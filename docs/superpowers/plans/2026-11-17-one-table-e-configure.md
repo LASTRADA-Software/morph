@@ -21,9 +21,9 @@ Everything in the roadmap's Global Constraints and its standard task loop applie
   - `A table sorts by at most {n} columns` · `A range selects at most {n} rows` · `A copy holds at most {n} rows`
   - `Copied {n} rows` (`Copied 1 row`), and with unloaded cells `Copied {n} rows, {m} cells were not loaded` (`1 cell was not loaded`)
   - `{label} is locked` · `At least one column stays visible` · `This table's columns cannot be moved` (`hidden`, `pinned`, `resized`)
-  - `Too many values to list; filter with a condition` · `The list may grow while data loads` · `{n} cells could not be read` (`1 cell could not be read`)
+  - `Too many values to list; filter with a condition` · `Too many dates to list; filter with a condition` · `The list may grow while data loads` · `{n} cells could not be read` (`1 cell could not be read`)
   - header accessible description, lower case as the spec writes it: `sorted ascending` / `sorted descending`, and with two or more keys `sorted ascending, key 2 of 3`; header mark ` ▲` / ` ▼`, and with two or more keys ` ▲2`; a filtered header's accessible name `{label}, filtered`
-  - menus and dialogs: `Sort ascending`, `Sort descending`, `Add to sort`, `Remove from sort`, `Filter…`, `Filter {group}, {k} columns…`, `Move left`, `Move right`, `Pin column`, `Unpin`, `Hide column`, `Display unit`; `Columns…`, `Sort…`, `Clear all filters`, `Reset columns`, `Copy`, `Copy with headers`; `(Select all)`, `(Blanks)`, `Group columns…`, `Add key`; views (Task 14): `Views`, `Save view…`, `Rename view…`, `Remove view`, `Set as default`, `Start from the default view`, `Shared views`, `Publish view…`, `Save as my view`, `{name} (modified)`, `Saved view {name}`, `A view named {name} exists`, `Views could not be saved: another window changed them at the same time`, `Published view {name}`, `This view could not be published: {reason}`
+  - menus and dialogs: `Sort ascending`, `Sort descending`, `Add to sort`, `Remove from sort`, `Filter…`, `Filter {group}, {k} columns…`, `Move left`, `Move right`, `Pin column`, `Unpin`, `Hide column`, `Display unit`; `Columns…`, `Sort…`, `Clear all filters`, `Reset columns`, `Copy`, `Copy with headers`; `(Select all)`, `(Blanks)`, `Group columns…`, `Remove group`, `Add key`; views (Task 14): `Views`, `Save view…`, `Rename view…`, `Remove view`, `Set as default`, `Start from the default view`, `Shared views`, `Publish view…`, `Save as my view`, `{name} (modified)`, `Saved view {name}`, `A view named {name} exists`, `Views could not be saved: another window changed them at the same time`, `Published view {name}`, `This view could not be published: {reason}`
 - Test trees. `morph_tests` and `morph_table_tests` build in `cl-debug`. `morph_qt_quick_tests` and `morph_tui_tests` need Qt Quick and the terminal backend, which no checked-in Windows preset turns on: configure once with `cmake --preset cl-qt-debug -DMORPH_BUILD_QT_QUICK=ON -DMORPH_BUILD_TUI=ON`, build with `cmake --build build/cl-qt-debug --target <target>`, run with `ctest --test-dir build/cl-qt-debug -R "<pattern>" --output-on-failure` (Qt Quick cases run with `QT_QPA_PLATFORM=offscreen`, set by their `catch_discover_tests`). `morph_net_tests` is POSIX-only (`MORPH_BUILD_NET` is ignored on Windows): its cases build and run on the `linux-everything` preset, `ctest --test-dir build/linux-everything -R "<pattern>"`. Every case that can run in `morph_tests` is placed there, so a Windows tree runs it.
 - Timings marked (P) or (M) in the spec are recorded into `docs/spec/table/table.md` "Performance" with the date and the machine, from a `cl-release` (or `linux-everything` for `tests/net`) build; a gate is an ordinary test.
 - No GUI application is launched. The one step that grabs screens (Task 12f) runs the example client offscreen through the repository's grab scripts and is run by the user, not by an agent.
@@ -51,7 +51,7 @@ Names the roadmap pins are used as it gives them. Where the roadmap leaves a nam
 | Task 8b | `GroupMode`, `ColumnCount{Kind, n}`, `GroupFilter{group, columns, mode, match, combine, include, exclude}` | — |
 | Task 8c | `ColumnKind::Measure`, `UnitInfo`, `DistinctValue::{dimension, unit}` | — |
 | Task 8d | `ColumnLayout::setWidth(id, std::optional<int>)`, `widths()`, `setPinned(n)`, `pinned()`, `value()`, `apply(value)` | as Part C writes it: `table::ColumnLayoutValue{order, hidden, pinned, widths, groups, units}` (`groups` a `std::vector<ColumnGroupInfo>` of user-formed groups, `units` column → dimension → unit id), `std::size_t pinned()` counting the first visible columns, `widths()` a `std::map<std::string, int> const&`; `apply` and `rebuild` fit groups and units |
-| Task 9 (Part D) | `ui::SortChain`, `TableCountsView`, `TableRows` (`total`, `row`, `unloadedLevels`, `visible`, `keysOf`, `setSort`, `setFilter`, `counts`, `onChange`), `EngineRows`, `WindowRows`, `TableStateKey`, `StoredTableState`, `SaveOutcome`, `SaveResult`, `ITableStateStore`, `MemoryTableStateStore`, `PreferencesTableStateStore`, `TableStateModel` (`morph.tableState`), `SessionOptions::tableState` | as Part D writes them: `EngineRows(std::shared_ptr<table::DataSource>, RecordOf, table::EngineOptions)`; `WindowRows::retry()`, `WindowRows::description()`; `ui::countsText(TableCountsView const&, std::int64_t selected, FormatContext const&)`; `ui::detail::standInCellText(Cell const&, table::TableColumn const&)`; `ui::TableStatus{counts, state, retry, message, shown}`, `Table::status`, `Table::onRetry`, `TableWidget::setStatus`, `setOnRetry` (the status line, its counts, Retry and the `status` key are Part D's); the status line's message channel, Task 9d's per index decision 11: `void ScreenCore::tableMessage(ElementState& table, std::string text)` in `src/ui/interpreter.cpp` and `inline constexpr std::chrono::seconds kStatusMessageHold{6}` (sets `TableStatus::message` and restarts the hold on the session's scheduler; under `status: false` sends `text` once to `InterpreterHost::notify(text, "warning")`; an empty `text` clears the message and notifies nothing — this part's gestures clear it that way); `ui::TableStates` (`include/morph/ui/table_state.hpp`, 9c: `kept`, `load`, `changed`, `flush`, `onSaveFailed`; loads made in one turn of the owner go out as one `TableStateLoad`) and `Session::tableStates() -> TableStates*`; `SessionOptions::application`; `table::StateDocument{version, layout, sort, filters, view, carried}`, `readState`, `writeState`, `fitState(StateDocument, TableDescription const&, FitReport&)`; `MemoryTableStateStore(exec::IExecutor&)` with revisions `"1"`, `"2"`, …; `ui::TableStateLoad{keys}`, `TableStateSave{key, expected, upload, offset, text, last}` → `TableStateSaved{result}`, `registerTableState(std::shared_ptr<IPreferencesStore>, dispatcher, registry, TableStateOptions)`; `PreferencesTableStateStore(Dispatcher&, exec::IExecutor& owner)`; test support `tests/ui_table_support.hpp`: `tableCatalog()` (the corpus catalog plus `Table.samples` and `.describe` on `Lims_SampleModel`), `samplesDescription(int columns)` (`id` Integer key, `name` Text, then `c3…` Decimal), `describeJson`, `pageJson(offset, count, total, columns, kind, undecided, awaiting)`, `GatedTableStateStore`, `Harness(std::shared_ptr<table::ITableStateStore>)` (sets `tableState` and `application = "lims"`), `h.replyDescribe()`, `h.replyPage(json)`, `lastQuery(h)`, `statusOf(h)` |
+| Task 9 (Part D) | `ui::SortChain`, `TableCountsView`, `TableRows` (`total`, `row`, `unloadedLevels`, `visible`, `keysOf`, `setSort`, `setFilter`, `counts`, `onChange`), `EngineRows`, `WindowRows`, `TableStateKey`, `StoredTableState`, `SaveOutcome`, `SaveResult`, `ITableStateStore`, `MemoryTableStateStore`, `PreferencesTableStateStore`, `TableStateModel` (`morph.tableState`), `SessionOptions::tableState` | as Part D writes them: `EngineRows(std::shared_ptr<table::DataSource>, RecordOf, table::EngineOptions)`; `WindowRows::retry()`, `WindowRows::description()`; `ui::countsText(TableCountsView const&, std::int64_t selected, FormatContext const&)`; `ui::detail::standInCellText(Cell const&, table::TableColumn const&)`; `ui::TableStatus{counts, state, retry, message, shown}`, `Table::status`, `Table::onRetry`, `TableWidget::setStatus`, `setOnRetry` (the status line, its counts, Retry and the `status` key are Part D's); the status line's message channel, Task 9d's per index decision 11: `void ScreenCore::tableMessage(ElementState& table, std::string text)` in `src/ui/interpreter.cpp` and `inline constexpr std::chrono::seconds kStatusMessageHold{6}` (sets `TableStatus::message` and restarts the hold on the session's scheduler; under `status: false` sends `text` once to `InterpreterHost::notify(text, "warning")`; an empty `text` clears the message and notifies nothing — this part's gestures clear it that way); `ui::TableStates` (`include/morph/ui/table_state.hpp`, 9c: `kept`, `load`, `changed`, `flush`, `onSaveFailed`, and, per index decision 32, `store() -> table::ITableStateStore&` and `keep(key, state)`, which 14b saves views through; loads made in one turn of the owner go out as one `TableStateLoad`) and `Session::tableStates() -> TableStates*`; `SessionOptions::application`; `table::StateDocument{version, layout, sort, filters, view, carried}`, `readState`, `writeState`, `fitState(StateDocument, TableDescription const&, FitReport&)`; `MemoryTableStateStore(exec::IExecutor&)` with revisions `"1"`, `"2"`, …; `ui::TableStateLoad{keys}`, `TableStateSave{key, expected, upload, offset, text, last}` → `TableStateSaved{result}`, `registerTableState(std::shared_ptr<IPreferencesStore>, dispatcher, registry, TableStateOptions)`; `PreferencesTableStateStore(Dispatcher&, exec::IExecutor& owner)`; test support `tests/ui_table_support.hpp`: `tableCatalog()` (the corpus catalog plus `Table.samples` and `.describe` on `Lims_SampleModel`), `samplesDescription(int columns)` (`id` Integer key, `name` Text, then `c3…` Decimal), `describeJson`, `pageJson(offset, count, total, columns, kind, undecided, awaiting)`, `GatedTableStateStore`, the harness `ui::testing::TableHarness` (9d, index decision 42; its constructor taking a `std::shared_ptr<table::ITableStateStore>` sets `tableState` and `application = "lims"`), `elementValue(h, id, name)` (an element value as JSON text), `h.replyDescribe()`, `h.replyPage(json)`, `lastQuery(h)`, `statusOf(h)` |
 | Task 10 (Part D) | the column window; `TableWidget`'s range report by view rows | as Part D writes them: `ui::TableColumn::id`, `ui::TableArrangement{visible, pinned, widths}`, `Table::arrangement` (applied without rebuilding rows, gate D8), `TableWidget::setOnSelectRange(std::function<void(std::size_t anchorRow, std::size_t focusRow, SelectionChange)>)`, `RecordingBackend::selectTableRange(id, anchor, focus)`, `SessionOptions::maxRangeRows`; range selection through `keysOf` and its refusal are Task 10a's |
 | Task 11 (Part D) | `ValueRowsSource`, rows tables on `EngineRows`; the internal lowering of a table node onto `TableRows` | a column part's `kind` (`ValueColumn::kind`) and the refusal of `persist` on a table with no `id` are Task 11's |
 
@@ -81,17 +81,17 @@ Names the roadmap pins are used as it gives them. Where the roadmap leaves a nam
     - `struct TickOp { std::string search; std::optional<std::string> operand; bool ticked = true; }` — `operand` set: one value's box; unset: "(Select all)" under `search` (empty `search`: every value)
     - `struct ValueTicks { bool ticked = true; std::vector<TickOp> ops; std::optional<bool> blanks; }` — `ticked` is every value's state before the first operation (true with no filter on the column); later operations win
     - `struct ResolvedTicks { bool ticked = true; std::map<std::string, bool> covered; std::optional<bool> blanks; }` — `covered`: the final state of every value an operation reached, by operand
-    - `[[nodiscard]] ResolvedTicks resolveTicks(ValueTicks const& ticks, std::function<std::vector<std::string>(std::string const& search)> const& valuesUnder)` — `valuesUnder` returns the operands a search shows; the menu answers it by paging `distinctValues` with `limit = QueryLimits::maxLimit` at Apply; an op with an empty search and no operand clears `covered` and sets `ticked`
+    - `[[nodiscard]] ResolvedTicks resolveTicks(ValueTicks const& ticks, std::function<std::vector<std::string>(std::string const& search)> const& valuesUnder)` — `valuesUnder` returns the operands a search shows; it is synchronous, and `distinctValues` on a `WindowRows` is not: at Apply the menu first awaits, for each distinct non-empty `search` among the operand-less ops, every page of `distinctValues` at `limit = QueryLimits::maxLimit` (1000) into a `std::map<std::string, std::vector<std::string>>`, and only then calls `resolveTicks` with a `valuesUnder` that reads the map; an op with an empty search and no operand clears `covered` and sets `ticked`. A menu reopened on a stored values filter seeds its `ValueTicks` from it: an `include` `oneOf` is `ticked = false` plus one `TickOp{.search = "", .operand = member, .ticked = true}` per member, an `exclude` `oneOf` is `ticked = true` plus one such op with `ticked = false` per member, and `blanks` is `true` for an included `isEmpty`, `false` for an excluded one
     - `struct ValueFilterPlan { enum class Side : std::uint8_t { All, Include, Exclude, Nothing, Disabled } side = Side::All; std::size_t members = 0; bool needsComplement = false; }`; `[[nodiscard]] ValueFilterPlan planValueFilter(std::int64_t distinct, ResolvedTicks const& ticks, std::size_t maxSetValues)`
     - `enum class ValueForm : std::uint8_t { Set, Ranges }` (`Ranges` for date buckets, whose operand is `a..b`); `[[nodiscard]] std::optional<table::ColumnFilter> valueFilter(ValueFilterPlan::Side side, std::vector<std::string> members, std::optional<bool> blanks, ValueForm form = ValueForm::Set)`
   - Values and conditions are exclusive per column: one `ColumnFilter` has one `combine` (`filter.hpp:86-93`), so `[oneOf, isEmpty, condition]` under `All` would match nothing. `enum class FilterPart : std::uint8_t { None, Values, Conditions }`; `[[nodiscard]] FilterPart classifyFilter(table::ColumnFilter const& filter, table::ColumnKind kind)` — `Values` when the filter is a values shape: `combine = Any` and `include` is `{oneOf}`, `{oneOf, isEmpty}`, one or more `between` entries (a date column's buckets) with or without `isEmpty`, or a lone `{isEmpty}` on a column that is not `Custom`, and `exclude` the same shapes with `include` empty; a lone `isEmpty`/`notEmpty` on a `Custom` column is `Conditions` (it has no values list); anything else not empty is `Conditions`
   - `[[nodiscard]] std::optional<std::string> canonicalOperand(std::string_view typed, table::ColumnKind kind, LocaleFacts const& locale, std::span<table::UnitInfo const> units = {}, std::string_view chosenUnit = {})` — the wire form of a typed operand: a number in the locale's form (`"1.234,5"` under a comma locale) becomes a decimal with a point and no grouping (`"1234.5"`); a `Measure` operand goes through Part C's `ui::parseMeasure(typed, units, locale, chosenUnit)` and `ui::measureOperand`; a date is the picker's ISO text; text is unchanged; `nullopt` when it does not read
   - `enum class GroupMatch : std::uint8_t { AnyColumn, EveryColumn, AtLeast, Exactly, Together }`; `[[nodiscard]] std::expected<table::GroupFilter, std::string> groupValueFilter(std::string group, std::size_t groupColumns, std::vector<std::string> ticked, std::optional<bool> blanks, GroupMatch match, std::int64_t n)`
   - `enum class ConditionOp : std::uint8_t { Equals, NotEquals, Contains, BeginsWith, EndsWith, Less, LessOrEqual, Greater, GreaterOrEqual, Between, IsEmpty, IsNotEmpty }`; `[[nodiscard]] std::vector<ConditionOp> conditionOps(table::ColumnKind kind)`; `[[nodiscard]] std::string_view conditionLabel(ConditionOp op, table::ColumnKind kind)`; `[[nodiscard]] table::FilterEntry conditionEntry(ConditionOp op, std::string operand, std::string second, bool matchCase)`
-  - `enum class MenuCommand : std::uint8_t { SortAscending, SortDescending, AddToSort, RemoveFromSort, Filter, FilterGroup, MoveLeft, MoveRight, PinColumn, UnpinColumn, HideColumn, DisplayUnit, Columns, SortDialog, ClearAllFilters, ResetColumns, Copy, CopyWithHeaders }` (Task 14 appends its view commands); `struct TableMenuEntry { MenuEntry entry; MenuCommand command; std::string argument; std::vector<TableMenuEntry> items; }`; `struct MenuGroup { std::string id; std::string label; std::size_t columns = 0; }`; `struct HeaderMenuInput { LayoutColumn column; bool sortable, filterable; std::optional<std::size_t> sortPlace; std::size_t chainSize, maxSortKeys, visibleIndex, visibleCount, pinned; std::vector<std::pair<std::string, std::vector<std::string>>> dimensions; std::vector<MenuGroup> groups; Configure allowed; }`; `struct TableMenuInput { bool anyFilter; std::vector<MenuGroup> groups; Configure allowed; }`; `[[nodiscard]] std::vector<TableMenuEntry> headerMenu(HeaderMenuInput const&)`; `[[nodiscard]] std::vector<TableMenuEntry> tableMenu(TableMenuInput const&)`; `[[nodiscard]] std::vector<MenuEntry> menuEntries(std::span<TableMenuEntry const>)`; `[[nodiscard]] TableMenuEntry const* chosen(std::span<TableMenuEntry const>, std::span<std::size_t const> path)`
+  - `enum class MenuCommand : std::uint8_t { SortAscending, SortDescending, AddToSort, RemoveFromSort, Filter, FilterGroup, MoveLeft, MoveRight, PinColumn, UnpinColumn, HideColumn, DisplayUnit, Columns, SortDialog, ClearAllFilters, ResetColumns, Copy, CopyWithHeaders }` (Task 14 appends its view commands); `struct TableMenuEntry { MenuEntry entry; MenuCommand command; std::string argument; std::vector<TableMenuEntry> items; }`; `struct MenuGroup { std::string id; std::string label; std::size_t columns = 0; }`; `struct HeaderMenuInput { LayoutColumn column; bool sortable, filterable; std::optional<std::size_t> sortPlace; std::size_t chainSize, maxSortKeys, visibleIndex, visibleCount, pinned; std::vector<MenuDimension> dimensions; std::vector<MenuGroup> groups; Configure allowed; }` with `struct MenuDimension { std::string dimension; std::vector<std::string> units; std::string chosen; }` (`units`: unit ids in the description's order; `chosen`: the layout's display unit for the dimension, empty when the cells show their own). A column with a non-empty `dimensions` gets, last in its header menu, `Display unit` with a submenu: per dimension and unit one checkable entry labelled `{dimension}: {unit}` (`mass: g`), checked when it is `chosen`, with `command = DisplayUnit` and `argument = "{dimension}\x1F{unit}"`; choosing the checked entry clears the display unit (`SetDisplayUnit{id, dimension, nullopt}`). `FilterGroup`'s `argument` is the group's id; every other command's is empty; `struct TableMenuInput { bool anyFilter; std::vector<MenuGroup> groups; Configure allowed; }`; `[[nodiscard]] std::vector<TableMenuEntry> headerMenu(HeaderMenuInput const&)`; `[[nodiscard]] std::vector<TableMenuEntry> tableMenu(TableMenuInput const&)`; `[[nodiscard]] std::vector<MenuEntry> menuEntries(std::span<TableMenuEntry const>)`; `[[nodiscard]] TableMenuEntry const* chosen(std::span<TableMenuEntry const>, std::span<std::size_t const> path)`
   - `struct CopiedText { std::string text; std::size_t unloaded = 0; }`; `[[nodiscard]] CopiedText copyText(std::span<std::string const> labels, std::span<std::vector<std::optional<std::string>> const> rows)` (empty `labels`: no header line; `nullopt`: an unloaded cell)
   - `[[nodiscard]] std::string groupedCount(std::int64_t n, std::string_view separator = ",")`
-  - `namespace tableText`: `sortBound(std::size_t)`, `rangeBound(std::size_t, std::string_view separator = ",")`, `copyBound(std::size_t, std::string_view separator = ",")`, `copied(std::size_t rows, std::size_t unloaded, std::string_view separator = ",")`, `locked(std::string_view label)`, `notConfigurable(Configure what)`, `lastVisible()`, `tooManyValues()`, `mayGrow()`, `unreadable(std::size_t)`, each `-> std::string`, the exact copy of Global Constraints
+  - `namespace tableText`: `sortBound(std::size_t)`, `rangeBound(std::size_t, std::string_view separator = ",")`, `copyBound(std::size_t, std::string_view separator = ",")`, `copied(std::size_t rows, std::size_t unloaded, std::string_view separator = ",")`, `locked(std::string_view label)`, `notConfigurable(Configure what)`, `lastVisible()`, `tooManyValues()`, `tooManyDates()`, `mayGrow()`, `unreadable(std::size_t)`, each `-> std::string`, the exact copy of Global Constraints
   - (The six-second hold, `kStatusMessageHold`, is Part D's Task 9d's, with the channel that uses it; this header does not declare it.)
 
 - [ ] **Step 1: Write the failing tests** in `tests/test_ui_table_config.cpp` (tag `[ui][table][config]`), each preceded by its mutation comment:
@@ -140,14 +140,14 @@ TEST_CASE("layout gesture: moves, hides, pins and resets, refusing a locked colu
     CHECK(ui::applyLayoutGesture(layout, columns, ui::Configure::All, ui::ResizeColumn{"mass", 14}).changed);
     CHECK(layout.widths().at("mass") == 14);
     for (std::string const id : {"name", "mass", "site"}) {
-        ui::applyLayoutGesture(layout, columns, ui::Configure::All, ui::HideColumn{id});
+        CHECK(ui::applyLayoutGesture(layout, columns, ui::Configure::All, ui::HideColumn{id}).changed);
     }
     CHECK(layout.visible() == std::vector<std::string>{"id"});
     CHECK(ui::applyLayoutGesture(layout, columns, ui::Configure::All, ui::HideColumn{"id"}).refusal ==
           "ID is locked");
     table::ColumnLayout lone{{"a", "b"}};
     std::vector<ui::LayoutColumn> const ab{{"a", "A"}, {"b", "B"}};
-    ui::applyLayoutGesture(lone, ab, ui::Configure::All, ui::HideColumn{"a"});
+    CHECK(ui::applyLayoutGesture(lone, ab, ui::Configure::All, ui::HideColumn{"a"}).changed);
     CHECK(ui::applyLayoutGesture(lone, ab, ui::Configure::All, ui::HideColumn{"b"}).refusal ==
           "At least one column stays visible");
     CHECK(ui::applyLayoutGesture(lone, ab, ui::Configure::Hide, ui::MoveColumn{"b", -1}).refusal ==
@@ -198,6 +198,19 @@ TEST_CASE("value filter: the smaller side is sent, and both sides over the bound
     CHECK(complement.members == 5'000);
     CHECK(complement.needsComplement);
     CHECK(ui::planValueFilter(3, ui::ResolvedTicks{.ticked = false, .blanks = false}, 10'000).side == Side::Nothing);
+    // Mutation: the tie decided as Include (`T <= U`): one of two values unticked sends the other as an include.
+    auto const tie = ui::planValueFilter(2, ui::ResolvedTicks{.ticked = true, .covered = {{"Open", false}}, .blanks = true}, 10'000);
+    CHECK(tie.side == Side::Exclude);
+    CHECK(tie.members == 1);
+    // Mutation: an empty `oneOf` written beside `isEmpty` when only "(Blanks)" is ticked.
+    auto const blanksOnly = ui::planValueFilter(2, ui::ResolvedTicks{.ticked = false, .blanks = true}, 10'000);
+    CHECK(blanksOnly.side == Side::Include);
+    CHECK(blanksOnly.members == 0);
+    auto const onlyBlanks = ui::valueFilter(Side::Include, {}, true);
+    REQUIRE(onlyBlanks);
+    REQUIRE(onlyBlanks->include.size() == 1);
+    CHECK(onlyBlanks->include.at(0).isEmpty == true);
+    CHECK_FALSE(ui::valueFilter(Side::Exclude, {}, std::nullopt));
     auto const include = ui::valueFilter(Side::Include, {"F", "S"}, true);
     REQUIRE(include);
     CHECK(include->combine == table::Combine::Any);
@@ -321,6 +334,18 @@ TEST_CASE("header menu: entries, order and enablement", "[ui][table][config]") {
     hideOnly.allowed = ui::Configure::Hide;
     CHECK(ui::menuEntries(ui::headerMenu(hideOnly)).back().label == "Hide column");
     CHECK(ui::menuEntries(ui::headerMenu(hideOnly)).size() == 9);
+    // Mutation: the Display unit submenu drawn with no check on the chosen unit.
+    ui::HeaderMenuInput measure = input;
+    measure.column = {"weight", "Weight", false, table::ColumnKind::Measure};
+    measure.dimensions = {{.dimension = "mass", .units = {"g", "kg"}, .chosen = "g"}};
+    std::vector<ui::TableMenuEntry> const measureMenu = ui::headerMenu(measure);
+    REQUIRE(measureMenu.back().entry.label == "Display unit");
+    REQUIRE(measureMenu.back().items.size() == 2);
+    CHECK(measureMenu.back().items.at(0).entry.label == "mass: g");
+    CHECK(measureMenu.back().items.at(0).entry.checked == true);
+    CHECK(measureMenu.back().items.at(1).entry.checked == false);
+    CHECK(measureMenu.back().items.at(1).command == ui::MenuCommand::DisplayUnit);
+    CHECK(measureMenu.back().items.at(1).argument == "mass\x1Fkg");
     std::vector<ui::MenuEntry> const table = ui::menuEntries(ui::tableMenu({.anyFilter = false, .groups = {}, .allowed = ui::Configure::All}));
     std::vector<std::string> tableLabels;
     for (ui::MenuEntry const& entry : table) { tableLabels.push_back(entry.separator ? "-" : entry.label); }
@@ -340,7 +365,9 @@ TEST_CASE("copy text: tabs and line breaks become one space; unloaded cells are 
     CHECK(ui::copyText(labels, rows).text == "Na me\tN\na b c\t1\n\tx y z");
 }
 
+// Mutations: groupedCount writing the digits ungrouped; `copied` using the plural for one row or one cell.
 TEST_CASE("status copy: counts are grouped and messages are exact", "[ui][table][config]") {
+    CHECK(ui::tableText::tooManyDates() == "Too many dates to list; filter with a condition");
     CHECK(ui::groupedCount(999) == "999");
     CHECK(ui::groupedCount(10'000) == "10,000");
     CHECK(ui::groupedCount(-1'234'567) == "-1,234,567");
@@ -367,8 +394,8 @@ Expected: compile errors naming `morph/ui/table_config.hpp` (missing) and `Colum
   - `applySortGesture`: `Click` makes `{column, Descending}` when `chain[0]` is `{column, Ascending}`, else `{column, Ascending}`; `Ascending`/`Descending` make that one key; `Extend` flips a key already in the chain in place, else appends ascending; `Add` appends only a column not in the chain; `Remove` erases it. The "in the chain" case is decided before the bound; a new key past `maxSortKeys` returns the chain unchanged with `tableText::sortBound(maxSortKeys)`.
   - The rule that pinned columns take at most half the table's width is the renderer's (Task 10), for display only; no gesture here changes the stored count for it.
   - `applyLayoutGesture`: a gesture on a locked column refuses with `tableText::locked(label)` before anything else, a gesture the `allowed` set lacks with `notConfigurable` (`Reset` is allowed while any capability is); `MoveColumn` moves among visible columns, `PinColumn` places the column right after the last pinned visible column and adds one, `UnpinColumn` places it right after the pinned ones less one; `ResetColumns` restores the declared order and `shown`, `pinned = 0`, no widths; a hide that would leave none visible refuses with `lastVisible()`.
-  - `planValueFilter`: with D = `distinct`, C = `covered`, T = `(ticked ? D − |C| : 0) + |{c in C : c ticked}|`, U = D − T: `All` when T = D and `blanks` is not `false`; `Nothing` when T = 0 and `blanks` is not `true`; otherwise `Include` when T ≤ U, else `Exclude`, with `members = min(T, U)`, `Disabled` when that exceeds `maxSetValues`, and `needsComplement` when the side's members include values outside C (then the menu pages every value at `maxLimit` to name them).
-  - `valueFilter`: `Set` → `Include`: `include = {oneOf members} + {isEmpty} if blanks == true`, `combine = Any`; `Exclude`: `exclude = {oneOf members} (when not empty) + {isEmpty} if blanks == false`. `Ranges` → the same with one `between` entry per member, its two ends the member split at `..`. `All`, `Nothing`, `Disabled` → `nullopt`.
+  - `planValueFilter`: with D = `distinct`, C = `covered`, T = `(ticked ? D − |C| : 0) + |{c in C : c ticked}|`, U = D − T: `All` when T = D and `blanks` is not `false`; `Nothing` when T = 0 and `blanks` is not `true`; otherwise `Include` when T < U, else `Exclude` (a tie sends the unticked side, so unticking one of two values is one excluded value), with `members = min(T, U)`, `Disabled` when that exceeds `maxSetValues`, and `needsComplement` when the side's members include values outside C (then the menu pages every value at `maxLimit` to name them).
+  - `valueFilter`: `Set` → `Include`: `include = {oneOf members} + {isEmpty} if blanks == true`, `combine = Any`; `Exclude`: `exclude = {oneOf members} + {isEmpty} if blanks == false`. On both sides the `oneOf` entry is left out when `members` is empty (ticking only "(Blanks)" is `include = [{isEmpty}]`), and a side left with no entry at all is `nullopt`. `Ranges` → the same with one `between` entry per member, its two ends the member split at `..`. `All`, `Nothing`, `Disabled` → `nullopt`.
   - `canonicalOperand` reads the locale's decimal and grouping separators from `LocaleFacts` (`ui::localeFacts`), never assuming a point.
   - `groupValueFilter`: `AnyColumn`, `EveryColumn`, `AtLeast n`, `Exactly n` → one `oneOf` entry (plus `isEmpty` under `AnyColumn` when `blanks == true`) with `match` `Any`, `All`, `AtLeast`, `Exactly`; `Together` → one `eq` per ticked value, `mode = Together`, refused unless 2 ≤ ticked ≤ `groupColumns`.
   - Every public symbol gets complete Doxygen.
@@ -386,11 +413,14 @@ Expected: all pass; then the whole of `morph_table_tests` and the `[ui]` cases o
 - Modify: `include/morph/ui/view.hpp:364-374` (`TableSort`), `:1217-1283` (`TableColumn`, `Table`), `:2026-2049` (`TableOptions`); `include/morph/ui/backend.hpp:764-879` (`TableWidget`), `:1293-1510` (`IViewBackend::copyText`); `include/morph/ui/mount.hpp:1622-1645` (binding the new members); `include/morph/ui/testing/recording_backend.hpp:290-298` (`formatSort`), `:1986-2240` (`FakeTable`), `:3015-3040` (drivers); `include/morph/ui/testing/backend_conformance.hpp:60-225` (probe operations) and its cases
 - Modify: `src/qt_quick/kinds.hpp:614-695`, `src/qt_quick/table.cpp`, `src/qt_quick/qml/MorphTable.qml`, `src/qt_quick/qml/MorphMenu.qml` (as the header and table menus' popup), `src/qt_quick/backend.cpp` (`copyText` through `QGuiApplication::clipboard()`); `src/tui/table_widget.hpp`, `src/tui/table_widget.cpp` (and the TUI backend's `copyText`: OSC 52)
 - Modify: `include/morph/forms/engine/collection_view.hpp:143-227` (the `sort` and `onSort` members it leaves unset keep compiling)
+- Modify, so this commit builds and stays green on its own: `src/ui/interpreter.cpp` (the table lowering's `options.sort` and `options.onSort`, today at `:7655-7673`: `sort` becomes a `std::vector<TableSort>` of the one key it holds, or empty, and `onSort` takes `(std::size_t, HeaderClick)` and ignores the click — the chain is 12c's); `tests/test_ui_table_row_span.cpp:52,79,170-198` (its `Signal<std::optional<ui::TableSort>>` becomes a `Signal<std::vector<ui::TableSort>>`, `std::nullopt` an empty vector); the existing `setSort(ui::TableSort{…})` and `setSort(std::nullopt)` calls at `tests/qt_quick/test_qt_quick_table.cpp:1148,1163` and `tests/tui/test_tui_table.cpp:910` (a one-key vector, an empty one); `tests/test_ui_conformance.cpp` (`REQUIRE(cases.size() == 56)` becomes `64`, and the faults below)
 - Test: `tests/test_ui_conformance.cpp`, `tests/test_ui_table_config.cpp` (the `sort marks` case), `tests/qt_quick/test_qt_quick_conformance.cpp`, `tests/qt_quick/test_qt_quick_table.cpp`, `tests/tui/test_tui_conformance.cpp`, `tests/tui/test_tui_table.cpp`
 - Docs: `docs/spec/ui/backend_contract.md` ("Widgets" table entry, "The probe", "The cases", "RecordingBackend"), `docs/spec/ui/view_tree.md` ("ForEach and Table rows"), `docs/spec/qt_quick/backend.md` (header menus, the table menu button, header drag and resize, the group header), the TUI table's header comment in `src/tui/table_widget.hpp`.
 
 **Interfaces:**
 - Consumes: Part D's `ui::TableColumn::id`, `Table::arrangement` (`TableArrangement`, whose visible places `onColumnMove` positions and `TableColumnGroup::first` count in) and `Table::status`.
+- **Column indices (index decision 37).** The `column` argument of every handler, `TableWidget` call, probe operation and `RecordingBackend` driver below is the index into `Table::columns`, which holds every column, hidden ones included, and does not change when the layout does. Only a `position` argument (`onColumnMove`, `moveColumn`) and `TableColumnGroup::first` are visible places of the arrangement. A driver given a hidden column's index throws `std::logic_error`: a user cannot reach its header.
+- **Parallel structs (index decision 41).** Every member below is added to both `ui::Table` and `TableOptions`, and `ui::table<Row>()` copies each across.
 - Produces (namespace `morph::ui`):
   - `enum class HeaderClick : std::uint8_t { Plain, Shift }`
   - `[[nodiscard]] std::string sortMarkText(SortDirection direction, std::size_t place, std::size_t count)` and `[[nodiscard]] std::string sortDescription(SortDirection direction, std::size_t place, std::size_t count)` in `view.hpp` (`place` from 1): `sortMarkText` is `" ▲"`/`" ▼"` when `count == 1`, else `" ▲<place>"`/`" ▼<place>"`; `sortDescription` is exactly `"sorted ascending"`/`"sorted descending"` when `count == 1`, else `"sorted ascending, key <place> of <count>"` (lower case, as table.md "Sort chains" writes it); both backends set the header's accessible description from it and nothing else
@@ -399,11 +429,11 @@ Expected: all pass; then the whole of `morph_table_tests` and the `[ui]` cases o
   - `ui::Table` and `TableOptions`: `Prop<std::vector<TableSort>> sort` (replacing `Prop<std::optional<TableSort>>`, chain order), `std::function<void(std::size_t, HeaderClick)> onSort` (replacing the one-argument handler), `std::function<std::vector<MenuEntry>(std::optional<std::size_t>)> menu` and `std::function<void(std::optional<std::size_t>, std::vector<std::size_t>)> onMenu` (no column: the table's menu), `std::function<void(std::size_t column, std::size_t position)> onColumnMove`, `std::function<void(std::size_t column, std::optional<int> units)> onColumnResize`, `std::function<void(std::size_t column)> onFilter`, `Prop<std::vector<std::size_t>> filtered`, `Prop<std::vector<TableColumnGroup>> columnGroups`, `std::function<void(std::size_t group)> onGroupFilter`, `Action onCopy`
   - `TableWidget`: `virtual void setSort(std::vector<TableSort> const& chain) = 0;` and `virtual void setOnSort(std::function<void(std::size_t, HeaderClick)> onSort) = 0;` (replacing both), and with default empty bodies `setMenu(std::function<std::vector<MenuEntry>(std::optional<std::size_t>)> entries, std::function<void(std::optional<std::size_t>, std::vector<std::size_t>)> onChoose)`, `setOnColumnMove(…)`, `setOnColumnResize(…)`, `setOnFilter(…)`, `setFiltered(std::vector<std::size_t> const&)`, `setColumnGroups(std::vector<TableColumnGroup> const&)`, `setOnGroupFilter(…)`, `setOnCopy(Action)` (the status line's `setStatus` and `setOnRetry` are Part D's)
   - `IViewBackend::copyText(std::string_view text) -> bool` (default `false`: no clipboard)
-  - `RecordingBackend` drivers: `clickHeader(int table, std::size_t column, HeaderClick click)`, `menuOf(int table, std::optional<std::size_t> column) -> std::vector<MenuEntry>`, `chooseMenu(int table, std::optional<std::size_t> column, std::vector<std::string_view> const& labels)` (labels from the top, resolved to the entry path), `moveColumn(int table, std::size_t column, std::size_t position)`, `resizeColumn(int table, std::size_t column, std::optional<int> units)`, `clickFilter(int table, std::size_t column)`, `clickGroupFilter(int table, std::size_t group)`, `pressCopy(int table)`, `clipboardText() -> std::string` (the last text `copyText` was given; empty before any — index decision 27); properties `sort` (`"0:Ascending,2:Descending"`, `none` when empty), `filtered` (`[0,2]`), `columnGroups` (`[Company:0+3]`, label, first visible place, count)
-  - `ConformanceProbe`: `clickHeader(Widget& table, std::size_t column, HeaderClick click)`, `headerMenu(Widget& table, std::optional<std::size_t> column) -> std::vector<MenuEntry>`, `chooseHeaderMenuEntry(Widget& table, std::optional<std::size_t> column, std::vector<std::size_t> const& path)`, `moveColumn(Widget& table, std::size_t column, std::size_t position)`, `headerText(Widget const& table, std::size_t column) -> std::string`, `headerName(Widget const& table, std::size_t column) -> std::string`, `headerDescription(Widget const& table, std::size_t column) -> std::string`, `clipboardText() -> std::string`
+  - `RecordingBackend` drivers: the existing `clickHeader(int table, std::size_t column)` gains a defaulted third parameter, `HeaderClick click = HeaderClick::Plain` (index decision 42), so its callers in `tests/test_ui_interpreter_table.cpp`, `tests/test_ui_conformance.cpp` and `examples/lims_gallery/tests/test_samples.cpp` compile unchanged; `menuOf(int table, std::optional<std::size_t> column) -> std::vector<MenuEntry>`, `chooseMenu(int table, std::optional<std::size_t> column, std::vector<std::string_view> const& labels)` (labels from the top, resolved to the entry path), `moveColumn(int table, std::size_t column, std::size_t position)`, `resizeColumn(int table, std::size_t column, std::optional<int> units)`, `clickFilter(int table, std::size_t column)`, `clickGroupFilter(int table, std::size_t group)`, `pressCopy(int table)`, `clipboardText() -> std::string` (the last text `copyText` was given; empty before any — index decision 27); properties `sort` (`"0:Ascending,2:Descending"`, `none` when empty), `filtered` (`[0,2]`), `columnGroups` (`[Company:0+3]`, label, first visible place, count)
+  - `ConformanceProbe`: the existing pure `clickHeader(Widget& table, std::size_t column)` gains the same defaulted `HeaderClick click = HeaderClick::Plain` (one virtual, three parameters; the probes' overrides take the third parameter, the existing cases' calls are unchanged). The operations added here are virtual with default bodies that do nothing and return an empty value, as `descriptionOf` and `boundsOf` are, so the null probe of `tests/test_ui_conformance.cpp` needs no override and fails the new cases by observing nothing; the three real probes (`RecordingProbe` in `tests/test_ui_conformance.cpp`, the Qt Quick probe, the terminal probe) override every one: `headerMenu(Widget& table, std::optional<std::size_t> column) -> std::vector<MenuEntry>`, `chooseHeaderMenuEntry(Widget& table, std::optional<std::size_t> column, std::vector<std::size_t> const& path)`, `moveColumn(Widget& table, std::size_t column, std::size_t position)`, `headerText(Widget const& table, std::size_t column) -> std::string`, `headerName(Widget const& table, std::size_t column) -> std::string`, `headerDescription(Widget const& table, std::size_t column) -> std::string`, `clipboardText() -> std::string`
 - Backend behaviour both backends implement: a header's menu opens on a right click on the header, on `Shift+F10` or the context-menu key with the header focused, and from a `⋯` button at the header row's trailing end for the table's menu (accessible name `Table options`); `Shift`+click, `Shift+Enter` and `Shift+Space` report `HeaderClick::Shift`; `Ctrl+Shift+Left` and `Ctrl+Shift+Right` on a focused header report `onColumnMove(column, position ∓ 1)` among the arrangement's visible columns; on Qt Quick dragging a header onto another reports the move, dragging a header's trailing edge reports `onColumnResize` in units, a double click on the edge reports `nullopt`; a filterable header draws a filter button, filled while `setFiltered` names it; a group header row is drawn over side-by-side group columns with its own filter button; `Ctrl+C` on a focused table reports `onCopy`. The terminal header becomes focusable: `Up` on the first row focuses the header at the sorted column (else the first), `Left`/`Right` move along it, `Enter`/`Space` sort, `Shift+Enter` extends, `Ctrl+Shift+Left/Right` move, `Shift+F10` opens its menu, `Down` returns to the rows; the terminal draws no drag or resize handle.
 
-- [ ] **Step 1: Write the failing conformance cases** in `include/morph/ui/testing/backend_conformance.hpp`, appended to `conformanceCases()` in this order, each with its control comment:
+- [ ] **Step 1: Write the failing conformance cases** in `include/morph/ui/testing/backend_conformance.hpp`, appended to `conformanceCases()` in this order (the `std::array<ConformanceCase, 56>` becomes `64`, as does the count `tests/test_ui_conformance.cpp` requires), each with its control comment. A control is a `Fault` of `tests/test_ui_conformance.cpp`'s `RecordingProbe`, the repository's way to show that a conformance case fails on a broken backend. This task adds `PlainHeaderClicks` (every header click reported as `Plain`), `FirstSortKeyOnly` (`headerText` and `headerDescription` answer for the chain's first key only), `MenuColumnOffByOne` (`chooseHeaderMenuEntry` chooses on `column + 1`), `MoveTargetIsSource` (`moveColumn` reports the column's own place), `UnnamedFilter` (`headerName` answers the bare label) and `SilentClipboard` (`clipboardText` answers empty), and extends `"ui conformance: the suite flags a backend that breaks the contract"` to assert, per fault, that `failingCases(fault)` contains the case its control stands beside below. The existing `DeadInput` covers the table-menu and `Ctrl+C` cases, whose probe operations go through it:
 
 ```cpp
 // Control: report every header click as Plain.
@@ -468,9 +498,9 @@ TEST_CASE("tui table: Up on the first row focuses the header; Left, Right, Shift
 - [ ] **Step 2: Run them to see them fail**
 
 Run: `cmake --build --preset cl-debug --target morph_tests` then `cmake --build build/cl-qt-debug --target morph_qt_quick_tests morph_tui_tests`
-Expected: compile errors for `HeaderClick`, `TableColumnGroup` and the probe operations.
+Expected: compile errors for `HeaderClick`, `TableColumnGroup`, the probe operations and the new `Fault` enumerators.
 
-- [ ] **Step 3: Implement** the interfaces and behaviour above in every listed file. `mount.hpp` binds `sort`, `filtered` and `columnGroups` as it binds `sort` today, wires each handler with `event(...)`, calls `setMenu` only when `menu` is set and `setOnColumnResize` only when `onColumnResize` is set, and keeps calling `setSort` only for a table with a sortable column. `copyText` writes `QGuiApplication::clipboard()` on Qt Quick, an OSC 52 sequence on the terminal, and a record on `RecordingBackend`; each backend's conformance probe reads back what its `copyText` wrote.
+- [ ] **Step 3: Implement** the interfaces and behaviour above in every listed file. `mount.hpp` binds `sort`, `filtered` and `columnGroups` as it binds `sort` today, wires each handler with `event(...)`, calls `setMenu` only when `menu` is set and `setOnColumnResize` only when `onColumnResize` is set, and keeps calling `setSort` only for a table with a sortable column. The row-span rule reads the chain where it read the optional: `spans.sorted = sortable && sortValue == nullptr && !spec.sort.constant().empty()` (`mount.hpp:1646` tests `has_value()` today), and inside the rows Effect a bound chain counts as sorted while it is not empty. `copyText` writes `QGuiApplication::clipboard()` on Qt Quick, an OSC 52 sequence on the terminal, and a record on `RecordingBackend`; each backend's conformance probe reads back what its `copyText` wrote.
 
 - [ ] **Step 4: Run them to see them pass**
 
@@ -483,7 +513,7 @@ Expected: all pass, the existing table cases included.
 
 **Files:**
 - Modify: `src/ui/document.cpp:292-334` (keys), `:3209-3290` (load checks); `src/ui/interpreter.cpp` (the table lowering Part D built: its `sort`, `onSort`, columns, element values and `TableStatus::message`), `include/morph/ui/interpreter.hpp:371-395` (`SessionOptions::maxCopyRows`)
-- Test: `tests/test_ui_table_model.cpp`, `tests/test_ui_document.cpp`, `tests/bench_interpreter.cpp`
+- Test: `tests/test_ui_table_model.cpp`, `tests/test_ui_document.cpp`, `tests/bench_interpreter.cpp`, `tests/ui_table_support.hpp` (the helpers and documents of Step 1)
 - Docs: `docs/spec/ui/document.md` (the `table` row: `layout`, `onLayoutChange`, `configurable`, `onFiltersChange`, a column's `locked` and `filterable`; element values `layout`, `visibleColumns`, `hiddenCount`), `docs/spec/ui/interpreter.md` (the lowering's menus and messages), `docs/spec/table/table.md` (D7 figure)
 
 **Interfaces:**
@@ -495,20 +525,47 @@ Expected: all pass, the existing table cases included.
   - the clearing half of the message rule for the gestures this part adds: each one the lowering receives (a header click, a menu choice, a column move or resize, a filter button, a copy) calls `tableMessage(table, "")` before it acts, so the user's next gesture on the table clears a message; a refusal it then makes posts its own
 - The lowering's rules: `onSort(column, click)` maps `Plain` to `SortGesture::Click` and `Shift` to `Extend`, applies `applySortGesture` with the table's bound (8, or Task 16's), and on success calls `TableRows::setSort`, sets the held `sort` (when not bound) and runs `onSortChange`; a refusal goes to `tableMessage`. Menu commands map to the same gestures and to 12d, 12e and 12f's openers; `menu` and `onMenu` are set unless `configurable` is `false`. A layout change updates `Table::arrangement`, calls `TableRows::visible` with the new visible columns, sets the held `layout` (when not bound), runs `onLayoutChange` and marks the state unsaved; the stored state's `layout` member is applied before the first rows, as `sort` and `filters` are, and a bound `layout` is neither applied nor saved. A `rows` table's `TableStatus::shown` holds while its `state` or `message` is not empty (a model-backed table's is always shown, Part D); a literal `status: true` shows it always. Every refusal is shown (invariant 31).
 
-- [ ] **Step 1: Write the failing tests** in `tests/test_ui_table_model.cpp` (tag `[ui][table][config]`), over a `rows` table document `kNine` with `"id": "t"`, nine sortable columns `c1`…`c9` and three rows, unless a test says otherwise:
+- [ ] **Step 1: Write the failing tests** in `tests/test_ui_table_model.cpp` (tag `[ui][table][config]`). Every test of this part runs on `ui::testing::TableHarness` (9d, index decision 42) and mounts a whole document.
+
+Helpers, added to `tests/ui_table_support.hpp` by this task (index decisions 20 and 42): free functions over `ui::testing::TableHarness&` that call 12b's `RecordingBackend` driver of the same name on `h.backend` and then `h.settle()` — `menuOf(h, table, column) -> std::vector<ui::MenuEntry>`, `chooseMenu(h, table, column, labels)`, `moveColumn(h, table, column, position)`, `resizeColumn(h, table, column, units)`, `clickFilter(h, table, column)`, `clickGroupFilter(h, table, group)`, `pressCopy(h, table)`, `clipboardText(h) -> std::string`; `table` is the widget id, `column` an index into `Table::columns` (index decision 37). A header click is `h.backend.clickHeader(table, column, click)`. In the sketches of this part a helper written without `h` (`chooseMenu(table, …)`) is that helper with `h` first, `<name>` in angle brackets (`<status>`) is that column's index, and `t.<name>` is `elementValue(h, "t", "<name>")`, the element value as JSON text.
+
+The documents, in `tests/ui_table_support.hpp` (a sketch that says "with …" mounts the document with that one key added to its `table` node or column):
+
+```cpp
+/// A rows table `t`: nine sortable columns c1…c9 labelled C1…C9, three rows keyed by `id`.
+inline constexpr std::string_view kNine = R"({
+  "vocab": "ui/1", "id": "nine",
+  "state": { "items": { "init": { "lit": [
+    { "id": 1, "c1": 3, "c2": 1, "c3": 2, "c4": 1, "c5": 2, "c6": 3, "c7": 1, "c8": 2, "c9": 3 },
+    { "id": 2, "c1": 1, "c2": 2, "c3": 3, "c4": 2, "c5": 3, "c6": 1, "c7": 2, "c8": 3, "c9": 1 },
+    { "id": 3, "c1": 2, "c2": 3, "c3": 1, "c4": 3, "c5": 1, "c6": 2, "c7": 3, "c8": 1, "c9": 2 } ] } } },
+  "view": { "kind": "table", "id": "t", "rows": { "ref": "items" },
+            "columns": [ { "id": "c1", "label": "C1", "sortable": true }, { "id": "c2", "label": "C2", "sortable": true },
+                         { "id": "c3", "label": "C3", "sortable": true }, { "id": "c4", "label": "C4", "sortable": true },
+                         { "id": "c5", "label": "C5", "sortable": true }, { "id": "c6", "label": "C6", "sortable": true },
+                         { "id": "c7", "label": "C7", "sortable": true }, { "id": "c8", "label": "C8", "sortable": true },
+                         { "id": "c9", "label": "C9", "sortable": true } ] } })";
+
+/// The model-backed table `t` over `Table.samples`; its description is what the test replies (`h.replyDescribe`).
+inline constexpr std::string_view kConfigModelTable = R"({
+  "vocab": "ui/1", "id": "samples",
+  "models": { "sample": { "type": "Lims_SampleModel" } },
+  "view": { "kind": "table", "id": "t", "model": "sample", "table": "samples" } })";
+```
+
+The cases:
 
 ```cpp
 // Mutation: the lowering mapping HeaderClick::Shift to Click.
 TEST_CASE("sort chains: a plain click replaces, Shift adds and flips, a key past the bound is refused", "[ui][table][config]") {
-    Harness h;
+    ui::testing::TableHarness h;
     auto screen = h.mount(kNine);
     int const table = h.backend.all("Table").front();
     h.backend.clickHeader(table, 0, ui::HeaderClick::Plain);
     h.backend.clickHeader(table, 1, ui::HeaderClick::Shift);
     h.backend.clickHeader(table, 0, ui::HeaderClick::Shift);
     h.settle();
-    CHECK(readJson(*screen, R"({"ref":"t.sort"})") ==
-          R"([{"column":"c1","direction":"desc"},{"column":"c2","direction":"asc"}])");
+    CHECK(elementValue(h, "t", "sort") == R"([{"column":"c1","direction":"desc"},{"column":"c2","direction":"asc"}])");
     CHECK(h.backend.prop(table, "sort") == "0:Descending,1:Ascending");
     for (std::size_t column = 2; column < 9; ++column) { h.backend.clickHeader(table, column, ui::HeaderClick::Shift); }
     h.settle();
@@ -518,7 +575,7 @@ TEST_CASE("sort chains: a plain click replaces, Shift adds and flips, a key past
     CHECK(statusOf(h).shown);
     h.backend.clickHeader(table, 4, ui::HeaderClick::Plain);
     h.settle();
-    CHECK(readJson(*screen, R"({"ref":"t.sort"})") == R"([{"column":"c5","direction":"asc"}])");
+    CHECK(elementValue(h, "t", "sort") == R"([{"column":"c5","direction":"asc"}])");
     CHECK(statusOf(h).message.empty());
     CHECK_FALSE(statusOf(h).shown);
 }
@@ -528,13 +585,15 @@ TEST_CASE("sort chains: the header menu builds a chain without a modifier", "[ui
 // chooseMenu(table, 0, {"Sort descending"}); chooseMenu(table, 2, {"Add to sort"}); chooseMenu(table, 0, {"Remove from sort"}):
 // sort == [{"column":"c3","direction":"asc"}]; onSortChange ran three times.
 
-// Mutation: the lowering applying a menu gesture without updating `visibleColumns`.
+// Mutations: the lowering applying a menu gesture without updating `visibleColumns`; a driver's column read as a
+// visible place (the resize after the move lands on c1).
 TEST_CASE("column layout: hiding, moving, pinning and resetting from the menus change the layout and the visible columns",
           "[ui][table][config]")
 // chooseMenu(table, 2, {"Hide column"}); chooseMenu(table, 1, {"Move left"}); chooseMenu(table, 1, {"Pin column"});
 // t.visibleColumns == ["c2","c1","c4",…,"c9"]; t.hiddenCount == 1;
 // t.layout == {"order":["c2","c1","c3",…],"hidden":["c3"],"pinned":1,"widths":{}};
-// resizeColumn(table, 0, 20): t.layout.widths == {"c2":20}; resizeColumn(table, 0, nullopt): widths == {};
+// resizeColumn(table, 1, 20) (index 1 is c2 wherever it stands): t.layout.widths == {"c2":20};
+// resizeColumn(table, 1, nullopt): widths == {};
 // chooseMenu(table, nullopt, {"Reset columns"}): t.layout == the declared order, nothing hidden, pinned 0;
 // onLayoutChange ran six times with `event` the new layout.
 
@@ -550,21 +609,23 @@ TEST_CASE("column layout: configurable and locked limit what the user can do, an
 TEST_CASE("status line: a refusal is shown once, until the next gesture or six seconds", "[ui][table][config]")
 // refusal at the bound shows the message; h.advance(5'999ms): still shown; h.advance(1ms): message empty and
 // statusOf(h).shown false (a rows table with nothing else to say takes no room); refuse again then
-// clickHeader(table, 0, Plain): message gone. "status": false: the refusal reaches h.host.log as
-// "notify warning A table sorts by at most 8 columns" exactly once, and statusOf(h).shown stays false.
+// clickHeader(table, 0, Plain): message gone. "status": false: the harness's record of `notify` calls (9d's
+// `h.host.notified`) holds exactly one entry, the text "A table sorts by at most 8 columns" with the role "warning", and
+// statusOf(h).shown stays false.
 
 // Mutation: the lowering applying a stored layout after the first query.
 TEST_CASE("persisted layout: a stored layout applies before the first query, a change saves once after the debounce",
           "[ui][table][config]")
-// Harness(store) over a MemoryTableStateStore holding, under the table's key, part "state",
+// TableHarness(store) over a MemoryTableStateStore holding, under the table's key, part "state",
 // {"version":1,"layout":{"order":["c2","c1"],"hidden":["c3"],"pinned":0,"widths":{"c2":20}}}: before any rows,
-// t.visibleColumns starts with "c2","c1" and lacks "c3"; chooseMenu(table, 0, {"Hide column"}) three times inside 500 ms
-// then h.advance(500ms): the store received exactly one save whose layout hides those columns. With `layout` bound to
+// t.visibleColumns starts with "c2","c1" and lacks "c3"; chooseMenu(table, 0, {"Hide column"}), chooseMenu(table, 3,
+// {"Hide column"}) and chooseMenu(table, 4, {"Hide column"}) (c1, c4, c5: indices into Table::columns) inside 500 ms, then
+// h.advance(500ms): the store received exactly one save, whose layout's `hidden` is c1, c3, c4 and c5. With `layout` bound to
 // state `lay`, the stored layout is neither applied nor saved and the sort part still is.
 
 // Review Focus 1. Mutation: hiding a column removing it from the query's sort.
 TEST_CASE("hiding a sorted and filtered column changes no row", "[ui][table][config]")
-// kModelTable over samplesDescription(5), sorted by `name`, filter `{"columns":{"name":{"include":[{"contains":"a"}]}}}`:
+// kConfigModelTable over samplesDescription(5), sorted by `name`, filter `{"columns":{"name":{"include":[{"contains":"a"}]}}}`:
 // h.replyPage(pageJson(0, 50, 50, cols)) holds rows R; chooseMenu(table, 1, {"Hide column"}): no new Table.samples call
 // whose sort or filters differ (any call sent is a column fetch of held rows: lastQuery(h)'s `sort` and `filters` equal
 // the previous ones and its `columns` lacks "name");
@@ -618,17 +679,22 @@ Expected: all pass, the existing `test_ui_table.cpp` and `test_ui_interpreter_ta
 - Docs: `docs/spec/ui/document.md` (a `rows` table's `groups`), `docs/spec/qt_quick/backend.md` (the filter menu), table.md (B3 and D9 figures)
 
 **Interfaces:**
-- Consumes: 12a's tick model, `planValueFilter`, `valueFilter`, `classifyFilter`, `canonicalOperand`, `groupValueFilter`, `conditionOps`, `conditionEntry`; 12b's `onFilter`, `onGroupFilter`, `filtered`, `columnGroups`; Task 8a's `DistinctRequest`/`DistinctValues` and `DateBucket` (a bucket's `text` is its ISO form, `2026`, `2026-03`, `2026-03-14`, and its operand `a..b`, as Part C's tests pin them); Task 8c's `DistinctValue::{dimension, unit}`, `ui::parseMeasure`, `ui::measureOperand`; Part D's `ScreenCore::tableMessage`.
+- Consumes: 12e's column chooser (`table_columns_group`, `table_group_create`, `table_group_remove_<id>`), through which the user-formed-group case forms and removes its group, so 12e lands first; 12a's tick model, `planValueFilter`, `valueFilter`, `classifyFilter`, `canonicalOperand`, `groupValueFilter`, `conditionOps`, `conditionEntry`; 12b's `onFilter`, `onGroupFilter`, `filtered`, `columnGroups`; Task 8a's `DistinctRequest`/`DistinctValues` and `DateBucket` (a bucket's `text` is its ISO form, `2026`, `2026-03`, `2026-03-14`, and its operand `a..b`, as Part C's tests pin them); Task 8c's `DistinctValue::{dimension, unit}`, `ui::parseMeasure`, `ui::measureOperand`; Part D's `ScreenCore::tableMessage`.
 - Produces:
   - `TableRows::distinctValues(table::DistinctRequest request) -> async::Completion<std::expected<table::DistinctValues, table::TableError>>` (pure virtual; `EngineRows` answers at once through `Engine::distinctValues`; `WindowRows` sends a query carrying `distinct` through the session's query cache, so reopening a menu sends nothing; `TableCapabilities::distinct == false` → `Unavailable`, and the menu shows conditions only)
   - `SessionOptions::tableFilterDebounce = std::chrono::milliseconds{250}`
   - the menu, a `ui::Dialog` (test id `table_filter`, title the column's or group's label) the lowering mounts beside the table, with test ids: `table_filter_search` (TextInput), `table_filter_all` (`(Select all)` Checkbox), `table_filter_blanks` (`(Blanks)`, only while `blanks > 0`), `table_filter_value_<i>` (Checkbox, label `{text} ({count})`, in the reply's order, `i` from 0), `table_filter_heading_<dimension>` (Text, a `Measure` column's dimension heading before its first value), `table_filter_open_<i>` (Button `▸`, a date bucket that opens to its months or days), `table_filter_more` (Button, the next 200), `table_filter_note` (Text: `mayGrow()` while `partial`, `unreadable(invalid)` while `invalid > 0`, `tooManyValues()` after an Apply whose plan is `Disabled`), `table_filter_op_1` / `_2` (Select of `conditionLabel`s), `table_filter_operand_1` / `_2` and `table_filter_second_1` / `_2` (a TextInput, or on a `Date`/`DateTime` column a `DateTimeInput` in `Date`/`DateTime` mode — the date picker; the second only for `between`), `table_filter_case` (Checkbox `match case`, Text columns), `table_filter_combine` (Select `and`/`or`), `table_filter_unit_1` / `_2` (Select of the column's units, `Measure` only), `table_filter_match` and `table_filter_count` (group menus: `in any column`, `in every column`, `in at least N columns`, `in exactly N columns`, `all of them, each in a column`; the last only while 2 to k values are ticked), `table_filter_apply` (Button, disabled while nothing is ticked), `table_filter_clear` (Button `Clear filter`)
-  - the `Display unit` header submenu (Measure columns) lists, per dimension the column holds, its units (from the description's `units`), checked on the chosen one; choosing sets `layout.units[column][dimension]`
+  - the `Display unit` header submenu (Measure columns) is 12a's (`HeaderMenuInput::dimensions`, entries `{dimension}: {unit}`); the lowering fills `dimensions` from the description's `units` and each `chosen` from `layout.units[column][dimension]`; choosing an entry sets `layout.units[column][dimension]`, and choosing the checked one removes it
 - Rules:
   - **Values or conditions.** A column's filter is either its values part or its conditions part (12a's `classifyFilter`). Reopening the menu shows the part the stored filter is, the other part empty; editing one part clears the other's draft. A user who wants both writes conditions only.
   - **When it applies.** Ticks and "(Select all)" are recorded as `TickOp`s and applied only by Apply, which resolves them (paging each search's values at `maxLimit`), plans the side, and sets the filter; a `Disabled` plan applies nothing and puts `tooManyValues()` in the note. Conditions apply live: an edit of an operator, an operand, the unit, `match case` or `and`/`or` is sent `tableFilterDebounce` after the last such edit, provided every operand canonicalises (`canonicalOperand`) and a `between` has both ends; otherwise nothing is sent and the operand shows its error. Apply on the conditions part sends a pending edit at once. A sent filter calls `TableRows::setFilter`, sets the held `filters` and runs `onFiltersChange`.
   - **The values list** asks `DistinctRequest{column, search, offset, limit = 200}`, the search sent `tableFilterDebounce` after the last keystroke; a group menu asks with `group`. A `Measure` column's list draws `table_filter_heading_<dimension>` before each dimension's first value.
-  - **Dates.** A `Date`/`DateTime` column's list is a tree: it asks `bucket = Year`; opening a year asks `bucket = Month, search = "<year>-"`; opening a month asks `bucket = Day, search = "<year>-<month>-"`, each paged at 200 like any list. A ticked bucket is a member of the `Ranges` form: one `between` per bucket. The conditions take dates from the picker.
+  - **Dates.** A `Date`/`DateTime` column's list is a tree: it asks `bucket = Year`; opening a year asks `bucket = Month, search = "<year>-"`; opening a month asks `bucket = Day, search = "<year>-<month>-"`, each paged at 200 like any list. Its ticks are a set of buckets, not `TickOp`s, and its filter is include-only (`planValueFilter` is not used; a stated simplification of the spec's values list for dates):
+    - with no values filter on the column the tree opens with every box unticked and draws no `(Select all)`; with one, the buckets whose range a stored `between` covers are ticked;
+    - ticking a year or a month covers the buckets under it, whose boxes then show ticked and disabled;
+    - Apply writes `valueFilter(Side::Include, members, blanks, ValueForm::Ranges)`: one `between` per ticked bucket (a covered child adds none), in ascending order of its first end whatever the order of ticking, `combine = Any`, `isEmpty` beside them when `(Blanks)` is ticked; with no box ticked it clears the column's values filter;
+    - one column's entries are bounded by `QueryLimits::maxEntries` (32, `query.hpp:112`), which the server's `validate` enforces. Before sending, buckets that touch (the next begins the day, or the second, after the previous ends) are merged into one `between`; a selection still over 32 entries applies nothing and puts `tableText::tooManyDates()` in `table_filter_note`.
+  The conditions take dates from the picker.
   - **Groups.** A declared group's menu pools its values (`DistinctRequest::group`). A user-formed group (a layout group, index decision #26) has no values list: its menu sends no `DistinctRequest`, shows no search, `(Select all)` or value boxes, and offers the conditions of its columns' kind (a user-formed group is of one kind, 12e) and the match line's four quantifiers (`all of them, each in a column` takes ticked values, so it is not offered). Its filter is a `GroupFilter` with `group` empty and `columns` the layout group's columns in group order (Part C's `compileGroup` takes exactly one of `group` and `columns`), `match` from the match line, `combine` from `and`/`or`, `include` the condition entries; that one object is what the held `filters`, the stored state and the query carry. The lowering finds a layout group's filter as the `GroupFilter` whose `columns` equal the group's columns; removing the group (`RemoveGroup`) removes that filter with it.
 
 - [ ] **Step 1: Write the failing tests** in `tests/test_ui_table_model.cpp`:
@@ -654,21 +720,21 @@ TEST_CASE("filter menu: values and conditions are exclusive, and reopening shows
 
 // Mutation: the search sent on every keystroke (no debounce).
 TEST_CASE("filter menu: a search typed quickly is one distinct request after the pause", "[ui][table][config]")
-// kModelTable over samplesDescription(5), first page replied: open the menu on `name` (one Table.samples call with
+// kConfigModelTable over samplesDescription(5), first page replied: open the menu on `name` (one Table.samples call with
 // `distinct`, replied by hand); type "a","ab","abc" 50 ms apart in table_filter_search;
 // h.advance(249ms): no new call; h.advance(1ms): exactly one more, whose body's distinct.search == "abc".   (D9 gate)
 
 // Mutation: the condition sent on every keystroke, or a half-typed between sent.
 TEST_CASE("filter menu: a condition applies once after typing pauses, and an incomplete between is not sent",
           "[ui][table][config]")
-// kModelTable, `name` (Text), op "contains": type ten letters 150 ms apart into table_filter_operand_1:
+// kConfigModelTable, `name` (Text), op "contains": type ten letters 150 ms apart into table_filter_operand_1:
 // h.advance(249ms) after the last: no new page request; h.advance(1ms): exactly one, filtering contains the ten
 // letters (B4 gate). c3 (Decimal), op "between", operand_1 "2", no second: h.advance(1s): no request; second "5": one,
 // include [{"between":["2","5"]}]; edit operand_1 to "3" and press Apply at once: the request goes without waiting.
 
 // Mutation: the note line ignoring `partial`.
 TEST_CASE("filter menu: a partial list says it may grow and invalid cells are counted under it", "[ui][table][config]")
-// kModelTable; reply the distinct request with {"values":[{"text":"x","operand":"x","count":4}],"distinct":1,
+// kConfigModelTable; reply the distinct request with {"values":[{"text":"x","operand":"x","count":4}],"distinct":1,
 // "blanks":0,"invalid":3,"partial":true}: table_filter_note text == "The list may grow while data loads\n3 cells could not
 // be read"; no checkbox for the invalid cells.
 
@@ -691,7 +757,7 @@ TEST_CASE("filter menu: conditions follow the column's kind, and typed operands 
 
 // Mutation: the Measure list drawn without dimension headings.
 TEST_CASE("filter menu: a Measure column's values are grouped under a heading per dimension", "[ui][table][config]")
-// kModelTable; distinct reply values 0.3 kg (mass), 300 g counted as one with it, 0.5 % (ratio): table_filter_heading_mass
+// kConfigModelTable; distinct reply values 0.3 kg (mass), 300 g counted as one with it, 0.5 % (ratio): table_filter_heading_mass
 // precedes table_filter_value_0, table_filter_heading_ratio precedes the ratio value.
 
 // Mutation: the group menu sending `together` as one oneOf.
@@ -700,7 +766,7 @@ TEST_CASE("filter menu: a group's values are pooled and the match line builds th
 // rows of the spec's truth table; the table's `columnGroups` prop is "[Company:0+3]" (the three stand side by side) and
 // clickGroupFilter(table, 0) opens the group's menu; after moving companyB to the end it is "[]" and the menu is reached
 // from the header and table menus only; menuOf(table, <companyA>) has "Filter Company, 3 columns…"; its values list counts
-// F 3, S 2, X 3, Y 1, Z 1 (rows having it in any column); tick F and S, match "all of them, each in a column", Apply:
+// F 4, S 2, X 4, Y 2, Z 1 (rows having it in any column: F in rows 1 to 4, S in 1 and 3, X in 1, 2, 4 and 5, Y in 4 and 5, Z in 5); tick F and S, match "all of them, each in a column", Apply:
 // filters.groups == [{"group":"company","mode":"together","include":[{"eq":"F"},{"eq":"S"}]}] and the view holds rows 1
 // and 3 only; match "in at least N columns", N 2: rows 1, 2, 3.
 
@@ -713,15 +779,21 @@ TEST_CASE("filter menu: a user-formed group offers conditions and the match line
 // column"); "equals" "F" with "in every column", after 250 ms: the request's filters.groups ==
 // [{"columns":["a","b"],"match":"all","include":[{"eq":"F"}]}] with no "group" member (table.md "Column groups":
 // `match` is "any", "all", {"atLeast": n} or {"exactly": n}), and t.filters.groups holds the same one object; reopening the
-// group's menu shows "equals" "F" and "in every column"; removing the group "Pair" from the chooser empties
+// group's menu shows "equals" "F" and "in every column"; table_group_remove_g1 in the chooser (12e) empties
 // t.filters.groups.
 
 // Mutation: the date tree filtering months on the client (an opened year past 200 months shows nothing).
 TEST_CASE("filter menu: a date column lists years, then a year's months, then a month's days", "[ui][table][config]")
-// kModelTable over a description whose c3 is a Date column: opening its menu sends distinct {"bucket":"year"}; the reply
+// kConfigModelTable over a description whose c3 is a Date column: opening its menu sends distinct {"bucket":"year"}; the reply
 // lists 2025, 2026; table_filter_open_1 (2026) sends {"bucket":"month","search":"2026-"}; opening March sends
-// {"bucket":"day","search":"2026-03-"}; tick March and 2025, Apply: include [{"between":["2025-01-01","2025-12-31"]},
-// {"between":["2026-03-01","2026-03-31"]}] with combine "any".
+// {"bucket":"day","search":"2026-03-"}; every box starts unticked and there is no table_filter_all; tick March, then 2025
+// (in that order), Apply: include [{"between":["2025-01-01","2025-12-31"]}, {"between":["2026-03-01","2026-03-31"]}]
+// (ascending, not the order of ticking) with combine "any"; reopen: 2025 and March are ticked, 2026 is not.
+// Mutation: adjacent buckets sent as one entry each. Tick the 31 days of March and the first 9 of April one by one (40
+// touching days): Apply sends one entry, {"between":["2026-03-01","2026-04-09"]}.
+// Mutation: a selection over maxEntries sent as it is (the server refuses the query). Tick 33 days no two of which
+// touch (every second day from 2026-03-01): Apply sends nothing, t.filters is unchanged and table_filter_note ==
+// "Too many dates to list; filter with a condition".
 
 // Mutation: the unit choice written to the column's own unit instead of the layout.
 TEST_CASE("display unit: the header menu writes the layout's units", "[ui][table][config]")
@@ -759,7 +831,7 @@ TEST_CASE("table benchmark: a server-mode values list from open to shown", "[.be
 
 **Interfaces:**
 - Consumes: 12a's gestures and `FormGroup`; 12c's lowering.
-- Produces: `Columns…` opens a `ui::Dialog` `table_columns` listing every column of the description in layout order (a companion column is not listed once Task 15 marks companions): per column a Checkbox `table_columns_show_<id>` (its label; disabled for a locked column and for the only visible one), Buttons `table_columns_up_<id>` and `table_columns_down_<id>`; Buttons `table_columns_reset` (`Reset columns`) and `table_columns_group` (`Group columns…`, offered while `hide` or `reorder` is allowed), which shows `table_group_label` (TextInput), `table_group_column_<id>` Checkboxes (after the first is ticked, only columns of its kind stay enabled), `table_group_create` (Button, enabled at 2 to 16 ticked and a label); `Sort…` opens `table_sort` listing the chain: per key `i` from 0 a Select `table_sort_column_<i>` (sortable columns), Select `table_sort_direction_<i>` (`ascending`, `descending`), Buttons `table_sort_up_<i>`, `table_sort_down_<i>`, `table_sort_remove_<i>`; Button `table_sort_add` (`Add key`, adds the first sortable column not in the chain; at the bound it refuses with the message). Both dialogs apply each change as it is made, through the same gesture functions; a `Done` button and a dismissal close them.
+- Produces: `Columns…` opens a `ui::Dialog` `table_columns` listing every column of the description in layout order (a companion column is not listed once Task 15 marks companions): per column a Checkbox `table_columns_show_<id>` (its label; disabled for a locked column and for the only visible one), Buttons `table_columns_up_<id>` and `table_columns_down_<id>`; Buttons `table_columns_reset` (`Reset columns`) and `table_columns_group` (`Group columns…`, offered while `hide` or `reorder` is allowed), which shows `table_group_label` (TextInput), `table_group_column_<id>` Checkboxes (after the first is ticked, only columns of its kind stay enabled), `table_group_create` (Button, enabled at 2 to 16 ticked and a label), and under them one line per user-formed group of the layout, `table_group_<id>` (Text, its label and column count, `Pair, 2 columns`) with Button `table_group_remove_<id>` (`Remove group`), which applies `RemoveGroup{id}` and, per 12d's rule, removes the group's filter; `Sort…` opens `table_sort` listing the chain: per key `i` from 0 a Select `table_sort_column_<i>` (sortable columns), Select `table_sort_direction_<i>` (`ascending`, `descending`), Buttons `table_sort_up_<i>`, `table_sort_down_<i>`, `table_sort_remove_<i>`; Button `table_sort_add` (`Add key`, adds the first sortable column not in the chain; at the bound it refuses with the message). Both dialogs apply each change as it is made, through the same gesture functions; a `Done` button and a dismissal close them.
 
 - [ ] **Step 1: Write the failing tests:**
 
@@ -773,7 +845,10 @@ TEST_CASE("column chooser: every column in order, with show, move and reset", "[
 TEST_CASE("column chooser: Group columns forms a group of one kind, which the layout keeps", "[ui][table][config]")
 // columns a, b (Text) and n (Integer): tick table_group_column_a → table_group_column_n disabled; tick b, label
 // "Pair", create: t.layout.groups == [{"id":"g1","label":"Pair","columns":["a","b"]}]; menuOf(table, <a>) holds
-// "Filter Pair, 2 columns…".
+// "Filter Pair, 2 columns…"; the chooser lists table_group_g1 "Pair, 2 columns".
+// Mutation: the Remove group button closing the line without applying RemoveGroup.
+// click table_group_remove_g1: t.layout.groups == [], menuOf(table, <a>) no longer holds "Filter Pair, 2 columns…",
+// and onLayoutChange ran once more.
 
 // Mutation: the sort dialog's move applying to the wrong neighbour.
 TEST_CASE("sort dialog: keys in order with direction, move and remove; Add key refuses at the bound", "[ui][table][config]")
@@ -804,27 +879,27 @@ TEST_CASE("sort dialog: keys in order with direction, move and remove; Add key r
 ```cpp
 // Mutation: copy writing rows in selection order instead of view order.
 TEST_CASE("copy: selected rows as tab-separated display text in layout order, rows not held fetched", "[ui][table][config]")
-// kModelTable over samplesDescription(5) sorted by name, c3 hidden, `name` moved first; the page holds view rows 0-29;
+// kConfigModelTable over samplesDescription(5) sorted by name, c3 hidden, `name` moved first; the page holds view rows 0-29;
 // select keys 9 and 2 (view rows 40 and 3); pressCopy(table): one keyed Table.samples request naming only the visible
 // columns and keys [9] (the held row is not
-// fetched); h.backend.clipboardText() == "<row 3 cells>\n<row 40 cells>" with "\t" between cells in the arrangement's
+// fetched); clipboardText(h) == "<row 3 cells>\n<row 40 cells>" with "\t" between cells in the arrangement's
 // order; statusOf(h).message "Copied 2 rows". chooseMenu(table, nullopt, {"Copy with headers"}) prefixes the labels' line.
 // No row selected: the focused cell's text alone. A rows table whose `name` column has its own `cell` (a badge reading
 // `row.name`) copies the value's text, not the template's.
 
 // Mutation: unloaded cells copied as their placeholder text.
 TEST_CASE("copy: unloaded cells copy as empty and are counted", "[ui][table][config]")
-// kModelTable whose page reply names both rows in `unloadedRows` for level `recipe` (hand-written reply; c4 of that
+// kConfigModelTable whose page reply names both rows in `unloadedRows` for level `recipe` (hand-written reply; c4 of that
 // level): select the two rows, copy: their c4 cells are empty fields;
 // message "Copied 2 rows, 2 cells were not loaded"; no request waits for the level.
 
 // Review Focus 3. Mutation: the bounds compared with `>=`.
 TEST_CASE("range and copy at their bounds: 10,000 pass, 10,001 are refused", "[ui][table][config]")
-// kModelTable, pageJson total 100,000, nothing held past the first page: selectTableRange(table, 0, 9'999): keysOf
+// kConfigModelTable, pageJson total 100,000, nothing held past the first page: selectTableRange(table, 0, 9'999): keysOf
 // fetches pages naming no columns (each body's "columns" is []), t.selectedCount == 10000; pressCopy: copies 10,000 lines;
 // selectTableRange(table, 0, 10'000): statusOf(h).message "A range selects at most 10,000 rows", selection unchanged;
 // with 10,001 keys selected (a 10,000-row range, then a Ctrl-click), pressCopy: "A copy holds at most 10,000 rows",
-// h.backend.clipboardText() unchanged (still the 10,000 lines).
+// clipboardText(h) unchanged (still the 10,000 lines).
 ```
 
 (`selectTableRange` is the `RecordingBackend` driver Part D's Task 10a adds for its range report. Replies the helpers of `tests/ui_table_support.hpp` do not build (distinct values, keyed replies, `unloadedRows`) are written as JSON in the test.)
@@ -851,17 +926,38 @@ TEST_CASE("range and copy at their bounds: 10,000 pass, 10,001 are refused", "[u
 - Consumes: Part D's `EngineRows(std::shared_ptr<table::DataSource>, RecordOf, table::EngineOptions)` over `session.source()` (a `RecordOf` reading the collection row's key and its cells as a record), the state store and `SessionOptions::application`; 12c's lowering.
 - Produces:
   - `forms::CollectionChrome::rows : std::function<ui::Node(CollectionSession&, std::function<ui::Node(std::string const& rowKey)> const& buttons)>` — replaces the rows table; `buttons` is empty when the view has no Open or row action
-  - in `src/ui/interpreter.cpp`: `struct TableSurface { std::shared_ptr<TableRows> rows; std::vector<SurfaceColumn> columns; std::function<Node(Key const&)> trailingCell; std::string trailingLabel; std::function<std::string(std::string const& column, Key const&)> cellTestId; ui::TableOptions options; table::TableStateKey stateKey; std::size_t maxSortKeys = 8; }`, `struct SurfaceColumn { std::string id; std::string label; table::ColumnKind kind; bool shown; bool sortable; bool filterable; }`, and `Node ScreenCore::lowerTableSurface(TableSurface surface, LowerCtx const& ctx, ElementState* element)` — the part of the table lowering below reading the node; the document `table` node builds a `TableSurface` and calls it
+  - in `src/ui/interpreter.cpp`: `lowerTableSurface` — the part of the table lowering below reading the node. It reads no `DocNode`: everything 12c to 12f and 14 read from a `table` node reaches it as a member of the surface, so the document `table` node fills every member from its keys and a collection leaves the defaults. The types:
+    - `struct SurfaceColumn { std::string id; std::string label; table::ColumnKind kind = table::ColumnKind::Text; bool shown = true; bool sortable = false; bool filterable = false; bool locked = false; ui::TableColumn look; CellView cell; }` — `look` carries the column's `width`, `role`, `align`, `valign`, `wrap` and `shrink` (its `label`, `id`, `sortable` and `filterable` are overwritten from the members beside it); `cell` is the column's own cell view, of the type 9d's `TableSource::cellView` returns for one column (index decision 28), empty for the formatted text cell;
+    - `struct SurfaceValue { ExprPtr bound; DocCommands onChange; }` — `bound`: the node's expression when the document binds the value, null when the table holds it; `onChange`: what `DocNode::event` returns for the value's change key, run with `event` the new value;
+    - `struct TableSurface { std::shared_ptr<TableRows> rows; std::vector<SurfaceColumn> columns; std::vector<table::ColumnGroupInfo> groups; std::function<Node(Key const&)> trailingCell; std::string trailingLabel; std::function<std::string(std::string const& column, Key const&)> cellTestId; RowView rowView; ui::TableOptions options; SurfaceValue layout; SurfaceValue sort; SurfaceValue filters; Configure configurable = Configure::All; bool menus = true; std::optional<bool> status; std::optional<table::TableStateKey> stateKey; std::size_t maxSortKeys = 8; }` — `groups`: the declared groups (12d); `rowView`: 9d's row-level view (tone, label), empty for none; `menus`: false under `configurable: false`; `status`: the node's literal, absent for the default; `stateKey`: absent when the table persists nothing (`persist: false`, a `rows` table with no `id`);
+    - `Node ScreenCore::lowerTableSurface(TableSurface surface, LowerCtx const& ctx, ElementState* element)`.
+    What only a `rows` table has — `group` headings, `pageSize`/`page`, `rowSpans`, `empty` — stays in the document table's own code around the call. `CellView`, `RowView` and `DocCommands` stand for the types Part D's lowering already uses for these three things; the executor writes the landed names
   - a collection's surface: columns from `CollectionModel::columns()` (`id = field`, `label`, `kind`, `shown = !hidden`, sortable and filterable), the trailing buttons column (label empty), cell test ids `cell_<field>_<rowKey>`, options from `forms::detail::engine::rowsTableOptions(session)` (test id `collection_rows`, master-detail selection), state key `{application = SessionOptions::application, model = the node's model type, table = the collection's action, qualifier = the screen's id, part}`
-  - test support, this task's (no earlier task defines it; later tasks reuse it by name): `std::vector<std::string> rowKeys(Harness& h, int table)` in `tests/ui_table_support.hpp` — the `rowKey` property of each of `h.backend.children(table)` that has one, in child order (the order the mount placed the realized rows), with a string key's surrounding quotes removed (`RecordingBackend`'s `formatKey` quotes text keys and not integer ones), so a collection keyed by text and a rows table keyed by integer compare equal
+  - test support, this task's (no earlier task defines it; later tasks reuse it by name): `std::vector<std::string> rowKeys(ui::testing::TableHarness& h, int table)` in `tests/ui_table_support.hpp` (index decision 42 names it; if 9d has landed a `rowKeys` of this meaning, this task reuses it and adds none) — the `rowKey` property of each of `h.backend.children(table)` that has one, in child order (the order the mount placed the realized rows), with a string key's surrounding quotes removed (`RecordingBackend`'s `formatKey` quotes text keys and not integer ones), so a collection keyed by text and a rows table keyed by integer compare equal
 
-- [ ] **Step 1: Write the failing tests** in `tests/test_ui_table_model.cpp`:
+- [ ] **Step 1: Write the failing tests** in `tests/test_ui_table_model.cpp`, over this document in `tests/ui_table_support.hpp` (`Lims_ListSamples` is in `corpusCatalog()`, which `TableHarness`'s catalog includes; the rows table holds the rows the test replies to the collection, so both surfaces have the same four):
+
+```cpp
+/// The Samples collection beside a rows table `t` over the same four rows.
+inline constexpr std::string_view kCollectionBesideTable = R"({
+  "vocab": "ui/1", "id": "both",
+  "models": { "sample": { "type": "Lims_SampleModel" } },
+  "state": { "rows": { "init": { "lit": [ { "id": 1, "name": "beta" }, { "id": 2, "name": "Alpha" },
+                                          { "id": 3, "name": "álpha" }, { "id": 4, "name": "Gamma" } ] } } },
+  "view": { "kind": "column", "children": [
+    { "kind": "collection", "model": "sample", "action": "Lims_ListSamples" },
+    { "kind": "table", "id": "t", "testId": "t", "rows": { "ref": "rows" },
+      "columns": [ { "id": "id", "label": "ID", "sortable": true },
+                   { "id": "name", "label": "Name", "sortable": true } ] } ] } })";
+```
+
+`h.reply`, `h.dispatcher.last`, `h.find`, `h.byTestId` and `h.text` are the members `TableHarness` has in common with the existing `Harness` (`tests/ui_interpreter_support.hpp:560-603`); where 9d left one out, the test reads the same thing through `h.backend`.
 
 ```cpp
 // Mutation: the collection keeping the reply's order (chrome.rows not set by the interpreter).
 TEST_CASE("collection: a collection and a rows table over the same rows show the same order and selection", "[ui][table]") {
-    Harness h;
-    auto screen = h.mount(kCollectionBesideTable);  // the Samples collection and a rows table `t` over state `rows`
+    ui::testing::TableHarness h;
+    auto screen = h.mount(kCollectionBesideTable);
     std::string const rows = R"([{"id":1,"name":"beta"},{"id":2,"name":"Alpha"},{"id":3,"name":"álpha"},{"id":4,"name":"Gamma"}])";
     h.reply(h.dispatcher.last("Lims_ListSamples"), R"({"rows":)" + rows + "}");
     int const collection = h.byTestId("Table", "collection_rows");
@@ -884,7 +980,7 @@ TEST_CASE("collection: a master-detail selection and its open row hold through a
 
 // Mutation: the collection's state saved under the screen's rows key.
 TEST_CASE("collection: header and table menus are present and its arrangement persists under its action", "[ui][table]")
-// Harness(store) over a MemoryTableStateStore: menuOf(collection, 1) (Name) holds "Hide column"; choose it, h.advance(500ms):
+// TableHarness(store) over a MemoryTableStateStore: menuOf(collection, 1) (Name) holds "Hide column"; choose it, h.advance(500ms):
 // one save whose key is {application "lims", model "Lims_SampleModel", table "Lims_ListSamples", qualifier the screen's
 // id, part "state"}.
 ```
@@ -1035,15 +1131,14 @@ In `tests/net/test_push_tables.cpp` (Linux): `"shared views: a view published ov
 
 **Files:**
 - Create: `include/morph/ui/table_views.hpp`
-- Modify: `include/morph/ui/table_config.hpp` (view menu commands), `include/morph/ui/table_state.hpp` (`TableStates::store`, `TableStates::keep`), `src/ui/interpreter.cpp` (the `Views` submenu, the name dialog, mount behaviour), `tests/ui_table_support.hpp` (`RecordingTableStateStore`, `LiteralTableStateStore`, index decision 20)
+- Modify: `include/morph/ui/table_config.hpp` (view menu commands), `src/ui/interpreter.cpp` (the `Views` submenu, the name dialog, mount behaviour), `tests/ui_table_support.hpp` (`RecordingTableStateStore`, `LiteralTableStateStore`, index decision 20)
 - Test: `tests/test_ui_table_state.cpp`
 - Docs: `docs/spec/ui/interpreter.md` (saved views), `docs/spec/ui/document.md` (the table menu's views), `docs/spec/table/table.md` ("Two windows, two devices": the retry when the reload finds nothing stored, below)
 
 **Interfaces:**
-- Consumes: 14a; Part D's `TableStates` (9c) and `Session::tableStates()`, the state key, load at mount, save and fitting; 12c's arrangement.
+- Consumes: 14a; Part D's `TableStates` (9c) with its `[[nodiscard]] table::ITableStateStore& store() const noexcept` (the store it was built over) and `void keep(table::TableStateKey const& key, table::StoredTableState state)` (replaces the kept document of `key`; the next `load(key)` resolves to it with no call) — both declared and tested by 9c, index decision 32; this task adds nothing to `TableStates` — and `Session::tableStates()`, the state key, load at mount, save and fitting; 12c's arrangement.
 - Produces:
   - `MenuCommand::{ApplyView, SaveView, RenameView, RemoveView, SetDefaultView, DefaultOnMount, ApplySharedView, PublishView, SaveAsMyView}`
-  - on Part D's `TableStates` (`include/morph/ui/table_state.hpp`), two members, so a views save keeps the session's kept copy current: `[[nodiscard]] table::ITableStateStore& store() const` (the store it was built over) and `void keep(table::TableStateKey const& key, table::StoredTableState state)` (replaces the kept document of `key`; the next `load(key)` resolves to it with no call)
   - `class TableViews` (`morph::ui`, `table_views.hpp`): `TableViews(TableStates& states, table::TableStateKey key)` (`key.part` is ignored; it reads and writes the parts `"views"` and `"shared"` of `key`); `load() -> async::Completion<std::expected<void, std::string>>` — calls `states.load` for the `views` key and, when `states.store().shares()`, for the `shared` key, so they join the turn's one batched `TableStateLoad` with the screen's `state` keys (gate T5) and a second mount reads them from the kept copies with no call; `own() -> table::ViewsDocument const&`; `shared() -> table::ViewsDocument const&`; `change(table::ViewOperation operation) -> async::Completion<std::expected<void, std::string>>` — applies the operation to the loaded document (an operation error answers at once, with no save) and saves through `states.store().save` with the loaded revision, or `kNoDocument` when nothing was loaded; on `Saved` calls `states.keep`; on `Conflict` loads again through `states.store().load` (not `states.load`, whose kept copy is the one that conflicted), keeps what it read, applies the operation to it and saves once more, with that document's revision, or with an empty `expected` when the reload finds nothing stored (a store that does not honour `kNoDocument` answers `Conflict` over nothing; a store that does cannot, unless the document was removed in between); a second `Conflict` answers `Views could not be saved: another window changed them at the same time`; an operation error after the reload answers `A view named {name} exists` or `No view named {name}` and saves nothing; `publish(table::ViewOperation)` the same through `states.store().publish` on the `shared` key; `shares() -> bool` (`states.store().shares()`)
   - the lowering builds one `TableViews` per mounted table that has a state key, over `Session::tableStates()`, and calls its `load()` in the same turn as the table's `state` load
 - Rules: the table menu gains `Views` (a submenu): each own view (checked when it is the state's `view`; labelled `{name} (modified)` while the arrangement differs from the fitted view), separator, `Save view…`, `Rename view…`, `Remove view`, `Set as default`, `Start from the default view` (checkable). `Save view…` and `Rename view…` open `table_view_dialog` with `table_view_name` (TextInput) and `table_view_save` (Button); saving under a name the user already has is a `ReplaceView`. Applying a view fits it as stored state is fitted, sets `layout`, `sort` and `filters` (through their handlers where bound) and writes its name to the state's `view`; the status line shows `Saved view {name}` after a save. At mount: with no stored `state`, the `default` view is applied; with `defaultOnMount`, the default view's `sort` and `filters` are applied over the stored state's, and the stored `layout` still applies. A mounted table does not follow saves made elsewhere.
@@ -1053,7 +1148,7 @@ In `tests/net/test_push_tables.cpp` (Linux): `"shared views: a view published ov
 ```cpp
 // Mutation: a views save with no expected revision (the second window's save overwrites the first's view).
 TEST_CASE("views: views are not lost between windows", "[ui][table][state]")
-// two Harnesses (two sessions) over one RecordingTableStateStore, the same table: both mount with no views stored;
+// two TableHarnesses (two sessions) over one RecordingTableStateStore, the same table: both mount with no views stored;
 // window A saves view "A": the record shows save(views, expected "-") → Saved rA; window B saves view "B": save(views,
 // expected "-") → Conflict carrying rA, then load(views), then save(views, expected rA) → Saved rB, rB != rA; the
 // store's views part holds "A" and "B". Both mount again (new sessions: the views document read has revision rB) and
@@ -1071,7 +1166,7 @@ TEST_CASE("views: a screen's state, views and shared parts load in one call, and
 
 // Mutation: the retry after a Conflict resending kNoDocument (the second Conflict reports the views unsaved).
 TEST_CASE("views: a store that ignores kNoDocument still saves the first view", "[ui][table][state]")
-// Harness over LiteralTableStateStore, no views stored: Save view… named "A": the store saw save(views, expected "-")
+// TableHarness over LiteralTableStateStore, no views stored: Save view… named "A": the store saw save(views, expected "-")
 // → Conflict with revision "", a load finding nothing, save(views, expected "") → Saved; status "Saved view A"; the
 // stored views document holds "A".
 
@@ -1094,16 +1189,16 @@ TEST_CASE("views: a taken name is replaced on save and refused on rename", "[ui]
 // Window 1 over a RecordingTableStateStore holding views "A" and "B" at revision r0. Save view… named "A" after a sort
 // change: one save(views, expected r0) → Saved r1; one view "A" with the new sort, two views in all. Rename view… on
 // "B" to "A": status "A view named A exists", no save is recorded, views unchanged.
-// Then window 2 (a second Harness over the same store) mounts, reads r1, and saves view "C" → Saved r2. Window 1, which
+// Then window 2 (a second TableHarness over the same store) mounts, reads r1, and saves view "C" → Saved r2. Window 1, which
 // still holds r1 and no "C", renames "B" to "C": the record shows save(views, expected r1) → Conflict carrying r2, then
 // load(views) (the reload: the first load of that key since window 1 mounted), and no further save; status
 // "A view named C exists"; the stored document is window 2's, views "A", "B", "C" at revision r2.
 ```
 
-- [ ] **Step 2: Run to see them fail.** `ctest --test-dir build/cl-debug -R "views:" --output-on-failure` after building `morph_tests`. Expected: FAIL — no `Views` entry in the table menu; `TableStates::keep` does not exist.
-- [ ] **Step 3: Implement** `TableStates::store` and `keep`, `TableViews`, the menu, the dialog and the mount rules. In table.md "Two windows, two devices", add after the `views` bullet: a table that loaded no views saves with `kNoDocument`; when the reload after a `Conflict` finds nothing stored, the one retry saves with no expected revision.
+- [ ] **Step 2: Run to see them fail.** `ctest --test-dir build/cl-debug -R "views:" --output-on-failure` after building `morph_tests`. Expected: compile error for `ui::TableViews` (`morph/ui/table_views.hpp` missing); with the header stubbed, FAIL — no `Views` entry in the table menu.
+- [ ] **Step 3: Implement** `TableViews`, the menu, the dialog and the mount rules. In table.md "Two windows, two devices", add after the `views` bullet: a table that loaded no views saves with `kNoDocument`; when the reload after a `Conflict` finds nothing stored, the one retry saves with no expected revision.
 - [ ] **Step 4: Run to see them pass**, then the whole of `morph_tests`.
-- [ ] **Step 5: Mutations, docs, commit.** Apply each named mutation, see its case fail, revert. Run the docs build (`TableStates::store`, `keep` and `TableViews` are public). Commit: `feat(ui): saved table views`.
+- [ ] **Step 5: Mutations, docs, commit.** Apply each named mutation, see its case fail, revert. Run the docs build (`TableViews` is public). Commit: `feat(ui): saved table views`.
 
 ### Task 14c: Shared views on a table
 
@@ -1122,11 +1217,11 @@ TEST_CASE("views: a taken name is replaced on save and refused on rename", "[ui]
 // Mutation: the shared part saved through `save` instead of `publish` (an authoriser cannot tell it from own state).
 TEST_CASE("shared views on a table: publish, read by another person, Save as my view; none over a store that does not share",
           "[ui][table][state][remote]")
-// two Harnesses with PreferencesTableStateStore against one server harness, tokens alice and bob: alice's
+// two TableHarnesses with PreferencesTableStateStore against one server harness, tokens alice and bob: alice's
 // chooseMenu(table, nullopt, {"Views", "Publish view…"}) named "Team", dispatched as action "publish" (never "save");
 // bob mounts: his Views submenu has heading "Shared views" and "Team"; applying "Team" then "Save as my view" adds
 // "Team" to bob's own views. An authoriser refusing bob's publish: status starts "This view could not be published:".
-// A Harness over MemoryTableStateStore(executor) (Sharing defaults to Private): no "Publish view…" entry, and no load of
+// A TableHarness over MemoryTableStateStore(executor) (Sharing defaults to Private): no "Publish view…" entry, and no load of
 // part "shared". Alice's publish result is asserted by the revision it returned, read back by bob's load.
 ```
 
@@ -1149,18 +1244,26 @@ In `tests/net/test_push_tables.cpp`: the publish-then-read flow over a real sock
 - Docs: `docs/spec/ui/document.md` (`maxSortKeys`), `docs/spec/core/registry.md` (the bound carried from `limits`)
 
 **Interfaces:**
+- One revision. After this task every server path that names a table's revision takes it from `servedDescription`: `answerQuery` (the page's `revision`), the `describe` handler, and whatever Parts B to F have added by then (the view cache's key, `resolve`). Step 3 ends with `grep -rn "describe(served" include src` listing `servedDescription` alone; a path left on `describe(served.description)` would answer a page whose revision differs from the description's whenever `limits.maxSortKeys` is not 8, and the client would refetch the description on every page.
 - Consumes: Task 2's `ServedTable::limits` (`QueryLimits`, whose `maxSortKeys` defaults to 8); Task 1's `TableCapabilities::maxSortKeys`; 12a's `applySortGesture`.
-- Produces: `inline constexpr std::size_t kMaxSortKeysBound = 32;` and `[[nodiscard]] std::expected<TableDescription, TableError> servedDescription(ServedTable const& served)` in `morph::table` — the description with `capabilities.maxSortKeys = served.limits.maxSortKeys`, or `SourceContract` (message ``"a table's `limits.maxSortKeys` is 1 to 32"``) when it is 0 or above `kMaxSortKeysBound`; the document key `maxSortKeys` on `table`: a literal integer 1 to 32, a `rows` table's only (on a model-backed table refused at load with ``"`maxSortKeys` is a `rows` table's; a model's table carries its bound in its description"``; out of range refused with ``"`maxSortKeys` is 1 to 32"``).
+- Produces: `inline constexpr std::size_t kMaxSortKeysBound = 32;` and `[[nodiscard]] std::expected<TableDescription, TableError> servedDescription(ServedTable const& served)` in `morph::table` — `describe(d)` of a copy `d` of `served.description` with `d.capabilities.maxSortKeys = static_cast<std::uint32_t>(served.limits.maxSortKeys)` (`QueryLimits::maxSortKeys` is a `std::size_t`, the capability a `std::uint32_t`), the bound set before the revision is taken because `capabilities` is part of the canonical JSON `describe` hashes; or `SourceContract` (message ``"a table's `limits.maxSortKeys` is 1 to 32"``) when it is 0 or above `kMaxSortKeysBound`; the document key `maxSortKeys` on `table`: a literal integer 1 to 32, a `rows` table's only (on a model-backed table refused at load with ``"`maxSortKeys` is a `rows` table's; a model's table carries its bound in its description"``; out of range refused with ``"`maxSortKeys` is 1 to 32"``).
 
 - [ ] **Step 1: Write the failing tests.** In `tests/table/test_table_description.cpp`:
 
 ```cpp
 // Mutation: servedDescription leaving capabilities at the default 8.
 TEST_CASE("served description: limits carry the sort bound, up to 32", "[table][description]") {
-    table::ServedTable served{.description = samplesDescription(3)};
-    CHECK(table::servedDescription(served)->capabilities.maxSortKeys == 8);
+    table::ServedTable served{.description = threeColumns()};
+    auto const eight = table::servedDescription(served);
+    REQUIRE(eight);
+    CHECK(eight->capabilities.maxSortKeys == 8);
+    CHECK(eight->revision.size() == 16);
+    CHECK(eight->revision == table::describe(*eight).revision);
     served.limits.maxSortKeys = 32;
-    CHECK(table::servedDescription(served)->capabilities.maxSortKeys == 32);
+    auto const wide = table::servedDescription(served);
+    REQUIRE(wide);
+    CHECK(wide->capabilities.maxSortKeys == 32);
+    CHECK(wide->revision != eight->revision);   // Mutation: the revision taken before the bound is set.
     served.limits.maxSortKeys = 33;
     CHECK(table::servedDescription(served).error().code == table::TableErrorCode::SourceContract);
     served.limits.maxSortKeys = 0;
@@ -1168,12 +1271,24 @@ TEST_CASE("served description: limits carry the sort bound, up to 32", "[table][
 }
 ```
 
+(`threeColumns()` is a file-local helper returning a `TableDescription` of `id` Integer key, `name` Text and `c3` Decimal, built as this file's Task 1 cases build theirs. `samplesDescription` is not used here: it lives in `tests/ui_table_support.hpp`, the UI harness header of `morph_tests`, and this file is in `morph_table_tests`, which links `morph::morph` and `morph_test_main` only.)
+
+In the same file, the page's revision:
+
+```cpp
+// Mutation: answerQuery hashing served.description as the model gave it (the page names a revision no describe reply has).
+TEST_CASE("served description: a page carries the served description's revision", "[table][description]")
+// a ServedTable over a VectorSource of three rows with limits.maxSortKeys = 32, built as this file's Task 2 answerQuery
+// cases build theirs: table::detail::answerQuery(served, {})->revision == table::servedDescription(served)->revision;
+// with limits.maxSortKeys = 33 answerQuery answers SourceContract.
+```
+
 In `tests/test_ui_table_model.cpp`:
 
 ```cpp
 // Mutation: the client holding 8 whatever the description says.
 TEST_CASE("sort chains: a table whose limits set 32 accepts 32 keys from the header and refuses the 33rd", "[ui][table][config]")
-// kModelTable over samplesDescription(40) whose capabilities.maxSortKeys is 32: Shift-click 33 sortable headers: t.sort
+// kConfigModelTable over samplesDescription(40) whose capabilities.maxSortKeys is 32: Shift-click 33 sortable headers: t.sort
 // has 32 keys, the last page request's sort has 32 keys, status message "A table sorts by at most 32 columns".
 // A rows table with "maxSortKeys": 12 over 13 sortable columns: 12 keys, the 13th refused with "…at most 12 columns".
 ```
@@ -1189,4 +1304,4 @@ In `tests/test_ui_document.cpp`: `"table: maxSortKeys is a rows table's literal 
 
 ## Order within this part
 
-12a → 12b → 12c → (12d, 12e, 12f in any order; each touches the lowering, so they merge one at a time) → 13 → 14a → 14b → 14c. Task 16 needs only 12c and may run beside 13 and 14. All of Task 12 needs Part D's Tasks 9 to 11 (the lowering, the status line, the arrangement); Task 13 needs Tasks 9 and 11; Task 14 needs Task 9's store and model.
+12a → 12b → 12c → 12e → 12d, with 12f anywhere after 12c (12d's user-formed-group case forms and removes its group through 12e's chooser; each of the three touches the lowering, so they merge one at a time) → 13 → 14a → 14b → 14c. Task 16 needs only 12c and may run beside 13 and 14. All of Task 12 needs Part D's Tasks 9 to 11 (the lowering, the status line, the arrangement); Task 13 needs Tasks 9 and 11; Task 14 needs Task 9's store and model.
