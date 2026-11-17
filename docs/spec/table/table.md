@@ -111,7 +111,7 @@ struct TableCapabilities {
 };
 
 struct TableDescription {
-    std::string id;                        // unique within the model: "designs"
+    std::string id;                        // unique in the process, across every model: "designs"
     std::string label;
     std::vector<TableColumn> columns;      // in the declared order
     std::string key;                       // the id of the column that is the row's key
@@ -171,7 +171,7 @@ BRIDGE_REGISTER_TABLE(lims::DesignModel, "recipes", &lims::DesignModel::recipes,
   things and is expected to be cheap; the description of a table whose columns do not vary is built once.
 - **The framework does the rest**, and none of it on the model's strand. When the function returns, the
   framework takes the source's snapshot, and then on the server's table executor
-  (`RemoteServerOptions::tableWork`, a pool) validates the query against the description and `limits`, finds or
+  (`ServerConfig::tableWork`, a pool) validates the query against the description and `limits`, finds or
   computes the view ([The view cache](#the-view-cache)), reads the level snapshots, builds the reply, and wants
   what the reply showed as unloaded. A model writes no paging, sorting, filtering, keyed or distinct-value code.
 - **Services are the caller's.** `services` is what makes text order by the caller's locale. Left empty it is the
@@ -202,6 +202,12 @@ BRIDGE_REGISTER_TABLE(lims::DesignModel, "recipes", &lims::DesignModel::recipes,
 | `Table.designs.describe` | nothing | `TableDescription` |
 | `Table.designs.resolve` | `ResolveRequest` (a `RowSelection` and a `SelectionPolicy`) | `SelectedRows` ([Acting on rows](#acting-on-rows)) |
 
+**A table id is unique in the process**, not only in its model. The action ids carry the table's id and no
+model, and an action id names one action type: the effects registries are keyed by it, and an id registered by
+two action types fails every effects lookup of the process. Two models that each register a table `"rows"`
+are therefore refused when the registries resolve, with "action `Table.rows` is registered by two action types;
+give each its own id".
+
 One generic action taking a table id in its body was the alternative, and loses on every count that matters:
 
 - **Authorisation** is per model type and action id. An action per table lets a principal read one table of a
@@ -212,8 +218,10 @@ One generic action taking a table id in its body was the alternative, and loses 
   without the cache reading bodies.
 - **Effects** are declared per action.
 
-A typed list action that takes a `TableQuery` and returns a `Page<Row>` remains a table: it is the same contract
-with the description derived from the row type.
+A typed list action that takes a `TableQuery` and returns a `Page<Row>` remains a table: it is the same contract,
+read against a description the client builds from the node's columns or the action's view document
+([The client table model](#the-client-table-model)), since a client sees an action's request schema and never
+its reply's.
 
 **Changing a row is the application's action.** The registration makes no edit action. A model changes a row
 through an action of its own, which declares its effect on the table and returns the keys it changed. A column
@@ -295,6 +303,17 @@ serves the rows through a `RowsSource<Row>`. Wherever this document shows a type
 `LevelLoaded<Row>`, `Page<Row>`), it is this layer; the contract underneath is the description, the
 `DataSource` and the generic page.
 
+A row type cannot carry a unit registry, which is the application's run-time knowledge
+([Measures and the unit registry](#measures-and-the-unit-registry)). A model whose typed table has a
+`MeasureValue` member declares one more function, which the framework calls when it serves the table:
+
+```cpp
+std::shared_ptr<table::UnitRegistry const> tableUnits(table::TableContext const& context);
+```
+
+Its registry resolves the members' unit ids and gives the description its `units`. A typed table with a
+`MeasureValue` member whose model declares no `tableUnits` is a `SourceContract` error.
+
 ### Rows on the wire
 
 ```cpp
@@ -345,7 +364,9 @@ A page of a generic table is row arrays under one header:
 - An unloaded cell costs nothing per cell: the state is per row and level.
 - Every other member is the typed page's, with the same meaning.
 - `revision` is the description's. A client holding another revision fetches the description again and resets
-  its window: the columns changed under it.
+  its window: the columns changed under it. On a screen the table is mounted again over the new columns, under
+  the same element state, because a mounted table's columns are set once: it keeps its window, sort, filters
+  and selection, and loses its realized cells and scroll offset.
 - **Why rows and not columns.** Column arrays would be the same bytes. A reply is read by row: a keyed reply
   replaces rows, and a reply carries a few rows as cheaply as a page.
 - **Size.** A row object repeats every column's id, which is most of the 21 bytes a cell costs in a typed page.
@@ -404,9 +425,11 @@ struct ColumnDisplay {
 };
 ```
 
-- **Where it is formatted.** On the client, by `ui::formatCell(cell, column, locale)`, the one function every
-  backend, the copy, the status line and the filter menu call. The server sends no text for a value it can
-  send exactly; a model that formats on the server sends a `Text` column, which then sorts and filters as text.
+- **Where it is formatted.** On the client, by `ui::formatCell(cell, column, format)`, the one function every
+  backend, the copy, the status line and the filter menu call. `format` is the session's `ui::FormatContext`,
+  which carries the locale's numbers, its date patterns and the display zone. The server sends no text for a
+  value it can send exactly; a model that formats on the server sends a `Text` column, which then sorts and
+  filters as text.
 - **Rounding is for showing.** 0.125 shown at two places under `HalfUp` is "0.13", and a filter
   `eq 0.13` does not match it: the filter compares the exact value. A filter menu's condition field accepts
   more places than the column shows for that reason.
@@ -508,9 +531,16 @@ smallest row changes.
 - **Kinds.** A column part's `kind` (a literal: `text`, `integer`, `decimal`, `number`, `date`, `dateTime`,
   `bool`) decides the column's kind. Without it the kind is inferred from every non-null cell of the column:
   all integers is `Integer`; integers and exact decimals together is `Decimal`, an integer being an exact
-  decimal; any `double` among numbers is `Number`; all booleans is `Bool`; all text is `Text`. Any other mix
+  decimal; all timestamps is `DateTime`; all booleans is `Bool`; all text is `Text`. Any other mix
   takes the kind of the first non-null cell, and a cell not of that kind is invalid: it sorts last and is
   reported once at the `sort` path. A change that alters the inferred kind is a `Reset` of that column.
+- **`Number` only by name.** A document value holds no `double`: a number with a fraction that reaches `rows`
+  through the query cache is already an exact decimal. So inference never yields `Number`, and a column is
+  `Number` only through a literal `kind: "number"`.
+- **Timestamps to the second.** A timestamp becomes a `DateTime` cell of whole seconds, rounded down (toward
+  negative infinity, so −1 ms is −1 s), as a model's `DateTime` column holds it. Two timestamps within one second
+  tie and keep their source order, so a `rows` table orders them as a model's table does, where the expression
+  language's `sort` orders them to the millisecond.
 - **Text order.** The source orders text with a collator whose sort key is the default collator's fold followed
   by the text itself, which is the expression language's order for text: case-folded first, then by its own
   bytes. `null` is an empty cell and sorts last in either direction, as the expression language's `sort` places
@@ -605,8 +635,13 @@ through the query cache, and gives the node its columns, so a node that declares
 as described, and one that declares some lays those out and takes the rest of each column from the
 description. Its `body` is the query's fixed part, its header sorts and its `filters` set the query's `sort` and
 `filters`, and `highlightKey` is a keyed query for that row's view index. A typed list action is read into the
-same window: its description is derived from the action's schema, and the reader turns each row object into
-cells; it returns whole rows whatever `columns` says.
+same window, and its description is built on the client, because a client's catalog holds an action's request
+schema and never its reply's: the columns are the node's `columns` parts, or else the `v-columns` of the
+action's view document, with the key from the node's `key`, the view document's `v-rowKey`, or `id`. A column's
+kind is the node part's literal `kind`, else the view document's, else inferred from the first reply's rows and
+then fixed for the window's life. The query is written into the request's one member marked `x-table`. A node
+whose action has no such member, or which has neither `columns` nor a view document, is refused when the
+document loads. The reader turns each row object into cells; it returns whole rows whatever `columns` says.
 
 ## The renderer
 
@@ -797,8 +832,9 @@ Why a cell alternative inside the engine:
   arrive together.
 
 Cost: every reader of `Cell` must know the alternative. `Cell` does not grow (an empty struct is smaller than
-`QuantityCell`), and apunloaded keeps every existing alternative's index. `displayText` is the one `std::visit` over
-a `Cell`; its last branch formats the value, so the new alternative does not compile until it has a branch.
+`QuantityCell`), and placing `Unloaded` after the existing alternatives keeps every one's index. `displayText`
+is the one `std::visit` over a `Cell`; its last branch formats the value, so the new alternative does not compile
+until it has a branch.
 
 **The wire is a second channel.** A page says which cells are unloaded beside its rows, per row and level
 ([Partial pages](#partial-pages)): a generic page holds `null` in an unloaded cell, and a typed row holds whatever
@@ -849,10 +885,11 @@ the engine's rule in one sentence: a cell matches an operator only when the cell
 ### Totals
 
 `total` counts the rows in the view. When `undecided` is not zero the view may still grow, so the total is a lower
-bound and `totalKind` is `AtLeast`. `AtLeast` therefore has two causes, the cap and undecided rows, and
-`Page::undecided` tells them apart: a client shows "100,000 or more" for the first and "12 so far, 40 loading" for
-the second. `apply` still omits `total` above `QueryLimits::totalCap`. A sort on an unloaded column changes no
-membership and leaves the total `Exact`.
+bound and `totalKind` is `AtLeast`; with no undecided rows `apply` reports `Exact`. Above `QueryLimits::totalCap`
+`apply` does not count the view and omits `total`, and a window keeps the total it already knows. A client shows
+"12 so far, 40 loading" while rows are undecided, and the cap followed by "or more" ("100,000 or more") when
+the view is past the cap and the page carries no total. A
+sort on an unloaded column changes no membership and leaves the total `Exact`.
 
 ### Unique values
 
@@ -1497,7 +1534,7 @@ struct ViewCacheOptions {
 - **One computation.** Requests that need the same entry while it is computed wait for that one computation. So
   fifty watchers of one view that refetch after an arrival cost one `apply`, not fifty.
 - **Where it runs.** Finding, computing and reading an entry, and encoding the reply, run on
-  `RemoteServerOptions::tableWork`, over immutable snapshots. Neither the model's strand nor the server strand
+  `ServerConfig::tableWork`, over immutable snapshots. Neither the model's strand nor the server strand
   waits for a sort.
 - **Bound.** Over `maxBytes` the least recently used entries go. An entry is also dropped when it is found
   invalid.
@@ -1540,17 +1577,23 @@ third is `ActionRecordInfo::opaque`, which a registration states when a result h
   query reads, a distinct-values list) is marked by every change of the table's record and is never merged
   into. A table's description is an entry of `Table.<id>.describe`, which holds no record: it is replaced when
   a reply names another `revision`.
+- **An opaque entry keeps fractions.** A `Value` holds no JSON number with a fraction or an exponent, and an
+  ordinary action's reply that has one is refused. A page's `Number` cells are such numbers, so the reply of an
+  opaque entry is decoded by a table-aware variant of `valueFromJson`: a number with a fraction becomes the
+  decimal `Value` its shortest text spells (`table::parseDecimal`), and one that does not parse as a decimal
+  becomes its text. Every other action keeps the strict rule. A document's `rows` bound to such a page
+  therefore hold decimals, and a column of fractional numbers there infers as `Decimal`.
 
 **A window's fetches are not queries and make no entry.** The session has a read for them and a way to watch
 without an entry:
 
 ```cpp
-/// Runs a read action and resolves with its reply, or fails as an entry's fetch fails. Makes no cache entry
-/// and reads none. A stop request sends the wire's `cancel` for the call, where the server takes one, and
-/// drops the reply in either case.
-async::Completion<Value>
+/// Runs a read action and resolves with its reply's JSON text, or fails as an entry's fetch fails. Makes no
+/// cache entry and reads none. A stop request sends the wire's `cancel` for the call, where the server takes
+/// one, and drops the reply in either case.
+async::Completion<std::string>
 Session::read(std::shared_ptr<ModelChannel> const& channel, std::string const& actionId, Value const& body,
-              std::stop_token stop = {});
+              ::core::async::StopToken stop = {});
 
 /// Watches `record` for as long as the returned holder lives, and hands its events to `handler` on the
 /// runtime's owner. Resolves when the server has the watch.
@@ -1562,6 +1605,9 @@ Session::watchRecord(std::string const& record, std::function<void(effects::Reco
   any holder needs it.
 - **Watch, then fetch.** `WindowRows` sends its first page fetch after `watchRecord` resolves, as an entry
   watches before it fetches, so no change between the reply and the watch is missed.
+- **`read` resolves with text, not a `Value`.** A page's `Number` cells are JSON numbers with fractions, which
+  a `Value` cannot hold, so the caller decodes the text against the table's description
+  (`table::readGenericPage`) and every cell keeps its exact value.
 - `read` does not route its reply through the cache's effects: a read has none, and the caller's own change
   events reach it like anyone's.
 - On reconnect and on `resync` the session calls each holder's handler with a whole-type change.
@@ -1795,7 +1841,8 @@ struct FilterEntry {
   matches an empty or invalid cell, and is `Unknown` on an unloaded one.
 - Ticked values are one `oneOf` entry in `include`; "(Blanks)" ticked adds an `isEmpty` entry beside it, which
   `combine: any` joins. Unticking a few values of many is the same entry in `exclude`. A menu sends whichever side
-  is smaller, so unticking one value of 50,000 sends one value.
+  is smaller, so unticking one value of 50,000 sends one value; when the two sides are equal it sends the
+  unticked side, an exclude, so unticking one of two values sends one excluded value.
 - `compileFilter` parses the members once into a set; a row is matched by one lookup, whatever the set's size.
 - `QueryLimits::maxSetValues` (10,000) bounds one entry, `maxQuerySetValues` (20,000) the members of every set
   of one query together, and `maxQuerySetBytes` (1 MiB) their text; over any of them is `LimitExceeded`. The
@@ -1850,7 +1897,13 @@ distinctValues(DataSource const& source, TableQuery const& query, DistinctReques
   `distinct` is counted up to `QueryLimits::totalCap` and is `AtLeast` at the cap. A column of 100,000 distinct
   values is paged and searched, never sent whole.
 - **Dates.** With a bucket, a value is a year, a month or a day, its `operand` the two ends of a `between`; the
-  menu draws the tree by asking for years, then the months of an opened year, then its days.
+  menu draws the tree by asking for years, then the months of an opened year, then its days. The tree's filter
+  is include-only: it opens with every box unticked and no "(Select all)" (or with the buckets a stored filter
+  covers ticked), ticking a year or a month covers the buckets under it, and Apply sends one `between` per
+  ticked bucket under `combine: any`, with `isEmpty` beside them when "(Blanks)" is ticked; with nothing ticked
+  it clears the column's values filter. Buckets that touch (the next begins the day, or the second, after the
+  previous ends) are merged into one `between` first. A selection still over `QueryLimits::maxEntries` (32)
+  entries applies nothing, and the menu says "Too many dates to list; filter with a condition".
 - **Levels.** The column's level is an `order` level of the request: it is needed for every candidate row.
 - **Client mode.** `Engine::distinctValues(request)` answers from the key columns the engine holds.
 - **Server mode.** `TableQuery::distinct` carries the request through the table's own action, so the model's
@@ -1894,7 +1947,8 @@ is in at most one declared group; a declaration that breaks either is refused wh
 A user may also form a group: the column chooser has "Group columns…", which offers columns of one kind and asks
 for a name. Such a group is part of the layout (`"groups": [{"id", "label", "columns"}]` in its stored shape) and
 is fitted to the table as the layout is: a column the table lacks leaves the group, and a group left with fewer
-than two columns is dropped, with any filter on it.
+than two columns is dropped, with any filter on it. The column chooser lists the groups a user formed, each with
+"Remove group", which removes the group and any filter on it.
 
 **The filter.** `GroupFilter` is the engine's filter over several columns, with a name, a quantifier, a mode
 and excludes:
@@ -1932,8 +1986,9 @@ nothing but `isEmpty`, and an invalid cell nothing but `notEmpty`.
 - **`Columns` mode.** Count the columns that satisfy the entries. The row passes when the count is at least 1
   (`any`), k (`all`), at least n, or exactly n.
 - **`Together` mode.** The row passes when the entries can be given a column each, no column twice, such that
-  each entry matches its column's cell. `match` and `combine` are not used. It takes at least 2 entries and at
-  most as many as the group has columns, so at most 16.
+  each entry matches its column's cell. `match` and `combine` are not used. It takes at least 2 include entries
+  and at most as many as the group has columns, so at most 16.
+  A group with no include entry is an exclude-only group in either mode: only its `exclude` decides.
 - **`exclude`.** The row is rejected when any column's cell matches any exclude entry: "none of the companies is
   X".
 - Groups combine with each other and with column filters by AND, so "F somewhere and S somewhere, in the same
@@ -2036,7 +2091,7 @@ by each backend from `Table::status`, and it is where every refusal this documen
   that the copy is refused with a message in the status line.
 - **Unloaded cells** are copied as empty, and the message says how many there were. Copying does not wait for
   a level.
-- The text reaches the clipboard through `Backend::copyText`.
+- The text reaches the clipboard through `IViewBackend::copyText`.
 
 Writing a view to a file (CSV, a spreadsheet) is not part of the table: it is an action of the application
 over the same query, which runs on the server and is not bound by what a client holds.
@@ -2070,20 +2125,34 @@ struct SaveResult {
     std::string reason;      // for Refused
 };
 
+/// An `expected` revision that stores only when nothing is stored under the key, and answers `Conflict`
+/// otherwise.
+inline constexpr std::string_view kNoDocument = "-";
+
 class ITableStateStore {
 public:
     virtual ~ITableStateStore() = default;
     /// The stored document, or nothing when none is stored.
     virtual async::Completion<std::optional<StoredTableState>> load(TableStateKey const& key) = 0;
-    /// Stores `json`. With `expected` empty it replaces whatever is stored; otherwise it stores only when the
-    /// stored document has that revision, and answers `Conflict` with the current revision when it has not.
+    /// Stores `json`. With `expected` empty it replaces whatever is stored; with `kNoDocument` it stores only when
+    /// nothing is stored; otherwise it stores only when the stored document has that revision. It answers
+    /// `Conflict` with the current revision when the condition does not hold.
     virtual async::Completion<SaveResult> save(TableStateKey const& key, std::string json,
                                                std::string expected = {}) = 0;
     virtual async::Completion<bool> remove(TableStateKey const& key) = 0;
     /// Whether the store keeps the `shared` part for everyone rather than for one person.
     [[nodiscard]] virtual bool shares() const { return false; }
+    /// Applies one operation (add, replace, rename or remove one view; see "Saved views") to the `shared` part,
+    /// under the `expected` rule of `save`. A store that does not share answers `Refused`, "this store does not
+    /// share views".
+    virtual async::Completion<SaveResult> publish(TableStateKey const& key, ViewOperation const& operation,
+                                                  std::string expected);
 };
 ```
+
+`kNoDocument` lets a save say "I loaded nothing": a table whose `views` part was empty when it loaded saves its
+first view with it, so two windows that both start from no views cannot overwrite each other's first view. An
+empty `expected` cannot say that, because it means "replace whatever is stored".
 
 - **One place.** The store is `SessionOptions::tableState`, a `std::shared_ptr<ITableStateStore>`. The session is
   what every table surface reaches: a document table over rows, a model-backed table, a collection, in client
@@ -2167,8 +2236,11 @@ debounce.
 - `state` is saved with no expected revision: the last save wins, whole document. Nothing is merged: an
   arrangement is a choice, and half of one window's filter joined to half of another's is neither's.
 - `views` is a list, and losing a view another window saved is losing work. A change to it is one operation
-  (add, replace, rename or remove one view, or set the default). The table saves with the revision it loaded;
-  on `Conflict` it loads again, applies its one operation to what is stored now, and saves once more.
+  (add, replace, rename or remove one view, or set the default). The table saves with the revision it loaded,
+  or with `kNoDocument` when it loaded nothing; on `Conflict` it loads again, applies its one operation to what
+  is stored now, and saves once more, with the revision it read. When that reload finds nothing stored, the one
+  retry saves with an empty `expected`: a store that does not honour `kNoDocument` answers `Conflict` over
+  nothing, and one that does cannot, unless the document was removed in between.
 - A mounted table does not follow saves made elsewhere; it reads its state when it mounts.
 
 #### The framework's stores
@@ -2176,7 +2248,7 @@ debounce.
 | Store | Keeps state in | Use |
 |---|---|---|
 | `PreferencesTableStateStore` | The application's `IPreferencesStore`, through the server's `morph.tableState` model, the person derived on the server | The default. A host that has a preferences store gives every table persistence with no further wiring. |
-| `MemoryTableStateStore` | A map | Tests, and a host that wants state for a session only |
+| `MemoryTableStateStore` | A map | Tests, and a host that wants state for a session only. Built with `Sharing::Private` by default, it does not share and offers no publishing; built with `Sharing::Shared`, it keeps the `shared` part for everyone |
 | A host's own | Anything: a settings file, a browser's local storage for a build with no server | The interface is all a host implements |
 
 **`PreferencesTableStateStore` has its own path to the preferences store.** It does not go through the
@@ -2213,8 +2285,17 @@ How it keeps a document of any size in a store built for small values:
   first 1 MiB and the document's revision and size, and the client asks for the rest by offset, starting again
   if the revision changes meanwhile. Loads made in one turn of the owner go out as one call naming all their
   keys, so a screen of five tables waits for one round trip.
-- **Bounds.** Each key member is 1 to 256 bytes. `TableStateOptions::maxBytesPerPerson` is the operator's
-  quota across one person's stored state; it is unset by default, and then nothing limits a state.
+- **Bounds.** `application`, `table`, `qualifier` and `part` are 1 to 256 bytes each; `model` is 0 to 256
+  bytes, empty for a table over a document's rows. `TableStateOptions::maxBytesPerPerson` is the operator's
+  quota across one person's stored state, in every application; it is unset by default, and then nothing limits
+  a state. The model checks it before it writes, against a usage total it keeps for the person. As with
+  `expected`, a preferences store has no conditional write, so two saves of one person that reach two model
+  instances in the same moment can both pass the check, and the quota is then overshot by one document; a
+  ceiling tolerates that as the `expected` rule tolerates its own race.
+- **Reserved names.** The preferences model writes wherever its caller names, so it refuses an application
+  `morph.tableState` and a scope that starts with `morph.table`, on every call: without that rule a person could
+  overwrite a state's head or the quota's usage entry through the preferences model. The same rule means a
+  person cannot reset their own quota.
 
 A document's `columns` and `saved` preference points that name a table hold no value of their own: their
 editors read and write the table's state.
@@ -2290,10 +2371,11 @@ struct SelectedRows {
     std::int64_t dropped = 0;            // keys the caller may no longer see, left out
 };
 
-/// Resolves on the table executor; a Task handler awaits it.
+/// Calls the table's function on the caller's thread, the model's strand, and resolves on the table executor;
+/// a Task handler awaits it. The model is not const because a table function is not.
 template <auto Function, typename Model>
 [[nodiscard]] async::Completion<std::expected<SelectedRows, TableError>>
-resolve(Model const& model, RowSelection<Function> const& selection, TableContext const& context,
+resolve(Model& model, RowSelection<Function> const& selection, TableContext const& context,
         SelectionPolicy policy);
 
 /// The body of `Table.<id>.resolve`, for an action of another model or a task off the model's strand.
@@ -2332,12 +2414,12 @@ struct ResolveRequest {
   leaves the revision as it was; an edit that brings a row in or takes one out changes it.
 - **Resolving.** An action of the table's model takes a `table::RowSelection<&Model::designs>` member, and its
   Task handler ([`../core/coroutines.md`](../core/coroutines.md#task-handlers)) awaits
-  `resolve(*this, selection, context, policy)`, which runs on the table executor. `resolve` calls the table's
-  function on that model for the caller, so the caller's row scope and `mayRead` apply, and computes the view's
-  membership: the filter's rows with an empty sort, which the view cache holds under that key when another
-  request computed it, and the retained rows merged in. An action of another model, or a server task, sends
-  `Table.<id>.resolve` with the selection and the policy instead, under its own principal. A key selection
-  resolves to the keys the caller can still see, counting the others in `dropped`. A view of more than
+  `resolve(*this, selection, context, policy)`. `resolve` calls the table's function on that model for the
+  caller, on the model's strand, so the caller's row scope and `mayRead` apply; then, on the table executor, it
+  computes the view's membership: the filter's rows with an empty sort, which the view cache holds under that
+  key when another request computed it, and the retained rows merged in. An action of another model, or a
+  server task, sends `Table.<id>.resolve` with the selection and the policy instead, under its own principal. A
+  key selection resolves to the keys the caller can still see, counting the others in `dropped`. A view of more than
   `QueryLimits::maxSelectedRows` (1,000,000) rows is `LimitExceeded`.
 - **When the rows changed.** Under `Exact`, `resolve` refuses with `TableErrorCode::ViewChanged` when the
   revision differs. The client then takes the selection again from the view as it is now (its filter, its
@@ -2423,9 +2505,11 @@ returns the row in its `ChangedRows` with `from`, the key the row had ([A model'
 
 While the session runs an action whose input names rows of a table on screen, the rows it names are **busy**:
 for a `RowSelection` member, the keys of a key selection or the held rows of a view selection that `except` does
-not name; the row of a `CellEdit` or a `RowEdit` ([`editing.md`](editing.md)); and the row of a
-`table::RowRef<&Model::designs>` member, a row key whose schema carries `x-rowOf` with the table's record, for an
-action that works on one row.
+not name; the row of a `CellEdit` or a `RowEdit` that a document runs as a mutation ([`editing.md`](editing.md));
+and the row of a `table::RowRef<&Model::designs>` member, a row key whose schema carries `x-rowOf` with the
+table's record, for an action that works on one row. A table's own cell and row edits are not runs of the
+session: they make no row busy, and a cell being saved shows as stale instead
+([`editing.md`](editing.md#cells-of-a-models-table)).
 
 - A busy row draws the theme's busy mark and takes no cell edit ([`editing.md`](editing.md)). It can still be
   selected, copied and scrolled past.
@@ -2502,7 +2586,8 @@ struct Measure {
   `UnitInfo`s and builds an immutable registry; `addUnitsOf<E>()` adds the units of one of morph's compile-time
   unit enums, as a convenience for an application that has them.
 - **A client learns units from the table's description** (`TableDescription::units`, the units of the
-  dimensions the table's columns allow), and from nowhere else: it has no registry of its own.
+  dimensions the table's columns allow), and from nowhere else: it has no registry of its own. A typed row's
+  schema carries none either; it marks a measure's property `x-measure` only.
 - **A unit's id** is 1 to 32 bytes, holds no white space, and does not begin with a digit, a sign, a point or
   a comma; the builder refuses any other, and a second unit of the same id. An operand is a number, a space and
   an id ([Filters on values with units](#filters-on-values-with-units)), so an id with a space in it, or one
@@ -2531,10 +2616,11 @@ struct Measure {
 - On the wire a unit is always its string id, never its number. A generic page writes a measure as
   `[numerator, denominator, unit id]` ([Rows on the wire](#rows-on-the-wire)). A typed row's member is a
   `table::MeasureValue`, written `{"num", "den", "unit"}` as a `Rational` is with the unit's id beside it.
-  `RowsSource` resolves the id through the registry it is given; a document's row value of that shape is read
-  the same way by `ValueRowsSource`. The row's schema marks
-  the property `x-measure` and lists the column's units as `x-units` (`{id, symbol, dimension, num, den,
-  decimals}`), so a client parses, converts and shows without asking.
+  `RowsSource` resolves the id through the registry it is given, which for a typed table is the model's
+  `tableUnits` ([Typed rows are a convenience](#typed-rows-are-a-convenience)); a document's row value of that
+  shape is read the same way by `ValueRowsSource`. The row's schema marks the property `x-measure` and lists no
+  units: it is built from the row type alone, and the units are the application's run-time registry. A client
+  parses, converts and shows a measure with the units of the table's description, without asking.
 
 ### Order of values with units
 
@@ -2941,21 +3027,21 @@ Headers marked (new) do not exist before the step that lands them ([Delivery ord
 | `table/engine.hpp` | `detail::JobInput::previousUndecided`, `detail::JobResult::undecided`; `Engine::undecidedRowCount()`, `undecidedRows()` (source rows), `onUndecidedChange(std::function<void(std::size_t)>)`; `Engine::distinctValues`; `ColumnLayout::setWidth`, `widths`, `setPinned`, `pinned`, `value`, `apply`, and `rebuild` placing a column by the fitting rule. |
 | `table/query.hpp` | `TableQuery::columns`, `keys`, `distinct`, `retry`; `QueryLimits::maxColumns`, `maxKeys`, `maxSetValues`, `maxQuerySetValues`, `maxQuerySetBytes`; `ColumnLevel` and the row type's `columnLevels()`; `LevelLoaded<Row>` as a trailing parameter of `RowsSource` and the typed `apply`; `LevelsNeeded`, `levelsNeeded`; `PageRows::totalKind`, `undecided`, `awaiting`, `failed`, `indices`; `UnloadedRow`, `UnloadedLevels`; `Page::unloadedRows`, `undecided`, `awaiting`, `failed`, `indices`, `distinct`; `DistinctRequest`, `DistinctValue`, `DistinctValues`, `DateBucket`, `distinctValues`; `changeKeys`, `rowIdOf`; `PageFetch::columns`, `revision`; `RowsFetch`, `Refresh`, `RefreshPlan`; `PageWindow`'s key function, `maxKeys` and `maxColumns`; `PageWindow::visible` with columns, `superseded`, `cancelled`, `refresh`, `owed`, `invalidate`, `patch`, `unloadedLevels`, `undecided`, `awaiting`, `failed`; the specialisation `PageWindow<GenericRow>`. |
 | `table/edits.hpp` | `CellEdits::commit` refuses an unloaded cell. |
-| `table/description.hpp` (new) | `TableColumn`, `ColumnGroupInfo`, `TableCapabilities`, `TableDescription`, `TableContext`, `ServedTable`, `GenericRow`, `GenericPage`, `ChangedRow`, `ChangedRows<fn>`, `TableOf<fn>`, `table::typed<Row>`, `table::scoped`, `table::rowScoped`, `table::derivedFrom`; the generic page's writer and reader. `ColumnDisplay`, `Rounding`, `ValueLabel`; `TableColumn::display`, `tone`, `tooltip`, `edit` and `EditInfo` ([`editing.md`](editing.md)); `TableDescription::rowTone`, `rowLock`, `bands` and `BandInfo`; `TableCapabilities::maxSortKeys`; `ResolveRequest` and the `Table.<id>.resolve` action; `ChangedRow::from`, `FailedRow`, `ChangedRows::failed`. |
+| `table/description.hpp` (new) | `TableColumn`, `ColumnGroupInfo`, `TableCapabilities`, `TableDescription`, `TableContext`, `ServedTable`, `GenericRow`, `GenericPage`, `ChangedRow`, `ChangedRows<fn>`, `TableOf<fn>`, `table::typed<Row>` and the model's `tableUnits` hook it calls, `table::scoped`, `table::rowScoped`, `table::derivedFrom`; the generic page's writer and reader. `ColumnDisplay`, `Rounding`, `ValueLabel`; `TableColumn::display`, `tone`, `tooltip`, `edit` and `EditInfo` ([`editing.md`](editing.md)); `TableDescription::rowTone`, `rowLock`, `bands` and `BandInfo`; `TableCapabilities::maxSortKeys`; `ResolveRequest` and the `Table.<id>.resolve` action; `ChangedRow::from`, `FailedRow`, `ChangedRows::failed`. |
 | `table/row_selection.hpp` (new) | `RowSelection<fn>` and its schema's `x-selectionOf`, `SelectionPolicy`, `SelectedRows`, `resolve`, `ResolveRequest`; `RowRef<fn>` and its schema's `x-rowOf`. |
 | `table/data_source.hpp`, `table/query.hpp`, `table/engine.hpp` (additions) | `TableErrorCode::ViewChanged`; the view cache entry's membership digest; `QueryLimits::maxSelectedRows`, `maxRetained`; `TableQuery::retain`, `Page::unmatched`, `Page::viewRevision` and their generic-page members; `Engine::retain`. |
 | `table/query.hpp`, `table/filter.hpp` (removals) | `QueryPlan` and the planned types, `PlanUse`, `planQuery`, and `plan_conformance.hpp` whole: no table is paged in a database. |
-| `ui/cell_format.hpp` (new) | `ui::formatCell`, the one formatter of a cell's text from its column's display and the session's locale. |
+| `ui/cell_format.hpp` (new) | `ui::formatCell`, the one formatter of a cell's text from its column's display and the session's `ui::FormatContext`. |
 | `table/level_cache.hpp` (new) | `LevelRead`, `LevelUse`, `LevelSnapshot`, `LevelSource`, `LevelCacheOptions`, `LevelCacheStats`, `LevelCache<Value>`, `CellLevelCache`. |
 | `table/view_cache.hpp` (new) | `ViewCacheOptions`, `ViewCacheStats`, `ViewCache`. |
-| `table/state_store.hpp` (new) | `TableStateKey`, `StoredTableState`, `SaveOutcome`, `SaveResult`, `ITableStateStore` with `shares()`, `MemoryTableStateStore`; the state's and the views' readers, writers, version migration and fitting. |
+| `table/state_store.hpp` (new) | `TableStateKey`, `StoredTableState`, `SaveOutcome`, `SaveResult`, `kNoDocument`, `ITableStateStore` with `shares()` and `publish`, `Sharing`, `MemoryTableStateStore`; the views operations; the state's and the views' readers, writers, version migration and fitting. |
 | `forms/views.hpp`, `forms/engine/collection.hpp` | The schema carries `x-level` from `columnLevels()` and `x-group` from `columnGroups()`; `deriveColumns` copies them; `CollectionColumn::level`. |
 | `core/change_types.hpp` | `effects::IChangeObserver` (`changed(Changes const&)`, `bind(AnnounceSink)`); `effects::AnnounceSink`. |
-| `core/remote.hpp` | `RemoteServer::announce`, `RemoteServer::attach(std::shared_ptr<effects::IChangeObserver>)`; `RemoteServerOptions::tableWork`, `views`. |
+| `core/remote.hpp` | `RemoteServer::announce`, `RemoteServer::attach(std::shared_ptr<effects::IChangeObserver>)`; `ServerConfig::tableWork`, `views`. |
 | `core/registry.hpp`, `core/effects.hpp` | `BRIDGE_REGISTER_TABLE` and its options; the actions `Table.<id>` and `Table.<id>.describe`; the table's record; `effects::updatesTable<fn>`, `effects::changesTable<fn>`; the result walk's slot for `ChangedRows<fn>`, collecting each row's `key` and `from` and no `failed` key, and its record of a holder's `openMembers()` and `partialMember()`; `ActionRecordInfo::open`, `partial`, `opaque`. `Page<Row>` declares both members. |
 | `ui/table_rows.hpp` (new) | `SortChain`, `TableTotal`, `TableRowRef`, `TableCountsView`, `TableRows`, `EngineRows`, `WindowRows`, `ValueRowsSource`; `ui::parseMeasure`; a selection of the view, retained, busy, failed and locked rows, and key moves by `from`, in both `TableRows`; `TableCountsView::retained`, `busy`; `SessionOptions::retainHold`; the element value `selectedCountKind`. |
 | `ui/interpreter.hpp` | `Session::read`, `Session::watchRecord`, `WatchHolder`; the query cache's rules for open, partial and opaque entries; `SessionOptions::tableState`, `tableStateTimeout`, `tableStateDebounce`, `tableSettle`, `tableAwaitedRefetch`, `maxRangeRows`, `maxCopyRows`; the lowering of every table node onto `TableRows`; a table node's `cellMenu`, `headerMenu`, `retainChanged`, `headerEnabled` and element values `selectionSet`, `busyCount`; a column's display parts, `tone` and `tooltip`; a table node's `status`, `persist`, a column's `kind` and `locked`. |
-| `ui/view.hpp`, `ui/mount.hpp`, `ui/backend.hpp` | `Virtualization::columnThreshold`, `cellThreshold`, `columnOverscan`, `realizePerFrame`; `ColumnExtents`; the column window, cell pools and the frame budget; `Table::status`; `Backend::copyText`; the range-selection report by view rows. |
+| `ui/view.hpp`, `ui/mount.hpp`, `ui/backend.hpp` | `Virtualization::columnThreshold`, `cellThreshold`, `columnOverscan`, `realizePerFrame`; `ColumnExtents`; the column window, cell pools and the frame budget; `Table::status`; `IViewBackend::copyText`; the range-selection report by view rows. |
 | `ui/table_state.hpp` (new), `ui/table_state_model.hpp` (new) | `PreferencesTableStateStore`; `TableStateModel` (`morph.tableState`) with its `publish` action for shared views, `TableStateOptions`. |
 | `qt_quick` and the terminal backend | Cells and header cells for columns in the window only; pinned columns; header menus, drag, resize, the sort dialog, the column chooser, the filter menu, the status line. |
 
@@ -2989,14 +3075,14 @@ Each case names the mutation it was seen to fail on, as the module's other tests
 | An open entry hears every change | A cached page whose `awaiting` is not empty is marked by an event for a key it does not hold; one whose `awaiting` is empty is not. Mutation: the cache ignoring `open`. | `tests/test_ui_interpreter_cache.cpp` |
 | A partial entry is not merged into | An `updates` reply for a row of a cached page with `unloadedRows` marks the entry and leaves its value; without `unloadedRows` it merges. Mutation: the cache ignoring `partial`, which shows an unloaded member's default as a value. | `tests/test_ui_interpreter_cache.cpp` |
 | A table from a description | A model with no row type serves a table; a client given only the catalog draws its columns, sorts, filters and pages it. Mutation: a lowering that needs the node's `columns`. | `tests/table/test_table_description.cpp`; `tests/test_ui_table_model.cpp` |
-| A model with several tables | Two tables of one model are authorised, cached and changed apart: a principal allowed one action is refused the other; an action declaring `updatesTable` on one marks only its watchers; an action that changes two tables returns two `ChangedRows`, and each table's watchers get that table's keys; `updatesTable` without its `ChangedRows` in the result is refused when the registries resolve. Mutation: one record for the model. | `tests/net/test_push_tables.cpp` |
+| A model with several tables | Two tables of one model are authorised, cached and changed apart: a principal allowed one action is refused the other; an action declaring `updatesTable` on one marks only its watchers; an action that changes two tables returns two `ChangedRows`, and each table's watchers get that table's keys; `updatesTable` without its `ChangedRows` in the result is refused when the registries resolve; one table id in two models is refused when the registries resolve. Mutation: one record for the model. | `tests/net/test_push_tables.cpp`; `tests/table/test_table_description.cpp` |
 | Columns by session | Two principals get different descriptions of one table; a page's `columns` are the caller's; a changed `revision` makes the client fetch the description again. | `tests/net/test_push_tables.cpp` |
 | The generic page | Every kind of cell round-trips: empty, unloaded, a quantity with a factor and with none, a measure; a typed table served through `table::typed` writes the same page as the generic source of the same rows. | `test_table_description.cpp` |
 | Column layout | A stored layout with unknown ids, a new column and every column hidden yields the fitted layout; hiding and moving create no cell widgets (gate D8). Mutation: `apply` ignoring `hidden`. | `tests/table/test_table_columns.cpp`; `tests/qt_quick` |
 | Sort chains | `Shift`+click adds a key and flips one in the chain; a plain click replaces; a key past the table's `maxSortKeys` is refused. Mutation: `Shift` ignored. | `tests/test_ui_table_model.cpp`; `tests/qt_quick` |
 | `oneOf` | It matches exactly the rows the OR of its `eq` entries matches, in include and exclude, with blanks beside it; an unloaded cell is undecided. Mutation: a `oneOf` that matches nothing. | `test_table_filter.cpp` |
 | Distinct values | Counts are those of the rows the other filters leave; the column's own filter is ignored; counts, `blanks` and `invalid` sum to those rows when `partial` is false; a group's "(Blanks)" count is the rows its `isEmpty` entry admits; unloaded rows set `partial`. Mutation: counting over the view. | `tests/table/test_table_distinct.cpp` |
-| Column groups | The truth table of [Column groups](#column-groups) row by row, including the row that tells `together` from `atLeast 2`; each quantifier with unloaded cells against its three-valued rule; an exclude. Mutation: `together` evaluated as `atLeast`. | `test_table_filter.cpp` |
+| Column groups | The truth table of [Column groups](#column-groups) row by row, including the row that tells `together` from `atLeast 2`; each quantifier with unloaded cells against its three-valued rule; an exclude; a group with exclude entries and no include entry, in either mode. Mutation: `together` evaluated as `atLeast`. | `test_table_filter.cpp` |
 | Values with units | 300 g sorts between 0.2 kg and 0.5 kg in both directions; `gt "250 g"` drops 0.3 % rows; 0.3 % and 0.3 kg are not equal; 0.3 kg and 300 g are one distinct value; an operand with no unit is a ratio. Mutation: a key that ignores the unit's factor. | `tests/table/test_table_measure.cpp` |
 | Persisted state before the first query | A table mounts with a stored sort and filter in a `MemoryTableStateStore` whose load is held: no query is sent; released, one query goes out carrying the stored sort and filter. Mutation: a table that ignores its store sends the default query. | `tests/test_ui_table_model.cpp` |
 | Stale state is fitted | A stored state naming a removed column, a removed group, an unknown unit, a filter that no longer compiles and every column hidden: the table shows, with one column at least, the rest applied, each drop reported once; what a session's description lacks is written back unchanged. Mutation: applying the state unfitted. | `tests/table/test_table_state.cpp` |
@@ -3018,16 +3104,16 @@ Each case names the mutation it was seen to fail on, as the module's other tests
 | Order uses are leased | Two order uses that do not fit together: the first loads once and keeps every row, the second is `Unavailable`; after `orderLease` on an injected clock the first's rows are evictable. A level whose values outgrow the estimate stops loading and announces without keys. Mutation: no lease, under which the loader's call count grows without end. | `test_table_level_cache.cpp` |
 | A failed load | The loader returns no value for ten keys: their cells are unloaded, the reply names the level in `failed` and not in `awaiting`, the keys are announced once, and no request loads them until `retryAfter` on an injected clock, a `retry` query or an invalidation. A row with nothing at the level comes back empty and loaded. Mutation: a failed key wanted again by every request. | `test_table_level_cache.cpp`; `test_push_unloaded_rows.cpp` |
 | A row-scoped table | A principal's watch receives an arrival without keys and refetches its pages; no event it receives names a key outside its scope. `rowScoped` with an empty `scope` is `SourceContract`. Mutation: the record registered without `privateKeys`. | `test_push_tables.cpp` |
-| An opaque entry | A document query on `Table.<id>` and a distinct-values entry are marked by a keyed change of the table's record that names none of their rows, and are not merged into. Mutation: the cache looking for a key member. | `tests/test_ui_interpreter_cache.cpp` |
-| A read with no entry | `Session::read` makes no cache entry; `watchRecord` puts the record in the watch set while its holder lives and is told a whole-type change on resync; the first page fetch follows the watch. | `tests/test_ui_interpreter_cache.cpp` |
-| A document's rows as a source | A fresh decode of the same rows notifies nothing; one changed row is one `Updated`; a change to what a `sortBy` reads updates that row; an unused column holds no cells; integers with decimals are one `Decimal` column and a text among them is one invalid cell. Mutation: a diff by row value. | `tests/test_ui_table_model.cpp` |
+| An opaque entry | A document query on `Table.<id>` and a distinct-values entry are marked by a keyed change of the table's record that names none of their rows, and are not merged into; a page's fractional `Number` cell is held as a decimal, while an ordinary action's reply with a fraction is still refused. Mutation: the cache looking for a key member. | `tests/test_ui_interpreter_cache.cpp` |
+| A read with no entry | `Session::read` makes no cache entry and resolves with the reply's text, a fractional number intact; `watchRecord` puts the record in the watch set while its holder lives and is told a whole-type change on resync; the first page fetch follows the watch. | `tests/test_ui_interpreter_cache.cpp` |
+| A document's rows as a source | A fresh decode of the same rows notifies nothing; one changed row is one `Updated`; a change to what a `sortBy` reads updates that row; an unused column holds no cells; integers with decimals are one `Decimal` column and a text among them is one invalid cell; a timestamp is a `DateTime` cell of whole seconds, rounded down; only a literal `kind` makes a `Number` column. Mutation: a diff by row value. | `tests/test_ui_table_model.cpp` |
 | Windows of the renderer | 1,999 × 300 is windowed both ways; cells and header cells alive match F2; a fling creates no cell once the pools are warm; a column growing left of the view keeps the columns in view where they are; pinned columns stay realized and narrow tables unpin for display only. Mutation: a column window that ignores `cellThreshold`. | `tests/test_ui_mount.cpp`; `tests/qt_quick` |
 | Keyboard and focus under windowing | The focused cell survives a scroll of 10,000 rows; `Ctrl+End` over rows not fetched lands on the last row when it arrives; the reported row count is the total, or unknown for a lower bound. | `tests/test_ui_mount.cpp`; `tests/qt_quick` |
 | Range selection in server mode | A range over rows not held resolves to the view's keys through pages that name no columns; over `maxRangeRows` it is refused with a status message and selects nothing. | `tests/test_ui_table_model.cpp` |
 | Copy | Selected rows copy as tab-separated display text in layout order, in the chosen display units; rows not held are fetched; unloaded cells are empty and counted in the message; over `maxCopyRows` is refused. | `tests/test_ui_table_model.cpp` |
 | The status line | Counts for exact, lower-bound and undecided totals; a failed level with "Retry", which sends `retry`; a refusal shown once; `status: false` sends the message to the session's notifications. Mutation: a refusal with no message. | `tests/test_ui_table_model.cpp` |
 | State of any size | A state with a 20,000-value filter saves through `PreferencesTableStateStore` and reads back equal, as segments each within `segmentBytes`; a save stopped after its segments leaves the previous state readable; a missing segment is a failed load. Mutation: the store calling the preferences model, which refuses the value. | `tests/test_ui_table_state.cpp` |
-| Views are not lost between windows | Two windows each add a view from the same loaded revision: the second save answers `Conflict`, reloads, and both views are stored. A `state` save overwrites. | `tests/test_ui_table_state.cpp` |
+| Views are not lost between windows | Two windows each add a view from the same loaded revision: the second save answers `Conflict`, reloads, and both views are stored. A table that loaded no views saves with `kNoDocument`; over a store that does not honour it, the retry after a `Conflict` whose reload finds nothing saves with an empty `expected`. A `state` save overwrites. | `tests/test_ui_table_state.cpp` |
 | Unit numbers across registries | A successor registry keeps every number and tombstones a removed unit; a level cache keeps its values under a successor and invalidates under another lineage; a unit id with a space is refused. | `tests/table/test_table_measure.cpp` |
 | A column's display | 0.125 at two places shows "0.12" under `HalfEven` and "0.13" under `HalfUp`; `eq 0.13` matches neither; an empty cell shows `empty`, an unloaded one its placeholder; a `Bool` with labels orders false first; `decimals` on a `Measure` column is `SourceContract`; copy writes the formatted text. Mutation: a sort over the formatted text, which orders "10.00" before "9.00". | `tests/test_ui_cell_format.cpp`; `test_table_description.cpp` |
 | Companion columns travel with their column | A page naming a column names its `tone` and `tooltip` companions and the `rowTone` one; a column out of the window fetches neither; a document `tone` expression stops the companion being fetched. Mutation: companions fetched for every column. | `test_table_description.cpp`; `tests/test_ui_table_model.cpp` |
@@ -3041,7 +3127,7 @@ Each case names the mutation it was seen to fail on, as the module's other tests
 | Retained rows and the event | With `retainChanged`, an event that precedes its action's reply causes no refetch until the reply or `retainHold`. Mutation: no hold, under which a retained row leaves the view and comes back. | `tests/test_ui_table_model.cpp` |
 | Locked rows and companions | A row whose `rowLock` companion holds text draws locked with that tooltip and refuses a cell edit; companion columns are absent from the column chooser and the header menus; an unknown tone is reported once. Mutation: the chooser listing every column of the description. | `tests/test_ui_table_model.cpp` |
 | A raised sort bound | A table whose `limits` set 32 accepts a 32-key chain from the header and refuses the 33rd; the description carries the bound; `limits` above 32 is `SourceContract`. Mutation: the client holding 8 whatever the description says. | `tests/test_ui_table_model.cpp`; `test_table_description.cpp` |
-| Shared views | A view published through `morph.tableState.publish` is read by a second principal and copied by "Save as my view"; a principal the authoriser refuses `publish` is refused; a store whose `shares()` is false offers no publishing; `defaultOnMount` applies the default view's sort and filters over the stored state at mount. Mutation: the shared part saved through `save`, which an authoriser cannot tell from a user's own state. | `tests/test_ui_table_state.cpp`; `tests/net/test_push_tables.cpp` |
+| Shared views | A view published through `morph.tableState.publish` is read by a second principal and copied by "Save as my view"; a principal the authoriser refuses `publish` is refused; a store whose `shares()` is false, a `MemoryTableStateStore` built with the default `Sharing::Private` among them, offers no publishing; `defaultOnMount` applies the default view's sort and filters over the stored state at mount. Mutation: the shared part saved through `save`, which an authoriser cannot tell from a user's own state. | `tests/test_ui_table_state.cpp`; `tests/net/test_push_tables.cpp` |
 | Copy of a selection of the view | A copy of a view selection less two keys writes the view's rows in order without them, fetched as pages; over `maxCopyRows` it is refused. | `tests/test_ui_table_model.cpp` |
 | A disabled header | With `headerEnabled` false a header click, a filter menu and a column drag change nothing and each is refused in the status line; selection and copy still work. Mutation: `headerEnabled` read once at mount, which leaves the header enabled after the condition turns false. | `tests/test_ui_table_model.cpp` |
 
@@ -3290,7 +3376,7 @@ with the lowering, as cases U6, F6 and F7 of [Performance](#performance).
 | A stored display unit the registry no longer has | Dropped; the cells show in their own units. |
 | A group of columns of different kinds, of fewer than 2 or more than 16 columns, or sharing a column with another declared group | Refused where the columns are read. |
 | A group filter naming a group the table lacks | `UnknownColumn`, naming the group. |
-| `together` with fewer than 2 entries, or more entries than the group has columns | `InvalidSpec`. |
+| `together` with exactly 1 include entry, or more include entries than the group has columns | `InvalidSpec`. |
 | `atLeast` or `exactly` with n below 0 or above the group's column count | `InvalidSpec`. |
 | A user-formed group loses a column | The column leaves the group; under two columns the group and its filter are dropped. |
 | A query's `columns` names a column the table lacks, or one the caller may not read | `UnknownColumn` or `ColumnNotReadable`; the client fetches the description again and asks once more. |
@@ -3343,7 +3429,7 @@ section that does not exist yet.
 | Spec | Takes | With step |
 |---|---|---|
 | [`../core/registry.md`](../core/registry.md) | `BRIDGE_REGISTER_TABLE` and its options, the table's record and `TableOf`, the result walk's slot for `ChangedRows`, `openMembers`, `partialMember`, an opaque holder | 1, 2d |
-| [`../core/backend.md`](../core/backend.md), "Fan-out" | `RemoteServerOptions::tableWork`; `RemoteServer::announce`, `attach`, `IChangeObserver`; the view cache | 1, 2c |
+| [`../core/backend.md`](../core/backend.md), "Fan-out" | `ServerConfig::tableWork`; `RemoteServer::announce`, `attach`, `IChangeObserver`; the view cache | 1, 2c |
 | [`../ui/interpreter.md`](../ui/interpreter.md), "Queries and the cache" | The rules for open, partial and opaque entries; `Session::read` and `watchRecord` | 2d |
 | [`../ui/interpreter.md`](../ui/interpreter.md), "Not yet lowered" and the rows' pipeline | The entry for a model-backed `table` goes; the lowering onto `TableRows` is described; the "Rows' pipeline" and "Groups" rules keep what the lowering does around the engine's order | 4, 6 |
 | [`../ui/document.md`](../ui/document.md), the `table` kind | `table`, `status`, `persist`, `layout`, `configurable`, a column's `kind` and `locked`; `filters` on every table; `cellMenu`, `headerMenu`, `retainChanged`, `headerEnabled`; a column's display parts, `tone` and `tooltip`; the element values this design names | 4, 6, 7, 9a, 9b |
@@ -3365,14 +3451,14 @@ gate runs as an ordinary test; a timing is recorded in [Performance](#performanc
 | 0a | Store paging goes: `QueryPlan`, `planQuery`, `PlanUse` and `plan_conformance.hpp`, their tests, and the example models that page in SQLite, which serve their rows as a `DataSource` instead. | The table, net and example suites green without them |
 | 1 | The generic table contract: `TableDescription`, `ServedTable` over a `source`, `BRIDGE_REGISTER_TABLE`, its options and its two actions, the table's record with `updatesTable`, `changesTable` and `ChangedRows`, the generic page with every cell encoding, `TableQuery::columns`, `table::typed<Row>`, requests answered on `tableWork`. The fixture becomes the registered model `bench::WideTableModel` with its three tables and no slow level. | W1, W2, W5, W7; W6's bytes and codec |
 | 2a | The engine's part of slow columns: the `Unloaded` cell and its rank, the three-valued filter and the undecided set, `ColumnInfo::level`, `levelsNeeded`, `LevelLoaded`, `unloadedRows` on `PageRows` and the typed `Page`. | S1 to S6 |
-| 2b | The wire's part: `unloadedRows`, `undecided`, `awaiting`, `failed` and `indices` on the generic page; `TableQuery::keys` and the keyed reply with its totals. | W3, W4 |
+| 2b | The wire's part: `unloadedRows`, `undecided`, `awaiting`, `failed` and `indices` on the generic page; `TableQuery::keys` and the keyed reply with its totals. `TableQuery::columns` is step 1's. | W3, W4 |
 | 2c | The server's caches and the push: `LevelSource`, `LevelCache` with leases, failures and immutable snapshots; `RemoteServer::announce` and `attach`; the view cache. The fixture gains its slow level. | L1 to L8, S7, S9, C1 to C3 |
 | 2d | The client's part: `PageWindow` under changes, with columns, probes and `superseded`; `Session::read` and `watchRecord`; the query cache's rules for open, partial and opaque entries. A table served over `apply` and read through a `PageWindow` then shows a first page before a slow level loads, shows its cells as unloaded, loads a level only when a named column needs it, and updates exactly the rows that arrived. | K1 to K4, K6, K7, E1 to E4 |
 | 3 | The engine's configuring additions: `oneOf`, `distinctValues`, column groups with quantifiers and `together`, `Measure` and the unit registry, `ColumnLayout`'s widths, pinning, fitting rule and stored shape. | D1 to D6, G1 to G7, M1 to M5 |
 | 4 | `TableRows` and the lowering of a model-backed `table` onto `PageWindow`, from the description, with the status line's counts. The four behaviours of 2d then hold on a screen. `ITableStateStore`, the framework's stores and the load before the first rows land here, for sort and filters, so the rule is built into the first lowering. | U6 (E1 to E3 on a screen), K5, K8, F6, F7, T1, T3 to T5; W6's one request; F1 recorded |
-| 5 | The column window in the mount and in both backends: extents, pinned columns, cell pools, the frame budget, focus, keys and counts under windowing. **Exit criterion:** U8, the same scrolls in the WebAssembly build in a browser, within F3's and F4's frame budgets. | F1 to F5, F8 to F10, U7, U8, D8 |
+| 5 | The column window in the mount and in both backends: extents, pinned columns, cell pools, the frame budget, focus, keys and counts under windowing; range selection in server mode. **Exit criterion:** U8, the same scrolls in the WebAssembly build in a browser, within F3's and F4's frame budgets. | F1 to F5, F8 to F10, U7, U8, D8 |
 | 6 | `rows` tables on the engine through `ValueRowsSource`; the interpreter's own sort and page go. | U1 to U4; B1's 20,000-row step bound |
-| 7 | The configuration interface: header and table menus, column order, visibility, pinning and width, persisted with the rest of the table's state; sort chains; the filter menu with values, conditions, groups and units; copy; range selection in server mode. Screenshots of existing screens change here, as intended. | D7, D9, B3, B4 |
+| 7 | The configuration interface: header and table menus, column order, visibility, pinning and width, persisted with the rest of the table's state; sort chains; the filter menu with values, conditions, groups and units; copy. Screenshots of existing screens change here, as intended. | D7, D9, B3, B4 |
 | 8 | Collections through the same lowering. | U5 |
 | 9 | Saved views, as the `views` part of the persisted state, with the conflict rule; shared views and the default first. | T2 |
 | 9a | A column's display and `ui::formatCell`; companion columns for tone and tooltip; header units. It may land before step 4; if it lands after, step 4's lowering formats through a stand-in that 9a replaces. | The display and companion tests of [Tests](#tests) |

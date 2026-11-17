@@ -689,7 +689,7 @@ Expected: all pass, the existing `test_ui_table.cpp` and `test_ui_interpreter_ta
   - **Values or conditions.** A column's filter is either its values part or its conditions part (12a's `classifyFilter`). Reopening the menu shows the part the stored filter is, the other part empty; editing one part clears the other's draft. A user who wants both writes conditions only.
   - **When it applies.** Ticks and "(Select all)" are recorded as `TickOp`s and applied only by Apply, which resolves them (paging each search's values at `maxLimit`), plans the side, and sets the filter; a `Disabled` plan applies nothing and puts `tooManyValues()` in the note. Conditions apply live: an edit of an operator, an operand, the unit, `match case` or `and`/`or` is sent `tableFilterDebounce` after the last such edit, provided every operand canonicalises (`canonicalOperand`) and a `between` has both ends; otherwise nothing is sent and the operand shows its error. Apply on the conditions part sends a pending edit at once. A sent filter calls `TableRows::setFilter`, sets the held `filters` and runs `onFiltersChange`.
   - **The values list** asks `DistinctRequest{column, search, offset, limit = 200}`, the search sent `tableFilterDebounce` after the last keystroke; a group menu asks with `group`. A `Measure` column's list draws `table_filter_heading_<dimension>` before each dimension's first value.
-  - **Dates.** A `Date`/`DateTime` column's list is a tree: it asks `bucket = Year`; opening a year asks `bucket = Month, search = "<year>-"`; opening a month asks `bucket = Day, search = "<year>-<month>-"`, each paged at 200 like any list. Its ticks are a set of buckets, not `TickOp`s, and its filter is include-only (`planValueFilter` is not used; a stated simplification of the spec's values list for dates):
+  - **Dates.** A `Date`/`DateTime` column's list is a tree: it asks `bucket = Year`; opening a year asks `bucket = Month, search = "<year>-"`; opening a month asks `bucket = Day, search = "<year>-<month>-"`, each paged at 200 like any list. Its ticks are a set of buckets, not `TickOp`s, and its filter is include-only (`planValueFilter` is not used), as table.md's "Distinct values" bullet **Dates.** states:
     - with no values filter on the column the tree opens with every box unticked and draws no `(Select all)`; with one, the buckets whose range a stored `between` covers are ticked;
     - ticking a year or a month covers the buckets under it, whose boxes then show ticked and disabled;
     - Apply writes `valueFilter(Side::Include, members, blanks, ValueForm::Ranges)`: one `between` per ticked bucket (a covered child adds none), in ascending order of its first end whatever the order of ticking, `combine = Any`, `isEmpty` beside them when `(Blanks)` is ticked; with no box ticked it clears the column's values filter;
@@ -1008,7 +1008,7 @@ TEST_CASE("interpreter bench: a collection of 20,000 rows: mount, sort, one row 
 **Files:**
 - Modify: `include/morph/table/state_store.hpp` (views document, operations, `ITableStateStore::publish`, `MemoryTableStateStore` sharing), `include/morph/ui/table_state_model.hpp` (`publish`; a user's `save` of `shared` refused), `include/morph/ui/table_state.hpp` (`PreferencesTableStateStore::shares()`, `publish`)
 - Test: `tests/table/test_table_state.cpp`, `tests/test_ui_table_state.cpp`
-- Docs: `docs/spec/ui/preferences.md` (the `shared` part kept with no person); `docs/spec/table/table.md`, in this task's commit: the `ITableStateStore` block in "Persisted state" gains `publish` (with its default refusal) and `kNoDocument`, and the paragraph under it says what the sentinel means; "Two windows, two devices" says a `views` save from a table that loaded nothing sends `kNoDocument`; "The framework's stores" names `MemoryTableStateStore`'s `Sharing` and its default, `Private`. This settles the handover's spec question 9; the spec text states the rule, with no reference to this plan.
+- Docs: `docs/spec/ui/preferences.md` (the `shared` part kept with no person); `docs/spec/table/table.md` is not edited for these: its `ITableStateStore` block in "Persisted state" already declares `publish` (with its default refusal) and `kNoDocument`, with the paragraph saying what the sentinel means; "Two windows, two devices" already says a `views` save from a table that loaded nothing sends `kNoDocument`; "The framework's stores" already names `MemoryTableStateStore`'s `Sharing` and its default, `Private`. Check: `grep -n "kNoDocument\|Sharing::Private" docs/spec/table/table.md` prints those lines.
 
 **Interfaces:**
 - Consumes: Part D's `TableStateKey`, `SaveOutcome`, `SaveResult`, `ITableStateStore`, `MemoryTableStateStore`, `TableStateModel`, `TableStateSaved`, `registerTableState`, `fitState`; Task 8d's `ColumnLayoutValue` (with `groups`, `units`).
@@ -1125,7 +1125,7 @@ In `tests/net/test_push_tables.cpp` (Linux): `"shared views: a view published ov
 - [ ] **Step 2: Run to see them fail.** `cmake --build --preset cl-debug --target morph_tests morph_table_tests && ctest --test-dir build/cl-debug -R "views document|kNoDocument|shared views|table state: a full state" --output-on-failure`. Expected: compile errors for `ViewsDocument`, `kNoDocument`, `Sharing`, `TableStatePublish`.
 - [ ] **Step 3: Implement** the interfaces above.
 - [ ] **Step 4: Run to see them pass**; on Linux `ctest --test-dir build/linux-everything -R "shared views" --output-on-failure`.
-- [ ] **Step 5: Mutations, docs, commit.** Record T2's bytes and entry counts in table.md. Edit table.md as the Docs line says (`publish`, `kNoDocument`, `Sharing` with its default) and run the docs build, since `kNoDocument`, `Sharing` and `publish` are public. Commit: `feat(table): saved views, their operations and publishing`.
+- [ ] **Step 5: Mutations, docs, commit.** Record T2's bytes and entry counts in table.md. Run the Docs line's check, and the docs build, since `kNoDocument`, `Sharing` and `publish` are public. Commit: `feat(table): saved views, their operations and publishing`.
 
 ### Task 14b: Saved views on a table
 
@@ -1133,7 +1133,7 @@ In `tests/net/test_push_tables.cpp` (Linux): `"shared views: a view published ov
 - Create: `include/morph/ui/table_views.hpp`
 - Modify: `include/morph/ui/table_config.hpp` (view menu commands), `src/ui/interpreter.cpp` (the `Views` submenu, the name dialog, mount behaviour), `tests/ui_table_support.hpp` (`RecordingTableStateStore`, `LiteralTableStateStore`, index decision 20)
 - Test: `tests/test_ui_table_state.cpp`
-- Docs: `docs/spec/ui/interpreter.md` (saved views), `docs/spec/ui/document.md` (the table menu's views), `docs/spec/table/table.md` ("Two windows, two devices": the retry when the reload finds nothing stored, below)
+- Docs: `docs/spec/ui/interpreter.md` (saved views), `docs/spec/ui/document.md` (the table menu's views), `docs/spec/table/table.md` is not edited: "Two windows, two devices" already states the retry when the reload finds nothing stored
 
 **Interfaces:**
 - Consumes: 14a; Part D's `TableStates` (9c) with its `[[nodiscard]] table::ITableStateStore& store() const noexcept` (the store it was built over) and `void keep(table::TableStateKey const& key, table::StoredTableState state)` (replaces the kept document of `key`; the next `load(key)` resolves to it with no call) — both declared and tested by 9c, index decision 32; this task adds nothing to `TableStates` — and `Session::tableStates()`, the state key, load at mount, save and fitting; 12c's arrangement.
@@ -1196,7 +1196,7 @@ TEST_CASE("views: a taken name is replaced on save and refused on rename", "[ui]
 ```
 
 - [ ] **Step 2: Run to see them fail.** `ctest --test-dir build/cl-debug -R "views:" --output-on-failure` after building `morph_tests`. Expected: compile error for `ui::TableViews` (`morph/ui/table_views.hpp` missing); with the header stubbed, FAIL — no `Views` entry in the table menu.
-- [ ] **Step 3: Implement** `TableViews`, the menu, the dialog and the mount rules. In table.md "Two windows, two devices", add after the `views` bullet: a table that loaded no views saves with `kNoDocument`; when the reload after a `Conflict` finds nothing stored, the one retry saves with no expected revision.
+- [ ] **Step 3: Implement** `TableViews`, the menu, the dialog and the mount rules. table.md "Two windows, two devices" already says that a table that loaded no views saves with `kNoDocument`, and that when the reload after a `Conflict` finds nothing stored the one retry saves with an empty `expected`; check with `grep -n "retry saves with an empty" docs/spec/table/table.md`.
 - [ ] **Step 4: Run to see them pass**, then the whole of `morph_tests`.
 - [ ] **Step 5: Mutations, docs, commit.** Apply each named mutation, see its case fail, revert. Run the docs build (`TableViews` is public). Commit: `feat(ui): saved table views`.
 
