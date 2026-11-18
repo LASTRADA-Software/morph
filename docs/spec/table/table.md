@@ -1790,9 +1790,9 @@ columns, whether the layout is a stored one (`apply`) or the table's own when it
 revision (`rebuild`):
 
 - an id the table does not have is dropped, from `order`, `hidden` and `widths` alike;
-- a column the layout does not mention is shown, and placed after the nearest column before it in the declared
-  order that the layout does place, or first when there is none, so a new column appears where its author put
-  it and not at the end;
+- a column the layout does not mention takes its declared visibility, and is placed after the nearest column
+  before it in the declared order that the layout does place, or first when there is none, so a new column
+  appears where its author put it, as its author declared it, and not at the end;
 - `pinned` is clamped to the visible columns;
 - if that leaves no column visible, the first declared column is shown.
 
@@ -3018,7 +3018,7 @@ spread reflects. A row marked *not yet measured* says why; its figure is taken w
 | G3 | 3 | `atLeast 2`: 11.9 ms (9.8–15.1); 68.7 ms (63.8–74.7), **over** 1.2 × G1. `exactly 1`: 12.8 ms (12.0–15.8); 70.1 ms (68.8–81.6), **over** 1.2 × G1 | A, 20–46% busy | 2026-11-19 |
 | G4 | 3 | `together`, 2 entries over 3 columns: 11.9 ms (10.6–13.9), within the 12 ms budget in this run (17.4 ms, over, in the previous one); 16 entries over 16 columns: 74.5 ms (67.0–95.3) | A, 20–46% busy | 2026-11-19 |
 | G6 | 3 | Pooled distinct values through the engine, first 200 of 32: 3 columns 7.8 ms (7.7–8.0); 16 columns 51.7 ms (46.9–64.3) | A, 20–46% busy | 2026-11-19 |
-| G7 | 3 | G1 and G4 with a third of the cells unloaded: G1 15.9 ms (15.6–17.1), **over** 1.2 × the loaded 12.2 ms, and 58.3 ms (45.5–61.4), within; G4 14.5 ms (13.3–14.8), **over** 1.2 × the loaded 11.9 ms by a hair, and 76.2 ms (72.5–97.7), within 1.2 × 74.5 ms. The 16-column `together` figure was 290.5 ms before the wildcard matching was preceded by a count of the columns that can match any entry: with the unknown columns' masks full, the covered test passed on nearly every row, and the matching then failed only after trying every assignment; a row with fewer such columns than entries is now refused without a search | A, 20–46% busy | 2026-11-19 |
+| G7 | 3 | G1 and G4 with a third of the cells unloaded: G1 15.9 ms (15.6–17.1), **over** 1.2 × the loaded 12.2 ms, and 58.3 ms (45.5–61.4), within; G4 14.5 ms (13.3–14.8), **over** 1.2 × the loaded 11.9 ms by a hair, and 76.2 ms (72.5–97.7), within 1.2 × 74.5 ms. The 16-column `together` figure rests on a count of the columns that can match any entry, taken before the wildcard matching: with the unknown columns' masks full, the covered test passes on nearly every row, and a row with fewer such columns than entries is refused without running a failing augmenting-path search for each entry | A, 20–46% busy | 2026-11-19 |
 | U1 | 0 | A document `rows` table of 100,000 rows on the recording backend, a bound sort set on a text column, click to settled: 2,921.5 ms (2,860.0–3,017.6). The rows realized after the sort are the ones realized before it, reordered, not the view's first rows: the figure is the interpreter's sort and reconcile, not a correct window | A, 82–91% busy | 2026-11-17 |
 | U2 | 0 | The same table sorted, one row's name replaced in `items`, click to settled: 2,941.3 ms (2,881.4–2,992.2) | A, 82–91% busy | 2026-11-17 |
 | U3 | 0 | Text folds of the interpreter's sort of 100,000 rows: *not yet measured* — the interpreter folds with a `CodePointCollator` it constructs inside the comparison and takes none from outside, so no counting collator can be installed; the count needs that seam | — | — |

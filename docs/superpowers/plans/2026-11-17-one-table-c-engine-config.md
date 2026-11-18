@@ -1198,9 +1198,11 @@ fit(value, D = declared ids):
   for d in D, in declared order, if d not in order:
       p = nearest id before d in D that is in order
       insert d right after p, or at the front when there is none
-  hidden = ids of value.hidden in D, listed in `order`'s order       (an unmentioned column is shown)
+  hidden = ids of value.hidden in D, listed in `order`'s order,
+           plus each unmentioned column that is declared hidden          (it takes its declared visibility)
   widths = entries of value.widths with id in D and width > 0
-  groups = each group with its columns filtered to D, duplicates removed; groups with < 2 columns dropped
+  groups = each group with its columns filtered to D, duplicates and columns an earlier group holds removed;
+           groups with < 2 or > 16 columns, or an earlier group's id, dropped
   units  = entries of value.units with column id in D
   if D is not empty and no column of order is visible: show D[0]
   pinned = min(value.pinned, number of visible columns)
