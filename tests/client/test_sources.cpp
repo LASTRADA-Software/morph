@@ -11,6 +11,7 @@
 #include <chrono>
 #include <expected>
 #include <functional>
+#include <future>
 #include <memory>
 #include <morph/client/shell.hpp>
 #include <morph/client/source.hpp>
@@ -846,4 +847,89 @@ TEST_CASE("remote_source_refetches_after_the_bridge_rebinds", "[client][source][
         CHECK(log.problems.empty());
     }
     source.close();
+}
+
+TEST_CASE("makeLocalServer serves the application's catalog and runs its actions", "[client][local-server]") {
+    morph::exec::ThreadPoolExecutor workers{2};
+    auto const server = morph::client::makeLocalServer(probe::app(), workers);
+    REQUIRE(server.has_value());
+    morph::wire::Envelope catalog;
+    catalog.kind = std::string{morph::ui::kCatalogKind};
+    catalog.callId = 1;
+    auto const reply = morph::wire::decode((*server)->handleInline(morph::wire::encode(catalog), 0));
+    CHECK(reply.kind == "ok");
+    CHECK(reply.body.contains("Probe_Answer"));
+}
+
+TEST_CASE("makeLocalServer refuses an application whose bundle does not build", "[client][local-server]") {
+    morph::exec::ThreadPoolExecutor workers{1};
+    morph::client::LocalApp broken{
+        .name = "broken",
+        .bundle = []() -> std::expected<std::shared_ptr<morph::ui::ServedBundle const>, morph::ui::Refusal> {
+            return std::unexpected(morph::ui::Refusal{.document = "broken.home", .path = "", .reason = "no view"});
+        },
+        .setUp = {}};
+    auto const server = morph::client::makeLocalServer(broken, workers);
+    REQUIRE_FALSE(server.has_value());
+    CHECK_FALSE(server.error().empty());
+}
+
+namespace {
+
+struct RefuseAll final : morph::session::IAuthorizer {
+    [[nodiscard]] bool authorize(morph::session::Context const& /*ctx*/, std::string_view /*modelType*/,
+                                 std::string_view /*actionType*/) const override {
+        return false;
+    }
+};
+
+// Registers a Probe_Model and executes Probe_Answer on it through @p server; the execute's reply.
+morph::wire::Envelope runAnswer(morph::backend::RemoteServer& server) {
+    morph::wire::Envelope reg;
+    reg.kind = "register";
+    reg.callId = 1;
+    reg.typeId = "Probe_Model";
+    auto const registered = morph::wire::decode(server.handleInline(morph::wire::encode(reg), 0));
+    if (registered.kind != "ok") {
+        return registered;
+    }
+    morph::wire::Envelope run;
+    run.kind = "execute";
+    run.callId = 2;
+    run.modelId = registered.modelId;
+    run.modelType = "Probe_Model";
+    run.actionType = "Probe_Answer";
+    run.body = "{}";
+    std::promise<std::string> answer;
+    auto future = answer.get_future();
+    server.handle(morph::wire::encode(run), [&answer](std::string reply) { answer.set_value(std::move(reply)); });
+    if (future.wait_for(std::chrono::seconds{10}) != std::future_status::ready) {
+        morph::wire::Envelope timeout;
+        timeout.kind = "err";
+        timeout.message = "no reply within 10 s";
+        return timeout;
+    }
+    return morph::wire::decode(future.get());
+}
+
+}  // namespace
+
+TEST_CASE("makeLocalServer checks requests with the application's serverAuthorizer", "[client][local-server]") {
+    morph::exec::ThreadPoolExecutor workers{2};
+
+    auto open = probe::app();
+    auto const allowed = morph::client::makeLocalServer(open, workers);
+    REQUIRE(allowed.has_value());
+    auto const answered = runAnswer(**allowed);
+    INFO("allow-all reply: " << answered.kind << " " << answered.message);
+    CHECK(answered.kind == "ok");
+    CHECK(answered.body == "42");
+
+    auto closed = probe::app();
+    closed.serverAuthorizer = [] { return std::make_shared<RefuseAll>(); };
+    auto const refusing = morph::client::makeLocalServer(closed, workers);
+    REQUIRE(refusing.has_value());
+    auto const refused = runAnswer(**refusing);
+    INFO("refusing reply: " << refused.kind << " " << refused.message);
+    CHECK(refused.kind == "err");
 }
