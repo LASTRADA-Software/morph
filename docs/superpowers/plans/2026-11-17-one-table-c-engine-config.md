@@ -163,7 +163,8 @@ TEST_CASE("table: oneOf matches what its eq entries match", "[table][filter]") {
 }
 
 TEST_CASE("table: oneOf is unknown on an unloaded cell", "[table][filter]") {
-    auto const source = tabletest::column(ColumnKind::Text, {std::string{"Alpha"}, Cell{Unloaded{}}, std::string{"b"}});
+    // slowColumn, not column: an unloaded cell in a filtered base-level column is SourceContract.
+    auto const source = tabletest::slowColumn(ColumnKind::Text, {std::string{"Alpha"}, Cell{Unloaded{}}, std::string{"b"}});
     auto const page = apply(*source, TableQuery{.sort = {}, .filters = on("c", {oneOf({"alpha"})}), .page = {}});
     REQUIRE(page);
     CHECK(page->rows == std::vector<std::size_t>{0});
@@ -365,7 +366,8 @@ TEST_CASE("answer query: a distinct request answers values and no rows", "[table
     CHECK(page->keys.empty());
     REQUIRE(page->distinct);
     CHECK(*page->distinct == *distinctValues(*source, q, *q.distinct));
-    // Mutation: answerQuery ignoring query.distinct — `distinct` is absent and the page has rows.
+    // Mutation: answerQuery ignoring query.distinct — `apply` answers the distinct request, but `writeGenericPage`
+    // does not copy `distinct` (a distinct reply is built by answerQuery), so `distinct` is absent.
 
     auto refusing = served;
     refusing.description.capabilities.distinct = false;
@@ -774,7 +776,7 @@ group result: No if include-part or exclude-part is No; else Unknown if either i
 
   `FilterRun`'s group stage and `evaluateRow` already call `evaluateGroup` (Task 3); they pass no counters.
 
-- [ ] **Step 7: Engine and pooled values.** `Engine::compile` passes `_source->groups()`; `fitToColumns` keeps a `GroupFilter` whose `group` the source still declares and drops one whose `group` it no longer declares, then erases groups whose `columns` and `group` are both empty. `distinctValues` with `request.group`: the group resolves through `source.groups()` (`UnknownColumn` naming it when absent) and every one of its columns passes `detail::checkColumn` with `options.mayRead` (`ColumnNotReadable` naming the first that does not), in the request's validation, which `validate` runs too for `query.distinct`; then the rows passing every filter with every `GroupFilter` whose `group == request.group` removed; per candidate row, the set of distinct keys over the group's loaded valid cells (a row counts once per value); `blanks` counts rows with at least one empty cell, `invalid` rows with at least one invalid cell; an unloaded cell sets `partial` and the row's loaded cells still count. A value's text and operand come from the first row and column (in group order) that holds it. Remove 8a's `Unavailable` branch. `levelsNeeded` adds the level of every column of `request.group` to `order`; test `"distinct: a group's levels are order levels of the request"` in `test_table_distinct.cpp` (group `company` with `companyB` at level `"slow"`: `levelsNeeded(q with distinct{.group = "company"}, …).order == {"slow"}`; mutation: the group's columns left out).
+- [ ] **Step 7: Engine and pooled values.** `Engine::compile` passes `_source->groups()`; `fitToColumns` keeps a `GroupFilter` whose `group` the source still declares and drops one whose `group` it no longer declares, then erases groups whose `columns` and `group` are both empty. `distinctValues` with `request.group`: the group resolves through `source.groups()` (`UnknownColumn` naming it when absent) and every one of its columns passes `detail::checkColumn` with `options.mayRead` (`ColumnNotReadable` naming the first that does not), in the request's validation, which `validate` runs too for `query.distinct`; then the rows passing every filter with every `GroupFilter` whose `group == request.group` removed; per candidate row, the set of distinct keys over the group's loaded valid cells (a row counts once per value); `blanks` counts rows with at least one empty cell, `invalid` rows with at least one invalid cell; an unloaded cell sets `partial` and the row's loaded cells still count. A value's text and operand come from the first row and column (in group order) that holds it. Remove 8a's `Unavailable` branch. `levelsNeeded` adds the level of every column of `request.group` to `order`, and resolves a group filter's `group` too: it gains a trailing `std::span<ColumnGroupInfo const> groups = {}` parameter, which every caller passes as it passes `validate`'s; test `"distinct: a group's levels are order levels of the request"` in `test_table_distinct.cpp` (group `company` with `companyB` at level `"slow"`: `levelsNeeded(q with distinct{.group = "company"}, …).order == {"slow"}`; mutation: the group's columns left out).
 
 - [ ] **Step 8: `x-group`.** `mergeSchemaExtras` writes `"x-group": "<id>"` on each property a row's `columnGroups()` names; `deriveColumns` adds `"x-group"` to the keys it copies. `docs/spec/forms/views.md`: one line under the copied keys, and the `v-columns` row's key list gains `"x-group"?`.
 
