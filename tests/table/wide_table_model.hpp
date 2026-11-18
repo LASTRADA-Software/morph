@@ -150,7 +150,7 @@ private:
 
 // `source` with `columns` at `level`, `loadedFraction` of its rows (by the draw of (seed, row)) loaded.
 [[nodiscard]] std::shared_ptr<UnloadedSource> withUnloaded(std::shared_ptr<morph::table::DataSource> source,
-                                                           std::vector<std::string> columns, std::string level,
+                                                           std::vector<std::string> const& columns, std::string level,
                                                            double loadedFraction, std::uint64_t seed);
 
 // The process's private bytes (Windows) or resident bytes (Linux); 0 where neither is available. What the memory

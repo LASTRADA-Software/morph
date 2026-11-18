@@ -632,4 +632,9 @@ TEST_CASE("views: deriveColumns copies x-level", "[views]") {
     REQUIRE(model->columns().size() == 3);
     CHECK(model->columns()[2].level == "stock");
     CHECK(model->columns()[1].level.empty());
+    // Mutation: tableColumns building the collection's table columns without the level.
+    auto const infos = morph::forms::detail::engine::tableColumns(*model);
+    REQUIRE(infos.size() == 3);
+    CHECK(infos[2].level == "stock");
+    CHECK(infos[1].level.empty());
 }

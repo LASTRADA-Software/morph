@@ -547,6 +547,7 @@ TEST_CASE("table: a total kind goes over the wire by name", "[table][query]") {
 }
 
 // Mutation: levelsNeeded returning every level of the columns.
+// Mutation: levelsNeeded adding every column of a group with no include entry.
 TEST_CASE("table: levelsNeeded names the levels a query sorts, filters and shows", "[table][query][levels]") {
     using tabletest::levelCol;
     std::vector<ColumnInfo> const columns{
@@ -565,8 +566,12 @@ TEST_CASE("table: levelsNeeded names the levels a query sorts, filters and shows
                         .columns = V{"p1"}};
     CHECK(needed(filtered).order == V{"price"});
     CHECK(needed(filtered).display == V{"price"});
-    TableQuery grouped{.filters = FilterSpec{.groups = {GroupFilter{.columns = {"r1", "s1"}}}}, .columns = V{}};
+    TableQuery grouped{
+        .filters = FilterSpec{.groups = {GroupFilter{.columns = {"r2", "s1"}, .include = {{.contains = "a"}}}}},
+        .columns = V{}};
     CHECK(needed(grouped).order == V{"recipe", "stock"});
+    TableQuery emptyGroup{.filters = FilterSpec{.groups = {GroupFilter{.columns = {"r1", "s1"}}}}, .columns = V{}};
+    CHECK(needed(emptyGroup).order.empty());  // a group with no entry reads no column
     CHECK(needed(TableQuery{.columns = V{"id"}}).display.empty());
     CHECK(needed(TableQuery{}).display == V{"price", "recipe", "stock"});  // columns absent: every column
     CHECK(levelsNeeded(TableQuery{}, columns, [](std::string_view c) { return c != "p1"; }).display ==
@@ -708,4 +713,23 @@ TEST_CASE("table: a keyed page uses the lookup it is given", "[table][query][key
     CHECK(looked.total == scanned.total);
     CHECK(looked.undecided == scanned.undecided);
     CHECK(snapshot.ids == 0);
+}
+
+// Mutation: levelsNeeded adding a group's column on which none of its entries compiles.
+TEST_CASE("table: levelsNeeded leaves out a group's column on which no entry compiles", "[table][query][levels]") {
+    using tabletest::levelCol;
+    std::vector<ColumnInfo> const columns{tabletest::col("id", ColumnKind::Integer),
+                                          levelCol("r1", ColumnKind::Decimal, "recipe"),
+                                          levelCol("s1", ColumnKind::Text, "stock")};
+    using V = std::vector<std::string>;
+    // `contains` is a text operator: it compiles on s1 and not on the decimal r1, so the group reads s1 alone.
+    TableQuery const search{
+        .filters = FilterSpec{.groups = {GroupFilter{.columns = {"r1", "s1"}, .include = {{.contains = "a"}}}}},
+        .columns = V{}};
+    CHECK(levelsNeeded(search, columns).order == V{"stock"});
+    // `gt "5"` parses on the decimal and is no text operator: the group reads r1 alone.
+    TableQuery const above{
+        .filters = FilterSpec{.groups = {GroupFilter{.columns = {"r1", "s1"}, .include = {{.gt = "5"}}}}},
+        .columns = V{}};
+    CHECK(levelsNeeded(above, columns).order == V{"recipe"});
 }

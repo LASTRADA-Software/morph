@@ -101,7 +101,7 @@ Two commits, each its own reviewer gate: **3a** the cell, its order, the filter 
   - `template <typename Row> using LevelLoaded = std::function<bool(Row const& row, std::string_view level)>;`
   - `RowsSource(rows, key, kinds = {}, comparators = {}, LevelLoaded<Row> loaded = {})`; typed `apply(rows, key, query, options = {}, kinds = {}, comparators = {}, LevelLoaded<Row> loaded = {})`
   - `struct LevelsNeeded { std::vector<std::string> order; std::vector<std::string> display; };`
-  - `[[nodiscard]] LevelsNeeded levelsNeeded(TableQuery const& query, std::span<ColumnInfo const> columns, std::function<bool(std::string_view)> const& mayRead = {});`
+  - `[[nodiscard]] LevelsNeeded levelsNeeded(TableQuery const& query, std::span<ColumnInfo const> columns, std::function<bool(std::string_view)> const& mayRead = {}, Services const& services = {});`
   - `struct UnloadedRow { std::int64_t index = 0; std::vector<std::string> levels; std::vector<std::string> failed; [[nodiscard]] bool operator==(UnloadedRow const&) const = default; };` (decision 38)
   - `Page<Row>::{std::vector<UnloadedRow> unloadedRows; std::int64_t undecided = 0; std::vector<std::string> awaiting; std::vector<std::string> failed;}`
   - `CollectionColumn::level` (`std::string`)
@@ -296,8 +296,12 @@ TEST_CASE("table: levelsNeeded names the levels a query sorts, filters and shows
                         .columns = V{"p1"}};
     CHECK(needed(filtered).order == V{"price"});
     CHECK(needed(filtered).display == V{"price"});
-    TableQuery grouped{.filters = FilterSpec{.groups = {GroupFilter{.columns = {"r1", "s1"}}}}, .columns = V{}};
+    TableQuery grouped{
+        .filters = FilterSpec{.groups = {GroupFilter{.columns = {"r2", "s1"}, .include = {{.contains = "a"}}}}},
+        .columns = V{}};
     CHECK(needed(grouped).order == V{"recipe", "stock"});
+    TableQuery emptyGroup{.filters = FilterSpec{.groups = {GroupFilter{.columns = {"r1", "s1"}}}}, .columns = V{}};
+    CHECK(needed(emptyGroup).order.empty());  // a group with no entry reads no column
     CHECK(needed(TableQuery{.columns = V{"id"}}).display.empty());
     CHECK(needed(TableQuery{}).display == V{"price", "recipe", "stock"});           // columns absent: every column
     CHECK(levelsNeeded(TableQuery{}, columns, [](std::string_view c) { return c != "p1"; }).display ==
@@ -323,7 +327,7 @@ In `tests/test_views.cpp`: `"views: deriveColumns copies x-level"` — for `Leve
 - [ ] **Step 14: Implement levels on typed rows, pages and schemas**
 
 - `detail::reflectedColumns<Row>()` (in `query.hpp`, which Task 2's `typed` also reads) applies `Row::columnLevels()` when the member function exists: each entry sets that column's `level`; an entry naming no column throws `std::invalid_argument{"columnLevels() names no column: <id>"}`. So `RowsSource` and Task 2's `typed<Row>` description both carry the levels, and 3b changes `typed`'s description builder (`detail::serve`'s typed branch) to set `description.levels` to the sorted, unique non-empty levels of its columns. `RowsSnapshot` holds the `LevelLoaded` and a per-column level; `cell` and `readColumn` return `Unloaded{}` for a column whose level the predicate refuses, without calling the member's reader.
-- `levelsNeeded`: `order` = levels of every sort key's column, every column with a filter entry, every column of every group (Task 8a adds the distinct request's column or group); `display` = levels of `query.columns`, or of every column `mayRead` allows when absent; both sorted, unique, without `""`. Pure; no rows read.
+- `levelsNeeded`: `order` = levels of exactly the columns `apply` builds keys for: every sort key's column, and `compileFilterGuarded(query.filters, columns, services)->columnsUsed()` (so a column filter with an entry; a group's column only when the group has an `include` entry and one of them compiles on it; nothing from a filter that does not compile) (Task 8a adds the distinct request's column or group); `display` = levels of `query.columns`, or of every column `mayRead` allows when absent; both sorted, unique, without `""`. No rows read. The typed `apply` passes `options.services.forTask()`. A second case, `"table: levelsNeeded leaves out a group's column on which no entry compiles"`: group `{r1 Decimal, s1 Text}` with `contains "a"` → `order == {"stock"}`, with `gt "5"` → `{"recipe"}`. Mutations: a group with no `include` entry adding its columns (first case); a group's column on which no entry compiles added (second case).
 - Typed `apply`: copies `undecided`, `totalKind`, `awaiting`, `failed` from `PageRows`; builds `unloadedRows` for the page's rows from `LevelLoaded` over the needed levels (`order ∪ display`), each row's `levels` sorted; `failed` per row stays empty (a predicate cannot say a load failed). `awaiting` = the `order` levels the predicate refuses for at least one row of the view or the undecided set. Without a predicate all three stay empty.
 - `forms::detail::mergeSchemaExtras<Row>` writes `"x-level": <level>` on each property `columnLevels()` names; `views::buildColumnEntry` adds `"x-level"` to the keys it copies; `CollectionColumn::level` reads it.
 - `bench::UnloadedSource` and `bench::withUnloaded` as the Interfaces block state; its snapshot hands runs through `readColumn`, and `load(rows)` is one new snapshot and one `Updated` notification for all of `rows`.

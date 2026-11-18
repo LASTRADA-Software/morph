@@ -384,17 +384,23 @@ namespace detail {
 /// @brief The levels @p query needs: `order` for the columns it sorts and filters, `display` for the columns it
 ///        names.
 ///
-/// `order` is the levels of every sort key's column, every filtered column that has an entry and every column of
-/// every group: the columns `apply` builds keys for. `display` is the levels of `query.columns`, or of every column
-/// @p mayRead allows when `columns` is absent: a caller that does not say what it shows is taken to show
-/// everything. Both are sorted, without duplicates, and never hold the base level; a level may be in both. Pure: no
-/// row is read. Called on the query `validate` returned; a name that is no column is skipped.
-/// @param query   The validated query.
-/// @param columns The table's columns.
-/// @param mayRead Whether the caller may read a column; empty allows every column.
+/// `order` is the levels of the columns `apply` builds keys for: every sort key's column, and the columns the
+/// compiled filter reads. The filter is compiled here as `apply` compiles it, so a filtered column without an entry,
+/// a group without an `include` entry, and a group's column on which none of its entries compiles add nothing: a
+/// filter that reads no cell of a level does not need it. A filter that does not compile adds nothing either, since
+/// `apply` refuses the query. `display` is the levels of `query.columns`, or of every column @p mayRead allows when
+/// `columns` is absent: a caller that does not say what it shows is taken to show everything. Both are sorted,
+/// without duplicates, and never hold the base level; a level may be in both. No row is read. Called on the query
+/// `validate` returned; a name that is no column is skipped.
+/// @param query    The validated query.
+/// @param columns  The table's columns.
+/// @param mayRead  Whether the caller may read a column; empty allows every column.
+/// @param services The services `apply` compiles the filter with: whether an entry applies to a date column depends
+///                 on the date parser. Null members mean their defaults.
 /// @return The levels.
 [[nodiscard]] inline LevelsNeeded levelsNeeded(TableQuery const& query, std::span<ColumnInfo const> columns,
-                                               std::function<bool(std::string_view)> const& mayRead = {}) {
+                                               std::function<bool(std::string_view)> const& mayRead = {},
+                                               Services const& services = {}) {
     // The columns that have a level, sorted by id: each column the query names is then one lookup.
     std::vector<std::pair<std::string_view, std::string_view>> levelled;
     for (auto const& column : columns) {
@@ -417,14 +423,13 @@ namespace detail {
     for (auto const& key : query.sort) {
         add(order, key.column);
     }
-    for (auto const& [columnId, filter] : query.filters.columns) {
-        if (!filter.include.empty() || !filter.exclude.empty()) {
-            add(order, columnId);
-        }
-    }
-    for (auto const& group : query.filters.groups) {
-        for (auto const& columnId : group.columns) {
-            add(order, columnId);
+    if (!query.filters.empty()) {
+        if (auto const filter = compileFilterGuarded(query.filters, columns, services)) {
+            for (auto const column : filter->columnsUsed()) {
+                if (!columns[column].level.empty()) {
+                    order.push_back(columns[column].level);
+                }
+            }
         }
     }
     if (query.columns) {
@@ -1107,7 +1112,7 @@ template <typename Row>
     if (!loaded) {
         return out;
     }
-    auto const needed = levelsNeeded(*checked, source.columns(), options.mayRead);
+    auto const needed = levelsNeeded(*checked, source.columns(), options.mayRead, options.services.forTask());
     std::vector<std::string> wanted = needed.order;
     wanted.insert(wanted.end(), needed.display.begin(), needed.display.end());
     std::ranges::sort(wanted);
