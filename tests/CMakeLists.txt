@@ -271,6 +271,7 @@ add_executable(morph_tests
     test_ui_route_history.cpp
     test_ui_preferences.cpp
     test_ui_preference_sync.cpp
+    test_ui_custom_screen_rules.cpp
     test_ui_host_vocabulary.cpp
     test_ui_catalogue.cpp
     test_ui_locale_table.cpp
