@@ -125,15 +125,17 @@ enum class GroupMode : std::uint8_t {
 /// @brief How many of a group's columns must satisfy its entries, in `Columns` mode.
 ///
 /// Its JSON is `"any"`, `"all"`, `{"atLeast": n}` or `{"exactly": n}`. Any other shape reads as `atLeast -1`, which
-/// no group compiles with.
+/// every group refuses as malformed, in either mode.
 struct ColumnCount {
-    /// @brief The quantifier.
+    /// @brief A quantifier.
     enum class Kind : std::uint8_t {
         Any,      ///< At least one column.
         All,      ///< Every column.
         AtLeast,  ///< At least `n` columns.
         Exactly,  ///< Exactly `n` columns.
-    } kind = Kind::Any;
+    };
+    /// @brief The quantifier.
+    Kind kind = Kind::Any;
     /// @brief The count, for `AtLeast` and `Exactly`.
     std::int64_t n = 1;
 
@@ -436,6 +438,25 @@ private:
     std::unordered_map<std::string, std::uint32_t, detail::TextHash, std::equal_to<>> _texts;
 };
 
+class CompiledFilter;
+
+/// @brief Compiles @p spec against @p columns.
+///
+/// In a group, an entry whose operator a column's kind does not define, or
+/// whose value does not parse for it, does not apply to that column; it is an
+/// error only when it applies to none of the group's columns. A quick-search
+/// text therefore searches the text columns of a group that also holds numbers.
+/// A group with no include and no exclude entry compiles to nothing.
+/// @param spec     The filter.
+/// @param columns  The table's columns.
+/// @param services The collator (values of text filters are folded with it)
+///                 and date parser; null members mean their defaults.
+/// @param groups   The table's declared groups, which a group filter's `group` names.
+/// @return The compiled filter, or the first error, naming its column.
+[[nodiscard]] inline std::expected<CompiledFilter, TableError> compileFilter(
+    FilterSpec const& spec, std::span<ColumnInfo const> columns, Services const& services,
+    std::span<ColumnGroupInfo const> groups = {});
+
 /// @brief A filter compiled against a table's columns: every value parsed.
 class CompiledFilter {
 public:
@@ -719,6 +740,7 @@ public:
         return Match::Yes;
     }
 
+private:
     /// @brief The bits of the entries of one group column that one cell matches.
     /// @param entries The column's compiled entries.
     /// @param bits    Each entry's bit.
@@ -806,7 +828,8 @@ public:
         return true;
     }
 
-    /// @brief One augmenting-path search from @p entry.
+    /// @brief One augmenting-path search from @p entry: a free column that matches it first, so a dense row is
+    ///        matched without following owners; only then an owned one whose owner can move.
     /// @param entry   The entry to place.
     /// @param masks   Each column's entry bits.
     /// @param owner   The entry each column holds, or -1.
@@ -814,6 +837,13 @@ public:
     /// @return `true` when @p entry was placed.
     [[nodiscard]] static bool augment(int entry, std::span<std::uint32_t const> masks, std::span<int> owner,
                                       std::uint32_t& visited) {
+        for (std::size_t column = 0; column < masks.size(); ++column) {
+            if (((masks[column] >> entry) & 1U) != 0 && owner[column] < 0 && ((visited >> column) & 1U) == 0) {
+                visited |= 1U << column;
+                owner[column] = entry;
+                return true;
+            }
+        }
         for (std::size_t column = 0; column < masks.size(); ++column) {
             if (((masks[column] >> entry) & 1U) == 0 || ((visited >> column) & 1U) != 0) {
                 continue;
@@ -827,6 +857,7 @@ public:
         return false;
     }
 
+public:
     /// @brief What the whole filter says of a row: `No` when any column filter
     ///        or group says `No`, otherwise `Unknown` when any says `Unknown`,
     ///        otherwise `Yes`.
@@ -1404,6 +1435,11 @@ inline void indexEntry(CompiledFilter::Entry const& entry, FilterEntry const& ra
                                           .message = "a filter group has more than 32 entries on a side"});
     }
     auto const k = names.size();
+    bool const counted =
+        group.match.kind == ColumnCount::Kind::AtLeast || group.match.kind == ColumnCount::Kind::Exactly;
+    if (counted && group.match.n < 0) {
+        return invalid(R"(a group's match is not "any", "all", {"atLeast": n} or {"exactly": n} with n at least 0)");
+    }
     if (group.mode == GroupMode::Together) {
         if (k > kMaxTogether) {
             return invalid("a together group has at most 16 columns");
@@ -1411,9 +1447,8 @@ inline void indexEntry(CompiledFilter::Entry const& entry, FilterEntry const& ra
         if (!group.include.empty() && (group.include.size() < 2 || group.include.size() > k)) {
             return invalid("a together group takes 2 to as many include entries as it has columns");
         }
-    } else if ((group.match.kind == ColumnCount::Kind::AtLeast || group.match.kind == ColumnCount::Kind::Exactly) &&
-               (group.match.n < 0 || std::cmp_greater(group.match.n, k))) {
-        return invalid("a group's count is outside 0 to its column count");
+    } else if (counted && std::cmp_greater(group.match.n, k)) {
+        return invalid("a group's count is above its column count");
     }
     CompiledFilter::Group out;
     out.k = k;
@@ -1474,19 +1509,6 @@ inline void indexEntry(CompiledFilter::Entry const& entry, FilterEntry const& ra
 
 }  // namespace detail
 
-/// @brief Compiles @p spec against @p columns.
-///
-/// In a group, an entry whose operator a column's kind does not define, or
-/// whose value does not parse for it, does not apply to that column; it is an
-/// error only when it applies to none of the group's columns. A quick-search
-/// text therefore searches the text columns of a group that also holds numbers.
-/// A group with no include and no exclude entry compiles to nothing.
-/// @param spec     The filter.
-/// @param columns  The table's columns.
-/// @param services The collator (values of text filters are folded with it)
-///                 and date parser; null members mean their defaults.
-/// @param groups   The table's declared groups, which a group filter's `group` names.
-/// @return The compiled filter, or the first error, naming its column.
 [[nodiscard]] inline std::expected<CompiledFilter, TableError> compileFilter(FilterSpec const& spec,
                                                                              std::span<ColumnInfo const> columns,
                                                                              Services const& services,
@@ -1511,17 +1533,6 @@ inline void indexEntry(CompiledFilter::Entry const& entry, FilterEntry const& ra
         }
     }
     return out;
-}
-
-/// @brief `compileFilter` for a table that declares no groups.
-/// @param spec     The filter.
-/// @param columns  The table's columns.
-/// @param services The collator and date parser; null members mean their defaults.
-/// @return The compiled filter, or the first error, naming its column.
-[[nodiscard]] inline std::expected<CompiledFilter, TableError> compileFilter(FilterSpec const& spec,
-                                                                             std::span<ColumnInfo const> columns,
-                                                                             Services const& services) {
-    return compileFilter(spec, columns, services, {});
 }
 
 /// @brief `compileFilter`, with an exception from the collator or the date parser returned as `ServiceFailed`.

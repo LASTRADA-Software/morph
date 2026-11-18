@@ -3289,8 +3289,9 @@ concept HasColumnGroups = requires {
     { A::columnGroups() };
 };
 
-/// @brief Stamps `x-group` on each property `A::columnGroups()` names, so a table's column derived from the
-///        schema knows the declared group it is in (`docs/spec/table/table.md`, "Column groups").
+/// @brief Stamps `x-column-group` on each property `A::columnGroups()` names, so a table's column derived from the
+///        schema knows the declared group it is in (`docs/spec/table/table.md`, "Column groups"). Not `x-group`,
+///        which a form layout writes for the title of a field's group.
 ///
 /// A column naming a member `A` does not have is skipped here: the table refuses a group whose columns it lacks
 /// where it reads the columns.
@@ -3306,7 +3307,7 @@ void annotateColumnGroups(glz::generic_u64& dom, std::span<std::string_view cons
                 if (std::ranges::find(memberNames, column) == memberNames.end()) {
                     continue;
                 }
-                dom["properties"][std::string{column}]["x-group"] = std::string{group.id};
+                dom["properties"][std::string{column}]["x-column-group"] = std::string{group.id};
             }
         }
     } else {

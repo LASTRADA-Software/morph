@@ -1968,7 +1968,7 @@ struct DesignRow {
 };
 ```
 
-`DataSource::groups()` returns them (empty by default); the row's schema carries `x-group` on each member
+`DataSource::groups()` returns them (empty by default); the row's schema carries `x-column-group` on each member
 property, and `deriveColumns` copies it. A document table over `rows` declares `groups` as parts
 `{id, label, columns}`. A group has 2 to `QueryLimits::maxGroupColumns` (16) columns of one kind, and a column
 is in at most one declared group; a declaration that breaks either is refused where the columns are read.
@@ -3013,12 +3013,12 @@ spread reflects. A row marked *not yet measured* says why; its figure is taken w
 | D2 | 3 | The same with the search `"abc"`: 41.4 ms (27.5–42.5), above D1 as in the earlier run (30.9 ms against 15.9) | A, 51–77% busy | 2026-11-18 |
 | D3 | 3 | The same with `o1 ge 20` and `o2 lt 80`, `o2` unloaded in 30% of the rows, `partial` set: 25.3 ms (24.4–26.6) | A, 51–77% busy | 2026-11-18 |
 | D4 | 3 | A `oneOf` of 10,000 texts: compiled in 2.07 ms (2.01–2.21); 100,000 rows filtered with it, keys built, in 6.51 ms (6.22–9.13) | A, 40–54% busy | 2026-11-18 |
-| G1 | 3 | `Engine::setFilter` of an `any` group with a `oneOf` of 2 values, 100,000 rows, keys held: 3 columns 23.3 ms (12.8–23.5); 16 columns 79.9 ms (72.1–96.9), above the 45 ms budget | A, 43–70% busy | 2026-11-18 |
-| G2 | 3 | The same with a `oneOf` of 1,000 values: 18.7 ms (17.7–19.5); 113.2 ms (76.9–123.8), above 1.2 × G1 | A, 43–70% busy | 2026-11-18 |
-| G3 | 3 | `atLeast 2`: 15.1 ms (14.7–17.3); 80.9 ms (79.4–83.5). `exactly 1`: 20.6 ms (18.6–23.5); 70.7 ms (53.6–78.3) | A, 43–70% busy | 2026-11-18 |
-| G4 | 3 | `together`, 2 entries over 3 columns: 11.6 ms (10.6–14.8); 16 entries over 16 columns: 93.4 ms (82.9–101.6) | A, 43–70% busy | 2026-11-18 |
-| G6 | 3 | Pooled distinct values through the engine, first 200 of 32: 3 columns 15.1 ms (15.0–15.3); 16 columns 56.5 ms (52.5–61.7) | A, 43–70% busy | 2026-11-18 |
-| G7 | 3 | G1 and G4 with a third of the cells unloaded: G1 16.6 ms (16.4–20.8) and 88.1 ms (69.1–96.5); G4 21.9 ms (21.4–22.2) and 287.4 ms (273.1–313.7), above 1.2 × the loaded figure: a row with an unknown column reads every column and runs the wildcard matching | A, 43–70% busy | 2026-11-18 |
+| G1 | 3 | An `any` group with a `oneOf` of 2 values, 100,000 rows: 3 columns 18.3 ms (14.3–23.0), **over** the 10 ms budget (an earlier run: 23.3 ms); 16 columns 70.6 ms (49.7–83.0), **over** the 45 ms budget. Each figure is an `Engine::setFilter` with the group's keys held, so it includes the view's rebuild and change, not the group filter alone | A, 28–61% busy | 2026-11-18 |
+| G2 | 3 | The same with a `oneOf` of 1,000 values: 15.3 ms (12.6–18.8); 82.0 ms (78.1–118.3), **over** 1.2 × G1 at 16 columns | A, 28–61% busy | 2026-11-18 |
+| G3 | 3 | `atLeast 2`: 14.2 ms (11.0–15.3); 82.2 ms (69.3–96.0). `exactly 1`: 18.5 ms (13.1–19.4); 83.5 ms (75.2–99.4) | A, 28–61% busy | 2026-11-18 |
+| G4 | 3 | `together`, 2 entries over 3 columns: 17.4 ms (14.9–17.8), **over** the 12 ms budget; 16 entries over 16 columns: 97.7 ms (77.1–127.1) | A, 28–61% busy | 2026-11-18 |
+| G6 | 3 | Pooled distinct values through the engine, first 200 of 32: 3 columns 8.8 ms (8.4–14.8); 16 columns 69.9 ms (58.8–92.2) | A, 28–61% busy | 2026-11-18 |
+| G7 | 3 | G1 and G4 with a third of the cells unloaded, `augment` taking a free column first: G1 13.2 ms (12.8–17.1) and 69.6 ms (64.5–78.5); G4 at 3 columns 19.5 ms (15.7–21.2), within 1.2 × this run's 17.4 ms but **over** it in the earlier run (21.9 against 11.6 ms); G4 at 16 columns 290.5 ms (264.6–306.3), **over** 1.2 × the loaded 97.7 ms. Taking a free column first did not move the 16-column figure (287.4 ms before), so its cost is not the matching's owner chains; nearly every row has an unknown column (P = (2/3)^16 ≈ 0.15% of none), reads all 16 and runs the wildcard pass | A, 28–61% busy | 2026-11-18 |
 | U1 | 0 | A document `rows` table of 100,000 rows on the recording backend, a bound sort set on a text column, click to settled: 2,921.5 ms (2,860.0–3,017.6). The rows realized after the sort are the ones realized before it, reordered, not the view's first rows: the figure is the interpreter's sort and reconcile, not a correct window | A, 82–91% busy | 2026-11-17 |
 | U2 | 0 | The same table sorted, one row's name replaced in `items`, click to settled: 2,941.3 ms (2,881.4–2,992.2) | A, 82–91% busy | 2026-11-17 |
 | U3 | 0 | Text folds of the interpreter's sort of 100,000 rows: *not yet measured* — the interpreter folds with a `CodePointCollator` it constructs inside the comparison and takes none from outside, so no counting collator can be installed; the count needs that seam | — | — |
@@ -3129,7 +3129,7 @@ Headers marked (new) do not exist before the step that lands them ([Delivery ord
 | `table/level_cache.hpp` (new) | `LevelRead`, `LevelUse`, `LevelSnapshot`, `LevelSource`, `LevelCacheOptions`, `LevelCacheStats`, `LevelCache<Value>`, `CellLevelCache`. |
 | `table/view_cache.hpp` (new) | `ViewCacheOptions`, `ViewCacheStats`, `ViewCache`. |
 | `table/state_store.hpp` (new) | `TableStateKey`, `StoredTableState`, `SaveOutcome`, `SaveResult`, `kNoDocument`, `ITableStateStore` with `shares()` and `publish`, `Sharing`, `MemoryTableStateStore`; the views operations; the state's and the views' readers, writers, version migration and fitting. |
-| `forms/views.hpp`, `forms/engine/collection.hpp` | The schema carries `x-level` from `columnLevels()` and `x-group` from `columnGroups()`; `deriveColumns` copies them; `CollectionColumn::level`. |
+| `forms/views.hpp`, `forms/engine/collection.hpp` | The schema carries `x-level` from `columnLevels()` and `x-column-group` from `columnGroups()`; `deriveColumns` copies them; `CollectionColumn::level`. |
 | `core/change_types.hpp` | `effects::IChangeObserver` (`changed(Changes const&)`, `bind(AnnounceSink)`); `effects::AnnounceSink`. |
 | `core/remote.hpp` | `RemoteServer::announce`, `RemoteServer::attach(std::shared_ptr<effects::IChangeObserver>)`; `ServerConfig::tableWork`, `views`. |
 | `core/registry.hpp`, `core/effects.hpp` | `BRIDGE_REGISTER_TABLE` and its options; the actions `Table.<id>` and `Table.<id>.describe`; the table's record; `effects::updatesTable<fn>`, `effects::changesTable<fn>`; the result walk's slot for `ChangedRows<fn>`, collecting each row's `key` and `from` and no `failed` key, and its record of a holder's `openMembers()` and `partialMember()`; `ActionRecordInfo::open`, `partial`, `opaque`. `Page<Row>` declares both members. |
@@ -3529,7 +3529,7 @@ section that does not exist yet.
 | [`../ui/document.md`](../ui/document.md), the `table` kind | `table`, `status`, `persist`, `layout`, `configurable`, a column's `kind` and `locked`; `filters` on every table; `cellMenu`, `headerMenu`, `retainChanged`, `headerEnabled`; a column's display parts, `tone` and `tooltip`; the element values this design names | 4, 6, 7, 9a, 9b |
 | [`../ui/preferences.md`](../ui/preferences.md) | That table state has its own model and is not bounded by `maxValueBytes`; the `columns` and `saved` points | 4 |
 | [`../qt_quick/backend.md`](../qt_quick/backend.md) | The column window, cell pools, pinned columns, the status line; the menus and dialogs | 5, 7 |
-| [`../forms/views.md`](../forms/views.md) | `x-level` and `x-group` on a schema property | 2a, 3 |
+| [`../forms/views.md`](../forms/views.md) | `x-level` and `x-column-group` on a schema property | 2a, 3 |
 | [`engine.md`](engine.md) | Its "Not here yet" entries for the model-backed table and the single-threaded steps; `ColumnLayout`'s fitting rule | 4, 6, 7 |
 | [`engine.md`](engine.md), `database_pages.md` | `planQuery`, `QueryPlan` and the conformance helper leave `engine.md`; `database_pages.md` is removed | 0a |
 | [`editing.md`](editing.md) | Editing cells in place, grids, spans, header bands and summary rows, on this pipeline | its own order |

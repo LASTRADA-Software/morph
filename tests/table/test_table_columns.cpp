@@ -74,6 +74,20 @@ struct NoOverride {};
 
 namespace tcol {
 
+// A row with a form layout and a column group: each writes its own schema key.
+struct LayoutGroupRow {
+    std::string companyA;
+    std::string companyB;
+    std::string name;
+
+    static constexpr std::array<std::string_view, 2> kCompany{"companyA", "companyB"};
+    static constexpr std::array<std::string_view, 3> kAll{"companyA", "companyB", "name"};
+    static constexpr std::array formLayout{morph::forms::FieldGroup{.title = "Parties", .fields = kAll}};
+    static constexpr std::array<morph::table::ColumnGroup, 1> columnGroups() noexcept {
+        return {{{.id = "company", .columns = kCompany}}};
+    }
+};
+
 struct EpochRow {
     std::int64_t day = 0;
     std::int64_t at = 0;
@@ -188,12 +202,12 @@ TEST_CASE("table: optional members keep their column kind", "[table][columns]") 
     CHECK(column("mass").contains("ExtUnits"));
 }
 
-// Mutation: the copy list in deriveColumns without "x-group".
-TEST_CASE("table: derived columns carry x-group", "[table][columns][groups]") {
+// Mutation: the copy list in deriveColumns without "x-column-group".
+TEST_CASE("table: derived columns carry x-column-group", "[table][columns][groups]") {
     glz::generic_u64 schema{};
     REQUIRE_FALSE(glz::read_json(schema, morph::forms::schemaJson<tabletest::GroupRow>()));
-    CHECK(schema["properties"]["companyB"]["x-group"].get_string() == "company");
-    CHECK_FALSE(schema["properties"]["name"].contains("x-group"));
+    CHECK(schema["properties"]["companyB"]["x-column-group"].get_string() == "company");
+    CHECK_FALSE(schema["properties"]["name"].contains("x-column-group"));
     auto const json = morph::views::detail::deriveColumns<tcol::HideNothing, tabletest::GroupRow>();
     INFO(json);
     glz::generic columns;
@@ -201,8 +215,8 @@ TEST_CASE("table: derived columns carry x-group", "[table][columns][groups]") {
     auto const& list = columns.get_array();
     REQUIRE(list.size() == 4);
     CHECK(list[1]["field"].get_string() == "companyB");
-    CHECK(list[1]["x-group"].get_string() == "company");
-    CHECK_FALSE(list[3].contains("x-group"));
+    CHECK(list[1]["x-column-group"].get_string() == "company");
+    CHECK_FALSE(list[3].contains("x-column-group"));
 }
 
 // Mutation: RowsSource<Row>::groups() returning nothing: the typed apply is UnknownColumn.
@@ -230,4 +244,24 @@ TEST_CASE("typed rows declare their groups to the source", "[table][columns][gro
     REQUIRE(page->rows.size() == 2);
     CHECK(page->rows[0].name == "a");
     CHECK(page->rows[1].name == "c");
+}
+
+// Mutation: annotateColumnGroups writing `x-group`, the layout's key: the layout pass overwrites the column group's
+// id, and no column carries x-column-group.
+TEST_CASE("table: a form layout's group and a column group keep their own keys", "[table][columns][groups]") {
+    glz::generic_u64 schema{};
+    REQUIRE_FALSE(glz::read_json(schema, morph::forms::schemaJson<tcol::LayoutGroupRow>()));
+    CHECK(schema["properties"]["companyA"]["x-group"].get_string() == "Parties");
+    CHECK(schema["properties"]["companyA"]["x-column-group"].get_string() == "company");
+    CHECK(schema["properties"]["name"]["x-group"].get_string() == "Parties");
+    CHECK_FALSE(schema["properties"]["name"].contains("x-column-group"));
+    auto const json = morph::views::detail::deriveColumns<tcol::HideNothing, tcol::LayoutGroupRow>();
+    INFO(json);
+    glz::generic columns;
+    REQUIRE_FALSE(glz::read_json(columns, json));
+    auto const& list = columns.get_array();
+    REQUIRE(list.size() == 3);
+    CHECK(list[0]["x-column-group"].get_string() == "company");
+    CHECK_FALSE(list[0].contains("x-group"));  // a layout title is not a column group
+    CHECK_FALSE(list[2].contains("x-column-group"));
 }
