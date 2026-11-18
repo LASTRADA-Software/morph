@@ -70,6 +70,10 @@ struct TableQuery {
     FilterSpec filters;
     /// @brief The page.
     PageRequest page;
+    /// @brief The columns the reply carries, by id. Absent means every column the caller may read; empty means
+    ///        none, and the reply then holds keys alone. `validate` puts it in the table's column order, each id
+    ///        once.
+    std::optional<std::vector<std::string>> columns;
 
     /// @brief The schema keyword that marks a member of this type.
     /// @return `"x-table"`.
@@ -117,6 +121,8 @@ struct QueryLimits {
     std::size_t maxTextLength = 256;
     /// @brief A total above this is not reported.
     std::int64_t totalCap = 100'000;
+    /// @brief Entries of `TableQuery::columns`, counted as received, duplicates included.
+    std::size_t maxColumns = 512;
 };
 
 namespace detail {
@@ -166,6 +172,27 @@ namespace detail {
                           .message = "column " + columnId + " is not readable"};
     }
     return std::nullopt;
+}
+
+/// @brief The ids of @p asked in the order of @p columns, each once.
+///
+/// An id @p columns lacks is dropped; `validate` refuses such an id before it
+/// calls this.
+/// @param columns The table's columns, in their declared order.
+/// @param asked   Column ids in any order, duplicates allowed.
+/// @return The ids of @p columns that @p asked names, in the order of @p columns.
+[[nodiscard]] inline std::vector<std::string> orderedColumns(std::span<ColumnInfo const> columns,
+                                                             std::vector<std::string> const& asked) {
+    std::vector<std::string_view> wanted(asked.begin(), asked.end());
+    std::ranges::sort(wanted);
+    std::vector<std::string> out;
+    out.reserve(std::min(asked.size(), columns.size()));
+    for (auto const& column : columns) {
+        if (std::ranges::binary_search(wanted, std::string_view{column.id})) {
+            out.push_back(column.id);
+        }
+    }
+    return out;
 }
 
 /// @brief Checks a filter's columns, entry counts and value lengths.
@@ -218,12 +245,14 @@ namespace detail {
 /// Every column named must be one of @p columns, a closed set, and one the
 /// principal may read: a filter on a hidden column is an oracle for its value,
 /// so hiding a column is not a security control. `page.limit` is clamped;
-/// every other bound is a refusal.
+/// every other bound is a refusal. A `columns` list is put in the order of
+/// @p columns with each id once, so every caller of `validate` or `apply`
+/// sees it that way; an absent list stays absent and an empty one empty.
 /// @param query   The query, as received.
 /// @param columns The row schema's columns.
 /// @param limits  The bounds.
 /// @param mayRead Whether the principal may read a column; empty allows every column.
-/// @return The query with its limit clamped, or the first violation.
+/// @return The query with its limit clamped and its `columns` ordered, or the first violation.
 [[nodiscard]] inline std::expected<TableQuery, TableError> validate(
     TableQuery query, std::span<ColumnInfo const> columns, QueryLimits const& limits = {},
     std::function<bool(std::string_view)> const& mayRead = {}) {
@@ -244,6 +273,17 @@ namespace detail {
     }
     if (auto error = detail::checkFilters(query.filters, columns, limits, mayRead)) {
         return std::unexpected(std::move(*error));
+    }
+    if (query.columns) {
+        if (query.columns->size() > limits.maxColumns) {
+            return std::unexpected(detail::limitError({}, "too many columns"));
+        }
+        for (auto const& columnId : *query.columns) {
+            if (auto error = detail::checkColumn(columnId, columns, mayRead)) {
+                return std::unexpected(std::move(*error));
+            }
+        }
+        query.columns = detail::orderedColumns(columns, *query.columns);
     }
     return query;
 }

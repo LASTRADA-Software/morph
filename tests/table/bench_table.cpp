@@ -21,13 +21,17 @@
 #include <memory>
 #include <morph/core/executor.hpp>
 #include <morph/core/wire.hpp>
+#include <morph/detail/reflected_member.hpp>
+#include <morph/table/description.hpp>
 #include <morph/table/engine.hpp>
 #include <morph/table/query.hpp>
+#include <optional>
 #include <print>
 #include <random>
 #include <string>
 #include <thread>
 #include <type_traits>
+#include <utility>
 #include <variant>
 #include <vector>
 
@@ -511,4 +515,196 @@ TEST_CASE("table baseline: W7 as a typed page", "[.benchmark][baseline]") {
         "|\n|---:|---:|---:|\n| {} | {:.2f} | {:.2f}-{:.2f} |",
         bytes, spread.median, spread.p10, spread.p90);
     static_cast<void>(std::fflush(stdout));
+}
+
+// ── Wire: the generic page and the description ──────────────────────────────
+// docs/spec/table/table.md, "Benchmarks: wire". Each measurement first REQUIREs its page's cell count, so a writer
+// that dropped columns could not pass for a fast one.
+
+// Reflected by glaze, so not in an anonymous namespace.
+namespace tbench {
+
+// A typed row of wideColumns(30), member i being column i: what a typed `Page<Row>` of the same table carries. A
+// quantity is its amount, as a typed member in the column's unit would be; an empty cell is an absent member.
+struct WideRow30 {
+    std::optional<std::int64_t> id;
+    std::optional<std::int64_t> i001;
+    std::optional<std::int64_t> i002;
+    std::optional<std::int64_t> i003;
+    std::optional<std::int64_t> i004;
+    std::optional<std::int64_t> i005;
+    std::optional<std::int64_t> i006;
+    std::optional<std::int64_t> i007;
+    std::optional<std::int64_t> i008;
+    std::optional<std::int64_t> i009;
+    std::optional<morph::math::Rational> d000;
+    std::optional<morph::math::Rational> d001;
+    std::optional<morph::math::Rational> d002;
+    std::optional<morph::math::Rational> d003;
+    std::optional<morph::math::Rational> d004;
+    std::optional<morph::math::Rational> d005;
+    std::optional<morph::math::Rational> q000;
+    std::optional<morph::math::Rational> q001;
+    std::optional<morph::math::Rational> q002;
+    std::optional<morph::math::Rational> m000;
+    std::optional<std::string> t000;
+    std::optional<std::string> t001;
+    std::optional<std::string> t002;
+    std::optional<std::string> t003;
+    std::optional<std::string> t004;
+    std::optional<std::string> t005;
+    std::optional<std::string> t006;
+    std::optional<std::int64_t> a000;
+    std::optional<std::int64_t> s000;
+    std::optional<bool> b000;
+};
+
+}  // namespace tbench
+
+namespace {
+
+template <typename T>
+void assignCell(std::optional<T>& member, Cell const& cell) {
+    if (std::holds_alternative<std::monostate>(cell)) {
+        member.reset();
+    } else if constexpr (std::is_same_v<T, morph::math::Rational>) {
+        auto const* const quantity = std::get_if<QuantityCell>(&cell);
+        member = quantity != nullptr ? quantity->amount : std::get<morph::math::Rational>(cell);
+    } else {
+        member = std::get<T>(cell);
+    }
+}
+
+Page<tbench::WideRow30> typedPage30(bench::WideTableSource const& source, PageRows const& rows) {
+    constexpr auto kMembers = glz::reflect<tbench::WideRow30>::size;
+    REQUIRE(source.columns().size() == kMembers);
+    auto const snapshot = source.snapshot();
+    Page<tbench::WideRow30> page;
+    page.total = rows.total;
+    page.offset = rows.offset;
+    for (auto const row : rows.rows) {
+        tbench::WideRow30 typed;
+        [&]<std::size_t... I>(std::index_sequence<I...>) {
+            (assignCell(morph::detail::reflectedMember<I>(typed), snapshot->cell(row, I)), ...);
+        }(std::make_index_sequence<kMembers>{});
+        page.rows.push_back(std::move(typed));
+    }
+    return page;
+}
+
+PageRows firstRows(std::size_t count, std::int64_t total) {
+    PageRows rows;
+    for (std::size_t i = 0; i < count; ++i) {
+        rows.rows.push_back(i);
+    }
+    rows.total = total;
+    return rows;
+}
+
+std::size_t cellsOf(GenericPage const& page) {
+    std::size_t cells = 0;
+    for (auto const& row : page.rows) {
+        cells += row.size();
+    }
+    return cells;
+}
+
+std::vector<std::string> columnIds(DataSource const& source, std::size_t first, std::size_t last) {
+    std::vector<std::string> out;
+    for (auto i = first; i < last; ++i) {
+        out.push_back(source.columns()[i].id);
+    }
+    return out;
+}
+
+Spread timed(int runs, std::function<void()> const& body) {
+    std::vector<double> samples;
+    for (int run = 0; run < runs; ++run) {
+        auto const began = Clock::now();
+        body();
+        samples.push_back(millisSince(began));
+    }
+    return spreadOf(samples);
+}
+
+void printWire(std::string const& id, std::string const& what, std::size_t bytes, Spread const& spread) {
+    std::println("| {} | {} | {} | {:.3f} | {:.3f}-{:.3f} |", id, what, bytes, spread.median, spread.p10, spread.p90);
+    static_cast<void>(std::fflush(stdout));
+}
+
+template <typename T>
+std::string jsonOf(T const& value) {
+    auto json = glz::write_json(value);
+    REQUIRE(json.has_value());
+    return std::move(*json);
+}
+
+}  // namespace
+
+TEST_CASE("table benchmark: the generic page", "[.benchmark][wire]") {
+    constexpr int kRuns = 31;
+    bench::WideTableSource const wide{{.rows = 1'000, .columns = 300, .seed = 1}};
+    bench::WideTableSource const small{{.rows = 1'000, .columns = 30, .seed = 1}};
+    auto const description = describe(bench::wideDescription("wide", 300));
+    auto const rows = firstRows(200, 1'000);
+    std::println(
+        "\nWire: the generic page and the description (bytes; time per call)\n\n| id | measures | bytes | median ms | "
+        "p10-p90 ms |\n|---|---|---:|---:|---:|");
+
+    // W1, W2: 200 rows of the 40 columns at positions 100 to 139.
+    auto const forty = columnIds(wide, 100, 140);
+    auto const page40 = writeGenericPage(rows, wide, forty);
+    REQUIRE(cellsOf(page40) == 8'000);
+    auto const body40 = jsonOf(page40);
+    auto const envelope40 = morph::wire::encode(morph::wire::makeOk(1, body40)).size();
+    printWire("W1", "200 x 40 generic page in an ok envelope", envelope40, Spread{});
+    printWire("W2", "encode 200 x 40 from the column store", body40.size(),
+              timed(kRuns, [&] { REQUIRE(jsonOf(writeGenericPage(rows, wide, forty)).size() == body40.size()); }));
+    printWire("W2", "readGenericPage 200 x 40", body40.size(), timed(kRuns, [&] {
+                  auto const read = readGenericPage(body40, description);
+                  REQUIRE(read.has_value());
+                  REQUIRE(read->rows.size() == 200);
+              }));
+
+    // W5: the same 200 x 30 rows as generic rows and as a typed page.
+    auto const thirty = columnIds(small, 0, 30);
+    auto const page30 = writeGenericPage(rows, small, thirty);
+    REQUIRE(cellsOf(page30) == 6'000);
+    auto const generic30 = jsonOf(page30).size();
+    auto const typed = typedPage30(small, rows);
+    REQUIRE(typed.rows.size() == 200);
+    auto const typed30 = jsonOf(typed).size();
+    printWire("W5", "200 x 30 generic page, encode", generic30,
+              timed(kRuns, [&] { REQUIRE(jsonOf(writeGenericPage(rows, small, thirty)).size() == generic30); }));
+    printWire("W5", "200 x 30 typed Page<Row>, encode", typed30,
+              timed(kRuns, [&] { REQUIRE(jsonOf(typedPage30(small, rows)).size() == typed30); }));
+    std::println("| W5 | generic / typed bytes | {:.3f} | | |",
+                 static_cast<double>(generic30) / static_cast<double>(typed30));
+
+    // W6: the 300-column description.
+    REQUIRE(description.columns.size() == 300);
+    auto const descriptionJson = jsonOf(description);
+    printWire("W6", "300-column description, encode", descriptionJson.size(),
+              timed(kRuns, [&] { REQUIRE(jsonOf(describe(description)).size() == descriptionJson.size()); }));
+    printWire("W6", "300-column description, decode", descriptionJson.size(), timed(kRuns, [&] {
+                  TableDescription back;
+                  REQUIRE_FALSE(glz::read_json(back, descriptionJson));
+                  REQUIRE(back.columns.size() == 300);
+              }));
+
+    // W7: 200 rows of all 300 columns.
+    auto const all = columnIds(wide, 0, 300);
+    auto const page300 = writeGenericPage(rows, wide, all);
+    REQUIRE(cellsOf(page300) == 60'000);
+    auto const body300 = jsonOf(page300);
+    auto const envelope300 = morph::wire::encode(morph::wire::makeOk(1, body300)).size();
+    REQUIRE(envelope300 < morph::wire::kMaxEnvelopeBytes);
+    printWire("W7", "200 x 300 generic page in an ok envelope", envelope300, Spread{});
+    printWire("W7", "encode 200 x 300 from the column store", body300.size(),
+              timed(15, [&] { REQUIRE(jsonOf(writeGenericPage(rows, wide, all)).size() == body300.size()); }));
+    printWire("W7", "readGenericPage 200 x 300", body300.size(), timed(15, [&] {
+                  auto const read = readGenericPage(body300, description);
+                  REQUIRE(read.has_value());
+                  REQUIRE(read->rows.size() == 200);
+              }));
 }

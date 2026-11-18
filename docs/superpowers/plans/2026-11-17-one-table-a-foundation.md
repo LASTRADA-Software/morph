@@ -534,7 +534,7 @@ TEST_CASE("description: equal descriptions have equal revisions", "[table][descr
 TEST_CASE("generic page: every cell kind round-trips", "[table][description]") {
     // Description: id Integer, name Text, net Decimal, share Decimal, dose Quantity, ratio Number, flag Bool, on Date.
     // Rows (keys 101, 102):
-    //   101: 101, "Alpha", 12.50 (places 2), 0.003 (places 3), QuantityCell{5 (places 0), 1/1000}, 0.1, true, 19'000
+    //   101: 101, "Alpha", 12.50 (places 2), 0.003 (places 3), QuantityCell{5 (places 0), 1/1000 (places 3)}, 0.1, true, 19'000
     //   102: 102, "Beta", empty, empty, Rational 250 (places 0), 2.5, false, empty
     // writeGenericPage over a VectorSource of these rows, PageRows{.rows = {0, 1}, .total = 9093, .offset = 0},
     // columns {"id","name","net","share","dose"}, revision set to "9f2c"; glz::write_json gives exactly:
@@ -630,7 +630,7 @@ Expected: compile failure, `morph/table/description.hpp` not found.
 - [ ] **Step 4: Run them to see them pass**
 
 Run: `ctest --test-dir build/cl-debug -R "description|generic page|table query" --output-on-failure`
-Expected: 10 tests pass; then `ctest --test-dir build/cl-debug -R "^table" --output-on-failure`, all pass.
+Expected: the 10 tests of `test_table_description.cpp` pass (the pattern also matches `morph_tests` cases whose names contain "description", when that executable is built); then `ctest --test-dir build/cl-debug -R "^table" --output-on-failure`, all pass.
 
 - [ ] **Step 5: Write the wire benchmarks** in `bench_table.cpp`, `"table benchmark: the generic page"`, `"[.benchmark][wire]"`: W1 (bytes of the 200 × 40 page in an `ok` envelope), W2 (encode from the column store, and `readGenericPage`), W5 (the same 200 × 30 page as generic rows and as a typed `Page<WideRow30>`, where `WideRow30` is a 30-member struct in the bench file mirroring `wideColumns(30)`), W6 (bytes, encode and decode of the 300-column description), W7 (the 200 × 300 page: bytes, encode, decode). Each first `REQUIRE`s its page's cell count. Run on `cl-release` and add rows W1, W2, W5, W6, W7 to "Recorded baselines".
 

@@ -350,10 +350,10 @@ A page of a generic table is row arrays under one header:
   |---|---|
   | empty | `null` |
   | integer; a date as days, a date-time as seconds | an integer |
-  | `double`, in a `Number` column only | a number |
+  | `double`, in a `Number` column only | a number with a fraction or an exponent, so `2.0` and never `2`; NaN and the infinities, which JSON has no number for, as the strings `"nan"`, `"inf"` and `"-inf"` |
   | text | a string |
   | boolean | `true` or `false` |
-  | exact value (`Rational`) | `[numerator, denominator]` |
+  | exact value (`Rational`) | `[numerator, denominator]`, scaled to the value's decimal places where that fits: 12.50 at two places is `[1250, 100]`, and a reader takes the places back from a denominator that is a power of ten |
   | `QuantityCell` | `[numerator, denominator, [factor numerator, factor denominator]]`: the amount in the cell's own unit and its factor to the column's canonical unit. A factor of 1 is left out, which is also how a plain `Rational` in a `Quantity` column reads. |
   | `Measure` | `[numerator, denominator, unit id]`, the unit's string id |
   | unloaded | `null`, with the row and level named in `unloadedRows` |
@@ -2949,9 +2949,14 @@ spread reflects. A row marked *not yet measured* says why; its figure is taken w
 | B1 | 0 | Client mode, an owner and no worker, 30 columns, three-key sort then a text filter, request to result: 21.0 ms (19.8–24.0) at 10,000 rows, 42.7 ms (37.0–44.8) at 20,000, 242.5 ms (215.3–245.0) at 100,000 | A, 82–91% busy | 2026-11-17 |
 | B1 | 0 | The same, the longest owner step: 10.0 ms (8.1–10.5) at 10,000, 10.2 ms (8.9–10.5) at 20,000, 11.6 ms (10.6–14.2) at 100,000 | A, 82–91% busy | 2026-11-17 |
 | B2 | 0 | S1, S2 and B1 under Node from the `table-wasm` build, as a factor over native: *not yet measured* — no Emscripten or Node on machine A; the CI job builds and runs the table tests there, and the factor is taken by running `node build-wasm/tests/morph_table_tests.js "[.benchmark][baseline]"` beside a native run on one machine | — | — |
-| B2 | 1 | W2's decode under Node: *not yet measured* — W2 lands with the generic page | — | — |
+| B2 | 1 | W2's decode under Node: *not yet measured* — no Emscripten or Node on machine A; the figure is taken by running `node build-wasm/tests/morph_table_tests.js "[.benchmark][wire]"` beside a native run on one machine | — | — |
 | B5 | 0 | Qt for WebAssembly in a headless browser, mount of the 2,000 × 300 `rows` table and one screen of scroll: *not yet measured* — no Qt for WebAssembly kit, Emscripten or browser runner on machine A; the harness is `tests/qt_quick/wasm/wide_rows_baseline.cpp`, built and run as its header says | — | — |
 | W7 | 0 | A page of 200 × 300 as typed row objects (a decimal as its `{"num","den","dp"}` object, a quantity as its amount): 2,162,606 bytes; encode 14.7 ms (14.4–15.7) | A, 82–91% busy | 2026-11-17 |
+| W1 | 1 | A generic page of 200 rows and the 40 columns at positions 100 to 139, in an `ok` envelope: 116,155 bytes; no other column's cell | A, 12–23% busy | 2026-11-18 |
+| W2 | 1 | That page: `writeGenericPage` and its JSON from the column store 1.48 ms (1.45–1.62); `readGenericPage` 2.33 ms (2.21–3.01) | A, 12–23% busy | 2026-11-18 |
+| W5 | 1 | 200 × 30: generic page 405,396 bytes, encode 3.00 ms (2.91–4.00); typed `Page<Row>` with an absent member for an empty cell 479,205 bytes, encode 1.87 ms (1.80–1.91); generic / typed 0.85, above the 0.7 budget | A, 12–23% busy | 2026-11-18 |
+| W6 | 1 | The 300-column description: 42,494 bytes; encode with `describe` 0.23 ms (0.23–0.24); decode 0.14 ms (0.14–0.15) | A, 12–23% busy | 2026-11-18 |
+| W7 | 1 | A generic page of 200 × 300 in an `ok` envelope: 1,443,726 bytes, under `kMaxEnvelopeBytes`; encode 17.0 ms (16.5–19.0) and decode 18.7 ms (17.8–21.6), above the 10 ms and 15 ms budgets | A, 12–23% busy | 2026-11-18 |
 | U1 | 0 | A document `rows` table of 100,000 rows on the recording backend, a bound sort set on a text column, click to settled: 2,921.5 ms (2,860.0–3,017.6). The rows realized after the sort are the ones realized before it, reordered, not the view's first rows: the figure is the interpreter's sort and reconcile, not a correct window | A, 82–91% busy | 2026-11-17 |
 | U2 | 0 | The same table sorted, one row's name replaced in `items`, click to settled: 2,941.3 ms (2,881.4–2,992.2) | A, 82–91% busy | 2026-11-17 |
 | U3 | 0 | Text folds of the interpreter's sort of 100,000 rows: *not yet measured* — the interpreter folds with a `CodePointCollator` it constructs inside the comparison and takes none from outside, so no counting collator can be installed; the count needs that seam | — | — |

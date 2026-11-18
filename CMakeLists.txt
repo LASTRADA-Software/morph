@@ -774,6 +774,7 @@ target_sources(morph
         include/morph/table/view_change.hpp
         include/morph/table/engine.hpp
         include/morph/table/query.hpp
+        include/morph/table/description.hpp
         include/morph/table/selection.hpp
         include/morph/table/edits.hpp
 )

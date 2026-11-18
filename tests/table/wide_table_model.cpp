@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <array>
 #include <format>
+#include <iterator>
 #include <morph/core/payload_schema.hpp>
 #include <stdexcept>
 #include <type_traits>
@@ -385,6 +386,28 @@ std::vector<WideColumn> wideColumns(int columns) {
         }
     }
     return small;
+}
+
+morph::table::TableDescription wideDescription(std::string id, int columns) {
+    morph::table::TableDescription out;
+    out.label = id;
+    out.id = std::move(id);
+    out.key = "id";
+    for (auto const& column : wideColumns(columns)) {
+        out.columns.push_back(
+            morph::table::TableColumn{.info = column.info, .label = column.info.id, .group = column.group});
+        if (column.group.empty()) {
+            continue;
+        }
+        auto group = std::ranges::find(out.groups, column.group, &morph::table::ColumnGroupInfo::id);
+        if (group == out.groups.end()) {
+            out.groups.push_back(
+                morph::table::ColumnGroupInfo{.id = column.group, .label = column.group, .columns = {}});
+            group = std::prev(out.groups.end());
+        }
+        group->columns.push_back(column.info.id);
+    }
+    return out;
 }
 
 std::size_t approximateCellBytes(Cell const& cell) noexcept {

@@ -12,6 +12,7 @@
 #include <cstdint>
 #include <memory>
 #include <morph/table/data_source.hpp>
+#include <morph/table/description.hpp>
 #include <mutex>
 #include <span>
 #include <string>
@@ -43,6 +44,11 @@ struct WideTableOptions {
 
 // The 300- or 30-column layout, in declared order; throws std::invalid_argument for any other count.
 [[nodiscard]] std::vector<WideColumn> wideColumns(int columns);
+
+// The description of wideColumns(columns): `id` as given, `label` = `id`, each column's label its id, `group` and
+// `groups` (`g3`, `g16`, labels their ids, in the order the layout first names them) from the layout, key "id",
+// `levels` empty, `revision` empty.
+[[nodiscard]] morph::table::TableDescription wideDescription(std::string id, int columns);
 
 // The bytes a cell costs held as a `Cell`: the variant, plus a string's heap buffer when it has one.
 [[nodiscard]] std::size_t approximateCellBytes(morph::table::Cell const& cell) noexcept;
