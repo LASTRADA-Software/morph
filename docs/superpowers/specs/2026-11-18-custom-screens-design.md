@@ -167,6 +167,10 @@ every document it accepts is one a reply can carry.
 - **`app`** must be the served bundle's application id; a request naming another is refused before anything else, a
   `list` without a principal included, so a screen checked against one application is never stored under another.
 - **A store's refusal reaches the person as the store gave it**, from `get` as from `put` and `remove`; the model adds no wording of its own over it.
+- **Bounded replies.** Every summary field has a cap: `savedBy` and `broken`'s pointer at `kMaxNameBytes`, `broken`'s
+  reason at 1 KiB, each cut with an ellipsis when longer, so the part of a reply that is not the document is bounded and
+  every `get` reply fits an envelope. `list` answers at most `CustomScreensOptions::maxListed` summaries, 500 by
+  default, and says `truncated` when the store held more.
 - **`mine`** is whether `savedBy` is the caller, so a screen someone else saved is shown as theirs.
 - **`broken`** is the refusal the checks give for a stored document today, with its pointer. A broken screen is still
   listed, so the person can open its source and fix it, and is never mounted.
