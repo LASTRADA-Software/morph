@@ -15,6 +15,7 @@ target_link_libraries(morph_net_tests
     PRIVATE
         morph::net
         morph_test_main
+        "$<LINK_LIBRARY:WHOLE_ARCHIVE,morph_wide_table_model>"
 )
 
 apply_warnings(morph_net_tests)

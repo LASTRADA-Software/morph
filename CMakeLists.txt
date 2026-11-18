@@ -1253,6 +1253,11 @@ if(MORPH_BUILD_QT)
         add_subdirectory(tests/qt_quick)
     endif()
 
+    # The browser's frontend baseline: one Qt for WebAssembly executable, run by hand under a headless browser.
+    if(EMSCRIPTEN AND MORPH_BUILD_QT_QUICK AND MORPH_BUILD_TESTS)
+        add_subdirectory(tests/qt_quick/wasm)
+    endif()
+
     # Qt for WebAssembly has no TLS sockets: a browser's WebSocket carries the TLS.
     if(MORPH_BUILD_EXAMPLES AND NOT EMSCRIPTEN)
         add_subdirectory(examples/qt_tls_client)

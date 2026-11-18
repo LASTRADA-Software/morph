@@ -15,6 +15,46 @@ morph_generate_pinned_facts_header(
     ${CMAKE_BINARY_DIR}/generated/pinned_facts_generated.hpp
 )
 
+# ── The wide-table fixture ───────────────────────────────────────────────────
+# The column-store source every table measurement runs against (docs/spec/table/table.md, "Performance"). Linked
+# whole, so the registrations it carries are never dropped by a linker that finds nothing referencing them.
+add_library(morph_wide_table_model STATIC table/wide_table_model.cpp)
+target_link_libraries(morph_wide_table_model PUBLIC morph::morph)
+target_include_directories(morph_wide_table_model PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+apply_warnings(morph_wide_table_model)
+
+# ── WebAssembly: the table tests alone, run under Node ──────────────────────
+# The table module is header-only and builds without Qt, so its tests run in WebAssembly too and the count gates of
+# the single-threaded path are checked there. Nothing else in this directory is built for that target, and Node runs
+# the executable by hand, so no test is registered with ctest.
+if(EMSCRIPTEN)
+    add_executable(morph_table_tests
+        table/test_table_source.cpp
+        table/test_table_sort.cpp
+        table/test_table_parse.cpp
+        table/test_table_filter.cpp
+        table/test_table_view_change.cpp
+        table/test_table_engine.cpp
+        table/test_table_changes.cpp
+        table/test_table_query.cpp
+        table/test_table_database_pages.cpp
+        table/test_table_selection.cpp
+        table/test_table_columns.cpp
+        table/test_table_pending.cpp
+        table/test_table_reentrancy.cpp
+        table/test_table_server.cpp
+        table/test_wide_table.cpp
+        table/bench_table.cpp
+    )
+    target_link_libraries(morph_table_tests PRIVATE morph::morph morph_test_main
+                          "$<LINK_LIBRARY:WHOLE_ARCHIVE,morph_wide_table_model>")
+    target_include_directories(morph_table_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+    # Emscripten's default heap is a fixed 16 MiB; the 100,000 x 300 column store the baselines sort needs it to grow.
+    target_link_options(morph_table_tests PRIVATE -sALLOW_MEMORY_GROWTH=1 -sMAXIMUM_MEMORY=4GB)
+    apply_warnings(morph_table_tests)
+    return()
+endif()
+
 add_executable(morph_tests
     oom_injector.cpp
     test_oom_injector.cpp
@@ -281,6 +321,7 @@ target_link_libraries(morph_tests
     PRIVATE
         morph::morph
         morph_test_main
+        "$<LINK_LIBRARY:WHOLE_ARCHIVE,morph_wide_table_model>"
 )
 
 apply_warnings(morph_tests)
@@ -894,9 +935,11 @@ add_executable(morph_table_tests
     table/test_table_pending.cpp
     table/test_table_reentrancy.cpp
     table/test_table_server.cpp
+    table/test_wide_table.cpp
     table/bench_table.cpp
 )
-target_link_libraries(morph_table_tests PRIVATE morph::morph morph_test_main)
+target_link_libraries(morph_table_tests PRIVATE morph::morph morph_test_main
+                      "$<LINK_LIBRARY:WHOLE_ARCHIVE,morph_wide_table_model>")
 target_include_directories(morph_table_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 target_compile_options(morph_table_tests PRIVATE $<$<CXX_COMPILER_ID:MSVC>:/bigobj>)
 apply_warnings(morph_table_tests)

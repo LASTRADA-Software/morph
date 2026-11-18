@@ -18,6 +18,7 @@
 #include <string>
 #include <string_view>
 #include <utility>
+#include <variant>
 #include <vector>
 
 namespace tabletest {
@@ -30,6 +31,26 @@ using morph::table::RowId;
 // A Rational from decimal text; zero on bad input, which the tests never pass.
 inline morph::math::Rational dec(std::string_view text) {
     return morph::table::parseDecimal(text).value_or(morph::math::Rational{});
+}
+
+// The same cell, places included: the same alternative and an equal value, and for a Rational (a quantity's
+// amount and factor too) the same decimal places. `Cell == Cell` compares values only, since Rational's equality
+// ignores places.
+[[nodiscard]] inline bool sameCell(Cell const& a, Cell const& b) {
+    if (a.index() != b.index()) {
+        return false;
+    }
+    auto const sameRational = [](morph::math::Rational const& x, morph::math::Rational const& y) {
+        return x == y && x.decimalPlaces == y.decimalPlaces;
+    };
+    if (auto const* const value = std::get_if<morph::math::Rational>(&a)) {
+        return sameRational(*value, std::get<morph::math::Rational>(b));
+    }
+    if (auto const* const value = std::get_if<morph::table::QuantityCell>(&a)) {
+        auto const& other = std::get<morph::table::QuantityCell>(b);
+        return sameRational(value->amount, other.amount) && sameRational(value->toCanonical, other.toCanonical);
+    }
+    return a == b;
 }
 
 inline ColumnInfo col(std::string id, ColumnKind kind, std::string comparator = {}) {

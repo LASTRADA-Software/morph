@@ -17,6 +17,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <functional>
+#include <glaze/glaze.hpp>
 #include <memory>
 #include <morph/core/executor.hpp>
 #include <morph/core/wire.hpp>
@@ -26,9 +27,12 @@
 #include <random>
 #include <string>
 #include <thread>
+#include <type_traits>
+#include <variant>
 #include <vector>
 
 #include "table/table_fixtures.hpp"
+#include "table/wide_table_model.hpp"
 
 using namespace morph::table;
 
@@ -298,5 +302,213 @@ TEST_CASE("table benchmark: rows of ten small cells per envelope", "[.benchmark]
         "\nRows per envelope (kMaxEnvelopeBytes = {})\n\n| bytes per row in the envelope | rows that fit "
         "|\n|---:|---:|\n| {:.1f} | {} |",
         morph::wire::kMaxEnvelopeBytes, perRow, fit);
+    static_cast<void>(std::fflush(stdout));
+}
+
+// ── Step 0 baselines over the wide-table fixture ────────────────────────────
+// docs/spec/table/table.md, "Performance": each case first REQUIREs that the path it times was reached, then prints
+// its rows as the cases above do.
+
+namespace {
+
+constexpr std::int64_t kWideRows = 100'000;
+
+TableQuery wideQuery(std::vector<SortKey> sort, FilterSpec filters, std::int64_t offset) {
+    TableQuery query;
+    query.sort = std::move(sort);
+    query.filters = std::move(filters);
+    query.page = {.offset = offset, .limit = 200};
+    return query;
+}
+
+double millisSince(Clock::time_point began) {
+    return std::chrono::duration<double, std::milli>(Clock::now() - began).count();
+}
+
+void printBytes(std::string const& what, std::size_t rows, std::size_t bytes) {
+    std::println("| {} | {} | {} | {:.1f} |", what, rows, bytes, static_cast<double>(bytes) / (1024.0 * 1024.0));
+    static_cast<void>(std::fflush(stdout));
+}
+
+}  // namespace
+
+TEST_CASE("table baseline: S1 S2 S7 over the wide table", "[.benchmark][baseline]") {
+    bench::WideTableSource const wide{{.rows = kWideRows, .columns = 300, .seed = 1}};
+    auto const s1 = wideQuery({{.column = "d000", .dir = kAsc}}, {}, 0);
+    auto const s2 = wideQuery({}, filterOn("t001", FilterEntry{.contains = "ka"}), 0);
+    {
+        auto const page = apply(wide, s1);
+        REQUIRE(page.has_value());
+        REQUIRE(page->rows.size() == 200);
+        REQUIRE(page->total == kWideRows);
+        auto const filtered = apply(wide, s2);
+        REQUIRE(filtered.has_value());
+        REQUIRE(filtered->total.has_value());
+        REQUIRE(*filtered->total > 0);
+        REQUIRE(*filtered->total < kWideRows);
+    }
+    printHeader("Step 0 baselines: apply over the wide table, 100,000 x 300, in the calling thread");
+    auto const time = [&](std::string const& scenario, TableQuery const& query) {
+        std::vector<double> samples;
+        for (int run = 0; run < runsFor(kWideRows); ++run) {
+            auto const began = Clock::now();
+            auto const page = apply(wide, query);
+            samples.push_back(millisSince(began));
+            REQUIRE(page.has_value());
+        }
+        printRow(scenario, kWideRows, spreadOf(samples));
+    };
+    time("S1: sort d000 asc, page of 200", s1);
+    time("S2: filter t001 contains \"ka\"", s2);
+
+    // S7: ten consecutive pages of S1's query, each a separate apply.
+    std::vector<double> totals;
+    std::vector<double> perCall;
+    for (int run = 0; run < runsFor(kWideRows); ++run) {
+        std::vector<RowId> firstKeys;
+        auto const snapshot = wide.snapshot();
+        auto const began = Clock::now();
+        for (std::int64_t page = 0; page < 10; ++page) {
+            auto const call = Clock::now();
+            auto const rows = apply(wide, wideQuery({{.column = "d000", .dir = kAsc}}, {}, page * 200));
+            perCall.push_back(millisSince(call));
+            REQUIRE(rows.has_value());
+            REQUIRE_FALSE(rows->rows.empty());
+            firstKeys.push_back(snapshot->rowId(rows->rows.front()));
+        }
+        totals.push_back(millisSince(began));
+        std::ranges::sort(firstKeys);
+        REQUIRE(std::ranges::adjacent_find(firstKeys) == firstKeys.end());
+    }
+    printRow("S7: ten pages of S1, total", kWideRows, spreadOf(totals));
+    printRow("S7: ten pages of S1, per call", kWideRows, spreadOf(perCall));
+}
+
+#ifndef __EMSCRIPTEN__
+// Native only: the VectorSource of the same rows holds near 1.7 GB of cells.
+TEST_CASE("table baseline: S8 resident bytes", "[.benchmark][baseline]") {
+    bench::WideTableSource const wide{{.rows = kWideRows, .columns = 300, .seed = 1}};
+    auto const snapshot = wide.snapshot();
+    auto const columns = wide.columns().size();
+    std::vector<RowId> ids;
+    std::vector<std::vector<Cell>> rows;
+    ids.reserve(snapshot->rowCount());
+    rows.reserve(snapshot->rowCount());
+    std::size_t cellBytes = 0;
+    for (std::size_t row = 0; row < snapshot->rowCount(); ++row) {
+        ids.push_back(snapshot->rowId(row));
+        std::vector<Cell> cells;
+        cells.reserve(columns);
+        for (std::size_t column = 0; column < columns; ++column) {
+            cells.push_back(snapshot->cell(row, column));
+            cellBytes += bench::approximateCellBytes(cells.back());
+        }
+        rows.push_back(std::move(cells));
+    }
+    VectorSource cellsSource{std::vector<ColumnInfo>(wide.columns().begin(), wide.columns().end())};
+    cellsSource.setRows(std::move(ids), std::move(rows));
+    REQUIRE(cellsSource.snapshot()->rowCount() == static_cast<std::size_t>(kWideRows));
+    std::println(
+        "\nS8: resident bytes of the wide table, 100,000 x 300\n\n| held as | rows | bytes | MiB |\n|---|---:|---:|---:|");
+    printBytes("S8: the fixture's column store (residentBytes)", snapshot->rowCount(), wide.residentBytes());
+    printBytes("S8: a VectorSource of the same rows (approximateCellBytes)", snapshot->rowCount(), cellBytes);
+}
+#endif
+
+TEST_CASE("table baseline: B1 client mode with no worker", "[.benchmark][baseline]") {
+    std::println(
+        "\nB1: client mode, an owner and no worker, WideTableSource of 30 columns (sort a000 asc, d000 desc, i001 asc, "
+        "then filter t001 contains \"ka\")\n\n| rows | request to result ms (median) | p10-p90 ms | worst owner step ms "
+        "(median of runs) | p10-p90 ms |\n|---:|---:|---:|---:|---:|");
+    for (std::int64_t const rows : {std::int64_t{10'000}, std::int64_t{20'000}, kWideRows}) {
+        auto const source =
+            std::make_shared<bench::WideTableSource>(bench::WideTableOptions{.rows = rows, .columns = 30, .seed = 1});
+        std::vector<double> latency;
+        std::vector<double> worst;
+        for (int run = 0; run < runsFor(static_cast<std::size_t>(rows)); ++run) {
+            morph::exec::MainThreadExecutor owner;
+            Engine engine{source, EngineOptions{.owner = &owner, .worker = nullptr}};
+            REQUIRE(spinUntil(owner, [&] { return !engine.pending(); }));
+            auto const firstBefore = engine.rowIdAt(0);
+            auto const began = Clock::now();
+            require(engine.setSort(
+                {{.column = "a000", .dir = kAsc}, {.column = "d000", .dir = kDesc}, {.column = "i001", .dir = kAsc}}));
+            REQUIRE(spinUntil(owner, [&] { return !engine.pending(); }));
+            REQUIRE(engine.rowIdAt(0) != firstBefore);
+            require(engine.setFilter(filterOn("t001", FilterEntry{.contains = "ka"})));
+            REQUIRE(spinUntil(owner, [&] { return !engine.pending(); }));
+            latency.push_back(millisSince(began));
+            worst.push_back(static_cast<double>(engine.stats().maxOwnerStepMicros) / 1000.0);
+        }
+        auto const l = spreadOf(latency);
+        auto const w = spreadOf(worst);
+        std::println("| {} | {:.2f} | {:.2f}-{:.2f} | {:.2f} | {:.2f}-{:.2f} |", rows, l.median, l.p10, l.p90, w.median,
+                     w.p10, w.p90);
+        static_cast<void>(std::fflush(stdout));
+    }
+}
+
+namespace {
+
+// A page of the wide table as row objects keyed by column id, each cell written as glaze writes a typed member of
+// its kind: a decimal as the Rational object, a quantity as its amount in the column's unit, an empty cell as null.
+std::string typedPage(bench::WideTableSource const& source, std::size_t rows, std::size_t& cells) {
+    auto const snapshot = source.snapshot();
+    auto const columns = source.columns();
+    std::string out = "[";
+    std::string buffer;
+    for (std::size_t row = 0; row < rows; ++row) {
+        out += row == 0 ? "{" : ",{";
+        for (std::size_t column = 0; column < columns.size(); ++column) {
+            if (column > 0) {
+                out += ',';
+            }
+            out += '"';
+            out += columns[column].id;
+            out += "\":";
+            Cell const cell = snapshot->cell(row, column);
+            buffer.clear();
+            bool const failed = std::visit(
+                [&]<typename T>(T const& value) -> bool {
+                    if constexpr (std::is_same_v<T, std::monostate>) {
+                        buffer = "null";
+                        return false;
+                    } else if constexpr (std::is_same_v<T, QuantityCell>) {
+                        return static_cast<bool>(glz::write_json(value.amount, buffer));
+                    } else {
+                        return static_cast<bool>(glz::write_json(value, buffer));
+                    }
+                },
+                cell);
+            REQUIRE_FALSE(failed);
+            out += buffer;
+            ++cells;
+        }
+        out += '}';
+    }
+    out += ']';
+    return out;
+}
+
+}  // namespace
+
+TEST_CASE("table baseline: W7 as a typed page", "[.benchmark][baseline]") {
+    bench::WideTableSource const wide{{.rows = 200, .columns = 300, .seed = 1}};
+    std::size_t cells = 0;
+    auto const bytes = typedPage(wide, 200, cells).size();
+    REQUIRE(cells == 60'000);
+    std::vector<double> samples;
+    for (int run = 0; run < 15; ++run) {
+        std::size_t counted = 0;
+        auto const began = Clock::now();
+        auto const page = typedPage(wide, 200, counted);
+        samples.push_back(millisSince(began));
+        REQUIRE(page.size() == bytes);
+    }
+    auto const spread = spreadOf(samples);
+    std::println(
+        "\nW7: a page of 200 rows x 300 columns as typed row objects\n\n| bytes | encode ms (median) | p10-p90 ms "
+        "|\n|---:|---:|---:|\n| {} | {:.2f} | {:.2f}-{:.2f} |",
+        bytes, spread.median, spread.p10, spread.p90);
     static_cast<void>(std::fflush(stdout));
 }

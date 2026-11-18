@@ -73,6 +73,12 @@ struct QuantityCell {
     math::Rational amount;
     /// @brief Multiplier from the cell's unit to the column's canonical unit.
     math::Rational toCanonical;
+
+    /// @brief Member-wise equality, by value: `Rational`'s equality ignores decimal places, so two cells that
+    ///        differ only in places are equal.
+    /// @param other The cell to compare with.
+    /// @return `true` when the amounts are equal and the factors are equal.
+    [[nodiscard]] bool operator==(QuantityCell const& other) const = default;
 };
 
 /// @brief One cell as a data source hands it out.

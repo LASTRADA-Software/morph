@@ -5,12 +5,29 @@
 //
 //   morph_tests "[.benchmark][interpreter]"
 
+#include <algorithm>
 #include <catch2/benchmark/catch_benchmark.hpp>
 #include <catch2/catch_test_macros.hpp>
+#include <chrono>
+#include <cmath>
 #include <cstddef>
+#include <cstdint>
+#include <cstdio>
 #include <format>
+#include <glaze/glaze.hpp>
+#include <morph/forms/engine/collection.hpp>
+#include <morph/table/data_source.hpp>
+#include <morph/table/engine.hpp>
+#include <optional>
+#include <print>
 #include <string>
+#include <string_view>
+#include <variant>
+#include <vector>
 
+#include "forms_engine_support.hpp"
+#include "qt_quick/wide_rows_document.hpp"
+#include "table/wide_table_model.hpp"
 #include "ui_interpreter_support.hpp"
 
 namespace ui = morph::ui;
@@ -64,3 +81,267 @@ TEST_CASE("interpreter bench: update state read by a mounted screen", "[.benchma
         return h.backend.all("Text").size();
     };
 }
+
+// ── Step 0 baselines: a `rows` table on the interpreter, and a collection ───
+// docs/spec/table/table.md, "Benchmarks: every surface". Each case first REQUIREs that the path it times was reached.
+// Run on a Release build:
+//
+//   morph_tests "[.benchmark][baseline]"
+
+namespace {
+
+using Clock = std::chrono::steady_clock;
+
+struct Spread {
+    double median = 0;
+    double p10 = 0;
+    double p90 = 0;
+};
+
+Spread spreadOf(std::vector<double> samples) {
+    std::ranges::sort(samples);
+    auto const at = [&](double q) {
+        auto const index = static_cast<std::size_t>(std::lround(q * static_cast<double>(samples.size() - 1)));
+        return samples[std::min(index, samples.size() - 1)];
+    };
+    return Spread{.median = at(0.5), .p10 = at(0.1), .p90 = at(0.9)};
+}
+
+double millisSince(Clock::time_point began) {
+    return std::chrono::duration<double, std::milli>(Clock::now() - began).count();
+}
+
+void printRow(std::string_view scenario, std::size_t rows, Spread const& spread) {
+    std::println("| {} | {} | {:.2f} | {:.2f}-{:.2f} |", scenario, rows, spread.median, spread.p10, spread.p90);
+    static_cast<void>(std::fflush(stdout));
+}
+
+std::string jsonText(std::string const& text) {
+    std::string out;
+    REQUIRE_FALSE(glz::write_json(text, out));
+    return out;
+}
+
+// The rows of a `rows` table over the fixture: `id`, `name` from `t001` and `qty` from `i001`.
+std::string fixtureItems(bench::WideTableSource const& source) {
+    auto const snapshot = source.snapshot();
+    auto const columns = source.columns();
+    auto const index = [&](std::string_view id) {
+        return static_cast<std::size_t>(std::ranges::find(columns, id, &morph::table::ColumnInfo::id) -
+                                        columns.begin());
+    };
+    auto const name = index("t001");
+    auto const qty = index("i001");
+    std::string items;
+    for (std::size_t row = 0; row < snapshot->rowCount(); ++row) {
+        auto const quantity = snapshot->cell(row, qty);
+        items += std::format(R"({}{{"id":{},"name":{},"qty":{}}})", row == 0 ? "" : ",", row + 1,
+                             jsonText(morph::table::displayText(snapshot->cell(row, name))),
+                             std::holds_alternative<std::monostate>(quantity) ? std::string{"null"}
+                                                                              : morph::table::displayText(quantity));
+    }
+    return items;
+}
+
+// A table over state `items` whose sort is state `order`; "sort" sorts it by name, "rename" gives the row keyed
+// @p renamed a name that sorts last.
+std::string sortedDocument(std::string const& items, std::int64_t renamed) {
+    return std::format(R"({{
+  "vocab": "ui/1", "id": "baselineRows",
+  "state": {{ "items": {{ "init": {{ "lit": [{}] }} }}, "order": {{ "init": {{ "lit": [] }} }} }},
+  "view": {{ "kind": "column", "children": [
+    {{ "kind": "button", "testId": "sort", "label": "sort",
+       "onClick": {{ "set": "order", "value": {{ "lit": [ {{ "column": "name", "direction": "asc" }} ] }} }} }},
+    {{ "kind": "button", "testId": "rename", "label": "rename",
+       "onClick": {{ "set": "items", "value": {{ "map": {{ "ref": "items" }}, "as": "r", "to": {{ "if": [
+         {{ "fn": "eq", "args": [ {{ "ref": "r.id" }}, {} ] }},
+         {{ "obj": {{ "id": {{ "ref": "r.id" }}, "name": "ÿÿÿ", "qty": {{ "ref": "r.qty" }} }} }},
+         {{ "ref": "r" }} ] }} }} }} }},
+    {{ "kind": "table", "rows": {{ "ref": "items" }}, "sort": {{ "ref": "order" }},
+       "columns": [ {{ "id": "id", "label": "Id" }}, {{ "id": "name", "label": "Name", "sortable": true }},
+                    {{ "id": "qty", "label": "Qty" }} ] }} ] }} }})",
+                       items, renamed);
+}
+
+// The texts of the first row the table shows, in column order.
+std::vector<std::string> firstRowTexts(Harness const& h) {
+    auto const tables = h.backend.all("Table");
+    REQUIRE(tables.size() == 1);
+    auto const rows = h.backend.children(tables.front());
+    REQUIRE_FALSE(rows.empty());
+    std::vector<std::string> texts;
+    std::vector<int> pending{rows.front()};
+    while (!pending.empty()) {
+        int const id = pending.front();
+        pending.erase(pending.begin());
+        if (h.backend.kindOf(id) == "Text") {
+            texts.push_back(h.backend.prop(id, "text"));
+        }
+        auto const children = h.backend.children(id);
+        pending.insert(pending.begin(), children.begin(), children.end());
+    }
+    return texts;
+}
+
+std::string realizedWindow(Harness const& h) { return h.backend.prop(h.backend.all("Table").front(), "realizedWindow"); }
+
+}  // namespace
+
+TEST_CASE("interpreter baseline: U1 U2 a rows table of 100,000", "[.benchmark][baseline]") {
+    constexpr std::size_t kRows = 100'000;
+    bench::WideTableSource const source{{.rows = kRows, .columns = 300, .seed = 1}};
+    std::string const items = fixtureItems(source);
+    // The row U2 renames is the one the sorted table shows first, read from one mount before the timed runs.
+    std::int64_t shownFirst = 0;
+    {
+        Harness probe;
+        auto screen = probe.mount(sortedDocument(items, 0));
+        probe.backend.click(probe.byTestId("Button", "sort"));
+        probe.settle();
+        auto const texts = firstRowTexts(probe);
+        REQUIRE_FALSE(texts.empty());
+        shownFirst = std::stoll(texts.front());
+    }
+    std::string const document = sortedDocument(items, shownFirst);
+    std::println("\nU1, U2: a document rows table of 100,000 rows on the recording backend, click to settled\n\n"
+                 "| scenario | rows | median ms | p10-p90 ms |\n|---|---:|---:|---:|");
+    std::vector<double> sorts;
+    std::vector<double> renames;
+    for (int run = 0; run < 7; ++run) {
+        Harness h;
+        auto screen = h.mount(document);
+        REQUIRE(realizedWindow(h).ends_with("/100000"));
+        auto const before = firstRowTexts(h);
+        auto began = Clock::now();
+        h.backend.click(h.byTestId("Button", "sort"));
+        h.settle();
+        sorts.push_back(millisSince(began));
+        auto const sorted = firstRowTexts(h);
+        REQUIRE(sorted.size() >= 2);
+        REQUIRE(sorted != before);
+        began = Clock::now();
+        h.backend.click(h.byTestId("Button", "rename"));
+        h.settle();
+        renames.push_back(millisSince(began));
+        auto const after = firstRowTexts(h);
+        REQUIRE(after.size() >= 2);
+        REQUIRE(after.front() != sorted.front());  // the renamed row moved from the top
+    }
+    printRow("U1: sort on name, click to settled", kRows, spreadOf(sorts));
+    printRow("U2: one row renamed in the sorted table, click to settled", kRows, spreadOf(renames));
+}
+
+TEST_CASE("interpreter baseline: U4 memory of a rows table", "[.benchmark][baseline]") {
+    constexpr std::size_t kRows = 10'000;
+    bench::WideTableSource const source{{.rows = kRows, .columns = 300, .seed = 1}};
+    auto const snapshot = source.snapshot();
+    std::size_t cellBytes = 0;
+    for (std::size_t row = 0; row < kRows; ++row) {
+        for (std::size_t column = 0; column < source.columns().size(); ++column) {
+            cellBytes += bench::approximateCellBytes(snapshot->cell(row, column));
+        }
+    }
+    std::string const document = std::format(
+        R"({{ "vocab": "ui/1", "id": "baselineMemory", "state": {{ "items": {{ "init": {{ "lit": [{}] }} }} }},
+  "view": {{ "kind": "table", "rows": {{ "ref": "items" }}, "sort": {{ "lit": [ {{ "column": "t001", "direction": "asc" }} ] }},
+             "columns": [{}] }} }})",
+        bench::wideRowsJson(source), bench::wideColumnsJson(source));
+    auto const before = bench::processBytes();
+    Harness h;
+    auto screen = h.mount(document);
+    auto const after = bench::processBytes();
+    REQUIRE(realizedWindow(h).ends_with("/10000"));
+    std::println("\nU4: a rows table of 10,000 x 300 sorted on one column\n\n| held as | bytes | MiB |\n|---|---:|---:|\n"
+                 "| the same rows as cells (approximateCellBytes) | {} | {:.1f} |\n"
+                 "| the mounted document: process bytes after mount over before | {} | {:.1f} |",
+                 cellBytes, static_cast<double>(cellBytes) / (1024.0 * 1024.0),
+                 static_cast<std::int64_t>(after) - static_cast<std::int64_t>(before),
+                 (static_cast<double>(after) - static_cast<double>(before)) / (1024.0 * 1024.0));
+    static_cast<void>(std::fflush(stdout));
+}
+
+namespace {
+
+constexpr std::string_view kCollectionView = R"({
+  "v-kind": "collection", "v-title": "Rows", "v-query": "ListRows", "v-rowKey": "id",
+  "v-columns": [
+    {"field": "id", "label": "ID", "kind": "integer", "v-hidden": true},
+    {"field": "name", "label": "Name", "kind": "text"},
+    {"field": "qty", "label": "Qty", "kind": "integer"}]})";
+
+// A ListRows reply of the fixture's rows; @p renamed, when not 0, is the key of a row whose name is changed.
+std::string listReply(bench::WideTableSource const& source, std::int64_t renamed) {
+    auto const snapshot = source.snapshot();
+    auto const columns = source.columns();
+    auto const index = [&](std::string_view id) {
+        return static_cast<std::size_t>(std::ranges::find(columns, id, &morph::table::ColumnInfo::id) -
+                                        columns.begin());
+    };
+    auto const name = index("t001");
+    auto const qty = index("i001");
+    std::string out = R"({"rows":[)";
+    for (std::size_t row = 0; row < snapshot->rowCount(); ++row) {
+        auto const key = static_cast<std::int64_t>(row) + 1;
+        auto const quantity = snapshot->cell(row, qty);
+        out += std::format(
+            R"({}{{"id":{},"name":{},"qty":{}}})", row == 0 ? "" : ",", key,
+            jsonText(key == renamed ? std::string{"renamed"} : morph::table::displayText(snapshot->cell(row, name))),
+            std::holds_alternative<std::monostate>(quantity) ? std::string{"null"}
+                                                             : morph::table::displayText(quantity));
+    }
+    out += "]}";
+    return out;
+}
+
+}  // namespace
+
+TEST_CASE("interpreter baseline: U5 a collection of 20,000", "[.benchmark][baseline]") {
+    constexpr std::size_t kRows = 20'000;
+    bench::WideTableSource const source{{.rows = kRows, .columns = 30, .seed = 1}};
+    std::string const original = listReply(source, 0);
+    std::string const edited = listReply(source, 1);
+    auto const model = morph::forms::CollectionModel::fromSchema(kCollectionView);
+    REQUIRE(model.has_value());
+    std::println("\nU5: a collection of 20,000 rows over a ListRows reply\n\n"
+                 "| scenario | rows | median ms | p10-p90 ms |\n|---|---:|---:|---:|");
+    std::vector<double> mounts;
+    std::vector<double> sorts;
+    std::vector<double> edits;
+    for (int run = 0; run < 15; ++run) {
+        morph::test::formsengine::Harness harness;
+        std::string const* reply = &original;
+        harness.server.replyWith([&reply](morph::test::formsengine::Call const& call) -> std::optional<std::string> {
+            if (call.action == "ListRows") {
+                return *reply;
+            }
+            return std::string{R"({"ok":true})"};
+        });
+        auto began = Clock::now();
+        morph::forms::CollectionSession collection{
+            harness.rt, *model, [](std::string_view) { return std::optional<std::string>{}; },
+            harness.server.submitter(), harness.server.fetcher()};
+        harness.settle();
+        mounts.push_back(millisSince(began));
+        REQUIRE(collection.rows().size() == kRows);
+
+        morph::table::Engine engine{collection.source()};
+        began = Clock::now();
+        REQUIRE(engine.setSort({{.column = "name", .dir = morph::table::SortDirection::Ascending}}).has_value());
+        engine.settleNow();
+        sorts.push_back(millisSince(began));
+        REQUIRE(engine.viewRowCount() == kRows);
+
+        reply = &edited;
+        began = Clock::now();
+        collection.refresh();
+        harness.settle();
+        engine.settleNow();
+        edits.push_back(millisSince(began));
+        REQUIRE(collection.rows().size() == kRows);
+        REQUIRE(collection.rows().front().cells.front() == "renamed");
+    }
+    printRow("U5: mount (list reply decoded into the collection)", kRows, spreadOf(mounts));
+    printRow("U5: sort on name through the table engine", kRows, spreadOf(sorts));
+    printRow("U5: one row edited (the list reloaded) and the sorted view repaired", kRows, spreadOf(edits));
+}
+
