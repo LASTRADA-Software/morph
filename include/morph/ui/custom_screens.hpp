@@ -11,10 +11,15 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <tuple>
 #include <utility>
 #include <vector>
 
+#include "../core/completion.hpp"
+#include "../core/executor.hpp"
+#include "../core/owner_strand.hpp"
 #include "../session/session.hpp"
+#include "../util/datetime.hpp"
 #include "document.hpp"
 #include "service.hpp"
 #include "value.hpp"
@@ -26,6 +31,164 @@
 /// Specified in `docs/spec/ui/custom_screens.md`.
 
 namespace morph::ui {
+
+/// @brief Where one custom screen is stored.
+struct CustomScreenKey {
+    /// @brief The person, derived on the server from the verified principal; never taken from a request.
+    std::string person;
+    /// @brief The application.
+    std::string app;
+    /// @brief The screen's id, `custom:` and 32 hexadecimal digits.
+    std::string id;
+};
+
+/// @brief A stored custom screen.
+struct CustomScreen {
+    /// @brief The id, `custom:` and 32 hexadecimal digits, issued by the model.
+    std::string id;
+    /// @brief The person's name for it, which names its entry.
+    std::string title;
+    /// @brief The id of the application screen it was made from.
+    std::string basedOn;
+    /// @brief The `ui/1` JSON text, its screen id already the custom screen's.
+    std::string document;
+    /// @brief When it was saved.
+    time::DateTime savedAt;
+    /// @brief The principal that saved it.
+    std::string savedBy;
+};
+
+/// @brief A store's refusal, shown to the person as it is.
+struct CustomScreenRefusal {
+    /// @brief The reason, in one sentence.
+    std::string reason;
+};
+
+/// @brief Stores custom screens. The application's implementation is where every policy over them lives.
+///
+/// `list` answers the screens a person may open, which may include screens others saved. `put` and `remove` refuse
+/// what the person may not do, with a reason for the person. The model calls a store only with a person the server
+/// derived and with a document that passed every check. A store owns the executor its completions are delivered on.
+class ICustomScreenStore {
+public:
+    ICustomScreenStore() = default;
+    ICustomScreenStore(ICustomScreenStore const&) = delete;
+    ICustomScreenStore& operator=(ICustomScreenStore const&) = delete;
+    ICustomScreenStore(ICustomScreenStore&&) = delete;
+    ICustomScreenStore& operator=(ICustomScreenStore&&) = delete;
+    virtual ~ICustomScreenStore() = default;
+
+    /// @brief The custom screens @p person may open in @p app.
+    /// @param person The person.
+    /// @param app    The application.
+    /// @return The screens, in the store's order.
+    [[nodiscard]] virtual async::Completion<std::vector<CustomScreen>> list(std::string person, std::string app) = 0;
+
+    /// @brief One custom screen the person may open.
+    /// @param key The entry.
+    /// @return The screen, or the refusal.
+    [[nodiscard]] virtual async::Completion<std::expected<CustomScreen, CustomScreenRefusal>> get(
+        CustomScreenKey key) = 0;
+
+    /// @brief Stores a custom screen, replacing one of the same key.
+    /// @param key    The entry.
+    /// @param screen The screen.
+    /// @return Nothing, or the refusal.
+    [[nodiscard]] virtual async::Completion<std::expected<void, CustomScreenRefusal>> put(CustomScreenKey key,
+                                                                                          CustomScreen screen) = 0;
+
+    /// @brief Forgets a custom screen.
+    /// @param key The entry.
+    /// @return Nothing, or the refusal.
+    [[nodiscard]] virtual async::Completion<std::expected<void, CustomScreenRefusal>> remove(CustomScreenKey key) = 0;
+};
+
+/// @brief The framework's store: a map held in memory, on its own strand, each person seeing and changing only
+///        their own screens.
+///
+/// Its entries last as long as it does. Each call is a task on the strand, and its completion is delivered there.
+class MemoryCustomScreenStore final : public ICustomScreenStore {
+public:
+    /// @brief A store whose strand runs on @p base.
+    /// @param base Where the strand's tasks run. Borrowed: it must outlive the store.
+    explicit MemoryCustomScreenStore(exec::IExecutor& base MORPH_LIFETIMEBOUND) : _strand{base} {}
+
+    /// @brief The custom screens @p person saved in @p app.
+    /// @param person The person.
+    /// @param app    The application.
+    /// @return The screens, ordered by id.
+    [[nodiscard]] async::Completion<std::vector<CustomScreen>> list(std::string person, std::string app) override {
+        auto [completion, promise] = async::Completion<std::vector<CustomScreen>>::makeSettleable(&_strand);
+        _strand.postTask([this, who = std::move(person), where = std::move(app), settle = std::move(promise)] mutable {
+            std::vector<CustomScreen> out;
+            for (auto const& [key, screen] : _entries) {
+                if (std::get<0>(key) == who && std::get<1>(key) == where) {
+                    out.push_back(screen);
+                }
+            }
+            settle.resolve(std::move(out));
+        });
+        return std::move(completion);
+    }
+
+    /// @brief One of the person's own screens.
+    /// @param key The entry.
+    /// @return The screen, or `no such custom screen`.
+    [[nodiscard]] async::Completion<std::expected<CustomScreen, CustomScreenRefusal>> get(
+        CustomScreenKey key) override {
+        auto [completion, promise] =
+            async::Completion<std::expected<CustomScreen, CustomScreenRefusal>>::makeSettleable(&_strand);
+        _strand.postTask([this, entry = tie(key), settle = std::move(promise)] mutable {
+            auto const found = _entries.find(entry);
+            if (found == _entries.end()) {
+                settle.resolve(std::unexpected(CustomScreenRefusal{.reason = "no such custom screen"}));
+                return;
+            }
+            settle.resolve(found->second);
+        });
+        return std::move(completion);
+    }
+
+    /// @brief Stores a screen under the person's key.
+    /// @param key    The entry.
+    /// @param screen The screen.
+    /// @return Nothing: the memory store refuses no write.
+    [[nodiscard]] async::Completion<std::expected<void, CustomScreenRefusal>> put(CustomScreenKey key,
+                                                                                  CustomScreen screen) override {
+        auto [completion, promise] =
+            async::Completion<std::expected<void, CustomScreenRefusal>>::makeSettleable(&_strand);
+        _strand.postTask([this, entry = tie(key), kept = std::move(screen), settle = std::move(promise)] mutable {
+            _entries.insert_or_assign(std::move(entry), std::move(kept));
+            settle.resolve(std::expected<void, CustomScreenRefusal>{});
+        });
+        return std::move(completion);
+    }
+
+    /// @brief Forgets one of the person's own screens.
+    /// @param key The entry.
+    /// @return Nothing, or `no such custom screen`.
+    [[nodiscard]] async::Completion<std::expected<void, CustomScreenRefusal>> remove(CustomScreenKey key) override {
+        auto [completion, promise] =
+            async::Completion<std::expected<void, CustomScreenRefusal>>::makeSettleable(&_strand);
+        _strand.postTask([this, entry = tie(key), settle = std::move(promise)] mutable {
+            if (_entries.erase(entry) == 0) {
+                settle.resolve(std::unexpected(CustomScreenRefusal{.reason = "no such custom screen"}));
+                return;
+            }
+            settle.resolve(std::expected<void, CustomScreenRefusal>{});
+        });
+        return std::move(completion);
+    }
+
+private:
+    using Key = std::tuple<std::string, std::string, std::string>;
+
+    [[nodiscard]] static Key tie(CustomScreenKey const& key) { return Key{key.person, key.app, key.id}; }
+
+    std::map<Key, CustomScreen> _entries;
+    /// After the map, so it is destroyed first: a task running on it reads the map.
+    exec::OwnerStrand _strand;
+};
 
 /// @brief Checks that @p custom uses nothing its base screen does not: the base rule.
 ///
