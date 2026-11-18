@@ -94,15 +94,18 @@ public:
     /// @throws ValidationError if the query names a column the rows do not have, or exceeds the limits.
     ::morph::table::Page<SampleView> execute(const ListSamples& action);
 
-    /// @brief Answers @p query over the samples at @p sites: reads the caller's rows and runs the query over them with
-    ///        `table::apply`; the total is exact.
+    /// @brief Answers @p query over the samples at @p sites: reads those rows and runs the query over them with
+    ///        `table::apply`; the total is the count up to `QueryLimits::totalCap` and omitted above it.
     /// @param sites The sites whose samples are listed.
     /// @param query The sort, filters and page.
+    /// @param action The action named in a refusal.
     /// @return The page.
-    /// @throws ValidationError if the query names a column the rows do not have, or exceeds the limits.
+    /// @throws ValidationError if the query names a column the rows do not have, holds an operand its column cannot
+    ///         parse, or exceeds the limits.
     /// @throws Lightweight::SqlException if a statement fails.
     [[nodiscard]] static ::morph::table::Page<SampleView> pageSamples(std::vector<SiteId> const& sites,
-                                                                      ::morph::table::TableQuery const& query);
+                                                                      ::morph::table::TableQuery const& query,
+                                                                      std::string_view action = "ListSamples");
 
     /// @brief `Registered → Received`.
     /// @param action Carries no fields of its own.

@@ -200,8 +200,8 @@ TEST_CASE("Stress: Hypothesis 10: a page of the journal over 10^6 entries", "[li
     CHECK(*page.rows.front().id == ids[500'000]);
     CHECK(*page.rows.back().id == ids[500'000 + kPageSize - 1]);
     CHECK(page.offset == 500'000);
-    CHECK(page.total == kEntriesForPage);
-    CHECK(page.totalKind == morph::table::TotalKind::Exact);
+    // Above `QueryLimits::totalCap` (100,000 rows) `table::apply` gives no total.
+    CHECK_FALSE(page.total.has_value());
 
     // A sorted and filtered page costs the same order: the last entries by descending id, among those whose reference
     // starts with the last one's prefix.

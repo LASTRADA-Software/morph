@@ -1793,7 +1793,8 @@ The first case's run was 592 s against a 600 s ctest limit, so a case named for 
 limit (`cmake/morph_add_rung.cmake`); both are `Stress:` cases and outside `ctest -L ladder -LE stress`.
 
 The sample and ledger lists (`ListSamples`, `ListEntriesPage`) read the caller's rows with one query and answer
-with `table::apply`, so their order, filters and total are the engine's on every surface.
+with `table::apply`, so their order, filters and total are the engine's on every surface. The total is the count up
+to `QueryLimits::totalCap` (100,000 rows) and omitted above it, so the 10^6-entry page has none.
 
 The trial balance sums `company_num` per account, side and denominator in the database and adds the few sums per
 account exactly. This is not the brief's sum of minor units: the ledger's own tests hold 5 * 10^18 whole units as a
