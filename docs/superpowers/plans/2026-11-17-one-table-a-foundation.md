@@ -655,7 +655,8 @@ git commit -m "feat(table): table descriptions and the generic page"
 - Modify: `include/morph/core/registry.hpp:841,967,1030,1039` and `include/morph/core/bridge.hpp:612,625,2245,2434` (call `invokeExecute`), and `BRIDGE_REGISTER_TABLE` after `BRIDGE_REGISTER_ACTION_SOURCE` (`registry.hpp:2206`)
 - Create: `include/morph/table/runtime.hpp` (`TableRuntime`, `currentTableRuntime`, `TableRuntimeScope`; it includes only `core/executor.hpp`, so `core/remote.hpp` includes it without reaching the table headers; add it to the `FILE_SET` beside `query.hpp`); define the thread-local behind `currentTableRuntime()` in `src/ui/process_state.cpp` beside `tlsCurrent()` (`:144`), as a `MORPH_API` function so a shared build has one copy
 - Modify: `include/morph/core/remote.hpp:310-367` (`ServerConfig::tableWork`), `:2861` and `:2875-2885` (`startRemote` and `startTaskRemote` install a `table::TableRuntimeScope` beside `ScopedContext`, with `work` = `tableWork` or, when null, the server's worker pool)
-- Modify: `tests/table/wide_table_model.{hpp,cpp}` (`bench::WideTableModel`), `tests/table/test_table_description.cpp`
+- Modify: `include/morph/forms/forms.hpp` (`forEachNamedMember` walks a type glaze writes as one of its members, its `glz::meta` value a member pointer, through that member: `QueryTable`'s JSON is its `TableQuery`'s, and the action's schema extras are built by that walk)
+- Modify: `tests/table/wide_table_model.{hpp,cpp}` (`bench::WideTableModel`), `tests/table/test_table_description.cpp`, `tests/table/bench_table.cpp` (Step 6)
 - Create: `tests/net/test_push_tables.cpp` (in `morph_net_tests`, `tests/net/CMakeLists.txt:1-12`)
 - Docs: `docs/spec/core/registry.md` (a section `### BRIDGE_REGISTER_TABLE(M, ID, FN, ...)` after `### BRIDGE_REGISTER_ACTION(M, A, NAME, ...)`, `:999`, and a paragraph on `invoke` under `### ActionTraits<Action>`, `:217`), `docs/spec/core/backend.md` (`tableWork` in the `ServerConfig` table, `:2491`, and one bullet in "Fan-out", `:1221`, saying a table action's reply is built on `tableWork` and its fan-out is the record machinery's)
 
@@ -879,7 +880,7 @@ Expected: compile failure, `ServedTable` undeclared.
 Socket tests (POSIX only; on Windows in WSL or the Linux CI leg): `cmake --preset linux-everything && cmake --build --preset linux-everything --target morph_net_tests`
 Expected: compile failure, `BRIDGE_REGISTER_TABLE` undefined.
 
-- [ ] **Step 4: Implement** every symbol of Produces and the pinned behaviour, in the files listed; register `bench::WideTableModel` with its three tables and two actions in `wide_table_model.cpp`. Every public symbol gets complete Doxygen.
+- [ ] **Step 4: Implement** every symbol of Produces and the pinned behaviour, in the files listed; register `bench::WideTableModel` with its three tables and two actions in `wide_table_model.hpp`, below the class, and define its members in `wide_table_model.cpp`. The registrations go in the header because a translation unit that names `TableOf<&WideTableModel::wide>` (the walk over `EditWideRowResult` in the tests does) must see `TableTraits`' specialisation, or `TableOf`'s `static_assert` fires there. Every public symbol gets complete Doxygen.
 
 - [ ] **Step 5: Run them to see them pass**
 
