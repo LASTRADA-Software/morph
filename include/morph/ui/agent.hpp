@@ -724,7 +724,10 @@ inline void serveStdioOnOwner(McpAdapter& adapter, exec::IExecutor& owner, std::
         });
         std::unique_lock lock{mutex};
         answered.wait(lock, [&replied] { return replied.has_value(); });
-        if (auto const& reply = replied.value(); reply.has_value()) {
+        if (!replied) {
+            continue;
+        }
+        if (auto const& reply = *replied; reply.has_value()) {
             output << reply.value() << '\n' << std::flush;
         }
     }
