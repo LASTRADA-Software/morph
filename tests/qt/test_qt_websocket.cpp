@@ -3003,7 +3003,13 @@ TEST_CASE("morph::qt::QtWebSocketBackend: a refused first open emits disconnecte
     int disconnected = 0;
     int errors = 0;
     QObject::connect(&socket, &QWebSocket::disconnected, [&] { ++disconnected; });
+    // Qt 6.5 renamed the signal; the distribution Qt that CI builds against may be older.
+#if QT_VERSION >= QT_VERSION_CHECK(6, 5, 0)
     QObject::connect(&socket, &QWebSocket::errorOccurred, [&](QAbstractSocket::SocketError) { ++errors; });
+#else
+    QObject::connect(&socket, QOverload<QAbstractSocket::SocketError>::of(&QWebSocket::error),
+                     [&](QAbstractSocket::SocketError) { ++errors; });
+#endif
     socket.open(QUrl{QString("ws://127.0.0.1:%1").arg(port)});
     pumpUntil([&] { return errors > 0; }, 100);
     pumpUntil([] { return false; }, 10);
