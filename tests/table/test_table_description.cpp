@@ -1606,6 +1606,16 @@ TEST_CASE("table: a refused order use takes back the other levels' leases", "[ta
     REQUIRE_FALSE(refused.has_value());
     CHECK(refused.error().column == "s");
     CHECK(recipe->unwanted == 4);
+
+    // Mutation: the distinct branch not taking back the accepted levels' wants (recipe keeps its second lease).
+    TableQuery distinct;
+    distinct.filters.columns.emplace(
+        "s", ColumnFilter{.combine = Combine::Any, .include = {FilterEntry{.contains = "a"}}, .exclude = {}});
+    distinct.distinct = DistinctRequest{.column = "r"};
+    auto const refusedDistinct = detail::answerQuery(served, distinct);
+    REQUIRE_FALSE(refusedDistinct.has_value());
+    CHECK(refusedDistinct.error().column == "s");
+    CHECK(recipe->unwanted == 8);
 }
 
 namespace {
@@ -1692,17 +1702,23 @@ std::shared_ptr<VectorSource> companyRows() {
     return source;
 }
 
-ServedTable companyTable(std::shared_ptr<DataSource const> source) {
+// `slow`, when set, is a level the table serves.
+ServedTable companyTable(std::shared_ptr<DataSource const> source, std::shared_ptr<LevelSource> slow = nullptr) {
     auto description = TableDescription{
         .id = "companies",
         .label = "Companies",
         .columns = {column("companyA", ColumnKind::Text), column("companyB", ColumnKind::Text),
                     column("companyC", ColumnKind::Text)},
         .key = "companyA"};
+    std::vector<std::shared_ptr<LevelSource>> levels;
+    if (slow != nullptr) {
+        description.levels = {std::string{slow->level()}};
+        levels.push_back(std::move(slow));
+    }
     description.groups.assign(source->groups().begin(), source->groups().end());
     return detail::pinned(ServedTable{.description = describe(std::move(description)),
                                       .source = std::move(source),
-                                      .levels = {},
+                                      .levels = std::move(levels),
                                       .mayRead = {},
                                       .scope = {},
                                       .services = {},
@@ -1712,8 +1728,8 @@ ServedTable companyTable(std::shared_ptr<DataSource const> source) {
 }  // namespace
 
 // Mutations: answerQuery calling validate without the source's groups, and detail::PinnedSource not forwarding
-// groups(): the first reply is UnknownColumn naming "company". The scoped source returning no groups: the scoped
-// replies are UnknownColumn.
+// groups(): the first reply is UnknownColumn naming "company". The scoped source, or the LeveledSource every reply
+// is computed over, returning no groups: the scoped or levelled replies are UnknownColumn.
 TEST_CASE("answer query: a declared group filters and pools on the server", "[table][description][groups]") {
     auto const source = companyRows();
     TableQuery q;
@@ -1724,7 +1740,8 @@ TEST_CASE("answer query: a declared group filters and pools on the server", "[ta
     auto const expectedValues = distinctValues(*source, {}, *pooled.distinct);
     REQUIRE(expectedValues);
     std::vector<RowId> const all{std::int64_t{0}, std::int64_t{1}, std::int64_t{2}, std::int64_t{3}, std::int64_t{4}};
-    for (auto const& served : {companyTable(source), companyTable(scoped(source, all))}) {
+    for (auto const& served : {companyTable(source), companyTable(scoped(source, all)),
+                               companyTable(source, std::make_shared<RecordingLevel>("notes"))}) {
         auto const page = detail::answerQuery(served, q);
         REQUIRE(page);
         CHECK(page->keys == std::vector<RowId>{std::int64_t{0}, std::int64_t{2}});
@@ -1782,4 +1799,84 @@ TEST_CASE("typed: a row's column groups reach the description", "[table][registr
     auto const page = detail::answerQuery(detail::pinned(served), q);
     REQUIRE(page);
     CHECK(page->keys == std::vector<RowId>{std::string{"a"}, std::string{"c"}});
+}
+
+namespace {
+
+// A level that forwards to another and records every key it is wanted for, with the use.
+class WantLog final : public LevelSource {
+public:
+    explicit WantLog(std::shared_ptr<LevelSource> inner) : _inner{std::move(inner)} {}
+    [[nodiscard]] std::string_view level() const override { return _inner->level(); }
+    [[nodiscard]] std::span<ColumnInfo const> columns() const override { return _inner->columns(); }
+    [[nodiscard]] std::shared_ptr<LevelSnapshot const> snapshot() const override { return _inner->snapshot(); }
+    std::expected<void, TableError> want(std::span<RowId const> keys, LevelUse use, bool retry) override {
+        for (auto const& key : keys) {
+            wanted.emplace_back(key, use);
+        }
+        return _inner->want(keys, use, retry);
+    }
+    std::vector<std::pair<RowId, LevelUse>> wanted;
+
+private:
+    std::shared_ptr<LevelSource> _inner;
+};
+
+}  // namespace
+
+// Mutation: the distinct branch running distinctValues over served.source instead of the LeveledSource: the first
+// reply lists the base source's values and is not partial.
+TEST_CASE("answer query: a distinct request reads a slow column through its level", "[table][description][distinct]") {
+    auto const plain = tabletest::distinctSource();
+    auto const status = tabletest::levelCol("status", ColumnKind::Text, "slow");
+    tabletest::ManualExecutor loads;
+    auto const snapshot = plain->snapshot();
+    auto cache = std::make_shared<CellLevelCache>(
+        LevelCacheOptions{.records = {"d"}, .level = "slow", .columns = {status}, .loads = &loads},
+        [snapshot](std::span<RowId const> keys) {
+            std::vector<std::pair<RowId, std::vector<Cell>>> out;
+            for (auto const& key : keys) {
+                out.emplace_back(key, std::vector<Cell>{snapshot->cell(static_cast<std::size_t>(std::get<std::int64_t>(key)), 0)});
+            }
+            return out;
+        });
+    auto log = std::make_shared<WantLog>(cache);
+    auto description = TableDescription{
+        .id = "d",
+        .label = "D",
+        .columns = {column("status", ColumnKind::Text), column("city", ColumnKind::Text),
+                    column("qty", ColumnKind::Integer)},
+        .key = "qty"};
+    description.columns[0].info.level = "slow";
+    description.levels = {"slow"};
+    auto const served = detail::pinned(ServedTable{.description = describe(std::move(description)),
+                                                   .source = plain,
+                                                   .levels = {log},
+                                                   .mayRead = {},
+                                                   .scope = {},
+                                                   .services = {},
+                                                   .limits = {}});
+    auto const q = distinctStatusQuery();
+    auto const first = detail::answerQuery(served, q);
+    REQUIRE(first);
+    REQUIRE(first->distinct);
+    CHECK(first->distinct->partial);
+    CHECK(first->distinct->values.empty());
+    std::vector<RowId> wantedKeys;
+    for (auto const& [key, use] : log->wanted) {
+        CHECK(use == LevelUse::Order);
+        wantedKeys.push_back(key);
+    }
+    std::ranges::sort(wantedKeys);
+    std::vector<RowId> allSixKeys;
+    for (std::int64_t row = 0; row < 6; ++row) {
+        allSixKeys.emplace_back(row);
+    }
+    CHECK(wantedKeys == allSixKeys);
+    tabletest::drain(loads);
+    auto const second = detail::answerQuery(served, q);
+    REQUIRE(second);
+    REQUIRE(second->distinct);
+    CHECK_FALSE(second->distinct->partial);
+    CHECK(*second->distinct == *distinctValues(*plain, q, *q.distinct));
 }

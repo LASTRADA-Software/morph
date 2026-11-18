@@ -1288,25 +1288,39 @@ struct AnswerContext {
     return served;
 }
 
-/// @brief A sorted or filtered column of @p level: the column a refused order use names.
+/// @brief A sorted, filtered or listed column of @p level: the column a refused order use names.
 /// @param query    The validated query.
 /// @param columns  The table's columns.
 /// @param level    The level.
 /// @param services The services the filter compiles with.
-/// @return The first sort key's column at @p level, else the first filtered column at it; empty when none is.
+/// @param groups   The table's declared groups.
+/// @return The first sort key's column at @p level, else the first filtered column at it, else the first column a
+///         `distinct` request lists at it; empty when none is.
 [[nodiscard]] inline std::string orderColumnOf(TableQuery const& query, std::span<ColumnInfo const> columns,
-                                               std::string_view level, Services const& services) {
+                                               std::string_view level, Services const& services,
+                                               std::span<ColumnGroupInfo const> groups = {}) {
     for (auto const& key : query.sort) {
         if (auto const index = findColumn(columns, key.column); index && columns[*index].level == level) {
             return key.column;
         }
     }
     if (!query.filters.empty()) {
-        if (auto const filter = compileFilterGuarded(query.filters, columns, services)) {
+        if (auto const filter = compileFilterGuarded(query.filters, columns, services, groups)) {
             for (auto const column : filter->columnsUsed()) {
                 if (columns[column].level == level) {
                     return columns[column].id;
                 }
+            }
+        }
+    }
+    if (query.distinct) {
+        auto const listed = query.distinct->group.empty()
+                                ? std::span<std::string const>{&query.distinct->column, 1}
+                                : detail::groupColumns(groups, query.distinct->group)
+                                      .value_or(std::span<std::string const>{});
+        for (auto const& id : listed) {
+            if (auto const index = findColumn(columns, id); index && columns[*index].level == level) {
+                return id;
             }
         }
     }
@@ -1338,8 +1352,10 @@ struct AnswerContext {
 /// A keyed query to a table whose capabilities exclude keyed queries is `Unavailable`, which a client answers by
 /// refetching its pages.
 ///
-/// A query with `distinct` set is answered by `distinctValues` over the source: a page with no columns, keys or rows
-/// and `distinct` set, or `Unavailable` when the table's capabilities exclude distinct requests.
+/// A query with `distinct` set is answered by `distinctValues` over a `LeveledSource` of the levels the request
+/// needs (its listed column's level is an order level), each level then wanted as `Order` for every row, with
+/// `query.retry`: a page with no columns, keys or rows and `distinct` set; `Unavailable` when the table's
+/// capabilities exclude distinct requests, or when a level refuses the order use.
 /// A group filter's or a distinct request's `group` resolves through the source's declared groups, which are
 /// checked first (`detail::checkGroups`).
 /// @param served  The table, its source pinned (`pinned`).
@@ -1370,23 +1386,6 @@ struct AnswerContext {
     if (!checked) {
         return std::unexpected(std::move(checked.error()));
     }
-    if (checked->distinct) {
-        if (!served.description.capabilities.distinct) {
-            return std::unexpected(TableError{.code = TableErrorCode::Unavailable,
-                                              .column = {},
-                                              .message = "this table answers no distinct request"});
-        }
-        auto values = distinctValues(
-            *served.source, *checked, *checked->distinct,
-            ApplyOptions{.limits = served.limits, .services = served.services, .mayRead = served.mayRead});
-        if (!values) {
-            return std::unexpected(std::move(values.error()));
-        }
-        GenericPage page;
-        page.revision = served.description.revision;
-        page.distinct = std::move(*values);
-        return page;
-    }
     auto const levelOf = [&served](std::string_view level) -> std::shared_ptr<LevelSource> {
         for (auto const& source : served.levels) {
             if (source != nullptr && source->level() == level) {
@@ -1395,6 +1394,59 @@ struct AnswerContext {
         }
         return nullptr;
     };
+    if (checked->distinct) {
+        if (!served.description.capabilities.distinct) {
+            return std::unexpected(TableError{.code = TableErrorCode::Unavailable,
+                                              .column = {},
+                                              .message = "this table answers no distinct request"});
+        }
+        // The listed column's level is an order level: the values list reads it for every candidate row.
+        auto const needed = levelsNeeded(*checked, infos, served.mayRead, served.services.forTask(), groups);
+        std::vector<LevelInput> inputs;
+        for (auto const& level : needed.order) {
+            if (auto source = levelOf(level)) {
+                auto levelSnapshot = source->snapshot();
+                inputs.push_back(LevelInput{.source = std::move(source), .snapshot = std::move(levelSnapshot)});
+            }
+        }
+        LeveledSource const leveled{served.source, infos, std::move(inputs)};
+        auto values = distinctValues(
+            leveled, *checked, *checked->distinct,
+            ApplyOptions{.limits = served.limits, .services = served.services, .mayRead = served.mayRead});
+        if (!values) {
+            return std::unexpected(std::move(values.error()));
+        }
+        auto const snapshot = leveled.snapshot();
+        auto keys = std::make_shared<std::vector<RowId>>();
+        if (!needed.order.empty()) {
+            keys->reserve(snapshot->rowCount());
+            for (std::size_t row = 0; row < snapshot->rowCount(); ++row) {
+                keys->push_back(snapshot->rowId(row));
+            }
+        }
+        std::vector<std::shared_ptr<LevelSource>> leased;
+        for (auto const& level : needed.order) {
+            auto const source = levelOf(level);
+            if (source == nullptr) {
+                continue;
+            }
+            if (auto wanted = source->wantSet(keys, LevelUse::Order, query.retry); !wanted) {
+                // The request is refused: the levels that accepted its order use hold nothing for it.
+                for (auto const& accepted : leased) {
+                    accepted->unwant(*keys);
+                }
+                auto error = std::move(wanted.error());
+                error.code = TableErrorCode::Unavailable;
+                error.column = orderColumnOf(*checked, infos, level, served.services.forTask(), groups);
+                return std::unexpected(std::move(error));
+            }
+            leased.push_back(source);
+        }
+        GenericPage page;
+        page.revision = served.description.revision;
+        page.distinct = std::move(*values);
+        return page;
+    }
     auto const sourceColumns = served.source->columns();
     for (auto const& info : infos) {
         auto const level = info.level.empty() ? nullptr : levelOf(info.level);
@@ -1536,7 +1588,7 @@ struct AnswerContext {
             }
             auto error = std::move(wanted.error());
             error.code = TableErrorCode::Unavailable;
-            error.column = orderColumnOf(*checked, infos, level, served.services.forTask());
+            error.column = orderColumnOf(*checked, infos, level, served.services.forTask(), groups);
             return std::unexpected(std::move(error));
         }
         leased.push_back(source);
