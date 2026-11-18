@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include <algorithm>
-#include <expected>
-#include <glaze/glaze.hpp>
-#include <list>
 #include <cstdlib>
 #include <deque>
+#include <expected>
 #include <functional>
+#include <glaze/glaze.hpp>
+#include <list>
 #include <map>
 #include <morph/ui/author.hpp>
 #include <morph/ui/bundle.hpp>
@@ -499,33 +499,42 @@ std::string verdictKey(std::string_view basedOn, std::string_view document, std:
         joined += action;
         joined += '\n';
     }
-    return contentHash(document) + ' ' + std::string{basedOn} + ' ' + std::string{digest} + ' ' +
-           contentHash(joined);
+    return contentHash(document) + ' ' + std::string{basedOn} + ' ' + std::string{digest} + ' ' + contentHash(joined);
 }
 
 namespace {
 
-/// @brief Checks 2 to 6 of `checkCustomScreen`.
-// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): the base, then the document, at every call.
-[[nodiscard]] std::optional<Refusal> checkAgainstBase(ServedBundle const& bundle,
-                                                      ::morph::session::Context const& session,
-                                                      ::morph::session::IAuthorizer const& authorizer,
-                                                      std::string_view basedOn, std::string_view document,
-                                                      std::vector<std::string> const& permitted) {
+/// @brief Check 2 of `checkCustomScreen`: the base screen, or the refusal.
+///
+/// Read from the bundle and the authoriser on every call, never from the verdict cache: the bundle's digest hashes
+/// the manifest, which does not say whether an entry is available, so a cached verdict cannot vouch for the base.
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): the base, then the session.
+[[nodiscard]] std::expected<ServedScreen const*, Refusal> baseOf(ServedBundle const& bundle,
+                                                                 ::morph::session::Context const& session,
+                                                                 ::morph::session::IAuthorizer const& authorizer,
+                                                                 std::string_view basedOn) {
     auto const base = std::ranges::find(bundle.screens, basedOn, [](ServedScreen const& s) { return s.entry.id; });
     if (base == bundle.screens.end() || base->hash.empty()) {
-        return refusalAt("", "`basedOn` names no screen document of the application: `" + std::string{basedOn} +
-                                 "`");
+        return std::unexpected(
+            refusalAt("", "`basedOn` names no screen document of the application: `" + std::string{basedOn} + "`"));
     }
     if (!screenAdmitted(*base, session, authorizer)) {
-        return refusalAt("", "this person may not open the base screen `" + std::string{basedOn} + "`");
+        return std::unexpected(
+            refusalAt("", "this person may not open the base screen `" + std::string{basedOn} + "`"));
     }
-    std::string const& baseText = bundle.files.at(base->hash).bytes;
+    return &*base;
+}
+
+/// @brief Checks 3 to 6 of `checkCustomScreen`, against the base screen `base`.
+[[nodiscard]] std::optional<Refusal> checkAgainstBase(ServedBundle const& bundle, ServedScreen const& base,
+                                                      std::string_view basedOn, std::string_view document,
+                                                      std::vector<std::string> const& permitted) {
+    std::string const& baseText = bundle.files.at(base.hash).bytes;
     LoadOptions const load{.catalog = bundle.catalog};
     auto const baseDocument = loadDocumentText(baseText, load);
     if (!baseDocument) {
-        return refusalAt("", "the base screen `" + std::string{basedOn} +
-                                 "` does not load: " + baseDocument.error().message());
+        return refusalAt(
+            "", "the base screen `" + std::string{basedOn} + "` does not load: " + baseDocument.error().message());
     }
     auto custom = loadDocumentText(document, load);
     if (!custom) {
@@ -552,17 +561,20 @@ namespace {
 }  // namespace
 
 std::optional<Refusal> checkCustomScreen(ServedBundle const& bundle, ::morph::session::Context const& session,
-                                         ::morph::session::IAuthorizer const& authorizer, std::string_view basedOn,
+                                         ::morph::session::IAuthorizer const& authorizer,
+                                         std::vector<std::string> const& permitted, std::string_view basedOn,
                                          std::string_view document, CustomScreensOptions const& options,
                                          VerdictCache* cache) {
     if (document.size() > options.maxDocumentBytes) {
-        return refusalAt("", "a custom screen is longer than " + std::to_string(options.maxDocumentBytes) +
-                                 " bytes");
+        return refusalAt("", "a custom screen is longer than " + std::to_string(options.maxDocumentBytes) + " bytes");
     }
     if (detail::nestsTooDeep(document)) {
         return refusalAt("", "a custom screen nests deeper than " + std::to_string(kMaxJsonDepth) + " levels");
     }
-    std::vector<std::string> const permitted = permittedActions(bundle, session, authorizer);
+    auto const base = baseOf(bundle, session, authorizer, basedOn);
+    if (!base) {
+        return base.error();
+    }
     std::string key;
     if (cache != nullptr) {
         key = verdictKey(basedOn, document, bundle.digest, permitted);
@@ -570,11 +582,19 @@ std::optional<Refusal> checkCustomScreen(ServedBundle const& bundle, ::morph::se
             return std::move(*hit);
         }
     }
-    std::optional<Refusal> verdict = checkAgainstBase(bundle, session, authorizer, basedOn, document, permitted);
+    std::optional<Refusal> verdict = checkAgainstBase(bundle, **base, basedOn, document, permitted);
     if (cache != nullptr) {
         cache->store(std::move(key), verdict);
     }
     return verdict;
+}
+
+std::optional<Refusal> checkCustomScreen(ServedBundle const& bundle, ::morph::session::Context const& session,
+                                         ::morph::session::IAuthorizer const& authorizer, std::string_view basedOn,
+                                         std::string_view document, CustomScreensOptions const& options,
+                                         VerdictCache* cache) {
+    return checkCustomScreen(bundle, session, authorizer, permittedActions(bundle, session, authorizer), basedOn,
+                             document, options, cache);
 }
 
 std::expected<std::string, Refusal> withScreenId(std::string_view document, std::string_view id) {

@@ -4,6 +4,7 @@
 // rewrite, and the verdict cache.
 
 #include <catch2/catch_test_macros.hpp>
+#include <memory>
 #include <morph/session/session.hpp>
 #include <morph/ui/author.hpp>
 #include <morph/ui/custom_screens.hpp>
@@ -44,12 +45,14 @@ TEST_CASE("checks: a copy of the base passes", "[ui][custom-screens][checks]") {
 
 TEST_CASE("checks: 1, the bounds", "[ui][custom-screens][checks]") {
     Fixture const f;
-    auto const large = f.check(baseScreen("lims.base"), "lims.base", morph::ui::CustomScreensOptions{.maxDocumentBytes = 64});
+    auto const large =
+        f.check(baseScreen("lims.base"), "lims.base", morph::ui::CustomScreensOptions{.maxDocumentBytes = 64});
     REQUIRE(large);
     CHECK(large->reason.contains("longer than 64 bytes"));
-    auto const deep = f.check(std::string(65, '[') + std::string(65, ']'));
+    // An unknown base: only the bounds, which run before the base, can answer with this wording.
+    auto const deep = f.check(std::string(65, '[') + std::string(65, ']'), "lims.nothing");
     REQUIRE(deep);
-    CHECK(deep->reason.contains("nests deeper"));
+    CHECK(deep->reason.contains("a custom screen nests deeper"));
 }
 
 TEST_CASE("checks: 2, the base", "[ui][custom-screens][checks]") {
@@ -110,10 +113,86 @@ TEST_CASE("checks: 6, permission", "[ui][custom-screens][checks]") {
     CHECK(refusal->reason.contains("may not run action `Lims_Verify`"));
 }
 
+TEST_CASE("checks: the first failing check answers", "[ui][custom-screens][checks]") {
+    Fixture f;
+    f.authorizer->denied["alice"] = {{"Lims_Sample", "Lims_Verify"}};
+    std::string const unlabelled = replaced(baseScreen("lims.base"), R"("label":"Verify")", R"("label":"")");
+
+    // 3 before 4: a document that does not load is not checked for labels.
+    std::string const both =
+        replaced(unlabelled, R"({"kind":"text","text":"Results"})", R"({"kind":"nope","text":"Results"})");
+    auto const loadRefusal = morph::ui::loadDocumentText(both, morph::ui::LoadOptions{.catalog = f.bundle->catalog});
+    REQUIRE_FALSE(loadRefusal);
+    auto const loadFirst = f.check(both);
+    REQUIRE(loadFirst);
+    CHECK(loadFirst->reason == loadRefusal.error().reason);
+
+    // 4 before 6: an unlabelled button and a denied action.
+    auto const label = f.check(unlabelled);
+    REQUIRE(label);
+    CHECK(label->path != "/mutations/verify");
+    CHECK_FALSE(label->reason.contains("may not run action"));
+
+    // 5 before 6: a command the base lacks and a denied action.
+    auto const rule = f.check(replaced(baseScreen("lims.base"), R"({"host":"print"})", R"({"signOut":true})"));
+    REQUIRE(rule);
+    CHECK(rule->reason.contains("signOut"));
+    CHECK_FALSE(rule->reason.contains("may not run action"));
+}
+
+TEST_CASE("checks: the base is read on every call, past the verdict cache", "[ui][custom-screens][cache]") {
+    Fixture f;
+    morph::ui::VerdictCache cache{8};
+    std::string const document = baseScreen("lims.base");
+    CHECK_FALSE(f.check(document, "lims.base", {}, &cache));
+
+    // The same bundle but for the base entry's `available`, which the manifest does not carry.
+    morph::ui::UiRegistry made = uiservice::registry();
+    morph::ui::CatalogEntry entry = uiservice::entry("lims.base");
+    entry.available = false;
+    entry.reason = "withdrawn";
+    auto const added = made.addScreen(entry, baseScreen("lims.base"));
+    REQUIRE(added);
+    auto const rebuilt = made.build();
+    REQUIRE(rebuilt);
+    REQUIRE((*rebuilt)->digest == f.bundle->digest);
+    f.bundle = *rebuilt;
+    auto const refusal = f.check(document, "lims.base", {}, &cache);
+    REQUIRE(refusal);
+    CHECK(refusal->reason.contains("may not open"));
+}
+
+TEST_CASE("checkCustomScreen takes a permitted set computed once", "[ui][custom-screens][checks]") {
+    Fixture f;
+    auto const permitted = morph::ui::permittedActions(*f.bundle, f.alice, *f.authorizer);
+    CHECK_FALSE(morph::ui::checkCustomScreen(*f.bundle, f.alice, *f.authorizer, permitted, "lims.base",
+                                             baseScreen("lims.base"), {}));
+    auto const none = std::vector<std::string>{};
+    auto const refusal = morph::ui::checkCustomScreen(*f.bundle, f.alice, *f.authorizer, none, "lims.base",
+                                                      baseScreen("lims.base"), {});
+    REQUIRE(refusal);
+    CHECK(refusal->reason.contains("may not run action"));
+}
+
 TEST_CASE("withScreenId puts the custom screen's id on the document", "[ui][custom-screens][checks]") {
     auto const rewritten = morph::ui::withScreenId(baseScreen("lims.results"), "custom:0123");
     REQUIRE(rewritten);
     CHECK(screens_test::load(*rewritten).id == "custom:0123");
+    auto const added = morph::ui::withScreenId(R"({"vocab":"ui/1","view":{"kind":"text","text":"a"}})", "custom:2");
+    REQUIRE(added);
+    CHECK(added->contains(R"("id":"custom:2")"));
+    auto const overwritten = morph::ui::withScreenId(R"({"id":5,"view":{"kind":"text","text":"a"}})", "custom:3");
+    REQUIRE(overwritten);
+    CHECK(overwritten->contains(R"("id":"custom:3")"));
+    CHECK_FALSE(overwritten->contains("5"));
+    auto const nested = morph::ui::withScreenId(R"({"view":{"id":"keep","kind":"text"}})", "custom:4");
+    REQUIRE(nested);
+    CHECK(nested->contains(R"("id":"keep")"));
+    CHECK(nested->contains(R"("id":"custom:4")"));
+    auto const duplicated = morph::ui::withScreenId(R"({"id":"a","id":"b","vocab":"ui/1"})", "custom:5");
+    REQUIRE(duplicated);
+    CHECK(duplicated->find(R"("id")") == duplicated->rfind(R"("id")"));
+    CHECK(duplicated->contains(R"("id":"custom:5")"));
     CHECK_FALSE(morph::ui::withScreenId("{not json", "custom:1"));
     CHECK_FALSE(morph::ui::withScreenId("[1,2]", "custom:1"));
 }

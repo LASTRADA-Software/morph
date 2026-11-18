@@ -124,7 +124,9 @@ private:
 /// 5. The base rule (`checkBaseRule`).
 /// 6. Permission: every action the document names is in `permittedActions`.
 ///
-/// Checks 2 to 6 are answered from @p cache when it holds the verdict, and stored in it otherwise.
+/// Check 2 reads the bundle and the authoriser on every call: the bundle's digest does not cover whether a screen
+/// entry is available, so a cached verdict cannot vouch for the base. Checks 3 to 6 are answered from @p cache when
+/// it holds the verdict, and stored in it otherwise.
 /// @param bundle     The served bundle.
 /// @param session    The session, its principal verified.
 /// @param authorizer The authoriser.
@@ -137,6 +139,26 @@ private:
 [[nodiscard]] MORPH_API std::optional<Refusal> checkCustomScreen(ServedBundle const& bundle,
                                                                  ::morph::session::Context const& session,
                                                                  ::morph::session::IAuthorizer const& authorizer,
+                                                                 std::string_view basedOn, std::string_view document,
+                                                                 CustomScreensOptions const& options,
+                                                                 VerdictCache* cache = nullptr);
+
+/// @brief `checkCustomScreen` with the person's permitted actions already computed, so a list of many screens
+///        computes them once.
+/// @param bundle     The served bundle.
+/// @param session    The session, its principal verified.
+/// @param authorizer The authoriser.
+/// @param permitted  `permittedActions(bundle, session, authorizer)`.
+/// @param basedOn    The base screen's id.
+/// @param document   The custom document's text.
+/// @param options    The bounds.
+/// @param cache      The verdict cache; null checks every time.
+/// @return The first refusal, with its JSON Pointer, or nothing when the document passes.
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): the base, then the document, at every call.
+[[nodiscard]] MORPH_API std::optional<Refusal> checkCustomScreen(ServedBundle const& bundle,
+                                                                 ::morph::session::Context const& session,
+                                                                 ::morph::session::IAuthorizer const& authorizer,
+                                                                 std::vector<std::string> const& permitted,
                                                                  std::string_view basedOn, std::string_view document,
                                                                  CustomScreensOptions const& options,
                                                                  VerdictCache* cache = nullptr);
