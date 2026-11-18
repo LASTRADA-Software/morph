@@ -107,8 +107,9 @@ it in the destructor. The transport constructor's link is `transport.request(env
 `serveStdio` reads one message per line of `in`, skipping empty lines, and writes each reply on a line of `out`,
 flushed, in order, until `in` ends. Its calling thread is the adapter's owner: it pumps the `MainThreadExecutor`
 it is given while it waits for each reply. `serveStdioOnOwner` serves the same stream when another thread turns the
-owner, such as a Qt event loop: each `handle` is posted to the owner and the calling thread waits for its reply. An agent launches the server process with an option that turns it on
-(bank's server: `--mcp-stdio`), and the process serves its WebSocket clients as before.
+owner, such as a Qt event loop: each `handle` is posted to the owner and the calling thread waits for its reply.
+An agent launches the server process with an option that turns it on (bank's server: `--mcp-stdio`), and the
+process serves its WebSocket clients as before.
 
 ## From the generic client
 

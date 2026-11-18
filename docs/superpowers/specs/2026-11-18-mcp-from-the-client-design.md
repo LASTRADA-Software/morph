@@ -101,9 +101,9 @@ stamps nothing.
 
 `morph::net` is preferred for `ws://` because it needs no event loop on the main thread.
 
-The arrangement is bank's: stdio runs on a thread of its own, which owns a `MainThreadExecutor` it pumps while
-`serveStdio` waits. With the Qt transport, the main thread runs a `QCoreApplication` event loop that the backend
-lives on, and stdio's end quits it. With `SocketBackend`, the main thread simply joins the stdio thread.
+With `SocketBackend`, the main thread pumps a `MainThreadExecutor` owner while `serveStdio` waits. With the Qt
+transport, the main thread runs a `QCoreApplication` event loop that the backend lives on, stdin is read on a
+thread of its own, and `serveStdioOnOwner` posts each message to the owner; stdio's end quits the loop.
 
 The transport is built with `retryFirstConnect = true`. The backends otherwise stop for good when the first
 connect never reaches the server. A Claude Code session started before the application server would then have a

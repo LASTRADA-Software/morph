@@ -77,8 +77,8 @@ TEST_CASE("morph_examples_client --mcp-stdio --app lims serves lims's actions", 
     }
     auto const& tools = result.lines.at(1);
     CHECK(tools.contains(R"("name":"evaluate")"));
-    // lims's own actions are tools too: more than one name.
-    CHECK(tools.find(R"("name":")") != tools.rfind(R"("name":")"));
+    // lims's own actions are tools too.
+    CHECK(tools.contains(R"("name":"ListAnalyses")"));
     std::filesystem::remove_all(directory);
 }
 #endif
