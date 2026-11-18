@@ -1110,7 +1110,8 @@ struct Page {
   can stop saying "loading": the level is in the row's `failed`, and for an order level in `Page::failed`
   instead of `awaiting`. `awaiting` and `failed` together are the order levels that leave rows unloaded.
 - The members beyond `rows`, `total`, `offset` and `totalKind` are absent-tolerant: a `Page` read without them
-  is a fully loaded page.
+  is a fully loaded page. A server writes every one, empty or not: the empty ones cost about seventy bytes a
+  page, and one shape for every reply keeps the typed and the generic writers the same.
 
 `PageRows`, what `apply(DataSource const&, …)` returns, carries `totalKind`, `undecided`, `awaiting`, `failed`
 and, for a keyed query, `indices`. The framework builds a generic page from it and takes each row's unloaded
@@ -2964,6 +2965,8 @@ spread reflects. A row marked *not yet measured* says why; its figure is taken w
 | W5 | 1 | 200 × 30: generic page 405,396 bytes, encode 3.00 ms (2.91–4.00); typed `Page<Row>` with an absent member for an empty cell 479,205 bytes, encode 1.87 ms (1.80–1.91); generic / typed 0.85, above the 0.7 budget | A, 12–23% busy | 2026-11-18 |
 | W6 | 1 | The 300-column description: 42,494 bytes; encode with `describe` 0.23 ms (0.23–0.24); decode 0.14 ms (0.14–0.15) | A, 12–23% busy | 2026-11-18 |
 | W7 | 1 | A generic page of 200 × 300 in an `ok` envelope: 1,443,726 bytes, under `kMaxEnvelopeBytes`; encode 17.0 ms (16.5–19.0) and decode 18.7 ms (17.8–21.6), above the 10 ms and 15 ms budgets | A, 12–23% busy | 2026-11-18 |
+| W3 | 2b | W1's page (200 rows, the 40 columns at positions 100 to 139, which hold the recipe decimals) with no row's recipe level loaded, in an `ok` envelope: 108,421 bytes; the same page with `unloadedRows` cleared 97,732 bytes; the 200 entries 10,689 bytes, 53 a row, 9.2% of W1 (116,236 bytes, which now carries the empty partial-page members), above the 1% budget. One entry a row is the spec's shape, and 1% of W1 is 5.8 bytes a row | A, 37–64% busy | 2026-11-18 |
+| W4 | 2b | A keyed reply of 20 keys spread over the view and W1's 40 columns: 12,279 bytes in an `ok` envelope; encode from the column store 0.132 ms (0.127–0.152); `readGenericPage` 0.273 ms (0.258–0.399) | A, 37–64% busy | 2026-11-18 |
 | U1 | 0 | A document `rows` table of 100,000 rows on the recording backend, a bound sort set on a text column, click to settled: 2,921.5 ms (2,860.0–3,017.6). The rows realized after the sort are the ones realized before it, reordered, not the view's first rows: the figure is the interpreter's sort and reconcile, not a correct window | A, 82–91% busy | 2026-11-17 |
 | U2 | 0 | The same table sorted, one row's name replaced in `items`, click to settled: 2,941.3 ms (2,881.4–2,992.2) | A, 82–91% busy | 2026-11-17 |
 | U3 | 0 | Text folds of the interpreter's sort of 100,000 rows: *not yet measured* — the interpreter folds with a `CodePointCollator` it constructs inside the comparison and takes none from outside, so no counting collator can be installed; the count needs that seam | — | — |

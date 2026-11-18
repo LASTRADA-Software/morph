@@ -26,6 +26,7 @@
 #include <optional>
 #include <stdexcept>
 #include <string>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -571,4 +572,140 @@ TEST_CASE("table: levelsNeeded names the levels a query sorts, filters and shows
     CHECK(levelsNeeded(TableQuery{}, columns, [](std::string_view c) { return c != "p1"; }).display ==
           V{"recipe", "stock"});                                // only what the caller may read
     CHECK(needed(TableQuery{.columns = V{}}).display.empty());  // columns empty: keys alone
+}
+
+// Mutation: TableQuery's JSON leaving out `keys` (a glz::meta naming every member but `keys`).
+TEST_CASE("table: columns and keys round-trip through glaze", "[table][query][keyed]") {
+    TableQuery query;
+    query.columns = std::vector<std::string>{"id", "name"};
+    query.keys = std::vector<RowId>{RowId{std::int64_t{7}}, RowId{std::string{"A-1"}}};
+    query.retry = true;
+    std::string json;
+    REQUIRE_FALSE(glz::write_json(query, json));
+    TableQuery back;
+    REQUIRE_FALSE(glz::read_json(back, json));
+    CHECK(back.columns == query.columns);
+    CHECK(back.keys == query.keys);
+    CHECK(back.retry);
+    TableQuery bare;
+    REQUIRE_FALSE(glz::read_json(bare, R"({"sort":[],"filters":{},"page":{"offset":0,"limit":200}})"));
+    CHECK_FALSE(bare.columns.has_value());
+    CHECK_FALSE(bare.keys.has_value());
+    CHECK_FALSE(bare.retry);
+}
+
+// Mutation: the keyed checks skipped.
+TEST_CASE("table: validate refuses a keyed query out of bounds", "[table][query][keyed]") {
+    std::vector<ColumnInfo> const columns{tabletest::col("id", ColumnKind::Integer)};
+    auto const code = [&](TableQuery const& query) {
+        auto const result = validate(query, columns);
+        return result ? std::optional<TableErrorCode>{} : std::optional{result.error().code};
+    };
+    TableQuery offset;
+    offset.keys = std::vector<RowId>{RowId{std::int64_t{1}}};
+    CHECK_FALSE(code(offset).has_value());
+    offset.page.offset = 10;
+    CHECK(code(offset) == TableErrorCode::InvalidSpec);
+    TableQuery many;
+    many.keys = std::vector<RowId>(1'001, RowId{std::int64_t{1}});
+    CHECK(code(many) == TableErrorCode::LimitExceeded);
+    many.keys->resize(1'000);
+    CHECK_FALSE(code(many).has_value());
+    TableQuery longKey;
+    longKey.keys = std::vector<RowId>{RowId{std::string(257, 'k')}};
+    CHECK(code(longKey) == TableErrorCode::LimitExceeded);
+    longKey.keys = std::vector<RowId>{RowId{std::string(256, 'k')}};
+    CHECK_FALSE(code(longKey).has_value());
+}
+
+// Mutation: indices filled with positions in the reply instead of view rows.
+TEST_CASE("table: a keyed reply carries the view's totals and each row's view row", "[table][query][keyed]") {
+    using morph::table::Unloaded;
+    auto source = tabletest::makeSource({tabletest::levelCol("a", ColumnKind::Integer, "slow")},
+                                        {{Cell{std::int64_t{40}}}, {Cell{std::int64_t{10}}}, {Cell{Unloaded{}}},
+                                         {Cell{std::int64_t{30}}}, {Cell{std::int64_t{-1}}}, {Cell{std::int64_t{20}}}});
+    TableQuery query{.sort = {SortKey{.column = "a"}},
+                     .filters = FilterSpec{.columns = {{"a", ColumnFilter{.include = {{.gt = "0"}}}}}}};
+    query.keys = std::vector<RowId>{RowId{std::int64_t{3}}, RowId{std::int64_t{1}}, RowId{std::int64_t{2}},
+                                    RowId{std::int64_t{4}}, RowId{std::int64_t{99}}};
+    auto page = apply(*source, query);
+    REQUIRE(page.has_value());
+    CHECK(page->rows == std::vector<std::size_t>{1, 3});          // view order; 2 undecided, 4 rejected, 99 absent
+    CHECK(page->indices == std::vector<std::int64_t>{0, 2});
+    CHECK(page->total == 4);
+    CHECK(page->undecided == 1);
+    CHECK(page->totalKind == TotalKind::AtLeast);
+}
+
+// Mutation: the typed apply not copying indices.
+TEST_CASE("table: a typed keyed reply carries each row's view row", "[table][query][keyed]") {
+    auto const rows = resultRows(10);
+    TableQuery query{.sort = {SortKey{.column = "id", .dir = SortDirection::Descending}}};
+    query.keys = std::vector<RowId>{RowId{std::int64_t{2}}, RowId{std::int64_t{8}}, RowId{std::int64_t{42}}};
+    auto const page = apply(rows, byId(), query);
+    REQUIRE(page.has_value());
+    REQUIRE(page->rows.size() == 2);
+    CHECK(page->rows[0].id == 8);
+    CHECK(page->rows[1].id == 2);
+    CHECK(page->indices == std::vector<std::int64_t>{1, 7});
+    CHECK(page->offset == 0);
+    CHECK(page->total == 10);
+}
+
+namespace {
+
+// A snapshot that counts the row ids read through it.
+class CountingSnapshot final : public RowSnapshot {
+public:
+    explicit CountingSnapshot(std::shared_ptr<RowSnapshot const> base) : _base{std::move(base)} {}
+    [[nodiscard]] std::size_t rowCount() const override { return _base->rowCount(); }
+    [[nodiscard]] RowId rowId(std::size_t row) const override {
+        ++ids;
+        return _base->rowId(row);
+    }
+    [[nodiscard]] Cell cell(std::size_t row, std::size_t column) const override { return _base->cell(row, column); }
+    mutable std::size_t ids = 0;
+
+private:
+    std::shared_ptr<RowSnapshot const> _base;
+};
+
+}  // namespace
+
+// Mutation: pageRows ignoring sourceRowOf.
+TEST_CASE("table: a keyed page uses the lookup it is given", "[table][query][keyed]") {
+    using morph::table::Unloaded;
+    auto source = tabletest::makeSource({tabletest::levelCol("a", ColumnKind::Integer, "slow")},
+                                        {{Cell{std::int64_t{40}}}, {Cell{std::int64_t{10}}}, {Cell{Unloaded{}}},
+                                         {Cell{std::int64_t{30}}}, {Cell{std::int64_t{-1}}}, {Cell{std::int64_t{20}}}});
+    TableQuery query{.sort = {SortKey{.column = "a"}},
+                     .filters = FilterSpec{.columns = {{"a", ColumnFilter{.include = {{.gt = "0"}}}}}}};
+    query.keys = std::vector<RowId>{RowId{std::int64_t{3}}, RowId{std::int64_t{1}}, RowId{std::int64_t{2}},
+                                    RowId{std::int64_t{4}}, RowId{std::int64_t{99}}};
+    auto const validated = validate(query, source->columns());
+    REQUIRE(validated.has_value());
+    auto const view = detail::computeView(*source, *validated, ApplyOptions{});
+    REQUIRE(view.has_value());
+    CountingSnapshot const snapshot{source->snapshot()};
+
+    auto const scanned = detail::pageRows(*view, snapshot, *validated, QueryLimits{});
+    CHECK(scanned.rows == std::vector<std::size_t>{1, 3});
+    CHECK(scanned.indices == std::vector<std::int64_t>{0, 2});
+    CHECK(snapshot.ids > 0);  // the scan reads every row's id once
+
+    std::unordered_map<RowId, std::uint32_t> byKey;
+    for (std::uint32_t row = 0; row < source->snapshot()->rowCount(); ++row) {
+        byKey.emplace(source->snapshot()->rowId(row), row);
+    }
+    detail::SourceRowOf const lookup = [&byKey](RowId const& key) -> std::optional<std::uint32_t> {
+        auto const found = byKey.find(key);
+        return found == byKey.end() ? std::nullopt : std::optional{found->second};
+    };
+    snapshot.ids = 0;
+    auto const looked = detail::pageRows(*view, snapshot, *validated, QueryLimits{}, {}, lookup);
+    CHECK(looked.rows == scanned.rows);
+    CHECK(looked.indices == scanned.indices);
+    CHECK(looked.total == scanned.total);
+    CHECK(looked.undecided == scanned.undecided);
+    CHECK(snapshot.ids == 0);
 }

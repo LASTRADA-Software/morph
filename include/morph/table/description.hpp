@@ -180,7 +180,10 @@ using GenericRow = std::vector<Cell>;
 ///        header of column ids.
 ///
 /// Its JSON members, in order: `revision`, `columns`, `keys`, `rows`, `total`
-/// (absent when not counted), `totalKind` and `offset`.
+/// (absent when not counted), `totalKind`, `offset`, `unloadedRows`,
+/// `undecided`, `awaiting`, `failed` and `indices`. Every member is written;
+/// the reader takes each from `unloadedRows` on as optional, so a page without
+/// them is a fully loaded page that is not a keyed reply.
 struct GenericPage {
     /// @brief The revision of the description the page was written against.
     std::string revision;
@@ -197,6 +200,17 @@ struct GenericPage {
     TotalKind totalKind = TotalKind::Exact;
     /// @brief The view row of `rows[0]`.
     std::int64_t offset = 0;
+    /// @brief The rows of this page that have unloaded levels, ascending by index. A row not listed is fully
+    ///        loaded; a cell at a listed level is `null` on the wire.
+    std::vector<UnloadedRow> unloadedRows;
+    /// @brief Rows the filter can neither admit nor reject until a level loads. They are in no page.
+    std::int64_t undecided = 0;
+    /// @brief The order levels with a load wanted or in flight for at least one row.
+    std::vector<std::string> awaiting;
+    /// @brief The order levels whose load failed for at least one row, and is not being tried again yet.
+    std::vector<std::string> failed;
+    /// @brief A keyed reply only: the view row of each of `rows`.
+    std::vector<std::int64_t> indices;
 };
 
 namespace detail {
@@ -641,7 +655,9 @@ struct glz::meta<morph::table::GenericPage> {
                         morph::table::detail::readPageRows(page, rows);
                     },
                                 [](T const& page) { return morph::table::detail::writePageRows(page); }>,
-                    "total", &T::total, "totalKind", &T::totalKind, "offset", &T::offset);
+                    "total", &T::total, "totalKind", &T::totalKind, "offset", &T::offset, "unloadedRows",
+                    &T::unloadedRows, "undecided", &T::undecided, "awaiting", &T::awaiting, "failed", &T::failed,
+                    "indices", &T::indices);
 };
 
 namespace morph::table {
@@ -651,8 +667,11 @@ namespace morph::table {
 /// @brief Builds the generic page of @p page's rows.
 ///
 /// Reads only the cells of @p columns, for the page's rows only, so a source
-/// may produce every other cell lazily or not at all.
-/// @param page    The page's source rows, total and offset, as `apply` returns them.
+/// may produce every other cell lazily or not at all. A row is listed in
+/// `unloadedRows` with the levels of the named columns whose cell it holds as
+/// `Unloaded`, sorted; a level no named column has is not looked up. Every
+/// member of @p page beyond its rows is copied.
+/// @param page    The page's source rows and the view's state, as `apply` returns them.
 /// @param source  The rows; read through one snapshot.
 /// @param columns The column ids to write, already ordered and without
 ///                duplicates (`validate` makes a query's list so). An id the
@@ -671,17 +690,32 @@ namespace morph::table {
     out.columns.assign(columns.begin(), columns.end());
     out.keys.reserve(page.rows.size());
     out.rows.reserve(page.rows.size());
-    for (auto const row : page.rows) {
+    std::vector<std::string_view> unloaded;
+    for (std::size_t at = 0; at < page.rows.size(); ++at) {
+        auto const row = page.rows[at];
         out.keys.push_back(snapshot->rowId(row));
         GenericRow cells;
         cells.reserve(indices.size());
+        unloaded.clear();
         for (auto const& index : indices) {
             cells.push_back(index ? snapshot->cell(row, *index) : Cell{});
+            if (std::holds_alternative<Unloaded>(cells.back())) {
+                unloaded.emplace_back(infos[*index].level);
+            }
         }
         out.rows.push_back(std::move(cells));
+        if (!unloaded.empty()) {
+            out.unloadedRows.push_back(UnloadedRow{
+                .index = static_cast<std::int64_t>(at), .levels = detail::sortedLevels(unloaded), .failed = {}});
+        }
     }
     out.total = page.total;
     out.offset = page.offset;
+    out.totalKind = page.totalKind;
+    out.undecided = page.undecided;
+    out.awaiting = page.awaiting;
+    out.failed = page.failed;
+    out.indices = page.indices;
     return out;
 }
 
@@ -1023,7 +1057,8 @@ struct AnswerContext {};
 /// The query is validated against the description's columns, its limits and `mayRead`; the page's columns
 /// are the validated `columns`, or, absent, every description column `mayRead` allows, in the description's
 /// order. Every description column must be one of the source's, or nothing is read. The rows are read from
-/// the source's snapshot only.
+/// the source's snapshot only. A keyed query to a table whose capabilities exclude keyed queries is
+/// `Unavailable`, which a client answers by refetching its pages.
 /// @param served  The table, its source pinned (`pinned`).
 /// @param query   The query, as received.
 /// @param context What the reply is built with.
@@ -1035,6 +1070,10 @@ struct AnswerContext {};
     if (served.source == nullptr) {
         return std::unexpected(
             TableError{.code = TableErrorCode::Unavailable, .column = {}, .message = "the table serves no source"});
+    }
+    if (query.keys && !served.description.capabilities.keys) {
+        return std::unexpected(TableError{
+            .code = TableErrorCode::Unavailable, .column = {}, .message = "this table answers no keyed query"});
     }
     auto const infos = columnInfos(served.description);
     auto checked = validate(query, infos, served.limits, served.mayRead);
