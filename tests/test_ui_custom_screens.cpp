@@ -36,8 +36,7 @@ morph::ui::CustomScreen screen(std::string id, std::string person) {
 }  // namespace
 
 TEST_CASE("MemoryCustomScreenStore keeps each person's screens apart", "[ui][custom-screens][store]") {
-    morph::exec::detail::InlineExecutor inline_;
-    morph::ui::MemoryCustomScreenStore store{inline_};
+    morph::ui::MemoryCustomScreenStore store{morph::exec::detail::inlineExecutor()};
     REQUIRE(settled(store.put({.person = "alice", .app = "lims", .id = "custom:1"}, screen("custom:1", "alice"))));
     REQUIRE(settled(store.put({.person = "bob", .app = "lims", .id = "custom:2"}, screen("custom:2", "bob"))));
 
@@ -54,4 +53,29 @@ TEST_CASE("MemoryCustomScreenStore keeps each person's screens apart", "[ui][cus
     CHECK_FALSE(settled(store.remove({.person = "alice", .app = "lims", .id = "custom:2"})));
     CHECK(settled(store.remove({.person = "alice", .app = "lims", .id = "custom:1"})));
     CHECK(settled(store.list("alice", "lims")).empty());
+
+    // Alice's writes under an id Bob also uses leave Bob's screen alone.
+    REQUIRE(settled(store.put({.person = "bob", .app = "lims", .id = "custom:2"}, screen("custom:2", "bob"))));
+    morph::ui::CustomScreen hers = screen("custom:2", "alice");
+    hers.title = "Hers";
+    REQUIRE(settled(store.put({.person = "alice", .app = "lims", .id = "custom:2"}, std::move(hers))));
+    auto const bobs = settled(store.get({.person = "bob", .app = "lims", .id = "custom:2"}));
+    REQUIRE(bobs);
+    CHECK(bobs->title == "Mine");
+    CHECK(bobs->savedBy == "bob");
+    CHECK(settled(store.list("bob", "lims")).size() == 1);
+
+    CHECK(settled(store.remove({.person = "alice", .app = "lims", .id = "custom:2"})));
+    CHECK(settled(store.get({.person = "bob", .app = "lims", .id = "custom:2"})).has_value());
+    CHECK(settled(store.list("bob", "lims")).size() == 1);
+}
+
+TEST_CASE("MemoryCustomScreenStore lists one person's screens ordered by id", "[ui][custom-screens][store]") {
+    morph::ui::MemoryCustomScreenStore store{morph::exec::detail::inlineExecutor()};
+    REQUIRE(settled(store.put({.person = "alice", .app = "lims", .id = "custom:b"}, screen("custom:b", "alice"))));
+    REQUIRE(settled(store.put({.person = "alice", .app = "lims", .id = "custom:a"}, screen("custom:a", "alice"))));
+    std::vector<morph::ui::CustomScreen> const listed = settled(store.list("alice", "lims"));
+    REQUIRE(listed.size() == 2);
+    CHECK(listed[0].id == "custom:a");
+    CHECK(listed[1].id == "custom:b");
 }
