@@ -38,10 +38,11 @@ struct QtWebSocketBackendConfig {
     /// @brief Whether to keep retrying when the first connect never reaches the server, on the same backoff as a
     ///        reconnect. Off by default: a client that starts before its server is usually misconfigured, and
     ///        failing fast says so. A process that may start before its server, such as an agent's MCP server,
-    ///        turns it on. While it retries, requests and private binds are held as they are during a reconnect.
-    ///        The blocking structural verbs (`registerModel`, `registerModelWithContext`) are refused on this
-    ///        backend whatever the setting, so they neither wait for the connect nor throw because of it.
-    ///        Needs `reconnectEnabled`: with that off, the first failed connect is final either way.
+    ///        turns it on. While it retries, requests and private binds are held across every failed attempt and sent
+    ///        once one succeeds (during a reconnect, by contrast, they are rejected at the next failed attempt). The
+    ///        blocking structural verbs (`registerModel`, `registerModelWithContext`) are refused on this backend
+    ///        whatever the setting, so they neither wait for the connect nor throw because of it. Needs
+    ///        `reconnectEnabled`: with that off, the first failed connect is final either way.
     bool retryFirstConnect = false;
 
     /// @brief Delay before the first reconnect attempt after a disconnect.
