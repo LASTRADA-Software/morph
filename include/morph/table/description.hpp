@@ -1293,6 +1293,7 @@ struct AnswerContext {
             page.unloadedRows.push_back(std::move(row));
         }
     }
+    std::vector<std::shared_ptr<LevelSource>> leased;
     for (auto const& level : needed.order) {
         auto const source = levelOf(level);
         if (source == nullptr) {
@@ -1307,11 +1308,16 @@ struct AnswerContext {
             keys.push_back(snapshot->rowId(row));
         }
         if (auto wanted = source->want(keys, LevelUse::Order, query.retry); !wanted) {
+            // The query is refused: the levels that accepted its order use hold nothing for it.
+            for (auto const& accepted : leased) {
+                accepted->unwant(keys);
+            }
             auto error = std::move(wanted.error());
             error.code = TableErrorCode::Unavailable;
             error.column = orderColumnOf(*checked, infos, level, served.services.forTask());
             return std::unexpected(std::move(error));
         }
+        leased.push_back(source);
     }
     for (auto const& level : needed.display) {
         if (auto const source = levelOf(level); source != nullptr && !page.keys.empty()) {

@@ -1538,3 +1538,72 @@ TEST_CASE("view cache: concurrent requests through a server compute one view", "
     CHECK(stats.computations == 1);
     CHECK(stats.waits == kRequests - 1);
 }
+
+namespace {
+
+// An order level that records the keys taken back from it, and may refuse.
+class LeaseLevel final : public LevelSource {
+public:
+    LeaseLevel(std::string level, bool refuse) : _level{std::move(level)}, _refuse{refuse} {
+        _columns.push_back(tabletest::levelCol(_level == "recipe" ? "r" : "s", ColumnKind::Text, _level));
+    }
+    [[nodiscard]] std::string_view level() const override { return _level; }
+    [[nodiscard]] std::span<ColumnInfo const> columns() const override { return _columns; }
+    [[nodiscard]] std::shared_ptr<LevelSnapshot const> snapshot() const override {
+        struct Held final : LevelSnapshot {
+            [[nodiscard]] LevelRead read(RowId const& key, std::span<Cell> out) const override {
+                out[0] = Cell{std::to_string(std::get<std::int64_t>(key))};
+                return LevelRead::Loaded;
+            }
+            [[nodiscard]] std::uint64_t generation() const override { return 1; }
+        };
+        return std::make_shared<Held const>();
+    }
+    std::expected<void, TableError> want(std::span<RowId const> /*keys*/, LevelUse use, bool /*retry*/) override {
+        if (_refuse && use == LevelUse::Order) {
+            return std::unexpected(TableError{.code = TableErrorCode::Unavailable, .column = {}, .message = "full"});
+        }
+        return {};
+    }
+    void unwant(std::span<RowId const> keys) override { unwanted += keys.size(); }
+
+    std::size_t unwanted = 0;
+
+private:
+    std::string _level;
+    bool _refuse;
+    std::vector<ColumnInfo> _columns;
+};
+
+}  // namespace
+
+// Mutation: answerQuery not taking back the accepted levels' wants (recipe keeps its lease).
+TEST_CASE("table: a refused order use takes back the other levels' leases", "[table][levels]") {
+    auto const recipe = std::make_shared<LeaseLevel>("recipe", false);
+    auto const stock = std::make_shared<LeaseLevel>("stock", true);
+    auto description =
+        describedOf({column("id", ColumnKind::Integer), column("r", ColumnKind::Text), column("s", ColumnKind::Text)});
+    description.columns[1].info.level = "recipe";
+    description.columns[2].info.level = "stock";
+    description.levels = {"recipe", "stock"};
+    std::vector<std::vector<Cell>> rows;
+    for (std::int64_t row = 0; row < 4; ++row) {
+        rows.push_back({Cell{row}});
+    }
+    auto const served = detail::pinned(
+        ServedTable{.description = describe(std::move(description)),
+                    .source = tabletest::makeSource({tabletest::col("id", ColumnKind::Integer)}, std::move(rows)),
+                    .levels = {recipe, stock},
+                    .mayRead = {},
+                    .scope = {},
+                    .services = {},
+                    .limits = {}});
+    TableQuery query;
+    query.sort = {SortKey{.column = "r", .dir = SortDirection::Ascending},
+                  SortKey{.column = "s", .dir = SortDirection::Ascending}};
+    query.columns = std::vector<std::string>{"id"};
+    auto const refused = detail::answerQuery(served, query);
+    REQUIRE_FALSE(refused.has_value());
+    CHECK(refused.error().column == "s");
+    CHECK(recipe->unwanted == 4);
+}

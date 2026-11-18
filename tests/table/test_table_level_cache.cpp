@@ -665,3 +665,79 @@ TEST_CASE("level cache: the wait queue holds a key once", "[table][levels]") {
     // The first want's batch is in flight; the rest of the keys wait, once each.
     CHECK(detail::LevelCacheAccess::queuedEntries(rig.cache) + 64 == 100'000);
 }
+
+// Mutation: the eviction scan run under the writer mutex (the invalidation waits for the paused store).
+TEST_CASE("level cache: an invalidation does not wait for a store's eviction", "[table][levels]") {
+    morph::exec::ThreadPoolExecutor pool{1};
+    Rig rig{[&pool](LevelCacheOptions& options) {
+        options.loads = &pool;
+        options.maxBytes = 10 * smallValueBytes();
+    }};
+    Values preload;
+    for (auto const& key : keys(10)) {
+        preload.emplace_back(key, std::vector<Cell>{Cell{"v" + text(key)}});
+    }
+    detail::LevelCacheAccess::store(rig.cache, preload);
+    std::atomic<bool> paused{false};
+    std::promise<void> resume;
+    auto const resumed = resume.get_future().share();
+    std::atomic<bool> first{true};
+    detail::LevelCacheAccess::onEvictionScan(rig.cache, [&] {
+        if (first.exchange(false)) {
+            paused = true;
+            static_cast<void>(resumed.wait_for(10s));
+        }
+    });
+    REQUIRE(rig.cache.want(keyRange(10, 15), LevelUse::Display));  // over the bound: the store evicts, and pauses
+    auto const deadline = std::chrono::steady_clock::now() + 10s;
+    while (!paused.load() && std::chrono::steady_clock::now() < deadline) {
+        std::this_thread::yield();
+    }
+    REQUIRE(paused.load());
+    auto invalidation = std::async(std::launch::async, [&rig] { rig.cache.invalidate(keys(2)); });
+    bool const done = invalidation.wait_for(5s) == std::future_status::ready;
+    resume.set_value();
+    CHECK(done);
+    invalidation.get();
+    std::promise<void> idle;
+    pool.post([&idle] { idle.set_value(); });
+    idle.get_future().wait();
+    CHECK(stateOf(*rig.cache.snapshot(), RowId{std::int64_t{0}}) == LevelRead::Unloaded);
+    CHECK(rig.cache.stats().bytes <= 10 * smallValueBytes());
+}
+
+// Mutation: a want of a queued key leaving it in its place (B's keys load before A's).
+TEST_CASE("level cache: a key wanted again moves to the front", "[table][levels]") {
+    Rig rig{[](LevelCacheOptions& options) { options.batch = 5; }};
+    REQUIRE(rig.cache.want(keys(10), LevelUse::Display));          // page A: 0-4 in flight, 5-9 queued
+    REQUIRE(rig.cache.want(keyRange(10, 20), LevelUse::Display));  // page B
+    REQUIRE(rig.cache.want(keys(10), LevelUse::Display));          // page A again
+    CHECK(detail::LevelCacheAccess::queuedEntries(rig.cache) == 15);
+    rig.drain();
+    REQUIRE(rig.calls.size() == 4);
+    CHECK(rig.calls[1] == keyRange(5, 10));
+    CHECK(rig.calls[2] == keyRange(10, 15));
+}
+
+// Mutation: a failure evicted inside its retry delay (the failed keys read unloaded after the next store).
+TEST_CASE("level cache: a failure stays through its retry delay under memory pressure", "[table][levels]") {
+    Rig rig{[](LevelCacheOptions& options) { options.maxBytes = 20 * smallValueBytes(); },
+            [](std::span<RowId const> asked) {
+                Values out;
+                for (auto const& key : asked) {
+                    if (std::get<std::int64_t>(key) >= 5) {
+                        out.emplace_back(key, std::vector<Cell>{Cell{"v" + text(key)}});
+                    }
+                }
+                return out;
+            }};
+    REQUIRE(rig.cache.want(keys(5), LevelUse::Display));  // all five fail
+    rig.drain();
+    REQUIRE(rig.cache.want(keyRange(5, 80), LevelUse::Display));  // 75 values in two batches: over the bound
+    rig.drain();
+    CHECK(rig.cache.stats().evictedKeys > 0);
+    auto const snapshot = rig.cache.snapshot();
+    for (auto const& key : keys(5)) {
+        CHECK(stateOf(*snapshot, key) == LevelRead::Failed);
+    }
+}
