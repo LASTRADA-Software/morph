@@ -339,11 +339,12 @@ concept HasViewActions = requires {
     // What a table needs beyond the forms view: the column's kind, the
     // schema's title (the header a table shows when no label is declared),
     // the unit alternatives a quantity column offers, the values of a closed
-    // set, and the name of a custom comparator. Each is a write into the
-    // entry being built; see the directive above.
+    // set, the name of a custom comparator, and the data level the column's
+    // cells need. Each is a write into the entry being built; see the
+    // directive above.
     // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access)
     entry["kind"] = std::string{inferColumnKind(rowDom, prop)};
-    for (std::string_view const key : {"title", "x-unitAlternatives", "x-comparator"}) {
+    for (std::string_view const key : {"title", "x-unitAlternatives", "x-comparator", "x-level"}) {
         if (auto const* const value = ::morph::forms::detail::findMember(prop, key)) {
             // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access)
             entry[std::string{key}] = *value;

@@ -544,3 +544,31 @@ TEST_CASE("table: a total kind goes over the wire by name", "[table][query]") {
     CHECK(back.totalKind == TotalKind::AtLeast);
     CHECK(glz::read_json(back, R"({"rows":[],"total":3,"offset":0,"totalKind":1})"));  // a number is refused
 }
+
+// Mutation: levelsNeeded returning every level of the columns.
+TEST_CASE("table: levelsNeeded names the levels a query sorts, filters and shows", "[table][query][levels]") {
+    using tabletest::levelCol;
+    std::vector<ColumnInfo> const columns{
+        tabletest::col("id", ColumnKind::Integer), levelCol("r1", ColumnKind::Decimal, "recipe"),
+        levelCol("r2", ColumnKind::Text, "recipe"), levelCol("s1", ColumnKind::Text, "stock"),
+        levelCol("p1", ColumnKind::Integer, "price")};
+    auto const needed = [&](TableQuery const& query) { return levelsNeeded(query, columns); };
+    using V = std::vector<std::string>;
+    TableQuery named{.columns = V{"id", "r2"}};
+    CHECK(needed(named).order.empty());
+    CHECK(needed(named).display == V{"recipe"});
+    TableQuery sorted{.sort = {SortKey{.column = "s1"}}, .columns = V{"id"}};
+    CHECK(needed(sorted).order == V{"stock"});
+    CHECK(needed(sorted).display.empty());
+    TableQuery filtered{.filters = FilterSpec{.columns = {{"p1", ColumnFilter{.include = {{.gt = "1"}}}}}},
+                        .columns = V{"p1"}};
+    CHECK(needed(filtered).order == V{"price"});
+    CHECK(needed(filtered).display == V{"price"});
+    TableQuery grouped{.filters = FilterSpec{.groups = {GroupFilter{.columns = {"r1", "s1"}}}}, .columns = V{}};
+    CHECK(needed(grouped).order == V{"recipe", "stock"});
+    CHECK(needed(TableQuery{.columns = V{"id"}}).display.empty());
+    CHECK(needed(TableQuery{}).display == V{"price", "recipe", "stock"});  // columns absent: every column
+    CHECK(levelsNeeded(TableQuery{}, columns, [](std::string_view c) { return c != "p1"; }).display ==
+          V{"recipe", "stock"});                                // only what the caller may read
+    CHECK(needed(TableQuery{.columns = V{}}).display.empty());  // columns empty: keys alone
+}

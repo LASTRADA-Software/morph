@@ -105,6 +105,54 @@ private:
     morph::table::detail::Listeners _listeners;
 };
 
+// A source over another whose named columns are at one level, and read `Unloaded` in the rows not loaded yet: the
+// slow level of a benchmark or a test, without a level cache. Whether a row starts loaded depends on (seed, row)
+// alone, so a seed gives the same rows on every machine.
+//
+// load() marks rows loaded, publishes one new snapshot and notifies one `Updated` for all of them: an arrival. A
+// change of the wrapped source is forwarded after the new snapshot is published, a row beyond the old count starting
+// as the draw says. A slow column's runs are handed through readColumn as the wrapped source hands them, its
+// unloaded rows replaced. Owner-affine, as every source.
+class UnloadedSource final : public morph::table::DataSource, private morph::table::ChangeListener {
+public:
+    // Throws std::invalid_argument when `columns` names a column `source` does not have, or `level` is empty.
+    UnloadedSource(std::shared_ptr<morph::table::DataSource> source, std::vector<std::string> const& columns,
+                   std::string level, double loadedFraction, std::uint64_t seed);
+    ~UnloadedSource() override;
+    UnloadedSource(UnloadedSource const&) = delete;
+    UnloadedSource& operator=(UnloadedSource const&) = delete;
+    UnloadedSource(UnloadedSource&&) = delete;
+    UnloadedSource& operator=(UnloadedSource&&) = delete;
+
+    [[nodiscard]] std::span<morph::table::ColumnInfo const> columns() const override;
+    [[nodiscard]] std::shared_ptr<morph::table::RowSnapshot const> snapshot() const override;
+    void subscribe(morph::table::ChangeListener& listener) override;
+    void unsubscribe(morph::table::ChangeListener& listener) override;
+
+    // Marks `rows` loaded; a row out of range throws std::invalid_argument before anything changes.
+    void load(std::span<std::size_t const> rows);
+    // The rows still unloaded, ascending.
+    [[nodiscard]] std::vector<std::size_t> unloadedRows() const;
+
+private:
+    void rowsChanged(morph::table::RowChange const& change) override;
+    void publish(std::shared_ptr<morph::table::RowSnapshot const> inner);
+
+    std::shared_ptr<morph::table::DataSource> _source;
+    std::vector<morph::table::ColumnInfo> _columns;
+    std::shared_ptr<std::vector<bool> const> _slow;  // by column index
+    double _loadedFraction;
+    std::uint64_t _seed;
+    std::shared_ptr<std::vector<bool> const> _loaded;  // by row
+    std::shared_ptr<morph::table::RowSnapshot const> _snapshot;
+    morph::table::detail::Listeners _listeners;
+};
+
+// `source` with `columns` at `level`, `loadedFraction` of its rows (by the draw of (seed, row)) loaded.
+[[nodiscard]] std::shared_ptr<UnloadedSource> withUnloaded(std::shared_ptr<morph::table::DataSource> source,
+                                                           std::vector<std::string> columns, std::string level,
+                                                           double loadedFraction, std::uint64_t seed);
+
 // The process's private bytes (Windows) or resident bytes (Linux); 0 where neither is available. What the memory
 // baselines difference before and after the thing they measure.
 [[nodiscard]] std::size_t processBytes() noexcept;

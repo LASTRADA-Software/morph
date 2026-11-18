@@ -1193,12 +1193,14 @@ template <typename Row>
 ///        `RowsSource<Row>`.
 ///
 /// The columns are `Row`'s reflected members in member order, each labelled by its field metadata or else by
-/// its name made a title; the key is the key member of the record registered for `Row`.
+/// its name made a title, each with the level `Row::columnLevels()` gives it; `levels` lists those levels, sorted
+/// and each once. The key is the key member of the record registered for `Row`.
 /// @tparam Row The row type.
 /// @param id   The table's id.
 /// @param rows The rows the caller may see; null serves none.
 /// @return The served table.
 /// @throws std::logic_error when `Row` is not a registered record with a key.
+/// @throws std::invalid_argument when `Row::columnLevels()` names no column.
 template <typename Row>
 [[nodiscard]] ServedTable typedTable(std::string_view id, std::shared_ptr<std::vector<Row> const> rows) {
     auto const& records = effects::detail::resolved().records;
@@ -1218,9 +1220,15 @@ template <typename Row>
         auto const* const meta = forms::detail::findFieldMeta<Row>(info.id);
         std::string label =
             meta != nullptr && !meta->label.empty() ? std::string{meta->label} : forms::detail::inferTitle(info.id);
+        if (!info.level.empty()) {
+            served.description.levels.push_back(info.level);
+        }
         served.description.columns.push_back(
             TableColumn{.info = std::move(info), .label = std::move(label), .group = {}});
     }
+    std::ranges::sort(served.description.levels);
+    auto const [firstDuplicate, lastDuplicate] = std::ranges::unique(served.description.levels);
+    served.description.levels.erase(firstDuplicate, lastDuplicate);
     if (rows == nullptr) {
         rows = std::make_shared<std::vector<Row> const>();
     }

@@ -485,6 +485,12 @@ public:
     std::shared_ptr<std::vector<TypedRow> const> rows(morph::table::TableContext const& context);
 };
 
+// A typed table whose row type declares a level on one column.
+class LevelModel {
+public:
+    std::shared_ptr<std::vector<tabletest::LevelRow> const> rows(morph::table::TableContext const& context);
+};
+
 // A table that throws on its first call, names a column its source lacks on its second, and is well formed after.
 class FlakyModel {
 public:
@@ -563,6 +569,7 @@ public:
 
 BRIDGE_REGISTER_RECORD(tabledesc::RtSource, "RtSource")
 BRIDGE_REGISTER_RECORD(tabledesc::TypedRow, "TypedRow")
+BRIDGE_REGISTER_RECORD(tabletest::LevelRow, "LevelRow")
 BRIDGE_REGISTER_MODEL(tabledesc::RtModel, "RtModel")
 BRIDGE_REGISTER_TABLE(tabledesc::RtModel, "mine", &tabledesc::RtModel::mine, morph::table::rowScoped)
 BRIDGE_REGISTER_TABLE(tabledesc::RtModel, "theirs", &tabledesc::RtModel::theirs,
@@ -572,6 +579,9 @@ BRIDGE_REGISTER_EFFECTS(tabledesc::RtTouch, morph::effects::changes<tabledesc::R
 BRIDGE_REGISTER_MODEL(tabledesc::TypedModel, "TypedModel")
 BRIDGE_REGISTER_TABLE(tabledesc::TypedModel, "typedRows",
                       morph::table::typed<tabledesc::TypedRow>(&tabledesc::TypedModel::rows))
+BRIDGE_REGISTER_MODEL(tabledesc::LevelModel, "LevelModel")
+BRIDGE_REGISTER_TABLE(tabledesc::LevelModel, "levelRows",
+                      morph::table::typed<tabletest::LevelRow>(&tabledesc::LevelModel::rows))
 BRIDGE_REGISTER_MODEL(tabledesc::FlakyModel, "FlakyModel")
 BRIDGE_REGISTER_TABLE(tabledesc::FlakyModel, "flaky", &tabledesc::FlakyModel::flaky)
 BRIDGE_REGISTER_MODEL(tabledesc::WorkModel, "WorkModel")
@@ -632,6 +642,11 @@ morph::table::ServedTable UqB::rows(morph::table::TableContext const& context) {
 std::shared_ptr<std::vector<TypedRow> const> TypedModel::rows(morph::table::TableContext const& context) {
     static_cast<void>(context);
     return std::make_shared<std::vector<TypedRow> const>(typedRows());
+}
+
+std::shared_ptr<std::vector<tabletest::LevelRow> const> LevelModel::rows(morph::table::TableContext const& context) {
+    static_cast<void>(context);
+    return std::make_shared<std::vector<tabletest::LevelRow> const>(tabletest::levelRows(3));
 }
 
 morph::table::ServedTable FlakyModel::flaky(morph::table::TableContext const& context) {
@@ -977,6 +992,27 @@ TEST_CASE("typed: a typed table writes the page the generic source writes", "[ta
     // Mutation: DescribeTable building the typed description its own way and dropping the labels.
     // Mutation: the typed layer reading cells in glaze's key order while the description lists reflected order
     // differently.
+}
+
+// Mutation: columnLevels() applied in RowsSource only, not in reflectedColumns.
+TEST_CASE("typed: a row's column levels reach the description", "[table][registration][levels]") {
+    morph::session::Context const session{};
+    TableContext const context{.session = session};
+    tabledesc::LevelModel model;
+    auto const served = detail::serve<&tabledesc::LevelModel::rows>(model, context);
+    auto const& description = served.description;
+    auto const qty = std::ranges::find(description.columns, std::string{"qty"},
+                                       [](TableColumn const& column) { return column.info.id; });
+    REQUIRE(qty != description.columns.end());
+    CHECK(qty->info.level == "stock");
+    CHECK(description.levels == std::vector<std::string>{"stock"});
+    for (auto const& column : description.columns) {
+        CHECK((column.info.level.empty() || column.info.id == "qty"));
+    }
+    auto const sourceColumns = served.source->columns();
+    auto const sourceQty = std::ranges::find(sourceColumns, std::string{"qty"}, &ColumnInfo::id);
+    REQUIRE(sourceQty != sourceColumns.end());
+    CHECK(sourceQty->level == "stock");
 }
 
 TEST_CASE("scoped: a scope's source reads the shared rows of its keys", "[table][registration]") {

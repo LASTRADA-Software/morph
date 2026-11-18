@@ -36,6 +36,7 @@
 #include <optional>
 #include <set>
 #include <span>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <type_traits>
@@ -86,7 +87,26 @@ enum class TotalKind : std::uint8_t {
     AtLeast,  ///< `total` is a lower bound: the view has at least that many rows.
 };
 
+/// @brief A row of a page with levels that are not loaded.
+struct UnloadedRow {
+    /// @brief The row's index into `Page::rows`.
+    std::int64_t index = 0;
+    /// @brief The row's unloaded levels among those the reply needed: sorted, without duplicates, never the base
+    ///        level.
+    std::vector<std::string> levels;
+    /// @brief The subset of `levels` whose load failed; usually empty.
+    std::vector<std::string> failed;
+
+    /// @brief Member-wise equality.
+    /// @param other The row to compare with.
+    /// @return `true` when index, levels and failed levels match.
+    [[nodiscard]] bool operator==(UnloadedRow const& other) const = default;
+};
+
 /// @brief One page of a list action's reply.
+///
+/// The members after `totalKind` say which of its cells are still coming. A page read without them is a fully
+/// loaded page.
 /// @tparam Row The row type.
 template <typename Row>
 struct Page {
@@ -99,6 +119,16 @@ struct Page {
     std::int64_t offset = 0;
     /// @brief Whether `total` is the count or a lower bound; meaningful only when `total` is present.
     TotalKind totalKind = TotalKind::Exact;
+    /// @brief The rows of this reply that have unloaded levels, ascending by index. A row not listed is fully
+    ///        loaded; the members of a listed row at those levels hold whatever the server left, and are not read.
+    std::vector<UnloadedRow> unloadedRows;
+    /// @brief Rows the filter can neither admit nor reject until a level loads. They are in no page.
+    std::int64_t undecided = 0;
+    /// @brief The order levels with a load wanted or in flight for at least one row. Not empty means the order and
+    ///        the membership of the view may change without any row being edited.
+    std::vector<std::string> awaiting;
+    /// @brief The order levels whose load failed for at least one row, and is not being tried again yet.
+    std::vector<std::string> failed;
 };
 
 /// @brief The bounds a server applies to every `TableQuery`, an untrusted body.
@@ -288,6 +318,90 @@ namespace detail {
     return query;
 }
 
+/// @brief The data levels a query needs, by what it needs them for.
+struct LevelsNeeded {
+    /// @brief Levels of the sorted and filtered columns: the view's membership and order depend on them for every
+    ///        row.
+    std::vector<std::string> order;
+    /// @brief Levels of the columns the query names: needed only for the rows of the reply.
+    std::vector<std::string> display;
+};
+
+namespace detail {
+
+/// @brief @p levels sorted, each once.
+/// @param levels Level names, views into strings that outlive the call.
+/// @return The levels as strings.
+[[nodiscard]] inline std::vector<std::string> sortedLevels(std::vector<std::string_view> levels) {
+    std::ranges::sort(levels);
+    auto const [first, last] = std::ranges::unique(levels);
+    levels.erase(first, last);
+    return {levels.begin(), levels.end()};
+}
+
+}  // namespace detail
+
+/// @brief The levels @p query needs: `order` for the columns it sorts and filters, `display` for the columns it
+///        names.
+///
+/// `order` is the levels of every sort key's column, every filtered column that has an entry and every column of
+/// every group: the columns `apply` builds keys for. `display` is the levels of `query.columns`, or of every column
+/// @p mayRead allows when `columns` is absent: a caller that does not say what it shows is taken to show
+/// everything. Both are sorted, without duplicates, and never hold the base level; a level may be in both. Pure: no
+/// row is read. Called on the query `validate` returned; a name that is no column is skipped.
+/// @param query   The validated query.
+/// @param columns The table's columns.
+/// @param mayRead Whether the caller may read a column; empty allows every column.
+/// @return The levels.
+[[nodiscard]] inline LevelsNeeded levelsNeeded(TableQuery const& query, std::span<ColumnInfo const> columns,
+                                               std::function<bool(std::string_view)> const& mayRead = {}) {
+    // The columns that have a level, sorted by id: each column the query names is then one lookup.
+    std::vector<std::pair<std::string_view, std::string_view>> levelled;
+    for (auto const& column : columns) {
+        if (!column.level.empty()) {
+            levelled.emplace_back(column.id, column.level);
+        }
+    }
+    std::ranges::sort(levelled);
+    auto const levelOf = [&levelled](std::string_view id) {
+        auto const found = std::ranges::lower_bound(levelled, id, {}, [](auto const& entry) { return entry.first; });
+        return found != levelled.end() && found->first == id ? found->second : std::string_view{};
+    };
+    std::vector<std::string_view> order;
+    std::vector<std::string_view> display;
+    auto const add = [&levelOf](std::vector<std::string_view>& out, std::string_view id) {
+        if (auto const level = levelOf(id); !level.empty()) {
+            out.push_back(level);
+        }
+    };
+    for (auto const& key : query.sort) {
+        add(order, key.column);
+    }
+    for (auto const& [columnId, filter] : query.filters.columns) {
+        if (!filter.include.empty() || !filter.exclude.empty()) {
+            add(order, columnId);
+        }
+    }
+    for (auto const& group : query.filters.groups) {
+        for (auto const& columnId : group.columns) {
+            add(order, columnId);
+        }
+    }
+    if (query.columns) {
+        for (auto const& columnId : *query.columns) {
+            add(display, columnId);
+        }
+    } else {
+        for (auto const& [columnId, level] : levelled) {
+            if (!mayRead || mayRead(columnId)) {
+                display.push_back(level);
+            }
+        }
+    }
+    return LevelsNeeded{.order = detail::sortedLevels(std::move(order)),
+                        .display = detail::sortedLevels(std::move(display))};
+}
+
 /// @brief How `apply` runs.
 struct ApplyOptions {
     /// @brief The bounds of `validate`.
@@ -317,15 +431,23 @@ struct PageRows {
     std::vector<std::string> failed;
 };
 
-/// @brief Runs @p query over @p source in the calling thread: the reference
-///        implementation of `server` mode.
-/// @param source  The server's rows.
-/// @param query   The request body's table query.
+namespace detail {
+
+/// @brief A query `apply` ran: the query as `validate` returned it, and the result of its job.
+struct QueryRun {
+    /// @brief The validated query.
+    TableQuery query;
+    /// @brief The view and the undecided rows.
+    JobResult result;
+};
+
+/// @brief Validates @p query and computes its view over @p source in the calling thread.
+/// @param source  The rows.
+/// @param query   The query, as received.
 /// @param options Limits, services and column access.
-/// @return The page, or the typed error the client shows: `SourceContract`
-///         when a sorted or filtered base-level column holds an unloaded cell.
-[[nodiscard]] inline std::expected<PageRows, TableError> apply(DataSource const& source, TableQuery const& query,
-                                                               ApplyOptions const& options = {}) {
+/// @return The run, or the typed error.
+[[nodiscard]] inline std::expected<QueryRun, TableError> runQuery(DataSource const& source, TableQuery const& query,
+                                                                  ApplyOptions const& options) {
     auto const columns = source.columns();
     auto checked = validate(query, columns, options.limits, options.mayRead);
     if (!checked) {
@@ -339,13 +461,13 @@ struct PageRows {
     if (!filter) {
         return std::unexpected(std::move(filter.error()));
     }
-    detail::JobInput input;
+    JobInput input;
     input.snapshot = source.snapshot();
     input.columns.assign(columns.begin(), columns.end());
     input.services = std::move(services);
     input.keys.resize(columns.size());
     for (auto const& key : checked->sort) {
-        if (auto const column = detail::findColumn(columns, key.column)) {
+        if (auto const column = findColumn(columns, key.column)) {
             input.needed.push_back(*column);
         }
     }
@@ -358,34 +480,82 @@ struct PageRows {
     input.sort = checked->sort;
     input.filter = std::make_shared<CompiledFilter const>(std::move(*filter));
     input.previousSnapshot = input.snapshot;
-    detail::ViewJob job{std::move(input)};
+    ViewJob job{std::move(input)};
     static_cast<void>(job.step(kNoDeadline, ::core::async::StopToken{}));
     if (job.failure()) {
         return std::unexpected(*job.failure());
     }
-    auto const result = job.takeResult();
-    auto const& view = result.view;
+    return QueryRun{.query = std::move(*checked), .result = job.takeResult()};
+}
 
+/// @brief The page of @p run: its rows, total and undecided count.
+/// @param run    The query and its view.
+/// @param limits The bounds; a total above `totalCap` is left out.
+/// @return The page.
+[[nodiscard]] inline PageRows pageRows(QueryRun const& run, QueryLimits const& limits) {
+    auto const& view = run.result.view;
     PageRows out;
-    out.offset = checked->page.offset;
-    out.undecided = static_cast<std::int64_t>(result.undecided.size());
+    out.offset = run.query.page.offset;
+    out.undecided = static_cast<std::int64_t>(run.result.undecided.size());
     out.totalKind = out.undecided > 0 ? TotalKind::AtLeast : TotalKind::Exact;
     auto const count = static_cast<std::int64_t>(view.size());
-    if (count <= options.limits.totalCap) {
+    if (count <= limits.totalCap) {
         out.total = count;
     }
-    auto const begin = std::min(checked->page.offset, count);
+    auto const begin = std::min(run.query.page.offset, count);
     // Compared, not added: `maxLimit` may be as large as INT64_MAX.
-    auto const end = checked->page.limit >= count - begin ? count : begin + checked->page.limit;
+    auto const end = run.query.page.limit >= count - begin ? count : begin + run.query.page.limit;
     for (auto i = begin; i < end; ++i) {
         out.rows.push_back(view[static_cast<std::size_t>(i)]);
     }
     return out;
 }
 
+}  // namespace detail
+
+/// @brief Runs @p query over @p source in the calling thread: the reference
+///        implementation of `server` mode.
+/// @param source  The server's rows.
+/// @param query   The request body's table query.
+/// @param options Limits, services and column access.
+/// @return The page, or the typed error the client shows: `SourceContract`
+///         when a sorted or filtered base-level column holds an unloaded cell.
+[[nodiscard]] inline std::expected<PageRows, TableError> apply(DataSource const& source, TableQuery const& query,
+                                                               ApplyOptions const& options = {}) {
+    auto const run = detail::runQuery(source, query, options);
+    if (!run) {
+        return std::unexpected(run.error());
+    }
+    return detail::pageRows(*run, options.limits);
+}
+
 // ── Typed rows ──────────────────────────────────────────────────────────────
 
+/// @brief One entry of a row type's `columnLevels()`: the data level a column's cells need.
+///
+/// A row type declares its levels once, as
+/// `static constexpr std::array<table::ColumnLevel, N> columnLevels() noexcept`.
+struct ColumnLevel {
+    /// @brief The column, by the member's JSON name.
+    std::string_view column;
+    /// @brief The level; never empty, which is the base level every column has without an entry.
+    std::string_view level;
+};
+
+/// @brief Whether @p level is loaded for @p row: how a typed table says which of its cells are unloaded. Empty
+///        means every level is loaded.
+/// @tparam Row The row type.
+template <typename Row>
+using LevelLoaded = std::function<bool(Row const& row, std::string_view level)>;
+
 namespace detail {
+
+/// @brief A row type that declares the levels of its columns.
+/// @tparam Row The row type.
+template <typename Row>
+concept HasColumnLevels = requires {
+    { Row::columnLevels() };
+};
 
 /// @brief `true` for `std::optional<T>`.
 /// @tparam T A type.
@@ -517,9 +687,11 @@ template <typename Row>
     }(std::make_index_sequence<count>{});
 }
 
-/// @brief One column per key glaze writes, its kind from the value's type.
+/// @brief One column per key glaze writes, its kind from the value's type and its level from `Row::columnLevels()`
+///        when the row type declares it.
 /// @tparam Row The row type.
 /// @return The columns.
+/// @throws std::invalid_argument when a `columnLevels()` entry names no column.
 template <typename Row>
 [[nodiscard]] std::vector<ColumnInfo> reflectedColumns() {
     constexpr auto count = glz::reflect<Row>::size;
@@ -533,6 +705,15 @@ template <typename Row>
                         .level = {}}),
          ...);
     }(std::make_index_sequence<count>{});
+    if constexpr (HasColumnLevels<Row>) {
+        for (auto const& entry : Row::columnLevels()) {
+            auto const column = std::ranges::find(out, entry.column, &ColumnInfo::id);
+            if (column == out.end()) {
+                throw std::invalid_argument{"columnLevels() names no column: " + std::string{entry.column}};
+            }
+            column->level = std::string{entry.level};
+        }
+    }
     return out;
 }
 
@@ -544,6 +725,8 @@ template <typename Row>
 using RowKey = std::function<RowId(Row const&)>;
 
 /// @brief A snapshot over a shared, immutable vector of typed rows.
+///
+/// A cell of a column whose level @p loaded refuses for its row is `Unloaded`; the member is not read.
 /// @tparam Row A glaze-reflectable aggregate.
 template <typename Row>
 class RowsSnapshot final : public RowSnapshot {
@@ -552,9 +735,16 @@ public:
     /// @param rows    The rows; shared, never modified.
     /// @param key     The key projection.
     /// @param readers One cell reader per column.
+    /// @param levels  Each column's level, by column index; null when no column has one.
+    /// @param loaded  Whether a level is loaded for a row; empty when every level is.
     RowsSnapshot(std::shared_ptr<std::vector<Row> const> rows, RowKey<Row> key,
-                 std::shared_ptr<std::vector<detail::CellReader<Row>> const> readers)
-        : _rows{std::move(rows)}, _key{std::move(key)}, _readers{std::move(readers)} {}
+                 std::shared_ptr<std::vector<detail::CellReader<Row>> const> readers,
+                 std::shared_ptr<std::vector<std::string> const> levels = nullptr, LevelLoaded<Row> loaded = {})
+        : _rows{std::move(rows)},
+          _key{std::move(key)},
+          _readers{std::move(readers)},
+          _levels{std::move(levels)},
+          _loaded{std::move(loaded)} {}
 
     /// @brief The number of rows.
     /// @return Row count.
@@ -570,7 +760,12 @@ public:
     /// @param column Column index.
     /// @return The cell.
     [[nodiscard]] Cell cell(std::size_t row, std::size_t column) const override {
-        return (*_readers)[column]((*_rows)[row]);
+        auto const& value = (*_rows)[row];
+        auto const level = levelOf(column);
+        if (!level.empty() && !_loaded(value, level)) {
+            return Cell{Unloaded{}};
+        }
+        return (*_readers)[column](value);
     }
 
     /// @brief Hands rows `[first, last)` of @p column to @p sink in runs.
@@ -583,11 +778,13 @@ public:
         std::vector<Cell> run;
         run.reserve(kRun);
         auto const reader = (*_readers)[column];
+        auto const level = levelOf(column);
         while (first < last) {
             auto const end = std::min(first + kRun, last);
             run.clear();
             for (auto row = first; row < end; ++row) {
-                run.push_back(reader((*_rows)[row]));
+                auto const& value = (*_rows)[row];
+                run.push_back(!level.empty() && !_loaded(value, level) ? Cell{Unloaded{}} : reader(value));
             }
             sink.cells(first, run);
             first = end;
@@ -595,9 +792,16 @@ public:
     }
 
 private:
+    // The level a column's cells are checked against: empty when the column has none or no predicate is set.
+    [[nodiscard]] std::string_view levelOf(std::size_t column) const {
+        return _loaded && _levels != nullptr ? std::string_view{(*_levels)[column]} : std::string_view{};
+    }
+
     std::shared_ptr<std::vector<Row> const> _rows;
     RowKey<Row> _key;
     std::shared_ptr<std::vector<detail::CellReader<Row>> const> _readers;
+    std::shared_ptr<std::vector<std::string> const> _levels;
+    LevelLoaded<Row> _loaded;
 };
 
 /// @brief A `DataSource` over typed rows: one column per key glaze writes,
@@ -610,7 +814,10 @@ private:
 /// `Choice`, `Tagged`) that member's kind; everything else `Text` (an enum by
 /// its glaze name). A `std::optional` member's empty state, or anything glaze
 /// writes as `null`, is an empty cell. A row with a `glz::meta` has the
-/// columns its meta names. `setRows` replaces the rows and notifies `Reset`.
+/// columns its meta names. A row type's `columnLevels()` gives its columns
+/// their levels, and a cell of a column whose level the `LevelLoaded`
+/// predicate refuses for its row is `Unloaded`. `setRows` replaces the rows
+/// and notifies `Reset`.
 /// @tparam Row A glaze-reflectable aggregate.
 template <typename Row>
 class RowsSource final : public DataSource {
@@ -622,13 +829,17 @@ public:
     ///                    id (for example `Date` for an `int64` of epoch days).
     /// @param comparators Comparator names by column id, from
     ///                    `Services::comparators`; a column named here is `Custom`.
+    /// @param loaded      Whether a level is loaded for a row; empty means every level is.
+    /// @throws std::invalid_argument when `Row::columnLevels()` names no column.
     RowsSource(std::shared_ptr<std::vector<Row> const> rows, RowKey<Row> key,
                std::map<std::string, ColumnKind, std::less<>> const& kinds = {},
-               std::map<std::string, std::string, std::less<>> const& comparators = {})
+               std::map<std::string, std::string, std::less<>> const& comparators = {}, LevelLoaded<Row> loaded = {})
         : _columns{detail::reflectedColumns<Row>()},
           _readers{std::make_shared<std::vector<detail::CellReader<Row>> const>(detail::cellReaders<Row>())},
           _key{std::move(key)},
-          _snapshot{std::make_shared<RowsSnapshot<Row>>(std::move(rows), _key, _readers)} {
+          _loaded{std::move(loaded)} {
+        auto levels = std::make_shared<std::vector<std::string>>();
+        levels->reserve(_columns.size());
         for (auto& column : _columns) {
             if (auto const found = kinds.find(column.id); found != kinds.end()) {
                 column.kind = found->second;
@@ -637,7 +848,10 @@ public:
                 column.kind = ColumnKind::Custom;
                 column.comparator = found->second;
             }
+            levels->push_back(column.level);
         }
+        _levels = std::move(levels);
+        _snapshot = std::make_shared<RowsSnapshot<Row>>(std::move(rows), _key, _readers, _levels, _loaded);
     }
 
     /// @brief The columns.
@@ -659,7 +873,7 @@ public:
     /// @brief Replaces the rows and notifies `Reset`.
     /// @param rows The new rows.
     void setRows(std::shared_ptr<std::vector<Row> const> rows) {
-        _snapshot = std::make_shared<RowsSnapshot<Row>>(std::move(rows), _key, _readers);
+        _snapshot = std::make_shared<RowsSnapshot<Row>>(std::move(rows), _key, _readers, _levels, _loaded);
         _listeners.notify(RowChange{.kind = ChangeKind::Reset, .rows = {}});
     }
 
@@ -667,12 +881,62 @@ private:
     std::vector<ColumnInfo> _columns;
     std::shared_ptr<std::vector<detail::CellReader<Row>> const> _readers;
     RowKey<Row> _key;
+    LevelLoaded<Row> _loaded;
+    std::shared_ptr<std::vector<std::string> const> _levels;
     std::shared_ptr<RowsSnapshot<Row> const> _snapshot;
     detail::Listeners _listeners;
 };
 
+namespace detail {
+
+/// @brief The levels of @p levels that @p loaded refuses for @p row, in the order of @p levels.
+/// @tparam Row The row type.
+/// @param row    The row.
+/// @param levels Levels, sorted.
+/// @param loaded The predicate; not empty.
+/// @return The refused levels.
+template <typename Row>
+[[nodiscard]] std::vector<std::string> refusedLevels(Row const& row, std::span<std::string const> levels,
+                                                     LevelLoaded<Row> const& loaded) {
+    std::vector<std::string> out;
+    for (auto const& level : levels) {
+        if (!loaded(row, level)) {
+            out.push_back(level);
+        }
+    }
+    return out;
+}
+
+/// @brief The order levels @p loaded refuses for at least one row of the view or of the undecided set.
+/// @tparam Row The row type.
+/// @param rows   The rows the run read.
+/// @param run    The run.
+/// @param order  The run's order levels, sorted.
+/// @param loaded The predicate; not empty.
+/// @return The levels, sorted.
+template <typename Row>
+[[nodiscard]] std::vector<std::string> awaitedLevels(std::vector<Row> const& rows, QueryRun const& run,
+                                                     std::span<std::string const> order,
+                                                     LevelLoaded<Row> const& loaded) {
+    std::vector<std::string> out;
+    for (auto const& level : order) {
+        auto const refused = [&](std::uint32_t row) { return !loaded(rows[row], level); };
+        if (std::ranges::any_of(run.result.view, refused) || std::ranges::any_of(run.result.undecided, refused)) {
+            out.push_back(level);
+        }
+    }
+    return out;
+}
+
+}  // namespace detail
+
 /// @brief Runs @p query over typed rows and returns the page of rows: what a
 ///        server's list action returns.
+///
+/// With @p loaded set, `unloadedRows` names each row of the page with the levels the query needs (`levelsNeeded`:
+/// `order` and `display`) that @p loaded refuses for it, and `awaiting` the `order` levels it refuses for at least
+/// one row of the view or of the undecided rows. A predicate cannot say that a load failed, so `failed` stays
+/// empty. Without @p loaded every level is loaded, and all three stay empty.
 /// @tparam Row A glaze-reflectable aggregate.
 /// @param rows    The server's rows; read during the call only.
 /// @param key     The key projection.
@@ -680,26 +944,53 @@ private:
 /// @param options     Limits, services and column access.
 /// @param kinds       Column kinds that replace the inferred ones.
 /// @param comparators Comparator names by column id; a column named here is `Custom`.
+/// @param loaded      Whether a level is loaded for a row; empty means every level is.
 /// @return The page, or the typed error the client shows.
 template <typename Row>
 [[nodiscard]] std::expected<Page<Row>, TableError> apply(
     std::vector<Row> const& rows, RowKey<Row> key, TableQuery const& query, ApplyOptions const& options = {},
     std::map<std::string, ColumnKind, std::less<>> const& kinds = {},
-    std::map<std::string, std::string, std::less<>> const& comparators = {}) {
+    std::map<std::string, std::string, std::less<>> const& comparators = {}, LevelLoaded<Row> loaded = {}) {
     // Borrowed for the call: an aliasing pointer that owns nothing.
     std::shared_ptr<std::vector<Row> const> const borrowed{std::shared_ptr<void>{}, &rows};
-    RowsSource<Row> const source{borrowed, std::move(key), kinds, comparators};
-    auto page = apply(source, query, options);
-    if (!page) {
-        return std::unexpected(std::move(page.error()));
+    RowsSource<Row> const source{borrowed, std::move(key), kinds, comparators, loaded};
+    auto const run = detail::runQuery(source, query, options);
+    if (!run) {
+        return std::unexpected(run.error());
     }
+    auto page = detail::pageRows(*run, options.limits);
     Page<Row> out;
-    out.total = page->total;
-    out.offset = page->offset;
-    out.rows.reserve(page->rows.size());
-    for (auto const row : page->rows) {
+    out.total = page.total;
+    out.offset = page.offset;
+    out.totalKind = page.totalKind;
+    out.undecided = page.undecided;
+    out.awaiting = std::move(page.awaiting);
+    out.failed = std::move(page.failed);
+    out.rows.reserve(page.rows.size());
+    for (auto const row : page.rows) {
         out.rows.push_back(rows[row]);
     }
+    if (!loaded) {
+        return out;
+    }
+    auto const needed = levelsNeeded(run->query, source.columns(), options.mayRead);
+    std::vector<std::string> wanted = needed.order;
+    wanted.insert(wanted.end(), needed.display.begin(), needed.display.end());
+    std::ranges::sort(wanted);
+    auto const [first, last] = std::ranges::unique(wanted);
+    wanted.erase(first, last);
+    for (std::size_t index = 0; index < page.rows.size(); ++index) {
+        auto levels = detail::refusedLevels(rows[page.rows[index]], wanted, loaded);
+        if (!levels.empty()) {
+            out.unloadedRows.push_back(
+                UnloadedRow{.index = static_cast<std::int64_t>(index), .levels = std::move(levels), .failed = {}});
+        }
+    }
+    auto awaited = detail::awaitedLevels(rows, *run, needed.order, loaded);
+    out.awaiting.insert(out.awaiting.end(), awaited.begin(), awaited.end());
+    std::ranges::sort(out.awaiting);
+    auto const [awaitFirst, awaitLast] = std::ranges::unique(out.awaiting);
+    out.awaiting.erase(awaitFirst, awaitLast);
     return out;
 }
 

@@ -176,6 +176,7 @@
 #include <morph/detail/fixed_string.hpp>
 #include <morph/detail/reflected_member.hpp>
 #include <optional>
+#include <span>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -3157,6 +3158,40 @@ void annotateSubmitMode(glz::generic_u64& dom) {
 }
 // NOLINTEND(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access)
 
+/// @brief A row type that declares the data levels of its columns, as
+///        `static constexpr std::array<table::ColumnLevel, N> columnLevels() noexcept`, each entry naming a member
+///        by `column` and its level by `level`.
+/// @tparam A The type whose schema is being built.
+template <typename A>
+concept HasColumnLevels = requires {
+    { A::columnLevels() };
+};
+
+/// @brief Stamps `x-level` on each property `A::columnLevels()` names, so a table's column derived from the
+///        schema knows the data level its cells need (`docs/spec/table/table.md`, "Data levels").
+///
+/// An entry naming a member `A` does not have is skipped here: the table refuses it where it reflects the
+/// columns, and a schema is never the place generation throws over a name.
+/// @tparam A Type whose schema is being annotated.
+/// @param dom         Schema DOM to stamp in place.
+/// @param memberNames Wire keys of every reflected member of `A`.
+// NOLINTBEGIN(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access) -- glaze DOM requires operator[]
+template <typename A>
+void annotateColumnLevels(glz::generic_u64& dom, std::span<std::string_view const> memberNames) {
+    if constexpr (HasColumnLevels<A>) {
+        for (auto const& entry : A::columnLevels()) {
+            if (std::ranges::find(memberNames, std::string_view{entry.column}) == memberNames.end()) {
+                continue;
+            }
+            dom["properties"][std::string{entry.column}]["x-level"] = std::string{entry.level};
+        }
+    } else {
+        static_cast<void>(dom);
+        static_cast<void>(memberNames);
+    }
+}
+// NOLINTEND(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access)
+
 /// @brief The DOM post-merge behind `schemaJson`: adds the derived `required`
 ///        array, `x-order`, `x-decimalPlaces`, and (for actions declaring
 ///        `computedFields`) `x-computed`/`x-readonly` to a glaze-produced schema.
@@ -3260,6 +3295,7 @@ template <typename A>
     // Always assign — an explicit empty array beats leaving whatever the
     // schema writer may have emitted (or omitted) for `required`.
     dom["required"] = requiredNames;
+    annotateColumnLevels<A>(dom, memberNames);
 
     // Layout & grouping (docs/spec/forms/forms.md, "Layout & grouping"):
     // purely additive over the required/x-order pass above; a no-op unless
