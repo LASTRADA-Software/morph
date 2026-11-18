@@ -780,7 +780,8 @@ private:
     /// @param group          The group.
     /// @param masks          Each column's include bits; zero for an unknown column.
     /// @param unknownColumns The unknown columns, as bits of their places in `group.columns`.
-    /// @param counters       Counts the known pass's augmentations when not null.
+    /// @param counters       Counts the known pass's augmentations in `augmentations` and the pass with the unknown
+    ///                       columns matching every entry in `wildcardAugmentations`, when not null.
     /// @return `Yes` when a matching over the known cells covers every entry; `Unknown` when one does only with
     ///         every unknown column matching every entry compiled on it; `No` otherwise.
     [[nodiscard]] static Match matchTogether(Group const& group, std::span<std::uint32_t> masks,
@@ -808,8 +809,8 @@ private:
         }
         // Each entry needs a column of its own, so fewer columns that match any entry than there are entries
         // cannot be matched (Hall's condition on the column side). The unknown columns' masks are full, so the
-        // covered test alone passes on nearly every row, and the search would then fail only after trying every
-        // assignment.
+        // covered test alone passes on nearly every row, and the search would then run a failing augmenting-path
+        // search for up to every entry of every such row.
         if (covered != full || usable < entries) {
             return Match::No;
         }

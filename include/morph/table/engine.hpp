@@ -54,8 +54,8 @@
 #include <morph/table/filter.hpp>
 #include <morph/table/sort.hpp>
 #include <morph/table/view_change.hpp>
-#include <numeric>
 #include <map>
+#include <numeric>
 #include <optional>
 #include <span>
 #include <string>
@@ -149,8 +149,9 @@ struct ColumnLayoutValue {
 ///
 /// At least one column stays visible. A stored layout is fitted to the table's declared columns (`apply`): a
 /// column the table no longer has is dropped from every part of it, and a column the layout does not name takes its
-/// declared place, right after the nearest column declared before it that the layout places, or first when there is
-/// none.
+/// declared visibility and its declared place, right after the nearest column declared before it that the layout
+/// places, or first when there is none. A user-formed group keeps the columns no earlier group holds; one left with
+/// fewer than 2 or more than 16 columns, or repeating an earlier group's id, is dropped.
 class ColumnLayout {
 public:
     /// @brief A layout of @p ids in that order, @p declaredHidden hidden.
@@ -304,6 +305,7 @@ private:
                 order.push_back(columnId);
             }
         }
+        std::vector<std::string> unmentioned;
         for (std::size_t at = 0; at < _defaults.size(); ++at) {
             auto const& columnId = _defaults[at];
             if (std::ranges::find(order, columnId) != order.end()) {
@@ -317,11 +319,19 @@ private:
                 }
             }
             order.insert(place, columnId);
+            unmentioned.push_back(columnId);
         }
         _order = std::move(order);
         _hidden.clear();
         for (auto const& columnId : value.hidden) {
             if (declared(columnId)) {
+                _hidden.insert(columnId);
+            }
+        }
+        // A column the stored layout predates keeps its author's visibility, so a column declared hidden is not
+        // shown, nor its level fetched, for every user who has a layout.
+        for (auto const& columnId : unmentioned) {
+            if (std::ranges::find(_declaredHidden, columnId) != _declaredHidden.end()) {
                 _hidden.insert(columnId);
             }
         }
@@ -332,14 +342,20 @@ private:
             }
         }
         _groups.clear();
+        std::unordered_set<std::string> grouped;
         for (auto group : value.groups) {
+            if (std::ranges::any_of(_groups, [&](ColumnGroupInfo const& kept) { return kept.id == group.id; })) {
+                continue;
+            }
             std::vector<std::string> columns;
             for (auto& columnId : group.columns) {
-                if (declared(columnId) && std::ranges::find(columns, columnId) == columns.end()) {
+                if (declared(columnId) && !grouped.contains(columnId) &&
+                    std::ranges::find(columns, columnId) == columns.end()) {
                     columns.push_back(std::move(columnId));
                 }
             }
-            if (columns.size() >= 2) {
+            if (columns.size() >= 2 && columns.size() <= kMaxUserGroupColumns) {
+                grouped.insert(columns.begin(), columns.end());
                 group.columns = std::move(columns);
                 _groups.push_back(std::move(group));
             }
@@ -358,6 +374,9 @@ private:
     }
 
     void clampPinned() { _pinned = std::min(_pinned, visible().size()); }
+
+    // A group's column bound, `QueryLimits::maxGroupColumns`, which `query.hpp` holds and this header cannot include.
+    static constexpr std::size_t kMaxUserGroupColumns = 16;
 
     std::vector<std::string> _defaults;
     std::vector<std::string> _declaredHidden;

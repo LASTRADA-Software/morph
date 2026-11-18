@@ -10,8 +10,8 @@
 //  - inferColumnKind swapping quantity and decimal: the same test fails.
 //  - ColumnLayout::apply ignoring `hidden`: "a stored layout is fitted to the
 //    table" fails.
-//  - ColumnLayout::rebuild appending a new column last: "a new column takes its
-//    declared place" fails.
+//  - ColumnLayout's fitting rule appending a new column last: the `apply` half of
+//    "a new column takes its declared place" fails.
 //  The column-group, typed-row group and other layout cases name their own mutations above them.
 
 #include <algorithm>
@@ -382,4 +382,47 @@ TEST_CASE("column layout: a stored layout that repeats itself", "[table][layout]
     CHECK(layout.pinned() == 3);
     REQUIRE(layout.value().groups.size() == 1);
     CHECK(layout.value().groups[0].columns == std::vector<std::string>{"a", "c"});
+}
+
+// Mutation: the fitting rule showing every column the stored layout does not mention.
+TEST_CASE("column layout: a declared-hidden column a rebuild adds stays hidden without a reset", "[table][layout]") {
+    ColumnLayout layout{{"a"}};
+    layout.rebuild({"a", "x"}, {"x"});
+    CHECK(layout.visible() == std::vector<std::string>{"a"});
+    CHECK(layout.order().size() == 2);
+    layout.apply(ColumnLayoutValue{.order = {"a"}});
+    CHECK(layout.visible() == std::vector<std::string>{"a"});
+    layout.apply(ColumnLayoutValue{.order = {"x", "a"}});
+    CHECK(layout.visible() == std::vector<std::string>{"x", "a"});  // a layout that names it decides
+}
+
+// Mutation: reset clearing the groups the user formed.
+TEST_CASE("column layout: reset keeps groups and units", "[table][layout]") {
+    ColumnLayout layout{{"a", "b"}};
+    layout.apply(ColumnLayoutValue{.order = {"b", "a"},
+                                   .groups = {{.id = "g1", .label = "G", .columns = {"a", "b"}}},
+                                   .units = {{"a", {{"mass", "g"}}}}});
+    layout.reset();
+    CHECK(layout.value().order == std::vector<std::string>{"a", "b"});
+    CHECK(layout.value().groups.size() == 1);
+    CHECK(layout.value().units.size() == 1);
+}
+
+// Mutation: the fitting rule keeping a group of 17 columns.
+TEST_CASE("column layout: user-formed groups are fitted to the group rules", "[table][layout]") {
+    std::vector<std::string> ids;
+    for (int at = 0; at < 18; ++at) {
+        ids.push_back("c" + std::to_string(at));
+    }
+    ColumnLayout layout{ids};
+    std::vector<std::string> const wide(ids.begin(), ids.begin() + 17);
+    layout.apply(ColumnLayoutValue{.groups = {{.id = "g1", .label = "Wide", .columns = wide},
+                                              {.id = "g2", .label = "A", .columns = {"c0", "c1", "c2"}},
+                                              {.id = "g2", .label = "Again", .columns = {"c5", "c6"}},
+                                              {.id = "g3", .label = "B", .columns = {"c1", "c3", "c4"}},
+                                              {.id = "g4", .label = "C", .columns = {"c2", "c17"}}}});
+    auto const groups = layout.value().groups;
+    REQUIRE(groups.size() == 2);
+    CHECK(groups[0] == morph::table::ColumnGroupInfo{.id = "g2", .label = "A", .columns = {"c0", "c1", "c2"}});
+    CHECK(groups[1].columns == std::vector<std::string>{"c3", "c4"});  // c1 is g2's
 }
