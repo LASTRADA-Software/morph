@@ -181,9 +181,10 @@ using GenericRow = std::vector<Cell>;
 ///
 /// Its JSON members, in order: `revision`, `columns`, `keys`, `rows`, `total`
 /// (absent when not counted), `totalKind`, `offset`, `unloadedRows`,
-/// `undecided`, `awaiting`, `failed` and `indices`. Every member is written;
-/// the reader takes each from `unloadedRows` on as optional, so a page without
-/// them is a fully loaded page that is not a keyed reply.
+/// `undecided`, `awaiting`, `failed` and `indices`. An empty `failed` or
+/// `indices` is left out, as is a row's empty `failed` in `unloadedRows`; the
+/// reader takes each member from `unloadedRows` on as present or absent, so a
+/// page without them is a fully loaded page that is not a keyed reply.
 struct GenericPage {
     /// @brief The revision of the description the page was written against.
     std::string revision;
@@ -648,6 +649,17 @@ template <>
 struct glz::meta<morph::table::GenericPage> {
     /// @brief The page type.
     using T = morph::table::GenericPage;
+    /// @brief Whether a member is left out of the JSON written.
+    /// @tparam V The member's type.
+    /// @param member  The member.
+    /// @param key     Its JSON name.
+    /// @param context Unused.
+    /// @return `true` for an empty `failed` or `indices`.
+    template <typename V>
+    static constexpr bool skip_if(V const& member, std::string_view key, glz::meta_context const& context) {
+        static_cast<void>(context);
+        return morph::table::detail::omittedPageMember(member, key);
+    }
     /// @brief Each member after its JSON name.
     static constexpr auto value =
         glz::object("revision", &T::revision, "columns", &T::columns, "keys", &T::keys, "rows",
