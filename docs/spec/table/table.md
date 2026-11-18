@@ -2894,9 +2894,9 @@ browser is measured when the frontend's cost is decided and not after everything
 
 | Id | Measures | Budget | Catches |
 |---|---|---|---|
-| D1 | `distinctValues` on a text column with 50,000 distinct values in 100,000 rows, first 200, keys built | ≤ 22.1 ms (recorded 15.9 ms, spread to 22.1 ms) | Grouping by comparing texts instead of keys |
-| D2 | The same with a three-letter search | ≤ D1 (P; recorded 30.9 ms, 18.2–33.7, against D1's 15.9 ms on a busy host, so the relative budget is not yet met) | A search that folds every value again |
-| D3 | The same with a filter on two other columns, one at an unloaded level | ≤ 28.2 ms (recorded 20.0 ms, spread to 28.2 ms); `partial` set (gate) | The cascade running the full filter per value |
+| D1 | `distinctValues` on a text column with 50,000 distinct values in 100,000 rows, first 200, keys built | ≤ 30 ms (P; a sort of one text key with its keys is 46.3 ms; recorded runs 15.9 to 35.4 ms on a busy host) | Grouping by comparing texts instead of keys |
+| D2 | The same with a three-letter search | ≤ D1 (P; not met in the recorded runs) | A search that folds every value again |
+| D3 | The same with a filter on two other columns, one at an unloaded level | ≤ 1.5 × D1 (P); `partial` set (gate) | The cascade running the full filter per value |
 | D4 | Compile a `oneOf` of 10,000 values; filter 100,000 rows with it | ≤ 2.2 ms; ≤ 9.1 ms (recorded 2.07 ms and 6.51 ms, spreads to 2.21 and 9.13 ms) | A membership test that scans the set per row |
 | D5 | Lookups per row by that filter | One (gate, counted by the set) | The same |
 | D6 | Wire bytes of a query with a 10,000-value `oneOf` of the fixture's texts, 16 bytes a value on average; of unticking one value of 50,000 | ≤ 250 kB (P) and under `maxQuerySetBytes` (gate); one value (gate) | A menu that sends the larger side |
@@ -3009,9 +3009,9 @@ spread reflects. A row marked *not yet measured* says why; its figure is taken w
 | K3 | 2d | `patch` of 200 rows and the seven other runs' probes, one column: 0.325 ms (0.306–0.374), just above the 0.3 ms budget (P). It builds an index of the 1,600 held keys for each patch | A, Release | 2026-11-19 |
 | K4 | 2d | Debug build only (`cl-debug`), so not comparable with the budgets: a 4,096-key event against an entry of 200 rows, 86.4 ms (74.6–101.4); storing a decoded 200 × 300 page of fractional numbers in an opaque entry, 708.1 ms (623.3–759.6). The Release figure is *not yet measured*: a Release build of `morph_tests` did not fit the session; the case is `"interpreter bench: K4 the query cache under an event and a wide page"` | A, Debug | 2026-11-19 |
 | E1, E2 | 2d | *Not yet measured* — the case `"table benchmark: E1 E2 a window over the bridge"` is a socket benchmark (`[.benchmark][net]`, POSIX only); machine A builds no `morph_net_tests` | — | — |
-| D1 | 3 | `distinctValues` through an `Engine` holding the column's keys, a text column of 50,000 distinct values in 100,000 rows, first 200: 15.9 ms (15.5–22.1) | A, 40–54% busy | 2026-11-18 |
-| D2 | 3 | The same with the search `"abc"`: 30.9 ms (18.2–33.7), above D1 in this run (an earlier run on the same build at 63–84% busy: D1 33.7 ms, D2 29.0 ms) | A, 40–54% busy | 2026-11-18 |
-| D3 | 3 | The same with `o1 ge 20` and `o2 lt 80`, `o2` unloaded in 30% of the rows, `partial` set: 20.0 ms (14.3–28.2) | A, 40–54% busy | 2026-11-18 |
+| D1 | 3 | `distinctValues` through an `Engine` holding the column's keys, a text column of 50,000 distinct values in 100,000 rows, first 200: 35.4 ms (26.8–43.9); an earlier run of the code before its unused reserve was removed, at 40–54% busy, 15.9 ms (15.5–22.1) | A, 51–77% busy | 2026-11-18 |
+| D2 | 3 | The same with the search `"abc"`: 41.4 ms (27.5–42.5), above D1 as in the earlier run (30.9 ms against 15.9) | A, 51–77% busy | 2026-11-18 |
+| D3 | 3 | The same with `o1 ge 20` and `o2 lt 80`, `o2` unloaded in 30% of the rows, `partial` set: 25.3 ms (24.4–26.6) | A, 51–77% busy | 2026-11-18 |
 | D4 | 3 | A `oneOf` of 10,000 texts: compiled in 2.07 ms (2.01–2.21); 100,000 rows filtered with it, keys built, in 6.51 ms (6.22–9.13) | A, 40–54% busy | 2026-11-18 |
 | G1 | 3 | `Engine::setFilter` of an `any` group with a `oneOf` of 2 values, 100,000 rows, keys held: 3 columns 23.3 ms (12.8–23.5); 16 columns 79.9 ms (72.1–96.9), above the 45 ms budget | A, 43–70% busy | 2026-11-18 |
 | G2 | 3 | The same with a `oneOf` of 1,000 values: 18.7 ms (17.7–19.5); 113.2 ms (76.9–123.8), above 1.2 × G1 | A, 43–70% busy | 2026-11-18 |

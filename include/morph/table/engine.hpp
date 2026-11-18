@@ -284,6 +284,16 @@ struct JobResult {
     std::size_t keyBuilds = 0;
 };
 
+/// @brief The error of an unloaded cell in a base-level column: no level names that cell, so no load would
+///        resolve it, and a view or a values list built on it would never settle.
+/// @param info The column.
+/// @return A `SourceContract` error naming the column.
+[[nodiscard]] inline TableError unloadedInBaseLevel(ColumnInfo const& info) {
+    return TableError{.code = TableErrorCode::SourceContract,
+                      .column = info.id,
+                      .message = "an unloaded cell in a base-level column"};
+}
+
 /// @brief The error of a job an injected service failed.
 /// @param what The message of the exception the service threw.
 /// @return A `ServiceFailed` error.
@@ -414,15 +424,12 @@ private:
         }
     }
 
-    // Fails the job when a base-level column holds an unloaded cell: no level names that cell, so no load would
-    // resolve it, and a view built on it would hold a row whose place nothing can ever settle.
+    // Fails the job when a base-level column holds an unloaded cell (`detail::unloadedInBaseLevel`).
     bool refuseUnloaded(std::size_t column, CellState state) {
         if (state != CellState::Unloaded || !_in.columns[column].level.empty()) {
             return false;
         }
-        _failure = TableError{.code = TableErrorCode::SourceContract,
-                              .column = _in.columns[column].id,
-                              .message = "an unloaded cell in a base-level column"};
+        _failure = unloadedInBaseLevel(_in.columns[column]);
         return true;
     }
 

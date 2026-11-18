@@ -1377,6 +1377,10 @@ struct AnswerContext {
         return std::unexpected(TableError{
             .code = TableErrorCode::Unavailable, .column = {}, .message = "this table answers no keyed query"});
     }
+    if (query.distinct && !served.description.capabilities.distinct) {
+        return std::unexpected(TableError{
+            .code = TableErrorCode::Unavailable, .column = {}, .message = "this table answers no distinct request"});
+    }
     auto const infos = columnInfos(served.description);
     auto const groups = served.source->groups();
     if (auto error = detail::checkGroups(served.source->columns(), groups)) {
@@ -1395,11 +1399,6 @@ struct AnswerContext {
         return nullptr;
     };
     if (checked->distinct) {
-        if (!served.description.capabilities.distinct) {
-            return std::unexpected(TableError{.code = TableErrorCode::Unavailable,
-                                              .column = {},
-                                              .message = "this table answers no distinct request"});
-        }
         // The listed column's level is an order level: the values list reads it for every candidate row.
         auto const needed = levelsNeeded(*checked, infos, served.mayRead, served.services.forTask(), groups);
         std::vector<LevelInput> inputs;

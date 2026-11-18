@@ -519,13 +519,13 @@ struct SetTally {
     request.limit = std::min(request.limit, limits.maxLimit);
     auto const& first = listed.front();
     auto const kind = columns[*findColumn(columns, first)].kind;
-    if (request.bucket != DateBucket::Value && kind != ColumnKind::Date && kind != ColumnKind::DateTime) {
-        return invalid("a date bucket on column " + first + ", which holds no dates");
-    }
     if (kind == ColumnKind::Custom) {
         return TableError{.code = TableErrorCode::UnsupportedOperator,
                           .column = first,
                           .message = "column " + first + " has no values to list"};
+    }
+    if (request.bucket != DateBucket::Value && kind != ColumnKind::Date && kind != ColumnKind::DateTime) {
+        return invalid("a date bucket on column " + first + ", which holds no dates");
     }
     return std::nullopt;
 }
@@ -1134,14 +1134,16 @@ void groupRows(std::span<std::uint32_t const> rows, std::span<KeyColumn const* c
 ///
 /// Builds the key columns @p input lacks (the filter's and the listed columns') on the calling thread, into locals.
 /// A row the filter leaves undecided is in no count and sets `partial`; an unloaded cell in a listed column is in no
-/// count and sets `partial`, and the row's loaded cells still count. Valid cells group by the key the column sorts
+/// count and sets `partial`, and the row's loaded cells still count. An unloaded cell in a base-level column the
+/// list reads is `SourceContract`, as a view job reports it. Valid cells group by the key the column sorts
 /// and filters by (text by its fold; a date bucket by its first day); a row counts once per value it holds, once in
 /// `blanks` when it has an empty cell and once in `invalid` when it has an invalid one. A value's text is that of
 /// its first row and, within the row, its first column. Values are searched by their folded text, ordered ascending
 /// by their keys (ties by first row), counted up to `totalCap`, and then sliced by `offset` and `limit`.
 /// @param input     The snapshot, columns, keys, filter, services, bounds and groups.
 /// @param validated The request as `detail::checkDistinct` left it.
-/// @return The values, or `ServiceFailed` from a throwing service, or the filter's compile error.
+/// @return The values; `ServiceFailed` from a throwing service; `SourceContract` for an unloaded cell in a base-level
+///         column it reads; or the filter's compile error.
 [[nodiscard]] inline std::expected<DistinctValues, TableError> distinctOver(DistinctInput const& input,
                                                                             DistinctRequest const& validated) {
     try {
@@ -1177,6 +1179,14 @@ void groupRows(std::span<std::uint32_t const> rows, std::span<KeyColumn const* c
         for (auto const at : listed) {
             if (pointers[at] == nullptr) {
                 keysOf(at);
+            }
+        }
+        // As a view job does: an unloaded cell in a base-level column the list reads is a broken source, not a
+        // list that may grow.
+        for (std::size_t at = 0; at < pointers.size(); ++at) {
+            if (pointers[at] != nullptr && input.columns[at].level.empty() &&
+                std::ranges::contains(pointers[at]->states, CellState::Unloaded)) {
+                return std::unexpected(unloadedInBaseLevel(input.columns[at]));
             }
         }
         std::vector<std::uint32_t> candidates(rowCount);
@@ -1249,8 +1259,6 @@ void groupRows(std::span<std::uint32_t const> rows, std::span<KeyColumn const* c
             return describeValue(snapshot, at, input.columns[at], *listedKeys[group.column], group.first,
                                  validated.bucket);
         };
-        std::vector<DistinctValue> values;
-        values.reserve(groups.size());
         if (!validated.search.empty()) {
             auto const& collator = collatorOf(input.services);
             auto const needle = collator.fold(validated.search);

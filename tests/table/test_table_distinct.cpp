@@ -17,6 +17,8 @@
 //  - apply ignoring query.distinct: "server mode answers through apply, client mode through the engine" fails.
 //  - Engine::distinctValues passing no keys: "the engine reuses the keys it holds" fails on the fold count.
 //  - empty cells not counted in blanks: "invariant 22 over random tables" fails.
+//  - distinctOver without the base-level check: "an unloaded cell in a base-level column breaks the contract" fails.
+//  - the typed apply ignoring query.distinct: "the typed apply answers a distinct request" fails.
 //  - the request's group columns not passed through checkColumn: "a group's values are pooled" fails.
 //  - levelsNeeded leaving a group's columns out: "a group's levels are order levels of the request" fails.
 
@@ -105,8 +107,12 @@ TEST_CASE("distinct: counts are those of the rows the other filters leave", "[ta
     CHECK(d->blanks == 1);
     CHECK(d->invalid == 0);
     CHECK_FALSE(d->partial);
-    // invariant 22: the sum is the row count of the other filters
-    CHECK(1 + 3 + d->blanks + d->invalid == 5);
+    // invariant 22: the counts, blanks and invalid cells sum to the rows the other filters leave
+    std::int64_t sum = d->blanks + d->invalid;
+    for (auto const& value : d->values) {
+        sum += value.count;
+    }
+    CHECK(sum == 5);
 }
 
 TEST_CASE("distinct: invalid cells are counted and listed under no value", "[table][distinct]") {
@@ -271,7 +277,7 @@ TEST_CASE("distinct: the engine reuses the keys it holds", "[table][distinct]") 
     auto const collator = std::make_shared<CountingCollator>();
     Engine engine{source, EngineOptions{.services = Services{.collator = collator}}};
     REQUIRE(engine.setSort({SortKey{.column = "status"}}));
-    REQUIRE(engine.stats().keyBuilds == 1);
+    REQUIRE(engine.stats().keyBuilds == 1);  // a sanity check of the setup; the fold count below is the test
     auto const foldsBefore = collator->folds.load();
     auto const values = engine.distinctValues({.column = "status"});
     REQUIRE(values);
@@ -402,4 +408,46 @@ TEST_CASE("distinct: a group's levels are order levels of the request", "[table]
     q.columns = std::vector<std::string>{};
     auto const needed = levelsNeeded(q, levelled->columns(), {}, {}, levelled->groups());
     CHECK(needed.order == std::vector<std::string>{"slow"});
+}
+
+TEST_CASE("distinct: an unloaded cell in a base-level column breaks the contract", "[table][distinct]") {
+    // status at the base level, with an unloaded cell: no level would ever load it.
+    auto const source = tabletest::distinctSource();
+    source->updateRow(0, {Cell{Unloaded{}}, Cell{std::string{"Berlin"}}, Cell{std::int64_t{1}}});
+    auto const listed = distinctValues(*source, {}, {.column = "status"});
+    REQUIRE_FALSE(listed);
+    CHECK(listed.error().code == TableErrorCode::SourceContract);
+    CHECK(listed.error().column == "status");
+    // The same through a filter on it, as apply refuses it.
+    TableQuery q;
+    q.filters.columns["status"] = ColumnFilter{.combine = Combine::Any, .include = {eq("open")}, .exclude = {}};
+    CHECK(codeOf(distinctValues(*source, q, {.column = "city"})) == TableErrorCode::SourceContract);
+    CHECK(codeOf(apply(*source, q)) == TableErrorCode::SourceContract);
+}
+
+namespace tdistinct {
+
+// A typed row for the typed apply's distinct case. Reflected by glaze.
+struct StatusRow {
+    std::int64_t id = 0;
+    std::string status;
+};
+
+}  // namespace tdistinct
+
+TEST_CASE("distinct: the typed apply answers a distinct request", "[table][distinct]") {
+    std::vector<tdistinct::StatusRow> const rows{{.id = 1, .status = "open"}, {.id = 2, .status = "Open"},
+                                                 {.id = 3, .status = "closed"}};
+    RowKey<tdistinct::StatusRow> const key = [](tdistinct::StatusRow const& row) { return RowId{row.id}; };
+    TableQuery q;
+    q.distinct = DistinctRequest{.column = "status"};
+    auto const page = apply(rows, key, q);
+    REQUIRE(page);
+    CHECK(page->rows.empty());
+    REQUIRE(page->distinct);
+    std::shared_ptr<std::vector<tdistinct::StatusRow> const> const shared{std::shared_ptr<void>{}, &rows};
+    RowsSource<tdistinct::StatusRow> const source{shared, key};
+    CHECK(*page->distinct == *distinctValues(source, q, *q.distinct));
+    REQUIRE(page->distinct->values.size() == 2);
+    CHECK(page->distinct->values[1].count == 2);  // "open", "Open"
 }
