@@ -371,3 +371,62 @@ TEST_CASE("custom screens: a title outside its bound is refused", "[ui][custom-s
     CHECK(s.save(baseScreen("lims.base"), "alice", std::string(morph::ui::kMaxNameBytes + 1, 'x')).kind == "err");
     CHECK(s.save(baseScreen("lims.base"), "alice", std::string(morph::ui::kMaxNameBytes, 'x')).kind == "ok");
 }
+
+namespace {
+
+/// Stores a screen that the base no longer matches: it carries a host command with a huge literal argument, so the
+/// refusal that makes it broken quotes the whole command.
+void storeBrokenScreen(morph::ui::MemoryCustomScreenStore& store, std::string const& id, std::size_t argBytes) {
+    std::string const document = replaced(baseScreen(id), R"({"host":"print"})",
+                                          R"({"host":"print","args":{"lit":")" + std::string(argBytes, 'x') + R"("}})");
+    REQUIRE(settled(store.put({.person = "alice", .app = "lims", .id = id},
+                              morph::ui::CustomScreen{.id = id,
+                                                      .title = "Big",
+                                                      .basedOn = "lims.base",
+                                                      .document = document,
+                                                      .savedAt = {},
+                                                      .savedBy = std::string(1000, 'p')})));
+}
+
+}  // namespace
+
+TEST_CASE("custom screens: a reply's fields other than the document are capped", "[ui][custom-screens][remote]") {
+    morph::ui::CustomScreensOptions options;
+    options.maxDocumentBytes = (morph::wire::kMaxEnvelopeBytes - morph::ui::kCustomScreenReplyOverhead) / 4;
+    // The store runs inline, so the test thread can fill it directly.
+    auto const store = std::make_shared<morph::ui::MemoryCustomScreenStore>(morph::exec::detail::inlineExecutor());
+    Server s{store, options};
+    std::string const id = "custom:0123456789abcdef0123456789abcdef";
+    storeBrokenScreen(*store, id, 200 * 1024);
+
+    Envelope const got = s.call(morph::ui::kCustomScreensGet, R"({"app":"lims","id":)" + quoted(id) + "}", "alice");
+    REQUIRE(got.kind == "ok");
+    CHECK(morph::wire::encode(morph::wire::makeOk(0, got.body)).size() <= morph::wire::kMaxEnvelopeBytes);
+    morph::ui::CustomScreenFound found;
+    REQUIRE_FALSE(glz::read_json(found, got.body));
+    REQUIRE(found.summary.broken.has_value());
+    std::string const& reason = found.summary.broken->reason;
+    CHECK(reason.size() <= morph::ui::kMaxBrokenReasonBytes);
+    CHECK(reason.ends_with("\xE2\x80\xA6"));
+    CHECK(found.summary.savedBy.size() <= morph::ui::kMaxNameBytes);
+    CHECK(found.summary.savedBy.ends_with("\xE2\x80\xA6"));
+    CHECK(found.summary.broken->pointer.size() <= morph::ui::kMaxNameBytes);
+}
+
+TEST_CASE("custom screens: list answers at most maxListed and says it truncated", "[ui][custom-screens][remote]") {
+    Server s{nullptr, morph::ui::CustomScreensOptions{.maxListed = 2}};
+    for (int i = 0; i < 3; ++i) {
+        REQUIRE(s.save(baseScreen("lims.base"), "alice").kind == "ok");
+    }
+    auto const all = listed(s, "alice");
+    CHECK(all.screens.size() == 2);
+    CHECK(all.truncated);
+
+    Server roomy{nullptr, morph::ui::CustomScreensOptions{.maxListed = 3}};
+    for (int i = 0; i < 3; ++i) {
+        REQUIRE(roomy.save(baseScreen("lims.base"), "alice").kind == "ok");
+    }
+    auto const exact = listed(roomy, "alice");
+    CHECK(exact.screens.size() == 3);
+    CHECK_FALSE(exact.truncated);
+}

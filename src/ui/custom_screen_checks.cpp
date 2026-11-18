@@ -8,6 +8,7 @@
 #include <glaze/glaze.hpp>
 #include <list>
 #include <map>
+#include <morph/core/wire.hpp>
 #include <morph/ui/author.hpp>
 #include <morph/ui/bundle.hpp>
 #include <morph/ui/custom_screens.hpp>
@@ -607,7 +608,9 @@ std::expected<std::string, Refusal> withScreenId(std::string_view document, std:
         return std::unexpected(refusalAt("", "a custom screen is a JSON object"));
     }
     (*object)["id"].data = std::string{id};
-    auto written = glz::write_json(*parsed);
+    // Control bytes are escaped inside the writer, as the wire does: glaze's default leaves them raw, which is
+    // invalid JSON and can corrupt the byte after an earlier escaped character.
+    auto written = glz::write<::morph::wire::detail::EscapingWriteOpts{}>(*parsed);
     if (!written) {
         return std::unexpected(refusalAt("", "a custom screen could not be written back as JSON"));
     }

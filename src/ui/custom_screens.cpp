@@ -83,11 +83,29 @@ void checkName(std::string const& name, std::string_view what) {
     return bundle;
 }
 
+/// @brief @p text cut to at most @p limit bytes, ending with an ellipsis when it was cut, never inside a UTF-8
+///        sequence.
+[[nodiscard]] std::string capped(std::string text, std::size_t limit) {
+    static constexpr std::string_view kEllipsis = "\xE2\x80\xA6";
+    if (text.size() <= limit) {
+        return text;
+    }
+    std::size_t keep = limit - kEllipsis.size();
+    // A continuation byte is 10xxxxxx: step back to the start of the sequence the cut would split.
+    while (keep > 0 && (static_cast<unsigned char>(text[keep]) & 0xC0U) == 0x80U) {
+        --keep;
+    }
+    text.resize(keep);
+    text += kEllipsis;
+    return text;
+}
+
 [[nodiscard]] std::optional<CheckRefusal> onWire(std::optional<Refusal> const& refusal) {
     if (!refusal) {
         return std::nullopt;
     }
-    return CheckRefusal{.pointer = refusal->path, .reason = refusal->reason};
+    return CheckRefusal{.pointer = capped(refusal->path, kMaxNameBytes),
+                        .reason = capped(refusal->reason, kMaxBrokenReasonBytes)};
 }
 
 /// @brief Whether @p document declares no params, read from its JSON.
@@ -124,11 +142,11 @@ namespace {
                                             ::morph::session::Context const& session,
                                             std::vector<std::string> const& permitted, CustomScreen const& screen) {
     return CustomScreenSummary{
-        .id = screen.id,
-        .title = screen.title,
-        .basedOn = screen.basedOn,
+        .id = capped(screen.id, kMaxNameBytes),
+        .title = capped(screen.title, kMaxNameBytes),
+        .basedOn = capped(screen.basedOn, kMaxNameBytes),
         .savedAt = screen.savedAt,
-        .savedBy = screen.savedBy,
+        .savedBy = capped(screen.savedBy, kMaxNameBytes),
         .mine = screen.savedBy == session.principal,
         .opensWithoutParams = declaresNoParams(screen.document),
         .broken = onWire(checkCustomScreen(bundle, session, *context.authorizer, permitted, screen.basedOn,
@@ -148,7 +166,11 @@ namespace {
     std::vector<CustomScreen> const stored = co_await _context->store->list(session.principal, request.app);
     // Computed once for the whole list, and never kept past this call: permissions can change between calls.
     std::vector<std::string> const permitted = permittedActions(*bundle, session, *_context->authorizer);
+    reply.truncated = stored.size() > _context->options.maxListed;
     for (CustomScreen const& screen : stored) {
+        if (reply.screens.size() == _context->options.maxListed) {
+            break;
+        }
         reply.screens.push_back(summarize(*_context, *bundle, session, permitted, screen));
     }
     co_return reply;

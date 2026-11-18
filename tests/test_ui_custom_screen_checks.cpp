@@ -245,3 +245,18 @@ TEST_CASE("checkCustomScreen reads and fills the verdict cache", "[ui][custom-sc
     REQUIRE(denied);
     CHECK(denied->path == "/mutations/verify");
 }
+
+TEST_CASE("withScreenId keeps a control byte after an escaped character", "[ui][custom-screens][checks]") {
+    // The text is `a`, a backslash, U+000B and `b`. The writer's default leaves U+000B raw, and after the earlier
+    // escaped backslash it can write it back as other bytes.
+    std::string const text = R"({"vocab":"ui/1","view":{"kind":"text","text":"a\\\u000bb"}})";
+    auto const rewritten = morph::ui::withScreenId(text, "custom:6");
+    REQUIRE(rewritten);
+    CHECK_FALSE(rewritten->contains('\x0b'));
+    auto const loaded = morph::ui::loadDocumentText(*rewritten, {});
+    REQUIRE(loaded);
+    CHECK(loaded->id == "custom:6");
+    auto const again = morph::ui::withScreenId(*rewritten, "custom:6");
+    REQUIRE(again);
+    CHECK(*again == *rewritten);
+}

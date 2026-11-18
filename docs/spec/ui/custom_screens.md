@@ -51,7 +51,7 @@ bounds and one `VerdictCache`). A server that offers custom screens calls it onc
   could not be served: above `kMaxFileBytes`, or with `4 * maxDocumentBytes + kCustomScreenReplyOverhead` above
   `wire::kMaxEnvelopeBytes`. A `get` reply carries the document escaped once into the reply's JSON and the reply
   escaped again as the envelope's body, so a document of quotes and backslashes grows four-fold; the overhead (64 KiB)
-  is the reply's other fields, with a wide margin. At the 8 MiB envelope bound the largest accepted value is
+  is the reply's other fields, with a wide margin, which every summary's caps make a bound (below). At the 8 MiB envelope bound the largest accepted value is
   2,080,768 bytes, well above the 256 KiB default.
 
 | Action id | Kind | Body | `ok` reply |
@@ -82,12 +82,23 @@ What every action does, in order:
 - **`save`** with an `id` first asks the store's `get` for that screen under the caller; a refusal, such as `no such
   custom screen`, is the error as the store gave it, so a client cannot choose an id. With no `id`, the id is
   `custom:` and 32 hexadecimal digits from `newFileRef`. The document then passes `checkCustomScreen`; a refusal is the
-  `err` reply's message, pointer included. `withScreenId` writes the custom screen's own id into the document, and the
+  `err` reply's message, pointer included. `withScreenId` writes the custom screen's own id into the document, escaping control bytes inside the writer as the
+  wire does (the writer's default leaves them raw, which is invalid JSON and can corrupt a byte after an earlier
+  escaped character), and the
   rewritten text, whose id may be longer than the one it had, must still be within `maxDocumentBytes`. Only then is `put` called, with
   `savedAt` the current time and `savedBy` the caller.
+- **`list` answers at most `maxListed` summaries** (500 by default) and says `truncated: true` when the store held
+  more. A capped summary is about 2.3 KiB at most and the envelope escapes the reply up to four-fold, so 500 stay well
+  under the envelope bound.
 - **`remove`** calls the store's `remove` under the caller.
 - **A store's refusal is passed through unchanged**, from `get`, `put` and `remove`: the model adds no wording over
   the reason, so the person is told what the store said.
+
+**Bounded replies.** Every field of a summary is capped when the summary is built, so the part of a `get` reply that is
+not the document is bounded whatever the store holds: `id`, `title`, `basedOn`, `savedBy` and `broken.pointer` at
+`kMaxNameBytes`, and `broken.reason` at `kMaxBrokenReasonBytes` (1 KiB). A longer value is cut on a UTF-8 boundary and
+ends with an ellipsis (U+2026). A reason can quote a whole host command, and a pointer or a principal can be of any
+length, so without the caps the reply would have no bound. `mine` is computed from the stored `savedBy`, before the cap.
 
 A `CustomScreenSummary` carries `id`, `title`, `basedOn`, `savedAt`, `savedBy` and:
 

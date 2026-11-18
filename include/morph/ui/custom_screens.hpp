@@ -221,9 +221,13 @@ private:
 [[nodiscard]] MORPH_API std::optional<Refusal> checkBaseRule(Document const& base, std::string_view baseText,
                                                              Document const& custom, std::string_view customText);
 
-/// @brief The bytes of a `get` reply that are not its document: the summary's fields, each at most `kMaxNameBytes` and
-///        at most six bytes per byte once escaped, the keys and the punctuation. Sized with a wide margin so a
-///        change to the summary does not silently exceed it.
+/// @brief The longest `broken.reason` of a summary, in bytes; a longer one is cut and ends with an ellipsis.
+inline constexpr std::size_t kMaxBrokenReasonBytes = 1024;
+
+/// @brief The bytes of a `get` reply that are not its document. Every summary field is capped when the summary is
+///        built: `id`, `title`, `basedOn`, `savedBy` and `broken.pointer` at `kMaxNameBytes` and `broken.reason` at
+///        `kMaxBrokenReasonBytes`, a cut one ending with an ellipsis. Six capped fields of at most six bytes per
+///        byte once escaped, the keys and the punctuation come to under 12 KiB, and this is sized with a wide margin.
 inline constexpr std::size_t kCustomScreenReplyOverhead = std::size_t{64} * 1024;
 
 /// @brief The custom screens' bounds.
@@ -235,6 +239,10 @@ struct CustomScreensOptions {
     std::size_t maxDocumentBytes = std::size_t{256} * 1024;
     /// @brief The most verdicts `VerdictCache` keeps.
     std::size_t verdictCacheSize = 1024;
+    /// @brief The most summaries `list` answers; it says `truncated` when the store held more. A capped summary is
+    ///        about 2.3 KiB at most, and the envelope escapes the reply up to four-fold, so 500 stay well under
+    ///        `wire::kMaxEnvelopeBytes`.
+    std::size_t maxListed = 500;
 };
 
 /// @brief The checks' verdicts by `verdictKey`, bounded, dropping the least recently used.
@@ -397,8 +405,10 @@ struct CustomScreensList {
 
 /// @brief What `list` answers.
 struct CustomScreensListed {
-    /// @brief The screens, in the store's order.
+    /// @brief The screens, in the store's order, at most `CustomScreensOptions::maxListed`.
     std::vector<CustomScreenSummary> screens;
+    /// @brief Whether the store held more screens than are listed.
+    bool truncated = false;
 };
 
 /// @brief `get`: one custom screen.
