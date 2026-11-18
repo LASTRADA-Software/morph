@@ -597,7 +597,8 @@ TEST_CASE("UiRegistry: a theme token nothing reads is logged once at build and d
     CHECK(lines.size() == 1);
 }
 
-TEST_CASE("permittedActions answers ui-catalog's permitted, and screenAdmitted its admission", "[ui-service][catalog]") {
+TEST_CASE("permittedActions answers ui-catalog's permitted, and screenAdmitted its admission",
+          "[ui-service][catalog]") {
     auto const bundle = uiservice::bundle();
     auto const authorizer = uiservice::authorizer();
     morph::session::Context tech;
