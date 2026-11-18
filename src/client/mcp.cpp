@@ -97,7 +97,7 @@ int serveLocal(Args const& args, std::string const& appName, std::vector<LocalAp
     return 0;
 }
 
-// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): the two streams are the protocol's two directions.
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): the protocol's channel, then the log.
 int serveRemote(std::string const& url, session::Context session, std::istream& input, std::ostream& output,
                 std::ostream& diagnostics) {
     ui::McpOptions options{.session = std::move(session), .serverName = "morph"};

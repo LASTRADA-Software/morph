@@ -70,8 +70,8 @@ reply, plus an optional close.
   instances when that connection drops.
 - **`McpOptions::callTimeout`** bounds each envelope sent over a transport, 30 seconds by default. A call that
   gets no reply in time answers `wire::makeErr("no reply from the server in <n> s")`, and a reply that arrives
-  later is dropped. `serveStdio` handles one message at a time, so without this bound a request the transport
-  holds through an outage would block every later message, `ping` included. The in-process constructor ignores it:
+  later is dropped. `serveStdio` handles one message at a time, so without this bound a request the server never
+  answers would block every later message, `ping` included. The in-process constructor ignores it:
   `RemoteServer` always replies.
 - **A generation guard.** `Shared` keeps a generation counter. A reset bumps it under the mutex, clearing the
   cached catalog and every cached model id. `withCatalog` and `withInstance` record the generation when they send,
@@ -107,11 +107,12 @@ lives on, and stdio's end quits it. With `SocketBackend`, the main thread simply
 
 The transport is built with `retryFirstConnect = true`. The backends otherwise stop for good when the first
 connect never reaches the server. A Claude Code session started before the application server would then have a
-dead MCP server, and retrying fixes that. Calls made before the first connect, or during an outage, are held by
-the transport and bounded by `callTimeout`.
+dead MCP server, and retrying fixes that. A call made before the first connect is held across every failed
+attempt and sent once the server is reached. A call in flight when an established connection drops is rejected,
+and so is a call made during a reconnect, at the next failed attempt. `callTimeout` bounds anything the server
+never answers. The agent sees each rejection as a tool error.
 
-The disconnect handler is the adapter's `resetter()`. Calls made while the connection is down are held and sent at
-the next connect; because the reset already ran, they register fresh instances.
+The disconnect handler is the adapter's `resetter()`, so the next call registers fresh instances.
 
 `initialize`, `ping` and `tools/list` before the catalog arrives behave as they do today: `initialize` and `ping`
 need no server, and `tools/list` waits for the catalog, bounded by `callTimeout`.
@@ -211,9 +212,9 @@ log instead of corrupting the protocol.
   for local mode, and builds the transports. A new binary would copy all three.
 - **The transport constructor borrows.** `IEnvelopeTransport` has a protected, non-virtual destructor and lives
   inside a `RemoteTransport` the caller owns. Ownership stays where the client's GUI path keeps it.
-- **Reset on disconnect, guarded by a generation.** Calls made during an outage are held and sent at the next
-  connect, so resetting at the disconnect means they register fresh instances. The generation guard covers replies
-  already queued when the connection dropped.
+- **Reset on disconnect, guarded by a generation.** The server releases an adapter's instances when its connection
+  drops, so resetting at the disconnect makes the next call register fresh ones. The generation guard covers
+  replies already queued when the connection dropped.
 - **A bound on each call, not a concurrent `serveStdio`.** MCP allows replies out of order, so a concurrent reader
   would also stop one held call from blocking the rest. That is a larger change, though, and a bounded wait is
   enough to keep the server responsive.
