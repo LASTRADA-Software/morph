@@ -210,6 +210,30 @@ TEST_CASE("shell: the lab counts the samples to verify and finds samples by refe
     CHECK_THROWS_AS(lab.execute(lims::CountSamplesToVerify{}), lims::ValidationError);
 }
 
+// Above the table engine's total cap (100,000 rows) the count and the search total are still the number of matches.
+// Mutation: samplesWhere without its uncapped options, counting with `page.total.value_or(0)` (the count reads 0).
+TEST_CASE("shell: the lab counts samples to verify exactly above the total cap", "[lims][lab][shell]") {
+    DbFixture fixture;
+    lims::test::grant("tech", lims::LimsRole::Analyst);
+    ScopedPrincipal const tech{"tech"};
+    static_cast<void>(lims::SampleModel{}.execute(lims::RegisterClient{.name = "Waterworks Ltd"}));
+    Lightweight::DataMapper mapper;
+    auto const clients = mapper.Query<lims::db::ClientRecord>().All();
+    REQUIRE(!clients.empty());
+    constexpr std::int64_t kMatches = 100'001;
+    lims::test::runSql(
+        "INSERT INTO lims_samples (client_id, reference, state, version, registered_at, site_id) "
+        "WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM n WHERE i < " +
+        std::to_string(kMatches) + ") SELECT " + std::to_string(clients.front().id.Value()) + ", 'CAP-' || i, " +
+        std::to_string(static_cast<int>(lims::SampleState::ToBeVerified)) + ", 1, 0, " +
+        std::to_string(*lims::test::seededSite()) + " FROM n");
+    lims::SampleDirectoryModel lab;
+    CHECK(lab.execute(lims::CountSamplesToVerify{.company = lims::test::seededCompany()}).count == countOf(kMatches));
+    auto const found = lab.execute(lims::SearchSamples{.query = "CAP-", .company = lims::test::seededCompany()});
+    CHECK(found.total == countOf(kMatches));
+    CHECK(found.hits.size() == 8);
+}
+
 // Mutations: count the invoices of every company; count the caller's pending approvals
 // at every company (carl's count at the second company is wrong); answer the total as the number of hits (the total
 // reads as the 8 hits).

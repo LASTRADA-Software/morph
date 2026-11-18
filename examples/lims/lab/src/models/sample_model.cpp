@@ -5,6 +5,7 @@
 #include <Lightweight/SqlTransaction.hpp>
 #include <algorithm>
 #include <cstdint>
+#include <limits>
 #include <memory>
 #include <morph/forms/instance_constraints.hpp>
 #include <morph/session/session.hpp>
@@ -281,9 +282,11 @@ namespace {
 
 ::morph::table::Page<SampleView> SampleModel::pageSamples(std::vector<SiteId> const& sites,
                                                           ::morph::table::TableQuery const& query,
-                                                          std::string_view action) {
+                                                          std::string_view action,
+                                                          ::morph::table::ApplyOptions const& options) {
     // Refuse a bad query before reading every row in scope.
-    if (auto const checked = ::morph::table::validate(query, sampleColumns()); !checked) {
+    if (auto const checked = ::morph::table::validate(query, sampleColumns(), options.limits, options.mayRead);
+        !checked) {
         throw ValidationError{std::string{action} + ": " + checked.error().message};
     }
     std::vector<std::int64_t> siteIds;
@@ -304,7 +307,7 @@ namespace {
         }
     }
     auto page = ::morph::table::apply<SampleView>(
-        rows, [](SampleView const& s) { return ::morph::table::RowId{*s.id}; }, query);
+        rows, [](SampleView const& s) { return ::morph::table::RowId{*s.id}; }, query, options);
     if (!page) {
         throw ValidationError{std::string{action} + ": " + page.error().message};
     }
@@ -338,8 +341,8 @@ namespace {
 /// @param company The company.
 /// @param column The column's id.
 /// @param condition The condition.
-/// @param limit How many rows the page holds; the page's total counts every match.
-/// @return The page.
+/// @param limit How many rows the page holds; the page's total counts every match, at any size.
+/// @return The page, whose total is always present.
 /// @throws ValidationError if the operand does not parse for the column.
 [[nodiscard]] ::morph::table::Page<SampleView> samplesWhere(std::string_view action, CompanyId company,
                                                             std::string column, ::morph::table::FilterEntry condition,
@@ -349,7 +352,10 @@ namespace {
     filter.include.push_back(std::move(condition));
     query.filters.columns.emplace(std::move(column), std::move(filter));
     query.page.limit = limit;
-    return SampleModel::pageSamples(callerSitesAt(company), query, action);
+    // A count is exact at any size, so the total is never capped here.
+    ::morph::table::ApplyOptions options;
+    options.limits.totalCap = std::numeric_limits<std::int64_t>::max();
+    return SampleModel::pageSamples(callerSitesAt(company), query, action, options);
 }
 
 }  // namespace
@@ -362,7 +368,7 @@ OpenWork<SampleView> SampleDirectoryModel::execute(const CountSamplesToVerify& a
     }
     auto const page = samplesWhere("CountSamplesToVerify", action.company, "state",
                                    ::morph::table::FilterEntry{.eq = std::string{"ToBeVerified"}}, 1);
-    return openWork<SampleView>(page.total.value_or(0));
+    return openWork<SampleView>(page.total.value());
 }
 
 // An action handler: the registry calls it on the instance, like every other.
@@ -385,7 +391,7 @@ SearchHits<SampleView> SampleDirectoryModel::execute(const SearchSamples& action
                                   .screen = std::string{hit_screens::kSample},
                                   .params = {{"sampleId", *sample.id}}});
     }
-    return hitsOf<SampleView>(std::move(found), page.total.value_or(0));
+    return hitsOf<SampleView>(std::move(found), page.total.value());
 }
 
 SampleView SampleModel::execute(const ReceiveSample& action) { return transition(action, SampleState::Received); }
