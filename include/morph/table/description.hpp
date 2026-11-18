@@ -16,27 +16,51 @@
 /// its JSON shape and its column's kind, so a cell the server keyed as invalid
 /// is invalid on the client too.
 ///
-/// See `docs/spec/table/table.md`, "A table is a description" and "Rows on the wire".
+/// A model serves a table by a function returning a `ServedTable`, registered
+/// with `BRIDGE_REGISTER_TABLE`; the registration makes the table's actions
+/// (`QueryTable`, `DescribeTable`) and its record (`TableOf`).
+///
+/// See `docs/spec/table/table.md`, "A table is a description", "A model's tables" and "Rows on the wire".
 
 #include <algorithm>
 #include <array>
 #include <charconv>
 #include <cmath>
+#include <core/async/ExecutorContext.hpp>
+#include <core/async/ParkedWork.hpp>
+#include <core/async/Task.hpp>
+#include <coroutine>
 #include <cstddef>
 #include <cstdint>
+#include <exception>
 #include <expected>
+#include <functional>
 #include <glaze/glaze.hpp>
+#include <iterator>
 #include <limits>
+#include <memory>
+#include <morph/attributes.hpp>
+#include <morph/core/action_refusal.hpp>
+#include <morph/core/effects.hpp>
+#include <morph/core/executor.hpp>
 #include <morph/core/payload_schema.hpp>
+#include <morph/core/records.hpp>
+#include <morph/forms/forms.hpp>
+#include <morph/session/session.hpp>
 #include <morph/table/data_source.hpp>
 #include <morph/table/query.hpp>
+#include <morph/table/runtime.hpp>
 #include <morph/util/rational.hpp>
+#include <mutex>
 #include <optional>
+#include <set>
 #include <span>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <system_error>
 #include <type_traits>
+#include <typeindex>
 #include <utility>
 #include <variant>
 #include <vector>
@@ -725,3 +749,655 @@ namespace morph::table {
 // NOLINTEND(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access)
 
 }  // namespace morph::table
+
+// ── A model's tables ───────────────────────────────────────────────────────
+
+namespace morph::table {
+
+class LevelSource;
+
+/// @brief Who asks for a table: what a table's function reads to decide what it serves.
+struct TableContext {
+    /// @brief The caller's session; an empty one outside a dispatch.
+    session::Context const& session;
+};
+
+/// @brief What a model's table function returns: everything the framework needs to answer a query.
+///
+/// The function runs per request on the model's strand and returns shared, immutable things; the framework
+/// pins the source's snapshot there and builds the reply off the strand.
+struct ServedTable {
+    /// @brief The table as this caller sees it; its `revision` is set by the framework.
+    TableDescription description;
+    /// @brief The rows the caller may see, held in memory or read lazily: `apply` runs over it.
+    std::shared_ptr<DataSource const> source;
+    /// @brief The slow levels, one per level the description names.
+    std::vector<std::shared_ptr<LevelSource>> levels;
+    /// @brief Whether the caller may read a column; empty allows every column of the description.
+    std::function<bool(std::string_view column)> mayRead;
+    /// @brief Names everything about the caller that changes the view beyond the query: the row scope and the
+    ///        collation. Empty when every caller sees the same rows in the same order.
+    std::string scope;
+    /// @brief The collator, date parser, comparators and progress sink this caller's order uses.
+    Services services;
+    /// @brief The bounds a query to this table is held to.
+    QueryLimits limits;
+};
+
+/// @brief One row of a table that an action changed.
+struct ChangedRow {
+    /// @brief The row's key.
+    RowId key;
+
+    /// @brief Member-wise equality.
+    /// @param other The row to compare with.
+    /// @return `true` when the keys match.
+    [[nodiscard]] bool operator==(ChangedRow const& other) const = default;
+};
+
+/// @brief What `BRIDGE_REGISTER_TABLE` declares about a table, by its function.
+///
+/// The primary template is no table; the registration specialises it with `model`, `row` (`void` for a table
+/// whose function returns a `ServedTable`, the row type for a `typed<Row>` one), `registered`, `id` and `serve`.
+/// @tparam Function The table's function.
+template <auto Function>
+struct TableTraits {
+    /// @brief `false`: no registration names @p Function.
+    static constexpr bool registered = false;
+};
+
+/// @brief A table's record type: a tag made from the table's function, distinct for each table.
+///
+/// Named by `updatesTable`, `changesTable`, `ChangedRows` and the record registry. A function no registration
+/// names does not compile as a table.
+/// @tparam Function The table's function.
+template <auto Function>
+struct TableOf {
+    static_assert(TableTraits<Function>::registered,
+                  "not a registered table: BRIDGE_REGISTER_TABLE must name this function before it is used");
+};
+
+/// @brief The rows of one table that an action changed: the slot an `updatesTable<Function>` effect reads.
+///
+/// Its JSON is `{"rows": [{"key": …}, …]}`. The result walk reports `TableOf<Function>` at its `rows` member,
+/// keyed by `key`, so an action's changed rows are collected as any record's are.
+/// @tparam Function The table's function, as `BRIDGE_REGISTER_TABLE` names it.
+template <auto Function>
+struct ChangedRows {
+    /// @brief The rows changed, in any order.
+    std::vector<ChangedRow> rows;
+
+    /// @brief The record the rows belong to.
+    using heldRecord = TableOf<Function>;
+
+    /// @brief The member that holds the record's rows.
+    /// @return `"rows"`.
+    [[nodiscard]] static constexpr std::string_view heldMember() noexcept { return "rows"; }
+};
+
+/// @brief A table function that returns typed rows, as `typed<Row>` registers it.
+/// @tparam Row The row type: a glaze-reflectable aggregate registered as a record.
+/// @tparam Fn  The function's type: `std::shared_ptr<std::vector<Row> const> (Model::*)(TableContext const&)`.
+template <typename Row, typename Fn>
+struct Typed {
+    /// @brief The model's function.
+    Fn function;
+};
+
+/// @brief Registers a table from typed rows: its description is built from @p Row and its rows are served
+///        through a `RowsSource<Row>`.
+/// @tparam Row The row type: a glaze-reflectable aggregate registered as a record, whose key is the table's.
+/// @tparam Fn  The function's type, deduced.
+/// @param function The model's function returning the rows the caller may see.
+/// @return The registration's function, for `BRIDGE_REGISTER_TABLE`.
+template <typename Row, typename Fn>
+[[nodiscard]] constexpr Typed<Row, Fn> typed(Fn function) noexcept {
+    static_assert(std::is_member_function_pointer_v<Fn>, "table::typed: the function is a member of the model");
+    return Typed<Row, Fn>{function};
+}
+
+/// @brief Registration option: callers see different rows, so the table's record keeps its keys private.
+struct rowScoped {};
+
+/// @brief Registration option: a change of any of @p Records is a change of the table's record.
+/// @tparam Records Registered record types.
+template <typename... Records>
+struct derivedFrom {};
+
+// NOLINTBEGIN(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access) -- row indices are bounded by the snapshot's own counts
+
+namespace detail {
+
+/// @brief A source holding one snapshot: what a reply is built from off the owner's thread.
+///
+/// A `DataSource` is owner-affine and only its snapshot may cross threads, so the snapshot is taken on the
+/// owner's thread and this source carries it, with a copy of the columns. It never changes.
+class PinnedSource final : public DataSource {
+public:
+    /// @brief Holds @p snapshot under @p columns.
+    /// @param snapshot The rows.
+    /// @param columns  The source's columns when the snapshot was taken.
+    PinnedSource(std::shared_ptr<RowSnapshot const> snapshot, std::vector<ColumnInfo> columns)
+        : _snapshot{std::move(snapshot)}, _columns{std::move(columns)} {}
+
+    /// @brief The columns.
+    /// @return The copy taken with the snapshot.
+    [[nodiscard]] std::span<ColumnInfo const> columns() const override { return _columns; }
+
+    /// @brief The one snapshot.
+    /// @return The snapshot.
+    [[nodiscard]] std::shared_ptr<RowSnapshot const> snapshot() const override { return _snapshot; }
+
+    /// @brief Does nothing: the source never changes.
+    /// @param listener Ignored.
+    void subscribe(ChangeListener& listener) override { static_cast<void>(listener); }
+
+    /// @brief Does nothing: the source never changes.
+    /// @param listener Ignored.
+    void unsubscribe(ChangeListener& listener) override { static_cast<void>(listener); }
+
+private:
+    std::shared_ptr<RowSnapshot const> _snapshot;
+    std::vector<ColumnInfo> _columns;
+};
+
+/// @brief The rows of a shared snapshot whose keys a scope holds, in the shared snapshot's order.
+class ScopedSnapshot final : public RowSnapshot {
+public:
+    /// @brief Maps @p rows onto @p base.
+    /// @param base The shared rows.
+    /// @param rows The rows of @p base in the scope, in order.
+    ScopedSnapshot(std::shared_ptr<RowSnapshot const> base, std::vector<std::size_t> rows)
+        : _base{std::move(base)}, _rows{std::move(rows)} {}
+
+    /// @brief The rows in the scope.
+    /// @return Row count.
+    [[nodiscard]] std::size_t rowCount() const override { return _rows.size(); }
+
+    /// @brief A row's key.
+    /// @param row Row index in the scope.
+    /// @return The shared row's key.
+    [[nodiscard]] RowId rowId(std::size_t row) const override { return _base->rowId(_rows[row]); }
+
+    /// @brief One cell, read from the shared row.
+    /// @param row    Row index in the scope.
+    /// @param column Column index.
+    /// @return The cell.
+    [[nodiscard]] Cell cell(std::size_t row, std::size_t column) const override {
+        return _base->cell(_rows[row], column);
+    }
+
+private:
+    std::shared_ptr<RowSnapshot const> _base;
+    std::vector<std::size_t> _rows;
+};
+
+/// @brief A scope's view of a shared source: the rows whose key the scope holds, sharing every cell.
+///
+/// Its row map is rebuilt, under a mutex, on the first `snapshot()` after the shared source's snapshot
+/// changed. It notifies no change of its own: a reader sees the shared source's changes on its next snapshot.
+class ScopedSource final : public DataSource {
+public:
+    /// @brief Scopes @p source to @p keys.
+    /// @param source The shared source.
+    /// @param keys   The keys of the scope's rows; a key the source lacks is skipped.
+    ScopedSource(std::shared_ptr<DataSource const> source, std::vector<RowId> keys)
+        : _source{std::move(source)},
+          _keys(std::make_move_iterator(keys.begin()), std::make_move_iterator(keys.end())) {}
+
+    /// @brief The shared source's columns.
+    /// @return The columns.
+    [[nodiscard]] std::span<ColumnInfo const> columns() const override { return _source->columns(); }
+
+    /// @brief The scope's rows of the shared source's current snapshot.
+    /// @return The snapshot.
+    [[nodiscard]] std::shared_ptr<RowSnapshot const> snapshot() const override {
+        auto base = _source->snapshot();
+        std::scoped_lock const lock{_mutex};
+        if (base != _base || _scoped == nullptr) {
+            std::vector<std::size_t> rows;
+            rows.reserve(std::min(_keys.size(), base->rowCount()));
+            for (std::size_t row = 0; row < base->rowCount(); ++row) {
+                if (_keys.contains(base->rowId(row))) {
+                    rows.push_back(row);
+                }
+            }
+            _scoped = std::make_shared<ScopedSnapshot const>(base, std::move(rows));
+            _base = std::move(base);
+        }
+        return _scoped;
+    }
+
+    /// @brief Does nothing: the scope notifies no change of its own.
+    /// @param listener Ignored.
+    void subscribe(ChangeListener& listener) override { static_cast<void>(listener); }
+
+    /// @brief Does nothing: the scope notifies no change of its own.
+    /// @param listener Ignored.
+    void unsubscribe(ChangeListener& listener) override { static_cast<void>(listener); }
+
+private:
+    std::shared_ptr<DataSource const> _source;
+    std::set<RowId> _keys;
+    mutable std::mutex _mutex;
+    mutable std::shared_ptr<RowSnapshot const> _base;
+    mutable std::shared_ptr<RowSnapshot const> _scoped;
+};
+
+}  // namespace detail
+
+/// @brief A source of the rows of @p source whose key is in @p keys, without copying a cell.
+///
+/// What a model with row scopes keeps per scope: built when the scope is first asked for and shared from then
+/// on. Its rows keep the shared source's order; keys the source lacks are skipped. A change of the shared
+/// source is seen by the next `snapshot()`.
+/// @param source The shared source.
+/// @param keys   The scope's row keys.
+/// @return The scoped source.
+[[nodiscard]] inline std::shared_ptr<DataSource const> scoped(std::shared_ptr<DataSource const> source,
+                                                              std::vector<RowId> keys) {
+    return std::make_shared<detail::ScopedSource const>(std::move(source), std::move(keys));
+}
+
+namespace detail {
+
+/// @brief What a reply is built with beyond the table and the query.
+struct AnswerContext {};
+
+/// @brief @p served with its source replaced by a `PinnedSource` of one snapshot taken now.
+///
+/// Called on the source's owner thread, the model's strand, before the reply is built anywhere else.
+/// @param served The table as the model served it.
+/// @return The same table over a pinned source; a null source stays null.
+[[nodiscard]] inline ServedTable pinned(ServedTable served) {
+    if (served.source != nullptr) {
+        auto const columns = served.source->columns();
+        served.source = std::make_shared<PinnedSource const>(served.source->snapshot(),
+                                                             std::vector<ColumnInfo>(columns.begin(), columns.end()));
+    }
+    return served;
+}
+
+/// @brief Answers @p query over a served table: the page a `Table.<id>` action returns.
+///
+/// The query is validated against the description's columns, its limits and `mayRead`; the page's columns
+/// are the validated `columns`, or, absent, every description column `mayRead` allows, in the description's
+/// order. Every description column must be one of the source's, or nothing is read. The rows are read from
+/// the source's snapshot only.
+/// @param served  The table, its source pinned (`pinned`).
+/// @param query   The query, as received.
+/// @param context What the reply is built with.
+/// @return The page, its `revision` the description's, or the error the client shows.
+[[nodiscard]] inline std::expected<GenericPage, TableError> answerQuery(ServedTable const& served,
+                                                                        TableQuery const& query,
+                                                                        AnswerContext const& context = {}) {
+    static_cast<void>(context);
+    if (served.source == nullptr) {
+        return std::unexpected(
+            TableError{.code = TableErrorCode::Unavailable, .column = {}, .message = "the table serves no source"});
+    }
+    auto const infos = columnInfos(served.description);
+    auto checked = validate(query, infos, served.limits, served.mayRead);
+    if (!checked) {
+        return std::unexpected(std::move(checked.error()));
+    }
+    auto const sourceColumns = served.source->columns();
+    for (auto const& info : infos) {
+        if (!findColumn(sourceColumns, info.id)) {
+            return std::unexpected(TableError{.code = TableErrorCode::UnknownColumn,
+                                              .column = info.id,
+                                              .message = "the table's source has no column " + info.id});
+        }
+    }
+    std::vector<std::string> columns;
+    if (checked->columns) {
+        columns = std::move(*checked->columns);
+    } else {
+        columns.reserve(infos.size());
+        for (auto const& info : infos) {
+            if (!served.mayRead || served.mayRead(info.id)) {
+                columns.push_back(info.id);
+            }
+        }
+    }
+    auto rows = apply(*served.source, *checked,
+                      ApplyOptions{.limits = served.limits, .services = served.services, .mayRead = served.mayRead});
+    if (!rows) {
+        return std::unexpected(std::move(rows.error()));
+    }
+    auto page = writeGenericPage(*rows, *served.source, columns);
+    page.revision = served.description.revision;
+    return page;
+}
+
+/// @brief The name a `TableErrorCode` has on the wire.
+/// @param code The code.
+/// @return Its JSON name, as `unknownColumn`, without quotes.
+[[nodiscard]] inline std::string errorCodeName(TableErrorCode code) {
+    auto text = glz::write_json(code).value_or(std::string{});
+    if (text.size() >= 2 && text.front() == '"' && text.back() == '"') {
+        text = text.substr(1, text.size() - 2);
+    }
+    return text;
+}
+
+/// @brief The refusal a table's action throws for @p error.
+/// @param error The error.
+/// @return `ActionRefusal{"table." + code, {{"column", column}}, message}`.
+[[nodiscard]] inline model::ActionRefusal refusalOf(TableError const& error) {
+    return model::ActionRefusal{"table." + errorCodeName(error.code),
+                                {model::RefusalArg{.name = "column", .value = error.column}},
+                                error.message};
+}
+
+/// @brief The caller's `TableContext`: the session installed on the calling thread, or an empty one.
+/// @return The context, valid while the session stays installed.
+[[nodiscard]] inline TableContext callerContext() {
+    static session::Context const empty{};
+    auto const* const current = session::current();
+    return TableContext{.session = current != nullptr ? *current : empty};
+}
+
+/// @brief The row type of a registration's function: `void` for one returning a `ServedTable`.
+/// @tparam F The registration's function type.
+template <typename F>
+struct TableRowOf {
+    /// @brief `void`: the function returns a `ServedTable`.
+    using type = void;
+};
+
+/// @brief The row type of a `typed<Row>(…)` registration.
+/// @tparam Row The row type.
+/// @tparam Fn  The function's type.
+template <typename Row, typename Fn>
+struct TableRowOf<Typed<Row, Fn>> {
+    /// @brief The row type.
+    using type = Row;
+};
+
+/// @brief The row type of a registration's function.
+/// @tparam F The registration's function type, as `decltype` gives it.
+template <typename F>
+using TableRow = typename TableRowOf<std::remove_cvref_t<F>>::type;
+
+/// @brief The member function a registration keys its table on.
+/// @tparam F The registration's function type.
+/// @param function A member function pointer, or a `typed<Row>(…)` registration.
+/// @return The member function pointer.
+template <typename F>
+[[nodiscard]] constexpr auto tableKey(F function) noexcept {
+    if constexpr (std::is_void_v<TableRow<F>>) {
+        return function;
+    } else {
+        return function.function;
+    }
+}
+
+/// @brief The record option a table registration option stands for.
+/// @tparam O A table registration option.
+template <typename O>
+struct RecordOptionOf {
+    static_assert(sizeof(O) == 0, "BRIDGE_REGISTER_TABLE: an option is table::rowScoped or table::derivedFrom<...>");
+};
+
+/// @brief `rowScoped` is the record's `privateKeys`.
+template <>
+struct RecordOptionOf<rowScoped> {
+    /// @brief The record option.
+    using type = record::privateKeys;
+};
+
+/// @brief `derivedFrom<Records…>` is the record's.
+/// @tparam Records The source records.
+template <typename... Records>
+struct RecordOptionOf<derivedFrom<Records...>> {
+    /// @brief The record option.
+    using type = record::derivedFrom<Records...>;
+};
+
+/// @brief Static-init helper for `BRIDGE_REGISTER_TABLE`: registers the table's record.
+/// @tparam Key     The table's function.
+/// @tparam Options The registration's options.
+/// @param name The record's wire name, `<model type>.<table id>`.
+/// @return Always true, so the result can initialise a namespace-scope variable.
+template <auto Key, typename... Options>
+inline bool registerTableRecord(std::string const& name) noexcept {
+    return record::detail::registerTableRecordOnce<TableOf<Key>, typename RecordOptionOf<Options>::type...>(name);
+}
+
+/// @brief The key of a typed row, read from its member named @p keyField.
+/// @tparam Row The row type.
+/// @param keyField The key member's JSON name.
+/// @return The projection, or nothing when @p Row has no such member.
+template <typename Row>
+[[nodiscard]] std::optional<RowKey<Row>> rowKeyNamed(std::string_view keyField) {
+    auto const readers = cellReaders<Row>();
+    for (std::size_t index = 0; index < readers.size(); ++index) {
+        if (glz::reflect<Row>::keys[index] == keyField) {
+            return RowKey<Row>{[reader = readers[index]](Row const& row) -> RowId {
+                auto cell = reader(row);
+                if (auto* const text = std::get_if<std::string>(&cell)) {
+                    return RowId{std::move(*text)};
+                }
+                if (auto const* const integer = std::get_if<std::int64_t>(&cell)) {
+                    return RowId{*integer};
+                }
+                return RowId{std::int64_t{0}};
+            }};
+        }
+    }
+    return std::nullopt;
+}
+
+/// @brief The table a `typed<Row>` registration serves: a description built from @p Row and its rows through a
+///        `RowsSource<Row>`.
+///
+/// The columns are `Row`'s reflected members in member order, each labelled by its field metadata or else by
+/// its name made a title; the key is the key member of the record registered for `Row`.
+/// @tparam Row The row type.
+/// @param id   The table's id.
+/// @param rows The rows the caller may see; null serves none.
+/// @return The served table.
+/// @throws std::logic_error when `Row` is not a registered record with a key.
+template <typename Row>
+[[nodiscard]] ServedTable typedTable(std::string_view id, std::shared_ptr<std::vector<Row> const> rows) {
+    auto const& records = effects::detail::resolved().records;
+    auto const record = std::ranges::find(records, std::type_index{typeid(Row)}, &record::RecordInfo::type);
+    if (record == records.end() || !record->keyField) {
+        throw std::logic_error{"table " + std::string{id} + ": its row type is not a registered record with a key"};
+    }
+    auto key = rowKeyNamed<Row>(*record->keyField);
+    if (!key) {
+        throw std::logic_error{"table " + std::string{id} + ": its row type has no member " + *record->keyField};
+    }
+    ServedTable served;
+    served.description.id = std::string{id};
+    served.description.label = forms::detail::inferTitle(id);
+    served.description.key = *record->keyField;
+    for (auto& info : reflectedColumns<Row>()) {
+        auto const* const meta = forms::detail::findFieldMeta<Row>(info.id);
+        std::string label =
+            meta != nullptr && !meta->label.empty() ? std::string{meta->label} : forms::detail::inferTitle(info.id);
+        served.description.columns.push_back(
+            TableColumn{.info = std::move(info), .label = std::move(label), .group = {}});
+    }
+    if (rows == nullptr) {
+        rows = std::make_shared<std::vector<Row> const>();
+    }
+    served.source = std::make_shared<RowsSource<Row> const>(std::move(rows), std::move(*key));
+    return served;
+}
+
+/// @brief A table's `ServedTable`, from its model: the one way to it.
+///
+/// Calls the registered function on @p model, on the model's strand, with @p context; for a `typed<Row>` table
+/// it builds the description and the source from the rows. The description is stamped with its revision.
+/// @tparam Function The table's function, as `BRIDGE_REGISTER_TABLE` keys it.
+/// @tparam Model    The model type.
+/// @param model   The model instance.
+/// @param context Who asks.
+/// @return The served table, its source live.
+template <auto Function, typename Model>
+[[nodiscard]] ServedTable serve(Model& model, TableContext const& context) {
+    using Traits = TableTraits<Function>;
+    static_assert(Traits::registered, "not a registered table");
+    ServedTable served;
+    if constexpr (std::is_void_v<typename Traits::row>) {
+        served = (model.*Function)(context);
+    } else {
+        served = typedTable<typename Traits::row>(Traits::id, (model.*Function)(context));
+    }
+    served.description = describe(std::move(served.description));
+    return served;
+}
+
+/// @brief The awaiter that builds a reply on the table executor and resumes the awaiting coroutine where it
+///        was running.
+///
+/// The work item owns the pinned table and the query. The coroutine resumes through the executor it was
+/// running on when it suspended, its strand, or inline on the worker when it was running on none.
+class AnswerAwaiter {
+    struct Shared {
+        std::expected<GenericPage, TableError> answer;
+        std::exception_ptr error;
+        std::coroutine_handle<> continuation;
+        ::core::async::ResumeTarget context;
+    };
+
+public:
+    /// @brief An answer of @p query over @p served, to run on @p work.
+    /// @param work    The table executor; must outlive the work item.
+    /// @param served  The table, its source pinned.
+    /// @param query   The query.
+    /// @param context What the reply is built with.
+    AnswerAwaiter(exec::IExecutor& work MORPH_LIFETIMEBOUND, ServedTable served, TableQuery query,
+                  AnswerContext context)
+        : _work{&work},
+          _served{std::move(served)},
+          _query{std::move(query)},
+          _context{context},
+          _shared{std::make_shared<Shared>()} {}
+
+    /// @return Always false: the answer is built elsewhere.
+    // Called through the awaiter by the compiler, so not static.
+    // NOLINTNEXTLINE(readability-convert-member-functions-to-static)
+    [[nodiscard]] constexpr bool await_ready() const noexcept { return false; }
+
+    /// @brief Posts the answer to the table executor.
+    /// @param awaiting The coroutine performing the `co_await`.
+    void await_suspend(std::coroutine_handle<> awaiting) {
+        auto shared = _shared;
+        shared->continuation = awaiting;
+        shared->context = ::core::async::ResumeTarget::current();
+        // Nothing of this awaiter is touched after the post: the work may resume the coroutine, and free the
+        // awaiter with its frame, before `post` returns.
+        auto* const work = _work;
+        work->post([shared, served = std::move(_served), query = std::move(_query), context = _context] {
+            try {
+                shared->answer = answerQuery(served, query, context);
+            } catch (...) {
+                shared->error = std::current_exception();
+            }
+            if (shared->context) {
+                shared->context.submit(::core::async::ParkedWork{.resume = shared->continuation, .abandon = {}});
+            } else {
+                shared->continuation.resume();
+            }
+        });
+    }
+
+    /// @brief The answer, or what building it threw.
+    /// @return The answer.
+    std::expected<GenericPage, TableError> await_resume() {
+        if (_shared->error) {
+            std::rethrow_exception(_shared->error);
+        }
+        return std::move(_shared->answer);
+    }
+
+private:
+    exec::IExecutor* _work;
+    ServedTable _served;
+    TableQuery _query;
+    AnswerContext _context;
+    std::shared_ptr<Shared> _shared;
+};
+
+}  // namespace detail
+
+/// @brief The action `Table.<id>`: a page of a table, read by a `TableQuery`.
+///
+/// Its JSON is the `TableQuery`'s. It runs on the model's strand: the table's function is called with the
+/// caller's session and the source's snapshot is pinned there; the page is then built on the server's table
+/// executor (`ServerConfig::tableWork`) and the coroutine resumes on the strand with it. With no table executor
+/// installed, as on a `LocalBackend`, the page is built on the strand.
+/// @tparam Function The table's function, as `BRIDGE_REGISTER_TABLE` keys it.
+template <auto Function>
+struct QueryTable {
+    /// @brief The query.
+    TableQuery query;
+
+    /// @brief Answers the query.
+    /// @tparam Model The model type.
+    /// @param model  The model instance.
+    /// @param action The action.
+    /// @return The page.
+    /// @throws morph::model::ActionRefusal `table.<code>` with the argument `column`, for a query the table
+    ///         refuses.
+    template <typename Model>
+    static ::core::async::Task<GenericPage> invoke(Model& model, QueryTable& action);
+};
+
+/// @brief The action `Table.<id>.describe`: the table's description as the caller sees it.
+///
+/// It runs on the model's strand and reads neither the source nor a snapshot.
+/// @tparam Function The table's function, as `BRIDGE_REGISTER_TABLE` keys it.
+template <auto Function>
+struct DescribeTable {
+    /// @brief Describes the table.
+    /// @tparam Model The model type.
+    /// @param model  The model instance.
+    /// @param action The action.
+    /// @return The description, its revision set.
+    template <typename Model>
+    static TableDescription invoke(Model& model, DescribeTable& action) {
+        static_cast<void>(action);
+        return describe(detail::serve<Function>(model, detail::callerContext()).description);
+    }
+};
+
+template <auto Function>
+template <typename Model>
+::core::async::Task<GenericPage> QueryTable<Function>::invoke(Model& model, QueryTable& action) {
+    // Read before the first suspension: a server installs the runtime for the dispatch's first step only.
+    auto const* const runtime = currentTableRuntime();
+    exec::IExecutor* const work = runtime != nullptr ? runtime->work : nullptr;
+    detail::AnswerContext const context{};
+    auto served = detail::pinned(detail::serve<Function>(model, detail::callerContext()));
+    std::expected<GenericPage, TableError> answer;
+    if (work == nullptr) {
+        answer = detail::answerQuery(served, action.query, context);
+    } else {
+        // Its own statement: MSVC cannot tail-call a call that shares a full-expression with a `co_await`.
+        auto awaited = co_await detail::AnswerAwaiter{*work, std::move(served), action.query, context};
+        answer = std::move(awaited);
+    }
+    if (!answer) {
+        throw detail::refusalOf(answer.error());
+    }
+    co_return std::move(*answer);
+}
+
+// NOLINTEND(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access)
+
+}  // namespace morph::table
+
+/// @brief The JSON of `morph::table::QueryTable`: its `TableQuery`'s.
+/// @tparam Function The table's function.
+template <auto Function>
+struct glz::meta<morph::table::QueryTable<Function>> {
+    /// @brief The action type.
+    using T = morph::table::QueryTable<Function>;
+    /// @brief The action is written as its query.
+    static constexpr auto value = &T::query;
+};

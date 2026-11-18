@@ -19,6 +19,7 @@
 #include <morph/journal/journal.hpp>
 #include <morph/session/session.hpp>
 #include <morph/session/session_auth.hpp>
+#include <morph/table/runtime.hpp>
 #include <morph/ui/author.hpp>
 #include <morph/util/datetime.hpp>
 #include <morph/util/rational.hpp>
@@ -152,6 +153,17 @@ const RunOrigin*& tlsOrigin() {
 }
 
 }  // namespace morph::session::detail
+
+namespace morph::table {
+
+TableRuntime const*& detail::tableRuntimeSlot() noexcept {
+    thread_local TableRuntime const* tls = nullptr;
+    return tls;
+}
+
+TableRuntime const* currentTableRuntime() noexcept { return detail::tableRuntimeSlot(); }
+
+}  // namespace morph::table
 
 namespace morph::effects::detail {
 

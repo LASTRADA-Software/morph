@@ -12,6 +12,7 @@
 /// registry is first read.
 
 #include <algorithm>
+#include <concepts>
 #include <cstddef>
 #include <functional>
 #include <glaze/glaze.hpp>
@@ -36,6 +37,9 @@ struct ResultSlot {
     /// The JSON path to it: member names joined with `.`, empty for the result itself.
     /// A `std::vector`, `std::optional` or `std::map` value adds no segment.
     std::string path;
+    /// True when the result holds the type with no path a key can be read at: the
+    /// action holds the record, but no reader finds its rows in the value.
+    bool opaque = false;
 };
 
 /// @brief What one action id's registration recorded about its result.
@@ -114,6 +118,14 @@ consteval bool mayHoldSlots() {
     }
 }
 
+/// @brief A type that holds a record's rows at one of its members, under another type than the rows': it names
+///        the record as `heldRecord` and the member as `heldMember()`.
+template <typename T>
+concept HoldsRecord = requires {
+    typename T::heldRecord;
+    { T::heldMember() } -> std::convertible_to<std::string_view>;
+};
+
 /// @brief The state of one walk.
 struct Walk {
     /// The slots found so far.
@@ -157,6 +169,11 @@ void visit(Walk& walk, std::string const& path) {
             return;
         }
         walk.found.push_back(ResultSlot{.type = self, .path = path});
+        if constexpr (HoldsRecord<T>) {
+            std::string const member{T::heldMember()};
+            walk.found.push_back(ResultSlot{.type = std::type_index{typeid(typename T::heldRecord)},
+                                            .path = path.empty() ? member : path + "." + member});
+        }
         walk.onPath.push_back(self);
         visitMembers<T>(walk, path, std::make_index_sequence<glz::reflect<T>::size>{});
         walk.onPath.pop_back();
@@ -170,9 +187,10 @@ void visit(Walk& walk, std::string const& path) {
 /// The result itself, a `std::vector`, `std::optional` or `std::map` value of a
 /// visited type, and the members of a reflected aggregate are visited,
 /// depth-first. Member names are glaze's reflected keys, which are the names
-/// the codec writes. `void`, scalars, strings, types whose `glz::meta` replaces
-/// the codec, and pure-reflection types in an anonymous namespace are skipped.
-/// The walk stops at a type already on its path, so recursive types end.
+/// the codec writes. A type with a `heldRecord` and a `heldMember()` also
+/// reports its `heldRecord` at that member, beside its own slot. `void`, scalars, strings, types whose `glz::meta`
+/// replaces the codec, and pure-reflection types in an anonymous namespace are skipped. The walk stops at a type
+/// already on its path, so recursive types end.
 /// @tparam R The result type, `void` included.
 /// @return The slots in visiting order.
 template <typename R>

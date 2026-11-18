@@ -7,6 +7,7 @@
 #include <format>
 #include <iterator>
 #include <morph/core/payload_schema.hpp>
+#include <mutex>
 #include <stdexcept>
 #include <type_traits>
 #include <utility>
@@ -523,6 +524,162 @@ std::size_t processBytes() noexcept {
 #else
     return 0;
 #endif
+}
+
+namespace {
+
+// The model's process-wide state: the options, and each table's source once a call has built it.
+struct WideModelState {
+    std::mutex mutex;
+    WideTableOptions wide{.rows = 100'000, .columns = 300, .seed = 1, .loadDelay = {}};
+    WideTableOptions small{.rows = 1'000, .columns = 30, .seed = 1, .loadDelay = {}};
+    std::shared_ptr<WideTableSource> wideSource;
+    std::shared_ptr<WideTableSource> smallSource;
+};
+
+WideModelState& wideModelState() {
+    static WideModelState state;
+    return state;
+}
+
+// The source of one table, built under the state's mutex by the first call that needs it.
+std::shared_ptr<WideTableSource> sourceOf(bool wide) {
+    auto& state = wideModelState();
+    std::scoped_lock const lock{state.mutex};
+    auto& source = wide ? state.wideSource : state.smallSource;
+    if (source == nullptr) {
+        source = std::make_shared<WideTableSource>(wide ? state.wide : state.small);
+    }
+    return source;
+}
+
+// Sets both tables' seed and returns the sources built so far, building neither.
+std::pair<std::shared_ptr<WideTableSource>, std::shared_ptr<WideTableSource>> builtSources(std::uint64_t seed) {
+    auto& state = wideModelState();
+    std::scoped_lock const lock{state.mutex};
+    state.wide.seed = seed;
+    state.small.seed = seed;
+    return {state.wideSource, state.smallSource};
+}
+
+morph::table::TableDescription const& describedWide() {
+    static auto const description = morph::table::describe(wideDescription("wide", 300));
+    return description;
+}
+
+morph::table::TableDescription const& describedSmall() {
+    static auto const description = morph::table::describe(wideDescription("small", 30));
+    return description;
+}
+
+// `base` without `dropped`, from its columns and from its groups; a group left with fewer than two columns goes.
+morph::table::TableDescription without(morph::table::TableDescription base, std::vector<std::string> const& dropped) {
+    auto const isDropped = [&](std::string const& id) { return std::ranges::find(dropped, id) != dropped.end(); };
+    std::erase_if(base.columns, [&](morph::table::TableColumn const& column) { return isDropped(column.info.id); });
+    for (auto& group : base.groups) {
+        std::erase_if(group.columns, isDropped);
+    }
+    std::erase_if(base.groups, [](morph::table::ColumnGroupInfo const& group) { return group.columns.size() < 2; });
+    for (auto& column : base.columns) {
+        if (!column.group.empty() &&
+            std::ranges::find(base.groups, column.group, &morph::table::ColumnGroupInfo::id) == base.groups.end()) {
+            column.group.clear();
+        }
+    }
+    base.id = "scoped";
+    base.label = "scoped";
+    return morph::table::describe(std::move(base));
+}
+
+std::vector<std::string> numbered(char prefix, int count) {
+    std::vector<std::string> out;
+    for (int i = 0; i < count; ++i) {
+        out.push_back(std::format("{}{:03}", prefix, i));
+    }
+    return out;
+}
+
+morph::table::TableDescription const& scopedDescription(std::string_view principal) {
+    static auto const extended = without(describedSmall(), {});
+    static auto const common = without(describedSmall(), numbered('d', 6));
+    static auto const restricted = [] {
+        auto dropped = numbered('d', 6);
+        auto texts = numbered('t', 7);
+        dropped.insert(dropped.end(), texts.begin(), texts.end());
+        return without(describedSmall(), dropped);
+    }();
+    if (principal == "extended") {
+        return extended;
+    }
+    return principal == "restricted" ? restricted : common;
+}
+
+morph::table::ServedTable served(morph::table::TableDescription const& description,
+                                 std::shared_ptr<WideTableSource> source) {
+    morph::table::ServedTable out;
+    out.description = description;
+    out.source = std::move(source);
+    return out;
+}
+
+}  // namespace
+
+void WideTableModel::configure(WideTableOptions wide, WideTableOptions small) {
+    auto& state = wideModelState();
+    std::scoped_lock const lock{state.mutex};
+    state.wide = wide;
+    state.small = small;
+    state.wideSource.reset();
+    state.smallSource.reset();
+}
+
+morph::table::ServedTable WideTableModel::wide(morph::table::TableContext const& context) {
+    static_cast<void>(context);
+    return served(describedWide(), sourceOf(true));
+}
+
+morph::table::ServedTable WideTableModel::small(morph::table::TableContext const& context) {
+    static_cast<void>(context);
+    return served(describedSmall(), sourceOf(false));
+}
+
+morph::table::ServedTable WideTableModel::scoped(morph::table::TableContext const& context) {
+    auto const& description = scopedDescription(context.session.principal);
+    auto out = served(description, sourceOf(false));
+    out.mayRead = [&description](std::string_view column) {
+        return std::ranges::any_of(description.columns, [&](morph::table::TableColumn const& entry) {
+            return entry.info.id == column;
+        });
+    };
+    return out;
+}
+
+EditWideRowResult WideTableModel::execute(EditWideRow const& action) {
+    EditWideRowResult result;
+    morph::table::RowId const key{action.row + 1};
+    auto const wideSource = sourceOf(true);
+    wideSource->setCell(action.row, action.column, Cell{action.value});
+    result.wide.rows.push_back(morph::table::ChangedRow{.key = key});
+    auto const smallSource = sourceOf(false);
+    auto const& columns = smallSource->columns();
+    if (action.row < smallSource->options().rows &&
+        std::ranges::find(columns, action.column, &ColumnInfo::id) != columns.end()) {
+        smallSource->setCell(action.row, action.column, Cell{action.value});
+        result.small.rows.push_back(morph::table::ChangedRow{.key = key});
+    }
+    return result;
+}
+
+bool WideTableModel::execute(ReplaceWideRows const& action) {
+    // A source not built yet is built from the new seed.
+    auto const [wideSource, smallSource] = builtSources(action.seed);
+    if (wideSource != nullptr) {
+        wideSource->regenerate(action.seed);
+    }
+    if (smallSource != nullptr) {
+        smallSource->regenerate(action.seed);
+    }
+    return true;
 }
 
 std::uint64_t digestForTesting(WideTableSource const& source) {

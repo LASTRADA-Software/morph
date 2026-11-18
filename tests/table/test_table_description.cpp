@@ -19,27 +19,44 @@
 //  - writeGenericPage ignoring `columns`: "a page names only the asked columns" fails.
 //  - writeGenericPage writing the first 40 columns whatever it is given: "a whole page fits an envelope" fails.
 //  - a glz::meta for TableDescription that leaves out `groups`: "a 300-column description round-trips" fails.
+//  The table registration cases name their own mutations at their ends.
 
 #include <algorithm>
 #include <catch2/catch_test_macros.hpp>
 #include <cmath>
 #include <cstdint>
+#include <functional>
 #include <glaze/glaze.hpp>
 #include <limits>
 #include <memory>
+#include <morph/core/bridge.hpp>
+#include <morph/core/changes.hpp>
+#include <morph/core/effects.hpp>
+#include <morph/core/records.hpp>
+#include <morph/core/remote.hpp>
 #include <morph/core/wire.hpp>
+#include <morph/session/session.hpp>
 #include <morph/table/description.hpp>
 #include <morph/table/query.hpp>
 #include <morph/table/sort.hpp>
+#include <mutex>
 #include <numeric>
 #include <optional>
+#include <set>
+#include <span>
+#include <stdexcept>
 #include <string>
+#include <string_view>
+#include <thread>
+#include <type_traits>
+#include <typeindex>
 #include <utility>
 #include <variant>
 #include <vector>
 
 #include "table/table_fixtures.hpp"
 #include "table/wide_table_model.hpp"
+#include "test_support.hpp"
 
 using namespace morph::table;
 using morph::math::DecimalPlaces;
@@ -424,4 +441,634 @@ TEST_CASE("description: a 300-column description round-trips", "[table][descript
     CHECK(back.groups[1].columns.size() == 16);
     CHECK(back.revision.size() == 16);
     // Mutation: a glz::meta for TableDescription that leaves out `groups` (the read description has none).
+}
+
+// ── Tables of a model on the bridge ─────────────────────────────────────────
+
+namespace tabledesc {
+
+// A record a table is derived from, and an action that changes it.
+struct RtSource {
+    std::int64_t id = 0;
+};
+
+struct RtTouch {};
+
+class RtModel {
+public:
+    morph::table::ServedTable mine(morph::table::TableContext const& context);
+    morph::table::ServedTable theirs(morph::table::TableContext const& context);
+    bool execute(RtTouch const& action);
+};
+
+// Two models with a table function of the same name; neither is registered (see the uniqueness case).
+class UqA {
+public:
+    morph::table::ServedTable rows(morph::table::TableContext const& context);
+};
+
+class UqB {
+public:
+    morph::table::ServedTable rows(morph::table::TableContext const& context);
+};
+
+// A typed table's rows.
+struct TypedRow {
+    std::int64_t id = 0;
+    std::string name;
+    morph::math::Rational price;
+};
+
+class TypedModel {
+public:
+    std::shared_ptr<std::vector<TypedRow> const> rows(morph::table::TableContext const& context);
+};
+
+// A table that throws on its first call, names a column its source lacks on its second, and is well formed after.
+class FlakyModel {
+public:
+    morph::table::ServedTable flaky(morph::table::TableContext const& context);
+
+private:
+    int _calls = 0;
+};
+
+// A result that holds no ChangedRows.
+struct NoTableResult {
+    std::vector<int> ids;
+};
+
+// The threads a recorded snapshot was read on, and the thread the table's function last ran on.
+struct WorkThreads {
+    std::mutex mutex;
+    std::set<std::thread::id> reads;
+    std::thread::id served;
+
+    void noteRead() {
+        std::scoped_lock const lock{mutex};
+        reads.insert(std::this_thread::get_id());
+    }
+};
+
+inline WorkThreads& workThreads() {
+    static WorkThreads shared;
+    return shared;
+}
+
+// A snapshot that records the thread of every read of a cell.
+class RecordingSnapshot final : public morph::table::RowSnapshot {
+public:
+    explicit RecordingSnapshot(std::shared_ptr<morph::table::RowSnapshot const> inner) : _inner{std::move(inner)} {}
+
+    [[nodiscard]] std::size_t rowCount() const override { return _inner->rowCount(); }
+    [[nodiscard]] RowId rowId(std::size_t row) const override { return _inner->rowId(row); }
+    [[nodiscard]] Cell cell(std::size_t row, std::size_t column) const override {
+        workThreads().noteRead();
+        return _inner->cell(row, column);
+    }
+    void readColumn(std::size_t column, morph::table::ColumnSink& sink, std::size_t first,
+                    std::size_t last) const override {
+        workThreads().noteRead();
+        _inner->readColumn(column, sink, first, last);
+    }
+
+private:
+    std::shared_ptr<morph::table::RowSnapshot const> _inner;
+};
+
+// A source whose snapshots record their reads.
+class RecordingSource final : public DataSource {
+public:
+    explicit RecordingSource(std::shared_ptr<DataSource const> inner) : _inner{std::move(inner)} {}
+
+    [[nodiscard]] std::span<ColumnInfo const> columns() const override { return _inner->columns(); }
+    [[nodiscard]] std::shared_ptr<morph::table::RowSnapshot const> snapshot() const override {
+        return std::make_shared<RecordingSnapshot const>(_inner->snapshot());
+    }
+    void subscribe(morph::table::ChangeListener& /*listener*/) override {}
+    void unsubscribe(morph::table::ChangeListener& /*listener*/) override {}
+
+private:
+    std::shared_ptr<DataSource const> _inner;
+};
+
+// A table read through a recording source.
+class WorkModel {
+public:
+    morph::table::ServedTable work(morph::table::TableContext const& context);
+};
+
+}  // namespace tabledesc
+
+BRIDGE_REGISTER_RECORD(tabledesc::RtSource, "RtSource")
+BRIDGE_REGISTER_RECORD(tabledesc::TypedRow, "TypedRow")
+BRIDGE_REGISTER_MODEL(tabledesc::RtModel, "RtModel")
+BRIDGE_REGISTER_TABLE(tabledesc::RtModel, "mine", &tabledesc::RtModel::mine, morph::table::rowScoped)
+BRIDGE_REGISTER_TABLE(tabledesc::RtModel, "theirs", &tabledesc::RtModel::theirs,
+                      morph::table::derivedFrom<tabledesc::RtSource>)
+BRIDGE_REGISTER_ACTION(tabledesc::RtModel, tabledesc::RtTouch, "RtTouch")
+BRIDGE_REGISTER_EFFECTS(tabledesc::RtTouch, morph::effects::changes<tabledesc::RtSource>)
+BRIDGE_REGISTER_MODEL(tabledesc::TypedModel, "TypedModel")
+BRIDGE_REGISTER_TABLE(tabledesc::TypedModel, "typedRows",
+                      morph::table::typed<tabledesc::TypedRow>(&tabledesc::TypedModel::rows))
+BRIDGE_REGISTER_MODEL(tabledesc::FlakyModel, "FlakyModel")
+BRIDGE_REGISTER_TABLE(tabledesc::FlakyModel, "flaky", &tabledesc::FlakyModel::flaky)
+BRIDGE_REGISTER_MODEL(tabledesc::WorkModel, "WorkModel")
+BRIDGE_REGISTER_TABLE(tabledesc::WorkModel, "work", &tabledesc::WorkModel::work)
+
+namespace tabledesc {
+
+namespace {
+
+// A one-column table over `rows` integer rows keyed 1..rows.
+morph::table::ServedTable oneColumnTable(std::string id, std::int64_t rows) {
+    morph::table::ServedTable served;
+    served.description =
+        describe(TableDescription{.id = std::move(id), .label = "T", .columns = {column("v", ColumnKind::Integer)}});
+    auto source = std::make_shared<VectorSource>(columnInfos(served.description));
+    std::vector<std::vector<Cell>> cells;
+    for (std::int64_t row = 1; row <= rows; ++row) {
+        cells.push_back({Cell{row * 10}});
+    }
+    source->setRows(intKeys(static_cast<std::size_t>(rows)), std::move(cells));
+    served.source = std::move(source);
+    return served;
+}
+
+std::vector<TypedRow> typedRows() {
+    return {TypedRow{.id = 1, .name = "Alpha", .price = dec("12.50")},
+            TypedRow{.id = 2, .name = "Beta", .price = dec("3.25")},
+            TypedRow{.id = 3, .name = "Gamma", .price = dec("40.00")}};
+}
+
+}  // namespace
+
+morph::table::ServedTable RtModel::mine(morph::table::TableContext const& context) {
+    static_cast<void>(context);
+    return oneColumnTable("mine", 3);
+}
+
+morph::table::ServedTable RtModel::theirs(morph::table::TableContext const& context) {
+    static_cast<void>(context);
+    return oneColumnTable("theirs", 3);
+}
+
+bool RtModel::execute(RtTouch const& action) {
+    static_cast<void>(action);
+    return true;
+}
+
+morph::table::ServedTable UqA::rows(morph::table::TableContext const& context) {
+    static_cast<void>(context);
+    return oneColumnTable("rows", 1);
+}
+
+morph::table::ServedTable UqB::rows(morph::table::TableContext const& context) {
+    static_cast<void>(context);
+    return oneColumnTable("rows", 2);
+}
+
+std::shared_ptr<std::vector<TypedRow> const> TypedModel::rows(morph::table::TableContext const& context) {
+    static_cast<void>(context);
+    return std::make_shared<std::vector<TypedRow> const>(typedRows());
+}
+
+morph::table::ServedTable FlakyModel::flaky(morph::table::TableContext const& context) {
+    static_cast<void>(context);
+    ++_calls;
+    if (_calls == 1) {
+        throw std::runtime_error{"the flaky table failed"};
+    }
+    auto served = oneColumnTable("flaky", 3);
+    if (_calls == 2) {
+        served.description.columns.push_back(column("ghost", ColumnKind::Text));
+    }
+    return served;
+}
+
+morph::table::ServedTable WorkModel::work(morph::table::TableContext const& context) {
+    static_cast<void>(context);
+    {
+        std::scoped_lock const lock{workThreads().mutex};
+        workThreads().served = std::this_thread::get_id();
+    }
+    auto served = oneColumnTable("work", 50);
+    served.source = std::make_shared<RecordingSource const>(std::move(served.source));
+    return served;
+}
+
+}  // namespace tabledesc
+
+namespace {
+
+// A pool that records the threads its tasks run on.
+class RecordingPool final : public morph::exec::IExecutor {
+public:
+    void post(std::function<void()> task) override {
+        _pool.post([this, task = std::move(task)] {
+            {
+                std::scoped_lock const lock{_mutex};
+                _threads.insert(std::this_thread::get_id());
+            }
+            task();
+        });
+    }
+
+    [[nodiscard]] bool isSerial() const noexcept override { return false; }
+
+    std::set<std::thread::id> threads() {
+        std::scoped_lock const lock{_mutex};
+        return _threads;
+    }
+
+private:
+    std::mutex _mutex;
+    std::set<std::thread::id> _threads;
+    morph::exec::ThreadPoolExecutor _pool{2};
+};
+
+std::vector<RowId> keysOfApply(DataSource const& source, TableQuery const& query) {
+    auto const page = apply(source, query);
+    REQUIRE(page.has_value());
+    auto const snapshot = source.snapshot();
+    std::vector<RowId> out;
+    for (auto const row : page->rows) {
+        out.push_back(snapshot->rowId(row));
+    }
+    return out;
+}
+
+std::vector<std::string> idsOf(TableDescription const& description) {
+    std::vector<std::string> out;
+    for (auto const& entry : description.columns) {
+        out.push_back(entry.info.id);
+    }
+    return out;
+}
+
+morph::effects::detail::DeclaredEffect updatesOf(std::type_index record) {
+    return {.kind = morph::effects::Kind::Updates, .record = record};
+}
+
+bool holdsProblem(std::function<void()> const& resolve, std::string const& problem) {
+    try {
+        resolve();
+    } catch (morph::model::EffectsRegistrationError const& error) {
+        return std::ranges::find(error.problems(), problem) != error.problems().end();
+    }
+    return false;
+}
+
+std::vector<std::string> keyTexts(morph::effects::RecordChange const& change) {
+    std::vector<std::string> out;
+    if (change.keys) {
+        for (auto const& key : *change.keys) {
+            out.push_back(key.str);
+        }
+    }
+    return out;
+}
+
+morph::effects::RecordChange const* changeOf(morph::effects::Changes const& changes, std::string_view record) {
+    auto const found = std::ranges::find(changes.records, record, &morph::effects::RecordChange::record);
+    return found == changes.records.end() ? nullptr : &*found;
+}
+
+morph::effects::InstanceChange const kRanOn{.modelType = "WideTableModel", .instance = 1, .primary = {}};
+
+}  // namespace
+
+TEST_CASE("table registration: a model with no row type serves a table", "[table][registration]") {
+    bench::WideTableModel::configure({.rows = 2'000, .columns = 300, .seed = 7, .loadDelay = {}},
+                                     {.rows = 1'000, .columns = 30, .seed = 7, .loadDelay = {}});
+    morph::session::Context const session{};
+    TableContext const context{.session = session};
+    bench::WideTableModel model;
+    auto const served = detail::pinned(model.small(context));
+    TableQuery query;
+    query.sort = {SortKey{.column = "i001", .dir = SortDirection::Ascending}};
+    query.filters.columns["t001"].include.push_back(FilterEntry{.contains = "a"});
+    query.page = PageRequest{.offset = 0, .limit = 10};
+
+    auto const page = detail::answerQuery(served, query);
+    REQUIRE(page.has_value());
+    bench::WideTableSource const fresh{{.rows = 1'000, .columns = 30, .seed = 7, .loadDelay = {}}};
+    auto const expected = keysOfApply(fresh, query);
+    REQUIRE(expected.size() == 10);
+    CHECK(page->keys == expected);
+    std::vector<std::string> layout;
+    for (auto const& entry : bench::wideColumns(30)) {
+        layout.push_back(entry.info.id);
+    }
+    CHECK(page->columns == layout);
+    CHECK(page->revision == describe(served.description).revision);
+    CHECK_FALSE(page->revision.empty());
+    // Spec row "A table from a description", server half. Mutation: answerQuery ignoring query.sort.
+}
+
+TEST_CASE("table registration: two tables of one model are two records and two actions", "[table][registration]") {
+    for (std::string_view const name : {"WideTableModel.wide", "WideTableModel.small", "WideTableModel.scoped"}) {
+        INFO(name);
+        auto const* const record = morph::effects::recordNamed(name);
+        REQUIRE(record != nullptr);
+        CHECK(record->keyField == std::optional<std::string>{"key"});
+        CHECK(record->table);
+    }
+    using morph::effects::ActionRecord;
+    CHECK(morph::effects::recordsOf("Table.wide") ==
+          std::vector<ActionRecord>{
+              ActionRecord{.record = "WideTableModel.wide", .keyField = "key", .paths = {}, .opaque = true}});
+    CHECK(morph::effects::actionsHolding("WideTableModel.wide") ==
+          std::vector<std::string>{"EditWideRow", "Table.wide"});
+    CHECK(morph::effects::actionsHolding("WideTableModel.small") ==
+          std::vector<std::string>{"EditWideRow", "Table.small"});
+    using morph::effects::Effect;
+    using morph::effects::Kind;
+    CHECK(morph::effects::effectsOf("EditWideRow") ==
+          std::vector<Effect>{{.kind = Kind::Updates, .record = "WideTableModel.wide"},
+                              {.kind = Kind::Updates, .record = "WideTableModel.small"}});
+    CHECK(morph::effects::effectsOf("ReplaceWideRows") ==
+          std::vector<Effect>{{.kind = Kind::Changes, .record = "WideTableModel.wide"},
+                              {.kind = Kind::Changes, .record = "WideTableModel.small"}});
+    // Mutation: one record for the model (the record named by the model alone): the second registration conflicts.
+}
+
+TEST_CASE("changed rows: the walk reports the table at its rows member", "[table][registration]") {
+    using morph::model::detail::ResultSlot;
+    auto const slots = morph::model::detail::walkResult<bench::EditWideRowResult>();
+    auto const holds = [&](std::type_index type, std::string_view path) {
+        return std::ranges::any_of(slots,
+                                   [&](ResultSlot const& slot) { return slot.type == type && slot.path == path; });
+    };
+    CHECK(holds(typeid(TableOf<&bench::WideTableModel::wide>), "wide.rows"));
+    CHECK(holds(typeid(TableOf<&bench::WideTableModel::small>), "small.rows"));
+
+    auto const changes = morph::effects::deriveChanges(
+        "EditWideRow", R"({"wide":{"rows":[{"key":5}]},"small":{"rows":[{"key":5}]}})", kRanOn);
+    auto const* const wide = changeOf(changes, "WideTableModel.wide");
+    auto const* const small = changeOf(changes, "WideTableModel.small");
+    REQUIRE(wide != nullptr);
+    REQUIRE(small != nullptr);
+    CHECK(keyTexts(*wide) == std::vector<std::string>{"5"});
+    CHECK(keyTexts(*small) == std::vector<std::string>{"5"});
+    // Mutation: the walker without the heldRecord rule (the registry then refuses EditWideRow's updates).
+}
+
+TEST_CASE("changed rows: updatesTable without its ChangedRows is refused when the registries resolve",
+          "[table][registration]") {
+    using morph::model::detail::ActionResult;
+    using morph::model::detail::walkResult;
+    auto const* const record = morph::effects::recordNamed("WideTableModel.wide");
+    REQUIRE(record != nullptr);
+    morph::effects::detail::EffectsMap declared;
+    morph::effects::detail::addEffects(declared, "Bad", {updatesOf(typeid(TableOf<&bench::WideTableModel::wide>))});
+    std::string const problem =
+        "action `Bad` declares updates on record `WideTableModel.wide`, but its result holds no `WideTableModel.wide`";
+
+    morph::model::detail::ActionResultSlotMap bad;
+    bad.emplace("Bad", ActionResult{.action = typeid(tabledesc::NoTableResult),
+                                    .resultSlots = walkResult<tabledesc::NoTableResult>()});
+    CHECK(holdsProblem([&] { static_cast<void>(morph::effects::detail::resolveForTesting({*record}, bad, declared)); },
+                       problem));
+
+    morph::model::detail::ActionResultSlotMap good;
+    good.emplace("Bad", ActionResult{.action = typeid(bench::EditWideRowResult),
+                                     .resultSlots = walkResult<bench::EditWideRowResult>()});
+    auto const resolved = morph::effects::detail::resolveForTesting({*record}, good, declared);
+    auto const held = resolved.recordsOf("Bad");
+    REQUIRE(held.size() == 1);
+    CHECK(held[0].record == "WideTableModel.wide");
+    CHECK(held[0].paths == std::vector<std::string>{"wide.rows"});
+    // Mutation: the walker without the heldRecord rule (the second call throws the same problem).
+}
+
+TEST_CASE("table registration: one table id in two models is refused when the registries resolve",
+          "[table][registration]") {
+    // Two query actions under one id are two action types: what registerActionResultOnce lists as a conflict.
+    static_assert(!std::is_same_v<QueryTable<&tabledesc::UqA::rows>, QueryTable<&tabledesc::UqB::rows>>);
+    morph::model::detail::ActionResultSlotMap slots;
+    slots.emplace("Table.rows", morph::model::detail::ActionResult{.action = typeid(QueryTable<&tabledesc::UqA::rows>),
+                                                                   .resultSlots = {}});
+    CHECK(holdsProblem(
+        [&] { static_cast<void>(morph::effects::detail::resolveForTesting({}, slots, {}, {"Table.rows"})); },
+        "action `Table.rows` is registered by two action types; give each its own id"));
+    // This executable's tables all have different ids, so its process registry holds no conflict.
+    CHECK(morph::model::detail::actionResultConflicts().empty());
+    // Mutation: QueryTable keyed on the table's id text instead of its function (the static_assert fails: two
+    // models' tables would share one action type and a second table "rows" would answer with the first's rows).
+}
+
+TEST_CASE("table registration: rowScoped and derivedFrom are the record's", "[table][registration]") {
+    auto const* const mine = morph::effects::recordNamed("RtModel.mine");
+    REQUIRE(mine != nullptr);
+    CHECK(mine->privateKeys);
+    auto const* const theirs = morph::effects::recordNamed("RtModel.theirs");
+    REQUIRE(theirs != nullptr);
+    CHECK(theirs->derivedFrom == std::vector<std::type_index>{typeid(tabledesc::RtSource)});
+    CHECK(theirs->keyField == std::optional<std::string>{"key"});
+    CHECK_FALSE(theirs->privateKeys);
+    auto const changes = morph::effects::deriveChanges("RtTouch", "{}", kRanOn);
+    auto const* const change = changeOf(changes, "RtModel.theirs");
+    REQUIRE(change != nullptr);
+    CHECK_FALSE(change->keys.has_value());
+    // Mutation: keeping "a derived record is keyless" for tables (the process registry fails to resolve).
+}
+
+TEST_CASE("columns by session: two principals get two descriptions", "[table][registration]") {
+    bench::WideTableModel::configure({.rows = 2'000, .columns = 300, .seed = 7, .loadDelay = {}},
+                                     {.rows = 1'000, .columns = 30, .seed = 7, .loadDelay = {}});
+    bench::WideTableModel model;
+    morph::session::Context const alice{.principal = "alice"};
+    morph::session::Context const extended{.principal = "extended"};
+    morph::session::Context const restricted{.principal = "restricted"};
+    auto const aliceTable = model.scoped(TableContext{.session = alice});
+    auto const extendedTable = model.scoped(TableContext{.session = extended});
+    auto const restrictedTable = model.scoped(TableContext{.session = restricted});
+    auto const aliceDescription = describe(aliceTable.description);
+    auto const extendedDescription = describe(extendedTable.description);
+    auto const restrictedDescription = describe(restrictedTable.description);
+    CHECK(aliceDescription.columns.size() == 24);
+    CHECK(extendedDescription.columns.size() == 30);
+    CHECK(restrictedDescription.columns.size() == 17);
+    CHECK(aliceDescription.revision != extendedDescription.revision);
+    CHECK(aliceDescription.revision != restrictedDescription.revision);
+    CHECK(extendedDescription.revision != restrictedDescription.revision);
+
+    TableQuery query;
+    query.page = PageRequest{.offset = 0, .limit = 5};
+    auto const restrictedPage = detail::answerQuery(detail::pinned(restrictedTable), query);
+    REQUIRE(restrictedPage.has_value());
+    CHECK(restrictedPage->columns == idsOf(restrictedDescription));
+    CHECK(restrictedPage->columns.size() == 17);
+
+    query.columns = std::vector<std::string>{"d000"};
+    auto const refused = detail::answerQuery(detail::pinned(restrictedTable), query);
+    REQUIRE_FALSE(refused.has_value());
+    CHECK(refused.error().code == TableErrorCode::UnknownColumn);
+    CHECK(refused.error().column == "d000");
+
+    query.columns.reset();
+    auto const alicePage = detail::answerQuery(detail::pinned(aliceTable), query);
+    REQUIRE(alicePage.has_value());
+    CHECK(alicePage->revision == aliceDescription.revision);
+
+    // A description that lists i001 under a mayRead that refuses it: the page neither names nor carries it.
+    auto narrowed = model.small(TableContext{.session = alice});
+    narrowed.mayRead = [](std::string_view id) { return id != "i001"; };
+    auto const narrowedPage = detail::answerQuery(detail::pinned(narrowed), query);
+    REQUIRE(narrowedPage.has_value());
+    CHECK(std::ranges::find(narrowedPage->columns, "i001") == narrowedPage->columns.end());
+    CHECK(narrowedPage->columns.size() == 29);
+    CHECK(std::ranges::all_of(narrowedPage->rows, [](GenericRow const& row) { return row.size() == 29; }));
+    // Spec row "Columns by session", server half.
+    // Mutation: answerQuery not filtering the absent-columns list by mayRead.
+    // Mutation: answerQuery validating against the source's columns instead of the description's.
+}
+
+TEST_CASE("typed: a typed table writes the page the generic source writes", "[table][registration]") {
+    morph::session::Context const session{};
+    TableContext const context{.session = session};
+    tabledesc::TypedModel model;
+    auto const typedServed = detail::serve<&tabledesc::TypedModel::rows>(model, context);
+    auto const& description = typedServed.description;
+    REQUIRE(description.columns.size() == 3);
+    CHECK(description.columns[0].info.id == "id");
+    CHECK(description.columns[0].info.kind == ColumnKind::Integer);
+    CHECK(description.columns[1].info.id == "name");
+    CHECK(description.columns[1].info.kind == ColumnKind::Text);
+    CHECK(description.columns[2].info.id == "price");
+    CHECK(description.columns[2].info.kind == ColumnKind::Decimal);
+    CHECK(description.columns[0].label == "Id");
+    CHECK(description.columns[1].label == "Name");
+    CHECK(description.columns[2].label == "Price");
+    CHECK(description.key == "id");
+
+    ServedTable generic;
+    generic.description = description;
+    auto source = std::make_shared<VectorSource>(columnInfos(description));
+    std::vector<std::vector<Cell>> cells;
+    std::vector<RowId> keys;
+    for (auto const& row : tabledesc::typedRows()) {
+        keys.emplace_back(row.id);
+        cells.push_back({Cell{row.id}, Cell{row.name}, Cell{row.price}});
+    }
+    source->setRows(std::move(keys), std::move(cells));
+    generic.source = std::move(source);
+
+    TableQuery query;
+    query.sort = {SortKey{.column = "price", .dir = SortDirection::Descending}};
+    query.page = PageRequest{.offset = 0, .limit = 2};
+    auto const typedPage = detail::answerQuery(detail::pinned(typedServed), query);
+    auto const genericPage = detail::answerQuery(detail::pinned(generic), query);
+    REQUIRE(typedPage.has_value());
+    REQUIRE(genericPage.has_value());
+    CHECK(typedPage->keys == std::vector<RowId>{RowId{std::int64_t{3}}, RowId{std::int64_t{1}}});
+    CHECK(toJson(*typedPage) == toJson(*genericPage));
+
+    morph::exec::ThreadPoolExecutor pool{2};
+    morph::exec::MainThreadExecutor owner;
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool), owner};
+    morph::bridge::BridgeHandler<tabledesc::TypedModel> handler{bridge, &owner};
+    auto const described =
+        morph::testing::awaitValueOn(owner, handler.execute(DescribeTable<&tabledesc::TypedModel::rows>{}));
+    CHECK(described == describe(description));
+    // Spec row "The generic page", typed half.
+    // Mutation: DescribeTable building the typed description its own way and dropping the labels.
+    // Mutation: the typed layer reading cells in glaze's key order while the description lists reflected order
+    // differently.
+}
+
+TEST_CASE("scoped: a scope's source reads the shared rows of its keys", "[table][registration]") {
+    auto base = std::make_shared<VectorSource>(std::vector<ColumnInfo>{tabletest::col("v", ColumnKind::Integer)});
+    std::vector<std::vector<Cell>> cells;
+    for (std::int64_t key = 1; key <= 5; ++key) {
+        cells.push_back({Cell{key * 10}});
+    }
+    base->setRows(intKeys(5), std::move(cells));
+    auto const scope = scoped(base, {RowId{std::int64_t{4}}, RowId{std::int64_t{2}}, RowId{std::int64_t{9}}});
+    auto const before = scope->snapshot();
+    REQUIRE(before->rowCount() == 2);
+    CHECK(before->rowId(0) == RowId{std::int64_t{2}});
+    CHECK(before->rowId(1) == RowId{std::int64_t{4}});
+    CHECK(sameCell(before->cell(1, 0), Cell{std::int64_t{40}}));
+
+    base->updateRow(3, {Cell{std::int64_t{99}}});
+    auto const after = scope->snapshot();
+    REQUIRE(after->rowCount() == 2);
+    CHECK(sameCell(after->cell(1, 0), Cell{std::int64_t{99}}));
+    // Mutation: scoped copying the rows when built (the update is not seen).
+}
+
+TEST_CASE("table action: a failing table function is an error reply and the model stays usable",
+          "[table][registration]") {
+    morph::exec::ThreadPoolExecutor pool{2};
+    morph::exec::MainThreadExecutor owner;
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool), owner};
+    morph::bridge::BridgeHandler<tabledesc::FlakyModel> handler{bridge, &owner};
+    using Query = QueryTable<&tabledesc::FlakyModel::flaky>;
+
+    std::string thrown;
+    try {
+        static_cast<void>(morph::testing::awaitValueOn(owner, handler.execute(Query{})));
+    } catch (std::exception const& error) {
+        thrown = error.what();
+    }
+    CHECK(thrown == "the flaky table failed");
+
+    std::optional<morph::model::ActionRefusal> refusal;
+    try {
+        static_cast<void>(morph::testing::awaitValueOn(owner, handler.execute(Query{})));
+    } catch (morph::model::ActionRefusal const& error) {
+        refusal = error;
+    }
+    REQUIRE(refusal.has_value());
+    CHECK(refusal->code() == "table.unknownColumn");
+    REQUIRE(refusal->args().size() == 1);
+    CHECK(refusal->args()[0].name == "column");
+    CHECK(refusal->args()[0].value == "ghost");
+
+    auto const page = morph::testing::awaitValueOn(owner, handler.execute(Query{}));
+    CHECK(page.keys.size() == 3);
+    CHECK(page.columns == std::vector<std::string>{"v"});
+    // Mutation: answerQuery writing the page column by column without checking the source first (a partial page).
+}
+
+TEST_CASE("table action: a server builds a table's reply on tableWork", "[table][registration]") {
+    auto const tableWork = std::make_shared<RecordingPool>();
+    morph::exec::ThreadPoolExecutor pool{2};
+    morph::backend::ServerConfig config;
+    config.tableWork = tableWork;
+    auto const server = std::make_shared<morph::backend::RemoteServer>(pool, std::move(config));
+    auto const registered =
+        morph::wire::decode(server->handleInline(morph::wire::encode(morph::wire::makeRegister("WorkModel"))));
+    REQUIRE(registered.kind == "ok");
+    {
+        std::scoped_lock const lock{tabledesc::workThreads().mutex};
+        tabledesc::workThreads().reads.clear();
+    }
+
+    morph::wire::Envelope execute;
+    execute.kind = "execute";
+    execute.callId = 7;
+    execute.modelId = registered.modelId;
+    execute.modelType = "WorkModel";
+    execute.actionType = "Table.work";
+    execute.body = R"({"sort":[{"column":"v","dir":"desc"}],"page":{"offset":0,"limit":4}})";
+    auto const waiter = std::make_shared<morph::testing::WaitReply>();
+    server->handle(morph::wire::encode(execute), [waiter](std::string const& reply) { (*waiter)(reply); });
+    REQUIRE(waiter->await(std::chrono::seconds{30}));
+    REQUIRE(waiter->env.kind == "ok");
+    GenericPage page;
+    REQUIRE_FALSE(glz::read_json(page, waiter->env.body));
+    CHECK(page.keys == std::vector<RowId>{RowId{std::int64_t{50}}, RowId{std::int64_t{49}}, RowId{std::int64_t{48}},
+                                          RowId{std::int64_t{47}}});
+
+    std::scoped_lock const lock{tabledesc::workThreads().mutex};
+    auto const& reads = tabledesc::workThreads().reads;
+    auto const work = tableWork->threads();
+    REQUIRE_FALSE(reads.empty());
+    CHECK(std::ranges::all_of(reads, [&](std::thread::id id) { return work.contains(id); }));
+    CHECK_FALSE(reads.contains(tabledesc::workThreads().served));
+    // The in-process twin of the socket case "tables: a table's reply is built on tableWork".
+    // Mutation: RemoteServer not installing the TableRuntimeScope (answerQuery runs inline on the strand).
 }
