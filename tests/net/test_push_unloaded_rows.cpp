@@ -549,7 +549,9 @@ TEST_CASE("table over the bridge: no value crosses a scope", "[net][push][levels
     for (std::int64_t key = 250; key < 500; ++key) {
         CHECK(std::ranges::count(logged, RowId{key}) == 1);
     }
-    // Mutation: a view shared across scopes (an empty `scope` in the key: p2 is answered p1's rows).
+    // Each scope's source has its own snapshot, so the snapshot identity alone keeps the two views apart; the
+    // scope in the view key is held by "table over the bridge: two scopes over one snapshot get two views".
+    // Mutation: the scoped source answering every shared row (each reply holds rows of the other scope).
 }
 
 TEST_CASE("table over the bridge: a row-scoped table announces without keys", "[net][push][levels]") {
@@ -568,7 +570,8 @@ TEST_CASE("table over the bridge: a row-scoped table announces without keys", "[
     CHECK(p1.keysOf("UrModel.urRows").empty());
     auto const refused = p1.execute(instance, "UrModel", "Table.urEmptyScope", R"({"page":{"offset":0,"limit":5}})");
     CHECK(refused.kind == "err");
-    CHECK(refused.body.find("sourceContract") != std::string::npos);
+    REQUIRE(refused.refusal.has_value());
+    CHECK(refused.refusal->code == "table.sourceContract");
     // Mutation: the record registered without privateKeys (p1 is told the arrived rows' keys).
 }
 

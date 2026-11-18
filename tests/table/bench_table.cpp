@@ -27,6 +27,7 @@
 #include <morph/core/backend.hpp>
 #include <morph/core/bridge.hpp>
 #include <morph/core/executor.hpp>
+#include <morph/core/remote.hpp>
 #include <morph/core/wire.hpp>
 #include <morph/detail/reflected_member.hpp>
 #include <morph/session/session.hpp>
@@ -49,6 +50,7 @@
 
 #include "table/table_fixtures.hpp"
 #include "table/wide_table_model.hpp"
+#include "test_support.hpp"
 
 using namespace morph::table;
 
@@ -1243,5 +1245,91 @@ TEST_CASE("table benchmark: S7 S9 the view cache", "[.benchmark][views]") {
         std::println("| S9 | keyed query of 20 keys, {} | {:.3f} |", run == 0 ? "first" : "next", ms);
     }
     std::println("| S9 | views computed after both keyed queries | {} |", views.stats().computations);
+    static_cast<void>(std::fflush(stdout));
+}
+
+// ── Many clients, in process (C1-C3) ────────────────────────────────────────
+
+TEST_CASE("table benchmark: C1 C2 C3 many requests through an in-process server", "[.benchmark][views]") {
+    bench::WideTableModel::recipeGate().release();
+    bench::WideTableModel::configure({.rows = 100'000, .columns = 300, .seed = 7, .loadDelay = {}},
+                                     {.rows = 1'000, .columns = 30, .seed = 7, .loadDelay = {}});
+    constexpr std::size_t kViewBytes = 4 * 100'000;
+    morph::exec::ThreadPoolExecutor pool{4};
+    morph::backend::ServerConfig config;
+    config.tableWork = std::make_shared<morph::exec::ThreadPoolExecutor>(8);
+    config.views.maxBytes = 10 * kViewBytes;
+    auto const server = std::make_shared<morph::backend::RemoteServer>(pool, std::move(config));
+    server->attach(bench::WideTableModel::recipeCache());
+    // An instance per request of C1: one instance runs its executes one at a time.
+    std::vector<std::uint64_t> instances;
+    for (int instance = 0; instance < 50; ++instance) {
+        auto const registered = morph::wire::decode(
+            server->handleInline(morph::wire::encode(morph::wire::makeRegister(std::string{bench::kWideModelType}))));
+        REQUIRE(registered.kind == "ok");
+        instances.push_back(registered.modelId);
+    }
+    std::uint64_t callId = 1;
+    auto const send = [&](std::string body, std::size_t instance = 0) {
+        morph::wire::Envelope execute;
+        execute.kind = "execute";
+        execute.callId = callId++;
+        execute.modelId = instances[instance];
+        execute.modelType = std::string{bench::kWideModelType};
+        execute.actionType = "Table.wide";
+        execute.body = std::move(body);
+        auto waiter = std::make_shared<morph::testing::WaitReply>();
+        server->handle(morph::wire::encode(execute), [waiter](std::string const& reply) { (*waiter)(reply); });
+        return waiter;
+    };
+    auto const settle = [](std::shared_ptr<morph::testing::WaitReply> const& waiter) {
+        REQUIRE(waiter->await(std::chrono::seconds{120}));
+        REQUIRE(waiter->env.kind == "ok");
+    };
+    std::println(
+        "\nMany requests through an in-process server, 100,000 x 300\n\n| Id | scenario | figure |\n|---|---|---|");
+    std::string const sorted = R"({"sort":[{"column":"d000","dir":"asc"}],"columns":["id","d000"],)"
+                               R"("page":{"offset":0,"limit":50}})";
+    settle(send(sorted));  // the first view, before the arrival
+    // C1: an arrival on the order level, then fifty concurrent refetches of the view.
+    auto const cache = bench::WideTableModel::recipeCache();
+    std::vector<Cell> cells(20);
+    REQUIRE(cache->snapshot()->read(RowId{std::int64_t{1}}, cells) == LevelRead::Loaded);
+    morph::table::detail::LevelCacheAccess::store(
+        *cache, std::vector<std::pair<RowId, std::vector<Cell>>>{{RowId{std::int64_t{1}}, cells}});
+    auto const before = server->viewStats();
+    auto const began = Clock::now();
+    std::vector<std::shared_ptr<morph::testing::WaitReply>> waiters;
+    for (std::size_t request = 0; request < 50; ++request) {
+        waiters.push_back(send(sorted, request));
+    }
+    for (auto const& waiter : waiters) {
+        settle(waiter);
+    }
+    auto const c1 = std::chrono::duration<double, std::milli>(Clock::now() - began).count();
+    auto const after = server->viewStats();
+    std::println(
+        "| C1 | fifty concurrent refetches after an arrival, send to last reply | {:.1f} ms; {} computed, {} waited |",
+        c1, after.computations - before.computations, after.waits - before.waits);
+    // C2: distinct sorts, one after another.
+    auto const c2Began = Clock::now();
+    for (int column = 1; column <= 20; ++column) {
+        settle(send(std::format(R"({{"sort":[{{"column":"i{:03}","dir":"asc"}}],"columns":["id"],)"
+                                R"("page":{{"offset":0,"limit":10}}}})",
+                                column)));
+    }
+    auto const seconds = std::chrono::duration<double>(Clock::now() - c2Began).count();
+    std::println("| C2 | views computed per second, twenty sorts one after another | {:.2f} |", 20.0 / seconds);
+    // C3: fifty sorts in all against a bound of ten views.
+    for (int column = 21; column <= 50; ++column) {
+        settle(send(std::format(R"({{"sort":[{{"column":"i{:03}","dir":"asc"}}],"columns":["id"],)"
+                                R"("page":{{"offset":0,"limit":10}}}})",
+                                column)));
+    }
+    auto const stats = server->viewStats();
+    std::println("| C3 | after fifty sorts | {} bytes held of a {} bound, {} evictions |", stats.bytes,
+                 10 * kViewBytes, stats.evictions);
+    CHECK(stats.bytes <= 10 * kViewBytes);
+    std::println("| C1 | the server strand's longest task | not measured in process |");
     static_cast<void>(std::fflush(stdout));
 }

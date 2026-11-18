@@ -30,7 +30,7 @@ namespace morph::table {
 /// @brief How a server's view cache is bounded.
 struct ViewCacheOptions {
     /// @brief The most bytes the cached views hold, across the server's tables, before the least recently used
-    ///        go.
+    ///        go. It counts the views and their lookups, not the snapshots the views keep alive.
     std::size_t maxBytes = 64U << 20U;
     /// @brief Called on the computing thread at the start of each computation; empty calls nothing.
     std::function<void()> onCompute;

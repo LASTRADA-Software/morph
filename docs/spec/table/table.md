@@ -1529,9 +1529,15 @@ keeps the views it has computed.
 
 ```cpp
 struct ViewCacheOptions {
-    std::size_t maxBytes = 64U << 20U;     // across the server's tables
+    std::size_t maxBytes = 64U << 20U;     // across the server's tables; the views, not the snapshots they keep
+    std::function<void()> onCompute;       // called on the computing thread as each computation starts
 };
 ```
+
+An entry keeps the snapshot it was computed over alive, and `maxBytes` does not count that snapshot: an entry for
+a sort nobody asks for again holds its rows until it is evicted or found invalid. Each request carries how
+recently its snapshot was pinned; a request over an older snapshot computes its view without displacing a newer
+entry, so a straggler never undoes a newer view.
 
 - **Key.** The table's record, `ServedTable::scope`, and the validated query's sort and filter in canonical
   form. `page`, `columns`, `keys`, `distinct` and `retain` are not in it: every page, every column set and every
@@ -2983,8 +2989,11 @@ spread reflects. A row marked *not yet measured* says why; its figure is taken w
 | L2 | 2c | Bytes the cache counts for 100,000 values of ten decimals and ten texts of 4 to 60 characters: 151,449,600, 1,514 a row, 0.9% over the 1.5 kB budget (the cells by `cellBytes` and the vector; the shard entries are not counted); the process's private bytes grew 191,729,664 over the store, which includes the 100,000 values built to be stored | A, Release | 2026-11-18 |
 | L3 | 2c | Shards that grow to about 64 rows each (2,048 at 100,000 rows), changes under a writer mutex and published under a reader mutex held for the swap: `invalidate` of 1,000 keys 6.90 ms (4.33–7.48), the observer call for a 4,096-key change 20.6 ms (16.2–25.1); with a reader holding a snapshot for 40 ms, 3.76 ms (2.22–4.28) and 26.0 ms (23.4–30.4), so the reader does not lengthen either (gate `"level cache: invalidation does not wait for a reader"`). **Both miss the 0.5 ms and 1 ms budgets.** Inferred from the code: 1,000 random keys touch about 1,000 of the 2,048 shards, so the call copies about half the entries; the 4,096-key call touches nearly all | A, Release | 2026-11-18 |
 | L6 | 2c | Loader return to announce for a batch of 64 at 100,000 held rows: 0.539 ms (0.482–0.669), within the 1 ms budget; 960 shards copied for 960 keys stored over fifteen batches (gate: at most one shard a key, `"level cache: a batch copies only the shards it touches"`) | A, Release | 2026-11-18 |
-| S7 | 2c | *Debug build (`cl-debug`), not a budget figure*: ten `answerQuery` calls through one `ViewCache` over the 100,000 × 300 column store, sorted on `i001`, pages 0 to 9 of 200: the first 562 ms (it sorts), requests two to ten 17.2 ms (16.9–17.3) each; one view computed for the ten (gate) | A, debug | 2026-11-18 |
-| S9 | 2c | *Debug build*: a keyed query of 20 keys against that view: the first 279 ms (it builds the view rows by source row and the key index, 100,000 rows each), the next 8.96 ms; no view computed (gate) | A, debug | 2026-11-18 |
+| S7 | 2c | Ten `answerQuery` calls through one `ViewCache` over the 100,000 × 300 column store, sorted on `i001`, pages 0 to 9 of 200: the first 75.1 ms (it sorts), requests two to ten 1.48 ms (1.43–1.49) each, within the 2 ms budget; one view computed for the ten (gate) | A, Release | 2026-11-19 |
+| S9 | 2c | A keyed query of 20 keys against that view: the first 22.0 ms (it builds the view rows by source row and the key index, 100,000 rows each), above the 3 ms budget; the next 1.22 ms, above the 0.5 ms budget; no view computed (gate) | A, Release | 2026-11-19 |
+| C1 | 2c | In process, not over a socket (`"table benchmark: C1 C2 C3 many requests through an in-process server"`): fifty `Table.wide` requests on fifty instances, sorted on the `recipe` column `d000` at 100,000 rows, sent together after an arrival on the level: 4,484 ms from the first send to the last reply; one view computed, 7 requests waited for it, the other 42 found it computed. Inferred, not measured apart: most of the time is each request's order `want` of 100,000 keys under the level cache's writer mutex. The server strand's longest task is not measured: it needs the socket benchmark (`[.benchmark][net]`, POSIX only, not run) | A, Release | 2026-11-19 |
+| C2 | 2c | In process: twenty distinct sorts of `wide` one after another, 15.6 views computed a second | A, Release | 2026-11-19 |
+| C3 | 2c | In process: fifty sorts against a bound of ten 100,000-row views (4,000,000 bytes): 4,000,000 bytes held, 41 evictions (gate: held within the bound) | A, Release | 2026-11-19 |
 | U1 | 0 | A document `rows` table of 100,000 rows on the recording backend, a bound sort set on a text column, click to settled: 2,921.5 ms (2,860.0–3,017.6). The rows realized after the sort are the ones realized before it, reordered, not the view's first rows: the figure is the interpreter's sort and reconcile, not a correct window | A, 82–91% busy | 2026-11-17 |
 | U2 | 0 | The same table sorted, one row's name replaced in `items`, click to settled: 2,941.3 ms (2,881.4–2,992.2) | A, 82–91% busy | 2026-11-17 |
 | U3 | 0 | Text folds of the interpreter's sort of 100,000 rows: *not yet measured* — the interpreter folds with a `CodePointCollator` it constructs inside the comparison and takes none from outside, so no counting collator can be installed; the count needs that seam | — | — |

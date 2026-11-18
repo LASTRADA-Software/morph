@@ -392,3 +392,116 @@ TEST_CASE("view cache: a keyed fetch sorts nothing", "[table][views]") {
     CHECK(views.stats().computations == 1);
     CHECK(views.stats().hits == 1);
 }
+
+namespace {
+
+// One row, whose destructor waits until the test lets it finish: a snapshot whose release is slow.
+class SlowToFree final : public RowSnapshot {
+public:
+    SlowToFree(std::atomic<bool>& entered, std::shared_future<void> release)
+        : _entered{&entered}, _release{std::move(release)} {}
+    SlowToFree(SlowToFree const&) = delete;
+    SlowToFree& operator=(SlowToFree const&) = delete;
+    SlowToFree(SlowToFree&&) = delete;
+    SlowToFree& operator=(SlowToFree&&) = delete;
+    ~SlowToFree() override {
+        _entered->store(true);
+        static_cast<void>(_release.wait_for(10s));
+    }
+    [[nodiscard]] std::size_t rowCount() const override { return 1; }
+    [[nodiscard]] RowId rowId(std::size_t /*row*/) const override { return RowId{std::int64_t{0}}; }
+    [[nodiscard]] Cell cell(std::size_t /*row*/, std::size_t /*column*/) const override { return Cell{}; }
+
+private:
+    std::atomic<bool>* _entered;
+    std::shared_future<void> _release;
+};
+
+std::expected<ViewComputation, TableError> oneRowView() {
+    return ViewComputation{.view = {.rows = {0}, .undecided = {}}, .awaiting = {}, .failed = {}};
+}
+
+}  // namespace
+
+// Mutation: drop() destroying the entry under the mutex (the hit on another key waits for the snapshot's release).
+TEST_CASE("view cache: an evicted entry is released outside the mutex", "[table][views]") {
+    ViewCache views{ViewCacheOptions{.maxBytes = 4, .onCompute = {}}};  // one one-row view
+    std::atomic<bool> entered{false};
+    std::promise<void> release;
+    auto const releaseFuture = release.get_future().share();
+    {
+        auto slow = std::make_shared<SlowToFree const>(entered, releaseFuture);
+        REQUIRE(views.find(keyOf("slow"), slow, {}, oneRowView).has_value());
+    }
+    auto const source = tabletest::makeSource({tabletest::col("a", ColumnKind::Integer)}, {{Cell{std::int64_t{1}}}});
+    auto const other = source->snapshot();
+    // Inserting "other" evicts "slow", whose snapshot only the cache held: its release blocks this thread.
+    auto evicting = std::async(std::launch::async, [&] { return views.find(keyOf("other"), other, {}, oneRowView); });
+    auto const deadline = std::chrono::steady_clock::now() + 10s;
+    while (!entered.load() && std::chrono::steady_clock::now() < deadline) {
+        std::this_thread::yield();
+    }
+    REQUIRE(entered.load());
+    auto hit = std::async(std::launch::async, [&] { return views.stats(); });
+    auto third = std::async(std::launch::async, [&] {
+        auto const source2 =
+            tabletest::makeSource({tabletest::col("a", ColumnKind::Integer)}, {{Cell{std::int64_t{2}}}});
+        return views.find(keyOf("third"), source2->snapshot(), {}, oneRowView).has_value();
+    });
+    bool const thirdDone = third.wait_for(5s) == std::future_status::ready;
+    release.set_value();
+    CHECK(thirdDone);
+    CHECK(third.get());
+    REQUIRE(evicting.get().has_value());
+    static_cast<void>(hit.get());
+}
+
+// Mutation: a stale entry dropped whatever the request's newness (the newer entry is replaced, and computed again).
+TEST_CASE("view cache: an older request does not displace a newer entry", "[table][views]") {
+    auto const source = tabletest::makeSource({tabletest::col("a", ColumnKind::Integer)}, {{Cell{std::int64_t{1}}}});
+    auto const older = source->snapshot();
+    source->updateRow(0, {Cell{std::int64_t{2}}});
+    auto const newer = source->snapshot();
+    ViewCache views;
+    REQUIRE(views.find(keyOf("a"), newer, {}, oneRowView, 2).has_value());
+    auto const straggler = views.find(keyOf("a"), older, {}, oneRowView, 1);
+    REQUIRE(straggler.has_value());
+    CHECK((*straggler)->snapshot == older);
+    REQUIRE(views.find(keyOf("a"), newer, {}, oneRowView, 3).has_value());
+    CHECK(views.stats().computations == 2);
+    CHECK(views.stats().hits == 1);
+}
+
+// Mutation: an empty scope in the view key (the second caller is answered the first caller's view).
+TEST_CASE("view cache: callers of two scopes over one snapshot get two views", "[table][views]") {
+    std::vector<std::vector<Cell>> rows;
+    for (std::int64_t row = 0; row < 20; ++row) {
+        rows.push_back({Cell{row}, Cell{(row * 7) % 5}});
+    }
+    auto description = describe(TableDescription{
+        .id = "t",
+        .label = "T",
+        .columns = {TableColumn{.info = tabletest::col("id", ColumnKind::Integer), .label = "id", .group = {}},
+                    TableColumn{.info = tabletest::col("n", ColumnKind::Integer), .label = "n", .group = {}}},
+        .key = "id"});
+    auto const first = detail::pinned(ServedTable{
+        .description = description,
+        .source = tabletest::makeSource(
+            {tabletest::col("id", ColumnKind::Integer), tabletest::col("n", ColumnKind::Integer)}, std::move(rows)),
+        .levels = {},
+        .mayRead = {},
+        .scope = "p1",
+        .services = {},
+        .limits = {}});
+    auto second = first;  // the same pinned source: one snapshot, one identity
+    second.scope = "p2";
+    ViewCache views;
+    detail::AnswerContext const context{.views = &views, .record = "T.rows", .rowScoped = true};
+    TableQuery query;
+    query.sort = {SortKey{.column = "n", .dir = SortDirection::Ascending}};
+    REQUIRE(detail::answerQuery(first, query, context).has_value());
+    REQUIRE(detail::answerQuery(second, query, context).has_value());
+    REQUIRE(detail::answerQuery(first, query, context).has_value());
+    CHECK(views.stats().computations == 2);
+    CHECK(views.stats().hits == 1);
+}
