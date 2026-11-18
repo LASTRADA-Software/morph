@@ -22,6 +22,7 @@
 #include <exception>
 #include <expected>
 #include <functional>
+#include <map>
 #include <memory>
 #include <morph/core/change_types.hpp>
 #include <morph/core/executor.hpp>
@@ -33,6 +34,7 @@
 #include <span>
 #include <string>
 #include <string_view>
+#include <tuple>
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
@@ -94,6 +96,12 @@ public:
     /// @param retry Load the failed keys among @p keys now, without waiting out their retry delay.
     /// @return Nothing, or `Unavailable` when an order use cannot fit the cache's bound.
     virtual std::expected<void, TableError> want(std::span<RowId const> keys, LevelUse use, bool retry = false) = 0;
+
+    /// @brief Takes back an order use's want of @p keys: the leases it gave end now. A reply calls it when a later
+    ///        level refuses its order use, so the earlier levels do not hold rows for a query that was refused.
+    ///        The default does nothing.
+    /// @param keys The keys an order want named.
+    virtual void unwant(std::span<RowId const> keys) { static_cast<void>(keys); }
 };
 // NOLINTEND(cppcoreguidelines-special-member-functions)
 
@@ -193,7 +201,7 @@ struct LevelCacheAccess {
         return cache._core->shardCopies.load();
     }
 
-    /// @brief How many key entries wait on the cache's stacks, stale ones included.
+    /// @brief How many keys wait on the cache's queues.
     /// @tparam Value The cache's value type.
     /// @param cache The cache.
     /// @return The count.
@@ -210,6 +218,15 @@ struct LevelCacheAccess {
     [[nodiscard]] static std::size_t shardCount(LevelCache<Value> const& cache) {
         return cache._core->shardCount();
     }
+
+    /// @brief Sets what each eviction scan calls first, with no lock held: how a test pauses a store mid-eviction.
+    /// @tparam Value The cache's value type.
+    /// @param cache The cache.
+    /// @param hook  The call; empty for none. Set before any load runs.
+    template <typename Value>
+    static void onEvictionScan(LevelCache<Value>& cache, std::function<void()> hook) {
+        cache._core->evictionHook = std::move(hook);
+    }
 };
 
 }  // namespace detail
@@ -220,18 +237,20 @@ struct LevelCacheAccess {
 /// The values live in shards by key hash, each an immutable sorted vector behind a shared pointer; the shard
 /// count is a power of two that doubles as the cache grows, so a shard averages at most `detail::kRowsPerShard`
 /// entries. A published state is the shard pointers and a generation behind one shared pointer, and a snapshot
-/// holds it. A store, a removal and an observer call copy only the shards they touch into a new state, under a
-/// writer mutex that orders the changes; the state is then published under a second mutex held for the pointer
-/// swap alone. A reader takes only that second mutex, to copy the pointer, so a reader holding a snapshot blocks
-/// no one and a change never waits for one. A value's recency is an atomic beside it, and leases are kept beside
-/// the shards; neither is part of a snapshot's state.
+/// holds it. A store, a removal, an eviction and an observer call prepare their new state from the published one
+/// with no lock held: the shard copies, the scans and sorts, the re-spread. They then take a writer mutex only to
+/// check that nothing was published meanwhile (and prepare again if it was) and to publish, under a second mutex
+/// held for the pointer swap alone. So neither a reader nor the server strand's observer call waits behind
+/// another change's slow work. A value's recency and order lease are atomics beside it, and neither is part of a
+/// snapshot's state.
 ///
 /// The application's callbacks (the sink, the failure handler, `sizeOf`, `loads->post`) may throw: a throw is
 /// logged, a key whose size could not be read is stored as failed, and a batch that could not be posted goes back
 /// on the queue, so no callback stops the level from loading.
 ///
-/// One loader call runs at a time. Wanted keys wait on two stacks, `Display` before `Order`, each want's keys
-/// one block in the order given and the newest want on top; a batch takes up to `batch` keys from the top. A
+/// One loader call runs at a time. Wanted keys wait on two queues, `Display` before `Order`, each ordered by the
+/// newest want first and, inside one want, in the order given; a key is queued once, and a want of a queued key
+/// moves it to that want's place. A batch takes up to `batch` keys from the front. A
 /// load remembers each key's generation and stores only the keys no invalidation touched meanwhile; it publishes
 /// the values, then announces their keys to every record in `records`.
 /// @tparam Value What the loader returns for one key.
@@ -294,6 +313,10 @@ public:
         return Core::want(_core, keys, use, retry);
     }
 
+    /// @brief Ends the order leases of @p keys.
+    /// @param keys The keys.
+    void unwant(std::span<RowId const> keys) override { _core->release(keys); }
+
     /// @brief Drops what @p changes made wrong. On the server strand; removes only.
     ///
     /// A change of a record in `invalidatedBy` that is one of `records` invalidates its keys, or the level when
@@ -338,11 +361,13 @@ private:
         Clock::time_point failedAt{};
         std::size_t bytes = 0;  // a value's deep bytes; a failure's own size
         mutable std::atomic<std::int64_t> lastUse{0};
+        mutable std::atomic<std::int64_t> leaseUntil{0};  // clock ticks; 0: no lease
     };
-    using Entry = std::pair<RowId, std::shared_ptr<Slot const>>;
+    using SlotPtr = std::shared_ptr<Slot const>;
+    using Entry = std::pair<RowId, SlotPtr>;
     using Shard = std::vector<Entry>;  // sorted by key
 
-    // One published state: the shards, a power of two of them, and the generation.
+    // One published state: the shards, a power of two of them, the generation and the entry count.
     struct Table {
         std::vector<std::shared_ptr<Shard const>> shards;
         std::uint64_t generation = 0;
@@ -353,9 +378,13 @@ private:
         return std::hash<RowId>{}(key) & (count - 1);
     }
 
-    [[nodiscard]] static std::shared_ptr<Slot const> findIn(Shard const& shard, RowId const& key) {
+    [[nodiscard]] static SlotPtr findIn(Shard const& shard, RowId const& key) {
         auto const found = std::ranges::lower_bound(shard, key, {}, &Entry::first);
         return found != shard.end() && found->first == key ? found->second : nullptr;
+    }
+
+    [[nodiscard]] static SlotPtr findIn(Table const& table, RowId const& key) {
+        return findIn(*table.shards[shardOf(key, table.shards.size())], key);
     }
 
     class Snapshot final : public LevelSnapshot {
@@ -364,8 +393,7 @@ private:
             : _table{std::move(table)}, _cells{std::move(cells)} {}
 
         [[nodiscard]] LevelRead read(RowId const& key, std::span<Cell> out) const override {
-            auto const& shards = _table->shards;
-            auto const slot = findIn(*shards[shardOf(key, shards.size())], key);
+            auto const slot = findIn(*_table, key);
             if (slot == nullptr) {
                 return LevelRead::Unloaded;
             }
@@ -390,22 +418,18 @@ private:
         std::uint64_t started = 0;
     };
 
-    struct Block {
-        std::vector<std::pair<RowId, std::uint64_t>> keys;  // key, stamp
-        std::size_t next = 0;
-    };
-
     struct Queued {
         LevelUse use = LevelUse::Display;
-        std::uint64_t stamp = 0;
+        std::uint64_t priority = 0;
     };
 
-    // The shards one change touches, each copied once, and the new table they are published in.
+    // A change prepared against one published state with no lock held: the shards it touches, copied once each,
+    // and each slot it replaces or removes, for the accounting done when it is published.
     class Edit {
     public:
         Edit(Table const& base, std::atomic<std::size_t>& copies) : _base{&base}, _copies{&copies} {}
 
-        [[nodiscard]] std::shared_ptr<Slot const> find(RowId const& key) const {
+        [[nodiscard]] SlotPtr find(RowId const& key) const {
             auto const index = shardOf(key, _base->shards.size());
             if (auto const copied = _copied.find(index); copied != _copied.end()) {
                 return findIn(*copied->second, key);
@@ -413,12 +437,14 @@ private:
             return findIn(*_base->shards[index], key);
         }
 
-        void put(RowId const& key, std::shared_ptr<Slot const> slot) {
+        void put(RowId const& key, SlotPtr slot) {
             auto& shard = copy(key);
             auto const found = std::ranges::lower_bound(shard, key, {}, &Entry::first);
             if (found != shard.end() && found->first == key) {
+                changes.emplace_back(found->second, slot);
                 found->second = std::move(slot);
             } else {
+                changes.emplace_back(nullptr, slot);
                 shard.insert(found, Entry{key, std::move(slot)});
                 ++_added;
             }
@@ -428,6 +454,7 @@ private:
             auto& shard = copy(key);
             auto const found = std::ranges::lower_bound(shard, key, {}, &Entry::first);
             if (found != shard.end() && found->first == key) {
+                changes.emplace_back(found->second, nullptr);
                 shard.erase(found);
                 ++_removed;
             }
@@ -436,13 +463,13 @@ private:
         [[nodiscard]] bool changed() const noexcept { return !_copied.empty(); }
 
         // The base with the copied shards in; the shard count doubles until a shard averages at most
-        // `detail::kRowsPerShard` entries.
+        // `detail::kRowsPerShard` entries. Built with no lock held.
         [[nodiscard]] std::shared_ptr<Table const> table() const {
             auto out = std::make_shared<Table>();
             out->generation = _base->generation + 1;
             out->entries = _base->entries + _added - _removed;
             out->shards = _base->shards;
-            for (auto& [index, shard] : _copied) {
+            for (auto const& [index, shard] : _copied) {
                 out->shards[index] = shard;
             }
             auto count = out->shards.size();
@@ -465,6 +492,9 @@ private:
             }
             return out;
         }
+
+        // (old, new) per changed key; null for none.
+        std::vector<std::pair<SlotPtr, SlotPtr>> changes;
 
     private:
         Shard& copy(RowId const& key) {
@@ -532,10 +562,6 @@ private:
             return at.time_since_epoch().count();
         }
 
-        [[nodiscard]] std::shared_ptr<Slot const> findLocked(RowId const& key) const {
-            return findIn(*current->shards[shardOf(key, current->shards.size())], key);
-        }
-
         [[nodiscard]] Clock::duration retryDelay(std::uint32_t failures) const {
             auto const doublings = std::min<std::uint32_t>(failures == 0 ? 0 : failures - 1, 30);
             auto const delay = options.retryAfter * (std::int64_t{1} << doublings);
@@ -549,68 +575,73 @@ private:
             return options.expectedBytes != 0 ? options.expectedBytes : 64 * options.columns.size();
         }
 
-        // Under the writer mutex: publishes `edit`'s table; the publish mutex is held for the pointer swap alone.
-        void publish(Edit const& edit) {
-            if (!edit.changed()) {
-                return;
+        [[nodiscard]] std::shared_ptr<Table const> publishedTable() const {
+            std::scoped_lock const lock{publishMutex};
+            return published;
+        }
+
+        // Under the writer mutex: publishes a prepared table and accounts for its changes; the publish mutex is
+        // held for the pointer swap alone.
+        void publish(std::shared_ptr<Table const> next, Edit const& edit) {
+            for (auto const& [old, slot] : edit.changes) {
+                forget(old.get());
+                if (slot != nullptr) {
+                    remember(*slot);
+                }
             }
-            auto next = edit.table();
             {
                 std::scoped_lock const lock{publishMutex};
                 published = next;
             }
             current = std::move(next);
+            ++version;
         }
 
         [[nodiscard]] std::shared_ptr<LevelSnapshot const> snapshot() const {
-            std::shared_ptr<Table const> table;
-            {
-                std::scoped_lock const lock{publishMutex};
-                table = published;
-            }
-            return std::make_shared<Snapshot const>(std::move(table), cells);
+            return std::make_shared<Snapshot const>(publishedTable(), cells);
         }
 
-        // Under the writer mutex: puts `key` on `use`'s stack unless it is queued already. A key queued for order
-        // and wanted for display moves to the display stack; otherwise it keeps its place.
-        void enqueue(RowId const& key, LevelUse use, std::vector<std::pair<RowId, std::uint64_t>>& block) {
+        // ── The queue ──
+        // Each use's queue is ordered by priority, the newest want highest and, inside one want, its first key
+        // highest. A key is queued once; a want of a queued key gives it the want's priority, so the keys a user
+        // asks for again come first. A key queued for display stays there when wanted for order.
+
+        void enqueue(RowId const& key, LevelUse use, std::uint64_t priority) {
             auto const found = queued.find(key);
-            if (found != queued.end() && (found->second.use == use || found->second.use == LevelUse::Display)) {
-                return;
+            if (found != queued.end()) {
+                if (found->second.use == LevelUse::Display && use == LevelUse::Order) {
+                    return;
+                }
+                queues[static_cast<std::size_t>(found->second.use)].erase(found->second.priority);
             }
-            auto const at = ++stamp;
-            queued.insert_or_assign(key, Queued{.use = use, .stamp = at});
-            block.emplace_back(key, at);
+            queued.insert_or_assign(key, Queued{.use = use, .priority = priority});
+            queues[static_cast<std::size_t>(use)].emplace(priority, key);
         }
 
-        // Under the writer mutex: the next batch off the stacks, display first, its keys marked in flight.
+        // The priority of the `index`-th key of the next want.
+        [[nodiscard]] std::uint64_t priorityOf(std::uint64_t want, std::size_t index) const noexcept {
+            return (want << 32U) | (0xFFFF'FFFFULL - (static_cast<std::uint64_t>(index) & 0xFFFF'FFFFULL));
+        }
+
+        // Under the writer mutex: the next batch, display first, highest priority first, its keys marked in flight.
         [[nodiscard]] std::vector<Loading> takeBatch() {
             std::vector<Loading> out;
             auto const started = ++sequence;
             for (auto const use : {LevelUse::Display, LevelUse::Order}) {
-                auto& stack = stacks[static_cast<std::size_t>(use)];
-                while (out.size() < options.batch && !stack.empty()) {
-                    auto& top = stack.back();
-                    while (top.next < top.keys.size() && out.size() < options.batch) {
-                        auto& [key, at] = top.keys[top.next++];
-                        auto const found = queued.find(key);
-                        if (found == queued.end() || found->second.stamp != at) {
-                            continue;
-                        }
-                        queued.erase(found);
-                        inFlight.insert_or_assign(key, std::pair{epoch, started});
-                        out.push_back(Loading{.key = std::move(key), .epoch = epoch, .started = started});
-                    }
-                    if (top.next >= top.keys.size()) {
-                        stack.pop_back();
-                    }
+                auto& queue = queues[static_cast<std::size_t>(use)];
+                while (out.size() < options.batch && !queue.empty()) {
+                    auto const top = std::prev(queue.end());
+                    auto key = std::move(top->second);
+                    queue.erase(top);
+                    queued.erase(key);
+                    inFlight.insert_or_assign(key, std::pair{epoch, started});
+                    out.push_back(Loading{.key = std::move(key), .epoch = epoch, .started = started});
                 }
             }
             running = !out.empty();
             return out;
         }
 
-        // Under the writer mutex: whether a load holding the key's current state runs.
         [[nodiscard]] bool inFlightNow(RowId const& key) const {
             auto const found = inFlight.find(key);
             if (found == inFlight.end() || found->second.first != epoch) {
@@ -620,7 +651,6 @@ private:
             return invalidated == invalidatedAt.end() || invalidated->second < found->second.second;
         }
 
-        // Under the writer mutex: whether a load that started at `loading` may store its key.
         [[nodiscard]] bool stillCurrent(Loading const& loading) const {
             if (loading.epoch != epoch) {
                 return false;
@@ -629,20 +659,31 @@ private:
             return invalidated == invalidatedAt.end() || invalidated->second < loading.started;
         }
 
+        // ── want ──
+
         static std::expected<void, TableError> want(std::shared_ptr<Core> const& core, std::span<RowId const> keys,
                                                     LevelUse use, bool retry) {
             auto const at = core->now();
+            auto const nowTicks = ticks(at);
+            // An order use's fit reads the leases of other keys from the published state, with no lock held.
+            std::size_t leasedOther = 0;
+            std::unordered_set<RowId> own;
+            if (use == LevelUse::Order) {
+                own.insert(keys.begin(), keys.end());
+                leasedOther = core->leasedBytes(*core->publishedTable(), nowTicks, &own);
+            }
             std::vector<Loading> batch;
             {
                 std::scoped_lock const lock{core->writer};
                 if (use == LevelUse::Order) {
-                    if (auto fitted = core->fitOrder(keys, at); !fitted) {
+                    if (auto fitted = core->fitOrder(own, leasedOther, at); !fitted) {
                         return fitted;
                     }
                 }
-                std::vector<std::pair<RowId, std::uint64_t>> block;
+                auto const want = ++core->wants;
+                std::size_t index = 0;
                 for (auto const& key : keys) {
-                    auto const slot = core->findLocked(key);
+                    auto const slot = findIn(*core->current, key);
                     if (slot != nullptr && slot->value) {
                         core->hits.fetch_add(1);
                         slot->lastUse.store(++core->useCounter);
@@ -655,10 +696,7 @@ private:
                     if (core->inFlightNow(key)) {
                         continue;
                     }
-                    core->enqueue(key, use, block);
-                }
-                if (!block.empty()) {
-                    core->stacks[static_cast<std::size_t>(use)].push_back(Block{.keys = std::move(block), .next = 0});
+                    core->enqueue(key, use, core->priorityOf(want, index++));
                 }
                 if (!core->running) {
                     batch = core->takeBatch();
@@ -668,29 +706,24 @@ private:
             return {};
         }
 
-        // Under the writer mutex: the bytes the leases of keys other than `own` hold; expired leases go.
-        [[nodiscard]] std::size_t leasedBytes(std::int64_t nowTicks, std::unordered_set<RowId> const* own) {
+        // The bytes the unexpired leases of keys other than `own` hold in `table`. Run with no lock held.
+        [[nodiscard]] static std::size_t leasedBytes(Table const& table, std::int64_t nowTicks,
+                                                     std::unordered_set<RowId> const* own) {
             std::size_t out = 0;
-            for (auto lease = leases.begin(); lease != leases.end();) {
-                if (lease->second <= nowTicks) {
-                    lease = leases.erase(lease);
-                    continue;
-                }
-                if (own == nullptr || !own->contains(lease->first)) {
-                    if (auto const slot = findLocked(lease->first); slot != nullptr && slot->value) {
+            for (auto const& shard : table.shards) {
+                for (auto const& [key, slot] : *shard) {
+                    if (slot->leaseUntil.load() > nowTicks && (own == nullptr || !own->contains(key))) {
                         out += slot->bytes;
                     }
                 }
-                ++lease;
             }
             return out;
         }
 
         // Under the writer mutex: refuses an order use that cannot fit, or leases its keys.
-        std::expected<void, TableError> fitOrder(std::span<RowId const> keys, Clock::time_point at) {
-            auto const nowTicks = ticks(at);
-            std::unordered_set<RowId> const own(keys.begin(), keys.end());
-            if (own.size() * meanBytes() + leasedBytes(nowTicks, &own) > options.maxBytes) {
+        std::expected<void, TableError> fitOrder(std::unordered_set<RowId> const& own, std::size_t leasedOther,
+                                                 Clock::time_point at) {
+            if (own.size() * meanBytes() + leasedOther > options.maxBytes) {
                 refusedOrders.fetch_add(1);
                 return std::unexpected(
                     TableError{.code = TableErrorCode::Unavailable,
@@ -699,11 +732,27 @@ private:
             }
             auto const until = ticks(at + options.orderLease);
             for (auto const& key : own) {
-                leases.insert_or_assign(key, until);
+                if (auto const slot = findIn(*current, key); slot != nullptr && slot->value) {
+                    slot->leaseUntil.store(until);
+                } else {
+                    pendingLeases.insert_or_assign(key, until);
+                }
                 leasedKeys.fetch_add(1);
             }
             return {};
         }
+
+        void release(std::span<RowId const> keys) {
+            std::scoped_lock const lock{writer};
+            for (auto const& key : keys) {
+                pendingLeases.erase(key);
+                if (auto const slot = findIn(*current, key); slot != nullptr) {
+                    slot->leaseUntil.store(0);
+                }
+            }
+        }
+
+        // ── loading ──
 
         static void dispatch(std::shared_ptr<Core> const& core, std::vector<Loading> batch) {
             if (batch.empty()) {
@@ -718,28 +767,22 @@ private:
             try {
                 core->options.loads->post([core, batch]() mutable { dispatch(core, core->load(std::move(batch))); });
             } catch (...) {
-                // Nothing will load the batch: its keys go back on top of the display stack, and the next want
-                // dispatches again.
+                // Nothing will load the batch: its keys go back on the display queue, and the next want dispatches.
                 core->unpost(batch);
             }
         }
 
-        // Ends a batch that could not be posted.
         void unpost(std::vector<Loading> const& batch) {
             std::scoped_lock const lock{writer};
-            std::vector<std::pair<RowId, std::uint64_t>> block;
+            auto const want = ++wants;
+            std::size_t index = 0;
             for (auto const& loading : batch) {
                 inFlight.erase(loading.key);
-                enqueue(loading.key, LevelUse::Display, block);
-            }
-            if (!block.empty()) {
-                stacks[static_cast<std::size_t>(LevelUse::Display)].push_back(
-                    Block{.keys = std::move(block), .next = 0});
+                enqueue(loading.key, LevelUse::Display, priorityOf(want, index++));
             }
             running = false;
         }
 
-        // Runs one loader call, stores and announces what it returned; returns the next batch to load.
         [[nodiscard]] std::vector<Loading> load(std::vector<Loading> batch) {
             std::vector<RowId> keys;
             keys.reserve(batch.size());
@@ -753,73 +796,114 @@ private:
             } catch (...) {
                 loaded.clear();
             }
-            Told told;
+            auto told = store(batch, loaded, true);
             std::vector<Loading> next;
             {
                 std::scoped_lock const lock{writer};
-                told = store(batch, loaded);
                 next = takeBatch();
             }
             tell(told);
             return next;
         }
 
-        // Under the writer mutex: stores a load's values and failures, then applies the bound. Calls no callback
-        // that may throw except `sizeOf`, whose throw fails that key.
-        [[nodiscard]] Told store(std::vector<Loading> const& batch, std::vector<std::pair<RowId, Value>>& loaded) {
-            std::unordered_map<RowId, Value*> returned;
+        // Stores a load's values and failures, then applies the bound. The new state and the eviction are
+        // prepared with no lock held; the writer mutex is taken only to check that nothing changed since and to
+        // publish. A change published meanwhile makes the store prepare again.
+        [[nodiscard]] Told store(std::vector<Loading> const& batch, std::vector<std::pair<RowId, Value>>& loaded,
+                                 bool counted) {
+            // Sizes are read once, before any lock: a throwing `sizeOf` fails its key.
+            std::unordered_map<RowId, std::pair<Value*, std::size_t>> returned;
             returned.reserve(loaded.size());
             for (auto& [key, value] : loaded) {
-                returned.emplace(key, &value);
+                try {
+                    returned.emplace(key, std::pair{&value, sizeOf(value)});
+                } catch (...) {
+                    // Not returned: the key is stored as failed.
+                    returned.erase(key);
+                }
             }
             auto const at = nowOrEpoch();
             Told told;
-            Edit edit{*current, shardCopies};
-            for (auto const& loading : batch) {
-                if (auto const flight = inFlight.find(loading.key);
-                    flight != inFlight.end() && flight->second == std::pair{loading.epoch, loading.started}) {
-                    inFlight.erase(flight);
-                }
-                if (!stillCurrent(loading)) {
-                    droppedLoads.fetch_add(1);
-                    continue;
-                }
-                auto const old = edit.find(loading.key);
-                auto slot = std::make_shared<Slot>();
-                bool stored = false;
-                if (auto const found = returned.find(loading.key); found != returned.end()) {
-                    try {
-                        slot->bytes = sizeOf(*found->second);
-                        slot->value = std::move(*found->second);
-                        stored = true;
-                    } catch (...) {
-                        slot->value.reset();
+            bool leasedStored = false;
+            for (;;) {
+                std::shared_ptr<Table const> base;
+                std::uint64_t seen = 0;
+                std::vector<bool> valid(batch.size());
+                {
+                    std::scoped_lock const lock{writer};
+                    base = current;
+                    seen = version;
+                    for (std::size_t index = 0; index < batch.size(); ++index) {
+                        valid[index] = stillCurrent(batch[index]);
                     }
                 }
-                if (stored) {
-                    slot->lastUse.store(++useCounter);
-                    loadedKeys.fetch_add(1);
-                    told.stored.push_back(loading.key);
-                } else {
-                    slot->bytes = sizeof(Slot);
-                    slot->failures = old != nullptr && !old->value ? old->failures + 1 : 1;
-                    slot->failedAt = at;
-                    failedLoads.fetch_add(1);
-                    leases.erase(loading.key);
-                    told.failed.push_back(loading.key);
+                Edit edit{*base, shardCopies};
+                std::vector<RowId> stored;
+                std::vector<RowId> failed;
+                std::size_t dropped = 0;
+                for (std::size_t index = 0; index < batch.size(); ++index) {
+                    auto const& key = batch[index].key;
+                    if (!valid[index]) {
+                        ++dropped;
+                        continue;
+                    }
+                    auto const old = edit.find(key);
+                    auto slot = std::make_shared<Slot>();
+                    if (auto const found = returned.find(key); found != returned.end()) {
+                        slot->value = *found->second.first;
+                        slot->bytes = found->second.second;
+                        stored.push_back(key);
+                    } else {
+                        slot->bytes = sizeof(Slot);
+                        slot->failures = old != nullptr && !old->value ? old->failures + 1 : 1;
+                        slot->failedAt = at;
+                        failed.push_back(key);
+                    }
+                    edit.put(key, std::move(slot));
                 }
-                forget(old.get());
-                remember(*slot);
-                edit.put(loading.key, std::move(slot));
+                auto next = edit.table();
+                {
+                    std::scoped_lock const lock{writer};
+                    if (version != seen) {
+                        continue;  // a change was published meanwhile: prepare again over it
+                    }
+                    for (auto const& loading : batch) {
+                        if (auto const flight = inFlight.find(loading.key);
+                            flight != inFlight.end() && flight->second == std::pair{loading.epoch, loading.started}) {
+                            inFlight.erase(flight);
+                        }
+                        invalidatedAt.erase(loading.key);
+                    }
+                    for (auto const& key : stored) {
+                        auto const slot = findIn(*next, key);
+                        slot->lastUse.store(++useCounter);
+                        if (auto const lease = pendingLeases.find(key); lease != pendingLeases.end()) {
+                            slot->leaseUntil.store(lease->second);
+                            pendingLeases.erase(lease);
+                            leasedStored = true;
+                        }
+                    }
+                    for (auto const& key : failed) {
+                        pendingLeases.erase(key);
+                    }
+                    if (edit.changed()) {
+                        publish(std::move(next), edit);
+                    }
+                    if (counted) {
+                        loadedKeys.fetch_add(stored.size());
+                    }
+                    failedLoads.fetch_add(failed.size());
+                    droppedLoads.fetch_add(dropped);
+                    told.sink = sink;
+                    told.failedHandler = failedHandler;
+                }
+                told.stored = std::move(stored);
+                told.failed = std::move(failed);
+                break;
             }
-            for (auto const& loading : batch) {
-                invalidatedAt.erase(loading.key);
-            }
-            publish(edit);
-            told.overBound = dropLeasesOverBound(at);
-            evict(told.stored, at);
-            told.sink = sink;
-            told.failedHandler = failedHandler;
+            // Leased bytes grow only when a leased value is stored; only then can they have passed the bound.
+            told.overBound = leasedStored && dropLeasesOverBound(at);
+            evict(told.stored, told.failed, at);
             return told;
         }
 
@@ -846,60 +930,107 @@ private:
             bytes.store(valueBytes + failureBytes);
         }
 
-        // Under the writer mutex: when the leased values exceed the bound, stops loading for order and drops every
-        // lease.
+        // When the leased values exceed the bound, stops loading for order and drops every lease. The leases are
+        // summed and cleared over the published state with no lock held; only the queue is changed under it.
         bool dropLeasesOverBound(Clock::time_point at) {
-            if (leasedBytes(ticks(at), nullptr) <= options.maxBytes) {
+            auto const table = publishedTable();
+            if (leasedBytes(*table, ticks(at), nullptr) <= options.maxBytes) {
                 return false;
             }
-            stacks[static_cast<std::size_t>(LevelUse::Order)].clear();
-            std::erase_if(queued, [](auto const& entry) { return entry.second.use == LevelUse::Order; });
-            leases.clear();
+            {
+                std::scoped_lock const lock{writer};
+                queues[static_cast<std::size_t>(LevelUse::Order)].clear();
+                std::erase_if(queued, [](auto const& entry) { return entry.second.use == LevelUse::Order; });
+                pendingLeases.clear();
+            }
+            for (auto const& shard : table->shards) {
+                for (auto const& [key, slot] : *shard) {
+                    slot->leaseUntil.store(0);
+                }
+            }
             return true;
         }
 
-        // Under the writer mutex: evicts the least recently used unleased slots, failures included, until the bound
-        // holds. The values just stored are not candidates; when the bound still does not hold, they are marked
-        // to go first.
-        void evict(std::vector<RowId> const& stored, Clock::time_point at) {
-            if (valueBytes + failureBytes <= options.maxBytes) {
-                return;
-            }
+        // Evicts the least recently used unleased slots until the bound holds. The scan, the sort and the new
+        // state are prepared with no lock held, over the published state; the writer mutex is taken only to check
+        // that nothing changed and to publish. This batch's keys, stored or failed, are not candidates, nor is a
+        // failure still inside its retry delay; when the bound still does not hold, the stored keys are marked to
+        // go first.
+        void evict(std::vector<RowId> const& stored, std::vector<RowId> const& failed, Clock::time_point at) {
             auto const nowTicks = ticks(at);
-            std::unordered_set<RowId> const fresh(stored.begin(), stored.end());
-            std::vector<std::pair<std::int64_t, RowId>> candidates;
-            for (auto const& shard : current->shards) {
-                for (auto const& [key, slot] : *shard) {
-                    auto const lease = leases.find(key);
-                    bool const leased = lease != leases.end() && lease->second > nowTicks;
-                    if (!leased && !fresh.contains(key)) {
-                        candidates.emplace_back(slot->value ? slot->lastUse.load() : std::int64_t{-1}, key);
+            std::unordered_set<RowId> fresh(stored.begin(), stored.end());
+            fresh.insert(failed.begin(), failed.end());
+            for (int attempt = 0; attempt < 8; ++attempt) {
+                std::shared_ptr<Table const> base;
+                std::uint64_t seen = 0;
+                std::size_t held = 0;
+                {
+                    std::scoped_lock const lock{writer};
+                    base = current;
+                    seen = version;
+                    held = valueBytes + failureBytes;
+                }
+                if (held <= options.maxBytes) {
+                    return;
+                }
+                if (evictionHook) {
+                    evictionHook();
+                }
+                std::vector<std::tuple<std::int64_t, RowId, std::size_t>> candidates;
+                for (auto const& shard : base->shards) {
+                    for (auto const& [key, slot] : *shard) {
+                        if (slot->leaseUntil.load() > nowTicks || fresh.contains(key)) {
+                            continue;
+                        }
+                        if (!slot->value && at < slot->failedAt + retryDelay(slot->failures)) {
+                            continue;
+                        }
+                        candidates.emplace_back(slot->value ? slot->lastUse.load() : std::int64_t{-1}, key,
+                                                slot->bytes);
                     }
                 }
-            }
-            std::ranges::sort(candidates);
-            Edit edit{*current, shardCopies};
-            for (auto const& [use, key] : candidates) {
-                if (valueBytes + failureBytes <= options.maxBytes) {
-                    break;
+                std::ranges::sort(candidates);
+                Edit edit{*base, shardCopies};
+                auto remaining = held;
+                std::size_t evicted = 0;
+                for (auto const& [use, key, size] : candidates) {
+                    if (remaining <= options.maxBytes) {
+                        break;
+                    }
+                    edit.erase(key);
+                    remaining -= std::min(remaining, size);
+                    ++evicted;
                 }
-                forget(edit.find(key).get());
-                edit.erase(key);
-                leases.erase(key);
-                evictedKeys.fetch_add(1);
-            }
-            publish(edit);
-            if (valueBytes + failureBytes > options.maxBytes) {
-                for (auto const& key : stored) {
-                    if (auto const slot = findLocked(key); slot != nullptr) {
-                        slot->lastUse.store(0);
+                auto next = edit.changed() ? edit.table() : nullptr;
+                {
+                    std::scoped_lock const lock{writer};
+                    if (version != seen) {
+                        continue;  // a change was published meanwhile: scan again over it
+                    }
+                    // A lease given since the scan protects its value: scan again.
+                    bool leased = false;
+                    for (auto const& [old, slot] : edit.changes) {
+                        leased = leased || old->leaseUntil.load() > nowTicks;
+                    }
+                    if (leased) {
+                        continue;
+                    }
+                    if (next != nullptr) {
+                        publish(std::move(next), edit);
+                    }
+                    evictedKeys.fetch_add(evicted);
+                    if (valueBytes + failureBytes > options.maxBytes) {
+                        for (auto const& key : stored) {
+                            if (auto const slot = findIn(*current, key); slot != nullptr) {
+                                slot->lastUse.store(0);
+                            }
+                        }
                     }
                 }
+                return;
             }
         }
 
-        // Calls one of the application's callbacks; a throw is logged and goes no further, so it cannot stop the
-        // loads.
         template <typename Call>
         static void guarded(Call&& call) noexcept {
             try {
@@ -932,34 +1063,53 @@ private:
             }
         }
 
-        // Stores values as a load would, counting none as loaded and telling no one.
         void storeQuietly(std::vector<std::pair<RowId, Value>> loaded) {
-            std::scoped_lock const lock{writer};
             std::vector<Loading> batch;
-            batch.reserve(loaded.size());
-            auto const started = ++sequence;
-            for (auto const& [key, value] : loaded) {
-                batch.push_back(Loading{.key = key, .epoch = epoch, .started = started});
+            {
+                std::scoped_lock const lock{writer};
+                auto const started = ++sequence;
+                batch.reserve(loaded.size());
+                for (auto const& [key, value] : loaded) {
+                    batch.push_back(Loading{.key = key, .epoch = epoch, .started = started});
+                }
             }
-            auto const told = store(batch, loaded);
-            loadedKeys.fetch_sub(told.stored.size());
+            static_cast<void>(store(batch, loaded, false));
         }
 
+        // Removes keys. The new state is prepared with no lock held; the writer mutex is taken to check that
+        // nothing changed, mark the keys in flight as invalidated, and publish.
         void invalidate(std::span<RowId const> keys) {
-            std::scoped_lock const lock{writer};
-            Edit edit{*current, shardCopies};
-            for (auto const& key : keys) {
-                if (inFlight.contains(key)) {
-                    invalidatedAt.insert_or_assign(key, ++sequence);
+            for (;;) {
+                std::shared_ptr<Table const> base;
+                std::uint64_t seen = 0;
+                {
+                    std::scoped_lock const lock{writer};
+                    base = current;
+                    seen = version;
                 }
-                leases.erase(key);
-                if (auto const old = edit.find(key); old != nullptr) {
-                    forget(old.get());
-                    edit.erase(key);
-                    invalidatedKeys.fetch_add(1);
+                Edit edit{*base, shardCopies};
+                for (auto const& key : keys) {
+                    if (findIn(*base, key) != nullptr) {
+                        edit.erase(key);
+                    }
                 }
+                auto next = edit.changed() ? edit.table() : nullptr;
+                std::scoped_lock const lock{writer};
+                if (version != seen) {
+                    continue;
+                }
+                for (auto const& key : keys) {
+                    if (inFlight.contains(key)) {
+                        invalidatedAt.insert_or_assign(key, ++sequence);
+                    }
+                    pendingLeases.erase(key);
+                }
+                if (next != nullptr) {
+                    invalidatedKeys.fetch_add(edit.changes.size());
+                    publish(std::move(next), edit);
+                }
+                return;
             }
-            publish(edit);
         }
 
         void invalidateAll() {
@@ -972,8 +1122,9 @@ private:
                 published = next;
             }
             current = std::move(next);
+            ++version;
             invalidatedAt.clear();
-            leases.clear();
+            pendingLeases.clear();
             valueBytes = 0;
             failureBytes = 0;
             values = 0;
@@ -1029,19 +1180,10 @@ private:
 
         [[nodiscard]] std::size_t queuedEntries() const {
             std::scoped_lock const lock{writer};
-            std::size_t out = 0;
-            for (auto const& stack : stacks) {
-                for (auto const& block : stack) {
-                    out += block.keys.size() - block.next;
-                }
-            }
-            return out;
+            return queues[0].size() + queues[1].size();
         }
 
-        [[nodiscard]] std::size_t shardCount() const {
-            std::scoped_lock const lock{publishMutex};
-            return published->shards.size();
-        }
+        [[nodiscard]] std::size_t shardCount() const { return publishedTable()->shards.size(); }
 
         [[nodiscard]] LevelCacheStats stats() const {
             return LevelCacheStats{.hits = hits.load(),
@@ -1061,24 +1203,28 @@ private:
         Loader loader;
         SizeOf sizeOf;
         std::shared_ptr<Cells const> cells;
+        // Called at each eviction scan, with no lock held: what a test pauses a store with.
+        std::function<void()> evictionHook;
 
-        // Orders every change and guards everything below but `published`. Readers never take it.
+        // Orders every change; guards everything below but `published`. Held only to read or publish state,
+        // never across a scan, a sort or a shard copy.
         mutable std::mutex writer;
         // Held only to read or swap `published`.
         mutable std::mutex publishMutex;
         std::shared_ptr<Table const> published;
         std::shared_ptr<Table const> current;  // what `published` is, read under `writer`
+        std::uint64_t version = 0;             // advances with every published change
         std::uint64_t epoch = 0;
         std::uint64_t sequence = 0;
+        std::uint64_t wants = 0;
         // Keys of the running batch invalidated after it started, by the sequence number of the invalidation.
         std::unordered_map<RowId, std::uint64_t> invalidatedAt;
         std::unordered_map<RowId, std::pair<std::uint64_t, std::uint64_t>> inFlight;  // epoch, started
-        std::array<std::vector<Block>, 2> stacks;
+        std::array<std::map<std::uint64_t, RowId>, 2> queues;                         // by priority
         std::unordered_map<RowId, Queued> queued;
-        std::uint64_t stamp = 0;
         bool running = false;
-        // Order leases by key, until a clock tick; held or not yet loaded.
-        std::unordered_map<RowId, std::int64_t> leases;
+        // Order leases of keys not held yet, by key, until a clock tick; a held key's lease is on its slot.
+        std::unordered_map<RowId, std::int64_t> pendingLeases;
         std::size_t valueBytes = 0;
         std::size_t failureBytes = 0;
         std::size_t values = 0;
