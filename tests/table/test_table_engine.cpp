@@ -323,7 +323,7 @@ TEST_CASE("table: a column layout keeps one column visible and resets", "[table]
     CHECK(layout.move("c", 0));
     layout.rebuild({"b", "c", "d"});
     CHECK(std::vector<std::string>(layout.order().begin(), layout.order().end()) ==
-          std::vector<std::string>{"c", "b", "d"});
+          std::vector<std::string>{"c", "d", "b"});  // d after its declared predecessor c
     CHECK(layout.visible() == std::vector<std::string>{"c", "d"});
 }
 
