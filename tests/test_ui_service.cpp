@@ -598,3 +598,28 @@ TEST_CASE("permittedActions answers ui-catalog's permitted, and screenAdmitted i
     CHECK_FALSE(morph::ui::screenAdmitted(screen("lims.verify"), tech, *authorizer));
     CHECK_FALSE(morph::ui::screenAdmitted(screen("lims.billing"), tech, *authorizer));
 }
+
+TEST_CASE("UiRegistry refuses an application screen id in the custom screens' namespace", "[ui-service][registry]") {
+    UiRegistry registry{morph::ui::ApplicationInfo{.id = "lims", .version = "1.0.0"}, uiservice::facts()};
+    std::string text{uiservice::kResults};
+    text.replace(text.find("lims.results"), std::string_view{"lims.results"}.size(), "custom:results");
+    auto const screen = registry.addScreen(entry("custom:results"), text);
+    REQUIRE_FALSE(screen);
+    CHECK(screen.error().reason.contains("`custom:`"));
+
+    CatalogEntry host = entry("custom:scanner");
+    host.host = "Scanner";
+    auto const listed = registry.addEntry(host);
+    REQUIRE_FALSE(listed);
+    CHECK(listed.error().reason.contains("`custom:`"));
+}
+
+TEST_CASE("ServedBundle keeps the catalog its documents were loaded with", "[ui-service][registry]") {
+    auto const bundle = uiservice::bundle();
+    REQUIRE(bundle->catalog.action);
+    auto const info = bundle->catalog.action("Lims_List");
+    REQUIRE(info);
+    CHECK(info->modelType == "Lims_Sample");
+    REQUIRE(bundle->catalog.model);
+    CHECK(bundle->catalog.model("Lims_Sample").has_value());
+}

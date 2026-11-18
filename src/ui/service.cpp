@@ -52,6 +52,10 @@ namespace {
     if (entry.id.empty()) {
         return std::string{"a catalog entry has an id"};
     }
+    if (entry.id.starts_with(kCustomScreenIdPrefix)) {
+        return "`custom:` begins the id of a person's custom screen, never an application screen's: `" + entry.id +
+               "`";
+    }
     if (auto reason = detail::checkName(entry.id, "a catalog entry id")) {
         return reason;
     }
@@ -686,6 +690,7 @@ void UiRegistry::serveFiles(ServedBundle& bundle) const {
 }
 
 void UiRegistry::addFacts(ServedBundle& bundle) const {
+    bundle.catalog = _catalog;
     std::set<ActionRef> all{_appActions.begin(), _appActions.end()};
     std::set<std::string, std::less<>> modelTypes{_appModelTypes.begin(), _appModelTypes.end()};
     for (ServedScreen const& screen : bundle.screens) {

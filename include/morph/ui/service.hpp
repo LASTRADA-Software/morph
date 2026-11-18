@@ -87,6 +87,10 @@ struct ServedScreen {
     std::vector<std::string> modelTypes;
 };
 
+/// @brief The prefix of every custom screen's id. An application screen's id never starts with it, so a person's
+///        screen and an application's can never share an id.
+inline constexpr std::string_view kCustomScreenIdPrefix = "custom:";
+
 /// @brief An application's bundle, built and immutable: what `UiService` serves.
 struct ServedBundle {
     /// @brief The application.
@@ -119,6 +123,9 @@ struct ServedBundle {
     /// @brief The wizard documents the registry's catalog gave, by the action of their first step, for every action
     ///        a document names; absent when it has no wizard lookup.
     std::optional<std::map<std::string, std::string, std::less<>>> wizards;
+    /// @brief The catalog the registry loaded every document with, so a document checked after the build, such as
+    ///        a person's custom screen, is loaded against the same facts.
+    Catalog catalog;
 };
 
 /// @brief The actions of @p bundle that the principal of @p session may run: what `ui-catalog` answers as
