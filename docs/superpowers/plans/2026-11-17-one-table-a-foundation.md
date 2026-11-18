@@ -353,7 +353,7 @@ git commit -m "test(table): wide-table fixture and baselines"
 **Files:**
 - Delete: `include/morph/table/plan_conformance.hpp`, `tests/table/test_table_database_pages.cpp`, `examples/lims/org/include/lims/org/core/plan_sql.hpp`, `docs/spec/table/database_pages.md`
 - Modify: `include/morph/table/query.hpp:1-16` (file comment: "or with a database query that honours the same semantics" goes), `:252-268` (`escapeLikePattern` goes), `:354-592` (the "Query plans" section: `PlanUse`, `FilterOp`, `PlannedOperand`, `PlannedSortKey`, `PlannedCondition`, `PlannedColumnFilter`, `PlannedGroup`, `QueryPlan`, `detail::plannedOperand`, `detail::plannedCondition`, `detail::plannedColumnFilter`, `detail::untranslatable`, `planQuery`); no `QueryLimits` member is used only by plans, so `QueryLimits` is unchanged
-- Modify: `include/morph/table/filter.hpp:645` (the comment becomes "The one compile step `apply` and `Engine` share, so a throwing service is an error value in both."), `CMakeLists.txt:722`, `tests/CMakeLists.txt:891`, `tests/table/test_table_query.cpp` (receives the moved cases; loses `"table: LIKE patterns keep % and _ ordinary"`)
+- Modify: `include/morph/table/filter.hpp:645` (the comment becomes "The one compile step `apply` and `Engine` share, so a throwing service is an error value in both."), `CMakeLists.txt:722`, `tests/CMakeLists.txt:36`, `tests/table/test_table_query.cpp` (receives the moved cases; loses `"table: LIKE patterns keep % and _ ordinary"`)
 - Modify: `docs/spec/table/engine.md:52-53` (the `query.hpp` row loses `escapeLikePattern`, `QueryPlan`, `planQuery`; the `plan_conformance.hpp` row goes), `:300-306` and `:311-312` (see Step 5), `docs/spec/README.md:138-139`
 - Modify: `examples/lims/lab/include/lims/lab/models/sample_model.hpp:96-110`, `examples/lims/lab/src/models/sample_model.cpp:280-390`, `examples/lims/ledger/include/lims/ledger/models/ledger_model.hpp:166-191`, `examples/lims/ledger/src/models/ledger_entries.cpp:535-580`, `examples/lims/tests/test_sample_pages.cpp`, `examples/lims/tests/test_ledger_entries.cpp:1440-1785`, `examples/lims/README.md:1795-1846`
 
@@ -404,12 +404,12 @@ TEST_CASE("table: apply refuses what validate and compile refuse, by code", "[ta
 
 (`withFilter` is the one-column helper the moved cases bring with them; keep a single definition.)
 
-- [ ] **Step 2: Delete** the four files listed, remove `include/morph/table/plan_conformance.hpp` from the `FILE_SET` at `CMakeLists.txt:722` and `table/test_table_database_pages.cpp` from `tests/CMakeLists.txt:891`, remove the query-plans section and `escapeLikePattern` from `query.hpp`, and delete `"table: LIKE patterns keep % and _ ordinary"`.
+- [ ] **Step 2: Delete** the four files listed, remove `include/morph/table/plan_conformance.hpp` from the `FILE_SET` at `CMakeLists.txt:722` and `table/test_table_database_pages.cpp` from `tests/CMakeLists.txt:36`, remove the query-plans section and `escapeLikePattern` from `query.hpp`, and delete `"table: LIKE patterns keep % and _ ordinary"`.
 
 - [ ] **Step 3: Rewrite the lims list actions** to read their rows and answer with `apply`
 
-- `SampleModel::pageSamples(sites, query)`: one `mapper.Query<db::SampleRecord>().WhereIn(::Lightweight::FieldNameOf<&db::SampleRecord::siteId>, siteIds).All()` (the `WhereIn` form `examples/bank/src/models/statement_model.cpp:62` uses), each record through `toView`, then `::morph::table::apply(rows, [](SampleView const& s) { return RowId{*s.id}; }, query)`. `execute(ListSamples)` calls it with `OrgModel::visibleSites(currentPrincipal())`; `samplesWhere` builds its `TableQuery` as now and calls it with `callerSitesAt(company)`.
-- `LedgerModel::pageEntries(company, query)`: the entries `execute(ListEntries)` already reads (`ledger_entries.cpp:520-532`, one query on `companyId` and `toView(mapper, loadWritten(…))` per entry), then `apply`. `execute(ListEntriesPage)` keeps its visibility check and empty page.
+- `SampleModel::pageSamples(sites, query)`: one `mapper.Query<db::SampleRecord>().WhereIn(::Lightweight::FieldNameOf<&db::SampleRecord::siteId>, siteIds).All()` (the `WhereIn` form `examples/bank/src/models/statement_model.cpp:62` uses), each record through `toView`, then `::morph::table::apply<SampleView>(rows, [](SampleView const& s) { return RowId{*s.id}; }, query)` (the row type is named: a lambda does not deduce `Row` through `RowKey<Row>`, a `std::function`). An empty site list reads nothing (`WHERE IN ()` is not issued). `execute(ListSamples)` calls it with `OrgModel::visibleSites(currentPrincipal())`; `samplesWhere` builds its `TableQuery` as now and calls it with `callerSitesAt(company)`.
+- `LedgerModel::pageEntries(company, query)`: the entries `execute(ListEntries)` already reads (`ledger_entries.cpp:520-532`, one query on `companyId` and `toView(mapper, loadWritten(…))` per entry), then `apply<JournalEntryView>`; the read is one helper both actions share. `execute(ListEntriesPage)` validates the query against the journal columns first (an invalid query is refused for every caller, as before), then keeps its visibility check and empty page.
 - Doc comments on both say what they now do: "reads the caller's rows and runs the query over them with `table::apply`; the total is exact".
 - `plan_sql.hpp`'s includes leave `sample_model.cpp` and `ledger_entries.cpp`.
 
@@ -422,7 +422,7 @@ Expected: `"lab: the sample list answers through the action with an exact total"
 
 - `engine.md:300-306` becomes: "A model whose rows live in a database reads them as a `DataSource`, whole or lazily by column, and the server sorts, filters, pages and counts them with `apply`; `Page::totalKind` says whether a total is the count or a lower bound (`AtLeast`). `compileFilterGuarded` is the one compile step `apply` and `Engine` share, so a collator or date parser that throws is `ServiceFailed` in both." The `escapeLikePattern` bullet (`:311-312`) goes.
 - `docs/spec/README.md:138-139`: the `database_pages.md` entry goes.
-- `examples/lims/README.md:1795-1846`: replace the database-page section with one paragraph: the sample and ledger lists read the caller's rows with one query and answer with `table::apply`, so their order is the engine's on every surface.
+- `examples/lims/README.md:1795-1819`: replace the database-page section with one paragraph (the trial-balance paragraph after it stays and keeps its 10^7-line measurement): the sample and ledger lists read the caller's rows with one query and answer with `table::apply`, so their order is the engine's on every surface. The two findings that describe `plan_sql.hpp` and the conformance corpus (`:1830-1847`) go.
 
 - [ ] **Step 6: Verify nothing names the removed code**
 
@@ -432,7 +432,7 @@ Expected: no output. (`table.md` names the removals in its API, Neighbouring-spe
 - [ ] **Step 7: Run the suites**
 
 Run: `cmake --build --preset cl-debug --target morph_table_tests && ctest --test-dir build/cl-debug -R "^table" --output-on-failure`
-Run: `cmake --preset cl-debug -DMORPH_BUILD_LADDER=ON -DMORPH_LADDER_RUNGS=lims && cmake --build --preset cl-debug --target ladder_lims_tests && ctest --test-dir build/cl-debug -L ladder-lims --output-on-failure`
+Run: `cmake --preset cl-qt-debug -DMORPH_BUILD_LADDER=ON -DMORPH_LADDER_RUNGS=lims -DCMAKE_PREFIX_PATH=C:/Qt/6.8.3/msvc2022_64/lib/cmake && cmake --build build/cl-qt-debug --target ladder_lims_tests -j 6 && ctest --test-dir build/cl-qt-debug -L ladder-lims -LE stress --output-on-failure` (the ladder needs `MORPH_BUILD_QT=ON`, so `cl-debug` refuses it at configure; with the SQLite ODBC driver installed as `SQLite3 ODBC Driver`, set `ODBC_CONNECTION_STRING=DRIVER={SQLite3 ODBC Driver};Database=morph_ladder_test.db;Timeout=5000`, since the fixture's default names a driver `SQLite3`)
 Run the docs build of the roadmap's Global Constraints.
 Expected: all green; the docs build prints no warning.
 

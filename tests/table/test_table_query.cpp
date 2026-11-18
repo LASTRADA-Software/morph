@@ -10,6 +10,10 @@
 //    action's table member is marked x-table" fails.
 //  - PageWindow::visible not skipping pages in flight: "the window fetches the
 //    pages around the visible rows" fails.
+//  - PageWindow stopping at an AtLeast total: "a total is exact or a lower
+//    bound, and a lower bound does not end the window" fails.
+//  - apply skipping validate: "apply refuses what validate and compile refuse,
+//    by code" fails (the offset case answers an empty page).
 
 #include <array>
 #include <catch2/catch_test_macros.hpp>
@@ -22,6 +26,7 @@
 #include <optional>
 #include <stdexcept>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "table/table_fixtures.hpp"
@@ -258,11 +263,6 @@ TEST_CASE("table: a server's filter error is typed and travels as JSON", "[table
     CHECK(json.contains(R"("column":"mass")"));
 }
 
-TEST_CASE("table: LIKE patterns keep % and _ ordinary", "[table][query]") {
-    CHECK(escapeLikePattern("100%_a\\b") == "100\\%\\_a\\\\b");
-    CHECK(escapeLikePattern("50%", '!') == "50!%");
-}
-
 TEST_CASE("table: the window fetches the pages around the visible rows", "[table][query]") {
     PageWindow<int> window{100, 4};
     auto const first = window.visible(250, 30);
@@ -463,4 +463,84 @@ TEST_CASE("table: a collator that throws while the filter compiles is a ServiceF
     auto const page = apply(resultRows(10), byId(), query, options);
     REQUIRE_FALSE(page.has_value());
     CHECK(page.error().code == TableErrorCode::ServiceFailed);
+}
+
+namespace {
+
+TableQuery withFilter(std::string column, FilterEntry entry) {
+    TableQuery query;
+    query.filters.columns.emplace(std::move(column),
+                                  ColumnFilter{.combine = Combine::Any, .include = {std::move(entry)}, .exclude = {}});
+    return query;
+}
+
+}  // namespace
+
+TEST_CASE("table: apply refuses what validate and compile refuse, by code", "[table][query]") {
+    auto const source =
+        tabletest::makeSource({tabletest::col("id", ColumnKind::Key), tabletest::col("n", ColumnKind::Integer)},
+                              {{Cell{std::int64_t{1}}, Cell{std::int64_t{5}}}});
+    auto const code = [&](TableQuery const& q) {
+        auto r = apply(*source, q);
+        REQUIRE_FALSE(r.has_value());
+        return std::pair{r.error().code, r.error().column};
+    };
+    TableQuery far;
+    far.page.offset = 10'000'001;
+    CHECK(code(far).first == TableErrorCode::LimitExceeded);
+    CHECK(code(withFilter("n", FilterEntry{.contains = "1"})) ==
+          std::pair{TableErrorCode::UnsupportedOperator, std::string{"n"}});
+    CHECK(code(withFilter("n", FilterEntry{.eq = "1", .ne = "2"})) ==
+          std::pair{TableErrorCode::InvalidSpec, std::string{"n"}});
+    TableQuery group;
+    group.filters.groups.push_back(
+        GroupFilter{.columns = {"n"}, .combine = Combine::Any, .include = {FilterEntry{.contains = "x"}}});
+    CHECK(code(group) == std::pair{TableErrorCode::UnsupportedOperator, std::string{"n"}});
+    // Mutation: apply skipping validate (the offset case answers an empty page).
+}
+
+TEST_CASE("table: a total is exact or a lower bound, and a lower bound does not end the window", "[table][query]") {
+    Page<int> page{.rows = {1, 2}, .total = 100, .offset = 0, .totalKind = TotalKind::AtLeast};
+    auto const json = glz::write_json(page);
+    REQUIRE(json.has_value());
+    Page<int> back;
+    REQUIRE_FALSE(glz::read_json(back, *json));
+    CHECK(back.totalKind == TotalKind::AtLeast);
+    CHECK(back.total == 100);
+    Page<int> without;
+    REQUIRE_FALSE(glz::read_json(without, R"({"rows":[1],"total":1,"offset":0})"));
+    CHECK(without.totalKind == TotalKind::Exact);
+
+    PageWindow<int> bounded{10, 8};
+    auto const first = bounded.visible(0, 5);
+    REQUIRE_FALSE(first.empty());
+    CHECK(bounded.accept(
+        first[0],
+        Page<int>{.rows = std::vector<int>(10, 1), .total = 10, .offset = 0, .totalKind = TotalKind::AtLeast}));
+    CHECK(bounded.totalKind() == TotalKind::AtLeast);
+    // Rows 10.. are fetched although the bound is 10: a lower bound says there are at least that many.
+    auto const next = bounded.visible(10, 5);
+    CHECK_FALSE(next.empty());
+    bounded.reset();
+    CHECK(bounded.totalKind() == TotalKind::Exact);
+
+    PageWindow<int> exact{10, 8};
+    auto const start = exact.visible(0, 5);
+    REQUIRE_FALSE(start.empty());
+    CHECK(exact.accept(start[0], Page<int>{.rows = std::vector<int>(10, 1), .total = 10, .offset = 0}));
+    CHECK(exact.visible(10, 5).empty());
+    // Mutation: PageWindow stopping at an AtLeast total.
+}
+
+TEST_CASE("table: a total kind goes over the wire by name", "[table][query]") {
+    Page<int> page{.rows = {1}, .total = 5, .offset = 0, .totalKind = TotalKind::AtLeast};
+    auto const json = glz::write_json(page);
+    REQUIRE(json.has_value());
+    CHECK(json->find("\"totalKind\":\"atLeast\"") != std::string::npos);
+    page.totalKind = TotalKind::Exact;
+    CHECK(glz::write_json(page).value().find("\"totalKind\":\"exact\"") != std::string::npos);
+    Page<int> back;
+    REQUIRE_FALSE(glz::read_json(back, R"({"rows":[],"total":3,"offset":0,"totalKind":"atLeast"})"));
+    CHECK(back.totalKind == TotalKind::AtLeast);
+    CHECK(glz::read_json(back, R"({"rows":[],"total":3,"offset":0,"totalKind":1})"));  // a number is refused
 }
