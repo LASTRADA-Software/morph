@@ -11,6 +11,7 @@
 #include <memory>
 #include <morph/table/query.hpp>
 #include <span>
+#include <stdexcept>
 #include <string>
 #include <utility>
 #include <variant>
@@ -24,8 +25,7 @@ using morph::table::QuantityCell;
 
 namespace {
 
-// FNV-1a 64 of seed 7's first 1,000 rows by 300 columns, as `digestForTesting` takes it. Computed on MSVC and
-// reproduced by an independent implementation of the generator's formulas.
+// FNV-1a 64 of seed 7's first 1,000 rows by 300 columns, as `digestForTesting` takes it.
 constexpr std::uint64_t kPinnedDigest = 0xe7998de91954d00aULL;
 
 // A source that hands out another source's snapshot, counting the cells read from it per column through both
@@ -228,4 +228,47 @@ TEST_CASE("wide table: an edit changes one cell and copies one column", "[table]
     CHECK(listener.changes[0].kind == morph::table::ChangeKind::Updated);
     CHECK(listener.changes[0].rows == std::vector<std::size_t>{5});
     source.unsubscribe(listener);
+}
+
+TEST_CASE("wide table: a text edit shifts the rows after it and copies the column", "[table][wide]") {
+    bench::WideTableSource source{{.rows = 1'000, .columns = 300, .seed = 7}};
+    auto const t001 = columnIndex(source, "t001");
+    auto const before = source.snapshot();
+    Cell const oldFive = before->cell(5, t001);
+    Cell const oldSix = before->cell(6, t001);
+    Cell const oldLast = before->cell(999, t001);
+    // A text of another length than the one it replaces, so every later row's offset moves.
+    std::string const replacement = "ÃditÃ©";
+    REQUIRE(std::get<std::string>(oldFive).size() != replacement.size());
+    source.setCell(5, "t001", Cell{replacement});
+    auto const after = source.snapshot();
+    CHECK(tabletest::sameCell(after->cell(5, t001), Cell{replacement}));
+    CHECK(tabletest::sameCell(after->cell(6, t001), oldSix));  // Mutation: setCell leaving the later offsets
+    CHECK(tabletest::sameCell(after->cell(999, t001), oldLast));
+    CHECK(tabletest::sameCell(before->cell(5, t001), oldFive));
+    CHECK(tabletest::sameCell(before->cell(6, t001), oldSix));
+    source.setCell(6, "t001", Cell{});
+    CHECK(std::holds_alternative<std::monostate>(source.snapshot()->cell(6, t001)));
+    CHECK(tabletest::sameCell(source.snapshot()->cell(5, t001), Cell{replacement}));
+}
+
+TEST_CASE("wide table: a decimal edit is kept at the column's places, and one that does not fit is refused",
+          "[table][wide]") {
+    using morph::math::DecimalPlaces;
+    using morph::math::Denominator;
+    using morph::math::Numerator;
+    using morph::math::Rational;
+    bench::WideTableSource source{{.rows = 1'000, .columns = 300, .seed = 7}};
+    auto const d000 = columnIndex(source, "d000");
+    // 1.5 at one place is stored at the column's two: it reads back as 1.50.
+    // Mutation: storing the numerator unscaled.
+    source.setCell(5, "d000", Cell{Rational{Numerator{3}, Denominator{2}, DecimalPlaces{1}}});
+    CHECK(tabletest::sameCell(source.snapshot()->cell(5, d000),
+                              Cell{Rational{Numerator{150}, Denominator{100}, DecimalPlaces{2}}}));
+    // A third has no exact value at two places.
+    // Mutation: scaling without checking that the denominator divides the scale.
+    auto const unchanged = source.snapshot()->cell(5, d000);
+    CHECK_THROWS_AS(source.setCell(5, "d000", Cell{Rational{Numerator{1}, Denominator{3}, DecimalPlaces{2}}}),
+                    std::invalid_argument);
+    CHECK(tabletest::sameCell(source.snapshot()->cell(5, d000), unchanged));
 }

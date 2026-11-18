@@ -422,7 +422,10 @@ void WideTableSource::unsubscribe(morph::table::ChangeListener& listener) { _lis
 
 std::vector<WideColumn> const& WideTableSource::layout() const noexcept { return _layout; }
 
-WideTableOptions const& WideTableSource::options() const noexcept { return _options; }
+WideTableOptions WideTableSource::options() const {
+    std::scoped_lock const lock{_mutex};
+    return _options;
+}
 
 std::size_t WideTableSource::residentBytes() const noexcept {
     std::scoped_lock const lock{_mutex};
@@ -443,17 +446,23 @@ void WideTableSource::setCell(std::int64_t row, std::string_view column, Cell va
     }
     auto const index = static_cast<std::size_t>(at - _columns.begin());
     {
-        std::scoped_lock const lock{_mutex};
+        // Only writers change `_data`, and they hold `_writer`: the copy is read and built without `_mutex`.
+        std::scoped_lock const writer{_writer};
         auto copy = std::make_shared<ColumnData>(*_data[index]);
         store(*copy, static_cast<std::size_t>(_options.rows), static_cast<std::size_t>(row), value);
-        _data[index] = std::move(copy);
-        _snapshot = std::make_shared<WideSnapshot const>(_options.rows, _data);
+        auto data = _data;
+        data[index] = std::move(copy);
+        auto snapshot = std::make_shared<WideSnapshot const>(_options.rows, data);
+        std::scoped_lock const lock{_mutex};
+        _data = std::move(data);
+        _snapshot = std::move(snapshot);
     }
     _listeners.notify(morph::table::RowChange{.kind = morph::table::ChangeKind::Updated,
                                               .rows = {static_cast<std::size_t>(row)}});
 }
 
 void WideTableSource::regenerate(std::uint64_t seed) {
+    std::unique_lock writer{_writer};
     std::vector<std::shared_ptr<ColumnData const>> data;
     data.reserve(_layout.size());
     for (auto const& column : _layout) {
@@ -466,6 +475,7 @@ void WideTableSource::regenerate(std::uint64_t seed) {
         _data = std::move(data);
         _snapshot = std::move(snapshot);
     }
+    writer.unlock();
     _listeners.notify(morph::table::RowChange{.kind = morph::table::ChangeKind::Reset, .rows = {}});
 }
 

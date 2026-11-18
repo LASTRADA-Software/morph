@@ -23,29 +23,32 @@ target_link_libraries(morph_wide_table_model PUBLIC morph::morph)
 target_include_directories(morph_wide_table_model PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 apply_warnings(morph_wide_table_model)
 
+# The table tests' sources, one list for the native executable and the WebAssembly one below.
+set(MORPH_TABLE_TEST_SOURCES
+    table/test_table_source.cpp
+    table/test_table_sort.cpp
+    table/test_table_parse.cpp
+    table/test_table_filter.cpp
+    table/test_table_view_change.cpp
+    table/test_table_engine.cpp
+    table/test_table_changes.cpp
+    table/test_table_query.cpp
+    table/test_table_database_pages.cpp
+    table/test_table_selection.cpp
+    table/test_table_columns.cpp
+    table/test_table_pending.cpp
+    table/test_table_reentrancy.cpp
+    table/test_table_server.cpp
+    table/test_wide_table.cpp
+    table/bench_table.cpp
+)
+
 # ── WebAssembly: the table tests alone, run under Node ──────────────────────
 # The table module is header-only and builds without Qt, so its tests run in WebAssembly too and the count gates of
 # the single-threaded path are checked there. Nothing else in this directory is built for that target, and Node runs
 # the executable by hand, so no test is registered with ctest.
 if(EMSCRIPTEN)
-    add_executable(morph_table_tests
-        table/test_table_source.cpp
-        table/test_table_sort.cpp
-        table/test_table_parse.cpp
-        table/test_table_filter.cpp
-        table/test_table_view_change.cpp
-        table/test_table_engine.cpp
-        table/test_table_changes.cpp
-        table/test_table_query.cpp
-        table/test_table_database_pages.cpp
-        table/test_table_selection.cpp
-        table/test_table_columns.cpp
-        table/test_table_pending.cpp
-        table/test_table_reentrancy.cpp
-        table/test_table_server.cpp
-        table/test_wide_table.cpp
-        table/bench_table.cpp
-    )
+    add_executable(morph_table_tests ${MORPH_TABLE_TEST_SOURCES})
     target_link_libraries(morph_table_tests PRIVATE morph::morph morph_test_main
                           "$<LINK_LIBRARY:WHOLE_ARCHIVE,morph_wide_table_model>")
     target_include_directories(morph_table_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
@@ -920,24 +923,7 @@ endif()
 # Its own executable so the threaded engine tests can run alone under a
 # sanitizer preset. The `[.benchmark]` cases are hidden: catch_discover_tests
 # does not list them, and they run only when asked for by tag.
-add_executable(morph_table_tests
-    table/test_table_source.cpp
-    table/test_table_sort.cpp
-    table/test_table_parse.cpp
-    table/test_table_filter.cpp
-    table/test_table_view_change.cpp
-    table/test_table_engine.cpp
-    table/test_table_changes.cpp
-    table/test_table_query.cpp
-    table/test_table_database_pages.cpp
-    table/test_table_selection.cpp
-    table/test_table_columns.cpp
-    table/test_table_pending.cpp
-    table/test_table_reentrancy.cpp
-    table/test_table_server.cpp
-    table/test_wide_table.cpp
-    table/bench_table.cpp
-)
+add_executable(morph_table_tests ${MORPH_TABLE_TEST_SOURCES})
 target_link_libraries(morph_table_tests PRIVATE morph::morph morph_test_main
                       "$<LINK_LIBRARY:WHOLE_ARCHIVE,morph_wide_table_model>")
 target_include_directories(morph_table_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
