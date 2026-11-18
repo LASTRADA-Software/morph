@@ -55,8 +55,9 @@ struct McpOptions {
     ///        required.
     exec::IExecutor* callbacks = nullptr;
     /// @brief How long an envelope sent over a transport waits for its reply before it is answered as a failure.
-    ///        `serveStdio` handles one message at a time, so without this bound a request a transport holds, such as
-    ///        one made before the first connect, would block every later message. Zero waits forever. The in-process
+    ///        `serveStdio` handles one message at a time, so without this bound a request a transport holds before its
+    ///        first connect (with `retryFirstConnect`; requests during an outage are rejected instead) would block
+    ///        every later message. Zero waits forever. The in-process
     ///        constructor ignores it, since a `RemoteServer` always replies. A negative value is refused by the
     ///        transport constructor.
     std::chrono::milliseconds callTimeout = std::chrono::seconds{30};

@@ -1251,7 +1251,7 @@ private:
         }
 
         /// Decides what follows an attempt that has ended: fail fast on a never-reached server, or schedule the
-        /// next attempt.
+        /// next attempt. Runs on the I/O loop, which owns every field it writes.
         /// @param reachedServer Whether this attempt completed the handshake.
         void settleAttempt(bool reachedServer) {
             // A first connect that is retried keeps the calls held for it: they are sent when an attempt succeeds.
