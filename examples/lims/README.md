@@ -1786,8 +1786,9 @@ returned took 140 ms. A trial balance over 10^7 posted lines (5 * 10^6 entries o
 168,209 ms and peaked at 10,857 MB; its totals equal the independently accumulated `int64` sums exactly, so it
 answers, but by loading every line, which is not the production criterion. The inference in decision 30 (about 11 s at
 10^7) was a time estimate that assumed the lines fit in memory; the measured time is 168 s and the memory it left out is
-10.9 GB. `ListEntries` makes about five queries per entry, so most of its time is that pattern; one flat read of the
-narrow rows was not measured. Writing the rows took 25 s and 121 s. Not measured: other hardware, other databases.
+10.9 GB. `ListEntries` then made about five queries per entry, so most of its time was that pattern. It now reads the headers
+in one query, the accounts once and the lines 500 entries per query: on the Windows `cl-qt-release` build with
+SQLite's ODBC driver, a `ListEntriesPage` of 50 at offset 500,000 of 10^6 entries took 34,902 ms. Writing the rows took 25 s and 121 s. Not measured: other hardware, other databases.
 
 The first case's run was 592 s against a 600 s ctest limit, so a case named for a 10^6 or 10^7 table has a 1,800 s
 limit (`cmake/morph_add_rung.cmake`); both are `Stress:` cases and outside `ctest -L ladder -LE stress`.
