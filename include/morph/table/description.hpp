@@ -1173,7 +1173,7 @@ struct AnswerContext {
     }
     std::vector<std::string> columns;
     if (checked->columns) {
-        columns = std::move(*checked->columns);
+        columns = *checked->columns;
     } else {
         columns.reserve(infos.size());
         for (auto const& info : infos) {
