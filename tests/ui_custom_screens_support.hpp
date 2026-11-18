@@ -94,8 +94,8 @@ struct Server {
     explicit Server(std::shared_ptr<morph::ui::ICustomScreenStore> chosen = nullptr,
                     morph::ui::CustomScreensOptions options = {})
         : store{chosen != nullptr ? std::move(chosen) : std::make_shared<morph::ui::MemoryCustomScreenStore>(pool)} {
-        morph::ui::registerCustomScreens(store, [held = served] { return held; }, authorizer, dispatcher, registry,
-                                         options);
+        morph::ui::registerCustomScreens(
+            store, [held = served] { return held; }, authorizer, dispatcher, registry, options);
         server = std::make_shared<morph::backend::RemoteServer>(pool, authorizer, dispatcher, registry);
         // NOLINTNEXTLINE(cppcoreguidelines-prefer-member-initializer): bind() needs the server built above.
         instance = bind();

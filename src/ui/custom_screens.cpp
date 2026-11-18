@@ -69,6 +69,19 @@ void checkName(std::string const& name, std::string_view what) {
     }
 }
 
+/// @brief The bundle being served now, once @p app is the application it serves: custom screens belong to it alone.
+[[nodiscard]] std::shared_ptr<ServedBundle const> servedFor(detail::CustomScreensContext const& context,
+                                                            std::string const& app) {
+    checkName(app, "app");
+    std::shared_ptr<ServedBundle const> bundle = context.bundle();
+    if (bundle == nullptr || bundle->application.id != app) {
+        throw std::invalid_argument{"custom screens belong to `" +
+                                    (bundle == nullptr ? std::string{} : bundle->application.id) + "`, not `" + app +
+                                    "`"};
+    }
+    return bundle;
+}
+
 [[nodiscard]] std::optional<CheckRefusal> onWire(std::optional<Refusal> const& refusal) {
     if (!refusal) {
         return std::nullopt;
@@ -125,14 +138,13 @@ namespace {
 }  // namespace
 
 ::core::async::Task<CustomScreensListed> CustomScreensModel::execute(CustomScreensList request) {
-    checkName(request.app, "app");
+    std::shared_ptr<ServedBundle const> const bundle = servedFor(*_context, request.app);
     ::morph::session::Context const session = callerSession();
     CustomScreensListed reply;
     if (session.principal.empty()) {
         co_return reply;
     }
     std::vector<CustomScreen> const stored = co_await _context->store->list(session.principal, request.app);
-    std::shared_ptr<ServedBundle const> const bundle = _context->bundle();
     // Computed once for the whole list, and never kept past this call: permissions can change between calls.
     std::vector<std::string> const permitted = permittedActions(*bundle, session, *_context->authorizer);
     for (CustomScreen const& screen : stored) {
@@ -142,45 +154,44 @@ namespace {
 }
 
 ::core::async::Task<CustomScreenFound> CustomScreensModel::execute(CustomScreensGet request) {
-    checkName(request.app, "app");
+    std::shared_ptr<ServedBundle const> const bundle = servedFor(*_context, request.app);
     checkName(request.id, "id");
     ::morph::session::Context const session = callerSession();
     std::string const person = requirePerson(session);
-    auto found = co_await _context->store->get(CustomScreenKey{.person = person, .app = request.app, .id = request.id});
+    auto found =
+        co_await _context->store->get(CustomScreenKey{.person = person, .app = request.app, .id = request.id});
     if (!found) {
         throw std::runtime_error{found.error().reason};
     }
-    std::shared_ptr<ServedBundle const> const bundle = _context->bundle();
     std::vector<std::string> const permitted = permittedActions(*bundle, session, *_context->authorizer);
     CustomScreenSummary summary = summarize(*_context, *bundle, session, permitted, *found);
     co_return CustomScreenFound{.summary = std::move(summary), .document = std::move(found->document)};
 }
 
 ::core::async::Task<CustomScreenChecked> CustomScreensModel::execute(CustomScreensCheck request) {
-    checkName(request.app, "app");
+    std::shared_ptr<ServedBundle const> const bundle = servedFor(*_context, request.app);
     checkName(request.basedOn, "basedOn");
     ::morph::session::Context const session = callerSession();
     static_cast<void>(requirePerson(session));
-    std::shared_ptr<ServedBundle const> const bundle = _context->bundle();
-    co_return CustomScreenChecked{.refusal = onWire(checkCustomScreen(*bundle, session, *_context->authorizer,
-                                                                      request.basedOn, request.document,
-                                                                      _context->options, &_context->verdicts))};
+    co_return CustomScreenChecked{
+        .refusal = onWire(checkCustomScreen(*bundle, session, *_context->authorizer, request.basedOn, request.document,
+                                            _context->options, &_context->verdicts))};
 }
 
 ::core::async::Task<CustomScreenSaved> CustomScreensModel::execute(CustomScreensSave request) {
-    checkName(request.app, "app");
+    std::shared_ptr<ServedBundle const> const bundle = servedFor(*_context, request.app);
     checkName(request.title, "title");
     checkName(request.basedOn, "basedOn");
     ::morph::session::Context const session = callerSession();
     std::string const person = requirePerson(session);
     if (request.id) {
         checkName(*request.id, "id");
-        auto existing = co_await _context->store->get(CustomScreenKey{.person = person, .app = request.app, .id = *request.id});
+        auto existing =
+            co_await _context->store->get(CustomScreenKey{.person = person, .app = request.app, .id = *request.id});
         if (!existing) {
-            throw std::runtime_error{"no such custom screen"};
+            throw std::runtime_error{existing.error().reason};
         }
     }
-    std::shared_ptr<ServedBundle const> const bundle = _context->bundle();
     if (auto refusal = checkCustomScreen(*bundle, session, *_context->authorizer, request.basedOn, request.document,
                                          _context->options, &_context->verdicts)) {
         throw std::invalid_argument{refusal->message()};
@@ -209,11 +220,12 @@ namespace {
 }
 
 ::core::async::Task<CustomScreenRemoved> CustomScreensModel::execute(CustomScreensRemove request) {
-    checkName(request.app, "app");
+    static_cast<void>(servedFor(*_context, request.app));
     checkName(request.id, "id");
     ::morph::session::Context const session = callerSession();
     std::string const person = requirePerson(session);
-    auto removed = co_await _context->store->remove(CustomScreenKey{.person = person, .app = request.app, .id = request.id});
+    auto removed =
+        co_await _context->store->remove(CustomScreenKey{.person = person, .app = request.app, .id = request.id});
     if (!removed) {
         throw std::runtime_error{removed.error().reason};
     }
@@ -229,8 +241,9 @@ void registerCustomScreens(std::shared_ptr<ICustomScreenStore> store,
         throw std::invalid_argument{"registerCustomScreens: a null store, bundle or authorizer"};
     }
     if (options.maxDocumentBytes > kMaxFileBytes) {
-        throw std::invalid_argument{"registerCustomScreens: maxDocumentBytes is at most kMaxFileBytes, so every "
-                                    "stored screen can be served"};
+        throw std::invalid_argument{
+            "registerCustomScreens: maxDocumentBytes is at most kMaxFileBytes, so every "
+            "stored screen can be served"};
     }
     auto context = std::make_shared<detail::CustomScreensContext>(std::move(store), std::move(bundle),
                                                                   std::move(authorizer), options);
@@ -249,7 +262,7 @@ void registerCustomScreens(std::shared_ptr<ICustomScreenStore> store,
 // The process-level registries resolve once, at their first read, so the record, the result slots that let a list
 // be found holding it, and the effects of save and remove are registered here, at static initialisation, in the
 // translation unit a server links by calling registerCustomScreens.
-BRIDGE_REGISTER_RECORD(morph::ui::CustomScreenSummary, "morph.customScreens")
+BRIDGE_REGISTER_RECORD(morph::ui::CustomScreenSummary, "morph.customScreens", ::morph::record::privateKeys)
 BRIDGE_REGISTER_EFFECTS(morph::ui::CustomScreensSave, morph::effects::changes<morph::ui::CustomScreenSummary>)
 BRIDGE_REGISTER_EFFECTS(morph::ui::CustomScreensRemove, morph::effects::changes<morph::ui::CustomScreenSummary>)
 #ifndef MORPH_CLIENT_ONLY

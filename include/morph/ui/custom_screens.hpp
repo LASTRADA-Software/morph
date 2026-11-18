@@ -338,7 +338,6 @@ private:
 [[nodiscard]] MORPH_API std::expected<std::string, Refusal> withScreenId(std::string_view document,
                                                                          std::string_view id);
 
-
 /// @brief The type id the custom screens model is registered under.
 inline constexpr std::string_view kCustomScreensModel = "morph.customScreens";
 /// @brief The record type a custom screen's summary is, which `save` and `remove` change.

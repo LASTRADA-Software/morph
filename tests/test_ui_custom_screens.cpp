@@ -137,14 +137,16 @@ TEST_CASE("custom screens: one person never reaches another's", "[ui][custom-scr
         s.call(morph::ui::kCustomScreensGet, R"({"app":"lims","id":)" + quoted(bobs) + R"(,"person":"bob"})", "alice");
     REQUIRE(got.kind == "err");
     CHECK(got.message.contains("no such custom screen"));
-    Envelope const overwrite = s.call(morph::ui::kCustomScreensSave,
-                                      R"({"app":"lims","id":)" + quoted(bobs) +
-                                          R"(,"title":"Taken","basedOn":"lims.base","document":)" +
-                                          quoted(baseScreen("lims.base")) + "}",
-                                      "alice");
+    Envelope const overwrite =
+        s.call(morph::ui::kCustomScreensSave,
+               R"({"app":"lims","id":)" + quoted(bobs) + R"(,"title":"Taken","basedOn":"lims.base","document":)" +
+                   quoted(baseScreen("lims.base")) + "}",
+               "alice");
     REQUIRE(overwrite.kind == "err");
     CHECK(overwrite.message.contains("no such custom screen"));
-    CHECK(listed(s, "bob").screens.front().title == "Mine");
+    auto const bobsList = listed(s, "bob");
+    REQUIRE(bobsList.screens.size() == 1);
+    CHECK(bobsList.screens.front().title == "Mine");
 }
 
 TEST_CASE("custom screens: without a verified person nothing is read or written", "[ui][custom-screens][remote]") {
@@ -153,10 +155,59 @@ TEST_CASE("custom screens: without a verified person nothing is read or written"
     Envelope const write = s.save(baseScreen("lims.base"), "");
     REQUIRE(write.kind == "err");
     CHECK(write.message.contains("signed-in person"));
-    CHECK(s.call(morph::ui::kCustomScreensCheck,
-                 R"({"app":"lims","basedOn":"lims.base","document":)" + quoted(baseScreen("lims.base")) + "}", "")
-              .kind == "err");
-    CHECK(s.call(morph::ui::kCustomScreensRemove, R"({"app":"lims","id":"custom:x"})", "").kind == "err");
+    Envelope const check =
+        s.call(morph::ui::kCustomScreensCheck,
+               R"({"app":"lims","basedOn":"lims.base","document":)" + quoted(baseScreen("lims.base")) + "}", "");
+    REQUIRE(check.kind == "err");
+    CHECK(check.message.contains("signed-in person"));
+    Envelope const remove = s.call(morph::ui::kCustomScreensRemove, R"({"app":"lims","id":"custom:x"})", "");
+    REQUIRE(remove.kind == "err");
+    CHECK(remove.message.contains("signed-in person"));
+    Envelope const get = s.call(morph::ui::kCustomScreensGet, R"({"app":"lims","id":"custom:x"})", "");
+    REQUIRE(get.kind == "err");
+    CHECK(get.message.contains("signed-in person"));
+}
+
+TEST_CASE("custom screens: every action refuses an application the bundle does not serve",
+          "[ui][custom-screens][remote]") {
+    Server s;
+    std::string const doc = quoted(baseScreen("lims.base"));
+    std::string const other = R"("app":"other")";
+    for (auto const& [action, body] : std::vector<std::pair<std::string_view, std::string>>{
+             {morph::ui::kCustomScreensList, "{" + other + "}"},
+             {morph::ui::kCustomScreensGet, "{" + other + R"(,"id":"custom:x"})"},
+             {morph::ui::kCustomScreensCheck, "{" + other + R"(,"basedOn":"lims.base","document":)" + doc + "}"},
+             {morph::ui::kCustomScreensSave,
+              "{" + other + R"(,"title":"T","basedOn":"lims.base","document":)" + doc + "}"},
+             {morph::ui::kCustomScreensRemove, "{" + other + R"(,"id":"custom:x"})"}}) {
+        Envelope const reply = s.call(action, body, "alice");
+        INFO(action);
+        REQUIRE(reply.kind == "err");
+        CHECK(reply.message.contains("custom screens belong to `lims`, not `other`"));
+    }
+}
+
+TEST_CASE("registerCustomScreens refuses what it cannot serve", "[ui][custom-screens][remote]") {
+    morph::exec::ThreadPoolExecutor pool{1};
+    morph::model::detail::ActionDispatcher dispatcher;
+    morph::model::detail::ModelRegistryFactory registry;
+    auto const store = std::make_shared<morph::ui::MemoryCustomScreenStore>(pool);
+    auto const served = screens_test::bundle();
+    auto const getBundle = [served] { return served; };
+    auto const authorizer = std::make_shared<uiservice::RuleAuthorizer>();
+    CHECK_THROWS_AS(morph::ui::registerCustomScreens(
+                        store, getBundle, authorizer, dispatcher, registry,
+                        morph::ui::CustomScreensOptions{.maxDocumentBytes = morph::ui::kMaxFileBytes + 1}),
+                    std::invalid_argument);
+    CHECK_THROWS_AS(morph::ui::registerCustomScreens(nullptr, getBundle, authorizer, dispatcher, registry),
+                    std::invalid_argument);
+    CHECK_THROWS_AS(morph::ui::registerCustomScreens(store, nullptr, authorizer, dispatcher, registry),
+                    std::invalid_argument);
+    CHECK_THROWS_AS(morph::ui::registerCustomScreens(store, getBundle, nullptr, dispatcher, registry),
+                    std::invalid_argument);
+    CHECK_NOTHROW(morph::ui::registerCustomScreens(
+        store, getBundle, authorizer, dispatcher, registry,
+        morph::ui::CustomScreensOptions{.maxDocumentBytes = morph::ui::kMaxFileBytes}));
 }
 
 TEST_CASE("custom screens: check answers the refusal and its pointer; save refuses the same",
@@ -226,12 +277,17 @@ TEST_CASE("custom screens: a screen the person has since lost permission for is 
 TEST_CASE("custom screens: save with an id overwrites, remove removes", "[ui][custom-screens][remote]") {
     Server s;
     std::string const id = savedId(s.save(baseScreen("lims.base"), "alice"));
-    Envelope const again = s.call(morph::ui::kCustomScreensSave,
-                                  R"({"app":"lims","id":)" + quoted(id) +
-                                      R"(,"title":"Renamed","basedOn":"lims.base","document":)" +
-                                      quoted(baseScreen("lims.base")) + "}",
-                                  "alice");
+    Envelope const again =
+        s.call(morph::ui::kCustomScreensSave,
+               R"({"app":"lims","id":)" + quoted(id) + R"(,"title":"Renamed","basedOn":"lims.base","document":)" +
+                   quoted(screens_test::replaced(baseScreen("lims.base"), "Results", "Changed")) + "}",
+               "alice");
     CHECK(savedId(again) == id);
+    Envelope const got = s.call(morph::ui::kCustomScreensGet, R"({"app":"lims","id":)" + quoted(id) + "}", "alice");
+    REQUIRE(got.kind == "ok");
+    morph::ui::CustomScreenFound found;
+    REQUIRE_FALSE(glz::read_json(found, got.body));
+    CHECK(found.document.contains("Changed"));
     auto const mine = listed(s, "alice");
     REQUIRE(mine.screens.size() == 1);
     CHECK(mine.screens.front().title == "Renamed");
@@ -240,8 +296,7 @@ TEST_CASE("custom screens: save with an id overwrites, remove removes", "[ui][cu
         s.call(morph::ui::kCustomScreensRemove, R"({"app":"lims","id":)" + quoted(id) + "}", "alice");
     REQUIRE(removed.kind == "ok");
     CHECK(listed(s, "alice").screens.empty());
-    CHECK(s.call(morph::ui::kCustomScreensRemove, R"({"app":"lims","id":)" + quoted(id) + "}", "alice").kind ==
-          "err");
+    CHECK(s.call(morph::ui::kCustomScreensRemove, R"({"app":"lims","id":)" + quoted(id) + "}", "alice").kind == "err");
 }
 
 TEST_CASE("custom screens: lists hold the record that saves and removes change", "[ui][custom-screens][effects]") {
@@ -258,7 +313,8 @@ TEST_CASE("custom screens: lists hold the record that saves and removes change",
     CHECK(morph::model::ActionTraits<morph::ui::CustomScreensList>::typeId() == morph::ui::kCustomScreensList);
 }
 
-TEST_CASE("custom screens: a save whose stored text would exceed the bound is refused", "[ui][custom-screens][remote]") {
+TEST_CASE("custom screens: a save whose stored text would exceed the bound is refused",
+          "[ui][custom-screens][remote]") {
     std::string const document = baseScreen("lims.base");
     Server s{nullptr, morph::ui::CustomScreensOptions{.maxDocumentBytes = document.size()}};
     // The document itself is within the bound; the id the model writes into it is longer than the one it had.
