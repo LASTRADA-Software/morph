@@ -40,7 +40,9 @@
 #include <string>
 #include <string_view>
 #include <type_traits>
+#include <unordered_set>
 #include <utility>
+#include <variant>
 #include <vector>
 
 namespace morph::table {
@@ -75,6 +77,12 @@ struct TableQuery {
     ///        none, and the reply then holds keys alone. `validate` puts it in the table's column order, each id
     ///        once.
     std::optional<std::vector<std::string>> columns;
+    /// @brief When set, the reply holds only the view's rows with these keys, in view order, and `page` does not
+    ///        apply. A key not in the view (removed, rejected or undecided) has no row in the reply.
+    std::optional<std::vector<RowId>> keys;
+    /// @brief The user asked for failed loads to be tried again: the level caches load the failed keys this query
+    ///        needs without waiting out their retry delay.
+    bool retry = false;
 
     /// @brief The schema keyword that marks a member of this type.
     /// @return `"x-table"`.
@@ -103,10 +111,19 @@ struct UnloadedRow {
     [[nodiscard]] bool operator==(UnloadedRow const& other) const = default;
 };
 
+/// @brief What is not loaded for one row: views into the page or window that holds the row.
+struct UnloadedLevels {
+    /// @brief The row's unloaded levels, sorted.
+    std::span<std::string const> levels;
+    /// @brief The subset of `levels` whose load failed.
+    std::span<std::string const> failed;
+};
+
 /// @brief One page of a list action's reply.
 ///
-/// The members after `totalKind` say which of its cells are still coming. A page read without them is a fully
-/// loaded page.
+/// The members from `unloadedRows` to `failed` say which of its cells are still coming, and `indices` places a
+/// keyed reply's rows in the view. Every member is written; a page read without the members after `totalKind` is
+/// a fully loaded page that is not a keyed reply.
 /// @tparam Row The row type.
 template <typename Row>
 struct Page {
@@ -129,6 +146,8 @@ struct Page {
     std::vector<std::string> awaiting;
     /// @brief The order levels whose load failed for at least one row, and is not being tried again yet.
     std::vector<std::string> failed;
+    /// @brief A keyed reply only: the view row of each of `rows`.
+    std::vector<std::int64_t> indices;
 };
 
 /// @brief The bounds a server applies to every `TableQuery`, an untrusted body.
@@ -153,6 +172,8 @@ struct QueryLimits {
     std::int64_t totalCap = 100'000;
     /// @brief Entries of `TableQuery::columns`, counted as received, duplicates included.
     std::size_t maxColumns = 512;
+    /// @brief Entries of `TableQuery::keys`, counted as received, duplicates included.
+    std::size_t maxKeys = 1000;
 };
 
 namespace detail {
@@ -278,6 +299,9 @@ namespace detail {
 /// every other bound is a refusal. A `columns` list is put in the order of
 /// @p columns with each id once, so every caller of `validate` or `apply`
 /// sees it that way; an absent list stays absent and an empty one empty.
+/// A keyed query has no page, so `keys` with a non-zero `page.offset` is
+/// `InvalidSpec`; the keys are bounded by `maxKeys`, and a text key by
+/// `maxTextLength`.
 /// @param query   The query, as received.
 /// @param columns The row schema's columns.
 /// @param limits  The bounds.
@@ -314,6 +338,22 @@ namespace detail {
             }
         }
         query.columns = detail::orderedColumns(columns, *query.columns);
+    }
+    if (query.keys) {
+        if (query.page.offset != 0) {
+            return std::unexpected(
+                TableError{.code = TableErrorCode::InvalidSpec, .column = {}, .message = "a keyed query has no page"});
+        }
+        if (query.keys->size() > limits.maxKeys) {
+            return std::unexpected(detail::limitError({}, "too many keys"));
+        }
+        auto const tooLong = [&limits](RowId const& key) {
+            auto const* const text = std::get_if<std::string>(&key);
+            return text != nullptr && text->size() > limits.maxTextLength;
+        };
+        if (std::ranges::any_of(*query.keys, tooLong)) {
+            return std::unexpected(detail::limitError({}, "key too long"));
+        }
     }
     return query;
 }
@@ -429,35 +469,35 @@ struct PageRows {
     std::vector<std::string> awaiting;
     /// @brief The order levels whose load failed for at least one row, and is not being tried again yet.
     std::vector<std::string> failed;
+    /// @brief A keyed query only: the view row of each of `rows`.
+    std::vector<std::int64_t> indices;
 };
 
 namespace detail {
 
-/// @brief A query `apply` ran: the query as `validate` returned it, and the result of its job.
-struct QueryRun {
-    /// @brief The validated query.
-    TableQuery query;
-    /// @brief The view and the undecided rows.
-    JobResult result;
+/// @brief A query's view over one snapshot: what `pageRows` pages.
+struct ComputedView {
+    /// @brief The sorted, filtered view, as source rows.
+    std::vector<std::uint32_t> rows;
+    /// @brief The rows the filter could neither admit nor reject, source rows ascending. They are in no view.
+    std::vector<std::uint32_t> undecided;
 };
 
-/// @brief Validates @p query and computes its view over @p source in the calling thread.
-/// @param source  The rows.
-/// @param query   The query, as received.
-/// @param options Limits, services and column access.
-/// @return The run, or the typed error.
-[[nodiscard]] inline std::expected<QueryRun, TableError> runQuery(DataSource const& source, TableQuery const& query,
-                                                                  ApplyOptions const& options) {
+/// @brief Computes the view of a validated query over @p source in the calling thread.
+/// @param source    The rows; read through one snapshot.
+/// @param validated The query as `validate` returned it.
+/// @param options   The services; `validate` applied its limits and `mayRead`.
+/// @return The view, or the typed error: `ServiceFailed` from a throwing service, `SourceContract` when a sorted
+///         or filtered base-level column holds an unloaded cell.
+[[nodiscard]] inline std::expected<ComputedView, TableError> computeView(DataSource const& source,
+                                                                         TableQuery const& validated,
+                                                                         ApplyOptions const& options) {
     auto const columns = source.columns();
-    auto checked = validate(query, columns, options.limits, options.mayRead);
-    if (!checked) {
-        return std::unexpected(std::move(checked.error()));
-    }
     // One copy of the services for this call, the filter's operands included:
     // a collator that is not safe to share clones itself here, so concurrent
     // calls never fold on the one the caller passed.
     auto services = options.services.forTask();
-    auto filter = compileFilterGuarded(checked->filters, columns, services);
+    auto filter = compileFilterGuarded(validated.filters, columns, services);
     if (!filter) {
         return std::unexpected(std::move(filter.error()));
     }
@@ -466,7 +506,7 @@ struct QueryRun {
     input.columns.assign(columns.begin(), columns.end());
     input.services = std::move(services);
     input.keys.resize(columns.size());
-    for (auto const& key : checked->sort) {
+    for (auto const& key : validated.sort) {
         if (auto const column = findColumn(columns, key.column)) {
             input.needed.push_back(*column);
         }
@@ -477,7 +517,7 @@ struct QueryRun {
     std::ranges::sort(input.needed);
     auto const [first, last] = std::ranges::unique(input.needed);
     input.needed.erase(first, last);
-    input.sort = checked->sort;
+    input.sort = validated.sort;
     input.filter = std::make_shared<CompiledFilter const>(std::move(*filter));
     input.previousSnapshot = input.snapshot;
     ViewJob job{std::move(input)};
@@ -485,28 +525,108 @@ struct QueryRun {
     if (job.failure()) {
         return std::unexpected(*job.failure());
     }
-    return QueryRun{.query = std::move(*checked), .result = job.takeResult()};
+    auto result = job.takeResult();
+    return ComputedView{.rows = std::move(result.view), .undecided = std::move(result.undecided)};
 }
 
-/// @brief The page of @p run: its rows, total and undecided count.
-/// @param run    The query and its view.
-/// @param limits The bounds; a total above `totalCap` is left out.
+/// @brief The source row of a key, or nothing when the snapshot has no row with that key.
+using SourceRowOf = std::function<std::optional<std::uint32_t>(RowId const&)>;
+
+/// @brief What a view-row table holds for a source row that is not in the view.
+inline constexpr std::uint32_t kNotInView = std::numeric_limits<std::uint32_t>::max();
+
+/// @brief Fills a keyed page's `rows` and `indices`: the rows of @p keys in the view, ascending by view row.
+/// @param view        The view.
+/// @param snapshot    The snapshot the view was computed over.
+/// @param keys        The keys asked for.
+/// @param viewRowOf   View row by source row, `kNotInView` for a row not in the view; built from @p view when
+///                    empty.
+/// @param sourceRowOf A key's source row; when empty, the snapshot's row ids are scanned once.
+/// @param out         The page to fill.
+inline void keyedRows(ComputedView const& view, RowSnapshot const& snapshot, std::span<RowId const> keys,
+                      std::span<std::uint32_t const> viewRowOf, SourceRowOf const& sourceRowOf, PageRows& out) {
+    if (view.rows.empty() || keys.empty()) {
+        return;
+    }
+    std::vector<std::uint32_t> built;
+    if (viewRowOf.empty()) {
+        built.assign(snapshot.rowCount(), kNotInView);
+        for (std::size_t at = 0; at < view.rows.size(); ++at) {
+            built[view.rows[at]] = static_cast<std::uint32_t>(at);
+        }
+        viewRowOf = built;
+    }
+    // (view row, source row) of each key found in the view.
+    std::vector<std::pair<std::uint32_t, std::uint32_t>> found;
+    found.reserve(keys.size());
+    auto const take = [&found, viewRowOf](std::size_t row) {
+        if (row < viewRowOf.size() && viewRowOf[row] != kNotInView) {
+            found.emplace_back(viewRowOf[row], static_cast<std::uint32_t>(row));
+        }
+    };
+    if (sourceRowOf) {
+        for (auto const& key : keys) {
+            if (auto const row = sourceRowOf(key)) {
+                take(*row);
+            }
+        }
+    } else {
+        std::unordered_set<RowId> const wanted(keys.begin(), keys.end());
+        std::size_t matched = 0;
+        for (std::size_t row = 0; row < snapshot.rowCount() && matched < wanted.size(); ++row) {
+            if (wanted.contains(snapshot.rowId(row))) {
+                ++matched;
+                take(row);
+            }
+        }
+    }
+    // A key asked for twice is one row of the reply.
+    std::ranges::sort(found);
+    auto const [first, last] = std::ranges::unique(found);
+    found.erase(first, last);
+    out.rows.reserve(found.size());
+    out.indices.reserve(found.size());
+    for (auto const& [viewRow, sourceRow] : found) {
+        out.rows.push_back(sourceRow);
+        out.indices.push_back(viewRow);
+    }
+}
+
+/// @brief The page of a view: its rows, total and undecided count.
+///
+/// A query without `keys` gets the view rows its `page` names. A keyed query gets the source rows whose key is in
+/// `keys` and whose row is in the view, ascending by view row, each one's view row in `indices`, and offset 0.
+/// Either way `total`, `totalKind` and `undecided` are the whole view's.
+/// @param view        The view, as `computeView` returns it.
+/// @param snapshot    The snapshot the view was computed over.
+/// @param validated   The query as `validate` returned it.
+/// @param limits      The bounds; a total above `totalCap` is left out.
+/// @param viewRowOf   View row by source row, `kNotInView` for a row not in the view; built on demand when empty.
+///                    Read by a keyed query only.
+/// @param sourceRowOf A key's source row, one call a key; when empty, a keyed query scans the snapshot's row ids
+///                    once.
 /// @return The page.
-[[nodiscard]] inline PageRows pageRows(QueryRun const& run, QueryLimits const& limits) {
-    auto const& view = run.result.view;
+[[nodiscard]] inline PageRows pageRows(ComputedView const& view, RowSnapshot const& snapshot,
+                                       TableQuery const& validated, QueryLimits const& limits,
+                                       std::span<std::uint32_t const> viewRowOf = {},
+                                       SourceRowOf const& sourceRowOf = {}) {
     PageRows out;
-    out.offset = run.query.page.offset;
-    out.undecided = static_cast<std::int64_t>(run.result.undecided.size());
+    out.undecided = static_cast<std::int64_t>(view.undecided.size());
     out.totalKind = out.undecided > 0 ? TotalKind::AtLeast : TotalKind::Exact;
-    auto const count = static_cast<std::int64_t>(view.size());
+    auto const count = static_cast<std::int64_t>(view.rows.size());
     if (count <= limits.totalCap) {
         out.total = count;
     }
-    auto const begin = std::min(run.query.page.offset, count);
+    if (validated.keys) {
+        keyedRows(view, snapshot, *validated.keys, viewRowOf, sourceRowOf, out);
+        return out;
+    }
+    out.offset = validated.page.offset;
+    auto const begin = std::min(validated.page.offset, count);
     // Compared, not added: `maxLimit` may be as large as INT64_MAX.
-    auto const end = run.query.page.limit >= count - begin ? count : begin + run.query.page.limit;
+    auto const end = validated.page.limit >= count - begin ? count : begin + validated.page.limit;
     for (auto i = begin; i < end; ++i) {
-        out.rows.push_back(view[static_cast<std::size_t>(i)]);
+        out.rows.push_back(view.rows[static_cast<std::size_t>(i)]);
     }
     return out;
 }
@@ -515,6 +635,9 @@ struct QueryRun {
 
 /// @brief Runs @p query over @p source in the calling thread: the reference
 ///        implementation of `server` mode.
+///
+/// `validate`, then `detail::computeView`, then `detail::pageRows`; a keyed
+/// query finds its keys by scanning the snapshot's row ids once.
 /// @param source  The server's rows.
 /// @param query   The request body's table query.
 /// @param options Limits, services and column access.
@@ -522,11 +645,17 @@ struct QueryRun {
 ///         when a sorted or filtered base-level column holds an unloaded cell.
 [[nodiscard]] inline std::expected<PageRows, TableError> apply(DataSource const& source, TableQuery const& query,
                                                                ApplyOptions const& options = {}) {
-    auto const run = detail::runQuery(source, query, options);
-    if (!run) {
-        return std::unexpected(run.error());
+    auto const checked = validate(query, source.columns(), options.limits, options.mayRead);
+    if (!checked) {
+        return std::unexpected(checked.error());
     }
-    return detail::pageRows(*run, options.limits);
+    auto const view = detail::computeView(source, *checked, options);
+    if (!view) {
+        return std::unexpected(view.error());
+    }
+    // A source is read on its owner's thread, which this call is on, so this is the snapshot the view was
+    // computed over.
+    return detail::pageRows(*view, *source.snapshot(), *checked, options.limits);
 }
 
 // ── Typed rows ──────────────────────────────────────────────────────────────
@@ -909,19 +1038,19 @@ template <typename Row>
 
 /// @brief The order levels @p loaded refuses for at least one row of the view or of the undecided set.
 /// @tparam Row The row type.
-/// @param rows   The rows the run read.
-/// @param run    The run.
-/// @param order  The run's order levels, sorted.
+/// @param rows   The rows the view was computed over.
+/// @param view   The view.
+/// @param order  The query's order levels, sorted.
 /// @param loaded The predicate; not empty.
 /// @return The levels, sorted.
 template <typename Row>
-[[nodiscard]] std::vector<std::string> awaitedLevels(std::vector<Row> const& rows, QueryRun const& run,
+[[nodiscard]] std::vector<std::string> awaitedLevels(std::vector<Row> const& rows, ComputedView const& view,
                                                      std::span<std::string const> order,
                                                      LevelLoaded<Row> const& loaded) {
     std::vector<std::string> out;
     for (auto const& level : order) {
         auto const refused = [&](std::uint32_t row) { return !loaded(rows[row], level); };
-        if (std::ranges::any_of(run.result.view, refused) || std::ranges::any_of(run.result.undecided, refused)) {
+        if (std::ranges::any_of(view.rows, refused) || std::ranges::any_of(view.undecided, refused)) {
             out.push_back(level);
         }
     }
@@ -954,11 +1083,15 @@ template <typename Row>
     // Borrowed for the call: an aliasing pointer that owns nothing.
     std::shared_ptr<std::vector<Row> const> const borrowed{std::shared_ptr<void>{}, &rows};
     RowsSource<Row> const source{borrowed, std::move(key), kinds, comparators, loaded};
-    auto const run = detail::runQuery(source, query, options);
-    if (!run) {
-        return std::unexpected(run.error());
+    auto const checked = validate(query, source.columns(), options.limits, options.mayRead);
+    if (!checked) {
+        return std::unexpected(checked.error());
     }
-    auto page = detail::pageRows(*run, options.limits);
+    auto const view = detail::computeView(source, *checked, options);
+    if (!view) {
+        return std::unexpected(view.error());
+    }
+    auto page = detail::pageRows(*view, *source.snapshot(), *checked, options.limits);
     Page<Row> out;
     out.total = page.total;
     out.offset = page.offset;
@@ -966,6 +1099,7 @@ template <typename Row>
     out.undecided = page.undecided;
     out.awaiting = std::move(page.awaiting);
     out.failed = std::move(page.failed);
+    out.indices = std::move(page.indices);
     out.rows.reserve(page.rows.size());
     for (auto const row : page.rows) {
         out.rows.push_back(rows[row]);
@@ -973,7 +1107,7 @@ template <typename Row>
     if (!loaded) {
         return out;
     }
-    auto const needed = levelsNeeded(run->query, source.columns(), options.mayRead);
+    auto const needed = levelsNeeded(*checked, source.columns(), options.mayRead);
     std::vector<std::string> wanted = needed.order;
     wanted.insert(wanted.end(), needed.display.begin(), needed.display.end());
     std::ranges::sort(wanted);
@@ -986,7 +1120,7 @@ template <typename Row>
                 UnloadedRow{.index = static_cast<std::int64_t>(index), .levels = std::move(levels), .failed = {}});
         }
     }
-    auto awaited = detail::awaitedLevels(rows, *run, needed.order, loaded);
+    auto awaited = detail::awaitedLevels(rows, *view, needed.order, loaded);
     out.awaiting.insert(out.awaiting.end(), awaited.begin(), awaited.end());
     std::ranges::sort(out.awaiting);
     auto const [awaitFirst, awaitLast] = std::ranges::unique(out.awaiting);

@@ -198,7 +198,8 @@ TEST_CASE("generic page: every cell kind round-trips", "[table][description]") {
     auto const json = toJson(page);
     CHECK(json == R"({"revision":"9f2c","columns":["id","name","net","share","dose"],"keys":[101,102],)"
                   R"("rows":[[101,"Alpha",[1250,100],[3,1000],[5,1,[1,1000]]],[102,"Beta",null,null,[250,1]]],)"
-                  R"("total":9093,"totalKind":"exact","offset":0})");
+                  R"("total":9093,"totalKind":"exact","offset":0,)"
+                  R"("unloadedRows":[],"undecided":0,"awaiting":[],"failed":[],"indices":[]})");
     auto const read = readGenericPage(json, description);
     REQUIRE(read.has_value());
     CHECK(read->keys == page.keys);
@@ -1108,4 +1109,108 @@ TEST_CASE("table action: a server builds a table's reply on tableWork", "[table]
     CHECK_FALSE(reads.contains(tabledesc::workThreads().served));
     // The in-process twin of the socket case "tables: a table's reply is built on tableWork".
     // Mutation: RemoteServer not installing the TableRuntimeScope (answerQuery runs inline on the strand).
+}
+
+namespace {
+
+// A served table of `rows` rows of one integer column "id" holding 10, 11, …; row keys 0..rows-1.
+ServedTable threeRowTable(std::size_t rows, bool keyed) {
+    std::vector<std::vector<Cell>> cells;
+    for (std::size_t row = 0; row < rows; ++row) {
+        cells.push_back({Cell{static_cast<std::int64_t>(10 + row)}});
+    }
+    auto description = TableDescription{.id = "t", .label = "T", .columns = {column("id", ColumnKind::Integer)},
+                                        .key = "id"};
+    description.capabilities.keys = keyed;
+    return detail::pinned(ServedTable{.description = describe(std::move(description)),
+                                      .source = tabletest::makeSource({tabletest::col("id", ColumnKind::Integer)},
+                                                                      std::move(cells)),
+                                      .levels = {},
+                                      .mayRead = {},
+                                      .scope = {},
+                                      .services = {},
+                                      .limits = {}});
+}
+
+}  // namespace
+
+// Mutation: answerQuery ignoring capabilities.keys.
+TEST_CASE("table: a keyed query to a table without keyed queries is unavailable", "[table][query][keyed]") {
+    auto const served = threeRowTable(3, false);
+    TableQuery keyed;
+    keyed.keys = std::vector<RowId>{RowId{std::int64_t{1}}};
+    auto const refused = detail::answerQuery(served, keyed);
+    REQUIRE_FALSE(refused.has_value());
+    CHECK(refused.error().code == TableErrorCode::Unavailable);
+    auto const page = detail::answerQuery(served, TableQuery{});
+    REQUIRE(page.has_value());
+    CHECK(page->keys.size() == 3);
+    auto const answered = detail::answerQuery(threeRowTable(3, true), keyed);
+    REQUIRE(answered.has_value());
+    CHECK(answered->keys == std::vector<RowId>{RowId{std::int64_t{1}}});
+    CHECK(answered->indices == std::vector<std::int64_t>{1});
+}
+
+// Mutation: an empty columns list read as absent.
+TEST_CASE("table: an empty columns list gives a page of keys", "[table][query]") {
+    TableQuery query;
+    query.columns = std::vector<std::string>{};
+    auto const page = detail::answerQuery(threeRowTable(3, true), query);
+    REQUIRE(page.has_value());
+    CHECK(page->columns.empty());
+    CHECK(page->keys == std::vector<RowId>{RowId{std::int64_t{0}}, RowId{std::int64_t{1}}, RowId{std::int64_t{2}}});
+    REQUIRE(page->rows.size() == 3);
+    CHECK(std::ranges::all_of(page->rows, [](GenericRow const& row) { return row.empty(); }));
+}
+
+// Mutation: the reader requiring unloadedRows.
+TEST_CASE("generic page: unloaded rows, undecided and indices round-trip", "[table][description]") {
+    GenericPage page;
+    page.revision = "r";
+    page.keys = {RowId{std::int64_t{5}}, RowId{std::int64_t{9}}};
+    page.rows = {GenericRow{}, GenericRow{}};
+    page.unloadedRows = {UnloadedRow{.index = 1, .levels = {"recipe"}, .failed = {"recipe"}}};
+    page.undecided = 40;
+    page.awaiting = {"stock"};
+    page.failed = {"recipe"};
+    page.indices = {5, 9};
+    auto const description = describedOf({column("id", ColumnKind::Integer)});
+    auto const back = readGenericPage(toJson(page), description);
+    REQUIRE(back.has_value());
+    CHECK(back->unloadedRows == page.unloadedRows);
+    CHECK(back->undecided == 40);
+    CHECK(back->awaiting == page.awaiting);
+    CHECK(back->failed == page.failed);
+    CHECK(back->indices == page.indices);
+
+    auto const loaded = readGenericPage(
+        R"({"revision":"r","columns":[],"keys":[5],"rows":[[]],"total":1,"totalKind":"exact","offset":0})",
+        description);
+    REQUIRE(loaded.has_value());
+    CHECK(loaded->unloadedRows.empty());
+    CHECK(loaded->undecided == 0);
+    CHECK(loaded->awaiting.empty());
+    CHECK(loaded->failed.empty());
+    CHECK(loaded->indices.empty());
+}
+
+// Mutation: the writer emitting a sentinel string for Unloaded.
+TEST_CASE("generic page: an unloaded cell is null and named per level", "[table][description]") {
+    using tabletest::levelCol;
+    auto const source = tabletest::makeSource(
+        {tabletest::col("id", ColumnKind::Integer), levelCol("r", ColumnKind::Text, "recipe"),
+         levelCol("s", ColumnKind::Text, "stock")},
+        {{Cell{std::int64_t{10}}, Cell{std::string{"a"}}, Cell{std::string{"x"}}},
+         {Cell{std::int64_t{11}}, Cell{Unloaded{}}, Cell{Unloaded{}}}});
+    std::vector<std::string> const named{"id", "r"};
+    auto const page = writeGenericPage(pageOf(2), *source, named);
+    CHECK(page.unloadedRows ==
+          std::vector<UnloadedRow>{UnloadedRow{.index = 1, .levels = {"recipe"}, .failed = {}}});  // not "stock"
+    auto const json = toJson(page);
+    CHECK(json.find(R"("rows":[[10,"a"],[11,null]])") != std::string::npos);
+    auto const back = readGenericPage(json, describedOf({column("id", ColumnKind::Integer), column("r", ColumnKind::Text)}));
+    REQUIRE(back.has_value());
+    REQUIRE(back->rows.size() == 2);
+    CHECK(std::holds_alternative<std::monostate>(back->rows[1][1]));
+    CHECK(back->unloadedRows == page.unloadedRows);
 }

@@ -917,3 +917,59 @@ TEST_CASE("table benchmark: S5 S6 arrivals", "[.benchmark][table][unloaded]") {
     }
     printRow("S6: about 50,000 undecided, 1,000 of them decided", kWideRows, spreadOf(decided));
 }
+
+// ── Step 2b: partial pages and keyed replies on the wire (W3, W4) ──────────
+
+TEST_CASE("table benchmark: partial pages and keyed replies", "[.benchmark][table][wire]") {
+    constexpr int kRuns = 31;
+    auto const wide = std::make_shared<bench::WideTableSource>(
+        bench::WideTableOptions{.rows = 1'000, .columns = 300, .seed = 1, .loadDelay = {}});
+    auto const description = describe(bench::wideDescription("wide", 300));
+    std::println(
+        "\nWire: partial pages and keyed replies (bytes; time per call)\n\n| id | measures | bytes | median ms | "
+        "p10-p90 ms |\n|---|---|---:|---:|---:|");
+
+    // W3: W1's page, 200 rows of the 40 columns at positions 100 to 139, which hold the recipe decimals d000 to
+    // d009, with no row's recipe level loaded: every row names one unloaded level.
+    auto const named = columnIds(*wide, 100, 140);
+    auto const unloaded = bench::withUnloaded(wide, recipeColumnsOf(*wide), "recipe", 0.0, 7);
+    auto const rows = firstRows(200, 1'000);
+    auto const partial = writeGenericPage(rows, *unloaded, named);
+    REQUIRE(partial.unloadedRows.size() == 200);
+    REQUIRE(std::ranges::all_of(partial.unloadedRows,
+                                [](UnloadedRow const& row) { return row.levels == std::vector<std::string>{"recipe"}; }));
+    auto bare = partial;
+    bare.unloadedRows.clear();
+    auto const withRows = morph::wire::encode(morph::wire::makeOk(1, jsonOf(partial))).size();
+    auto const without = morph::wire::encode(morph::wire::makeOk(1, jsonOf(bare))).size();
+    auto const w1 = morph::wire::encode(morph::wire::makeOk(1, jsonOf(writeGenericPage(rows, *wide, named)))).size();
+    printWire("W3", "200 x 40 page, every row naming one unloaded level, in an ok envelope", withRows, Spread{});
+    printWire("W3", "the same page without its unloadedRows", without, Spread{});
+    std::println("| W3 | unloadedRows bytes {} as a share of W1's {} | {:.4f} | | |", withRows - without, w1,
+                 static_cast<double>(withRows - without) / static_cast<double>(w1));
+
+    // W4: a keyed reply of 20 keys spread over the view and W1's 40 columns.
+    TableQuery keyed;
+    keyed.columns = named;
+    keyed.keys.emplace();
+    for (std::int64_t i = 0; i < 20; ++i) {
+        keyed.keys->emplace_back(std::int64_t{1 + (i * 50)});
+    }
+    auto const keyedRows = apply(*wide, keyed);
+    REQUIRE(keyedRows.has_value());
+    REQUIRE(keyedRows->rows.size() == 20);
+    REQUIRE(keyedRows->indices.size() == 20);
+    auto const keyedPage = writeGenericPage(*keyedRows, *wide, *keyed.columns);
+    REQUIRE(cellsOf(keyedPage) == 800);
+    auto const keyedBody = jsonOf(keyedPage);
+    printWire("W4", "keyed reply, 20 x 40, in an ok envelope",
+              morph::wire::encode(morph::wire::makeOk(1, keyedBody)).size(), Spread{});
+    printWire("W4", "encode the keyed reply from the column store", keyedBody.size(), timed(kRuns, [&] {
+                  REQUIRE(jsonOf(writeGenericPage(*keyedRows, *wide, *keyed.columns)).size() == keyedBody.size());
+              }));
+    printWire("W4", "readGenericPage of the keyed reply", keyedBody.size(), timed(kRuns, [&] {
+                  auto const read = readGenericPage(keyedBody, description);
+                  REQUIRE(read.has_value());
+                  REQUIRE(read->indices.size() == 20);
+              }));
+}
