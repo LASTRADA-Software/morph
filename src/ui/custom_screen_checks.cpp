@@ -128,8 +128,8 @@ private:
         _aliases.enter(scope);
         Table& table = _tables.emplace_back(_open.empty() ? Table{} : *_open.back());
         for (MutationDecl const& mutation : scope.mutations) {
-            Mutation const& resolved =
-                _resolved.emplace_back(Mutation{&mutation, _aliases.resolve(mutation.model), &table});
+            Mutation const& resolved = _resolved.emplace_back(
+                Mutation{.decl = &mutation, .type = _aliases.resolve(mutation.model), .table = &table});
             table.mutations.insert_or_assign(mutation.name, &resolved);
         }
         _open.push_back(&table);
@@ -215,7 +215,10 @@ private:
                     note(capability, command.path);
                 }
                 if (!trigger.empty()) {
-                    note(trigger + ": " + capability, command.path);
+                    std::string pressed = trigger;
+                    pressed += ": ";
+                    pressed += capability;
+                    note(pressed, command.path);
                 }
             }
             // `run`, `upload` and `signIn` each name a mutation, and run it.
@@ -234,6 +237,7 @@ private:
 
     /// @brief A mutation run without a press runs its `onSuccess` and `onError` without one too, resolving their
     ///        names in the scope that declares the mutation, as the runtime does.
+    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): the mutation's name, then the trigger that ran it.
     void follow(std::string const& name, std::string const& trigger, Table const& table) {
         Mutation const* const mutation = find(name, table);
         if (mutation == nullptr || !_followed.insert({mutation, trigger}).second) {
@@ -248,7 +252,7 @@ private:
         auto const* const object = json == nullptr ? nullptr : std::get_if<Json::object_t>(&json->data);
         if (object != nullptr) {
             if (auto written = glz::write<::morph::wire::detail::EscapingWriteOpts{}>(*json)) {
-                auto const args = object->find("args");
+                Json::object_t::const_iterator const args = object->find("args");
                 _hostCommands.push_back(HostCommand{.json = *std::move(written),
                                                     .path = path,
                                                     .literalArgs = args == object->end() || isLiteral(args->second)});
@@ -281,7 +285,7 @@ private:
         if (object == nullptr) {
             return false;
         }
-        auto const mode = object->find("mode");
+        Json::object_t::const_iterator const mode = object->find("mode");
         if (mode == object->end()) {
             return true;
         }
@@ -296,17 +300,17 @@ private:
         while (json != nullptr && start < pointer.size()) {
             std::size_t const end = std::min(pointer.find('/', start + 1), pointer.size());
             std::string token = pointer.substr(start + 1, end - start - 1);
-            for (std::size_t at = token.find('~'); at != std::string::npos; at = token.find('~', at + 1)) {
-                if (at + 1 < token.size()) {
-                    token.replace(at, 2, token[at + 1] == '1' ? "/" : "~");
+            for (std::size_t tilde = token.find('~'); tilde != std::string::npos; tilde = token.find('~', tilde + 1)) {
+                if (tilde + 1 < token.size()) {
+                    token.replace(tilde, 2, token.at(tilde + 1) == '1' ? "/" : "~");
                 }
             }
             if (auto const* const object = std::get_if<Json::object_t>(&json->data)) {
-                auto const found = object->find(token);
+                Json::object_t::const_iterator const found = object->find(token);
                 json = found == object->end() ? nullptr : &found->second;
             } else if (auto const* const array = std::get_if<Json::array_t>(&json->data)) {
                 std::size_t const index = std::strtoull(token.c_str(), nullptr, 10);
-                json = index < array->size() ? &(*array)[index] : nullptr;
+                json = index < array->size() ? &array->at(index) : nullptr;
             } else {
                 json = nullptr;
             }
@@ -316,6 +320,7 @@ private:
     }
 
     /// @brief Whether the command at @p pointer has exactly `{"ref": "event"}` as its @p key.
+    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): the command's pointer, then the key under it.
     [[nodiscard]] bool isEventRef(std::string const& pointer, std::string const& key) const {
         Json const* const command = at(pointer);
         auto const* const object = command == nullptr ? nullptr : std::get_if<Json::object_t>(&command->data);
@@ -379,15 +384,15 @@ private:
     void hostNames(Json const& json, std::string const& path) {
         if (auto const* const object = std::get_if<Json::object_t>(&json.data)) {
             for (auto const& [key, value] : *object) {
-                std::string const at = pointerAppend(path, key);
+                std::string const keyPath = pointerAppend(path, key);
                 if (auto const* const text = std::get_if<std::string>(&value.data); text != nullptr && key == "host") {
-                    note("host `" + *text + "`", at);
+                    note("host `" + *text + "`", keyPath);
                 }
-                hostNames(value, at);
+                hostNames(value, keyPath);
             }
         } else if (auto const* const array = std::get_if<Json::array_t>(&json.data)) {
             for (std::size_t index = 0; index < array->size(); ++index) {
-                hostNames((*array)[index], pointerAppend(path, index));
+                hostNames(array->at(index), pointerAppend(path, index));
             }
         }
     }
@@ -411,9 +416,9 @@ private:
 
 std::optional<Refusal> checkBaseRule(Document const& base, std::string_view baseText, Document const& custom,
                                      std::string_view customText) {
-    std::string const of = "the base screen `" + base.id + "`";
+    std::string const baseName = "the base screen `" + base.id + "`";
     if (custom.params != base.params) {
-        return refusalAt("/params", "a custom screen declares exactly the params of " + of);
+        return refusalAt("/params", "a custom screen declares exactly the params of " + baseName);
     }
     detail::DocumentActions const baseNames{base};
     detail::DocumentActions const customNames{custom};
@@ -421,12 +426,13 @@ std::optional<Refusal> checkBaseRule(Document const& base, std::string_view base
     for (detail::ActionUse const& use : customNames.uses()) {
         ActionRef const& ref = use.action;
         if (!std::ranges::binary_search(baseActions, ref)) {
-            return refusalAt(use.path, of + " does not use action `" + ref.action + "` of `" + ref.modelType + "`");
+            return refusalAt(use.path,
+                             baseName + " does not use action `" + ref.action + "` of `" + ref.modelType + "`");
         }
         // The same action in another kind of position runs differently: a mutation, a query and a form that submits
         // itself each reach the server by a different trigger.
         if (!baseNames.names(ref, use.position)) {
-            return refusalAt(use.path, of + " does not use action `" + ref.action + "` of `" + ref.modelType +
+            return refusalAt(use.path, baseName + " does not use action `" + ref.action + "` of `" + ref.modelType +
                                            "` in a position of kind `" + use.position + "`");
         }
     }
@@ -439,7 +445,11 @@ std::optional<Refusal> checkBaseRule(Document const& base, std::string_view base
     Capabilities const has{custom, *customJson};
     for (auto const& [capability, path] : has.uses()) {
         if (!had.has(capability)) {
-            return refusalAt(path, of + " has no `" + capability + "`");
+            std::string message = baseName;
+            message += " has no `";
+            message += capability;
+            message += "`";
+            return refusalAt(path, message);
         }
     }
     if (has.unreadableHost()) {
@@ -453,7 +463,7 @@ std::optional<Refusal> checkBaseRule(Document const& base, std::string_view base
                              "resolve in the screen");
         }
         if (!std::ranges::any_of(had.hostCommands(), [&](auto const& known) { return known.json == command.json; })) {
-            return refusalAt(command.path, of + " has no host command `" + command.json + "`");
+            return refusalAt(command.path, baseName + " has no host command `" + command.json + "`");
         }
     }
     if (has.strayUpload()) {
@@ -515,7 +525,8 @@ namespace {
                                                                  ::morph::session::Context const& session,
                                                                  ::morph::session::IAuthorizer const& authorizer,
                                                                  std::string_view basedOn) {
-    auto const base = std::ranges::find(bundle.screens, basedOn, [](ServedScreen const& s) { return s.entry.id; });
+    auto const base =
+        std::ranges::find(bundle.screens, basedOn, [](ServedScreen const& screen) { return screen.entry.id; });
     if (base == bundle.screens.end() || base->hash.empty()) {
         return std::unexpected(
             refusalAt("", "`basedOn` names no screen document of the application: `" + std::string{basedOn} + "`"));
@@ -528,9 +539,10 @@ namespace {
 }
 
 /// @brief Checks 3 to 6 of `checkCustomScreen`, against the base screen `base`.
-[[nodiscard]] std::optional<Refusal> checkAgainstBase(ServedBundle const& bundle, ServedScreen const& base,
-                                                      std::string_view basedOn, std::string_view document,
-                                                      std::vector<std::string> const& permitted) {
+[[nodiscard]] std::optional<Refusal> checkAgainstBase(
+    ServedBundle const& bundle, ServedScreen const& base,
+    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): the base's id, then the custom text.
+    std::string_view basedOn, std::string_view document, std::vector<std::string> const& permitted) {
     std::string const& baseText = bundle.files.at(base.hash).bytes;
     LoadOptions const load{.catalog = bundle.catalog};
     auto const baseDocument = loadDocumentText(baseText, load);
@@ -599,7 +611,8 @@ std::optional<Refusal> checkCustomScreen(ServedBundle const& bundle, ::morph::se
                              document, options, cache);
 }
 
-std::expected<std::string, Refusal> withScreenId(std::string_view document, std::string_view id) {
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): the document, then its new id.
+std::expected<std::string, Refusal> withScreenId(std::string_view document, std::string_view screenId) {
     auto parsed = parseJson(document);
     if (!parsed) {
         return std::unexpected(refusalAt("", "a custom screen is JSON text: " + parsed.error()));
@@ -608,7 +621,7 @@ std::expected<std::string, Refusal> withScreenId(std::string_view document, std:
     if (object == nullptr) {
         return std::unexpected(refusalAt("", "a custom screen is a JSON object"));
     }
-    (*object)["id"].data = std::string{id};
+    object->try_emplace("id").first->second.data = std::string{screenId};
     // Control bytes are escaped inside the writer, as the wire does: glaze's default leaves them raw, which is
     // invalid JSON and can corrupt the byte after an earlier escaped character.
     auto written = glz::write<::morph::wire::detail::EscapingWriteOpts{}>(*parsed);

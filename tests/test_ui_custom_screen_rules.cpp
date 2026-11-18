@@ -76,7 +76,7 @@ TEST_CASE("base rule: a client-side command the base does not use is refused", "
     REQUIRE(refusal);
     CHECK(refusal->reason.contains("signOut"));
     // The base's own upload, moved into a nested column, is still the base's.
-    auto const attach =
+    char const* const attach =
         R"({"kind":"filePicker","label":"Attach","onPick":[{"upload":{"ref":"event"},"to":"save","as":"ref"}]})";
     std::string const moved = replaced(
         replaced(baseScreen("custom:mine"), "," + std::string{attach}, ""), R"({"kind":"text","text":"Results"},)",
@@ -140,7 +140,7 @@ std::string miniScreen(std::string_view id, std::string_view top = {}, std::stri
 }  // namespace
 
 TEST_CASE("base rule: a component's fallback is part of the document", "[ui][custom-screens][base-rule]") {
-    auto const forEachWithReport =
+    char const* const forEachWithReport =
         R"({"kind":"column","children":[{"kind":"forEach","rows":{"lit":[]},"key":{"row":"id"},)"
         R"("scope":{"models":{"sample":{"type":"Lims_Sample","instance":"private"}},)"
         R"("mutations":{"rep":{"model":"sample","action":"Lims_Report"}}},)"
@@ -159,9 +159,9 @@ TEST_CASE("base rule: a mutation resolves its model in the scope that declares i
                               R"(},"children":[{"kind":"text","text":"r"}]})");
     };
     SECTION("an inner alias of the same name does not retype an outer mutation") {
-        auto const outer = R"("mutations":{"a":{"model":"sample","action":"Lims_Save"}},)";
-        auto const run = R"("watch":[{"on":{"query":"list"},"do":[{"run":"a"}]}])";
-        auto const shadow = R"("models":{"sample":{"type":"Lims_Audit","instance":"private"}},)";
+        char const* const outer = R"("mutations":{"a":{"model":"sample","action":"Lims_Save"}},)";
+        char const* const run = R"("watch":[{"on":{"query":"list"},"do":[{"run":"a"}]}])";
+        char const* const shadow = R"("models":{"sample":{"type":"Lims_Audit","instance":"private"}},)";
         // The base runs `a` from a watch at the top; the custom runs it from a watch under an alias that is Lims_Audit
         // there, but `a` is declared against the outer alias: it is the same run.
         CHECK_FALSE(between(withWatch("lims.base", std::string{outer} + run + ",", ""),
@@ -300,22 +300,23 @@ TEST_CASE("base rule: every place a command can sit is walked", "[ui][custom-scr
         return R"({"kind":"button","label":"B","onClick":[)" + command + "]}";
     };
     std::vector<Place> const places = {
-        {"document keys", R"("keys":{"Ctrl+Shift+Y":[)" + out + R"(]},)", "", ""},
-        {"node keys", "", R"({"kind":"text","text":"k","keys":{"Enter":[)" + out + "]}}", ""},
-        {"head actions", R"("actions":[{"id":"a","label":"A","onClick":[)" + out + R"(]}],)", "", ""},
-        {"head menu", R"("menu":[{"id":"m","label":"M","onClick":[)" + out + R"(]}],)", "", ""},
-        {"head tools", R"("tools":[{"id":"t","kind":"search","label":"T","onChange":[)" + out + R"(]}],)", "", ""},
-        {"component fallback", "", "", press(out)},
-        {"watch in a nested scope", "",
-         R"({"kind":"forEach","rows":{"lit":[]},"key":{"row":"id"},"scope":{"watch":[{"on":{"query":"list"},)"
-         R"("do":[)" +
-             out + R"(]}]},"children":[{"kind":"text","text":"r"}]})",
-         ""},
-        {"seq", "", press(R"({"seq":[)" + out + "]}"), ""},
-        {"all", "", press(R"({"all":[)" + out + "]}"), ""},
-        {"if, else branch", "", press(R"({"if":[{"lit":true},[],[)" + out + "]]}"), ""},
-        {"navigate, onResult", "", press(R"({"navigate":"lims.other","onResult":[)" + out + "]}"), ""},
-        {"navigate, onCancel", "", press(R"({"navigate":"lims.other","onCancel":[)" + out + "]}"), ""},
+        {.name = "document keys", .top = R"("keys":{"Ctrl+Shift+Y":[)" + out + R"(]},)"},
+        {.name = "node keys", .children = R"({"kind":"text","text":"k","keys":{"Enter":[)" + out + "]}}"},
+        {.name = "head actions", .top = R"("actions":[{"id":"a","label":"A","onClick":[)" + out + R"(]}],)"},
+        {.name = "head menu", .top = R"("menu":[{"id":"m","label":"M","onClick":[)" + out + R"(]}],)"},
+        {.name = "head tools",
+         .top = R"("tools":[{"id":"t","kind":"search","label":"T","onChange":[)" + out + R"(]}],)"},
+        {.name = "component fallback", .fallback = press(out)},
+        {.name = "watch in a nested scope",
+         .children =
+             R"({"kind":"forEach","rows":{"lit":[]},"key":{"row":"id"},"scope":{"watch":[{"on":{"query":"list"},)"
+             R"("do":[)" +
+             out + R"(]}]},"children":[{"kind":"text","text":"r"}]})"},
+        {.name = "seq", .children = press(R"({"seq":[)" + out + "]}")},
+        {.name = "all", .children = press(R"({"all":[)" + out + "]}")},
+        {.name = "if, else branch", .children = press(R"({"if":[{"lit":true},[],[)" + out + "]]}")},
+        {.name = "navigate, onResult", .children = press(R"({"navigate":"lims.other","onResult":[)" + out + "]}")},
+        {.name = "navigate, onCancel", .children = press(R"({"navigate":"lims.other","onCancel":[)" + out + "]}")},
     };
     for (Place const& place : places) {
         DYNAMIC_SECTION(place.name) {

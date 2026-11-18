@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <catch2/catch_test_macros.hpp>
+#include <initializer_list>
 #include <morph/core/completion.hpp>
 #include <morph/core/effects.hpp>
 #include <morph/core/executor.hpp>
@@ -12,12 +13,22 @@
 #include <morph/ui/custom_screens.hpp>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
 #include "ui_custom_screens_support.hpp"
 
 namespace {
+
+/// The concatenation of @p parts.
+std::string joined(std::initializer_list<std::string_view> parts) {
+    std::string text;
+    for (std::string_view const part : parts) {
+        text += part;
+    }
+    return text;
+}
 
 /// The value of a completion the inline executor has already settled.
 template <typename T>
@@ -62,7 +73,8 @@ TEST_CASE("MemoryCustomScreenStore keeps each person's screens apart", "[ui][cus
     REQUIRE(settled(store.put({.person = "bob", .app = "lims", .id = "custom:2"}, screen("custom:2", "bob"))));
     morph::ui::CustomScreen hers = screen("custom:2", "alice");
     hers.title = "Hers";
-    REQUIRE(settled(store.put({.person = "alice", .app = "lims", .id = "custom:2"}, std::move(hers))));
+    auto const storedHers = settled(store.put({.person = "alice", .app = "lims", .id = "custom:2"}, std::move(hers)));
+    REQUIRE(storedHers);
     auto const bobs = settled(store.get({.person = "bob", .app = "lims", .id = "custom:2"}));
     REQUIRE(bobs);
     CHECK(bobs->title == "Mine");
@@ -178,9 +190,9 @@ TEST_CASE("custom screens: every action refuses an application the bundle does n
     for (auto const& [action, body] : std::vector<std::pair<std::string_view, std::string>>{
              {morph::ui::kCustomScreensList, "{" + other + "}"},
              {morph::ui::kCustomScreensGet, "{" + other + R"(,"id":"custom:x"})"},
-             {morph::ui::kCustomScreensCheck, "{" + other + R"(,"basedOn":"lims.base","document":)" + doc + "}"},
+             {morph::ui::kCustomScreensCheck, joined({"{", other, R"(,"basedOn":"lims.base","document":)", doc, "}"})},
              {morph::ui::kCustomScreensSave,
-              "{" + other + R"(,"title":"T","basedOn":"lims.base","document":)" + doc + "}"},
+              joined({"{", other, R"(,"title":"T","basedOn":"lims.base","document":)", doc, "}"})},
              {morph::ui::kCustomScreensRemove, "{" + other + R"(,"id":"custom:x"})"}}) {
         Envelope const reply = s.call(action, body, "alice");
         INFO(action);
@@ -194,8 +206,8 @@ TEST_CASE("registerCustomScreens refuses what it cannot serve", "[ui][custom-scr
     morph::model::detail::ActionDispatcher dispatcher;
     morph::model::detail::ModelRegistryFactory registry;
     auto const store = std::make_shared<morph::ui::MemoryCustomScreenStore>(pool);
-    auto const served = screens_test::bundle();
-    auto const getBundle = [served] { return served; };
+    auto served = screens_test::bundle();
+    auto getBundle = [served] { return served; };
     auto const authorizer = std::make_shared<uiservice::RuleAuthorizer>();
     CHECK_THROWS_AS(morph::ui::registerCustomScreens(
                         store, getBundle, authorizer, dispatcher, registry,
@@ -235,7 +247,7 @@ TEST_CASE("custom screens: a document of escaping characters at the default boun
     std::string const document = replaced(filled, "@@", [&] {
         std::string pad;
         for (std::size_t i = 0; i < room / 4; ++i) {
-            pad += "\\\\\\\\";
+            pad += R"(\\\\)";
         }
         return pad;
     }());
@@ -403,7 +415,7 @@ TEST_CASE("custom screens: a reply's fields other than the document are capped",
     auto const store = std::make_shared<morph::ui::MemoryCustomScreenStore>(morph::exec::detail::inlineExecutor());
     Server s{store, options};
     std::string const id = "custom:0123456789abcdef0123456789abcdef";
-    storeBrokenScreen(*store, id, 200 * 1024);
+    storeBrokenScreen(*store, id, std::size_t{200} * 1024);
 
     Envelope const got = s.call(morph::ui::kCustomScreensGet, R"({"app":"lims","id":)" + quoted(id) + "}", "alice");
     REQUIRE(got.kind == "ok");

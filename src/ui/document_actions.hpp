@@ -75,7 +75,10 @@ public:
     /// @param submit The form's `submit`, empty when absent.
     /// @return `form`, `explicit form` or `auto form`.
     [[nodiscard]] static std::string formPosition(std::string_view submit) {
-        return submit.empty() ? "form" : submit == "explicit" ? "explicit form" : "auto form";
+        if (submit.empty()) {
+            return "form";
+        }
+        return submit == "explicit" ? "explicit form" : "auto form";
     }
 
     /// @brief Walks @p document.

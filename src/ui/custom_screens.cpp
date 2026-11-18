@@ -92,7 +92,7 @@ void checkName(std::string const& name, std::string_view what) {
     }
     std::size_t keep = limit - kEllipsis.size();
     // A continuation byte is 10xxxxxx: step back to the start of the sequence the cut would split.
-    while (keep > 0 && (static_cast<unsigned char>(text[keep]) & 0xC0U) == 0x80U) {
+    while (keep > 0 && (static_cast<unsigned char>(text.at(keep)) & 0xC0U) == 0x80U) {
         --keep;
     }
     text.resize(keep);
@@ -118,7 +118,7 @@ void checkName(std::string const& name, std::string_view what) {
     if (object == nullptr) {
         return false;
     }
-    auto const params = object->find("params");
+    Json::object_t::const_iterator const params = object->find("params");
     if (params == object->end()) {
         return true;
     }
@@ -219,8 +219,8 @@ namespace {
                                          _context->options, &_context->verdicts)) {
         throw std::invalid_argument{refusal->message()};
     }
-    std::string const id = request.id ? *request.id : newFileRef(kCustomScreenIdPrefix);
-    auto text = withScreenId(request.document, id);
+    std::string const screenId = request.id ? *request.id : newFileRef(kCustomScreenIdPrefix);
+    auto text = withScreenId(request.document, screenId);
     if (!text) {
         throw std::invalid_argument{text.error().message()};
     }
@@ -229,8 +229,8 @@ namespace {
         throw std::invalid_argument{"a custom screen is longer than " +
                                     std::to_string(_context->options.maxDocumentBytes) + " bytes"};
     }
-    auto stored = co_await _context->store->put(CustomScreenKey{.person = person, .app = request.app, .id = id},
-                                                CustomScreen{.id = id,
+    auto stored = co_await _context->store->put(CustomScreenKey{.person = person, .app = request.app, .id = screenId},
+                                                CustomScreen{.id = screenId,
                                                              .title = std::move(request.title),
                                                              .basedOn = std::move(request.basedOn),
                                                              .document = std::move(*text),
@@ -239,7 +239,7 @@ namespace {
     if (!stored) {
         throw std::runtime_error{stored.error().reason};
     }
-    co_return CustomScreenSaved{.id = id};
+    co_return CustomScreenSaved{.id = screenId};
 }
 
 ::core::async::Task<CustomScreenRemoved> CustomScreensModel::execute(CustomScreensRemove request) {

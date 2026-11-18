@@ -358,13 +358,13 @@ private:
                                                                  CustomScreensOptions const& options,
                                                                  VerdictCache* cache = nullptr);
 
-/// @brief @p document with its screen id replaced by @p id, the id a custom screen is stored and served under.
+/// @brief @p document with its screen id replaced by @p screenId, the id a custom screen is stored and served under.
 /// @param document The custom document's JSON text.
-/// @param id       The custom screen's id.
+/// @param screenId The custom screen's id.
 /// @return The rewritten JSON text, or the refusal of text that is not a JSON object.
 // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): the document, then its new id.
 [[nodiscard]] MORPH_API std::expected<std::string, Refusal> withScreenId(std::string_view document,
-                                                                         std::string_view id);
+                                                                         std::string_view screenId);
 
 /// @brief The type id the custom screens model is registered under.
 inline constexpr std::string_view kCustomScreensModel = "morph.customScreens";

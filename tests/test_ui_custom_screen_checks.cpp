@@ -56,7 +56,7 @@ TEST_CASE("checks: 1, the bounds", "[ui][custom-screens][checks]") {
 }
 
 TEST_CASE("checks: 2, the base", "[ui][custom-screens][checks]") {
-    Fixture f;
+    Fixture const f;
     auto const unknown = f.check(baseScreen("lims.base"), "lims.nothing");
     REQUIRE(unknown);
     CHECK(unknown->reason.contains("names no screen document"));
@@ -105,7 +105,7 @@ TEST_CASE("checks: 5, the base rule", "[ui][custom-screens][checks]") {
 }
 
 TEST_CASE("checks: 6, permission", "[ui][custom-screens][checks]") {
-    Fixture f;
+    Fixture const f;
     f.authorizer->denied["alice"] = {{"Lims_Sample", "Lims_Verify"}};
     auto const refusal = f.check(baseScreen("lims.base"));
     REQUIRE(refusal);
@@ -114,7 +114,7 @@ TEST_CASE("checks: 6, permission", "[ui][custom-screens][checks]") {
 }
 
 TEST_CASE("checks: the first failing check answers", "[ui][custom-screens][checks]") {
-    Fixture f;
+    Fixture const f;
     f.authorizer->denied["alice"] = {{"Lims_Sample", "Lims_Verify"}};
     std::string const unlabelled = replaced(baseScreen("lims.base"), R"("label":"Verify")", R"("label":"")");
 
@@ -163,7 +163,7 @@ TEST_CASE("checks: the base is read on every call, past the verdict cache", "[ui
 }
 
 TEST_CASE("checkCustomScreen takes a permitted set computed once", "[ui][custom-screens][checks]") {
-    Fixture f;
+    Fixture const f;
     auto const permitted = morph::ui::permittedActions(*f.bundle, f.alice, *f.authorizer);
     CHECK_FALSE(morph::ui::checkCustomScreen(*f.bundle, f.alice, *f.authorizer, permitted, "lims.base",
                                              baseScreen("lims.base"), {}));
@@ -223,7 +223,7 @@ TEST_CASE("the verdict key changes with the document, the base, the bundle and t
 }
 
 TEST_CASE("checkCustomScreen reads and fills the verdict cache", "[ui][custom-screens][cache]") {
-    Fixture f;
+    Fixture const f;
     morph::ui::VerdictCache cache{8};
     std::string const document = baseScreen("lims.base");
     CHECK_FALSE(f.check(document, "lims.base", {}, &cache));
