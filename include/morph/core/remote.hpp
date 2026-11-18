@@ -9,6 +9,7 @@
 #include <core/async/StopToken.hpp>
 #include <cstddef>
 #include <cstdint>
+#include <expected>
 #include <functional>
 #include <iterator>
 #include <latch>
@@ -378,6 +379,13 @@ struct ServerConfig {
     ///
     /// A pool, so that a sort of many rows holds neither the model's strand nor the server's.
     std::shared_ptr<::morph::exec::IExecutor> tableWork;
+
+    /// @brief The server's one view cache: its bound, across every table, and the hook called where a view is
+    ///        computed.
+    ///
+    /// A table's computed views (its sort and filter over one snapshot) are kept and read by every page, keyed
+    /// fetch and watcher of the same sort and filter, until the rows or an order level change.
+    ::morph::table::ViewCacheOptions views;
 };
 
 /// @brief Server-side message handler that owns model instances and dispatches actions.
@@ -533,7 +541,9 @@ public:
           _executeTimeouts{_config.limits.executeTimeout.count() > 0
                                ? std::make_unique<::morph::async::detail::TimeoutScheduler>()
                                : nullptr},
-          _tableRuntime{.work = _config.tableWork != nullptr ? _config.tableWork.get() : &workerPool} {
+          _views{::morph::table::makeViewCache(_config.views)},
+          _tableRuntime{.work = _config.tableWork != nullptr ? _config.tableWork.get() : &workerPool,
+                        .views = _views.get()} {
         // The first read of the record and effects registries: an invalid
         // declaration fails the server's construction rather than its first
         // successful execute, whose changes are derived from them.
@@ -874,6 +884,80 @@ public:
     void fanOut(::morph::effects::Changes changes, ConnectionId caller, std::string_view callerPrincipal) {
         assert(_strand.runningHere() && "RemoteServer::fanOut runs on the server strand");
         noteOwner("RemoteServer::fanOut");
+        // Before any event is queued: a client that refetches because of the event reads what the observers left.
+        for (auto const& observer : _observers) {
+            try {
+                observer->changed(changes);
+            } catch (std::exception const& exc) {
+                ::morph::log::logError("[fanOut] an observer failed: {}", exc.what());
+            } catch (...) {
+                ::morph::log::logError("[fanOut] an observer failed: unknown exception");
+            }
+        }
+        fanOutEvents(std::move(changes), caller, callerPrincipal);
+    }
+
+    /// @brief Reports a change to rows of @p record that no execute made. Callable from any thread.
+    ///
+    /// The change is built as an execute's is: the record's derived records are added whole, and more than
+    /// `effects::kMaxChangeKeys` keys become a whole-type change. It is posted to the server strand and fanned out
+    /// with no caller, as a time fact's is, except that the change observers are not told: an arrival never
+    /// invalidates the cache that announced it.
+    /// @param record The record's wire name.
+    /// @param keys   The changed rows' keys as raw JSON; absent for the whole type.
+    /// @return Nothing, or why the record was refused (`"unregistered record: <name>"`); then nothing is sent.
+    std::expected<void, std::string> announce(std::string_view record,
+                                              std::optional<std::vector<glz::raw_json>> keys) {
+        auto const& resolved = ::morph::effects::detail::resolved();
+        if (resolved.recordNamed(record) == nullptr) {
+            return std::unexpected("unregistered record: " + std::string{record});
+        }
+        std::string const name{record};
+        ::morph::effects::Changes changes;
+        ::morph::effects::detail::addRecordChange(changes, name, std::move(keys));
+        ::morph::effects::detail::addDerivedChanges(resolved, name, changes);
+        for (auto& change : changes.records) {
+            if (change.keys && change.keys->size() > ::morph::effects::kMaxChangeKeys) {
+                change.keys.reset();
+            }
+        }
+        _strand.postTask([self = shared_from_this(), changes = std::move(changes)]() mutable {
+            self->fanOutEvents(std::move(changes), 0, std::string_view{});
+        });
+        return {};
+    }
+
+    /// @brief Tells @p observer of every change an execute or a time fact derives, and gives it the server's
+    ///        announce sink.
+    ///
+    /// The application calls it after constructing the server. The observer is called on the server strand,
+    /// before the change's events are queued; the sink holds the server weakly and calls `announce`.
+    /// @param observer The observer, such as a `table::LevelCache`; null is ignored.
+    void attach(std::shared_ptr<::morph::effects::IChangeObserver> observer) {
+        if (observer == nullptr) {
+            return;
+        }
+        observer->bind(
+            [weak = weak_from_this()](std::string_view record, std::optional<std::vector<glz::raw_json>> keys) {
+                if (auto const self = weak.lock()) {
+                    static_cast<void>(self->announce(record, std::move(keys)));
+                }
+            });
+        _strand.postTask([self = shared_from_this(), observer = std::move(observer)]() mutable {
+            self->_observers.push_back(std::move(observer));
+        });
+    }
+
+    /// @brief The server's view cache's counters. Callable from any thread.
+    /// @return What the cache has done, and the bytes it holds.
+    [[nodiscard]] ::morph::table::ViewCacheStats viewStats() const { return ::morph::table::viewCacheStats(*_views); }
+
+private:
+    /// @brief `fanOut` without the observers: the events of @p changes. On the server strand.
+    /// @param changes         What changed.
+    /// @param caller          Connection the execute arrived on; `0` for none.
+    /// @param callerPrincipal The execute's verified principal; empty when none.
+    void fanOutEvents(::morph::effects::Changes changes, ConnectionId caller, std::string_view callerPrincipal) {
         askTimeFactsNamedIn(changes);
         std::map<ConnectionId, ::morph::wire::ChangesBody> bodies;
         for (auto const& change : changes.records) {
@@ -901,6 +985,7 @@ public:
         }
     }
 
+public:
     /// @brief The server strand, as an executor.
     ///
     /// What `runningOn(server.strand())` asks about: true inside every task the
@@ -3024,7 +3109,10 @@ private:
     // Fixed at construction, so a model strand's finish can cancel through it
     // without a lock.
     std::unique_ptr<::morph::async::detail::TimeoutScheduler> const _executeTimeouts;
-    // What a table's action reads during a dispatch: `tableWork`, or the worker pool. Fixed at construction.
+    // The server's one view cache, made from `ServerConfig::views`. Its type stays incomplete here.
+    std::shared_ptr<::morph::table::ViewCache> const _views;
+    // What a table's action reads during a dispatch: `tableWork`, or the worker pool, and the view cache. Fixed at
+    // construction.
     ::morph::table::TableRuntime const _tableRuntime;
 
     // ── Server-strand state: touched only in the server strand's tasks ──────
@@ -3119,6 +3207,8 @@ private:
     std::uint64_t _nextWindow{0};
     // The reporters of time-derived facts; filled by the first envelope handled.
     std::vector<TimeFact> _timeFacts;
+    // The attached change observers, told of every execute's and time fact's changes.
+    std::vector<std::shared_ptr<::morph::effects::IChangeObserver>> _observers;
     bool _timeFactsStarted{false};
 
     // Drawn off the strand by openConnection(), which answers at once.

@@ -777,6 +777,7 @@ target_sources(morph
         include/morph/table/runtime.hpp
         include/morph/table/description.hpp
         include/morph/table/level_cache.hpp
+        include/morph/table/view_cache.hpp
         include/morph/table/selection.hpp
         include/morph/table/edits.hpp
 )

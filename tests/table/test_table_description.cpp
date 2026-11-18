@@ -1307,3 +1307,60 @@ TEST_CASE("level cache: a level no cache serves is unloaded and awaited", "[tabl
     CHECK(page->awaiting == std::vector<std::string>{"recipe"});
     CHECK(stock->calls == 0);
 }
+
+namespace tabledesc {
+
+// A typed table whose function returns the same rows vector until `replace` makes a new one.
+class CachedRowsModel {
+public:
+    std::shared_ptr<std::vector<TypedRow> const> rows(morph::table::TableContext const& context) {
+        static_cast<void>(context);
+        return _rows;
+    }
+    void replace() { _rows = std::make_shared<std::vector<TypedRow> const>(typedRows()); }
+
+private:
+    std::shared_ptr<std::vector<TypedRow> const> _rows = std::make_shared<std::vector<TypedRow> const>(typedRows());
+};
+
+}  // namespace tabledesc
+
+BRIDGE_REGISTER_MODEL(tabledesc::CachedRowsModel, "CachedRowsModel")
+BRIDGE_REGISTER_TABLE(tabledesc::CachedRowsModel, "cachedRows",
+                      morph::table::typed<tabledesc::TypedRow>(&tabledesc::CachedRowsModel::rows))
+
+// Mutation: find comparing snapshot pointers instead of identity() (three computations).
+TEST_CASE("view cache: a typed table's view is cached across calls", "[table][views]") {
+    tabledesc::CachedRowsModel model;
+    morph::session::Context const session{};
+    TableContext const context{.session = session};
+    ViewCache views;
+    detail::AnswerContext const answer{.views = &views, .record = "CachedRowsModel.cachedRows", .rowScoped = false};
+    TableQuery query;
+    query.sort = {SortKey{.column = "name", .dir = SortDirection::Ascending}};
+    auto const ask = [&] {
+        auto const page = detail::answerQuery(
+            detail::pinned(detail::serve<&tabledesc::CachedRowsModel::rows>(model, context)), query, answer);
+        REQUIRE(page.has_value());
+    };
+    ask();
+    ask();
+    CHECK(views.stats().computations == 1);
+    CHECK(views.stats().hits == 1);
+    model.replace();
+    ask();
+    CHECK(views.stats().computations == 2);
+}
+
+// Mutation: the check reading served.scope alone (the third case is refused).
+TEST_CASE("view cache: a row-scoped table needs a scope", "[table][views]") {
+    auto served = threeRowTable(true);
+    detail::AnswerContext const scoped{.views = nullptr, .record = {}, .rowScoped = true};
+    auto const refused = detail::answerQuery(served, TableQuery{}, scoped);
+    REQUIRE_FALSE(refused.has_value());
+    CHECK(refused.error().code == TableErrorCode::SourceContract);
+    served.scope = "p1";
+    CHECK(detail::answerQuery(served, TableQuery{}, scoped).has_value());
+    served.scope.clear();
+    CHECK(detail::answerQuery(served, TableQuery{}, detail::AnswerContext{}).has_value());
+}

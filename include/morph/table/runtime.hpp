@@ -12,19 +12,66 @@
 /// `TableRuntime` naming that executor for the length of each dispatch;
 /// outside one there is none, and the reply is built where the action runs.
 ///
+/// It also declares the server's view cache by name only (`ViewCache`, made by
+/// `makeViewCache`), so a server holds one without its definition.
+///
 /// This header includes only the executor, so `core/remote.hpp` reaches it
 /// without the table headers.
 
+#include <cstddef>
+#include <functional>
+#include <memory>
 #include <morph/attributes.hpp>
 #include <morph/core/executor.hpp>
 #include <morph/export.hpp>
 
 namespace morph::table {
 
+/// @brief How a server's view cache is bounded.
+struct ViewCacheOptions {
+    /// @brief The most bytes the cached views hold, across the server's tables, before the least recently used
+    ///        go.
+    std::size_t maxBytes = 64U << 20U;
+    /// @brief Called on the computing thread at the start of each computation; empty calls nothing.
+    std::function<void()> onCompute;
+};
+
+/// @brief What a view cache has done since it was made; `bytes` is what it holds now.
+struct ViewCacheStats {
+    /// @brief Finds that used a valid entry.
+    std::size_t hits = 0;
+    /// @brief Finds that found no valid entry.
+    std::size_t misses = 0;
+    /// @brief Views computed.
+    std::size_t computations = 0;
+    /// @brief Finds that waited for another request's computation.
+    std::size_t waits = 0;
+    /// @brief Entries evicted at the bound.
+    std::size_t evictions = 0;
+    /// @brief Entries dropped because the rows or an order level changed.
+    std::size_t invalidations = 0;
+    /// @brief The bytes the entries hold.
+    std::size_t bytes = 0;
+};
+
+class ViewCache;
+
+/// @brief A view cache, for a holder that does not see its definition.
+/// @param options Its bound and computation hook.
+/// @return The cache.
+[[nodiscard]] MORPH_API std::shared_ptr<ViewCache> makeViewCache(ViewCacheOptions options);
+
+/// @brief A view cache's counters, for a holder that does not see its definition.
+/// @param cache The cache.
+/// @return Its counters.
+[[nodiscard]] MORPH_API ViewCacheStats viewCacheStats(ViewCache const& cache);
+
 /// @brief What a server gives a table's actions for one dispatch.
 struct TableRuntime {
     /// @brief Where a reply is built, off the model's strand; null builds it on the strand.
     exec::IExecutor* work = nullptr;
+    /// @brief The server's view cache; null computes every view for its request.
+    ViewCache* views = nullptr;
 };
 
 namespace detail {

@@ -526,6 +526,13 @@ public:
         }
     }
 
+    /// @brief What the rows are, as an address: two snapshots with one identity hold the same rows.
+    ///
+    /// What a cache of views compares to know its view still describes the rows. A snapshot that wraps another
+    /// does not forward the other's identity, since its rows are its own.
+    /// @return This snapshot's address, unless an override names storage that outlives it.
+    [[nodiscard]] virtual void const* identity() const { return this; }
+
 protected:
     /// @brief Copies the base of a snapshot: a derived snapshot makes a changed
     ///        copy of itself this way.

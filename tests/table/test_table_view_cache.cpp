@@ -1,0 +1,394 @@
+// SPDX-License-Identifier: Apache-2.0
+//
+// morph::table's server view cache (docs/spec/table/table.md, "The view cache"): a cached view is the view `apply`
+// computes, an entry is valid while its snapshot's identity and its order levels' generations hold, requests for an
+// entry being computed wait for that one computation and no other, the bound evicts the least recently used entry,
+// and a keyed fetch reads the entry it finds. Each case names the mutation it was seen to fail on.
+
+#include <algorithm>
+#include <array>
+#include <atomic>
+#include <catch2/catch_test_macros.hpp>
+#include <chrono>
+#include <cstddef>
+#include <cstdint>
+#include <expected>
+#include <future>
+#include <latch>
+#include <memory>
+#include <morph/table/description.hpp>
+#include <morph/table/level_cache.hpp>
+#include <morph/table/query.hpp>
+#include <morph/table/view_cache.hpp>
+#include <numeric>
+#include <optional>
+#include <random>
+#include <span>
+#include <string>
+#include <string_view>
+#include <thread>
+#include <utility>
+#include <vector>
+
+#include "table/table_fixtures.hpp"
+
+using namespace morph::table;
+using namespace std::chrono_literals;
+
+namespace {
+
+using Levels = std::vector<std::pair<std::string, std::uint64_t>>;
+using Values = std::vector<std::pair<RowId, std::vector<Cell>>>;
+
+std::vector<ColumnInfo> fourColumns() {
+    return {tabletest::col("a", ColumnKind::Integer), tabletest::col("b", ColumnKind::Text),
+            tabletest::levelCol("c", ColumnKind::Decimal, "recipe"),
+            tabletest::levelCol("d", ColumnKind::Text, "recipe")};
+}
+
+std::string word(std::mt19937& random) {
+    static constexpr std::string_view kLetters = "abcde";
+    std::string out;
+    auto const length = 1 + (random() % 4);
+    for (std::uint32_t i = 0; i < length; ++i) {
+        out += kLetters[random() % kLetters.size()];
+    }
+    return out;
+}
+
+// A 300-row table: `a` and `b` in the base source, `c` and `d` at level `recipe` in a cache holding 70% of the
+// rows, its loads queued and never run.
+struct Table {
+    explicit Table(std::mt19937& random, std::size_t rows = 300) {
+        std::vector<std::vector<Cell>> base;
+        for (std::size_t row = 0; row < rows; ++row) {
+            base.push_back({Cell{static_cast<std::int64_t>(random() % 50)}, Cell{word(random)}});
+            recipe.emplace_back(
+                RowId{static_cast<std::int64_t>(row)},
+                std::vector<Cell>{Cell{tabletest::dec(std::to_string(random() % 40) + ".5")}, Cell{word(random)}});
+        }
+        source = tabletest::makeSource(
+            {tabletest::col("a", ColumnKind::Integer), tabletest::col("b", ColumnKind::Text)}, std::move(base));
+        LevelCacheOptions options;
+        options.records = {"T.rows"};
+        options.level = "recipe";
+        options.columns = {fourColumns()[2], fourColumns()[3]};
+        options.loads = &loads;
+        cache = std::make_shared<CellLevelCache>(std::move(options), [](std::span<RowId const>) { return Values{}; });
+        Values held;
+        for (auto const& entry : recipe) {
+            if (random() % 10 < 7) {
+                held.push_back(entry);
+            }
+        }
+        detail::LevelCacheAccess::store(*cache, std::move(held));
+    }
+
+    [[nodiscard]] LeveledSource leveled() const {
+        return LeveledSource{source, fourColumns(), {LevelInput{.source = cache, .snapshot = cache->snapshot()}}};
+    }
+
+    tabletest::ManualExecutor loads;
+    std::shared_ptr<VectorSource> source;
+    std::shared_ptr<CellLevelCache> cache;
+    Values recipe;
+};
+
+TableQuery randomQuery(std::mt19937& random) {
+    static constexpr std::array<std::string_view, 4> kColumns{"a", "b", "c", "d"};
+    TableQuery query;
+    auto const keys = 1 + (random() % 2);
+    for (std::uint32_t i = 0; i < keys; ++i) {
+        std::string const column{kColumns[random() % 4]};
+        if (std::ranges::find(query.sort, column, &SortKey::column) == query.sort.end()) {
+            query.sort.push_back(SortKey{
+                .column = column, .dir = random() % 2 == 0 ? SortDirection::Ascending : SortDirection::Descending});
+        }
+    }
+    auto const entries = 1 + (random() % 2);
+    for (std::uint32_t i = 0; i < entries; ++i) {
+        std::string const column{kColumns[random() % 4]};
+        FilterEntry entry;
+        if (column == "a") {
+            entry.gt = std::to_string(random() % 50);
+        } else if (column == "c") {
+            entry.ge = std::to_string(random() % 40);
+        } else {
+            entry.contains = std::string(1, "abcde"[random() % 5]);
+        }
+        query.filters.columns.insert_or_assign(
+            column, ColumnFilter{.combine = Combine::Any, .include = {entry}, .exclude = {}});
+    }
+    query.page = PageRequest{.offset = 0, .limit = 50};
+    return query;
+}
+
+Levels orderLevels(TableQuery const& query, CellLevelCache const& cache) {
+    auto const needed = levelsNeeded(query, fourColumns());
+    Levels out;
+    for (auto const& level : needed.order) {
+        out.emplace_back(level, cache.snapshot()->generation());
+    }
+    return out;
+}
+
+ViewCache::Found findIn(ViewCache& views, ViewKey const& key, LeveledSource const& leveled, Table const& table,
+                        TableQuery const& validated) {
+    return views.find(key, table.source->snapshot(), orderLevels(validated, *table.cache),
+                      [&]() -> std::expected<ViewComputation, TableError> {
+                          auto view = detail::computeView(leveled, validated, ApplyOptions{});
+                          if (!view) {
+                              return std::unexpected(view.error());
+                          }
+                          return ViewComputation{.view = std::move(*view), .awaiting = {}, .failed = {}};
+                      });
+}
+
+// The page of `validated` from `entry`, as answerQuery reads it.
+PageRows pageFrom(ViewEntry const& entry, LeveledSource const& leveled, TableQuery const& validated) {
+    if (validated.keys) {
+        return detail::pageRows(entry.view, *leveled.snapshot(), validated, QueryLimits{}, entry.viewRowOf(),
+                                [&entry](RowId const& key) { return entry.sourceRowOf(key); });
+    }
+    return detail::pageRows(entry.view, *leveled.snapshot(), validated, QueryLimits{});
+}
+
+bool samePage(PageRows const& a, PageRows const& b) {
+    return a.rows == b.rows && a.total == b.total && a.totalKind == b.totalKind && a.undecided == b.undecided &&
+           a.indices == b.indices && a.offset == b.offset;
+}
+
+TableQuery validated(TableQuery const& query) {
+    auto checked = validate(query, fourColumns(), QueryLimits{}, {});
+    REQUIRE(checked.has_value());
+    return *checked;
+}
+
+ViewKey keyOf(std::string query) { return ViewKey{.record = "T.rows", .scope = {}, .query = std::move(query)}; }
+
+}  // namespace
+
+// Mutation: an entry valid whatever its order levels' generations, which serves the old order.
+TEST_CASE("view cache: a cached view is the view", "[table][views]") {
+    for (std::uint32_t seed = 0; seed < 200; ++seed) {
+        CAPTURE(seed);
+        std::mt19937 random{seed};
+        Table table{random};
+        ViewCache views;
+        auto const query = validated(randomQuery(random));
+        auto const key = keyOf("q");
+        auto const pageOf = [&](TableQuery const& asked) {
+            auto const leveled = table.leveled();
+            auto entry = findIn(views, key, leveled, table, query);
+            REQUIRE(entry.has_value());
+            auto const expected = apply(leveled, asked);
+            REQUIRE(expected.has_value());
+            CHECK(samePage(pageFrom(**entry, leveled, asked), *expected));
+        };
+        pageOf(query);
+        auto keyed = query;
+        keyed.keys.emplace();
+        for (int i = 0; i < 10; ++i) {
+            keyed.keys->emplace_back(static_cast<std::int64_t>(random() % 300));
+        }
+        pageOf(keyed);
+        auto second = query;
+        second.page.offset = 50;
+        pageOf(second);
+        // An arrival on the level: every row stored, so the order and the undecided rows change.
+        detail::LevelCacheAccess::store(*table.cache, table.recipe);
+        pageOf(query);
+    }
+}
+
+// Mutation: as the case above (an entry valid whatever its order levels' generations).
+TEST_CASE("view cache: an arrival on an order level computes again; on a display level it does not",
+          "[table][views]") {
+    std::mt19937 random{7};
+    {
+        Table table{random};
+        ViewCache views;
+        TableQuery query;
+        query.sort = {SortKey{.column = "c", .dir = SortDirection::Ascending}};
+        auto const checked = validated(query);
+        REQUIRE(findIn(views, keyOf("c"), table.leveled(), table, checked).has_value());
+        detail::LevelCacheAccess::store(*table.cache, table.recipe);
+        REQUIRE(findIn(views, keyOf("c"), table.leveled(), table, checked).has_value());
+        CHECK(views.stats().computations == 2);
+    }
+    {
+        Table table{random};
+        ViewCache views;
+        TableQuery query;
+        query.sort = {SortKey{.column = "a", .dir = SortDirection::Ascending}};
+        query.columns = std::vector<std::string>{"a", "d"};
+        auto const checked = validated(query);
+        REQUIRE(findIn(views, keyOf("a"), table.leveled(), table, checked).has_value());
+        detail::LevelCacheAccess::store(*table.cache, table.recipe);  // the display level `d` changes
+        REQUIRE(findIn(views, keyOf("a"), table.leveled(), table, checked).has_value());
+        CHECK(views.stats().computations == 1);
+        CHECK(views.stats().hits == 1);
+    }
+}
+
+// Mutation: single flight joined on the key alone, which hands B the view over S1.
+TEST_CASE("view cache: a request on a newer snapshot does not join an older computation", "[table][views]") {
+    auto const source =
+        tabletest::makeSource({tabletest::col("a", ColumnKind::Integer)},
+                              {{Cell{std::int64_t{3}}}, {Cell{std::int64_t{1}}}, {Cell{std::int64_t{2}}}});
+    auto const s1 = source->snapshot();
+    source->updateRow(0, {Cell{std::int64_t{0}}});
+    auto const s2 = source->snapshot();
+    ViewCache views;
+    auto const key = keyOf("a");
+    auto const computation = [](std::vector<std::uint32_t> rows) {
+        return [rows]() -> std::expected<ViewComputation, TableError> {
+            return ViewComputation{.view = {.rows = rows, .undecided = {}}, .awaiting = {}, .failed = {}};
+        };
+    };
+    std::latch release{1};
+    auto a = std::async(std::launch::async, [&] {
+        return views.find(key, s1, {}, [&]() -> std::expected<ViewComputation, TableError> {
+            release.wait();
+            return computation({1, 2, 0})();
+        });
+    });
+    while (views.stats().computations < 1) {
+        std::this_thread::sleep_for(1ms);
+    }
+    auto b = std::async(std::launch::async, [&] { return views.find(key, s2, {}, computation({0, 1, 2})); });
+    bool const bReady = b.wait_for(5s) == std::future_status::ready;
+    CHECK(bReady);
+    release.count_down();
+    auto const fromB = b.get();
+    REQUIRE(fromB.has_value());
+    CHECK((*fromB)->snapshot == s2);
+    CHECK((*fromB)->view.rows == std::vector<std::uint32_t>{0, 1, 2});
+    CHECK(views.stats().computations == 2);
+    CHECK(views.stats().waits == 0);
+    REQUIRE(a.get().has_value());
+    auto const third = views.find(key, s2, {}, computation({2, 1, 0}));
+    REQUIRE(third.has_value());
+    CHECK(*third == *fromB);
+
+    // The same snapshot at another order-level generation computes on its own too.
+    std::latch hold{1};
+    Levels const g1{{"recipe", 1}};
+    Levels const g2{{"recipe", 2}};
+    auto older = std::async(std::launch::async, [&] {
+        return views.find(keyOf("c"), s2, g1, [&]() -> std::expected<ViewComputation, TableError> {
+            hold.wait();
+            return computation({1})();
+        });
+    });
+    while (views.stats().computations < 3) {
+        std::this_thread::sleep_for(1ms);
+    }
+    auto newer = std::async(std::launch::async, [&] { return views.find(keyOf("c"), s2, g2, computation({2})); });
+    bool const newerReady = newer.wait_for(5s) == std::future_status::ready;
+    CHECK(newerReady);
+    hold.count_down();
+    auto const fromNewer = newer.get();
+    REQUIRE(fromNewer.has_value());
+    CHECK((*fromNewer)->levels == g2);
+    REQUIRE(older.get().has_value());
+    CHECK(views.stats().waits == 0);
+}
+
+// Mutation: no single flight (fifty computations).
+TEST_CASE("view cache: fifty requests compute once", "[table][views]") {
+    auto const source = tabletest::makeSource({tabletest::col("a", ColumnKind::Integer)}, {{Cell{std::int64_t{1}}}});
+    auto const snapshot = source->snapshot();
+    ViewCache views;
+    std::latch release{1};
+    std::vector<std::future<ViewCache::Found>> found;
+    for (int i = 0; i < 50; ++i) {
+        found.push_back(std::async(std::launch::async, [&] {
+            return views.find(keyOf("a"), snapshot, {}, [&]() -> std::expected<ViewComputation, TableError> {
+                release.wait();
+                return ViewComputation{.view = {.rows = {0}, .undecided = {}}, .awaiting = {}, .failed = {}};
+            });
+        }));
+    }
+    auto const deadline = std::chrono::steady_clock::now() + 10s;
+    while (views.stats().computations + views.stats().waits < 50 && std::chrono::steady_clock::now() < deadline) {
+        std::this_thread::sleep_for(1ms);
+    }
+    release.count_down();
+    std::vector<std::shared_ptr<ViewEntry const>> entries;
+    for (auto& each : found) {
+        auto result = each.get();
+        REQUIRE(result.has_value());
+        entries.push_back(*result);
+    }
+    CHECK(views.stats().computations == 1);
+    CHECK(views.stats().waits == 49);
+    CHECK(std::ranges::all_of(entries, [&](auto const& entry) { return entry == entries.front(); }));
+}
+
+// Mutation: no bound (nothing is evicted and the bytes exceed maxBytes).
+TEST_CASE("view cache: the bound evicts least recently used", "[table][views]") {
+    std::vector<std::vector<Cell>> rows;
+    for (std::int64_t row = 0; row < 10'000; ++row) {
+        rows.push_back({Cell{row % 97}});
+    }
+    auto const source = tabletest::makeSource({tabletest::col("a", ColumnKind::Integer)}, std::move(rows));
+    auto const snapshot = source->snapshot();
+    ViewCache views{ViewCacheOptions{.maxBytes = 2 * 4 * 10'000, .onCompute = {}}};
+    auto const compute = [&]() -> std::expected<ViewComputation, TableError> {
+        ViewComputation out;
+        out.view.rows.resize(10'000);
+        std::iota(out.view.rows.begin(), out.view.rows.end(), 0U);
+        return out;
+    };
+    for (auto const* const name : {"one", "two", "three"}) {
+        REQUIRE(views.find(keyOf(name), snapshot, {}, compute).has_value());
+    }
+    CHECK(views.stats().evictions == 1);
+    CHECK(views.stats().bytes <= 2 * 4 * 10'000);
+    REQUIRE(views.find(keyOf("three"), snapshot, {}, compute).has_value());
+    REQUIRE(views.find(keyOf("two"), snapshot, {}, compute).has_value());
+    CHECK(views.stats().computations == 3);
+    REQUIRE(views.find(keyOf("one"), snapshot, {}, compute).has_value());
+    CHECK(views.stats().computations == 4);  // the first was evicted
+}
+
+// Mutation: a keyed query bypassing the cache (it computes the view again).
+TEST_CASE("view cache: a keyed fetch sorts nothing", "[table][views]") {
+    std::vector<std::vector<Cell>> rows;
+    for (std::int64_t row = 0; row < 1'000; ++row) {
+        rows.push_back({Cell{row}, Cell{(row * 37) % 101}});
+    }
+    auto description = describe(TableDescription{
+        .id = "t",
+        .label = "T",
+        .columns = {TableColumn{.info = tabletest::col("id", ColumnKind::Integer), .label = "id", .group = {}},
+                    TableColumn{.info = tabletest::col("n", ColumnKind::Integer), .label = "n", .group = {}}},
+        .key = "id"});
+    description.capabilities.keys = true;
+    auto const served = detail::pinned(ServedTable{
+        .description = describe(std::move(description)),
+        .source = tabletest::makeSource(
+            {tabletest::col("id", ColumnKind::Integer), tabletest::col("n", ColumnKind::Integer)}, std::move(rows)),
+        .levels = {},
+        .mayRead = {},
+        .scope = {},
+        .services = {},
+        .limits = {}});
+    ViewCache views;
+    detail::AnswerContext const context{.views = &views, .record = "T.rows", .rowScoped = false};
+    TableQuery query;
+    query.sort = {SortKey{.column = "n", .dir = SortDirection::Descending}};
+    REQUIRE(detail::answerQuery(served, query, context).has_value());
+    CHECK(views.stats().computations == 1);
+    auto keyed = query;
+    keyed.keys.emplace();
+    for (std::int64_t i = 0; i < 20; ++i) {
+        keyed.keys->emplace_back(i * 50);
+    }
+    auto const page = detail::answerQuery(served, keyed, context);
+    REQUIRE(page.has_value());
+    CHECK(page->keys.size() == 20);
+    CHECK(views.stats().computations == 1);
+    CHECK(views.stats().hits == 1);
+}

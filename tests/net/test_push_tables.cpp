@@ -14,7 +14,9 @@
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
+#include <format>
 #include <functional>
+#include <map>
 #include <memory>
 #include <morph/core/backend.hpp>
 #include <morph/core/bridge.hpp>
@@ -27,6 +29,7 @@
 #include <morph/net/socket_server.hpp>
 #include <morph/session/session.hpp>
 #include <morph/table/description.hpp>
+#include <morph/table/level_cache.hpp>
 #include <morph/ui/service_client.hpp>
 #include <mutex>
 #include <optional>
@@ -36,6 +39,7 @@
 #include <string_view>
 #include <thread>
 #include <utility>
+#include <variant>
 #include <vector>
 
 #include "table/wide_table_model.hpp"
@@ -528,4 +532,175 @@ TEST_CASE("tables: a table's reply is built on tableWork", "[net][tables]") {
     CHECK(std::ranges::all_of(readThreads, [&](std::thread::id id) { return workThreads.contains(id); }));
     CHECK_FALSE(readThreads.contains(push_tables::firstThread().load()));
     // Mutation: RemoteServer not installing the TableRuntimeScope (answerQuery runs inline on the strand).
+}
+
+namespace {
+
+// A server whose `tableWork` and view cache a case configures, `WideTableModel`'s recipe cache attached.
+struct ViewServer {
+    explicit ViewServer(std::size_t maxViewBytes = 64U << 20U) {
+        morph::backend::ServerConfig config;
+        config.services.push_back(std::make_shared<Hello>());
+        config.coalesceWindow = kCoalesce;
+        config.tableWork = tableWork;
+        config.views.maxBytes = maxViewBytes;
+        config.views.onCompute = [this] {
+            std::scoped_lock const lock{mutex};
+            computedOn.insert(std::this_thread::get_id());
+        };
+        server = std::make_shared<morph::backend::RemoteServer>(pool, std::make_shared<TablesAuthorizer>(),
+                                                                std::move(config));
+        server->attach(bench::WideTableModel::recipeCache());
+        socket = std::make_unique<morph::net::SocketServer>(*server, 0);
+        REQUIRE(socket->listen());
+        url = "ws://127.0.0.1:" + std::to_string(static_cast<unsigned>(socket->port()));
+    }
+
+    std::set<std::thread::id> computeThreads() {
+        std::scoped_lock const lock{mutex};
+        return computedOn;
+    }
+
+    morph::exec::ThreadPoolExecutor pool{4};
+    std::shared_ptr<RecordingPool> tableWork = std::make_shared<RecordingPool>();
+    std::mutex mutex;
+    std::set<std::thread::id> computedOn;
+    std::shared_ptr<morph::backend::RemoteServer> server;
+    std::unique_ptr<morph::net::SocketServer> socket;
+    std::string url;
+};
+
+bool waitUntil(std::function<bool()> const& done, std::chrono::milliseconds budget = 10s) {
+    auto const deadline = std::chrono::steady_clock::now() + budget;
+    while (!done()) {
+        if (std::chrono::steady_clock::now() > deadline) {
+            return false;
+        }
+        std::this_thread::sleep_for(2ms);
+    }
+    return true;
+}
+
+}  // namespace
+
+TEST_CASE("table over the bridge: a level's layout is the cache's", "[net][tables][levels]") {
+    bench::WideTableModel::recipeGate().release();
+    bench::WideTableModel::configure(
+        {.rows = 2'000, .columns = 300, .seed = 7, .loadDelay = {}, .recipePreloaded = 0.0},
+        {.rows = 1'000, .columns = 30, .seed = 7, .loadDelay = {}, .recipePreloaded = 0.0});
+    ViewServer server;
+    Client extended{server.url, "extended"};
+    Client alice{server.url, "alice"};
+    auto const extendedModel = extended.create(std::string{bench::kWideModelType});
+    auto const aliceModel = alice.create(std::string{bench::kWideModelType});
+    std::string const extendedQuery =
+        R"({"sort":[{"column":"id","dir":"asc"}],"columns":["id","d000","d001","d002","d003","d004","d005",)"
+        R"("t001","t002","t003","t004","t005","t006"],"page":{"offset":0,"limit":200}})";
+    std::string const aliceQuery =
+        R"({"sort":[{"column":"id","dir":"asc"}],"columns":["id","t001","t002","t003","t004","t005","t006"],)"
+        R"("page":{"offset":0,"limit":200}})";
+    auto const ask = [&](Client& client, std::uint64_t instance, std::string const& query) {
+        return pageOf(client.execute(instance, std::string{bench::kWideModelType}, "Table.scoped", query));
+    };
+    auto const firstExtended = ask(extended, extendedModel, extendedQuery);
+    auto const firstAlice = ask(alice, aliceModel, aliceQuery);
+    CHECK(firstExtended.unloadedRows.size() == 200);
+    CHECK(firstAlice.unloadedRows.size() == 200);
+    CHECK(std::holds_alternative<std::monostate>(firstAlice.rows.at(0).at(1)));
+    REQUIRE(waitUntil([] { return bench::WideTableModel::recipeCache()->stats().loadedKeys >= 200; }));
+    auto const secondExtended = ask(extended, extendedModel, extendedQuery);
+    auto const secondAlice = ask(alice, aliceModel, aliceQuery);
+    CHECK(secondExtended.unloadedRows.empty());
+    CHECK(secondAlice.unloadedRows.empty());
+    // The generator's cells: the small source holds the same values in its own columns.
+    bench::WideTableSource const truth{{.rows = 1'000, .columns = 30, .seed = 7, .loadDelay = {}}};
+    auto const snapshot = truth.snapshot();
+    auto const columnOf = [&](std::string_view id) {
+        auto const& columns = truth.columns();
+        return static_cast<std::size_t>(std::ranges::find(columns, id, &morph::table::ColumnInfo::id) -
+                                        columns.begin());
+    };
+    for (std::size_t row = 0; row < 200; ++row) {
+        for (std::size_t at = 1; at < secondAlice.columns.size(); ++at) {
+            CHECK(secondAlice.rows[row][at] == snapshot->cell(row, columnOf(secondAlice.columns[at])));
+        }
+        for (std::size_t at = 1; at < secondExtended.columns.size(); ++at) {
+            CHECK(secondExtended.rows[row][at] == snapshot->cell(row, columnOf(secondExtended.columns[at])));
+        }
+    }
+    std::map<morph::table::RowId, int> counts;
+    for (auto const& call : bench::WideTableModel::loaderCalls()) {
+        for (auto const& key : call) {
+            ++counts[key];
+        }
+    }
+    CHECK(counts.size() == 200);
+    CHECK(std::ranges::all_of(counts, [](auto const& entry) { return entry.second == 1; }));
+    // Mutation: reading the value by the caller's column order (alice's t001 then holds d000's value).
+}
+
+TEST_CASE("table over the bridge: one sort for many watchers", "[net][tables][views]") {
+    bench::WideTableModel::recipeGate().release();
+    bench::WideTableModel::configure(
+        {.rows = 2'000, .columns = 300, .seed = 7, .loadDelay = {}, .recipePreloaded = 1.0},
+        {.rows = 1'000, .columns = 30, .seed = 7, .loadDelay = {}, .recipePreloaded = 1.0});
+    ViewServer server;
+    std::vector<std::unique_ptr<Client>> clients;
+    std::vector<std::uint64_t> instances;
+    std::string const query = R"({"sort":[{"column":"d000","dir":"asc"}],"columns":["id","d000"],)"
+                              R"("page":{"offset":0,"limit":50}})";
+    for (int i = 0; i < 50; ++i) {
+        clients.push_back(std::make_unique<Client>(server.url, "alice"));
+        REQUIRE(clients.back()->watch({"WideTableModel.wide"}).empty());
+        instances.push_back(clients.back()->create(std::string{bench::kWideModelType}));
+        static_cast<void>(pageOf(
+            clients.back()->execute(instances.back(), std::string{bench::kWideModelType}, "Table.wide", query)));
+    }
+    auto const before = server.server->viewStats().computations;
+    CHECK(before == 1);
+    // An arrival on the order level: one value stored again gives the level a new generation.
+    auto const cache = bench::WideTableModel::recipeCache();
+    std::vector<morph::table::Cell> cells(20);
+    REQUIRE(cache->snapshot()->read(morph::table::RowId{std::int64_t{1}}, cells) == morph::table::LevelRead::Loaded);
+    morph::table::detail::LevelCacheAccess::store(
+        *cache, std::vector<std::pair<morph::table::RowId, std::vector<morph::table::Cell>>>{
+                    {morph::table::RowId{std::int64_t{1}}, cells}});
+    REQUIRE(server.server->announce("WideTableModel.wide", std::nullopt));
+    for (std::size_t i = 0; i < clients.size(); ++i) {
+        auto& client = *clients[i];
+        REQUIRE(client.pumpUntil([&] { return !client.changes.empty(); }));
+    }
+    for (std::size_t i = 0; i < clients.size(); ++i) {
+        static_cast<void>(
+            pageOf(clients[i]->execute(instances[i], std::string{bench::kWideModelType}, "Table.wide", query)));
+    }
+    CHECK(server.server->viewStats().computations == before + 1);
+    auto const work = server.tableWork->threads();
+    auto const computed = server.computeThreads();
+    REQUIRE_FALSE(computed.empty());
+    CHECK(std::ranges::all_of(computed, [&](std::thread::id id) { return work.contains(id); }));
+    // Mutations: no single flight or no cache (a computation per refetch); QueryTable::invoke running answerQuery
+    // inline (the computing thread is a strand's, not a tableWork thread).
+}
+
+TEST_CASE("table over the bridge: fifty sorts stay inside the bound", "[net][tables][views]") {
+    bench::WideTableModel::recipeGate().release();
+    bench::WideTableModel::configure(
+        {.rows = 2'000, .columns = 300, .seed = 7, .loadDelay = {}, .recipePreloaded = 1.0},
+        {.rows = 1'000, .columns = 30, .seed = 7, .loadDelay = {}, .recipePreloaded = 1.0});
+    std::size_t const viewBytes = 4 * 2'000;  // a view of every row of `wide`
+    ViewServer server{10 * viewBytes};
+    Client client{server.url, "alice"};
+    auto const instance = client.create(std::string{bench::kWideModelType});
+    for (int i = 1; i <= 50; ++i) {
+        auto const query = std::format(R"({{"sort":[{{"column":"i{:03}","dir":"asc"}}],"columns":["id"],)"
+                                       R"("page":{{"offset":0,"limit":10}}}})",
+                                       i);
+        static_cast<void>(pageOf(client.execute(instance, std::string{bench::kWideModelType}, "Table.wide", query)));
+    }
+    auto const stats = server.server->viewStats();
+    CHECK(stats.computations == 50);
+    CHECK(stats.bytes <= 10 * viewBytes);
+    CHECK(stats.evictions > 0);
+    // Mutation: no bound (forty views over it are kept and nothing is evicted).
 }
