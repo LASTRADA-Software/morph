@@ -372,7 +372,7 @@ git commit -m "feat(table): data levels on columns, typed rows and pages"
 - [ ] **Step 1: Write the failing wire tests** in `tests/table/test_table_query.cpp`
 
 ```cpp
-// Mutation: TableQuery::keys declared as std::vector<std::int64_t> (text keys fail to read).
+// Mutation: TableQuery's JSON leaving out `keys` (a glz::meta naming every member but `keys`).
 TEST_CASE("table: columns and keys round-trip through glaze", "[table][query][keyed]") {
     TableQuery query;
     query.columns = std::vector<std::string>{"id", "name"};
@@ -443,7 +443,7 @@ Add to Step 1 `"table: a keyed page uses the lookup it is given"` (`test_table_q
 
 - [ ] **Step 6: Run the target** — `ctest --test-dir build/cl-debug -R "^(table|generic page|description)" --output-on-failure`: all pass.
 
-- [ ] **Step 7: Benchmarks** in `bench_table.cpp` (`"[.benchmark][table][wire]"`): W3 — bytes of the W1 page (200 rows, 40 named columns from the 100,000 × 300 fixture) with all 200 rows naming one unloaded level, minus the same page with none, as a share of W1; W4 — a keyed reply of 20 keys and 40 columns: bytes, encode, decode. Record into table.md's "Benchmarks: wire".
+- [ ] **Step 7: Benchmarks** in `bench_table.cpp` (`"[.benchmark][table][wire]"`): W3 — bytes of the W1 page (200 rows, 40 named columns from the 1,000 × 300 fixture W1 is recorded on; positions 100 to 139 hold the recipe decimals `d000` to `d009`) with all 200 rows naming one unloaded level, minus the same page with `unloadedRows` cleared, as a share of W1; W4 — a keyed reply of 20 keys and 40 columns: bytes, encode, decode. Record into table.md's "Benchmarks: wire".
 
 - [ ] **Step 8: Mutations, then commit**
 
