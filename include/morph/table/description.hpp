@@ -48,6 +48,7 @@
 #include <morph/forms/forms.hpp>
 #include <morph/session/session.hpp>
 #include <morph/table/data_source.hpp>
+#include <morph/table/level_cache.hpp>
 #include <morph/table/query.hpp>
 #include <morph/table/runtime.hpp>
 #include <morph/util/rational.hpp>
@@ -800,8 +801,6 @@ namespace morph::table {
 
 namespace morph::table {
 
-class LevelSource;
-
 /// @brief Who asks for a table: what a table's function reads to decide what it serves.
 struct TableContext {
     /// @brief The caller's session; an empty one outside a dispatch.
@@ -1064,13 +1063,49 @@ struct AnswerContext {};
     return served;
 }
 
+/// @brief A sorted or filtered column of @p level: the column a refused order use names.
+/// @param query    The validated query.
+/// @param columns  The table's columns.
+/// @param level    The level.
+/// @param services The services the filter compiles with.
+/// @return The first sort key's column at @p level, else the first filtered column at it; empty when none is.
+[[nodiscard]] inline std::string orderColumnOf(TableQuery const& query, std::span<ColumnInfo const> columns,
+                                               std::string_view level, Services const& services) {
+    for (auto const& key : query.sort) {
+        if (auto const index = findColumn(columns, key.column); index && columns[*index].level == level) {
+            return key.column;
+        }
+    }
+    if (!query.filters.empty()) {
+        if (auto const filter = compileFilterGuarded(query.filters, columns, services)) {
+            for (auto const column : filter->columnsUsed()) {
+                if (columns[column].level == level) {
+                    return columns[column].id;
+                }
+            }
+        }
+    }
+    return {};
+}
+
 /// @brief Answers @p query over a served table: the page a `Table.<id>` action returns.
 ///
 /// The query is validated against the description's columns, its limits and `mayRead`; the page's columns
 /// are the validated `columns`, or, absent, every description column `mayRead` allows, in the description's
-/// order. Every description column must be one of the source's, or nothing is read. The rows are read from
-/// the source's snapshot only. A keyed query to a table whose capabilities exclude keyed queries is
-/// `Unavailable`, which a client answers by refetching its pages.
+/// order. Every base-level description column must be one of the source's, and every column of a level that
+/// `served.levels` serves one of that level's columns, or nothing is read.
+///
+/// The levels the query needs (`levelsNeeded`) are read from one snapshot of each, taken at the start, through a
+/// `LeveledSource` over the pinned source: a level cell no snapshot holds is `Unloaded`, and a level no entry of
+/// `served.levels` serves is `Unloaded` in every row. `unloadedRows` names each row of the page with the needed
+/// levels its snapshot does not hold, `failed` those whose load failed; `awaiting` and `failed` name the order
+/// levels unloaded, or failed, for some row of the view or of the undecided rows. Then each level is told what
+/// the reply needed, with `query.retry`: an order level every row of the view and the undecided rows, a display
+/// level the page's rows. An order use the level refuses refuses the query, `Unavailable` naming a sorted or
+/// filtered column of the level, and no page is returned.
+///
+/// A keyed query to a table whose capabilities exclude keyed queries is `Unavailable`, which a client answers by
+/// refetching its pages.
 /// @param served  The table, its source pinned (`pinned`).
 /// @param query   The query, as received.
 /// @param context What the reply is built with.
@@ -1092,9 +1127,20 @@ struct AnswerContext {};
     if (!checked) {
         return std::unexpected(std::move(checked.error()));
     }
+    auto const levelOf = [&served](std::string_view level) -> std::shared_ptr<LevelSource> {
+        for (auto const& source : served.levels) {
+            if (source != nullptr && source->level() == level) {
+                return source;
+            }
+        }
+        return nullptr;
+    };
     auto const sourceColumns = served.source->columns();
     for (auto const& info : infos) {
-        if (!findColumn(sourceColumns, info.id)) {
+        auto const level = info.level.empty() ? nullptr : levelOf(info.level);
+        bool const known = info.level.empty() ? findColumn(sourceColumns, info.id).has_value()
+                                              : level == nullptr || findColumn(level->columns(), info.id).has_value();
+        if (!known) {
             return std::unexpected(TableError{.code = TableErrorCode::UnknownColumn,
                                               .column = info.id,
                                               .message = "the table's source has no column " + info.id});
@@ -1111,12 +1157,88 @@ struct AnswerContext {};
             }
         }
     }
-    auto rows = apply(*served.source, *checked,
-                      ApplyOptions{.limits = served.limits, .services = served.services, .mayRead = served.mayRead});
-    if (!rows) {
-        return std::unexpected(std::move(rows.error()));
+    auto const needed = levelsNeeded(*checked, infos, served.mayRead, served.services.forTask());
+    std::vector<std::string> levels = needed.order;
+    levels.insert(levels.end(), needed.display.begin(), needed.display.end());
+    std::ranges::sort(levels);
+    auto const [firstDuplicate, lastDuplicate] = std::ranges::unique(levels);
+    levels.erase(firstDuplicate, lastDuplicate);
+    std::vector<LevelInput> inputs;
+    for (auto const& level : levels) {
+        if (auto source = levelOf(level)) {
+            auto levelSnapshot = source->snapshot();
+            inputs.push_back(LevelInput{.source = std::move(source), .snapshot = std::move(levelSnapshot)});
+        }
     }
-    auto page = writeGenericPage(*rows, *served.source, columns);
+    LeveledSource const leveled{served.source, infos, std::move(inputs)};
+    ApplyOptions const options{.limits = served.limits, .services = served.services, .mayRead = served.mayRead};
+    auto view = computeView(leveled, *checked, options);
+    if (!view) {
+        return std::unexpected(std::move(view.error()));
+    }
+    auto const snapshot = leveled.snapshot();
+    auto rows = pageRows(*view, *snapshot, *checked, served.limits);
+    for (auto const& level : needed.order) {
+        bool unloaded = false;
+        bool failed = false;
+        auto const look = [&](std::uint32_t row) {
+            auto const state = leveled.state(row, level);
+            unloaded = unloaded || state == LevelRead::Unloaded;
+            failed = failed || state == LevelRead::Failed;
+            return unloaded && failed;
+        };
+        if (!std::ranges::any_of(view->rows, look)) {
+            static_cast<void>(std::ranges::any_of(view->undecided, look));
+        }
+        if (unloaded) {
+            rows.awaiting.push_back(level);
+        }
+        if (failed) {
+            rows.failed.push_back(level);
+        }
+    }
+    auto page = writeGenericPage(rows, leveled, columns);
+    page.unloadedRows.clear();
+    for (std::size_t at = 0; at < rows.rows.size(); ++at) {
+        UnloadedRow row{.index = static_cast<std::int64_t>(at), .levels = {}, .failed = {}};
+        for (auto const& level : levels) {
+            auto const state = leveled.state(rows.rows[at], level);
+            if (state != LevelRead::Loaded) {
+                row.levels.push_back(level);
+            }
+            if (state == LevelRead::Failed) {
+                row.failed.push_back(level);
+            }
+        }
+        if (!row.levels.empty()) {
+            page.unloadedRows.push_back(std::move(row));
+        }
+    }
+    for (auto const& level : needed.order) {
+        auto const source = levelOf(level);
+        if (source == nullptr) {
+            continue;
+        }
+        std::vector<RowId> keys;
+        keys.reserve(view->rows.size() + view->undecided.size());
+        for (auto const row : view->rows) {
+            keys.push_back(snapshot->rowId(row));
+        }
+        for (auto const row : view->undecided) {
+            keys.push_back(snapshot->rowId(row));
+        }
+        if (auto wanted = source->want(keys, LevelUse::Order, query.retry); !wanted) {
+            auto error = std::move(wanted.error());
+            error.code = TableErrorCode::Unavailable;
+            error.column = orderColumnOf(*checked, infos, level, served.services.forTask());
+            return std::unexpected(std::move(error));
+        }
+    }
+    for (auto const& level : needed.display) {
+        if (auto const source = levelOf(level); source != nullptr && !page.keys.empty()) {
+            static_cast<void>(source->want(page.keys, LevelUse::Display, query.retry));
+        }
+    }
     page.revision = served.description.revision;
     return page;
 }

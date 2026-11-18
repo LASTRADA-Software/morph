@@ -12,6 +12,7 @@
 #pragma once
 
 #include <chrono>
+#include <condition_variable>
 #include <cstddef>
 #include <cstdint>
 #include <memory>
@@ -20,6 +21,7 @@
 #include <morph/core/registry.hpp>
 #include <morph/table/data_source.hpp>
 #include <morph/table/description.hpp>
+#include <morph/table/level_cache.hpp>
 #include <mutex>
 #include <span>
 #include <string>
@@ -43,7 +45,14 @@ struct WideTableOptions {
     std::int64_t rows = 100'000;
     int columns = 300;  // 300 or 30; anything else throws std::invalid_argument
     std::uint64_t seed = 1;
-    std::chrono::microseconds loadDelay{0};  // not read by WideTableSource, which has no slow level
+    std::chrono::microseconds loadDelay{0};  // the recipe loader sleeps this long per key
+    // The model's `recipe` level cache: the fraction of rows stored when a table's source is built (rows chosen by
+    // (seed, row)), the keys one loader call takes, and whether the loader returns no value for any key. The cache
+    // is shared by `wide` and `small` and takes the smaller fraction and batch of the two, and fails if either
+    // says so.
+    double recipePreloaded = 1.0;
+    std::size_t recipeBatch = 64;
+    bool recipeFails = false;
 };
 
 // The bits a cell is generated from: splitmix64(splitmix64(seed ^ fnv1a64(column)) + row).
@@ -162,6 +171,28 @@ private:
 
 inline constexpr std::string_view kWideModelType = "WideTableModel";
 
+// Holds the recipe loader: a held gate makes each loader call wait until it is released.
+class LoadGate {
+public:
+    // Every loader call from now on waits.
+    void hold();
+    // Every call passes, waiting ones included.
+    void release();
+    // `calls` loader calls pass, waiting ones first; then the gate holds again.
+    void release(std::size_t calls);
+    // Waits until the gate lets this call pass.
+    void pass();
+
+private:
+    std::mutex _mutex;
+    std::condition_variable _changed;
+    bool _held = false;
+    std::size_t _passes = 0;
+};
+
+// The `recipe` level's columns: d000..d009 and t001..t010 of the wide layout, in that order.
+[[nodiscard]] std::vector<morph::table::ColumnInfo> recipeColumns();
+
 // Sets one integer cell: `row` is the row index (its key is row + 1), `column` an integer column of the wide layout.
 struct EditWideRow {
     std::int64_t row = 0;
@@ -195,8 +226,15 @@ public:
 
     // Sets the cell in `wide`, and in `small` when the row and the column are there; names the row in each.
     [[nodiscard]] EditWideRowResult execute(EditWideRow const& action);
-    // Regenerates both tables from the seed.
+    // Regenerates both tables from the seed; the recipe cache is emptied and preloaded again at the new seed.
     bool execute(ReplaceWideRows const& action);
+
+    // The recipe loader's gate; open unless a test holds it.
+    [[nodiscard]] static LoadGate& recipeGate();
+    // The keys of every recipe loader call since the cache was built, one entry per call.
+    [[nodiscard]] static std::vector<std::vector<morph::table::RowId>> loaderCalls();
+    // The recipe level's cache, built with the first source (and again by `configure`).
+    [[nodiscard]] static std::shared_ptr<morph::table::CellLevelCache> recipeCache();
 };
 
 struct EditWideRowResult {

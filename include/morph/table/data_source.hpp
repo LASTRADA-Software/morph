@@ -235,6 +235,20 @@ struct TableError {
         cell);
 }
 
+/// @brief The bytes a cell owns: what a cache of cells counts against its bound.
+/// @param cell The cell.
+/// @return `sizeof(Cell)`, plus a string's heap buffer and its terminator when the text is not in the string's
+///         own small buffer.
+[[nodiscard]] inline std::size_t cellBytes(Cell const& cell) noexcept {
+    std::size_t bytes = sizeof(Cell);
+    if (auto const* const text = std::get_if<std::string>(&cell)) {
+        if (text->capacity() > std::string{}.capacity()) {
+            bytes += text->capacity() + 1;
+        }
+    }
+    return bytes;
+}
+
 // ── Services ────────────────────────────────────────────────────────────────
 
 /// @brief Orders and matches text. The renderer injects the toolkit's collator

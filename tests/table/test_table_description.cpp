@@ -1247,3 +1247,63 @@ TEST_CASE("generic page: an empty failed or indices is left out, and read either
     REQUIRE_FALSE(glz::read_json(back, R"({"rows":[1],"offset":0,"totalKind":"exact","failed":[],"indices":[]})"));
     CHECK(back.rows == std::vector<int>{1});
 }
+
+namespace {
+
+// A level that records what it is asked and holds nothing.
+class RecordingLevel final : public LevelSource {
+public:
+    explicit RecordingLevel(std::string level) : _level{std::move(level)} {}
+    [[nodiscard]] std::string_view level() const override { return _level; }
+    [[nodiscard]] std::span<ColumnInfo const> columns() const override { return {}; }
+    [[nodiscard]] std::shared_ptr<LevelSnapshot const> snapshot() const override {
+        struct Empty final : LevelSnapshot {
+            [[nodiscard]] LevelRead read(RowId const&, std::span<Cell>) const override { return LevelRead::Unloaded; }
+            [[nodiscard]] std::uint64_t generation() const override { return 0; }
+        };
+        return std::make_shared<Empty const>();
+    }
+    std::expected<void, TableError> want(std::span<RowId const> keys, LevelUse, bool) override {
+        wanted += keys.size();
+        ++calls;
+        return {};
+    }
+    std::size_t wanted = 0;
+    std::size_t calls = 0;
+
+private:
+    std::string _level;
+};
+
+}  // namespace
+
+// Mutation: a level without a source read from the base source (every row matches and none is undecided).
+TEST_CASE("level cache: a level no cache serves is unloaded and awaited", "[table][levels]") {
+    auto stock = std::make_shared<RecordingLevel>("stock");
+    auto description = describedOf({column("id", ColumnKind::Integer), column("r", ColumnKind::Text)});
+    description.columns[1].info.level = "recipe";
+    description.levels = {"recipe"};
+    description = describe(std::move(description));
+    std::vector<std::vector<Cell>> rows;
+    for (std::int64_t row = 0; row < 5; ++row) {
+        rows.push_back({Cell{row}, Cell{std::string{"abc"}}});
+    }
+    auto const served = detail::pinned(ServedTable{
+        .description = description,
+        .source = tabletest::makeSource(
+            {tabletest::col("id", ColumnKind::Integer), tabletest::col("r", ColumnKind::Text)}, std::move(rows)),
+        .levels = {stock},
+        .mayRead = {},
+        .scope = {},
+        .services = {},
+        .limits = {}});
+    TableQuery query;
+    query.filters.columns.emplace(
+        "r", ColumnFilter{.combine = Combine::Any, .include = {FilterEntry{.contains = "a"}}, .exclude = {}});
+    auto const page = detail::answerQuery(served, query);
+    REQUIRE(page.has_value());
+    CHECK(page->rows.empty());
+    CHECK(page->undecided == 5);
+    CHECK(page->awaiting == std::vector<std::string>{"recipe"});
+    CHECK(stock->calls == 0);
+}
