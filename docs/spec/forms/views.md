@@ -170,6 +170,14 @@ type it is instantiated on. Each derived column carries:
   defaulting to `field`; a renderer that wants a readable header without an
   override uses `title`.
 - `x-unitAlternatives`, `x-comparator` — copied off the property when present.
+- `x-level` — the data level the column's cells need
+  ([../table/table.md, "Data levels"](../table/table.md#data-levels)), copied
+  off the property as `x-comparator` is. The row schema carries it on each
+  property the row type's `columnLevels()` names
+  (`static constexpr std::array<table::ColumnLevel, N> columnLevels() noexcept`);
+  an entry naming a member the row does not have is skipped in the schema and
+  refused where the table reflects its columns. A collection reads it as
+  `CollectionColumn::level`.
 - `enum` — the values of a closed set: the property's `enum`, or the `const`
   of each `oneOf` entry (glaze's shape for an enum with names).
 
@@ -194,7 +202,7 @@ have is emitted as a bare `{field, label}` column with no `x-decimalPlaces` /
 | `v-title` | top-level | string | Screen title. Defaults to `v-query`'s type id. |
 | `v-query` | top-level | string | Registered query action's type id; executed with an empty body. |
 | `v-rowKey` | top-level | string | Wire field uniquely identifying a row. Defaults to `"id"`. |
-| `v-columns` | top-level | array | Ordered column descriptors: `{field, label, kind, title?, "v-hidden"?, "x-decimalPlaces"?, ExtUnits?, "x-unitAlternatives"?, "x-comparator"?, enum?}`. Derived from the row type unless `V::columns` overrides it. |
+| `v-columns` | top-level | array | Ordered column descriptors: `{field, label, kind, title?, "v-hidden"?, "x-decimalPlaces"?, ExtUnits?, "x-unitAlternatives"?, "x-comparator"?, "x-level"?, enum?}`. Derived from the row type unless `V::columns` overrides it. |
 | `v-rowAction` | top-level | object | `{action, bind?}` — the action a row activation opens. Omitted when `V` declares no `rowAction`. Carries only `action`/`bind`, never `label`/`scope`/`confirm`. |
 | `v-actions` | top-level | array | `{action, label, scope, bind?, confirm?}` per entry — buttons that run an action. `scope` is `"row"` or `"collection"`; `confirm` is omitted when `false`; `bind` is omitted when empty. Omitted entirely when `V` declares no `actions`. |
 

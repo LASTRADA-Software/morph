@@ -63,6 +63,8 @@ struct CollectionColumn {
     std::optional<std::uint32_t> decimalPlaces;
     /// @brief The unit appended to an exact value (`ExtUnits.unitUnicode`, else `unitAscii`).
     std::string unit;
+    /// @brief `x-level`: the data level the column's cells need; empty is the base level.
+    std::string level;
 };
 
 /// @brief One `v-rowAction` or `v-actions` entry.
@@ -201,6 +203,9 @@ private:
                 detail::engine::SchemaReader::unsignedOf(detail::engine::member(entry, "x-decimalPlaces"))) {
             column.decimalPlaces =
                 static_cast<std::uint32_t>(std::min<std::uint64_t>(*places, math::kMaxDecimalPlaces));
+        }
+        if (auto const* const level = detail::engine::stringAt(entry, "x-level")) {
+            column.level = *level;
         }
         if (Json const* const units = detail::engine::member(entry, "ExtUnits")) {
             auto const* const unicode = detail::engine::stringAt(*units, "unitUnicode");

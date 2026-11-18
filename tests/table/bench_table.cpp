@@ -17,6 +17,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <exception>
+#include <format>
 #include <functional>
 #include <glaze/glaze.hpp>
 #include <memory>
@@ -33,7 +34,9 @@
 #include <print>
 #include <random>
 #include <string>
+#include <string_view>
 #include <thread>
+#include <tuple>
 #include <type_traits>
 #include <utility>
 #include <variant>
@@ -755,4 +758,162 @@ TEST_CASE("table benchmark: the generic page", "[.benchmark][wire]") {
                   REQUIRE(read.has_value());
                   REQUIRE(read->rows.size() == 200);
               }));
+}
+
+// ── Step 2a: unloaded cells and data levels (S1, S2, S4 to S6) ─────────────
+
+namespace {
+
+// The wide table's recipe columns: ten decimals and ten texts.
+std::vector<std::string> recipeColumnsOf(DataSource const& source) {
+    std::vector<std::string> out;
+    for (auto const& column : source.columns()) {
+        if (column.level == "recipe") {
+            out.push_back(column.id);
+        }
+    }
+    return out;
+}
+
+// Rows of @p column holding `Unloaded`.
+std::size_t unloadedIn(DataSource const& source, std::string_view column) {
+    auto const index = detail::findColumn(source.columns(), column);
+    REQUIRE(index.has_value());
+    auto const snapshot = source.snapshot();
+    std::size_t count = 0;
+    for (std::size_t row = 0; row < snapshot->rowCount(); ++row) {
+        count += std::holds_alternative<Unloaded>(snapshot->cell(row, *index)) ? 1 : 0;
+    }
+    return count;
+}
+
+}  // namespace
+
+TEST_CASE("table benchmark: S1 S2 with unloaded cells", "[.benchmark][table][unloaded]") {
+    auto const wide = std::make_shared<bench::WideTableSource>(
+        bench::WideTableOptions{.rows = kWideRows, .columns = 300, .seed = 1, .loadDelay = {}});
+    auto const recipe = recipeColumnsOf(*wide);
+    REQUIRE(recipe.size() == 20);
+    auto const partial = bench::withUnloaded(wide, recipe, "recipe", 0.7, 7);
+    auto const whole = bench::withUnloaded(wide, recipe, "recipe", 1.0, 7);
+    REQUIRE(unloadedIn(*partial, "d000") > 25'000);
+    REQUIRE(unloadedIn(*partial, "t001") > 25'000);
+    REQUIRE(unloadedIn(*whole, "d000") == 0);
+    auto const s1 = wideQuery({{.column = "d000", .dir = kAsc}}, {}, 0);
+    auto const s2 = wideQuery({}, filterOn("t001", FilterEntry{.contains = "ka"}), 0);
+    {
+        auto const page = apply(*partial, s1);
+        REQUIRE(page.has_value());
+        REQUIRE(page->rows.size() == 200);
+        auto const filtered = apply(*partial, s2);
+        REQUIRE(filtered.has_value());
+        REQUIRE(filtered->undecided > 25'000);
+        REQUIRE(filtered->totalKind == TotalKind::AtLeast);
+    }
+    printHeader("Step 2a: apply over the wide table with the recipe level, 100,000 x 300, in the calling thread");
+    auto const time = [&](std::string const& scenario, DataSource const& source, TableQuery const& query) {
+        std::vector<double> samples;
+        for (int run = 0; run < runsFor(kWideRows); ++run) {
+            auto const began = Clock::now();
+            auto const page = apply(source, query);
+            samples.push_back(millisSince(began));
+            REQUIRE(page.has_value());
+        }
+        printRow(scenario, kWideRows, spreadOf(samples));
+    };
+    time("S1: sort d000 asc, page of 200, 70% of recipe loaded", *partial, s1);
+    time("S1: the same, every row loaded", *whole, s1);
+    time("S2: filter t001 contains \"ka\", 70% of recipe loaded", *partial, s2);
+    time("S2: the same, every row loaded", *whole, s2);
+}
+
+TEST_CASE("table benchmark: S4 levelsNeeded", "[.benchmark][table][unloaded]") {
+    auto const columns = bench::wideColumns(300);
+    std::vector<ColumnInfo> infos;
+    infos.reserve(columns.size());
+    for (auto const& column : columns) {
+        infos.push_back(column.info);
+    }
+    TableQuery query;
+    // Eight sort keys, two of them on recipe columns; 32 filtered columns, four of them recipe columns.
+    for (auto const* const id : {"d000", "i001", "i002", "t001", "i003", "i004", "i005", "i006"}) {
+        query.sort.push_back(SortKey{.column = id, .dir = kAsc});
+    }
+    for (int i = 0; i < 32; ++i) {
+        auto const id = i < 4 ? std::format("d{:03}", i + 1) : std::format("i{:03}", i + 7);
+        query.filters.columns.emplace(id, ColumnFilter{.include = {FilterEntry{.gt = "0"}}});
+    }
+    REQUIRE(query.filters.columns.size() == 32);
+    auto const checked = validate(query, infos);
+    REQUIRE(checked.has_value());
+    auto const needed = levelsNeeded(*checked, infos);
+    REQUIRE(needed.order == std::vector<std::string>{"recipe"});
+    REQUIRE(needed.display == std::vector<std::string>{"recipe"});
+    constexpr int kCalls = 1000;
+    std::vector<double> samples;
+    for (int run = 0; run < 15; ++run) {
+        std::size_t sink = 0;
+        auto const began = Clock::now();
+        for (int call = 0; call < kCalls; ++call) {
+            sink += levelsNeeded(*checked, infos).order.size();
+        }
+        samples.push_back(millisSince(began) * 1000.0 / kCalls);
+        REQUIRE(sink == kCalls);
+    }
+    auto const spread = spreadOf(samples);
+    std::println(
+        "\nS4: levelsNeeded, 300 columns, 8 sort keys, 32 filtered columns\n\n| scenario | median us | p10-p90 "
+        "us |\n|---|---:|---:|\n| S4: one call | {:.2f} | {:.2f}-{:.2f} |",
+        spread.median, spread.p10, spread.p90);
+    static_cast<void>(std::fflush(stdout));
+}
+
+TEST_CASE("table benchmark: S5 S6 arrivals", "[.benchmark][table][unloaded]") {
+    auto const wide = std::make_shared<bench::WideTableSource>(
+        bench::WideTableOptions{.rows = kWideRows, .columns = 300, .seed = 1, .loadDelay = {}});
+    auto const recipe = recipeColumnsOf(*wide);
+    printHeader("Step 2a: an engine over the wide table when a level arrives, 100,000 x 300, in the calling thread");
+
+    // S5: sorted on a recipe decimal; 200 rows arrive, then the next 1,000.
+    std::vector<double> first;
+    std::vector<double> second;
+    for (int run = 0; run < runsFor(kWideRows); ++run) {
+        auto const source = bench::withUnloaded(wide, recipe, "recipe", 0.7, 7);
+        Engine engine{source};
+        require(engine.setSort({{.column = "d000", .dir = kAsc}}));
+        auto const waiting = source->unloadedRows();
+        REQUIRE(waiting.size() > 25'000);
+        for (auto const [from, count, samples] : {std::tuple{std::size_t{0}, std::size_t{200}, &first},
+                                                  std::tuple{std::size_t{200}, std::size_t{1000}, &second}}) {
+            std::vector<std::size_t> const arriving(waiting.begin() + static_cast<std::ptrdiff_t>(from),
+                                                    waiting.begin() + static_cast<std::ptrdiff_t>(from + count));
+            auto const before = engine.stats();
+            auto const began = Clock::now();
+            source->load(arriving);
+            samples->push_back(millisSince(began));
+            REQUIRE(engine.stats().repairs == before.repairs + 1);
+            REQUIRE(engine.stats().fullSorts == before.fullSorts);
+        }
+    }
+    printRow("S5: sorted on d000, 200 rows arrive", kWideRows, spreadOf(first));
+    printRow("S5: then the next 1,000 rows arrive", kWideRows, spreadOf(second));
+
+    // S6: filtered on a recipe decimal with half the rows loaded; 1,000 undecided rows arrive.
+    std::vector<double> decided;
+    auto const filter = filterOn("d000", FilterEntry{.gt = "0"});
+    for (int run = 0; run < runsFor(kWideRows); ++run) {
+        auto const source = bench::withUnloaded(wide, recipe, "recipe", 0.5, 7);
+        Engine engine{source};
+        require(engine.setFilter(filter));
+        REQUIRE(engine.undecidedRowCount() > 45'000);
+        auto const waiting = source->unloadedRows();
+        std::vector<std::size_t> const arriving(waiting.begin(), waiting.begin() + 1000);
+        auto const before = engine.stats();
+        auto const began = Clock::now();
+        source->load(arriving);
+        decided.push_back(millisSince(began));
+        REQUIRE(engine.stats().repairs == before.repairs + 1);
+        REQUIRE(engine.stats().filterRuns == before.filterRuns);
+    }
+    printRow("S6: about 50,000 undecided, 1,000 of them decided", kWideRows, spreadOf(decided));
 }

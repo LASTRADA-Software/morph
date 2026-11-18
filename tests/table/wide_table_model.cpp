@@ -523,6 +523,157 @@ void WideTableSource::regenerate(std::uint64_t seed) {
     _listeners.notify(morph::table::RowChange{.kind = morph::table::ChangeKind::Reset, .rows = {}});
 }
 
+namespace {
+
+// Whether row `row` starts loaded: its draw, uniform in [0, 1), is below the fraction.
+[[nodiscard]] bool drawnLoaded(std::uint64_t seed, std::size_t row, double loadedFraction) noexcept {
+    constexpr double kUnit = 1.0 / 9007199254740992.0;  // 2^-53
+    auto const bits = cellBits(seed, "loaded", static_cast<std::int64_t>(row));
+    return static_cast<double>(bits >> 11U) * kUnit < loadedFraction;
+}
+
+// Hands a slow column's run on with its unloaded rows replaced.
+class MaskingSink final : public morph::table::ColumnSink {
+public:
+    MaskingSink(morph::table::ColumnSink& out, std::vector<bool> const& loaded) : _out{&out}, _loaded{&loaded} {}
+
+    void cells(std::size_t firstRow, std::span<Cell const> cells) override {
+        _run.assign(cells.begin(), cells.end());
+        for (std::size_t i = 0; i < _run.size(); ++i) {
+            if (!(*_loaded)[firstRow + i]) {
+                _run[i] = Cell{morph::table::Unloaded{}};
+            }
+        }
+        _out->cells(firstRow, _run);
+    }
+
+private:
+    morph::table::ColumnSink* _out;
+    std::vector<bool> const* _loaded;
+    std::vector<Cell> _run;
+};
+
+class UnloadedSnapshot final : public morph::table::RowSnapshot {
+public:
+    UnloadedSnapshot(std::shared_ptr<morph::table::RowSnapshot const> inner,
+                     std::shared_ptr<std::vector<bool> const> slow, std::shared_ptr<std::vector<bool> const> loaded)
+        : _inner{std::move(inner)}, _slow{std::move(slow)}, _loaded{std::move(loaded)} {}
+
+    [[nodiscard]] std::size_t rowCount() const override { return _inner->rowCount(); }
+    [[nodiscard]] morph::table::RowId rowId(std::size_t row) const override { return _inner->rowId(row); }
+    [[nodiscard]] Cell cell(std::size_t row, std::size_t column) const override {
+        if ((*_slow)[column] && !(*_loaded)[row]) {
+            return Cell{morph::table::Unloaded{}};
+        }
+        return _inner->cell(row, column);
+    }
+    void readColumn(std::size_t column, morph::table::ColumnSink& sink, std::size_t first,
+                    std::size_t last) const override {
+        if (!(*_slow)[column]) {
+            _inner->readColumn(column, sink, first, last);
+            return;
+        }
+        MaskingSink masking{sink, *_loaded};
+        _inner->readColumn(column, masking, first, last);
+    }
+
+private:
+    std::shared_ptr<morph::table::RowSnapshot const> _inner;
+    std::shared_ptr<std::vector<bool> const> _slow;
+    std::shared_ptr<std::vector<bool> const> _loaded;
+};
+
+}  // namespace
+
+UnloadedSource::UnloadedSource(std::shared_ptr<morph::table::DataSource> source,
+                               std::vector<std::string> const& columns, std::string level, double loadedFraction,
+                               std::uint64_t seed)
+    : _source{std::move(source)},
+      _columns{_source->columns().begin(), _source->columns().end()},
+      _loadedFraction{loadedFraction},
+      _seed{seed} {
+    if (level.empty()) {
+        throw std::invalid_argument{"unloaded source: the base level cannot be unloaded"};
+    }
+    std::vector<bool> slow(_columns.size(), false);
+    for (auto const& id : columns) {
+        auto const at = std::ranges::find(_columns, id, &ColumnInfo::id);
+        if (at == _columns.end()) {
+            throw std::invalid_argument{std::format("unloaded source: no column {}", id)};
+        }
+        at->level = level;
+        slow[static_cast<std::size_t>(at - _columns.begin())] = true;
+    }
+    _slow = std::make_shared<std::vector<bool> const>(std::move(slow));
+    auto inner = _source->snapshot();
+    std::vector<bool> loaded(inner->rowCount());
+    for (std::size_t row = 0; row < loaded.size(); ++row) {
+        loaded[row] = drawnLoaded(_seed, row, _loadedFraction);
+    }
+    _loaded = std::make_shared<std::vector<bool> const>(std::move(loaded));
+    publish(std::move(inner));
+    _source->subscribe(*this);
+}
+
+UnloadedSource::~UnloadedSource() { _source->unsubscribe(*this); }
+
+std::span<ColumnInfo const> UnloadedSource::columns() const { return _columns; }
+
+std::shared_ptr<morph::table::RowSnapshot const> UnloadedSource::snapshot() const { return _snapshot; }
+
+void UnloadedSource::subscribe(morph::table::ChangeListener& listener) { _listeners.add(listener); }
+
+void UnloadedSource::unsubscribe(morph::table::ChangeListener& listener) { _listeners.remove(listener); }
+
+void UnloadedSource::load(std::span<std::size_t const> rows) {
+    auto loaded = *_loaded;
+    for (auto const row : rows) {
+        if (row >= loaded.size()) {
+            throw std::invalid_argument{std::format("unloaded source: no row {}", row)};
+        }
+        loaded[row] = true;
+    }
+    _loaded = std::make_shared<std::vector<bool> const>(std::move(loaded));
+    publish(_source->snapshot());
+    _listeners.notify(
+        morph::table::RowChange{.kind = morph::table::ChangeKind::Updated, .rows = {rows.begin(), rows.end()}});
+}
+
+std::vector<std::size_t> UnloadedSource::unloadedRows() const {
+    std::vector<std::size_t> out;
+    for (std::size_t row = 0; row < _loaded->size(); ++row) {
+        if (!(*_loaded)[row]) {
+            out.push_back(row);
+        }
+    }
+    return out;
+}
+
+void UnloadedSource::rowsChanged(morph::table::RowChange const& change) {
+    auto inner = _source->snapshot();
+    if (inner->rowCount() != _loaded->size()) {
+        auto loaded = *_loaded;
+        auto const kept = loaded.size();
+        loaded.resize(inner->rowCount());
+        for (std::size_t row = kept; row < loaded.size(); ++row) {
+            loaded[row] = drawnLoaded(_seed, row, _loadedFraction);
+        }
+        _loaded = std::make_shared<std::vector<bool> const>(std::move(loaded));
+    }
+    publish(std::move(inner));
+    _listeners.notify(change);
+}
+
+void UnloadedSource::publish(std::shared_ptr<morph::table::RowSnapshot const> inner) {
+    _snapshot = std::make_shared<UnloadedSnapshot const>(std::move(inner), _slow, _loaded);
+}
+
+std::shared_ptr<UnloadedSource> withUnloaded(std::shared_ptr<morph::table::DataSource> source,
+                                             std::vector<std::string> columns, std::string level,
+                                             double loadedFraction, std::uint64_t seed) {
+    return std::make_shared<UnloadedSource>(std::move(source), columns, std::move(level), loadedFraction, seed);
+}
+
 std::size_t processBytes() noexcept {
 #if defined(_WIN32)
     PROCESS_MEMORY_COUNTERS_EX counters{};

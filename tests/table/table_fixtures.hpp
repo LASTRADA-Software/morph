@@ -13,6 +13,7 @@
 #include <morph/core/executor.hpp>
 #include <morph/table/data_source.hpp>
 #include <morph/table/engine.hpp>
+#include <morph/table/query.hpp>
 #include <mutex>
 #include <random>
 #include <string>
@@ -95,6 +96,23 @@ inline std::shared_ptr<morph::table::VectorSource> slowColumn(ColumnKind kind, s
         rows.push_back({std::move(cell)});
     }
     return makeSource({levelCol("c", kind, "slow")}, std::move(rows));
+}
+
+// A typed row whose `qty` is at level "stock": the row type of the typed level cases. Reflected by glaze.
+struct LevelRow {
+    std::int64_t id = 0;
+    std::string name;
+    std::int64_t qty = 0;
+    static constexpr std::array<morph::table::ColumnLevel, 1> columnLevels() noexcept { return {{{"qty", "stock"}}}; }
+};
+
+// Rows 0..count-1: id i, name "n<i>", qty 10 * i.
+inline std::vector<LevelRow> levelRows(std::int64_t count) {
+    std::vector<LevelRow> out;
+    for (std::int64_t i = 0; i < count; ++i) {
+        out.push_back(LevelRow{.id = i, .name = "n" + std::to_string(i), .qty = 10 * i});
+    }
+    return out;
 }
 
 // Folds the accented Latin-1 vowels the fixtures use to their base letter,
