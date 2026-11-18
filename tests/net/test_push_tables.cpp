@@ -5,7 +5,8 @@
 // rows reach the watchers of their own table; a page's columns are the caller's; and the reply is built on the
 // server's table executor.
 //
-// Mutations these tests were seen to fail on are named at the end of each case.
+// The end of each case names the mutation it is meant to catch. These cases need a POSIX build, and none of
+// those mutations has been run yet.
 
 #include <algorithm>
 #include <atomic>
