@@ -1398,6 +1398,17 @@ struct AnswerContext {
         }
         return nullptr;
     };
+    auto const sourceColumns = served.source->columns();
+    for (auto const& info : infos) {
+        auto const level = info.level.empty() ? nullptr : levelOf(info.level);
+        bool const known = info.level.empty() ? findColumn(sourceColumns, info.id).has_value()
+                                              : level == nullptr || findColumn(level->columns(), info.id).has_value();
+        if (!known) {
+            return std::unexpected(TableError{.code = TableErrorCode::UnknownColumn,
+                                              .column = info.id,
+                                              .message = "the table's source has no column " + info.id});
+        }
+    }
     if (checked->distinct) {
         // The listed column's level is an order level: the values list reads it for every candidate row.
         auto const needed = levelsNeeded(*checked, infos, served.mayRead, served.services.forTask(), groups);
@@ -1445,17 +1456,6 @@ struct AnswerContext {
         page.revision = served.description.revision;
         page.distinct = std::move(*values);
         return page;
-    }
-    auto const sourceColumns = served.source->columns();
-    for (auto const& info : infos) {
-        auto const level = info.level.empty() ? nullptr : levelOf(info.level);
-        bool const known = info.level.empty() ? findColumn(sourceColumns, info.id).has_value()
-                                              : level == nullptr || findColumn(level->columns(), info.id).has_value();
-        if (!known) {
-            return std::unexpected(TableError{.code = TableErrorCode::UnknownColumn,
-                                              .column = info.id,
-                                              .message = "the table's source has no column " + info.id});
-        }
     }
     std::vector<std::string> columns;
     if (checked->columns) {

@@ -601,7 +601,7 @@ TEST_CASE("table: oneOf matches what its eq entries match", "[table][filter]") {
                                                                        std::string{"alpha"}}),
                         .services = {}};
     CHECK(text.by(on("c", {oneOf({"alpha", "BETA"})})) == Rows{0, 1, 4});
-    CHECK(*text.by(on("c", {oneOf({"alpha", "BETA"})})) == *text.by(on("c", {eq("alpha"), eq("BETA")})));
+    CHECK(must(text.by(on("c", {oneOf({"alpha", "BETA"})}))) == must(text.by(on("c", {eq("alpha"), eq("BETA")}))));
     CHECK(text.by(on("c", {}, Combine::Any, {oneOf({"alpha", "BETA"})})) == Rows{2, 3});
     CHECK(text.by(on("c", {oneOf({"alpha", "BETA"}), isEmpty()})) == Rows{0, 1, 3, 4});
     FilterEntry exact = oneOf({"alpha"});
@@ -633,7 +633,7 @@ TEST_CASE("table: an empty or repeating oneOf", "[table][filter]") {
         .services = {}};
     CHECK(text.by(on("c", {oneOf({})})) == Rows{});
     CHECK(text.by(on("c", {}, Combine::Any, {oneOf({})})) == Rows{0, 1, 2});
-    CHECK(*text.by(on("c", {oneOf({"alpha", "ALPHA"})})) == *text.by(on("c", {oneOf({"alpha"})})));
+    CHECK(must(text.by(on("c", {oneOf({"alpha", "ALPHA"})}))) == must(text.by(on("c", {oneOf({"alpha"})}))));
 }
 
 // Gate D5: one lookup a cell, whatever the set's size. The count is kept by the set, so a set that scanned its
@@ -1390,4 +1390,22 @@ TEST_CASE("groups: a row costs k lookups and at most one augmentation an entry",
     REQUIRE(coveredRows >= kRows / 50);
     CHECK(maxAugmentationsOnUncoveredRows == 0);
     CHECK(maxAugmentationsOnCoveredRows == 16);  // one search an entry, reached on every covered row
+}
+
+// Mutation: the wildcard matching run without the count of matching columns (the first row's search runs, and
+// fails, instead of being refused by the count).
+TEST_CASE("groups: the wildcard matching needs as many matching columns as entries", "[table][filter][groups]") {
+    GroupFilter const together{
+        .group = "company", .mode = GroupMode::Together, .include = {eq("A"), eq("B"), eq("C")}};
+    // Row 0: A, unloaded, X: two columns can match anything, three entries need three. Row 1: A, two unloaded.
+    auto const source = companySource({{std::string{"A"}, Cell{Unloaded{}}, std::string{"X"}},
+                                       {std::string{"A"}, Cell{Unloaded{}}, Cell{Unloaded{}}}},
+                                      true);
+    GroupEval const evaluate{*source, together};
+    FilterCounters refused;
+    CHECK(evaluate(0, &refused) == Match::No);
+    CHECK(refused.wildcardAugmentations == 0);
+    FilterCounters searched;
+    CHECK(evaluate(1, &searched) == Match::Unknown);
+    CHECK(searched.wildcardAugmentations == 3);
 }

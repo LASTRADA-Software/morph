@@ -8,7 +8,7 @@
 //  - deriveColumns not skipping x-hidden members: "derived columns carry
 //    kind, title and metadata" fails (nine columns, not eight).
 //  - inferColumnKind swapping quantity and decimal: the same test fails.
-//  The x-group and typed-row group cases name their own mutations above them.
+//  The column-group and typed-row group cases name their own mutations above them.
 
 #include <algorithm>
 #include <catch2/catch_test_macros.hpp>
