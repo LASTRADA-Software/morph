@@ -7,6 +7,7 @@
 #include <morph/client/mcp.hpp>
 #include <morph/ui/value.hpp>
 #include <sstream>
+#include <stdexcept>
 #include <string>
 #include <vector>
 #ifndef _WIN32
@@ -82,6 +83,21 @@ TEST_CASE("serveMcp refuses an application the binary does not link", "[client][
     CHECK(morph::client::serveMcp(args, {probe::agentApp()}, kNoSession, input, output, diagnostics) == 2);
     CHECK(output.str().empty());
     CHECK(diagnostics.str().contains("probe"));
+}
+
+// Mutation: remove the try/catch around `setUp` in serveLocal; the exception escapes serveMcp and the case fails.
+TEST_CASE("serveMcp answers a throwing setUp with exit 2 and a diagnostic", "[client][mcp]") {
+    morph::client::LocalApp app = probe::agentApp();
+    app.setUp = [](morph::client::LocalSetup const&) { throw std::runtime_error{"cannot open the database"}; };
+    morph::client::Args args;
+    args.app = "probe";
+    args.mcpStdio = true;
+    std::istringstream input;
+    std::ostringstream output;
+    std::ostringstream diagnostics;
+    CHECK(morph::client::serveMcp(args, {app}, kNoSession, input, output, diagnostics) == 2);
+    CHECK(output.str().empty());
+    CHECK(diagnostics.str() == "client: cannot open the database\n");
 }
 
 // A wss:// URL needs the Qt transport; without it, serveMcp says which one is missing and starts nothing.

@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cstdio>
+#include <exception>
 #include <expected>
 #include <functional>
 #include <iostream>
@@ -77,7 +78,12 @@ int serveLocal(Args const& args, std::string const& appName, std::vector<LocalAp
         return 2;
     }
     if (found->setUp) {
-        found->setUp(LocalSetup{.db = args.db, .user = args.user});
+        try {
+            found->setUp(LocalSetup{.db = args.db, .user = args.user});
+        } catch (std::exception const& thrown) {
+            diagnostics << "client: " << thrown.what() << '\n';
+            return 2;
+        }
     }
     // Declared in the order that tears down safely: the adapter goes first, then the server, then the owner its
     // replies were delivered on, then the pool its strands ran on.

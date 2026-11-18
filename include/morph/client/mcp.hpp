@@ -44,8 +44,9 @@ namespace morph::client {
 /// @param input       Where JSON-RPC messages arrive, one per line.
 /// @param output      Where replies go, one per line, and nothing else.
 /// @param diagnostics Where problems are reported.
-/// @return The process exit code: 0 once input ended, 2 when the server cannot be reached by any built transport or
-///         the application is not linked.
+/// @return The process exit code: 0 once input ended; 2 when the application is not linked, its bundle does not
+///         build, or its `setUp` throws; when neither `--server` nor `--app` is given; when the `--server` URL is not
+///         ws:// or wss://; or when no built transport can reach it.
 [[nodiscard]] int serveMcp(Args const& args, std::vector<LocalApp> const& apps, session::Context session,
                            std::istream& input, std::ostream& output, std::ostream& diagnostics);
 
