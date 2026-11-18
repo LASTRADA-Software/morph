@@ -630,8 +630,9 @@ TEST_CASE("table: an empty or repeating oneOf", "[table][filter]") {
     CHECK(*text.by(on("c", {oneOf({"alpha", "ALPHA"})})) == *text.by(on("c", {oneOf({"alpha"})})));
 }
 
-// Gate D5: one lookup a cell, whatever the set's size. Mutation: a text set scanned member by member, each
-// comparison counted as a lookup.
+// Gate D5: one lookup a cell, whatever the set's size. The count is kept by the set, so a set that scanned its
+// members but counted one probe would pass; D4's timing is what guards against that. Mutation: a text set scanned
+// member by member, each comparison counted as a lookup.
 TEST_CASE("table: a oneOf of any size is one lookup a cell", "[table][filter]") {
     constexpr std::uint32_t kRows = 100'000;
     std::vector<Cell> cells;
