@@ -191,9 +191,9 @@ pointer as a field, and a refused `save` carries both in its error message.
 7. **The id.** The document's screen id is replaced by the custom screen's own id before it is stored or answered.
    The document is written out again for this, so the stored text keeps its content, not its key order or spacing.
 
-**The verdict cache.** The result of checks 2 to 6 is kept by the model, keyed by the document's content hash, its
+**The verdict cache.** The result of checks 3 to 6 is kept by the model, keyed by the document's content hash, its
 `basedOn`, the bundle digest, and a hash of the person's permitted set, in a cache bounded by `CustomScreensOptions::verdictCacheSize`
-entries. A `list` over unchanged documents reads verdicts; a reload, a permission change or an edit misses the cache
+entries. Check 2 runs before the cache on every call, because what it reads, a catalog entry's availability, is not part of the bundle digest. A `list` over unchanged documents reads verdicts; a reload, a permission change or an edit misses the cache
 and checks again.
 
 The checks are a guide for the person and a bound on what a document contains. The boundary on what it does is still
