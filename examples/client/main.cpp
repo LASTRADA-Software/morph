@@ -6,7 +6,8 @@
 // without a problem and 1 otherwise. `--grab FILE.png` (Qt Quick only) sizes the window 1280×900, saves what it draws
 // once the first screen mounted, and quits as `--exit-after-mount` does; `--grab-size WIDTHxHEIGHT` sizes it
 // otherwise. `--dev`, or `MORPH_UI_DEV=1`, turns development mode on (spec 6 §21): the screens reload when the
-// server's documents change, and Ctrl+Shift+I opens the inspector on Qt Quick.
+// server's documents change, and Ctrl+Shift+I opens the inspector on Qt Quick. `--mcp-stdio` serves MCP on stdin and
+// stdout instead of mounting a frontend: remote to `--server`, or local over the `--app` application.
 
 #include <algorithm>
 #include <charconv>
@@ -19,6 +20,7 @@
 #include <functional>
 #include <iostream>
 #include <memory>
+#include <morph/client/mcp.hpp>
 #include <morph/client/shell.hpp>
 #include <morph/client/source.hpp>
 #include <morph/ui/backend.hpp>
@@ -335,6 +337,29 @@ struct ShellFactory {
     }
 };
 
+/// `--mcp-stdio`: serves MCP on stdin and stdout. Draws nothing, so `--grab` and every frontend argument is refused.
+int serveMcpStdio(morph::client::Args const& clientArgs, std::vector<std::string> const& rest, Grab const& grab) {
+    if (!grab.path.empty()) {
+        std::cerr << "client: --mcp-stdio draws no window: drop --grab\n";
+        return 2;
+    }
+    if (auto const checked = morph::client::checkMcpArgs(clientArgs, rest); !checked) {
+        std::cerr << "client: " << checked.error() << '\n';
+        return 2;
+    }
+    auto const channel = morph::client::claimStdout();
+    if (channel == nullptr) {
+        std::cerr << "client: cannot set stdout aside for JSON-RPC\n";
+        return 1;
+    }
+    // Read once, at start, before any thread that could change the environment exists.
+    // NOLINTNEXTLINE(concurrency-mt-unsafe)
+    auto const environment = [](char const* name) { return std::getenv(name); };
+    auto session = morph::client::mcpSession(clientArgs, environment, std::cerr);
+    return morph::client::serveMcp(clientArgs, examples::client::localApps(), std::move(session), std::cin, *channel,
+                                   std::cerr);
+}
+
 int run(int argc, char** argv) {
     std::span<char*> const raw{argv, static_cast<std::size_t>(argc)};
     std::vector<std::string> args{raw.begin(), raw.end()};
@@ -364,6 +389,9 @@ int run(int argc, char** argv) {
     if (!clientArgs) {
         std::cerr << "client: " << clientArgs.error() << '\n';
         return 2;
+    }
+    if (clientArgs->mcpStdio) {
+        return serveMcpStdio(*clientArgs, args, *grab);
     }
     // Read once, at start, before any thread that could change the environment exists.
     // NOLINTNEXTLINE(concurrency-mt-unsafe)

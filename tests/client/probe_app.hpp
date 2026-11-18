@@ -132,6 +132,16 @@ inline constexpr std::string_view kOther =
 /// @return It, or the refusal.
 [[nodiscard]] std::expected<std::shared_ptr<morph::ui::ServedBundle const>, morph::ui::Refusal> bundle();
 
+/// @brief The bundle of `probe.home` alone, whose catalog carries the facts of `Probe_Answer`: an MCP server lists
+/// only
+///        the actions whose model the catalog describes, and `bundle`'s catalog describes none.
+/// @return It, or the refusal.
+[[nodiscard]] std::expected<std::shared_ptr<morph::ui::ServedBundle const>, morph::ui::Refusal> agentBundle();
+
+/// @brief The application over `agentBundle`, linked.
+/// @return It.
+[[nodiscard]] morph::client::LocalApp agentApp();
+
 /// @brief The application, linked.
 /// @return It.
 [[nodiscard]] morph::client::LocalApp app();

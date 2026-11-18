@@ -1,6 +1,6 @@
 # The generic client (`morph::client`)
 
-`include/morph/client/{args,source,shell,transport}.hpp`, `src/client/`. The generic client opens an application's
+`include/morph/client/{args,source,shell,transport,mcp}.hpp`, `src/client/`. The generic client opens an application's
 screens from a server or from the application linked in-process, mounts them in a shell of tabs, and answers the
 commands a document cannot carry out alone. An application with a shell of its own uses the same source and
 application host.
@@ -14,6 +14,7 @@ application host.
 - [The shell](#the-shell)
 - [Sign-in mapping](#sign-in-mapping)
 - [The application host](#the-application-host)
+- [MCP on stdio](#mcp-on-stdio)
 - [Tests](#tests)
 - [Chat](#chat)
 
@@ -33,7 +34,7 @@ application host.
 ## Arguments
 
 `readArgs(args)` reads `client::Args` from the command line and removes what it read: `--server URL` or `--app NAME`
-(exactly one), `--db`, `--user`, `--screen`, `--exit-after-mount` and `--dev`. A value option is `--name value` or
+(exactly one), `--db`, `--user`, `--screen`, `--exit-after-mount`, `--dev` and `--mcp-stdio`. A value option is `--name value` or
 `--name=value`, the last one given wins, and nothing after `--` is read. A refusal leaves the arguments as they were.
 
 The examples' client takes one more option before `readArgs` sees the rest: `--grab FILE.png` sizes the Qt Quick
@@ -204,13 +205,36 @@ there itself. An empty mapper is `std::invalid_argument`.
   `notify`'s role (`"info"`, `"success"`, `"warning"`, `"error"`; empty or unknown default to `Tone::Info`) to a
   `Tone`.
 
+## MCP on stdio
+
+`--mcp-stdio` makes the client an MCP server (`ui::McpAdapter`, spec `ui/agent.md`) on stdin and stdout, which an agent
+such as Claude Code installs as a command. It mounts no frontend: the examples' `main` handles it right after
+`readArgs`, before `MORPH_UI_DEV` is applied, and `checkMcpArgs` refuses `--screen`, `--exit-after-mount`, `--dev` and
+any argument `readArgs` left for a frontend (`--grab` is refused by `main`).
+
+- **Stdout.** `claimStdout()` duplicates descriptor 1 as the JSON-RPC stream and points descriptor 1 at stderr, so
+  whatever else the process prints reaches the agent's log and never corrupts the protocol.
+- **Identity.** `mcpSession` builds the session each call carries: the principal is `--user`, or in remote mode
+  `MORPH_MCP_PRINCIPAL`; the token is `MORPH_MCP_TOKEN`, remote mode only. A local server checks no token, and a
+  diagnostic says one is ignored.
+- **Remote** (`--server`). A `ws://` URL goes over `SocketBackend` when `morph::net` is built, on a loop of its own;
+  otherwise, and for `wss://`, over `QtWebSocketBackend` (verified against the system's certificate authorities) on a
+  `QCoreApplication` the call makes when the process has none, with stdin read on a thread of its own. Both retry the
+  first connect, so the agent may start the process before its server. The transport's disconnect handler is the
+  adapter's `resetter()`, so a reconnect does not reuse released model ids. A URL no built transport reaches is
+  refused with exit code 2, naming what is missing.
+- **Local** (`--app`). `makeLocalServer` builds the application's in-process server after `setUp` ran, and the adapter
+  opens a connection of it. An application the binary does not link is refused with exit code 2, naming the linked ones.
+
+`serveMcp` returns 0 once input ended.
+
 ## Tests
 
 `tests/client/` (`morph_client_tests`, label `client`), headless over a `FakeAppContext` and `RecordingBackend`:
 the arguments, both sources and the shell over a two-screen probe application (and the same behind a public login,
 for when the frame shows its chrome), a navigation as a dialog and a callee that returns from a tab, a call to a
 screen whose tab is open, the frame's compact form below `expanded`, the app document's navigation counts, the waits
-the tests use, and the sign-in mapping: a mapper reading `{user, jwt}` signs in, an empty principal is reported, and an `ApplicationHost`
+the tests use, `--mcp-stdio` in both modes (local over the probe application, remote over a `SocketServer`, including a server that starts after the client), `claimStdout` in a forked child, and the sign-in mapping: a mapper reading `{user, jwt}` signs in, an empty principal is reported, and an `ApplicationHost`
 passed to a hand-built `DocumentScreenHost` runs a document's `signIn` and inline `upload`, while the same host
 without it reports both as not supported.
 

@@ -19,4 +19,16 @@ std::expected<RemoteTransport, std::string> socketTransport(ui::AppContext& cont
     }
 }
 
+std::expected<RemoteTransport, std::string> socketTransport(std::string const& url, bool retryFirstConnect) {
+    try {
+        net::SocketBackend::Config config;
+        config.retryFirstConnect = retryFirstConnect;
+        auto made = std::make_unique<net::SocketBackend>(url, config);
+        backend::IEnvelopeTransport* const requests = made.get();
+        return RemoteTransport{.backend = std::move(made), .requests = requests};
+    } catch (std::exception const& error) {
+        return std::unexpected(std::string{error.what()});
+    }
+}
+
 }  // namespace morph::client::detail

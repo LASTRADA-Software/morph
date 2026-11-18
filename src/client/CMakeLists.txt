@@ -9,6 +9,7 @@ set(_morph_client_transport_qt 0)
 set(_morph_client_transport_net 0)
 add_library(morph_client STATIC
     args.cpp
+    mcp.cpp
     shell.cpp
     source.cpp
     transport.cpp
@@ -20,6 +21,7 @@ target_sources(morph_client
     BASE_DIRS ${PROJECT_SOURCE_DIR}/include
     FILES
         ${PROJECT_SOURCE_DIR}/include/morph/client/args.hpp
+        ${PROJECT_SOURCE_DIR}/include/morph/client/mcp.hpp
         ${PROJECT_SOURCE_DIR}/include/morph/client/shell.hpp
         ${PROJECT_SOURCE_DIR}/include/morph/client/source.hpp
         ${PROJECT_SOURCE_DIR}/include/morph/client/transport.hpp

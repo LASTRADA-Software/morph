@@ -34,6 +34,7 @@ std::array<ValueOption, 5> const& valueOptions() {
 
 constexpr std::string_view kExitAfterMount = "--exit-after-mount";
 constexpr std::string_view kDev = "--dev";
+constexpr std::string_view kMcpStdio = "--mcp-stdio";
 
 /// What reading one argument as a value option did: how many arguments it used, or why it is refused.
 struct OptionRead {
@@ -75,8 +76,14 @@ std::expected<Args, std::string> readArgs(std::vector<std::string>& args) {
         if (arg == "--") {
             break;
         }
-        if (arg == kExitAfterMount || arg == kDev) {
-            (arg == kDev ? read.dev : read.exitAfterMount) = true;
+        if (arg == kExitAfterMount || arg == kDev || arg == kMcpStdio) {
+            if (arg == kDev) {
+                read.dev = true;
+            } else if (arg == kMcpStdio) {
+                read.mcpStdio = true;
+            } else {
+                read.exitAfterMount = true;
+            }
             used.push_back(index);
             continue;
         }

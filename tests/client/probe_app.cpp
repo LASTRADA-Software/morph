@@ -68,6 +68,22 @@ std::expected<std::shared_ptr<morph::ui::ServedBundle const>, morph::ui::Refusal
     return served.build();
 }
 
+std::expected<std::shared_ptr<morph::ui::ServedBundle const>, morph::ui::Refusal> agentBundle() {
+    morph::ui::author::CatalogFacts facts;
+    facts.action<ProbeModel, Answer>();
+    morph::ui::UiRegistry served{morph::ui::ApplicationInfo{.id = "probe", .version = "1"}, facts.catalog()};
+    morph::ui::CatalogEntry entry;
+    entry.id = "probe.home";
+    if (auto added = served.addScreen(std::move(entry), std::string{kHome}); !added) {
+        return std::unexpected(std::move(added.error()));
+    }
+    return served.build();
+}
+
+morph::client::LocalApp agentApp() {
+    return morph::client::LocalApp{.name = "probe", .bundle = &agentBundle, .setUp = {}};
+}
+
 morph::client::LocalApp app() { return morph::client::LocalApp{.name = "probe", .bundle = &bundle, .setUp = {}}; }
 
 }  // namespace probe
