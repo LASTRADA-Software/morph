@@ -126,6 +126,10 @@ TEST_CASE("claimStdout leaves only the claimed stream on the original stdout", "
     std::array<int, 2> err{};
     REQUIRE(::pipe(out.data()) == 0);
     REQUIRE(::pipe(err.data()) == 0);
+    // Flushed first, so the child does not inherit and then write out what this process has buffered, such as
+    // Catch2's own header.
+    std::cout.flush();
+    static_cast<void>(std::fflush(stdout));
     pid_t const child = ::fork();
     REQUIRE(child >= 0);
     if (child == 0) {

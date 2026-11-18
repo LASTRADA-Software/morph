@@ -10,6 +10,7 @@
 #include <filesystem>
 #include <morph/ui/value.hpp>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace {
@@ -42,12 +43,12 @@ Run run(std::string const& command) {
     return result;
 }
 
-std::string const kInitializeAndList = R"({"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}\n)"
-                                       R"({"jsonrpc":"2.0","id":2,"method":"tools/list"}\n)";
+constexpr std::string_view kInitializeAndList = R"({"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}\n)"
+                                                R"({"jsonrpc":"2.0","id":2,"method":"tools/list"}\n)";
 
-std::string client(std::string const& requests, std::string const& options) {
-    return "printf '%b' '" + requests + "' | '" + std::string{MORPH_EXAMPLES_CLIENT_PATH} + "' --mcp-stdio " +
-           options + " 2>/dev/null";
+std::string client(std::string_view requests, std::string const& options) {
+    return "printf '%b' '" + std::string{requests} + "' | '" + std::string{MORPH_EXAMPLES_CLIENT_PATH} +
+           "' --mcp-stdio " + options + " 2>/dev/null";
 }
 
 }  // namespace

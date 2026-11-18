@@ -10,7 +10,6 @@
 #include <memory>
 #include <morph/client/transport.hpp>
 #include <morph/qt/qt_executor.hpp>
-#include <morph/qt/qt_tls.hpp>
 #include <morph/qt/qt_websocket_backend.hpp>
 #include <morph/ui/agent.hpp>
 #include <optional>
@@ -18,6 +17,11 @@
 #include <string>
 #include <thread>
 #include <utility>
+
+// After the Qt headers above, which define QT_NO_SSL on a Qt built without TLS, such as Qt for WebAssembly.
+#ifndef QT_NO_SSL
+#include <morph/qt/qt_tls.hpp>
+#endif
 
 #include "mcp_internal.hpp"
 
@@ -78,8 +82,8 @@ int serveMcpOverQt(std::string const& url, ui::McpOptions options, std::istream&
     });
     std::thread stdio{[&adapter, &owner, &input, &output] {
         ui::serveStdioOnOwner(adapter, owner, input, output);
-        QMetaObject::invokeMethod(
-            QCoreApplication::instance(), [] { QCoreApplication::quit(); }, Qt::QueuedConnection);
+        // Queued to the application's thread by slot name: quit must run on the thread whose loop it ends.
+        QMetaObject::invokeMethod(QCoreApplication::instance(), "quit", Qt::QueuedConnection);
     }};
     QCoreApplication::exec();
     stdio.join();

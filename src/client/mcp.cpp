@@ -173,6 +173,7 @@ private:
     std::FILE* _file;
 };
 
+// NOLINTNEXTLINE(misc-multiple-inheritance): the bases counted are std::ostream's own; this class adds none.
 class FileOStream final : public std::ostream {
 public:
     explicit FileOStream(std::FILE* file) : std::ostream{nullptr}, _buffer{file} { rdbuf(&_buffer); }
