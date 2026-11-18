@@ -24,6 +24,7 @@
 
 #include <algorithm>
 #include <array>
+#include <atomic>
 #include <charconv>
 #include <cmath>
 #include <core/async/ExecutorContext.hpp>
@@ -924,7 +925,11 @@ public:
     /// @param snapshot The rows.
     /// @param columns  The source's columns when the snapshot was taken.
     PinnedSource(std::shared_ptr<RowSnapshot const> snapshot, std::vector<ColumnInfo> columns)
-        : _snapshot{std::move(snapshot)}, _columns{std::move(columns)} {}
+        : _snapshot{std::move(snapshot)}, _columns{std::move(columns)}, _pinnedAt{nextPin()} {}
+
+    /// @brief When the snapshot was pinned, among every pin of the process: larger for later.
+    /// @return The pin's sequence number.
+    [[nodiscard]] std::uint64_t pinnedAt() const noexcept { return _pinnedAt; }
 
     /// @brief The columns.
     /// @return The copy taken with the snapshot.
@@ -943,8 +948,14 @@ public:
     void unsubscribe(ChangeListener& listener) override { static_cast<void>(listener); }
 
 private:
+    [[nodiscard]] static std::uint64_t nextPin() noexcept {
+        static std::atomic<std::uint64_t> pins{0};
+        return pins.fetch_add(1) + 1;
+    }
+
     std::shared_ptr<RowSnapshot const> _snapshot;
     std::vector<ColumnInfo> _columns;
+    std::uint64_t _pinnedAt;
 };
 
 /// @brief The rows of a shared snapshot whose keys a scope holds, in the shared snapshot's order.
@@ -1059,10 +1070,15 @@ struct AnswerContext {
 
 /// @brief The canonical text of a validated query's sort and filter: the part of a view's key the query gives.
 /// @param validated The query as `validate` returned it.
-/// @return The JSON of `sort`, then of `filters`.
-[[nodiscard]] inline std::string viewQueryOf(TableQuery const& validated) {
-    return glz::write_json(validated.sort).value_or(std::string{}) + "\n" +
-           glz::write_json(validated.filters).value_or(std::string{});
+/// @return The JSON of `sort`, then of `filters`; nothing when either cannot be written, and the view is then
+///         computed for the request alone rather than cached under a key two queries could share.
+[[nodiscard]] inline std::optional<std::string> viewQueryOf(TableQuery const& validated) {
+    auto sort = glz::write_json(validated.sort);
+    auto filters = glz::write_json(validated.filters);
+    if (!sort || !filters) {
+        return std::nullopt;
+    }
+    return *sort + "\n" + *filters;
 }
 
 /// @brief @p served with its source replaced by a `PinnedSource` of one snapshot taken now.
@@ -1226,7 +1242,8 @@ struct AnswerContext {
     };
     auto const snapshot = leveled.snapshot();
     std::shared_ptr<ViewEntry const> entry;
-    if (context.views != nullptr && !context.record.empty()) {
+    auto const viewQuery = context.views != nullptr && !context.record.empty() ? viewQueryOf(*checked) : std::nullopt;
+    if (viewQuery) {
         // The pinned source's snapshot, whose identity survives across requests, and the order levels' states.
         std::vector<std::pair<std::string, std::uint64_t>> generations;
         for (auto const& level : needed.order) {
@@ -1236,9 +1253,10 @@ struct AnswerContext {
                 }
             }
         }
+        auto const* const pinned = dynamic_cast<PinnedSource const*>(served.source.get());
         auto found = context.views->find(
-            ViewKey{.record = std::string{context.record}, .scope = served.scope, .query = viewQueryOf(*checked)},
-            served.source->snapshot(), generations, compute);
+            ViewKey{.record = std::string{context.record}, .scope = served.scope, .query = *viewQuery},
+            served.source->snapshot(), generations, compute, pinned != nullptr ? pinned->pinnedAt() : 0);
         if (!found) {
             return std::unexpected(std::move(found.error()));
         }
@@ -1252,10 +1270,10 @@ struct AnswerContext {
             served.source->snapshot(), std::vector<std::pair<std::string, std::uint64_t>>{}, std::move(*computed));
     }
     auto const* const view = &entry->view;
-    auto rows = checked->keys && context.views != nullptr
-                    ? pageRows(*view, *snapshot, *checked, served.limits, entry->viewRowOf(),
-                               [&entry](RowId const& key) { return entry->sourceRowOf(key); })
-                    : pageRows(*view, *snapshot, *checked, served.limits);
+    // A cached entry keeps the keyed lookups for the requests after this one; a request's own view is scanned once.
+    auto rows = checked->keys && viewQuery ? pageRows(*view, *snapshot, *checked, served.limits, entry->viewRowOf(),
+                                                      [&entry](RowId const& key) { return entry->sourceRowOf(key); })
+                                           : pageRows(*view, *snapshot, *checked, served.limits);
     rows.awaiting = entry->awaiting;
     rows.failed = entry->failed;
     auto page = writeGenericPage(rows, leveled, columns);

@@ -33,6 +33,7 @@
 #include <morph/ui/service_client.hpp>
 #include <mutex>
 #include <optional>
+#include <print>
 #include <set>
 #include <span>
 #include <string>
@@ -545,8 +546,13 @@ struct ViewServer {
         config.tableWork = tableWork;
         config.views.maxBytes = maxViewBytes;
         config.views.onCompute = [this] {
-            std::scoped_lock const lock{mutex};
-            computedOn.insert(std::this_thread::get_id());
+            {
+                std::scoped_lock const lock{mutex};
+                computedOn.insert(std::this_thread::get_id());
+            }
+            if (gate) {
+                gate();
+            }
         };
         server = std::make_shared<morph::backend::RemoteServer>(pool, std::make_shared<TablesAuthorizer>(),
                                                                 std::move(config));
@@ -565,6 +571,8 @@ struct ViewServer {
     std::shared_ptr<RecordingPool> tableWork = std::make_shared<RecordingPool>();
     std::mutex mutex;
     std::set<std::thread::id> computedOn;
+    // Called where a view's computation starts, when set; set before any request.
+    std::function<void()> gate;
     std::shared_ptr<morph::backend::RemoteServer> server;
     std::unique_ptr<morph::net::SocketServer> socket;
     std::string url;
@@ -584,7 +592,7 @@ bool waitUntil(std::function<bool()> const& done, std::chrono::milliseconds budg
 }  // namespace
 
 TEST_CASE("table over the bridge: a level's layout is the cache's", "[net][tables][levels]") {
-    bench::WideTableModel::recipeGate().release();
+    bench::WideTableModel::recipeGate().hold();
     bench::WideTableModel::configure(
         {.rows = 2'000, .columns = 300, .seed = 7, .loadDelay = {}, .recipePreloaded = 0.0},
         {.rows = 1'000, .columns = 30, .seed = 7, .loadDelay = {}, .recipePreloaded = 0.0});
@@ -607,6 +615,8 @@ TEST_CASE("table over the bridge: a level's layout is the cache's", "[net][table
     CHECK(firstExtended.unloadedRows.size() == 200);
     CHECK(firstAlice.unloadedRows.size() == 200);
     CHECK(std::holds_alternative<std::monostate>(firstAlice.rows.at(0).at(1)));
+    // Both first replies are in, each wholly unloaded: the loads may run now.
+    bench::WideTableModel::recipeGate().release();
     REQUIRE(waitUntil([] { return bench::WideTableModel::recipeCache()->stats().loadedKeys >= 200; }));
     auto const secondExtended = ask(extended, extendedModel, extendedQuery);
     auto const secondAlice = ask(alice, aliceModel, aliceQuery);
@@ -670,17 +680,41 @@ TEST_CASE("table over the bridge: one sort for many watchers", "[net][tables][vi
         auto& client = *clients[i];
         REQUIRE(client.pumpUntil([&] { return !client.changes.empty(); }));
     }
+    // The fifty refetches are sent before any reply is read, and the computation they share waits until the other
+    // forty-nine have joined it (or ten seconds, when they compute instead).
+    auto const waitsBefore = server.server->viewStats().waits;
+    server.gate = [&server, waitsBefore] {
+        auto const deadline = std::chrono::steady_clock::now() + 10s;
+        while (server.server->viewStats().waits < waitsBefore + 49 && std::chrono::steady_clock::now() < deadline) {
+            std::this_thread::yield();
+        }
+    };
+    std::vector<std::optional<ui::ExchangeReply>> replies(clients.size());
     for (std::size_t i = 0; i < clients.size(); ++i) {
-        static_cast<void>(
-            pageOf(clients[i]->execute(instances[i], std::string{bench::kWideModelType}, "Table.wide", query)));
+        morph::wire::Envelope env;
+        env.kind = "execute";
+        env.modelId = instances[i];
+        env.modelType = std::string{bench::kWideModelType};
+        env.actionType = "Table.wide";
+        env.body = query;
+        env.session.principal = "alice";
+        clients[i]->exchange(std::move(env),
+                             [&replies, i](ui::ExchangeReply answer) { replies[i] = std::move(answer); });
     }
+    for (std::size_t i = 0; i < clients.size(); ++i) {
+        REQUIRE(clients[i]->pumpUntil([&] { return replies[i].has_value(); }, 30s));
+        REQUIRE(replies[i]->has_value());
+        CHECK((*replies[i])->kind == "ok");
+    }
+    server.gate = {};
     CHECK(server.server->viewStats().computations == before + 1);
+    CHECK(server.server->viewStats().waits == waitsBefore + 49);
     auto const work = server.tableWork->threads();
     auto const computed = server.computeThreads();
     REQUIRE_FALSE(computed.empty());
     CHECK(std::ranges::all_of(computed, [&](std::thread::id id) { return work.contains(id); }));
-    // Mutations: no single flight or no cache (a computation per refetch); QueryTable::invoke running answerQuery
-    // inline (the computing thread is a strand's, not a tableWork thread).
+    // Mutations: no single flight (a computation per refetch, each waiting out the gate); QueryTable::invoke
+    // running answerQuery inline (the computing thread is a strand's, not a tableWork thread).
 }
 
 TEST_CASE("table over the bridge: fifty sorts stay inside the bound", "[net][tables][views]") {
@@ -703,4 +737,95 @@ TEST_CASE("table over the bridge: fifty sorts stay inside the bound", "[net][tab
     CHECK(stats.bytes <= 10 * viewBytes);
     CHECK(stats.evictions > 0);
     // Mutation: no bound (forty views over it are kept and nothing is evicted).
+}
+
+TEST_CASE("table over the bridge: two scopes over one snapshot get two views", "[net][tables][views]") {
+    bench::WideTableModel::recipeGate().release();
+    bench::WideTableModel::configure(
+        {.rows = 2'000, .columns = 300, .seed = 7, .loadDelay = {}, .recipePreloaded = 1.0},
+        {.rows = 1'000, .columns = 30, .seed = 7, .loadDelay = {}, .recipePreloaded = 1.0});
+    ViewServer server;
+    Client alice{server.url, "alice"};
+    Client carol{server.url, "carol"};
+    auto const aliceModel = alice.create(std::string{bench::kWideModelType});
+    auto const carolModel = carol.create(std::string{bench::kWideModelType});
+    std::string const query = R"({"sort":[{"column":"i001","dir":"asc"}],"columns":["id","i001"],)"
+                              R"("page":{"offset":0,"limit":10}})";
+    // `scoped` serves one source to every principal, so both views are over one snapshot.
+    static_cast<void>(pageOf(alice.execute(aliceModel, std::string{bench::kWideModelType}, "Table.scoped", query)));
+    static_cast<void>(pageOf(carol.execute(carolModel, std::string{bench::kWideModelType}, "Table.scoped", query)));
+    static_cast<void>(pageOf(alice.execute(aliceModel, std::string{bench::kWideModelType}, "Table.scoped", query)));
+    CHECK(server.server->viewStats().computations == 2);
+    CHECK(server.server->viewStats().hits == 1);
+    // Mutation: an empty scope in the view key (carol is answered alice's view: one computation).
+}
+
+TEST_CASE("table benchmark: C1 C2 C3 many clients over the bridge", "[.benchmark][net]") {
+    bench::WideTableModel::recipeGate().release();
+    bench::WideTableModel::configure(
+        {.rows = 100'000, .columns = 300, .seed = 7, .loadDelay = {}, .recipePreloaded = 1.0},
+        {.rows = 1'000, .columns = 30, .seed = 7, .loadDelay = {}, .recipePreloaded = 1.0});
+    ViewServer server{10 * 4 * 100'000};
+    std::vector<std::unique_ptr<Client>> clients;
+    std::vector<std::uint64_t> instances;
+    for (int i = 0; i < 50; ++i) {
+        clients.push_back(std::make_unique<Client>(server.url, "alice"));
+        instances.push_back(clients.back()->create(std::string{bench::kWideModelType}));
+    }
+    auto const ask = [&](std::size_t i, std::string const& body) {
+        morph::wire::Envelope env;
+        env.kind = "execute";
+        env.modelId = instances[i];
+        env.modelType = std::string{bench::kWideModelType};
+        env.actionType = "Table.wide";
+        env.body = body;
+        env.session.principal = "alice";
+        return env;
+    };
+    std::string const sorted = R"({"sort":[{"column":"d000","dir":"asc"}],"columns":["id","d000"],)"
+                               R"("page":{"offset":0,"limit":50}})";
+    // C1: fifty concurrent refetches of one sorted view after a new order-level generation.
+    auto const cache = bench::WideTableModel::recipeCache();
+    std::vector<morph::table::Cell> cells(20);
+    REQUIRE(cache->snapshot()->read(morph::table::RowId{std::int64_t{1}}, cells) == morph::table::LevelRead::Loaded);
+    morph::table::detail::LevelCacheAccess::store(
+        *cache, std::vector<std::pair<morph::table::RowId, std::vector<morph::table::Cell>>>{
+                    {morph::table::RowId{std::int64_t{1}}, cells}});
+    std::vector<std::optional<ui::ExchangeReply>> replies(clients.size());
+    auto const began = std::chrono::steady_clock::now();
+    for (std::size_t i = 0; i < clients.size(); ++i) {
+        clients[i]->exchange(ask(i, sorted),
+                             [&replies, i](ui::ExchangeReply answer) { replies[i] = std::move(answer); });
+    }
+    for (std::size_t i = 0; i < clients.size(); ++i) {
+        REQUIRE(clients[i]->pumpUntil([&] { return replies[i].has_value(); }, 60s));
+    }
+    auto const c1 = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - began).count();
+    std::println("| C1 | fifty concurrent refetches of one sorted view, 100,000 x 300: {:.1f} ms, {} computed |", c1,
+                 server.server->viewStats().computations);
+    // C2: distinct sorts computed one after another.
+    auto const computed = server.server->viewStats().computations;
+    auto const c2Began = std::chrono::steady_clock::now();
+    for (int column = 1; column <= 20; ++column) {
+        static_cast<void>(pageOf(clients[0]->execute(
+            instances[0], std::string{bench::kWideModelType}, "Table.wide",
+            std::format(
+                R"({{"sort":[{{"column":"i{:03}","dir":"asc"}}],"columns":["id"],"page":{{"offset":0,"limit":10}}}})",
+                column))));
+    }
+    auto const seconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - c2Began).count();
+    std::println("| C2 | views computed per second: {:.1f} ({} views) |",
+                 static_cast<double>(server.server->viewStats().computations - computed) / seconds,
+                 server.server->viewStats().computations - computed);
+    // C3: fifty sorts against a bound of ten views.
+    for (int column = 21; column <= 50; ++column) {
+        static_cast<void>(pageOf(clients[0]->execute(
+            instances[0], std::string{bench::kWideModelType}, "Table.wide",
+            std::format(
+                R"({{"sort":[{{"column":"i{:03}","dir":"asc"}}],"columns":["id"],"page":{{"offset":0,"limit":10}}}})",
+                column))));
+    }
+    auto const stats = server.server->viewStats();
+    std::println("| C3 | after fifty sorts: {} bytes held of a {} bound, {} evictions |", stats.bytes,
+                 10 * 4 * 100'000, stats.evictions);
 }

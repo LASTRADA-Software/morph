@@ -716,8 +716,12 @@ struct WideModelState {
     std::shared_ptr<WideTableSource> wideSource;
     std::shared_ptr<WideTableSource> smallSource;
     std::shared_ptr<morph::table::CellLevelCache> recipe;
-    std::mutex logMutex;
-    std::vector<std::vector<morph::table::RowId>> calls;
+    // The current cache's loader calls; each cache logs into its own, so an earlier cache's late calls stay out.
+    struct CallLog {
+        std::mutex mutex;
+        std::vector<std::vector<morph::table::RowId>> calls;
+    };
+    std::shared_ptr<CallLog> log = std::make_shared<CallLog>();
     LoadGate gate;
 };
 
@@ -782,10 +786,11 @@ std::shared_ptr<morph::table::CellLevelCache> makeRecipeCache(WideModelState& st
     options.columns = recipeColumns();
     options.loads = &recipeLoads();
     options.batch = settings.batch;
-    auto loader = [&state, settings](std::span<morph::table::RowId const> keys) {
+    auto log = std::make_shared<WideModelState::CallLog>();
+    auto loader = [&state, settings, log](std::span<morph::table::RowId const> keys) {
         {
-            std::scoped_lock const lock{state.logMutex};
-            state.calls.emplace_back(keys.begin(), keys.end());
+            std::scoped_lock const lock{log->mutex};
+            log->calls.emplace_back(keys.begin(), keys.end());
         }
         state.gate.pass();
         if (settings.delay.count() > 0) {
@@ -811,8 +816,7 @@ std::shared_ptr<morph::table::CellLevelCache> makeRecipeCache(WideModelState& st
         return out;
     };
     {
-        std::scoped_lock const lock{state.logMutex};
-        state.calls.clear();
+        state.log = log;
     }
     return std::make_shared<morph::table::CellLevelCache>(std::move(options), std::move(loader));
 }
@@ -973,6 +977,8 @@ morph::table::ServedTable WideTableModel::small(morph::table::TableContext const
 morph::table::ServedTable WideTableModel::scoped(morph::table::TableContext const& context) {
     auto const& description = scopedDescription(context.session.principal);
     auto out = served(description, sourceOf(false));
+    // Principals see different columns, so their views are kept apart.
+    out.scope = context.session.principal;
     out.mayRead = [&description](std::string_view column) {
         return std::ranges::any_of(description.columns, [&](morph::table::TableColumn const& entry) {
             return entry.info.id == column;
@@ -1052,8 +1058,13 @@ LoadGate& WideTableModel::recipeGate() { return wideModelState().gate; }
 
 std::vector<std::vector<morph::table::RowId>> WideTableModel::loaderCalls() {
     auto& state = wideModelState();
-    std::scoped_lock const lock{state.logMutex};
-    return state.calls;
+    std::shared_ptr<WideModelState::CallLog> log;
+    {
+        std::scoped_lock const lock{state.mutex};
+        log = state.log;
+    }
+    std::scoped_lock const lock{log->mutex};
+    return log->calls;
 }
 
 std::shared_ptr<morph::table::CellLevelCache> WideTableModel::recipeCache() {

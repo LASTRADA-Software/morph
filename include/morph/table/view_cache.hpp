@@ -160,7 +160,12 @@ private:
 /// @brief The server's computed views, across its tables, bounded by `ViewCacheOptions::maxBytes`.
 ///
 /// Thread-safe. An entry is found under a mutex and computed outside it, on the calling thread; requests for the
-/// same key, snapshot identity and order-level generations while it is computed wait for that computation.
+/// same key, snapshot identity and order-level generations while it is computed wait for that computation. The
+/// mutex is held for bookkeeping alone: an entry that leaves the cache is released after it.
+///
+/// `ViewCacheOptions::maxBytes` bounds what the entries themselves hold (`ViewEntry::bytes`), not the snapshots
+/// they keep alive: an entry over an old snapshot holds that snapshot's rows until the entry is evicted or found
+/// invalid.
 class ViewCache {
 public:
     /// @brief The result of a find.
@@ -173,20 +178,26 @@ public:
     /// @brief The entry of @p key valid for @p snapshot and @p levels, computing it when there is none.
     ///
     /// An entry whose snapshot has the identity of @p snapshot and whose every level generation equals
-    /// @p levels' is a hit; any other entry of the key is dropped. A miss joins a running computation of the same
-    /// key, identity and generations, or computes on the calling thread, calling `ViewCacheOptions::onCompute`
-    /// first. A failed computation is not cached.
+    /// @p levels' is a hit. Any other entry of the key is dropped, unless it is newer than the request (a larger
+    /// @p newness): a request on an older snapshot then computes its view without displacing the entry. A miss
+    /// joins a running computation of the same key, identity and generations, or computes on the calling thread,
+    /// calling `ViewCacheOptions::onCompute` first. A failed computation is not cached, and an entry replaces the
+    /// key's only when it is at least as new. Entries this call evicts or drops are released after the mutex is.
     /// @param key      The view's key.
     /// @param snapshot The rows the view is of: the table's pinned source snapshot.
     /// @param levels   Each order level the query reads, with its snapshot's generation.
     /// @param compute  Computes the view over the request's snapshots.
+    /// @param newness  How recently @p snapshot was taken, larger for later; 0 when unknown.
     /// @return The entry, or what the computation refused.
     [[nodiscard]] Found find(ViewKey const& key, std::shared_ptr<RowSnapshot const> const& snapshot,
                              std::span<std::pair<std::string, std::uint64_t> const> levels,
-                             std::function<std::expected<ViewComputation, TableError>()> const& compute) {
+                             std::function<std::expected<ViewComputation, TableError>()> const& compute,
+                             std::uint64_t newness = 0) {
         std::vector<std::pair<std::string, std::uint64_t>> const wanted(levels.begin(), levels.end());
         auto const* const identity = snapshot->identity();
         std::shared_ptr<Running> running;
+        // Entries leaving the cache: released after the mutex, since the last of one may free a whole snapshot.
+        std::vector<std::shared_ptr<ViewEntry const>> released;
         {
             std::unique_lock lock{_mutex};
             if (auto const found = _entries.find(key); found != _entries.end()) {
@@ -196,11 +207,15 @@ public:
                     _recency.splice(_recency.begin(), _recency, slot.recency);
                     auto entry = slot.entry;
                     remeasure(found->second);
-                    bound();
+                    bound(released);
+                    lock.unlock();
+                    released.clear();
                     return entry;
                 }
-                drop(found);
-                _invalidations.fetch_add(1);
+                if (newness >= slot.newness) {
+                    drop(found, released);
+                    _invalidations.fetch_add(1);
+                }
             }
             _misses.fetch_add(1);
             for (auto const& other : _running) {
@@ -216,6 +231,7 @@ public:
             running->identity = identity;
             running->levels = wanted;
             running->snapshot = snapshot;
+            running->newness = newness;
             running->order = ++_started;
             running->done = running->promise.get_future().share();
             _running.push_back(running);
@@ -260,6 +276,7 @@ private:
         void const* identity = nullptr;
         std::vector<std::pair<std::string, std::uint64_t>> levels;
         std::shared_ptr<RowSnapshot const> snapshot;
+        std::uint64_t newness = 0;
         std::uint64_t order = 0;
         std::promise<Found> promise;
         std::shared_future<Found> done;
@@ -267,6 +284,7 @@ private:
 
     struct Slot {
         std::shared_ptr<ViewEntry const> entry;
+        std::uint64_t newness = 0;
         std::uint64_t order = 0;
         std::size_t bytes = 0;
         std::list<ViewKey>::iterator recency;
@@ -274,25 +292,33 @@ private:
 
     using Entries = std::map<ViewKey, Slot>;
 
-    // Under the mutex: ends @p running and caches its entry, unless an entry of a later computation is there.
+    // Ends @p running and caches its entry, unless the key's entry is newer: of a later snapshot, or of the same
+    // newness and a later computation. What leaves the cache is released after the mutex.
     void finish(std::shared_ptr<Running> const& running, Found const& result) {
-        std::scoped_lock const lock{_mutex};
+        std::vector<std::shared_ptr<ViewEntry const>> released;
+        std::unique_lock lock{_mutex};
         std::erase(_running, running);
         if (!result || *result == nullptr) {
             return;
         }
         if (auto const found = _entries.find(running->key); found != _entries.end()) {
-            if (found->second.order > running->order) {
+            auto const& slot = found->second;
+            if (std::pair{slot.newness, slot.order} > std::pair{running->newness, running->order}) {
                 return;
             }
-            drop(found);
+            drop(found, released);
         }
         _recency.push_front(running->key);
-        auto [at, inserted] = _entries.emplace(
-            running->key, Slot{.entry = *result, .order = running->order, .bytes = 0, .recency = _recency.begin()});
+        auto [at, inserted] = _entries.emplace(running->key, Slot{.entry = *result,
+                                                                  .newness = running->newness,
+                                                                  .order = running->order,
+                                                                  .bytes = 0,
+                                                                  .recency = _recency.begin()});
         static_cast<void>(inserted);
         remeasure(at->second);
-        bound();
+        bound(released);
+        lock.unlock();
+        released.clear();
     }
 
     void remeasure(Slot& slot) {
@@ -302,18 +328,20 @@ private:
         _bytes.store(_held);
     }
 
-    void drop(Entries::iterator found) {
+    // Under the mutex: removes an entry, moving it into @p released for the caller to free after the mutex.
+    void drop(Entries::iterator found, std::vector<std::shared_ptr<ViewEntry const>>& released) {
         _held -= found->second.bytes;
         _bytes.store(_held);
         _recency.erase(found->second.recency);
+        released.push_back(std::move(found->second.entry));
         _entries.erase(found);
     }
 
-    // Under the mutex: evicts the least recently used entries until the bound holds.
-    void bound() {
+    // Under the mutex: evicts the least recently used entries until the bound holds, into @p released.
+    void bound(std::vector<std::shared_ptr<ViewEntry const>>& released) {
         while (_held > _options.maxBytes && !_recency.empty()) {
             auto const found = _entries.find(_recency.back());
-            drop(found);
+            drop(found, released);
             _evictions.fetch_add(1);
         }
     }

@@ -1490,3 +1490,51 @@ TEST_CASE("table: an order use the level refuses refuses the query", "[table][le
     CHECK(refused.error().column == "r");
     CHECK(level->wanted.size() == 1);  // no display want follows a refusal
 }
+
+// Mutation: find not joining a running computation (each request computes; the first holds the gate until all have
+// asked, so the others compute too).
+TEST_CASE("view cache: concurrent requests through a server compute one view", "[table][views]") {
+    bench::WideTableModel::recipeGate().release();
+    bench::WideTableModel::configure({.rows = 2'000, .columns = 300, .seed = 7, .loadDelay = {}},
+                                     {.rows = 1'000, .columns = 30, .seed = 7, .loadDelay = {}});
+    constexpr int kRequests = 8;
+    morph::exec::ThreadPoolExecutor pool{4};
+    morph::backend::ServerConfig config;
+    config.tableWork = std::make_shared<morph::exec::ThreadPoolExecutor>(kRequests);
+    std::shared_ptr<morph::backend::RemoteServer> server;
+    // The first computation waits until every other request has joined it, or ten seconds when they compute
+    // instead.
+    config.views.onCompute = [&server] {
+        auto const deadline = std::chrono::steady_clock::now() + std::chrono::seconds{10};
+        while (server->viewStats().waits < kRequests - 1 && std::chrono::steady_clock::now() < deadline) {
+            std::this_thread::yield();
+        }
+    };
+    server = std::make_shared<morph::backend::RemoteServer>(pool, std::move(config));
+    server->attach(bench::WideTableModel::recipeCache());
+    std::vector<std::shared_ptr<morph::testing::WaitReply>> waiters;
+    for (int request = 0; request < kRequests; ++request) {
+        // An instance each: one instance runs its executes one at a time, and these must overlap.
+        auto const registered = morph::wire::decode(
+            server->handleInline(morph::wire::encode(morph::wire::makeRegister(std::string{bench::kWideModelType}))));
+        REQUIRE(registered.kind == "ok");
+        morph::wire::Envelope execute;
+        execute.kind = "execute";
+        execute.callId = static_cast<std::uint64_t>(100 + request);
+        execute.modelId = registered.modelId;
+        execute.modelType = std::string{bench::kWideModelType};
+        execute.actionType = "Table.small";
+        execute.body = R"({"sort":[{"column":"i001","dir":"desc"}],"columns":["id","i001"],)"
+                       R"("page":{"offset":0,"limit":20}})";
+        auto waiter = std::make_shared<morph::testing::WaitReply>();
+        server->handle(morph::wire::encode(execute), [waiter](std::string const& reply) { (*waiter)(reply); });
+        waiters.push_back(std::move(waiter));
+    }
+    for (auto const& waiter : waiters) {
+        REQUIRE(waiter->await(std::chrono::seconds{30}));
+        REQUIRE(waiter->env.kind == "ok");
+    }
+    auto const stats = server->viewStats();
+    CHECK(stats.computations == 1);
+    CHECK(stats.waits == kRequests - 1);
+}

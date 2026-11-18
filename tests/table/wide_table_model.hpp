@@ -221,7 +221,7 @@ public:
     [[nodiscard]] morph::table::ServedTable small(morph::table::TableContext const& context);
     // small's rows; its description is small's without d000..d005 for every principal but "extended" (all 30),
     // and for "restricted" also without t000..t006, which leaves it no level. A column outside the caller's
-    // description is not readable.
+    // description is not readable. Its scope is the caller's principal.
     [[nodiscard]] morph::table::ServedTable scoped(morph::table::TableContext const& context);
 
     // Sets the cell in `wide`, and in `small` when the row and the column are there; names the row in each.
