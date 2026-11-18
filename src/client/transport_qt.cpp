@@ -81,7 +81,7 @@ int serveMcpOverQt(std::string const& url, ui::McpOptions options, std::istream&
         }
     });
     std::thread stdio{[&adapter, &owner, &input, &output] {
-        ui::serveStdioOnOwner(adapter, owner, input, output);
+        serveStdioOn(adapter, owner, input, output);
         // Queued to the application's thread by slot name: quit must run on the thread whose loop it ends.
         QMetaObject::invokeMethod(QCoreApplication::instance(), "quit", Qt::QueuedConnection);
     }};

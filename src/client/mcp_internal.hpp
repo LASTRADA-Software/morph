@@ -25,4 +25,16 @@ namespace morph::client::detail {
 [[nodiscard]] int serveMcpOverQt(std::string const& url, ui::McpOptions options, std::istream& input,
                                  std::ostream& output, std::ostream& diagnostics);
 
+/// @brief Runs `ui::serveStdioOnOwner` for an owner another thread turns; defined in `mcp.cpp`.
+///
+/// Defined in a translation unit that sees the owner only as an `exec::IExecutor`. Where the concrete executor is
+/// visible, as a `qt::QtExecutor` is in the Qt transport's unit, clang's static analyzer follows its `post` into Qt's
+/// `QMetaObject::invokeMethod`, loses the queued callable that Qt owns, and reports it leaked inside Qt's own header,
+/// where no suppression can be written.
+/// @param adapter The adapter; its `McpOptions::callbacks` is @p owner.
+/// @param owner   The adapter's owner, a serial executor another thread runs.
+/// @param input   Where MCP messages arrive.
+/// @param output  Where replies go.
+void serveStdioOn(ui::McpAdapter& adapter, exec::IExecutor& owner, std::istream& input, std::ostream& output);
+
 }  // namespace morph::client::detail

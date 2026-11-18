@@ -27,6 +27,10 @@
 
 namespace morph::client {
 
+void detail::serveStdioOn(ui::McpAdapter& adapter, exec::IExecutor& owner, std::istream& input, std::ostream& output) {
+    ui::serveStdioOnOwner(adapter, owner, input, output);
+}
+
 std::expected<void, std::string> checkMcpArgs(Args const& args, std::vector<std::string> const& rest) {
     if (!args.screen.empty()) {
         return std::unexpected(std::string{"--mcp-stdio mounts no screen: drop --screen"});
