@@ -83,7 +83,7 @@ TEST_CASE("morph_examples_client --mcp-stdio --app lims serves lims's actions", 
 }
 #endif
 
-TEST_CASE("--mcp-stdio with a frontend option exits 2 and writes nothing to stdout", "[client][mcp][pipe]") {
+TEST_CASE("a frontend option with --mcp-stdio exits 2 and writes nothing to stdout", "[client][mcp][pipe]") {
     auto const result = run("printf '' | '" + std::string{MORPH_EXAMPLES_CLIENT_PATH} +
                             "' --mcp-stdio --app forms --screen x 2>/dev/null");
     CHECK(result.lines.empty());
