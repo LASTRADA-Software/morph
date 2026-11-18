@@ -148,7 +148,8 @@ public:
 dispatcher, registry, options)`, which a server that offers custom screens calls once before it serves. `bundle` is a
 getter for the current `ServedBundle`; `authorizer` is the server's, for `permittedActions`. Its action ids are
 `morph.customScreens.<action>`, so they cannot meet an application's. It refuses a `maxDocumentBytes` above
-`kMaxFileBytes`, so every document it accepts is one `UiRegistry` could serve.
+`kMaxFileBytes`, or one whose document, escaped into a reply with its summary, could exceed the envelope bound, so
+every document it accepts is one a reply can carry.
 
 | Action | Kind | Body | `ok` reply |
 |---|---|---|---|
@@ -211,7 +212,7 @@ them:
 |---|---|
 | Actions: queries, mutations, forms, collections, wizards, wherever declared, component fallbacks included | Only actions the base uses, each on a model type the base binds it to and in a position of the same kind: a query, a mutation, a form the person submits, a form that submits itself (any `submit` but `"explicit"`: a form with none keeps its schema's mode, which is automatic unless the schema says otherwise), a model-backed table, a collection, a wizard |
 | Commands that run without the person: `onMount`, `onUnmount`, `onBackendChange`, `onClose`, `onSave`, watches, a form whose `submit` is not `"explicit"`, a delivered or host component's `on` events (its own code decides when they fire), and the `onSuccess` and `onError` of a mutation one of those runs, an `upload` or a `signIn`, followed through every chain, each name resolved in the scope that declares it | Only the actions and commands the base runs from the same trigger, so an unattended run cannot chain to an action the base only runs on a press |
-| Client-side commands: `upload`, `download`, `switchBackend`, `signIn`, `signOut`, `resetPrefs` | Only the command kinds the base uses anywhere; an `upload`'s file only as `{"ref": "event"}` directly in the `onPick` of a `filePicker` that opens files (no `mode`, or the literal `"open"`) or a `dropZone`'s `onDrop`, so it is always a file the person just chose |
+| Client-side commands: `upload`, `download`, `switchBackend`, `signIn`, `signOut`, `resetPrefs` | Only the command kinds the base uses anywhere, and a `switchBackend` only to a backend the base names; an `upload`'s file only as `{"ref": "event"}` directly in the `onPick` of a `filePicker` that opens files (no `mode`, or the literal `"open"`) or a `dropZone`'s `onDrop`, so it is always a file the person just chose |
 | `host` commands | Only a command identical to one of the base's, name and arguments, with literal arguments: an argument that names a state, a let or an element would resolve in the custom document, whose author chose its value. A host command's handler still treats its arguments as untrusted input |
 | Delivered components | Only the components the base declares, by name and content hash |
 | Host names: host components and host values, and the names of `host` commands, as one set of every string member named `host` | Only the names the base uses |
