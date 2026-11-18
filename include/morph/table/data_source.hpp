@@ -81,12 +81,25 @@ struct QuantityCell {
     [[nodiscard]] bool operator==(QuantityCell const& other) const = default;
 };
 
+/// @brief A cell whose value is not loaded yet. It is neither a value nor empty.
+///
+/// Only a column with a data level (`ColumnInfo::level`) may hold one. It sorts
+/// after every other cell in either direction, and every filter operator is
+/// unknown on it, so a row whose filter depends on it is undecided rather than
+/// shown or rejected.
+struct Unloaded {
+    /// @brief Every unloaded cell equals every other.
+    /// @return `true`.
+    friend constexpr bool operator==(Unloaded, Unloaded) noexcept = default;
+};
+
 /// @brief One cell as a data source hands it out.
 ///
 /// `std::monostate` is an empty cell. A `std::string` in a non-text column is
 /// parsed for the column's kind when its key is built; text that does not parse
-/// is an invalid cell.
-using Cell = std::variant<std::monostate, std::int64_t, math::Rational, double, std::string, bool, QuantityCell>;
+/// is an invalid cell. `Unloaded` is a cell whose value has not arrived.
+using Cell =
+    std::variant<std::monostate, std::int64_t, math::Rational, double, std::string, bool, QuantityCell, Unloaded>;
 
 /// @brief A column's identity and kind.
 struct ColumnInfo {
@@ -98,10 +111,12 @@ struct ColumnInfo {
     std::string comparator;
     /// @brief For a `Date` or `DateTime` column holding text, the format handed to the `DateParser`.
     std::string format;
+    /// @brief The data level the column's cells need. Empty is the base level, which every row has when it exists.
+    std::string level;
 
     /// @brief Member-wise equality.
     /// @param other The column to compare with.
-    /// @return `true` when id, kind, comparator and format match.
+    /// @return `true` when id, kind, comparator, format and level match.
     [[nodiscard]] bool operator==(ColumnInfo const& other) const = default;
 };
 
@@ -115,6 +130,7 @@ enum class TableErrorCode : std::uint8_t {
     ColumnNotReadable,    ///< A sort or filter on a column the principal may not read.
     Unavailable,          ///< An operation the table's mode does not offer.
     ServiceFailed,        ///< An injected service (collator, date parser, comparator) threw.
+    SourceContract,       ///< The source broke its contract: an unloaded cell in a base-level column.
 };
 
 /// @brief The error every fallible table call returns.
@@ -198,11 +214,11 @@ struct TableError {
 /// @param cell The cell.
 /// @return Its text: the string itself, a number in decimal form (a decimal
 ///         to its own places, `"12.5"`), `true` or `false`, or empty for an
-///         empty cell.
+///         empty or an unloaded cell.
 [[nodiscard]] inline std::string displayText(Cell const& cell) {
     return std::visit(
         []<typename T>(T const& value) -> std::string {
-            if constexpr (std::is_same_v<T, std::monostate>) {
+            if constexpr (std::is_same_v<T, std::monostate> || std::is_same_v<T, Unloaded>) {
                 return {};
             } else if constexpr (std::is_same_v<T, std::string>) {
                 return value;
@@ -935,8 +951,8 @@ template <>
 struct glz::meta<morph::table::TableErrorCode> {
     using enum morph::table::TableErrorCode;
     /// @brief Each enumerator after its JSON name.
-    static constexpr auto value =
-        glz::enumerate("unknownColumn", UnknownColumn, "unsupportedOperator", UnsupportedOperator, "invalidValue",
-                       InvalidValue, "invalidSpec", InvalidSpec, "limitExceeded", LimitExceeded, "columnNotReadable",
-                       ColumnNotReadable, "unavailable", Unavailable, "serviceFailed", ServiceFailed);
+    static constexpr auto value = glz::enumerate(
+        "unknownColumn", UnknownColumn, "unsupportedOperator", UnsupportedOperator, "invalidValue", InvalidValue,
+        "invalidSpec", InvalidSpec, "limitExceeded", LimitExceeded, "columnNotReadable", ColumnNotReadable,
+        "unavailable", Unavailable, "serviceFailed", ServiceFailed, "sourceContract", SourceContract);
 };

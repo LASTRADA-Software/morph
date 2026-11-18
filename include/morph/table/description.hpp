@@ -319,7 +319,7 @@ inline void appendDouble(std::string& out, double value) {
 
 /// @brief Appends one cell as JSON, by its `Cell` alternative.
 ///
-/// Empty is `null`; an integer, a string and a boolean are themselves; a
+/// Empty and unloaded are `null`; an integer, a string and a boolean are themselves; a
 /// `double` is written by `appendDouble`; a `Rational` is a pair by
 /// `appendRational`; a `QuantityCell` is `[n, d, [fn, fd]]`, its amount and
 /// factor each written as a `Rational`, or the plain pair of its amount when
@@ -329,7 +329,7 @@ inline void appendDouble(std::string& out, double value) {
 inline void appendCellJson(std::string& out, Cell const& cell) {
     std::visit(
         [&out]<typename T>(T const& value) {
-            if constexpr (std::is_same_v<T, std::monostate>) {
+            if constexpr (std::is_same_v<T, std::monostate> || std::is_same_v<T, Unloaded>) {
                 out += "null";
             } else if constexpr (std::is_same_v<T, std::int64_t>) {
                 appendInteger(out, value);

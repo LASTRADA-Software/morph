@@ -72,7 +72,8 @@ constexpr auto kInt64Max = std::numeric_limits<std::int64_t>::max();
 constexpr auto kInt64Min = std::numeric_limits<std::int64_t>::min();
 
 TableColumn column(std::string id, ColumnKind kind) {
-    return TableColumn{.info = {.id = id, .kind = kind, .comparator = {}, .format = {}}, .label = id, .group = {}};
+    return TableColumn{
+        .info = {.id = id, .kind = kind, .comparator = {}, .format = {}, .level = {}}, .label = id, .group = {}};
 }
 
 TableDescription describedOf(std::vector<TableColumn> columns) {
@@ -103,7 +104,7 @@ std::string toJson(GenericPage const& page) {
 
 // The states buildKeys gives a single column of `kind` holding `cells`, one per row.
 std::vector<CellState> statesOf(ColumnKind kind, std::vector<Cell> cells) {
-    ColumnInfo const info{.id = "v", .kind = kind, .comparator = {}, .format = {}};
+    ColumnInfo const info{.id = "v", .kind = kind, .comparator = {}, .format = {}, .level = {}};
     VectorSource source{{info}};
     std::vector<std::vector<Cell>> rows;
     for (auto& cell : cells) {
@@ -131,7 +132,7 @@ struct OneColumn {
 };
 
 OneColumn throughTheWire(ColumnKind kind, std::vector<Cell> cells) {
-    VectorSource source{{ColumnInfo{.id = "v", .kind = kind, .comparator = {}, .format = {}}}};
+    VectorSource source{{ColumnInfo{.id = "v", .kind = kind, .comparator = {}, .format = {}, .level = {}}}};
     std::vector<std::vector<Cell>> rows;
     for (auto& cell : cells) {
         rows.push_back({std::move(cell)});

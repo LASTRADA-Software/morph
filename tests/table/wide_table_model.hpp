@@ -32,7 +32,7 @@ namespace bench {
 enum class WideRole : std::uint8_t { Key, Integer, Decimal, Quantity, Measure, Text, LongText, Date, DateTime, Bool };
 
 struct WideColumn {
-    morph::table::ColumnInfo info;  // id and kind; Measure-role columns are ColumnKind::Decimal
+    morph::table::ColumnInfo info;  // id, kind and level; Measure-role columns are ColumnKind::Decimal
     WideRole role = WideRole::Integer;
     bool sparse = false;  // 10% of its cells empty
     std::string level;    // "recipe" or empty
@@ -54,7 +54,7 @@ struct WideTableOptions {
 
 // The description of wideColumns(columns): `id` as given, `label` = `id`, each column's label its id, `group` and
 // `groups` (`g3`, `g16`, labels their ids, in the order the layout first names them) from the layout, key "id",
-// `levels` empty, `revision` empty.
+// `levels` the levels its columns name (`recipe`), `revision` empty.
 [[nodiscard]] morph::table::TableDescription wideDescription(std::string id, int columns);
 
 // The bytes a cell costs held as a `Cell`: the variant, plus a string's heap buffer when it has one.
@@ -141,7 +141,8 @@ public:
     // wideDescription("small", 30) over one shared WideTableSource.
     [[nodiscard]] morph::table::ServedTable small(morph::table::TableContext const& context);
     // small's rows; its description is small's without d000..d005 for every principal but "extended" (all 30),
-    // and for "restricted" also without t000..t006. A column outside the caller's description is not readable.
+    // and for "restricted" also without t000..t006, which leaves it no level. A column outside the caller's
+    // description is not readable.
     [[nodiscard]] morph::table::ServedTable scoped(morph::table::TableContext const& context);
 
     // Sets the cell in `wide`, and in `small` when the row and the column are there; names the row in each.

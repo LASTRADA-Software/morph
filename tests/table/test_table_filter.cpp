@@ -16,8 +16,11 @@
 #include <cstdint>
 #include <glaze/glaze.hpp>
 #include <limits>
+#include <morph/table/engine.hpp>
 #include <morph/table/filter.hpp>
+#include <morph/table/query.hpp>
 #include <numeric>
+#include <random>
 #include <ranges>
 #include <string>
 #include <vector>
@@ -377,4 +380,192 @@ TEST_CASE("table: a filter run yields between stages at a passed deadline", "[ta
     CHECK(run.run(kNoDeadline, ::core::async::StopToken{}));
     auto const rows = std::move(run).take();
     CHECK(rows == Rows{1});
+}
+
+// Mutation: evaluate returning passes (two-valued), which rejects the unloaded row.
+TEST_CASE("table: an unloaded cell is unknown to every operator", "[table][filter][unloaded]") {
+    using morph::table::Unloaded;
+    struct Case {
+        ColumnKind kind;
+        FilterEntry entry;
+    };
+    std::vector<Case> const cases{{ColumnKind::Integer, {.eq = "1"}},
+                                  {ColumnKind::Integer, {.ne = "1"}},
+                                  {ColumnKind::Integer, {.lt = "1"}},
+                                  {ColumnKind::Integer, {.le = "1"}},
+                                  {ColumnKind::Integer, {.gt = "1"}},
+                                  {ColumnKind::Integer, {.ge = "1"}},
+                                  {ColumnKind::Decimal, {.between = std::array<std::string, 2>{"1", "2"}}},
+                                  {ColumnKind::Text, {.contains = "a"}},
+                                  {ColumnKind::Text, {.startsWith = "a"}},
+                                  {ColumnKind::Text, {.endsWith = "a"}},
+                                  {ColumnKind::Date, {.eq = "2026-01-01"}},
+                                  {ColumnKind::Bool, {.eq = "true"}},
+                                  {ColumnKind::Text, {.isEmpty = true}},
+                                  {ColumnKind::Text, {.notEmpty = true}}};
+    for (auto const& [kind, entry] : cases) {
+        for (bool const exclude : {false, true}) {
+            for (auto const combine : {Combine::Any, Combine::All}) {
+                auto source = tabletest::slowColumn(kind, {Cell{Unloaded{}}});
+                ColumnFilter filter{.combine = combine};
+                (exclude ? filter.exclude : filter.include).push_back(entry);
+                auto page = apply(*source, TableQuery{.filters = FilterSpec{.columns = {{"c", filter}}}});
+                REQUIRE(page.has_value());
+                CHECK(page->rows.empty());
+                CHECK(page->undecided == 1);
+                CHECK(page->total == 0);
+                CHECK(page->totalKind == TotalKind::AtLeast);
+            }
+        }
+    }
+}
+
+// Mutation: a group evaluated as `all` of its columns (Yes only when every column is Yes).
+TEST_CASE("table: a group admits on one loaded match and is unknown otherwise", "[table][filter][unloaded]") {
+    using morph::table::Unloaded;
+    auto const text = [](char const* value) { return Cell{std::string{value}}; };
+    auto const source = tabletest::makeSource(
+        {tabletest::levelCol("a", ColumnKind::Text, "slow"), tabletest::levelCol("b", ColumnKind::Text, "slow")},
+        {{text("x"), Cell{Unloaded{}}},
+         {Cell{Unloaded{}}, text("y")},
+         {text("y"), text("z")},
+         {Cell{Unloaded{}}, Cell{Unloaded{}}}});
+    FilterSpec spec;
+    spec.groups.push_back(GroupFilter{.columns = {"a", "b"}, .combine = Combine::Any, .include = {contains("x")}});
+    Engine engine{source};
+    REQUIRE(engine.setFilter(spec));
+    CHECK(tabletest::viewKeys(engine) == std::vector<RowId>{0});
+    CHECK(Rows(engine.undecidedRows().begin(), engine.undecidedRows().end()) == Rows{1, 3});
+    auto const page = apply(*source, TableQuery{.filters = spec});
+    REQUIRE(page.has_value());
+    CHECK(page->rows == std::vector<std::size_t>{0});
+    CHECK(page->undecided == 2);
+    CHECK(page->totalKind == TotalKind::AtLeast);
+}
+
+// Mutation: FilterRun keeping a marked row undecided when a later stage answers No.
+TEST_CASE("table: a row unknown at one stage and rejected at a later one is rejected", "[table][filter][unloaded]") {
+    using morph::table::Unloaded;
+    auto const source = tabletest::makeSource(
+        {tabletest::levelCol("a", ColumnKind::Integer, "slow"), tabletest::col("b", ColumnKind::Integer)},
+        {{Cell{Unloaded{}}, Cell{std::int64_t{3}}}});
+    FilterSpec spec = on("a", {eq("1")});
+    spec.columns.emplace("b", ColumnFilter{.combine = Combine::Any, .include = {eq("2")}, .exclude = {}});
+    auto const page = apply(*source, TableQuery{.filters = spec});
+    REQUIRE(page.has_value());
+    CHECK(page->rows.empty());
+    CHECK(page->undecided == 0);
+    CHECK(page->totalKind == TotalKind::Exact);
+}
+
+namespace {
+
+// A random cell of a column of the soundness property: integers 0..5, short texts, booleans, a tenth of them empty.
+Cell randomValue(ColumnKind kind, std::mt19937& rng) {
+    static constexpr std::array<char const*, 4> kTexts{"a", "ab", "b", "ba"};
+    if (rng() % 10 == 0) {
+        return Cell{};
+    }
+    switch (kind) {
+        case ColumnKind::Integer:
+            return Cell{static_cast<std::int64_t>(rng() % 6)};
+        case ColumnKind::Bool:
+            return Cell{rng() % 2 == 0};
+        default:
+            return Cell{std::string{kTexts.at(rng() % kTexts.size())}};
+    }
+}
+
+// A random entry that `kind` defines, from eq, ne, lt, gt, contains, isEmpty and notEmpty.
+FilterEntry randomEntry(ColumnKind kind, std::mt19937& rng) {
+    std::string operand;
+    if (kind == ColumnKind::Integer) {
+        operand = std::to_string(rng() % 6);
+    } else if (kind == ColumnKind::Bool) {
+        operand = rng() % 2 == 0 ? "true" : "false";
+    } else {
+        operand = rng() % 2 == 0 ? "a" : "b";
+    }
+    std::vector<FilterEntry> choices{eq(operand), ne(operand), isEmpty(), notEmpty()};
+    if (kind == ColumnKind::Integer) {
+        choices.push_back(lt(operand));
+        choices.push_back(gt(operand));
+    } else if (kind == ColumnKind::Text) {
+        choices.push_back(contains(operand));
+    }
+    return choices.at(rng() % choices.size());
+}
+
+}  // namespace
+
+// Mutation: evaluate answering No for `ne` on an unloaded cell.
+TEST_CASE("table: the filter is sound under every completion", "[table][filter][unloaded]") {
+    using morph::table::Unloaded;
+    constexpr std::uint32_t kRows = 30;
+    std::array<ColumnKind, 3> const kinds{ColumnKind::Integer, ColumnKind::Text, ColumnKind::Bool};
+    std::array<std::string, 3> const ids{"i", "t", "b"};
+    std::vector<ColumnInfo> columns;
+    for (std::size_t c = 0; c < kinds.size(); ++c) {
+        columns.push_back(tabletest::levelCol(ids.at(c), kinds.at(c), "slow"));
+    }
+    // The view, sorted, and the undecided rows of `rows` under `spec`, as source rows.
+    auto const run = [&](std::vector<std::vector<Cell>> rows, FilterSpec const& spec) {
+        Engine engine{tabletest::makeSource(columns, std::move(rows))};
+        REQUIRE(engine.setFilter(spec));
+        Rows view(engine.view().begin(), engine.view().end());
+        Rows undecided(engine.undecidedRows().begin(), engine.undecidedRows().end());
+        std::ranges::sort(view);
+        return std::pair{view, undecided};
+    };
+    for (std::uint32_t seed = 0; seed < 200; ++seed) {
+        std::mt19937 rng{seed};
+        std::vector<std::vector<Cell>> rows(kRows);
+        for (auto& row : rows) {
+            for (auto const kind : kinds) {
+                row.push_back(rng() % 4 == 0 ? Cell{Unloaded{}} : randomValue(kind, rng));
+            }
+        }
+        FilterSpec spec;
+        auto const filtered = 1 + (rng() % 3);
+        for (std::size_t i = 0; i < filtered; ++i) {
+            auto const c = rng() % kinds.size();
+            auto& filter = spec.columns[ids.at(c)];
+            (rng() % 2 == 0 ? filter.include : filter.exclude).push_back(randomEntry(kinds.at(c), rng));
+        }
+        if (rng() % 2 == 0) {
+            auto const first = rng() % kinds.size();
+            GroupFilter group{.columns = {ids.at(first)}, .combine = Combine::Any, .include = {}};
+            group.include.push_back(randomEntry(kinds.at(first), rng));
+            for (std::size_t c = 0; c < kinds.size(); ++c) {
+                if (c != first && rng() % 2 == 0) {
+                    group.columns.push_back(ids.at(c));
+                }
+            }
+            spec.groups.push_back(std::move(group));
+        }
+        auto const [view, undecided] = run(rows, spec);
+        REQUIRE(view.size() + undecided.size() <= kRows);
+        for (int completion = 0; completion < 20; ++completion) {
+            auto completed = rows;
+            for (auto& row : completed) {
+                for (std::size_t c = 0; c < kinds.size(); ++c) {
+                    if (std::holds_alternative<Unloaded>(row.at(c))) {
+                        row.at(c) = randomValue(kinds.at(c), rng);
+                    }
+                }
+            }
+            auto const [after, none] = run(std::move(completed), spec);
+            REQUIRE(none.empty());
+            for (std::uint32_t row = 0; row < kRows; ++row) {
+                bool const shown = std::ranges::binary_search(view, row);
+                bool const open = std::ranges::find(undecided, row) != undecided.end();
+                bool const shownAfter = std::ranges::binary_search(after, row);
+                if (shown) {
+                    REQUIRE(shownAfter);
+                } else if (!open) {
+                    REQUIRE_FALSE(shownAfter);
+                }
+            }
+        }
+    }
 }

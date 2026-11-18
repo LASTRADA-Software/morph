@@ -14,10 +14,13 @@
 /// stale from its commit until its edit settles.
 ///
 /// With an engine attached, a row holds its place while it has an edit in
-/// flight (`Engine::beginEdit`), which a `Deferred` reorder honours.
+/// flight (`Engine::beginEdit`), which a `Deferred` reorder honours, and an
+/// edit of a cell the engine's view holds as `Unloaded` is refused on the cell:
+/// it would overwrite a value the user has not seen.
 ///
 /// See `docs/spec/table/engine.md`.
 
+#include <algorithm>
 #include <cstddef>
 #include <deque>
 #include <expected>
@@ -32,6 +35,7 @@
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
+#include <variant>
 #include <vector>
 
 namespace morph::table {
@@ -102,8 +106,16 @@ public:
     }
 
     /// @brief Commits an edit: now, or after the row's earlier edits settle.
+    ///
+    /// An edit of a cell that is unloaded in the engine's view is not
+    /// committed: the cell's error becomes "not loaded yet" and the commit
+    /// function is not called. Without an engine nothing is checked.
     /// @param request The edit.
     void commit(EditRequest request) {
+        if (unloadedInView(request)) {
+            _errors[request.row].insert_or_assign(request.column, "not loaded yet");
+            return;
+        }
         auto& queue = _queues[request.row];
         queue.push_back(std::move(request));
         if (queue.size() == 1) {
@@ -148,6 +160,24 @@ public:
     }
 
 private:
+    // Whether the engine's view shows the edited cell as unloaded.
+    [[nodiscard]] bool unloadedInView(EditRequest const& request) const {
+        if (_engine == nullptr) {
+            return false;
+        }
+        auto const viewRow = _engine->viewRowOfKey(request.row);
+        if (!viewRow) {
+            return false;
+        }
+        auto const columns = _engine->columns();
+        auto const column = std::ranges::find(columns, request.column, &ColumnInfo::id);
+        if (column == columns.end()) {
+            return false;
+        }
+        auto const index = static_cast<std::size_t>(column - columns.begin());
+        return std::holds_alternative<Unloaded>(_engine->cellAt(*viewRow, index));
+    }
+
     void start(RowId const& row) {
         if (_engine != nullptr) {
             _engine->beginEdit(row);

@@ -307,6 +307,14 @@ struct PageRows {
     std::optional<std::int64_t> total;
     /// @brief The view row of `rows[0]`.
     std::int64_t offset = 0;
+    /// @brief `AtLeast` while rows are undecided, since the view may still grow; `Exact` otherwise.
+    TotalKind totalKind = TotalKind::Exact;
+    /// @brief Rows the filter can neither admit nor reject until a level loads. They are in no page.
+    std::int64_t undecided = 0;
+    /// @brief The order levels with a load wanted or in flight for at least one row.
+    std::vector<std::string> awaiting;
+    /// @brief The order levels whose load failed for at least one row, and is not being tried again yet.
+    std::vector<std::string> failed;
 };
 
 /// @brief Runs @p query over @p source in the calling thread: the reference
@@ -314,7 +322,8 @@ struct PageRows {
 /// @param source  The server's rows.
 /// @param query   The request body's table query.
 /// @param options Limits, services and column access.
-/// @return The page, or the typed error the client shows.
+/// @return The page, or the typed error the client shows: `SourceContract`
+///         when a sorted or filtered base-level column holds an unloaded cell.
 [[nodiscard]] inline std::expected<PageRows, TableError> apply(DataSource const& source, TableQuery const& query,
                                                                ApplyOptions const& options = {}) {
     auto const columns = source.columns();
@@ -352,13 +361,15 @@ struct PageRows {
     detail::ViewJob job{std::move(input)};
     static_cast<void>(job.step(kNoDeadline, ::core::async::StopToken{}));
     if (job.failure()) {
-        return std::unexpected(TableError{
-            .code = TableErrorCode::ServiceFailed, .column = {}, .message = "a service failed: " + *job.failure()});
+        return std::unexpected(*job.failure());
     }
-    auto const view = job.takeResult().view;
+    auto const result = job.takeResult();
+    auto const& view = result.view;
 
     PageRows out;
     out.offset = checked->page.offset;
+    out.undecided = static_cast<std::int64_t>(result.undecided.size());
+    out.totalKind = out.undecided > 0 ? TotalKind::AtLeast : TotalKind::Exact;
     auto const count = static_cast<std::int64_t>(view.size());
     if (count <= options.limits.totalCap) {
         out.total = count;
@@ -518,7 +529,8 @@ template <typename Row>
              ColumnInfo{.id = std::string{glz::reflect<Row>::keys[I]},
                         .kind = kindOf<decltype(morph::detail::reflectedMember<I>(std::declval<Row const&>()))>(),
                         .comparator = {},
-                        .format = {}}),
+                        .format = {},
+                        .level = {}}),
          ...);
     }(std::make_index_sequence<count>{});
     return out;
