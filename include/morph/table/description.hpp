@@ -185,10 +185,11 @@ using GenericRow = std::vector<Cell>;
 ///
 /// Its JSON members, in order: `revision`, `columns`, `keys`, `rows`, `total`
 /// (absent when not counted), `totalKind`, `offset`, `unloadedRows`,
-/// `undecided`, `awaiting`, `failed` and `indices`. An empty `failed` or
-/// `indices` is left out, as is a row's empty `failed` in `unloadedRows`; the
-/// reader takes each member from `unloadedRows` on as present or absent, so a
-/// page without them is a fully loaded page that is not a keyed reply.
+/// `undecided`, `awaiting`, `failed`, `indices` and `distinct`. An empty
+/// `failed` or `indices` is left out, as is a row's empty `failed` in
+/// `unloadedRows`, and `distinct` is written only on a distinct-values reply;
+/// the reader takes each member from `unloadedRows` on as present or absent, so
+/// a page without them is a fully loaded page that is not a keyed reply.
 struct GenericPage {
     /// @brief The revision of the description the page was written against.
     std::string revision;
@@ -216,6 +217,8 @@ struct GenericPage {
     std::vector<std::string> failed;
     /// @brief A keyed reply only: the view row of each of `rows`.
     std::vector<std::int64_t> indices;
+    /// @brief A distinct-values reply only: the values; the page then has no rows.
+    std::optional<DistinctValues> distinct;
 };
 
 namespace detail {
@@ -673,7 +676,7 @@ struct glz::meta<morph::table::GenericPage> {
                                 [](T const& page) { return morph::table::detail::writePageRows(page); }>,
                     "total", &T::total, "totalKind", &T::totalKind, "offset", &T::offset, "unloadedRows",
                     &T::unloadedRows, "undecided", &T::undecided, "awaiting", &T::awaiting, "failed", &T::failed,
-                    "indices", &T::indices);
+                    "indices", &T::indices, "distinct", &T::distinct);
 };
 
 namespace morph::table {
@@ -686,7 +689,8 @@ namespace morph::table {
 /// may produce every other cell lazily or not at all. A row is listed in
 /// `unloadedRows` with the levels of the named columns whose cell it holds as
 /// `Unloaded`, sorted; a level no named column has is not looked up. Every
-/// member of @p page beyond its rows is copied.
+/// member of @p page beyond its rows is copied but `distinct`: a distinct-values
+/// reply is built by `detail::answerQuery`, not from a page of rows.
 /// @param page    The page's source rows and the view's state, as `apply` returns them.
 /// @param source  The rows; read through one snapshot.
 /// @param columns The column ids to write, already ordered and without
@@ -1333,6 +1337,9 @@ struct AnswerContext {
 ///
 /// A keyed query to a table whose capabilities exclude keyed queries is `Unavailable`, which a client answers by
 /// refetching its pages.
+///
+/// A query with `distinct` set is answered by `distinctValues` over the source: a page with no columns, keys or rows
+/// and `distinct` set, or `Unavailable` when the table's capabilities exclude distinct requests.
 /// @param served  The table, its source pinned (`pinned`).
 /// @param query   The query, as received.
 /// @param context What the reply is built with.
@@ -1356,6 +1363,23 @@ struct AnswerContext {
     auto checked = validate(query, infos, served.limits, served.mayRead);
     if (!checked) {
         return std::unexpected(std::move(checked.error()));
+    }
+    if (checked->distinct) {
+        if (!served.description.capabilities.distinct) {
+            return std::unexpected(TableError{.code = TableErrorCode::Unavailable,
+                                              .column = {},
+                                              .message = "this table answers no distinct request"});
+        }
+        auto values = distinctValues(
+            *served.source, *checked, *checked->distinct,
+            ApplyOptions{.limits = served.limits, .services = served.services, .mayRead = served.mayRead});
+        if (!values) {
+            return std::unexpected(std::move(values.error()));
+        }
+        GenericPage page;
+        page.revision = served.description.revision;
+        page.distinct = std::move(*values);
+        return page;
     }
     auto const levelOf = [&served](std::string_view level) -> std::shared_ptr<LevelSource> {
         for (auto const& source : served.levels) {

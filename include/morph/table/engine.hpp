@@ -693,6 +693,9 @@ private:
 
 }  // namespace detail
 
+struct DistinctRequest;
+struct DistinctValues;
+
 /// @brief Sorts, filters and maps the view of one table.
 ///
 /// Owner-affine; see the file comment for how it executes. Holds a shared
@@ -880,6 +883,17 @@ public:
     /// @brief Counters.
     /// @return The engine's counters so far.
     [[nodiscard]] EngineStats const& stats() const noexcept { return _stats; }
+
+    /// @brief The distinct values of a column over the rows the engine's other filters leave: client mode's
+    ///        `distinctValues`.
+    ///
+    /// Runs on the calling thread over the engine's latest snapshot, with the filter `filter()` returns less the
+    /// column's own entry. The key columns the engine holds for that snapshot are read; one it does not hold is built
+    /// for the call and not kept. The request is checked as `validate` checks it, with default `QueryLimits` and
+    /// every column readable. Defined in `table/query.hpp`, which declares the request and the reply.
+    /// @param request The column, search, bucket and page of values.
+    /// @return The values, or the request's error.
+    [[nodiscard]] std::expected<DistinctValues, TableError> distinctValues(DistinctRequest const& request) const;
 
     /// @brief Marks a row as being edited: with `Deferred` reorder it keeps its
     ///        place through updates until `endEdit`.

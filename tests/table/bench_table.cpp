@@ -38,6 +38,7 @@
 #include <optional>
 #include <print>
 #include <random>
+#include <set>
 #include <span>
 #include <string>
 #include <string_view>
@@ -1274,6 +1275,47 @@ std::vector<std::string> windowColumns(std::size_t count) {
 
 }  // namespace
 
+namespace {
+
+// D1-D4's table: 100,000 rows; `t` a text of 50,000 distinct values of 3 to 10 lowercase letters, `o1` an integer
+// 0..99, `o2` an integer 0..99 at level "slow", unloaded in 30% of the rows. From std::mt19937{7}.
+std::shared_ptr<VectorSource> distinctBenchSource() {
+    std::mt19937 rng{7};
+    std::vector<std::string> words;
+    std::set<std::string> seen;
+    while (words.size() < 50'000) {
+        std::string word(3 + (rng() % 8), 'a');
+        for (auto& letter : word) {
+            letter = static_cast<char>('a' + (rng() % 26));
+        }
+        if (seen.insert(word).second) {
+            words.push_back(std::move(word));
+        }
+    }
+    std::vector<std::vector<Cell>> rows;
+    rows.reserve(100'000);
+    for (std::size_t row = 0; row < 100'000; ++row) {
+        auto const& word = words[row < words.size() ? row : rng() % words.size()];
+        rows.push_back({Cell{word}, Cell{static_cast<std::int64_t>(rng() % 100)},
+                        rng() % 10 < 3 ? Cell{Unloaded{}} : Cell{static_cast<std::int64_t>(rng() % 100)}});
+    }
+    return tabletest::makeSource({tabletest::col("t", ColumnKind::Text), tabletest::col("o1", ColumnKind::Integer),
+                                  tabletest::levelCol("o2", ColumnKind::Integer, "slow")},
+                                 std::move(rows));
+}
+
+Spread timedRuns(int runs, std::function<void()> const& body) {
+    std::vector<double> samples;
+    for (int run = 0; run < runs; ++run) {
+        auto const began = Clock::now();
+        body();
+        samples.push_back(std::chrono::duration<double, std::milli>(Clock::now() - began).count());
+    }
+    return spreadOf(samples);
+}
+
+}  // namespace
+
 TEST_CASE("table benchmark: K1 K2 K3 the window", "[.benchmark][window]") {
     auto const wide = windowColumns(300);
     std::println("\nThe window\n\n| Id | scenario | median ms (p10-p90) |\n|---|---|---:|");
@@ -1481,4 +1523,67 @@ TEST_CASE("table benchmark: C1 where a request's time goes", "[.benchmark][views
     report("answerQuery from a cached view, sorted on a recipe column (an order want)", sortedOnLevel);
     report("answerQuery from a cached view, sorted on a base column (no order want)", sortedOnBase);
     std::println("| views computed | {} | |", views.stats().computations);
+}
+
+TEST_CASE("table benchmark: distinct values and value sets", "[.benchmark][table][distinct]") {
+    auto const source = distinctBenchSource();
+    constexpr int kRuns = 9;
+    printHeader("D1-D4: distinct values and value sets");
+
+    Engine sorted{source};
+    require(sorted.setSort({SortKey{.column = "t", .dir = kAsc}}));
+    REQUIRE(sorted.stats().keyBuilds == 1);
+    auto const first = sorted.distinctValues({.column = "t"});
+    REQUIRE(first);
+    REQUIRE(first->values.size() == 200);
+    REQUIRE(first->distinct == 50'000);
+    printRow("D1 distinctValues, 50,000 distinct, first 200, keys built", 100'000,
+             timedRuns(kRuns, [&] { static_cast<void>(sorted.distinctValues({.column = "t"})); }));
+
+    auto const searched = sorted.distinctValues({.column = "t", .search = "abc"});
+    REQUIRE(searched);
+    REQUIRE(searched->distinct > 0);
+    printRow("D2 the same, search \"abc\"", 100'000,
+             timedRuns(kRuns, [&] { static_cast<void>(sorted.distinctValues({.column = "t", .search = "abc"})); }));
+
+    Engine filtered{source};
+    require(filtered.setSort({SortKey{.column = "t", .dir = kAsc}}));
+    FilterSpec others;
+    others.columns.emplace("o1",
+                           ColumnFilter{.combine = Combine::Any, .include = {FilterEntry{.ge = "20"}}, .exclude = {}});
+    others.columns.emplace("o2",
+                           ColumnFilter{.combine = Combine::Any, .include = {FilterEntry{.lt = "80"}}, .exclude = {}});
+    require(filtered.setFilter(others));
+    auto const partial = filtered.distinctValues({.column = "t"});
+    REQUIRE(partial);
+    REQUIRE(partial->partial);
+    printRow("D3 the same, filters on o1 and on o2 (30% unloaded)", 100'000,
+             timedRuns(kRuns, [&] { static_cast<void>(filtered.distinctValues({.column = "t"})); }));
+
+    std::vector<std::string> members;
+    auto const snapshot = source->snapshot();
+    for (std::size_t row = 0; row < 10'000; ++row) {
+        members.push_back(std::get<std::string>(snapshot->cell(row * 5, 0)));
+    }
+    auto const columns = source->columns();
+    Services const services;
+    auto keys = KeyColumn::forColumn(columns[0], services, snapshot->rowCount());
+    buildKeys(*snapshot, 0, columns[0], services, 0, snapshot->rowCount(), keys);
+    std::vector<KeyColumn const*> const pointers{&keys, nullptr, nullptr};
+    auto const spec = filterOn("t", FilterEntry{.oneOf = members});
+    printRow("D4 compile a 10,000-value oneOf", 100'000,
+             timedRuns(kRuns, [&] { static_cast<void>(compileFilter(spec, columns, services)); }));
+    auto const compiled = compileFilter(spec, columns, services);
+    REQUIRE(compiled);
+    std::size_t passed = 0;
+    printRow("D4 filter 100,000 rows with it", 100'000, timedRuns(kRuns, [&] {
+                 std::vector<std::uint32_t> rows(snapshot->rowCount());
+                 for (std::size_t row = 0; row < rows.size(); ++row) {
+                     rows[row] = static_cast<std::uint32_t>(row);
+                 }
+                 FilterRun run{*compiled, pointers, std::move(rows)};
+                 static_cast<void>(run.run(kNoDeadline, ::core::async::StopToken{}));
+                 passed = std::move(run).take().size();
+             }));
+    REQUIRE(passed >= 10'000);
 }
