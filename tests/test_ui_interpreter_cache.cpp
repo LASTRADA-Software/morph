@@ -342,6 +342,6 @@ TEST_CASE("cache: a page declares its open and partial members to the result wal
     auto const holders = morph::model::detail::walkHolders<cache_walk::Wrapped>();
     REQUIRE(holders.size() == 1);
     CHECK(holders[0].path == "page");
-    CHECK(holders[0].open == std::vector<std::string>{"awaiting"});  // `distinct` is not a member of this page
+    CHECK(holders[0].open == std::vector<std::string>{"awaiting", "distinct"});
     CHECK(holders[0].partial == "unloadedRows");
 }

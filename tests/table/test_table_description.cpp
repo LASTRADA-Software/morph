@@ -1607,3 +1607,71 @@ TEST_CASE("table: a refused order use takes back the other levels' leases", "[ta
     CHECK(refused.error().column == "s");
     CHECK(recipe->unwanted == 4);
 }
+
+namespace {
+
+// The distinct cases' first query: city oneOf Berlin, Paris; status eq closed; and a distinct request on status.
+TableQuery distinctStatusQuery() {
+    TableQuery q;
+    q.filters.columns["city"] = ColumnFilter{
+        .combine = Combine::Any, .include = {FilterEntry{.oneOf = std::vector<std::string>{"Berlin", "Paris"}}},
+        .exclude = {}};
+    q.filters.columns["status"] =
+        ColumnFilter{.combine = Combine::Any, .include = {FilterEntry{.eq = "closed"}}, .exclude = {}};
+    q.distinct = DistinctRequest{.column = "status"};
+    return q;
+}
+
+ServedTable distinctTable(std::shared_ptr<VectorSource> source) {
+    auto description = TableDescription{
+        .id = "d",
+        .label = "D",
+        .columns = {column("status", ColumnKind::Text), column("city", ColumnKind::Text),
+                    column("qty", ColumnKind::Integer)},
+        .key = "qty"};
+    return detail::pinned(ServedTable{.description = describe(std::move(description)),
+                                      .source = std::move(source),
+                                      .levels = {},
+                                      .mayRead = {},
+                                      .scope = {},
+                                      .services = {},
+                                      .limits = {}});
+}
+
+}  // namespace
+
+// Mutation: the writer leaving `distinct` out.
+TEST_CASE("generic page: a distinct reply round-trips", "[table][description][distinct]") {
+    auto const source = tabletest::distinctSource();
+    auto const q = distinctStatusQuery();
+    GenericPage page;
+    page.revision = "r";
+    page.distinct = *distinctValues(*source, q, *q.distinct);
+    REQUIRE(page.distinct->values.size() == 2);
+    auto const description = describedOf({column("status", ColumnKind::Text)});
+    auto const back = readGenericPage(toJson(page), description);
+    REQUIRE(back.has_value());
+    CHECK(back->rows.empty());
+    REQUIRE(back->distinct);
+    CHECK(*back->distinct == *page.distinct);
+}
+
+TEST_CASE("answer query: a distinct request answers values and no rows", "[table][description][distinct]") {
+    auto const source = tabletest::distinctSource();
+    auto const served = distinctTable(source);
+    auto const q = distinctStatusQuery();
+    auto const page = detail::answerQuery(served, q);
+    REQUIRE(page);
+    CHECK(page->rows.empty());
+    CHECK(page->keys.empty());
+    REQUIRE(page->distinct);
+    CHECK(*page->distinct == *distinctValues(*source, q, *q.distinct));
+    // Mutation: answerQuery ignoring query.distinct: `distinct` is absent.
+
+    auto refusing = served;
+    refusing.description.capabilities.distinct = false;
+    auto const refused = detail::answerQuery(refusing, q);
+    REQUIRE_FALSE(refused);
+    CHECK(refused.error().code == TableErrorCode::Unavailable);
+    // Mutation: the branch not reading capabilities.distinct.
+}

@@ -10,6 +10,9 @@
 //    entries combine by any and all" fails.
 //  - CompiledFilter::passes ignoring `exclude`: "an exclude entry rejects the
 //    row" fails.
+//  - `ValueSet` matching nothing: "oneOf matches what its eq entries match"
+//    fails.
+//  The oneOf cases name their own mutations above them.
 
 #include <catch2/catch_test_macros.hpp>
 #include <chrono>
@@ -80,6 +83,15 @@ FilterEntry startsWith(std::string v) { return FilterEntry{.startsWith = std::mo
 FilterEntry endsWith(std::string v) { return FilterEntry{.endsWith = std::move(v)}; }
 FilterEntry isEmpty() { return FilterEntry{.isEmpty = true}; }
 FilterEntry notEmpty() { return FilterEntry{.notEmpty = true}; }
+FilterEntry oneOf(std::vector<std::string> v) { return FilterEntry{.oneOf = std::move(v)}; }
+
+std::vector<FilterEntry> eqEntries(std::vector<std::string> const& values) {
+    std::vector<FilterEntry> out;
+    for (auto const& value : values) {
+        out.push_back(eq(value));
+    }
+    return out;
+}
 
 FilterSpec on(std::string column, std::vector<FilterEntry> include, Combine combine = Combine::Any,
               std::vector<FilterEntry> exclude = {}) {
@@ -567,5 +579,130 @@ TEST_CASE("table: the filter is sound under every completion", "[table][filter][
                 }
             }
         }
+    }
+}
+
+// Mutation: `ValueSet::contains` answering false.
+TEST_CASE("table: oneOf matches what its eq entries match", "[table][filter]") {
+    Filtered const text{.source = tabletest::column(ColumnKind::Text, {std::string{"Alpha"}, std::string{"beta"},
+                                                                       std::string{"Gamma"}, Cell{},
+                                                                       std::string{"alpha"}}),
+                        .services = {}};
+    CHECK(text.by(on("c", {oneOf({"alpha", "BETA"})})) == Rows{0, 1, 4});
+    CHECK(*text.by(on("c", {oneOf({"alpha", "BETA"})})) == *text.by(on("c", {eq("alpha"), eq("BETA")})));
+    CHECK(text.by(on("c", {}, Combine::Any, {oneOf({"alpha", "BETA"})})) == Rows{2, 3});
+    CHECK(text.by(on("c", {oneOf({"alpha", "BETA"}), isEmpty()})) == Rows{0, 1, 3, 4});
+    FilterEntry exact = oneOf({"alpha"});
+    exact.caseSensitive = true;
+    CHECK(text.by(on("c", {exact})) == Rows{4});
+
+    Filtered const ints{.source = tabletest::column(ColumnKind::Integer, {std::int64_t{1}, std::int64_t{2},
+                                                                          std::int64_t{3}, std::string{"x"}}),
+                        .services = {}};
+    CHECK(ints.by(on("c", {oneOf({"2", "1.5"})})) == Rows{1});
+    CHECK(ints.by(on("c", {oneOf({"2", "zz"})})).error().code == TableErrorCode::InvalidValue);
+}
+
+// Mutation: a lone oneOf entry answering No, not Unknown, on an unloaded cell.
+TEST_CASE("table: oneOf is unknown on an unloaded cell", "[table][filter]") {
+    auto const source = tabletest::slowColumn(ColumnKind::Text,
+                                              {std::string{"Alpha"}, Cell{morph::table::Unloaded{}}, std::string{"b"}});
+    auto const page = apply(*source, TableQuery{.sort = {}, .filters = on("c", {oneOf({"alpha"})}), .page = {}});
+    REQUIRE(page);
+    CHECK(page->rows == std::vector<std::size_t>{0});
+    CHECK(page->undecided == 1);
+    CHECK(page->totalKind == TotalKind::AtLeast);
+}
+
+// Mutation: an empty set matching every valid cell.
+TEST_CASE("table: an empty or repeating oneOf", "[table][filter]") {
+    Filtered const text{
+        .source = tabletest::column(ColumnKind::Text, {std::string{"Alpha"}, std::string{"beta"}, Cell{}}),
+        .services = {}};
+    CHECK(text.by(on("c", {oneOf({})})) == Rows{});
+    CHECK(text.by(on("c", {}, Combine::Any, {oneOf({})})) == Rows{0, 1, 2});
+    CHECK(*text.by(on("c", {oneOf({"alpha", "ALPHA"})})) == *text.by(on("c", {oneOf({"alpha"})})));
+}
+
+// Gate D5: one lookup a cell, whatever the set's size. Mutation: a text set scanned member by member, each
+// comparison counted as a lookup.
+TEST_CASE("table: a oneOf of any size is one lookup a cell", "[table][filter]") {
+    constexpr std::uint32_t kRows = 100'000;
+    std::vector<Cell> cells;
+    cells.reserve(kRows);
+    for (std::uint32_t row = 0; row < kRows; ++row) {
+        cells.emplace_back("v" + std::to_string(row % 20'000));
+    }
+    auto const source = tabletest::column(ColumnKind::Text, std::move(cells));
+    std::vector<std::string> members;
+    for (int value = 0; value < 10'000; ++value) {
+        members.push_back("v" + std::to_string(value));
+    }
+    Services const services;
+    auto const compiled = compileFilter(on("c", {oneOf(members)}), source->columns(), services);
+    REQUIRE(compiled);
+    auto const snapshot = source->snapshot();
+    auto keys = KeyColumn::forColumn(source->columns()[0], services, kRows);
+    buildKeys(*snapshot, 0, source->columns()[0], services, 0, kRows, keys);
+    FilterCounters counters;
+    std::size_t passed = 0;
+    for (std::uint32_t row = 0; row < kRows; ++row) {
+        passed += CompiledFilter::evaluate(compiled->columns()[0], keys, row, &counters) == Match::Yes ? 1U : 0U;
+    }
+    CHECK(counters.setLookups == 100'000);
+    CHECK(passed == 50'000);
+}
+
+// Invariant 23. Mutation: text members kept as given rather than folded.
+TEST_CASE("table: oneOf is the OR of its eq entries over random tables", "[table][filter]") {
+    struct Kind {
+        ColumnKind kind;
+        std::vector<Cell> cells;           // the values a cell is drawn from
+        std::vector<std::string> operands;  // the same values as filter text
+    };
+    std::vector<Kind> const kinds{
+        {ColumnKind::Text,
+         {std::string{"a"}, std::string{"B"}, std::string{"b"}, std::string{"c"}, std::string{"D"}, std::string{"e"},
+          std::string{"F"}, std::string{"g"}},
+         {"a", "B", "b", "c", "D", "e", "F", "g"}},
+        {ColumnKind::Integer,
+         {std::int64_t{1}, std::int64_t{2}, std::int64_t{3}, std::int64_t{4}, std::int64_t{5}, std::int64_t{6},
+          std::int64_t{7}, std::int64_t{8}},
+         {"1", "2", "3", "4", "5", "6.0", "7", "8"}},
+        {ColumnKind::Decimal,
+         {dec("0.5"), dec("1"), dec("1.25"), dec("2"), dec("2.5"), dec("3"), dec("3.75"), dec("4")},
+         {"0.5", "1.0", "1.25", "2", "2.50", "3", "3.75", "4"}},
+        {ColumnKind::Date,
+         {std::string{"2026-01-01"}, std::string{"2026-01-02"}, std::string{"2026-01-03"}, std::string{"2026-01-04"},
+          std::string{"2026-01-05"}, std::string{"2026-01-06"}, std::string{"2026-01-07"},
+          std::string{"2026-01-08"}},
+         {"2026-01-01", "2026-01-02", "2026-01-03", "2026-01-04", "2026-01-05", "2026-01-06", "2026-01-07",
+          "2026-01-08"}},
+        {ColumnKind::Bool, {true, false}, {"true", "false"}},
+    };
+    std::mt19937 rng{23};
+    for (int table = 0; table < 200; ++table) {
+        auto const& kind = kinds.at(static_cast<std::size_t>(table) % kinds.size());
+        std::vector<Cell> cells;
+        for (int row = 0; row < 50; ++row) {
+            auto const roll = rng() % (kind.cells.size() + 2);
+            if (roll < kind.cells.size()) {
+                cells.push_back(kind.cells.at(roll));
+            } else if (roll == kind.cells.size()) {
+                cells.emplace_back();
+            } else {
+                cells.emplace_back(std::string{"not a value"});
+            }
+        }
+        Filtered const f{.source = tabletest::column(kind.kind, std::move(cells)), .services = {}};
+        std::vector<std::string> values;
+        auto const count = 1 + (rng() % 6);
+        for (std::size_t i = 0; i < count; ++i) {
+            values.push_back(kind.operands.at(rng() % kind.operands.size()));
+        }
+        REQUIRE(f.by(on("c", {oneOf(values)})));
+        CHECK(*f.by(on("c", {oneOf(values)})) == *f.by(on("c", eqEntries(values))));
+        CHECK(*f.by(on("c", {}, Combine::Any, {oneOf(values)})) ==
+              *f.by(on("c", {}, Combine::Any, eqEntries(values))));
     }
 }

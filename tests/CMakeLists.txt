@@ -34,6 +34,7 @@ set(MORPH_TABLE_TEST_SOURCES
     table/test_table_sort.cpp
     table/test_table_parse.cpp
     table/test_table_filter.cpp
+    table/test_table_distinct.cpp
     table/test_table_view_change.cpp
     table/test_table_engine.cpp
     table/test_table_changes.cpp

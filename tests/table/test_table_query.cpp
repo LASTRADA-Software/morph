@@ -753,3 +753,66 @@ TEST_CASE("table: change keys round-trip awkward keys", "[table][query][levels]"
     CHECK(simple[0].str == "7");
     CHECK(simple[1].str == "\"x\"");
 }
+
+namespace {
+
+// The error code of a refused query, or nothing when it was accepted.
+std::optional<TableErrorCode> codeOf(std::expected<TableQuery, TableError> const& result) {
+    return result ? std::nullopt : std::optional{result.error().code};
+}
+
+// `n` distinct texts of exactly `bytes` bytes each.
+std::vector<std::string> texts(std::size_t n, std::size_t bytes) {
+    std::vector<std::string> out;
+    out.reserve(n);
+    for (std::size_t i = 0; i < n; ++i) {
+        auto text = std::to_string(i);
+        out.push_back(std::string(bytes - text.size(), '0') + text);
+    }
+    return out;
+}
+
+// A query with one `oneOf` include entry on each named column.
+TableQuery setQuery(std::vector<std::pair<std::string, std::vector<std::string>>> sets) {
+    TableQuery q;
+    for (auto& [column, values] : sets) {
+        q.filters.columns[column] = ColumnFilter{
+            .combine = Combine::Any, .include = {FilterEntry{.oneOf = std::move(values)}}, .exclude = {}};
+    }
+    return q;
+}
+
+std::vector<ColumnInfo> threeTextColumns() {
+    return {tabletest::col("a", ColumnKind::Text), tabletest::col("b", ColumnKind::Text),
+            tabletest::col("c", ColumnKind::Text)};
+}
+
+}  // namespace
+
+// Mutation: the per-query sum of set values not checked.
+TEST_CASE("table query: value sets are bounded per entry and per query", "[table][query]") {
+    auto const columns = threeTextColumns();
+    CHECK(validate(setQuery({{"a", texts(10'000, 16)}}), columns).has_value());
+    CHECK(codeOf(validate(setQuery({{"a", texts(10'001, 16)}}), columns)) == TableErrorCode::LimitExceeded);
+    auto const overEntry = validate(setQuery({{"a", texts(10'001, 16)}}), columns);
+    REQUIRE_FALSE(overEntry.has_value());
+    CHECK(overEntry.error().column == "a");
+    CHECK(validate(setQuery({{"a", texts(10'000, 16)}, {"b", texts(10'000, 16)}}), columns).has_value());
+    CHECK(codeOf(validate(setQuery({{"a", texts(10'000, 16)}, {"b", texts(10'000, 16)}, {"c", texts(1, 16)}}),
+                          columns)) == TableErrorCode::LimitExceeded);
+    // 1,080,000 bytes, over maxQuerySetBytes
+    CHECK(codeOf(validate(setQuery({{"a", texts(9'000, 120)}}), columns)) == TableErrorCode::LimitExceeded);
+    // over maxTextLength
+    CHECK(codeOf(validate(setQuery({{"a", texts(1, 257)}}), columns)) == TableErrorCode::LimitExceeded);
+}
+
+// Gate D6. Mutation: one set's bound one below maxSetValues, so 10,000 values are refused.
+TEST_CASE("table query: a 10,000-value set fits the wire bound", "[table][query]") {
+    auto const columns = threeTextColumns();
+    auto const q = setQuery({{"a", texts(10'000, 16)}});
+    std::string json;
+    REQUIRE_FALSE(glz::write_json(q, json));
+    CHECK(json.size() <= 250'000);
+    CHECK(json.size() < QueryLimits{}.maxQuerySetBytes);
+    CHECK(validate(q, columns).has_value());
+}

@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <algorithm>
 #include <array>
 #include <cstdint>
 #include <functional>
@@ -96,6 +97,30 @@ inline std::shared_ptr<morph::table::VectorSource> slowColumn(ColumnKind kind, s
         rows.push_back({std::move(cell)});
     }
     return makeSource({levelCol("c", kind, "slow")}, std::move(rows));
+}
+
+// The distinct-values cases' source: status (Text), city (Text), qty (Integer); keys 0..5. A column named in
+// `slow` is at level "slow"; each (row, column) of `unloaded` holds Cell{Unloaded{}} (its column must be slow).
+//   0: "open",   "Berlin", 1        3: empty,  "Berlin", 4
+//   1: "Open",   "Paris",  2        4: "open", "Paris",  "x" (an invalid integer)
+//   2: "closed", "Berlin", 3        5: "hold", "Rome",   5
+inline std::shared_ptr<morph::table::VectorSource> distinctSource(
+    std::vector<std::string> const& slow = {}, std::vector<std::pair<std::size_t, std::size_t>> const& unloaded = {}) {
+    using S = std::string;
+    std::vector<std::vector<Cell>> rows{
+        {S{"open"}, S{"Berlin"}, std::int64_t{1}}, {S{"Open"}, S{"Paris"}, std::int64_t{2}},
+        {S{"closed"}, S{"Berlin"}, std::int64_t{3}}, {Cell{}, S{"Berlin"}, std::int64_t{4}},
+        {S{"open"}, S{"Paris"}, S{"x"}}, {S{"hold"}, S{"Rome"}, std::int64_t{5}}};
+    for (auto const& [row, column] : unloaded) {
+        rows.at(row).at(column) = Cell{morph::table::Unloaded{}};
+    }
+    auto const levelOf = [&slow](std::string const& id) {
+        return std::ranges::find(slow, id) != slow.end() ? std::string{"slow"} : std::string{};
+    };
+    return makeSource({levelCol("status", ColumnKind::Text, levelOf("status")),
+                       levelCol("city", ColumnKind::Text, levelOf("city")),
+                       levelCol("qty", ColumnKind::Integer, levelOf("qty"))},
+                      std::move(rows));
 }
 
 // A typed row whose `qty` is at level "stock": the row type of the typed level cases. Reflected by glaze.
