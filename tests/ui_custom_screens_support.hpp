@@ -5,8 +5,17 @@
 
 #pragma once
 #include <catch2/catch_test_macros.hpp>
+#include <chrono>
+#include <cstdint>
+#include <future>
+#include <glaze/glaze.hpp>
 #include <memory>
+#include <morph/core/executor.hpp>
+#include <morph/core/registry.hpp>
+#include <morph/core/remote.hpp>
+#include <morph/core/wire.hpp>
 #include <morph/ui/bundle.hpp>
+#include <morph/ui/custom_screens.hpp>
 #include <morph/ui/document.hpp>
 #include <morph/ui/service.hpp>
 #include <stdexcept>
@@ -74,5 +83,69 @@ inline std::shared_ptr<morph::ui::ServedBundle const> bundle() {
     }
     return *built;
 }
+
+using morph::wire::Envelope;
+
+/// @p text as a JSON string literal, quotes included.
+inline std::string quoted(std::string const& text) { return glz::write_json(text).value_or("\"\""); }
+
+/// A RemoteServer that offers custom screens over @p store, checking against the fixture bundle.
+struct Server {
+    explicit Server(std::shared_ptr<morph::ui::ICustomScreenStore> chosen = nullptr,
+                    morph::ui::CustomScreensOptions options = {})
+        : store{chosen != nullptr ? std::move(chosen) : std::make_shared<morph::ui::MemoryCustomScreenStore>(pool)} {
+        morph::ui::registerCustomScreens(store, [held = served] { return held; }, authorizer, dispatcher, registry,
+                                         options);
+        server = std::make_shared<morph::backend::RemoteServer>(pool, authorizer, dispatcher, registry);
+        // NOLINTNEXTLINE(cppcoreguidelines-prefer-member-initializer): bind() needs the server built above.
+        instance = bind();
+    }
+
+    Envelope send(Envelope const& request) {
+        std::promise<std::string> replied;
+        auto reply = replied.get_future();
+        server->handle(morph::wire::encode(request),
+                       [&replied](std::string text) { replied.set_value(std::move(text)); });
+        REQUIRE(reply.wait_for(std::chrono::seconds{5}) == std::future_status::ready);
+        return morph::wire::decode(reply.get());
+    }
+
+    std::uint64_t bind() {
+        Envelope const reply = send(morph::wire::makeRegister(std::string{morph::ui::kCustomScreensModel}));
+        REQUIRE(reply.kind == "ok");
+        return reply.modelId;
+    }
+
+    /// Runs @p action with @p body as the caller whose token is @p token.
+    Envelope call(std::string_view action, std::string body, std::string token) {
+        Envelope request;
+        request.kind = "execute";
+        request.callId = ++lastCallId;
+        request.modelId = instance;
+        request.modelType = std::string{morph::ui::kCustomScreensModel};
+        request.actionType = std::string{action};
+        request.body = std::move(body);
+        request.session.token = std::move(token);
+        return send(request);
+    }
+
+    /// Saves @p document as a new custom screen of @p token's, based on `lims.base`.
+    Envelope save(std::string const& document, std::string token, std::string const& title = "Mine") {
+        return call(morph::ui::kCustomScreensSave,
+                    R"({"app":"lims","title":)" + quoted(title) + R"(,"basedOn":"lims.base","document":)" +
+                        quoted(document) + "}",
+                    std::move(token));
+    }
+
+    morph::exec::ThreadPoolExecutor pool{2};
+    morph::model::detail::ActionDispatcher dispatcher;
+    morph::model::detail::ModelRegistryFactory registry;
+    std::shared_ptr<morph::ui::ServedBundle const> served = bundle();
+    std::shared_ptr<uiservice::RuleAuthorizer> authorizer = std::make_shared<uiservice::RuleAuthorizer>();
+    std::shared_ptr<morph::ui::ICustomScreenStore> store;
+    std::shared_ptr<morph::backend::RemoteServer> server;
+    std::uint64_t instance = 0;
+    std::uint64_t lastCallId = 0;
+};
 
 }  // namespace screens_test

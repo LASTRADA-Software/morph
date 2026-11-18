@@ -481,6 +481,7 @@ add_library(morph ${_morph_library_type}
     src/ui/library.cpp
     src/ui/service.cpp
     src/ui/custom_screen_checks.cpp
+    src/ui/custom_screens.cpp
     src/ui/host.cpp
     src/ui/backend.cpp
     src/ui/explorer.cpp

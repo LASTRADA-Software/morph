@@ -6,6 +6,7 @@
 #include <functional>
 #include <list>
 #include <map>
+#include <memory>
 #include <morph/export.hpp>
 #include <mutex>
 #include <optional>
@@ -16,8 +17,11 @@
 #include <vector>
 
 #include "../core/completion.hpp"
+#include "../core/coroutine.hpp"
 #include "../core/executor.hpp"
+#include "../core/model.hpp"
 #include "../core/owner_strand.hpp"
+#include "../core/registry.hpp"
 #include "../session/session.hpp"
 #include "../util/datetime.hpp"
 #include "document.hpp"
@@ -333,5 +337,217 @@ private:
 // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): the document, then its new id.
 [[nodiscard]] MORPH_API std::expected<std::string, Refusal> withScreenId(std::string_view document,
                                                                          std::string_view id);
+
+
+/// @brief The type id the custom screens model is registered under.
+inline constexpr std::string_view kCustomScreensModel = "morph.customScreens";
+/// @brief The record type a custom screen's summary is, which `save` and `remove` change.
+inline constexpr std::string_view kCustomScreenRecord = "morph.customScreens";
+/// @brief The `list` action's id.
+inline constexpr std::string_view kCustomScreensList = "morph.customScreens.list";
+/// @brief The `get` action's id.
+inline constexpr std::string_view kCustomScreensGet = "morph.customScreens.get";
+/// @brief The `check` action's id.
+inline constexpr std::string_view kCustomScreensCheck = "morph.customScreens.check";
+/// @brief The `save` action's id.
+inline constexpr std::string_view kCustomScreensSave = "morph.customScreens.save";
+/// @brief The `remove` action's id.
+inline constexpr std::string_view kCustomScreensRemove = "morph.customScreens.remove";
+
+/// @brief A check's refusal on the wire.
+struct CheckRefusal {
+    /// @brief The JSON Pointer of the refused part; empty for the whole document.
+    std::string pointer;
+    /// @brief The reason, in one sentence.
+    std::string reason;
+};
+
+/// @brief One custom screen as a list shows it: the record `save` and `remove` change.
+struct CustomScreenSummary {
+    /// @brief The id.
+    std::string id;
+    /// @brief The person's name for it.
+    std::string title;
+    /// @brief The application screen it was made from.
+    std::string basedOn;
+    /// @brief When it was saved.
+    time::DateTime savedAt;
+    /// @brief Who saved it.
+    std::string savedBy;
+    /// @brief Whether the caller saved it.
+    bool mine = false;
+    /// @brief Whether it declares no params, so it opens from the navigator.
+    bool opensWithoutParams = false;
+    /// @brief The refusal the checks give it today; absent when it may be mounted.
+    std::optional<CheckRefusal> broken;
+};
+
+/// @brief `list`: the caller's custom screens of an application.
+struct CustomScreensList {
+    /// @brief The application.
+    std::string app;
+};
+
+/// @brief What `list` answers.
+struct CustomScreensListed {
+    /// @brief The screens, in the store's order.
+    std::vector<CustomScreenSummary> screens;
+};
+
+/// @brief `get`: one custom screen.
+struct CustomScreensGet {
+    /// @brief The application.
+    std::string app;
+    /// @brief The screen's id.
+    std::string id;
+};
+
+/// @brief What `get` answers.
+struct CustomScreenFound {
+    /// @brief The screen as a list shows it.
+    CustomScreenSummary summary;
+    /// @brief Its document's JSON text.
+    std::string document;
+};
+
+/// @brief `check`: whether a document would be saved.
+struct CustomScreensCheck {
+    /// @brief The application.
+    std::string app;
+    /// @brief The base screen's id.
+    std::string basedOn;
+    /// @brief The document's JSON text.
+    std::string document;
+};
+
+/// @brief What `check` answers.
+struct CustomScreenChecked {
+    /// @brief The first refusal; absent when the document would be saved.
+    std::optional<CheckRefusal> refusal;
+};
+
+/// @brief `save`: stores a custom screen.
+struct CustomScreensSave {
+    /// @brief The application.
+    std::string app;
+    /// @brief The screen to overwrite, one `get` answers for the caller; absent saves a new screen.
+    std::optional<std::string> id;
+    /// @brief The person's name for it.
+    std::string title;
+    /// @brief The base screen's id.
+    std::string basedOn;
+    /// @brief The document's JSON text.
+    std::string document;
+};
+
+/// @brief What `save` answers.
+struct CustomScreenSaved {
+    /// @brief The screen's id.
+    std::string id;
+};
+
+/// @brief `remove`: forgets a custom screen.
+struct CustomScreensRemove {
+    /// @brief The application.
+    std::string app;
+    /// @brief The screen's id.
+    std::string id;
+};
+
+/// @brief What `remove` answers.
+struct CustomScreenRemoved {
+    /// @brief Whether it was removed.
+    bool removed = false;
+};
+
+namespace detail {
+struct CustomScreensContext;
+}  // namespace detail
+
+/// @brief The server's custom screens model: the caller's screens, through the application's store, checked.
+///
+/// The person is the principal of the verified session, read once at the start of each action, before anything is
+/// awaited. No request names a person, and one that tries is ignored. With no verified principal, `list` answers
+/// nothing and every other action is refused.
+class MORPH_API CustomScreensModel {
+public:
+    /// @brief A model over @p context.
+    /// @param context The store, the bundle, the authoriser, the bounds and the verdict cache. Shared by every
+    ///                instance.
+    explicit CustomScreensModel(std::shared_ptr<detail::CustomScreensContext> context);
+
+    /// @brief The caller's custom screens, each checked today.
+    /// @param request The application.
+    /// @return The screens.
+    ::core::async::Task<CustomScreensListed> execute(CustomScreensList request);
+
+    /// @brief One of the caller's custom screens.
+    /// @param request The application and the id.
+    /// @return The screen and its document.
+    ::core::async::Task<CustomScreenFound> execute(CustomScreensGet request);
+
+    /// @brief Whether a document would be saved.
+    /// @param request The application, the base and the document.
+    /// @return The first refusal, or none.
+    ::core::async::Task<CustomScreenChecked> execute(CustomScreensCheck request);
+
+    /// @brief Stores a custom screen.
+    /// @param request The application, the id to overwrite if any, the title, the base and the document.
+    /// @return The screen's id.
+    ::core::async::Task<CustomScreenSaved> execute(CustomScreensSave request);
+
+    /// @brief Forgets a custom screen.
+    /// @param request The application and the id.
+    /// @return That it was removed.
+    ::core::async::Task<CustomScreenRemoved> execute(CustomScreensRemove request);
+
+private:
+    std::shared_ptr<detail::CustomScreensContext> _context;
+};
+
+}  // namespace morph::ui
+
+/// @cond detail
+// The traits the registration macros write, without their static-init registrars: registerCustomScreens registers
+// the model and its actions; the record, the result slots and the effects are registered in custom_screens.cpp.
+// NOLINTBEGIN(misc-const-correctness): inside the macros' codec bodies.
+BRIDGE_DETAIL_MODEL_TRAITS_ONLY_BODY(morph::ui::CustomScreensModel, "morph.customScreens")
+BRIDGE_DETAIL_ACTION_TRAITS_ONLY_BODY(morph::ui::CustomScreensModel, morph::ui::CustomScreensList,
+                                      morph::ui::CustomScreensListed, "morph.customScreens.list",
+                                      ::morph::model::Loggable::No)
+BRIDGE_DETAIL_ACTION_TRAITS_ONLY_BODY(morph::ui::CustomScreensModel, morph::ui::CustomScreensGet,
+                                      morph::ui::CustomScreenFound, "morph.customScreens.get",
+                                      ::morph::model::Loggable::No)
+BRIDGE_DETAIL_ACTION_TRAITS_ONLY_BODY(morph::ui::CustomScreensModel, morph::ui::CustomScreensCheck,
+                                      morph::ui::CustomScreenChecked, "morph.customScreens.check",
+                                      ::morph::model::Loggable::No)
+BRIDGE_DETAIL_ACTION_TRAITS_ONLY_BODY(morph::ui::CustomScreensModel, morph::ui::CustomScreensSave,
+                                      morph::ui::CustomScreenSaved, "morph.customScreens.save",
+                                      ::morph::model::Loggable::No)
+BRIDGE_DETAIL_ACTION_TRAITS_ONLY_BODY(morph::ui::CustomScreensModel, morph::ui::CustomScreensRemove,
+                                      morph::ui::CustomScreenRemoved, "morph.customScreens.remove",
+                                      ::morph::model::Loggable::No)
+// NOLINTEND(misc-const-correctness)
+/// @endcond
+
+namespace morph::ui {
+
+/// @brief Registers the custom screens model and its five actions, with a factory that gives every instance one
+///        shared context.
+///
+/// A server that offers custom screens calls this once, before it serves, with the dispatcher and registry its
+/// `RemoteServer` uses. Its authoriser then admits `morph.customScreens` and its actions for every signed-in
+/// principal; the model keeps each person to what the store answers them.
+/// @param store      Where custom screens are kept, and the application's policy over them.
+/// @param bundle     The bundle being served now; called at every action, so a development reload is seen.
+/// @param authorizer The server's authoriser, for the permitted set and the base screen's admission.
+/// @param dispatcher The server's action dispatcher.
+/// @param registry   The server's model registry.
+/// @param options    The bounds. `maxDocumentBytes` is at most `kMaxFileBytes`.
+MORPH_API void registerCustomScreens(std::shared_ptr<ICustomScreenStore> store,
+                                     std::function<std::shared_ptr<ServedBundle const>()> bundle,
+                                     std::shared_ptr<::morph::session::IAuthorizer const> authorizer,
+                                     model::detail::ActionDispatcher& dispatcher,
+                                     model::detail::ModelRegistryFactory& registry, CustomScreensOptions options = {});
 
 }  // namespace morph::ui
