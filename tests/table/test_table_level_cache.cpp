@@ -219,11 +219,7 @@ TEST_CASE("level cache: concurrent wants share one load", "[table][levels]") {
         thread.join();
     }
     open.count_down();
-    auto const deadline = std::chrono::steady_clock::now() + 10s;
-    while (rig.cache.stats().loadedKeys < 60 && std::chrono::steady_clock::now() < deadline) {
-        std::this_thread::sleep_for(1ms);
-    }
-    // The pool is idle once a no-op posted after the load has run.
+    // The one load was posted before this no-op, and the pool has one thread: once the no-op runs, the load has.
     std::promise<void> idle;
     pool.post([&idle] { idle.set_value(); });
     idle.get_future().wait();
@@ -433,7 +429,7 @@ TEST_CASE("level cache: a held snapshot blocks no store", "[table][levels]") {
     REQUIRE(rig.cache.want(keys(10), LevelUse::Display));
     rig.drain();
     auto held = rig.cache.snapshot();
-    // Each call runs on its own thread; the case waits a second for it, and joins it only after releasing the
+    // Each call runs on its own thread; the case waits ten seconds for it, and joins it only after releasing the
     // snapshot, so a store that waited for the reader fails the check instead of hanging the case.
     std::vector<std::thread> calls;
     auto const finishes = [&calls](std::function<void()> work) {
@@ -443,7 +439,7 @@ TEST_CASE("level cache: a held snapshot blocks no store", "[table][levels]") {
             work();
             done->set_value();
         });
-        return finished.wait_for(1s) == std::future_status::ready;
+        return finished.wait_for(10s) == std::future_status::ready;
     };
     CHECK(finishes([&rig] {
         static_cast<void>(rig.cache.want(keyRange(10, 20), LevelUse::Display));
@@ -525,6 +521,10 @@ TEST_CASE("level cache: leased values outgrowing the bound stop the order load",
     auto const again = rig.cache.want(keys(100), LevelUse::Order);
     REQUIRE_FALSE(again.has_value());
     CHECK(again.error().code == TableErrorCode::Unavailable);
+    // The lease is dropped: a display load evicts the order values it no longer protects.
+    REQUIRE(rig.cache.want(keyRange(200, 210), LevelUse::Display));
+    rig.drain();
+    CHECK(rig.cache.stats().evictedKeys >= 10);
 }
 
 // Mutation: a failed key wanted again by every request (the loader is called inside the delay).
@@ -585,4 +585,83 @@ TEST_CASE("level cache: a failed load is remembered", "[table][levels]") {
     throwing.drain();
     CHECK(throwing.cache.stats().failedLoads == 5);
     CHECK(stateOf(*throwing.cache.snapshot(), RowId{std::int64_t{4}}) == LevelRead::Failed);
+}
+
+namespace {
+
+// Queues like `ManualExecutor`, but throws from the first `throws` posts.
+class ThrowingExecutor final : public morph::exec::IExecutor {
+public:
+    explicit ThrowingExecutor(int throws) : _throws{throws} {}
+    void post(std::function<void()> task) override {
+        if (_throws > 0) {
+            --_throws;
+            throw std::runtime_error{"the executor is closing"};
+        }
+        queue.post(std::move(task));
+    }
+    [[nodiscard]] bool isSerial() const noexcept override { return false; }
+    tabletest::ManualExecutor queue;
+
+private:
+    int _throws;
+};
+
+}  // namespace
+
+// Mutations: tell() calling the sink and the failure handler unguarded (the second want loads nothing); dispatch
+// without catching a throwing post (the want throws).
+TEST_CASE("level cache: a throwing callback or post does not stop the loads", "[table][levels]") {
+    {
+        Rig rig{{}, [](std::span<RowId const> asked) {
+                    Values out;
+                    for (auto const& key : asked) {
+                        if (std::get<std::int64_t>(key) % 2 == 0) {
+                            out.emplace_back(key, std::vector<Cell>{Cell{"v" + text(key)}});
+                        }
+                    }
+                    return out;
+                }};
+        rig.cache.bind([](std::string_view, std::optional<std::vector<glz::raw_json>> const&) {
+            throw std::runtime_error{"the server is gone"};
+        });
+        rig.cache.onLoadFailed([](std::span<RowId const>) { throw std::runtime_error{"the handler failed"}; });
+        // More keys than one batch: a throw that escaped the first load would leave the second batch undispatched.
+        REQUIRE(rig.cache.want(keys(100), LevelUse::Display));
+        try {
+            rig.drain();
+        } catch (...) {
+            // A throw escaping the load is the defect this case looks for; what follows shows its effect.
+        }
+        REQUIRE(rig.cache.want(keyRange(100, 120), LevelUse::Display));
+        try {
+            rig.drain();
+        } catch (...) {
+        }
+        CHECK(rig.loggedKeys() == keys(120));
+        CHECK(rig.cache.stats().loadedKeys == 60);
+    }
+    {
+        ThrowingExecutor loads{1};
+        Rig rig{[&loads](LevelCacheOptions& options) { options.loads = &loads; }};
+        auto const first = [&] { return rig.cache.want(keys(5), LevelUse::Display); };
+        std::optional<std::expected<void, TableError>> wanted;
+        CHECK_NOTHROW(wanted = first());
+        CHECK(loads.queue.queued() == 0);
+        REQUIRE(rig.cache.want(keys(5), LevelUse::Display));
+        tabletest::drain(loads.queue);
+        CHECK(rig.loggedKeys() == keys(5));
+        CHECK(stateOf(*rig.cache.snapshot(), RowId{std::int64_t{4}}) == LevelRead::Loaded);
+    }
+}
+
+// Mutation: want pushing a queued key again on every want (the queue holds ten entries a key).
+TEST_CASE("level cache: the wait queue holds a key once", "[table][levels]") {
+    Rig rig;
+    auto const many = keys(100'000);
+    for (int round = 0; round < 10; ++round) {
+        REQUIRE(rig.cache.want(many, LevelUse::Order));
+    }
+    // The first want's batch is in flight; the rest of the keys wait, once each.
+    CHECK(detail::LevelCacheAccess::queuedEntries(rig.cache) + 64 == 100'000);
 }

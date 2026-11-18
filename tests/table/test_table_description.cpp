@@ -1364,3 +1364,129 @@ TEST_CASE("view cache: a row-scoped table needs a scope", "[table][views]") {
     served.scope.clear();
     CHECK(detail::answerQuery(served, TableQuery{}, detail::AnswerContext{}).has_value());
 }
+
+namespace {
+
+// A level whose rows are scripted: keys 0-3 loaded (`a`, `b`, `a`, `b`), 4-6 unloaded, 7-9 failed. It records every
+// want and can refuse an order use.
+class ScriptedLevel final : public LevelSource {
+public:
+    struct Wanted {
+        std::vector<RowId> keys;
+        LevelUse use = LevelUse::Display;
+        bool retry = false;
+    };
+
+    [[nodiscard]] std::string_view level() const override { return "recipe"; }
+    [[nodiscard]] std::span<ColumnInfo const> columns() const override { return _columns; }
+    [[nodiscard]] std::shared_ptr<LevelSnapshot const> snapshot() const override {
+        struct Scripted final : LevelSnapshot {
+            [[nodiscard]] LevelRead read(RowId const& key, std::span<Cell> out) const override {
+                auto const at = std::get<std::int64_t>(key);
+                if (at >= 7) {
+                    return LevelRead::Failed;
+                }
+                if (at >= 4) {
+                    return LevelRead::Unloaded;
+                }
+                out[0] = Cell{std::string{at % 2 == 0 ? "a" : "b"}};
+                return LevelRead::Loaded;
+            }
+            [[nodiscard]] std::uint64_t generation() const override { return 1; }
+        };
+        return std::make_shared<Scripted const>();
+    }
+    std::expected<void, TableError> want(std::span<RowId const> keys, LevelUse use, bool retry) override {
+        wanted.push_back(Wanted{.keys = {keys.begin(), keys.end()}, .use = use, .retry = retry});
+        if (refuseOrder && use == LevelUse::Order) {
+            return std::unexpected(TableError{.code = TableErrorCode::Unavailable, .column = {}, .message = "full"});
+        }
+        return {};
+    }
+
+    std::vector<Wanted> wanted;
+    bool refuseOrder = false;
+
+private:
+    std::vector<ColumnInfo> _columns{tabletest::levelCol("r", ColumnKind::Text, "recipe")};
+};
+
+ServedTable scriptedTable(std::shared_ptr<ScriptedLevel> const& level) {
+    auto description = describedOf({column("id", ColumnKind::Integer), column("r", ColumnKind::Text)});
+    description.columns[1].info.level = "recipe";
+    description.levels = {"recipe"};
+    std::vector<std::vector<Cell>> rows;
+    for (std::int64_t row = 0; row < 10; ++row) {
+        rows.push_back({Cell{row}});
+    }
+    return detail::pinned(
+        ServedTable{.description = describe(std::move(description)),
+                    .source = tabletest::makeSource({tabletest::col("id", ColumnKind::Integer)}, std::move(rows)),
+                    .levels = {level},
+                    .mayRead = {},
+                    .scope = {},
+                    .services = {},
+                    .limits = {}});
+}
+
+std::set<RowId> keySet(std::vector<RowId> const& keys) { return {keys.begin(), keys.end()}; }
+
+}  // namespace
+
+// Mutations: the order want leaving out the undecided rows; the wants not passing `retry`; `awaiting` read from the
+// view's rows alone (the unloaded rows are all undecided).
+TEST_CASE("table: a query's levels are wanted with the rows it needed", "[table][levels]") {
+    auto const level = std::make_shared<ScriptedLevel>();
+    TableQuery query;
+    query.filters.columns.emplace(
+        "r", ColumnFilter{.combine = Combine::Any, .include = {FilterEntry{.contains = "a"}}, .exclude = {}});
+    query.columns = std::vector<std::string>{"id", "r"};
+    query.page = PageRequest{.offset = 0, .limit = 1};
+    query.retry = true;
+    auto const page = detail::answerQuery(scriptedTable(level), query);
+    REQUIRE(page.has_value());
+    CHECK(page->keys == std::vector<RowId>{RowId{std::int64_t{0}}});
+    CHECK(page->undecided == 6);
+    CHECK(page->awaiting == std::vector<std::string>{"recipe"});
+    CHECK(page->failed == std::vector<std::string>{"recipe"});
+    REQUIRE(level->wanted.size() == 2);
+    auto const& order = level->wanted[0];
+    CHECK(order.use == LevelUse::Order);
+    CHECK(keySet(order.keys) == std::set<RowId>{RowId{std::int64_t{0}}, RowId{std::int64_t{2}}, RowId{std::int64_t{4}},
+                                                RowId{std::int64_t{5}}, RowId{std::int64_t{6}}, RowId{std::int64_t{7}},
+                                                RowId{std::int64_t{8}}, RowId{std::int64_t{9}}});
+    auto const& display = level->wanted[1];
+    CHECK(display.use == LevelUse::Display);
+    CHECK(display.keys == page->keys);
+    CHECK(order.retry);
+    CHECK(display.retry);
+}
+
+// Mutation: a failed row read as merely unloaded (its `failed` left empty).
+TEST_CASE("table: failed levels are read from the snapshots", "[table][levels]") {
+    auto const level = std::make_shared<ScriptedLevel>();
+    TableQuery query;
+    query.columns = std::vector<std::string>{"id", "r"};
+    auto const page = detail::answerQuery(scriptedTable(level), query);
+    REQUIRE(page.has_value());
+    REQUIRE(page->unloadedRows.size() == 6);
+    for (auto const& row : page->unloadedRows) {
+        CHECK(row.levels == std::vector<std::string>{"recipe"});
+        CHECK(row.failed == (row.index >= 7 ? std::vector<std::string>{"recipe"} : std::vector<std::string>{}));
+    }
+    CHECK(page->awaiting.empty());  // no order level: nothing is sorted or filtered by `r`
+}
+
+// Mutation: answerQuery ignoring an order want's refusal (a page is returned).
+TEST_CASE("table: an order use the level refuses refuses the query", "[table][levels]") {
+    auto const level = std::make_shared<ScriptedLevel>();
+    level->refuseOrder = true;
+    TableQuery query;
+    query.sort = {SortKey{.column = "r", .dir = SortDirection::Ascending}};
+    query.columns = std::vector<std::string>{"id"};
+    auto const refused = detail::answerQuery(scriptedTable(level), query);
+    REQUIRE_FALSE(refused.has_value());
+    CHECK(refused.error().code == TableErrorCode::Unavailable);
+    CHECK(refused.error().column == "r");
+    CHECK(level->wanted.size() == 1);  // no display want follows a refusal
+}

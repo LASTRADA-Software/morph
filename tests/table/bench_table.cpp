@@ -20,6 +20,7 @@
 #include <exception>
 #include <format>
 #include <functional>
+#include <future>
 #include <glaze/glaze.hpp>
 #include <latch>
 #include <memory>
@@ -1041,18 +1042,21 @@ morph::effects::Changes keyedChange(std::string record, std::int64_t count) {
 TEST_CASE("level cache: invalidation does not wait for a reader", "[table][levels]") {
     auto const cache = benchCache(nullptr);
     morph::table::detail::LevelCacheAccess::store(*cache, recipeLikeValues(0, 5'000));
+    // The reader holds its snapshot until the calls have returned, or for ten seconds when they wait for it.
     std::atomic<bool> released{false};
     std::latch holding{1};
-    std::thread reader{[&] {
+    std::promise<void> returned;
+    std::thread reader{[&, done = returned.get_future()] {
         auto const snapshot = cache->snapshot();
         holding.count_down();
-        std::this_thread::sleep_for(std::chrono::milliseconds{200});
+        static_cast<void>(done.wait_for(std::chrono::seconds{10}));
         released = true;
     }};
     holding.wait();
     cache->invalidate(rowKeys(0, 1'000));
     cache->changed(keyedChange("Bench.rows", 4'096));
     CHECK_FALSE(released.load());
+    returned.set_value();
     reader.join();
     CHECK(cache->stats().invalidatedKeys == 4'096);
 }
