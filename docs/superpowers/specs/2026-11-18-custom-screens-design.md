@@ -206,11 +206,12 @@ them:
 
 | Capability | The custom document may use |
 |---|---|
-| Actions: queries, mutations, forms, collections, wizards, wherever declared, component fallbacks included | Only actions the base uses, each on a model type the base binds it to and in a position of the same kind: a query, a mutation, a form the person submits, a form that submits itself (`submit: "auto"`), a model-backed table, a collection, a wizard |
-| Commands that run without the person: `onMount`, `onUnmount`, `onBackendChange`, `onClose`, `onSave`, watches, a form that submits itself, a delivered or host component's `on` events (its own code decides when they fire), and the `onSuccess` and `onError` of a mutation one of those runs, an `upload` or a `signIn`, followed through every chain, each name resolved in the scope that declares it | Only the actions and commands the base runs from the same trigger, so an unattended run cannot chain to an action the base only runs on a press |
-| Client-side commands: `upload`, `download`, `switchBackend`, `signIn`, `signOut`, `resetPrefs` | Only the command kinds the base uses anywhere |
+| Actions: queries, mutations, forms, collections, wizards, wherever declared, component fallbacks included | Only actions the base uses, each on a model type the base binds it to and in a position of the same kind: a query, a mutation, a form the person submits, a form that submits itself (any `submit` but `"explicit"`: a form with none keeps its schema's mode, which is automatic unless the schema says otherwise), a model-backed table, a collection, a wizard |
+| Commands that run without the person: `onMount`, `onUnmount`, `onBackendChange`, `onClose`, `onSave`, watches, a form whose `submit` is not `"explicit"`, a delivered or host component's `on` events (its own code decides when they fire), and the `onSuccess` and `onError` of a mutation one of those runs, an `upload` or a `signIn`, followed through every chain, each name resolved in the scope that declares it | Only the actions and commands the base runs from the same trigger, so an unattended run cannot chain to an action the base only runs on a press |
+| Client-side commands: `upload`, `download`, `switchBackend`, `signIn`, `signOut`, `resetPrefs` | Only the command kinds the base uses anywhere; an `upload`'s file only as `{"ref": "event"}` directly in a `filePicker`'s `onPick` or a `dropZone`'s `onDrop`, so it is always a file the person just chose |
+| `host` commands | Only a command identical to one of the base's, name and arguments; a host command's handler treats its arguments as untrusted input |
 | Delivered components | Only the components the base declares, by name and content hash |
-| Host names: `host` commands, host components and host values, as one set of every string member named `host` | Only the names the base uses |
+| Host names: host components and host values, and the names of `host` commands, as one set of every string member named `host` | Only the names the base uses |
 | `navigate` | Any screen the person's catalog lists, as a navigator entry already would |
 | Messages (`t` keys), styles, layout, literals, expressions, states | Anything the vocabulary allows |
 
