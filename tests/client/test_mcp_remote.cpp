@@ -141,6 +141,75 @@ TEST_CASE("serveMcp in remote mode reaches a server that starts after it", "[cli
     CHECK(countOf(output.str(), R"("name":")") > 1);
 }
 
+// A call after the server restarted succeeds only if the adapter dropped the instance ids it cached: the new server
+// has never issued them. Each server here is a fresh one, so a stale id names nothing.
+// Mutation: remove `transport->backend->setDisconnectHandler(adapter.resetter())` in serveRemote; the second call
+// reuses the first server's instance id, which the second server does not know, and answers an error.
+// The probe model is stateless, so a second connection cannot observe a call's effect; the second server answering
+// the same call is what shows the call reached the server.
+TEST_CASE("serveMcp in remote mode makes a call after the server restarted", "[client][mcp][net]") {
+    morph::exec::ThreadPoolExecutor workers{2};
+    auto first = morph::client::makeLocalServer(probe::agentApp(), workers);
+    REQUIRE(first.has_value());
+    auto socket = std::make_unique<morph::net::SocketServer>(**first, 0);
+    REQUIRE(socket->listen());
+    std::uint16_t const port = socket->port();
+
+    morph::client::Args args;
+    args.server = url(port);
+    args.mcpStdio = true;
+    PipeBuf pipe;
+    std::istream input{&pipe};
+    std::ostringstream output;
+    std::ostringstream diagnostics;
+    auto finished = std::async(std::launch::async, [&] {
+        return morph::client::serveMcp(args, kNoApps, kNoSession, input, output, diagnostics);
+    });
+
+    auto const awaitReplies = [&](std::size_t count) {
+        auto const deadline = std::chrono::steady_clock::now() + std::chrono::seconds{10};
+        while (countOf(output.str(), R"("jsonrpc")") < count && std::chrono::steady_clock::now() < deadline) {
+            std::this_thread::sleep_for(std::chrono::milliseconds{20});
+        }
+        return countOf(output.str(), R"("jsonrpc")") >= count;
+    };
+    auto const call = [](int id) {
+        return R"({"jsonrpc":"2.0","id":)" + std::to_string(id) +
+               R"(,"method":"tools/call","params":{"name":"Probe_Answer"}})"
+               "\n";
+    };
+
+    pipe.push(call(1));
+    REQUIRE(awaitReplies(1));
+    REQUIRE(output.str().contains(R"("isError":false)"));
+
+    socket.reset();
+    first->reset();
+    std::this_thread::sleep_for(std::chrono::milliseconds{100});
+    auto second = morph::client::makeLocalServer(probe::agentApp(), workers);
+    REQUIRE(second.has_value());
+    morph::net::SocketServer restarted{**second, port};
+    REQUIRE(restarted.listen());
+
+    // The backend reconnects on its own schedule: call until one succeeds, bounded.
+    bool succeeded = false;
+    auto const deadline = std::chrono::steady_clock::now() + std::chrono::seconds{10};
+    for (int id = 2; !succeeded && std::chrono::steady_clock::now() < deadline; ++id) {
+        pipe.push(call(id));
+        REQUIRE(awaitReplies(static_cast<std::size_t>(id)));
+        std::string const text = output.str();
+        std::size_t const lastReply = text.rfind(R"({"jsonrpc")");
+        succeeded = text.find(R"("isError":false)", lastReply) != std::string::npos;
+        if (!succeeded) {
+            std::this_thread::sleep_for(std::chrono::milliseconds{100});
+        }
+    }
+    pipe.close();
+    REQUIRE(finished.wait_for(std::chrono::seconds{60}) == std::future_status::ready);
+    CHECK(finished.get() == 0);
+    CHECK(succeeded);
+}
+
 #ifdef MORPH_CLIENT_TESTS_HAVE_QT_TRANSPORT
 // The Qt WebSocket path serves over a ws:// URL as well as wss://, so a SocketServer reaches it here.
 // Mutation: leave out `options.callbacks = &owner` in serveMcpOverQt; the adapter refuses to be built and the case
