@@ -163,6 +163,8 @@ getter for the current `ServedBundle`; `authorizer` is the server's, for `permit
   `custom screens are stored for a signed-in person`.
 - **`save` with an `id`** overwrites only a screen `get` answers for this person; any other id is refused with
   `no such custom screen`, so a client cannot choose an id. With no `id`, the model issues a new id.
+- **`app`** must be the served bundle's application name; a request naming another is refused, so a screen checked against one application is never stored under another.
+- **A store's refusal reaches the person as the store gave it**, from `get` as from `put` and `remove`; the model adds no wording of its own over it.
 - **`mine`** is whether `savedBy` is the caller, so a screen someone else saved is shown as theirs.
 - **`broken`** is the refusal the checks give for a stored document today, with its pointer. A broken screen is still
   listed, so the person can open its source and fix it, and is never mounted.
