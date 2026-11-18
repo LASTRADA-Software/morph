@@ -324,3 +324,17 @@ TEST_CASE("base rule: every place a command can sit is walked", "[ui][custom-scr
         }
     }
 }
+
+TEST_CASE("base rule: a form that submits itself runs its chains without a press", "[ui][custom-screens][base-rule]") {
+    auto const screen = [](std::string_view id, std::string_view onSuccess) {
+        return miniScreen(id, R"("mutations":{"verify":{"model":"sample","action":"Lims_Verify"}},)",
+                          R"({"kind":"form","model":"sample","action":"Lims_Report","submit":"auto","onSuccess":)" +
+                              std::string{onSuccess} +
+                              R"(},{"kind":"button","label":"V","onClick":[{"run":"verify"}]})");
+    };
+    auto const refusal = between(screen("lims.base", R"([{"refetch":"list"}])"),
+                                 screen("custom:mine", R"([{"run":"verify"}])"));
+    REQUIRE(refusal);
+    CHECK(refusal->reason.contains("form-auto:Lims_Sample/Lims_Report: run Lims_Sample/Lims_Verify"));
+    CHECK_FALSE(between(screen("lims.base", R"([{"refetch":"list"}])"), screen("custom:mine", R"([{"refetch":"list"}])")));
+}

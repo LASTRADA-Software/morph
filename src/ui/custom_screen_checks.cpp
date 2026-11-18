@@ -130,11 +130,22 @@ private:
             enter(*view.scope);
         }
         Table const& table = *_open.back();
+        // A form that submits itself runs its submit commands and chains without a press.
+        bool const autoForm = view.kind == "form" && view.name("submit") == "auto";
+        std::string autoTrigger;
+        if (autoForm) {
+            auto const types = _types.find(view.name("model"));
+            std::string const type =
+                types == _types.end() || types->second.empty() ? std::string{view.name("model")} : types->second.back();
+            autoTrigger = "form-auto:" + type + "/" + std::string{view.name("action")};
+        }
         for (auto const& [key, commands] : view.events) {
             // A custom component's own code decides when its events fire, so they run without a press.
             std::string trigger;
             if (view.kind == "custom" && key.starts_with("on.")) {
                 trigger = "component:" + std::string{view.name("name")} + "." + key.substr(3);
+            } else if (autoForm && (key == "onSubmit" || key == "onSuccess" || key == "onError")) {
+                trigger = autoTrigger;
             }
             walk(commands, trigger, table);
         }
