@@ -122,8 +122,8 @@ struct UnloadedLevels {
 /// @brief One page of a list action's reply.
 ///
 /// The members from `unloadedRows` to `failed` say which of its cells are still coming, and `indices` places a
-/// keyed reply's rows in the view. Every member is written; a page read without the members after `totalKind` is
-/// a fully loaded page that is not a keyed reply.
+/// keyed reply's rows in the view. An absent `total` and an empty `failed` or `indices` are left out of the JSON
+/// written; a page read without the members after `totalKind` is a fully loaded page that is not a keyed reply.
 /// @tparam Row The row type.
 template <typename Row>
 struct Page {
@@ -1340,6 +1340,60 @@ private:
 // NOLINTEND(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access)
 
 }  // namespace morph::table
+
+namespace morph::table::detail {
+
+/// @brief Whether a page member is left out of its JSON: `failed` and `indices` when empty.
+///
+/// The typed page, the generic page and `UnloadedRow` share this rule. An optional member that is unset is left
+/// out by glaze's own rule for null members. A reader takes every member as present or absent.
+/// @tparam T The member's type.
+/// @param value The member.
+/// @param key   Its JSON name.
+/// @return `true` when it is left out.
+template <typename T>
+[[nodiscard]] constexpr bool omittedPageMember(T const& value, std::string_view key) {
+    if constexpr (requires { value.empty(); }) {
+        return (key == "failed" || key == "indices") && value.empty();
+    } else {
+        return false;
+    }
+}
+
+}  // namespace morph::table::detail
+
+/// @brief The JSON of `morph::table::Page`: every member by reflection, an empty `failed` or `indices` left out.
+/// @tparam Row The row type.
+template <typename Row>
+struct glz::meta<morph::table::Page<Row>> {
+    /// @brief Whether a member is left out of the JSON written.
+    /// @tparam T The member's type.
+    /// @param member  The member.
+    /// @param key     Its JSON name.
+    /// @param context Unused.
+    /// @return `true` for an empty `failed` or `indices`.
+    template <typename T>
+    static constexpr bool skip_if(T const& member, std::string_view key, glz::meta_context const& context) {
+        static_cast<void>(context);
+        return morph::table::detail::omittedPageMember(member, key);
+    }
+};
+
+/// @brief The JSON of `morph::table::UnloadedRow`: every member by reflection, an empty `failed` left out.
+template <>
+struct glz::meta<morph::table::UnloadedRow> {
+    /// @brief Whether a member is left out of the JSON written.
+    /// @tparam T The member's type.
+    /// @param member  The member.
+    /// @param key     Its JSON name.
+    /// @param context Unused.
+    /// @return `true` for an empty `failed`.
+    template <typename T>
+    static constexpr bool skip_if(T const& member, std::string_view key, glz::meta_context const& context) {
+        static_cast<void>(context);
+        return morph::table::detail::omittedPageMember(member, key);
+    }
+};
 
 /// @brief JSON names of `morph::table::TotalKind`: `exact` and `atLeast`.
 template <>

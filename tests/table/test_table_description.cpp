@@ -198,8 +198,7 @@ TEST_CASE("generic page: every cell kind round-trips", "[table][description]") {
     auto const json = toJson(page);
     CHECK(json == R"({"revision":"9f2c","columns":["id","name","net","share","dose"],"keys":[101,102],)"
                   R"("rows":[[101,"Alpha",[1250,100],[3,1000],[5,1,[1,1000]]],[102,"Beta",null,null,[250,1]]],)"
-                  R"("total":9093,"totalKind":"exact","offset":0,)"
-                  R"("unloadedRows":[],"undecided":0,"awaiting":[],"failed":[],"indices":[]})");
+                  R"("total":9093,"totalKind":"exact","offset":0,"unloadedRows":[],"undecided":0,"awaiting":[]})");
     auto const read = readGenericPage(json, description);
     REQUIRE(read.has_value());
     CHECK(read->keys == page.keys);
@@ -1113,11 +1112,12 @@ TEST_CASE("table action: a server builds a table's reply on tableWork", "[table]
 
 namespace {
 
-// A served table of `rows` rows of one integer column "id" holding 10, 11, …; row keys 0..rows-1.
-ServedTable threeRowTable(std::size_t rows, bool keyed) {
+// A served table of three rows whose key column "id" holds each row's key, 0, 1 and 2; `keyed` is its
+// capability for keyed queries.
+ServedTable threeRowTable(bool keyed) {
     std::vector<std::vector<Cell>> cells;
-    for (std::size_t row = 0; row < rows; ++row) {
-        cells.push_back({Cell{static_cast<std::int64_t>(10 + row)}});
+    for (std::int64_t row = 0; row < 3; ++row) {
+        cells.push_back({Cell{row}});
     }
     auto description = TableDescription{.id = "t", .label = "T", .columns = {column("id", ColumnKind::Integer)},
                                         .key = "id"};
@@ -1136,7 +1136,7 @@ ServedTable threeRowTable(std::size_t rows, bool keyed) {
 
 // Mutation: answerQuery ignoring capabilities.keys.
 TEST_CASE("table: a keyed query to a table without keyed queries is unavailable", "[table][query][keyed]") {
-    auto const served = threeRowTable(3, false);
+    auto const served = threeRowTable(false);
     TableQuery keyed;
     keyed.keys = std::vector<RowId>{RowId{std::int64_t{1}}};
     auto const refused = detail::answerQuery(served, keyed);
@@ -1145,7 +1145,7 @@ TEST_CASE("table: a keyed query to a table without keyed queries is unavailable"
     auto const page = detail::answerQuery(served, TableQuery{});
     REQUIRE(page.has_value());
     CHECK(page->keys.size() == 3);
-    auto const answered = detail::answerQuery(threeRowTable(3, true), keyed);
+    auto const answered = detail::answerQuery(threeRowTable(true), keyed);
     REQUIRE(answered.has_value());
     CHECK(answered->keys == std::vector<RowId>{RowId{std::int64_t{1}}});
     CHECK(answered->indices == std::vector<std::int64_t>{1});
@@ -1155,7 +1155,7 @@ TEST_CASE("table: a keyed query to a table without keyed queries is unavailable"
 TEST_CASE("table: an empty columns list gives a page of keys", "[table][query]") {
     TableQuery query;
     query.columns = std::vector<std::string>{};
-    auto const page = detail::answerQuery(threeRowTable(3, true), query);
+    auto const page = detail::answerQuery(threeRowTable(true), query);
     REQUIRE(page.has_value());
     CHECK(page->columns.empty());
     CHECK(page->keys == std::vector<RowId>{RowId{std::int64_t{0}}, RowId{std::int64_t{1}}, RowId{std::int64_t{2}}});
@@ -1213,4 +1213,37 @@ TEST_CASE("generic page: an unloaded cell is null and named per level", "[table]
     REQUIRE(back->rows.size() == 2);
     CHECK(std::holds_alternative<std::monostate>(back->rows[1][1]));
     CHECK(back->unloadedRows == page.unloadedRows);
+}
+
+// Mutation: the page writers leaving nothing out (skip_if answering false: an empty failed and indices written).
+TEST_CASE("generic page: an empty failed or indices is left out, and read either way", "[table][description]") {
+    std::vector<UnloadedRow> const unloaded{UnloadedRow{.index = 0, .levels = {"recipe"}, .failed = {}}};
+    GenericPage page;
+    page.revision = "r";
+    page.keys = {RowId{std::int64_t{5}}};
+    page.rows = {GenericRow{}};
+    page.unloadedRows = unloaded;
+    CHECK(toJson(page) == R"({"revision":"r","columns":[],"keys":[5],"rows":[[]],"totalKind":"exact","offset":0,)"
+                          R"("unloadedRows":[{"index":0,"levels":["recipe"]}],"undecided":0,"awaiting":[]})");
+    Page<int> typed{.rows = {1}};
+    typed.unloadedRows = unloaded;
+    CHECK(glz::write_json(typed).value_or("") ==
+          R"({"rows":[1],"offset":0,"totalKind":"exact","unloadedRows":[{"index":0,"levels":["recipe"]}],)"
+          R"("undecided":0,"awaiting":[]})");
+    typed.failed = {"recipe"};
+    typed.indices = {3};
+    CHECK(glz::write_json(typed).value_or("").find(R"("failed":["recipe"],"indices":[3])") != std::string::npos);
+
+    auto const present = readGenericPage(
+        R"({"revision":"r","columns":[],"keys":[5],"rows":[[]],"totalKind":"exact","offset":0,)"
+        R"("unloadedRows":[{"index":0,"levels":["recipe"],"failed":[]}],"undecided":0,"awaiting":[],"failed":[],)"
+        R"("indices":[]})",
+        describedOf({column("id", ColumnKind::Integer)}));
+    REQUIRE(present.has_value());
+    CHECK(present->unloadedRows == unloaded);
+    CHECK(present->failed.empty());
+    CHECK(present->indices.empty());
+    Page<int> back;
+    REQUIRE_FALSE(glz::read_json(back, R"({"rows":[1],"offset":0,"totalKind":"exact","failed":[],"indices":[]})"));
+    CHECK(back.rows == std::vector<int>{1});
 }
