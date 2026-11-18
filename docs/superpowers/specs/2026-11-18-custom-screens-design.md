@@ -146,26 +146,28 @@ public:
 
 `CustomScreensModel` is registered under `morph.customScreens` by `registerCustomScreens(store, bundle, authorizer,
 dispatcher, registry, options)`, which a server that offers custom screens calls once before it serves. `bundle` is a
-getter for the current `ServedBundle`; `authorizer` is the server's, for `permittedActions`.
+getter for the current `ServedBundle`; `authorizer` is the server's, for `permittedActions`. Its action ids are
+`morph.customScreens.<action>`, so they cannot meet an application's. It refuses a `maxDocumentBytes` above
+`kMaxFileBytes`, so every document it accepts is one `UiRegistry` could serve.
 
 | Action | Kind | Body | `ok` reply |
 |---|---|---|---|
 | `list` | query | `{app}` | `{screens: [{id, title, basedOn, savedAt, savedBy, mine, opensWithoutParams, broken?}]}` |
-| `get` | query | `{app, id}` | `{screen: CustomScreen, broken?}` |
+| `get` | query | `{app, id}` | `{summary, document}`: the `list` entry of the screen, and its document text |
 | `check` | query | `{app, basedOn, document}` | `{refusal?: {pointer, reason}}`; absent when the document would be saved |
-| `save` | mutation | `{app, id?, title, basedOn, document}` | `{id}` |
+| `save` | mutation | `{app, id?, title, basedOn, document}` | `{id}`; a refusal is the error's message, its pointer in the text |
 | `remove` | mutation | `{app, id}` | `{removed}` |
 
 - **The person** is `session::current()->principal`, as for preferences. A body naming a person has it ignored. With no
   verified principal, `list` answers nothing and the other actions are refused with
   `custom screens are stored for a signed-in person`.
 - **`save` with an `id`** overwrites only a screen `get` answers for this person; any other id is refused with
-  `no such custom screen`, so a client cannot choose an id. With no `id`, the model issues a new `custom:<uuid>`.
+  `no such custom screen`, so a client cannot choose an id. With no `id`, the model issues a new id.
 - **`mine`** is whether `savedBy` is the caller, so a screen someone else saved is shown as theirs.
 - **`broken`** is the refusal the checks give for a stored document today, with its pointer. A broken screen is still
   listed, so the person can open its source and fix it, and is never mounted.
-- **Effects.** `save` and `remove` declare effects on the record type `morph.customScreens`, keyed by the screen's id.
-  Effects fan out by record type to every connection watching it, not by person, so every client with a list of custom
+- **Effects.** `save` and `remove` declare `changes` on the record type `morph.customScreens`, the whole type: a save
+  can add a screen to lists no key names yet. Effects fan out by record type to every connection watching it, not by person, so every client with a list of custom
   screens open refetches its own `list` after anyone's save. Saves are a person's deliberate act, so this is rare; the
   verdict cache below keeps each refetch cheap.
 - **Journal.** The actions are `Loggable::No`. A screen is not application data; the store keeps who saved it and when.
@@ -173,22 +175,24 @@ getter for the current `ServedBundle`; `authorizer` is the server's, for `permit
 ## The checks
 
 `save` and `check` run them in this order, and `list` and `get` run them on every stored document they answer. Each
-stops at its first refusal and answers it with its JSON Pointer and reason, as `loadDocument` does.
+stops at its first refusal, with its JSON Pointer and reason, as `loadDocument` does: `check` and `broken` carry the
+pointer as a field, and a refused `save` carries both in its error message.
 
 1. **Bounds.** The document is at most `CustomScreensOptions::maxDocumentBytes` bytes, 256 KiB by default, and parses
    within `kMaxJsonDepth`. `title` is 1 to `kMaxNameBytes` bytes.
 2. **The base.** `basedOn` is a screen document of the current bundle that the person's catalog lists. A custom screen
    based on something else, or on a screen the person can no longer open, is refused.
 3. **The application screen checks.** `ui::loadDocument` with the served bundle's catalog; the document is a screen,
-   not the app document; and `UiRegistry`'s servability check.
+   not the app document.
 4. **The accessibility rules**, `author`'s `checkAccessibility`, which application screens built with the author
    builders already pass at registration.
 5. **The base rule**, below.
 6. **Permission.** Every action the document names is in `permittedActions` for this person.
 7. **The id.** The document's screen id is replaced by the custom screen's own id before it is stored or answered.
+   The document is written out again for this, so the stored text keeps its content, not its key order or spacing.
 
-**The verdict cache.** The result of checks 2 to 6 is kept by the model, keyed by the document's content hash, the
-bundle digest, and a hash of the person's permitted set, in a cache bounded by `CustomScreensOptions::verdictCacheSize`
+**The verdict cache.** The result of checks 2 to 6 is kept by the model, keyed by the document's content hash, its
+`basedOn`, the bundle digest, and a hash of the person's permitted set, in a cache bounded by `CustomScreensOptions::verdictCacheSize`
 entries. A `list` over unchanged documents reads verdicts; a reload, a permission change or an edit misses the cache
 and checks again.
 
@@ -203,10 +207,10 @@ them:
 | Capability | The custom document may use |
 |---|---|
 | Actions: queries, mutations, forms, collections, wizards | Only actions the base uses, each on a model type the base binds it to |
-| Commands that run without the person: `onMount`, `onUnmount`, `refreshEvery`, timers | Only the actions and commands the base runs from the same trigger |
-| Client-side commands: `host`, `upload`, `readFile`, `saveFile`, `download`, `switchBackend`, `signOut`, `resetPrefs` | Only the commands, by kind and by host command name, that the base uses anywhere |
+| Commands that run without the person: `onMount`, `onUnmount`, `onBackendChange`, watches, and the `onSuccess` and `onError` of a mutation one of those runs, followed through every chain | Only the actions and commands the base runs from the same trigger, so an unattended run cannot chain to an action the base only runs on a press |
+| Client-side commands: `upload`, `download`, `switchBackend`, `signIn`, `signOut`, `resetPrefs` | Only the command kinds the base uses anywhere |
 | Delivered components | Only the components the base declares, by name and content hash |
-| Host components and host values | Only the names the base uses |
+| Host names: `host` commands, host components and host values, as one set of every string member named `host` | Only the names the base uses |
 | `navigate` | Any screen the person's catalog lists, as a navigator entry already would |
 | Messages (`t` keys), styles, layout, literals, expressions, states | Anything the vocabulary allows |
 
@@ -225,7 +229,7 @@ it opens wherever its base opens with the params the base was given.
 
 ## Ids and where a screen opens
 
-- **The namespace.** A custom screen's id is `custom:` and a UUID issued by the model. A client resolves a `custom:` id
+- **The namespace.** A custom screen's id is `custom:` and 32 random hexadecimal digits issued by the model. A client resolves a `custom:` id
   through its custom document cache and every other id through the bundle.
 - **The client's cache.** `CustomDocuments` holds loaded custom documents by id, filled by `get`, and answers
   `DocumentScreenHostOptions::documents` for `custom:` ids. It drops an entry when its `list` refetch shows the screen
