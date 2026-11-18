@@ -2975,6 +2975,10 @@ TEST_CASE("SocketBackend: retryFirstConnect reaches a server that listens after 
     std::uint16_t const port = refusedPort(server);
     std::this_thread::sleep_for(std::chrono::milliseconds{100});
 
+    // Declared before the backend, which settles a request still held into them when it is destroyed.
+    morph::exec::MainThreadExecutor callerExec;
+    Settled answered;
+
     morph::net::SocketBackend::Config cfg;
     cfg.retryFirstConnect = true;
     cfg.initialReconnectDelay = std::chrono::milliseconds{50};
@@ -2983,8 +2987,6 @@ TEST_CASE("SocketBackend: retryFirstConnect reaches a server that listens after 
     // Long enough for several refused attempts; the held request must survive every one of them.
     REQUIRE_FALSE(backend.waitForConnected(std::chrono::milliseconds{400}));
 
-    morph::exec::MainThreadExecutor callerExec;
-    Settled answered;
     auto comp = backend.request(probe("probe-ok"), callerExec);
     watch(comp, answered);
     REQUIRE_FALSE(drainUntil(callerExec, answered.done, 60));

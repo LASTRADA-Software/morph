@@ -3021,6 +3021,11 @@ TEST_CASE("morph::qt::QtWebSocketBackend: retryFirstConnect reaches a server tha
     ProbeServer probe;
     quint16 const port = refusedPort(probe);
 
+    // Declared before the backend, which settles a request still held into them when it is destroyed.
+    morph::exec::MainThreadExecutor cbExec;
+    std::optional<morph::wire::Envelope> reply;
+    std::string failure;
+
     morph::qt::QtWebSocketBackend::Config cfg;
     cfg.retryFirstConnect = true;
     cfg.initialReconnectDelay = std::chrono::milliseconds{50};
@@ -3029,9 +3034,6 @@ TEST_CASE("morph::qt::QtWebSocketBackend: retryFirstConnect reaches a server tha
     // Several refused opens go by; the held request must survive every one of them.
     REQUIRE_FALSE(backend.waitForConnected(400));
 
-    morph::exec::MainThreadExecutor cbExec;
-    std::optional<morph::wire::Envelope> reply;
-    std::string failure;
     backend.request(probeRequest("probe-ok", "late"), cbExec)
         .then([&](morph::wire::Envelope const& got) { reply = got; })
         .onError([&](std::exception_ptr const&) { failure = "rejected"; });
