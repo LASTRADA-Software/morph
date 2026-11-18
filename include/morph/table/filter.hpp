@@ -16,6 +16,10 @@
 ///   columns, and groups, combine with each other by AND;
 /// - a group matches a row when its entries match on any of its columns;
 /// - no operator but `isEmpty` and `notEmpty` matches an empty or invalid cell;
+/// - on an unloaded cell every column filter is unknown, `isEmpty`, `notEmpty`
+///   and `exclude` included: a row is rejected when any column filter or group
+///   rejects it, otherwise undecided when any is unknown, otherwise admitted,
+///   and a group admits a row as soon as one of its columns does;
 /// - text operators compare through the collator's primary-strength fold
 ///   unless the entry sets `caseSensitive`; `%` and `_` are ordinary characters.
 ///
@@ -115,6 +119,13 @@ struct FilterSpec {
     [[nodiscard]] bool empty() const noexcept { return columns.empty() && groups.empty(); }
 };
 
+/// @brief What a filter says of a row whose cells may be unloaded.
+enum class Match : std::uint8_t {
+    No,       ///< Rejected by what is loaded.
+    Yes,      ///< Admitted by what is loaded.
+    Unknown,  ///< Neither, until an unloaded cell loads: the row is undecided.
+};
+
 /// @brief A filter compiled against a table's columns: every value parsed.
 class CompiledFilter {
 public:
@@ -201,12 +212,18 @@ public:
     /// @return The groups.
     [[nodiscard]] std::span<Group const> groups() const noexcept { return _groups; }
 
-    /// @brief Whether a row passes one column filter.
+    /// @brief What one column filter says of a row.
+    ///
+    /// An unloaded cell is `Unknown` whatever the entries: whether it is empty,
+    /// and whether an exclude entry matches it, is not known either.
     /// @param filter The column filter.
     /// @param keys   That column's keys.
     /// @param row    The row.
-    /// @return `true` when the row passes.
-    [[nodiscard]] static bool passes(Column const& filter, KeyColumn const& keys, std::uint32_t row) {
+    /// @return `Unknown` on an unloaded cell, else `Yes` when the row passes and `No` when it does not.
+    [[nodiscard]] static Match evaluate(Column const& filter, KeyColumn const& keys, std::uint32_t row) {
+        if (keys.states[row] == CellState::Unloaded) {
+            return Match::Unknown;
+        }
         if (!filter.include.empty()) {
             bool const all = filter.combine == Combine::All;
             bool result = all;
@@ -217,10 +234,71 @@ public:
                 }
             }
             if (!result) {
-                return false;
+                return Match::No;
             }
         }
-        return std::ranges::none_of(filter.exclude, [&](Entry const& entry) { return matches(entry, keys, row); });
+        bool const excluded =
+            std::ranges::any_of(filter.exclude, [&](Entry const& entry) { return matches(entry, keys, row); });
+        return excluded ? Match::No : Match::Yes;
+    }
+
+    /// @brief Whether a row passes one column filter.
+    /// @param filter The column filter.
+    /// @param keys   That column's keys.
+    /// @param row    The row.
+    /// @return `true` when `evaluate` says `Yes`.
+    [[nodiscard]] static bool passes(Column const& filter, KeyColumn const& keys, std::uint32_t row) {
+        return evaluate(filter, keys, row) == Match::Yes;
+    }
+
+    /// @brief What one group says of a row: `Yes` when any of its columns says
+    ///        `Yes`, otherwise `Unknown` when any says `Unknown`, otherwise `No`.
+    /// @param group The group.
+    /// @param keys  Key columns by column index; every column of the group must be non-null.
+    /// @param row   The row.
+    /// @return The group's answer.
+    [[nodiscard]] static Match evaluateGroup(Group const& group, std::span<KeyColumn const* const> keys,
+                                             std::uint32_t row) {
+        auto out = Match::No;
+        for (auto const& column : group.columns) {
+            auto const match = evaluate(column, *keys[column.column], row);
+            if (match == Match::Yes) {
+                return Match::Yes;
+            }
+            if (match == Match::Unknown) {
+                out = Match::Unknown;
+            }
+        }
+        return out;
+    }
+
+    /// @brief What the whole filter says of a row: `No` when any column filter
+    ///        or group says `No`, otherwise `Unknown` when any says `Unknown`,
+    ///        otherwise `Yes`.
+    /// @param keys Key columns by column index; every index in `columnsUsed()` must be non-null.
+    /// @param row  The row.
+    /// @return The row's answer.
+    [[nodiscard]] Match evaluateRow(std::span<KeyColumn const* const> keys, std::uint32_t row) const {
+        auto out = Match::Yes;
+        for (auto const& column : _columns) {
+            auto const match = evaluate(column, *keys[column.column], row);
+            if (match == Match::No) {
+                return Match::No;
+            }
+            if (match == Match::Unknown) {
+                out = Match::Unknown;
+            }
+        }
+        for (auto const& group : _groups) {
+            auto const match = evaluateGroup(group, keys, row);
+            if (match == Match::No) {
+                return Match::No;
+            }
+            if (match == Match::Unknown) {
+                out = Match::Unknown;
+            }
+        }
+        return out;
     }
 
     /// @brief Whether one entry matches one cell.
@@ -668,6 +746,10 @@ struct RawEntry {
 /// Each column filter, then each group, compacts the surviving candidates in
 /// place, so later columns test fewer rows. The order of the candidates is
 /// kept, which is how a filter over a cached sorted order stays sorted.
+///
+/// A stage that answers `No` drops a row; one that answers `Unknown` keeps it
+/// marked, and a later stage may still drop it. The unmarked survivors are the
+/// view (`take`), the marked ones the undecided rows (`takeUndecided`).
 class FilterRun {
 public:
     /// @brief Prepares to filter @p candidates.
@@ -676,7 +758,11 @@ public:
     ///                   `filter.columnsUsed()` must be non-null and outlive the run.
     /// @param candidates The rows to filter, in the order to keep.
     FilterRun(CompiledFilter const& filter, std::vector<KeyColumn const*> keys, std::vector<std::uint32_t> candidates)
-        : _filter{&filter}, _keys{std::move(keys)}, _rows{std::move(candidates)}, _size{_rows.size()} {}
+        : _filter{&filter},
+          _keys{std::move(keys)},
+          _rows{std::move(candidates)},
+          _marks(_rows.size(), std::uint8_t{0}),
+          _size{_rows.size()} {}
 
     /// @brief Filters until done, the deadline passes, or a stop is requested.
     /// @param deadline When to yield.
@@ -689,7 +775,9 @@ public:
                 auto const end = std::min(_read + detail::kCheckEvery, _size);
                 for (; _read < end; ++_read) {
                     auto const row = _rows[_read];
-                    if (keep(row)) {
+                    auto const match = stage(row);
+                    if (match != Match::No) {
+                        _marks[_write] = match == Match::Unknown ? std::uint8_t{1} : _marks[_read];
                         _rows[_write++] = row;
                     }
                 }
@@ -708,29 +796,41 @@ public:
         return true;
     }
 
-    /// @brief The surviving rows. Valid once `run` returned `true`.
-    /// @return The rows, moved out.
-    [[nodiscard]] std::vector<std::uint32_t> take() && {
-        _rows.resize(_size);
-        return std::move(_rows);
-    }
+    /// @brief The rows every stage admitted. Valid once `run` returned `true`;
+    ///        may be called once, before or after `takeUndecided`.
+    /// @return The rows, in candidate order.
+    [[nodiscard]] std::vector<std::uint32_t> take() && { return survivors(0); }
+
+    /// @brief The rows no stage rejected and some stage could not decide.
+    ///        Valid once `run` returned `true`; may be called once, before or after `take`.
+    /// @return The rows, in candidate order.
+    [[nodiscard]] std::vector<std::uint32_t> takeUndecided() && { return survivors(1); }
 
 private:
-    [[nodiscard]] bool keep(std::uint32_t row) const {
+    [[nodiscard]] Match stage(std::uint32_t row) const {
         auto const columns = _filter->columns();
         if (_stage < columns.size()) {
             auto const& column = columns[_stage];
-            return CompiledFilter::passes(column, *_keys[column.column], row);
+            return CompiledFilter::evaluate(column, *_keys[column.column], row);
         }
-        auto const& group = _filter->groups()[_stage - columns.size()];
-        return std::ranges::any_of(group.columns, [&](CompiledFilter::Column const& column) {
-            return CompiledFilter::passes(column, *_keys[column.column], row);
-        });
+        return CompiledFilter::evaluateGroup(_filter->groups()[_stage - columns.size()], _keys, row);
+    }
+
+    // The survivors whose mark is `mark`: 0 for the admitted rows, 1 for the undecided ones.
+    [[nodiscard]] std::vector<std::uint32_t> survivors(std::uint8_t mark) const {
+        std::vector<std::uint32_t> out;
+        for (std::size_t i = 0; i < _size; ++i) {
+            if (_marks[i] == mark) {
+                out.push_back(_rows[i]);
+            }
+        }
+        return out;
     }
 
     CompiledFilter const* _filter;
     std::vector<KeyColumn const*> _keys;
     std::vector<std::uint32_t> _rows;
+    std::vector<std::uint8_t> _marks;  // 1 once a stage answered Unknown; compacted with `_rows`
     std::size_t _size;
     std::size_t _stage = 0;
     std::size_t _read = 0;

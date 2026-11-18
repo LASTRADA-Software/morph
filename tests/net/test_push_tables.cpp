@@ -165,7 +165,7 @@ morph::table::ServedTable smallTable(std::string id, std::int64_t rows) {
     served.description.label = served.description.id;
     served.description.key = "v";
     served.description.columns.push_back(morph::table::TableColumn{
-        .info = {.id = "v", .kind = morph::table::ColumnKind::Integer, .comparator = {}, .format = {}},
+        .info = {.id = "v", .kind = morph::table::ColumnKind::Integer, .comparator = {}, .format = {}, .level = {}},
         .label = "V",
         .group = {}});
     auto source = std::make_shared<morph::table::VectorSource>(morph::table::columnInfos(served.description));

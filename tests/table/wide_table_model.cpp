@@ -332,12 +332,13 @@ std::vector<WideColumn> wideColumns(int columns) {
     all.reserve(300);
     auto const add = [&](std::string id, WideRole role, std::string level = {}, std::string group = {}) {
         bool const sparse = all.size() % 12 == 11;
-        all.push_back(WideColumn{.info = ColumnInfo{.id = std::move(id), .kind = kindOf(role), .comparator = {},
-                                                    .format = {}},
-                                 .role = role,
-                                 .sparse = sparse,
-                                 .level = std::move(level),
-                                 .group = std::move(group)});
+        all.push_back(WideColumn{
+            .info =
+                ColumnInfo{.id = std::move(id), .kind = kindOf(role), .comparator = {}, .format = {}, .level = level},
+            .role = role,
+            .sparse = sparse,
+            .level = std::move(level),
+            .group = std::move(group)});
     };
     add("id", WideRole::Key);
     for (int i = 1; i <= 99; ++i) {
@@ -389,6 +390,24 @@ std::vector<WideColumn> wideColumns(int columns) {
     return small;
 }
 
+namespace {
+
+// The levels the columns of `description` name, sorted, each once, the base level left out.
+std::vector<std::string> levelsOf(morph::table::TableDescription const& description) {
+    std::vector<std::string> out;
+    for (auto const& column : description.columns) {
+        if (!column.info.level.empty()) {
+            out.push_back(column.info.level);
+        }
+    }
+    std::ranges::sort(out);
+    auto const [first, last] = std::ranges::unique(out);
+    out.erase(first, last);
+    return out;
+}
+
+}  // namespace
+
 morph::table::TableDescription wideDescription(std::string id, int columns) {
     morph::table::TableDescription out;
     out.label = id;
@@ -408,6 +427,7 @@ morph::table::TableDescription wideDescription(std::string id, int columns) {
         }
         group->columns.push_back(column.info.id);
     }
+    out.levels = levelsOf(out);
     return out;
 }
 
@@ -586,6 +606,7 @@ morph::table::TableDescription without(morph::table::TableDescription base, std:
             column.group.clear();
         }
     }
+    base.levels = levelsOf(base);
     base.id = "scoped";
     base.label = "scoped";
     return morph::table::describe(std::move(base));

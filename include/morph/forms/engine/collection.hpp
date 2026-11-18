@@ -352,7 +352,8 @@ namespace detail::engine {
     std::vector<table::ColumnInfo> columns;
     columns.reserve(model.columns().size());
     for (CollectionColumn const& column : model.columns()) {
-        columns.push_back(table::ColumnInfo{.id = column.field, .kind = column.kind, .comparator = {}, .format = {}});
+        columns.push_back(
+            table::ColumnInfo{.id = column.field, .kind = column.kind, .comparator = {}, .format = {}, .level = {}});
     }
     return columns;
 }

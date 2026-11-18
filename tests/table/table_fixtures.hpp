@@ -54,7 +54,13 @@ inline morph::math::Rational dec(std::string_view text) {
 }
 
 inline ColumnInfo col(std::string id, ColumnKind kind, std::string comparator = {}) {
-    return ColumnInfo{.id = std::move(id), .kind = kind, .comparator = std::move(comparator), .format = {}};
+    return ColumnInfo{
+        .id = std::move(id), .kind = kind, .comparator = std::move(comparator), .format = {}, .level = {}};
+}
+
+// A column whose cells need data level `level`: the only kind of column whose cells may be `Unloaded`.
+inline ColumnInfo levelCol(std::string id, ColumnKind kind, std::string level) {
+    return ColumnInfo{.id = std::move(id), .kind = kind, .comparator = {}, .format = {}, .level = std::move(level)};
 }
 
 // A source whose row keys are 0..n-1 (as int64) and whose cells are given row by row.
@@ -79,6 +85,16 @@ inline std::shared_ptr<morph::table::VectorSource> column(ColumnKind kind, std::
         rows.push_back({std::move(cell)});
     }
     return makeSource({col(std::move(id), kind)}, std::move(rows));
+}
+
+// A one-column source whose column `c` is at level "slow", so its cells may be `Unloaded`; keys 0..n-1.
+inline std::shared_ptr<morph::table::VectorSource> slowColumn(ColumnKind kind, std::vector<Cell> cells) {
+    std::vector<std::vector<Cell>> rows;
+    rows.reserve(cells.size());
+    for (auto& cell : cells) {
+        rows.push_back({std::move(cell)});
+    }
+    return makeSource({levelCol("c", kind, "slow")}, std::move(rows));
 }
 
 // Folds the accented Latin-1 vowels the fixtures use to their base letter,

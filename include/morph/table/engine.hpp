@@ -44,6 +44,7 @@
 #include <exception>
 #include <expected>
 #include <functional>
+#include <iterator>
 #include <limits>
 #include <memory>
 #include <morph/core/callback_scope.hpp>
@@ -110,6 +111,8 @@ struct EngineStats {
     std::size_t keyBuilds = 0;
     /// @brief Repairs of updated rows.
     std::size_t repairs = 0;
+    /// @brief Filter runs over a candidate list; a repair evaluates its dirty rows alone and runs none.
+    std::size_t filterRuns = 0;
     /// @brief Results dropped because a newer request superseded them.
     std::size_t dropped = 0;
     /// @brief Steps run on the owner thread (one-step runs included).
@@ -246,6 +249,9 @@ struct JobInput {
     std::vector<std::uint32_t> dirty;
     /// @brief Repair: the sorted, filtered order, without holds, that the dirty rows merge into.
     std::vector<std::uint32_t> previousTrueView;
+    /// @brief Repair: the rows the filter could not decide, source rows ascending. A dirty row may have been here
+    ///        or in the view, so a repair reads both.
+    std::vector<std::uint32_t> previousUndecided;
     /// @brief The job repairs updated rows rather than recomputing.
     bool repair = false;
     /// @brief Every surviving row may have new content (a reset).
@@ -262,6 +268,8 @@ struct JobResult {
     std::shared_ptr<std::vector<std::uint32_t> const> sorted;
     /// @brief The sorted, filtered view.
     std::vector<std::uint32_t> view;
+    /// @brief The rows the filter could neither admit nor reject, source rows ascending. They are in no view.
+    std::vector<std::uint32_t> undecided;
     /// @brief From `JobInput::previousView` to `view`.
     ViewChange change;
     /// @brief Every source row was sorted.
@@ -270,9 +278,18 @@ struct JobResult {
     bool subsetSort = false;
     /// @brief Updated rows were merged into the previous order.
     bool repaired = false;
+    /// @brief A filter ran over a candidate list.
+    bool filtered = false;
     /// @brief Key columns built from scratch.
     std::size_t keyBuilds = 0;
 };
+
+/// @brief The error of a job an injected service failed.
+/// @param what The message of the exception the service threw.
+/// @return A `ServiceFailed` error.
+[[nodiscard]] inline TableError serviceFailed(std::string const& what) {
+    return TableError{.code = TableErrorCode::ServiceFailed, .column = {}, .message = "a service failed: " + what};
+}
 
 /// @brief One recomputation of a view, runnable in steps.
 ///
@@ -292,7 +309,9 @@ public:
     /// @brief Runs until done, the deadline, or a stop request.
     ///
     /// An exception from an injected service (a collator, date parser or
-    /// comparator) ends the job: it is done, with `failure()` set.
+    /// comparator) ends the job: it is done, with `failure()` set to
+    /// `ServiceFailed`. So does an unloaded cell in a base-level column, with
+    /// `SourceContract` naming the column.
     /// @param deadline When to yield.
     /// @param stop     A stop request ends the step.
     /// @return `true` when the job is done.
@@ -300,9 +319,9 @@ public:
         try {
             return run(deadline, stop);
         } catch (std::exception const& error) {
-            _failure = error.what();
+            _failure = serviceFailed(error.what());
         } catch (...) {
-            _failure = "unknown exception";
+            _failure = serviceFailed("unknown exception");
         }
         _phase = Phase::Done;
         return true;
@@ -323,9 +342,9 @@ public:
     /// @return `true` when done.
     [[nodiscard]] bool done() const noexcept { return _phase == Phase::Done; }
 
-    /// @brief Why the job failed: the message of the exception that ended it.
-    /// @return The message, or nothing when the job did not fail.
-    [[nodiscard]] std::optional<std::string> const& failure() const noexcept { return _failure; }
+    /// @brief Why the job failed.
+    /// @return The error that ended it, or nothing when the job did not fail.
+    [[nodiscard]] std::optional<TableError> const& failure() const noexcept { return _failure; }
 
     /// @brief What the job reads.
     /// @return The input.
@@ -363,6 +382,10 @@ private:
             if (!finished) {
                 return false;
             }
+            if (_failure) {
+                _phase = Phase::Done;
+                return true;
+            }
             advance();
             if (_onPhase) {
                 auto const [doneUnits, total] = progress();
@@ -391,6 +414,18 @@ private:
         }
     }
 
+    // Fails the job when a base-level column holds an unloaded cell: no level names that cell, so no load would
+    // resolve it, and a view built on it would hold a row whose place nothing can ever settle.
+    bool refuseUnloaded(std::size_t column, CellState state) {
+        if (state != CellState::Unloaded || !_in.columns[column].level.empty()) {
+            return false;
+        }
+        _failure = TableError{.code = TableErrorCode::SourceContract,
+                              .column = _in.columns[column].id,
+                              .message = "an unloaded cell in a base-level column"};
+        return true;
+    }
+
     // Builds every needed column that has no keys, and patches the dirty rows
     // of every column that has them (on a copy: the old keys may still be
     // read by the owner or another job).
@@ -405,6 +440,9 @@ private:
                 auto copy = std::make_shared<KeyColumn>(*_result.keys[column]);
                 for (auto const row : _in.dirty) {
                     copy->set(row, _in.snapshot->cell(row, column), _in.columns[column], _in.services);
+                    if (refuseUnloaded(column, copy->states[row])) {
+                        return true;
+                    }
                 }
                 _result.keys[column] = std::move(copy);
             }
@@ -427,6 +465,12 @@ private:
                 _rowAt = end;
                 if (_rowAt < rows && detail::shouldYield(deadline, stop)) {
                     return false;
+                }
+            }
+            if (_in.columns[column].level.empty()) {
+                if (auto const found = std::ranges::find(_building->states, CellState::Unloaded);
+                    found != _building->states.end() && refuseUnloaded(column, *found)) {
+                    return true;
                 }
             }
             _result.keys[column] = std::move(_building);
@@ -471,26 +515,6 @@ private:
         return out;
     }
 
-    [[nodiscard]] bool passesFilter(std::uint32_t row) const {
-        if (_in.filter == nullptr) {
-            return true;
-        }
-        for (auto const& column : _in.filter->columns()) {
-            if (!CompiledFilter::passes(column, *_result.keys[column.column], row)) {
-                return false;
-            }
-        }
-        for (auto const& group : _in.filter->groups()) {
-            bool const any = std::ranges::any_of(group.columns, [&](CompiledFilter::Column const& column) {
-                return CompiledFilter::passes(column, *_result.keys[column.column], row);
-            });
-            if (!any) {
-                return false;
-            }
-        }
-        return true;
-    }
-
     // Merges the dirty rows back into an order the clean rows still satisfy.
     [[nodiscard]] std::vector<std::uint32_t> repairOrder(std::span<std::uint32_t const> previous,
                                                          std::vector<std::uint32_t> dirtyRows,
@@ -513,16 +537,28 @@ private:
     }
 
     // Merges the re-keyed dirty rows into the previous order (and the cached
-    // full order), without sorting the rest.
+    // full order), without sorting the rest. Each dirty row is evaluated
+    // again, wherever it was before: admitted rows merge into the view,
+    // undecided ones join the undecided rows, rejected ones join neither. The
+    // clean undecided rows are kept as they were, with no filter run over them.
     void repair() {
         MORPH_ZONE("table.change");
         auto const orderBy = rowOrder();
+        auto const keys = keyPointers();
         std::vector<std::uint32_t> passing;
+        std::vector<std::uint32_t> undecided;
         for (auto const row : _in.dirty) {
-            if (passesFilter(row)) {
+            auto const match = _in.filter == nullptr ? Match::Yes : _in.filter->evaluateRow(keys, row);
+            if (match == Match::Yes) {
                 passing.push_back(row);
+            } else if (match == Match::Unknown) {
+                undecided.push_back(row);
             }
         }
+        std::vector<std::uint32_t> clean;
+        std::ranges::set_difference(_in.previousUndecided, _in.dirty, std::back_inserter(clean));
+        _result.undecided.resize(clean.size() + undecided.size());
+        std::ranges::merge(clean, undecided, _result.undecided.begin());
         _result.view = repairOrder(_in.previousTrueView, std::move(passing), orderBy);
         if (_in.cachedSorted != nullptr) {
             _result.sorted =
@@ -559,6 +595,7 @@ private:
         }
         if (filtering && (_sorted || _sort == std::nullopt)) {
             _filterRun.emplace(*_in.filter, keyPointers(), std::move(_base));
+            _result.filtered = true;
         }
     }
 
@@ -576,6 +613,8 @@ private:
             if (!_filterRun->run(deadline, stop)) {
                 return false;
             }
+            _result.undecided = std::move(*_filterRun).takeUndecided();
+            std::ranges::sort(_result.undecided);
             _base = std::move(*_filterRun).take();
             _filterRun.reset();
             if (!_sorted) {
@@ -648,7 +687,7 @@ private:
     std::optional<FilterRun> _filterRun;
     std::optional<ChunkedMergeSort> _sort;
     // outcome
-    std::optional<std::string> _failure;
+    std::optional<TableError> _failure;
     std::function<void(std::size_t, std::size_t)> _onPhase;
 };
 
@@ -694,8 +733,9 @@ public:
     /// shows once the view computed with them is applied.
     /// @param chain The keys, most significant first.
     /// @return `UnknownColumn` when a key names no column; `ServiceFailed` when
-    ///         the sort ran inside the call and an injected service threw. The
-    ///         sort is then unchanged.
+    ///         the sort ran inside the call and an injected service threw;
+    ///         `SourceContract` when it ran inside the call and a base-level
+    ///         column holds an unloaded cell. The sort is then unchanged.
     std::expected<void, TableError> setSort(SortChain chain) {
         for (auto const& key : chain) {
             if (!detail::findColumn(_columns, key.column)) {
@@ -711,9 +751,9 @@ public:
 
     /// @brief Sets the filter.
     /// @param spec The filter; an empty spec shows every row.
-    /// @return The compile error, naming its column; or `ServiceFailed` when
-    ///         the filter ran inside the call and an injected service threw.
-    ///         The filter is then unchanged.
+    /// @return The compile error, naming its column; or `ServiceFailed` or
+    ///         `SourceContract`, as for `setSort`, when the filter ran inside
+    ///         the call. The filter is then unchanged.
     std::expected<void, TableError> setFilter(FilterSpec spec) {
         auto compiled = compile(spec);
         if (!compiled) {
@@ -802,6 +842,15 @@ public:
     /// @return The snapshot.
     [[nodiscard]] std::shared_ptr<RowSnapshot const> const& viewSnapshot() const noexcept { return _viewSnapshot; }
 
+    /// @brief Rows the filter can neither admit nor reject until an unloaded
+    ///        cell loads. They are in no view row.
+    /// @return The count.
+    [[nodiscard]] std::size_t undecidedRowCount() const noexcept { return _undecided.size(); }
+
+    /// @brief The undecided rows.
+    /// @return Source rows of `viewSnapshot()`, ascending.
+    [[nodiscard]] std::span<std::uint32_t const> undecidedRows() const noexcept { return _undecided; }
+
     /// @brief Whether a computation is in flight.
     /// @return `true` from an asynchronous request until its result is applied.
     [[nodiscard]] bool pending() const noexcept { return _pending; }
@@ -811,14 +860,20 @@ public:
     /// @param handler The receiver; empty to stop receiving.
     void onViewChange(std::function<void(ViewChange const&)> handler) { _onViewChange = std::move(handler); }
 
+    /// @brief Sets the receiver of `undecidedRowCount()` changes, called on the
+    ///        owner with the new count: after `onViewChange` when the same
+    ///        result changed the view, and on its own when it changed nothing else.
+    /// @param handler The receiver; empty to stop receiving.
+    void onUndecidedChange(std::function<void(std::size_t)> handler) { _onUndecidedChange = std::move(handler); }
+
     /// @brief Sets the receiver of `pending()` changes.
     /// @param handler The receiver; empty to stop receiving.
     void onPending(std::function<void(bool)> handler) { _onPending = std::move(handler); }
 
     /// @brief Sets the receiver of errors no call could return: an injected
-    ///        service that threw in a job that did not run inside the call
-    ///        that asked for it. The sort and filter go back to those of the
-    ///        view shown.
+    ///        service that threw, or a source that broke its contract, in a job
+    ///        that did not run inside the call that asked for it. The sort and
+    ///        filter go back to those of the view shown.
     /// @param handler The receiver; empty to stop receiving.
     void onError(std::function<void(TableError const&)> handler) { _onError = std::move(handler); }
 
@@ -883,6 +938,7 @@ private:
     struct Applied {
         ViewChange change;
         bool armSettle = false;
+        std::optional<std::size_t> undecided;  // the new count, when it changed
     };
 
     // ── changes ─────────────────────────────────────────────────────────────
@@ -997,10 +1053,6 @@ private:
         return compileFilterGuarded(spec, _columns, _options.services);
     }
 
-    [[nodiscard]] static TableError serviceFailed(std::string const& what) {
-        return TableError{.code = TableErrorCode::ServiceFailed, .column = {}, .message = "a service failed: " + what};
-    }
-
     // ── scheduling ──────────────────────────────────────────────────────────
 
     // Whether the shown view is out of date with the requested state.
@@ -1082,6 +1134,7 @@ private:
         input.dirty.erase(dupFirst, dupLast);
         if (input.repair) {
             input.previousTrueView = _trueView;
+            input.previousUndecided = _undecided;
         }
         input.allChanged = _obligeAll;
         _obligeAll = false;
@@ -1118,7 +1171,7 @@ private:
             recordOwnerStep(began);
             giveBack(job.input(), ticket);
             revert();
-            return std::unexpected(serviceFailed(*job.failure()));
+            return std::unexpected(*job.failure());
         }
         auto const applied = install(job.input(), job.takeResult(), ticket);
         recordOwnerStep(began);
@@ -1188,7 +1241,7 @@ private:
         if (job->failure()) {
             giveBack(input, _runningTicket);
             revert();
-            afterJob(serviceFailed(*job->failure()));
+            afterJob(*job->failure());
             return;
         }
         auto const began = std::chrono::steady_clock::now();
@@ -1240,6 +1293,7 @@ private:
         _stats.fullSorts += result.fullSort ? 1 : 0;
         _stats.subsetSorts += result.subsetSort ? 1 : 0;
         _stats.repairs += result.repaired ? 1 : 0;
+        _stats.filterRuns += result.filtered ? 1 : 0;
         _keys = std::move(result.keys);
         _keysSnapshot = input.snapshot;
         if (result.sorted != nullptr) {
@@ -1263,11 +1317,16 @@ private:
         _appliedFilter = input.filter;
         _appliedFilterSpec = _filterSpec;
         _trueView = std::move(result.view);
+        auto const undecidedBefore = _undecided.size();
+        _undecided = std::move(result.undecided);
         _viewSnapshot = input.snapshot;
         _relayoutPending = false;
         _viewIndexValid = false;
         _keyIndexValid = false;
-        Applied out{.change = std::move(result.change), .armSettle = false};
+        Applied out{
+            .change = std::move(result.change),
+            .armSettle = false,
+            .undecided = _undecided.size() != undecidedBefore ? std::optional{_undecided.size()} : std::nullopt};
         if (_options.reorder == ReorderPolicy::Deferred) {
             // An ended edit's token stands for the notifications up to its own
             // count: one the shown view had already taken in has no use.
@@ -1354,7 +1413,7 @@ private:
         _view = std::move(displayed);
         _viewIndexValid = false;
         _keyIndexValid = false;
-        deliver(Applied{.change = change, .armSettle = false});
+        deliver(Applied{.change = change, .armSettle = false, .undecided = std::nullopt});
     }
 
     // ── calling out ─────────────────────────────────────────────────────────
@@ -1379,6 +1438,13 @@ private:
             // A copy: the handler may replace itself or destroy the engine.
             auto const handler = _onViewChange;
             handler(applied.change);
+            if (alive.expired()) {
+                return false;
+            }
+        }
+        if (applied.undecided && _onUndecidedChange) {
+            auto const handler = _onUndecidedChange;
+            handler(*applied.undecided);
         }
         return !alive.expired();
     }
@@ -1458,6 +1524,7 @@ private:
     std::uint64_t _viewChangeSeq = 0;      // notifications the view took in
     std::vector<std::uint32_t> _view;      // displayed
     std::vector<std::uint32_t> _trueView;  // sorted and filtered, without holds
+    std::vector<std::uint32_t> _undecided;  // neither admitted nor rejected, source rows ascending
     // caches, valid for `_keysSnapshot`
     std::shared_ptr<RowSnapshot const> _keysSnapshot;
     std::vector<std::shared_ptr<KeyColumn const>> _keys;
@@ -1488,6 +1555,7 @@ private:
     Ticket _runningTicket;
     ::core::async::StopSource _jobStop;
     std::function<void(ViewChange const&)> _onViewChange;
+    std::function<void(std::size_t)> _onUndecidedChange;
     std::function<void(bool)> _onPending;
     std::function<void(TableError const&)> _onError;
     EngineStats _stats;

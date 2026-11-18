@@ -13,7 +13,8 @@
 /// only a `Number` column holds a double.
 ///
 /// Ordering rules, normative for every client and server (spec 7 §5):
-/// - an empty or invalid cell sorts after every valid one, in either direction;
+/// - an empty or invalid cell sorts after every valid one, and an unloaded cell
+///   after every empty or invalid one, in either direction;
 /// - each key of a chain has its own direction;
 /// - ties break by source row, so the sort is stable.
 ///
@@ -51,7 +52,7 @@ namespace morph::table {
 /// @brief A sort key's direction.
 enum class SortDirection : std::uint8_t {
     Ascending,   ///< Smallest first.
-    Descending,  ///< Largest first. Invalid cells still come last.
+    Descending,  ///< Largest first. Empty, invalid and unloaded cells still come last.
 };
 
 /// @brief One key of a sort chain.
@@ -72,9 +73,10 @@ using SortChain = std::vector<SortKey>;
 
 /// @brief Whether a cell has a key.
 enum class CellState : std::uint8_t {
-    Valid,    ///< The cell has a key.
-    Empty,    ///< The cell is empty; it sorts with invalid cells.
-    Invalid,  ///< The cell could not be read for its column's kind.
+    Valid,     ///< The cell has a key.
+    Empty,     ///< The cell is empty; it sorts with invalid cells.
+    Invalid,   ///< The cell could not be read for its column's kind.
+    Unloaded,  ///< The cell's value is not loaded yet; it has no key and sorts after every other state.
 };
 
 /// @brief A deadline for one step of work; `kNoDeadline` runs to completion.
@@ -256,6 +258,10 @@ struct KeyColumn {
 
 private:
     [[nodiscard]] CellState read(std::size_t row, Cell const& cell, ColumnInfo const& info, Services const& services) {
+        // Before the kind: every kind treats an unloaded cell alike, and none stores a key for it.
+        if (std::holds_alternative<Unloaded>(cell)) {
+            return CellState::Unloaded;
+        }
         if (std::holds_alternative<std::monostate>(cell)) {
             return CellState::Empty;
         }
@@ -424,21 +430,35 @@ inline void buildKeys(RowSnapshot const& snapshot, std::size_t column, ColumnInf
     snapshot.readColumn(column, sink, first, last);
 }
 
-/// @brief Compares two rows' keys in one column, valid before invalid in
-///        either direction.
+/// @brief Compares two rows' keys in one column: valid cells first, then empty
+///        and invalid ones, then unloaded ones, in either direction.
 /// @param keys The column's keys.
 /// @param left  One row.
 /// @param right Another row.
-/// @param dir   The key's direction; it does not move invalid cells.
+/// @param dir   The key's direction; it does not move empty, invalid or unloaded cells.
 /// @return Negative, zero or positive as row @p left orders before, with, or after @p right.
 [[nodiscard]] inline int compareKeys(KeyColumn const& keys, std::uint32_t left, std::uint32_t right,
                                      SortDirection dir) {
-    bool const validA = keys.states[left] == CellState::Valid;
-    bool const validB = keys.states[right] == CellState::Valid;
-    if (validA != validB) {
-        return validA ? -1 : 1;
+    // Valid 0; Empty and Invalid 1 (they tie); Unloaded 2 (they tie). Ranks never flip with the direction, so an
+    // unloaded cell is never placed among the empties it might not belong to.
+    auto const rank = [](CellState state) {
+        switch (state) {
+            case CellState::Valid:
+                return 0;
+            case CellState::Unloaded:
+                return 2;
+            case CellState::Empty:
+            case CellState::Invalid:
+            default:
+                return 1;
+        }
+    };
+    int const rankA = rank(keys.states[left]);
+    int const rankB = rank(keys.states[right]);
+    if (rankA != rankB) {
+        return rankA < rankB ? -1 : 1;
     }
-    if (!validA) {
+    if (rankA != 0) {
         return 0;
     }
     auto const sign = [](auto ordering) -> int {
