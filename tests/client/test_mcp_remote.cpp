@@ -73,6 +73,48 @@ private:
     bool _closed = false;
 };
 
+// An output the serving thread writes and a test thread reads while it runs.
+class LockedBuf final : public std::streambuf {
+public:
+    std::string text() const {
+        std::scoped_lock const lock{_mutex};
+        return _text;
+    }
+
+protected:
+    int_type overflow(int_type character) override {
+        if (!traits_type::eq_int_type(character, traits_type::eof())) {
+            std::scoped_lock const lock{_mutex};
+            _text.push_back(traits_type::to_char_type(character));
+        }
+        return traits_type::not_eof(character);
+    }
+
+    std::streamsize xsputn(char const* text, std::streamsize count) override {
+        std::scoped_lock const lock{_mutex};
+        _text.append(text, static_cast<std::size_t>(count));
+        return count;
+    }
+
+private:
+    mutable std::mutex _mutex;
+    std::string _text;
+};
+
+// Closes a pipe when the test leaves, so a failed REQUIRE ends the serving thread instead of waiting on its input.
+class ClosePipe {
+public:
+    explicit ClosePipe(PipeBuf& pipe) : _pipe{pipe} {}
+    ~ClosePipe() { _pipe.close(); }
+    ClosePipe(ClosePipe const&) = delete;
+    ClosePipe& operator=(ClosePipe const&) = delete;
+    ClosePipe(ClosePipe&&) = delete;
+    ClosePipe& operator=(ClosePipe&&) = delete;
+
+private:
+    PipeBuf& _pipe;
+};
+
 std::size_t countOf(std::string const& text, std::string const& needle) {
     std::size_t count = 0;
     for (std::size_t at = text.find(needle); at != std::string::npos; at = text.find(needle, at + needle.size())) {
@@ -123,11 +165,14 @@ TEST_CASE("serveMcp in remote mode reaches a server that starts after it", "[cli
     args.mcpStdio = true;
     PipeBuf pipe;
     std::istream input{&pipe};
-    std::ostringstream output;
+    LockedBuf outputBuf;
+    std::ostream output{&outputBuf};
     std::ostringstream diagnostics;
     auto finished = std::async(std::launch::async, [&] {
         return morph::client::serveMcp(args, kNoApps, kNoSession, input, output, diagnostics);
     });
+    // Declared after the future, so it closes the pipe before the future's destructor waits for the serving thread.
+    ClosePipe const closer{pipe};
 
     std::this_thread::sleep_for(std::chrono::milliseconds{300});
     morph::net::SocketServer late{**server, port};
@@ -137,8 +182,8 @@ TEST_CASE("serveMcp in remote mode reaches a server that starts after it", "[cli
     pipe.close();
     REQUIRE(finished.wait_for(std::chrono::seconds{60}) == std::future_status::ready);
     CHECK(finished.get() == 0);
-    CHECK(output.str().contains(R"("name":"evaluate")"));
-    CHECK(countOf(output.str(), R"("name":")") > 1);
+    CHECK(outputBuf.text().contains(R"("name":"evaluate")"));
+    CHECK(countOf(outputBuf.text(), R"("name":")") > 1);
 }
 
 // A call after the server restarted succeeds only if the adapter dropped the instance ids it cached: the new server
@@ -160,18 +205,21 @@ TEST_CASE("serveMcp in remote mode makes a call after the server restarted", "[c
     args.mcpStdio = true;
     PipeBuf pipe;
     std::istream input{&pipe};
-    std::ostringstream output;
+    LockedBuf outputBuf;
+    std::ostream output{&outputBuf};
     std::ostringstream diagnostics;
     auto finished = std::async(std::launch::async, [&] {
         return morph::client::serveMcp(args, kNoApps, kNoSession, input, output, diagnostics);
     });
+    // Declared after the future, so it closes the pipe before the future's destructor waits for the serving thread.
+    ClosePipe const closer{pipe};
 
     auto const awaitReplies = [&](std::size_t count) {
         auto const deadline = std::chrono::steady_clock::now() + std::chrono::seconds{10};
-        while (countOf(output.str(), R"("jsonrpc")") < count && std::chrono::steady_clock::now() < deadline) {
+        while (countOf(outputBuf.text(), R"("jsonrpc")") < count && std::chrono::steady_clock::now() < deadline) {
             std::this_thread::sleep_for(std::chrono::milliseconds{20});
         }
-        return countOf(output.str(), R"("jsonrpc")") >= count;
+        return countOf(outputBuf.text(), R"("jsonrpc")") >= count;
     };
     auto const call = [](int id) {
         return R"({"jsonrpc":"2.0","id":)" + std::to_string(id) +
@@ -181,7 +229,7 @@ TEST_CASE("serveMcp in remote mode makes a call after the server restarted", "[c
 
     pipe.push(call(1));
     REQUIRE(awaitReplies(1));
-    REQUIRE(output.str().contains(R"("isError":false)"));
+    REQUIRE(outputBuf.text().contains(R"("isError":false)"));
 
     socket.reset();
     first->reset();
@@ -197,7 +245,7 @@ TEST_CASE("serveMcp in remote mode makes a call after the server restarted", "[c
     for (int id = 2; !succeeded && std::chrono::steady_clock::now() < deadline; ++id) {
         pipe.push(call(id));
         REQUIRE(awaitReplies(static_cast<std::size_t>(id)));
-        std::string const text = output.str();
+        std::string const text = outputBuf.text();
         std::size_t const lastReply = text.rfind(R"({"jsonrpc")");
         succeeded = text.find(R"("isError":false)", lastReply) != std::string::npos;
         if (!succeeded) {
