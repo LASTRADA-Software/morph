@@ -98,10 +98,8 @@ public:
             throw std::invalid_argument{"McpAdapter: a server and a callbacks executor are required"};
         }
         backend::ConnectionId const cid = server->openConnection();
-        _shared->link = [server, cid](std::shared_ptr<Shared> const& /*self*/, wire::Envelope env,
-                                      EnvelopeReply done) {
-            Shared::overServer(server, cid, std::move(env), std::move(done));
-        };
+        _shared->link = [server, cid](std::shared_ptr<Shared> const& /*self*/, wire::Envelope const& env,
+                                      EnvelopeReply done) { Shared::overServer(server, cid, env, std::move(done)); };
         _shared->close = [server, cid] { server->closeConnection(cid); };
     }
 
@@ -726,9 +724,8 @@ inline void serveStdioOnOwner(McpAdapter& adapter, exec::IExecutor& owner, std::
         });
         std::unique_lock lock{mutex};
         answered.wait(lock, [&replied] { return replied.has_value(); });
-        auto const& reply = replied.value();
-        if (reply) {
-            output << *reply << '\n' << std::flush;
+        if (auto const& reply = replied.value(); reply.has_value()) {
+            output << reply.value() << '\n' << std::flush;
         }
     }
 }

@@ -141,15 +141,13 @@ struct EventWire {
                     sent.push_back(std::move(frame));
                 },
             .backlog = [] { return std::size_t{0}; },
-        }
-    };
-}
+        };
+    }
 
-std::size_t
-count() {
-    std::scoped_lock const lock{mutex};
-    return sent.size();
-}
+    std::size_t count() {
+        std::scoped_lock const lock{mutex};
+        return sent.size();
+    }
 };
 
 struct Rig {
