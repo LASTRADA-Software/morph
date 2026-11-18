@@ -849,7 +849,7 @@ TEST_CASE("remote_source_refetches_after_the_bridge_rebinds", "[client][source][
     source.close();
 }
 
-TEST_CASE("makeLocalServer serves the application's catalog and runs its actions", "[client][local-server]") {
+TEST_CASE("makeLocalServer serves the application's catalog", "[client][local-server]") {
     morph::exec::ThreadPoolExecutor workers{2};
     auto const server = morph::client::makeLocalServer(probe::app(), workers);
     REQUIRE(server.has_value());
@@ -900,9 +900,9 @@ morph::wire::Envelope runAnswer(morph::backend::RemoteServer& server) {
     run.modelType = "Probe_Model";
     run.actionType = "Probe_Answer";
     run.body = "{}";
-    std::promise<std::string> answer;
-    auto future = answer.get_future();
-    server.handle(morph::wire::encode(run), [&answer](std::string reply) { answer.set_value(std::move(reply)); });
+    auto answer = std::make_shared<std::promise<std::string>>();
+    auto future = answer->get_future();
+    server.handle(morph::wire::encode(run), [answer](std::string reply) { answer->set_value(std::move(reply)); });
     if (future.wait_for(std::chrono::seconds{10}) != std::future_status::ready) {
         morph::wire::Envelope timeout;
         timeout.kind = "err";
