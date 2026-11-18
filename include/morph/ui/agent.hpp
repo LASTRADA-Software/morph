@@ -57,7 +57,7 @@ struct McpOptions {
     /// @brief How long an envelope sent over a transport waits for its reply before it is answered as a failure.
     ///        `serveStdio` handles one message at a time, so without this bound a request a transport holds through
     ///        an outage would block every later message. Zero waits forever. The in-process constructor ignores it,
-    ///        since a `RemoteServer` always replies.
+    ///        since a `RemoteServer` always replies. A negative value is refused by the transport constructor.
     std::chrono::milliseconds callTimeout = std::chrono::seconds{30};
 };
 
@@ -113,14 +113,19 @@ public:
     /// `McpOptions::callTimeout` for its reply.
     /// @param transport The transport. Borrowed: it must outlive the adapter.
     /// @param options   Its options; `callbacks` must be the executor the transport may deliver replies on.
-    /// @throws std::invalid_argument without a callbacks executor.
+    /// @throws std::invalid_argument without a callbacks executor, or with a negative `callTimeout`.
     McpAdapter(backend::IEnvelopeTransport& transport, McpOptions options)
-        : _shared{std::make_shared<Shared>(std::move(options))},
-          _timer{std::make_unique<async::detail::TimeoutScheduler>()} {
+        : _shared{std::make_shared<Shared>(std::move(options))} {
         if (_shared->options.callbacks == nullptr) {
             throw std::invalid_argument{"McpAdapter: a callbacks executor is required"};
         }
-        _shared->timer = _timer.get();
+        if (_shared->options.callTimeout.count() < 0) {
+            throw std::invalid_argument{"McpAdapter: callTimeout must not be negative"};
+        }
+        if (_shared->options.callTimeout.count() > 0) {
+            _timer = std::make_unique<async::detail::TimeoutScheduler>();
+            _shared->timer = _timer.get();
+        }
         _shared->link = [&transport](std::shared_ptr<Shared> const& self, wire::Envelope env, EnvelopeReply done) {
             Shared::overTransport(self, transport, std::move(env), std::move(done));
         };
@@ -408,13 +413,17 @@ private:
             wire::Envelope request;
             request.kind = std::string{kCatalogKind};
             send(self, std::move(request), [self, generation, then = std::move(then)](wire::Envelope const& reply) {
+                // An unreadable or failed reply is empty for this call only: caching it would hide every tool
+                // until the next reset.
                 CatalogReply catalog;
+                bool readable = false;
                 if (reply.kind == "ok") {
                     if (auto read = parseCatalogReply(reply.body)) {
                         catalog = std::move(*read);
+                        readable = true;
                     }
                 }
-                {
+                if (readable) {
                     std::scoped_lock const lock{self->mutex};
                     if (self->generation == generation) {
                         self->catalog = catalog;
@@ -693,6 +702,8 @@ inline void serveStdio(McpAdapter& adapter, exec::MainThreadExecutor& owner, std
 ///        event loop: each message's `handle` is posted to @p owner, and the calling thread waits for its reply.
 ///        One JSON-RPC message per line of @p input, each reply on a line of @p output, in order, until @p input
 ///        ends. An empty line is skipped.
+///
+/// The owner must keep running until @p input ends: a reply is delivered on it, and this call waits for each one.
 /// @param adapter The adapter; its `McpOptions::callbacks` is @p owner.
 /// @param owner   The adapter's owner, a serial executor another thread runs.
 /// @param input   Where messages arrive.

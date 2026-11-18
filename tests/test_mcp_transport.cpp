@@ -10,7 +10,6 @@
 #include <deque>
 #include <exception>
 #include <functional>
-#include <map>
 #include <memory>
 #include <morph/core/bridge.hpp>
 #include <morph/core/completion.hpp>
@@ -28,12 +27,10 @@
 #include <morph/ui/service.hpp>
 #include <mutex>
 #include <optional>
-#include <set>
 #include <sstream>
 #include <stdexcept>
 #include <string>
 #include <string_view>
-#include <thread>
 #include <utility>
 #include <vector>
 
@@ -196,14 +193,6 @@ struct Rig {
         return cid;
     }
 
-    std::unique_ptr<ui::McpAdapter> adapter(std::string token = "agent") {
-        // `authorize` reads the session as sent, so it carries the principal its token proves.
-        morph::session::Context session;
-        session.principal = token;
-        session.token = std::move(token);
-        return std::make_unique<ui::McpAdapter>(server, ui::McpOptions{.session = session, .callbacks = &callbacks});
-    }
-
     morph::exec::ThreadPoolExecutor pool{2};
     // The adapter's owner, which this thread pumps: declared before the server, so it outlives every reply.
     morph::exec::MainThreadExecutor callbacks;
@@ -245,6 +234,37 @@ std::vector<std::string> toolNames(ui::Json const& reply) {
         names.push_back(std::get<std::string>(tool["name"].data));
     }
     return names;
+}
+
+// One call's outcome, filled on the owner when the adapter's completion is delivered.
+using Outcome = std::shared_ptr<std::optional<std::optional<std::string>>>;
+
+Outcome start(ui::McpAdapter& adapter, std::string const& message) {
+    auto outcome = std::make_shared<std::optional<std::optional<std::string>>>();
+    adapter.handle(message).thenDetached([outcome](std::optional<std::string> const& answer) { *outcome = answer; });
+    return outcome;
+}
+
+// A genuine catalog reply, from the server the adapter would have asked.
+morph::wire::Envelope realCatalog(Rig& rig) {
+    morph::wire::Envelope request;
+    request.kind = std::string{ui::kCatalogKind};
+    request.callId = 1;
+    request.session.principal = "agent";
+    request.session.token = "agent";
+    auto const cid = rig.server->openConnection();
+    auto reply = morph::wire::decode(rig.server->handleInline(morph::wire::encode(request), cid));
+    REQUIRE(reply.kind == "ok");
+    rig.server->closeConnection(cid);
+    return reply;
+}
+
+morph::wire::Envelope okReply(std::uint64_t modelId = 0, std::string body = {}) {
+    morph::wire::Envelope reply;
+    reply.kind = "ok";
+    reply.modelId = modelId;
+    reply.body = std::move(body);
+    return reply;
 }
 
 constexpr std::string_view kAdd =
@@ -319,20 +339,95 @@ TEST_CASE("an adapter over a transport reports a refused call as a tool error", 
     rig.server->closeConnection(cid);
 }
 
+TEST_CASE("a call over a transport reaches a watching GUI connection as an event", "[mcp][transport]") {
+    Rig rig;
+    auto const gui = rig.gui();
+    static_cast<void>(gui);
+    auto const cid = rig.server->openConnection();
+    morph::backend::SimulatedRemoteBackend transport{*rig.server, cid};
+    morph::session::Context session;
+    session.principal = "agent";
+    session.token = "agent";
+    ui::McpAdapter adapter{transport, ui::McpOptions{.session = session, .callbacks = &rig.callbacks}};
+    auto const reply = json(ask(rig.callbacks, adapter, std::string{kAdd}));
+    REQUIRE_FALSE(std::get<bool>(reply["result"]["isError"].data));
+    REQUIRE(pumpUntil(rig.callbacks, [&] { return rig.wire.count() >= 1; }));
+    {
+        std::scoped_lock const lock{rig.wire.mutex};
+        auto const event = morph::wire::decode(rig.wire.sent.front());
+        CHECK(event.kind == morph::wire::kEventKind);
+        CHECK(event.body.contains("Mt_Note"));
+    }
+    rig.server->closeConnection(cid);
+}
+
+TEST_CASE("evaluate over a transport changes nothing", "[mcp][transport]") {
+    Rig rig;
+    auto const cid = rig.server->openConnection();
+    morph::backend::SimulatedRemoteBackend transport{*rig.server, cid};
+    morph::session::Context session;
+    session.principal = "agent";
+    session.token = "agent";
+    ui::McpAdapter adapter{transport, ui::McpOptions{.session = session, .callbacks = &rig.callbacks}};
+    auto const reply = json(ask(rig.callbacks, adapter,
+                                R"({"jsonrpc":"2.0","id":6,"method":"tools/call","params":{"name":"evaluate",)"
+                                R"("arguments":{"action":"Mt_Add","body":{"text":"draft"}}}})"));
+    CHECK_FALSE(std::get<bool>(reply["result"]["isError"].data));
+    std::scoped_lock const lock{mt_test::store().mutex};
+    CHECK(mt_test::store().notes.empty());
+    rig.server->closeConnection(cid);
+}
+
 TEST_CASE("a rejected transport request is a tool error carrying the failure", "[mcp][transport]") {
+    Rig rig;
+    auto const catalog = realCatalog(rig);
+    ScriptedTransport transport;
+    ui::McpAdapter adapter{transport, ui::McpOptions{.callbacks = &rig.callbacks}};
+    auto const outcome = start(adapter, std::string{kList});
+    transport.at(rig.callbacks, 0).promise.resolve(catalog);
+    transport.at(rig.callbacks, 1).promise.resolve(okReply(41));
+    // The execute is rejected: the failure's message is the tool error's text.
+    transport.at(rig.callbacks, 2).promise.reject(std::make_exception_ptr(morph::backend::DisconnectedError{}));
+    REQUIRE(pumpUntil(rig.callbacks, [&] { return outcome->has_value(); }));
+    auto const reply = json(**outcome);
+    CHECK(std::get<bool>(reply["result"]["isError"].data));
+    CHECK(std::get<std::string>(reply["result"]["content"][0]["text"].data) ==
+          morph::backend::DisconnectedError{}.what());
+}
+
+TEST_CASE("an unreadable catalog is empty for the call that met it", "[mcp][transport]") {
     morph::exec::MainThreadExecutor owner;
     ScriptedTransport transport;
     ui::McpAdapter adapter{transport, ui::McpOptions{.callbacks = &owner}};
-    std::optional<std::optional<std::string>> replied;
-    adapter.handle(std::string{kList}).thenDetached([&](std::optional<std::string> const& answer) {
-        replied = answer;
-    });
-    // The catalog request.
+    auto const outcome = start(adapter, std::string{kList});
     transport.at(owner, 0).promise.reject(std::make_exception_ptr(morph::backend::DisconnectedError{}));
-    REQUIRE(pumpUntil(owner, [&] { return replied.has_value(); }));
-    // An unreadable catalog is empty, so the tool is unknown: a JSON-RPC -32602 naming it, and no crash.
-    CHECK(replied->value().contains("-32602"));
-    CHECK(replied->value().contains("Mt_List"));
+    REQUIRE(pumpUntil(owner, [&] { return outcome->has_value(); }));
+    // The tool is unknown to an empty catalog: a JSON-RPC -32602 naming it, and no crash.
+    CHECK((*outcome)->value().contains("-32602"));
+    CHECK((*outcome)->value().contains("Mt_List"));
+}
+
+TEST_CASE("a catalog that timed out is fetched again by the next call", "[mcp][transport]") {
+    Rig rig;
+    auto const catalog = realCatalog(rig);
+    ScriptedTransport transport;
+    ui::McpAdapter adapter{transport, ui::McpOptions{.callbacks = &rig.callbacks, .callTimeout = 100ms}};
+    auto const first = start(adapter, R"({"jsonrpc":"2.0","id":1,"method":"tools/list"})");
+    REQUIRE(pumpUntil(rig.callbacks, [&] { return first->has_value(); }));
+    CHECK(toolNames(json(**first)) == std::vector<std::string>{"evaluate"});
+    // The empty catalog was not cached: the next list asks again, and a real reply brings the tools.
+    auto const second = start(adapter, R"({"jsonrpc":"2.0","id":2,"method":"tools/list"})");
+    REQUIRE(transport.at(rig.callbacks, 1).envelope.kind == ui::kCatalogKind);
+    transport.sent.at(1).promise.resolve(catalog);
+    // The schema requests of the permitted models.
+    for (std::size_t index = 2; index < 4; ++index) {
+        REQUIRE(transport.at(rig.callbacks, index).envelope.kind == "schemas");
+        transport.sent.at(index).promise.resolve(okReply(0, "{}"));
+    }
+    REQUIRE(pumpUntil(rig.callbacks, [&] { return second->has_value(); }));
+    auto names = toolNames(json(**second));
+    std::ranges::sort(names);
+    CHECK(names == std::vector<std::string>{"Mt_Add", "Mt_List", "Mt_Tally", "evaluate"});
 }
 
 TEST_CASE("a request with no reply times out after callTimeout", "[mcp][transport]") {
@@ -348,49 +443,40 @@ TEST_CASE("a request with no reply times out after callTimeout", "[mcp][transpor
     CHECK(std::chrono::steady_clock::now() - started >= 100ms);
     // The catalog timed out, so it is empty: the list holds only `evaluate`.
     CHECK(replied->value().contains(R"("name":"evaluate")"));
-    // A reply that arrives after the timeout is dropped, not delivered twice.
-    transport.at(owner, 0).promise.resolve(morph::wire::makeErr("late"));
-    owner.runFor(50ms);
+}
+
+TEST_CASE("a reply that arrives after its timeout is dropped", "[mcp][transport]") {
+    Rig rig;
+    auto const catalog = realCatalog(rig);
+    ScriptedTransport transport;
+    ui::McpAdapter adapter{transport, ui::McpOptions{.callbacks = &rig.callbacks, .callTimeout = 100ms}};
+    auto const first = start(adapter, R"({"jsonrpc":"2.0","id":1,"method":"tools/list"})");
+    REQUIRE(pumpUntil(rig.callbacks, [&] { return first->has_value(); }));
+    // A real catalog arrives too late. Were it delivered, the adapter would cache it and answer the next list from
+    // it; dropped, the next list asks for the catalog again.
+    transport.at(rig.callbacks, 0).promise.resolve(catalog);
+    rig.callbacks.runFor(50ms);
+    auto const second = start(adapter, R"({"jsonrpc":"2.0","id":2,"method":"tools/list"})");
+    CHECK(transport.at(rig.callbacks, 1).envelope.kind == ui::kCatalogKind);
 }
 
 TEST_CASE("a register reply released after a reset is not cached", "[mcp][transport]") {
     Rig rig;
-    // A genuine catalog reply, from the server the adapter would have asked.
-    morph::wire::Envelope catalogRequest;
-    catalogRequest.kind = std::string{ui::kCatalogKind};
-    catalogRequest.callId = 1;
-    catalogRequest.session.principal = "agent";
-    catalogRequest.session.token = "agent";
-    auto const cid = rig.server->openConnection();
-    auto const catalogReply = morph::wire::decode(rig.server->handleInline(morph::wire::encode(catalogRequest), cid));
-    REQUIRE(catalogReply.kind == "ok");
-    rig.server->closeConnection(cid);
+    auto const catalogReply = realCatalog(rig);
 
     ScriptedTransport transport;
     ui::McpAdapter adapter{transport, ui::McpOptions{.callbacks = &rig.callbacks}};
-    auto const call = [&] {
-        auto replied = std::make_shared<std::optional<std::optional<std::string>>>();
-        adapter.handle(std::string{kList}).thenDetached([replied](std::optional<std::string> const& answer) {
-            *replied = answer;
-        });
-        return replied;
-    };
+    auto const call = [&] { return start(adapter, std::string{kList}); };
     auto const first = call();
     transport.at(rig.callbacks, 0).promise.resolve(catalogReply);
     // sent[1] is the register request: reset before its reply arrives.
     REQUIRE(transport.at(rig.callbacks, 1).envelope.kind == "register");
     adapter.resetter()();
-    morph::wire::Envelope registered;
-    registered.kind = "ok";
-    registered.modelId = 41;
-    transport.sent.at(1).promise.resolve(registered);
+    transport.sent.at(1).promise.resolve(okReply(41));
     // sent[2] is the execute on 41.
     REQUIRE(transport.at(rig.callbacks, 2).envelope.kind == "execute");
     CHECK(transport.sent.at(2).envelope.modelId == 41);
-    morph::wire::Envelope executed;
-    executed.kind = "ok";
-    executed.body = "[]";
-    transport.sent.at(2).promise.resolve(executed);
+    transport.sent.at(2).promise.resolve(okReply(0, "[]"));
     REQUIRE(pumpUntil(rig.callbacks, [&] { return first->has_value(); }));
 
     // The reset came before 41 arrived, so 41 was not cached: the catalog is fetched and the instance registered
@@ -398,6 +484,30 @@ TEST_CASE("a register reply released after a reset is not cached", "[mcp][transp
     auto const second = call();
     transport.at(rig.callbacks, 3).promise.resolve(catalogReply);
     CHECK(transport.at(rig.callbacks, 4).envelope.kind == "register");
+}
+
+TEST_CASE("a catalog reply released after a reset is not cached", "[mcp][transport]") {
+    Rig rig;
+    auto const catalog = realCatalog(rig);
+    ScriptedTransport transport;
+    ui::McpAdapter adapter{transport, ui::McpOptions{.callbacks = &rig.callbacks}};
+    auto const first = start(adapter, std::string{kList});
+    REQUIRE(transport.at(rig.callbacks, 0).envelope.kind == ui::kCatalogKind);
+    // Reset while the catalog request is outstanding, then release its reply.
+    adapter.resetter()();
+    transport.sent.at(0).promise.resolve(catalog);
+    transport.at(rig.callbacks, 1).promise.reject(std::make_exception_ptr(morph::backend::DisconnectedError{}));
+    REQUIRE(pumpUntil(rig.callbacks, [&] { return first->has_value(); }));
+    // The reply was sent before the reset, so it was not cached: the next call asks for the catalog again.
+    auto const second = start(adapter, std::string{kList});
+    CHECK(transport.at(rig.callbacks, 2).envelope.kind == ui::kCatalogKind);
+}
+
+TEST_CASE("a negative callTimeout is refused", "[mcp][transport]") {
+    morph::exec::MainThreadExecutor owner;
+    ScriptedTransport transport;
+    CHECK_THROWS_AS((ui::McpAdapter{transport, ui::McpOptions{.callbacks = &owner, .callTimeout = -1ms}}),
+                    std::invalid_argument);
 }
 
 TEST_CASE("a resetter called after the adapter is destroyed does nothing", "[mcp][transport]") {
@@ -408,7 +518,7 @@ TEST_CASE("a resetter called after the adapter is destroyed does nothing", "[mcp
         ui::McpAdapter adapter{transport, ui::McpOptions{.callbacks = &owner}};
         reset = adapter.resetter();
     }
-    reset();  // must not crash; run under ASan in CI
+    reset();  // a lifetime smoke test: it cannot fail by itself, and is checked under ASan in CI
 }
 
 TEST_CASE("serveStdioOnOwner answers lines while another thread runs the owner", "[mcp][transport]") {
