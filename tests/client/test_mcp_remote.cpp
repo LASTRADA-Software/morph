@@ -11,19 +11,26 @@
 #include <deque>
 #include <future>
 #include <istream>
+#include <memory>
 #include <morph/client/mcp.hpp>
 #include <morph/core/executor.hpp>
 #include <morph/net/socket_server.hpp>
 #include <mutex>
+#include <span>
 #include <sstream>
 #include <streambuf>
 #include <string>
 #include <thread>
+#include <vector>
 
 #include "../../src/client/mcp_internal.hpp"
 #include "probe_app.hpp"
 
 namespace {
+
+// What a call passes when it needs no session and no linked application.
+morph::session::Context const kNoSession;
+std::vector<morph::client::LocalApp> const kNoApps;
 
 // An input a test feeds line by line: reading blocks until a line is pushed or the input is closed, as a pipe does.
 class PipeBuf final : public std::streambuf {
@@ -53,7 +60,8 @@ protected:
         }
         _chunk = std::move(_pending);
         _pending.clear();
-        setg(_chunk.data(), _chunk.data(), _chunk.data() + _chunk.size());
+        std::span<char> const view{_chunk};
+        setg(view.data(), view.data(), std::to_address(view.end()));
         return traits_type::to_int_type(*gptr());
     }
 
@@ -90,7 +98,7 @@ TEST_CASE("serveMcp in remote mode answers over a WebSocket", "[client][mcp][net
                              "\n"};
     std::ostringstream output;
     std::ostringstream diagnostics;
-    CHECK(morph::client::serveMcp(args, {}, {}, input, output, diagnostics) == 0);
+    CHECK(morph::client::serveMcp(args, kNoApps, kNoSession, input, output, diagnostics) == 0);
     CHECK(output.str().contains(R"("name":"evaluate")"));
     // `evaluate` plus at least one of the application's own actions.
     CHECK(countOf(output.str(), R"("name":")") > 1);
@@ -117,8 +125,9 @@ TEST_CASE("serveMcp in remote mode reaches a server that starts after it", "[cli
     std::istream input{&pipe};
     std::ostringstream output;
     std::ostringstream diagnostics;
-    auto finished = std::async(std::launch::async,
-                               [&] { return morph::client::serveMcp(args, {}, {}, input, output, diagnostics); });
+    auto finished = std::async(std::launch::async, [&] {
+        return morph::client::serveMcp(args, kNoApps, kNoSession, input, output, diagnostics);
+    });
 
     std::this_thread::sleep_for(std::chrono::milliseconds{300});
     morph::net::SocketServer late{**server, port};

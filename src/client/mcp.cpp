@@ -63,11 +63,13 @@ session::Context mcpSession(Args const& args, std::function<char const*(char con
 
 namespace {
 
-int serveLocal(Args const& args, std::vector<LocalApp> const& apps, session::Context session, std::istream& input,
+int serveLocal(Args const& args, std::string const& appName, std::vector<LocalApp> const& apps,
+               session::Context session, std::istream& input,
+               // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): the protocol's channel, then the log.
                std::ostream& output, std::ostream& diagnostics) {
-    auto const found = std::ranges::find(apps, *args.app, &LocalApp::name);
+    auto const found = std::ranges::find(apps, appName, &LocalApp::name);
     if (found == apps.end()) {
-        diagnostics << "client: no application named " << *args.app << "; this client links:";
+        diagnostics << "client: no application named " << appName << "; this client links:";
         for (LocalApp const& app : apps) {
             diagnostics << ' ' << app.name;
         }
@@ -95,9 +97,9 @@ int serveLocal(Args const& args, std::vector<LocalApp> const& apps, session::Con
     return 0;
 }
 
-int serveRemote(Args const& args, session::Context session, std::istream& input, std::ostream& output,
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): the two streams are the protocol's two directions.
+int serveRemote(std::string const& url, session::Context session, std::istream& input, std::ostream& output,
                 std::ostream& diagnostics) {
-    std::string const& url = *args.server;
     ui::McpOptions options{.session = std::move(session), .serverName = "morph"};
 #if MORPH_CLIENT_TRANSPORT_NET
     if (url.starts_with("ws://")) {
@@ -125,9 +127,13 @@ int serveRemote(Args const& args, session::Context session, std::istream& input,
     static_cast<void>(options);
     static_cast<void>(input);
     static_cast<void>(output);
-    diagnostics << "client: " << url
-                << (url.starts_with("wss://") ? " needs Qt WebSockets, which are not built here\n"
-                                              : " needs morph::net or Qt WebSockets, and neither is built here\n");
+    if (!url.starts_with("ws://") && !url.starts_with("wss://")) {
+        diagnostics << "client: not a ws:// or wss:// URL: " << url << '\n';
+    } else {
+        diagnostics << "client: " << url
+                    << (url.starts_with("wss://") ? " needs Qt WebSockets, which are not built here\n"
+                                                  : " needs morph::net or Qt WebSockets, and neither is built here\n");
+    }
     return 2;
 #endif
 }
@@ -136,18 +142,21 @@ int serveRemote(Args const& args, session::Context session, std::istream& input,
 class FileStreamBuf final : public std::streambuf {
 public:
     explicit FileStreamBuf(std::FILE* file) : _file{file} {}
-    ~FileStreamBuf() override { std::fclose(_file); }
+    ~FileStreamBuf() override {
+        // NOLINTNEXTLINE(cppcoreguidelines-owning-memory): the stream owns the C file it was handed.
+        static_cast<void>(std::fclose(_file));
+    }
     FileStreamBuf(FileStreamBuf const&) = delete;
     FileStreamBuf& operator=(FileStreamBuf const&) = delete;
     FileStreamBuf(FileStreamBuf&&) = delete;
     FileStreamBuf& operator=(FileStreamBuf&&) = delete;
 
 protected:
-    int_type overflow(int_type ch) override {
-        if (traits_type::eq_int_type(ch, traits_type::eof())) {
-            return traits_type::not_eof(ch);
+    int_type overflow(int_type character) override {
+        if (traits_type::eq_int_type(character, traits_type::eof())) {
+            return traits_type::not_eof(character);
         }
-        return std::fputc(ch, _file) != EOF ? ch : traits_type::eof();
+        return std::fputc(character, _file) != EOF ? character : traits_type::eof();
     }
     std::streamsize xsputn(char const* text, std::streamsize count) override {
         return static_cast<std::streamsize>(std::fwrite(text, 1, static_cast<std::size_t>(count), _file));
@@ -170,23 +179,45 @@ private:
 
 int serveMcp(Args const& args, std::vector<LocalApp> const& apps, session::Context session, std::istream& input,
              std::ostream& output, std::ostream& diagnostics) {
-    return args.app ? serveLocal(args, apps, std::move(session), input, output, diagnostics)
-                    : serveRemote(args, std::move(session), input, output, diagnostics);
+    if (args.app) {
+        return serveLocal(args, *args.app, apps, std::move(session), input, output, diagnostics);
+    }
+    if (args.server) {
+        return serveRemote(*args.server, std::move(session), input, output, diagnostics);
+    }
+    diagnostics << "client: --mcp-stdio needs --server or --app\n";
+    return 2;
 }
 
 std::unique_ptr<std::ostream> claimStdout() {
     std::cout.flush();
-    std::fflush(stdout);
+    static_cast<void>(std::fflush(stdout));
 #ifdef _WIN32
     int const channel = ::_dup(1);
     std::FILE* const file = channel < 0 ? nullptr : ::_fdopen(channel, "wb");
-    if (file == nullptr || ::_dup2(2, 1) != 0) {
+    if (file == nullptr) {
+        if (channel >= 0) {
+            ::_close(channel);
+        }
+        return nullptr;
+    }
+    if (::_dup2(2, 1) != 0) {
+        // NOLINTNEXTLINE(cppcoreguidelines-owning-memory): the file is this function's until a stream takes it.
+        static_cast<void>(std::fclose(file));
         return nullptr;
     }
 #else
     int const channel = ::dup(1);
     std::FILE* const file = channel < 0 ? nullptr : ::fdopen(channel, "w");
-    if (file == nullptr || ::dup2(2, 1) < 0) {
+    if (file == nullptr) {
+        if (channel >= 0) {
+            ::close(channel);
+        }
+        return nullptr;
+    }
+    if (::dup2(2, 1) < 0) {
+        // NOLINTNEXTLINE(cppcoreguidelines-owning-memory): the file is this function's until a stream takes it.
+        static_cast<void>(std::fclose(file));
         return nullptr;
     }
 #endif

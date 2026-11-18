@@ -18,6 +18,9 @@
 
 namespace {
 
+// What a call passes when it needs no session.
+morph::session::Context const kNoSession;
+
 std::vector<std::string> lines(std::string const& text) {
     std::vector<std::string> out;
     std::istringstream stream{text};
@@ -57,7 +60,7 @@ TEST_CASE("serveMcp in local mode lists the application's actions and runs one",
         "\n"};
     std::ostringstream output;
     std::ostringstream diagnostics;
-    int const code = morph::client::serveMcp(args, {probe::agentApp()}, {}, input, output, diagnostics);
+    int const code = morph::client::serveMcp(args, {probe::agentApp()}, kNoSession, input, output, diagnostics);
     CHECK(code == 0);
     auto const replies = lines(output.str());
     REQUIRE(replies.size() == 3);
@@ -76,7 +79,7 @@ TEST_CASE("serveMcp refuses an application the binary does not link", "[client][
     std::istringstream input;
     std::ostringstream output;
     std::ostringstream diagnostics;
-    CHECK(morph::client::serveMcp(args, {probe::agentApp()}, {}, input, output, diagnostics) == 2);
+    CHECK(morph::client::serveMcp(args, {probe::agentApp()}, kNoSession, input, output, diagnostics) == 2);
     CHECK(output.str().empty());
     CHECK(diagnostics.str().contains("probe"));
 }
@@ -86,13 +89,14 @@ TEST_CASE("serveMcp refuses wss:// when no transport can reach it", "[client][mc
 #ifdef MORPH_CLIENT_TESTS_HAVE_QT_TRANSPORT
     SUCCEED("a Qt WebSocket transport is built, which would try to connect");
 #else
+    std::vector<morph::client::LocalApp> const noApps;
     morph::client::Args args;
     args.server = "wss://127.0.0.1:1";
     args.mcpStdio = true;
     std::istringstream input;
     std::ostringstream output;
     std::ostringstream diagnostics;
-    CHECK(morph::client::serveMcp(args, {}, {}, input, output, diagnostics) == 2);
+    CHECK(morph::client::serveMcp(args, noApps, kNoSession, input, output, diagnostics) == 2);
     CHECK(output.str().empty());
     CHECK(diagnostics.str().contains("Qt WebSockets"));
 #endif
@@ -109,6 +113,9 @@ TEST_CASE("claimStdout leaves only the claimed stream on the original stdout", "
     pid_t const child = ::fork();
     REQUIRE(child >= 0);
     if (child == 0) {
+        // The test binary has run threads, and a fork carries only this one: a lock another thread held (the
+        // allocator's, a stream's) stays held here. The child therefore does nothing beyond what claimStdout needs and
+        // a write to each stream, and leaves with `_exit`, which runs no atexit handler or static destructor.
         ::dup2(out.at(1), 1);
         ::dup2(err.at(1), 2);
         ::close(out.at(0));

@@ -4,6 +4,7 @@
 #include <QMetaObject>
 #include <QString>
 #include <QUrl>
+#include <array>
 #include <expected>
 #include <istream>
 #include <memory>
@@ -32,8 +33,9 @@ std::expected<RemoteTransport, std::string> qtTransport(std::string const& url) 
     return RemoteTransport{.backend = std::move(made), .requests = requests};
 }
 
-int serveMcpOverQt(std::string const& url, ui::McpOptions options, std::istream& input, std::ostream& output,
-                   std::ostream& diagnostics) {
+int serveMcpOverQt(std::string const& url, ui::McpOptions options, std::istream& input,
+                   // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): the protocol's channel, then the log.
+                   std::ostream& output, std::ostream& diagnostics) {
     QUrl const parsed{QString::fromStdString(url)};
     if (!parsed.isValid() || (parsed.scheme() != "ws" && parsed.scheme() != "wss")) {
         diagnostics << "client: not a ws:// or wss:// URL: " << url << '\n';
@@ -41,11 +43,11 @@ int serveMcpOverQt(std::string const& url, ui::McpOptions options, std::istream&
     }
     // A stdio server mounts no frontend, so nothing else made the application object the backend's socket needs.
     static int argc = 1;
-    static char name[] = "morph-mcp";
-    static char* argv[] = {name, nullptr};
+    static std::string name{"morph-mcp"};
+    static std::array<char*, 2> argv{name.data(), nullptr};
     std::unique_ptr<QCoreApplication> application;
     if (QCoreApplication::instance() == nullptr) {
-        application = std::make_unique<QCoreApplication>(argc, argv);
+        application = std::make_unique<QCoreApplication>(argc, argv.data());
     }
     // The backend lives on this thread and must be called here, so its owner is this thread's event loop; stdin is
     // read on a thread of its own, which waits for each reply.

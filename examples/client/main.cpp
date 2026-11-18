@@ -70,6 +70,8 @@ struct Grab {
     int height = 900;
     /// Test ids of the widgets to click, in order, before the image is taken: a menu that is open in the grab.
     std::vector<std::string> clicks;
+    /// Whether `--grab-size` was given.
+    bool sized = false;
 #if MORPH_CLIENT_HAS_QT_QUICK
     QQuickWindow* window = nullptr;
 #endif
@@ -123,6 +125,7 @@ bool takeGrabSize(std::vector<std::string>& args, Grab& grab) {
             ++index;
             continue;
         }
+        grab.sized = true;
         std::size_t const cross = size.find('x');
         if (cross == std::string::npos) {
             return false;
@@ -339,8 +342,8 @@ struct ShellFactory {
 
 /// `--mcp-stdio`: serves MCP on stdin and stdout. Draws nothing, so `--grab` and every frontend argument is refused.
 int serveMcpStdio(morph::client::Args const& clientArgs, std::vector<std::string> const& rest, Grab const& grab) {
-    if (!grab.path.empty()) {
-        std::cerr << "client: --mcp-stdio draws no window: drop --grab\n";
+    if (!grab.path.empty() || !grab.clicks.empty() || grab.sized) {
+        std::cerr << "client: --mcp-stdio draws no window: drop --grab, --grab-click and --grab-size\n";
         return 2;
     }
     if (auto const checked = morph::client::checkMcpArgs(clientArgs, rest); !checked) {
