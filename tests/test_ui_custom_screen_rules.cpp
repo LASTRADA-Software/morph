@@ -468,3 +468,23 @@ TEST_CASE("base rule: a host command that cannot be read is refused, not skipped
     REQUIRE(refusal);
     CHECK(refusal->path == "/view/children/4/onClick/0");
 }
+
+TEST_CASE("base rule: a host command is compared and quoted with its control bytes escaped",
+          "[ui][custom-screens][base-rule]") {
+    // The writer's default leaves a control byte raw and, after an earlier escaped character, can write it back as
+    // other bytes, so two arguments could compare alike. The canonical text, which the refusal quotes, escapes it.
+    auto const withArgs = [](std::string_view id, std::string_view arg) {
+        return replaced(baseScreen(id), R"({"host":"print"})",
+                        R"({"host":"print","args":{"lit":")" + std::string{arg} + R"("}})");
+    };
+    for (std::size_t gap = 0; gap < 20; ++gap) {
+        CAPTURE(gap);
+        std::string const lead = std::string{R"(\\)"} + std::string(gap, 'y');
+        auto const base = withArgs("lims.base", lead + R"(\u000bb)");
+        auto const refusal = between(base, withArgs("custom:mine", lead + R"(\u0001b)"));
+        REQUIRE(refusal);
+        CHECK(refusal->reason.contains(R"(\u0001)"));
+        CHECK_FALSE(refusal->reason.contains('\x01'));
+        CHECK_FALSE(between(base, withArgs("custom:mine", lead + R"(\u000bb)")));
+    }
+}

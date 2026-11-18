@@ -71,7 +71,9 @@ struct CustomScreenRefusal {
 /// @brief Stores custom screens. The application's implementation is where every policy over them lives.
 ///
 /// `list` answers the screens a person may open, which may include screens others saved. `put` and `remove` refuse
-/// what the person may not do, with a reason for the person. The model calls a store only with a person the server
+/// what the person may not do, with a reason for the person. An id longer than `kMaxNameBytes` is shown to the person
+/// cut, so `get` and `remove` could not be given it back: a store keeps its ids within `kMaxNameBytes` (the model's
+/// own are 39 bytes). The model calls a store only with a person the server
 /// derived and with a document that passed every check. A store owns the executor its completions are delivered on.
 class ICustomScreenStore {
 public:
@@ -224,10 +226,18 @@ private:
 /// @brief The longest `broken.reason` of a summary, in bytes; a longer one is cut and ends with an ellipsis.
 inline constexpr std::size_t kMaxBrokenReasonBytes = 1024;
 
-/// @brief The bytes of a `get` reply that are not its document. Every summary field is capped when the summary is
-///        built: `id`, `title`, `basedOn`, `savedBy` and `broken.pointer` at `kMaxNameBytes` and `broken.reason` at
-///        `kMaxBrokenReasonBytes`, a cut one ending with an ellipsis. Six capped fields of at most six bytes per
-///        byte once escaped, the keys and the punctuation come to under 12 KiB, and this is sized with a wide margin.
+/// @brief The most bytes one summary takes before escaping. Every field is capped when the summary is built: `id`,
+///        `title`, `basedOn`, `savedBy` and `broken.pointer` at `kMaxNameBytes` and `broken.reason` at
+///        `kMaxBrokenReasonBytes`, a cut one ending with an ellipsis. That is 5 * 256 + 1024 = 2304 bytes of text; the
+///        keys, the punctuation and `savedAt` take under 300 more, and 3 KiB leaves a margin.
+inline constexpr std::size_t kMaxSummaryBytes = std::size_t{3} * 1024;
+
+/// @brief The most a byte of a summary grows to in an envelope: the reply is written with control bytes escaped, so
+///        one becomes a six-byte escape sequence, and the envelope then doubles each backslash of the reply, making seven.
+inline constexpr std::size_t kMaxEscapedGrowth = 7;
+
+/// @brief The bytes of a `get` reply that are not its document: one capped summary, at most
+///        `kMaxEscapedGrowth * kMaxSummaryBytes` = 21 KiB once escaped, with a margin to 64 KiB.
 inline constexpr std::size_t kCustomScreenReplyOverhead = std::size_t{64} * 1024;
 
 /// @brief The custom screens' bounds.
@@ -239,10 +249,11 @@ struct CustomScreensOptions {
     std::size_t maxDocumentBytes = std::size_t{256} * 1024;
     /// @brief The most verdicts `VerdictCache` keeps.
     std::size_t verdictCacheSize = 1024;
-    /// @brief The most summaries `list` answers; it says `truncated` when the store held more. A capped summary is
-    ///        about 2.3 KiB at most, and the envelope escapes the reply up to four-fold, so 500 stay well under
-    ///        `wire::kMaxEnvelopeBytes`.
-    std::size_t maxListed = 500;
+    /// @brief The most summaries `list` answers; it says `truncated` when the store held more. A capped summary is at
+    ///        most `kMaxSummaryBytes` and grows at most `kMaxEscapedGrowth`-fold in an envelope, so
+    ///        `maxListed * kMaxEscapedGrowth * kMaxSummaryBytes + kCustomScreenReplyOverhead` must not exceed
+    ///        `wire::kMaxEnvelopeBytes`: at most 387. The default of 200 takes at most 4.3 MB.
+    std::size_t maxListed = 200;
 };
 
 /// @brief The checks' verdicts by `verdictKey`, bounded, dropping the least recently used.

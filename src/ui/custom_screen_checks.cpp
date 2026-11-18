@@ -247,7 +247,7 @@ private:
         Json const* const json = at(path);
         auto const* const object = json == nullptr ? nullptr : std::get_if<Json::object_t>(&json->data);
         if (object != nullptr) {
-            if (auto written = glz::write_json(*json)) {
+            if (auto written = glz::write<::morph::wire::detail::EscapingWriteOpts{}>(*json)) {
                 auto const args = object->find("args");
                 _hostCommands.push_back(HostCommand{.json = *std::move(written),
                                                     .path = path,
@@ -285,7 +285,7 @@ private:
         if (mode == object->end()) {
             return true;
         }
-        auto const text = glz::write_json(mode->second);
+        auto const text = glz::write<::morph::wire::detail::EscapingWriteOpts{}>(mode->second);
         return text && (*text == R"("open")" || *text == R"({"lit":"open"})");
     }
 
@@ -322,7 +322,7 @@ private:
         if (object == nullptr || !object->contains(key)) {
             return false;
         }
-        return glz::write_json(object->at(key)).value_or("") == R"({"ref":"event"})";
+        return glz::write<::morph::wire::detail::EscapingWriteOpts{}>(object->at(key)).value_or("") == R"({"ref":"event"})";
     }
 
     [[nodiscard]] static Mutation const* find(std::string const& name, Table const& table) {

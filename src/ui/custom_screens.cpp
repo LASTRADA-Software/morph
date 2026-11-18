@@ -273,6 +273,11 @@ void registerCustomScreens(std::shared_ptr<ICustomScreenStore> store,
             "registerCustomScreens: maxDocumentBytes is too large for a `get` reply to fit one envelope once "
             "escaped"};
     }
+    if (options.maxListed >
+        (::morph::wire::kMaxEnvelopeBytes - kCustomScreenReplyOverhead) / (kMaxEscapedGrowth * kMaxSummaryBytes)) {
+        throw std::invalid_argument{"registerCustomScreens: maxListed is too large for a `list` reply to fit one envelope "
+                                    "once escaped"};
+    }
     auto context = std::make_shared<detail::CustomScreensContext>(std::move(store), std::move(bundle),
                                                                   std::move(authorizer), options);
     registry.registerModel<CustomScreensModel>(kCustomScreensModel, [context] {

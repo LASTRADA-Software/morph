@@ -217,6 +217,15 @@ TEST_CASE("registerCustomScreens refuses what it cannot serve", "[ui][custom-scr
     CHECK_NOTHROW(morph::ui::registerCustomScreens(
         store, getBundle, authorizer, dispatcher, registry,
         morph::ui::CustomScreensOptions{.maxDocumentBytes = largest}));
+    // The same for a list: the most summaries whose escaped reply fits one envelope, and one more.
+    std::size_t const mostListed = (morph::wire::kMaxEnvelopeBytes - morph::ui::kCustomScreenReplyOverhead) /
+                                   (morph::ui::kMaxEscapedGrowth * morph::ui::kMaxSummaryBytes);
+    CHECK_THROWS_AS(morph::ui::registerCustomScreens(
+                        store, getBundle, authorizer, dispatcher, registry,
+                        morph::ui::CustomScreensOptions{.maxListed = mostListed + 1}),
+                    std::invalid_argument);
+    CHECK_NOTHROW(morph::ui::registerCustomScreens(
+        store, getBundle, authorizer, dispatcher, registry, morph::ui::CustomScreensOptions{.maxListed = mostListed}));
 }
 
 TEST_CASE("custom screens: a document of escaping characters at the default bound is served within the envelope",
@@ -429,4 +438,30 @@ TEST_CASE("custom screens: list answers at most maxListed and says it truncated"
     auto const exact = listed(roomy, "alice");
     CHECK(exact.screens.size() == 3);
     CHECK_FALSE(exact.truncated);
+}
+
+TEST_CASE("custom screens: a full list of adversarial summaries fits one envelope", "[ui][custom-screens][remote]") {
+    auto const store = std::make_shared<morph::ui::MemoryCustomScreenStore>(morph::exec::detail::inlineExecutor());
+    morph::ui::CustomScreensOptions const options;
+    // Every field is full of control bytes, which are the most an escaped byte grows, and the id and basedOn are
+    // longer than a name may be.
+    std::string const control(5000, '\x0b');
+    for (std::size_t i = 0; i < options.maxListed + 5; ++i) {
+        std::string const id = "custom:" + std::to_string(1000 + i) + control;
+        REQUIRE(settled(store->put({.person = "alice", .app = "lims", .id = id},
+                                   morph::ui::CustomScreen{.id = id,
+                                                           .title = control,
+                                                           .basedOn = control,
+                                                           .document = "{}",
+                                                           .savedAt = {},
+                                                           .savedBy = control})));
+    }
+    Server s{store, options};
+    Envelope const reply = s.call(morph::ui::kCustomScreensList, R"({"app":"lims"})", "alice");
+    REQUIRE(reply.kind == "ok");
+    CHECK(morph::wire::encode(morph::wire::makeOk(0, reply.body)).size() <= morph::wire::kMaxEnvelopeBytes);
+    morph::ui::CustomScreensListed out;
+    REQUIRE_FALSE(glz::read_json(out, reply.body));
+    CHECK(out.screens.size() == options.maxListed);
+    CHECK(out.truncated);
 }

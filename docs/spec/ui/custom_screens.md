@@ -87,9 +87,12 @@ What every action does, in order:
   escaped character), and the
   rewritten text, whose id may be longer than the one it had, must still be within `maxDocumentBytes`. Only then is `put` called, with
   `savedAt` the current time and `savedBy` the caller.
-- **`list` answers at most `maxListed` summaries** (500 by default) and says `truncated: true` when the store held
-  more. A capped summary is about 2.3 KiB at most and the envelope escapes the reply up to four-fold, so 500 stay well
-  under the envelope bound.
+- **`list` answers at most `maxListed` summaries** (200 by default) and says `truncated: true` when the store held
+  more. A capped summary is at most `kMaxSummaryBytes` (3 KiB) and grows at most seven-fold in an envelope: the reply
+  is written with control bytes escaped, so one becomes a six-byte sequence, and the envelope doubles each backslash of
+  the reply. `registerCustomScreens` refuses a `maxListed` for which
+  `maxListed * 7 * kMaxSummaryBytes + kCustomScreenReplyOverhead` exceeds `wire::kMaxEnvelopeBytes`, which is above 387;
+  the default takes at most 4.3 MB.
 - **`remove`** calls the store's `remove` under the caller.
 - **A store's refusal is passed through unchanged**, from `get`, `put` and `remove`: the model adds no wording over
   the reason, so the person is told what the store said.
@@ -99,6 +102,9 @@ not the document is bounded whatever the store holds: `id`, `title`, `basedOn`, 
 `kMaxNameBytes`, and `broken.reason` at `kMaxBrokenReasonBytes` (1 KiB). A longer value is cut on a UTF-8 boundary and
 ends with an ellipsis (U+2026). A reason can quote a whole host command, and a pointer or a principal can be of any
 length, so without the caps the reply would have no bound. `mine` is computed from the stored `savedBy`, before the cap.
+One summary is then at most `kMaxSummaryBytes` (3 KiB) before escaping and at most seven times that after it (see `list`).
+A store keeps its ids within `kMaxNameBytes`, since an id shown cut could not be given back to `get` or `remove`; the
+model's own are 39 bytes.
 
 A `CustomScreenSummary` carries `id`, `title`, `basedOn`, `savedAt`, `savedBy` and:
 
