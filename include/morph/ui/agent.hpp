@@ -57,9 +57,9 @@ struct McpOptions {
     /// @brief How long an envelope sent over a transport waits for its reply before it is answered as a failure.
     ///        `serveStdio` handles one message at a time, so without this bound a request a transport holds before its
     ///        first connect (with `retryFirstConnect`; requests during an outage are rejected instead) would block
-    ///        every later message. Zero waits forever. The in-process
-    ///        constructor ignores it, since a `RemoteServer` always replies. A negative value is refused by the
-    ///        transport constructor.
+    ///        every later message. The timeout does not cancel the request: the call may still complete on the server,
+    ///        and a reply that arrives later is dropped. Zero waits forever. The in-process constructor ignores it,
+    ///        since a `RemoteServer` always replies. A negative value is refused by the transport constructor.
     std::chrono::milliseconds callTimeout = std::chrono::seconds{30};
 };
 
@@ -271,7 +271,8 @@ private:
                     // The timeout fires on the scheduler's loop and settles on the owner, as replies do.
                     pending->timer = self->timer->schedule(timeout, [owner, pending, timeout] {
                         owner->post([pending, timeout] {
-                            pending->settle(wire::makeErr("no reply from the server in " + waited(timeout)));
+                            pending->settle(wire::makeErr("no reply from the server in " + waited(timeout) +
+                                                          "; the call may still complete"));
                         });
                     });
                 }
@@ -726,10 +727,8 @@ inline void serveStdioOnOwner(McpAdapter& adapter, exec::IExecutor& owner, std::
         });
         std::unique_lock lock{mutex};
         answered.wait(lock, [&replied] { return replied.has_value(); });
-        if (!replied) {
-            continue;
-        }
-        if (auto const& reply = *replied; reply.has_value()) {
+        // The wait returns only once a reply, possibly an empty one for a notification, was stored.
+        if (auto const& reply = replied.value(); reply.has_value()) {
             output << reply.value() << '\n' << std::flush;
         }
     }

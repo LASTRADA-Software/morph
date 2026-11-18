@@ -69,8 +69,9 @@ reply, plus an optional close.
   nothing: the transport's connection is the agent's connection, and the server releases the adapter's private
   instances when that connection drops.
 - **`McpOptions::callTimeout`** bounds each envelope sent over a transport, 30 seconds by default. A call that
-  gets no reply in time answers `wire::makeErr("no reply from the server in <n> s")`, and a reply that arrives
-  later is dropped. `serveStdio` handles one message at a time, so without this bound a request the server never
+  gets no reply in time answers `wire::makeErr("no reply from the server in <n> s; the call may still complete")`,
+  and a reply that arrives later is dropped. The timeout cancels nothing: the server may still run the call.
+  `serveStdio` handles one message at a time, so without this bound a request the server never
   answers would block every later message, `ping` included. The in-process constructor ignores it:
   `RemoteServer` always replies.
 - **A generation guard.** `Shared` keeps a generation counter. A reset bumps it under the mutex, clearing the

@@ -84,7 +84,8 @@ it in the destructor. The transport constructor's link is `transport.request(env
   server releases the adapter's private instances when that connection drops. The session stays the adapter's:
   `send` stamps `options.session` on every envelope, and the transport stamps nothing.
 - **`callTimeout` bounds each envelope.** A call that gets no reply in time answers
-  `wire::makeErr("no reply from the server in <n> s")`, and a reply that arrives later is dropped. `serveStdio`
+  `wire::makeErr("no reply from the server in <n> s; the call may still complete")`, and a reply that arrives later
+  is dropped. The timeout cancels nothing: the server may still run the call. `serveStdio`
   handles one message at a time, so without the bound a request the server never answers would block every later
   message, `ping` included. Zero means no bound; the in-process constructor ignores it, since `RemoteServer`
   always replies.
