@@ -99,13 +99,14 @@ public:
     /// @param sites The sites whose samples are listed.
     /// @param query The sort, filters and page.
     /// @param action The action named in a refusal.
+    /// @param options How `apply` runs; its `limits.totalCap` decides above which count the total is omitted.
     /// @return The page.
     /// @throws ValidationError if the query names a column the rows do not have, holds an operand its column cannot
     ///         parse, or exceeds the limits.
     /// @throws Lightweight::SqlException if a statement fails.
-    [[nodiscard]] static ::morph::table::Page<SampleView> pageSamples(std::vector<SiteId> const& sites,
-                                                                      ::morph::table::TableQuery const& query,
-                                                                      std::string_view action = "ListSamples");
+    [[nodiscard]] static ::morph::table::Page<SampleView> pageSamples(
+        std::vector<SiteId> const& sites, ::morph::table::TableQuery const& query,
+        std::string_view action = "ListSamples", ::morph::table::ApplyOptions const& options = {});
 
     /// @brief `Registered → Received`.
     /// @param action Carries no fields of its own.
