@@ -9,6 +9,7 @@
 #include <morph/core/payload_schema.hpp>
 #include <mutex>
 #include <stdexcept>
+#include <thread>
 #include <type_traits>
 #include <utility>
 #include <variant>
@@ -120,8 +121,9 @@ void appendText(std::string& out, std::uint64_t bits, WideRole role) {
     }
 }
 
-// Generates one column's arrays for rows [0, rows).
-std::shared_ptr<ColumnData const> generate(std::uint64_t seed, WideColumn const& column, std::int64_t rows) {
+// Generates one column's arrays for rows [first, first + rows); the arrays' row 0 is row `first`.
+std::shared_ptr<ColumnData const> generate(std::uint64_t seed, WideColumn const& column, std::int64_t rows,
+                                           std::int64_t first = 0) {
     auto data = std::make_shared<ColumnData>();
     data->role = column.role;
     auto const count = static_cast<std::size_t>(rows);
@@ -137,14 +139,14 @@ std::shared_ptr<ColumnData const> generate(std::uint64_t seed, WideColumn const&
     }
     auto const base = columnBase(seed, column.info.id);
     for (std::int64_t row = 0; row < rows; ++row) {
-        auto const bits = splitmix64(base + static_cast<std::uint64_t>(row));
+        auto const bits = splitmix64(base + static_cast<std::uint64_t>(first + row));
         bool const empty = column.sparse && bits % 10 == 0;
         if (column.sparse) {
             data->empty.push_back(empty);
         }
         switch (column.role) {
             case WideRole::Key:
-                data->values.push_back(row + 1);
+                data->values.push_back(first + row + 1);
                 break;
             case WideRole::Integer:
                 data->values.push_back(empty ? 0 : signedBelow(bits, 2'000'001, 1'000'000));
@@ -699,13 +701,24 @@ std::size_t processBytes() noexcept {
 
 namespace {
 
-// The model's process-wide state: the options, and each table's source once a call has built it.
+// Where the recipe loader runs. Never destroyed: a loader held by a gate at exit must not be joined.
+morph::exec::ThreadPoolExecutor& recipeLoads() {
+    static auto* const pool = new morph::exec::ThreadPoolExecutor(1);  // NOLINT(cppcoreguidelines-owning-memory)
+    return *pool;
+}
+
+// The model's process-wide state: the options, each table's source once a call has built it, and the recipe
+// level's cache with the loader's call log.
 struct WideModelState {
     std::mutex mutex;
     WideTableOptions wide{.rows = 100'000, .columns = 300, .seed = 1, .loadDelay = {}};
     WideTableOptions small{.rows = 1'000, .columns = 30, .seed = 1, .loadDelay = {}};
     std::shared_ptr<WideTableSource> wideSource;
     std::shared_ptr<WideTableSource> smallSource;
+    std::shared_ptr<morph::table::CellLevelCache> recipe;
+    std::mutex logMutex;
+    std::vector<std::vector<morph::table::RowId>> calls;
+    LoadGate gate;
 };
 
 WideModelState& wideModelState() {
@@ -713,24 +726,164 @@ WideModelState& wideModelState() {
     return state;
 }
 
-// The source of one table, built under the state's mutex by the first call that needs it.
+// The recipe columns of the wide layout, with their generators' attributes.
+std::vector<WideColumn> const& recipeLayout() {
+    static auto const layout = [] {
+        std::vector<WideColumn> out;
+        auto const all = wideColumns(300);
+        for (auto const& column : all) {
+            if (column.level == "recipe" && column.role == WideRole::Decimal) {
+                out.push_back(column);
+            }
+        }
+        for (auto const& column : all) {
+            if (column.level == "recipe" && column.role == WideRole::Text) {
+                out.push_back(column);
+            }
+        }
+        return out;
+    }();
+    return layout;
+}
+
+// The recipe cells of rows [first, first + count), one vector per row.
+std::vector<std::vector<Cell>> recipeRows(std::uint64_t seed, std::int64_t first, std::int64_t count) {
+    std::vector<std::vector<Cell>> out(static_cast<std::size_t>(count));
+    for (auto const& column : recipeLayout()) {
+        auto const data = generate(seed, column, count, first);
+        for (std::size_t row = 0; row < out.size(); ++row) {
+            out[row].push_back(cellOf(*data, row));
+        }
+    }
+    return out;
+}
+
+// The recipe settings both tables' options give together.
+struct RecipeSettings {
+    double preloaded = 1.0;
+    std::size_t batch = 64;
+    bool fails = false;
+    std::chrono::microseconds delay{0};
+};
+
+RecipeSettings recipeSettings(WideModelState const& state) {
+    return RecipeSettings{.preloaded = std::min(state.wide.recipePreloaded, state.small.recipePreloaded),
+                          .batch = std::min(state.wide.recipeBatch, state.small.recipeBatch),
+                          .fails = state.wide.recipeFails || state.small.recipeFails,
+                          .delay = std::max(state.wide.loadDelay, state.small.loadDelay)};
+}
+
+// Under the state's mutex: a new, empty recipe cache over the state's settings.
+std::shared_ptr<morph::table::CellLevelCache> makeRecipeCache(WideModelState& state) {
+    auto const settings = recipeSettings(state);
+    morph::table::LevelCacheOptions options;
+    options.records = {"WideTableModel.wide", "WideTableModel.small"};
+    options.level = "recipe";
+    options.columns = recipeColumns();
+    options.loads = &recipeLoads();
+    options.batch = settings.batch;
+    auto loader = [&state, settings](std::span<morph::table::RowId const> keys) {
+        {
+            std::scoped_lock const lock{state.logMutex};
+            state.calls.emplace_back(keys.begin(), keys.end());
+        }
+        state.gate.pass();
+        if (settings.delay.count() > 0) {
+            std::this_thread::sleep_for(settings.delay * static_cast<std::int64_t>(keys.size()));
+        }
+        std::vector<std::pair<morph::table::RowId, std::vector<Cell>>> out;
+        if (settings.fails) {
+            return out;
+        }
+        std::uint64_t seed = 1;
+        {
+            std::scoped_lock const lock{state.mutex};
+            seed = state.wide.seed;
+        }
+        for (auto const& key : keys) {
+            auto const* const integer = std::get_if<std::int64_t>(&key);
+            if (integer == nullptr || *integer < 1) {
+                continue;
+            }
+            auto cells = recipeRows(seed, *integer - 1, 1);
+            out.emplace_back(key, std::move(cells.front()));
+        }
+        return out;
+    };
+    {
+        std::scoped_lock const lock{state.logMutex};
+        state.calls.clear();
+    }
+    return std::make_shared<morph::table::CellLevelCache>(std::move(options), std::move(loader));
+}
+
+// Under the state's mutex: stores the drawn fraction of rows [0, rows) the cache does not hold yet.
+void preload(WideModelState& state, std::int64_t rows, std::uint64_t seed) {
+    auto const fraction = recipeSettings(state).preloaded;
+    if (fraction <= 0.0 || rows <= 0) {
+        return;
+    }
+    auto const snapshot = state.recipe->snapshot();
+    std::vector<Cell> buffer(recipeLayout().size());
+    auto cells = recipeRows(seed, 0, rows);
+    std::vector<std::pair<morph::table::RowId, std::vector<Cell>>> values;
+    for (std::int64_t row = 0; row < rows; ++row) {
+        morph::table::RowId const key{row + 1};
+        if (!drawnLoaded(seed, static_cast<std::size_t>(row), fraction) ||
+            snapshot->read(key, buffer) == morph::table::LevelRead::Loaded) {
+            continue;
+        }
+        values.emplace_back(key, std::move(cells[static_cast<std::size_t>(row)]));
+    }
+    morph::table::detail::LevelCacheAccess::store(*state.recipe, std::move(values));
+}
+
+// Under the state's mutex: the recipe cache, built when missing.
+std::shared_ptr<morph::table::CellLevelCache> const& recipeOf(WideModelState& state) {
+    if (state.recipe == nullptr) {
+        state.recipe = makeRecipeCache(state);
+    }
+    return state.recipe;
+}
+
+// The source of one table, built under the state's mutex by the first call that needs it, its rows' recipe values
+// preloaded as the options say.
 std::shared_ptr<WideTableSource> sourceOf(bool wide) {
     auto& state = wideModelState();
     std::scoped_lock const lock{state.mutex};
     auto& source = wide ? state.wideSource : state.smallSource;
     if (source == nullptr) {
-        source = std::make_shared<WideTableSource>(wide ? state.wide : state.small);
+        auto const& options = wide ? state.wide : state.small;
+        source = std::make_shared<WideTableSource>(options);
+        static_cast<void>(recipeOf(state));
+        preload(state, options.rows, options.seed);
     }
     return source;
 }
 
-// Sets both tables' seed and returns the sources built so far, building neither.
+// Sets both tables' seed, empties the recipe cache and preloads the built tables' rows at the new seed; returns the
+// sources built so far, building neither.
 std::pair<std::shared_ptr<WideTableSource>, std::shared_ptr<WideTableSource>> builtSources(std::uint64_t seed) {
     auto& state = wideModelState();
     std::scoped_lock const lock{state.mutex};
     state.wide.seed = seed;
     state.small.seed = seed;
+    if (state.recipe != nullptr) {
+        state.recipe->invalidateAll();
+        for (auto const& source : {state.wideSource, state.smallSource}) {
+            if (source != nullptr) {
+                preload(state, source->options().rows, seed);
+            }
+        }
+    }
     return {state.wideSource, state.smallSource};
+}
+
+// The recipe cache, as a table's `levels`.
+std::vector<std::shared_ptr<morph::table::LevelSource>> recipeLevels() {
+    auto& state = wideModelState();
+    std::scoped_lock const lock{state.mutex};
+    return {recipeOf(state)};
 }
 
 morph::table::TableDescription const& describedWide() {
@@ -791,6 +944,7 @@ morph::table::ServedTable served(morph::table::TableDescription const& descripti
     morph::table::ServedTable out;
     out.description = description;
     out.source = std::move(source);
+    out.levels = recipeLevels();
     return out;
 }
 
@@ -803,6 +957,7 @@ void WideTableModel::configure(WideTableOptions wide, WideTableOptions small) {
     state.small = small;
     state.wideSource.reset();
     state.smallSource.reset();
+    state.recipe.reset();
 }
 
 morph::table::ServedTable WideTableModel::wide(morph::table::TableContext const& context) {
@@ -852,6 +1007,59 @@ bool WideTableModel::execute(ReplaceWideRows const& action) {
         smallSource->regenerate(action.seed);
     }
     return true;
+}
+
+void LoadGate::hold() {
+    std::scoped_lock const lock{_mutex};
+    _held = true;
+    _passes = 0;
+}
+
+void LoadGate::release() {
+    {
+        std::scoped_lock const lock{_mutex};
+        _held = false;
+        _passes = 0;
+    }
+    _changed.notify_all();
+}
+
+void LoadGate::release(std::size_t calls) {
+    {
+        std::scoped_lock const lock{_mutex};
+        _passes += calls;
+    }
+    _changed.notify_all();
+}
+
+void LoadGate::pass() {
+    std::unique_lock lock{_mutex};
+    _changed.wait(lock, [this] { return !_held || _passes > 0; });
+    if (_held) {
+        --_passes;
+    }
+}
+
+std::vector<ColumnInfo> recipeColumns() {
+    std::vector<ColumnInfo> out;
+    for (auto const& column : recipeLayout()) {
+        out.push_back(column.info);
+    }
+    return out;
+}
+
+LoadGate& WideTableModel::recipeGate() { return wideModelState().gate; }
+
+std::vector<std::vector<morph::table::RowId>> WideTableModel::loaderCalls() {
+    auto& state = wideModelState();
+    std::scoped_lock const lock{state.logMutex};
+    return state.calls;
+}
+
+std::shared_ptr<morph::table::CellLevelCache> WideTableModel::recipeCache() {
+    auto& state = wideModelState();
+    std::scoped_lock const lock{state.mutex};
+    return recipeOf(state);
 }
 
 std::uint64_t digestForTesting(WideTableSource const& source) {

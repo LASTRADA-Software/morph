@@ -11,6 +11,7 @@
 // for medians, so the cases time themselves.
 
 #include <algorithm>
+#include <atomic>
 #include <catch2/catch_test_macros.hpp>
 #include <chrono>
 #include <cmath>
@@ -20,6 +21,7 @@
 #include <format>
 #include <functional>
 #include <glaze/glaze.hpp>
+#include <latch>
 #include <memory>
 #include <morph/core/backend.hpp>
 #include <morph/core/bridge.hpp>
@@ -29,10 +31,12 @@
 #include <morph/session/session.hpp>
 #include <morph/table/description.hpp>
 #include <morph/table/engine.hpp>
+#include <morph/table/level_cache.hpp>
 #include <morph/table/query.hpp>
 #include <optional>
 #include <print>
 #include <random>
+#include <span>
 #include <string>
 #include <string_view>
 #include <thread>
@@ -972,4 +976,208 @@ TEST_CASE("table benchmark: partial pages and keyed replies", "[.benchmark][tabl
                   REQUIRE(read.has_value());
                   REQUIRE(read->indices.size() == 20);
               }));
+}
+
+// ── The server level cache (L1-L3, L6) ──────────────────────────────────────
+
+namespace {
+
+using LevelValues = std::vector<std::pair<RowId, std::vector<Cell>>>;
+
+// Twenty cells as the recipe level holds them: ten decimals and ten texts of 4 to 60 characters.
+std::vector<Cell> recipeLikeValue(std::int64_t key) {
+    std::vector<Cell> out;
+    out.reserve(20);
+    for (std::int64_t column = 0; column < 10; ++column) {
+        out.emplace_back(tabletest::dec(std::to_string((key * 31 + column) % 100000) + ".25"));
+    }
+    for (std::int64_t column = 0; column < 10; ++column) {
+        out.emplace_back(std::string(static_cast<std::size_t>(4 + ((key + column) % 57)), 'a'));
+    }
+    return out;
+}
+
+LevelValues recipeLikeValues(std::int64_t first, std::int64_t last) {
+    LevelValues out;
+    out.reserve(static_cast<std::size_t>(last - first));
+    for (auto key = first; key < last; ++key) {
+        out.emplace_back(RowId{key}, recipeLikeValue(key));
+    }
+    return out;
+}
+
+std::vector<RowId> rowKeys(std::int64_t first, std::int64_t last) {
+    std::vector<RowId> out;
+    for (auto key = first; key < last; ++key) {
+        out.emplace_back(key);
+    }
+    return out;
+}
+
+// A recipe-shaped cache whose loads run where `loads` runs them, the loader returning values at once.
+std::shared_ptr<CellLevelCache> benchCache(morph::exec::IExecutor* loads) {
+    LevelCacheOptions options;
+    options.records = {"Bench.rows"};
+    options.level = "recipe";
+    options.columns = bench::recipeColumns();
+    options.loads = loads;
+    return std::make_shared<CellLevelCache>(std::move(options), [](std::span<RowId const> keys) {
+        LevelValues out;
+        for (auto const& key : keys) {
+            out.emplace_back(key, recipeLikeValue(std::get<std::int64_t>(key)));
+        }
+        return out;
+    });
+}
+
+morph::effects::Changes keyedChange(std::string record, std::int64_t count) {
+    auto const keys = rowKeys(0, count);
+    return morph::effects::Changes{.records = {{std::move(record), changeKeys(keys)}}, .instances = {}};
+}
+
+}  // namespace
+
+// Mutation: a snapshot holding a shared lock that stores take exclusively (the calls return after the reader).
+TEST_CASE("level cache: invalidation does not wait for a reader", "[table][levels]") {
+    auto const cache = benchCache(nullptr);
+    morph::table::detail::LevelCacheAccess::store(*cache, recipeLikeValues(0, 5'000));
+    std::atomic<bool> released{false};
+    std::latch holding{1};
+    std::thread reader{[&] {
+        auto const snapshot = cache->snapshot();
+        holding.count_down();
+        std::this_thread::sleep_for(std::chrono::milliseconds{200});
+        released = true;
+    }};
+    holding.wait();
+    cache->invalidate(rowKeys(0, 1'000));
+    cache->changed(keyedChange("Bench.rows", 4'096));
+    CHECK_FALSE(released.load());
+    reader.join();
+    CHECK(cache->stats().invalidatedKeys == 4'096);
+}
+
+// Mutation: a store copying every shard (256 copies for a batch of 64 keys).
+TEST_CASE("level cache: a batch copies only the shards it touches", "[table][levels]") {
+    tabletest::ManualExecutor loads;
+    auto const cache = benchCache(&loads);
+    morph::table::detail::LevelCacheAccess::store(*cache, recipeLikeValues(0, 10'000));
+    auto const before = morph::table::detail::LevelCacheAccess::shardCopies(*cache);
+    REQUIRE(cache->want(rowKeys(10'000, 10'064), LevelUse::Display));
+    tabletest::drain(loads);
+    REQUIRE(cache->stats().loadedKeys == 64);
+    CHECK(morph::table::detail::LevelCacheAccess::shardCopies(*cache) - before <= 64);
+}
+
+TEST_CASE("table benchmark: L1 L2 L3 L6 the level cache", "[.benchmark][levels]") {
+    constexpr int kRuns = 15;
+    auto const timed = [](int runs, std::function<void()> const& body) {
+        std::vector<double> samples;
+        for (int run = 0; run < runs; ++run) {
+            auto const began = Clock::now();
+            body();
+            samples.push_back(std::chrono::duration<double, std::milli>(Clock::now() - began).count());
+        }
+        return spreadOf(std::move(samples));
+    };
+    std::println("\nThe server level cache\n\n| Id | scenario | median ms | p10-p90 ms |\n|---|---|---:|---:|");
+    auto const print = [](char const* id, char const* scenario, Spread const& spread) {
+        std::println("| {} | {} | {:.3f} | {:.3f}-{:.3f} |", id, scenario, spread.median, spread.p10, spread.p90);
+        static_cast<void>(std::fflush(stdout));
+    };
+
+    auto const bytesBefore = bench::processBytes();
+    auto const cache = benchCache(nullptr);
+    morph::table::detail::LevelCacheAccess::store(*cache, recipeLikeValues(1, 100'001));
+    auto const bytesAfter = bench::processBytes();
+    REQUIRE(cache->stats().bytes > 0);
+
+    // L1: a page's hit path, and an order level's 100,000 reads.
+    auto const page = rowKeys(1, 201);
+    auto const all = rowKeys(1, 100'001);
+    std::vector<Cell> buffer(20);
+    print("L1", "snapshot + 200 reads", timed(kRuns * 4, [&] {
+              auto const snapshot = cache->snapshot();
+              for (auto const& key : page) {
+                  REQUIRE(snapshot->read(key, buffer) == LevelRead::Loaded);
+              }
+          }));
+    print("L1", "100,000 reads", timed(kRuns, [&] {
+              auto const snapshot = cache->snapshot();
+              for (auto const& key : all) {
+                  static_cast<void>(snapshot->read(key, buffer));
+              }
+          }));
+
+    // L2: what a row costs.
+    std::println("| L2 | counted bytes per row at twenty columns | {} | |", cache->stats().bytes / 100'000);
+    std::println("| L2 | counted bytes for 100,000 rows | {} | |", cache->stats().bytes);
+    std::println("| L2 | process bytes for 100,000 rows | {} | |", bytesAfter - std::min(bytesAfter, bytesBefore));
+
+    // L3: invalidation and the observer call, alone and while a reader holds a snapshot for 40 ms.
+    auto const invalidation = rowKeys(1, 1'001);
+    auto const change = keyedChange("Bench.rows", 4'096);
+    auto const refill = [&] { morph::table::detail::LevelCacheAccess::store(*cache, recipeLikeValues(1, 4'097)); };
+    auto const l3 = [&](bool withReader) {
+        std::vector<double> invalidate;
+        std::vector<double> observe;
+        for (int run = 0; run < kRuns; ++run) {
+            refill();
+            std::latch holding{1};
+            std::jthread reader;
+            if (withReader) {
+                reader = std::jthread{[&] {
+                    auto const snapshot = cache->snapshot();
+                    holding.count_down();
+                    std::this_thread::sleep_for(std::chrono::milliseconds{40});
+                }};
+                holding.wait();
+            }
+            auto began = Clock::now();
+            cache->invalidate(invalidation);
+            invalidate.push_back(std::chrono::duration<double, std::milli>(Clock::now() - began).count());
+            refill();
+            began = Clock::now();
+            cache->changed(change);
+            observe.push_back(std::chrono::duration<double, std::milli>(Clock::now() - began).count());
+        }
+        print("L3", withReader ? "invalidate 1,000 keys, a reader holding a snapshot" : "invalidate 1,000 keys",
+              spreadOf(invalidate));
+        print("L3",
+              withReader ? "observer call, 4,096 keys, a reader holding a snapshot" : "observer call, 4,096 keys",
+              spreadOf(observe));
+    };
+    l3(false);
+    l3(true);
+
+    // L6: loader return to announce, per batch of 64, at 100,000 held rows.
+    tabletest::ManualExecutor loads;
+    LevelCacheOptions options;
+    options.records = {"Bench.rows"};
+    options.level = "recipe";
+    options.columns = bench::recipeColumns();
+    options.loads = &loads;
+    Clock::time_point returned;
+    std::vector<double> storeToAnnounce;
+    CellLevelCache timedCache{std::move(options), [&returned](std::span<RowId const> keys) {
+                                  LevelValues out;
+                                  for (auto const& key : keys) {
+                                      out.emplace_back(key, recipeLikeValue(std::get<std::int64_t>(key)));
+                                  }
+                                  returned = Clock::now();
+                                  return out;
+                              }};
+    timedCache.bind([&](std::string_view, std::optional<std::vector<glz::raw_json>> const&) {
+        storeToAnnounce.push_back(std::chrono::duration<double, std::milli>(Clock::now() - returned).count());
+    });
+    morph::table::detail::LevelCacheAccess::store(timedCache, recipeLikeValues(1, 100'001));
+    auto const copiesBefore = morph::table::detail::LevelCacheAccess::shardCopies(timedCache);
+    for (int run = 0; run < kRuns; ++run) {
+        auto const first = 200'000 + (std::int64_t{run} * 64);
+        REQUIRE(timedCache.want(rowKeys(first, first + 64), LevelUse::Display));
+        tabletest::drain(loads);
+    }
+    print("L6", "loader return to announce, batch of 64 at 100,000 rows", spreadOf(storeToAnnounce));
+    std::println("| L6 | shards copied for {} keys stored | {} | |", kRuns * 64,
+                 morph::table::detail::LevelCacheAccess::shardCopies(timedCache) - copiesBefore);
 }

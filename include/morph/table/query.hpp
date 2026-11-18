@@ -16,6 +16,7 @@
 
 #include <algorithm>
 #include <array>
+#include <charconv>
 #include <chrono>
 #include <concepts>
 #include <cstddef>
@@ -23,6 +24,7 @@
 #include <cstdlib>
 #include <expected>
 #include <functional>
+#include <glaze/glaze.hpp>
 #include <limits>
 #include <map>
 #include <memory>
@@ -661,6 +663,54 @@ inline void keyedRows(ComputedView const& view, RowSnapshot const& snapshot, std
     // A source is read on its owner's thread, which this call is on, so this is the snapshot the view was
     // computed over.
     return detail::pageRows(*view, *source.snapshot(), *checked, options.limits);
+}
+
+// ── Keys on the wire ────────────────────────────────────────────────────────
+
+/// @brief Writes row keys as a change event carries them.
+/// @param keys The keys.
+/// @return Each key as raw JSON: an integer key as a JSON number, a text key as a JSON string.
+[[nodiscard]] inline std::vector<glz::raw_json> changeKeys(std::span<RowId const> keys) {
+    std::vector<glz::raw_json> out;
+    out.reserve(keys.size());
+    for (auto const& key : keys) {
+        if (auto const* const integer = std::get_if<std::int64_t>(&key)) {
+            out.emplace_back(std::to_string(*integer));
+        } else {
+            out.emplace_back(glz::write_json(std::get<std::string>(key)).value_or(std::string{"\"\""}));
+        }
+    }
+    return out;
+}
+
+/// @brief Reads one row key of a change event back.
+/// @param key The key as raw JSON.
+/// @return The key: a JSON number that is an integer read exactly, a JSON string read as text; nothing for any
+///         other JSON, which a reader takes as a change of the whole type.
+[[nodiscard]] inline std::optional<RowId> rowIdOf(glz::raw_json const& key) {
+    constexpr std::string_view kSpace = " \t\n\r";
+    std::string_view text = key.str;
+    auto const first = text.find_first_not_of(kSpace);
+    text = first == std::string_view::npos ? std::string_view{}
+                                           : text.substr(first, text.find_last_not_of(kSpace) - first + 1);
+    if (text.empty()) {
+        return std::nullopt;
+    }
+    if (text.front() == '"') {
+        std::string value;
+        std::string const buffer{text};
+        if (glz::read_json(value, buffer)) {
+            return std::nullopt;
+        }
+        return RowId{std::move(value)};
+    }
+    std::int64_t value = 0;
+    auto const* const end = text.data() + text.size();
+    auto const [rest, error] = std::from_chars(text.data(), end, value);
+    if (error != std::errc{} || rest != end) {
+        return std::nullopt;
+    }
+    return RowId{value};
 }
 
 // ── Typed rows ──────────────────────────────────────────────────────────────

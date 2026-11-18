@@ -733,3 +733,21 @@ TEST_CASE("table: levelsNeeded leaves out a group's column on which no entry com
         .columns = V{}};
     CHECK(levelsNeeded(above, columns).order == V{"recipe"});
 }
+
+// Mutation: writing an integer key through double (9'007'199'254'740'993 comes back one less).
+TEST_CASE("table: change keys round-trip awkward keys", "[table][query][levels]") {
+    std::vector<RowId> const awkward{RowId{std::string{"a\"b\\c \xC3\xA9"}},
+                                     RowId{std::int64_t{9'007'199'254'740'993}}};
+    auto const written = changeKeys(awkward);
+    REQUIRE(written.size() == 2);
+    CHECK(rowIdOf(written[0]) == std::optional<RowId>{awkward[0]});
+    CHECK(rowIdOf(written[1]) == std::optional<RowId>{awkward[1]});
+    for (std::string const other : {"true", "1.5", "{}"}) {
+        CHECK_FALSE(rowIdOf(glz::raw_json{other}).has_value());
+    }
+    std::vector<RowId> const plain{RowId{std::int64_t{7}}, RowId{std::string{"x"}}};
+    auto const simple = changeKeys(plain);
+    REQUIRE(simple.size() == 2);
+    CHECK(simple[0].str == "7");
+    CHECK(simple[1].str == "\"x\"");
+}

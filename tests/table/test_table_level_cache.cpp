@@ -1,0 +1,588 @@
+// SPDX-License-Identifier: Apache-2.0
+//
+// morph::table's server level cache (docs/spec/table/table.md, "The server level cache"): a value is loaded once and
+// served until invalidated or evicted, a load does not land stale, values are stored before they are announced, the
+// bound is deep and evicts the least recently used values no order lease holds, an order use that cannot fit is
+// refused, a failed load waits out its delay, and a snapshot held by a reader blocks no store. Each case names the
+// mutation it was seen to fail on.
+
+#include <algorithm>
+#include <atomic>
+#include <catch2/catch_test_macros.hpp>
+#include <chrono>
+#include <cstddef>
+#include <cstdint>
+#include <functional>
+#include <future>
+#include <latch>
+#include <memory>
+#include <morph/core/change_types.hpp>
+#include <morph/core/executor.hpp>
+#include <morph/table/level_cache.hpp>
+#include <mutex>
+#include <optional>
+#include <span>
+#include <stdexcept>
+#include <string>
+#include <thread>
+#include <utility>
+#include <variant>
+#include <vector>
+
+#include "table/table_fixtures.hpp"
+
+using namespace morph::table;
+using namespace std::chrono_literals;
+
+namespace {
+
+using Values = std::vector<std::pair<RowId, std::vector<Cell>>>;
+using Body = std::function<Values(std::span<RowId const>)>;
+
+// RowId{first} … RowId{last - 1}.
+std::vector<RowId> keyRange(std::int64_t first, std::int64_t last) {
+    std::vector<RowId> out;
+    for (auto key = first; key < last; ++key) {
+        out.emplace_back(key);
+    }
+    return out;
+}
+
+// RowId{0} … RowId{n - 1}.
+std::vector<RowId> keys(std::int64_t n) { return keyRange(0, n); }
+
+std::string text(RowId const& key) {
+    return std::visit(
+        [](auto const& value) {
+            if constexpr (std::is_same_v<std::decay_t<decltype(value)>, std::string>) {
+                return value;
+            } else {
+                return std::to_string(value);
+            }
+        },
+        key);
+}
+
+// The first cell of the key's value, or Unloaded when the snapshot does not hold it.
+Cell readCell(LevelSnapshot const& snapshot, RowId const& key) {
+    std::vector<Cell> out(1);
+    return snapshot.read(key, out) == LevelRead::Loaded ? out[0] : Cell{Unloaded{}};
+}
+
+LevelRead stateOf(LevelSnapshot const& snapshot, RowId const& key) {
+    std::vector<Cell> out(1);
+    return snapshot.read(key, out);
+}
+
+// The bytes a one-cell value `v<key>` owns: every such value is in the string's small buffer, so all are equal.
+std::size_t smallValueBytes() { return detail::cellsBytes({Cell{std::string{"v0"}}}); }
+
+struct Announced {
+    std::string record;
+    std::optional<std::vector<RowId>> keys;
+};
+
+// A cache over one text column, a manual executor for its loads, an injected clock, a loader that logs its keys,
+// and an announce sink that records what it is told.
+struct Rig {
+    explicit Rig(std::function<void(LevelCacheOptions&)> const& adjust = {}, Body body = {})
+        : _body{std::move(body)},
+          cache{optionsOf(adjust), [this](std::span<RowId const> asked) { return load(asked); }} {
+        cache.bind([this](std::string_view record, std::optional<std::vector<glz::raw_json>> raw) {
+            Announced entry{.record = std::string{record}, .keys = std::nullopt};
+            if (raw) {
+                entry.keys.emplace();
+                for (auto const& key : *raw) {
+                    entry.keys->push_back(rowIdOf(key).value_or(RowId{std::string{"?"}}));
+                }
+            }
+            if (readOnAnnounce) {
+                auto const snapshot = cache.snapshot();
+                for (auto const& key : entry.keys ? *entry.keys : readOnWhole) {
+                    readsAtAnnounce.push_back(stateOf(*snapshot, key));
+                }
+            }
+            std::scoped_lock const lock{_mutex};
+            announced.push_back(std::move(entry));
+        });
+    }
+
+    LevelCacheOptions optionsOf(std::function<void(LevelCacheOptions&)> const& adjust) {
+        LevelCacheOptions options;
+        options.records = {"T.rows"};
+        options.level = "recipe";
+        options.columns = {tabletest::levelCol("r", ColumnKind::Text, "recipe")};
+        options.loads = &loads;
+        options.clock = [this] { return now; };
+        if (adjust) {
+            adjust(options);
+        }
+        return options;
+    }
+
+    Values load(std::span<RowId const> asked) {
+        {
+            std::scoped_lock const lock{_mutex};
+            calls.emplace_back(asked.begin(), asked.end());
+        }
+        if (_body) {
+            return _body(asked);
+        }
+        Values out;
+        for (auto const& key : asked) {
+            out.emplace_back(key, std::vector<Cell>{Cell{"v" + text(key)}});
+        }
+        return out;
+    }
+
+    void drain() { tabletest::drain(loads); }
+
+    // Every key the loader was given, sorted.
+    std::vector<RowId> loggedKeys() {
+        std::scoped_lock const lock{_mutex};
+        std::vector<RowId> out;
+        for (auto const& call : calls) {
+            out.insert(out.end(), call.begin(), call.end());
+        }
+        std::ranges::sort(out);
+        return out;
+    }
+
+    std::size_t callCount() {
+        std::scoped_lock const lock{_mutex};
+        return calls.size();
+    }
+
+    tabletest::ManualExecutor loads;
+    std::chrono::steady_clock::time_point now{std::chrono::hours{1}};
+    std::mutex _mutex;
+    std::vector<std::vector<RowId>> calls;
+    std::vector<Announced> announced;
+    bool readOnAnnounce = false;
+    std::vector<RowId> readOnWhole;
+    std::vector<LevelRead> readsAtAnnounce;
+    Body _body;
+    CellLevelCache cache;
+};
+
+std::vector<glz::raw_json> rawKeys(std::vector<std::string> const& texts) {
+    std::vector<glz::raw_json> out;
+    for (auto const& entry : texts) {
+        out.emplace_back(entry);
+    }
+    return out;
+}
+
+}  // namespace
+
+// Mutation: want not checking the cache (loads held keys again): loadedKeys 400.
+TEST_CASE("level cache: a value is loaded once", "[table][levels]") {
+    Rig rig;
+    REQUIRE(rig.cache.want(keys(200), LevelUse::Display));
+    rig.drain();  // all four batches
+    REQUIRE(rig.cache.want(keys(200), LevelUse::Display));
+    rig.drain();
+    CHECK(rig.cache.stats().loadedKeys == 200);
+    CHECK(rig.loggedKeys() == keys(200));  // each once, in any order: compared sorted
+    CHECK(readCell(*rig.cache.snapshot(), RowId{std::int64_t{5}}) == Cell{std::string{"v5"}});
+}
+
+// Mutation: want queueing a key that is already queued (272 keys loaded).
+TEST_CASE("level cache: a key wanted while it is queued is loaded once", "[table][levels]") {
+    Rig rig;
+    REQUIRE(rig.cache.want(keys(200), LevelUse::Display));
+    rig.loads.runAll();  // one batch of 64 stored, the next posted
+    REQUIRE(rig.cache.want(keys(200), LevelUse::Display));
+    rig.drain();
+    CHECK(rig.cache.stats().loadedKeys == 200);
+    CHECK(rig.loggedKeys() == keys(200));
+}
+
+// Mutation: no in-flight set (every thread's want loads the 60 keys again).
+TEST_CASE("level cache: concurrent wants share one load", "[table][levels]") {
+    morph::exec::ThreadPoolExecutor pool{1};
+    std::latch open{1};
+    Rig rig{[&pool](LevelCacheOptions& options) { options.loads = &pool; },
+            [&open](std::span<RowId const> asked) {
+                open.wait();
+                Values out;
+                for (auto const& key : asked) {
+                    out.emplace_back(key, std::vector<Cell>{Cell{"v" + text(key)}});
+                }
+                return out;
+            }};
+    std::vector<std::thread> threads;
+    for (int i = 0; i < 8; ++i) {
+        threads.emplace_back([&rig] { static_cast<void>(rig.cache.want(keys(60), LevelUse::Display)); });
+    }
+    for (auto& thread : threads) {
+        thread.join();
+    }
+    open.count_down();
+    auto const deadline = std::chrono::steady_clock::now() + 10s;
+    while (rig.cache.stats().loadedKeys < 60 && std::chrono::steady_clock::now() < deadline) {
+        std::this_thread::sleep_for(1ms);
+    }
+    // The pool is idle once a no-op posted after the load has run.
+    std::promise<void> idle;
+    pool.post([&idle] { idle.set_value(); });
+    idle.get_future().wait();
+    CHECK(rig.callCount() == 1);
+    CHECK(rig.cache.stats().loadedKeys == 60);
+}
+
+// Mutation: invalidate leaving the values.
+TEST_CASE("level cache: invalidated keys are absent and load once more", "[table][levels]") {
+    Rig rig;
+    REQUIRE(rig.cache.want(keys(200), LevelUse::Display));
+    rig.drain();
+    auto const before = rig.loggedKeys();
+    rig.cache.invalidate(keys(10));
+    auto const snapshot = rig.cache.snapshot();
+    for (auto const& key : keys(200)) {
+        CHECK(stateOf(*snapshot, key) == (std::get<std::int64_t>(key) < 10 ? LevelRead::Unloaded : LevelRead::Loaded));
+    }
+    REQUIRE(rig.cache.want(keys(200), LevelUse::Display));
+    REQUIRE(rig.cache.want(keys(200), LevelUse::Display));
+    rig.drain();
+    auto expected = keys(200);
+    auto const again = keys(10);
+    expected.insert(expected.end(), again.begin(), again.end());
+    std::ranges::sort(expected);
+    CHECK(rig.loggedKeys() == expected);
+    CHECK(rig.cache.stats().invalidatedKeys == 10);
+    CHECK(before.size() == 200);
+}
+
+// Mutation: changed ignoring the record (every change empties the level).
+TEST_CASE("level cache: the observer invalidates by record", "[table][levels]") {
+    {
+        Rig rig;
+        REQUIRE(rig.cache.want(keys(10), LevelUse::Display));
+        rig.drain();
+        auto const loads = rig.announced.size();
+        rig.cache.changed(morph::effects::Changes{.records = {{"T.rows", rawKeys({"3"})}}, .instances = {}});
+        auto snapshot = rig.cache.snapshot();
+        CHECK(stateOf(*snapshot, RowId{std::int64_t{3}}) == LevelRead::Unloaded);
+        CHECK(stateOf(*snapshot, RowId{std::int64_t{4}}) == LevelRead::Loaded);
+        CHECK(rig.announced.size() == loads);  // the action's own event is the notification
+
+        rig.cache.changed(morph::effects::Changes{.records = {{"Other", std::nullopt}}, .instances = {}});
+        CHECK(stateOf(*rig.cache.snapshot(), RowId{std::int64_t{4}}) == LevelRead::Loaded);  // in neither list
+
+        rig.cache.changed(morph::effects::Changes{.records = {{"T.rows", std::nullopt}}, .instances = {}});
+        snapshot = rig.cache.snapshot();
+        for (auto const& key : keys(10)) {
+            CHECK(stateOf(*snapshot, key) == LevelRead::Unloaded);
+        }
+        CHECK(rig.announced.size() == loads);
+    }
+    {
+        Rig rig{[](LevelCacheOptions& options) { options.invalidatedBy = {"T.rows", "Recipe"}; }};
+        REQUIRE(rig.cache.want(keys(10), LevelUse::Display));
+        rig.drain();
+        auto const loads = rig.announced.size();
+        rig.cache.changed(morph::effects::Changes{.records = {{"Other", std::nullopt}}, .instances = {}});
+        CHECK(stateOf(*rig.cache.snapshot(), RowId{std::int64_t{4}}) == LevelRead::Loaded);
+        CHECK(rig.announced.size() == loads);
+        rig.cache.changed(morph::effects::Changes{.records = {{"Recipe", rawKeys({"77"})}}, .instances = {}});
+        auto const snapshot = rig.cache.snapshot();
+        for (auto const& key : keys(10)) {
+            CHECK(stateOf(*snapshot, key) == LevelRead::Unloaded);
+        }
+        REQUIRE(rig.announced.size() == loads + 1);
+        CHECK(rig.announced.back().record == "T.rows");
+        CHECK_FALSE(rig.announced.back().keys.has_value());
+    }
+}
+
+// Mutation: storing without the generation check (key 1 reads the stale value).
+TEST_CASE("level cache: a load in flight at invalidation does not land", "[table][levels]") {
+    Rig rig;
+    std::vector<RowId> const one{RowId{std::int64_t{1}}};
+    REQUIRE(rig.cache.want(one, LevelUse::Display));  // the load is posted and held until the executor runs it
+    rig.cache.invalidate(one);
+    rig.drain();  // the loader returns the old value
+    CHECK(stateOf(*rig.cache.snapshot(), one[0]) == LevelRead::Unloaded);
+    CHECK(rig.cache.stats().droppedLoads == 1);
+    REQUIRE(rig.cache.want(one, LevelUse::Display));
+    rig.drain();
+    CHECK(rig.callCount() == 2);
+    CHECK(stateOf(*rig.cache.snapshot(), one[0]) == LevelRead::Loaded);
+}
+
+// Mutation: "in flight" ignoring the generation, which leaves key 1 unloaded after the stale load is dropped.
+TEST_CASE("level cache: a want after an invalidation does not wait for the stale load", "[table][levels]") {
+    int call = 0;
+    Rig rig{{}, [&call](std::span<RowId const> asked) {
+                ++call;
+                Values out;
+                for (auto const& key : asked) {
+                    out.emplace_back(key, std::vector<Cell>{Cell{"call" + std::to_string(call)}});
+                }
+                return out;
+            }};
+    std::vector<RowId> const one{RowId{std::int64_t{1}}};
+    REQUIRE(rig.cache.want(one, LevelUse::Display));
+    rig.cache.invalidate(one);
+    REQUIRE(rig.cache.want(one, LevelUse::Display));
+    rig.drain();
+    CHECK(rig.callCount() == 2);
+    CHECK(readCell(*rig.cache.snapshot(), one[0]) == Cell{std::string{"call2"}});
+    CHECK(rig.cache.stats().droppedLoads == 1);
+}
+
+// Mutation: announcing before storing (the sink reads the announced keys unloaded).
+TEST_CASE("level cache: values are stored before they are announced", "[table][levels]") {
+    Rig rig{[](LevelCacheOptions& options) { options.invalidatedBy = {"T.rows", "Recipe"}; }};
+    rig.readOnAnnounce = true;
+    REQUIRE(rig.cache.want(keys(100), LevelUse::Display));
+    rig.drain();
+    REQUIRE(rig.readsAtAnnounce.size() == 100);
+    CHECK(std::ranges::all_of(rig.readsAtAnnounce, [](LevelRead read) { return read == LevelRead::Loaded; }));
+    rig.readsAtAnnounce.clear();
+    rig.readOnWhole = keys(100);
+    rig.cache.changed(morph::effects::Changes{.records = {{"Recipe", std::nullopt}}, .instances = {}});
+    REQUIRE(rig.readsAtAnnounce.size() == 100);
+    CHECK(std::ranges::all_of(rig.readsAtAnnounce, [](LevelRead read) { return read == LevelRead::Unloaded; }));
+}
+
+// Mutation: evicting the most recently used (keys 50–99 go instead of 0–49).
+TEST_CASE("level cache: eviction drops the least recently used", "[table][levels]") {
+    Rig rig{[](LevelCacheOptions& options) { options.maxBytes = 100 * smallValueBytes(); }};
+    REQUIRE(rig.cache.want(keys(100), LevelUse::Display));
+    rig.drain();
+    REQUIRE(rig.cache.want(keyRange(50, 100), LevelUse::Display));  // read: their recency is renewed
+    rig.drain();
+    REQUIRE(rig.cache.want(keyRange(100, 150), LevelUse::Display));
+    rig.drain();
+    auto const snapshot = rig.cache.snapshot();
+    for (auto const& key : keys(150)) {
+        CHECK(stateOf(*snapshot, key) == (std::get<std::int64_t>(key) < 50 ? LevelRead::Unloaded : LevelRead::Loaded));
+    }
+    CHECK(rig.cache.stats().evictedKeys == 50);
+    std::size_t announcedKeys = 0;
+    for (auto const& entry : rig.announced) {
+        REQUIRE(entry.keys.has_value());  // no event for an eviction
+        announcedKeys += entry.keys->size();
+    }
+    CHECK(announcedKeys == 150);
+    auto const before = rig.callCount();
+    REQUIRE(rig.cache.want(keys(10), LevelUse::Display));
+    rig.drain();
+    REQUIRE(rig.callCount() == before + 1);
+    CHECK(rig.calls.back() == keys(10));
+}
+
+// Mutation: reading the value by the caller's column order (A's r3 then holds r1's value).
+TEST_CASE("level cache: a value's layout is the cache's", "[table][levels]") {
+    using tabletest::levelCol;
+    Rig rig{[](LevelCacheOptions& options) {
+                options.columns = {levelCol("r1", ColumnKind::Text, "recipe"),
+                                   levelCol("r2", ColumnKind::Text, "recipe"),
+                                   levelCol("r3", ColumnKind::Text, "recipe")};
+            },
+            [](std::span<RowId const> asked) {
+                Values out;
+                for (auto const& key : asked) {
+                    out.emplace_back(
+                        key, std::vector<Cell>{Cell{"a" + text(key)}, Cell{"b" + text(key)}, Cell{"c" + text(key)}});
+                }
+                return out;
+            }};
+    auto const base = tabletest::makeSource({tabletest::col("id", ColumnKind::Integer)}, {{Cell{std::int64_t{0}}}});
+    REQUIRE(rig.cache.want(keys(1), LevelUse::Display));
+    rig.drain();
+    std::shared_ptr<LevelSource> const level{std::shared_ptr<void>{}, &rig.cache};
+    LeveledSource const a{base,
+                          {tabletest::col("id", ColumnKind::Integer), levelCol("r3", ColumnKind::Text, "recipe"),
+                           levelCol("r1", ColumnKind::Text, "recipe")},
+                          {LevelInput{.source = level, .snapshot = rig.cache.snapshot()}}};
+    LeveledSource const b{base,
+                          {tabletest::col("id", ColumnKind::Integer), levelCol("r2", ColumnKind::Text, "recipe")},
+                          {LevelInput{.source = level, .snapshot = rig.cache.snapshot()}}};
+    CHECK(a.snapshot()->cell(0, 1) == Cell{std::string{"c0"}});
+    CHECK(a.snapshot()->cell(0, 2) == Cell{std::string{"a0"}});
+    CHECK(b.snapshot()->cell(0, 1) == Cell{std::string{"b0"}});
+    CHECK(a.state(0, "recipe") == LevelRead::Loaded);
+    CHECK(rig.callCount() == 1);
+}
+
+// Mutation: SizeOf as sizeof(Value) (nothing is ever evicted).
+TEST_CASE("level cache: size is deep", "[table][levels]") {
+    std::vector<Cell> const value(20, Cell{std::string(40, 'x')});
+    auto const valueBytes = detail::cellsBytes(value);
+    Rig rig{[valueBytes](LevelCacheOptions& options) { options.maxBytes = 100 * valueBytes; },
+            [&value](std::span<RowId const> asked) {
+                Values out;
+                for (auto const& key : asked) {
+                    out.emplace_back(key, value);
+                }
+                return out;
+            }};
+    CHECK(valueBytes > 20 * 40);
+    REQUIRE(rig.cache.want(keys(150), LevelUse::Display));
+    rig.drain();
+    CHECK(rig.cache.stats().bytes <= 100 * valueBytes);
+    CHECK(rig.cache.stats().evictedKeys == 50);
+}
+
+// Mutation: a snapshot holding a shared lock (the stores wait for the reader and time out).
+TEST_CASE("level cache: a held snapshot blocks no store", "[table][levels]") {
+    Rig rig{[](LevelCacheOptions& options) { options.invalidatedBy = {"T.rows", "Recipe"}; }};
+    REQUIRE(rig.cache.want(keys(10), LevelUse::Display));
+    rig.drain();
+    auto held = rig.cache.snapshot();
+    // Each call runs on its own thread; the case waits a second for it, and joins it only after releasing the
+    // snapshot, so a store that waited for the reader fails the check instead of hanging the case.
+    std::vector<std::thread> calls;
+    auto const finishes = [&calls](std::function<void()> work) {
+        auto done = std::make_shared<std::promise<void>>();
+        auto finished = done->get_future();
+        calls.emplace_back([work = std::move(work), done] {
+            work();
+            done->set_value();
+        });
+        return finished.wait_for(1s) == std::future_status::ready;
+    };
+    CHECK(finishes([&rig] {
+        static_cast<void>(rig.cache.want(keyRange(10, 20), LevelUse::Display));
+        rig.drain();
+    }));
+    CHECK(finishes([&rig] { rig.cache.invalidate(keys(1)); }));
+    CHECK(finishes([&rig] {
+        rig.cache.changed(morph::effects::Changes{.records = {{"T.rows", rawKeys({"2"})}}, .instances = {}});
+    }));
+    CHECK(readCell(*held, RowId{std::int64_t{0}}) == Cell{std::string{"v0"}});
+    CHECK(stateOf(*held, RowId{std::int64_t{15}}) == LevelRead::Unloaded);
+    auto const heldGeneration = held->generation();
+    held.reset();
+    for (auto& call : calls) {
+        call.join();
+    }
+    CHECK(heldGeneration != rig.cache.snapshot()->generation());
+}
+
+// Mutation: no lease (the second order use is accepted instead of refused).
+TEST_CASE("level cache: order uses are leased and the second is refused", "[table][levels]") {
+    auto const value = smallValueBytes();
+    auto const adjust = [value](LevelCacheOptions& options) {
+        options.maxBytes = 150 * value;
+        options.expectedBytes = value;
+    };
+    {
+        Rig rig{adjust};
+        REQUIRE(rig.cache.want(keys(100), LevelUse::Order));
+        rig.drain();
+        CHECK(rig.cache.stats().loadedKeys == 100);
+        auto const calls = rig.callCount();
+        auto const refused = rig.cache.want(keyRange(100, 200), LevelUse::Order);
+        REQUIRE_FALSE(refused.has_value());
+        CHECK(refused.error().code == TableErrorCode::Unavailable);
+        CHECK(rig.cache.stats().refusedOrders == 1);
+        rig.drain();
+        CHECK(rig.callCount() == calls);
+        REQUIRE(rig.cache.want(keyRange(200, 300), LevelUse::Display));
+        rig.drain();
+        auto snapshot = rig.cache.snapshot();
+        CHECK(std::ranges::all_of(keys(100),
+                                  [&](RowId const& key) { return stateOf(*snapshot, key) == LevelRead::Loaded; }));
+        rig.now += 61s;
+        REQUIRE(rig.cache.want(keyRange(300, 400), LevelUse::Display));
+        rig.drain();
+        snapshot = rig.cache.snapshot();
+        CHECK(std::ranges::any_of(keys(100),
+                                  [&](RowId const& key) { return stateOf(*snapshot, key) == LevelRead::Unloaded; }));
+    }
+    {
+        Rig rig{adjust};
+        std::size_t afterOne = 0;
+        for (int round = 0; round < 10; ++round) {
+            static_cast<void>(rig.cache.want(keys(100), LevelUse::Order));
+            rig.drain();
+            static_cast<void>(rig.cache.want(keyRange(100, 200), LevelUse::Order));
+            rig.drain();
+            if (round == 0) {
+                afterOne = rig.callCount();
+            }
+        }
+        CHECK(rig.callCount() == afterOne);
+    }
+}
+
+// Mutation: the over-bound check skipped (all 100 order keys load, and nothing is announced without keys).
+TEST_CASE("level cache: leased values outgrowing the bound stop the order load", "[table][levels]") {
+    auto const value = smallValueBytes();
+    Rig rig{[value](LevelCacheOptions& options) {
+        options.maxBytes = 50 * value;
+        options.expectedBytes = value / 10;
+    }};
+    REQUIRE(rig.cache.want(keys(100), LevelUse::Order));
+    rig.drain();
+    CHECK(rig.callCount() == 1);  // the first batch of 64 overran the bound; the rest were not loaded
+    CHECK(std::ranges::any_of(
+        rig.announced, [](Announced const& entry) { return entry.record == "T.rows" && !entry.keys.has_value(); }));
+    auto const again = rig.cache.want(keys(100), LevelUse::Order);
+    REQUIRE_FALSE(again.has_value());
+    CHECK(again.error().code == TableErrorCode::Unavailable);
+}
+
+// Mutation: a failed key wanted again by every request (the loader is called inside the delay).
+TEST_CASE("level cache: a failed load is remembered", "[table][levels]") {
+    Rig rig{{}, [](std::span<RowId const> asked) {
+                Values out;
+                for (auto const& key : asked) {
+                    auto const at = std::get<std::int64_t>(key);
+                    if (at == 15) {
+                        out.emplace_back(key, std::vector<Cell>{});
+                    } else if (at >= 10) {
+                        out.emplace_back(key, std::vector<Cell>{Cell{"v" + text(key)}});
+                    }
+                }
+                return out;
+            }};
+    std::vector<std::vector<RowId>> failedCalls;
+    rig.cache.onLoadFailed(
+        [&failedCalls](std::span<RowId const> failed) { failedCalls.emplace_back(failed.begin(), failed.end()); });
+    REQUIRE(rig.cache.want(keys(20), LevelUse::Display));
+    rig.drain();
+    auto snapshot = rig.cache.snapshot();
+    for (auto const& key : keys(10)) {
+        CHECK(stateOf(*snapshot, key) == LevelRead::Failed);
+    }
+    CHECK(rig.cache.stats().failedLoads == 10);
+    REQUIRE(failedCalls.size() == 1);
+    CHECK(failedCalls[0] == keys(10));
+    CHECK(std::ranges::count_if(rig.announced, [](Announced const& entry) { return entry.keys == keys(10); }) == 1);
+    std::vector<Cell> empty(1, Cell{std::string{"unwritten"}});
+    CHECK(snapshot->read(RowId{std::int64_t{15}}, empty) == LevelRead::Loaded);  // a row with nothing at the level
+    CHECK(std::holds_alternative<std::monostate>(empty[0]));
+
+    auto const calls = rig.callCount();
+    REQUIRE(rig.cache.want(keys(10), LevelUse::Display));
+    rig.drain();
+    CHECK(rig.callCount() == calls);  // inside retryAfter
+    rig.now += 30s;
+    REQUIRE(rig.cache.want(keys(10), LevelUse::Display));
+    rig.drain();
+    CHECK(rig.callCount() == calls + 1);  // once, and it fails again
+    rig.now += 30s;
+    REQUIRE(rig.cache.want(keys(10), LevelUse::Display));
+    rig.drain();
+    CHECK(rig.callCount() == calls + 1);  // the second failure waits 60 s
+    rig.now += 30s;
+    REQUIRE(rig.cache.want(keys(10), LevelUse::Display));
+    rig.drain();
+    CHECK(rig.callCount() == calls + 2);
+    REQUIRE(rig.cache.want(keys(10), LevelUse::Display, true));
+    rig.drain();
+    CHECK(rig.callCount() == calls + 3);  // retry: at once
+    rig.cache.invalidate(std::vector<RowId>{RowId{std::int64_t{3}}});
+    CHECK(stateOf(*rig.cache.snapshot(), RowId{std::int64_t{3}}) == LevelRead::Unloaded);
+
+    Rig throwing{{}, [](std::span<RowId const>) -> Values { throw std::runtime_error{"the store is down"}; }};
+    REQUIRE(throwing.cache.want(keys(5), LevelUse::Display));
+    throwing.drain();
+    CHECK(throwing.cache.stats().failedLoads == 5);
+    CHECK(stateOf(*throwing.cache.snapshot(), RowId{std::int64_t{4}}) == LevelRead::Failed);
+}
