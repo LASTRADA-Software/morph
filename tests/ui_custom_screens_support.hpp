@@ -31,7 +31,7 @@ inline std::string baseScreen(std::string_view id) {
            R"({"kind":"text","text":"Results"},)"
            R"({"kind":"button","label":"Print","onClick":[{"host":"print"}]},)"
            R"({"kind":"button","label":"Verify","onClick":[{"run":"verify"}]},)"
-           R"({"kind":"button","label":"Attach","onClick":[{"upload":"/tmp/a.csv","to":"save","as":"ref"}]}]}})";
+           R"({"kind":"filePicker","label":"Attach","onPick":[{"upload":{"ref":"event"},"to":"save","as":"ref"}]}]}})";
 }
 
 /// @p text with its first @p from replaced by @p to; fails the test when @p from is absent, so a fixture edit that

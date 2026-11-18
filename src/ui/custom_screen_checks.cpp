@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include <algorithm>
+#include <cstdlib>
 #include <deque>
 #include <functional>
 #include <map>
@@ -34,7 +35,7 @@ public:
     /// @brief Walks @p document and its JSON @p json.
     /// @param document The loaded document.
     /// @param json     Its parsed JSON, for the `host` names.
-    Capabilities(Document const& document, Json const& json) {
+    Capabilities(Document const& document, Json const& json) : _json{&json} {
         enter(document.scope);
         Table const& top = *_open.back();
         for (auto const& [trigger, commands] : document.lifecycle) {
@@ -74,6 +75,17 @@ public:
     /// @return Whether it does.
     [[nodiscard]] bool has(std::string const& capability) const { return _seen.contains(capability); }
 
+    /// @brief Every host command, as its canonical JSON, with its pointer.
+    /// @return The commands, in the order walked.
+    [[nodiscard]] std::vector<std::pair<std::string, std::string>> const& hostCommands() const noexcept {
+        return _hostCommands;
+    }
+
+    /// @brief The first upload that is not a file the person just chose, where `{"ref": "event"}` sits directly in a
+    ///        `filePicker`'s `onPick` or a `dropZone`'s `onDrop`.
+    /// @return The upload's pointer, or nothing.
+    [[nodiscard]] std::optional<std::string> const& strayUpload() const noexcept { return _strayUpload; }
+
 private:
     struct Table;
 
@@ -97,14 +109,11 @@ private:
     }
 
     void enter(ScopeDecl const& scope) {
-        for (ModelDecl const& model : scope.models) {
-            _types[model.name].push_back(model.type);
-        }
+        _aliases.enter(scope);
         Table& table = _tables.emplace_back(_open.empty() ? Table{} : *_open.back());
         for (MutationDecl const& mutation : scope.mutations) {
-            auto const types = _types.find(mutation.model);
-            std::string type = types == _types.end() || types->second.empty() ? mutation.model : types->second.back();
-            Mutation const& resolved = _resolved.emplace_back(Mutation{&mutation, std::move(type), &table});
+            Mutation const& resolved =
+                _resolved.emplace_back(Mutation{&mutation, _aliases.resolve(mutation.model), &table});
             table.mutations.insert_or_assign(mutation.name, &resolved);
         }
         _open.push_back(&table);
@@ -119,9 +128,7 @@ private:
     }
 
     void leave(ScopeDecl const& scope) {
-        for (ModelDecl const& model : scope.models) {
-            _types.at(model.name).pop_back();
-        }
+        _aliases.leave(scope);
         _open.pop_back();
     }
 
@@ -131,13 +138,12 @@ private:
         }
         Table const& table = *_open.back();
         // A form that submits itself runs its submit commands and chains without a press.
-        bool const autoForm = view.kind == "form" && view.name("submit") == "auto";
+        // Its submit mode, when it names none, is the action schema's, which is automatic unless the schema says
+        // otherwise, and no catalog is at hand here.
+        bool const autoForm = view.kind == "form" && view.name("submit") != "explicit";
         std::string autoTrigger;
         if (autoForm) {
-            auto const types = _types.find(view.name("model"));
-            std::string const type =
-                types == _types.end() || types->second.empty() ? std::string{view.name("model")} : types->second.back();
-            autoTrigger = "form-auto:" + type + "/" + std::string{view.name("action")};
+            autoTrigger = "form-auto:" + _aliases.resolve(view.name("model")) + "/" + std::string{view.name("action")};
         }
         for (auto const& [key, commands] : view.events) {
             // A custom component's own code decides when its events fire, so they run without a press.
@@ -147,7 +153,8 @@ private:
             } else if (autoForm && (key == "onSubmit" || key == "onSuccess" || key == "onError")) {
                 trigger = autoTrigger;
             }
-            walk(commands, trigger, table);
+            bool const picked = (view.kind == "filePicker" && key == "onPick") || (view.kind == "dropZone" && key == "onDrop");
+            walk(commands, trigger, table, picked);
         }
         for (auto const& [chord, commands] : view.keys) {
             static_cast<void>(chord);
@@ -172,8 +179,19 @@ private:
 
     /// @brief Notes @p commands' capabilities. @p trigger names what runs them without a press (`onMount`, `watch`,
     ///        …), and is empty for commands a person's press runs. @p table is the names open where they are written.
-    void walk(Commands const& commands, std::string const& trigger, Table const& table) {
+    ///        @p chosen is whether @p commands is the handler a chosen file arrives in.
+    void walk(Commands const& commands, std::string const& trigger, Table const& table, bool chosen = false) {
         for (Command const& command : commands) {
+            if (command.kind == CommandKind::Upload && !(chosen && trigger.empty() && isEventRef(command.path, "upload"))) {
+                if (!_strayUpload) {
+                    _strayUpload = command.path;
+                }
+            }
+            if (command.kind == CommandKind::Host) {
+                if (Json const* const json = at(command.path)) {
+                    _hostCommands.emplace_back(glz::write_json(*json).value_or(""), command.path);
+                }
+            }
             std::string const capability = capabilityOf(command, table);
             if (!capability.empty()) {
                 // Host commands are noted by name from the JSON with every other host name; runs by the actions row.
@@ -207,6 +225,42 @@ private:
         }
         walk(mutation->decl->onSuccess, trigger, *mutation->table);
         walk(mutation->decl->onError, trigger, *mutation->table);
+    }
+
+    /// @brief The JSON at @p pointer, or `nullptr`.
+    [[nodiscard]] Json const* at(std::string const& pointer) const {
+        Json const* json = _json;
+        std::size_t start = 0;
+        while (json != nullptr && start < pointer.size()) {
+            std::size_t const end = std::min(pointer.find('/', start + 1), pointer.size());
+            std::string token = pointer.substr(start + 1, end - start - 1);
+            for (std::size_t at = token.find('~'); at != std::string::npos; at = token.find('~', at + 1)) {
+                if (at + 1 < token.size()) {
+                    token.replace(at, 2, token[at + 1] == '1' ? "/" : "~");
+                }
+            }
+            if (auto const* const object = std::get_if<Json::object_t>(&json->data)) {
+                auto const found = object->find(token);
+                json = found == object->end() ? nullptr : &found->second;
+            } else if (auto const* const array = std::get_if<Json::array_t>(&json->data)) {
+                std::size_t const index = std::strtoull(token.c_str(), nullptr, 10);
+                json = index < array->size() ? &(*array)[index] : nullptr;
+            } else {
+                json = nullptr;
+            }
+            start = end;
+        }
+        return json;
+    }
+
+    /// @brief Whether the command at @p pointer has exactly `{"ref": "event"}` as its @p key.
+    [[nodiscard]] bool isEventRef(std::string const& pointer, std::string const& key) const {
+        Json const* const command = at(pointer);
+        auto const* const object = command == nullptr ? nullptr : std::get_if<Json::object_t>(&command->data);
+        if (object == nullptr || !object->contains(key)) {
+            return false;
+        }
+        return glz::write_json(object->at(key)).value_or("") == R"({"ref":"event"})";
     }
 
     [[nodiscard]] static Mutation const* find(std::string const& name, Table const& table) {
@@ -275,7 +329,10 @@ private:
         }
     }
 
-    std::map<std::string, std::vector<std::string>, std::less<>> _types;
+    Json const* _json;
+    detail::ModelAliases _aliases;
+    std::vector<std::pair<std::string, std::string>> _hostCommands;
+    std::optional<std::string> _strayUpload;
     std::deque<Table> _tables;
     std::deque<Mutation> _resolved;
     std::vector<Table const*> _open;
@@ -306,7 +363,7 @@ std::optional<Refusal> checkBaseRule(Document const& base, std::string_view base
         // itself each reach the server by a different trigger.
         if (!baseNames.names(ref, use.position)) {
             return refusalAt(use.path, of + " does not use action `" + ref.action + "` of `" + ref.modelType +
-                                           "` as a " + use.position);
+                                           "` in a position of kind `" + use.position + "`");
         }
     }
     auto const baseJson = parseJson(baseText);
@@ -320,6 +377,16 @@ std::optional<Refusal> checkBaseRule(Document const& base, std::string_view base
         if (!had.has(capability)) {
             return refusalAt(path, of + " has no `" + capability + "`");
         }
+    }
+    for (auto const& [command, path] : has.hostCommands()) {
+        if (!std::ranges::any_of(had.hostCommands(), [&](auto const& known) { return known.first == command; })) {
+            return refusalAt(path, of + " has no host command `" + command + "`");
+        }
+    }
+    if (has.strayUpload()) {
+        return refusalAt(*has.strayUpload(),
+                         "an `upload` of a custom screen sends `{\"ref\": \"event\"}` directly in a `filePicker`'s "
+                         "`onPick` or a `dropZone`'s `onDrop`");
     }
     return std::nullopt;
 }

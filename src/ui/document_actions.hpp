@@ -15,12 +15,44 @@ namespace morph::ui::detail {
 
 // NOLINTBEGIN(misc-no-recursion): view nodes nest, and the walk follows them; parseJson bounds the depth at 64.
 
+/// @brief The model types the model aliases open at one point of a document name, innermost declaration winning.
+class ModelAliases {
+public:
+    /// @brief Opens @p scope's aliases.
+    /// @param scope A scope being entered.
+    void enter(ScopeDecl const& scope) {
+        for (ModelDecl const& model : scope.models) {
+            _types[model.name].push_back(model.type);
+        }
+    }
+
+    /// @brief Closes the aliases `enter(scope)` opened.
+    /// @param scope The scope being left.
+    void leave(ScopeDecl const& scope) {
+        for (ModelDecl const& model : scope.models) {
+            _types.at(model.name).pop_back();
+        }
+    }
+
+    /// @brief The type the innermost open alias named @p alias names. Load-time validation requires every alias to
+    ///        be declared, so the fallback to @p alias itself is only for a document that skipped it.
+    /// @param alias An alias name.
+    /// @return Its type.
+    [[nodiscard]] std::string resolve(std::string_view alias) const {
+        auto const found = _types.find(alias);
+        return found == _types.end() || found->second.empty() ? std::string{alias} : found->second.back();
+    }
+
+private:
+    std::map<std::string, std::vector<std::string>, std::less<>> _types;
+};
+
 /// @brief One place a document names an action: the action, the kind of position it is named in, and where.
 struct ActionUse {
     /// @brief The action and its model type.
     ActionRef action;
-    /// @brief The position's kind: `query`, `mutation`, the kind of a model-bound node (`form`, `collection`,
-    ///        `wizard`, `table`), or `auto form` for a form that submits itself.
+    /// @brief The position's kind: `query`, `mutation`, the kind of a model-bound node (`collection`, `wizard`,
+    ///        `table`), or for a form its literal `submit`: `form` when absent, `explicit form`, `auto form`.
     std::string position;
     /// @brief The JSON Pointer of the query, mutation or node.
     std::string path;
@@ -33,6 +65,14 @@ struct ActionUse {
 /// here finds one. Component fallbacks are view trees like any other and are walked with the view.
 class DocumentActions {
 public:
+    /// @brief The position kind of a form whose literal `submit` is @p submit. Without a catalog the schema's submit
+    ///        mode is unknown, so a form with no `submit` is a position of its own.
+    /// @param submit The form's `submit`, empty when absent.
+    /// @return `form`, `explicit form` or `auto form`.
+    [[nodiscard]] static std::string formPosition(std::string_view submit) {
+        return submit.empty() ? "form" : submit == "explicit" ? "explicit form" : "auto form";
+    }
+
     /// @brief Walks @p document.
     /// @param document The loaded document.
     explicit DocumentActions(Document const& document) {
@@ -91,8 +131,8 @@ private:
     }
 
     void enter(ScopeDecl const& scope, bool top) {
+        _aliases.enter(scope);
         for (ModelDecl const& model : scope.models) {
-            _types.try_emplace(model.name).first->second.push_back(model.type);
             _models.insert(model.type);
         }
         for (QueryDecl const& query : scope.queries) {
@@ -107,11 +147,7 @@ private:
         }
     }
 
-    void leave(ScopeDecl const& scope) {
-        for (ModelDecl const& model : scope.models) {
-            _types.at(model.name).pop_back();
-        }
-    }
+    void leave(ScopeDecl const& scope) { _aliases.leave(scope); }
 
     void node(DocNode const& view) {
         if (view.scope) {
@@ -119,8 +155,8 @@ private:
         }
         if (std::string_view const model = view.name("model"); !model.empty()) {
             std::string position = view.kind;
-            if (view.kind == "form" && view.name("submit") == "auto") {
-                position = "auto form";
+            if (view.kind == "form") {
+                position = formPosition(view.name("submit"));
             }
             name(ActionRef{.modelType = resolve(model), .action = std::string{view.name("action")}}, position, view.path);
         }
@@ -141,15 +177,9 @@ private:
         }
     }
 
-    /// @brief The type of the innermost alias named @p alias. Load-time validation has resolved it already, so the
-    ///        lookup cannot miss; `at` throws rather than read past the end if that ever changes.
-    [[nodiscard]] std::string const& resolve(std::string_view alias) const {
-        std::vector<std::string> const& types = _types.at(std::string{alias});
-        return types.at(types.size() - 1);
-    }
+    [[nodiscard]] std::string resolve(std::string_view alias) const { return _aliases.resolve(alias); }
 
-    /// @brief The types an alias names in the open scopes, innermost last.
-    std::map<std::string, std::vector<std::string>, std::less<>> _types;
+    ModelAliases _aliases;
     std::vector<ActionRef> _top;
     std::set<ActionRef> _all;
     std::map<ActionRef, std::string> _paths;
