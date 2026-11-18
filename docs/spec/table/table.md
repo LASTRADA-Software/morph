@@ -2932,6 +2932,33 @@ pipeline, recorded once in step 0 and kept beside the budget it is held to after
 - *Every column realized* (F2): 15,000 cell widgets for 50 realized rows.
 - *A table held as cells* (U5, S8): about 56 bytes each.
 
+### Recorded baselines
+
+Step 0's figures, taken before anything they measure moves onto the pipeline. Timings are the median and the 10th
+to 90th percentile; a count or a size is exact. *Machine A* is a Windows Server 2025 host, AMD EPYC 7763 (128
+logical processors), 256 GB, MSVC 19.51.36257 Release (`cl-release`, `cl-qt-release`); it is shared with CI builds, and
+its processor time was 82 to 91% busy while these ran (five one-second samples before the run), which is what the
+spread reflects. A row marked *not yet measured* says why; its figure is taken where the environment exists.
+
+| Id | Step | Figure | Machine, load | Date |
+|---|---|---|---|---|
+| S1 | 0 | `apply`, sort `d000` asc, page of 200, 100,000 × 300: 91.9 ms (84.9–109.5) | A, 82–91% busy | 2026-11-17 |
+| S2 | 0 | `apply`, filter `t001` contains `"ka"`, 100,000 × 300: 175.3 ms (158.3–182.7) | A, 82–91% busy | 2026-11-17 |
+| S7 | 0 | Ten consecutive `apply` calls of S1, offsets 0 to 1,800: 937.7 ms (894.3–946.6) in all, 94.6 ms (80.0–107.5) a call — ten sorts | A, 82–91% busy | 2026-11-17 |
+| S8 | 0 | The column store at 100,000 × 300: 757,023,934 bytes (722.0 MiB); the same rows as a `VectorSource`'s cells, by `approximateCellBytes`: 2,143,111,296 bytes (2,043.8 MiB) | A | 2026-11-17 |
+| B1 | 0 | Client mode, an owner and no worker, 30 columns, three-key sort then a text filter, request to result: 21.0 ms (19.8–24.0) at 10,000 rows, 42.7 ms (37.0–44.8) at 20,000, 242.5 ms (215.3–245.0) at 100,000 | A, 82–91% busy | 2026-11-17 |
+| B1 | 0 | The same, the longest owner step: 10.0 ms (8.1–10.5) at 10,000, 10.2 ms (8.9–10.5) at 20,000, 11.6 ms (10.6–14.2) at 100,000 | A, 82–91% busy | 2026-11-17 |
+| B2 | 0 | S1, S2 and B1 under Node from the `table-wasm` build, as a factor over native: *not yet measured* — no Emscripten or Node on machine A; the CI job builds and runs the table tests there, and the factor is taken by running `node build-wasm/tests/morph_table_tests.js "[.benchmark][baseline]"` beside a native run on one machine | — | — |
+| B2 | 1 | W2's decode under Node: *not yet measured* — W2 lands with the generic page | — | — |
+| B5 | 0 | Qt for WebAssembly in a headless browser, mount of the 2,000 × 300 `rows` table and one screen of scroll: *not yet measured* — no Qt for WebAssembly kit, Emscripten or browser runner on machine A; the harness is `tests/qt_quick/wasm/wide_rows_baseline.cpp`, built and run as its header says | — | — |
+| W7 | 0 | A page of 200 × 300 as typed row objects (a decimal as its `{"num","den","dp"}` object, a quantity as its amount): 2,162,606 bytes; encode 14.7 ms (14.4–15.7) | A, 82–91% busy | 2026-11-17 |
+| U1 | 0 | A document `rows` table of 100,000 rows on the recording backend, a bound sort set on a text column, click to settled: 2,921.5 ms (2,860.0–3,017.6). The rows realized after the sort are the ones realized before it, reordered, not the view's first rows: the figure is the interpreter's sort and reconcile, not a correct window | A, 82–91% busy | 2026-11-17 |
+| U2 | 0 | The same table sorted, one row's name replaced in `items`, click to settled: 2,941.3 ms (2,881.4–2,992.2) | A, 82–91% busy | 2026-11-17 |
+| U3 | 0 | Text folds of the interpreter's sort of 100,000 rows: *not yet measured* — the interpreter folds with a `CodePointCollator` it constructs inside the comparison and takes none from outside, so no counting collator can be installed; the count needs that seam | — | — |
+| U4 | 0 | A `rows` table of 10,000 × 300 sorted on one column: the same rows as cells, by `approximateCellBytes`, 214,423,008 bytes (204.5 MiB); the process's private bytes after the mount over before, the parsed document, the state, the view's copy of the rows and the heap the parse left committed included, 7,644,012,544 bytes (7,289.9 MiB) | A | 2026-11-17 |
+| U5 | 0 | A collection of 20,000 rows over a `ListRows` reply: mount 117.0 ms (102.8–143.5); sort on a text column through the engine 46.9 ms (37.6–62.1); one row edited, the list reloaded and the sorted view repaired, 206.4 ms (171.9–226.2) | A, 82–91% busy | 2026-11-17 |
+| F2–F5 | 0 | A `rows` table of 2,000 × 300 in a 1,280 × 800 offscreen window: widgets alive, frame times of the vertical and horizontal scrolls, memory per realized row: *not yet measured* — on machine A the interpreter's mount of that table on the Qt Quick backend did not finish within its 300 s budget (the document's text 0.4 s, its parse 0.8 s); the case, `"qt quick baseline: F2 to F5 on a rows table of 2,000 x 300"`, bounds every step and names the one that overruns | A, 80–90% busy | 2026-11-18 |
+
 ## Invariants
 
 1. **Soundness of the filter.** For every way of replacing the unloaded cells of a table with loaded cells, a

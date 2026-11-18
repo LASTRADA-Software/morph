@@ -1751,6 +1751,29 @@ jobs:
           path: clang-format-report.txt
           if-no-files-found: ignore
 
+  # ── Table tests in WebAssembly, under Node ────────────────────────────
+  # The table module is header-only and builds without Qt: its tests run
+  # single-threaded under Node, so the count gates and the fixture's pinned
+  # digest are checked on a third standard library and a 32-bit target. The
+  # cases that need threads are tagged [threads] and left out.
+  table-wasm:
+    name: Table tests (WebAssembly, Node)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install build tools
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y ninja-build
+      - uses: mymindstorm/setup-emsdk@v14
+        with: { version: 4.0.7 }
+      - name: Configure
+        run: emcmake cmake -S . -B build-wasm -G Ninja -DCMAKE_BUILD_TYPE=Release -DMORPH_BUILD_TESTS=ON -DMORPH_BUILD_EXAMPLES=OFF
+      - name: Build
+        run: cmake --build build-wasm --target morph_table_tests
+      - name: Run
+        run: node build-wasm/tests/morph_table_tests.js "~[threads]"
+
   # ── actionlint (the workflows themselves) ─────────────────────────────
   # The workflows are thousands of lines of YAML and embedded bash that no
   # other job checks. actionlint validates expressions, job references and

@@ -207,7 +207,7 @@ TEST_CASE("table: an engine destroyed with a job in flight drops the job's resul
     CHECK(changes == 0);
 }
 
-TEST_CASE("table: results are identical on the owner, in owner steps and on a worker", "[table][engine]") {
+TEST_CASE("table: results are identical on the owner, in owner steps and on a worker", "[table][engine][threads]") {
     auto const source = tabletest::syntheticSource(6000, 5);
     morph::exec::MainThreadExecutor owner;
     morph::exec::ThreadPoolExecutor pool{2};

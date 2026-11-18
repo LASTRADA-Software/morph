@@ -24,6 +24,8 @@ add_executable(morph_qt_quick_tests
     test_qt_quick_theme.cpp
     test_qt_quick_automation.cpp
     test_qt_quick_inspector.cpp
+    wide_rows_document.hpp
+    bench_qt_quick_table.cpp
 )
 target_link_libraries(morph_qt_quick_tests
     PRIVATE
@@ -34,6 +36,7 @@ target_link_libraries(morph_qt_quick_tests
         # morph_test_main; morph_test_log_level carries the --log-level helper.
         Catch2::Catch2
         morph_test_log_level
+        "$<LINK_LIBRARY:WHOLE_ARCHIVE,morph_wide_table_model>"
 )
 # The widgets and the context are private to morph_qt_quick (src/qt_quick/); the tests include them as
 # "qt_quick/<name>.hpp", and the interpreter harness from tests/.
