@@ -20,6 +20,7 @@
 #include <morph/session/session.hpp>
 #include <morph/session/session_auth.hpp>
 #include <morph/table/runtime.hpp>
+#include <morph/table/view_cache.hpp>
 #include <morph/ui/author.hpp>
 #include <morph/util/datetime.hpp>
 #include <morph/util/rational.hpp>
@@ -162,6 +163,12 @@ TableRuntime const*& detail::tableRuntimeSlot() noexcept {
 }
 
 TableRuntime const* currentTableRuntime() noexcept { return detail::tableRuntimeSlot(); }
+
+std::shared_ptr<ViewCache> makeViewCache(ViewCacheOptions options) {
+    return std::make_shared<ViewCache>(std::move(options));
+}
+
+ViewCacheStats viewCacheStats(ViewCache const& cache) { return cache.stats(); }
 
 }  // namespace morph::table
 

@@ -934,6 +934,13 @@ public:
     /// @return Row count.
     [[nodiscard]] std::size_t rowCount() const override { return _rows->size(); }
 
+    /// @brief The rows vector's address without a level predicate, so a source rebuilt over the same vector has
+    ///        the same identity; this snapshot's address with one, whose cells the predicate also decides.
+    /// @return The identity.
+    [[nodiscard]] void const* identity() const override {
+        return _loaded ? static_cast<void const*>(this) : static_cast<void const*>(_rows.get());
+    }
+
     /// @brief A row's key.
     /// @param row Row index.
     /// @return The key.

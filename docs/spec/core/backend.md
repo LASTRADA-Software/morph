@@ -1232,6 +1232,27 @@ through `dispatchExecute`.
   an action whose result holds a `table::ChangedRows<F>` names that table's
   rows as `updates` keys (see [registry.md,
   `BRIDGE_REGISTER_TABLE`](registry.md#bridge_register_tablem-id-fn-)).
+  The reply reads its view from the server's one view cache (sized by
+  `ServerConfig::views`, counted by `RemoteServer::viewStats()`), which
+  `RemoteServer` puts in the `table::TableRuntime` it installs around a
+  dispatch beside `tableWork`; see [table.md, "The view
+  cache"](../table/table.md#the-view-cache).
+- **Change observers come first.** `RemoteServer::attach(observer)` registers
+  an `effects::IChangeObserver`, such as a table's level cache, and hands it
+  its announce sink (`effects::AnnounceSink`, holding the server weakly). On
+  the server strand, `fanOut` calls each observer's `changed(changes)` before
+  it finds a recipient, so a client that refetches because of the event reads
+  what the observer left. An observer only removes: it neither loads, waits
+  nor calls out. One that throws is logged and the fan-out goes on.
+- **`announce` is a fan-out with no caller and no observers.**
+  `RemoteServer::announce(record, keys)` reports a change no execute made, from
+  any thread: an unregistered record is refused (`"unregistered record:
+  <name>"`) and nothing is sent; otherwise the change is built as an execute's
+  is (the record's derived records whole, more than `effects::kMaxChangeKeys`
+  keys a whole-type change), posted to the server strand, and fanned out as a
+  time fact's is, with no caller, so a `privateKeys` record reaches every
+  watcher without keys. The observers are not told: an arrival never
+  invalidates the cache that announced it.
 - **The model strand derives.** `finishRemote`, on success only and before the
   reply, calls `effects::deriveChanges(actionType, result, ranOn)`. `ranOn` is
   the instance the action ran on: its model type, its id, and, for a keyed
@@ -2509,6 +2530,7 @@ server: each call is a loop task, so the loop serialises them.
 | `clock` | `std::function<morph::time::DateTime()>`, default empty (the system clock): the server's "now" for [time-derived fan-out](#time-derived-fan-out). |
 | `clockRecheck` | `std::chrono::milliseconds`, default `1 s`: the longest sleep before `clock` is read again; not positive throws `std::invalid_argument`. |
 | `tableWork` | `std::shared_ptr<morph::exec::IExecutor>`, default null (the server's worker pool): where a `Table.<id>` reply is built, off the model's strand. |
+| `views` | `morph::table::ViewCacheOptions`, default `maxBytes` 64 MiB and no `onCompute`: the bound of the server's one view cache across its tables, and a hook called on the thread that computes a view. |
 
 ### `SimulatedRemoteBackend`
 

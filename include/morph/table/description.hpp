@@ -51,6 +51,7 @@
 #include <morph/table/level_cache.hpp>
 #include <morph/table/query.hpp>
 #include <morph/table/runtime.hpp>
+#include <morph/table/view_cache.hpp>
 #include <morph/util/rational.hpp>
 #include <mutex>
 #include <optional>
@@ -1047,7 +1048,22 @@ private:
 namespace detail {
 
 /// @brief What a reply is built with beyond the table and the query.
-struct AnswerContext {};
+struct AnswerContext {
+    /// @brief The server's view cache; null computes the view for the request alone.
+    ViewCache* views = nullptr;
+    /// @brief The table's record name, `<model type>.<id>`: the first member of a view's key. Empty caches nothing.
+    std::string_view record;
+    /// @brief The registration's `rowScoped`: a reply then needs a `ServedTable::scope`.
+    bool rowScoped = false;
+};
+
+/// @brief The canonical text of a validated query's sort and filter: the part of a view's key the query gives.
+/// @param validated The query as `validate` returned it.
+/// @return The JSON of `sort`, then of `filters`.
+[[nodiscard]] inline std::string viewQueryOf(TableQuery const& validated) {
+    return glz::write_json(validated.sort).value_or(std::string{}) + "\n" +
+           glz::write_json(validated.filters).value_or(std::string{});
+}
 
 /// @brief @p served with its source replaced by a `PinnedSource` of one snapshot taken now.
 ///
@@ -1104,6 +1120,12 @@ struct AnswerContext {};
 /// level the page's rows. An order use the level refuses refuses the query, `Unavailable` naming a sorted or
 /// filtered column of the level, and no page is returned.
 ///
+/// The view comes from `context.views` when it is set and `context.record` is not empty: the entry of the
+/// record, `served.scope` and the canonical sort and filter that is valid for the pinned source's snapshot and
+/// the order levels' generations, computed once and read by every page and keyed fetch of it. A row-scoped table
+/// (`context.rowScoped`) whose `scope` is empty is refused `SourceContract` before anything is read: its callers
+/// would share views of different rows.
+///
 /// A keyed query to a table whose capabilities exclude keyed queries is `Unavailable`, which a client answers by
 /// refetching its pages.
 /// @param served  The table, its source pinned (`pinned`).
@@ -1113,7 +1135,10 @@ struct AnswerContext {};
 [[nodiscard]] inline std::expected<GenericPage, TableError> answerQuery(ServedTable const& served,
                                                                         TableQuery const& query,
                                                                         AnswerContext const& context = {}) {
-    static_cast<void>(context);
+    if (context.rowScoped && served.scope.empty()) {
+        return std::unexpected(TableError{
+            .code = TableErrorCode::SourceContract, .column = {}, .message = "a row-scoped table needs a scope"});
+    }
     if (served.source == nullptr) {
         return std::unexpected(
             TableError{.code = TableErrorCode::Unavailable, .column = {}, .message = "the table serves no source"});
@@ -1170,33 +1195,69 @@ struct AnswerContext {};
             inputs.push_back(LevelInput{.source = std::move(source), .snapshot = std::move(levelSnapshot)});
         }
     }
-    LeveledSource const leveled{served.source, infos, std::move(inputs)};
+    LeveledSource const leveled{served.source, infos, inputs};
     ApplyOptions const options{.limits = served.limits, .services = served.services, .mayRead = served.mayRead};
-    auto view = computeView(leveled, *checked, options);
-    if (!view) {
-        return std::unexpected(std::move(view.error()));
-    }
+    auto const compute = [&]() -> std::expected<ViewComputation, TableError> {
+        auto view = computeView(leveled, *checked, options);
+        if (!view) {
+            return std::unexpected(std::move(view.error()));
+        }
+        ViewComputation out{.view = std::move(*view), .awaiting = {}, .failed = {}};
+        for (auto const& level : needed.order) {
+            bool unloaded = false;
+            bool failed = false;
+            auto const look = [&](std::uint32_t row) {
+                auto const state = leveled.state(row, level);
+                unloaded = unloaded || state == LevelRead::Unloaded;
+                failed = failed || state == LevelRead::Failed;
+                return unloaded && failed;
+            };
+            if (!std::ranges::any_of(out.view.rows, look)) {
+                static_cast<void>(std::ranges::any_of(out.view.undecided, look));
+            }
+            if (unloaded) {
+                out.awaiting.push_back(level);
+            }
+            if (failed) {
+                out.failed.push_back(level);
+            }
+        }
+        return out;
+    };
     auto const snapshot = leveled.snapshot();
-    auto rows = pageRows(*view, *snapshot, *checked, served.limits);
-    for (auto const& level : needed.order) {
-        bool unloaded = false;
-        bool failed = false;
-        auto const look = [&](std::uint32_t row) {
-            auto const state = leveled.state(row, level);
-            unloaded = unloaded || state == LevelRead::Unloaded;
-            failed = failed || state == LevelRead::Failed;
-            return unloaded && failed;
-        };
-        if (!std::ranges::any_of(view->rows, look)) {
-            static_cast<void>(std::ranges::any_of(view->undecided, look));
+    std::shared_ptr<ViewEntry const> entry;
+    if (context.views != nullptr && !context.record.empty()) {
+        // The pinned source's snapshot, whose identity survives across requests, and the order levels' states.
+        std::vector<std::pair<std::string, std::uint64_t>> generations;
+        for (auto const& level : needed.order) {
+            for (auto const& input : inputs) {
+                if (input.source->level() == level) {
+                    generations.emplace_back(level, input.snapshot->generation());
+                }
+            }
         }
-        if (unloaded) {
-            rows.awaiting.push_back(level);
+        auto found = context.views->find(
+            ViewKey{.record = std::string{context.record}, .scope = served.scope, .query = viewQueryOf(*checked)},
+            served.source->snapshot(), generations, compute);
+        if (!found) {
+            return std::unexpected(std::move(found.error()));
         }
-        if (failed) {
-            rows.failed.push_back(level);
+        entry = std::move(*found);
+    } else {
+        auto computed = compute();
+        if (!computed) {
+            return std::unexpected(std::move(computed.error()));
         }
+        entry = std::make_shared<ViewEntry const>(
+            served.source->snapshot(), std::vector<std::pair<std::string, std::uint64_t>>{}, std::move(*computed));
     }
+    auto const* const view = &entry->view;
+    auto rows = checked->keys && context.views != nullptr
+                    ? pageRows(*view, *snapshot, *checked, served.limits, entry->viewRowOf(),
+                               [&entry](RowId const& key) { return entry->sourceRowOf(key); })
+                    : pageRows(*view, *snapshot, *checked, served.limits);
+    rows.awaiting = entry->awaiting;
+    rows.failed = entry->failed;
     auto page = writeGenericPage(rows, leveled, columns);
     page.unloadedRows.clear();
     for (std::size_t at = 0; at < rows.rows.size(); ++at) {
@@ -1432,6 +1493,21 @@ template <auto Function, typename Model>
     return served;
 }
 
+/// @brief A table's record: its name and whether it keeps its keys private.
+/// @tparam Function The table's function.
+/// @return The registered record's name, valid for the process, and its `privateKeys`; empty and false when the
+///         registries hold no such record.
+template <auto Function>
+[[nodiscard]] std::pair<std::string_view, bool> tableRecordOf() {
+    auto const& records = effects::detail::resolved().records;
+    auto const found =
+        std::ranges::find(records, std::type_index{typeid(TableOf<Function>)}, &record::RecordInfo::type);
+    if (found == records.end()) {
+        return {std::string_view{}, false};
+    }
+    return {std::string_view{found->name}, found->privateKeys};
+}
+
 /// @brief The awaiter that builds a reply on the table executor and resumes the awaiting coroutine where it
 ///        was running.
 ///
@@ -1553,7 +1629,9 @@ template <typename Model>
     // Read before the first suspension: a server installs the runtime for the dispatch's first step only.
     auto const* const runtime = currentTableRuntime();
     exec::IExecutor* const work = runtime != nullptr ? runtime->work : nullptr;
-    detail::AnswerContext const context{};
+    auto const [record, rowScoped] = detail::tableRecordOf<Function>();
+    detail::AnswerContext const context{
+        .views = runtime != nullptr ? runtime->views : nullptr, .record = record, .rowScoped = rowScoped};
     auto served = detail::pinned(detail::serve<Function>(model, detail::callerContext()));
     std::expected<GenericPage, TableError> answer;
     if (work == nullptr) {

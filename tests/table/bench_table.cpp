@@ -1181,3 +1181,63 @@ TEST_CASE("table benchmark: L1 L2 L3 L6 the level cache", "[.benchmark][levels]"
     std::println("| L6 | shards copied for {} keys stored | {} | |", kRuns * 64,
                  morph::table::detail::LevelCacheAccess::shardCopies(timedCache) - copiesBefore);
 }
+
+// ── The view cache (S7, S9) ─────────────────────────────────────────────────
+
+TEST_CASE("table benchmark: S7 S9 the view cache", "[.benchmark][views]") {
+    auto const source = std::make_shared<bench::WideTableSource>(
+        bench::WideTableOptions{.rows = 100'000, .columns = 300, .seed = 1, .loadDelay = {}});
+    auto description = morph::table::describe(bench::wideDescription("wide", 300));
+    description.capabilities.keys = true;
+    // Every column at the base level: the source holds the recipe columns' cells itself.
+    for (auto& column : description.columns) {
+        column.info.level.clear();
+    }
+    description.levels.clear();
+    auto const served = detail::pinned(ServedTable{.description = morph::table::describe(std::move(description)),
+                                                   .source = source,
+                                                   .levels = {},
+                                                   .mayRead = {},
+                                                   .scope = {},
+                                                   .services = {},
+                                                   .limits = {}});
+    ViewCache views;
+    detail::AnswerContext const context{.views = &views, .record = "WideTableModel.wide", .rowScoped = false};
+    TableQuery query;
+    query.sort = {SortKey{.column = "i001", .dir = kAsc}};
+    query.columns = std::vector<std::string>{"id", "i001", "t001"};
+    std::println("\nThe view cache, 100,000 x 300\n\n| Id | scenario | ms |\n|---|---|---:|");
+    std::vector<double> later;
+    for (int request = 0; request < 10; ++request) {
+        query.page = PageRequest{.offset = request * 200, .limit = 200};
+        auto const began = Clock::now();
+        REQUIRE(detail::answerQuery(served, query, context).has_value());
+        auto const ms = std::chrono::duration<double, std::milli>(Clock::now() - began).count();
+        if (request == 0) {
+            std::println("| S7 | request 1, which sorts | {:.3f} |", ms);
+        } else {
+            later.push_back(ms);
+        }
+    }
+    auto const spread = spreadOf(later);
+    std::println("| S7 | requests 2 to 10, median (p10-p90) | {:.3f} ({:.3f}-{:.3f}) |", spread.median, spread.p10,
+                 spread.p90);
+    std::println("| S7 | views computed for ten requests | {} |", views.stats().computations);
+    auto keyed = query;
+    keyed.page = PageRequest{};
+    keyed.keys.emplace();
+    for (std::int64_t i = 0; i < 20; ++i) {
+        keyed.keys->emplace_back(1 + (i * 4'999));
+    }
+    for (int run = 0; run < 2; ++run) {
+        auto const began = Clock::now();
+        auto const page = detail::answerQuery(served, keyed, context);
+        auto const ms = std::chrono::duration<double, std::milli>(Clock::now() - began).count();
+        INFO((page.has_value() ? std::string{} : page.error().message));
+        REQUIRE(page.has_value());
+        REQUIRE(page->keys.size() == 20);
+        std::println("| S9 | keyed query of 20 keys, {} | {:.3f} |", run == 0 ? "first" : "next", ms);
+    }
+    std::println("| S9 | views computed after both keyed queries | {} |", views.stats().computations);
+    static_cast<void>(std::fflush(stdout));
+}
