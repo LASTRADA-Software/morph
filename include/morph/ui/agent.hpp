@@ -3,6 +3,7 @@
 
 #include <atomic>
 #include <chrono>
+#include <condition_variable>
 #include <cstdint>
 #include <exception>
 #include <expected>
@@ -21,8 +22,10 @@
 #include <vector>
 
 #include "../core/completion.hpp"
+#include "../core/envelope_transport.hpp"
 #include "../core/executor.hpp"
 #include "../core/remote.hpp"
+#include "../core/timeout_scheduler.hpp"
 #include "../core/wire.hpp"
 #include "../forms/forms.hpp"
 #include "../session/session.hpp"
@@ -32,8 +35,9 @@
 /// @file
 /// The MCP adapter (spec 8 §11): an agent's tool calls run through the server as ordinary envelopes on a
 /// connection of their own, so every check a GUI gets applies to them, and every GUI watching what they change is
-/// told. The adapter speaks MCP's JSON-RPC 2.0 and knows no transport; `serveStdio` drives it over MCP's stdio
-/// transport.
+/// told. The server is in the same process, or on the far side of a `backend::IEnvelopeTransport`. The adapter
+/// speaks MCP's JSON-RPC 2.0 and knows no agent transport; `serveStdio` and `serveStdioOnOwner` drive it over MCP's
+/// stdio transport.
 
 namespace morph::ui {
 
@@ -50,6 +54,11 @@ struct McpOptions {
     ///        every call still in flight, such as the `exec::MainThreadExecutor` `serveStdio` pumps. Borrowed;
     ///        required.
     exec::IExecutor* callbacks = nullptr;
+    /// @brief How long an envelope sent over a transport waits for its reply before it is answered as a failure.
+    ///        `serveStdio` handles one message at a time, so without this bound a request a transport holds through
+    ///        an outage would block every later message. Zero waits forever. The in-process constructor ignores it,
+    ///        since a `RemoteServer` always replies.
+    std::chrono::milliseconds callTimeout = std::chrono::seconds{30};
 };
 
 /// @brief The JSON-RPC error code of a method the adapter does not answer.
@@ -72,8 +81,9 @@ inline constexpr std::int64_t kMcpInvalidParams = -32602;
 ///   instance per model type, registered on the adapter's connection at its first call. A tool `evaluate`, taking
 ///   `{action, body}`, is a dry run through `ui-evaluate`.
 /// - **A call's result** is the action's result JSON as text content, or the server's `err` message with `isError`.
-/// - **The connection** is opened when the adapter is made and closed when it is destroyed, which releases its
-///   private instances. The server treats it like any other connection, so its changes reach every watching GUI.
+/// - **The connection** of an adapter made over a server is opened when the adapter is made and closed when it is
+///   destroyed, which releases its private instances. The server treats it like any other connection, so its changes
+///   reach every watching GUI. Over a transport, the connection is the transport's.
 ///
 /// `handle` is called on the owner, `McpOptions::callbacks`, and its completion is delivered there.
 class McpAdapter {
@@ -83,20 +93,68 @@ public:
     /// @param options Its options.
     /// @throws std::invalid_argument without a server or a callbacks executor.
     McpAdapter(std::shared_ptr<backend::RemoteServer> server, McpOptions options)
-        : _shared{std::make_shared<Shared>(std::move(server), std::move(options))} {
-        if (_shared->server == nullptr || _shared->options.callbacks == nullptr) {
+        : _shared{std::make_shared<Shared>(std::move(options))} {
+        if (server == nullptr || _shared->options.callbacks == nullptr) {
             throw std::invalid_argument{"McpAdapter: a server and a callbacks executor are required"};
         }
-        _shared->cid = _shared->server->openConnection();
+        backend::ConnectionId const cid = server->openConnection();
+        _shared->link = [server, cid](std::shared_ptr<Shared> const& /*self*/, wire::Envelope env,
+                                      EnvelopeReply done) {
+            Shared::overServer(server, cid, std::move(env), std::move(done));
+        };
+        _shared->close = [server, cid] { server->closeConnection(cid); };
     }
 
-    /// @brief Closes the adapter's connection, releasing its private instances.
+    /// @brief An adapter whose envelopes travel over @p transport: a connection to a server in another process.
+    ///
+    /// The transport's connection is the agent's. The adapter opens and closes nothing, and the server releases
+    /// the adapter's private instances when that connection drops. Install `resetter()` as the transport's
+    /// disconnect handler, so a reconnect does not reuse released ids. Each envelope waits at most
+    /// `McpOptions::callTimeout` for its reply.
+    /// @param transport The transport. Borrowed: it must outlive the adapter.
+    /// @param options   Its options; `callbacks` must be the executor the transport may deliver replies on.
+    /// @throws std::invalid_argument without a callbacks executor.
+    McpAdapter(backend::IEnvelopeTransport& transport, McpOptions options)
+        : _shared{std::make_shared<Shared>(std::move(options))},
+          _timer{std::make_unique<async::detail::TimeoutScheduler>()} {
+        if (_shared->options.callbacks == nullptr) {
+            throw std::invalid_argument{"McpAdapter: a callbacks executor is required"};
+        }
+        _shared->timer = _timer.get();
+        _shared->link = [&transport](std::shared_ptr<Shared> const& self, wire::Envelope env, EnvelopeReply done) {
+            Shared::overTransport(self, transport, std::move(env), std::move(done));
+        };
+    }
+
+    /// @brief Closes the adapter's connection, if it opened one, and drops the timeouts still pending.
     ~McpAdapter() {
+        {
+            std::scoped_lock const lock{_shared->mutex};
+            _shared->timer = nullptr;
+        }
+        _timer.reset();
         // A destructor must not throw, so a close that fails is dropped.
         try {
-            _shared->server->closeConnection(_shared->cid);
+            if (_shared->close) {
+                _shared->close();
+            }
         } catch (...) {  // NOLINT(bugprone-empty-catch)
         }
+    }
+
+    /// @brief A callable that forgets the cached catalog and every cached model id, so the next call fetches the
+    ///        catalog and registers its instance again: what a transport's disconnect handler runs.
+    ///
+    /// It holds the adapter's state weakly, so calling it after the adapter is gone does nothing; a transport's
+    /// handler outlives the adapter that borrows the transport. Callable from any thread. A reply to a request
+    /// sent before the reset is not cached.
+    /// @return The callable.
+    [[nodiscard]] std::function<void()> resetter() const {
+        return [weak = std::weak_ptr<Shared>{_shared}] {
+            if (auto const shared = weak.lock()) {
+                shared->reset();
+            }
+        };
     }
 
     McpAdapter(McpAdapter const&) = delete;
@@ -123,12 +181,17 @@ private:
 
     // Everything a reply still in flight needs, kept alive by it after the adapter is gone.
     struct Shared {
-        Shared(std::shared_ptr<backend::RemoteServer> made, McpOptions given)
-            : server{std::move(made)}, options{std::move(given)} {}
+        explicit Shared(McpOptions given) : options{std::move(given)} {}
 
-        std::shared_ptr<backend::RemoteServer> server;
         McpOptions options;
-        backend::ConnectionId cid{};
+        // Sends one envelope and calls back with its reply; set by the constructor that made the adapter.
+        std::function<void(std::shared_ptr<Shared> const&, wire::Envelope, EnvelopeReply)> link;
+        // Closes the adapter's connection; empty over a transport, whose connection is the caller's.
+        std::function<void()> close;
+        // The timeout scheduler of a transport adapter, owned by the McpAdapter and null once it is gone.
+        async::detail::TimeoutScheduler* timer = nullptr;
+        // Bumped by every reset: a catalog or model id is cached only by a reply sent in the current generation.
+        std::uint64_t generation = 0;
         std::atomic<std::uint64_t> nextCall{0};
         std::mutex mutex;
         std::optional<CatalogReply> catalog;
@@ -147,7 +210,12 @@ private:
         static void send(std::shared_ptr<Shared> const& self, wire::Envelope env, EnvelopeReply done) {
             env.callId = self->nextCall.fetch_add(1) + 1;
             env.session = self->options.session;
-            self->server->handle(
+            self->link(self, std::move(env), std::move(done));
+        }
+
+        static void overServer(std::shared_ptr<backend::RemoteServer> const& server, backend::ConnectionId cid,
+                               wire::Envelope env, EnvelopeReply done) {
+            server->handle(
                 wire::encode(env),
                 [done = std::move(done)](std::string const& reply) {
                     try {
@@ -156,7 +224,79 @@ private:
                         done(wire::makeErr(error.what()));
                     }
                 },
-                self->cid);
+                cid);
+        }
+
+        // The reply to one transport request, settled once: by the reply, the rejection or the timeout.
+        struct Pending {
+            std::atomic<bool> settled{false};
+            EnvelopeReply done;
+            async::detail::TimeoutScheduler::Handle timer = 0;
+            void settle(wire::Envelope reply) {
+                if (!settled.exchange(true)) {
+                    done(std::move(reply));
+                }
+            }
+        };
+
+        [[nodiscard]] static std::string waited(std::chrono::milliseconds timeout) {
+            auto const ms = timeout.count();
+            return ms % 1000 == 0 ? std::to_string(ms / 1000) + " s" : std::to_string(ms) + " ms";
+        }
+
+        [[nodiscard]] static std::string describe(std::exception_ptr const& error) {
+            try {
+                std::rethrow_exception(error);
+            } catch (std::exception const& thrown) {
+                return thrown.what();
+            } catch (...) {
+                return "the transport failed";
+            }
+        }
+
+        static void overTransport(std::shared_ptr<Shared> const& self, backend::IEnvelopeTransport& transport,
+                                  wire::Envelope env, EnvelopeReply done) {
+            auto const pending = std::make_shared<Pending>();
+            pending->done = std::move(done);
+            exec::IExecutor* const owner = self->options.callbacks;
+            std::chrono::milliseconds const timeout = self->options.callTimeout;
+            {
+                std::scoped_lock const lock{self->mutex};
+                if (self->timer != nullptr && timeout.count() > 0) {
+                    // The timeout fires on the scheduler's loop and settles on the owner, as replies do.
+                    pending->timer = self->timer->schedule(timeout, [owner, pending, timeout] {
+                        owner->post([pending, timeout] {
+                            pending->settle(wire::makeErr("no reply from the server in " + waited(timeout)));
+                        });
+                    });
+                }
+            }
+            auto const cancel = [weak = std::weak_ptr<Shared>{self}, pending] {
+                if (auto const shared = weak.lock()) {
+                    std::scoped_lock const lock{shared->mutex};
+                    if (shared->timer != nullptr && pending->timer != 0) {
+                        shared->timer->cancel(pending->timer);
+                    }
+                }
+            };
+            auto completion = transport.request(std::move(env), *owner);
+            completion
+                .thenDetached([pending, cancel](wire::Envelope const& reply) {
+                    cancel();
+                    pending->settle(wire::Envelope{reply});
+                })
+                .onErrorDetached([pending, cancel](std::exception_ptr const& error) {
+                    cancel();
+                    pending->settle(wire::makeErr(describe(error)));
+                });
+        }
+
+        void reset() {
+            std::scoped_lock const lock{mutex};
+            ++generation;
+            catalog.reset();
+            privateIds.clear();
+            sharedIds.clear();
         }
 
         static std::string write(Json const& value) { return glz::write_json(value).value_or(std::string{"null"}); }
@@ -255,9 +395,11 @@ private:
         static void withCatalog(std::shared_ptr<Shared> const& self, std::function<void(CatalogReply const&)> then) {
             // Copied under the lock and used after it: the continuation takes the lock again.
             std::optional<CatalogReply> cached;
+            std::uint64_t generation = 0;
             {
                 std::scoped_lock const lock{self->mutex};
                 cached = self->catalog;
+                generation = self->generation;
             }
             if (cached) {
                 then(*cached);
@@ -265,7 +407,7 @@ private:
             }
             wire::Envelope request;
             request.kind = std::string{kCatalogKind};
-            send(self, std::move(request), [self, then = std::move(then)](wire::Envelope const& reply) {
+            send(self, std::move(request), [self, generation, then = std::move(then)](wire::Envelope const& reply) {
                 CatalogReply catalog;
                 if (reply.kind == "ok") {
                     if (auto read = parseCatalogReply(reply.body)) {
@@ -274,7 +416,9 @@ private:
                 }
                 {
                     std::scoped_lock const lock{self->mutex};
-                    self->catalog = catalog;
+                    if (self->generation == generation) {
+                        self->catalog = catalog;
+                    }
                 }
                 then(catalog);
             });
@@ -391,8 +535,10 @@ private:
                                  std::optional<std::string> const& key,
                                  std::function<void(std::expected<std::uint64_t, std::string>)> then) {
             std::optional<std::uint64_t> cached;
+            std::uint64_t generation = 0;
             {
                 std::scoped_lock const lock{self->mutex};
+                generation = self->generation;
                 if (key) {
                     if (auto const found = self->sharedIds.find(std::pair{type, *key});
                         found != self->sharedIds.end()) {
@@ -407,22 +553,25 @@ private:
                 return;
             }
             wire::Envelope request = key ? wire::makeRegisterShared(type, *key) : wire::makeRegister(type);
-            send(self, std::move(request), [self, type, key, then = std::move(then)](wire::Envelope const& reply) {
-                if (reply.kind != "ok" || reply.modelId == 0) {
-                    then(std::unexpected(reply.message.empty() ? std::string{"the instance was not registered"}
-                                                               : reply.message));
-                    return;
-                }
-                {
-                    std::scoped_lock const lock{self->mutex};
-                    if (key) {
-                        self->sharedIds.insert_or_assign(std::pair{type, *key}, reply.modelId);
-                    } else {
-                        self->privateIds.insert_or_assign(type, reply.modelId);
-                    }
-                }
-                then(reply.modelId);
-            });
+            send(self, std::move(request),
+                 [self, generation, type, key, then = std::move(then)](wire::Envelope const& reply) {
+                     if (reply.kind != "ok" || reply.modelId == 0) {
+                         then(std::unexpected(reply.message.empty() ? std::string{"the instance was not registered"}
+                                                                    : reply.message));
+                         return;
+                     }
+                     {
+                         std::scoped_lock const lock{self->mutex};
+                         if (self->generation == generation) {
+                             if (key) {
+                                 self->sharedIds.insert_or_assign(std::pair{type, *key}, reply.modelId);
+                             } else {
+                                 self->privateIds.insert_or_assign(type, reply.modelId);
+                             }
+                         }
+                     }
+                     then(reply.modelId);
+                 });
         }
 
         [[nodiscard]] static std::optional<std::string> instanceKey(Json const* value) {
@@ -511,6 +660,7 @@ private:
     };
 
     std::shared_ptr<Shared> _shared;
+    std::unique_ptr<async::detail::TimeoutScheduler> _timer;
 };
 
 /// @brief Serves an adapter over MCP's stdio transport: one JSON-RPC message per line of @p input, each reply on a
@@ -533,6 +683,38 @@ inline void serveStdio(McpAdapter& adapter, exec::MainThreadExecutor& owner, std
         while (!replied) {
             owner.runFor(std::chrono::milliseconds{10});
         }
+        if (*replied) {
+            output << **replied << '\n' << std::flush;
+        }
+    }
+}
+
+/// @brief Serves an adapter over MCP's stdio transport when its owner is turned by another thread, such as a Qt
+///        event loop: each message's `handle` is posted to @p owner, and the calling thread waits for its reply.
+///        One JSON-RPC message per line of @p input, each reply on a line of @p output, in order, until @p input
+///        ends. An empty line is skipped.
+/// @param adapter The adapter; its `McpOptions::callbacks` is @p owner.
+/// @param owner   The adapter's owner, a serial executor another thread runs.
+/// @param input   Where messages arrive.
+/// @param output  Where replies go; flushed after each.
+inline void serveStdioOnOwner(McpAdapter& adapter, exec::IExecutor& owner, std::istream& input, std::ostream& output) {
+    std::string line;
+    while (std::getline(input, line)) {
+        if (line.empty()) {
+            continue;
+        }
+        std::mutex mutex;
+        std::condition_variable answered;
+        std::optional<std::optional<std::string>> replied;
+        owner.post([&adapter, &line, &mutex, &answered, &replied] {
+            adapter.handle(line).thenDetached([&mutex, &answered, &replied](std::optional<std::string> const& reply) {
+                std::scoped_lock const lock{mutex};
+                replied = reply;
+                answered.notify_one();
+            });
+        });
+        std::unique_lock lock{mutex};
+        answered.wait(lock, [&replied] { return replied.has_value(); });
         if (*replied) {
             output << **replied << '\n' << std::flush;
         }
