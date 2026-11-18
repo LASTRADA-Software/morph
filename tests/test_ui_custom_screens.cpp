@@ -208,24 +208,20 @@ TEST_CASE("registerCustomScreens refuses what it cannot serve", "[ui][custom-scr
     CHECK_THROWS_AS(morph::ui::registerCustomScreens(store, getBundle, nullptr, dispatcher, registry),
                     std::invalid_argument);
     // The largest document whose escaped `get` reply fits one envelope is accepted; one byte more is not.
-    std::size_t const largest =
-        (morph::wire::kMaxEnvelopeBytes - morph::ui::kCustomScreenReplyOverhead) / 4;
-    CHECK_THROWS_AS(morph::ui::registerCustomScreens(
-                        store, getBundle, authorizer, dispatcher, registry,
-                        morph::ui::CustomScreensOptions{.maxDocumentBytes = largest + 1}),
+    std::size_t const largest = (morph::wire::kMaxEnvelopeBytes - morph::ui::kCustomScreenReplyOverhead) / 4;
+    CHECK_THROWS_AS(morph::ui::registerCustomScreens(store, getBundle, authorizer, dispatcher, registry,
+                                                     morph::ui::CustomScreensOptions{.maxDocumentBytes = largest + 1}),
                     std::invalid_argument);
-    CHECK_NOTHROW(morph::ui::registerCustomScreens(
-        store, getBundle, authorizer, dispatcher, registry,
-        morph::ui::CustomScreensOptions{.maxDocumentBytes = largest}));
+    CHECK_NOTHROW(morph::ui::registerCustomScreens(store, getBundle, authorizer, dispatcher, registry,
+                                                   morph::ui::CustomScreensOptions{.maxDocumentBytes = largest}));
     // The same for a list: the most summaries whose escaped reply fits one envelope, and one more.
     std::size_t const mostListed = (morph::wire::kMaxEnvelopeBytes - morph::ui::kCustomScreenReplyOverhead) /
                                    (morph::ui::kMaxEscapedGrowth * morph::ui::kMaxSummaryBytes);
-    CHECK_THROWS_AS(morph::ui::registerCustomScreens(
-                        store, getBundle, authorizer, dispatcher, registry,
-                        morph::ui::CustomScreensOptions{.maxListed = mostListed + 1}),
+    CHECK_THROWS_AS(morph::ui::registerCustomScreens(store, getBundle, authorizer, dispatcher, registry,
+                                                     morph::ui::CustomScreensOptions{.maxListed = mostListed + 1}),
                     std::invalid_argument);
-    CHECK_NOTHROW(morph::ui::registerCustomScreens(
-        store, getBundle, authorizer, dispatcher, registry, morph::ui::CustomScreensOptions{.maxListed = mostListed}));
+    CHECK_NOTHROW(morph::ui::registerCustomScreens(store, getBundle, authorizer, dispatcher, registry,
+                                                   morph::ui::CustomScreensOptions{.maxListed = mostListed}));
 }
 
 TEST_CASE("custom screens: a document of escaping characters at the default bound is served within the envelope",
@@ -386,8 +382,9 @@ namespace {
 /// Stores a screen that the base no longer matches: it carries a host command with a huge literal argument, so the
 /// refusal that makes it broken quotes the whole command.
 void storeBrokenScreen(morph::ui::MemoryCustomScreenStore& store, std::string const& id, std::size_t argBytes) {
-    std::string const document = replaced(baseScreen(id), R"({"host":"print"})",
-                                          R"({"host":"print","args":{"lit":")" + std::string(argBytes, 'x') + R"("}})");
+    std::string const document =
+        replaced(baseScreen(id), R"({"host":"print"})",
+                 R"({"host":"print","args":{"lit":")" + std::string(argBytes, 'x') + R"("}})");
     REQUIRE(settled(store.put({.person = "alice", .app = "lims", .id = id},
                               morph::ui::CustomScreen{.id = id,
                                                       .title = "Big",
@@ -448,13 +445,13 @@ TEST_CASE("custom screens: a full list of adversarial summaries fits one envelop
     std::string const control(5000, '\x0b');
     for (std::size_t i = 0; i < options.maxListed + 5; ++i) {
         std::string const id = "custom:" + std::to_string(1000 + i) + control;
-        REQUIRE(settled(store->put({.person = "alice", .app = "lims", .id = id},
-                                   morph::ui::CustomScreen{.id = id,
-                                                           .title = control,
-                                                           .basedOn = control,
-                                                           .document = "{}",
-                                                           .savedAt = {},
-                                                           .savedBy = control})));
+        REQUIRE(settled(
+            store->put({.person = "alice", .app = "lims", .id = id}, morph::ui::CustomScreen{.id = id,
+                                                                                             .title = control,
+                                                                                             .basedOn = control,
+                                                                                             .document = "{}",
+                                                                                             .savedAt = {},
+                                                                                             .savedBy = control})));
     }
     Server s{store, options};
     Envelope const reply = s.call(morph::ui::kCustomScreensList, R"({"app":"lims"})", "alice");

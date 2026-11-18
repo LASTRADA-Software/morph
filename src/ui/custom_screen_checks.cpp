@@ -322,7 +322,8 @@ private:
         if (object == nullptr || !object->contains(key)) {
             return false;
         }
-        return glz::write<::morph::wire::detail::EscapingWriteOpts{}>(object->at(key)).value_or("") == R"({"ref":"event"})";
+        return glz::write<::morph::wire::detail::EscapingWriteOpts{}>(object->at(key)).value_or("") ==
+               R"({"ref":"event"})";
     }
 
     [[nodiscard]] static Mutation const* find(std::string const& name, Table const& table) {

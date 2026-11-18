@@ -471,8 +471,8 @@ TEST_CASE("base rule: a host command that cannot be read is refused, not skipped
 
 TEST_CASE("base rule: a host command is compared and quoted with its control bytes escaped",
           "[ui][custom-screens][base-rule]") {
-    // The writer's default leaves a control byte raw and, after an earlier escaped character, can write it back as
-    // other bytes, so two arguments could compare alike. The canonical text, which the refusal quotes, escapes it.
+    // The writer's default leaves a control byte raw, which is invalid JSON, and after an earlier escaped character
+    // it wrote an extra byte at that position. The canonical text, which the refusal quotes, escapes the byte.
     auto const withArgs = [](std::string_view id, std::string_view arg) {
         return replaced(baseScreen(id), R"({"host":"print"})",
                         R"({"host":"print","args":{"lit":")" + std::string{arg} + R"("}})");

@@ -233,7 +233,8 @@ inline constexpr std::size_t kMaxBrokenReasonBytes = 1024;
 inline constexpr std::size_t kMaxSummaryBytes = std::size_t{3} * 1024;
 
 /// @brief The most a byte of a summary grows to in an envelope: the reply is written with control bytes escaped, so
-///        one becomes a six-byte escape sequence, and the envelope then doubles each backslash of the reply, making seven.
+///        one becomes a six-byte escape sequence, and the envelope then doubles each backslash of the reply, making
+///        seven.
 inline constexpr std::size_t kMaxEscapedGrowth = 7;
 
 /// @brief The bytes of a `get` reply that are not its document: one capped summary, at most
