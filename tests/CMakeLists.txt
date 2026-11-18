@@ -38,6 +38,7 @@ set(MORPH_TABLE_TEST_SOURCES
     table/test_table_pending.cpp
     table/test_table_reentrancy.cpp
     table/test_table_server.cpp
+    table/test_table_description.cpp
     table/test_wide_table.cpp
     table/bench_table.cpp
 )
