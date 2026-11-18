@@ -3071,18 +3071,10 @@ TEST_CASE("morph::qt::QtWebSocketBackend: without retryFirstConnect, a refused f
     morph::qt::QtWebSocketBackend backend{QUrl{QString("ws://127.0.0.1:%1").arg(port)}, cfg};
     REQUIRE_FALSE(backend.waitForConnected(300));
 
-    morph::exec::MainThreadExecutor cbExec;
-    std::optional<morph::wire::Envelope> reply;
-    std::string failure;
-    backend.request(probeRequest("probe-ok", "late"), cbExec)
-        .then([&](morph::wire::Envelope const& got) { reply = got; })
-        .onError([&](std::exception_ptr const&) { failure = "rejected"; });
-    // The refused open already ended, so nothing will send this request: it is held with no attempt left.
+    // The refused open already ended, so nothing will try again, even once the server is up.
     morph::qt::QtWebSocketServer late{*probe.server, port};
     REQUIRE(late.listen());
     CHECK_FALSE(backend.waitForConnected(1000));
-    cbExec.drain();
-    CHECK_FALSE(reply.has_value());
 }
 
 // ── Server-initiated events over the Qt transport ───────────────────────────

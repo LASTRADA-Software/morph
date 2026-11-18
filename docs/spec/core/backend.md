@@ -275,8 +275,8 @@ request's `Completion` exactly once. A
 *keyed* bind carries no queue: it is rejected immediately (`"disconnected"`
 from Qt, `DisconnectedError` from `SocketBackend`), since replayed on a later
 connection it would attach from a `current` that connection never issued.
-`SocketBackend` also rejects, rather than queues, a private bind made once no
-connect will be attempted again: the first connect failed, or the connection
+Without `retryFirstConnect`, `SocketBackend` also rejects, rather than queues, a
+private bind made once no connect will be attempted again: the first connect failed, or the connection
 dropped with reconnecting disabled.
 
 ## The structural registration surface — `bindModel` and `promoteModel`
