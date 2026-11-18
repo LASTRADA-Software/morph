@@ -142,6 +142,25 @@ TEST_CASE("UiRegistry names every action and model type a document names, at any
     REQUIRE(bundle->actions->at("Auth_Login").credential);
 }
 
+TEST_CASE("UiRegistry names the actions and model types a component's fallback names", "[ui-service][registry]") {
+    UiRegistry registry = uiservice::registry();
+    std::string const screen =
+        R"({"vocab":"ui/1","id":"lims.fallback","components":{"Chart":{"qml":")" +
+        morph::ui::contentHash(uiservice::kChart) +
+        R"(","props":{},"fallback":{"kind":"column","children":[{"kind":"forEach","rows":{"lit":[]},)"
+        R"("key":{"row":"id"},"scope":{"models":{"audit":{"type":"Lims_Audit","instance":"private"}},)"
+        R"("queries":{"trail":{"model":"audit","action":"Lims_Trail"}}},)"
+        R"("children":[{"kind":"text","text":"r"}]}]}}},"view":{"kind":"text","text":"x"}})";
+    REQUIRE(registry.addScreen(uiservice::entry("lims.fallback"), screen));
+    auto const built = registry.build();
+    REQUIRE(built);
+    auto const served = std::ranges::find((*built)->screens, std::string{"lims.fallback"},
+                                          [](morph::ui::ServedScreen const& one) { return one.entry.id; });
+    REQUIRE(served != (*built)->screens.end());
+    CHECK(served->actions == std::vector<morph::ui::ActionRef>{{.modelType = "Lims_Audit", .action = "Lims_Trail"}});
+    CHECK(served->modelTypes == std::vector<std::string>{"Lims_Audit"});
+}
+
 TEST_CASE("UiRegistry without catalog lookups serves no facts", "[ui-service][registry]") {
     auto const built = uiservice::registry(morph::ui::Catalog{}).build();
     REQUIRE(built);

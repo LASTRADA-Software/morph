@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include <algorithm>
+#include <deque>
 #include <functional>
 #include <map>
 #include <morph/ui/custom_screens.hpp>
@@ -35,12 +36,13 @@ public:
     /// @param json     Its parsed JSON, for the `host` names.
     Capabilities(Document const& document, Json const& json) {
         enter(document.scope);
+        Table const& top = *_open.back();
         for (auto const& [trigger, commands] : document.lifecycle) {
-            walk(commands, trigger);
+            walk(commands, trigger, top);
         }
         for (auto const& [chord, commands] : document.keys) {
             static_cast<void>(chord);
-            walk(commands, {});
+            walk(commands, {}, top);
         }
         for (auto const* parts :
              {&document.status, &document.actions, &document.menu, &document.tools, &document.navigation}) {
@@ -73,6 +75,21 @@ public:
     [[nodiscard]] bool has(std::string const& capability) const { return _seen.contains(capability); }
 
 private:
+    struct Table;
+
+    /// @brief A mutation resolved where it is declared: its model type, and the names open in its declaring scope,
+    ///        which its `onSuccess` and `onError` run against.
+    struct Mutation {
+        MutationDecl const* decl;
+        std::string type;
+        Table const* table;
+    };
+
+    /// @brief The mutations a scope can name: its own and every enclosing scope's, the innermost winning.
+    struct Table {
+        std::map<std::string, Mutation const*, std::less<>> mutations;
+    };
+
     void note(std::string capability, std::string const& path) {
         if (_seen.insert(capability).second) {
             _uses.emplace_back(std::move(capability), path);
@@ -83,16 +100,21 @@ private:
         for (ModelDecl const& model : scope.models) {
             _types[model.name].push_back(model.type);
         }
+        Table& table = _tables.emplace_back(_open.empty() ? Table{} : *_open.back());
         for (MutationDecl const& mutation : scope.mutations) {
-            _mutations[mutation.name].push_back(&mutation);
+            auto const types = _types.find(mutation.model);
+            std::string type = types == _types.end() || types->second.empty() ? mutation.model : types->second.back();
+            Mutation const& resolved = _resolved.emplace_back(Mutation{&mutation, std::move(type), &table});
+            table.mutations.insert_or_assign(mutation.name, &resolved);
         }
+        _open.push_back(&table);
         for (MutationDecl const& mutation : scope.mutations) {
-            walk(mutation.onSuccess, {});
-            walk(mutation.onError, {});
+            walk(mutation.onSuccess, {}, table);
+            walk(mutation.onError, {}, table);
         }
         // A watch runs when a value changes, whoever changed it, so its commands run without a press.
         for (WatchDecl const& watch : scope.watches) {
-            walk(watch.body, "watch");
+            walk(watch.body, "watch", table);
         }
     }
 
@@ -100,22 +122,25 @@ private:
         for (ModelDecl const& model : scope.models) {
             _types.at(model.name).pop_back();
         }
-        for (MutationDecl const& mutation : scope.mutations) {
-            _mutations.at(mutation.name).pop_back();
-        }
+        _open.pop_back();
     }
 
     void node(DocNode const& view) {
         if (view.scope) {
             enter(*view.scope);
         }
+        Table const& table = *_open.back();
         for (auto const& [key, commands] : view.events) {
-            static_cast<void>(key);
-            walk(commands, {});
+            // A custom component's own code decides when its events fire, so they run without a press.
+            std::string trigger;
+            if (view.kind == "custom" && key.starts_with("on.")) {
+                trigger = "component:" + std::string{view.name("name")} + "." + key.substr(3);
+            }
+            walk(commands, trigger, table);
         }
         for (auto const& [chord, commands] : view.keys) {
             static_cast<void>(chord);
-            walk(commands, {});
+            walk(commands, {}, table);
         }
         for (auto const& [key, children] : view.children) {
             static_cast<void>(key);
@@ -135,10 +160,10 @@ private:
     }
 
     /// @brief Notes @p commands' capabilities. @p trigger names what runs them without a press (`onMount`, `watch`,
-    ///        …), and is empty for commands a person's press runs.
-    void walk(Commands const& commands, std::string const& trigger) {
+    ///        …), and is empty for commands a person's press runs. @p table is the names open where they are written.
+    void walk(Commands const& commands, std::string const& trigger, Table const& table) {
         for (Command const& command : commands) {
-            std::string const capability = capabilityOf(command);
+            std::string const capability = capabilityOf(command, table);
             if (!capability.empty()) {
                 // Host commands are noted by name from the JSON with every other host name; runs by the actions row.
                 if (command.kind != CommandKind::Run && command.kind != CommandKind::Host) {
@@ -148,43 +173,45 @@ private:
                     note(trigger + ": " + capability, command.path);
                 }
             }
-            if (command.kind == CommandKind::Run && !trigger.empty()) {
-                follow(command.target, trigger);
+            // `run`, `upload` and `signIn` each name a mutation, and run it.
+            bool const runs = command.kind == CommandKind::Run || command.kind == CommandKind::Upload ||
+                              command.kind == CommandKind::SignIn;
+            if (runs && !trigger.empty()) {
+                if (command.kind != CommandKind::Run) {
+                    note(trigger + ": run " + actionOf(command.target, table), command.path);
+                }
+                follow(command.target, trigger, table);
             }
-            walk(command.commands, trigger);
-            walk(command.alternative, trigger);
+            walk(command.commands, trigger, table);
+            walk(command.alternative, trigger, table);
         }
     }
 
-    /// @brief A mutation run without a press runs its `onSuccess` and `onError` without one too.
-    void follow(std::string const& mutation, std::string const& trigger) {
-        MutationDecl const* const decl = mutationNamed(mutation);
-        if (decl == nullptr || !_followed.insert({decl, trigger}).second) {
+    /// @brief A mutation run without a press runs its `onSuccess` and `onError` without one too, resolving their
+    ///        names in the scope that declares the mutation, as the runtime does.
+    void follow(std::string const& name, std::string const& trigger, Table const& table) {
+        Mutation const* const mutation = find(name, table);
+        if (mutation == nullptr || !_followed.insert({mutation, trigger}).second) {
             return;
         }
-        walk(decl->onSuccess, trigger);
-        walk(decl->onError, trigger);
+        walk(mutation->decl->onSuccess, trigger, *mutation->table);
+        walk(mutation->decl->onError, trigger, *mutation->table);
     }
 
-    [[nodiscard]] MutationDecl const* mutationNamed(std::string const& name) const {
-        auto const found = _mutations.find(name);
-        return found == _mutations.end() || found->second.empty() ? nullptr : found->second.back();
+    [[nodiscard]] static Mutation const* find(std::string const& name, Table const& table) {
+        auto const found = table.mutations.find(name);
+        return found == table.mutations.end() ? nullptr : found->second;
     }
 
-    [[nodiscard]] std::string actionOf(std::string const& mutation) const {
-        MutationDecl const* const decl = mutationNamed(mutation);
-        if (decl == nullptr) {
-            return mutation;
-        }
-        auto const types = _types.find(decl->model);
-        std::string const type = types == _types.end() || types->second.empty() ? decl->model : types->second.back();
-        return type + "/" + decl->action;
+    [[nodiscard]] static std::string actionOf(std::string const& name, Table const& table) {
+        Mutation const* const mutation = find(name, table);
+        return mutation == nullptr ? name : mutation->type + "/" + mutation->decl->action;
     }
 
-    [[nodiscard]] std::string capabilityOf(Command const& command) const {
+    [[nodiscard]] static std::string capabilityOf(Command const& command, Table const& table) {
         switch (command.kind) {
         case CommandKind::Run:
-            return "run " + actionOf(command.target);
+            return "run " + actionOf(command.target, table);
         case CommandKind::Host:
             return "host `" + command.target + "`";
         case CommandKind::Upload:
@@ -238,8 +265,10 @@ private:
     }
 
     std::map<std::string, std::vector<std::string>, std::less<>> _types;
-    std::map<std::string, std::vector<MutationDecl const*>, std::less<>> _mutations;
-    std::set<std::pair<MutationDecl const*, std::string>> _followed;
+    std::deque<Table> _tables;
+    std::deque<Mutation> _resolved;
+    std::vector<Table const*> _open;
+    std::set<std::pair<Mutation const*, std::string>> _followed;
     std::vector<std::pair<std::string, std::string>> _uses;
     std::set<std::string, std::less<>> _seen;
 };
@@ -257,10 +286,16 @@ std::optional<Refusal> checkBaseRule(Document const& base, std::string_view base
     detail::DocumentActions const baseNames{base};
     detail::DocumentActions const customNames{custom};
     std::vector<ActionRef> const baseActions = baseNames.actions();
-    for (ActionRef const& ref : customNames.actions()) {
+    for (detail::ActionUse const& use : customNames.uses()) {
+        ActionRef const& ref = use.action;
         if (!std::ranges::binary_search(baseActions, ref)) {
-            return refusalAt(customNames.pathOf(ref),
-                             of + " does not use action `" + ref.action + "` of `" + ref.modelType + "`");
+            return refusalAt(use.path, of + " does not use action `" + ref.action + "` of `" + ref.modelType + "`");
+        }
+        // The same action in another kind of position runs differently: a mutation, a query and a form that submits
+        // itself each reach the server by a different trigger.
+        if (!baseNames.names(ref, use.position)) {
+            return refusalAt(use.path, of + " does not use action `" + ref.action + "` of `" + ref.modelType +
+                                           "` as a " + use.position);
         }
     }
     auto const baseJson = parseJson(baseText);

@@ -8,17 +8,29 @@
 #include <set>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 namespace morph::ui::detail {
 
 // NOLINTBEGIN(misc-no-recursion): view nodes nest, and the walk follows them; parseJson bounds the depth at 64.
 
+/// @brief One place a document names an action: the action, the kind of position it is named in, and where.
+struct ActionUse {
+    /// @brief The action and its model type.
+    ActionRef action;
+    /// @brief The position's kind: `query`, `mutation`, the kind of a model-bound node (`form`, `collection`,
+    ///        `wizard`, `table`), or `auto form` for a form that submits itself.
+    std::string position;
+    /// @brief The JSON Pointer of the query, mutation or node.
+    std::string path;
+};
+
 /// @brief Collects the actions and model types a loaded document names, resolving each query's, mutation's and
 ///        model-bound node's alias through the enclosing scopes, and where each action is first named.
 ///
 /// Load-time validation has already resolved every alias and requires every alias to name a type, so each lookup
-/// here finds one.
+/// here finds one. Component fallbacks are view trees like any other and are walked with the view.
 class DocumentActions {
 public:
     /// @brief Walks @p document.
@@ -27,6 +39,12 @@ public:
         enter(document.scope, true);
         if (document.view) {
             node(*document.view);
+        }
+        for (auto const& [name, component] : document.components) {
+            static_cast<void>(name);
+            if (component.fallback) {
+                node(*component.fallback);
+            }
         }
     }
 
@@ -42,6 +60,18 @@ public:
     /// @return Them, sorted and unique.
     [[nodiscard]] std::vector<std::string> modelTypes() const { return {_models.begin(), _models.end()}; }
 
+    /// @brief Every place an action is named, in the order walked.
+    /// @return The uses; an action named twice in the same kind of position is listed once, at its first place.
+    [[nodiscard]] std::vector<ActionUse> const& uses() const noexcept { return _uses; }
+
+    /// @brief Whether @p ref is named in a position of kind @p position.
+    /// @param ref      An action.
+    /// @param position A position kind, as `ActionUse::position` spells it.
+    /// @return Whether it is.
+    [[nodiscard]] bool names(ActionRef const& ref, std::string const& position) const {
+        return _positions.contains({ref, position});
+    }
+
     /// @brief Where @p ref is first named: the JSON Pointer of its query, mutation or model-bound node.
     /// @param ref An action `actions()` lists.
     /// @return The pointer; empty for an action the document does not name.
@@ -52,7 +82,10 @@ public:
     }
 
 private:
-    void name(ActionRef ref, std::string const& path) {
+    void name(ActionRef ref, std::string const& position, std::string const& path) {
+        if (_positions.emplace(ref, position).second) {
+            _uses.push_back(ActionUse{.action = ref, .position = position, .path = path});
+        }
         _paths.try_emplace(ref, path);
         _all.insert(std::move(ref));
     }
@@ -67,10 +100,10 @@ private:
             if (top) {
                 _top.push_back(ref);
             }
-            name(std::move(ref), query.path);
+            name(std::move(ref), "query", query.path);
         }
         for (MutationDecl const& mutation : scope.mutations) {
-            name(ActionRef{.modelType = resolve(mutation.model), .action = mutation.action}, mutation.path);
+            name(ActionRef{.modelType = resolve(mutation.model), .action = mutation.action}, "mutation", mutation.path);
         }
     }
 
@@ -85,7 +118,11 @@ private:
             enter(*view.scope, false);
         }
         if (std::string_view const model = view.name("model"); !model.empty()) {
-            name(ActionRef{.modelType = resolve(model), .action = std::string{view.name("action")}}, view.path);
+            std::string position = view.kind;
+            if (view.kind == "form" && view.name("submit") == "auto") {
+                position = "auto form";
+            }
+            name(ActionRef{.modelType = resolve(model), .action = std::string{view.name("action")}}, position, view.path);
         }
         for (auto const& [key, children] : view.children) {
             static_cast<void>(key);
@@ -116,6 +153,8 @@ private:
     std::vector<ActionRef> _top;
     std::set<ActionRef> _all;
     std::map<ActionRef, std::string> _paths;
+    std::vector<ActionUse> _uses;
+    std::set<std::pair<ActionRef, std::string>> _positions;
     std::set<std::string> _models;
 };
 
