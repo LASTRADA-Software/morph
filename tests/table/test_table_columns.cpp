@@ -8,7 +8,11 @@
 //  - deriveColumns not skipping x-hidden members: "derived columns carry
 //    kind, title and metadata" fails (nine columns, not eight).
 //  - inferColumnKind swapping quantity and decimal: the same test fails.
-//  The column-group and typed-row group cases name their own mutations above them.
+//  - ColumnLayout::apply ignoring `hidden`: "a stored layout is fitted to the
+//    table" fails.
+//  - ColumnLayout::rebuild appending a new column last: "a new column takes its
+//    declared place" fails.
+//  The column-group, typed-row group and other layout cases name their own mutations above them.
 
 #include <algorithm>
 #include <catch2/catch_test_macros.hpp>
@@ -17,7 +21,9 @@
 #include <morph/forms/forms.hpp>
 #include <morph/forms/views.hpp>
 #include <memory>
+#include <map>
 #include <morph/table/data_source.hpp>
+#include <morph/table/engine.hpp>
 #include <morph/table/query.hpp>
 #include <morph/util/datetime.hpp>
 #include <morph/util/quantity.hpp>
@@ -264,4 +270,116 @@ TEST_CASE("table: a form layout's group and a column group keep their own keys",
     CHECK(list[0]["x-column-group"].get_string() == "company");
     CHECK_FALSE(list[0].contains("x-group"));  // a layout title is not a column group
     CHECK_FALSE(list[2].contains("x-column-group"));
+}
+
+using morph::table::ColumnLayout;
+using morph::table::ColumnLayoutValue;
+
+namespace {
+
+std::vector<std::string> orderOf(ColumnLayout const& layout) {
+    return {layout.order().begin(), layout.order().end()};
+}
+
+// A layout that has been fitted: what the round-trip case stores.
+ColumnLayout fittedLayout() {
+    ColumnLayout layout{{"id", "name", "a", "b"}};
+    layout.apply(ColumnLayoutValue{.order = {"b", "name", "id", "a"},
+                                   .hidden = {"a"},
+                                   .pinned = 2,
+                                   .widths = {{"name", 24}},
+                                   .groups = {{.id = "g1", .label = "Company", .columns = {"a", "b"}}},
+                                   .units = {{"a", {{"mass", "g"}}}}});
+    return layout;
+}
+
+}  // namespace
+
+TEST_CASE("column layout: a stored layout is fitted to the table", "[table][layout]") {
+    ColumnLayout layout{{"id", "name", "a", "new", "b"}};
+    layout.apply(ColumnLayoutValue{
+        .order = {"b", "ghost", "name", "id", "a"},
+        .hidden = {"ghost", "a"},
+        .pinned = 9,
+        .widths = {{"name", 24}, {"ghost", 10}},
+        .groups = {{.id = "g1", .label = "Company", .columns = {"a", "ghost", "b"}},
+                   {.id = "g2", .label = "X", .columns = {"ghost", "name"}}},
+        .units = {{"a", {{"mass", "g"}}}, {"ghost", {{"mass", "kg"}}}}});
+    auto const v = layout.value();
+    CHECK(v.order == std::vector<std::string>{"b", "name", "id", "a", "new"});  // "new" after its predecessor "a"
+    CHECK(v.hidden == std::vector<std::string>{"a"});
+    CHECK(layout.visible() == std::vector<std::string>{"b", "name", "id", "new"});
+    CHECK(v.pinned == 4);
+    CHECK(v.widths == std::map<std::string, int>{{"name", 24}});
+    REQUIRE(v.groups.size() == 1);
+    CHECK(v.groups[0].columns == std::vector<std::string>{"a", "b"});
+    CHECK(v.units == std::map<std::string, std::map<std::string, std::string>>{{"a", {{"mass", "g"}}}});
+}
+
+// Mutation: the fitting rule not showing a column when every one is hidden.
+TEST_CASE("column layout: every column hidden shows the first declared column", "[table][layout]") {
+    ColumnLayout layout{{"id", "name"}};
+    layout.apply(ColumnLayoutValue{.order = {"name", "id"}, .hidden = {"name", "id"}});
+    CHECK(layout.visible() == std::vector<std::string>{"id"});
+}
+
+TEST_CASE("column layout: a new column takes its declared place", "[table][layout]") {
+    ColumnLayout layout{{"new0", "new1", "id", "name", "new2"}};
+    layout.apply(ColumnLayoutValue{.order = {"name", "id"}});
+    // new0 first (no placed predecessor), new1 after new0, new2 after name
+    CHECK(orderOf(layout) == std::vector<std::string>{"new0", "new1", "name", "new2", "id"});
+    ColumnLayout grown{{"a", "b", "c"}};
+    grown.move("c", 0);
+    grown.rebuild({"a", "b", "x", "c"});
+    CHECK(orderOf(grown) == std::vector<std::string>{"c", "a", "b", "x"});
+}
+
+// Mutation: the pinned count not clamped (setPinned keeping 5).
+TEST_CASE("column layout: widths and pinning", "[table][layout]") {
+    ColumnLayout layout{{"a", "b", "c"}, {"c"}};
+    CHECK(layout.visible() == std::vector<std::string>{"a", "b"});  // declared hidden
+    CHECK(layout.setWidth("a", 30));
+    CHECK_FALSE(layout.setWidth("zzz", 30));
+    CHECK_FALSE(layout.setWidth("b", 0));
+    CHECK(layout.widths() == std::map<std::string, int>{{"a", 30}});
+    CHECK(layout.setWidth("a", std::nullopt));
+    CHECK(layout.widths().empty());
+    layout.setPinned(5);
+    CHECK(layout.pinned() == 2);
+    CHECK(layout.setVisible("b", false));
+    CHECK(layout.pinned() == 1);  // clamped as visibility changes
+    CHECK(layout.setWidth("a", 12));
+    layout.reset();
+    CHECK(layout.visible() == std::vector<std::string>{"a", "b"});
+    CHECK(layout.widths().empty());
+    CHECK(layout.pinned() == 0);
+}
+
+// Mutation: value() leaving the widths out: the round trip loses them.
+TEST_CASE("column layout: the stored shape round-trips as JSON", "[table][layout]") {
+    auto const fitted = fittedLayout();
+    REQUIRE_FALSE(fitted.value().widths.empty());
+    std::string json;
+    REQUIRE_FALSE(glz::write_json(fitted.value(), json));
+    ColumnLayoutValue back;
+    REQUIRE_FALSE(glz::read_json(back, json));
+    CHECK(back == fitted.value());
+    ColumnLayoutValue partial;  // groups and units absent
+    REQUIRE_FALSE(glz::read_json(partial, std::string{R"({"order":["a"],"hidden":[],"pinned":1,"widths":{"a":24}})"}));
+    CHECK(partial.widths == std::map<std::string, int>{{"a", 24}});
+    CHECK(partial.groups.empty());
+}
+
+// Mutation: the fitting rule keeping a repeated id: the order holds "b" twice.
+TEST_CASE("column layout: a stored layout that repeats itself", "[table][layout]") {
+    ColumnLayout layout{{"a", "b", "c"}};
+    layout.apply(ColumnLayoutValue{.order = {"b", "a", "b", "c"},
+                                   .pinned = 40,
+                                   .widths = {{"a", 0}, {"b", -5}, {"c", 8}},
+                                   .groups = {{.id = "g", .label = "G", .columns = {"a", "a", "c"}}}});
+    CHECK(layout.value().order == std::vector<std::string>{"b", "a", "c"});
+    CHECK(layout.value().widths == std::map<std::string, int>{{"c", 8}});
+    CHECK(layout.pinned() == 3);
+    REQUIRE(layout.value().groups.size() == 1);
+    CHECK(layout.value().groups[0].columns == std::vector<std::string>{"a", "c"});
 }

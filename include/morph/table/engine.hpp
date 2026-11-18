@@ -55,6 +55,7 @@
 #include <morph/table/sort.hpp>
 #include <morph/table/view_change.hpp>
 #include <numeric>
+#include <map>
 #include <optional>
 #include <span>
 #include <string>
@@ -121,14 +122,44 @@ struct EngineStats {
     std::size_t maxOwnerStepMicros = 0;
 };
 
-/// @brief Column order and visibility, kept apart from the engine's view.
+/// @brief A column layout as it is stored: `{"order", "hidden", "pinned", "widths", "groups", "units"}`.
 ///
-/// At least one column stays visible.
+/// Read with glaze's reflection; a member the stored text leaves out reads as its default.
+struct ColumnLayoutValue {
+    /// @brief The columns in display order.
+    std::vector<std::string> order;
+    /// @brief The hidden columns, in display order.
+    std::vector<std::string> hidden;
+    /// @brief How many of the first visible columns are pinned.
+    std::size_t pinned = 0;
+    /// @brief Column widths in units, by column id; every width is above zero.
+    std::map<std::string, int> widths;
+    /// @brief The groups the user formed.
+    std::vector<ColumnGroupInfo> groups;
+    /// @brief Display units: by column id, a unit id per dimension.
+    std::map<std::string, std::map<std::string, std::string>> units;
+
+    /// @brief Member-wise equality.
+    /// @param other The layout to compare with.
+    /// @return `true` when every member matches.
+    [[nodiscard]] bool operator==(ColumnLayoutValue const& other) const = default;
+};
+
+/// @brief Column order, visibility, widths and pinning, kept apart from the engine's view.
+///
+/// At least one column stays visible. A stored layout is fitted to the table's declared columns (`apply`): a
+/// column the table no longer has is dropped from every part of it, and a column the layout does not name takes its
+/// declared place, right after the nearest column declared before it that the layout places, or first when there is
+/// none.
 class ColumnLayout {
 public:
-    /// @brief A layout of @p ids, all visible, in that order.
-    /// @param ids Column ids, the document's default order.
-    explicit ColumnLayout(std::vector<std::string> ids) : _defaults{std::move(ids)} { reset(); }
+    /// @brief A layout of @p ids in that order, @p declaredHidden hidden.
+    /// @param ids            Column ids, the declared order.
+    /// @param declaredHidden The columns hidden until the user shows them.
+    explicit ColumnLayout(std::vector<std::string> ids, std::vector<std::string> declaredHidden = {})
+        : _defaults{std::move(ids)}, _declaredHidden{std::move(declaredHidden)} {
+        reset();
+    }
 
     /// @brief The columns in display order.
     /// @return Column ids.
@@ -146,9 +177,9 @@ public:
         return out;
     }
 
-    /// @brief Shows or hides a column.
-    /// @param columnId   Column columnId.
-    /// @param show `true` to show.
+    /// @brief Shows or hides a column; the pinned count follows the visible columns.
+    /// @param columnId The column.
+    /// @param show     `true` to show.
     /// @return `false` when the column is unknown, or hiding it would leave none visible.
     bool setVisible(std::string const& columnId, bool show) {
         if (std::ranges::find(_order, columnId) == _order.end()) {
@@ -162,11 +193,12 @@ public:
             return false;
         }
         _hidden.insert(columnId);
+        clampPinned();
         return true;
     }
 
     /// @brief Moves a column to a display position.
-    /// @param columnId Column columnId.
+    /// @param columnId The column.
     /// @param position Position in `order()`, clamped to the end.
     /// @return `false` when the column is unknown.
     bool move(std::string const& columnId, std::size_t position) {
@@ -181,40 +213,160 @@ public:
         return true;
     }
 
-    /// @brief Restores the default order with every column visible.
+    /// @brief Sets or clears a column's width.
+    /// @param columnId The column.
+    /// @param width    The width in units, above zero; nothing clears it.
+    /// @return `false` when the column is unknown or the width is not above zero.
+    bool setWidth(std::string const& columnId, std::optional<int> width) {
+        if (std::ranges::find(_order, columnId) == _order.end() || (width && *width <= 0)) {
+            return false;
+        }
+        if (width) {
+            _widths[columnId] = *width;
+        } else {
+            _widths.erase(columnId);
+        }
+        return true;
+    }
+
+    /// @brief The widths set, by column id.
+    /// @return The widths.
+    [[nodiscard]] std::map<std::string, int> const& widths() const noexcept { return _widths; }
+
+    /// @brief Pins the first @p n visible columns.
+    /// @param n The count; clamped to the visible columns.
+    void setPinned(std::size_t n) {
+        _pinned = n;
+        clampPinned();
+    }
+
+    /// @brief How many of the first columns of `visible()` are pinned.
+    /// @return The count.
+    [[nodiscard]] std::size_t pinned() const noexcept { return _pinned; }
+
+    /// @brief The layout as it is stored.
+    /// @return Order, hidden columns in display order, pinned count, widths, groups and units.
+    [[nodiscard]] ColumnLayoutValue value() const {
+        ColumnLayoutValue out;
+        out.order = _order;
+        for (auto const& columnId : _order) {
+            if (_hidden.contains(columnId)) {
+                out.hidden.push_back(columnId);
+            }
+        }
+        out.pinned = _pinned;
+        out.widths = _widths;
+        out.groups = _groups;
+        out.units = _units;
+        return out;
+    }
+
+    /// @brief Adopts a stored layout, fitted to the declared columns (see the class).
+    /// @param value The stored layout.
+    void apply(ColumnLayoutValue const& value) { fit(value); }
+
+    /// @brief Restores the declared order and hidden columns, and clears widths and pinning; groups and units stay.
     void reset() {
         _order = _defaults;
         _hidden.clear();
-    }
-
-    /// @brief Adopts a new column list: kept columns keep their place and
-    ///        visibility, new ones are appended visible, vanished ones dropped.
-    /// @param ids The new columns, as the new default order.
-    void rebuild(std::vector<std::string> ids) {
-        std::vector<std::string> order;
-        for (auto const& columnId : _order) {
-            if (std::ranges::find(ids, columnId) != ids.end()) {
-                order.push_back(columnId);
+        for (auto const& columnId : _declaredHidden) {
+            if (std::ranges::find(_order, columnId) != _order.end()) {
+                _hidden.insert(columnId);
             }
         }
-        for (auto const& columnId : ids) {
-            if (std::ranges::find(order, columnId) == order.end()) {
-                order.push_back(columnId);
-            }
-        }
-        std::erase_if(_hidden,
-                      [&](std::string const& hiddenId) { return std::ranges::find(ids, hiddenId) == ids.end(); });
-        _defaults = std::move(ids);
-        _order = std::move(order);
         if (!_order.empty() && visible().empty()) {
             _hidden.erase(_order.front());
         }
+        _widths.clear();
+        _pinned = 0;
+    }
+
+    /// @brief Adopts a new declared column list and fits the current layout to it.
+    /// @param ids            The new columns, in their declared order.
+    /// @param declaredHidden The new declared hidden columns.
+    void rebuild(std::vector<std::string> ids, std::vector<std::string> declaredHidden = {}) {
+        auto current = value();
+        _defaults = std::move(ids);
+        _declaredHidden = std::move(declaredHidden);
+        fit(current);
     }
 
 private:
+    // The fitting rule: every part of `value` filtered to the declared columns, each declared column it lacks placed
+    // after its nearest declared predecessor that is placed, one column kept visible, and the pin count clamped.
+    void fit(ColumnLayoutValue const& value) {
+        auto const declared = [this](std::string const& columnId) {
+            return std::ranges::find(_defaults, columnId) != _defaults.end();
+        };
+        std::vector<std::string> order;
+        for (auto const& columnId : value.order) {
+            if (declared(columnId) && std::ranges::find(order, columnId) == order.end()) {
+                order.push_back(columnId);
+            }
+        }
+        for (std::size_t at = 0; at < _defaults.size(); ++at) {
+            auto const& columnId = _defaults[at];
+            if (std::ranges::find(order, columnId) != order.end()) {
+                continue;
+            }
+            auto place = order.begin();
+            for (std::size_t before = at; before-- > 0;) {
+                if (auto const found = std::ranges::find(order, _defaults[before]); found != order.end()) {
+                    place = std::next(found);
+                    break;
+                }
+            }
+            order.insert(place, columnId);
+        }
+        _order = std::move(order);
+        _hidden.clear();
+        for (auto const& columnId : value.hidden) {
+            if (declared(columnId)) {
+                _hidden.insert(columnId);
+            }
+        }
+        _widths.clear();
+        for (auto const& [columnId, width] : value.widths) {
+            if (declared(columnId) && width > 0) {
+                _widths.emplace(columnId, width);
+            }
+        }
+        _groups.clear();
+        for (auto group : value.groups) {
+            std::vector<std::string> columns;
+            for (auto& columnId : group.columns) {
+                if (declared(columnId) && std::ranges::find(columns, columnId) == columns.end()) {
+                    columns.push_back(std::move(columnId));
+                }
+            }
+            if (columns.size() >= 2) {
+                group.columns = std::move(columns);
+                _groups.push_back(std::move(group));
+            }
+        }
+        _units.clear();
+        for (auto const& [columnId, units] : value.units) {
+            if (declared(columnId)) {
+                _units.emplace(columnId, units);
+            }
+        }
+        if (!_defaults.empty() && visible().empty()) {
+            _hidden.erase(_defaults.front());
+        }
+        _pinned = value.pinned;
+        clampPinned();
+    }
+
+    void clampPinned() { _pinned = std::min(_pinned, visible().size()); }
+
     std::vector<std::string> _defaults;
+    std::vector<std::string> _declaredHidden;
     std::vector<std::string> _order;
     std::unordered_set<std::string> _hidden;
+    std::map<std::string, int> _widths;
+    std::size_t _pinned = 0;
+    std::vector<ColumnGroupInfo> _groups;
+    std::map<std::string, std::map<std::string, std::string>> _units;
 };
 
 namespace detail {
