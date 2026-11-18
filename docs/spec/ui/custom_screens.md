@@ -47,8 +47,12 @@ bounds and one `VerdictCache`). A server that offers custom screens calls it onc
 - `authorizer` is the server's, for `permittedActions` and the base screen's admission. The server's authoriser must
   admit `morph.customScreens` and its actions for every signed-in principal; the model keeps each person to what the
   store answers them.
-- It throws `std::invalid_argument` for a null store, bundle getter or authoriser, and for a `maxDocumentBytes` above
-  `kMaxFileBytes`: every document the model accepts is one `UiRegistry` could serve as a file.
+- It throws `std::invalid_argument` for a null store, bundle getter or authoriser, and for a `maxDocumentBytes` that
+  could not be served: above `kMaxFileBytes`, or with `4 * maxDocumentBytes + kCustomScreenReplyOverhead` above
+  `wire::kMaxEnvelopeBytes`. A `get` reply carries the document escaped once into the reply's JSON and the reply
+  escaped again as the envelope's body, so a document of quotes and backslashes grows four-fold; the overhead (64 KiB)
+  is the reply's other fields, with a wide margin. At the 8 MiB envelope bound the largest accepted value is
+  2,080,768 bytes, well above the 256 KiB default.
 
 | Action id | Kind | Body | `ok` reply |
 |---|---|---|---|
@@ -63,10 +67,12 @@ What every action does, in order:
 1. **`app` is the served application.** `app` is 1 to `kMaxNameBytes` bytes and equals the current bundle's
    `application.id`, or the action is refused, before anything else, a `list` without a principal included. A screen
    checked against one application is never stored under another.
-2. **The person** is the verified principal of the session, copied at the start of the action, before anything is
+2. **The names** the action takes (`id`, `title`, `basedOn`) are each 1 to `kMaxNameBytes` bytes, or it is refused;
+   they are checked before the person is looked at, except `save`'s optional `id`, which is checked after it.
+3. **The person** is the verified principal of the session, copied at the start of the action, before anything is
    awaited. A body naming a person has the key ignored: no body type has one. With no verified principal, `list`
    answers no screens and the other four are refused with `custom screens are stored for a signed-in person`.
-3. The action's own work, below.
+4. The action's own work, below.
 
 - **`list`** asks the store for the caller's screens and answers a `CustomScreenSummary` for each, in the store's
   order. The permitted set is computed once for the whole list and not kept past the call.
@@ -77,8 +83,8 @@ What every action does, in order:
   custom screen`, is the error as the store gave it, so a client cannot choose an id. With no `id`, the id is
   `custom:` and 32 hexadecimal digits from `newFileRef`. The document then passes `checkCustomScreen`; a refusal is the
   `err` reply's message, pointer included. `withScreenId` writes the custom screen's own id into the document, and the
-  rewritten text, whose id is longer, must still be within `maxDocumentBytes`. Only then is `put` called, with
-  `savedAt` now and `savedBy` the caller. `title` and `basedOn` are each 1 to `kMaxNameBytes` bytes.
+  rewritten text, whose id may be longer than the one it had, must still be within `maxDocumentBytes`. Only then is `put` called, with
+  `savedAt` the current time and `savedBy` the caller.
 - **`remove`** calls the store's `remove` under the caller.
 - **A store's refusal is passed through unchanged**, from `get`, `put` and `remove`: the model adds no wording over
   the reason, so the person is told what the store said.
@@ -100,8 +106,8 @@ of many screens computes `permittedActions` once. `save` and `check` run it on t
 run it on every stored document they answer.
 
 1. **Bounds.** At most `maxDocumentBytes` (256 KiB by default, at most `kMaxFileBytes`), nested within
-   `kMaxJsonDepth`. These cost nothing to evaluate and come first, so an oversized document is refused before it is
-   parsed.
+   `kMaxJsonDepth`. They are cheap and need no parse of the document, so they come first and an oversized document is refused before
+   it is parsed.
 2. **The base.** `basedOn` names a screen of the bundle that has a document (a host screen has none), and
    `screenAdmitted` admits the person to it: it is available and the person may run every top-level query it declares.
 3. **The application screen checks.** `loadDocumentText` with `ServedBundle::catalog`, the facts every served document
@@ -132,8 +138,8 @@ not have. A custom document's capabilities are a subset of its base's.
 | Params | Exactly the base's, names and types |
 | Actions: queries, mutations, forms, collections, wizards, tables, wherever declared, component fallbacks included | Each `(model type, action)` the base names, in a position of the same kind: a query, a mutation, a form with no `submit`, an `explicit` form, an `auto` form, a model-backed table, a collection, a wizard |
 | Commands run without the person pressing anything | The same trigger in the base, below |
-| Client-side commands `upload`, `download`, `switchBackend`, `signIn`, `signOut`, `resetPrefs` | Only a kind the base uses anywhere; an `upload` only as below |
-| `host` commands | Identical to one of the base's commands, name and arguments, and its arguments are literals |
+| Client-side commands `upload`, `download`, `switchBackend`, `signIn`, `signOut`, `resetPrefs` | Only a kind the base uses anywhere, compared by kind; `switchBackend` by kind and backend name; an `upload` only as below |
+| `host` commands | The whole command's canonical JSON matches one of the base's, and its arguments are literals |
 | Host names | Every string member named `host`: host commands, host values and host components share one set |
 | Delivered components | Name and content hash |
 
@@ -148,11 +154,10 @@ action the base only runs on a press. The triggers are:
 - the lifecycle keys `onMount`, `onUnmount`, `onBackendChange`, `onClose` and `onSave`;
 - watches;
 - a form whose `submit` is not `"explicit"`;
-- a delivered or host component's `on` events, whose own code decides when they fire;
-- an `upload` or a `signIn` command, whose `onSuccess` and `onError` chains run when the transfer or sign-in settles.
+- a delivered or host component's `on` events, whose own code decides when they fire.
 
-A mutation's `onSuccess` and `onError` reached from a trigger inherit that trigger, followed through every chain, with
-each name resolved in the scope that declares the mutation.
+Under a trigger, a `run`, an `upload` or a `signIn` is followed: the `onSuccess` and `onError` of the mutation it
+reaches inherit that trigger, through every chain, with each name resolved in the scope that declares the mutation.
 
 **Uploads.** Every `upload` of the custom document sends exactly `{"ref": "event"}` and sits directly in the `onPick`
 of a `filePicker` that opens files (`mode` absent, or the literal `"open"`) or in a `dropZone`'s `onDrop`, so the file
@@ -181,7 +186,7 @@ document that skipped load-time validation can.
 ## Records and effects
 
 `CustomScreenSummary` is the record `morph.customScreens`, keyed by `id`, registered `privateKeys`: its keys must not
-reach other principals, because a screen's id is a person's own. `save` and `remove` declare
+reach other principals: a person learns of a screen's id only through their own list, whatever the store shares. `save` and `remove` declare
 `changes<CustomScreenSummary>`, the whole type: a save can add a screen to lists no key names yet. `list` and `get`
 hold it, so a client's list refetches after any save or remove, from anyone. Saves are a person's deliberate act, so
 the refetch is rare, and the verdict cache keeps it cheap.
@@ -203,4 +208,4 @@ shared build carries them for every application, where they are inert.
 | Effects | `changes`, record-wide | A list refetches after any save; the verdict cache keeps the refetch cheap. |
 | Base admission | Every call, outside the verdict cache | Availability is not part of the bundle digest. |
 | The session | Copied before the first await | The session is the dispatching thread's; an action resumes elsewhere. |
-| Servability | A bound on `maxDocumentBytes`, rechecked on the rewritten text | Any stored document fits a file and an envelope, so no per-document check is needed at serve time. |
+| Servability | A bound on `maxDocumentBytes` that fits a file and the escaped `get` reply, rechecked on the rewritten text | Any stored document is then served within the envelope, so no per-document check is needed at serve time. |

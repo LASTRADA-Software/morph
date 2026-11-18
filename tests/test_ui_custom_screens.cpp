@@ -8,6 +8,7 @@
 #include <morph/core/effects.hpp>
 #include <morph/core/executor.hpp>
 #include <morph/core/owner_strand.hpp>
+#include <morph/core/wire.hpp>
 #include <morph/ui/custom_screens.hpp>
 #include <optional>
 #include <string>
@@ -86,6 +87,7 @@ TEST_CASE("MemoryCustomScreenStore lists one person's screens ordered by id", "[
 using screens_test::baseScreen;
 using screens_test::Envelope;
 using screens_test::quoted;
+using screens_test::replaced;
 using screens_test::Server;
 
 namespace {
@@ -205,9 +207,45 @@ TEST_CASE("registerCustomScreens refuses what it cannot serve", "[ui][custom-scr
                     std::invalid_argument);
     CHECK_THROWS_AS(morph::ui::registerCustomScreens(store, getBundle, nullptr, dispatcher, registry),
                     std::invalid_argument);
+    // The largest document whose escaped `get` reply fits one envelope is accepted; one byte more is not.
+    std::size_t const largest =
+        (morph::wire::kMaxEnvelopeBytes - morph::ui::kCustomScreenReplyOverhead) / 4;
+    CHECK_THROWS_AS(morph::ui::registerCustomScreens(
+                        store, getBundle, authorizer, dispatcher, registry,
+                        morph::ui::CustomScreensOptions{.maxDocumentBytes = largest + 1}),
+                    std::invalid_argument);
     CHECK_NOTHROW(morph::ui::registerCustomScreens(
         store, getBundle, authorizer, dispatcher, registry,
-        morph::ui::CustomScreensOptions{.maxDocumentBytes = morph::ui::kMaxFileBytes}));
+        morph::ui::CustomScreensOptions{.maxDocumentBytes = largest}));
+}
+
+TEST_CASE("custom screens: a document of escaping characters at the default bound is served within the envelope",
+          "[ui][custom-screens][remote]") {
+    Server s;
+    morph::ui::CustomScreensOptions const bounds;
+    // Backslashes are the worst case: each is one byte in the document, two in the reply's JSON and four in the
+    // envelope's body. The padding leaves room for the longer id the model writes in.
+    std::string const filled = replaced(baseScreen("lims.base"), "Results", "@@");
+    std::size_t const room = bounds.maxDocumentBytes - filled.size() - 64;
+    std::string const document = replaced(filled, "@@", [&] {
+        std::string pad;
+        for (std::size_t i = 0; i < room / 4; ++i) {
+            pad += "\\\\\\\\";
+        }
+        return pad;
+    }());
+    REQUIRE(document.size() <= bounds.maxDocumentBytes);
+    REQUIRE(document.size() > bounds.maxDocumentBytes - 256);
+
+    std::string const id = savedId(s.save(document, "alice"));
+    Envelope const got = s.call(morph::ui::kCustomScreensGet, R"({"app":"lims","id":)" + quoted(id) + "}", "alice");
+    REQUIRE(got.kind == "ok");
+    std::size_t const wireSize = morph::wire::encode(morph::wire::makeOk(0, got.body)).size();
+    CHECK(wireSize <= morph::wire::kMaxEnvelopeBytes);
+    CHECK(wireSize > 3 * document.size());
+    morph::ui::CustomScreenFound found;
+    REQUIRE_FALSE(glz::read_json(found, got.body));
+    CHECK(screens_test::load(found.document).id == id);
 }
 
 TEST_CASE("custom screens: check answers the refusal and its pointer; save refuses the same",

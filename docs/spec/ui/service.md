@@ -200,7 +200,6 @@ server, never a surprise on a client.
   index whose icon set names a file that is not an `icon` file of the bundle ([`theme.md`](theme.md#icons)), and a
   bundle over the bounds. `addFile` refuses an `icon` that is not SVG text or is larger than `kMaxIconBytes`. It returns a `std::shared_ptr<ServedBundle const>`: the manifest, the digest, every file
   by hash, the screens with their top-level queries and named actions, and the facts.
-
 - **`custom:` is reserved.** An entry id that starts with `custom:` (`kCustomScreenIdPrefix`) is refused, by
   `addScreen` and `addEntry` alike, because that prefix names a person's custom screen.
 - **The bundle keeps its catalog.** `ServedBundle::catalog` is the catalog every document was loaded with, so a

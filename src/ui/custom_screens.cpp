@@ -6,6 +6,7 @@
 #include <morph/core/effects.hpp>
 #include <morph/core/records.hpp>
 #include <morph/core/registry.hpp>
+#include <morph/core/wire.hpp>
 #include <morph/session/session.hpp>
 #include <morph/ui/bundle.hpp>
 #include <morph/ui/custom_screens.hpp>
@@ -244,6 +245,11 @@ void registerCustomScreens(std::shared_ptr<ICustomScreenStore> store,
         throw std::invalid_argument{
             "registerCustomScreens: maxDocumentBytes is at most kMaxFileBytes, so every "
             "stored screen can be served"};
+    }
+    if (options.maxDocumentBytes > (::morph::wire::kMaxEnvelopeBytes - kCustomScreenReplyOverhead) / 4) {
+        throw std::invalid_argument{
+            "registerCustomScreens: maxDocumentBytes is too large for a `get` reply to fit one envelope once "
+            "escaped"};
     }
     auto context = std::make_shared<detail::CustomScreensContext>(std::move(store), std::move(bundle),
                                                                   std::move(authorizer), options);

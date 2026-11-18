@@ -221,9 +221,17 @@ private:
 [[nodiscard]] MORPH_API std::optional<Refusal> checkBaseRule(Document const& base, std::string_view baseText,
                                                              Document const& custom, std::string_view customText);
 
+/// @brief The bytes of a `get` reply that are not its document: the summary's fields, each at most `kMaxNameBytes` and
+///        at most six bytes per byte once escaped, the keys and the punctuation. Sized with a wide margin so a
+///        change to the summary does not silently exceed it.
+inline constexpr std::size_t kCustomScreenReplyOverhead = std::size_t{64} * 1024;
+
 /// @brief The custom screens' bounds.
 struct CustomScreensOptions {
-    /// @brief The longest custom document, in bytes. At most `kMaxFileBytes`, so every stored screen can be served.
+    /// @brief The longest custom document, in bytes. At most `kMaxFileBytes`, and small enough that a `get` reply
+    ///        fits `wire::kMaxEnvelopeBytes`: the document is escaped once into the reply's JSON and the reply is
+    ///        escaped again as the envelope's body, so a document of quotes and backslashes grows four-fold, and
+    ///        `4 * maxDocumentBytes + kCustomScreenReplyOverhead` must not exceed the envelope bound.
     std::size_t maxDocumentBytes = std::size_t{256} * 1024;
     /// @brief The most verdicts `VerdictCache` keeps.
     std::size_t verdictCacheSize = 1024;
