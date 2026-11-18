@@ -20,7 +20,6 @@
 #include "lims/lab/events/lab_outbox_store.hpp"
 #include "lims/org/core/errors.hpp"
 #include "lims/org/core/model_support.hpp"
-#include "lims/org/core/plan_sql.hpp"
 #include "lims/org/models/org_model.hpp"
 
 namespace lims {
@@ -262,78 +261,37 @@ SampleView SampleModel::execute(const GetSample& action) {
     return loadAttached();
 }
 
-namespace {
-
-/// @brief The sample list's columns as the table engine reflects them from `SampleView`.
-/// @return One column per member, in member order.
-[[nodiscard]] std::vector<::morph::table::ColumnInfo> const& sampleColumns() {
-    static auto const columns = [] {
-        ::morph::table::RowsSource<SampleView> const source{
-            std::make_shared<std::vector<SampleView> const>(),
-            [](SampleView const& sample) { return ::morph::table::RowId{*sample.id}; }};
-        auto const reflected = source.columns();
-        return std::vector<::morph::table::ColumnInfo>(reflected.begin(), reflected.end());
-    }();
-    return columns;
-}
-
-/// @brief How the database reads each sample column. The state is the enumerator's name, as the table engine holds it.
-/// @return The columns by id.
-[[nodiscard]] plansql::Columns const& sampleSqlColumns() {
-    static plansql::Columns const columns{
-        {"id", plansql::integer("id")},
-        {"siteId", plansql::integer("site_id")},
-        {"clientId", plansql::integer("client_id")},
-        {"reference", plansql::storedText("reference")},
-        {"state", plansql::text(plansql::enumName<SampleState>("state", static_cast<int>(SampleState::Rejected) + 1))},
-        {"version", plansql::integer("version")},
-        {"registeredAt", plansql::dateTime(plansql::wholeSeconds("registered_at"))},
-    };
-    return columns;
-}
-
-}  // namespace
-
-bool SampleModel::canTranslateSampleColumn(std::string_view column, ::morph::table::PlanUse /*use*/) {
-    return plansql::translatable(sampleSqlColumns(), column);
-}
-
 ::morph::table::Page<SampleView> SampleModel::pageSamples(std::vector<SiteId> const& sites,
-                                                          ::morph::table::QueryPlan const& plan) {
-    auto const translation = plansql::translate(plan, sampleSqlColumns(), "id");
-    if (!translation) {
-        throw ValidationError{"ListSamples: " + translation.error().message};
-    }
-    std::string scope;
+                                                          ::morph::table::TableQuery const& query) {
+    std::vector<std::int64_t> siteIds;
     for (SiteId const site : sites) {
         if (site.hasValue()) {
-            scope += (scope.empty() ? "site_id IN (" : ", ") + std::to_string(*site);
+            siteIds.push_back(*site);
         }
     }
-    scope = scope.empty() ? "0" : scope + ")";
-    Lightweight::DataMapper mapper;
-    // One read transaction for the count and the page, so the total agrees with the rows. It is rolled back, never
-    // committed, and no write happens inside it.
-    Lightweight::SqlTransaction const reading{mapper.Connection(), Lightweight::SqlTransactionMode::ROLLBACK};
-    auto const fetched = plansql::fetch(mapper, db::SampleRecord::TableName, "id", scope, *translation, plan);
-    ::morph::table::Page<SampleView> page;
-    page.offset = plan.offset;
-    page.total = fetched.total;
-    page.totalKind = ::morph::table::TotalKind::Exact;
-    for (std::int64_t const id : fetched.ids) {
-        page.rows.push_back(toView(loadSample(mapper, id)));
+    std::vector<SampleView> rows;
+    if (!siteIds.empty()) {
+        Lightweight::DataMapper mapper;
+        auto const records = mapper.Query<db::SampleRecord>()
+                                 .WhereIn(::Lightweight::FieldNameOf<&db::SampleRecord::siteId>, siteIds)
+                                 .All();
+        rows.reserve(records.size());
+        for (auto const& record : records) {
+            rows.push_back(toView(record));
+        }
     }
-    return page;
+    auto page = ::morph::table::apply<SampleView>(
+        rows, [](SampleView const& s) { return ::morph::table::RowId{*s.id}; }, query);
+    if (!page) {
+        throw ValidationError{"ListSamples: " + page.error().message};
+    }
+    return std::move(*page);
 }
 
 // An action handler: the registry calls it on the instance, like every other.
 // NOLINTNEXTLINE(readability-convert-member-functions-to-static)
 ::morph::table::Page<SampleView> SampleModel::execute(const ListSamples& action) {
-    auto const plan = ::morph::table::planQuery(action.query, sampleColumns(), {}, {}, {}, canTranslateSampleColumn);
-    if (!plan) {
-        throw ValidationError{"ListSamples: " + plan.error().message};
-    }
-    return pageSamples(OrgModel::visibleSites(currentPrincipal()), *plan);
+    return pageSamples(OrgModel::visibleSites(currentPrincipal()), action.query);
 }
 
 namespace {
@@ -358,7 +316,7 @@ namespace {
 /// @param condition The condition.
 /// @param limit How many rows the page holds; the page's total counts every match.
 /// @return The page.
-/// @throws ValidationError if the database cannot compare the operand.
+/// @throws ValidationError if the query exceeds the limits.
 [[nodiscard]] ::morph::table::Page<SampleView> samplesWhere(CompanyId company, std::string column,
                                                             ::morph::table::FilterEntry condition,
                                                             std::int64_t limit) {
@@ -367,12 +325,7 @@ namespace {
     filter.include.push_back(std::move(condition));
     query.filters.columns.emplace(std::move(column), std::move(filter));
     query.page.limit = limit;
-    auto const plan =
-        ::morph::table::planQuery(query, sampleColumns(), {}, {}, {}, SampleModel::canTranslateSampleColumn);
-    if (!plan) {
-        throw ValidationError{"samples: " + plan.error().message};
-    }
-    return SampleModel::pageSamples(callerSitesAt(company), *plan);
+    return SampleModel::pageSamples(callerSitesAt(company), query);
 }
 
 }  // namespace

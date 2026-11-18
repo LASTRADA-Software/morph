@@ -49,8 +49,7 @@ or the reactive runtime.
 | `filter.hpp` | `FilterEntry`, `Combine`, `ColumnFilter`, `GroupFilter`, `FilterSpec`, `CompiledFilter`, `compileFilter`, `compileFilterGuarded`, `FilterRun` |
 | `view_change.hpp` | `ViewOp`, `ViewChange`, `diffViews`, `applyViewChange` |
 | `engine.hpp` | `Engine`, `EngineOptions`, `EngineStats`, `ReorderPolicy`, `ColumnLayout` |
-| `query.hpp` | `PageRequest`, `TableQuery`, `Page<Row>`, `TotalKind`, `QueryLimits`, `validate`, `escapeLikePattern`, `ApplyOptions`, `PageRows`, `apply`, `QueryPlan`, `planQuery`, `RowsSource<Row>`, `PageWindow<Row>` |
-| `plan_conformance.hpp` | `ModelPage`, `PlanModel`, `ConformanceOptions`, `standardCorpus`, `conformanceFailures` |
+| `query.hpp` | `PageRequest`, `TableQuery`, `Page<Row>`, `TotalKind`, `QueryLimits`, `validate`, `ApplyOptions`, `PageRows`, `apply`, `RowsSource<Row>`, `PageWindow<Row>` |
 | `selection.hpp` | `TableMode`, `SelectionMode`, `Selection`, `TableCounts`, `counts` |
 | `edits.hpp` | `EditRequest`, `FieldError`, `EditCommit`, `CellEdits` |
 
@@ -297,19 +296,14 @@ edited included; the next repair holds them again.
   `apply(rows, key, query, options, kinds)` does the same over typed rows and
   returns a `Page<Row>`. Text order is the server's collator; a client in
   server mode does not re-sort a page.
-- A model that holds its rows in a database pages them there: `planQuery(query, columns, limits, mayRead, services,
-  translatable)` is `validate`, the model's own refusals, the guarded compile and a projection of the compiled filter
-  into a `QueryPlan` the model translates into its query, and `Page::totalKind` says whether a total is the count or a
-  lower bound (`AtLeast`). `apply` stays the reference: `conformanceFailures` runs a corpus through `apply` and the
-  model's translation and reports every disagreement. `compileFilterGuarded` is the one compile step `apply`,
-  `Engine` and `planQuery` share, so a collator or date parser that throws is `ServiceFailed` in all three. The
-  design is [`database_pages.md`](database_pages.md).
+- A model whose rows live in a database reads them as a `DataSource`, whole or lazily by column, and the server
+  sorts, filters, pages and counts them with `apply`; `Page::totalKind` says whether a total is the count or a lower
+  bound (`AtLeast`). `compileFilterGuarded` is the one compile step `apply` and `Engine` share, so a collator or date
+  parser that throws is `ServiceFailed` in both.
 - A table whose rows are cheap and whose slow columns load later marks the unloaded cells `Unloaded`: an unloaded cell
   sorts after the empties, a filter over it is three-valued, and its row is undecided rather than rejected. A column
   names the data level its cells need, a query names the columns it shows, and a `Page` says which of its cells are
   still coming. The design is [`table.md`](table.md).
-- `escapeLikePattern` is for a database-backed server that maps `contains` to
-  SQL `LIKE`: it keeps `%` and `_` ordinary.
 - `TableError` serialises with its code by name (`"unsupportedOperator"`), so a
   server returns it as the action's typed error.
 - `PageWindow<Row>` is the client's view of a server-mode table: `visible(first,

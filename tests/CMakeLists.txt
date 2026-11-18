@@ -33,7 +33,6 @@ set(MORPH_TABLE_TEST_SOURCES
     table/test_table_engine.cpp
     table/test_table_changes.cpp
     table/test_table_query.cpp
-    table/test_table_database_pages.cpp
     table/test_table_selection.cpp
     table/test_table_columns.cpp
     table/test_table_pending.cpp

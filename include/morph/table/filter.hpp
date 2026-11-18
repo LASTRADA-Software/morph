@@ -642,7 +642,7 @@ struct RawEntry {
 
 /// @brief `compileFilter`, with an exception from the collator or the date parser returned as `ServiceFailed`.
 ///
-/// The one compile step `apply`, `Engine` and `planQuery` share, so a throwing service is an error value in all three.
+/// The one compile step `apply` and `Engine` share, so a throwing service is an error value in both.
 /// @param spec     The filter.
 /// @param columns  The table's columns.
 /// @param services The collator and date parser; null members mean their defaults.
