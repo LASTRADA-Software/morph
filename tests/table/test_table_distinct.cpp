@@ -17,6 +17,8 @@
 //  - apply ignoring query.distinct: "server mode answers through apply, client mode through the engine" fails.
 //  - Engine::distinctValues passing no keys: "the engine reuses the keys it holds" fails on the fold count.
 //  - empty cells not counted in blanks: "invariant 22 over random tables" fails.
+//  - the request's group columns not passed through checkColumn: "a group's values are pooled" fails.
+//  - levelsNeeded leaving a group's columns out: "a group's levels are order levels of the request" fails.
 
 #include <atomic>
 #include <catch2/catch_test_macros.hpp>
@@ -328,4 +330,76 @@ TEST_CASE("distinct: invariant 22 over random tables", "[table][distinct]") {
         REQUIRE(page->total);
         CHECK(sumOfCounts + d->blanks + d->invalid == *page->total);
     }
+}
+
+namespace {
+
+// The groups truth-table source plus row 5: empty, F, unloaded; declared group "company" over companyA..C.
+std::shared_ptr<VectorSource> pooledSource(std::vector<std::string> const& slow = {}) {
+    using S = std::string;
+    std::vector<std::vector<Cell>> rows{{S{"F"}, S{"S"}, S{"X"}}, {S{"F"}, S{"F"}, S{"X"}}, {S{"S"}, S{"F"}, S{"F"}},
+                                        {S{"F"}, S{"X"}, S{"Y"}}, {S{"X"}, S{"Y"}, S{"Z"}},
+                                        {Cell{}, S{"F"}, Cell{Unloaded{}}}};
+    std::vector<ColumnInfo> columns;
+    for (auto const* const id : {"companyA", "companyB", "companyC"}) {
+        // companyC holds the unloaded cell, so it is at a level whatever `slow` says.
+        bool const atLevel = std::ranges::find(slow, id) != slow.end() || std::string_view{id} == "companyC";
+        columns.push_back(tabletest::levelCol(id, ColumnKind::Text, atLevel ? "slow" : ""));
+    }
+    auto source = tabletest::makeSource(std::move(columns), std::move(rows));
+    source->setGroups(
+        {ColumnGroupInfo{.id = "company", .label = "Company", .columns = {"companyA", "companyB", "companyC"}}});
+    return source;
+}
+
+std::int64_t countOf(std::expected<DistinctValues, TableError> const& values, std::string_view text) {
+    if (!values) {
+        return -1;
+    }
+    auto const found = std::ranges::find(values->values, text, &DistinctValue::text);
+    return found == values->values.end() ? 0 : found->count;
+}
+
+}  // namespace
+
+// Mutation: the request's group columns not passed through detail::checkColumn: the list comes back with
+// companyB's values in it.
+TEST_CASE("distinct: a group's values are pooled", "[table][distinct][groups]") {
+    auto const source = pooledSource();
+    auto const d = distinctValues(*source, {}, DistinctRequest{.group = "company"});
+    REQUIRE(d);
+    CHECK(countOf(d, "F") == 5);  // rows 0, 1, 2, 3, 5: once a row
+    CHECK(countOf(d, "S") == 2);  // rows 0, 2
+    CHECK(d->blanks == 1);        // row 5: the rows an isEmpty entry under any admits
+    CHECK(d->partial);            // row 5's unloaded cell
+    TableQuery own;               // the group's own filter is removed, others stay
+    own.filters.groups.push_back({.group = "company", .include = {eq("Z")}});
+    CHECK(countOf(distinctValues(*source, own, {.group = "company"}), "F") == 5);
+    CHECK(codeOf(distinctValues(*source, {}, {.group = "nope"})) == TableErrorCode::UnknownColumn);
+    // A values list is a read of every column of the group.
+    ApplyOptions hiddenB;
+    hiddenB.mayRead = [](std::string_view id) { return id != "companyB"; };
+    auto const refused = distinctValues(*source, {}, {.group = "company"}, hiddenB);
+    REQUIRE_FALSE(refused);
+    CHECK(refused.error().code == TableErrorCode::ColumnNotReadable);
+    CHECK(refused.error().column == "companyB");
+    TableQuery viaQuery;
+    viaQuery.distinct = DistinctRequest{.group = "company"};
+    CHECK(codeOf(validate(viaQuery, source->columns(), {}, hiddenB.mayRead, source->groups())) ==
+          TableErrorCode::ColumnNotReadable);
+}
+
+// Mutation: levelsNeeded leaving the group's columns out of `order`.
+TEST_CASE("distinct: a group's levels are order levels of the request", "[table][distinct][groups]") {
+    auto source = pooledSource({"companyB"});
+    // Only companyB at a level here, so the expected levels are its alone.
+    std::vector<ColumnInfo> columns(source->columns().begin(), source->columns().end());
+    columns[2].level.clear();
+    auto const levelled = tabletest::makeSource(columns, {{std::string{"a"}, std::string{"b"}, std::string{"c"}}});
+    levelled->setGroups(std::vector<ColumnGroupInfo>(source->groups().begin(), source->groups().end()));
+    TableQuery q;
+    q.distinct = DistinctRequest{.group = "company"};
+    q.columns = std::vector<std::string>{};
+    auto const needed = levelsNeeded(q, levelled->columns(), {}, {}, levelled->groups());
+    CHECK(needed.order == std::vector<std::string>{"slow"});
 }

@@ -373,16 +373,39 @@ struct SetTally {
     }
 };
 
+/// @brief The columns of a declared group.
+/// @param groups  The table's declared groups.
+/// @param groupId A group's id.
+/// @return Its columns, or nothing when no group has that id.
+[[nodiscard]] inline std::optional<std::span<std::string const>> groupColumns(std::span<ColumnGroupInfo const> groups,
+                                                                             std::string_view groupId) {
+    auto const found = std::ranges::find(groups, groupId, &ColumnGroupInfo::id);
+    if (found == groups.end()) {
+        return std::nullopt;
+    }
+    return std::span<std::string const>{found->columns};
+}
+
+/// @brief An `UnknownColumn` error for a group id no declared group has.
+/// @param groupId The id.
+/// @return The error, naming the id.
+[[nodiscard]] inline TableError unknownGroup(std::string const& groupId) {
+    return TableError{
+        .code = TableErrorCode::UnknownColumn, .column = groupId, .message = "no column group " + groupId};
+}
+
 /// @brief Checks a filter's columns, entry counts and value lengths.
 /// @param filters The filter.
 /// @param columns The row schema's columns.
 /// @param limits  The bounds.
 /// @param mayRead Whether the principal may read a column.
+/// @param groups  The table's declared groups, which a group filter's `group` names.
 /// @return The first violation, or nothing.
 [[nodiscard]] inline std::optional<TableError> checkFilters(FilterSpec const& filters,
                                                             std::span<ColumnInfo const> columns,
                                                             QueryLimits const& limits,
-                                                            std::function<bool(std::string_view)> const& mayRead) {
+                                                            std::function<bool(std::string_view)> const& mayRead,
+                                                            std::span<ColumnGroupInfo const> groups = {}) {
     if (filters.columns.size() > limits.maxFilterColumns) {
         return limitError({}, "too many filtered columns");
     }
@@ -408,18 +431,30 @@ struct SetTally {
         return limitError({}, "too many filter groups");
     }
     for (auto const& group : filters.groups) {
-        if (group.columns.size() > limits.maxGroupColumns || group.include.size() > limits.maxEntries) {
+        if (group.columns.size() > limits.maxGroupColumns ||
+            group.include.size() + group.exclude.size() > limits.maxEntries) {
             return limitError({}, "filter group too large");
         }
-        for (auto const& columnId : group.columns) {
+        std::span<std::string const> named = group.columns;
+        if (!group.group.empty()) {
+            auto const declared = groupColumns(groups, group.group);
+            if (!declared) {
+                return unknownGroup(group.group);
+            }
+            named = *declared;
+        }
+        for (auto const& columnId : named) {
             if (auto error = checkColumn(columnId, columns, mayRead)) {
                 return error;
             }
         }
-        if (anyTooLong(group.include, limits.maxTextLength)) {
+        if (anyTooLong(group.include, limits.maxTextLength) || anyTooLong(group.exclude, limits.maxTextLength)) {
             return limitError({}, "filter value too long");
         }
         if (auto error = sets.add(group.include, {}, limits)) {
+            return error;
+        }
+        if (auto error = sets.add(group.exclude, {}, limits)) {
             return error;
         }
     }
@@ -434,33 +469,43 @@ struct SetTally {
 
 /// @brief Checks a distinct-values request, clamping its `limit`.
 ///
-/// Exactly one of `column` and `group` is set (`InvalidSpec`); a group is `Unavailable` (pooled values need column
-/// groups). The column exists and the caller may read it, since a values list is a read of the column. `search` is
-/// at most `maxTextLength` bytes and `offset` within `0..maxOffset`, `limit` not negative (`LimitExceeded`). A
-/// bucket other than `Value` needs a date or date-time column (`InvalidSpec`), and a `Custom` column lists no
-/// values (`UnsupportedOperator`).
+/// Exactly one of `column` and `group` is set (`InvalidSpec`). The column, or every column of the declared group,
+/// exists and the caller may read it, since a values list is a read of the column (`UnknownColumn` naming a group
+/// no declaration has). `search` is at most `maxTextLength` bytes and `offset` within `0..maxOffset`, `limit` not
+/// negative (`LimitExceeded`). A bucket other than `Value` needs date or date-time columns (`InvalidSpec`), and
+/// `Custom` columns list no values (`UnsupportedOperator`).
 /// @param request The request; its `limit` is clamped to `maxLimit`.
 /// @param columns The table's columns.
 /// @param limits  The bounds.
 /// @param mayRead Whether the caller may read a column; empty allows every column.
+/// @param groups  The table's declared groups, which `request.group` names.
 /// @return The first violation, or nothing.
 [[nodiscard]] inline std::optional<TableError> checkDistinct(DistinctRequest& request,
                                                              std::span<ColumnInfo const> columns,
                                                              QueryLimits const& limits,
-                                                             std::function<bool(std::string_view)> const& mayRead) {
+                                                             std::function<bool(std::string_view)> const& mayRead,
+                                                             std::span<ColumnGroupInfo const> groups = {}) {
     auto const invalid = [](std::string message) {
         return TableError{.code = TableErrorCode::InvalidSpec, .column = {}, .message = std::move(message)};
     };
     if (request.column.empty() == request.group.empty()) {
         return invalid("a distinct request names a column or a group");
     }
+    std::span<std::string const> listed{&request.column, 1};
     if (!request.group.empty()) {
-        return TableError{.code = TableErrorCode::Unavailable,
-                          .column = {},
-                          .message = "pooled values need column groups"};
+        auto const declared = groupColumns(groups, request.group);
+        if (!declared) {
+            return unknownGroup(request.group);
+        }
+        if (declared->empty()) {
+            return invalid("column group " + request.group + " has no columns");
+        }
+        listed = *declared;
     }
-    if (auto error = checkColumn(request.column, columns, mayRead)) {
-        return error;
+    for (auto const& columnId : listed) {
+        if (auto error = checkColumn(columnId, columns, mayRead)) {
+            return error;
+        }
     }
     if (request.search.size() > limits.maxTextLength) {
         return limitError({}, "distinct search too long");
@@ -472,14 +517,15 @@ struct SetTally {
         return limitError({}, "distinct limit is negative");
     }
     request.limit = std::min(request.limit, limits.maxLimit);
-    auto const kind = columns[*findColumn(columns, request.column)].kind;
+    auto const& first = listed.front();
+    auto const kind = columns[*findColumn(columns, first)].kind;
     if (request.bucket != DateBucket::Value && kind != ColumnKind::Date && kind != ColumnKind::DateTime) {
-        return invalid("a date bucket on column " + request.column + ", which holds no dates");
+        return invalid("a date bucket on column " + first + ", which holds no dates");
     }
     if (kind == ColumnKind::Custom) {
         return TableError{.code = TableErrorCode::UnsupportedOperator,
-                          .column = request.column,
-                          .message = "column " + request.column + " has no values to list"};
+                          .column = first,
+                          .message = "column " + first + " has no values to list"};
     }
     return std::nullopt;
 }
@@ -502,10 +548,12 @@ struct SetTally {
 /// @param columns The row schema's columns.
 /// @param limits  The bounds.
 /// @param mayRead Whether the principal may read a column; empty allows every column.
+/// @param groups  The table's declared groups (`DataSource::groups()`), which a group filter's or a distinct
+///                request's `group` names.
 /// @return The query with its limits clamped and its `columns` ordered, or the first violation.
 [[nodiscard]] inline std::expected<TableQuery, TableError> validate(
     TableQuery query, std::span<ColumnInfo const> columns, QueryLimits const& limits = {},
-    std::function<bool(std::string_view)> const& mayRead = {}) {
+    std::function<bool(std::string_view)> const& mayRead = {}, std::span<ColumnGroupInfo const> groups = {}) {
     if (query.page.offset < 0 || query.page.offset > limits.maxOffset) {
         return std::unexpected(detail::limitError({}, "page.offset out of range"));
     }
@@ -521,7 +569,7 @@ struct SetTally {
             return std::unexpected(std::move(*error));
         }
     }
-    if (auto error = detail::checkFilters(query.filters, columns, limits, mayRead)) {
+    if (auto error = detail::checkFilters(query.filters, columns, limits, mayRead, groups)) {
         return std::unexpected(std::move(*error));
     }
     if (query.columns) {
@@ -556,7 +604,7 @@ struct SetTally {
             return std::unexpected(TableError{
                 .code = TableErrorCode::InvalidSpec, .column = {}, .message = "a query is keyed or distinct"});
         }
-        if (auto error = detail::checkDistinct(*query.distinct, columns, limits, mayRead)) {
+        if (auto error = detail::checkDistinct(*query.distinct, columns, limits, mayRead, groups)) {
             return std::unexpected(std::move(*error));
         }
     }
@@ -593,7 +641,8 @@ namespace detail {
 /// compiled filter reads. The filter is compiled here as `apply` compiles it, so a filtered column without an entry,
 /// a group without an `include` entry, and a group's column on which none of its entries compiles add nothing: a
 /// filter that reads no cell of a level does not need it. A filter that does not compile adds nothing either, since
-/// `apply` refuses the query. A `distinct` request adds the level of the column it lists, which is read for every
+/// `apply` refuses the query; a group filter naming a declared group is compiled through @p groups. A `distinct`
+/// request adds the level of the column, or of every column of the group, it lists, which is read for every
 /// candidate row. `display` is the levels of `query.columns`, or of every column @p mayRead allows when
 /// `columns` is absent: a caller that does not say what it shows is taken to show everything. Both are sorted,
 /// without duplicates, and never hold the base level; a level may be in both. No row is read. Called on the query
@@ -603,10 +652,12 @@ namespace detail {
 /// @param mayRead  Whether the caller may read a column; empty allows every column.
 /// @param services The services `apply` compiles the filter with: whether an entry applies to a date column depends
 ///                 on the date parser. Null members mean their defaults.
+/// @param groups   The table's declared groups.
 /// @return The levels.
 [[nodiscard]] inline LevelsNeeded levelsNeeded(TableQuery const& query, std::span<ColumnInfo const> columns,
                                                std::function<bool(std::string_view)> const& mayRead = {},
-                                               Services const& services = {}) {
+                                               Services const& services = {},
+                                               std::span<ColumnGroupInfo const> groups = {}) {
     // The columns that have a level, sorted by id: each column the query names is then one lookup.
     std::vector<std::pair<std::string_view, std::string_view>> levelled;
     for (auto const& column : columns) {
@@ -630,7 +681,7 @@ namespace detail {
         add(order, key.column);
     }
     if (!query.filters.empty()) {
-        if (auto const filter = compileFilterGuarded(query.filters, columns, services)) {
+        if (auto const filter = compileFilterGuarded(query.filters, columns, services, groups)) {
             for (auto const column : filter->columnsUsed()) {
                 if (!columns[column].level.empty()) {
                     order.push_back(columns[column].level);
@@ -638,8 +689,14 @@ namespace detail {
             }
         }
     }
-    if (query.distinct && !query.distinct->column.empty()) {
-        add(order, query.distinct->column);
+    if (query.distinct) {
+        auto const named = query.distinct->group.empty()
+                               ? std::span<std::string const>{&query.distinct->column, 1}
+                               : detail::groupColumns(groups, query.distinct->group)
+                                     .value_or(std::span<std::string const>{});
+        for (auto const& columnId : named) {
+            add(order, columnId);
+        }
     }
     if (query.columns) {
         for (auto const& columnId : *query.columns) {
@@ -713,7 +770,7 @@ struct ComputedView {
     // a collator that is not safe to share clones itself here, so concurrent
     // calls never fold on the one the caller passed.
     auto services = options.services.forTask();
-    auto filter = compileFilterGuarded(validated.filters, columns, services);
+    auto filter = compileFilterGuarded(validated.filters, columns, services, source.groups());
     if (!filter) {
         return std::unexpected(std::move(filter.error()));
     }
@@ -861,6 +918,8 @@ struct DistinctInput {
     Services services;
     /// @brief The bounds; `totalCap` caps the `distinct` count.
     QueryLimits limits;
+    /// @brief The table's declared groups, which the filter's and the request's `group` name.
+    std::span<ColumnGroupInfo const> groups;
 };
 
 /// @brief The civil date of a count of days since 1970-01-01.
@@ -928,42 +987,93 @@ struct DistinctInput {
 struct DistinctGroup {
     /// @brief The value's first candidate row, in source order.
     std::uint32_t first = 0;
+    /// @brief The place, among the listed columns, of the first column of `first` that holds it.
+    std::size_t column = 0;
     /// @brief The rows that hold it.
     std::int64_t count = 0;
+    /// @brief The last row counted, so a row holding the value in several columns counts once.
+    std::uint32_t last = 0;
 };
 
-/// @brief Groups the candidate rows of one column by a key.
+/// @brief Groups the candidate rows of the listed columns by a key: a row counts once for each value it holds in
+///        any of them, once in `blanks` when one of its cells is empty, and once in `invalid` when one is invalid.
 /// @tparam Key  The grouping key's type.
 /// @tparam Hash Its hash.
-/// @param rows   The candidate rows, source order.
-/// @param keys   The column's keys.
-/// @param keyOf  The grouping key of a valid row.
-/// @param groups Receives one entry a value, in order of first appearance.
-/// @param out    Receives `blanks`, `invalid` and `partial`.
+/// @param rows    The candidate rows, source order.
+/// @param columns The listed columns' keys, in the order they are listed.
+/// @param keyOf   The grouping key of a valid cell, from its column's keys and its row.
+/// @param groups  Receives one entry a value, in order of first appearance.
+/// @param out     Receives `blanks`, `invalid` and `partial`.
 template <typename Key, typename Hash = std::hash<Key>>
-void groupRows(std::span<std::uint32_t const> rows, KeyColumn const& keys, auto const& keyOf,
+void groupRows(std::span<std::uint32_t const> rows, std::span<KeyColumn const* const> columns, auto const& keyOf,
                std::vector<DistinctGroup>& groups, DistinctValues& out) {
     std::unordered_map<Key, std::size_t, Hash> index;
     for (auto const row : rows) {
-        switch (keys.states[row]) {
-            case CellState::Empty:
-                ++out.blanks;
+        bool blank = false;
+        bool invalid = false;
+        for (std::size_t at = 0; at < columns.size(); ++at) {
+            auto const& keys = *columns[at];
+            switch (keys.states[row]) {
+                case CellState::Empty:
+                    blank = true;
+                    continue;
+                case CellState::Invalid:
+                    invalid = true;
+                    continue;
+                case CellState::Unloaded:
+                    out.partial = true;
+                    continue;
+                case CellState::Valid:
+                default:
+                    break;
+            }
+            auto const [found, added] = index.try_emplace(keyOf(keys, row), groups.size());
+            if (added) {
+                groups.push_back(DistinctGroup{.first = row, .column = at, .count = 1, .last = row});
                 continue;
-            case CellState::Invalid:
-                ++out.invalid;
-                continue;
-            case CellState::Unloaded:
-                out.partial = true;
-                continue;
-            case CellState::Valid:
-            default:
-                break;
+            }
+            auto& group = groups[found->second];
+            if (group.last != row) {
+                ++group.count;
+                group.last = row;
+            }
         }
-        auto const [at, added] = index.try_emplace(keyOf(row), groups.size());
-        if (added) {
-            groups.push_back(DistinctGroup{.first = row, .count = 0});
+        out.blanks += blank ? 1 : 0;
+        out.invalid += invalid ? 1 : 0;
+    }
+}
+
+/// @brief Orders two valid cells of one kind, possibly in two columns, as a sort of one column would.
+/// @param left      One cell's column keys.
+/// @param leftRow   Its row.
+/// @param right     The other cell's column keys, of the same kind.
+/// @param rightRow  Its row.
+/// @return Negative, zero or positive as the left cell orders before, with, or after the right one.
+[[nodiscard]] inline int compareValues(KeyColumn const& left, std::uint32_t leftRow, KeyColumn const& right,
+                                       std::uint32_t rightRow) {
+    auto const sign = [](auto ordering) -> int {
+        if (std::is_lt(ordering)) {
+            return -1;
         }
-        ++groups[at->second].count;
+        return std::is_gt(ordering) ? 1 : 0;
+    };
+    switch (left.kind) {
+        case ColumnKind::Integer:
+        case ColumnKind::Key:
+        case ColumnKind::Date:
+        case ColumnKind::DateTime:
+        case ColumnKind::Bool:
+            return sign(left.ints[leftRow] <=> right.ints[rightRow]);
+        case ColumnKind::Decimal:
+        case ColumnKind::Quantity:
+            return sign(left.exact[leftRow] <=> right.exact[rightRow]);
+        case ColumnKind::Number:
+            return sign(std::strong_order(left.reals[leftRow], right.reals[rightRow]));
+        case ColumnKind::Text:
+            return sign(left.text[leftRow].compare(right.text[rightRow]) <=> 0);
+        case ColumnKind::Custom:
+        default:
+            return 0;
     }
 }
 
@@ -1019,27 +1129,36 @@ void groupRows(std::span<std::uint32_t const> rows, KeyColumn const& keys, auto 
     return DistinctValue{.text = std::move(text), .operand = std::move(operand), .count = 0};
 }
 
-/// @brief The distinct values of one column over the rows @p input's filter admits: the one core that
-///        `distinctValues`, `Engine::distinctValues` and a server's reply share.
+/// @brief The distinct values of one column, or pooled over a group's columns, over the rows @p input's filter
+///        admits: the one core that `distinctValues`, `Engine::distinctValues` and a server's reply share.
 ///
-/// Builds the key columns @p input lacks (the filter's and the listed column's) on the calling thread, into locals.
-/// A row the filter leaves undecided, or whose cell in the column is unloaded, is in no count and sets `partial`.
-/// Valid cells group by the key the column sorts and filters by (text by its fold; a date bucket by its first day);
-/// a value's text is its first row's. Values are searched by their folded text, ordered ascending by their first
-/// rows' keys (ties by first row), counted up to `totalCap`, and then sliced by `offset` and `limit`.
-/// @param input     The snapshot, columns, keys, filter, services and bounds.
-/// @param validated The request as `detail::checkDistinct` left it, naming a column.
+/// Builds the key columns @p input lacks (the filter's and the listed columns') on the calling thread, into locals.
+/// A row the filter leaves undecided is in no count and sets `partial`; an unloaded cell in a listed column is in no
+/// count and sets `partial`, and the row's loaded cells still count. Valid cells group by the key the column sorts
+/// and filters by (text by its fold; a date bucket by its first day); a row counts once per value it holds, once in
+/// `blanks` when it has an empty cell and once in `invalid` when it has an invalid one. A value's text is that of
+/// its first row and, within the row, its first column. Values are searched by their folded text, ordered ascending
+/// by their keys (ties by first row), counted up to `totalCap`, and then sliced by `offset` and `limit`.
+/// @param input     The snapshot, columns, keys, filter, services, bounds and groups.
+/// @param validated The request as `detail::checkDistinct` left it.
 /// @return The values, or `ServiceFailed` from a throwing service, or the filter's compile error.
 [[nodiscard]] inline std::expected<DistinctValues, TableError> distinctOver(DistinctInput const& input,
                                                                             DistinctRequest const& validated) {
     try {
-        auto const filter = compileFilter(input.filters, input.columns, input.services);
+        auto const filter = compileFilter(input.filters, input.columns, input.services, input.groups);
         if (!filter) {
             return std::unexpected(filter.error());
         }
         auto const& snapshot = *input.snapshot;
         auto const rowCount = snapshot.rowCount();
-        auto const column = *findColumn(input.columns, validated.column);
+        std::vector<std::size_t> listed;
+        if (validated.group.empty()) {
+            listed.push_back(*findColumn(input.columns, validated.column));
+        } else {
+            for (auto const& columnId : *groupColumns(input.groups, validated.group)) {
+                listed.push_back(*findColumn(input.columns, columnId));
+            }
+        }
         std::vector<std::shared_ptr<KeyColumn const>> built(input.columns.size());
         std::vector<KeyColumn const*> pointers(input.columns.size(), nullptr);
         auto const keysOf = [&](std::size_t at) {
@@ -1055,8 +1174,10 @@ void groupRows(std::span<std::uint32_t const> rows, KeyColumn const& keys, auto 
         for (auto const at : filter->columnsUsed()) {
             keysOf(at);
         }
-        if (pointers[column] == nullptr) {
-            keysOf(column);
+        for (auto const at : listed) {
+            if (pointers[at] == nullptr) {
+                keysOf(at);
+            }
         }
         std::vector<std::uint32_t> candidates(rowCount);
         for (std::size_t row = 0; row < rowCount; ++row) {
@@ -1069,33 +1190,42 @@ void groupRows(std::span<std::uint32_t const> rows, KeyColumn const& keys, auto 
             out.partial = !std::move(run).takeUndecided().empty();
             candidates = std::move(run).take();
         }
-        auto const& keys = *pointers[column];
-        auto const& info = input.columns[column];
+        std::vector<KeyColumn const*> listedKeys;
+        listedKeys.reserve(listed.size());
+        for (auto const at : listed) {
+            listedKeys.push_back(pointers[at]);
+        }
+        // Every listed column is of one kind: a declared group's are, by `checkGroups`.
+        auto const& info = input.columns[listed.front()];
         std::vector<DistinctGroup> groups;
         switch (info.kind) {
             case ColumnKind::Text:
                 groupRows<std::string_view>(
-                    candidates, keys, [&keys](std::uint32_t row) { return std::string_view{keys.folded[row]}; },
+                    candidates, listedKeys,
+                    [](KeyColumn const& keys, std::uint32_t row) { return std::string_view{keys.folded[row]}; },
                     groups, out);
                 break;
             case ColumnKind::Decimal:
             case ColumnKind::Quantity:
                 groupRows<math::Rational, RationalHash>(
-                    candidates, keys, [&keys](std::uint32_t row) { return keys.exact[row]; }, groups, out);
+                    candidates, listedKeys, [](KeyColumn const& keys, std::uint32_t row) { return keys.exact[row]; },
+                    groups, out);
                 break;
             case ColumnKind::Number:
                 groupRows<double>(
-                    candidates, keys,
-                    [&keys](std::uint32_t row) { return keys.reals[row] == 0.0 ? 0.0 : keys.reals[row]; }, groups,
-                    out);
+                    candidates, listedKeys,
+                    [](KeyColumn const& keys, std::uint32_t row) {
+                        return keys.reals[row] == 0.0 ? 0.0 : keys.reals[row];
+                    },
+                    groups, out);
                 break;
             case ColumnKind::Date:
             case ColumnKind::DateTime: {
                 bool const dateTime = info.kind == ColumnKind::DateTime;
                 auto const bucket = validated.bucket;
                 groupRows<std::int64_t>(
-                    candidates, keys,
-                    [&keys, dateTime, bucket](std::uint32_t row) {
+                    candidates, listedKeys,
+                    [dateTime, bucket](KeyColumn const& keys, std::uint32_t row) {
                         if (bucket == DateBucket::Value) {
                             return keys.ints[row];
                         }
@@ -1110,9 +1240,15 @@ void groupRows(std::span<std::uint32_t const> rows, KeyColumn const& keys, auto 
             case ColumnKind::Custom:
             default:
                 groupRows<std::int64_t>(
-                    candidates, keys, [&keys](std::uint32_t row) { return keys.ints[row]; }, groups, out);
+                    candidates, listedKeys, [](KeyColumn const& keys, std::uint32_t row) { return keys.ints[row]; },
+                    groups, out);
                 break;
         }
+        auto const describe = [&](DistinctGroup const& group) {
+            auto const at = listed[group.column];
+            return describeValue(snapshot, at, input.columns[at], *listedKeys[group.column], group.first,
+                                 validated.bucket);
+        };
         std::vector<DistinctValue> values;
         values.reserve(groups.size());
         if (!validated.search.empty()) {
@@ -1120,10 +1256,9 @@ void groupRows(std::span<std::uint32_t const> rows, KeyColumn const& keys, auto 
             auto const needle = collator.fold(validated.search);
             std::erase_if(groups, [&](DistinctGroup const& group) {
                 if (info.kind == ColumnKind::Text) {
-                    return !std::string_view{keys.folded[group.first]}.contains(needle);
+                    return !std::string_view{listedKeys[group.column]->folded[group.first]}.contains(needle);
                 }
-                auto const value = describeValue(snapshot, column, info, keys, group.first, validated.bucket);
-                return !collator.fold(value.text).contains(needle);
+                return !collator.fold(describe(group).text).contains(needle);
             });
         }
         auto const count = static_cast<std::int64_t>(groups.size());
@@ -1133,13 +1268,14 @@ void groupRows(std::span<std::uint32_t const> rows, KeyColumn const& keys, auto 
         auto const end = validated.limit >= count - begin ? count : begin + validated.limit;
         // Only the values up to the page's end are put in order: a menu's first page of 50,000 values sorts 200.
         std::ranges::partial_sort(groups, groups.begin() + end,
-                                  [&keys](DistinctGroup const& a, DistinctGroup const& b) {
-                                      int const order = compareKeys(keys, a.first, b.first, SortDirection::Ascending);
+                                  [&listedKeys](DistinctGroup const& a, DistinctGroup const& b) {
+                                      int const order = compareValues(*listedKeys[a.column], a.first,
+                                                                      *listedKeys[b.column], b.first);
                                       return order != 0 ? order < 0 : a.first < b.first;
                                   });
         for (auto at = begin; at < end; ++at) {
             auto const& group = groups[static_cast<std::size_t>(at)];
-            auto value = describeValue(snapshot, column, info, keys, group.first, validated.bucket);
+            auto value = describe(group);
             value.count = group.count;
             out.values.push_back(std::move(value));
         }
@@ -1151,13 +1287,26 @@ void groupRows(std::span<std::uint32_t const> rows, KeyColumn const& keys, auto 
     }
 }
 
+/// @brief Removes a values list's own filter: the column's entry, or every group filter naming the group.
+/// @param filters The filter.
+/// @param request The values list's request.
+inline void withoutOwnFilter(FilterSpec& filters, DistinctRequest const& request) {
+    if (request.group.empty()) {
+        filters.columns.erase(request.column);
+        return;
+    }
+    std::erase_if(filters.groups, [&request](GroupFilter const& group) { return group.group == request.group; });
+}
+
 }  // namespace detail
 
-/// @brief The distinct values of one column, with their counts, over the rows the other filters of @p query leave.
+/// @brief The distinct values of one column, or pooled over a declared group's columns, with their counts, over the
+///        rows the other filters of @p query leave.
 ///
-/// The query and the request are validated together (`validate` with `distinct` set to @p request); the column's own
-/// entry in `query.filters.columns` is removed, so a value the column's filter left out is still listed. Runs in the
-/// calling thread over one snapshot, building the key columns it reads.
+/// The source's groups are checked (`detail::checkGroups`), and the query and the request validated together
+/// (`validate` with `distinct` set to @p request). The column's own entry in `query.filters.columns`, or every
+/// group filter naming the request's group, is removed, so a value the list's own filter left out is still listed.
+/// Runs in the calling thread over one snapshot, building the key columns it reads.
 /// @param source  The rows.
 /// @param query   The query whose filters narrow the rows; its page, sort and columns are not read.
 /// @param request The column, search, bucket and page of values.
@@ -1167,9 +1316,12 @@ void groupRows(std::span<std::uint32_t const> rows, KeyColumn const& keys, auto 
                                                                               TableQuery const& query,
                                                                               DistinctRequest const& request,
                                                                               ApplyOptions const& options = {}) {
+    if (auto error = detail::checkGroups(source.columns(), source.groups())) {
+        return std::unexpected(std::move(*error));
+    }
     TableQuery asked = query;
     asked.distinct = request;
-    auto checked = validate(std::move(asked), source.columns(), options.limits, options.mayRead);
+    auto checked = validate(std::move(asked), source.columns(), options.limits, options.mayRead, source.groups());
     if (!checked) {
         return std::unexpected(std::move(checked.error()));
     }
@@ -1178,19 +1330,24 @@ void groupRows(std::span<std::uint32_t const> rows, KeyColumn const& keys, auto 
                                 .keys = {},
                                 .filters = std::move(checked->filters),
                                 .services = options.services.forTask(),
-                                .limits = options.limits};
-    input.filters.columns.erase(checked->distinct->column);
+                                .limits = options.limits,
+                                .groups = source.groups()};
+    detail::withoutOwnFilter(input.filters, *checked->distinct);
     return detail::distinctOver(input, *checked->distinct);
 }
 
 inline std::expected<DistinctValues, TableError> Engine::distinctValues(DistinctRequest const& request) const {
     auto validated = request;
     QueryLimits const limits;
-    if (auto error = detail::checkDistinct(validated, _columns, limits, {})) {
+    auto const groups = _source->groups();
+    if (auto error = detail::checkGroups(_columns, groups)) {
+        return std::unexpected(std::move(*error));
+    }
+    if (auto error = detail::checkDistinct(validated, _columns, limits, {}, groups)) {
         return std::unexpected(std::move(*error));
     }
     auto filters = _filterSpec;
-    filters.columns.erase(validated.column);
+    detail::withoutOwnFilter(filters, validated);
     detail::DistinctInput const input{
         .snapshot = _snapshot,
         .columns = _columns,
@@ -1198,7 +1355,8 @@ inline std::expected<DistinctValues, TableError> Engine::distinctValues(Distinct
                                            : std::span<std::shared_ptr<KeyColumn const> const>{},
         .filters = std::move(filters),
         .services = _options.services.forTask(),
-        .limits = limits};
+        .limits = limits,
+        .groups = groups};
     return detail::distinctOver(input, validated);
 }
 
@@ -1212,10 +1370,14 @@ inline std::expected<DistinctValues, TableError> Engine::distinctValues(Distinct
 /// @param query   The request body's table query.
 /// @param options Limits, services and column access.
 /// @return The page, or the typed error the client shows: `SourceContract`
-///         when a sorted or filtered base-level column holds an unloaded cell.
+///         when a sorted or filtered base-level column holds an unloaded cell,
+///         or when the source's declared groups break `detail::checkGroups`.
 [[nodiscard]] inline std::expected<PageRows, TableError> apply(DataSource const& source, TableQuery const& query,
                                                                ApplyOptions const& options = {}) {
-    auto const checked = validate(query, source.columns(), options.limits, options.mayRead);
+    if (auto error = detail::checkGroups(source.columns(), source.groups())) {
+        return std::unexpected(std::move(*error));
+    }
+    auto const checked = validate(query, source.columns(), options.limits, options.mayRead, source.groups());
     if (!checked) {
         return std::unexpected(checked.error());
     }
@@ -1310,6 +1472,29 @@ template <typename Row>
 concept HasColumnLevels = requires {
     { Row::columnLevels() };
 };
+
+/// @brief A row type that declares column groups.
+/// @tparam Row The row type.
+template <typename Row>
+concept HasColumnGroups = requires {
+    { Row::columnGroups() };
+};
+
+/// @brief The column groups a row type declares, each labelled by its id.
+/// @tparam Row The row type.
+/// @return The groups; none when the row type declares none.
+template <typename Row>
+[[nodiscard]] std::vector<ColumnGroupInfo> declaredGroups() {
+    std::vector<ColumnGroupInfo> out;
+    if constexpr (HasColumnGroups<Row>) {
+        for (auto const& group : Row::columnGroups()) {
+            out.push_back(ColumnGroupInfo{.id = std::string{group.id},
+                                          .label = std::string{group.id},
+                                          .columns = {group.columns.begin(), group.columns.end()}});
+        }
+    }
+    return out;
+}
 
 /// @brief `true` for `std::optional<T>`.
 /// @tparam T A type.
@@ -1577,8 +1762,9 @@ private:
 /// writes as `null`, is an empty cell. A row with a `glz::meta` has the
 /// columns its meta names. A row type's `columnLevels()` gives its columns
 /// their levels, and a cell of a column whose level the `LevelLoaded`
-/// predicate refuses for its row is `Unloaded`. `setRows` replaces the rows
-/// and notifies `Reset`.
+/// predicate refuses for its row is `Unloaded`. A row type's `columnGroups()`
+/// are the source's `groups()`, each labelled by its id. `setRows` replaces
+/// the rows and notifies `Reset`.
 /// @tparam Row A glaze-reflectable aggregate.
 template <typename Row>
 class RowsSource final : public DataSource {
@@ -1596,6 +1782,7 @@ public:
                std::map<std::string, ColumnKind, std::less<>> const& kinds = {},
                std::map<std::string, std::string, std::less<>> const& comparators = {}, LevelLoaded<Row> loaded = {})
         : _columns{detail::reflectedColumns<Row>()},
+          _groups{detail::declaredGroups<Row>()},
           _readers{std::make_shared<std::vector<detail::CellReader<Row>> const>(detail::cellReaders<Row>())},
           _key{std::move(key)},
           _loaded{std::move(loaded)} {
@@ -1619,6 +1806,10 @@ public:
     /// @return One per reflected member.
     [[nodiscard]] std::span<ColumnInfo const> columns() const override { return _columns; }
 
+    /// @brief The row type's declared groups.
+    /// @return One per `Row::columnGroups()` entry, labelled by its id; none when the row type declares none.
+    [[nodiscard]] std::span<ColumnGroupInfo const> groups() const override { return _groups; }
+
     /// @brief The current rows; a pointer copy.
     /// @return The snapshot.
     [[nodiscard]] std::shared_ptr<RowSnapshot const> snapshot() const override { return _snapshot; }
@@ -1640,6 +1831,7 @@ public:
 
 private:
     std::vector<ColumnInfo> _columns;
+    std::vector<ColumnGroupInfo> _groups;
     std::shared_ptr<std::vector<detail::CellReader<Row>> const> _readers;
     RowKey<Row> _key;
     LevelLoaded<Row> _loaded;
@@ -1715,7 +1907,10 @@ template <typename Row>
     // Borrowed for the call: an aliasing pointer that owns nothing.
     std::shared_ptr<std::vector<Row> const> const borrowed{std::shared_ptr<void>{}, &rows};
     RowsSource<Row> const source{borrowed, std::move(key), kinds, comparators, loaded};
-    auto const checked = validate(query, source.columns(), options.limits, options.mayRead);
+    if (auto error = detail::checkGroups(source.columns(), source.groups())) {
+        return std::unexpected(std::move(*error));
+    }
+    auto const checked = validate(query, source.columns(), options.limits, options.mayRead, source.groups());
     if (!checked) {
         return std::unexpected(checked.error());
     }
@@ -1748,7 +1943,8 @@ template <typename Row>
     if (!loaded) {
         return out;
     }
-    auto const needed = levelsNeeded(*checked, source.columns(), options.mayRead, options.services.forTask());
+    auto const needed =
+        levelsNeeded(*checked, source.columns(), options.mayRead, options.services.forTask(), source.groups());
     std::vector<std::string> wanted = needed.order;
     wanted.insert(wanted.end(), needed.display.begin(), needed.display.end());
     std::ranges::sort(wanted);

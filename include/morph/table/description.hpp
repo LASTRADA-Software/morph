@@ -94,21 +94,6 @@ struct TableColumn {
     [[nodiscard]] bool operator==(TableColumn const& other) const = default;
 };
 
-/// @brief A declared group of columns, filtered together.
-struct ColumnGroupInfo {
-    /// @brief The group's id, which a column's `group` names.
-    std::string id;
-    /// @brief The group's text.
-    std::string label;
-    /// @brief The ids of its columns, 2 to 16 of one kind.
-    std::vector<std::string> columns;
-
-    /// @brief Member-wise equality.
-    /// @param other The group to compare with.
-    /// @return `true` when every member matches.
-    [[nodiscard]] bool operator==(ColumnGroupInfo const& other) const = default;
-};
-
 /// @brief What the server offers on a table beyond paging, sorting and filtering.
 struct TableCapabilities {
     /// @brief Keyed queries.
@@ -135,7 +120,8 @@ struct TableDescription {
     std::vector<TableColumn> columns;
     /// @brief The id of the column that is the row's key.
     std::string key;
-    /// @brief The declared column groups.
+    /// @brief The declared column groups, as a client draws them: the source's `groups()`, which the server
+    ///        evaluates.
     std::vector<ColumnGroupInfo> groups;
     /// @brief Every data level a column names, the base level excluded.
     std::vector<std::string> levels;
@@ -1111,14 +1097,17 @@ namespace detail {
 /// @brief A source holding one snapshot: what a reply is built from off the owner's thread.
 ///
 /// A `DataSource` is owner-affine and only its snapshot may cross threads, so the snapshot is taken on the
-/// owner's thread and this source carries it, with a copy of the columns. It never changes.
+/// owner's thread and this source carries it, with a copy of the columns and the groups. It never changes.
 class PinnedSource final : public DataSource {
 public:
-    /// @brief Holds @p snapshot under @p columns.
+    /// @brief Holds @p snapshot under @p columns and @p groups.
     /// @param snapshot The rows.
     /// @param columns  The source's columns when the snapshot was taken.
-    PinnedSource(std::shared_ptr<RowSnapshot const> snapshot, std::vector<ColumnInfo> columns)
-        : _snapshot{std::move(snapshot)}, _columns{std::move(columns)}, _pinnedAt{nextPin()} {}
+    /// @param groups   The source's declared groups when the snapshot was taken.
+    PinnedSource(std::shared_ptr<RowSnapshot const> snapshot, std::vector<ColumnInfo> columns,
+                 std::vector<ColumnGroupInfo> groups = {})
+        : _snapshot{std::move(snapshot)}, _columns{std::move(columns)}, _groups{std::move(groups)},
+          _pinnedAt{nextPin()} {}
 
     /// @brief When the snapshot was pinned, among every pin of the process: larger for later.
     /// @return The pin's sequence number.
@@ -1127,6 +1116,10 @@ public:
     /// @brief The columns.
     /// @return The copy taken with the snapshot.
     [[nodiscard]] std::span<ColumnInfo const> columns() const override { return _columns; }
+
+    /// @brief The declared groups.
+    /// @return The copy taken with the snapshot.
+    [[nodiscard]] std::span<ColumnGroupInfo const> groups() const override { return _groups; }
 
     /// @brief The one snapshot.
     /// @return The snapshot.
@@ -1148,6 +1141,7 @@ private:
 
     std::shared_ptr<RowSnapshot const> _snapshot;
     std::vector<ColumnInfo> _columns;
+    std::vector<ColumnGroupInfo> _groups;
     std::uint64_t _pinnedAt;
 };
 
@@ -1198,6 +1192,10 @@ public:
     /// @brief The shared source's columns.
     /// @return The columns.
     [[nodiscard]] std::span<ColumnInfo const> columns() const override { return _source->columns(); }
+
+    /// @brief The shared source's declared groups.
+    /// @return The groups.
+    [[nodiscard]] std::span<ColumnGroupInfo const> groups() const override { return _source->groups(); }
 
     /// @brief The scope's rows of the shared source's current snapshot.
     /// @return The snapshot.
@@ -1282,8 +1280,10 @@ struct AnswerContext {
 [[nodiscard]] inline ServedTable pinned(ServedTable served) {
     if (served.source != nullptr) {
         auto const columns = served.source->columns();
-        served.source = std::make_shared<PinnedSource const>(served.source->snapshot(),
-                                                             std::vector<ColumnInfo>(columns.begin(), columns.end()));
+        auto const groups = served.source->groups();
+        served.source = std::make_shared<PinnedSource const>(
+            served.source->snapshot(), std::vector<ColumnInfo>(columns.begin(), columns.end()),
+            std::vector<ColumnGroupInfo>(groups.begin(), groups.end()));
     }
     return served;
 }
@@ -1340,6 +1340,8 @@ struct AnswerContext {
 ///
 /// A query with `distinct` set is answered by `distinctValues` over the source: a page with no columns, keys or rows
 /// and `distinct` set, or `Unavailable` when the table's capabilities exclude distinct requests.
+/// A group filter's or a distinct request's `group` resolves through the source's declared groups, which are
+/// checked first (`detail::checkGroups`).
 /// @param served  The table, its source pinned (`pinned`).
 /// @param query   The query, as received.
 /// @param context What the reply is built with.
@@ -1360,7 +1362,11 @@ struct AnswerContext {
             .code = TableErrorCode::Unavailable, .column = {}, .message = "this table answers no keyed query"});
     }
     auto const infos = columnInfos(served.description);
-    auto checked = validate(query, infos, served.limits, served.mayRead);
+    auto const groups = served.source->groups();
+    if (auto error = detail::checkGroups(served.source->columns(), groups)) {
+        return std::unexpected(std::move(*error));
+    }
+    auto checked = validate(query, infos, served.limits, served.mayRead, groups);
     if (!checked) {
         return std::unexpected(std::move(checked.error()));
     }
@@ -1411,7 +1417,7 @@ struct AnswerContext {
             }
         }
     }
-    auto const needed = levelsNeeded(*checked, infos, served.mayRead, served.services.forTask());
+    auto const needed = levelsNeeded(*checked, infos, served.mayRead, served.services.forTask(), groups);
     std::vector<std::string> levels = needed.order;
     levels.insert(levels.end(), needed.display.begin(), needed.display.end());
     std::ranges::sort(levels);
@@ -1668,7 +1674,8 @@ template <typename Row>
 ///
 /// The columns are `Row`'s reflected members in member order, each labelled by its field metadata or else by
 /// its name made a title, each with the level `Row::columnLevels()` gives it; `levels` lists those levels, sorted
-/// and each once. The key is the key member of the record registered for `Row`.
+/// and each once. The groups are the source's (`Row::columnGroups()`), each labelled by its id made a title, and
+/// each column names the group it is in. The key is the key member of the record registered for `Row`.
 /// @tparam Row The row type.
 /// @param id   The table's id.
 /// @param rows The rows the caller may see; null serves none.
@@ -1706,7 +1713,17 @@ template <typename Row>
     if (rows == nullptr) {
         rows = std::make_shared<std::vector<Row> const>();
     }
-    served.source = std::make_shared<RowsSource<Row> const>(std::move(rows), std::move(*key));
+    auto source = std::make_shared<RowsSource<Row> const>(std::move(rows), std::move(*key));
+    for (auto group : source->groups()) {
+        group.label = forms::detail::inferTitle(group.id);
+        for (auto& column : served.description.columns) {
+            if (std::ranges::find(group.columns, column.info.id) != group.columns.end()) {
+                column.group = group.id;
+            }
+        }
+        served.description.groups.push_back(std::move(group));
+    }
+    served.source = std::move(source);
     return served;
 }
 

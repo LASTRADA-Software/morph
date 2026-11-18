@@ -61,8 +61,12 @@ struct WideTableOptions {
 // The 300- or 30-column layout, in declared order; throws std::invalid_argument for any other count.
 [[nodiscard]] std::vector<WideColumn> wideColumns(int columns);
 
-// The description of wideColumns(columns): `id` as given, `label` = `id`, each column's label its id, `group` and
-// `groups` (`g3`, `g16`, labels their ids, in the order the layout first names them) from the layout, key "id",
+// The declared groups of a layout, in the order it first names them: `g3` ("Group of 3": t004 to t006) and, in the
+// 300-column layout, `g16` ("Group of 16": t011 to t026). What WideTableSource::groups() returns.
+[[nodiscard]] std::vector<morph::table::ColumnGroupInfo> wideGroups(std::vector<WideColumn> const& layout);
+
+// The description of wideColumns(columns): `id` as given, `label` = `id`, each column's label its id, `group` from
+// the layout and `groups` the source's (wideGroups), key "id",
 // `levels` the levels its columns name (`recipe`), `revision` empty.
 [[nodiscard]] morph::table::TableDescription wideDescription(std::string id, int columns);
 
@@ -88,6 +92,8 @@ public:
     [[nodiscard]] std::shared_ptr<morph::table::RowSnapshot const> snapshot() const override;
     void subscribe(morph::table::ChangeListener& listener) override;
     void unsubscribe(morph::table::ChangeListener& listener) override;
+    // wideGroups(layout()).
+    [[nodiscard]] std::span<morph::table::ColumnGroupInfo const> groups() const override;
 
     [[nodiscard]] std::vector<WideColumn> const& layout() const noexcept;
     // A copy, since regenerate() changes the seed.
@@ -107,6 +113,7 @@ private:
     WideTableOptions _options;
     std::vector<WideColumn> _layout;
     std::vector<morph::table::ColumnInfo> _columns;
+    std::vector<morph::table::ColumnGroupInfo> _groups;
     std::mutex _writer;
     mutable std::mutex _mutex;
     std::shared_ptr<morph::table::RowSnapshot const> _snapshot;
@@ -137,6 +144,8 @@ public:
     [[nodiscard]] std::shared_ptr<morph::table::RowSnapshot const> snapshot() const override;
     void subscribe(morph::table::ChangeListener& listener) override;
     void unsubscribe(morph::table::ChangeListener& listener) override;
+    // The wrapped source's.
+    [[nodiscard]] std::span<morph::table::ColumnGroupInfo const> groups() const override;
 
     // Marks `rows` loaded; a row out of range throws std::invalid_argument before anything changes.
     void load(std::span<std::size_t const> rows);

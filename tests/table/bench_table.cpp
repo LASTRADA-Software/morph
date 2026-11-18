@@ -1587,3 +1587,111 @@ TEST_CASE("table benchmark: distinct values and value sets", "[.benchmark][table
              }));
     REQUIRE(passed >= 10'000);
 }
+
+namespace {
+
+// G1-G7's table: 100,000 rows; a group of 3 (h0..h2) and a group of 16 (k0..k15) text columns, each cell one of
+// "v0".."v31" from std::mt19937{7}; every column at level "slow", so `unloaded` can make a third of them Unloaded.
+std::shared_ptr<VectorSource> groupBenchSource(bool unloaded) {
+    std::mt19937 rng{7};
+    std::vector<ColumnInfo> columns;
+    std::vector<std::string> three;
+    std::vector<std::string> sixteen;
+    for (int c = 0; c < 3; ++c) {
+        three.push_back(std::format("h{}", c));
+        columns.push_back(tabletest::levelCol(three.back(), ColumnKind::Text, "slow"));
+    }
+    for (int c = 0; c < 16; ++c) {
+        sixteen.push_back(std::format("k{}", c));
+        columns.push_back(tabletest::levelCol(sixteen.back(), ColumnKind::Text, "slow"));
+    }
+    std::vector<std::string> values;
+    for (int v = 0; v < 32; ++v) {
+        values.push_back(std::format("v{}", v));
+    }
+    std::vector<std::vector<Cell>> rows(100'000);
+    for (auto& row : rows) {
+        row.reserve(columns.size());
+        for (std::size_t c = 0; c < columns.size(); ++c) {
+            if (unloaded && rng() % 3 == 0) {
+                row.emplace_back(Unloaded{});
+            } else {
+                row.emplace_back(values[rng() % values.size()]);
+            }
+        }
+    }
+    auto source = tabletest::makeSource(std::move(columns), std::move(rows));
+    source->setGroups({ColumnGroupInfo{.id = "three", .label = "Three", .columns = three},
+                       ColumnGroupInfo{.id = "sixteen", .label = "Sixteen", .columns = sixteen}});
+    return source;
+}
+
+// The members "v0".."v{n-1}", then "w0".. to make up `count` (values no cell holds).
+std::vector<std::string> setOf(int held, int count) {
+    std::vector<std::string> out;
+    for (int v = 0; v < count; ++v) {
+        out.push_back(v < held ? std::format("v{}", v) : std::format("w{}", v));
+    }
+    return out;
+}
+
+}  // namespace
+
+TEST_CASE("table benchmark: column groups", "[.benchmark][table][groups]") {
+    constexpr int kRuns = 9;
+    printHeader("G1-G4, G6, G7: column groups");
+    for (bool const unloaded : {false, true}) {
+        auto const source = groupBenchSource(unloaded);
+        // Keys built: every group filter below reads them from an engine that already holds them.
+        Engine engine{source};
+        FilterSpec warm;
+        warm.groups.push_back({.group = "three", .include = {FilterEntry{.eq = "v0"}}});
+        warm.groups.push_back({.group = "sixteen", .include = {FilterEntry{.eq = "v0"}}});
+        require(engine.setFilter(warm));
+        auto const time = [&](std::string const& scenario, GroupFilter const& group) {
+            FilterSpec spec;
+            spec.groups.push_back(group);
+            require(engine.setFilter(spec));
+            REQUIRE((engine.undecidedRowCount() > 0) == unloaded);
+            std::vector<double> samples;
+            for (int run = 0; run < kRuns; ++run) {
+                require(engine.setFilter(FilterSpec{}));
+                auto const began = Clock::now();
+                require(engine.setFilter(spec));
+                samples.push_back(std::chrono::duration<double, std::milli>(Clock::now() - began).count());
+            }
+            auto const spread = spreadOf(samples);
+            printRow(std::format("{}{}", scenario, unloaded ? " (a third unloaded)" : ""), 100'000, spread);
+        };
+        for (auto const* const id : {"three", "sixteen"}) {
+            std::string const name = id;
+            std::vector<FilterEntry> together;
+            auto const k = name == "three" ? 3 : 16;
+            for (int e = 0; e < (k == 3 ? 2 : 16); ++e) {
+                together.push_back(FilterEntry{.eq = std::format("v{}", e)});
+            }
+            time("G1 any, oneOf of 2, " + name, {.group = name, .include = {FilterEntry{.oneOf = setOf(2, 2)}}});
+            if (!unloaded) {
+                time("G2 any, oneOf of 1,000, " + name,
+                     {.group = name, .include = {FilterEntry{.oneOf = setOf(2, 1000)}}});
+                time("G3 atLeast 2, oneOf of 2, " + name,
+                     {.group = name,
+                      .match = ColumnCount{.kind = ColumnCount::Kind::AtLeast, .n = 2},
+                      .include = {FilterEntry{.oneOf = setOf(2, 2)}}});
+                time("G3 exactly 1, oneOf of 2, " + name,
+                     {.group = name,
+                      .match = ColumnCount{.kind = ColumnCount::Kind::Exactly, .n = 1},
+                      .include = {FilterEntry{.oneOf = setOf(2, 2)}}});
+            }
+            time(std::format("G4 together, {} entries, {}", together.size(), name),
+                 {.group = name, .mode = GroupMode::Together, .include = together});
+            if (!unloaded) {
+                auto const first = engine.distinctValues({.group = name});
+                REQUIRE(first);
+                REQUIRE(first->values.size() == 32);
+                printRow("G6 pooled distinct values, first 200, " + name, 100'000,
+                         timedRuns(kRuns, [&] { static_cast<void>(engine.distinctValues({.group = name})); }));
+            }
+        }
+    }
+}

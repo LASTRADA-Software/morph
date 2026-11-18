@@ -123,6 +123,18 @@ inline std::shared_ptr<morph::table::VectorSource> distinctSource(
                       std::move(rows));
 }
 
+// A typed row whose companyA, companyB and companyC form the declared group "company". Reflected by glaze.
+struct GroupRow {
+    std::string companyA;
+    std::string companyB;
+    std::string companyC;
+    std::string name;
+    static constexpr std::array<std::string_view, 3> kCompany{"companyA", "companyB", "companyC"};
+    static constexpr std::array<morph::table::ColumnGroup, 1> columnGroups() noexcept {
+        return {{{.id = "company", .columns = kCompany}}};
+    }
+};
+
 // A typed row whose `qty` is at level "stock": the row type of the typed level cases. Reflected by glaze.
 struct LevelRow {
     std::int64_t id = 0;
