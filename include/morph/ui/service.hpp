@@ -121,6 +121,28 @@ struct ServedBundle {
     std::optional<std::map<std::string, std::string, std::less<>>> wizards;
 };
 
+/// @brief The actions of @p bundle that the principal of @p session may run: what `ui-catalog` answers as
+///        `permitted`.
+///
+/// The candidates are `ServedBundle::allActions`, so an action no served document names is never permitted here,
+/// whatever the authoriser would say about it.
+/// @param bundle     The bundle.
+/// @param session    The session, its principal verified.
+/// @param authorizer The authoriser.
+/// @return The permitted action ids, in `allActions` order.
+[[nodiscard]] MORPH_API std::vector<std::string> permittedActions(ServedBundle const& bundle,
+                                                                  ::morph::session::Context const& session,
+                                                                  ::morph::session::IAuthorizer const& authorizer);
+
+/// @brief Whether the principal of @p session may open @p screen: it is available, and the principal may run every
+///        query the screen declares at its top level (spec 5 §12b).
+/// @param screen     The screen.
+/// @param session    The session, its principal verified.
+/// @param authorizer The authoriser.
+/// @return Whether the screen admits the principal.
+[[nodiscard]] MORPH_API bool screenAdmitted(ServedScreen const& screen, ::morph::session::Context const& session,
+                                            ::morph::session::IAuthorizer const& authorizer);
+
 /// @brief A file of the bundle that is not a screen, as `UiRegistry::addFile` takes it.
 struct BundleFile {
     /// @brief `app`, `theme`, `messages`, `component` or `icon`.
@@ -503,11 +525,6 @@ private:
     /// @return The reply and its log fields.
     [[nodiscard]] Answer fetchAnswer(::morph::wire::Envelope const& request,
                                      ::morph::session::IAuthorizer const& authorizer) const;
-
-    /// @brief Whether the principal may fetch @p screen's document: it is available, and the catalog lists it as
-    ///        such (every top-level query permitted).
-    [[nodiscard]] static bool screenAdmits(ServedScreen const& screen, ::morph::session::Context const& session,
-                                           ::morph::session::IAuthorizer const& authorizer);
 
     std::shared_ptr<ServedBundle const> _bundle;
     ::morph::model::detail::ActionDispatcher* _dispatcher;

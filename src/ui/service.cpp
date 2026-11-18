@@ -171,6 +171,22 @@ private:
 
 namespace morph::ui {
 
+std::vector<std::string> permittedActions(ServedBundle const& bundle, ::morph::session::Context const& session,
+                                          ::morph::session::IAuthorizer const& authorizer) {
+    std::vector<std::string> permitted;
+    for (ActionRef const& ref : bundle.allActions) {
+        if (authorizer.authorize(session, ref.modelType, ref.action)) {
+            permitted.push_back(ref.action);
+        }
+    }
+    return permitted;
+}
+
+bool screenAdmitted(ServedScreen const& screen, ::morph::session::Context const& session,
+                    ::morph::session::IAuthorizer const& authorizer) {
+    return screen.entry.available && permitsAll(authorizer, session, screen.topQueries);
+}
+
 std::expected<void, Refusal> UiRegistry::addScreen(CatalogEntry entry, std::string text) {
     std::string const screenId = entry.id;
     std::size_t const size = text.size();
@@ -882,11 +898,7 @@ UiService::Answer UiService::catalogAnswer(::morph::wire::Envelope const& reques
     }
     CatalogReply reply;
     Fetchable const fetchable = listEntries(reply, request.session, authorizer);
-    for (ActionRef const& ref : _bundle->allActions) {
-        if (authorizer.authorize(request.session, ref.modelType, ref.action)) {
-            reply.permitted.push_back(ref.action);
-        }
-    }
+    reply.permitted = permittedActions(*_bundle, request.session, authorizer);
     if (_bundle->models) {
         auto& known = reply.models.emplace();
         for (auto const& [type, info] : *_bundle->models) {
@@ -990,7 +1002,7 @@ UiService::Answer UiService::fetchAnswer(::morph::wire::Envelope const& request,
         return Answer{.encoded = err(request, "not found"), .subject = hash, .outcome = "refused: not found"};
     }
     bool const admitted = std::ranges::any_of(found->second.holders, [&](ServedFile::Holder const& holder) {
-        return !holder.screen || screenAdmits(_bundle->screens.at(*holder.screen), request.session, authorizer);
+        return !holder.screen || screenAdmitted(_bundle->screens.at(*holder.screen), request.session, authorizer);
     });
     return admitted ? Answer{.encoded = ok(request, found->second.bytes), .subject = hash, .outcome = "ok"}
                     : Answer{
@@ -998,11 +1010,6 @@ UiService::Answer UiService::fetchAnswer(::morph::wire::Envelope const& request,
                           .subject = hash,
                           .outcome = "refused: unauthorized",
                       };
-}
-
-bool UiService::screenAdmits(ServedScreen const& screen, ::morph::session::Context const& session,
-                             ::morph::session::IAuthorizer const& authorizer) {
-    return screen.entry.available && permitsAll(authorizer, session, screen.topQueries);
 }
 
 }  // namespace morph::ui

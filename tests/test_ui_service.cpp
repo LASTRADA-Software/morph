@@ -577,3 +577,24 @@ TEST_CASE("UiRegistry: a theme token nothing reads is logged once at build and d
     CHECK(warnings == 1);
     CHECK(lines.size() == 1);
 }
+
+TEST_CASE("permittedActions answers ui-catalog's permitted, and screenAdmitted its admission", "[ui-service][catalog]") {
+    auto const bundle = uiservice::bundle();
+    auto const authorizer = uiservice::authorizer();
+    morph::session::Context tech;
+    tech.principal = "tech";
+
+    std::vector<std::string> const permitted = morph::ui::permittedActions(*bundle, tech, *authorizer);
+    CHECK(std::ranges::find(permitted, std::string{"Lims_List"}) != permitted.end());
+    CHECK(std::ranges::find(permitted, std::string{"Lims_Pending"}) == permitted.end());
+    CHECK(std::ranges::find(permitted, std::string{"Lims_Verify"}) == permitted.end());
+
+    auto const screen = [&bundle](std::string_view id) -> morph::ui::ServedScreen const& {
+        auto const found = std::ranges::find(bundle->screens, id, [](auto const& s) { return s.entry.id; });
+        REQUIRE(found != bundle->screens.end());
+        return *found;
+    };
+    CHECK(morph::ui::screenAdmitted(screen("lims.results"), tech, *authorizer));
+    CHECK_FALSE(morph::ui::screenAdmitted(screen("lims.verify"), tech, *authorizer));
+    CHECK_FALSE(morph::ui::screenAdmitted(screen("lims.billing"), tech, *authorizer));
+}
