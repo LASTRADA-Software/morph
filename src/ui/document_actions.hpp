@@ -6,6 +6,7 @@
 #include <morph/ui/document.hpp>
 #include <morph/ui/service.hpp>
 #include <set>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -35,12 +36,16 @@ public:
     }
 
     /// @brief The type the innermost open alias named @p alias names. Load-time validation requires every alias to
-    ///        be declared, so the fallback to @p alias itself is only for a document that skipped it.
+    ///        be declared, so an undeclared one cannot reach here; it throws rather than resolve to a made-up type.
     /// @param alias An alias name.
     /// @return Its type.
+    /// @throws std::logic_error When no open alias is named @p alias.
     [[nodiscard]] std::string resolve(std::string_view alias) const {
         auto const found = _types.find(alias);
-        return found == _types.end() || found->second.empty() ? std::string{alias} : found->second.back();
+        if (found == _types.end() || found->second.empty()) {
+            throw std::logic_error{"the model alias `" + std::string{alias} + "` is not declared"};
+        }
+        return found->second.back();
     }
 
 private:
