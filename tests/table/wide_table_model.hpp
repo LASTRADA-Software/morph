@@ -4,6 +4,10 @@
 // column store generated from a seed, read through a `DataSource`. A cell depends only on the seed, its column's
 // id and its row, so the same seed gives the same table on every machine, and the 300- and 30-column layouts agree
 // on the rows and columns they share.
+//
+// `WideTableModel` serves it as a registered model with three tables, so the table actions are measured and tested
+// over the bridge. Its registrations are in this header: a translation unit that names one of its tables'
+// `TableOf` or `ChangedRows` needs the table's registration in sight.
 
 #pragma once
 
@@ -11,6 +15,9 @@
 #include <cstddef>
 #include <cstdint>
 #include <memory>
+#include <morph/core/bridge.hpp>
+#include <morph/core/effects.hpp>
+#include <morph/core/registry.hpp>
 #include <morph/table/data_source.hpp>
 #include <morph/table/description.hpp>
 #include <mutex>
@@ -105,4 +112,58 @@ private:
 // FNV-1a 64 over displayText(cell) of every row and column of the source, row by row, each followed by '\x1f'.
 [[nodiscard]] std::uint64_t digestForTesting(WideTableSource const& source);
 
+inline constexpr std::string_view kWideModelType = "WideTableModel";
+
+// Sets one integer cell: `row` is the row index (its key is row + 1), `column` an integer column of the wide layout.
+struct EditWideRow {
+    std::int64_t row = 0;
+    std::string column;
+    std::int64_t value = 0;
+};
+
+// Generates every row of both tables again from `seed`.
+struct ReplaceWideRows {
+    std::uint64_t seed = 1;
+};
+
+struct EditWideRowResult;
+
+// The fixture as a model: tables `wide` (the 300-column layout), `small` (the 30-column one) and `scoped` (small's
+// rows, its columns by principal). Its state is process-wide, so every instance serves the same rows.
+class WideTableModel {
+public:
+    // Replaces both tables' options and drops both sources; each is built again, lazily, by the first table call
+    // that needs it. A request already holding a source keeps it. Callable at any time, from any test case.
+    static void configure(WideTableOptions wide, WideTableOptions small);
+
+    // wideDescription("wide", 300) over one shared WideTableSource.
+    [[nodiscard]] morph::table::ServedTable wide(morph::table::TableContext const& context);
+    // wideDescription("small", 30) over one shared WideTableSource.
+    [[nodiscard]] morph::table::ServedTable small(morph::table::TableContext const& context);
+    // small's rows; its description is small's without d000..d005 for every principal but "extended" (all 30),
+    // and for "restricted" also without t000..t006. A column outside the caller's description is not readable.
+    [[nodiscard]] morph::table::ServedTable scoped(morph::table::TableContext const& context);
+
+    // Sets the cell in `wide`, and in `small` when the row and the column are there; names the row in each.
+    [[nodiscard]] EditWideRowResult execute(EditWideRow const& action);
+    // Regenerates both tables from the seed.
+    bool execute(ReplaceWideRows const& action);
+};
+
+struct EditWideRowResult {
+    morph::table::ChangedRows<&WideTableModel::wide> wide;
+    morph::table::ChangedRows<&WideTableModel::small> small;
+};
+
 }  // namespace bench
+
+BRIDGE_REGISTER_MODEL(bench::WideTableModel, "WideTableModel")
+BRIDGE_REGISTER_TABLE(bench::WideTableModel, "wide", &bench::WideTableModel::wide)
+BRIDGE_REGISTER_TABLE(bench::WideTableModel, "small", &bench::WideTableModel::small)
+BRIDGE_REGISTER_TABLE(bench::WideTableModel, "scoped", &bench::WideTableModel::scoped)
+BRIDGE_REGISTER_ACTION(bench::WideTableModel, bench::EditWideRow, "EditWideRow")
+BRIDGE_REGISTER_ACTION(bench::WideTableModel, bench::ReplaceWideRows, "ReplaceWideRows")
+BRIDGE_REGISTER_EFFECTS(bench::EditWideRow, morph::effects::updatesTable<&bench::WideTableModel::wide>,
+                        morph::effects::updatesTable<&bench::WideTableModel::small>)
+BRIDGE_REGISTER_EFFECTS(bench::ReplaceWideRows, morph::effects::changesTable<&bench::WideTableModel::wide>,
+                        morph::effects::changesTable<&bench::WideTableModel::small>)

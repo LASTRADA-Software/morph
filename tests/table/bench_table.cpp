@@ -16,12 +16,16 @@
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
+#include <exception>
 #include <functional>
 #include <glaze/glaze.hpp>
 #include <memory>
+#include <morph/core/backend.hpp>
+#include <morph/core/bridge.hpp>
 #include <morph/core/executor.hpp>
 #include <morph/core/wire.hpp>
 #include <morph/detail/reflected_member.hpp>
+#include <morph/session/session.hpp>
 #include <morph/table/description.hpp>
 #include <morph/table/engine.hpp>
 #include <morph/table/query.hpp>
@@ -665,6 +669,50 @@ TEST_CASE("table benchmark: the generic page", "[.benchmark][wire]") {
                   REQUIRE(read.has_value());
                   REQUIRE(read->rows.size() == 200);
               }));
+
+    // W1, W2 over the bridge: the same page as the `Table.wide` reply, through LocalBackend, and the server's side
+    // of it (the table function, the pinned snapshot, the answer and its JSON).
+    bench::WideTableModel::configure({.rows = 1'000, .columns = 300, .seed = 1, .loadDelay = {}},
+                                     {.rows = 1'000, .columns = 30, .seed = 1, .loadDelay = {}});
+    TableQuery query;
+    query.page = PageRequest{.offset = 0, .limit = 200};
+    query.columns = forty;
+    {
+        morph::exec::ThreadPoolExecutor pool{2};
+        morph::exec::MainThreadExecutor owner;
+        morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool), owner};
+        morph::bridge::BridgeHandler<bench::WideTableModel> handler{bridge, &owner};
+        using WideQuery = QueryTable<&bench::WideTableModel::wide>;
+        auto const fetch = [&] {
+            std::optional<GenericPage> reply;
+            handler.execute(WideQuery{.query = query})
+                .then([&reply](GenericPage page) { reply = std::move(page); })
+                .onError([](std::exception_ptr const&) {});
+            auto const deadline = Clock::now() + std::chrono::seconds{30};
+            while (!reply && Clock::now() < deadline) {
+                owner.runFor(std::chrono::milliseconds{1});
+            }
+            REQUIRE(reply.has_value());
+            return std::move(*reply);
+        };
+        auto const reply = fetch();
+        REQUIRE(reply.keys.size() == 200);
+        REQUIRE(cellsOf(reply) == 8'000);
+        auto const replyBody = jsonOf(reply);
+        auto const replyEnvelope = morph::wire::encode(morph::wire::makeOk(1, replyBody)).size();
+        printWire("W1", "Table.wide reply, 200 x 40, through LocalBackend, in an ok envelope", replyEnvelope,
+                  Spread{});
+        printWire("W1", "Table.wide round trip through LocalBackend", replyBody.size(),
+                  timed(kRuns, [&] { REQUIRE(fetch().keys.size() == 200); }));
+        morph::session::Context const session{};
+        TableContext const context{.session = session};
+        bench::WideTableModel model;
+        printWire("W2", "Table.wide server side: serve, pin, answer, encode", replyBody.size(), timed(kRuns, [&] {
+                      auto const answer = detail::answerQuery(detail::pinned(model.wide(context)), query);
+                      REQUIRE(answer.has_value());
+                      REQUIRE(jsonOf(*answer).size() == replyBody.size());
+                  }));
+    }
 
     // W5: the same 200 x 30 rows as generic rows and as a typed page.
     auto const thirty = columnIds(small, 0, 30);

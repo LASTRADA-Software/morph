@@ -9,6 +9,7 @@ add_executable(morph_net_tests
     test_socket_backend.cpp
     test_push_net.cpp
     test_push_two_clients.cpp
+    test_push_tables.cpp
 )
 
 target_link_libraries(morph_net_tests

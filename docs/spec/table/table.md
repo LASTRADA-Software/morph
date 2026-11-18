@@ -2954,6 +2954,8 @@ spread reflects. A row marked *not yet measured* says why; its figure is taken w
 | W7 | 0 | A page of 200 × 300 as typed row objects (a decimal as its `{"num","den","dp"}` object, a quantity as its amount): 2,162,606 bytes; encode 14.7 ms (14.4–15.7) | A, 82–91% busy | 2026-11-17 |
 | W1 | 1 | A generic page of 200 rows and the 40 columns at positions 100 to 139, in an `ok` envelope: 116,155 bytes; no other column's cell | A, 12–23% busy | 2026-11-18 |
 | W2 | 1 | That page: `writeGenericPage` and its JSON from the column store 1.48 ms (1.45–1.62); `readGenericPage` 2.33 ms (2.21–3.01) | A, 12–23% busy | 2026-11-18 |
+| W1 | 1 | The same page as the `Table.wide` reply through `LocalBackend` (a `TableQuery` naming those 40 columns, page of 200), in an `ok` envelope: 116,171 bytes, 16 more than W1's for the description's revision; the round trip 1.79 ms (1.41–2.15) | A, 80–88% busy | 2026-11-18 |
+| W2 | 1 | That reply's server side: the table function, the pinned snapshot, `answerQuery` and the page's JSON, 2.25 ms (1.65–2.44) | A, 80–88% busy | 2026-11-18 |
 | W5 | 1 | 200 × 30: generic page 405,396 bytes, encode 3.00 ms (2.91–4.00); typed `Page<Row>` with an absent member for an empty cell 479,205 bytes, encode 1.87 ms (1.80–1.91); generic / typed 0.85, above the 0.7 budget | A, 12–23% busy | 2026-11-18 |
 | W6 | 1 | The 300-column description: 42,494 bytes; encode with `describe` 0.23 ms (0.23–0.24); decode 0.14 ms (0.14–0.15) | A, 12–23% busy | 2026-11-18 |
 | W7 | 1 | A generic page of 200 × 300 in an `ok` envelope: 1,443,726 bytes, under `kMaxEnvelopeBytes`; encode 17.0 ms (16.5–19.0) and decode 18.7 ms (17.8–21.6), above the 10 ms and 15 ms budgets | A, 12–23% busy | 2026-11-18 |

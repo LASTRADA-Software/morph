@@ -30,6 +30,7 @@
 #include "../core/backend.hpp"
 #include "../journal/action_log.hpp"
 #include "../session/session.hpp"
+#include "../table/runtime.hpp"
 #include "../util/datetime.hpp"
 #include "changes.hpp"
 #include "completion.hpp"
@@ -371,6 +372,12 @@ struct ServerConfig {
     /// the instant is judged by reading `clock`, never by the length of the sleep. Not positive is refused by the
     /// constructor.
     std::chrono::milliseconds clockRecheck{1000};
+
+    /// @brief Where a table's reply is built: the sort, the filter and the page of a `Table.<id>` action, after
+    ///        the table's function has run on the model's strand. Null: the server's worker pool.
+    ///
+    /// A pool, so that a sort of many rows holds neither the model's strand nor the server's.
+    std::shared_ptr<::morph::exec::IExecutor> tableWork;
 };
 
 /// @brief Server-side message handler that owns model instances and dispatches actions.
@@ -525,7 +532,8 @@ public:
           _config{validated(std::move(config))},
           _executeTimeouts{_config.limits.executeTimeout.count() > 0
                                ? std::make_unique<::morph::async::detail::TimeoutScheduler>()
-                               : nullptr} {
+                               : nullptr},
+          _tableRuntime{.work = _config.tableWork != nullptr ? _config.tableWork.get() : &workerPool} {
         // The first read of the record and effects registries: an invalid
         // declaration fails the server's construction rather than its first
         // successful execute, whose changes are derived from them.
@@ -2880,6 +2888,7 @@ private:
         try {
             ::morph::session::detail::ScopedContext const scoped{run.env.session};
             ::morph::session::detail::ScopedOrigin const originScope{run.origin ? &*run.origin : nullptr};
+            ::morph::table::TableRuntimeScope const tableScope{run.self->_tableRuntime};
             result = run.self->_dispatcher.dispatch(run.env.modelType, run.env.actionType, *run.holder, run.env.body);
         } catch (...) {
             error = std::current_exception();
@@ -2897,6 +2906,7 @@ private:
         try {
             ::morph::session::detail::ScopedContext const scoped{run->env.session};
             ::morph::session::detail::ScopedOrigin const originScope{run->origin ? &*run->origin : nullptr};
+            ::morph::table::TableRuntimeScope const tableScope{run->self->_tableRuntime};
             auto const& strands = run->self->_strands;
             executor =
                 std::make_shared<::morph::exec::detail::TaskResumer>(strands, run->mid, run->env.session, run->origin);
@@ -3014,6 +3024,8 @@ private:
     // Fixed at construction, so a model strand's finish can cancel through it
     // without a lock.
     std::unique_ptr<::morph::async::detail::TimeoutScheduler> const _executeTimeouts;
+    // What a table's action reads during a dispatch: `tableWork`, or the worker pool. Fixed at construction.
+    ::morph::table::TableRuntime const _tableRuntime;
 
     // ── Server-strand state: touched only in the server strand's tasks ──────
     // Every live instance, private and shared alike, plus the shared-instance

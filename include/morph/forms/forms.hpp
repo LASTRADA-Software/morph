@@ -622,6 +622,13 @@ template <typename A>
     return {};
 }
 
+/// @brief Whether glaze writes @p T as one of its own members: its `glz::meta`
+///        value is a member pointer, as a table's query action's is.
+/// @tparam T A class type.
+template <typename T>
+concept WrittenAsMember = requires { glz::meta<T>::value; } &&
+                          std::is_member_object_pointer_v<std::remove_cvref_t<decltype(glz::meta<T>::value)>>;
+
 /// @brief Invokes `visitor.operator()<I>(name, member)` for every key glaze
 ///        reflects on @p action, with the value glaze reads and writes under
 ///        that key (`morph::detail::reflectedMember`). Under a `glz::meta`
@@ -640,15 +647,22 @@ template <typename A, typename Visitor>
 // NOLINTNEXTLINE(cppcoreguidelines-missing-std-forward)
 constexpr void forEachNamedMember(A&& action, Visitor&& visitor) {
     using Plain = std::remove_cvref_t<A>;
-    constexpr auto memberCount = glz::reflect<Plain>::size;
-    [&]<std::size_t... I>(std::index_sequence<I...>) {
-        // `I` is a pack of `std::index_sequence<memberCount>`, i.e. every value in
-        // [0, glz::reflect<Plain>::size), and `keys` is an array of exactly that
-        // size — the index cannot be out of range by construction. The directive
-        // stays on one physical line; see the note at detail/fixed_string.hpp:48.
-        // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access)
-        (visitor.template operator()<I>(glz::reflect<Plain>::keys[I], morph::detail::reflectedMember<I>(action)), ...);
-    }(std::make_index_sequence<memberCount>{});
+    // A type glaze writes as one of its members (its `glz::meta` value is a
+    // member pointer) has that member's keys.
+    if constexpr (WrittenAsMember<Plain>) {
+        forEachNamedMember(action.*(glz::meta<Plain>::value), visitor);
+    } else {
+        constexpr auto memberCount = glz::reflect<Plain>::size;
+        [&]<std::size_t... I>(std::index_sequence<I...>) {
+            // `I` is a pack of `std::index_sequence<memberCount>`, i.e. every value in
+            // [0, glz::reflect<Plain>::size), and `keys` is an array of exactly that
+            // size — the index cannot be out of range by construction. The directive
+            // stays on one physical line; see the note at detail/fixed_string.hpp:48.
+            // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access)
+            (visitor.template operator()<I>(glz::reflect<Plain>::keys[I], morph::detail::reflectedMember<I>(action)),
+             ...);
+        }(std::make_index_sequence<memberCount>{});
+    }
 }
 
 /// @brief Extracts the containing class type from a pointer-to-member type.
