@@ -22,6 +22,8 @@
 #include <print>
 #include <string>
 #include <string_view>
+#include <unordered_set>
+#include <utility>
 #include <variant>
 #include <vector>
 
@@ -231,6 +233,60 @@ TEST_CASE("interpreter baseline: U1 U2 a rows table of 100,000", "[.benchmark][b
     printRow("U2: one row renamed in the sorted table, click to settled", kRows, spreadOf(renames));
 }
 
+namespace {
+
+// The bytes a document value holds, as the cells' `approximateCellBytes` counts a cell: the `Value` itself, a string's
+// heap buffer when it has one, a list's or a record's container and its elements, with each map node's pointers.
+// A list or record shared between values is counted once; allocator overhead is not counted, as for the cells.
+class ValueBytes {
+public:
+    [[nodiscard]] std::size_t of(ui::Value const& value) { return sizeof(ui::Value) + held(value); }
+
+private:
+    // What @p value holds outside its own `sizeof`.
+    std::size_t held(ui::Value const& value) {
+        if (std::string const* const text = value.asString()) {
+            return heap(*text);
+        }
+        if (ui::Quantity const* const quantity = value.asQuantity()) {
+            return heap(quantity->unit);
+        }
+        if (ui::ValueList const* const list = value.asList()) {
+            if (!_seen.insert(list).second) {
+                return 0;
+            }
+            std::size_t bytes = kControlBlock + sizeof(ui::ValueList) + (list->capacity() * sizeof(ui::Value));
+            for (ui::Value const& item : *list) {
+                bytes += held(item);
+            }
+            return bytes;
+        }
+        if (ui::ValueRecord const* const record = value.asRecord()) {
+            if (!_seen.insert(record).second) {
+                return 0;
+            }
+            std::size_t bytes = kControlBlock + sizeof(ui::ValueRecord) + kMapNode;  // the map's sentinel node
+            for (auto const& [key, field] : *record) {
+                bytes += kMapNode + heap(key) + held(field);
+            }
+            return bytes;
+        }
+        return 0;
+    }
+
+    [[nodiscard]] static std::size_t heap(std::string const& text) {
+        return text.capacity() > std::string{}.capacity() ? text.capacity() + 1 : 0;
+    }
+
+    // A shared_ptr's control block: two counts and a vtable pointer.
+    static constexpr std::size_t kControlBlock = 2 * sizeof(long) + sizeof(void*);
+    // A map node: its key and value, three links and its colour, padded.
+    static constexpr std::size_t kMapNode = sizeof(std::pair<std::string const, ui::Value>) + (4 * sizeof(void*));
+    std::unordered_set<void const*> _seen;
+};
+
+}  // namespace
+
 TEST_CASE("interpreter baseline: U4 memory of a rows table", "[.benchmark][baseline]") {
     constexpr std::size_t kRows = 10'000;
     bench::WideTableSource const source{{.rows = kRows, .columns = 300, .seed = 1}};
@@ -246,17 +302,22 @@ TEST_CASE("interpreter baseline: U4 memory of a rows table", "[.benchmark][basel
   "view": {{ "kind": "table", "rows": {{ "ref": "items" }}, "sort": {{ "lit": [ {{ "column": "t001", "direction": "asc" }} ] }},
              "columns": [{}] }} }})",
         bench::wideRowsJson(source), bench::wideColumnsJson(source));
-    auto const before = bench::processBytes();
     Harness h;
     auto screen = h.mount(document);
-    auto const after = bench::processBytes();
     REQUIRE(realizedWindow(h).ends_with("/10000"));
-    std::println("\nU4: a rows table of 10,000 x 300 sorted on one column\n\n| held as | bytes | MiB |\n|---|---:|---:|\n"
-                 "| the same rows as cells (approximateCellBytes) | {} | {:.1f} |\n"
-                 "| the mounted document: process bytes after mount over before | {} | {:.1f} |",
+    auto const reference = ui::parseJson(R"({"ref": "items"})");
+    REQUIRE(reference.has_value());
+    ui::Value const items = screen->read(*reference);
+    REQUIRE(items.asList() != nullptr);
+    REQUIRE(items.asList()->size() == kRows);
+    auto const valueBytes = ValueBytes{}.of(items);
+    std::println("\nU4: a rows table of 10,000 x 300 sorted on one column\n\n| held as | bytes | MiB | bytes per cell |\n"
+                 "|---|---:|---:|---:|\n"
+                 "| cells (approximateCellBytes) | {} | {:.1f} | {:.1f} |\n"
+                 "| the state's document values | {} | {:.1f} | {:.1f} |",
                  cellBytes, static_cast<double>(cellBytes) / (1024.0 * 1024.0),
-                 static_cast<std::int64_t>(after) - static_cast<std::int64_t>(before),
-                 (static_cast<double>(after) - static_cast<double>(before)) / (1024.0 * 1024.0));
+                 static_cast<double>(cellBytes) / (kRows * 300.0), valueBytes,
+                 static_cast<double>(valueBytes) / (1024.0 * 1024.0), static_cast<double>(valueBytes) / (kRows * 300.0));
     static_cast<void>(std::fflush(stdout));
 }
 

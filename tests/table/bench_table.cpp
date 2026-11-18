@@ -385,7 +385,7 @@ TEST_CASE("table baseline: S1 S2 S7 over the wide table", "[.benchmark][baseline
 }
 
 #ifndef __EMSCRIPTEN__
-// Native only: the VectorSource of the same rows holds near 1.7 GB of cells.
+// Native only: the VectorSource of the same rows holds about 2 GiB of cells.
 TEST_CASE("table baseline: S8 resident bytes", "[.benchmark][baseline]") {
     bench::WideTableSource const wide{{.rows = kWideRows, .columns = 300, .seed = 1}};
     auto const snapshot = wide.snapshot();

@@ -35,7 +35,7 @@ struct WideTableOptions {
     std::int64_t rows = 100'000;
     int columns = 300;  // 300 or 30; anything else throws std::invalid_argument
     std::uint64_t seed = 1;
-    std::chrono::microseconds loadDelay{0};  // the slow level's wait per key
+    std::chrono::microseconds loadDelay{0};  // not read by WideTableSource, which has no slow level
 };
 
 // The bits a cell is generated from: splitmix64(splitmix64(seed ^ fnv1a64(column)) + row).
@@ -53,8 +53,10 @@ struct ColumnData;
 
 // The fixture's rows as a `DataSource`. The row key of row r is r + 1, which is also the `id` column's value.
 //
-// snapshot(), setCell() and regenerate() hold one mutex around reading or swapping the snapshot pointer, and notify
-// listeners after releasing it, so many clients' strands may share one source. subscribe() and unsubscribe() are
+// snapshot() and options() hold one mutex only around reading the snapshot pointer or the options, and setCell() and
+// regenerate() only around swapping them: a writer builds its new columns before it takes that mutex, under a second
+// one that orders writers, so a reader never waits for a column to be copied or generated. Listeners are notified
+// after both are released, so many clients' strands may share one source. subscribe() and unsubscribe() are
 // owner-affine, as for every source.
 class WideTableSource final : public morph::table::DataSource {
 public:
@@ -66,7 +68,8 @@ public:
     void unsubscribe(morph::table::ChangeListener& listener) override;
 
     [[nodiscard]] std::vector<WideColumn> const& layout() const noexcept;
-    [[nodiscard]] WideTableOptions const& options() const noexcept;
+    // A copy, since regenerate() changes the seed.
+    [[nodiscard]] WideTableOptions options() const;
     // Bytes of the column arrays, capacity included.
     [[nodiscard]] std::size_t residentBytes() const noexcept;
 
@@ -82,6 +85,7 @@ private:
     WideTableOptions _options;
     std::vector<WideColumn> _layout;
     std::vector<morph::table::ColumnInfo> _columns;
+    std::mutex _writer;
     mutable std::mutex _mutex;
     std::shared_ptr<morph::table::RowSnapshot const> _snapshot;
     std::vector<std::shared_ptr<detail::ColumnData const>> _data;

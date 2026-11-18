@@ -4,13 +4,13 @@
 // `rows` table of 2,000 x 300 that the native F2 to F5 baseline mounts, scrolls it down by one viewport over one
 // second, and prints to the console:
 //
-//   mounted rows=2000 ms=<mount time>
+//   mounted rows=2000 realized=<rows realized> ms=<mount time>
 //   frame ms=<time between frames>     (one per frame of the scroll)
 //   done
 //
 // Run it in a headless browser: emrun --browser chrome --browser_args=--headless=new wide_rows_baseline.html
-// Its guard is the `mounted rows=2000` line: a mount that realized nothing, or a table of another size, prints
-// something else.
+// Its guard is the `mounted rows=2000` line, printed only when the table holds 2,000 rows and realized at least one;
+// otherwise it prints a line that starts with `failed:`.
 
 #include <QCoreApplication>
 #include <QElapsedTimer>
@@ -66,9 +66,13 @@ struct Run {
     qint64 lastFrame = 0;
     double scrollFrom = 0;
     double scrollBy = 0;
+    int framesWaited = 0;
     bool mounted = false;
     bool scrolling = false;
 };
+
+// Frames the run waits for the table to appear before it reports a failure.
+constexpr int kMaxFramesWaited = 600;
 
 void print(std::string const& line) {
     std::puts(line.c_str());
@@ -91,13 +95,13 @@ int main(int argc, char* argv[]) {
         run->clock.start();
         auto loaded = morph::ui::loadDocumentText(document, morph::ui::LoadOptions{});
         if (!loaded) {
-            print("refused: " + loaded.error().message());
+            print("failed: refused: " + loaded.error().message());
             return;
         }
         auto screen = run->interpreter.mount(std::make_shared<morph::ui::Document const>(std::move(*loaded)), {},
                                              run->backend);
         if (!screen) {
-            print("refused: " + screen.error().message());
+            print("failed: refused: " + screen.error().message());
             return;
         }
         run->screen = std::move(*screen);
@@ -112,15 +116,25 @@ int main(int argc, char* argv[]) {
         if (!run->mounted && run->screen) {
             auto const* const table = morph::qt_quick::detail::findWidget(QStringLiteral("wide"));
             if (table == nullptr || table->item() == nullptr) {
+                if (++run->framesWaited >= kMaxFramesWaited) {
+                    print("failed: no table after " + std::to_string(kMaxFramesWaited) + " frames");
+                    return;
+                }
                 run->window.requestUpdate();
                 return;
             }
             run->mounted = true;
-            print("mounted rows=" + std::to_string(table->item()->property("totalRows").toInt()) +
+            int const total = table->item()->property("totalRows").toInt();
+            int const realized = table->item()->property("realizedCount").toInt();
+            if (total != 2'000 || realized <= 0) {
+                print("failed: rows=" + std::to_string(total) + " realized=" + std::to_string(realized));
+                return;
+            }
+            print("mounted rows=" + std::to_string(total) + " realized=" + std::to_string(realized) +
                   " ms=" + std::to_string(now));
             run->flick = table->item()->findChild<QQuickItem*>(QStringLiteral("flick"));
             if (run->flick == nullptr) {
-                print("no flick");
+                print("failed: no flick");
                 return;
             }
             run->scrollFrom = run->flick->property("contentY").toReal();
