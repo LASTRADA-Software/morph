@@ -3013,6 +3013,12 @@ spread reflects. A row marked *not yet measured* says why; its figure is taken w
 | D2 | 3 | The same with the search `"abc"`: 30.9 ms (18.2–33.7), above D1 in this run (an earlier run on the same build at 63–84% busy: D1 33.7 ms, D2 29.0 ms) | A, 40–54% busy | 2026-11-18 |
 | D3 | 3 | The same with `o1 ge 20` and `o2 lt 80`, `o2` unloaded in 30% of the rows, `partial` set: 20.0 ms (14.3–28.2) | A, 40–54% busy | 2026-11-18 |
 | D4 | 3 | A `oneOf` of 10,000 texts: compiled in 2.07 ms (2.01–2.21); 100,000 rows filtered with it, keys built, in 6.51 ms (6.22–9.13) | A, 40–54% busy | 2026-11-18 |
+| G1 | 3 | `Engine::setFilter` of an `any` group with a `oneOf` of 2 values, 100,000 rows, keys held: 3 columns 23.3 ms (12.8–23.5); 16 columns 79.9 ms (72.1–96.9), above the 45 ms budget | A, 43–70% busy | 2026-11-18 |
+| G2 | 3 | The same with a `oneOf` of 1,000 values: 18.7 ms (17.7–19.5); 113.2 ms (76.9–123.8), above 1.2 × G1 | A, 43–70% busy | 2026-11-18 |
+| G3 | 3 | `atLeast 2`: 15.1 ms (14.7–17.3); 80.9 ms (79.4–83.5). `exactly 1`: 20.6 ms (18.6–23.5); 70.7 ms (53.6–78.3) | A, 43–70% busy | 2026-11-18 |
+| G4 | 3 | `together`, 2 entries over 3 columns: 11.6 ms (10.6–14.8); 16 entries over 16 columns: 93.4 ms (82.9–101.6) | A, 43–70% busy | 2026-11-18 |
+| G6 | 3 | Pooled distinct values through the engine, first 200 of 32: 3 columns 15.1 ms (15.0–15.3); 16 columns 56.5 ms (52.5–61.7) | A, 43–70% busy | 2026-11-18 |
+| G7 | 3 | G1 and G4 with a third of the cells unloaded: G1 16.6 ms (16.4–20.8) and 88.1 ms (69.1–96.5); G4 21.9 ms (21.4–22.2) and 287.4 ms (273.1–313.7), above 1.2 × the loaded figure: a row with an unknown column reads every column and runs the wildcard matching | A, 43–70% busy | 2026-11-18 |
 | U1 | 0 | A document `rows` table of 100,000 rows on the recording backend, a bound sort set on a text column, click to settled: 2,921.5 ms (2,860.0–3,017.6). The rows realized after the sort are the ones realized before it, reordered, not the view's first rows: the figure is the interpreter's sort and reconcile, not a correct window | A, 82–91% busy | 2026-11-17 |
 | U2 | 0 | The same table sorted, one row's name replaced in `items`, click to settled: 2,941.3 ms (2,881.4–2,992.2) | A, 82–91% busy | 2026-11-17 |
 | U3 | 0 | Text folds of the interpreter's sort of 100,000 rows: *not yet measured* — the interpreter folds with a `CodePointCollator` it constructs inside the comparison and takes none from outside, so no counting collator can be installed; the count needs that seam | — | — |

@@ -753,11 +753,17 @@ public:
     }
 
     /// @brief Sets the filter.
+    ///
+    /// A group filter's `group` resolves through the source's declared groups, which are checked first
+    /// (`detail::checkGroups`).
     /// @param spec The filter; an empty spec shows every row.
-    /// @return The compile error, naming its column; or `ServiceFailed` or
-    ///         `SourceContract`, as for `setSort`, when the filter ran inside
-    ///         the call. The filter is then unchanged.
+    /// @return `SourceContract` when the source's declared groups are malformed; the compile error, naming its
+    ///         column; or `ServiceFailed` or `SourceContract`, as for `setSort`, when the filter ran inside the
+    ///         call. The filter is then unchanged.
     std::expected<void, TableError> setFilter(FilterSpec spec) {
+        if (auto error = detail::checkGroups(_columns, _source->groups())) {
+            return std::unexpected(std::move(*error));
+        }
         auto compiled = compile(spec);
         if (!compiled) {
             return std::unexpected(std::move(compiled.error()));
@@ -1047,11 +1053,18 @@ private:
         std::erase_if(_sort, [&](SortKey const& key) { return !detail::findColumn(_columns, key.column); });
         std::erase_if(_filterSpec.columns,
                       [&](auto const& entry) { return !detail::findColumn(_columns, entry.first).has_value(); });
+        // A filter on a declared group stays while the source still declares the group.
+        auto const declared = _source->groups();
+        std::erase_if(_filterSpec.groups, [&declared](GroupFilter const& group) {
+            return !group.group.empty() &&
+                   std::ranges::find(declared, group.group, &ColumnGroupInfo::id) == declared.end();
+        });
         for (auto& group : _filterSpec.groups) {
             std::erase_if(group.columns,
                           [&](std::string const& columnId) { return !detail::findColumn(_columns, columnId); });
         }
-        std::erase_if(_filterSpec.groups, [](GroupFilter const& group) { return group.columns.empty(); });
+        std::erase_if(_filterSpec.groups,
+                      [](GroupFilter const& group) { return group.columns.empty() && group.group.empty(); });
         auto compiled = compile(_filterSpec);
         if (compiled) {
             _filter = std::make_shared<CompiledFilter const>(std::move(*compiled));
@@ -1064,7 +1077,7 @@ private:
 
     // The shared guarded compile: an exception from the collator or date parser is an error.
     [[nodiscard]] std::expected<CompiledFilter, TableError> compile(FilterSpec const& spec) const {
-        return compileFilterGuarded(spec, _columns, _options.services);
+        return compileFilterGuarded(spec, _columns, _options.services, _source->groups());
     }
 
     // ── scheduling ──────────────────────────────────────────────────────────

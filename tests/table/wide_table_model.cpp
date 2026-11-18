@@ -410,25 +410,36 @@ std::vector<std::string> levelsOf(morph::table::TableDescription const& descript
 
 }  // namespace
 
+std::vector<morph::table::ColumnGroupInfo> wideGroups(std::vector<WideColumn> const& layout) {
+    std::vector<morph::table::ColumnGroupInfo> out;
+    for (auto const& column : layout) {
+        if (column.group.empty()) {
+            continue;
+        }
+        auto group = std::ranges::find(out, column.group, &morph::table::ColumnGroupInfo::id);
+        if (group == out.end()) {
+            out.push_back(morph::table::ColumnGroupInfo{.id = column.group, .label = {}, .columns = {}});
+            group = std::prev(out.end());
+        }
+        group->columns.push_back(column.info.id);
+    }
+    for (auto& group : out) {
+        group.label = std::format("Group of {}", group.columns.size());
+    }
+    return out;
+}
+
 morph::table::TableDescription wideDescription(std::string id, int columns) {
     morph::table::TableDescription out;
     out.label = id;
     out.id = std::move(id);
     out.key = "id";
-    for (auto const& column : wideColumns(columns)) {
+    auto const layout = wideColumns(columns);
+    for (auto const& column : layout) {
         out.columns.push_back(
             morph::table::TableColumn{.info = column.info, .label = column.info.id, .group = column.group});
-        if (column.group.empty()) {
-            continue;
-        }
-        auto group = std::ranges::find(out.groups, column.group, &morph::table::ColumnGroupInfo::id);
-        if (group == out.groups.end()) {
-            out.groups.push_back(
-                morph::table::ColumnGroupInfo{.id = column.group, .label = column.group, .columns = {}});
-            group = std::prev(out.groups.end());
-        }
-        group->columns.push_back(column.info.id);
     }
+    out.groups = wideGroups(layout);
     out.levels = levelsOf(out);
     return out;
 }
@@ -452,10 +463,13 @@ WideTableSource::WideTableSource(WideTableOptions options)
     for (auto const& column : _layout) {
         _columns.push_back(column.info);
     }
+    _groups = wideGroups(_layout);
     regenerate(options.seed);
 }
 
 std::span<ColumnInfo const> WideTableSource::columns() const { return _columns; }
+
+std::span<morph::table::ColumnGroupInfo const> WideTableSource::groups() const { return _groups; }
 
 std::shared_ptr<morph::table::RowSnapshot const> WideTableSource::snapshot() const {
     std::scoped_lock const lock{_mutex};
@@ -620,6 +634,8 @@ UnloadedSource::UnloadedSource(std::shared_ptr<morph::table::DataSource> source,
 UnloadedSource::~UnloadedSource() { _source->unsubscribe(*this); }
 
 std::span<ColumnInfo const> UnloadedSource::columns() const { return _columns; }
+
+std::span<morph::table::ColumnGroupInfo const> UnloadedSource::groups() const { return _source->groups(); }
 
 std::shared_ptr<morph::table::RowSnapshot const> UnloadedSource::snapshot() const { return _snapshot; }
 

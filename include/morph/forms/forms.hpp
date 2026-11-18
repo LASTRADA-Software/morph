@@ -3280,6 +3280,42 @@ void annotateColumnLevels(glz::generic_u64& dom, std::span<std::string_view cons
 }
 // NOLINTEND(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access)
 
+/// @brief A row type that declares column groups, as
+///        `static constexpr std::array<table::ColumnGroup, N> columnGroups() noexcept`, each entry naming a group by
+///        `id` and its members by `columns`.
+/// @tparam A The type whose schema is being built.
+template <typename A>
+concept HasColumnGroups = requires {
+    { A::columnGroups() };
+};
+
+/// @brief Stamps `x-group` on each property `A::columnGroups()` names, so a table's column derived from the
+///        schema knows the declared group it is in (`docs/spec/table/table.md`, "Column groups").
+///
+/// A column naming a member `A` does not have is skipped here: the table refuses a group whose columns it lacks
+/// where it reads the columns.
+/// @tparam A Type whose schema is being annotated.
+/// @param dom         Schema DOM to stamp in place.
+/// @param memberNames Wire keys of every reflected member of `A`.
+// NOLINTBEGIN(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access) -- glaze DOM requires operator[]
+template <typename A>
+void annotateColumnGroups(glz::generic_u64& dom, std::span<std::string_view const> memberNames) {
+    if constexpr (HasColumnGroups<A>) {
+        for (auto const& group : A::columnGroups()) {
+            for (auto const column : group.columns) {
+                if (std::ranges::find(memberNames, column) == memberNames.end()) {
+                    continue;
+                }
+                dom["properties"][std::string{column}]["x-group"] = std::string{group.id};
+            }
+        }
+    } else {
+        static_cast<void>(dom);
+        static_cast<void>(memberNames);
+    }
+}
+// NOLINTEND(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access)
+
 /// @brief The DOM post-merge behind `schemaJson`: adds the derived `required`
 ///        array, `x-order`, `x-decimalPlaces`, and (for actions declaring
 ///        `computedFields`) `x-computed`/`x-readonly` to a glaze-produced schema.
@@ -3384,6 +3420,7 @@ template <typename A>
     // schema writer may have emitted (or omitted) for `required`.
     dom["required"] = requiredNames;
     annotateColumnLevels<A>(dom, memberNames);
+    annotateColumnGroups<A>(dom, memberNames);
 
     // Layout & grouping (docs/spec/forms/forms.md, "Layout & grouping"):
     // purely additive over the required/x-order pass above; a no-op unless

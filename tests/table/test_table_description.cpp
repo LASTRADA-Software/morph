@@ -1675,3 +1675,111 @@ TEST_CASE("answer query: a distinct request answers values and no rows", "[table
     CHECK(refused.error().code == TableErrorCode::Unavailable);
     // Mutation: the branch not reading capabilities.distinct.
 }
+
+namespace {
+
+// The groups truth table: companyA..C (Text), declared group "company"; keys 0..4.
+// 0: F, S, X   1: F, F, X   2: S, F, F   3: F, X, Y   4: X, Y, Z
+std::shared_ptr<VectorSource> companyRows() {
+    using S = std::string;
+    auto source = tabletest::makeSource(
+        {tabletest::col("companyA", ColumnKind::Text), tabletest::col("companyB", ColumnKind::Text),
+         tabletest::col("companyC", ColumnKind::Text)},
+        {{S{"F"}, S{"S"}, S{"X"}}, {S{"F"}, S{"F"}, S{"X"}}, {S{"S"}, S{"F"}, S{"F"}}, {S{"F"}, S{"X"}, S{"Y"}},
+         {S{"X"}, S{"Y"}, S{"Z"}}});
+    source->setGroups(
+        {ColumnGroupInfo{.id = "company", .label = "Company", .columns = {"companyA", "companyB", "companyC"}}});
+    return source;
+}
+
+ServedTable companyTable(std::shared_ptr<DataSource const> source) {
+    auto description = TableDescription{
+        .id = "companies",
+        .label = "Companies",
+        .columns = {column("companyA", ColumnKind::Text), column("companyB", ColumnKind::Text),
+                    column("companyC", ColumnKind::Text)},
+        .key = "companyA"};
+    description.groups.assign(source->groups().begin(), source->groups().end());
+    return detail::pinned(ServedTable{.description = describe(std::move(description)),
+                                      .source = std::move(source),
+                                      .levels = {},
+                                      .mayRead = {},
+                                      .scope = {},
+                                      .services = {},
+                                      .limits = {}});
+}
+
+}  // namespace
+
+// Mutations: answerQuery calling validate without the source's groups, and detail::PinnedSource not forwarding
+// groups(): the first reply is UnknownColumn naming "company". The scoped source returning no groups: the scoped
+// replies are UnknownColumn.
+TEST_CASE("answer query: a declared group filters and pools on the server", "[table][description][groups]") {
+    auto const source = companyRows();
+    TableQuery q;
+    q.filters.groups.push_back(
+        {.group = "company", .mode = GroupMode::Together, .include = {FilterEntry{.eq = "F"}, FilterEntry{.eq = "S"}}});
+    TableQuery pooled;
+    pooled.distinct = DistinctRequest{.group = "company"};
+    auto const expectedValues = distinctValues(*source, {}, *pooled.distinct);
+    REQUIRE(expectedValues);
+    std::vector<RowId> const all{std::int64_t{0}, std::int64_t{1}, std::int64_t{2}, std::int64_t{3}, std::int64_t{4}};
+    for (auto const& served : {companyTable(source), companyTable(scoped(source, all))}) {
+        auto const page = detail::answerQuery(served, q);
+        REQUIRE(page);
+        CHECK(page->keys == std::vector<RowId>{std::int64_t{0}, std::int64_t{2}});
+        auto const values = detail::answerQuery(served, pooled);
+        REQUIRE(values);
+        REQUIRE(values->distinct);
+        CHECK(*values->distinct == *expectedValues);
+    }
+}
+
+namespace tabledesc {
+
+// A typed table whose row type declares a column group.
+class GroupModel {
+public:
+    std::shared_ptr<std::vector<tabletest::GroupRow> const> rows(morph::table::TableContext const& context);
+};
+
+}  // namespace tabledesc
+
+BRIDGE_REGISTER_RECORD(tabletest::GroupRow, "GroupRow", morph::record::key<&tabletest::GroupRow::name>)
+BRIDGE_REGISTER_MODEL(tabledesc::GroupModel, "GroupModel")
+BRIDGE_REGISTER_TABLE(tabledesc::GroupModel, "groupRows",
+                      morph::table::typed<tabletest::GroupRow>(&tabledesc::GroupModel::rows))
+
+std::shared_ptr<std::vector<tabletest::GroupRow> const> tabledesc::GroupModel::rows(
+    morph::table::TableContext const& context) {
+    static_cast<void>(context);
+    return std::make_shared<std::vector<tabletest::GroupRow> const>(std::vector<tabletest::GroupRow>{
+        {.companyA = "F", .companyB = "S", .companyC = "X", .name = "a"},
+        {.companyA = "F", .companyB = "F", .companyC = "X", .name = "b"},
+        {.companyA = "S", .companyB = "F", .companyC = "F", .name = "c"}});
+}
+
+// Mutation: typedTable leaving description.groups empty.
+TEST_CASE("typed: a row's column groups reach the description", "[table][registration][groups]") {
+    morph::session::Context const session{};
+    TableContext const context{.session = session};
+    tabledesc::GroupModel model;
+    auto const served = detail::serve<&tabledesc::GroupModel::rows>(model, context);
+    REQUIRE(served.description.groups.size() == 1);
+    CHECK(served.description.groups[0] ==
+          ColumnGroupInfo{.id = "company", .label = "Company", .columns = {"companyA", "companyB", "companyC"}});
+    auto const companyB = std::ranges::find(served.description.columns, std::string{"companyB"},
+                                            [](TableColumn const& column) { return column.info.id; });
+    REQUIRE(companyB != served.description.columns.end());
+    CHECK(companyB->group == "company");
+    auto const name = std::ranges::find(served.description.columns, std::string{"name"},
+                                        [](TableColumn const& column) { return column.info.id; });
+    REQUIRE(name != served.description.columns.end());
+    CHECK(name->group.empty());
+    TableQuery q;
+    q.filters.groups.push_back(
+        {.group = "company", .mode = GroupMode::Together, .include = {FilterEntry{.eq = "F"}, FilterEntry{.eq = "S"}}});
+    auto const page = detail::answerQuery(detail::pinned(served), q);
+    REQUIRE(page);
+    CHECK(page->keys == std::vector<RowId>{std::string{"a"}, std::string{"c"}});
+}

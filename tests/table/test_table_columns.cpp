@@ -8,6 +8,7 @@
 //  - deriveColumns not skipping x-hidden members: "derived columns carry
 //    kind, title and metadata" fails (nine columns, not eight).
 //  - inferColumnKind swapping quantity and decimal: the same test fails.
+//  The x-group and typed-row group cases name their own mutations above them.
 
 #include <algorithm>
 #include <catch2/catch_test_macros.hpp>
@@ -15,12 +16,17 @@
 #include <glaze/glaze.hpp>
 #include <morph/forms/forms.hpp>
 #include <morph/forms/views.hpp>
+#include <memory>
 #include <morph/table/data_source.hpp>
+#include <morph/table/query.hpp>
 #include <morph/util/datetime.hpp>
 #include <morph/util/quantity.hpp>
 #include <morph/util/rational.hpp>
 #include <optional>
 #include <string>
+#include <vector>
+
+#include "table/table_fixtures.hpp"
 
 namespace tcol {
 
@@ -180,4 +186,48 @@ TEST_CASE("table: optional members keep their column kind", "[table][columns]") 
     CHECK(column("at")["kind"].get_string() == "dateTime");
     CHECK(column("mass")["kind"].get_string() == "quantity");
     CHECK(column("mass").contains("ExtUnits"));
+}
+
+// Mutation: the copy list in deriveColumns without "x-group".
+TEST_CASE("table: derived columns carry x-group", "[table][columns][groups]") {
+    glz::generic_u64 schema{};
+    REQUIRE_FALSE(glz::read_json(schema, morph::forms::schemaJson<tabletest::GroupRow>()));
+    CHECK(schema["properties"]["companyB"]["x-group"].get_string() == "company");
+    CHECK_FALSE(schema["properties"]["name"].contains("x-group"));
+    auto const json = morph::views::detail::deriveColumns<tcol::HideNothing, tabletest::GroupRow>();
+    INFO(json);
+    glz::generic columns;
+    REQUIRE_FALSE(glz::read_json(columns, json));
+    auto const& list = columns.get_array();
+    REQUIRE(list.size() == 4);
+    CHECK(list[1]["field"].get_string() == "companyB");
+    CHECK(list[1]["x-group"].get_string() == "company");
+    CHECK_FALSE(list[3].contains("x-group"));
+}
+
+// Mutation: RowsSource<Row>::groups() returning nothing: the typed apply is UnknownColumn.
+TEST_CASE("typed rows declare their groups to the source", "[table][columns][groups]") {
+    using morph::table::ColumnGroupInfo;
+    using morph::table::FilterEntry;
+    using morph::table::GroupMode;
+    using morph::table::RowId;
+    auto const rows = std::make_shared<std::vector<tabletest::GroupRow> const>(std::vector<tabletest::GroupRow>{
+        {.companyA = "F", .companyB = "S", .companyC = "X", .name = "a"},
+        {.companyA = "F", .companyB = "F", .companyC = "X", .name = "b"},
+        {.companyA = "S", .companyB = "F", .companyC = "F", .name = "c"}});
+    morph::table::RowKey<tabletest::GroupRow> const key = [](tabletest::GroupRow const& row) {
+        return RowId{row.name};
+    };
+    morph::table::RowsSource<tabletest::GroupRow> const source{rows, key};
+    REQUIRE(source.groups().size() == 1);
+    CHECK(source.groups()[0] ==
+          ColumnGroupInfo{.id = "company", .label = "company", .columns = {"companyA", "companyB", "companyC"}});
+    morph::table::TableQuery q;
+    q.filters.groups.push_back(
+        {.group = "company", .mode = GroupMode::Together, .include = {FilterEntry{.eq = "F"}, FilterEntry{.eq = "S"}}});
+    auto const page = morph::table::apply(*rows, key, q);
+    REQUIRE(page);
+    REQUIRE(page->rows.size() == 2);
+    CHECK(page->rows[0].name == "a");
+    CHECK(page->rows[1].name == "c");
 }

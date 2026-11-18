@@ -755,6 +755,32 @@ struct RowChange {
     std::vector<std::size_t> rows;
 };
 
+/// @brief A declared group of columns, filtered together.
+struct ColumnGroupInfo {
+    /// @brief The group's id, which a column's `group` names.
+    std::string id;
+    /// @brief The group's text.
+    std::string label;
+    /// @brief The ids of its columns, 2 to 16 of one kind.
+    std::vector<std::string> columns;
+
+    /// @brief Member-wise equality.
+    /// @param other The group to compare with.
+    /// @return `true` when every member matches.
+    [[nodiscard]] bool operator==(ColumnGroupInfo const& other) const = default;
+};
+
+/// @brief One group of a typed row's `columnGroups()`: how a row type declares its groups, at compile time.
+///
+/// A row type declares its groups once, as `static constexpr std::array<table::ColumnGroup, N> columnGroups()
+/// noexcept`; each group's `columns` views an array that outlives the program.
+struct ColumnGroup {
+    /// @brief The group's id.
+    std::string_view id;
+    /// @brief Its columns, by the members' JSON names.
+    std::span<std::string_view const> columns;
+};
+
 /// @brief Receives a `DataSource`'s change notifications, on the owner thread.
 // NOLINTBEGIN(cppcoreguidelines-special-member-functions)
 class ChangeListener {
@@ -791,8 +817,56 @@ public:
     /// @brief Removes @p listener.
     /// @param listener A listener previously subscribed.
     virtual void unsubscribe(ChangeListener& listener) = 0;
+
+    /// @brief The table's declared column groups: what a `GroupFilter` naming a `group` resolves through.
+    /// @return The groups; none unless the source declares some.
+    [[nodiscard]] virtual std::span<ColumnGroupInfo const> groups() const { return {}; }
 };
 // NOLINTEND(cppcoreguidelines-special-member-functions)
+
+namespace detail {
+
+/// @brief Checks a source's declared groups against its columns.
+///
+/// Each group has 2 to 16 columns, every one of them a column of the source and all of one kind, and no column is
+/// in two groups. Run where the columns are read (`apply`, `distinctValues`, `Engine::setFilter`, a server's
+/// reply), since a declaration is the source's contract.
+/// @param columns The source's columns.
+/// @param groups  Its declared groups.
+/// @return `SourceContract` naming the first group that breaks a rule, or nothing.
+[[nodiscard]] inline std::optional<TableError> checkGroups(std::span<ColumnInfo const> columns,
+                                                           std::span<ColumnGroupInfo const> groups) {
+    constexpr std::size_t kMaxColumns = 16;
+    std::vector<std::string_view> seen;
+    for (auto const& group : groups) {
+        auto const broken = [&group](std::string why) {
+            return TableError{.code = TableErrorCode::SourceContract,
+                              .column = group.id,
+                              .message = "column group " + group.id + " " + std::move(why)};
+        };
+        if (group.columns.size() < 2 || group.columns.size() > kMaxColumns) {
+            return broken("has " + std::to_string(group.columns.size()) + " columns, not 2 to 16");
+        }
+        std::optional<ColumnKind> kind;
+        for (auto const& id : group.columns) {
+            auto const column = std::ranges::find(columns, id, &ColumnInfo::id);
+            if (column == columns.end()) {
+                return broken("names no column " + id);
+            }
+            if (kind && *kind != column->kind) {
+                return broken("mixes column kinds");
+            }
+            kind = column->kind;
+            if (std::ranges::find(seen, std::string_view{id}) != seen.end()) {
+                return broken("shares column " + id + " with another group, or names it twice");
+            }
+            seen.emplace_back(id);
+        }
+    }
+    return std::nullopt;
+}
+
+}  // namespace detail
 
 namespace detail {
 
@@ -939,6 +1013,14 @@ public:
         return found == _index.end() ? std::nullopt : std::optional{found->second};
     }
 
+    /// @brief Declares the table's column groups; notifies nothing. Checked where the columns are read.
+    /// @param groups The groups.
+    void setGroups(std::vector<ColumnGroupInfo> groups) { _groups = std::move(groups); }
+
+    /// @brief The groups `setGroups` declared.
+    /// @return The groups.
+    [[nodiscard]] std::span<ColumnGroupInfo const> groups() const override { return _groups; }
+
 private:
     void reindex() {
         _index.clear();
@@ -948,6 +1030,7 @@ private:
     }
 
     std::vector<ColumnInfo> _columns;
+    std::vector<ColumnGroupInfo> _groups;
     std::shared_ptr<TableSnapshot const> _snapshot;
     std::unordered_map<RowId, std::size_t> _index;
     detail::Listeners _listeners;

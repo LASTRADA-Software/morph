@@ -12,7 +12,11 @@
 //    row" fails.
 //  - `ValueSet` matching nothing: "oneOf matches what its eq entries match"
 //    fails.
-//  The oneOf cases name their own mutations above them.
+//  - `Together` evaluated as `atLeast` with n = entries: "groups: the spec's
+//    truth table" fails on row F, F, X.
+//  - `Filtered::by` compiling without `source->groups()`: every declared-group
+//    case fails with `UnknownColumn`.
+//  The oneOf and group cases name their own mutations above them.
 
 #include <catch2/catch_test_macros.hpp>
 #include <chrono>
@@ -23,7 +27,9 @@
 #include <morph/table/filter.hpp>
 #include <morph/table/query.hpp>
 #include <numeric>
+#include <optional>
 #include <random>
+#include <set>
 #include <ranges>
 #include <string>
 #include <vector>
@@ -43,7 +49,7 @@ struct Filtered {
 
     // The rows that pass `spec`, in source order; an error when it does not compile.
     [[nodiscard]] std::expected<Rows, TableError> by(FilterSpec const& spec) const {
-        auto const compiled = compileFilter(spec, source->columns(), services);
+        auto const compiled = compileFilter(spec, source->columns(), services, source->groups());
         if (!compiled) {
             return std::unexpected(compiled.error());
         }
@@ -705,4 +711,661 @@ TEST_CASE("table: oneOf is the OR of its eq entries over random tables", "[table
         CHECK(*f.by(on("c", {}, Combine::Any, {oneOf(values)})) ==
               *f.by(on("c", {}, Combine::Any, eqEntries(values))));
     }
+}
+
+// ── Column groups ───────────────────────────────────────────────────────────
+
+namespace {
+
+using morph::table::Unloaded;
+
+// companyA, companyB, companyC (Text), declared group {"company", "Company", {companyA, companyB, companyC}}.
+// 0: F, S, X   1: F, F, X   2: S, F, F   3: F, X, Y   4: X, Y, Z
+std::shared_ptr<VectorSource> companySource(std::vector<std::vector<Cell>> rows, bool slow = false) {
+    std::vector<ColumnInfo> columns;
+    for (auto const* const id : {"companyA", "companyB", "companyC"}) {
+        columns.push_back(slow ? tabletest::levelCol(id, ColumnKind::Text, "slow") : tabletest::col(id, ColumnKind::Text));
+    }
+    auto source = tabletest::makeSource(std::move(columns), std::move(rows));
+    source->setGroups({ColumnGroupInfo{.id = "company", .label = "Company", .columns = {"companyA", "companyB", "companyC"}}});
+    return source;
+}
+
+std::vector<std::vector<Cell>> truthTableRows() {
+    auto const row = [](char const* a, char const* b, char const* c) {
+        return std::vector<Cell>{std::string{a}, std::string{b}, std::string{c}};
+    };
+    return {row("F", "S", "X"), row("F", "F", "X"), row("S", "F", "F"), row("F", "X", "Y"), row("X", "Y", "Z")};
+}
+
+Filtered const& truthTable() {
+    static Filtered const f{.source = companySource(truthTableRows()), .services = {}};
+    return f;
+}
+
+std::expected<Rows, TableError> by(GroupFilter group) {
+    FilterSpec spec;
+    spec.groups.push_back(std::move(group));
+    return truthTable().by(spec);
+}
+
+// A group compiled once over a source whose keys are built once: what CompiledFilter::evaluateGroup says of a row.
+class GroupEval {
+public:
+    GroupEval(VectorSource const& source, GroupFilter const& group) {
+        Services const services;
+        FilterSpec spec;
+        spec.groups.push_back(group);
+        auto compiled = compileFilter(spec, source.columns(), services, source.groups());
+        REQUIRE(compiled);
+        REQUIRE(compiled->groups().size() == 1);
+        _compiled = std::move(*compiled);
+        auto const snapshot = source.snapshot();
+        auto const columns = source.columns();
+        _keys.reserve(columns.size());
+        for (std::size_t c = 0; c < columns.size(); ++c) {
+            _keys.push_back(KeyColumn::forColumn(columns[c], services, snapshot->rowCount()));
+            buildKeys(*snapshot, c, columns[c], services, 0, snapshot->rowCount(), _keys.back());
+        }
+        for (auto const& key : _keys) {
+            _pointers.push_back(&key);
+        }
+    }
+
+    [[nodiscard]] Match operator()(std::uint32_t row, FilterCounters* counters = nullptr) const {
+        return CompiledFilter::evaluateGroup(_compiled.groups()[0], _pointers, row, counters);
+    }
+
+private:
+    CompiledFilter _compiled;
+    std::vector<KeyColumn> _keys;
+    std::vector<KeyColumn const*> _pointers;
+};
+
+// What the group says of one row.
+Match groupMatch(VectorSource const& source, GroupFilter const& group, std::uint32_t row) {
+    return GroupEval{source, group}(row);
+}
+
+// The error code of a refused filter, or nothing when it compiled.
+std::optional<TableErrorCode> codeOf(std::expected<Rows, TableError> const& result) {
+    return result ? std::nullopt : std::optional{result.error().code};
+}
+
+ColumnCount atLeast(std::int64_t n) { return ColumnCount{.kind = ColumnCount::Kind::AtLeast, .n = n}; }
+ColumnCount exactly(std::int64_t n) { return ColumnCount{.kind = ColumnCount::Kind::Exactly, .n = n}; }
+ColumnCount every() { return ColumnCount{.kind = ColumnCount::Kind::All, .n = 1}; }
+
+}  // namespace
+
+// Mutation: `Together` decided as `atLeast` with n = the entry count: fails on row F, F, X.
+TEST_CASE("groups: the spec's truth table", "[table][filter][groups]") {
+    CHECK(by({.group = "company", .include = {eq("F")}}) == Rows{0, 1, 2, 3});
+    CHECK(by({.group = "company", .mode = GroupMode::Together, .include = {eq("F"), eq("S")}}) == Rows{0, 2});
+    CHECK(by({.group = "company", .include = {oneOf({"F", "S", "T"})}}) == Rows{0, 1, 2, 3});
+    CHECK(by({.group = "company", .match = atLeast(2), .include = {oneOf({"F", "S"})}}) == Rows{0, 1, 2});
+    CHECK(by({.group = "company", .match = exactly(1), .include = {eq("F")}}) == Rows{0, 3});
+    CHECK(by({.group = "company", .match = every(), .include = {oneOf({"F", "S"})}}) == Rows{2});
+    CHECK(*by({.columns = {"companyA", "companyB", "companyC"}, .include = {eq("F")}}) ==
+          *by({.group = "company", .include = {eq("F")}}));  // the plain group is `any`
+    CHECK(by({.group = "company", .include = {}, .exclude = {eq("X")}}) == Rows{2});  // "none of the companies is X"
+    std::vector<FilterEntry> seventeen;  // only the 17th entry can match
+    for (int i = 1; i <= 16; ++i) {
+        seventeen.push_back(eq("A" + std::to_string(i)));
+    }
+    seventeen.push_back(eq("F"));
+    CHECK(by({.group = "company", .include = seventeen}) == Rows{0, 1, 2, 3});  // a 16-bit entry mask would miss it
+    // "two of the three dates are after 2026-05-01": atLeast 2 with a gt entry over three Date columns.
+    auto const dates = tabletest::makeSource(
+        {tabletest::col("d1", ColumnKind::Date), tabletest::col("d2", ColumnKind::Date),
+         tabletest::col("d3", ColumnKind::Date)},
+        {{std::string{"2026-06-01"}, std::string{"2026-07-01"}, std::string{"2026-01-01"}},
+         {std::string{"2026-06-01"}, std::string{"2026-02-01"}, std::string{"2026-01-01"}}});
+    Filtered const f{.source = dates, .services = {}};
+    FilterSpec spec;
+    spec.groups.push_back({.columns = {"d1", "d2", "d3"}, .match = atLeast(2), .include = {gt("2026-05-01")}});
+    CHECK(f.by(spec) == Rows{0});
+}
+
+// Mutations: `exactly` deciding Yes while q > 0 ({F,X,U} under exactly 1 answers Yes); the known pass reading an
+// unknown column as matching every entry ({F,F,U} under Together F, S answers Yes).
+TEST_CASE("groups: three-valued over unloaded cells", "[table][filter][groups]") {
+    struct Case {
+        GroupFilter filter;
+        std::array<char const*, 3> cells;  // "U" is an unloaded cell
+        Match expected;
+    };
+    GroupFilter const anyF{.group = "company", .include = {eq("F")}};
+    GroupFilter const atLeast2F{.group = "company", .match = atLeast(2), .include = {eq("F")}};
+    GroupFilter const allF{.group = "company", .match = every(), .include = {eq("F")}};
+    GroupFilter const exactly1F{.group = "company", .match = exactly(1), .include = {eq("F")}};
+    GroupFilter const togetherFS{.group = "company", .mode = GroupMode::Together, .include = {eq("F"), eq("S")}};
+    GroupFilter const noneX{.group = "company", .include = {}, .exclude = {eq("X")}};
+    GroupFilter const anyEmpty{.group = "company", .include = {isEmpty()}};
+    std::vector<Case> const cases{
+        {atLeast2F, {"F", "F", "U"}, Match::Yes},      {atLeast2F, {"X", "X", "U"}, Match::No},
+        {atLeast2F, {"F", "X", "U"}, Match::Unknown},  {anyF, {"F", "U", "U"}, Match::Yes},
+        {anyF, {"X", "X", "U"}, Match::Unknown},       {anyF, {"X", "X", "X"}, Match::No},
+        {allF, {"F", "F", "U"}, Match::Unknown},       {allF, {"F", "X", "U"}, Match::No},
+        {exactly1F, {"F", "F", "U"}, Match::No},       {exactly1F, {"F", "X", "U"}, Match::Unknown},
+        {exactly1F, {"X", "X", "U"}, Match::Unknown},  {exactly1F, {"F", "X", "X"}, Match::Yes},
+        {exactly1F, {"X", "X", "X"}, Match::No},       {togetherFS, {"F", "S", "U"}, Match::Yes},
+        {togetherFS, {"F", "F", "U"}, Match::Unknown}, {togetherFS, {"U", "U", "X"}, Match::Unknown},
+        {togetherFS, {"X", "X", "U"}, Match::No},      {noneX, {"F", "X", "U"}, Match::No},
+        {noneX, {"F", "S", "U"}, Match::Unknown},      {noneX, {"F", "S", "F"}, Match::Yes},
+        {anyEmpty, {"X", "X", "U"}, Match::Unknown},
+    };
+    for (std::size_t at = 0; at < cases.size(); ++at) {
+        auto const& c = cases[at];
+        std::vector<Cell> row;
+        for (auto const* const cell : c.cells) {
+            row.push_back(std::string_view{cell} == "U" ? Cell{Unloaded{}} : Cell{std::string{cell}});
+        }
+        auto const source = companySource({row}, true);
+        INFO("case " << at << ": " << c.cells[0] << ", " << c.cells[1] << ", " << c.cells[2]);
+        CHECK(groupMatch(*source, c.filter, 0) == c.expected);
+    }
+}
+
+// Mutation: compileGroup requiring 2 to k include entries in Together mode with no exception for 0: the
+// exclude-only Together lines fail.
+TEST_CASE("groups: duplicate columns, exactly zero and too many together entries", "[table][filter][groups]") {
+    auto const& f = truthTable();
+    CHECK(codeOf(f.by(FilterSpec{.columns = {}, .groups = {{.columns = {"companyA", "companyA"}, .include = {eq("F")}}}})) ==
+          TableErrorCode::InvalidSpec);
+    CHECK(by({.group = "company", .match = exactly(0), .include = {eq("F")}}) == Rows{4});
+    CHECK(codeOf(f.by(FilterSpec{.columns = {},
+                                 .groups = {{.group = "company",
+                                             .mode = GroupMode::Together,
+                                             .include = {eq("A"), eq("B"), eq("C"), eq("D")}}}})) ==
+          TableErrorCode::InvalidSpec);
+    CHECK(codeOf(f.by(FilterSpec{
+              .columns = {}, .groups = {{.group = "company", .mode = GroupMode::Together, .include = {eq("A")}}}})) ==
+          TableErrorCode::InvalidSpec);  // one entry: neither 0 nor 2..k
+    // Together takes 0, or 2 to k, include entries: an exclude-only group compiles in either mode.
+    CHECK(by({.group = "company", .mode = GroupMode::Together, .include = {}, .exclude = {eq("X")}}) == Rows{2});
+    CHECK(*by({.group = "company", .mode = GroupMode::Together, .include = {}, .exclude = {eq("X")}}) ==
+          *by({.group = "company", .include = {}, .exclude = {eq("X")}}));
+    CHECK(by({.group = "company", .mode = GroupMode::Together, .include = {}, .exclude = {}}) == Rows{0, 1, 2, 3, 4});
+    CHECK(codeOf(f.by(FilterSpec{.columns = {},
+                                 .groups = {{.group = "company", .match = atLeast(4), .include = {eq("F")}}}})) ==
+          TableErrorCode::InvalidSpec);
+    CHECK(codeOf(f.by(FilterSpec{
+              .columns = {},
+              .groups = {{.group = "company", .columns = {"companyA", "companyB"}, .include = {eq("F")}}}})) ==
+          TableErrorCode::InvalidSpec);
+    CHECK(codeOf(f.by(FilterSpec{.columns = {}, .groups = {{.group = "nope", .include = {eq("F")}}}})) ==
+          TableErrorCode::UnknownColumn);
+}
+
+// Mutation: compileGroup without its 32-a-side bound: the first CHECK gets rows, not LimitExceeded.
+TEST_CASE("groups: more than 32 entries on a side is refused where the filter compiles", "[table][filter][groups]") {
+    // Engine::setFilter compiles without validate's QueryLimits, so the bound that keeps every entry a bit of a
+    // std::uint32_t mask is compileGroup's own. 33 include entries, only the 33rd ("F") able to match.
+    std::vector<FilterEntry> thirtyThree;
+    for (int i = 1; i <= 32; ++i) {
+        thirtyThree.push_back(eq("A" + std::to_string(i)));
+    }
+    thirtyThree.push_back(eq("F"));
+    std::vector<FilterEntry> const thirtyTwo(thirtyThree.end() - 32, thirtyThree.end());  // "A2".."A32", "F"
+    CHECK(codeOf(by({.group = "company", .include = thirtyThree})) == TableErrorCode::LimitExceeded);
+    CHECK(codeOf(by({.group = "company", .include = {eq("F")}, .exclude = thirtyThree})) ==
+          TableErrorCode::LimitExceeded);
+    CHECK(by({.group = "company", .include = thirtyTwo}) == Rows{0, 1, 2, 3});  // 32 a side compiles
+    CHECK(by({.group = "company", .include = thirtyTwo, .exclude = {eq("X")}}) == Rows{2});
+    Engine engine{truthTable().source};
+    FilterSpec over;
+    over.groups.push_back({.group = "company", .include = thirtyThree});
+    auto const refused = engine.setFilter(over);
+    REQUIRE_FALSE(refused);
+    CHECK(refused.error().code == TableErrorCode::LimitExceeded);
+    CHECK(engine.filter().empty());  // the filter is unchanged
+}
+
+// Mutation: detail::checkGroups accepting every declaration: each malformed one applies.
+TEST_CASE("groups: a declared group is checked where the columns are read", "[table][filter][groups]") {
+    std::vector<ColumnInfo> columns;
+    for (int i = 0; i < 18; ++i) {
+        columns.push_back(tabletest::col("t" + std::to_string(i), ColumnKind::Text));
+    }
+    columns.push_back(tabletest::col("n", ColumnKind::Integer));
+    std::vector<Cell> row(columns.size(), Cell{std::string{"1"}});
+    auto const source = tabletest::makeSource(columns, {row});
+    auto const group = [](std::string id, std::vector<std::string> members) {
+        return ColumnGroupInfo{.id = std::move(id), .label = {}, .columns = std::move(members)};
+    };
+    std::vector<std::string> seventeen;
+    for (int i = 0; i < 17; ++i) {
+        seventeen.push_back("t" + std::to_string(i));
+    }
+    std::vector<std::vector<ColumnGroupInfo>> const malformed{
+        {group("one", {"t0"})},
+        {group("many", seventeen)},
+        {group("mixed", {"t0", "n"})},
+        {group("a", {"t0", "t1"}), group("b", {"t1", "t2"})},
+        {group("missing", {"t0", "nope"})},
+    };
+    for (auto const& groups : malformed) {
+        source->setGroups(groups);
+        auto const page = apply(*source, TableQuery{});
+        REQUIRE_FALSE(page);
+        CHECK(page.error().code == TableErrorCode::SourceContract);
+    }
+    source->setGroups({group("good", {"t0", "t1", "t2"})});
+    CHECK(apply(*source, TableQuery{}).has_value());
+}
+
+// Mutation: ColumnCount's reader taking `{"atLeast": n}` as `exactly`: the shape does not read back.
+TEST_CASE("groups: the JSON shape reads and writes", "[table][filter][groups]") {
+    auto const json =
+        R"({"group":"company","mode":"together","match":{"atLeast":2},"combine":"all","include":[{"eq":"F"},{"eq":"S"}],"exclude":[{"eq":"X"}]})";
+    GroupFilter g;
+    REQUIRE_FALSE(glz::read_json(g, std::string{json}));
+    CHECK(g.group == "company");
+    CHECK(g.mode == GroupMode::Together);
+    CHECK(g.match.kind == ColumnCount::Kind::AtLeast);
+    CHECK(g.match.n == 2);
+    CHECK(g.combine == Combine::All);
+    CHECK(g.exclude == std::vector<FilterEntry>{eq("X")});
+    for (std::string const shape : {R"("any")", R"("all")", R"({"atLeast":3})", R"({"exactly":0})"}) {
+        ColumnCount count;
+        REQUIRE_FALSE(glz::read_json(count, shape));
+        std::string back;
+        REQUIRE_FALSE(glz::write_json(count, back));
+        CHECK(back == shape);
+    }
+    ColumnCount unknown;
+    REQUIRE_FALSE(glz::read_json(unknown, std::string{R"({"most":2})"}));
+    CHECK(codeOf(by({.group = "company", .match = unknown, .include = {eq("F")}})) == TableErrorCode::InvalidSpec);
+}
+
+// Mutation: ColumnCount::operator== comparing `kind` only: a changed `match.n` compares equal.
+TEST_CASE("groups: filters compare by value", "[table][filter][groups]") {
+    auto const make = [] {
+        FilterSpec spec = on("companyA", {oneOf({"F", "S"})});
+        spec.groups.push_back({.group = "company", .match = atLeast(2), .include = {oneOf({"F", "S"})}});
+        return spec;
+    };
+    CHECK(make() == make());
+    auto member = make();
+    member.columns["companyA"].include[0].oneOf->back() = "T";
+    CHECK_FALSE(member == make());
+    auto count = make();
+    count.groups[0].match.n = 3;
+    CHECK_FALSE(count == make());
+    auto mode = make();
+    mode.groups[0].mode = GroupMode::Together;
+    CHECK_FALSE(mode == make());
+}
+
+namespace {
+
+// One of "A".."E" or empty; Cell{Unloaded{}} with probability `unloaded`.
+Cell randomCell(std::mt19937& rng, double unloaded) {
+    if (std::bernoulli_distribution{unloaded}(rng)) {
+        return Cell{Unloaded{}};
+    }
+    auto const pick = std::uniform_int_distribution<int>{0, 5}(rng);
+    return pick == 5 ? Cell{} : Cell{std::string(1, static_cast<char>('A' + pick))};
+}
+
+FilterEntry randomGroupEntry(std::mt19937& rng) {
+    auto const letter = [&rng] { return std::string(1, static_cast<char>('A' + (rng() % 5))); };
+    switch (rng() % 4) {
+        case 0:
+            return eq(letter());
+        case 1: {
+            std::vector<std::string> members;
+            auto const count = 1 + (rng() % 3);
+            for (std::size_t i = 0; i < count; ++i) {
+                members.push_back(letter());
+            }
+            return oneOf(std::move(members));
+        }
+        case 2:
+            return ne(letter());
+        default:
+            return startsWith(letter());
+    }
+}
+
+// A random group over c0..c{k-1}: Columns mode with any quantifier and combine, or Together with 2..k entries.
+GroupFilter randomGroupFilter(std::mt19937& rng, std::size_t k) {
+    GroupFilter out;
+    for (std::size_t c = 0; c < k; ++c) {
+        out.columns.push_back("c" + std::to_string(c));
+    }
+    std::size_t entries = 0;
+    if (rng() % 2 == 0) {
+        out.mode = GroupMode::Columns;
+        auto const n = static_cast<std::int64_t>(rng() % (k + 1));
+        switch (rng() % 4) {
+            case 0:
+                out.match = ColumnCount{};
+                break;
+            case 1:
+                out.match = every();
+                break;
+            case 2:
+                out.match = atLeast(n);
+                break;
+            default:
+                out.match = exactly(n);
+                break;
+        }
+        out.combine = rng() % 2 == 0 ? Combine::Any : Combine::All;
+        entries = 1 + (rng() % k);
+    } else {
+        out.mode = GroupMode::Together;
+        entries = 2 + (rng() % (k - 1));
+    }
+    for (std::size_t i = 0; i < entries; ++i) {
+        out.include.push_back(randomGroupEntry(rng));
+    }
+    auto const excludes = rng() % 3;
+    for (std::size_t i = 0; i < excludes; ++i) {
+        out.exclude.push_back(randomGroupEntry(rng));
+    }
+    return out;
+}
+
+// Every row obtained by replacing each unloaded cell by one of "A".."E" or empty.
+std::vector<std::vector<Cell>> completions(std::vector<Cell> const& row) {
+    std::vector<std::vector<Cell>> out{row};
+    for (std::size_t c = 0; c < row.size(); ++c) {
+        if (!std::holds_alternative<Unloaded>(row[c])) {
+            continue;
+        }
+        std::vector<std::vector<Cell>> next;
+        for (auto const& partial : out) {
+            for (int pick = 0; pick <= 5; ++pick) {
+                auto completed = partial;
+                completed[c] = pick == 5 ? Cell{} : Cell{std::string(1, static_cast<char>('A' + pick))};
+                next.push_back(std::move(completed));
+            }
+        }
+        out = std::move(next);
+    }
+    return out;
+}
+
+// A source of `k` text columns c0..c{k-1}, at level "slow" so their cells may be unloaded.
+std::shared_ptr<VectorSource> groupColumnsSource(std::size_t k, std::vector<std::vector<Cell>> rows) {
+    std::vector<ColumnInfo> columns;
+    for (std::size_t c = 0; c < k; ++c) {
+        columns.push_back(tabletest::levelCol("c" + std::to_string(c), ColumnKind::Text, "slow"));
+    }
+    return tabletest::makeSource(std::move(columns), std::move(rows));
+}
+
+// The six loaded cells the random tables hold: "A".."E", then empty.
+std::size_t cellIndex(Cell const& cell) {
+    auto const* const text = std::get_if<std::string>(&cell);
+    return text == nullptr || text->empty() ? 5 : static_cast<std::size_t>((*text)[0] - 'A');
+}
+
+// Per entry, whether it matches each of the six loaded cells, through CompiledFilter::matches.
+std::vector<std::array<bool, 6>> entryHits(std::vector<FilterEntry> const& entries) {
+    auto const source = tabletest::column(ColumnKind::Text, {std::string{"A"}, std::string{"B"}, std::string{"C"},
+                                                             std::string{"D"}, std::string{"E"}, Cell{}});
+    Services const services;
+    auto keys = KeyColumn::forColumn(source->columns()[0], services, 6);
+    buildKeys(*source->snapshot(), 0, source->columns()[0], services, 0, 6, keys);
+    std::vector<std::array<bool, 6>> out;
+    for (auto const& entry : entries) {
+        auto const compiled = detail::compileEntry(entry, source->columns()[0], services);
+        REQUIRE(compiled);
+        std::array<bool, 6> hits{};
+        for (std::uint32_t at = 0; at < 6; ++at) {
+            hits.at(at) = CompiledFilter::matches(*compiled, keys, at);
+        }
+        out.push_back(hits);
+    }
+    return out;
+}
+
+// A group filter with each side's entry hits computed once.
+struct Oracle {
+    GroupFilter filter;
+    std::vector<std::array<bool, 6>> include = entryHits(filter.include);
+    std::vector<std::array<bool, 6>> exclude = entryHits(filter.exclude);
+};
+
+// The definition of a group filter on a fully loaded row (invariant 24), sharing no code with evaluateGroup.
+bool oracle(Oracle const& definition, std::vector<Cell> const& row) {
+    auto const& filter = definition.filter;
+    std::vector<std::vector<bool>> hits(row.size(), std::vector<bool>(filter.include.size()));
+    for (std::size_t c = 0; c < row.size(); ++c) {
+        auto const at = cellIndex(row[c]);
+        for (std::size_t e = 0; e < filter.include.size(); ++e) {
+            hits[c][e] = definition.include[e].at(at);
+        }
+        for (auto const& entry : definition.exclude) {
+            if (entry.at(at)) {
+                return false;
+            }
+        }
+    }
+    if (filter.include.empty()) {
+        return true;
+    }
+    auto const k = static_cast<std::int64_t>(row.size());
+    if (filter.mode == GroupMode::Together) {
+        // Try every injective assignment of entries to columns.
+        std::vector<std::size_t> columns(row.size());
+        std::iota(columns.begin(), columns.end(), std::size_t{0});
+        do {
+            bool all = true;
+            for (std::size_t e = 0; e < filter.include.size() && all; ++e) {
+                all = hits[columns[e]][e];
+            }
+            if (all) {
+                return true;
+            }
+        } while (std::next_permutation(columns.begin(), columns.end()));
+        return false;
+    }
+    std::int64_t satisfied = 0;
+    for (auto const& column : hits) {
+        bool const any = std::ranges::any_of(column, [](bool hit) { return hit; });
+        bool const all = std::ranges::all_of(column, [](bool hit) { return hit; });
+        satisfied += (filter.combine == Combine::All ? all : any) ? 1 : 0;
+    }
+    switch (filter.match.kind) {
+        case ColumnCount::Kind::All:
+            return satisfied == k;
+        case ColumnCount::Kind::AtLeast:
+            return satisfied >= filter.match.n;
+        case ColumnCount::Kind::Exactly:
+            return satisfied == filter.match.n;
+        case ColumnCount::Kind::Any:
+        default:
+            return satisfied >= 1;
+    }
+}
+
+}  // namespace
+
+// Mutation: Together decided as atLeast with n = the entry count.
+TEST_CASE("groups: invariant 24 over random tables", "[table][filter][groups]") {
+    std::mt19937 rng{24};
+    for (int table = 0; table < 300; ++table) {
+        auto const k = 2 + (rng() % 4);
+        std::vector<std::vector<Cell>> rows(40);
+        for (auto& row : rows) {
+            for (std::size_t c = 0; c < k; ++c) {
+                row.push_back(randomCell(rng, 0.0));
+            }
+        }
+        auto const filter = randomGroupFilter(rng, k);
+        Oracle const definition{.filter = filter};
+        Rows expected;
+        for (std::uint32_t r = 0; r < rows.size(); ++r) {
+            if (oracle(definition, rows[r])) {
+                expected.push_back(r);
+            }
+        }
+        Filtered const f{.source = groupColumnsSource(k, rows), .services = {}};
+        FilterSpec spec;
+        spec.groups.push_back(filter);
+        CHECK(f.by(spec) == expected);
+    }
+}
+
+// Gate G7's oracle. Mutation: the known pass reading an unknown column as matching every entry: a Yes row has a
+// failing completion.
+TEST_CASE("groups: invariant 1 over random completions", "[table][filter][groups]") {
+    std::mt19937 rng{1};
+    for (int table = 0; table < 200; ++table) {
+        std::vector<std::vector<Cell>> rows(30);
+        for (auto& row : rows) {
+            for (std::size_t c = 0; c < 3; ++c) {
+                row.push_back(randomCell(rng, 1.0 / 3));
+            }
+        }
+        auto const filter = randomGroupFilter(rng, 3);
+        Oracle const definition{.filter = filter};
+        auto const source = groupColumnsSource(3, rows);
+        GroupEval const evaluate{*source, filter};
+        for (std::uint32_t r = 0; r < rows.size(); ++r) {
+            auto const m = evaluate(r);
+            if (m == Match::Unknown) {
+                continue;
+            }
+            bool sound = true;
+            for (auto const& completed : completions(rows[r])) {
+                sound = sound && oracle(definition, completed) == (m == Match::Yes);
+            }
+            INFO("table " << table << " row " << r);
+            CHECK(sound);
+        }
+    }
+}
+
+// Gate G7. Mutation: Together's wildcard pass skipped (No instead of Unknown): `undecided` is below the oracle's.
+TEST_CASE("groups: undecided rows are the three-valued rule's", "[table][filter][groups]") {
+    std::mt19937 rng{7};
+    std::vector<std::vector<Cell>> rows(1000);
+    for (auto& row : rows) {
+        for (std::size_t c = 0; c < 3; ++c) {
+            row.push_back(randomCell(rng, 1.0 / 3));
+        }
+    }
+    auto const source = groupColumnsSource(3, rows);
+    Filtered const f{.source = source, .services = {}};
+    GroupFilter const anyAB{.columns = {"c0", "c1", "c2"}, .include = {oneOf({"A", "B"})}};
+    GroupFilter const togetherAB{
+        .columns = {"c0", "c1", "c2"}, .mode = GroupMode::Together, .include = {eq("A"), eq("B")}};
+    for (auto const& filter : {anyAB, togetherAB}) {
+        std::int64_t oracleYes = 0;
+        std::int64_t oracleUnknown = 0;
+        for (auto const& row : rows) {
+            // Per column: does it hold A, B; is it unloaded.
+            std::array<bool, 3> a{};
+            std::array<bool, 3> b{};
+            std::array<bool, 3> u{};
+            for (std::size_t c = 0; c < 3; ++c) {
+                u.at(c) = std::holds_alternative<Unloaded>(row[c]);
+                auto const* const text = std::get_if<std::string>(&row[c]);
+                a.at(c) = text != nullptr && *text == "A";
+                b.at(c) = text != nullptr && *text == "B";
+            }
+            if (filter.mode == GroupMode::Columns) {
+                int y = 0;
+                int q = 0;
+                for (std::size_t c = 0; c < 3; ++c) {
+                    y += a.at(c) || b.at(c) ? 1 : 0;
+                    q += u.at(c) ? 1 : 0;
+                }
+                oracleYes += y >= 1 ? 1 : 0;
+                oracleUnknown += y == 0 && q > 0 ? 1 : 0;
+                continue;
+            }
+            auto const assignable = [&](std::array<bool, 3> const& ea, std::array<bool, 3> const& eb) {
+                for (std::size_t i = 0; i < 3; ++i) {
+                    for (std::size_t j = 0; j < 3; ++j) {
+                        if (i != j && ea.at(i) && eb.at(j)) {
+                            return true;
+                        }
+                    }
+                }
+                return false;
+            };
+            std::array<bool, 3> wa{};
+            std::array<bool, 3> wb{};
+            for (std::size_t c = 0; c < 3; ++c) {
+                wa.at(c) = a.at(c) || u.at(c);
+                wb.at(c) = b.at(c) || u.at(c);
+            }
+            if (assignable(a, b)) {
+                ++oracleYes;
+            } else if (assignable(wa, wb)) {
+                ++oracleUnknown;
+            }
+        }
+        FilterSpec spec;
+        spec.groups.push_back(filter);
+        auto const page = apply(*source, TableQuery{.sort = {}, .filters = spec, .page = {}});
+        REQUIRE(page);
+        CHECK(page->undecided == oracleUnknown);
+        CHECK(static_cast<std::int64_t>(f.by(spec)->size()) == oracleYes);
+    }
+}
+
+// Gate G5. Mutation: skipping the covered-mask check: rows that cannot match run augmentations.
+TEST_CASE("groups: a row costs k lookups and at most one augmentation an entry", "[table][filter][groups]") {
+    constexpr std::uint32_t kRows = 1000;
+    std::mt19937 rng{5};
+    std::vector<ColumnInfo> columns;
+    std::vector<std::string> ids;
+    for (int c = 0; c < 16; ++c) {
+        ids.push_back("g" + std::to_string(c));
+        columns.push_back(tabletest::col(ids.back(), ColumnKind::Text));
+    }
+    std::vector<std::vector<Cell>> rows(kRows);
+    for (auto& row : rows) {
+        for (int c = 0; c < 16; ++c) {
+            row.emplace_back("v" + std::to_string(rng() % 32));
+        }
+    }
+    auto const source = tabletest::makeSource(columns, rows);
+    auto const counted = [&](GroupFilter const& filter) {
+        GroupEval const evaluate{*source, filter};
+        FilterCounters counters;
+        for (std::uint32_t r = 0; r < kRows; ++r) {
+            static_cast<void>(evaluate(r, &counters));
+        }
+        return counters;
+    };
+    auto const absentSetCounters = counted({.columns = ids, .include = {oneOf({"zz1", "zz2"})}});
+    auto const heldSetCounters = counted({.columns = ids, .include = {oneOf({"v0", "v1"})}});
+    std::vector<FilterEntry> sixteen;
+    for (int e = 0; e < 16; ++e) {
+        sixteen.push_back(eq("v" + std::to_string(e)));
+    }
+    GroupFilter const together{.columns = ids, .mode = GroupMode::Together, .include = sixteen};
+    auto const togetherCounters = counted(together);
+    CHECK(absentSetCounters.setLookups == 16 * kRows);
+    CHECK(heldSetCounters.setLookups >= kRows);
+    CHECK(heldSetCounters.setLookups < 16 * kRows);
+    CHECK(togetherCounters.setLookups == 16 * kRows);
+    std::uint64_t maxAugmentationsOnUncoveredRows = 0;
+    std::uint64_t maxAugmentationsOnCoveredRows = 0;
+    std::size_t coveredRows = 0;
+    GroupEval const evaluateTogether{*source, together};
+    for (std::uint32_t r = 0; r < kRows; ++r) {
+        FilterCounters counters;
+        static_cast<void>(evaluateTogether(r, &counters));
+        std::set<std::string> held;
+        for (auto const& cell : rows[r]) {
+            held.insert(std::get<std::string>(cell));
+        }
+        bool const covered = std::ranges::all_of(sixteen, [&](FilterEntry const& entry) { return held.contains(*entry.eq); });
+        coveredRows += covered ? 1 : 0;
+        auto& worst = covered ? maxAugmentationsOnCoveredRows : maxAugmentationsOnUncoveredRows;
+        worst = std::max(worst, counters.augmentations);
+    }
+    CHECK(maxAugmentationsOnUncoveredRows == 0);
+    CHECK(maxAugmentationsOnCoveredRows <= 16);
+    INFO("rows holding all sixteen values: " << coveredRows);
 }

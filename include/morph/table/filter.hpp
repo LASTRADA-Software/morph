@@ -14,7 +14,9 @@
 /// - the `include` entries of a column combine by `combine` (`any`, the
 ///   default, or `all`); a match on an `exclude` entry rejects the row;
 ///   columns, and groups, combine with each other by AND;
-/// - a group matches a row when its entries match on any of its columns;
+/// - a group counts the columns whose cell satisfies its entries against its
+///   quantifier (`any` by default), or in `Together` mode finds each entry in a
+///   column of its own; a match on one of its `exclude` entries rejects the row;
 /// - no operator but `isEmpty` and `notEmpty` matches an empty or invalid cell;
 /// - on an unloaded cell every column filter is unknown, `isEmpty`, `notEmpty`
 ///   and `exclude` included: a row is rejected when any column filter or group
@@ -41,8 +43,10 @@
 #include <span>
 #include <string>
 #include <string_view>
+#include <unordered_map>
 #include <unordered_set>
 #include <utility>
+#include <variant>
 #include <vector>
 
 namespace morph::table {
@@ -84,6 +88,11 @@ struct FilterEntry {
     /// @brief Matches a cell whose value equals any of these. Each is parsed for the column's kind, as `eq`'s
     ///        operand is.
     std::optional<std::vector<std::string>> oneOf;
+
+    /// @brief Member-wise equality.
+    /// @param other The entry to compare with.
+    /// @return `true` when every member matches.
+    [[nodiscard]] bool operator==(FilterEntry const& other) const = default;
 };
 
 /// @brief How a column's `include` entries combine.
@@ -100,17 +109,105 @@ struct ColumnFilter {
     std::vector<FilterEntry> include;
     /// @brief Conditions that reject a row when any matches.
     std::vector<FilterEntry> exclude;
+
+    /// @brief Member-wise equality.
+    /// @param other The filter to compare with.
+    /// @return `true` when every member matches.
+    [[nodiscard]] bool operator==(ColumnFilter const& other) const = default;
 };
 
-/// @brief A filter over several columns: a row matches when the entries match
-///        on any of them, which is what a quick-search box needs.
+/// @brief How a group's `include` entries are found among its columns.
+enum class GroupMode : std::uint8_t {
+    Columns,   ///< Count the columns whose cell satisfies the entries, against `match`.
+    Together,  ///< Every entry is found, each in a column of its own.
+};
+
+/// @brief How many of a group's columns must satisfy its entries, in `Columns` mode.
+///
+/// Its JSON is `"any"`, `"all"`, `{"atLeast": n}` or `{"exactly": n}`. Any other shape reads as `atLeast -1`, which
+/// no group compiles with.
+struct ColumnCount {
+    /// @brief The quantifier.
+    enum class Kind : std::uint8_t {
+        Any,      ///< At least one column.
+        All,      ///< Every column.
+        AtLeast,  ///< At least `n` columns.
+        Exactly,  ///< Exactly `n` columns.
+    } kind = Kind::Any;
+    /// @brief The count, for `AtLeast` and `Exactly`.
+    std::int64_t n = 1;
+
+    /// @brief The JSON shape: a quantifier's name, or an object of one quantifier and its count.
+    using Wire = std::variant<std::string, std::map<std::string, std::int64_t>>;
+
+    /// @brief Reads the JSON shape.
+    /// @param wire The shape as read.
+    void setWire(Wire const& wire) {
+        *this = ColumnCount{.kind = Kind::AtLeast, .n = -1};
+        if (auto const* const name = std::get_if<std::string>(&wire)) {
+            if (*name == "any" || *name == "all") {
+                *this = ColumnCount{.kind = *name == "any" ? Kind::Any : Kind::All, .n = 1};
+            }
+            return;
+        }
+        auto const& counted = std::get<std::map<std::string, std::int64_t>>(wire);
+        if (counted.size() != 1) {
+            return;
+        }
+        auto const& [name, count] = *counted.begin();
+        if (name == "atLeast" || name == "exactly") {
+            *this = ColumnCount{.kind = name == "atLeast" ? Kind::AtLeast : Kind::Exactly, .n = count};
+        }
+    }
+
+    /// @brief The JSON shape.
+    /// @return `"any"` or `"all"`, or `{"atLeast": n}` or `{"exactly": n}`.
+    [[nodiscard]] Wire getWire() const {
+        switch (kind) {
+            case Kind::All:
+                return std::string{"all"};
+            case Kind::AtLeast:
+                return std::map<std::string, std::int64_t>{{"atLeast", n}};
+            case Kind::Exactly:
+                return std::map<std::string, std::int64_t>{{"exactly", n}};
+            case Kind::Any:
+            default:
+                return std::string{"any"};
+        }
+    }
+
+    /// @brief Member-wise equality.
+    /// @param other The count to compare with.
+    /// @return `true` when the kind and the count match.
+    [[nodiscard]] bool operator==(ColumnCount const& other) const = default;
+};
+
+/// @brief A filter over several columns, named by a declared group or listed: in `Columns` mode a row passes when
+///        the number of columns whose cell satisfies `include` meets `match`; in `Together` mode when each `include`
+///        entry matches a column of its own. A match on an `exclude` entry in any column rejects the row.
+///
+/// A filter that sets only `columns`, `combine` and `include` is the plain group: the entries match on any of the
+/// columns, which is what a quick-search box needs.
 struct GroupFilter {
-    /// @brief The columns searched.
+    /// @brief A declared group's id; or empty, and `columns` lists the columns.
+    std::string group;
+    /// @brief The columns, when `group` is empty.
     std::vector<std::string> columns;
-    /// @brief How `include` entries combine on one column.
+    /// @brief How `include` entries are found among the columns.
+    GroupMode mode = GroupMode::Columns;
+    /// @brief `Columns` mode: how many columns must satisfy `include`.
+    ColumnCount match;
+    /// @brief `Columns` mode: how one column's cell must satisfy `include`.
     Combine combine = Combine::Any;
-    /// @brief The conditions.
+    /// @brief The conditions; empty means the group's `exclude` alone decides.
     std::vector<FilterEntry> include;
+    /// @brief Conditions that reject a row when any matches in any of the columns.
+    std::vector<FilterEntry> exclude;
+
+    /// @brief Member-wise equality.
+    /// @param other The filter to compare with.
+    /// @return `true` when every member matches.
+    [[nodiscard]] bool operator==(GroupFilter const& other) const = default;
 };
 
 /// @brief A table's whole filter.
@@ -123,6 +220,11 @@ struct FilterSpec {
     /// @brief Whether the spec filters nothing.
     /// @return `true` when it has no column filter and no group.
     [[nodiscard]] bool empty() const noexcept { return columns.empty() && groups.empty(); }
+
+    /// @brief Member-wise equality.
+    /// @param other The filter to compare with.
+    /// @return `true` when every column filter and group matches.
+    [[nodiscard]] bool operator==(FilterSpec const& other) const = default;
 };
 
 /// @brief What a filter says of a row whose cells may be unloaded.
@@ -248,6 +350,92 @@ private:
     std::unordered_set<std::string, detail::TextHash, std::equal_to<>> _texts;
 };
 
+/// @brief A group column's value entries, by value: one probe gives the bits of every `eq` and `oneOf` entry the
+///        cell's value matches.
+///
+/// Keyed as a `ValueSet` is; text by its fold, so only entries that are not `caseSensitive` are indexed.
+class ValueIndex {
+public:
+    /// @brief An empty index for a column of @p kind.
+    /// @param kind The column's kind.
+    explicit ValueIndex(ColumnKind kind = ColumnKind::Text) noexcept : _kind{kind} {}
+
+    /// @brief Adds @p bits to a date, date-time or boolean value.
+    /// @param value The value.
+    /// @param bits  The entries' bits.
+    void add(std::int64_t value, std::uint32_t bits) { _ints[value] |= bits; }
+
+    /// @brief Adds @p bits to an exact value: an integer, a key, a decimal or a quantity.
+    /// @param value The value.
+    /// @param bits  The entries' bits.
+    void add(math::Rational const& value, std::uint32_t bits) { _exact[value] |= bits; }
+
+    /// @brief Adds @p bits to a `Number` value; zero is one value whatever its sign.
+    /// @param value The value.
+    /// @param bits  The entries' bits.
+    void add(double value, std::uint32_t bits) { _reals[value == 0.0 ? 0.0 : value] |= bits; }
+
+    /// @brief Adds @p bits to a folded text.
+    /// @param value The text, folded.
+    /// @param bits  The entries' bits.
+    void add(std::string const& value, std::uint32_t bits) {
+        if (auto const found = _texts.find(std::string_view{value}); found != _texts.end()) {
+            found->second |= bits;
+        } else {
+            _texts.emplace(value, bits);
+        }
+    }
+
+    /// @brief Whether the index holds no value.
+    /// @return `true` when nothing was added.
+    [[nodiscard]] bool empty() const noexcept {
+        return _ints.empty() && _exact.empty() && _reals.empty() && _texts.empty();
+    }
+
+    /// @brief The bits of the entries a valid cell's value matches: one probe.
+    /// @param keys     The column's keys; the cell at @p row is valid.
+    /// @param row      The row.
+    /// @param counters Counts the probe in `setLookups` when not null.
+    /// @return The bits; zero when no entry matches.
+    [[nodiscard]] std::uint32_t lookup(KeyColumn const& keys, std::uint32_t row, FilterCounters* counters) const {
+        if (counters != nullptr) {
+            ++counters->setLookups;
+        }
+        auto const in = [](auto const& map, auto const& key) -> std::uint32_t {
+            auto const found = map.find(key);
+            return found == map.end() ? 0U : found->second;
+        };
+        switch (_kind) {
+            case ColumnKind::Integer:
+            case ColumnKind::Key:
+                return in(_exact, math::Rational{keys.ints[row], math::DecimalPlaces{0}});
+            case ColumnKind::Decimal:
+            case ColumnKind::Quantity:
+                return in(_exact, keys.exact[row]);
+            case ColumnKind::Number: {
+                auto const value = keys.reals[row];
+                return in(_reals, value == 0.0 ? 0.0 : value);
+            }
+            case ColumnKind::Date:
+            case ColumnKind::DateTime:
+            case ColumnKind::Bool:
+                return in(_ints, keys.ints[row]);
+            case ColumnKind::Text:
+                return in(_texts, std::string_view{keys.folded[row]});
+            case ColumnKind::Custom:
+            default:
+                return 0U;
+        }
+    }
+
+private:
+    ColumnKind _kind;
+    std::unordered_map<std::int64_t, std::uint32_t> _ints;
+    std::unordered_map<math::Rational, std::uint32_t, detail::RationalHash> _exact;
+    std::unordered_map<double, std::uint32_t> _reals;
+    std::unordered_map<std::string, std::uint32_t, detail::TextHash, std::equal_to<>> _texts;
+};
+
 /// @brief A filter compiled against a table's columns: every value parsed.
 class CompiledFilter {
 public:
@@ -301,10 +489,47 @@ public:
         std::vector<Entry> exclude;
     };
 
+    /// @brief How one column of a group evaluates its entries: which entry each is, and the value index.
+    struct GroupColumn {
+        /// @brief The bit of each of the column's include entries: its place in the group's `include`.
+        std::vector<std::uint32_t> includeBits;
+        /// @brief The bit of each of the column's exclude entries: its place in the group's `exclude`.
+        std::vector<std::uint32_t> excludeBits;
+        /// @brief The include entries matched by value (`eq` and `oneOf`, not case-sensitive).
+        ValueIndex include;
+        /// @brief The exclude entries matched by value.
+        ValueIndex exclude;
+        /// @brief The include entries the index does not hold, by their place in `Column::include`: tested one by
+        ///        one.
+        std::vector<std::size_t> includeTested;
+        /// @brief The exclude entries the index does not hold, by their place in `Column::exclude`.
+        std::vector<std::size_t> excludeTested;
+        /// @brief Every bit of `includeBits`.
+        std::uint32_t compiled = 0;
+        /// @brief Whether the column can satisfy the include entries in `Columns` mode: with `combine: all` it
+        ///        compiled every one, with `any` at least one. A column that cannot is a known *no*.
+        bool usable = false;
+    };
+
     /// @brief One compiled group: per column, the entries that apply to it.
     struct Group {
-        /// @brief The group's columns, each with the entries that compiled for it.
+        /// @brief The group's columns that compiled at least one entry, each with those entries, in the group's
+        ///        order.
         std::vector<Column> columns;
+        /// @brief Per entry of `columns`, its bits and value index.
+        std::vector<GroupColumn> index;
+        /// @brief The columns the group names, whether or not an entry compiled on them.
+        std::size_t k = 0;
+        /// @brief How the include entries are found.
+        GroupMode mode = GroupMode::Columns;
+        /// @brief `Columns` mode's quantifier.
+        ColumnCount match;
+        /// @brief How one column's cell satisfies the include entries in `Columns` mode.
+        Combine combine = Combine::Any;
+        /// @brief The group's include entries.
+        std::size_t includeCount = 0;
+        /// @brief The group's exclude entries.
+        std::size_t excludeCount = 0;
     };
 
     /// @brief Whether the filter matches every row.
@@ -379,25 +604,227 @@ public:
         return evaluate(filter, keys, row) == Match::Yes;
     }
 
-    /// @brief What one group says of a row: `Yes` when any of its columns says
-    ///        `Yes`, otherwise `Unknown` when any says `Unknown`, otherwise `No`.
-    /// @param group The group.
-    /// @param keys  Key columns by column index; every column of the group must be non-null.
-    /// @param row   The row.
+    /// @brief What one group says of a row, three-valued over its unloaded cells.
+    ///
+    /// Each column's cell is read once, and gives the bits of the include entries it matches: for value entries
+    /// one probe of the column's index, a condition tested per entry. An unloaded cell's column is unknown. In
+    /// `Columns` mode, with y the columns that satisfy, q the unknown ones and r those not read yet, reading stops
+    /// as soon as the quantifier is decided: `any` is `Yes` at y ≥ 1 and `No` at y + q + r = 0; `all` `Yes` at
+    /// y = k and `No` at y + q + r < k; `atLeast n` `Yes` at y ≥ n and `No` at y + q + r < n; `exactly n` `Yes` at
+    /// y = n with q = r = 0 and `No` at y > n or y + q + r < n; otherwise `Unknown`. In `Together` mode every
+    /// column is read; a row whose known cells leave an entry unmatched and has no unknown column is `No` with no
+    /// matching tried; otherwise a matching of entries to distinct columns over the known cells is `Yes`, and
+    /// failing that one that counts each unknown column as matching every entry compiled on it is `Unknown`, and
+    /// none is `No`. A known cell matching an exclude entry makes the group `No`; otherwise an unknown column with
+    /// exclude entries makes it `Unknown`. A group with exclude entries reads every column.
+    /// @param group    The group.
+    /// @param keys     Key columns by column index; every column of the group must be non-null.
+    /// @param row      The row.
+    /// @param counters Counts cell reads, index lookups and augmentations when not null.
     /// @return The group's answer.
     [[nodiscard]] static Match evaluateGroup(Group const& group, std::span<KeyColumn const* const> keys,
-                                             std::uint32_t row) {
-        auto out = Match::No;
-        for (auto const& column : group.columns) {
-            auto const match = evaluate(column, *keys[column.column], row);
-            if (match == Match::Yes) {
-                return Match::Yes;
+                                             std::uint32_t row, FilterCounters* counters = nullptr) {
+        constexpr std::size_t kMaxTogether = 16;
+        bool const together = group.mode == GroupMode::Together;
+        bool const hasExclude = group.excludeCount > 0;
+        auto include = group.includeCount == 0 ? std::optional{Match::Yes} : std::optional<Match>{};
+        std::int64_t y = 0;
+        std::int64_t q = 0;
+        std::int64_t r = 0;
+        for (auto const& column : group.index) {
+            r += column.usable ? 1 : 0;
+        }
+        auto const k = static_cast<std::int64_t>(group.k);
+        auto const decide = [&] {
+            auto const n = group.match.n;
+            switch (group.match.kind) {
+                case ColumnCount::Kind::All:
+                    return y == k ? std::optional{Match::Yes}
+                                  : (y + q + r < k ? std::optional{Match::No} : std::optional<Match>{});
+                case ColumnCount::Kind::AtLeast:
+                    return y >= n ? std::optional{Match::Yes}
+                                  : (y + q + r < n ? std::optional{Match::No} : std::optional<Match>{});
+                case ColumnCount::Kind::Exactly:
+                    if (y > n || y + q + r < n) {
+                        return std::optional{Match::No};
+                    }
+                    return y == n && q == 0 && r == 0 ? std::optional{Match::Yes} : std::optional<Match>{};
+                case ColumnCount::Kind::Any:
+                default:
+                    return y >= 1 ? std::optional{Match::Yes}
+                                  : (y + q + r == 0 ? std::optional{Match::No} : std::optional<Match>{});
             }
-            if (match == Match::Unknown) {
-                out = Match::Unknown;
+        };
+        if (!include && !together) {
+            include = decide();
+            if (include == Match::No) {
+                return Match::No;
+            }
+        }
+        std::array<std::uint32_t, kMaxTogether> masks{};
+        std::uint32_t unknownColumns = 0;
+        bool excludeUnknown = false;
+        for (std::size_t at = 0; at < group.columns.size(); ++at) {
+            if (include && !hasExclude) {
+                break;
+            }
+            auto const& column = group.columns[at];
+            auto const& index = group.index[at];
+            auto const& cells = *keys[column.column];
+            if (counters != nullptr) {
+                ++counters->cellReads;
+            }
+            bool const unknown = cells.states[row] == CellState::Unloaded;
+            if (!include && together) {
+                if (unknown) {
+                    unknownColumns |= 1U << at;
+                } else {
+                    masks.at(at) =
+                        entryBits(column.include, index.includeBits, index.include, index.includeTested, cells, row,
+                                  counters);
+                }
+            } else if (!include && index.usable) {
+                --r;
+                if (unknown) {
+                    ++q;
+                } else {
+                    auto const bits = entryBits(column.include, index.includeBits, index.include,
+                                                index.includeTested, cells, row, counters);
+                    bool const satisfies = group.combine == Combine::All ? bits == index.compiled : bits != 0;
+                    y += satisfies ? 1 : 0;
+                }
+                include = decide();
+                if (include == Match::No) {
+                    return Match::No;
+                }
+            }
+            if (hasExclude && !index.excludeBits.empty()) {
+                if (unknown) {
+                    excludeUnknown = true;
+                } else if (entryBits(column.exclude, index.excludeBits, index.exclude, index.excludeTested, cells,
+                                     row, counters) != 0) {
+                    return Match::No;
+                }
+            }
+        }
+        if (!include && together) {
+            include = matchTogether(group, std::span{masks}.first(group.columns.size()), unknownColumns, counters);
+            if (include == Match::No) {
+                return Match::No;
+            }
+        }
+        if (!include || *include == Match::Unknown || excludeUnknown) {
+            return Match::Unknown;
+        }
+        return Match::Yes;
+    }
+
+    /// @brief The bits of the entries of one group column that one cell matches.
+    /// @param entries The column's compiled entries.
+    /// @param bits    Each entry's bit.
+    /// @param index   The value index over the entries it holds.
+    /// @param tested  The entries the index does not hold, by place in @p entries.
+    /// @param keys    The column's keys.
+    /// @param row     The row; its cell is loaded.
+    /// @param counters Counts the index probe when not null.
+    /// @return The bits; an empty or invalid cell matches only `isEmpty` or `notEmpty` entries, with no probe.
+    [[nodiscard]] static std::uint32_t entryBits(std::span<Entry const> entries, std::span<std::uint32_t const> bits,
+                                                 ValueIndex const& index, std::span<std::size_t const> tested,
+                                                 KeyColumn const& keys, std::uint32_t row,
+                                                 FilterCounters* counters) {
+        std::uint32_t out = 0;
+        if (keys.states[row] != CellState::Valid) {
+            for (std::size_t at = 0; at < entries.size(); ++at) {
+                if (matches(entries[at], keys, row)) {
+                    out |= bits[at];
+                }
+            }
+            return out;
+        }
+        if (!index.empty()) {
+            out = index.lookup(keys, row, counters);
+        }
+        for (auto const at : tested) {
+            if (matches(entries[at], keys, row, counters)) {
+                out |= bits[at];
             }
         }
         return out;
+    }
+
+    /// @brief `Together` mode's answer once every column is read.
+    /// @param group          The group.
+    /// @param masks          Each column's include bits; zero for an unknown column.
+    /// @param unknownColumns The unknown columns, as bits of their places in `group.columns`.
+    /// @param counters       Counts the known pass's augmentations when not null.
+    /// @return `Yes` when a matching over the known cells covers every entry; `Unknown` when one does only with
+    ///         every unknown column matching every entry compiled on it; `No` otherwise.
+    [[nodiscard]] static Match matchTogether(Group const& group, std::span<std::uint32_t> masks,
+                                             std::uint32_t unknownColumns, FilterCounters* counters) {
+        auto const entries = group.includeCount;
+        std::uint32_t const full = entries >= 32 ? ~0U : (1U << entries) - 1U;
+        std::uint32_t covered = 0;
+        for (auto const mask : masks) {
+            covered |= mask;
+        }
+        if (covered == full && cover(masks, entries, counters)) {
+            return Match::Yes;
+        }
+        if (unknownColumns == 0) {
+            return Match::No;
+        }
+        covered = 0;
+        for (std::size_t at = 0; at < masks.size(); ++at) {
+            if ((unknownColumns >> at) & 1U) {
+                masks[at] = group.index[at].compiled;
+            }
+            covered |= masks[at];
+        }
+        return covered == full && cover(masks, entries, nullptr) ? Match::Unknown : Match::No;
+    }
+
+    /// @brief Whether every entry can be given a column of its own among @p masks: augmenting paths, one search an
+    ///        entry.
+    /// @param masks    Each column's entry bits.
+    /// @param entries  The entries to cover, bits `0..entries-1`.
+    /// @param counters Counts each search in `augmentations` when not null.
+    /// @return `true` when a matching covers every entry.
+    [[nodiscard]] static bool cover(std::span<std::uint32_t const> masks, std::size_t entries,
+                                    FilterCounters* counters) {
+        constexpr std::size_t kMaxTogether = 16;
+        std::array<int, kMaxTogether> owner{};
+        owner.fill(-1);
+        for (std::size_t entry = 0; entry < entries; ++entry) {
+            if (counters != nullptr) {
+                ++counters->augmentations;
+            }
+            std::uint32_t visited = 0;
+            if (!augment(static_cast<int>(entry), masks, owner, visited)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /// @brief One augmenting-path search from @p entry.
+    /// @param entry   The entry to place.
+    /// @param masks   Each column's entry bits.
+    /// @param owner   The entry each column holds, or -1.
+    /// @param visited The columns this search has visited.
+    /// @return `true` when @p entry was placed.
+    [[nodiscard]] static bool augment(int entry, std::span<std::uint32_t const> masks, std::span<int> owner,
+                                      std::uint32_t& visited) {
+        for (std::size_t column = 0; column < masks.size(); ++column) {
+            if (((masks[column] >> entry) & 1U) == 0 || ((visited >> column) & 1U) != 0) {
+                continue;
+            }
+            visited |= 1U << column;
+            if (owner[column] < 0 || augment(owner[column], masks, owner, visited)) {
+                owner[column] = entry;
+                return true;
+            }
+        }
+        return false;
     }
 
     /// @brief What the whole filter says of a row: `No` when any column filter
@@ -474,7 +901,8 @@ public:
 private:
     friend std::expected<CompiledFilter, TableError> compileFilter(FilterSpec const& spec,
                                                                    std::span<ColumnInfo const> columns,
-                                                                   Services const& services);
+                                                                   Services const& services,
+                                                                   std::span<ColumnGroupInfo const> groups);
 
     template <typename T>
     [[nodiscard]] static bool compare(Entry const& entry, T const& value, std::array<T, 2> const& operand) {
@@ -839,46 +1267,207 @@ struct RawEntry {
     return out;
 }
 
-/// @brief Compiles a group: per column, the entries that apply to it.
+/// @brief Adds a compiled `eq` or `oneOf` entry's values to a group column's value index.
+/// @param entry  The compiled entry; not case-sensitive.
+/// @param raw    The entry as the spec gave it (a `oneOf`'s members are parsed again for the index).
+/// @param info   The column.
+/// @param services Collator and date parser.
+/// @param bit    The entry's bit.
+/// @param index  The index to add to.
+inline void indexEntry(CompiledFilter::Entry const& entry, FilterEntry const& raw, ColumnInfo const& info,
+                       Services const& services, std::uint32_t bit, ValueIndex& index) {
+    auto const add = [&](CompiledFilter::Entry const& parsed) {
+        switch (info.kind) {
+            case ColumnKind::Integer:
+            case ColumnKind::Key:
+                if (parsed.exact[0].isInteger()) {
+                    index.add(parsed.exact[0], bit);
+                }
+                break;
+            case ColumnKind::Decimal:
+            case ColumnKind::Quantity:
+                index.add(parsed.exact[0], bit);
+                break;
+            case ColumnKind::Number:
+                index.add(parsed.reals[0], bit);
+                break;
+            case ColumnKind::Date:
+            case ColumnKind::DateTime:
+            case ColumnKind::Bool:
+                index.add(parsed.ints[0], bit);
+                break;
+            case ColumnKind::Text:
+                index.add(parsed.text, bit);
+                break;
+            case ColumnKind::Custom:
+            default:
+                break;
+        }
+    };
+    if (entry.op == CompiledFilter::Op::Eq) {
+        add(entry);
+        return;
+    }
+    CompiledFilter::Entry parsed;
+    for (auto const& member : *raw.oneOf) {
+        if (parseOperand(info, services, member, 0, parsed)) {
+            add(parsed);
+        }
+    }
+}
+
+/// @brief Compiles one side of a group's entries for one column, appending what compiled to @p entries.
+/// @param raw       The side's entries, as the spec gave them.
+/// @param info      The column.
+/// @param services  Collator and date parser.
+/// @param appliesTo Per entry, the columns it compiled on so far.
+/// @param lastError The latest error of an entry that did not apply to a column.
+/// @param entries   Receives the compiled entries.
+/// @param bits      Receives each compiled entry's bit.
+/// @param index     Receives the values of the compiled `eq` and `oneOf` entries that are not case-sensitive.
+/// @param tested    Receives the place in @p entries of every other compiled entry.
+/// @return Nothing, or an `InvalidSpec` error: an entry that sets no operator, or several.
+[[nodiscard]] inline std::expected<void, TableError> compileGroupSide(
+    std::span<FilterEntry const> raw, ColumnInfo const& info, Services const& services,
+    std::vector<std::size_t>& appliesTo, std::optional<TableError>& lastError,
+    std::vector<CompiledFilter::Entry>& entries, std::vector<std::uint32_t>& bits, ValueIndex& index,
+    std::vector<std::size_t>& tested) {
+    for (std::size_t i = 0; i < raw.size(); ++i) {
+        auto compiled = compileEntry(raw[i], info, services);
+        if (!compiled) {
+            if (compiled.error().code == TableErrorCode::InvalidSpec) {
+                return std::unexpected(std::move(compiled.error()));
+            }
+            lastError = std::move(compiled.error());
+            continue;
+        }
+        ++appliesTo[i];
+        auto const bit = 1U << i;
+        bool const byValue = (compiled->op == CompiledFilter::Op::Eq || compiled->op == CompiledFilter::Op::OneOf) &&
+                             !compiled->caseSensitive;
+        if (byValue) {
+            indexEntry(*compiled, raw[i], info, services, bit, index);
+        } else {
+            tested.push_back(entries.size());
+        }
+        bits.push_back(bit);
+        entries.push_back(std::move(*compiled));
+    }
+    return {};
+}
+
+/// @brief Compiles a group: per column, the entries that apply to it, and a value index over them.
+///
+/// Exactly one of `group` and `columns` names the columns (`InvalidSpec`); `group` resolves through @p groups
+/// (`UnknownColumn` naming it) and a column named twice is `InvalidSpec`. `Together` takes 0, or 2 to k, include
+/// entries and at most 16 columns; `atLeast` and `exactly` take `0 <= n <= k` (`InvalidSpec`). More than 32
+/// include entries, or 32 exclude entries, is `LimitExceeded`: each side's entries are bits of one 32-bit mask,
+/// and the bound is checked here because a filter set on an engine is compiled without a query's limits. In a
+/// group, an entry that does not apply to a column (its operator undefined, or its value not parsing, for the
+/// column's kind) is left out on that column, and is an error only when it applies to none.
 /// @param group    The group.
 /// @param columns  The table's columns.
 /// @param services Collator and date parser.
-/// @return The compiled group, or an error when a column is unknown, an entry
-///         is malformed, or an entry applies to none of the group's columns.
-[[nodiscard]] inline std::expected<CompiledFilter::Group, TableError> compileGroup(GroupFilter const& group,
-                                                                                   std::span<ColumnInfo const> columns,
-                                                                                   Services const& services) {
-    CompiledFilter::Group out;
-    std::vector<std::size_t> appliesTo(group.include.size(), 0);
-    std::optional<TableError> lastError;
-    for (auto const& columnId : group.columns) {
-        auto const index = findColumn(columns, columnId);
-        if (!index) {
-            return std::unexpected(unknownColumn(columnId));
+/// @param groups   The table's declared groups.
+/// @return The compiled group, or the first error.
+[[nodiscard]] inline std::expected<CompiledFilter::Group, TableError> compileGroup(
+    GroupFilter const& group, std::span<ColumnInfo const> columns, Services const& services,
+    std::span<ColumnGroupInfo const> groups) {
+    constexpr std::size_t kMaxSide = 32;
+    constexpr std::size_t kMaxTogether = 16;
+    auto const invalid = [](std::string message) {
+        return std::unexpected(
+            TableError{.code = TableErrorCode::InvalidSpec, .column = {}, .message = std::move(message)});
+    };
+    if (group.group.empty() == group.columns.empty()) {
+        return invalid("a filter group names a declared group or its columns");
+    }
+    std::span<std::string const> names = group.columns;
+    if (!group.group.empty()) {
+        auto const declared = std::ranges::find(groups, group.group, &ColumnGroupInfo::id);
+        if (declared == groups.end()) {
+            return std::unexpected(TableError{.code = TableErrorCode::UnknownColumn,
+                                              .column = group.group,
+                                              .message = "no column group " + group.group});
         }
-        CompiledFilter::Column column{.column = *index, .combine = group.combine, .include = {}, .exclude = {}};
-        for (std::size_t i = 0; i < group.include.size(); ++i) {
-            auto compiled = compileEntry(group.include[i], columns[*index], services);
-            if (compiled) {
-                ++appliesTo[i];
-                column.include.push_back(std::move(*compiled));
-            } else if (compiled.error().code == TableErrorCode::InvalidSpec) {
-                return std::unexpected(std::move(compiled.error()));
-            } else {
-                lastError = std::move(compiled.error());
-            }
-        }
-        // With `all`, a column that cannot evaluate every entry cannot
-        // match; with `any`, one that evaluates none cannot either.
-        bool const usable =
-            group.combine == Combine::All ? column.include.size() == group.include.size() : !column.include.empty();
-        if (usable) {
-            out.columns.push_back(std::move(column));
+        names = declared->columns;
+    }
+    for (std::size_t i = 0; i < names.size(); ++i) {
+        if (std::find(names.begin(), names.begin() + static_cast<std::ptrdiff_t>(i), names[i]) !=
+            names.begin() + static_cast<std::ptrdiff_t>(i)) {
+            return invalid("a filter group names column " + names[i] + " twice");
         }
     }
-    if (std::ranges::find(appliesTo, std::size_t{0}) != appliesTo.end()) {
+    if (group.include.size() > kMaxSide || group.exclude.size() > kMaxSide) {
+        return std::unexpected(TableError{.code = TableErrorCode::LimitExceeded,
+                                          .column = {},
+                                          .message = "a filter group has more than 32 entries on a side"});
+    }
+    auto const k = names.size();
+    if (group.mode == GroupMode::Together) {
+        if (k > kMaxTogether) {
+            return invalid("a together group has at most 16 columns");
+        }
+        if (!group.include.empty() && (group.include.size() < 2 || group.include.size() > k)) {
+            return invalid("a together group takes 2 to as many include entries as it has columns");
+        }
+    } else if ((group.match.kind == ColumnCount::Kind::AtLeast || group.match.kind == ColumnCount::Kind::Exactly) &&
+               (group.match.n < 0 || std::cmp_greater(group.match.n, k))) {
+        return invalid("a group's count is outside 0 to its column count");
+    }
+    CompiledFilter::Group out;
+    out.k = k;
+    out.mode = group.mode;
+    out.match = group.match;
+    out.combine = group.combine;
+    out.includeCount = group.include.size();
+    out.excludeCount = group.exclude.size();
+    std::vector<std::size_t> includeApplies(group.include.size(), 0);
+    std::vector<std::size_t> excludeApplies(group.exclude.size(), 0);
+    std::optional<TableError> lastError;
+    for (auto const& columnId : names) {
+        auto const at = findColumn(columns, columnId);
+        if (!at) {
+            return std::unexpected(unknownColumn(columnId));
+        }
+        auto const& info = columns[*at];
+        CompiledFilter::Column column{.column = *at, .combine = group.combine, .include = {}, .exclude = {}};
+        CompiledFilter::GroupColumn index{.includeBits = {},
+                                          .excludeBits = {},
+                                          .include = ValueIndex{info.kind},
+                                          .exclude = ValueIndex{info.kind},
+                                          .includeTested = {},
+                                          .excludeTested = {},
+                                          .compiled = 0,
+                                          .usable = false};
+        if (auto side = compileGroupSide(group.include, info, services, includeApplies, lastError, column.include,
+                                         index.includeBits, index.include, index.includeTested);
+            !side) {
+            return std::unexpected(std::move(side.error()));
+        }
+        if (auto side = compileGroupSide(group.exclude, info, services, excludeApplies, lastError, column.exclude,
+                                         index.excludeBits, index.exclude, index.excludeTested);
+            !side) {
+            return std::unexpected(std::move(side.error()));
+        }
+        for (auto const bit : index.includeBits) {
+            index.compiled |= bit;
+        }
+        // With `all`, a column that cannot evaluate every entry cannot satisfy them; with `any`, one that
+        // evaluates none cannot either.
+        index.usable = group.combine == Combine::All ? column.include.size() == group.include.size()
+                                                     : !column.include.empty();
+        if (!column.include.empty() || !column.exclude.empty()) {
+            out.columns.push_back(std::move(column));
+            out.index.push_back(std::move(index));
+        }
+    }
+    auto const unapplied = [](std::vector<std::size_t> const& applies) {
+        return std::ranges::find(applies, std::size_t{0}) != applies.end();
+    };
+    if (unapplied(includeApplies) || unapplied(excludeApplies)) {
         return std::unexpected(lastError.value_or(TableError{
-            .code = TableErrorCode::InvalidSpec, .column = {}, .message = "a filter group names no column"}));
+            .code = TableErrorCode::InvalidSpec, .column = {}, .message = "a filter group entry applies to no column"}));
     }
     return out;
 }
@@ -891,14 +1480,17 @@ struct RawEntry {
 /// whose value does not parse for it, does not apply to that column; it is an
 /// error only when it applies to none of the group's columns. A quick-search
 /// text therefore searches the text columns of a group that also holds numbers.
+/// A group with no include and no exclude entry compiles to nothing.
 /// @param spec     The filter.
 /// @param columns  The table's columns.
 /// @param services The collator (values of text filters are folded with it)
 ///                 and date parser; null members mean their defaults.
+/// @param groups   The table's declared groups, which a group filter's `group` names.
 /// @return The compiled filter, or the first error, naming its column.
 [[nodiscard]] inline std::expected<CompiledFilter, TableError> compileFilter(FilterSpec const& spec,
                                                                              std::span<ColumnInfo const> columns,
-                                                                             Services const& services) {
+                                                                             Services const& services,
+                                                                             std::span<ColumnGroupInfo const> groups) {
     CompiledFilter out;
     for (auto const& [columnId, filter] : spec.columns) {
         auto compiled = detail::compileColumnFilter(columnId, filter, columns, services);
@@ -910,15 +1502,26 @@ struct RawEntry {
         }
     }
     for (auto const& group : spec.groups) {
-        auto compiled = detail::compileGroup(group, columns, services);
+        auto compiled = detail::compileGroup(group, columns, services, groups);
         if (!compiled) {
             return std::unexpected(std::move(compiled.error()));
         }
-        if (!group.include.empty()) {
+        if (!group.include.empty() || !group.exclude.empty()) {
             out._groups.push_back(std::move(*compiled));
         }
     }
     return out;
+}
+
+/// @brief `compileFilter` for a table that declares no groups.
+/// @param spec     The filter.
+/// @param columns  The table's columns.
+/// @param services The collator and date parser; null members mean their defaults.
+/// @return The compiled filter, or the first error, naming its column.
+[[nodiscard]] inline std::expected<CompiledFilter, TableError> compileFilter(FilterSpec const& spec,
+                                                                             std::span<ColumnInfo const> columns,
+                                                                             Services const& services) {
+    return compileFilter(spec, columns, services, {});
 }
 
 /// @brief `compileFilter`, with an exception from the collator or the date parser returned as `ServiceFailed`.
@@ -927,15 +1530,17 @@ struct RawEntry {
 /// @param spec     The filter.
 /// @param columns  The table's columns.
 /// @param services The collator and date parser; null members mean their defaults.
+/// @param groups   The table's declared groups.
 /// @return The compiled filter, or the first error.
 [[nodiscard]] inline std::expected<CompiledFilter, TableError> compileFilterGuarded(
-    FilterSpec const& spec, std::span<ColumnInfo const> columns, Services const& services) {
+    FilterSpec const& spec, std::span<ColumnInfo const> columns, Services const& services,
+    std::span<ColumnGroupInfo const> groups = {}) {
     auto const failed = [](std::string const& what) {
         return std::unexpected(
             TableError{.code = TableErrorCode::ServiceFailed, .column = {}, .message = "a service failed: " + what});
     };
     try {
-        return compileFilter(spec, columns, services);
+        return compileFilter(spec, columns, services, groups);
     } catch (std::exception const& error) {
         return failed(error.what());
     } catch (...) {
@@ -1043,6 +1648,22 @@ private:
 // NOLINTEND(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access)
 
 }  // namespace morph::table
+
+/// @brief JSON names of `morph::table::GroupMode`: `columns` and `together`.
+template <>
+struct glz::meta<morph::table::GroupMode> {
+    using enum morph::table::GroupMode;
+    /// @brief Each enumerator after its JSON name.
+    static constexpr auto value = glz::enumerate("columns", Columns, "together", Together);
+};
+
+/// @brief The JSON of `morph::table::ColumnCount`: `"any"`, `"all"`, `{"atLeast": n}` or `{"exactly": n}`.
+template <>
+struct glz::meta<morph::table::ColumnCount> {
+    /// @brief Read and written through its wire shape.
+    static constexpr auto value =
+        glz::custom<&morph::table::ColumnCount::setWire, &morph::table::ColumnCount::getWire>;
+};
 
 /// @brief JSON names of `morph::table::Combine`: `any` and `all`.
 template <>
