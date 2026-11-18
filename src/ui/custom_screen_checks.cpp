@@ -1,14 +1,20 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include <algorithm>
+#include <expected>
+#include <glaze/glaze.hpp>
+#include <list>
 #include <cstdlib>
 #include <deque>
 #include <functional>
 #include <map>
+#include <morph/ui/author.hpp>
+#include <morph/ui/bundle.hpp>
 #include <morph/ui/custom_screens.hpp>
 #include <morph/ui/document.hpp>
 #include <morph/ui/service.hpp>
 #include <morph/ui/value.hpp>
+#include <mutex>
 #include <optional>
 #include <set>
 #include <string>
@@ -454,6 +460,138 @@ std::optional<Refusal> checkBaseRule(Document const& base, std::string_view base
                          "`onPick` or a `dropZone`'s `onDrop`");
     }
     return std::nullopt;
+}
+
+std::optional<std::optional<Refusal>> VerdictCache::find(std::string const& key) {
+    std::scoped_lock const lock{_mutex};
+    auto const found = _entries.find(key);
+    if (found == _entries.end()) {
+        return std::nullopt;
+    }
+    _order.splice(_order.begin(), _order, found->second.order);
+    return found->second.verdict;
+}
+
+void VerdictCache::store(std::string key, std::optional<Refusal> verdict) {
+    std::scoped_lock const lock{_mutex};
+    if (auto const found = _entries.find(key); found != _entries.end()) {
+        found->second.verdict = std::move(verdict);
+        _order.splice(_order.begin(), _order, found->second.order);
+        return;
+    }
+    _order.push_front(key);
+    _entries.emplace(std::move(key), Entry{.verdict = std::move(verdict), .order = _order.begin()});
+    while (_entries.size() > _capacity) {
+        _entries.erase(_order.back());
+        _order.pop_back();
+    }
+}
+
+std::size_t VerdictCache::size() const {
+    std::scoped_lock const lock{_mutex};
+    return _entries.size();
+}
+
+std::string verdictKey(std::string_view basedOn, std::string_view document, std::string_view digest,
+                       std::vector<std::string> const& permitted) {
+    std::string joined;
+    for (std::string const& action : permitted) {
+        joined += action;
+        joined += '\n';
+    }
+    return contentHash(document) + ' ' + std::string{basedOn} + ' ' + std::string{digest} + ' ' +
+           contentHash(joined);
+}
+
+namespace {
+
+/// @brief Checks 2 to 6 of `checkCustomScreen`.
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): the base, then the document, at every call.
+[[nodiscard]] std::optional<Refusal> checkAgainstBase(ServedBundle const& bundle,
+                                                      ::morph::session::Context const& session,
+                                                      ::morph::session::IAuthorizer const& authorizer,
+                                                      std::string_view basedOn, std::string_view document,
+                                                      std::vector<std::string> const& permitted) {
+    auto const base = std::ranges::find(bundle.screens, basedOn, [](ServedScreen const& s) { return s.entry.id; });
+    if (base == bundle.screens.end() || base->hash.empty()) {
+        return refusalAt("", "`basedOn` names no screen document of the application: `" + std::string{basedOn} +
+                                 "`");
+    }
+    if (!screenAdmitted(*base, session, authorizer)) {
+        return refusalAt("", "this person may not open the base screen `" + std::string{basedOn} + "`");
+    }
+    std::string const& baseText = bundle.files.at(base->hash).bytes;
+    LoadOptions const load{.catalog = bundle.catalog};
+    auto const baseDocument = loadDocumentText(baseText, load);
+    if (!baseDocument) {
+        return refusalAt("", "the base screen `" + std::string{basedOn} +
+                                 "` does not load: " + baseDocument.error().message());
+    }
+    auto custom = loadDocumentText(document, load);
+    if (!custom) {
+        return std::move(custom.error());
+    }
+    if (!custom->view) {
+        return refusalAt("", "a custom screen is a screen, not the app document");
+    }
+    if (auto refusal = author::checkAccessibility(*custom)) {
+        return refusal;
+    }
+    if (auto refusal = checkBaseRule(*baseDocument, baseText, *custom, document)) {
+        return refusal;
+    }
+    detail::DocumentActions const named{*custom};
+    for (ActionRef const& ref : named.actions()) {
+        if (std::ranges::find(permitted, ref.action) == permitted.end()) {
+            return refusalAt(named.pathOf(ref), "this person may not run action `" + ref.action + "`");
+        }
+    }
+    return std::nullopt;
+}
+
+}  // namespace
+
+std::optional<Refusal> checkCustomScreen(ServedBundle const& bundle, ::morph::session::Context const& session,
+                                         ::morph::session::IAuthorizer const& authorizer, std::string_view basedOn,
+                                         std::string_view document, CustomScreensOptions const& options,
+                                         VerdictCache* cache) {
+    if (document.size() > options.maxDocumentBytes) {
+        return refusalAt("", "a custom screen is longer than " + std::to_string(options.maxDocumentBytes) +
+                                 " bytes");
+    }
+    if (detail::nestsTooDeep(document)) {
+        return refusalAt("", "a custom screen nests deeper than " + std::to_string(kMaxJsonDepth) + " levels");
+    }
+    std::vector<std::string> const permitted = permittedActions(bundle, session, authorizer);
+    std::string key;
+    if (cache != nullptr) {
+        key = verdictKey(basedOn, document, bundle.digest, permitted);
+        if (auto hit = cache->find(key)) {
+            return std::move(*hit);
+        }
+    }
+    std::optional<Refusal> verdict = checkAgainstBase(bundle, session, authorizer, basedOn, document, permitted);
+    if (cache != nullptr) {
+        cache->store(std::move(key), verdict);
+    }
+    return verdict;
+}
+
+std::expected<std::string, Refusal> withScreenId(std::string_view document, std::string_view id) {
+    auto parsed = parseJson(document);
+    if (!parsed) {
+        return std::unexpected(refusalAt("", "a custom screen is JSON text: " + parsed.error()));
+    }
+    auto* const object = std::get_if<Json::object_t>(&parsed->data);
+    if (object == nullptr) {
+        return std::unexpected(refusalAt("", "a custom screen is a JSON object"));
+    }
+    (*object)["id"].data = std::string{id};
+    auto written = glz::write_json(*parsed);
+    if (!written) {
+        return std::unexpected(refusalAt("", "a custom screen could not be written back as JSON"));
+    }
+    return std::move(*written);
 }
 
 }  // namespace morph::ui

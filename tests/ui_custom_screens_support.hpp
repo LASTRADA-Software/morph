@@ -5,8 +5,11 @@
 
 #pragma once
 #include <catch2/catch_test_macros.hpp>
+#include <memory>
 #include <morph/ui/bundle.hpp>
 #include <morph/ui/document.hpp>
+#include <morph/ui/service.hpp>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 
@@ -51,6 +54,25 @@ inline morph::ui::Document load(std::string const& text) {
         FAIL("fixture does not load: " << loaded.error().message());
     }
     return std::move(*loaded);
+}
+
+/// The service fixture's registry with the base screen added as `lims.base`.
+inline morph::ui::UiRegistry registry() {
+    morph::ui::UiRegistry made = uiservice::registry();
+    auto const added = made.addScreen(uiservice::entry("lims.base"), baseScreen("lims.base"));
+    if (!added) {
+        throw std::runtime_error{added.error().message()};
+    }
+    return made;
+}
+
+/// That registry's bundle.
+inline std::shared_ptr<morph::ui::ServedBundle const> bundle() {
+    auto built = registry().build();
+    if (!built) {
+        throw std::runtime_error{built.error().message()};
+    }
+    return *built;
 }
 
 }  // namespace screens_test
