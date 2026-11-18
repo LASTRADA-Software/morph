@@ -91,6 +91,12 @@ FilterEntry isEmpty() { return FilterEntry{.isEmpty = true}; }
 FilterEntry notEmpty() { return FilterEntry{.notEmpty = true}; }
 FilterEntry oneOf(std::vector<std::string> v) { return FilterEntry{.oneOf = std::move(v)}; }
 
+// The rows of a filter that must compile: a refused one fails the case here rather than being dereferenced.
+Rows must(std::expected<Rows, TableError> const& result) {
+    REQUIRE(result.has_value());
+    return *result;
+}
+
 std::vector<FilterEntry> eqEntries(std::vector<std::string> const& values) {
     std::vector<FilterEntry> out;
     for (auto const& value : values) {
@@ -708,9 +714,9 @@ TEST_CASE("table: oneOf is the OR of its eq entries over random tables", "[table
             values.push_back(kind.operands.at(rng() % kind.operands.size()));
         }
         REQUIRE(f.by(on("c", {oneOf(values)})));
-        CHECK(*f.by(on("c", {oneOf(values)})) == *f.by(on("c", eqEntries(values))));
-        CHECK(*f.by(on("c", {}, Combine::Any, {oneOf(values)})) ==
-              *f.by(on("c", {}, Combine::Any, eqEntries(values))));
+        CHECK(must(f.by(on("c", {oneOf(values)}))) == must(f.by(on("c", eqEntries(values)))));
+        CHECK(must(f.by(on("c", {}, Combine::Any, {oneOf(values)}))) ==
+              must(f.by(on("c", {}, Combine::Any, eqEntries(values)))));
     }
 }
 
@@ -807,8 +813,8 @@ TEST_CASE("groups: the spec's truth table", "[table][filter][groups]") {
     CHECK(by({.group = "company", .match = atLeast(2), .include = {oneOf({"F", "S"})}}) == Rows{0, 1, 2});
     CHECK(by({.group = "company", .match = exactly(1), .include = {eq("F")}}) == Rows{0, 3});
     CHECK(by({.group = "company", .match = every(), .include = {oneOf({"F", "S"})}}) == Rows{2});
-    CHECK(*by({.columns = {"companyA", "companyB", "companyC"}, .include = {eq("F")}}) ==
-          *by({.group = "company", .include = {eq("F")}}));  // the plain group is `any`
+    CHECK(must(by({.columns = {"companyA", "companyB", "companyC"}, .include = {eq("F")}})) ==
+          must(by({.group = "company", .include = {eq("F")}})));  // the plain group is `any`
     CHECK(by({.group = "company", .include = {}, .exclude = {eq("X")}}) == Rows{2});  // "none of the companies is X"
     std::vector<FilterEntry> seventeen;  // only the 17th entry can match
     for (int i = 1; i <= 16; ++i) {
@@ -885,8 +891,8 @@ TEST_CASE("groups: duplicate columns, exactly zero and too many together entries
           TableErrorCode::InvalidSpec);  // one entry: neither 0 nor 2..k
     // Together takes 0, or 2 to k, include entries: an exclude-only group compiles in either mode.
     CHECK(by({.group = "company", .mode = GroupMode::Together, .include = {}, .exclude = {eq("X")}}) == Rows{2});
-    CHECK(*by({.group = "company", .mode = GroupMode::Together, .include = {}, .exclude = {eq("X")}}) ==
-          *by({.group = "company", .include = {}, .exclude = {eq("X")}}));
+    CHECK(must(by({.group = "company", .mode = GroupMode::Together, .include = {}, .exclude = {eq("X")}})) ==
+          must(by({.group = "company", .include = {}, .exclude = {eq("X")}})));
     CHECK(by({.group = "company", .mode = GroupMode::Together, .include = {}, .exclude = {}}) == Rows{0, 1, 2, 3, 4});
     CHECK(codeOf(f.by(FilterSpec{.columns = {},
                                  .groups = {{.group = "company", .match = atLeast(4), .include = {eq("F")}}}})) ==
@@ -956,7 +962,8 @@ TEST_CASE("groups: a declared group is checked where the columns are read", "[ta
     CHECK(apply(*source, TableQuery{}).has_value());
 }
 
-// Mutation: ColumnCount's reader taking `{"atLeast": n}` as `exactly`: the shape does not read back.
+// Mutations: ColumnCount's reader taking `{"atLeast": n}` as `exactly` (the shape does not read back); the malformed
+// check made in Columns mode only (a Together group with a malformed match compiles).
 TEST_CASE("groups: the JSON shape reads and writes", "[table][filter][groups]") {
     auto const json =
         R"({"group":"company","mode":"together","match":{"atLeast":2},"combine":"all","include":[{"eq":"F"},{"eq":"S"}],"exclude":[{"eq":"X"}]})";
@@ -978,6 +985,8 @@ TEST_CASE("groups: the JSON shape reads and writes", "[table][filter][groups]") 
     ColumnCount unknown;
     REQUIRE_FALSE(glz::read_json(unknown, std::string{R"({"most":2})"}));
     CHECK(codeOf(by({.group = "company", .match = unknown, .include = {eq("F")}})) == TableErrorCode::InvalidSpec);
+    CHECK(codeOf(by({.group = "company", .mode = GroupMode::Together, .match = unknown,
+                     .include = {eq("F"), eq("S")}})) == TableErrorCode::InvalidSpec);
 }
 
 // Mutation: ColumnCount::operator== comparing `kind` only: a changed `match.n` compares equal.
@@ -1309,11 +1318,12 @@ TEST_CASE("groups: undecided rows are the three-valued rule's", "[table][filter]
         auto const page = apply(*source, TableQuery{.sort = {}, .filters = spec, .page = {}});
         REQUIRE(page);
         CHECK(page->undecided == oracleUnknown);
-        CHECK(static_cast<std::int64_t>(f.by(spec)->size()) == oracleYes);
+        CHECK(static_cast<std::int64_t>(must(f.by(spec)).size()) == oracleYes);
     }
 }
 
-// Gate G5. Mutation: skipping the covered-mask check: rows that cannot match run augmentations.
+// Gate G5. Mutations: skipping the covered-mask check (rows that cannot match run augmentations); the matching
+// started again from no assignment for each entry (136 searches on a covered row, not 16).
 TEST_CASE("groups: a row costs k lookups and at most one augmentation an entry", "[table][filter][groups]") {
     constexpr std::uint32_t kRows = 1000;
     std::mt19937 rng{5};
@@ -1324,9 +1334,20 @@ TEST_CASE("groups: a row costs k lookups and at most one augmentation an entry",
         columns.push_back(tabletest::col(ids.back(), ColumnKind::Text));
     }
     std::vector<std::vector<Cell>> rows(kRows);
-    for (auto& row : rows) {
-        for (int c = 0; c < 16; ++c) {
-            row.emplace_back("v" + std::to_string(rng() % 32));
+    for (std::uint32_t r = 0; r < kRows; ++r) {
+        // Every 50th row holds v0..v15 in a shuffled order: the together filter below covers it, so its matching
+        // runs to the bound. Random rows almost never hold all sixteen values.
+        std::vector<int> values(16);
+        std::iota(values.begin(), values.end(), 0);
+        if (r % 50 == 0) {
+            std::ranges::shuffle(values, rng);
+        } else {
+            for (auto& value : values) {
+                value = static_cast<int>(rng() % 32);
+            }
+        }
+        for (auto const value : values) {
+            rows[r].emplace_back("v" + std::to_string(value));
         }
     }
     auto const source = tabletest::makeSource(columns, rows);
@@ -1366,7 +1387,7 @@ TEST_CASE("groups: a row costs k lookups and at most one augmentation an entry",
         auto& worst = covered ? maxAugmentationsOnCoveredRows : maxAugmentationsOnUncoveredRows;
         worst = std::max(worst, counters.augmentations);
     }
+    REQUIRE(coveredRows >= kRows / 50);
     CHECK(maxAugmentationsOnUncoveredRows == 0);
-    CHECK(maxAugmentationsOnCoveredRows <= 16);
-    INFO("rows holding all sixteen values: " << coveredRows);
+    CHECK(maxAugmentationsOnCoveredRows == 16);  // one search an entry, reached on every covered row
 }

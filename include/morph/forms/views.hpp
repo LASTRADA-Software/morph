@@ -344,7 +344,7 @@ concept HasViewActions = requires {
     // entry being built; see the directive above.
     // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access)
     entry["kind"] = std::string{inferColumnKind(rowDom, prop)};
-    for (std::string_view const key : {"title", "x-unitAlternatives", "x-comparator", "x-level", "x-group"}) {
+    for (std::string_view const key : {"title", "x-unitAlternatives", "x-comparator", "x-level", "x-column-group"}) {
         if (auto const* const value = ::morph::forms::detail::findMember(prop, key)) {
             // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access)
             entry[std::string{key}] = *value;
