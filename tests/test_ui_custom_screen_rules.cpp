@@ -234,6 +234,19 @@ TEST_CASE("base rule: an action keeps the kind of position it has in the base", 
         CHECK(refusal->path == "/queries/again");
         CHECK(refusal->reason.contains("position of kind `query`"));
     }
+    SECTION("an action the base only evaluates, called as a query") {
+        auto const withQuery = [](std::string_view id, std::string_view member) {
+            return replaced(miniScreen(id), R"("queries":{)",
+                            R"("queries":{"dry":{"model":"sample",)" + std::string{member} + R"(},)");
+        };
+        auto const refusal = between(withQuery("lims.base", R"("evaluate":"Lims_Save")"),
+                                     withQuery("custom:mine", R"("action":"Lims_Save")"));
+        REQUIRE(refusal);
+        CHECK(refusal->path == "/queries/dry");
+        CHECK(refusal->reason.contains("position of kind `query`"));
+        CHECK_FALSE(between(withQuery("lims.base", R"("evaluate":"Lims_Save")"),
+                            withQuery("custom:mine", R"("evaluate":"Lims_Save")")));
+    }
     SECTION("a form the person submits made one that submits itself") {
         auto const refusal =
             between(withForm("lims.base", R"(,"submit":"explicit")"), withForm("custom:mine", R"(,"submit":"auto")"));

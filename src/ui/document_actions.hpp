@@ -56,7 +56,7 @@ private:
 struct ActionUse {
     /// @brief The action and its model type.
     ActionRef action;
-    /// @brief The position's kind: `query`, `mutation`, the kind of a model-bound node (`collection`, `wizard`,
+    /// @brief The position's kind: `query`, `evaluate`, `mutation`, the kind of a model-bound node (`collection`, `wizard`,
     ///        `table`), or for a form its literal `submit`: `form` when absent, `explicit form`, `auto form`.
     std::string position;
     /// @brief The JSON Pointer of the query, mutation or node.
@@ -148,7 +148,9 @@ private:
             if (top) {
                 _top.push_back(ref);
             }
-            name(std::move(ref), "query", query.path);
+            // An evaluate is a dry run of the action's checks: a position of its own, since a call there would run
+            // the action's handler.
+            name(std::move(ref), query.evaluate ? "evaluate" : "query", query.path);
         }
         for (MutationDecl const& mutation : scope.mutations) {
             name(ActionRef{.modelType = resolve(mutation.model), .action = mutation.action}, "mutation",

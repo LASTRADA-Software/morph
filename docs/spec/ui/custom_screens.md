@@ -153,7 +153,7 @@ not have. A custom document's capabilities are a subset of its base's.
 | Compared | How |
 |---|---|
 | Params | Exactly the base's, names and types |
-| Actions: queries, mutations, forms, collections, wizards, tables, wherever declared, component fallbacks included | Each `(model type, action)` the base names, in a position of the same kind: a query, a mutation, a form with no `submit`, an `explicit` form, an `auto` form, a model-backed table, a collection, a wizard |
+| Actions: queries, mutations, forms, collections, wizards, tables, wherever declared, component fallbacks included | Each `(model type, action)` the base names, in a position of the same kind: a query, an evaluate (a query that names `evaluate`, a dry run of the action's checks), a mutation, a form with no `submit`, an `explicit` form, an `auto` form, a model-backed table, a collection, a wizard |
 | Commands run without the person pressing anything | The same trigger in the base, below |
 | Client-side commands `upload`, `download`, `switchBackend`, `signIn`, `signOut`, `resetPrefs` | Only a kind the base uses anywhere, compared by kind; `switchBackend` by kind and backend name; an `upload` only as below |
 | `host` commands | The whole command's canonical JSON matches one of the base's, and its arguments are literals |
