@@ -1468,7 +1468,7 @@ public:
     /// @param levels  The levels the request read, each with its snapshot.
     LeveledSource(std::shared_ptr<DataSource const> base, std::vector<ColumnInfo> columns,
                   std::vector<LevelInput> levels)
-        : _columns{std::move(columns)} {
+        : _columns{std::move(columns)}, _groups(base->groups().begin(), base->groups().end()) {
         auto const baseColumns = base->columns();
         std::vector<Plan> plans;
         plans.reserve(_columns.size());
@@ -1510,6 +1510,10 @@ public:
     /// @brief The view's one snapshot.
     /// @return The snapshot.
     [[nodiscard]] std::shared_ptr<RowSnapshot const> snapshot() const override { return _snapshot; }
+
+    /// @brief The base source's declared groups, copied when the view was made.
+    /// @return The groups.
+    [[nodiscard]] std::span<ColumnGroupInfo const> groups() const override { return _groups; }
 
     /// @brief Does nothing: the view never changes.
     /// @param listener Ignored.
@@ -1610,6 +1614,7 @@ private:
     // NOLINTEND(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access)
 
     std::vector<ColumnInfo> _columns;
+    std::vector<ColumnGroupInfo> _groups;
     std::shared_ptr<Snapshot const> _snapshot;
 };
 
