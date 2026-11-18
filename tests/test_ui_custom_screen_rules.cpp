@@ -42,16 +42,15 @@ TEST_CASE("base rule: an action the base does not use is refused", "[ui][custom-
 
 TEST_CASE("base rule: a command the base runs from another trigger is refused", "[ui][custom-screens][base-rule]") {
     SECTION("an attended action run on mount") {
-        auto const refusal =
-            rule(replaced(baseScreen("custom:mine"), R"("onMount":[{"run":"save"}])",
-                          R"("onMount":[{"run":"save"},{"run":"verify"}])"));
+        auto const refusal = rule(replaced(baseScreen("custom:mine"), R"("onMount":[{"run":"save"}])",
+                                           R"("onMount":[{"run":"save"},{"run":"verify"}])"));
         REQUIRE(refusal);
         CHECK(refusal->path == "/onMount/1");
         CHECK(refusal->reason.contains("onMount: run Lims_Sample/Lims_Verify"));
     }
     SECTION("a mount run moved to unmount") {
-        auto const refusal =
-            rule(replaced(baseScreen("custom:mine"), R"("onMount":[{"run":"save"}])", R"("onUnmount":[{"run":"save"}])"));
+        auto const refusal = rule(
+            replaced(baseScreen("custom:mine"), R"("onMount":[{"run":"save"}])", R"("onUnmount":[{"run":"save"}])"));
         REQUIRE(refusal);
         CHECK(refusal->path == "/onUnmount/0");
     }
@@ -79,10 +78,9 @@ TEST_CASE("base rule: a client-side command the base does not use is refused", "
     // The base's own upload, moved into a nested column, is still the base's.
     auto const attach =
         R"({"kind":"filePicker","label":"Attach","onPick":[{"upload":{"ref":"event"},"to":"save","as":"ref"}]})";
-    std::string const moved = replaced(replaced(baseScreen("custom:mine"), "," + std::string{attach}, ""),
-                                       R"({"kind":"text","text":"Results"},)",
-                                       R"({"kind":"text","text":"Results"},{"kind":"column","children":[)" +
-                                           std::string{attach} + "]},");
+    std::string const moved = replaced(
+        replaced(baseScreen("custom:mine"), "," + std::string{attach}, ""), R"({"kind":"text","text":"Results"},)",
+        R"({"kind":"text","text":"Results"},{"kind":"column","children":[)" + std::string{attach} + "]},");
     CHECK_FALSE(rule(moved));
 }
 
@@ -100,8 +98,7 @@ TEST_CASE("base rule: a host name the base does not use is refused", "[ui][custo
         CHECK(refusal->reason.contains("host `sync.count`"));
     }
     SECTION("a host component") {
-        auto const refusal =
-            rule(replaced(baseScreen("custom:mine"), R"("host":"ResultGrid")", R"("host":"Camera")"));
+        auto const refusal = rule(replaced(baseScreen("custom:mine"), R"("host":"ResultGrid")", R"("host":"Camera")"));
         REQUIRE(refusal);
         CHECK(refusal->path == "/components/Grid/host");
     }
@@ -145,7 +142,8 @@ std::string miniScreen(std::string_view id, std::string_view top = {}, std::stri
 TEST_CASE("base rule: a component's fallback is part of the document", "[ui][custom-screens][base-rule]") {
     auto const forEachWithReport =
         R"({"kind":"column","children":[{"kind":"forEach","rows":{"lit":[]},"key":{"row":"id"},)"
-        R"("scope":{"models":{"sample":{"type":"Lims_Sample","instance":"private"}},"mutations":{"rep":{"model":"sample","action":"Lims_Report"}}},)"
+        R"("scope":{"models":{"sample":{"type":"Lims_Sample","instance":"private"}},)"
+        R"("mutations":{"rep":{"model":"sample","action":"Lims_Report"}}},)"
         R"("children":[{"kind":"button","label":"R","onClick":[{"run":"rep"}]}]}]})";
     auto const refusal = between(miniScreen("lims.base"), miniScreen("custom:mine", {}, {}, forEachWithReport));
     REQUIRE(refusal);
@@ -153,11 +151,12 @@ TEST_CASE("base rule: a component's fallback is part of the document", "[ui][cus
     CHECK(refusal->reason.contains("Lims_Report"));
 }
 
-TEST_CASE("base rule: a mutation resolves its model in the scope that declares it", "[ui][custom-screens][base-rule]") {
+TEST_CASE("base rule: a mutation resolves its model in the scope that declares it",
+          "[ui][custom-screens][base-rule]") {
     auto const withWatch = [](std::string_view id, std::string_view top, std::string_view inner) {
         return miniScreen(id, top,
-                          R"({"kind":"forEach","rows":{"lit":[]},"key":{"row":"id"},"scope":{)" +
-                              std::string{inner} + R"(},"children":[{"kind":"text","text":"r"}]})");
+                          R"({"kind":"forEach","rows":{"lit":[]},"key":{"row":"id"},"scope":{)" + std::string{inner} +
+                              R"(},"children":[{"kind":"text","text":"r"}]})");
     };
     SECTION("an inner alias of the same name does not retype an outer mutation") {
         auto const outer = R"("mutations":{"a":{"model":"sample","action":"Lims_Save"}},)";
@@ -172,13 +171,12 @@ TEST_CASE("base rule: a mutation resolves its model in the scope that declares i
         // Outer `b` is the base's press-only action, run from a head action; an inner scope shadows `b` and runs the
         // shadow and `a` from a watch. Only the custom's `a` chains to `b`, which is the outer one.
         auto const screen = [&](std::string_view id, std::string_view onSuccess) {
-            return withWatch(
-                id,
-                R"("actions":[{"id":"v","label":"V","onClick":[{"run":"b"}]}],)"
-                R"("mutations":{"a":{"model":"sample","action":"Lims_Save")" +
-                    std::string{onSuccess} + R"(},"b":{"model":"sample","action":"Lims_Verify"}},)",
-                R"("mutations":{"b":{"model":"sample","action":"Lims_Report"}},)"
-                R"("watch":[{"on":{"query":"list"},"do":[{"run":"b"},{"run":"a"}]}])");
+            return withWatch(id,
+                             R"("actions":[{"id":"v","label":"V","onClick":[{"run":"b"}]}],)"
+                             R"("mutations":{"a":{"model":"sample","action":"Lims_Save")" +
+                                 std::string{onSuccess} + R"(},"b":{"model":"sample","action":"Lims_Verify"}},)",
+                             R"("mutations":{"b":{"model":"sample","action":"Lims_Report"}},)"
+                             R"("watch":[{"on":{"query":"list"},"do":[{"run":"b"},{"run":"a"}]}])");
         };
         auto const refusal = between(screen("lims.base", ""), screen("custom:mine", R"(,"onSuccess":[{"run":"b"}])"));
         REQUIRE(refusal);
@@ -230,15 +228,15 @@ TEST_CASE("base rule: an action keeps the kind of position it has in the base", 
                           R"({"kind":"form","model":"sample","action":"Lims_Report")" + std::string{submit} + "}");
     };
     SECTION("a mutation used as a query") {
-        auto const refusal =
-            rule(replaced(baseScreen("custom:mine"), R"("queries":{)",
-                          R"("queries":{"again":{"model":"sample","action":"Lims_Save"},)"));
+        auto const refusal = rule(replaced(baseScreen("custom:mine"), R"("queries":{)",
+                                           R"("queries":{"again":{"model":"sample","action":"Lims_Save"},)"));
         REQUIRE(refusal);
         CHECK(refusal->path == "/queries/again");
         CHECK(refusal->reason.contains("position of kind `query`"));
     }
     SECTION("a form the person submits made one that submits itself") {
-        auto const refusal = between(withForm("lims.base", R"(,"submit":"explicit")"), withForm("custom:mine", R"(,"submit":"auto")"));
+        auto const refusal =
+            between(withForm("lims.base", R"(,"submit":"explicit")"), withForm("custom:mine", R"(,"submit":"auto")"));
         REQUIRE(refusal);
         CHECK(refusal->reason.contains("position of kind `auto form`"));
     }
@@ -248,14 +246,14 @@ TEST_CASE("base rule: an action keeps the kind of position it has in the base", 
         CHECK(refusal->reason.contains("position of kind `auto form`"));
     }
     SECTION("the same form stays") {
-        CHECK_FALSE(between(withForm("lims.base", R"(,"submit":"explicit")"), withForm("custom:mine", R"(,"submit":"explicit")")));
+        CHECK_FALSE(between(withForm("lims.base", R"(,"submit":"explicit")"),
+                            withForm("custom:mine", R"(,"submit":"explicit")")));
     }
 }
 
 TEST_CASE("base rule: a component's events run without a press", "[ui][custom-screens][base-rule]") {
     auto const withChart = [](std::string_view id, std::string_view onLoaded) {
-        return miniScreen(id,
-                          R"("mutations":{"verify":{"model":"sample","action":"Lims_Verify"}},)",
+        return miniScreen(id, R"("mutations":{"verify":{"model":"sample","action":"Lims_Verify"}},)",
                           R"({"kind":"custom","name":"Chart","on":{"loaded":)" + std::string{onLoaded} +
                               R"(}},{"kind":"button","label":"V","onClick":[{"run":"verify"}]})");
     };
@@ -263,8 +261,8 @@ TEST_CASE("base rule: a component's events run without a press", "[ui][custom-sc
         between(withChart("lims.base", R"([{"refetch":"list"}])"), withChart("custom:mine", R"([{"run":"verify"}])"));
     REQUIRE(refusal);
     CHECK(refusal->reason.contains("component:Chart.loaded: run Lims_Sample/Lims_Verify"));
-    CHECK_FALSE(between(withChart("lims.base", R"([{"run":"verify"}])"),
-                        withChart("custom:mine", R"([{"run":"verify"}])")));
+    CHECK_FALSE(
+        between(withChart("lims.base", R"([{"run":"verify"}])"), withChart("custom:mine", R"([{"run":"verify"}])")));
 }
 
 // A catalog that knows the action's owner refuses the second alias at load, so the model type is compared only
@@ -310,7 +308,8 @@ TEST_CASE("base rule: every place a command can sit is walked", "[ui][custom-scr
         {"component fallback", "", "", press(out)},
         {"watch in a nested scope", "",
          R"({"kind":"forEach","rows":{"lit":[]},"key":{"row":"id"},"scope":{"watch":[{"on":{"query":"list"},)"
-         R"("do":[)" + out + R"(]}]},"children":[{"kind":"text","text":"r"}]})",
+         R"("do":[)" +
+             out + R"(]}]},"children":[{"kind":"text","text":"r"}]})",
          ""},
         {"seq", "", press(R"({"seq":[)" + out + "]}"), ""},
         {"all", "", press(R"({"all":[)" + out + "]}"), ""},
@@ -320,10 +319,10 @@ TEST_CASE("base rule: every place a command can sit is walked", "[ui][custom-scr
     };
     for (Place const& place : places) {
         DYNAMIC_SECTION(place.name) {
-            auto const refusal = between(
-                miniScreen("lims.base"),
-                miniScreen("custom:mine", place.top, place.children,
-                           place.fallback.empty() ? R"({"kind":"text","text":"chart"})" : place.fallback));
+            auto const refusal =
+                between(miniScreen("lims.base"),
+                        miniScreen("custom:mine", place.top, place.children,
+                                   place.fallback.empty() ? R"({"kind":"text","text":"chart"})" : place.fallback));
             REQUIRE(refusal);
             CHECK(refusal->reason.contains("signOut"));
         }
@@ -337,16 +336,18 @@ TEST_CASE("base rule: a form that submits itself runs its chains without a press
                               std::string{onSuccess} +
                               R"(},{"kind":"button","label":"V","onClick":[{"run":"verify"}]})");
     };
-    auto const refusal = between(screen("lims.base", R"([{"refetch":"list"}])"),
-                                 screen("custom:mine", R"([{"run":"verify"}])"));
+    auto const refusal =
+        between(screen("lims.base", R"([{"refetch":"list"}])"), screen("custom:mine", R"([{"run":"verify"}])"));
     REQUIRE(refusal);
     CHECK(refusal->reason.contains("form-auto:Lims_Sample/Lims_Report: run Lims_Sample/Lims_Verify"));
-    CHECK_FALSE(between(screen("lims.base", R"([{"refetch":"list"}])"), screen("custom:mine", R"([{"refetch":"list"}])")));
+    CHECK_FALSE(
+        between(screen("lims.base", R"([{"refetch":"list"}])"), screen("custom:mine", R"([{"refetch":"list"}])")));
 }
 
 TEST_CASE("base rule: a form with no submit mode submits itself unless the schema says otherwise",
           "[ui][custom-screens][base-rule]") {
-    auto const screen = [](std::string_view id, std::string_view submit, std::string_view member, std::string_view body) {
+    auto const screen = [](std::string_view id, std::string_view submit, std::string_view member,
+                           std::string_view body) {
         return miniScreen(id, R"("mutations":{"verify":{"model":"sample","action":"Lims_Verify"}},)",
                           R"({"kind":"form","model":"sample","action":"Lims_Report")" + std::string{submit} + R"(,")" +
                               std::string{member} + R"(":)" + std::string{body} +
@@ -359,8 +360,9 @@ TEST_CASE("base rule: a form with no submit mode submits itself unless the schem
         CHECK(refusal->reason.contains("form-auto:Lims_Sample/Lims_Report: run Lims_Sample/Lims_Verify"));
     }
     SECTION("onSubmit of a form that submits itself") {
-        auto const refusal = between(screen("lims.base", R"(,"submit":"auto")", "onSubmit", R"([{"refetch":"list"}])"),
-                                     screen("custom:mine", R"(,"submit":"auto")", "onSubmit", R"([{"run":"verify"}])"));
+        auto const refusal =
+            between(screen("lims.base", R"(,"submit":"auto")", "onSubmit", R"([{"refetch":"list"}])"),
+                    screen("custom:mine", R"(,"submit":"auto")", "onSubmit", R"([{"run":"verify"}])"));
         REQUIRE(refusal);
         CHECK(refusal->reason.contains("form-auto:Lims_Sample/Lims_Report: run Lims_Sample/Lims_Verify"));
     }
@@ -380,23 +382,22 @@ TEST_CASE("base rule: an upload is only a file the person just chose", "[ui][cus
         CHECK(refusal->path == "/view/children/3/onPick/0");
     }
     SECTION("a state value") {
-        auto const refusal = rule(replaced(attach(R"({"ref":"picked"})"), R"("models":)",
-                                           R"("state":{"picked":{"init":""}},"models":)"));
+        auto const refusal = rule(
+            replaced(attach(R"({"ref":"picked"})"), R"("models":)", R"("state":{"picked":{"init":""}},"models":)"));
         REQUIRE(refusal);
         CHECK(refusal->path == "/view/children/3/onPick/0");
     }
-    SECTION("the picked file") {
-        CHECK_FALSE(rule(baseScreen("custom:mine")));
-    }
+    SECTION("the picked file") { CHECK_FALSE(rule(baseScreen("custom:mine"))); }
     SECTION("the picked file, from a button's press") {
-        auto const refusal = rule(replaced(baseScreen("custom:mine"), R"("kind":"filePicker","label":"Attach","onPick")",
-                                           R"("kind":"button","label":"Attach","onClick")"));
+        auto const refusal =
+            rule(replaced(baseScreen("custom:mine"), R"("kind":"filePicker","label":"Attach","onPick")",
+                          R"("kind":"button","label":"Attach","onClick")"));
         REQUIRE(refusal);
     }
     SECTION("the picked file, nested in a seq") {
-        auto const refusal = rule(replaced(
-            replaced(baseScreen("custom:mine"), R"("onPick":[)", R"("onPick":[{"seq":[)"),
-            R"("as":"ref"}])", R"("as":"ref"}]}])"));
+        auto const refusal =
+            rule(replaced(replaced(baseScreen("custom:mine"), R"("onPick":[)", R"("onPick":[{"seq":[)"),
+                          R"("as":"ref"}])", R"("as":"ref"}]}])"));
         REQUIRE(refusal);
     }
 }
@@ -418,9 +419,52 @@ TEST_CASE("base rule: a shadowed alias's own mutation keeps its own type", "[ui]
                               std::string{inner} +
                               R"(},"children":[{"kind":"button","label":"C","onClick":[{"run":"c"}]}]})");
     };
-    auto const refusal =
-        between(screen("lims.base", ""),
-                screen("custom:mine", R"(,"watch":[{"on":{"query":"list"},"do":[{"run":"c"}]}])"));
+    auto const refusal = between(screen("lims.base", ""),
+                                 screen("custom:mine", R"(,"watch":[{"on":{"query":"list"},"do":[{"run":"c"}]}])"));
     REQUIRE(refusal);
     CHECK(refusal->reason.contains("watch: run Lims_Audit/Lims_Trail"));
+}
+
+TEST_CASE("base rule: a host command's arguments are literals", "[ui][custom-screens][base-rule]") {
+    auto const withArgs = [](std::string_view id, std::string_view args) {
+        return replaced(
+            replaced(baseScreen(id), R"({"host":"print"})", R"({"host":"print","args":)" + std::string{args} + "}"),
+            R"("models":)", R"("state":{"selected":{"init":""}},"models":)");
+    };
+    SECTION("an argument that names a state") {
+        auto const refusal =
+            between(withArgs("lims.base", R"({"ref":"selected"})"), withArgs("custom:mine", R"({"ref":"selected"})"));
+        REQUIRE(refusal);
+        CHECK(refusal->reason.contains("literal arguments"));
+    }
+    SECTION("literal arguments equal to the base's") {
+        CHECK_FALSE(between(withArgs("lims.base", R"({"lit":"x"})"), withArgs("custom:mine", R"({"lit":"x"})")));
+        CHECK_FALSE(between(withArgs("lims.base", R"("x")"), withArgs("custom:mine", R"("x")")));
+    }
+}
+
+TEST_CASE("base rule: an upload's file picker opens files", "[ui][custom-screens][base-rule]") {
+    auto const picker = [](std::string_view mode) {
+        return replaced(baseScreen("custom:mine"), R"("kind":"filePicker",)",
+                        R"("kind":"filePicker",)" + std::string{mode});
+    };
+    CHECK_FALSE(rule(picker(R"("mode":"open",)")));
+    CHECK_FALSE(rule(picker(R"("mode":{"lit":"open"},)")));
+    auto const refusal = rule(picker(R"("mode":"save",)"));
+    REQUIRE(refusal);
+    CHECK(refusal->path == "/view/children/3/onPick/0");
+    REQUIRE(rule(
+        replaced(picker(R"("mode":{"ref":"m"},)"), R"("models":)", R"("state":{"m":{"init":"open"}},"models":)")));
+}
+
+TEST_CASE("base rule: a host command that cannot be read is refused, not skipped", "[ui][custom-screens][base-rule]") {
+    // The custom text handed in is not the text the document was loaded from, so its host command's pointer finds
+    // nothing.
+    std::string const base = baseScreen("lims.base");
+    std::string const custom =
+        replaced(baseScreen("custom:mine"), R"("as":"ref"}]}]}})",
+                 R"("as":"ref"}]},{"kind":"button","label":"Again","onClick":[{"host":"print"}]}]}})");
+    auto const refusal = morph::ui::checkBaseRule(load(base), base, load(custom), base);
+    REQUIRE(refusal);
+    CHECK(refusal->path == "/view/children/4/onClick/0");
 }

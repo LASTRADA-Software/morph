@@ -75,11 +75,20 @@ public:
     /// @return Whether it does.
     [[nodiscard]] bool has(std::string const& capability) const { return _seen.contains(capability); }
 
-    /// @brief Every host command, as its canonical JSON, with its pointer.
+    /// @brief One host command: its canonical JSON, its pointer, and whether its arguments are literals.
+    struct HostCommand {
+        std::string json;
+        std::string path;
+        bool literalArgs;
+    };
+
+    /// @brief Every host command.
     /// @return The commands, in the order walked.
-    [[nodiscard]] std::vector<std::pair<std::string, std::string>> const& hostCommands() const noexcept {
-        return _hostCommands;
-    }
+    [[nodiscard]] std::vector<HostCommand> const& hostCommands() const noexcept { return _hostCommands; }
+
+    /// @brief The first host command whose JSON could not be found or written, which cannot be compared.
+    /// @return Its pointer, or nothing.
+    [[nodiscard]] std::optional<std::string> const& unreadableHost() const noexcept { return _unreadableHost; }
 
     /// @brief The first upload that is not a file the person just chose, where `{"ref": "event"}` sits directly in a
     ///        `filePicker`'s `onPick` or a `dropZone`'s `onDrop`.
@@ -153,7 +162,8 @@ private:
             } else if (autoForm && (key == "onSubmit" || key == "onSuccess" || key == "onError")) {
                 trigger = autoTrigger;
             }
-            bool const picked = (view.kind == "filePicker" && key == "onPick") || (view.kind == "dropZone" && key == "onDrop");
+            bool const picked = (view.kind == "filePicker" && key == "onPick" && opensFiles(view.path)) ||
+                                (view.kind == "dropZone" && key == "onDrop");
             walk(commands, trigger, table, picked);
         }
         for (auto const& [chord, commands] : view.keys) {
@@ -182,15 +192,14 @@ private:
     ///        @p chosen is whether @p commands is the handler a chosen file arrives in.
     void walk(Commands const& commands, std::string const& trigger, Table const& table, bool chosen = false) {
         for (Command const& command : commands) {
-            if (command.kind == CommandKind::Upload && !(chosen && trigger.empty() && isEventRef(command.path, "upload"))) {
+            if (command.kind == CommandKind::Upload &&
+                !(chosen && trigger.empty() && isEventRef(command.path, "upload"))) {
                 if (!_strayUpload) {
                     _strayUpload = command.path;
                 }
             }
             if (command.kind == CommandKind::Host) {
-                if (Json const* const json = at(command.path)) {
-                    _hostCommands.emplace_back(glz::write_json(*json).value_or(""), command.path);
-                }
+                noteHostCommand(command.path);
             }
             std::string const capability = capabilityOf(command, table);
             if (!capability.empty()) {
@@ -225,6 +234,52 @@ private:
         }
         walk(mutation->decl->onSuccess, trigger, *mutation->table);
         walk(mutation->decl->onError, trigger, *mutation->table);
+    }
+
+    void noteHostCommand(std::string const& path) {
+        Json const* const json = at(path);
+        auto const* const object = json == nullptr ? nullptr : std::get_if<Json::object_t>(&json->data);
+        if (object != nullptr) {
+            if (auto written = glz::write_json(*json)) {
+                auto const args = object->find("args");
+                _hostCommands.push_back(HostCommand{.json = *std::move(written),
+                                                    .path = path,
+                                                    .literalArgs = args == object->end() || isLiteral(args->second)});
+                return;
+            }
+        }
+        // A command that cannot be found or written cannot be compared, so it is refused rather than skipped.
+        if (!_unreadableHost) {
+            _unreadableHost = path;
+        }
+    }
+
+    /// @brief Whether @p json reads nothing from the document: a scalar, a `lit`, or an array of those. Any other
+    ///        object is an expression (`ref`, `fn`, …) whose names resolve in the custom document.
+    [[nodiscard]] static bool isLiteral(Json const& json) {
+        if (auto const* const object = std::get_if<Json::object_t>(&json.data)) {
+            return object->size() == 1 && object->contains("lit");
+        }
+        if (auto const* const array = std::get_if<Json::array_t>(&json.data)) {
+            return std::ranges::all_of(*array, [](Json const& item) { return isLiteral(item); });
+        }
+        return true;
+    }
+
+    /// @brief Whether the `filePicker` at @p pointer opens files: its `mode` is absent or the literal `open`. A save
+    ///        picker's `onPick` receives a place to write, not a file.
+    [[nodiscard]] bool opensFiles(std::string const& pointer) const {
+        Json const* const picker = at(pointer);
+        auto const* const object = picker == nullptr ? nullptr : std::get_if<Json::object_t>(&picker->data);
+        if (object == nullptr) {
+            return false;
+        }
+        auto const mode = object->find("mode");
+        if (mode == object->end()) {
+            return true;
+        }
+        auto const text = glz::write_json(mode->second);
+        return text && (*text == R"("open")" || *text == R"({"lit":"open"})");
     }
 
     /// @brief The JSON at @p pointer, or `nullptr`.
@@ -275,40 +330,40 @@ private:
 
     [[nodiscard]] static std::string capabilityOf(Command const& command, Table const& table) {
         switch (command.kind) {
-        case CommandKind::Run:
-            return "run " + actionOf(command.target, table);
-        case CommandKind::Host:
-            return "host `" + command.target + "`";
-        case CommandKind::Upload:
-            return "upload";
-        case CommandKind::Download:
-            return "download";
-        case CommandKind::SwitchBackend:
-            return "switchBackend `" + command.target + "`";
-        case CommandKind::SignIn:
-            return "signIn";
-        case CommandKind::SignOut:
-            return "signOut";
-        case CommandKind::ResetPrefs:
-            return "resetPrefs";
-        case CommandKind::Set:
-        case CommandKind::Reset:
-        case CommandKind::Refetch:
-        case CommandKind::Open:
-        case CommandKind::Close:
-        case CommandKind::Navigate:
-        case CommandKind::Return:
-        case CommandKind::Focus:
-        case CommandKind::SetLocale:
-        case CommandKind::SetContext:
-        case CommandKind::Notify:
-        case CommandKind::Seq:
-        case CommandKind::All:
-        case CommandKind::If:
-        case CommandKind::CancelClose:
-        case CommandKind::Retry:
-        default:
-            return {};
+            case CommandKind::Run:
+                return "run " + actionOf(command.target, table);
+            case CommandKind::Host:
+                return "host `" + command.target + "`";
+            case CommandKind::Upload:
+                return "upload";
+            case CommandKind::Download:
+                return "download";
+            case CommandKind::SwitchBackend:
+                return "switchBackend `" + command.target + "`";
+            case CommandKind::SignIn:
+                return "signIn";
+            case CommandKind::SignOut:
+                return "signOut";
+            case CommandKind::ResetPrefs:
+                return "resetPrefs";
+            case CommandKind::Set:
+            case CommandKind::Reset:
+            case CommandKind::Refetch:
+            case CommandKind::Open:
+            case CommandKind::Close:
+            case CommandKind::Navigate:
+            case CommandKind::Return:
+            case CommandKind::Focus:
+            case CommandKind::SetLocale:
+            case CommandKind::SetContext:
+            case CommandKind::Notify:
+            case CommandKind::Seq:
+            case CommandKind::All:
+            case CommandKind::If:
+            case CommandKind::CancelClose:
+            case CommandKind::Retry:
+            default:
+                return {};
         }
     }
 
@@ -331,7 +386,8 @@ private:
 
     Json const* _json;
     detail::ModelAliases _aliases;
-    std::vector<std::pair<std::string, std::string>> _hostCommands;
+    std::vector<HostCommand> _hostCommands;
+    std::optional<std::string> _unreadableHost;
     std::optional<std::string> _strayUpload;
     std::deque<Table> _tables;
     std::deque<Mutation> _resolved;
@@ -378,9 +434,18 @@ std::optional<Refusal> checkBaseRule(Document const& base, std::string_view base
             return refusalAt(path, of + " has no `" + capability + "`");
         }
     }
-    for (auto const& [command, path] : has.hostCommands()) {
-        if (!std::ranges::any_of(had.hostCommands(), [&](auto const& known) { return known.first == command; })) {
-            return refusalAt(path, of + " has no host command `" + command + "`");
+    if (has.unreadableHost()) {
+        return refusalAt(*has.unreadableHost(),
+                         "a host command of a document the base rule compares is a JSON object");
+    }
+    for (auto const& command : has.hostCommands()) {
+        if (!command.literalArgs) {
+            return refusalAt(command.path,
+                             "a host command of a custom screen has literal arguments, not names that "
+                             "resolve in the screen");
+        }
+        if (!std::ranges::any_of(had.hostCommands(), [&](auto const& known) { return known.json == command.json; })) {
+            return refusalAt(command.path, of + " has no host command `" + command.json + "`");
         }
     }
     if (has.strayUpload()) {

@@ -148,7 +148,8 @@ private:
             name(std::move(ref), "query", query.path);
         }
         for (MutationDecl const& mutation : scope.mutations) {
-            name(ActionRef{.modelType = resolve(mutation.model), .action = mutation.action}, "mutation", mutation.path);
+            name(ActionRef{.modelType = resolve(mutation.model), .action = mutation.action}, "mutation",
+                 mutation.path);
         }
     }
 
@@ -163,7 +164,8 @@ private:
             if (view.kind == "form") {
                 position = formPosition(view.name("submit"));
             }
-            name(ActionRef{.modelType = resolve(model), .action = std::string{view.name("action")}}, position, view.path);
+            name(ActionRef{.modelType = resolve(model), .action = std::string{view.name("action")}}, position,
+                 view.path);
         }
         for (auto const& [key, children] : view.children) {
             static_cast<void>(key);

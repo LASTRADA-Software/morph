@@ -30,13 +30,16 @@ namespace morph::ui {
 /// `resetPrefs`; every `host` name, whether a host command, a host value or a host component; each `host` command
 /// as a whole, name and arguments, which must be identical to one of the base's; the delivered components, by name
 /// and content hash; and the params, which must be the base's exactly. Every `upload` of the custom document must
-/// send exactly `{"ref": "event"}` and sit directly in a `filePicker`'s `onPick` or a `dropZone`'s `onDrop`, so it
-/// is always a file the person just chose. Text, layout, styles, states and expressions are not compared.
+/// send exactly `{"ref": "event"}` and sit directly in the `onPick` of a `filePicker` that opens files (no `mode`, or
+/// `open`) or in a `dropZone`'s `onDrop`, so it is always a file the person just chose. A host command's arguments
+/// must be literals. Text, layout, styles, states and expressions are not compared.
 /// @param base       The base screen, loaded.
 /// @param baseText   The base screen's JSON text.
 /// @param custom     The custom document, loaded.
 /// @param customText The text @p custom was loaded from, which the `host` names are read from.
 /// @return The first use the base does not have, with its JSON Pointer, or nothing.
+/// @throws std::logic_error When a document names a model alias it does not declare, which only a document that
+///         skipped load-time validation can.
 [[nodiscard]] MORPH_API std::optional<Refusal> checkBaseRule(Document const& base, std::string_view baseText,
                                                              Document const& custom, std::string_view customText);
 
