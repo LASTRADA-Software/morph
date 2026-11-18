@@ -2947,6 +2947,83 @@ TEST_CASE("SocketBackend: cancelPending rejects a request still held for the fir
     CHECK(answered.failure == "cancelled before connect");
 }
 
+namespace {
+
+/// A port nothing listens on: bound, then released, so a first connect to it is refused.
+std::uint16_t refusedPort(std::shared_ptr<morph::backend::RemoteServer> const& server) {
+    morph::net::SocketServer probeServer{*server, 0};
+    REQUIRE(probeServer.listen());
+    std::uint16_t const port = probeServer.port();
+    return port;
+}
+
+std::shared_ptr<morph::backend::RemoteServer> probeServer(morph::exec::ThreadPoolExecutor& pool) {
+    morph::backend::ServerConfig config;
+    config.services.push_back(std::make_shared<ProbeService>());
+    return std::make_shared<morph::backend::RemoteServer>(pool, config);
+}
+
+}  // namespace
+
+// With retryFirstConnect, a server that comes up after the first attempt failed is still reached, and a request made
+// before it is up is held and answered rather than rejected.
+// Mutation: ignore retryFirstConnect in the first-connect give-up; the held request is rejected and never answered.
+TEST_CASE("SocketBackend: retryFirstConnect reaches a server that listens after the first attempt",
+          "[net][socket_backend][disconnect]") {
+    morph::exec::ThreadPoolExecutor serverPool{2};
+    auto server = probeServer(serverPool);
+    std::uint16_t const port = refusedPort(server);
+    std::this_thread::sleep_for(std::chrono::milliseconds{100});
+
+    morph::net::SocketBackend::Config cfg;
+    cfg.retryFirstConnect = true;
+    cfg.initialReconnectDelay = std::chrono::milliseconds{50};
+    cfg.maxReconnectDelay = std::chrono::milliseconds{200};
+    morph::net::SocketBackend backend{"ws://127.0.0.1:" + std::to_string(static_cast<unsigned>(port)), cfg};
+    // Long enough for several refused attempts; the held request must survive every one of them.
+    REQUIRE_FALSE(backend.waitForConnected(std::chrono::milliseconds{400}));
+
+    morph::exec::MainThreadExecutor callerExec;
+    Settled answered;
+    auto comp = backend.request(probe("probe-ok"), callerExec);
+    watch(comp, answered);
+    REQUIRE_FALSE(drainUntil(callerExec, answered.done, 60));
+
+    morph::net::SocketServer late{*server, port};
+    REQUIRE(late.listen());
+    REQUIRE(drainUntil(callerExec, answered.done));
+    REQUIRE(answered.reply.has_value());
+    CHECK(answered.reply->body == "saw probe-ok");
+    CHECK(backend.waitForConnected(std::chrono::milliseconds{100}));
+}
+
+// Mutation: make retryFirstConnect default to true; the refused first connect is retried and the case fails.
+TEST_CASE("SocketBackend: without retryFirstConnect, a refused first connect is not retried",
+          "[net][socket_backend][disconnect]") {
+    morph::exec::ThreadPoolExecutor serverPool{2};
+    auto server = probeServer(serverPool);
+    std::uint16_t const port = refusedPort(server);
+    std::this_thread::sleep_for(std::chrono::milliseconds{100});
+
+    morph::net::SocketBackend::Config cfg;
+    cfg.initialReconnectDelay = std::chrono::milliseconds{50};
+    cfg.maxReconnectDelay = std::chrono::milliseconds{200};
+    morph::net::SocketBackend backend{"ws://127.0.0.1:" + std::to_string(static_cast<unsigned>(port)), cfg};
+    REQUIRE_FALSE(backend.waitForConnected(std::chrono::milliseconds{300}));
+
+    morph::exec::MainThreadExecutor callerExec;
+    Settled answered;
+    auto comp = backend.request(probe("probe-ok"), callerExec);
+    watch(comp, answered);
+    REQUIRE(drainUntil(callerExec, answered.done));
+    CHECK_FALSE(answered.reply.has_value());
+    CHECK_FALSE(answered.failure.empty());
+
+    morph::net::SocketServer late{*server, port};
+    REQUIRE(late.listen());
+    CHECK_FALSE(backend.waitForConnected(std::chrono::seconds{1}));
+}
+
 // ── Negotiation, cancel and connect edges ───────────────────────────────────
 
 namespace {

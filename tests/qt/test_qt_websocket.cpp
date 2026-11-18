@@ -2979,6 +2979,112 @@ TEST_CASE("morph::qt::QtWebSocketBackend: cancelPending rejects a request still 
     CHECK_THROWS_WITH(awaitOn(cbExec, std::move(held)), "cancelled before connect");
 }
 
+namespace {
+
+/// A port nothing listens on: bound, then released, so an open to it is refused. The server is left to listen on
+/// it later through `late`.
+quint16 refusedPort(ProbeServer& probe) {
+    quint16 const port = probe.wsServer->port();
+    probe.wsServer->close();
+    probe.wsServer.reset();
+    pumpUntil([] { return false; }, 10);
+    return port;
+}
+
+}  // namespace
+
+// The retry hangs on `disconnected`: a refused open emits it, after `errorOccurred`.
+TEST_CASE("morph::qt::QtWebSocketBackend: a refused first open emits disconnected as well as errorOccurred",
+          "[qt][ws][lifecycle]") {
+    ensureApp();
+    ProbeServer probe;
+    quint16 const port = refusedPort(probe);
+    QWebSocket socket;
+    int disconnected = 0;
+    int errors = 0;
+    QObject::connect(&socket, &QWebSocket::disconnected, [&] { ++disconnected; });
+    QObject::connect(&socket, &QWebSocket::errorOccurred, [&](QAbstractSocket::SocketError) { ++errors; });
+    socket.open(QUrl{QString("ws://127.0.0.1:%1").arg(port)});
+    pumpUntil([&] { return errors > 0; }, 100);
+    pumpUntil([] { return false; }, 10);
+    INFO("disconnected=" << disconnected << " errorOccurred=" << errors);
+    CHECK(errors == 1);
+    CHECK(disconnected == 1);
+}
+
+// With retryFirstConnect, a server that comes up after the first open was refused is still reached, and a request
+// made before it is up is held and answered rather than rejected.
+// Mutation: ignore retryFirstConnect in the disconnected slot; the held request is rejected and never answered.
+TEST_CASE("morph::qt::QtWebSocketBackend: retryFirstConnect reaches a server that listens after the first open",
+          "[qt][ws][lifecycle]") {
+    ensureApp();
+    ProbeServer probe;
+    quint16 const port = refusedPort(probe);
+
+    morph::qt::QtWebSocketBackend::Config cfg;
+    cfg.retryFirstConnect = true;
+    cfg.initialReconnectDelay = std::chrono::milliseconds{50};
+    cfg.maxReconnectDelay = std::chrono::milliseconds{200};
+    morph::qt::QtWebSocketBackend backend{QUrl{QString("ws://127.0.0.1:%1").arg(port)}, cfg};
+    // Several refused opens go by; the held request must survive every one of them.
+    REQUIRE_FALSE(backend.waitForConnected(400));
+
+    morph::exec::MainThreadExecutor cbExec;
+    std::optional<morph::wire::Envelope> reply;
+    std::string failure;
+    backend.request(probeRequest("probe-ok", "late"), cbExec)
+        .then([&](morph::wire::Envelope const& got) { reply = got; })
+        .onError([&](std::exception_ptr const&) { failure = "rejected"; });
+    pumpUntil(
+        [&] {
+            cbExec.drain();
+            return reply.has_value() || !failure.empty();
+        },
+        30);
+    REQUIRE(failure.empty());
+    REQUIRE_FALSE(reply.has_value());
+
+    morph::qt::QtWebSocketServer late{*probe.server, port};
+    REQUIRE(late.listen());
+    pumpUntil(
+        [&] {
+            cbExec.drain();
+            return reply.has_value() || !failure.empty();
+        },
+        300);
+    REQUIRE(failure.empty());
+    REQUIRE(reply.has_value());
+    CHECK(reply->body == "token late");
+    CHECK(backend.waitForConnected(100));
+}
+
+// Mutation: make retryFirstConnect default to true; the refused first open is retried and the case fails.
+TEST_CASE("morph::qt::QtWebSocketBackend: without retryFirstConnect, a refused first open is not retried",
+          "[qt][ws][lifecycle]") {
+    ensureApp();
+    ProbeServer probe;
+    quint16 const port = refusedPort(probe);
+
+    morph::qt::QtWebSocketBackend::Config cfg;
+    cfg.initialReconnectDelay = std::chrono::milliseconds{50};
+    cfg.maxReconnectDelay = std::chrono::milliseconds{200};
+    morph::qt::QtWebSocketBackend backend{QUrl{QString("ws://127.0.0.1:%1").arg(port)}, cfg};
+    REQUIRE_FALSE(backend.waitForConnected(300));
+
+    morph::exec::MainThreadExecutor cbExec;
+    std::optional<morph::wire::Envelope> reply;
+    std::string failure;
+    backend.request(probeRequest("probe-ok", "late"), cbExec)
+        .then([&](morph::wire::Envelope const& got) { reply = got; })
+        .onError([&](std::exception_ptr const&) { failure = "rejected"; });
+    // The refused open already ended, so nothing will send this request: it is held with no attempt left.
+    morph::qt::QtWebSocketServer late{*probe.server, port};
+    REQUIRE(late.listen());
+    CHECK_FALSE(backend.waitForConnected(1000));
+    cbExec.drain();
+    CHECK_FALSE(reply.has_value());
+}
+
 // ── Server-initiated events over the Qt transport ───────────────────────────
 namespace {
 

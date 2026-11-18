@@ -35,6 +35,13 @@ struct QtWebSocketBackendConfig {
     /// @brief Whether to attempt automatic reconnect after an unsolicited disconnect.
     bool reconnectEnabled = true;
 
+    /// @brief Whether to keep retrying when the first connect never reaches the server, on the same backoff as a
+    ///        reconnect. Off by default: a client that starts before its server is usually misconfigured, and
+    ///        failing fast says so. A process that may start before its server, such as an agent's MCP server,
+    ///        turns it on. While it retries, requests and private binds are held as they are during a reconnect.
+    ///        Needs `reconnectEnabled`: with that off, the first failed connect is final either way.
+    bool retryFirstConnect = false;
+
     /// @brief Delay before the first reconnect attempt after a disconnect.
     std::chrono::milliseconds initialReconnectDelay = std::chrono::milliseconds{500};
 

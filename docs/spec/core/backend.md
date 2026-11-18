@@ -269,8 +269,9 @@ is the ordering a single-threaded client must use (WASM, or a terminal client
 on a `Caller` I/O loop), since it can never block waiting for the connection to
 settle. The queued request is sent, in FIFO order, the moment the socket next
 connects (the first connect included, before the reconnect handler is posted).
-A disconnect, a failed connect attempt, `cancelPending` and the backend's
-destruction each reject every queued request's `Completion` exactly once. A
+A disconnect, a failed connect attempt (unless `retryFirstConnect` will try
+again), `cancelPending` and the backend's destruction each reject every queued
+request's `Completion` exactly once. A
 *keyed* bind carries no queue: it is rejected immediately (`"disconnected"`
 from Qt, `DisconnectedError` from `SocketBackend`), since replayed on a later
 connection it would attach from a `current` that connection never issued.
@@ -1597,6 +1598,7 @@ in the reply (see wire.md).
 | Field | Default | Meaning |
 |---|---|---|
 | `reconnectEnabled` | `true` | Whether to auto-reconnect after an unsolicited disconnect. |
+| `retryFirstConnect` | `false` | Whether to keep retrying, on the reconnect backoff, when the first connect never reaches the server. Needs `reconnectEnabled`. |
 | `initialReconnectDelay` | `500 ms` | Delay before the first reconnect attempt. |
 | `maxReconnectDelay` | `30 s` | Upper bound on the exponential backoff. |
 | `backoffMultiplier` | `2.0` | Multiplier applied to the delay after each failed attempt. |
@@ -1617,7 +1619,13 @@ The state machine:
   `reconnectEnabled`, and the socket had *ever* connected, it schedules a
   reconnect with the current backoff delay, then multiplies the delay by
   `backoffMultiplier` (capped at `maxReconnectDelay`) for the next attempt. A
-  connection that never succeeded the first time is **not** retried.
+  connection that never succeeded the first time is **not** retried, unless
+  `retryFirstConnect` is set: then the refused first open (which emits
+  `disconnected`, after `errorOccurred`) is retried on the same backoff, and the
+  private binds and requests held for the first connect survive each failed
+  attempt, to be sent when one succeeds. `execute`, keyed binds, listings and
+  `negotiateProtocolVersion` still reject while the socket is down, as they do
+  during a reconnect.
 - `attemptReconnect` re-opens the socket; if it fails, `QWebSocket` fires
   `disconnected` again and the cycle repeats with the grown backoff.
 
@@ -2063,9 +2071,10 @@ and every subsequently built `register`/`registerShared`/`attach`/`assign`/`dere
 envelope's `session` field is set from it before sending — see
 [Session propagation to control envelopes](#session-propagation-to-control-envelopes).
 Reconnect is configured by `SocketBackendConfig` (aliased
-`SocketBackend::Config`), with the same four fields and defaults as
-`QtWebSocketBackendConfig` (`reconnectEnabled`, `initialReconnectDelay`,
-`maxReconnectDelay`, `backoffMultiplier`) plus `connectTimeout` (default 5 s,
+`SocketBackend::Config`), with the same five fields and defaults as
+`QtWebSocketBackendConfig` (`reconnectEnabled`, `retryFirstConnect`,
+`initialReconnectDelay`, `maxReconnectDelay`, `backoffMultiplier`) plus
+`connectTimeout` (default 5 s,
 the whole dial), `sendTimeout` (default 30 s, one chunk's write) and
 `handshakeTimeout` (default 10 s, the whole handshake response read, from its
 first byte to the header's end). `waitForConnected(timeout = 5000ms)` posts a
@@ -2520,6 +2529,7 @@ server: each call is a loop task, so the loop serialises them.
 | Member | Type | Default |
 |---|---|---|
 | `reconnectEnabled` | `bool` | `true` |
+| `retryFirstConnect` | `bool` | `false` |
 | `initialReconnectDelay` | `std::chrono::milliseconds` | `500 ms` |
 | `maxReconnectDelay` | `std::chrono::milliseconds` | `30 s` |
 | `backoffMultiplier` | `double` | `2.0` |
@@ -2581,6 +2591,7 @@ loopback.
 | Member | Type | Default |
 |---|---|---|
 | `reconnectEnabled` | `bool` | `true` |
+| `retryFirstConnect` | `bool` | `false` |
 | `initialReconnectDelay` | `std::chrono::milliseconds` | `500 ms` |
 | `maxReconnectDelay` | `std::chrono::milliseconds` | `30 s` |
 | `backoffMultiplier` | `double` | `2.0` |
