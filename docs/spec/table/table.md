@@ -1037,15 +1037,21 @@ struct LevelsNeeded {
 };
 
 [[nodiscard]] LevelsNeeded levelsNeeded(TableQuery const& query, std::span<ColumnInfo const> columns,
-                                        std::function<bool(std::string_view)> const& mayRead = {});
+                                        std::function<bool(std::string_view)> const& mayRead = {},
+                                        Services const& services = {});
 ```
 
-- `order` is the levels of every sort key's column, every filtered column that has an entry, every column of
-  every group, and the column or group of a distinct request: the columns `apply` builds keys for.
+- `order` is the levels of exactly the columns `apply` builds keys for: every sort key's column, every filtered
+  column that has an entry, each column of a group that has an `include` entry on which at least one of those
+  entries compiles (as `compileFilter` decides it, with `services`, so by the column's kind and the operand), and
+  the column or group of a distinct request. A group without an `include` entry, or a group's column on which no
+  entry compiles, reads no cell and adds no level; nor does a filter that does not compile, since `apply` refuses
+  its query.
 - `display` is the levels of the columns in `query.columns`, or of every column the caller may read when
   `columns` is absent: a client that does not say what it shows is assumed to show everything.
 - Both are sorted, without duplicates, and never hold the base level. A level may be in both.
-- The function is pure and reads no rows. It is called on the query `validate` returned.
+- The function reads no rows. It is called on the query `validate` returned, with the services `apply` is
+  given.
 
 The two lists differ in how much a server must load. An `order` level is needed for every row the rest of the
 filter does not reject, because any of them may enter or move. A `display` level is needed for the rows of the
@@ -2957,10 +2963,10 @@ spread reflects. A row marked *not yet measured* says why; its figure is taken w
 | W2 | 1 | That page: `writeGenericPage` and its JSON from the column store 1.48 ms (1.45–1.62); `readGenericPage` 2.33 ms (2.21–3.01) | A, 12–23% busy | 2026-11-18 |
 | W1 | 1 | The same page as the `Table.wide` reply through `LocalBackend` (a `TableQuery` naming those 40 columns, page of 200), in an `ok` envelope: 116,171 bytes, 16 more than W1's for the description's revision; the round trip 1.79 ms (1.41–2.15) | A, 80–88% busy | 2026-11-18 |
 | W2 | 1 | That reply's server side: the table function, the pinned snapshot, `answerQuery` and the page's JSON, 2.25 ms (1.65–2.44) | A, 80–88% busy | 2026-11-18 |
-| S1 | 2a | `apply`, sort `d000` asc, page of 200, 100,000 × 300 through `bench::withUnloaded` with the `recipe` level loaded for 70% of the rows: 104.6 ms (90.8–111.4); the same source with every row loaded: 111.7 ms (103.7–117.4), a factor of 0.94 | A, 34–76% busy | 2026-11-18 |
-| S2 | 2a | `apply`, filter `t001` contains `"ka"`, the same sources: 147.3 ms (120.5–167.5) at 70% loaded, 219.9 ms (194.8–226.1) with every row loaded, a factor of 0.67 (an unloaded cell is decided by its state and its text is not searched) | A, 34–76% busy | 2026-11-18 |
-| S4 | 2a | `levelsNeeded`, 300 columns, 8 sort keys, 32 filtered columns: 9.89 µs (6.23–10.07) a call | A, 34–76% busy | 2026-11-18 |
-| S5 | 2a | An `Engine` sorted on `d000` over the 100,000 × 300 table at 70% loaded: 200 rows arrive by one `load`, 18.3 ms (16.6–22.9); the next 1,000, 21.5 ms (17.9–23.9); one repair and no full sort each | A, 34–76% busy | 2026-11-18 |
+| S1 | 2a | `apply`, sort `d000` asc, page of 200, 100,000 × 300 through `bench::withUnloaded` with the `recipe` level loaded for 70% of the rows: 104.6 ms (90.8–111.4); the same source with every row loaded: 111.7 ms (103.7–117.4). Above the 48 ms budget, as step 0's S1 already was on this host (91.9 ms); within the 1.10 factor, at 0.94, a factor inside the overlapping spreads, so noise and not a speed-up | A, 34–76% busy | 2026-11-18 |
+| S2 | 2a | `apply`, filter `t001` contains `"ka"`, the same sources: 147.3 ms (120.5–167.5) at 70% loaded, 219.9 ms (194.8–226.1) with every row loaded. Above the 12 ms budget, as step 0's S2 already was on this host (175.3 ms); within the 1.15 factor, at 0.67. Inferred, not measured: the unloaded rows are faster because an unloaded cell is decided by its state and its text is not searched | A, 34–76% busy | 2026-11-18 |
+| S4 | 2a | `levelsNeeded`, 300 columns, 8 sort keys, 32 filtered columns, the filter compiled to find the columns `apply` reads: 35.8 µs (33.8–45.0) a call, within the 50 µs budget | A, 57–76% busy | 2026-11-18 |
+| S5 | 2a | An `Engine` sorted on `d000` over the 100,000 × 300 table at 70% loaded: 200 rows arrive by one `load`, 18.3 ms (16.6–22.9); the next 1,000, 21.5 ms (17.9–23.9); one repair and no full sort each. The 200-row arrival is above its 15 ms budget (P); the 1,000-row one is within 35 ms. Inferred, not measured: the cost is mostly the merge into the sorted 100,000-row view, since five times the rows cost 3 ms more | A, 34–76% busy | 2026-11-18 |
 | S6 | 2a | An `Engine` filtered `d000 gt 0` at 50% loaded (about 50,000 undecided rows), 1,000 of them decided by one `load`: 4.18 ms (3.91–4.28); one repair, no filter run | A, 34–76% busy | 2026-11-18 |
 | W5 | 1 | 200 × 30: generic page 405,396 bytes, encode 3.00 ms (2.91–4.00); typed `Page<Row>` with an absent member for an empty cell 479,205 bytes, encode 1.87 ms (1.80–1.91); generic / typed 0.85, above the 0.7 budget | A, 12–23% busy | 2026-11-18 |
 | W6 | 1 | The 300-column description: 42,494 bytes; encode with `describe` 0.23 ms (0.23–0.24); decode 0.14 ms (0.14–0.15) | A, 12–23% busy | 2026-11-18 |

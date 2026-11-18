@@ -669,7 +669,7 @@ void UnloadedSource::publish(std::shared_ptr<morph::table::RowSnapshot const> in
 }
 
 std::shared_ptr<UnloadedSource> withUnloaded(std::shared_ptr<morph::table::DataSource> source,
-                                             std::vector<std::string> columns, std::string level,
+                                             std::vector<std::string> const& columns, std::string level,
                                              double loadedFraction, std::uint64_t seed) {
     return std::make_shared<UnloadedSource>(std::move(source), columns, std::move(level), loadedFraction, seed);
 }

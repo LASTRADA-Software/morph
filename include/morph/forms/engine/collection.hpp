@@ -350,15 +350,16 @@ namespace detail::engine {
     return toJson(*value);
 }
 
-/// @brief The table columns of a collection: every `v-columns` entry, hidden ones included, by field and kind.
+/// @brief The table columns of a collection: every `v-columns` entry, hidden ones included, by field, kind and
+///        level.
 /// @param model The collection model.
 /// @return The columns.
 [[nodiscard]] inline std::vector<table::ColumnInfo> tableColumns(CollectionModel const& model) {
     std::vector<table::ColumnInfo> columns;
     columns.reserve(model.columns().size());
     for (CollectionColumn const& column : model.columns()) {
-        columns.push_back(
-            table::ColumnInfo{.id = column.field, .kind = column.kind, .comparator = {}, .format = {}, .level = {}});
+        columns.push_back(table::ColumnInfo{
+            .id = column.field, .kind = column.kind, .comparator = {}, .format = {}, .level = column.level});
     }
     return columns;
 }
