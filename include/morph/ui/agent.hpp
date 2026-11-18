@@ -726,10 +726,12 @@ inline void serveStdioOnOwner(McpAdapter& adapter, exec::IExecutor& owner, std::
             });
         });
         std::unique_lock lock{mutex};
-        answered.wait(lock, [&replied] { return replied.has_value(); });
-        // The wait returns only once a reply, possibly an empty one for a notification, was stored.
-        if (auto const& reply = replied.value(); reply.has_value()) {
-            output << reply.value() << '\n' << std::flush;
+        // The loop ends only once a reply, possibly an empty one for a notification, was stored.
+        while (!replied) {
+            answered.wait(lock);
+        }
+        if (auto const& reply = replied.value()) {
+            output << *reply << '\n' << std::flush;
         }
     }
 }
