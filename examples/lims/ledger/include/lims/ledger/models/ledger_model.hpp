@@ -170,7 +170,8 @@ public:
     ::morph::table::Page<JournalEntryView> execute(const ListEntriesPage& action);
 
     /// @brief Answers @p query over @p company's entries, without checking who may see the company: reads the
-    ///        caller's rows and runs the query over them with `table::apply`; the total is exact.
+    ///        company's rows and runs the query over them with `table::apply`; the total is the count up to
+    ///        `QueryLimits::totalCap` and omitted above it.
     /// @param company The company.
     /// @param query The sort, filters and page.
     /// @return The page.

@@ -10,6 +10,7 @@
 #include <morph/session/session.hpp>
 #include <morph/table/query.hpp>
 #include <string>
+#include <string_view>
 #include <type_traits>
 #include <utility>
 #include <vector>
@@ -261,8 +262,30 @@ SampleView SampleModel::execute(const GetSample& action) {
     return loadAttached();
 }
 
+namespace {
+
+/// @brief The sample list's columns as the table engine reflects them from `SampleView`.
+/// @return One column per member, in member order.
+[[nodiscard]] std::vector<::morph::table::ColumnInfo> const& sampleColumns() {
+    static auto const columns = [] {
+        ::morph::table::RowsSource<SampleView> const source{
+            std::make_shared<std::vector<SampleView> const>(),
+            [](SampleView const& sample) { return ::morph::table::RowId{*sample.id}; }};
+        auto const reflected = source.columns();
+        return std::vector<::morph::table::ColumnInfo>(reflected.begin(), reflected.end());
+    }();
+    return columns;
+}
+
+}  // namespace
+
 ::morph::table::Page<SampleView> SampleModel::pageSamples(std::vector<SiteId> const& sites,
-                                                          ::morph::table::TableQuery const& query) {
+                                                          ::morph::table::TableQuery const& query,
+                                                          std::string_view action) {
+    // Refuse a bad query before reading every row in scope.
+    if (auto const checked = ::morph::table::validate(query, sampleColumns()); !checked) {
+        throw ValidationError{std::string{action} + ": " + checked.error().message};
+    }
     std::vector<std::int64_t> siteIds;
     for (SiteId const site : sites) {
         if (site.hasValue()) {
@@ -283,7 +306,7 @@ SampleView SampleModel::execute(const GetSample& action) {
     auto page = ::morph::table::apply<SampleView>(
         rows, [](SampleView const& s) { return ::morph::table::RowId{*s.id}; }, query);
     if (!page) {
-        throw ValidationError{"ListSamples: " + page.error().message};
+        throw ValidationError{std::string{action} + ": " + page.error().message};
     }
     return std::move(*page);
 }
@@ -311,21 +334,22 @@ namespace {
 }
 
 /// @brief The samples the caller can see at @p company that meet one condition on one column.
+/// @param action The action named in a refusal.
 /// @param company The company.
 /// @param column The column's id.
 /// @param condition The condition.
 /// @param limit How many rows the page holds; the page's total counts every match.
 /// @return The page.
-/// @throws ValidationError if the query exceeds the limits.
-[[nodiscard]] ::morph::table::Page<SampleView> samplesWhere(CompanyId company, std::string column,
-                                                            ::morph::table::FilterEntry condition,
+/// @throws ValidationError if the operand does not parse for the column.
+[[nodiscard]] ::morph::table::Page<SampleView> samplesWhere(std::string_view action, CompanyId company,
+                                                            std::string column, ::morph::table::FilterEntry condition,
                                                             std::int64_t limit) {
     ::morph::table::TableQuery query;
     ::morph::table::ColumnFilter filter;
     filter.include.push_back(std::move(condition));
     query.filters.columns.emplace(std::move(column), std::move(filter));
     query.page.limit = limit;
-    return SampleModel::pageSamples(callerSitesAt(company), query);
+    return SampleModel::pageSamples(callerSitesAt(company), query, action);
 }
 
 }  // namespace
@@ -336,8 +360,8 @@ OpenWork<SampleView> SampleDirectoryModel::execute(const CountSamplesToVerify& a
     if (!action.validate()) {
         throw ValidationError{"CountSamplesToVerify: a company is required"};
     }
-    auto const page =
-        samplesWhere(action.company, "state", ::morph::table::FilterEntry{.eq = std::string{"ToBeVerified"}}, 1);
+    auto const page = samplesWhere("CountSamplesToVerify", action.company, "state",
+                                   ::morph::table::FilterEntry{.eq = std::string{"ToBeVerified"}}, 1);
     return openWork<SampleView>(page.total.value_or(0));
 }
 
@@ -350,9 +374,9 @@ SearchHits<SampleView> SampleDirectoryModel::execute(const SearchSamples& action
     if (action.query.empty()) {
         return hitsOf<SampleView>({});
     }
-    auto const page =
-        samplesWhere(action.company, "reference", ::morph::table::FilterEntry{.startsWith = action.query},
-                     static_cast<std::int64_t>(kSearchHitLimit));
+    auto const page = samplesWhere("SearchSamples", action.company, "reference",
+                                   ::morph::table::FilterEntry{.startsWith = action.query},
+                                   static_cast<std::int64_t>(kSearchHitLimit));
     std::vector<SearchHit> found;
     for (SampleView const& sample : page.rows) {
         auto const site = OrgModel::findSite(sample.siteId);

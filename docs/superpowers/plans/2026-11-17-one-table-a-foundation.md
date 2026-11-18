@@ -410,7 +410,8 @@ TEST_CASE("table: apply refuses what validate and compile refuse, by code", "[ta
 
 - `SampleModel::pageSamples(sites, query)`: one `mapper.Query<db::SampleRecord>().WhereIn(::Lightweight::FieldNameOf<&db::SampleRecord::siteId>, siteIds).All()` (the `WhereIn` form `examples/bank/src/models/statement_model.cpp:62` uses), each record through `toView`, then `::morph::table::apply<SampleView>(rows, [](SampleView const& s) { return RowId{*s.id}; }, query)` (the row type is named: a lambda does not deduce `Row` through `RowKey<Row>`, a `std::function`). An empty site list reads nothing (`WHERE IN ()` is not issued). `execute(ListSamples)` calls it with `OrgModel::visibleSites(currentPrincipal())`; `samplesWhere` builds its `TableQuery` as now and calls it with `callerSitesAt(company)`.
 - `LedgerModel::pageEntries(company, query)`: the entries `execute(ListEntries)` already reads (`ledger_entries.cpp:520-532`, one query on `companyId` and `toView(mapper, loadWritten(…))` per entry), then `apply<JournalEntryView>`; the read is one helper both actions share. `execute(ListEntriesPage)` validates the query against the journal columns first (an invalid query is refused for every caller, as before), then keeps its visibility check and empty page.
-- Doc comments on both say what they now do: "reads the caller's rows and runs the query over them with `table::apply`; the total is exact".
+- Doc comments on both say what they now do: "reads those rows (the sites' samples, the company's entries) and runs the query over them with `table::apply`; the total is the count up to `QueryLimits::totalCap` and omitted above it". A refusal names the action the caller sent (`samplesWhere` passes `CountSamplesToVerify` or `SearchSamples`), and `pageSamples` validates before it reads.
+- `examples/lims/tests/test_ledger_scale.cpp`'s 10^6-entry `ListEntriesPage` case asserts no total (it is above `totalCap`), not an exact one.
 - `plan_sql.hpp`'s includes leave `sample_model.cpp` and `ledger_entries.cpp`.
 
 - [ ] **Step 4: Prove scope is still pinned**
@@ -432,7 +433,8 @@ Expected: no output. (`table.md` names the removals in its API, Neighbouring-spe
 - [ ] **Step 7: Run the suites**
 
 Run: `cmake --build --preset cl-debug --target morph_table_tests && ctest --test-dir build/cl-debug -R "^table" --output-on-failure`
-Run: `cmake --preset cl-qt-debug -DMORPH_BUILD_LADDER=ON -DMORPH_LADDER_RUNGS=lims -DCMAKE_PREFIX_PATH=C:/Qt/6.8.3/msvc2022_64/lib/cmake && cmake --build build/cl-qt-debug --target ladder_lims_tests -j 6 && ctest --test-dir build/cl-qt-debug -L ladder-lims -LE stress --output-on-failure` (the ladder needs `MORPH_BUILD_QT=ON`, so `cl-debug` refuses it at configure; with the SQLite ODBC driver installed as `SQLite3 ODBC Driver`, set `ODBC_CONNECTION_STRING=DRIVER={SQLite3 ODBC Driver};Database=morph_ladder_test.db;Timeout=5000`, since the fixture's default names a driver `SQLite3`)
+Run: `cmake --preset cl-qt-debug -DMORPH_BUILD_LADDER=ON -DMORPH_LADDER_RUNGS=lims && cmake --build build/cl-qt-debug --target ladder_lims_tests -j 6 && ctest --test-dir build/cl-qt-debug -L ladder-lims --output-on-failure`
+(The ladder needs `MORPH_BUILD_QT=ON`, so `cl-debug` refuses it at configure. Where Qt is not on the preset's path, add `-DCMAKE_PREFIX_PATH=<Qt>/lib/cmake`; where the SQLite ODBC driver is registered under another name than `SQLite3`, set `ODBC_CONNECTION_STRING` to name it.)
 Run the docs build of the roadmap's Global Constraints.
 Expected: all green; the docs build prints no warning.
 
