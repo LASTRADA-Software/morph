@@ -169,8 +169,10 @@ every document it accepts is one a reply can carry.
 - **A store's refusal reaches the person as the store gave it**, from `get` as from `put` and `remove`; the model adds no wording of its own over it.
 - **Bounded replies.** Every summary field has a cap: `savedBy` and `broken`'s pointer at `kMaxNameBytes`, `broken`'s
   reason at 1 KiB, each cut with an ellipsis when longer, so the part of a reply that is not the document is bounded and
-  every `get` reply fits an envelope. `list` answers at most `CustomScreensOptions::maxListed` summaries, 500 by
-  default, and says `truncated` when the store held more.
+  every `get` reply fits an envelope. `list` answers at most `CustomScreensOptions::maxListed` summaries, 200 by
+  default, and says `truncated` when the store held more; `registerCustomScreens` refuses a `maxListed` whose capped
+  summaries, at the seven-fold growth a control byte can take through the reply and the envelope, could exceed the
+  envelope bound.
 - **`mine`** is whether `savedBy` is the caller, so a screen someone else saved is shown as theirs.
 - **`broken`** is the refusal the checks give for a stored document today, with its pointer. A broken screen is still
   listed, so the person can open its source and fix it, and is never mounted.
