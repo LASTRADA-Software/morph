@@ -1247,20 +1247,26 @@ private:
                     }
                 }
             }
+            self->settleAttempt(reachedServer);
+        }
+
+        /// Decides what follows an attempt that has ended: fail fast on a never-reached server, or schedule the
+        /// next attempt.
+        /// @param reachedServer Whether this attempt completed the handshake.
+        void settleAttempt(bool reachedServer) {
             // A first connect that is retried keeps the calls held for it: they are sent when an attempt succeeds.
-            bool const neverReached = !reachedServer && !self->everConnected;
-            bool const retryingFirst = neverReached && self->cfg.retryFirstConnect && self->cfg.reconnectEnabled;
-            self->onDisconnected(retryingFirst ? HeldCalls::Keep : HeldCalls::Reject);
-            if (neverReached && !self->cfg.retryFirstConnect) {
-                // Never reached the server even once — fail fast, no retry
-                // (mirrors QtWebSocketBackend's "no reconnect for
-                // never-connected sockets").
-                self->attemptsOver = true;
-                co_return;
+            bool const neverReached = !reachedServer && !everConnected;
+            bool const retryingFirst = neverReached && cfg.retryFirstConnect && cfg.reconnectEnabled;
+            onDisconnected(retryingFirst ? HeldCalls::Keep : HeldCalls::Reject);
+            if (neverReached && !cfg.retryFirstConnect) {
+                // Never reached the server even once: fail fast, no retry (mirrors QtWebSocketBackend's
+                // "no reconnect for never-connected sockets").
+                attemptsOver = true;
+                return;
             }
-            self->attemptsOver = !self->cfg.reconnectEnabled;
-            if (!self->attemptsOver) {
-                self->scheduleReconnect();
+            attemptsOver = !cfg.reconnectEnabled;
+            if (!attemptsOver) {
+                scheduleReconnect();
             }
         }
 

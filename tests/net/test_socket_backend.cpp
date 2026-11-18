@@ -2971,7 +2971,7 @@ std::shared_ptr<morph::backend::RemoteServer> probeServer(morph::exec::ThreadPoo
 TEST_CASE("SocketBackend: retryFirstConnect reaches a server that listens after the first attempt",
           "[net][socket_backend][disconnect]") {
     morph::exec::ThreadPoolExecutor serverPool{2};
-    auto server = probeServer(serverPool);
+    auto const server = probeServer(serverPool);
     std::uint16_t const port = refusedPort(server);
     std::this_thread::sleep_for(std::chrono::milliseconds{100});
 
@@ -3003,7 +3003,7 @@ TEST_CASE("SocketBackend: retryFirstConnect reaches a server that listens after 
 TEST_CASE("SocketBackend: without retryFirstConnect, a refused first connect is not retried",
           "[net][socket_backend][disconnect]") {
     morph::exec::ThreadPoolExecutor serverPool{2};
-    auto server = probeServer(serverPool);
+    auto const server = probeServer(serverPool);
     std::uint16_t const port = refusedPort(server);
     std::this_thread::sleep_for(std::chrono::milliseconds{100});
 

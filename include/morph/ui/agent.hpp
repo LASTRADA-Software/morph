@@ -137,7 +137,7 @@ public:
             std::scoped_lock const lock{_shared->mutex};
             _shared->timer = nullptr;
         }
-        _timer.reset();
+        _timer = nullptr;
         // A destructor must not throw, so a close that fails is dropped.
         try {
             if (_shared->close) {
@@ -157,7 +157,7 @@ public:
     [[nodiscard]] std::function<void()> resetter() const {
         return [weak = std::weak_ptr<Shared>{_shared}] {
             if (auto const shared = weak.lock()) {
-                shared->reset();
+                shared->clear();
             }
         };
     }
@@ -219,7 +219,7 @@ private:
         }
 
         static void overServer(std::shared_ptr<backend::RemoteServer> const& server, backend::ConnectionId cid,
-                               wire::Envelope env, EnvelopeReply done) {
+                               wire::Envelope const& env, EnvelopeReply done) {
             server->handle(
                 wire::encode(env),
                 [done = std::move(done)](std::string const& reply) {
@@ -245,8 +245,8 @@ private:
         };
 
         [[nodiscard]] static std::string waited(std::chrono::milliseconds timeout) {
-            auto const ms = timeout.count();
-            return ms % 1000 == 0 ? std::to_string(ms / 1000) + " s" : std::to_string(ms) + " ms";
+            auto const millis = timeout.count();
+            return millis % 1000 == 0 ? std::to_string(millis / 1000) + " s" : std::to_string(millis) + " ms";
         }
 
         [[nodiscard]] static std::string describe(std::exception_ptr const& error) {
@@ -296,7 +296,7 @@ private:
                 });
         }
 
-        void reset() {
+        void clear() {
             std::scoped_lock const lock{mutex};
             ++generation;
             catalog.reset();
@@ -726,8 +726,9 @@ inline void serveStdioOnOwner(McpAdapter& adapter, exec::IExecutor& owner, std::
         });
         std::unique_lock lock{mutex};
         answered.wait(lock, [&replied] { return replied.has_value(); });
-        if (*replied) {
-            output << **replied << '\n' << std::flush;
+        auto const& reply = replied.value();
+        if (reply) {
+            output << *reply << '\n' << std::flush;
         }
     }
 }

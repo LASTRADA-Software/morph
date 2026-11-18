@@ -863,12 +863,13 @@ TEST_CASE("makeLocalServer serves the application's catalog", "[client][local-se
 
 TEST_CASE("makeLocalServer refuses an application whose bundle does not build", "[client][local-server]") {
     morph::exec::ThreadPoolExecutor workers{1};
-    morph::client::LocalApp broken{
+    morph::client::LocalApp const broken{
         .name = "broken",
-        .bundle = []() -> std::expected<std::shared_ptr<morph::ui::ServedBundle const>, morph::ui::Refusal> {
+        .bundle = [] -> std::expected<std::shared_ptr<morph::ui::ServedBundle const>, morph::ui::Refusal> {
             return std::unexpected(morph::ui::Refusal{.document = "broken.home", .path = "", .reason = "no view"});
         },
-        .setUp = {}};
+        .setUp = {},
+    };
     auto const server = morph::client::makeLocalServer(broken, workers);
     REQUIRE_FALSE(server.has_value());
     CHECK_FALSE(server.error().empty());
@@ -889,7 +890,7 @@ morph::wire::Envelope runAnswer(morph::backend::RemoteServer& server) {
     reg.kind = "register";
     reg.callId = 1;
     reg.typeId = "Probe_Model";
-    auto const registered = morph::wire::decode(server.handleInline(morph::wire::encode(reg), 0));
+    auto registered = morph::wire::decode(server.handleInline(morph::wire::encode(reg), 0));
     if (registered.kind != "ok") {
         return registered;
     }
@@ -900,7 +901,7 @@ morph::wire::Envelope runAnswer(morph::backend::RemoteServer& server) {
     run.modelType = "Probe_Model";
     run.actionType = "Probe_Answer";
     run.body = "{}";
-    auto answer = std::make_shared<std::promise<std::string>>();
+    auto const answer = std::make_shared<std::promise<std::string>>();
     auto future = answer->get_future();
     server.handle(morph::wire::encode(run), [answer](std::string reply) { answer->set_value(std::move(reply)); });
     if (future.wait_for(std::chrono::seconds{10}) != std::future_status::ready) {
@@ -917,7 +918,7 @@ morph::wire::Envelope runAnswer(morph::backend::RemoteServer& server) {
 TEST_CASE("makeLocalServer checks requests with the application's serverAuthorizer", "[client][local-server]") {
     morph::exec::ThreadPoolExecutor workers{2};
 
-    auto open = probe::app();
+    auto const open = probe::app();
     auto const allowed = morph::client::makeLocalServer(open, workers);
     REQUIRE(allowed.has_value());
     auto const answered = runAnswer(**allowed);

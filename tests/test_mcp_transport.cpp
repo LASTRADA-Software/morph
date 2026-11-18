@@ -134,18 +134,22 @@ struct EventWire {
     std::vector<std::string> sent;
 
     morph::backend::ConnectionWriter writer() {
-        return {.write =
-                    [this](std::string frame) {
-                        std::scoped_lock const lock{mutex};
-                        sent.push_back(std::move(frame));
-                    },
-                .backlog = [] { return std::size_t{0}; }};
-    }
+        return {
+            .write =
+                [this](std::string frame) {
+                    std::scoped_lock const lock{mutex};
+                    sent.push_back(std::move(frame));
+                },
+            .backlog = [] { return std::size_t{0}; },
+        }
+    };
+}
 
-    std::size_t count() {
-        std::scoped_lock const lock{mutex};
-        return sent.size();
-    }
+std::size_t
+count() {
+    std::scoped_lock const lock{mutex};
+    return sent.size();
+}
 };
 
 struct Rig {
@@ -246,7 +250,7 @@ Outcome start(ui::McpAdapter& adapter, std::string const& message) {
 }
 
 // A genuine catalog reply, from the server the adapter would have asked.
-morph::wire::Envelope realCatalog(Rig& rig) {
+morph::wire::Envelope realCatalog(Rig const& rig) {
     morph::wire::Envelope request;
     request.kind = std::string{ui::kCatalogKind};
     request.callId = 1;
@@ -515,14 +519,14 @@ TEST_CASE("a resetter called after the adapter is destroyed does nothing", "[mcp
     ScriptedTransport transport;
     std::function<void()> reset;
     {
-        ui::McpAdapter adapter{transport, ui::McpOptions{.callbacks = &owner}};
+        ui::McpAdapter const adapter{transport, ui::McpOptions{.callbacks = &owner}};
         reset = adapter.resetter();
     }
     reset();  // a lifetime smoke test: it cannot fail by itself, and is checked under ASan in CI
 }
 
 TEST_CASE("serveStdioOnOwner answers lines while another thread runs the owner", "[mcp][transport]") {
-    Rig rig;
+    Rig const rig;
     morph::exec::ThreadPoolExecutor ownerPool{1};
     morph::exec::OwnerStrand owner{ownerPool};
     morph::session::Context session;
