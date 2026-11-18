@@ -242,8 +242,10 @@ struct FilterCounters {
     std::uint64_t setLookups = 0;
     /// @brief Cells a group read.
     std::uint64_t cellReads = 0;
-    /// @brief Augmenting-path searches a `Together` group started.
+    /// @brief Augmenting-path searches a `Together` group started over its known cells.
     std::uint64_t augmentations = 0;
+    /// @brief Augmenting-path searches a `Together` group started with its unknown columns matching every entry.
+    std::uint64_t wildcardAugmentations = 0;
 };
 
 namespace detail {
@@ -796,29 +798,39 @@ private:
             return Match::No;
         }
         covered = 0;
+        std::size_t usable = 0;
         for (std::size_t at = 0; at < masks.size(); ++at) {
             if ((unknownColumns >> at) & 1U) {
                 masks[at] = group.index[at].compiled;
             }
             covered |= masks[at];
+            usable += masks[at] != 0 ? 1 : 0;
         }
-        return covered == full && cover(masks, entries, nullptr) ? Match::Unknown : Match::No;
+        // Each entry needs a column of its own, so fewer columns that match any entry than there are entries
+        // cannot be matched (Hall's condition on the column side). The unknown columns' masks are full, so the
+        // covered test alone passes on nearly every row, and the search would then fail only after trying every
+        // assignment.
+        if (covered != full || usable < entries) {
+            return Match::No;
+        }
+        return cover(masks, entries, counters, true) ? Match::Unknown : Match::No;
     }
 
     /// @brief Whether every entry can be given a column of its own among @p masks: augmenting paths, one search an
     ///        entry.
     /// @param masks    Each column's entry bits.
     /// @param entries  The entries to cover, bits `0..entries-1`.
-    /// @param counters Counts each search in `augmentations` when not null.
+    /// @param counters Counts each search when not null.
+    /// @param wildcard The search counts in `wildcardAugmentations` rather than `augmentations`.
     /// @return `true` when a matching covers every entry.
     [[nodiscard]] static bool cover(std::span<std::uint32_t const> masks, std::size_t entries,
-                                    FilterCounters* counters) {
+                                    FilterCounters* counters, bool wildcard = false) {
         constexpr std::size_t kMaxTogether = 16;
         std::array<int, kMaxTogether> owner{};
         owner.fill(-1);
         for (std::size_t entry = 0; entry < entries; ++entry) {
             if (counters != nullptr) {
-                ++counters->augmentations;
+                ++(wildcard ? counters->wildcardAugmentations : counters->augmentations);
             }
             std::uint32_t visited = 0;
             if (!augment(static_cast<int>(entry), masks, owner, visited)) {

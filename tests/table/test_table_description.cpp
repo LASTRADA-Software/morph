@@ -1880,3 +1880,51 @@ TEST_CASE("answer query: a distinct request reads a slow column through its leve
     CHECK_FALSE(second->distinct->partial);
     CHECK(*second->distinct == *distinctValues(*plain, q, *q.distinct));
 }
+
+// Mutation: the distinct branch answered before the column-presence check: the first request is a partial list
+// over an unloaded column (SourceContract after it), the second a list that stays partial however often it is asked.
+TEST_CASE("answer query: a distinct request is refused a column the table cannot read", "[table][description][distinct]") {
+    auto const q = [] {
+        TableQuery out;
+        out.distinct = DistinctRequest{.column = "status"};
+        return out;
+    }();
+    // A description column the base source lacks.
+    auto missingBase = TableDescription{
+        .id = "d",
+        .label = "D",
+        .columns = {column("status", ColumnKind::Text), column("extra", ColumnKind::Text)},
+        .key = "status"};
+    auto const base = detail::pinned(ServedTable{.description = describe(std::move(missingBase)),
+                                                 .source = tabletest::distinctSource(),
+                                                 .levels = {},
+                                                 .mayRead = {},
+                                                 .scope = {},
+                                                 .services = {},
+                                                 .limits = {}});
+    auto const refusedBase = detail::answerQuery(base, q);
+    REQUIRE_FALSE(refusedBase);
+    CHECK(refusedBase.error().code == TableErrorCode::UnknownColumn);
+    CHECK(refusedBase.error().column == "extra");
+    // A level column its level source does not serve: listed, it would stay unloaded for every row.
+    auto missingLevel = TableDescription{
+        .id = "d",
+        .label = "D",
+        .columns = {column("status", ColumnKind::Text), column("note", ColumnKind::Text)},
+        .key = "status"};
+    missingLevel.columns[1].info.level = "notes";
+    missingLevel.levels = {"notes"};
+    auto const levelled = detail::pinned(ServedTable{.description = describe(std::move(missingLevel)),
+                                                     .source = tabletest::distinctSource(),
+                                                     .levels = {std::make_shared<RecordingLevel>("notes")},
+                                                     .mayRead = {},
+                                                     .scope = {},
+                                                     .services = {},
+                                                     .limits = {}});
+    TableQuery notes;
+    notes.distinct = DistinctRequest{.column = "note"};
+    auto const refusedLevel = detail::answerQuery(levelled, notes);
+    REQUIRE_FALSE(refusedLevel);
+    CHECK(refusedLevel.error().code == TableErrorCode::UnknownColumn);
+    CHECK(refusedLevel.error().column == "note");
+}
