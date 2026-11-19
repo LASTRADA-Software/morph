@@ -588,6 +588,8 @@ public:
     /// The keys of a range of view rows, for a range selection; completes when every key is known.
     virtual async::Completion<std::expected<std::vector<table::RowId>, table::TableError>>
         keysOf(std::int64_t first, std::int64_t count) = 0;
+    /// Where the row with a key is in the view, fetched or not: its view index, or nothing when the view lacks it.
+    virtual void locateRow(table::RowId key, std::stop_token stop, std::function<void(RowLocation const&)> done) = 0;
     virtual std::expected<void, table::TableError> setSort(SortChain sort) = 0;
     virtual std::expected<void, table::TableError> setFilter(table::FilterSpec filter) = 0;
     [[nodiscard]] virtual TableCountsView counts() const = 0;
@@ -597,12 +599,14 @@ public:
 ```
 
 - **`EngineRows`** wraps an `Engine` over a `ValueRowsSource` or a `VectorSource`. Every row is present;
-  `visible` does nothing; `keysOf` completes at once; a change is the engine's `ViewChange`.
+  `visible` does nothing; `keysOf` completes at once, and `locateRow` answers from the engine's view; a change is
+  the engine's `ViewChange`.
 - **`WindowRows`** wraps a `PageWindow`, the table's description and the session. `visible` returns fetches,
   which it sends through the session's read that makes no cache entry; replies go to `accept` and `patch`; the
   table record's change events go to `refresh` and `invalidate`
   ([The window under changes](#the-window-under-changes)). A change is the diff of the rows it held against the
-  rows it holds, by key. It owns the two timing rules the window itself has no clock for: when a fetch is sent
+  rows it holds, by key. `locateRow` is a keyed fetch naming no columns, whose reply's `indices` give the row's
+  view index. It owns the two timing rules the window itself has no clock for: when a fetch is sent
   while the user scrolls, and how often an awaited order is fetched again.
 
 The mount's windowing, which decides the realized rows and columns of a large table, calls `visible` with both
@@ -3091,6 +3095,7 @@ spread reflects. A row marked *not yet measured* says why; its figure is taken w
 | U3 | 0 | Text folds of the interpreter's sort of 100,000 rows: *not yet measured* — the interpreter folds with a `CodePointCollator` it constructs inside the comparison and takes none from outside, so no counting collator can be installed; the count needs that seam | — | — |
 | U4 | 0 | A `rows` table of 10,000 × 300 sorted on one column: the rows as cells, by `approximateCellBytes`, 214,423,008 bytes (204.5 MiB, 71.5 bytes a cell); the state's `items` as document values, counted the same way (each value, a string's heap, a list's or a record's container, a map node's links; shared lists and records once), 432,663,112 bytes (412.6 MiB, 144.2 bytes a cell) | A | 2026-11-18 |
 | U5 | 0 | A collection of 20,000 rows over a `ListRows` reply: mount 117.0 ms (102.8–143.5); sort on a text column through the engine 46.9 ms (37.6–62.1); one row edited, the list reloaded and the sorted view repaired, 206.4 ms (171.9–226.2) | A, 82–91% busy | 2026-11-17 |
+| U8 | 5 | U1 and U2 at 20,000 rows, and U6's scrolls (F3 and F4), in the WebAssembly build in a browser: *not yet measured* — the harness, `tests/qt_quick/wasm/u8_scrolls.cpp`, is written and unbuilt: no Emscripten, Qt for WebAssembly kit or Chrome on machine A, and Qt Quick cannot be configured there. The window-shaped part of the exit criterion (every scroll's p50 ≤ 8 ms and p99 ≤ 16.6 ms) is open until it is built and run as its header says | — | — |
 | F2–F5 | 0 | A `rows` table of 2,000 × 300 in a 1,280 × 800 offscreen window: widgets alive, frame times of the vertical and horizontal scrolls, memory per realized row: *not yet measured* — on machine A the interpreter's mount of that table on the Qt Quick backend did not finish within its 300 s budget (the document's text 0.4 s, its parse 0.8 s); the case, `"qt quick baseline: F2 to F5 on a rows table of 2,000 x 300"`, bounds every step and names the one that overruns | A, 80–90% busy | 2026-11-18 |
 
 ## Invariants
