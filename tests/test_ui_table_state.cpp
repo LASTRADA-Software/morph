@@ -65,10 +65,10 @@ table::TableStateKey const kKey = keyOf("samples");
 
 // A server offering `morph.tableState` over a probe store; its token is the verified principal.
 struct StateServer {
-    explicit StateServer(TableStateOptions options) {
+    explicit StateServer(TableStateOptions options, std::shared_ptr<morph::session::IAuthorizer> authorizer =
+                                                        std::make_shared<prefs_test::TokenAuthorizer>()) {
         ui::registerTableState(prefs, dispatcher, registry, options);
-        server = std::make_shared<morph::backend::RemoteServer>(pool, std::make_shared<prefs_test::TokenAuthorizer>(),
-                                                                dispatcher, registry);
+        server = std::make_shared<morph::backend::RemoteServer>(pool, std::move(authorizer), dispatcher, registry);
     }
 
     morph::wire::Envelope send(morph::wire::Envelope const& request) {
@@ -158,9 +158,25 @@ private:
     std::string _person;
 };
 
+// Admits every call but `morph.tableState`'s `publish` for the token `bob`; the token is the verified principal.
+struct NoPublishForBob final : morph::session::IAuthorizer {
+    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): IAuthorizer's signature.
+    [[nodiscard]] bool authorize(morph::session::Context const& ctx, std::string_view modelType,
+                                 std::string_view actionType) const override {
+        return !(ctx.principal == "bob" && modelType == ui::kTableStateModel && actionType == "publish");
+    }
+
+    [[nodiscard]] std::optional<std::string> authenticate(morph::session::Context const& ctx) const override {
+        return ctx.token.empty() ? std::nullopt : std::optional<std::string>{ctx.token};
+    }
+};
+
 // A session's owner and timers, and the preferences-backed store over an in-process server.
 struct StoreFixture : RowsFixture {
-    explicit StoreFixture(TableStateOptions options = {}) : server{options} {}
+    explicit StoreFixture(TableStateOptions options = {},
+                          std::shared_ptr<morph::session::IAuthorizer> authorizer =
+                              std::make_shared<prefs_test::TokenAuthorizer>())
+        : server{options, std::move(authorizer)} {}
 
     StateServer server;
     ProbePreferencesStore& prefs = *server.prefs;
@@ -588,4 +604,200 @@ TEST_CASE("table state: a session's table states follow its store", "[ui][state]
     CHECK(&withStore.tableStates()->store() == &store);
     CHECK(withStore.options().tableStateTimeout == 300ms);
     CHECK(withStore.options().tableStateDebounce == 500ms);
+}
+
+// --- Saved views: kNoDocument, and the shared part ------------------------------------------------------------------
+
+namespace {
+
+table::TableStateKey partOf(std::string part) {
+    auto key = kKey;
+    key.part = std::move(part);
+    return key;
+}
+
+table::AddView addNamed(std::string name) {
+    return table::AddView{table::SavedView{.name = std::move(name), .layout = {}, .sort = {}, .filters = {}}};
+}
+
+std::vector<std::string> viewNames(std::optional<table::StoredTableState> const& stored) {
+    REQUIRE(stored.has_value());
+    auto const document = table::readViews(stored->json);
+    REQUIRE(document.has_value());
+    std::vector<std::string> names;
+    for (auto const& view : document->views) {
+        names.push_back(view.name);
+    }
+    return names;
+}
+
+// The body of a raw `publish` of @p operation on the shared part.
+std::string publishBody(table::ViewOperation const& operation, std::string expected) {
+    return morph::model::ActionTraits<ui::TableStatePublish>::toJson(ui::TableStatePublish{
+        .key = partOf("shared"), .operation = table::writeViewOperation(operation), .expected = std::move(expected)});
+}
+
+bool isRevision(std::string const& revision) {
+    return revision.size() == 16 && std::ranges::all_of(revision, [](char each) {
+               return (each >= '0' && each <= '9') || (each >= 'a' && each <= 'f');
+           });
+}
+
+}  // namespace
+
+// Mutation: publish written under the caller's person (bob does not see it).
+TEST_CASE("shared views: published by one principal, read by another", "[ui][table][state][remote]") {
+    StoreFixture h;
+    CHECK(h.store.shares());
+    auto const shared = partOf("shared");
+    auto const published = settled(h, h.store.publish(shared, addNamed("Mine"), std::string{table::kNoDocument}));
+    REQUIRE(published.outcome == table::SaveOutcome::Saved);
+    CHECK(isRevision(published.revision));
+    std::size_t const before = h.prefs.calls().size();
+    ServerDispatcher bobClient{h.server, h.owner, "bob"};
+    ui::PreferencesTableStateStore bobStore{bobClient, h.owner};
+    auto const read = settled(h, bobStore.load(shared));
+    REQUIRE(read.has_value());
+    CHECK(read->revision == published.revision);
+    CHECK(viewNames(read) == std::vector<std::string>{"Mine"});
+    auto const calls = h.prefs.calls();
+    CHECK(std::ranges::contains(calls, std::string{R"(set "" shared)"}));
+    CHECK_FALSE(std::ranges::any_of(calls, [](std::string const& call) { return call.contains(R"("alice")"); }));
+    REQUIRE(calls.size() > before);
+    CHECK(calls[before] == R"(get "" shared)");  // bob's read
+}
+
+// Mutation: the model treating kNoDocument as an ordinary revision in `save` (the first save answers Conflict).
+TEST_CASE("table state model: a save with kNoDocument stores over nothing and conflicts over something",
+          "[ui][table][state][remote]") {
+    StoreFixture h;
+    auto const views = partOf("views");
+    std::string const first = R"({"version":1,"views":[{"name":"first"}]})";
+    auto const saved = settled(h, h.store.save(views, first, std::string{table::kNoDocument}));
+    REQUIRE(saved.outcome == table::SaveOutcome::Saved);
+    auto const again = settled(
+        h, h.store.save(views, R"({"version":1,"views":[{"name":"second"}]})", std::string{table::kNoDocument}));
+    CHECK(again.outcome == table::SaveOutcome::Conflict);
+    CHECK(again.revision == saved.revision);
+    auto const stored = load(h, views);
+    REQUIRE(stored.has_value());
+    CHECK(stored->json == first);
+}
+
+// Mutation: the client sending a publish under the action id `save` (the authoriser, consulted with `save`, admits
+// bob's call, and alice's publish is refused as a save of the shared part).
+TEST_CASE("shared views: an authoriser that refuses publish refuses it by action id", "[ui][table][state][remote]") {
+    StoreFixture h{{}, std::make_shared<NoPublishForBob>()};
+    auto const shared = partOf("shared");
+    ServerDispatcher bobClient{h.server, h.owner, "bob"};
+    ui::PreferencesTableStateStore bobStore{bobClient, h.owner};
+    std::size_t const before = h.prefs.setCount();
+    CHECK_THROWS(settled(h, bobStore.publish(shared, addNamed("Bob's"), std::string{table::kNoDocument})));
+    CHECK(h.prefs.setCount() == before);
+    auto const alice = settled(h, h.store.publish(shared, addNamed("Alice's"), std::string{table::kNoDocument}));
+    CHECK(alice.outcome == table::SaveOutcome::Saved);
+    CHECK(viewNames(load(h, shared)) == std::vector<std::string>{"Alice's"});
+}
+
+// Mutation: save of part "shared" accepted.
+TEST_CASE("shared views: a user's own save of the shared part is refused", "[ui][table][state][remote]") {
+    StoreFixture h;
+    auto const instance = h.server.bind();
+    std::size_t const before = h.prefs.setCount();
+    auto const reply = h.server.call(instance, "save",
+                                     morph::model::ActionTraits<ui::TableStateSave>::toJson(
+                                         ui::TableStateSave{.key = partOf("shared"),
+                                                            .expected = {},
+                                                            .upload = {},
+                                                            .offset = 0,
+                                                            .text = R"({"version":1,"views":[]})",
+                                                            .last = true}),
+                                     kPerson);
+    REQUIRE(reply.kind == "ok");
+    CHECK(reply.body.starts_with(R"({"result":{"outcome":"refused",)"));
+    CHECK(reply.body.contains(R"("reason":"the shared views are written by publish")"));
+    CHECK(h.prefs.setCount() == before);
+    // Nor is a user's remove of it.
+    CHECK(h.server
+              .call(instance, "remove",
+                    morph::model::ActionTraits<ui::TableStateRemove>::toJson(
+                        ui::TableStateRemove{.key = partOf("shared")}),
+                    kPerson)
+              .kind != "ok");
+}
+
+// Mutation: publish ignoring `expected`.
+TEST_CASE("shared views: a publish over a replaced revision is a conflict", "[ui][table][state][remote]") {
+    StoreFixture h;
+    auto const instance = h.server.bind();
+    auto const publish = [&](table::ViewOperation const& operation, std::string expected) {
+        auto const reply = h.server.call(instance, "publish", publishBody(operation, std::move(expected)), kPerson);
+        REQUIRE(reply.kind == "ok");
+        return reply.body;
+    };
+    auto const resultOf = [](std::string const& body) {
+        return morph::model::ActionTraits<ui::TableStatePublish>::resultFromJson(body).result;
+    };
+    auto const first = resultOf(publish(addNamed("A"), std::string{table::kNoDocument}));
+    REQUIRE(first.outcome == table::SaveOutcome::Saved);
+    auto const second = resultOf(publish(addNamed("B"), first.revision));
+    REQUIRE(second.outcome == table::SaveOutcome::Saved);
+    CHECK(second.revision != first.revision);
+    std::string const stale = publish(addNamed("C"), first.revision);
+    CHECK(stale.starts_with(R"({"result":{"outcome":"conflict","revision":")" + second.revision + "\""));
+    CHECK(viewNames(load(h, partOf("shared"))) == std::vector<std::string>{"A", "B"});
+    // The shared document has no default, and a caller with no verified person publishes nothing.
+    CHECK(resultOf(publish(table::SetDefaultView{"A"}, {})).outcome == table::SaveOutcome::Refused);
+    CHECK(h.server.call(instance, "publish", publishBody(addNamed("D"), {}), "").kind != "ok");
+}
+
+// Mutation: every state written as segments.  (T2 gates)
+TEST_CASE(
+    "table state: a full state is one entry and one call; a 20,000-value filter reads back equal through segments",
+    "[ui][table][state][remote]") {
+    table::StateDocument full;
+    table::ColumnLayoutValue layout;
+    for (int at = 0; at < 300; ++at) {
+        layout.order.push_back(std::format("c{:03}", at));
+        layout.widths.emplace(std::format("c{:03}", at), 12 + at % 20);
+    }
+    layout.pinned = 1;
+    full.layout = layout;
+    table::SortChain sort;
+    for (int at = 0; at < 8; ++at) {
+        sort.push_back(table::SortKey{.column = std::format("c{:03}", at * 3), .dir = table::SortDirection::Ascending});
+    }
+    full.sort = sort;
+    table::FilterSpec filters;
+    for (int at = 0; at < 32; ++at) {
+        table::ColumnFilter filter;
+        filter.include.push_back(table::FilterEntry{.contains = "ka"});
+        filters.columns.emplace(std::format("c{:03}", 100 + at), std::move(filter));
+    }
+    full.filters = filters;
+    std::string const fullText = table::writeState(full);
+    std::string const ticked = stateWithOneOfValues(20'000);
+    for (std::string const part : {std::string{"state"}, std::string{"views"}}) {
+        CAPTURE(part);
+        StoreFixture h;
+        auto const key = partOf(part);
+        std::size_t const sets = h.prefs.setCount();
+        REQUIRE(save(h, key, fullText).outcome == table::SaveOutcome::Saved);
+        INFO("T2: a state of 300 columns, 8 sort keys and 32 filters is " << fullText.size() << " bytes");
+        CHECK(h.prefs.setCount() - sets == 1);
+        CHECK(h.prefs.pointsUnder(scopeOf(key)) == std::set<std::string>{part});
+        auto const stored = load(h, key);
+        REQUIRE(stored.has_value());
+        CHECK(stored->json == fullText);
+
+        StoreFixture big;
+        REQUIRE(save(big, key, ticked).outcome == table::SaveOutcome::Saved);
+        INFO("T2: a 20,000-value filter is " << ticked.size() << " bytes in " << segmentsOf(ticked)
+                                              << " segments; entries " << big.prefs.pointsUnder(scopeOf(key)).size()
+                                              << ", sets " << big.prefs.setCount());
+        auto const bigStored = load(big, key);
+        REQUIRE(bigStored.has_value());
+        CHECK(bigStored->json == ticked);
+        CHECK(big.prefs.largestValue() <= 12 * 1024);
+    }
 }

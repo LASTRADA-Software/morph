@@ -119,6 +119,17 @@ struct TableStateSaved {
     table::SaveResult result;
 };
 
+/// @brief `publish`: applies one operation to the views published for everyone.
+struct TableStatePublish {
+    /// @brief Which table's shared views; its `part` is `"shared"`.
+    table::TableStateKey key;
+    /// @brief The operation's JSON, as `table::writeViewOperation` writes it.
+    std::string operation;
+    /// @brief Empty to apply it to whatever is stored; `table::kNoDocument` to apply it only when nothing is;
+    ///        otherwise the revision the stored document must have.
+    std::string expected;
+};
+
 /// @brief `remove`: forgets a stored document.
 struct TableStateRemove {
     /// @brief Which document.
@@ -333,6 +344,11 @@ inline constexpr glz::opts kStoredRead{.null_terminated = false, .error_on_unkno
 /// The person is the principal of the verified session, as for the preferences model: no request names one. With no
 /// verified principal, `load` answers nothing found for every key and `read`, `save` and `remove` are refused.
 ///
+/// The `shared` part is the exception: it is the views published for everyone, so its entries are kept with no
+/// person, and every verified caller's `load` and `read` reach the same document. It is written only by `publish`,
+/// an action of its own, so an authoriser admits or refuses publishing by action id; `save` of it answers `Refused`
+/// and `remove` of it is refused. It is not counted against any person's quota.
+///
 /// A key's entries are the caller's person's, of the key's `application`, under the scope
 /// `detail::tableStateScope(key)`. The point `<part>` is the head: the key in clear, the revision, and the document
 /// itself when it is at most `segmentBytes`, else its segment count and length, the segments being the points
@@ -376,12 +392,13 @@ public:
                 reply.entries.emplace_back();
                 continue;
             }
-            Head const head = co_await readHead(person, key);
+            std::string const owner = ownerOf(person, key);
+            Head const head = co_await readHead(owner, key);
             TableStateHead entry{
                 .found = head.found, .revision = head.revision, .size = head.size(), .text = {}, .error = {}};
             if (head.found) {
                 try {
-                    entry.text = co_await readRange(person, key, head, 0);
+                    entry.text = co_await readRange(owner, key, head, 0);
                 } catch (std::exception const& error) {
                     entry =
                         TableStateHead{.found = false, .revision = {}, .size = 0, .text = {}, .error = error.what()};
@@ -401,21 +418,22 @@ public:
         if (person.empty()) {
             co_return TableStateChunk{};
         }
-        Head const head = co_await readHead(person, request.key);
+        std::string const owner = ownerOf(person, request.key);
+        Head const head = co_await readHead(owner, request.key);
         if (!head.found || head.revision != request.revision) {
             co_return TableStateChunk{.revision = head.revision, .text = {}};
         }
         if (request.offset > head.size()) {
             throw std::invalid_argument{"a table-state read starts past the document's end"};
         }
-        std::string text = co_await readRange(person, request.key, head, request.offset);
+        std::string text = co_await readRange(owner, request.key, head, request.offset);
         co_return TableStateChunk{.revision = head.revision, .text = std::move(text)};
     }
 
     /// @brief Stores the caller's document, or one part of it.
     /// @param request The key, the `expected` rule, and the document or part.
     /// @return `Saved` with the new revision; `Conflict` with the current one when `expected` does not hold;
-    ///         `Refused` over the quota.
+    ///         `Refused` over the quota, and for the `shared` part, which only `publish` writes.
     ::core::async::Task<TableStateSaved> execute(TableStateSave request) {
         checkKey(request.key);
         if (request.text.size() > _options.partBytes) {
@@ -423,6 +441,11 @@ public:
                                         std::to_string(_options.partBytes) + " bytes"};
         }
         std::string const person = signedInPerson();
+        if (request.key.part == kSharedPart) {
+            co_return TableStateSaved{.result = table::SaveResult{.outcome = table::SaveOutcome::Refused,
+                                                                  .revision = {},
+                                                                  .reason = "the shared views are written by publish"}};
+        }
         if (request.upload.empty()) {
             if (request.offset != 0 || !request.last) {
                 throw std::invalid_argument{"a table-state save in parts names its upload"};
@@ -455,9 +478,13 @@ public:
     /// @brief Forgets the caller's document.
     /// @param request The key.
     /// @return Whether a document was stored.
+    /// @throws std::invalid_argument for the `shared` part, which only `publish` writes.
     ::core::async::Task<TableStateRemoved> execute(TableStateRemove request) {
         checkKey(request.key);
         std::string const person = signedInPerson();
+        if (request.key.part == kSharedPart) {
+            throw std::invalid_argument{"the shared views are written by publish"};
+        }
         co_await cleanUp(person, request.key);
         Head const head = co_await readHead(person, request.key);
         if (!head.found) {
@@ -482,7 +509,57 @@ public:
         co_return TableStateRemoved{.removed = true};
     }
 
+    /// @brief Applies one operation to the views published for everyone, kept with no person.
+    /// @param request The `shared` key, the operation's JSON and the `expected` rule.
+    /// @return `Saved` with the new revision; `Conflict` with the current one when `expected` does not hold;
+    ///         `Refused` for a default, which the shared views do not have, an operation that does not apply, or a
+    ///         stored document that does not read.
+    /// @throws std::invalid_argument for a key of another part or an operation that does not read;
+    ///         std::runtime_error for a caller with no verified person.
+    ::core::async::Task<TableStateSaved> execute(TableStatePublish request) {
+        checkKey(request.key);
+        if (request.key.part != kSharedPart) {
+            throw std::invalid_argument{"a table-state publish names the part `shared`"};
+        }
+        static_cast<void>(signedInPerson());
+        auto const operation = table::readViewOperation(request.operation);
+        if (!operation) {
+            throw std::invalid_argument{operation.error().message};
+        }
+        auto const refuse = [](std::string revision, std::string reason) {
+            return TableStateSaved{.result = table::SaveResult{.outcome = table::SaveOutcome::Refused,
+                                                               .revision = std::move(revision),
+                                                               .reason = std::move(reason)}};
+        };
+        std::string const owner;  // the shared views are no one's
+        co_await cleanUp(owner, request.key);
+        Head const head = co_await readHead(owner, request.key);
+        if (!holds(request.expected, head)) {
+            co_return TableStateSaved{
+                .result = table::SaveResult{
+                    .outcome = table::SaveOutcome::Conflict, .revision = head.revision, .reason = {}}};
+        }
+        table::ViewsDocument document;
+        if (head.found) {
+            auto read = table::readViews(co_await readWhole(owner, request.key, head));
+            if (!read) {
+                co_return refuse(head.revision, read.error().message);
+            }
+            document = std::move(*read);
+        }
+        auto applied = table::applyViewOperation(std::move(document), *operation, table::ViewsPart::Shared);
+        if (!applied) {
+            co_return refuse(head.revision, table::viewErrorText(applied.error(), *operation));
+        }
+        co_return TableStateSaved{
+            .result = co_await commit(owner, request.key, head.found ? head.revision : std::string{table::kNoDocument},
+                                      table::writeViews(*applied, table::ViewsPart::Shared))};
+    }
+
 private:
+    /// @brief The part kept for everyone, with no person.
+    static constexpr std::string_view kSharedPart = "shared";
+
     /// @brief A head as read.
     struct Head {
         bool found = false;
@@ -502,6 +579,14 @@ private:
         table::TableStateKey key;
         std::string text;
     };
+
+    /// @brief Whose entries a key's are: @p person's, or no one's for the `shared` part.
+    /// @param person The verified caller.
+    /// @param key    The key.
+    /// @return The person the store is called with.
+    [[nodiscard]] static std::string ownerOf(std::string const& person, table::TableStateKey const& key) {
+        return key.part == kSharedPart ? std::string{} : person;
+    }
 
     /// @brief The verified principal of the call being run.
     /// @return It; empty when the server verified nobody.
@@ -631,6 +716,32 @@ private:
         co_return std::string{rest.substr(0, detail::utf8Prefix(rest, _options.partBytes))};
     }
 
+    /// @brief The whole document a head names.
+    /// @throws std::runtime_error when a segment the head names is missing or does not read.
+    ::core::async::Task<std::string> readWhole(std::string person, table::TableStateKey key, Head head) {
+        std::string text;
+        while (text.size() < head.size()) {
+            std::string part = co_await readRange(person, key, head, text.size());
+            if (part.empty()) {
+                throw std::runtime_error{"a table's stored state ended before its size"};
+            }
+            text += part;
+        }
+        co_return text;
+    }
+
+    /// @brief Whether @p expected holds over @p head: empty always; `kNoDocument` when nothing is stored; otherwise
+    ///        when the stored document has that revision.
+    [[nodiscard]] static bool holds(std::string const& expected, Head const& head) {
+        if (expected.empty()) {
+            return true;
+        }
+        if (expected == table::kNoDocument) {
+            return !head.found;
+        }
+        return head.found && expected == head.revision;
+    }
+
     /// @brief Removes a revision's segments; a removal the store does not make is left to a later save.
     ::core::async::Task<void> removeSegments(std::string person, table::TableStateKey key, std::string revision,
                                              std::uint64_t segments) {
@@ -674,7 +785,8 @@ private:
         static_cast<void>(co_await _store->set(usageKey(person), write(detail::StoredStateUsage{.bytes = bytes})));
     }
 
-    /// @brief Stores a whole document under the `expected` rule and the quota, in the order the class describes.
+    /// @brief Stores a whole document under the `expected` rule and the quota, in the order the class describes. The
+    ///        quota is a person's: entries of no person, the shared views, are not counted.
     ::core::async::Task<table::SaveResult> commit(std::string person, table::TableStateKey key, std::string expected,
                                                   std::string text) {
         if (auto const error = glz::validate_json(text)) {
@@ -682,14 +794,15 @@ private:
         }
         co_await cleanUp(person, key);
         Head const head = co_await readHead(person, key);
-        if (!expected.empty() && expected != head.revision) {
+        if (!holds(expected, head)) {
             co_return table::SaveResult{
                 .outcome = table::SaveOutcome::Conflict, .revision = head.revision, .reason = {}};
         }
+        bool const counted = _options.maxBytesPerPerson.has_value() && !person.empty();
         std::uint64_t const replaced = head.found ? head.size() : 0;
         std::uint64_t const added = text.size();
         std::uint64_t used = 0;
-        if (_options.maxBytesPerPerson) {
+        if (counted) {
             used = co_await usage(person);
             // used - replaced + added > quota, written so that nothing wraps.
             if (used + added > static_cast<std::uint64_t>(*_options.maxBytesPerPerson) + replaced) {
@@ -729,7 +842,7 @@ private:
         if (intent) {
             static_cast<void>(co_await _store->remove(pointKey(person, key, pendingPoint(key))));
         }
-        if (_options.maxBytesPerPerson) {
+        if (counted) {
             co_await setUsage(person, used - replaced + added);
         }
         co_return table::SaveResult{.outcome = table::SaveOutcome::Saved, .revision = revision, .reason = {}};
@@ -755,17 +868,23 @@ BRIDGE_DETAIL_ACTION_TRAITS_ONLY_BODY(morph::ui::TableStateModel, morph::ui::Tab
                                       morph::ui::TableStateSaved, "save", ::morph::model::Loggable::No)
 BRIDGE_DETAIL_ACTION_TRAITS_ONLY_BODY(morph::ui::TableStateModel, morph::ui::TableStateRemove,
                                       morph::ui::TableStateRemoved, "remove", ::morph::model::Loggable::No)
+BRIDGE_DETAIL_ACTION_TRAITS_ONLY_BODY(morph::ui::TableStateModel, morph::ui::TableStatePublish,
+                                      morph::ui::TableStateSaved, "publish", ::morph::model::Loggable::No)
 // NOLINTEND(misc-const-correctness)
 /// @endcond
 
 namespace morph::ui {
 
-/// @brief Registers the table-state model and its four actions, with a factory that gives every instance @p store.
+/// @brief Registers the table-state model and its five actions, with a factory that gives every instance @p store.
 ///
 /// Nothing registers it at static initialisation: a server that offers table state calls this once, before it serves,
 /// with the dispatcher and registry its `RemoteServer` uses. A deployment's authoriser then admits
 /// `morph.tableState` and its actions `load`, `read`, `save` and `remove` for every signed-in principal; the model
-/// keeps each person to their own entries.
+/// keeps each person to their own entries. `publish` writes the views shared with everyone, so the authoriser admits
+/// it for those who may publish.
+///
+/// The actions declare no effects: what they change is no record a screen shows, and a mounted table reads its state
+/// when it mounts, not as it changes elsewhere.
 ///
 /// Two instances share no lock, and a preferences store has no conditional write, so two saves of one person that
 /// reach two instances in the same moment can both pass the quota: the quota can then be overshot by one document.
@@ -785,6 +904,7 @@ inline void registerTableState(std::shared_ptr<IPreferencesStore> store, model::
     dispatcher.registerAction<TableStateModel, TableStateRead>(kTableStateModel, "read");
     dispatcher.registerAction<TableStateModel, TableStateSave>(kTableStateModel, "save");
     dispatcher.registerAction<TableStateModel, TableStateRemove>(kTableStateModel, "remove");
+    dispatcher.registerAction<TableStateModel, TableStatePublish>(kTableStateModel, "publish");
 }
 
 }  // namespace morph::ui

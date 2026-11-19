@@ -104,8 +104,35 @@ public:
     }
 
     /// @brief Whether the store keeps the `shared` part for everyone.
-    /// @return `true`.
+    /// @return `true`: the server keeps it with no person.
     [[nodiscard]] bool shares() const override { return true; }
+
+    /// @brief Applies one operation to the `shared` part, through the server's `publish` action, which the
+    ///        application's authoriser admits or refuses by its id.
+    /// @param key       Which table's state; its `part` is `"shared"`.
+    /// @param operation The operation.
+    /// @param expected  The revision the caller loaded, `table::kNoDocument` when it loaded nothing, or empty.
+    /// @return What the server answered; the call's failure when the server refused it.
+    [[nodiscard]] async::Completion<table::SaveResult> publish(table::TableStateKey const& key,
+                                                               table::ViewOperation const& operation,
+                                                               std::string expected) override {
+        auto [completion, promise] = async::Completion<table::SaveResult>::makeSettleable(_owner);
+        auto settle = std::make_shared<async::Completion<table::SaveResult>::Promise>(std::move(promise));
+        TableStatePublish const request{
+            .key = key, .operation = table::writeViewOperation(operation), .expected = std::move(expected)};
+        channel()
+            ->execute("publish", model::ActionTraits<TableStatePublish>::toJson(request), CallOptions{})
+            .then(_scope,
+                  [settle](std::string const& reply) {
+                      try {
+                          settle->resolve(model::ActionTraits<TableStatePublish>::resultFromJson(reply).result);
+                      } catch (...) {
+                          settle->reject(std::current_exception());
+                      }
+                  })
+            .onError(_scope, [settle](std::exception_ptr const& error) { settle->reject(error); });
+        return std::move(completion);
+    }
 
 private:
     /// The most bytes one `save` part carries: the server's default part size.

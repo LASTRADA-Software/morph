@@ -529,6 +529,7 @@ public:
     explicit ProbePreferencesStore(exec::IExecutor& base) : _strand{base} {}
 
     [[nodiscard]] async::Completion<std::optional<std::string>> get(PrefKey const& key) override {
+        note("get", key);
         auto [completion, promise] = async::Completion<std::optional<std::string>>::makeSettleable(&_strand);
         _strand.postTask([this, entry = tie(key), settle = std::move(promise)] mutable {
             std::scoped_lock const lock{_mutex};
@@ -539,6 +540,7 @@ public:
     }
 
     [[nodiscard]] async::Completion<bool> set(PrefKey const& key, std::string json) override {
+        note("set", key);
         auto [completion, promise] = async::Completion<bool>::makeSettleable(&_strand);
         _strand.postTask([this, entry = tie(key), text = std::move(json), settle = std::move(promise)] mutable {
             std::scoped_lock const lock{_mutex};
@@ -555,6 +557,7 @@ public:
     }
 
     [[nodiscard]] async::Completion<bool> remove(PrefKey const& key) override {
+        note("remove", key);
         auto [completion, promise] = async::Completion<bool>::makeSettleable(&_strand);
         _strand.postTask([this, entry = tie(key), settle = std::move(promise)] mutable {
             std::scoped_lock const lock{_mutex};
@@ -653,12 +656,25 @@ public:
         _failRemovesAfter.reset();
     }
 
+    /// @brief Every call so far, as `verb person point`, the person in quotes so an empty one shows.
+    /// @return The calls, in order.
+    [[nodiscard]] std::vector<std::string> calls() const {
+        std::scoped_lock const lock{_mutex};
+        return _calls;
+    }
+
 private:
     using Key = std::tuple<std::string, std::string, std::string, std::string>;
 
     [[nodiscard]] static Key tie(PrefKey const& key) { return Key{key.person, key.app, key.scope, key.point}; }
 
+    void note(std::string_view verb, PrefKey const& key) {
+        std::scoped_lock const lock{_mutex};
+        _calls.push_back(std::string{verb} + " \"" + key.person + "\" " + key.point);
+    }
+
     mutable std::mutex _mutex;
+    std::vector<std::string> _calls;
     std::map<Key, std::string> _entries;
     std::size_t _largest = 0;
     std::size_t _sets = 0;
@@ -716,6 +732,12 @@ public:
         auto [completion, promise] = async::Completion<bool>::makeSettleable(_executor);
         promise.resolve(std::exchange(_stored, std::nullopt).has_value());
         return std::move(completion);
+    }
+
+    [[nodiscard]] async::Completion<table::SaveResult> publish(table::TableStateKey const& /*key*/,
+                                                               table::ViewOperation const& /*operation*/,
+                                                               std::string /*expected*/) override {
+        return refusePublish(*_executor);
     }
 
     /// @brief Answers every held load with the stored document, and every later load at once.
