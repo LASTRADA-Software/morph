@@ -604,7 +604,7 @@ public:
           _sessionValues{runtime},
           _hostValues{runtime},
           _hostCommandNames{runtime},
-          _hostScopes{runtime},
+          _hostScopesRevision{runtime, 0},
           _contextOffered{runtime, false} {}
 
     Session(Session const&) = delete;
@@ -741,7 +741,10 @@ public:
     ///        a name not listed is in scope everywhere. Out of scope, a value reads as `null`, `{"can": "host:name"}`
     ///        is false and a command is missing, exactly as for a name nobody registered.
     /// @param scopes The names and their documents.
-    void setHostScopes(HostScopes scopes) { _hostScopes.set(std::move(scopes)); }
+    void setHostScopes(HostScopes scopes) {
+        _hostScopes = std::move(scopes);
+        _hostScopesRevision.set(_hostScopesRevision.peek() + 1);
+    }
 
     /// @brief Whether a document may name a host value or command. A tracked read.
     /// @param name     The host name.
@@ -1031,7 +1034,10 @@ private:
     detail::RtScope const* _appScope = nullptr;
     std::vector<detail::ScreenCore*> _screens;
     reactive::Signal<std::set<std::string, std::less<>>> _hostCommandNames;
-    reactive::Signal<HostScopes> _hostScopes;
+    // The scopes are read through `_hostScopesRevision`, which is what a tracked read subscribes to: a signal over the
+    // scopes' own type would be one more template instance in every generated inheritance graph of the signal base.
+    HostScopes _hostScopes;
+    reactive::Signal<std::size_t> _hostScopesRevision;
     reactive::Signal<bool> _contextOffered;
     std::function<bool(Value const&)> _contextHandler;
     std::string _formatLocale;

@@ -831,9 +831,9 @@ void Session::setHostCommands(HostCommands commands) {
 }
 
 bool Session::hostNameIn(std::string_view name, std::string_view document) const {
-    HostScopes const& scopes = _hostScopes.get();
-    auto const found = scopes.find(name);
-    return found == scopes.end() || found->second.contains(document);
+    static_cast<void>(_hostScopesRevision.get());
+    auto const found = _hostScopes.find(name);
+    return found == _hostScopes.end() || found->second.contains(document);
 }
 
 std::function<HostCommandResult(std::string const&, Value const&)> const& Session::hostCommandRunner() const noexcept {
