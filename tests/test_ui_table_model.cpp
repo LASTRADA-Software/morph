@@ -964,11 +964,11 @@ TEST_CASE("model table: after a new sort, focus is found again by key once its p
     CHECK(h.backend.focusCell(table).first == 20);
 }
 
-// Mutation: the located index ignored, the fallback taken instead (focus stays on view row 7, which another key now
-// holds).
-TEST_CASE("model table: a new sort that moves the focused key off-screen keeps focus on it", "[ui][table]") {
-    TableHarness h;
-    auto screen = mountShown(h, kModelTable, 9'093);
+namespace {
+
+// Mounts the model table with thirty rows in view, focuses view row 7 (key 7), and starts a new sort: the window drops
+// its pages, and the rows are asked where key 7 is.
+int focusSevenThenSort(TableHarness& h) {
     int const table = tableOf(h);
     h.backend.scrollTable(table, 0, 30);
     h.settle();
@@ -981,14 +981,65 @@ TEST_CASE("model table: a new sort that moves the focused key off-screen keeps f
     REQUIRE(h.backend.focusCell(table).first == 7);
     h.backend.clickHeader(table, 1);
     h.settle();
-    // The first page of the new order lacks key 7, and every row in view is fetched: still no answer, no move.
+    return table;
+}
+
+// The keys 0 to 199 with key 9,093 at view row 7: the first page of an order that lacks key 7 there.
+std::vector<std::int64_t> pageWithoutSeven() {
     std::vector<std::int64_t> keys(200);
     std::iota(keys.begin(), keys.end(), std::int64_t{0});
     keys.at(7) = 9'093;
-    replyFirstPage(h, keys);
+    return keys;
+}
+
+}  // namespace
+
+// Mutations: the located index ignored, the fallback taken instead (focus stays on view row 7, which another key now
+// holds); the located row not scrolled to when the rows do not hold it (its page is never asked for).
+TEST_CASE("model table: a new sort that moves the focused key off-screen keeps focus on it", "[ui][table]") {
+    TableHarness h;
+    auto screen = mountShown(h, kModelTable, 9'093);
+    int const table = focusSevenThenSort(h);
+    // The first page of the new order lacks key 7, and every row in view is fetched: still no answer, no move.
+    replyFirstPage(h, pageWithoutSeven());
     CHECK(h.backend.focusCell(table).first == 7);
+    std::size_t const located = h.dispatcher.calls.size();
     replyKeyed(h, {{7, 5'000}});  // key 7 is at view row 5,000
     CHECK(h.backend.focusCell(table).first == 5'000);
+    CHECK(h.backend.prop(table, "scrolledToRow") == "5000");  // not held: scrolled to, so the window fetches it
+    h.advance(80ms);  // the window's settle after a scroll
+    CHECK(askedForPage(h, located, 5'000));
+    answerPages(h, 9'093);
+    CHECK(h.backend.focusCell(table).first == 5'000);
+}
+
+// Mutation: the fallback's clamp applied while the count is not known (focus goes to view row 0).
+TEST_CASE("model table: an answer that the focused key is gone, before the first page, keeps focus at its place",
+          "[ui][table]") {
+    TableHarness h;
+    auto screen = mountShown(h, kModelTable, 9'093);
+    int const table = focusSevenThenSort(h);
+    replyKeyed(h, {});  // key 7 is gone; no page of the new order has arrived, so the count is not known
+    replyFirstPage(h, pageWithoutSeven());
+    answerPages(h, 9'093);
+    CHECK(h.backend.focusCell(table).first == 7);  // the row now at its place, key 9,093
+}
+
+// Mutation: the backend told of a located row before the count is known (focus is on view row 5,000 of a view with no
+// rows yet).
+TEST_CASE("model table: a located row answered before the first page is told once the count is known",
+          "[ui][table]") {
+    TableHarness h;
+    auto screen = mountShown(h, kModelTable, 9'093);
+    int const table = focusSevenThenSort(h);
+    replyKeyed(h, {{7, 5'000}});
+    CHECK(h.backend.focusCell(table).first == 7);  // no rows yet: nothing told
+    std::size_t const located = h.dispatcher.calls.size();
+    replyFirstPage(h, pageWithoutSeven());
+    CHECK(h.backend.focusCell(table).first == 5'000);
+    CHECK(h.backend.prop(table, "scrolledToRow") == "5000");
+    h.advance(80ms);  // the window's settle after a scroll
+    CHECK(askedForPage(h, located, 5'000));
     answerPages(h, 9'093);
     CHECK(h.backend.focusCell(table).first == 5'000);
 }

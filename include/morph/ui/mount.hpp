@@ -2039,6 +2039,9 @@ private:
         bool focusSearching = false;
         bool highlightSearching = false;
         std::stop_source focusLocate;
+        // The rows answered where the focused key is, and the backend is not told yet: it is told once the view's
+        // count is known and holds the index, which a server's rows learn only from the first page after a reset.
+        bool focusUntold = false;
         // The view's row count at the end of the last pass: an index at or past it names no row a change can move.
         std::size_t lastCount = 0;
         std::size_t focusColumn = 0;
@@ -2692,6 +2695,15 @@ private:
             }
             return;
         }
+        if (table.focused && table.focusUntold && total.known) {
+            if (table.focusLeft) {
+                table.focusIndex = std::min(table.focusIndex, std::max<std::int64_t>(total.rows - 1, 0));
+            }
+            if (table.focusIndex < total.rows) {
+                table.focusUntold = false;
+                tellLocatedFocus(table);
+            }
+        }
         if (table.focused) {
             std::optional<TableRowRef> const ref = table.source.rows->row(table.focusIndex);
             // The row at the focused index arrived, or took the place of the focused row that left the view; a row
@@ -2721,20 +2733,34 @@ private:
     // The rows' answer to where the focused key is. A key in the view takes focus at its index, its row kept
     // realized wherever it is; a key the view lacks has left it, and focus goes to the row now at its index, or the
     // last, as for a removed row. An answer the rows could not give leaves focus looking among the realized rows.
+    // The backend is told after the pass, once the view's count is known (`focusUntold`): the last row of a count
+    // not known yet is no row.
     void focusLocated(SourceTable& table, RowLocation const& found) {
         if (!table.focused || !table.focusSearching || !found) {
             return;
         }
         table.focusSearching = false;
-        std::int64_t const last = std::max<std::int64_t>(table.source.rows->total().rows - 1, 0);
+        table.focusUntold = true;
         if (*found && **found >= 0) {
             table.focusIndex = **found;
         } else {
             table.focusLeft = true;
-            table.focusIndex = std::min(table.focusIndex, last);
         }
         realizeWindow(table, [](std::int64_t) { return false; });
-        table.widget->setFocusCell(static_cast<std::size_t>(table.focusIndex), table.focusColumn);
+    }
+
+    // Tells the backend the focused cell the rows located. A row they do not hold, outside the rows in view, is
+    // scrolled to, so the window fetches it, as for a move onto a row not fetched; a held row is left where it is.
+    void tellLocatedFocus(SourceTable& table) {
+        auto const at = static_cast<std::size_t>(table.focusIndex);
+        VisibleRange range = shownOf(table);
+        if (!table.source.rows->row(table.focusIndex) && (at < range.first || at >= range.first + range.count)) {
+            range.first = at < range.first ? at : at + 1 - range.count;
+            table.range = range;
+            table.widget->scrollToRow(at);
+            tellVisible(table);
+        }
+        table.widget->setFocusCell(at, table.focusColumn);
     }
 
     void reportFocus(SourceTable const& table) {
@@ -2840,6 +2866,7 @@ private:
         }
         table.focused = true;
         table.focusSearching = false;
+        table.focusUntold = false;
         table.focusLocate.request_stop();
         table.focusIndex = index;
         table.focusColumn = table.visible.at(place);
@@ -2874,6 +2901,7 @@ private:
         }
         table.focused = true;
         table.focusSearching = false;
+        table.focusUntold = false;
         table.focusLocate.request_stop();
         table.focusKey = cell->key;
         table.focusIndex = row->index;
@@ -2967,16 +2995,21 @@ private:
                 }
             } else {
                 table.focusSearching = true;
+                table.focusUntold = false;
                 locateFocus(table);
             }
             return;
         }
         if (table.focused && !table.focusSearching) {
-            std::int64_t const last = std::max<std::int64_t>(table.source.rows->total().rows - 1, 0);
-            // A focused row the change removed leaves focus at its view index, on the row now there, or the last.
+            TableTotal const total = table.source.rows->total();
+            // A focused row the change removed leaves focus at its view index, on the row now there, or the last; a
+            // count not known yet names no last row.
             std::optional<std::int64_t> const now = followed(table.focusIndex);
             table.focusLeft = table.focusLeft || !now.has_value();
-            table.focusIndex = std::min(now.value_or(table.focusIndex), last);
+            table.focusIndex = now.value_or(table.focusIndex);
+            if (total.known) {
+                table.focusIndex = std::min(table.focusIndex, std::max<std::int64_t>(total.rows - 1, 0));
+            }
         }
     }
 

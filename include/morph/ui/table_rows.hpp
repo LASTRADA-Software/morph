@@ -969,11 +969,11 @@ public:
                                  : std::expected<Value, table::TableError>{std::unexpected(unavailable())};
         if (!body) {
             _session->runtime().owner().post(
-                [stop = std::move(stop), done = std::move(done), error = std::move(body.error())] {
+                _scope.guard([stop = std::move(stop), done = std::move(done), error = std::move(body.error())] {
                     if (!stop.stop_requested()) {
                         done(std::unexpected(error));
                     }
-                });
+                }));
             return;
         }
         auto reply = _session->read(_options.channel, "Table." + _options.table, *body, stop);
