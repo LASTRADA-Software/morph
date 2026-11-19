@@ -258,6 +258,8 @@ public:
 // A pool that records the threads its tasks run on.
 class RecordingPool final : public morph::exec::IExecutor {
 public:
+    explicit RecordingPool(std::size_t threads = 2) : _pool{threads} {}
+
     void post(std::function<void()> task) override {
         _pool.post([this, task = std::move(task)] {
             {
@@ -278,7 +280,7 @@ public:
 private:
     std::mutex _mutex;
     std::set<std::thread::id> _threads;
-    morph::exec::ThreadPoolExecutor _pool{2};
+    morph::exec::ThreadPoolExecutor _pool;
 };
 
 // One server on a socket, with the tables authorizer.
@@ -539,7 +541,8 @@ namespace {
 
 // A server whose `tableWork` and view cache a case configures, `WideTableModel`'s recipe cache attached.
 struct ViewServer {
-    explicit ViewServer(std::size_t maxViewBytes = 64U << 20U) {
+    explicit ViewServer(std::size_t maxViewBytes = 64U << 20U, std::size_t tableThreads = 2)
+        : tableWork{std::make_shared<RecordingPool>(tableThreads)} {
         morph::backend::ServerConfig config;
         config.services.push_back(std::make_shared<Hello>());
         config.coalesceWindow = kCoalesce;
@@ -568,7 +571,7 @@ struct ViewServer {
     }
 
     morph::exec::ThreadPoolExecutor pool{4};
-    std::shared_ptr<RecordingPool> tableWork = std::make_shared<RecordingPool>();
+    std::shared_ptr<RecordingPool> tableWork;
     std::mutex mutex;
     std::set<std::thread::id> computedOn;
     // Called where a view's computation starts, when set; set before any request.
@@ -654,7 +657,8 @@ TEST_CASE("table over the bridge: one sort for many watchers", "[net][tables][vi
     bench::WideTableModel::configure(
         {.rows = 2'000, .columns = 300, .seed = 7, .loadDelay = {}, .recipePreloaded = 1.0},
         {.rows = 1'000, .columns = 30, .seed = 7, .loadDelay = {}, .recipePreloaded = 1.0});
-    ViewServer server;
+    // Enough table threads for every refetch to be in the cache at once: one computes, forty-nine wait.
+    ViewServer server{64U << 20U, 64};
     std::vector<std::unique_ptr<Client>> clients;
     std::vector<std::uint64_t> instances;
     std::string const query = R"({"sort":[{"column":"d000","dir":"asc"}],"columns":["id","d000"],)"

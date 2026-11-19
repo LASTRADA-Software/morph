@@ -505,3 +505,20 @@ TEST_CASE("view cache: callers of two scopes over one snapshot get two views", "
     CHECK(views.stats().computations == 2);
     CHECK(views.stats().hits == 1);
 }
+
+// Mutation: newness compared on the rows alone (the later-pinned request on the older generation replaces the entry).
+TEST_CASE("view cache: a request on an older level generation does not displace a newer entry", "[table][views]") {
+    auto const source = tabletest::makeSource({tabletest::col("a", ColumnKind::Integer)}, {{Cell{std::int64_t{1}}}});
+    auto const snapshot = source->snapshot();
+    Levels const newer{{"recipe", 5}};
+    Levels const older{{"recipe", 4}};
+    ViewCache views;
+    REQUIRE(views.find(keyOf("c"), snapshot, newer, oneRowView, 2).has_value());
+    // Pinned later, but its level snapshot was read earlier.
+    auto const straggler = views.find(keyOf("c"), snapshot, older, oneRowView, 3);
+    REQUIRE(straggler.has_value());
+    CHECK((*straggler)->levels == older);
+    REQUIRE(views.find(keyOf("c"), snapshot, newer, oneRowView, 4).has_value());
+    CHECK(views.stats().computations == 2);
+    CHECK(views.stats().hits == 1);
+}

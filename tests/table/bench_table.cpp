@@ -1333,3 +1333,57 @@ TEST_CASE("table benchmark: C1 C2 C3 many requests through an in-process server"
     std::println("| C1 | the server strand's longest task | not measured in process |");
     static_cast<void>(std::fflush(stdout));
 }
+
+TEST_CASE("table benchmark: C1 where a request's time goes", "[.benchmark][views]") {
+    bench::WideTableModel::recipeGate().release();
+    bench::WideTableModel::configure({.rows = 100'000, .columns = 300, .seed = 7, .loadDelay = {}},
+                                     {.rows = 1'000, .columns = 30, .seed = 7, .loadDelay = {}});
+    std::println("\nOne request's parts, 100,000 x 300\n\n| part | median ms | p10-p90 ms |\n|---|---:|---:|");
+    auto const report = [](char const* part, std::vector<double> samples) {
+        auto const spread = spreadOf(std::move(samples));
+        std::println("| {} | {:.3f} | {:.3f}-{:.3f} |", part, spread.median, spread.p10, spread.p90);
+        static_cast<void>(std::fflush(stdout));
+    };
+    auto const time = [](std::function<void()> const& body) {
+        auto const began = Clock::now();
+        body();
+        return std::chrono::duration<double, std::milli>(Clock::now() - began).count();
+    };
+    bench::WideTableModel model;
+    morph::session::Context const session{};
+    TableContext const context{.session = session};
+    std::vector<double> serve;
+    std::vector<double> want;
+    std::vector<double> sortedOnLevel;
+    std::vector<double> sortedOnBase;
+    ViewCache views;
+    auto const answer = [&](std::string column) {
+        auto const served = detail::pinned(detail::serve<&bench::WideTableModel::wide>(model, context));
+        TableQuery query;
+        query.sort = {SortKey{.column = std::move(column), .dir = kAsc}};
+        query.columns = std::vector<std::string>{"id", "d000"};
+        query.page = PageRequest{.offset = 0, .limit = 50};
+        detail::AnswerContext const answerContext{
+            .views = &views, .record = "WideTableModel.wide", .rowScoped = false};
+        REQUIRE(detail::answerQuery(served, query, answerContext).has_value());
+    };
+    answer("d000");
+    answer("i001");
+    auto const cache = bench::WideTableModel::recipeCache();
+    std::vector<RowId> keys;
+    for (std::int64_t key = 1; key <= 100'000; ++key) {
+        keys.emplace_back(key);
+    }
+    for (int run = 0; run < 9; ++run) {
+        serve.push_back(time(
+            [&] { static_cast<void>(detail::pinned(detail::serve<&bench::WideTableModel::wide>(model, context))); }));
+        want.push_back(time([&] { REQUIRE(cache->want(keys, LevelUse::Order)); }));
+        sortedOnLevel.push_back(time([&] { answer("d000"); }));
+        sortedOnBase.push_back(time([&] { answer("i001"); }));
+    }
+    report("the table function, its description and the pinned snapshot", serve);
+    report("an order want of the 100,000 keys of a held level", want);
+    report("answerQuery from a cached view, sorted on a recipe column (an order want)", sortedOnLevel);
+    report("answerQuery from a cached view, sorted on a base column (no order want)", sortedOnBase);
+    std::println("| views computed | {} | |", views.stats().computations);
+}
