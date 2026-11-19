@@ -42,6 +42,15 @@ namespace detail {
 [[nodiscard]] std::expected<RemoteTransport, std::string> socketTransport(ui::AppContext& context,
                                                                           std::string const& url);
 
+/// @brief A `SocketBackend` on a loop of its own, for a process with no frontend (an MCP server); defined only where
+///        `morph::net` is built.
+/// @param url             `ws://host:port`.
+/// @param retryFirstConnect Whether to keep retrying when the first connect is refused, so the process may start
+///                        before its server.
+/// @return The transport, or why the URL is refused.
+[[nodiscard]] std::expected<RemoteTransport, std::string> socketTransport(std::string const& url,
+                                                                          bool retryFirstConnect);
+
 /// @brief A `QtWebSocketBackend`; defined only where `morph::qt` is built.
 /// @param url The server.
 /// @return The transport, or why the URL is refused.

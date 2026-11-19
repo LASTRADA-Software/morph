@@ -8,6 +8,7 @@ add_executable(morph_client_tests
     probe_app.cpp
     test_client_args.cpp
     test_custom_screens.cpp
+    test_mcp.cpp
     test_shell.cpp
     test_shell_locale.cpp
     test_sign_in.cpp
@@ -16,6 +17,14 @@ add_executable(morph_client_tests
 )
 target_include_directories(morph_client_tests PRIVATE ${PROJECT_SOURCE_DIR}/examples/common)
 target_link_libraries(morph_client_tests PRIVATE morph::client morph_test_main)
+# The same condition src/client/CMakeLists.txt turns the Qt WebSocket transport on with.
+if(TARGET morph_qt_impl)
+    target_compile_definitions(morph_client_tests PRIVATE MORPH_CLIENT_TESTS_HAVE_QT_TRANSPORT=1)
+endif()
+if(TARGET morph::net)
+    target_sources(morph_client_tests PRIVATE test_mcp_remote.cpp)
+    target_link_libraries(morph_client_tests PRIVATE morph::net)
+endif()
 apply_warnings(morph_client_tests)
 if(DEFINED AF_SANITIZER)
     apply_sanitizers(morph_client_tests ${AF_SANITIZER})

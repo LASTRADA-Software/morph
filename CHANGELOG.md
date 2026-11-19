@@ -50,6 +50,15 @@ API surface).
   `DocumentScreenHost::mountDraft`, `WorkspaceModel::openInPlace`, `WorkspaceOptions::chrome`,
   `Navigator::setCustom`, and `TextInputWidget::setCursor` on every backend.
 
+- **The generic client serves MCP (`--mcp-stdio`).** An agent such as Claude Code can install the client as an MCP
+  server, in one of two modes. `morph_remote_client --mcp-stdio --server ws://…|wss://…` reaches any running morph
+  server, with its tools read from that server's catalog. `morph_examples_client --mcp-stdio --app NAME --db PATH
+  --user NAME` runs a linked application in-process over its database. Each permitted action is a tool, and a call
+  is an ordinary execute under the agent's session. Stdout carries only JSON-RPC. `ui::McpAdapter` gains a
+  constructor over a `backend::IEnvelopeTransport`, with a per-call timeout (`McpOptions::callTimeout`) and a reset
+  for disconnects (`resetter()`). Both WebSocket backends gain `retryFirstConnect`, and `morph::client` gains
+  `makeLocalServer` and `serveMcp`. See the "MCP on stdio" section of `docs/spec/client/client.md`.
+
 - **A chat built into the client, with its assistant on the server.** A server given a `morph::ui::chat::ChatService`
   offers a chat, and the client's shell shows a panel for it. What a person types runs on the server: the assistant
   calls the open screen's actions under their session, with every check the screen's own calls get, and the screen

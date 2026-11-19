@@ -1,6 +1,6 @@
 # The generic client (`morph::client`)
 
-`include/morph/client/{args,source,shell,transport}.hpp`, `src/client/`. The generic client opens an application's
+`include/morph/client/{args,source,shell,transport,mcp}.hpp`, `src/client/`. The generic client opens an application's
 screens from a server or from the application linked in-process, mounts them in a shell of tabs, and answers the
 commands a document cannot carry out alone. An application with a shell of its own uses the same source and
 application host.
@@ -14,6 +14,7 @@ application host.
 - [The shell](#the-shell)
 - [Sign-in mapping](#sign-in-mapping)
 - [The application host](#the-application-host)
+- [MCP on stdio](#mcp-on-stdio)
 - [Tests](#tests)
 - [Chat](#chat)
 - [Custom screens](#custom-screens)
@@ -34,7 +35,7 @@ application host.
 ## Arguments
 
 `readArgs(args)` reads `client::Args` from the command line and removes what it read: `--server URL` or `--app NAME`
-(exactly one), `--db`, `--user`, `--screen`, `--exit-after-mount` and `--dev`. A value option is `--name value` or
+(exactly one), `--db`, `--user`, `--screen`, `--exit-after-mount`, `--dev` and `--mcp-stdio`. A value option is `--name value` or
 `--name=value`, the last one given wins, and nothing after `--` is read. A refusal leaves the arguments as they were.
 
 The examples' client takes one more option before `readArgs` sees the rest: `--grab FILE.png` sizes the Qt Quick
@@ -205,15 +206,103 @@ there itself. An empty mapper is `std::invalid_argument`.
   `notify`'s role (`"info"`, `"success"`, `"warning"`, `"error"`; empty or unknown default to `Tone::Info`) to a
   `Tone`.
 
+## MCP on stdio
+
+`--mcp-stdio` makes the client an MCP server (`ui::McpAdapter`, spec [`ui/agent.md`](../ui/agent.md)) on stdin and
+stdout, which an agent such as Claude Code installs as a command. It mounts no frontend: the examples' `main`
+handles it right after `readArgs`, before `MORPH_UI_DEV` is applied, and serves until stdin ends. `serveMcp`
+returns 0 once input ended.
+
+| Mode | Source | Reaches |
+|---|---|---|
+| Remote | `--server URL` | A running server, over a WebSocket. `morph_remote_client` links no application, so one binary serves every morph server, with its tools read from the server's `ui-catalog` at run time |
+| Local | `--app NAME` | The application's database, in-process, on an application the binary links (`morph_examples_client`) |
+
+```sh
+claude mcp add lims -- ./build/examples/client/morph_examples_client --mcp-stdio --app lims --db "$PWD/lims.db" --user alice
+claude mcp add lims-remote -e MORPH_MCP_TOKEN=... -- ./build/examples/client/morph_remote_client --mcp-stdio --server wss://lab:9000
+```
+
+### Remote
+
+The transport follows the URL and what is built:
+
+| URL | `morph::net` built | Qt built | Transport |
+|---|---|---|---|
+| `ws://` | yes | either | `SocketBackend`, on a loop of its own |
+| `ws://` | no | yes | `QtWebSocketBackend` |
+| `wss://` | either | yes | `QtWebSocketBackend`, verified against the system's certificate authorities |
+| any | no transport fits | | Refused: exit code 2, naming what is missing |
+
+`morph::net` is preferred for `ws://` because it needs no event loop on the main thread. With it, the main thread
+pumps a `MainThreadExecutor` while `serveStdio` waits. With Qt, the main thread runs a `QCoreApplication` (made when
+the process has none) that the backend lives on, stdin is read on a thread of its own, and `serveStdioOnOwner`
+posts each message to the owner.
+
+Both transports are built with `retryFirstConnect`, so an agent may start the process before its server. A call
+made before the first connect is held across every failed attempt. A call in flight when an established connection
+drops is rejected, and so is a call made during a reconnect, at the next failed attempt. `callTimeout` bounds
+anything the server never answers, and the agent sees each rejection as a tool error. The transport's disconnect
+handler is the adapter's `resetter()`, so a reconnect does not reuse released model ids.
+
+### Local
+
+Local MCP has the same semantics as the client's local GUI mode (`--app` without `--mcp-stdio`). It is not the
+application's production server process: an application's own `main` may install more than `LocalApp` describes (a
+token secret, a ledger port, an event relay), and what only such a `main` installs is absent from both local modes.
+An agent that needs it uses remote mode against that server.
+
+1. An application the binary does not link is refused with exit code 2, naming the linked ones.
+2. The application's `setUp` runs with `LocalSetup{db, user}`, which opens the database.
+3. `makeLocalServer(app, workers, config)` builds the in-process `RemoteServer`: its services hold a `ui::UiService`
+   over the application's bundle, checked by the application's `serverAuthorizer()` when it has one and by
+   allow-all otherwise. The test kit's `SimulatedAppSource` builds its server with the same helper. It does not
+   run `setUp`.
+4. The adapter opens a connection of that server, and stdio is served on the main thread over a
+   `MainThreadExecutor`.
+5. When stdin ends, the adapter is destroyed, then the server, then the worker pool.
+
+The action's own validation, effects and model-level checks run as they do for any dispatch. No action journal is
+installed, as in local GUI mode.
+
+### Identity
+
+`mcpSession` builds the session each call carries.
+
+| Source | Principal | Token |
+|---|---|---|
+| Remote | `--user`, else `MORPH_MCP_PRINCIPAL` | `MORPH_MCP_TOKEN`, if set |
+| Local | `--user` | none: a local server checks no token, and setting `MORPH_MCP_TOKEN` prints a diagnostic that it is ignored |
+
+The token comes from the environment, never the command line, because process listings show arguments;
+`claude mcp add -e` sets it. A remote server authenticates the session on every envelope, as it does a GUI's.
+
+### Stdout
+
+MCP's stdio transport requires stdout to carry nothing but JSON-RPC. `claimStdout()` runs first: it duplicates
+descriptor 1 as the JSON-RPC stream and points descriptor 1 at stderr, so whatever else the process prints, such as
+an application's `setUp` or Lightweight's SQL logger, reaches the agent's log and never corrupts the protocol.
+
+### Refusals
+
+A refused start writes one line to stderr and exits with code 2 before reading stdin; Claude Code shows the server
+as failed, with that line in its log. A start is refused for bad arguments, an unknown application, a URL no built
+transport reaches, or a bundle that does not build. Arguments meant for a frontend are refused, not ignored:
+`checkMcpArgs` refuses `--screen`, `--exit-after-mount`, `--dev` and any argument `readArgs` left over, and `main`
+refuses `--grab` (and its companions). `MORPH_UI_DEV` and `MORPH_UI` are environment-wide settings, not arguments
+to this run, and are ignored.
+
 ## Tests
 
 `tests/client/` (`morph_client_tests`, label `client`), headless over a `FakeAppContext` and `RecordingBackend`:
 the arguments, both sources and the shell over a two-screen probe application (and the same behind a public login,
 for when the frame shows its chrome), a navigation as a dialog and a callee that returns from a tab, a call to a
 screen whose tab is open, the frame's compact form below `expanded`, the app document's navigation counts, the waits
-the tests use, and the sign-in mapping: a mapper reading `{user, jwt}` signs in, an empty principal is reported, and an `ApplicationHost`
+the tests use, `--mcp-stdio` in both modes (local over the probe application, remote over a `SocketServer`, including a server that starts after the client), `claimStdout` in a forked child, and the sign-in mapping: a mapper reading `{user, jwt}` signs in, an empty principal is reported, and an `ApplicationHost`
 passed to a hand-built `DocumentScreenHost` runs a document's `signIn` and inline `upload`, while the same host
 without it reports both as not supported.
+
+`examples/client/tests/test_mcp_pipe.cpp` (`morph_client_mcp_pipe_tests`, label `client`) launches `morph_examples_client --mcp-stdio` as a real process over a shell pipe, on POSIX: every stdout line of a `forms` run, and of a `lims` run on a scratch database where the ladder builds lims, parses as JSON-RPC, and a frontend option exits 2 with nothing on stdout.
 
 ## Chat
 

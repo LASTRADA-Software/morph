@@ -75,24 +75,21 @@ public:
 
 protected:
     [[nodiscard]] std::expected<Transport, ui::ConnectError> connect(ui::AppContext& /*context*/) override {
-        auto bundle = _app.bundle();
-        if (!bundle) {
-            return std::unexpected(
-                ui::ConnectError{.kind = ui::ConnectError::Kind::Unsupported, .message = bundle.error().message()});
-        }
         if (_app.setUp) {
             _app.setUp(::morph::client::LocalSetup{});
         }
         _workers = std::make_unique<exec::ThreadPoolExecutor>(2);
         backend::ServerConfig config;
-        config.services.push_back(std::make_shared<ui::UiService>(std::move(*bundle)));
         // The server waits for a model's reported instant on the ladder's clock, which a test moves by hand, so it
         // reads the clock often.
         config.clock = [] { return *::morph::ladder::now().value; };
         config.clockRecheck = std::chrono::milliseconds{20};
-        _server = _app.serverAuthorizer
-                      ? std::make_shared<backend::RemoteServer>(*_workers, _app.serverAuthorizer(), config)
-                      : std::make_shared<backend::RemoteServer>(*_workers, config);
+        auto made = ::morph::client::makeLocalServer(_app, *_workers, std::move(config));
+        if (!made) {
+            return std::unexpected(
+                ui::ConnectError{.kind = ui::ConnectError::Kind::Unsupported, .message = made.error()});
+        }
+        _server = std::move(*made);
         // One connection for the models and for the `ui-*` requests, as one socket would be: the server tells a
         // connection what changed only when that connection negotiated events and has a watch.
         backend::ConnectionId const cid = _server->openConnection();

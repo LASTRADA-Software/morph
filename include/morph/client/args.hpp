@@ -21,7 +21,8 @@ struct Args {
     std::optional<std::string> app;
     /// @brief `--db PATH`: the database a local application opens.
     std::string db;
-    /// @brief `--user NAME`: the development principal a local application signs in.
+    /// @brief `--user NAME`: the development principal a local application signs in, and the principal an MCP
+    ///        server's session carries.
     std::string user;
     /// @brief `--screen ID`: the screen mounted first; empty for the catalog's first.
     std::string screen;
@@ -30,6 +31,8 @@ struct Args {
     /// @brief `--dev`, or `MORPH_UI_DEV=1`: development mode, which reloads the screens when the server's documents
     ///        change (spec 5 §12). A client built without the development tools ignores it.
     bool dev = false;
+    /// @brief `--mcp-stdio`: serve MCP on stdin and stdout instead of mounting a frontend (`client::serveMcp`).
+    bool mcpStdio = false;
 };
 
 /// @brief Reads the client's options from @p args and removes them, leaving the rest for the frontend.

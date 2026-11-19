@@ -38,6 +38,23 @@ constexpr std::chrono::seconds kReplayEvery{2};
 
 }  // namespace
 
+std::expected<std::shared_ptr<backend::RemoteServer>, std::string> makeLocalServer(LocalApp const& app,
+                                                                                   exec::IExecutor& workers,
+                                                                                   backend::ServerConfig config) {
+    if (!app.bundle) {
+        return std::unexpected("the application " + app.name + " has no bundle");
+    }
+    auto bundle = app.bundle();
+    if (!bundle) {
+        return std::unexpected(bundle.error().message());
+    }
+    config.services.push_back(std::make_shared<ui::UiService>(std::move(*bundle)));
+    if (app.serverAuthorizer) {
+        return std::make_shared<backend::RemoteServer>(workers, app.serverAuthorizer(), std::move(config));
+    }
+    return std::make_shared<backend::RemoteServer>(workers, std::move(config));
+}
+
 std::vector<std::string> clientVocabularies() {
     return {std::string{ui::kVocabulary}, std::string{ui::kExprVocabulary}};
 }
