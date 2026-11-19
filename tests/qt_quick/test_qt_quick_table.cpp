@@ -2000,3 +2000,41 @@ TEST_CASE("qt_quick table: a scrolling virtualized table of mixed row heights mo
     CHECK(compared > 60);
     CHECK(worst < 1.0);
 }
+
+// Mutation: do not create the vertical bar in MorphTable.qml.
+TEST_CASE("qt_quick table: a virtualized table scrolls with a vertical bar sized by its content", "[qt_quick]") {
+    Scene scene;
+    std::vector<VirtualRow> const many = mixedRows(600);
+    ui::Mounted const mounted{scene.runtime(), scene.backend(),
+                              ui::table<VirtualRow>(
+                                  {{.label = "Name"}}, [&many] { return many; },
+                                  [](VirtualRow const& row) { return ui::Key{row.id}; }, virtualRowCell,
+                                  {.virtualize = {.threshold = 5, .overscan = 3},
+                                   .common = {.layout = {.height = ui::Sizing::stretch(1)}}})};
+    scene.settle();
+    QQuickItem const& tableItem = Scene::itemOf(mounted.root());
+    auto* const flick = tableItem.findChild<QQuickItem*>(QStringLiteral("flick"));
+    REQUIRE(flick != nullptr);
+    auto const bars = Scene::itemsOf(*flick, "QQuickScrollBar");
+    INFO("scroll bars under the flickable: " << bars.size());
+    REQUIRE(bars.size() == 1);
+    QQuickItem* const vertical = bars.front();
+    CHECK(vertical->isVisible());
+    CHECK(vertical->property("orientation").toInt() == Qt::Vertical);
+    CHECK(vertical->property("size").toReal() < 0.5);
+    CHECK(vertical->property("minimumSize").toReal() == Catch::Approx(0.08));
+
+    // A table that is not virtualized has no vertical bar: its ancestor scrolls.
+    std::vector<VirtualRow> const few = mixedRows(3);
+    ui::Mounted const small{scene.runtime(), scene.backend(),
+                            ui::table<VirtualRow>(
+                                {{.label = "Name"}}, [&few] { return few; },
+                                [](VirtualRow const& row) { return ui::Key{row.id}; }, virtualRowCell,
+                                {.virtualize = {.threshold = 5, .overscan = 3}})};
+    scene.settle();
+    auto* const smallFlick = Scene::itemOf(small.root()).findChild<QQuickItem*>(QStringLiteral("flick"));
+    REQUIRE(smallFlick != nullptr);
+    for (QQuickItem* const candidate : Scene::itemsOf(*smallFlick, "QQuickScrollBar")) {
+        CHECK_FALSE(candidate->isVisible());
+    }
+}
