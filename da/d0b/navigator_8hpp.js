@@ -1,6 +1,7 @@
 var navigator_8hpp =
 [
     [ "morph::ui::NavigatorBadge", "d4/d28/structmorph_1_1ui_1_1NavigatorBadge.html", "d4/d28/structmorph_1_1ui_1_1NavigatorBadge" ],
+    [ "morph::ui::NavigatorCustomEntry", "db/dc6/structmorph_1_1ui_1_1NavigatorCustomEntry.html", "db/dc6/structmorph_1_1ui_1_1NavigatorCustomEntry" ],
     [ "morph::ui::NavigatorOptions", "db/d8f/structmorph_1_1ui_1_1NavigatorOptions.html", "db/d8f/structmorph_1_1ui_1_1NavigatorOptions" ],
     [ "morph::ui::Navigator", "d6/d15/classmorph_1_1ui_1_1Navigator.html", "d6/d15/classmorph_1_1ui_1_1Navigator" ]
 ];

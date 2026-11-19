@@ -143,6 +143,10 @@ Inheritance diagram for morph::ui::TextInputWidget:</div>
 Public Member Functions</h2></td></tr>
 <tr class="memitem:aad96ac37b2f72fb9c275abec61352148" id="r_aad96ac37b2f72fb9c275abec61352148"><td class="memItemLeft">virtual void&#160;</td><td class="memItemRight"><a class="el" href="#aad96ac37b2f72fb9c275abec61352148">setText</a> (std::string_view text)=0</td></tr>
 <tr class="memdesc:aad96ac37b2f72fb9c275abec61352148"><td class="mdescLeft">&#160;</td><td class="mdescRight">Replaces the text. Never calls the <span class="tt">onChange</span> handler. With the text the field already shows, it changes nothing: the cursor, the selection and an input method's composition stay as they are.  <br /></td></tr>
+<tr class="memitem:a96e399367a82c1f0e4afc9a3e781e880" id="r_a96e399367a82c1f0e4afc9a3e781e880"><td class="memItemLeft">virtual void&#160;</td><td class="memItemRight"><a class="el" href="#a96e399367a82c1f0e4afc9a3e781e880">setCursor</a> (std::size_t offset)=0</td></tr>
+<tr class="memdesc:a96e399367a82c1f0e4afc9a3e781e880"><td class="mdescLeft">&#160;</td><td class="mdescRight">Moves the text cursor to <code class="param">offset</code>, a byte offset into the text the field shows. An offset past the text's end moves it to the end; one inside a UTF-8 sequence moves it back to the start of that code point (a "character" here is a code point). Clears the selection. Calls no handler, does not move keyboard focus and does not scroll: <span class="tt"><a class="el" href="#adce34d010b9fe64e54c5a77b4b107e15" title="Scrolls the scrolling containers around the field so that the line the cursor is on is in view....">revealCursor</a></span> does that.  <br /></td></tr>
+<tr class="memitem:adce34d010b9fe64e54c5a77b4b107e15" id="r_adce34d010b9fe64e54c5a77b4b107e15"><td class="memItemLeft">virtual void&#160;</td><td class="memItemRight"><a class="el" href="#adce34d010b9fe64e54c5a77b4b107e15">revealCursor</a> ()</td></tr>
+<tr class="memdesc:adce34d010b9fe64e54c5a77b4b107e15"><td class="mdescLeft">&#160;</td><td class="mdescRight">Scrolls the scrolling containers around the field so that the line the cursor is on is in view. Best effort: a backend that cannot does nothing, and the default does nothing. Calls no handler and does not move keyboard focus or the cursor.  <br /></td></tr>
 <tr class="memitem:a5af001846d473ed5242e08e651b44908" id="r_a5af001846d473ed5242e08e651b44908"><td class="memItemLeft">virtual void&#160;</td><td class="memItemRight"><a class="el" href="#a5af001846d473ed5242e08e651b44908">setPlaceholder</a> (std::string_view placeholder)=0</td></tr>
 <tr class="memdesc:a5af001846d473ed5242e08e651b44908"><td class="mdescLeft">&#160;</td><td class="mdescRight">Sets the text shown while the field is empty.  <br /></td></tr>
 <tr class="memitem:a0e937b2ee04f7d2b402ac6b64157b13f" id="r_a0e937b2ee04f7d2b402ac6b64157b13f"><td class="memItemLeft">virtual void&#160;</td><td class="memItemRight"><a class="el" href="#a0e937b2ee04f7d2b402ac6b64157b13f">setOnChange</a> (std::function&lt; void(std::string)&gt; onChange)=0</td></tr>
@@ -255,6 +259,70 @@ Widget &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (Widget &amp;&a
 </dl>
 
 <p>Implemented in <a class="el" href="../../db/d64/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeTextInput.html#afe78fab8c4a9468427c6e56d757dc129">morph::ui::testing::detail::FakeTextInput</a>.</p>
+
+</div>
+</div>
+<a id="a96e399367a82c1f0e4afc9a3e781e880" name="a96e399367a82c1f0e4afc9a3e781e880"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a96e399367a82c1f0e4afc9a3e781e880">&#9670;&#160;</a></span>setCursor()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">virtual void morph::ui::TextInputWidget::setCursor </td>
+          <td>(</td>
+          <td class="paramtype">std::size_t</td>          <td class="paramname"><span class="paramname"><em>offset</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel pure-virtual">pure virtual</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Moves the text cursor to <code class="param">offset</code>, a byte offset into the text the field shows. An offset past the text's end moves it to the end; one inside a UTF-8 sequence moves it back to the start of that code point (a "character" here is a code point). Clears the selection. Calls no handler, does not move keyboard focus and does not scroll: <span class="tt"><a class="el" href="#adce34d010b9fe64e54c5a77b4b107e15" title="Scrolls the scrolling containers around the field so that the line the cursor is on is in view....">revealCursor</a></span> does that. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">offset</td><td>The byte offset. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+<p>Implemented in <a class="el" href="../../db/d64/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeTextInput.html#a02f280bb05b3756cecfc466768c9f269">morph::ui::testing::detail::FakeTextInput</a>.</p>
+
+</div>
+</div>
+<a id="adce34d010b9fe64e54c5a77b4b107e15" name="adce34d010b9fe64e54c5a77b4b107e15"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#adce34d010b9fe64e54c5a77b4b107e15">&#9670;&#160;</a></span>revealCursor()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">virtual void morph::ui::TextInputWidget::revealCursor </td>
+          <td>(</td>
+          <td class="paramname"><span class="paramname"><em></em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel virtual">virtual</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Scrolls the scrolling containers around the field so that the line the cursor is on is in view. Best effort: a backend that cannot does nothing, and the default does nothing. Calls no handler and does not move keyboard focus or the cursor. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d0/dc2/ui_2backend_8hpp_source.html#l00255">255</a> of file <a class="el" href="../../d0/dc2/ui_2backend_8hpp_source.html">backend.hpp</a>.</p>
 
 </div>
 </div>

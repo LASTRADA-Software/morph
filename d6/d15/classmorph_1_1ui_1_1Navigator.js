@@ -21,5 +21,7 @@ var classmorph_1_1ui_1_1Navigator =
     [ "moduleBadgeOf", "d6/d15/classmorph_1_1ui_1_1Navigator.html#adff364a15672dfba2e11997821d30975", null ],
     [ "setSearchShown", "d6/d15/classmorph_1_1ui_1_1Navigator.html#af08f2572335efeaf895e037b2dab91ea", null ],
     [ "relabel", "d6/d15/classmorph_1_1ui_1_1Navigator.html#aa6308f2f9b59f18c44d0a9ba57a57558", null ],
-    [ "setOnChanged", "d6/d15/classmorph_1_1ui_1_1Navigator.html#a1ab624270185a6d823007de657e9e88d", null ]
+    [ "setOnChanged", "d6/d15/classmorph_1_1ui_1_1Navigator.html#a1ab624270185a6d823007de657e9e88d", null ],
+    [ "setCustom", "d6/d15/classmorph_1_1ui_1_1Navigator.html#a53200f5b51fe17e0bf7b5fd601e68cc4", null ],
+    [ "custom", "d6/d15/classmorph_1_1ui_1_1Navigator.html#a69ce66562e913d9d6335726207ab43fd", null ]
 ];

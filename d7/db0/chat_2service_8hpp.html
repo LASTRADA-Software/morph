@@ -125,17 +125,20 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d7/db0/chat_2s
 <a href="#details">More...</a></p>
 <div class="textblock"><code>#include &lt;chrono&gt;</code><br />
 <code>#include &lt;cstddef&gt;</code><br />
+<code>#include &lt;expected&gt;</code><br />
 <code>#include &lt;functional&gt;</code><br />
 <code>#include &lt;memory&gt;</code><br />
 <code>#include &lt;morph/export.hpp&gt;</code><br />
 <code>#include &lt;string&gt;</code><br />
 <code>#include &lt;string_view&gt;</code><br />
+<code>#include &lt;vector&gt;</code><br />
 <code>#include &quot;../../core/executor.hpp&quot;</code><br />
 <code>#include &quot;../../core/registry.hpp&quot;</code><br />
 <code>#include &quot;../../core/remote.hpp&quot;</code><br />
 <code>#include &quot;../../core/wire.hpp&quot;</code><br />
 <code>#include &quot;../../session/session.hpp&quot;</code><br />
 <code>#include &quot;<a class="el" href="../../dc/dc9/conversations_8hpp_source.html">conversations.hpp</a>&quot;</code><br />
+<code>#include &quot;<a class="el" href="../../df/d53/extra__tool_8hpp_source.html">extra_tool.hpp</a>&quot;</code><br />
 <code>#include &quot;<a class="el" href="../../d3/d5b/provider_8hpp_source.html">provider.hpp</a>&quot;</code><br />
 </div>
 <p><a href="../../d7/db0/chat_2service_8hpp_source.html">Go to the source code of this file.</a></p>
@@ -147,6 +150,11 @@ Classes</h2></td></tr>
 <tr class="memitem:morph_3A_3Aui_3A_3Achat_3A_3AChatService" id="r_morph_3A_3Aui_3A_3Achat_3A_3AChatService"><td class="memItemLeft">class &#160;</td><td class="memItemRight"><a class="el" href="../../db/df0/classmorph_1_1ui_1_1chat_1_1ChatService.html">morph::ui::chat::ChatService</a></td></tr>
 <tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">Answers the chat kinds, and runs each turn's loop on the worker: read what the screen offers, ask the provider, run the tools it calls, and repeat until it has no more.  <a href="../../db/df0/classmorph_1_1ui_1_1chat_1_1ChatService.html#details">More...</a><br /></td></tr>
 </table><table class="memberdecls">
+<tr class="heading"><td colspan="2"><h2 id="header-typedef-members" class="groupheader"><a id="typedef-members" name="typedef-members"></a>
+Typedefs</h2></td></tr>
+<tr class="memitem:a4e8bbf849cb16afaedab1f0779e4996f" id="r_a4e8bbf849cb16afaedab1f0779e4996f"><td class="memItemLeft">using&#160;</td><td class="memItemRight"><a class="el" href="#a4e8bbf849cb16afaedab1f0779e4996f">morph::ui::chat::ChatDocumentSource</a></td></tr>
+<tr class="memdesc:a4e8bbf849cb16afaedab1f0779e4996f"><td class="mdescLeft">&#160;</td><td class="mdescRight">Reads the document of a screen the bundle does not hold, such as a person's own custom screen.  <br /></td></tr>
+</table><table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 id="header-var-members" class="groupheader"><a id="var-members" name="var-members"></a>
 Variables</h2></td></tr>
 <tr class="memitem:a8cf5e1415bd84c332ff7fb89c740a4c6" id="r_a8cf5e1415bd84c332ff7fb89c740a4c6"><td class="memItemLeft">constexpr std::string_view&#160;</td><td class="memItemRight"><a class="el" href="#a8cf5e1415bd84c332ff7fb89c740a4c6">morph::ui::chat::kDefaultSystemPrompt</a></td></tr>
@@ -156,7 +164,30 @@ Variables</h2></td></tr>
 <div class="textblock"><p>The server's side of a chat. Specified in <span class="tt">docs/spec/ui/chat.md</span>. </p>
 
 <p class="definition">Definition in file <a class="el" href="../../d7/db0/chat_2service_8hpp_source.html">service.hpp</a>.</p>
-</div><a name="doc-var-members" id="doc-var-members"></a><h2 id="header-doc-var-members" class="groupheader">Variable Documentation</h2>
+</div><a name="doc-typedef-members" id="doc-typedef-members"></a><h2 id="header-doc-typedef-members" class="groupheader">Typedef Documentation</h2>
+<a id="a4e8bbf849cb16afaedab1f0779e4996f" name="a4e8bbf849cb16afaedab1f0779e4996f"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a4e8bbf849cb16afaedab1f0779e4996f">&#9670;&#160;</a></span>ChatDocumentSource</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">using <a class="el" href="#a4e8bbf849cb16afaedab1f0779e4996f">morph::ui::chat::ChatDocumentSource</a></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+<b>Initial value:</b><div class="fragment"><div class="line">std::function&lt;void(<a class="code hl_struct" href="../../dd/d85/structmorph_1_1session_1_1Context.html">session::Context</a> <span class="keyword">const</span>&amp;, std::string <span class="keyword">const</span>&amp;,</div>
+<div class="line">                                             std::function&lt;<span class="keywordtype">void</span>(std::expected&lt;ChatScreenSource, std::string&gt;)&gt;)&gt;</div>
+<div class="ttc" id="astructmorph_1_1session_1_1Context_html"><div class="ttname"><a href="../../dd/d85/structmorph_1_1session_1_1Context.html">morph::session::Context</a></div><div class="ttdoc">Per-call session context carried through the bridge to the model.</div><div class="ttdef"><b>Definition</b> <a href="../../d4/d5e/session_8hpp_source.html#l00027">session.hpp:27</a></div></div>
+</div><!-- fragment -->
+<p>Reads the document of a screen the bundle does not hold, such as a person's own custom screen. </p>
+<p>Called on the turn's worker with the turn's session and the screen's id, and answers through the callback, from any thread, exactly once: the document and its base, or why there is none, which fails the turn. It is asked only for an id the bundle has no screen of, once per turn, and it must answer for the session's person alone. One that has not answered within <span class="tt">ChatLimits::toolCallTimeout</span> fails the turn, and a later answer is ignored. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d7/db0/chat_2service_8hpp_source.html#l00040">40</a> of file <a class="el" href="../../d7/db0/chat_2service_8hpp_source.html">service.hpp</a>.</p>
+
+</div>
+</div>
+<a name="doc-var-members" id="doc-var-members"></a><h2 id="header-doc-var-members" class="groupheader">Variable Documentation</h2>
 <a id="a8cf5e1415bd84c332ff7fb89c740a4c6" name="a8cf5e1415bd84c332ff7fb89c740a4c6"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a8cf5e1415bd84c332ff7fb89c740a4c6">&#9670;&#160;</a></span>kDefaultSystemPrompt</h2>
 
@@ -185,7 +216,7 @@ Variables</h2></td></tr>
 </div><!-- fragment -->
 <p>What an assistant is told about how to behave, before the screen's context. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d7/db0/chat_2service_8hpp_source.html#l00032">32</a> of file <a class="el" href="../../d7/db0/chat_2service_8hpp_source.html">service.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d7/db0/chat_2service_8hpp_source.html#l00044">44</a> of file <a class="el" href="../../d7/db0/chat_2service_8hpp_source.html">service.hpp</a>.</p>
 
 </div>
 </div>

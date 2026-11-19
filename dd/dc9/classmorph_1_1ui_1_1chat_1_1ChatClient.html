@@ -130,6 +130,8 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('dd/dc9/classmo
 Classes</h2></td></tr>
 <tr class="memitem:Entry" id="r_Entry"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../d5/de2/structmorph_1_1ui_1_1chat_1_1ChatClient_1_1Entry.html">Entry</a></td></tr>
 <tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">One line to show.  <a href="../../d5/de2/structmorph_1_1ui_1_1chat_1_1ChatClient_1_1Entry.html#details">More...</a><br /></td></tr>
+<tr class="memitem:DraftProposal" id="r_DraftProposal"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../df/d58/structmorph_1_1ui_1_1chat_1_1ChatClient_1_1DraftProposal.html">DraftProposal</a></td></tr>
+<tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">A draft the server accepted, and where the turn that proposed it was started.  <a href="../../df/d58/structmorph_1_1ui_1_1chat_1_1ChatClient_1_1DraftProposal.html#details">More...</a><br /></td></tr>
 </table><table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 id="header-pub-methods" class="groupheader"><a id="pub-methods" name="pub-methods"></a>
 Public Member Functions</h2></td></tr>
@@ -147,8 +149,10 @@ Public Member Functions</h2></td></tr>
 <tr class="memdesc:a013ef6aaaf9df7d7a7238db1a046100c"><td class="mdescLeft">&#160;</td><td class="mdescRight">Asks whether this server offers this principal a chat, which <span class="tt"><a class="el" href="#a168e9c0ed5215fea89a00af4caef1dc4" title="Whether the last probe found a chat.">available</a></span> then answers.  <br /></td></tr>
 <tr class="memitem:a168e9c0ed5215fea89a00af4caef1dc4" id="r_a168e9c0ed5215fea89a00af4caef1dc4"><td class="memItemLeft">bool&#160;</td><td class="memItemRight"><a class="el" href="#a168e9c0ed5215fea89a00af4caef1dc4">available</a> () const noexcept</td></tr>
 <tr class="memdesc:a168e9c0ed5215fea89a00af4caef1dc4"><td class="mdescLeft">&#160;</td><td class="mdescRight">Whether the last probe found a chat.  <br /></td></tr>
-<tr class="memitem:a65a41662feb882945dc7ec5e23ae667f" id="r_a65a41662feb882945dc7ec5e23ae667f"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a65a41662feb882945dc7ec5e23ae667f">send</a> (<a class="el" href="../../d5/d78/structmorph_1_1ui_1_1chat_1_1TurnRequest.html">TurnRequest</a> const &amp;request)</td></tr>
-<tr class="memdesc:a65a41662feb882945dc7ec5e23ae667f"><td class="mdescLeft">&#160;</td><td class="mdescRight">Starts a turn, and selects its conversation. Refused locally while a turn runs, as the server would.  <br /></td></tr>
+<tr class="memitem:ad2f1e1fdbf13434b379b46130158638a" id="r_ad2f1e1fdbf13434b379b46130158638a"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#ad2f1e1fdbf13434b379b46130158638a">onDraft</a> (std::function&lt; void(<a class="el" href="../../df/d58/structmorph_1_1ui_1_1chat_1_1ChatClient_1_1DraftProposal.html">DraftProposal</a> const &amp;)&gt; handler)</td></tr>
+<tr class="memdesc:ad2f1e1fdbf13434b379b46130158638a"><td class="mdescLeft">&#160;</td><td class="mdescRight">Sets what receives a draft the server accepted. Called on the owner, once per distinct document of a turn, from an event or from the state read; whichever carries it first.  <br /></td></tr>
+<tr class="memitem:ad6e2a1b18275ee4536c2188b8437dfec" id="r_ad6e2a1b18275ee4536c2188b8437dfec"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#ad6e2a1b18275ee4536c2188b8437dfec">send</a> (<a class="el" href="../../d5/d78/structmorph_1_1ui_1_1chat_1_1TurnRequest.html">TurnRequest</a> const &amp;request, std::uint64_t origin=0)</td></tr>
+<tr class="memdesc:ad6e2a1b18275ee4536c2188b8437dfec"><td class="mdescLeft">&#160;</td><td class="mdescRight">Starts a turn, and selects its conversation. Refused locally while a turn runs, as the server would.  <br /></td></tr>
 <tr class="memitem:ac0aa0145cf2c56293d9494020fcb5dad" id="r_ac0aa0145cf2c56293d9494020fcb5dad"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#ac0aa0145cf2c56293d9494020fcb5dad">cancel</a> ()</td></tr>
 <tr class="memdesc:ac0aa0145cf2c56293d9494020fcb5dad"><td class="mdescLeft">&#160;</td><td class="mdescRight">Asks the server to stop the running turn.  <br /></td></tr>
 <tr class="memitem:a5da4f6ce56ca33cafe23491511bb8155" id="r_a5da4f6ce56ca33cafe23491511bb8155"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a5da4f6ce56ca33cafe23491511bb8155">end</a> (std::function&lt; void()&gt; done)</td></tr>
@@ -213,7 +217,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d2/dfe/client_8hpp_source.html#l00053">53</a> of file <a class="el" href="../../d2/dfe/client_8hpp_source.html">client.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d2/dfe/client_8hpp_source.html#l00065">65</a> of file <a class="el" href="../../d2/dfe/client_8hpp_source.html">client.hpp</a>.</p>
 
 </div>
 </div>
@@ -243,7 +247,7 @@ Public Member Functions</h2></td></tr>
 
 <p>Asks whether this server offers this principal a chat, which <span class="tt"><a class="el" href="#a168e9c0ed5215fea89a00af4caef1dc4" title="Whether the last probe found a chat.">available</a></span> then answers. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d2/dfe/client_8hpp_source.html#l00063">63</a> of file <a class="el" href="../../d2/dfe/client_8hpp_source.html">client.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d2/dfe/client_8hpp_source.html#l00075">75</a> of file <a class="el" href="../../d2/dfe/client_8hpp_source.html">client.hpp</a>.</p>
 
 </div>
 </div>
@@ -273,12 +277,47 @@ Public Member Functions</h2></td></tr>
 <p>Whether the last probe found a chat. </p>
 <dl class="section return"><dt>Returns</dt><dd>Whether it did. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d2/dfe/client_8hpp_source.html#l00072">72</a> of file <a class="el" href="../../d2/dfe/client_8hpp_source.html">client.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d2/dfe/client_8hpp_source.html#l00084">84</a> of file <a class="el" href="../../d2/dfe/client_8hpp_source.html">client.hpp</a>.</p>
 
 </div>
 </div>
-<a id="a65a41662feb882945dc7ec5e23ae667f" name="a65a41662feb882945dc7ec5e23ae667f"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a65a41662feb882945dc7ec5e23ae667f">&#9670;&#160;</a></span>send()</h2>
+<a id="ad2f1e1fdbf13434b379b46130158638a" name="ad2f1e1fdbf13434b379b46130158638a"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ad2f1e1fdbf13434b379b46130158638a">&#9670;&#160;</a></span>onDraft()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">void morph::ui::chat::ChatClient::onDraft </td>
+          <td>(</td>
+          <td class="paramtype">std::function&lt; void(<a class="el" href="../../df/d58/structmorph_1_1ui_1_1chat_1_1ChatClient_1_1DraftProposal.html">DraftProposal</a> const &amp;)&gt;</td>          <td class="paramname"><span class="paramname"><em>handler</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Sets what receives a draft the server accepted. Called on the owner, once per distinct document of a turn, from an event or from the state read; whichever carries it first. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">handler</td><td>The receiver; empty drops drafts. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d2/dfe/client_8hpp_source.html#l00089">89</a> of file <a class="el" href="../../d2/dfe/client_8hpp_source.html">client.hpp</a>.</p>
+
+</div>
+</div>
+<a id="ad6e2a1b18275ee4536c2188b8437dfec" name="ad6e2a1b18275ee4536c2188b8437dfec"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ad6e2a1b18275ee4536c2188b8437dfec">&#9670;&#160;</a></span>send()</h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -289,8 +328,12 @@ Public Member Functions</h2></td></tr>
         <tr>
           <td class="memname">void morph::ui::chat::ChatClient::send </td>
           <td>(</td>
-          <td class="paramtype"><a class="el" href="../../d5/d78/structmorph_1_1ui_1_1chat_1_1TurnRequest.html">TurnRequest</a> const &amp;</td>          <td class="paramname"><span class="paramname"><em>request</em></span></td><td>)</td>
+          <td class="paramtype"><a class="el" href="../../d5/d78/structmorph_1_1ui_1_1chat_1_1TurnRequest.html">TurnRequest</a> const &amp;</td>          <td class="paramname"><span class="paramname"><em>request</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
           <td></td>
+          <td class="paramtype">std::uint64_t</td>          <td class="paramname"><span class="paramname"><em>origin</em></span><span class="paramdefsep"> = </span><span class="paramdefval">0</span>&#160;)</td>
         </tr>
       </table>
   </td>
@@ -304,11 +347,12 @@ Public Member Functions</h2></td></tr>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
     <tr><td class="paramname">request</td><td>What the person said, and where they are. </td></tr>
+    <tr><td class="paramname">origin</td><td>An opaque number given back with each draft the turn proposes, so a shell can tell which tab the turn belongs to. The client never reads it. </td></tr>
   </table>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d2/dfe/client_8hpp_source.html#l00076">76</a> of file <a class="el" href="../../d2/dfe/client_8hpp_source.html">client.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d2/dfe/client_8hpp_source.html#l00095">95</a> of file <a class="el" href="../../d2/dfe/client_8hpp_source.html">client.hpp</a>.</p>
 
 </div>
 </div>
@@ -337,7 +381,7 @@ Public Member Functions</h2></td></tr>
 
 <p>Asks the server to stop the running turn. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d2/dfe/client_8hpp_source.html#l00089">89</a> of file <a class="el" href="../../d2/dfe/client_8hpp_source.html">client.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d2/dfe/client_8hpp_source.html#l00108">108</a> of file <a class="el" href="../../d2/dfe/client_8hpp_source.html">client.hpp</a>.</p>
 
 </div>
 </div>
@@ -372,7 +416,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d2/dfe/client_8hpp_source.html#l00101">101</a> of file <a class="el" href="../../d2/dfe/client_8hpp_source.html">client.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d2/dfe/client_8hpp_source.html#l00120">120</a> of file <a class="el" href="../../d2/dfe/client_8hpp_source.html">client.hpp</a>.</p>
 
 </div>
 </div>
@@ -412,7 +456,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d2/dfe/client_8hpp_source.html#l00117">117</a> of file <a class="el" href="../../d2/dfe/client_8hpp_source.html">client.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d2/dfe/client_8hpp_source.html#l00136">136</a> of file <a class="el" href="../../d2/dfe/client_8hpp_source.html">client.hpp</a>.</p>
 
 </div>
 </div>
@@ -447,7 +491,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d2/dfe/client_8hpp_source.html#l00127">127</a> of file <a class="el" href="../../d2/dfe/client_8hpp_source.html">client.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d2/dfe/client_8hpp_source.html#l00146">146</a> of file <a class="el" href="../../d2/dfe/client_8hpp_source.html">client.hpp</a>.</p>
 
 </div>
 </div>
@@ -476,7 +520,7 @@ Public Member Functions</h2></td></tr>
 
 <p>Tells the client its connection was replaced. A running turn ended with the old connection, since a new one has new instance ids; what was shown stays, and the conversation goes on from the next turn. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d2/dfe/client_8hpp_source.html#l00161">161</a> of file <a class="el" href="../../d2/dfe/client_8hpp_source.html">client.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d2/dfe/client_8hpp_source.html#l00183">183</a> of file <a class="el" href="../../d2/dfe/client_8hpp_source.html">client.hpp</a>.</p>
 
 </div>
 </div>
@@ -506,7 +550,7 @@ Public Member Functions</h2></td></tr>
 <p>What the selected conversation shows. </p>
 <dl class="section return"><dt>Returns</dt><dd>Its entries, oldest first. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d2/dfe/client_8hpp_source.html#l00172">172</a> of file <a class="el" href="../../d2/dfe/client_8hpp_source.html">client.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d2/dfe/client_8hpp_source.html#l00194">194</a> of file <a class="el" href="../../d2/dfe/client_8hpp_source.html">client.hpp</a>.</p>
 
 </div>
 </div>
@@ -536,7 +580,7 @@ Public Member Functions</h2></td></tr>
 <p>Whether a turn is running, in any conversation. </p>
 <dl class="section return"><dt>Returns</dt><dd>Whether one is. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d2/dfe/client_8hpp_source.html#l00180">180</a> of file <a class="el" href="../../d2/dfe/client_8hpp_source.html">client.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d2/dfe/client_8hpp_source.html#l00202">202</a> of file <a class="el" href="../../d2/dfe/client_8hpp_source.html">client.hpp</a>.</p>
 
 </div>
 </div>

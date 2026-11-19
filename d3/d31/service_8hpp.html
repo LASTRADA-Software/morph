@@ -169,8 +169,17 @@ Classes</h2></td></tr>
 </table><table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 id="header-func-members" class="groupheader"><a id="func-members" name="func-members"></a>
 Functions</h2></td></tr>
+<tr class="memitem:af1ce9d7e1e327596bee65e840527663b" id="r_af1ce9d7e1e327596bee65e840527663b"><td class="memItemLeft">MORPH_API std::vector&lt; std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="#af1ce9d7e1e327596bee65e840527663b">morph::ui::permittedActions</a> (<a class="el" href="../../de/d9f/structmorph_1_1ui_1_1ServedBundle.html">ServedBundle</a> const &amp;bundle, <a class="el" href="../../dd/d85/structmorph_1_1session_1_1Context.html">::morph::session::Context</a> const &amp;session, <a class="el" href="../../d5/d07/structmorph_1_1session_1_1IAuthorizer.html">::morph::session::IAuthorizer</a> const &amp;authorizer)</td></tr>
+<tr class="memdesc:af1ce9d7e1e327596bee65e840527663b"><td class="mdescLeft">&#160;</td><td class="mdescRight">The actions of <code class="param">bundle</code> that the principal of <code class="param">session</code> may run: what <span class="tt">ui-catalog</span> answers as <span class="tt">permitted</span>.  <br /></td></tr>
+<tr class="memitem:ac8a3395864bbe9e7a972d956c80e9f60" id="r_ac8a3395864bbe9e7a972d956c80e9f60"><td class="memItemLeft">MORPH_API bool&#160;</td><td class="memItemRight"><a class="el" href="#ac8a3395864bbe9e7a972d956c80e9f60">morph::ui::screenAdmitted</a> (<a class="el" href="../../db/d17/structmorph_1_1ui_1_1ServedScreen.html">ServedScreen</a> const &amp;screen, <a class="el" href="../../dd/d85/structmorph_1_1session_1_1Context.html">::morph::session::Context</a> const &amp;session, <a class="el" href="../../d5/d07/structmorph_1_1session_1_1IAuthorizer.html">::morph::session::IAuthorizer</a> const &amp;authorizer)</td></tr>
+<tr class="memdesc:ac8a3395864bbe9e7a972d956c80e9f60"><td class="mdescLeft">&#160;</td><td class="mdescRight">Whether the principal of <code class="param">session</code> may open <code class="param">screen:</code> it is available, and the principal may run every query the screen declares at its top level (spec 5 §12b).  <br /></td></tr>
 <tr class="memitem:ad69b07175bd3a612103673995ff06c20" id="r_ad69b07175bd3a612103673995ff06c20"><td class="memItemLeft">constexpr bool&#160;</td><td class="memItemRight"><a class="el" href="#ad69b07175bd3a612103673995ff06c20">morph::ui::isUiServiceRead</a> (std::string_view modelType, std::string_view actionType) noexcept</td></tr>
 <tr class="memdesc:ad69b07175bd3a612103673995ff06c20"><td class="mdescLeft">&#160;</td><td class="mdescRight">Whether an authoriser is asked about one of the UI service's reads: <span class="tt">ui</span>'s <span class="tt">hello</span>, <span class="tt">catalog</span> or <span class="tt">fetch</span>.  <br /></td></tr>
+</table><table class="memberdecls">
+<tr class="heading"><td colspan="2"><h2 id="header-var-members" class="groupheader"><a id="var-members" name="var-members"></a>
+Variables</h2></td></tr>
+<tr class="memitem:a1b0c94b6052ff625b097ffe9e1855a0e" id="r_a1b0c94b6052ff625b097ffe9e1855a0e"><td class="memItemLeft">constexpr std::string_view&#160;</td><td class="memItemRight"><a class="el" href="#a1b0c94b6052ff625b097ffe9e1855a0e">morph::ui::kCustomScreenIdPrefix</a> = &quot;custom:&quot;</td></tr>
+<tr class="memdesc:a1b0c94b6052ff625b097ffe9e1855a0e"><td class="mdescLeft">&#160;</td><td class="mdescRight">The prefix of every custom screen's id. An application screen's id never starts with it, so a person's screen and an application's can never share an id.  <br /></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>The server side of the UI service (spec 5 §12, §12b, §13): <span class="tt">UiRegistry</span> collects an application's screens and files and builds a <span class="tt">ServedBundle</span>; <span class="tt">UiService</span> answers <span class="tt">ui-hello</span>, <span class="tt">ui-catalog</span> and <span class="tt">ui-fetch</span> from it as a <span class="tt">RemoteServer</span> envelope service. </p>
@@ -178,6 +187,96 @@ Functions</h2></td></tr>
 
 <p class="definition">Definition in file <a class="el" href="../../d3/d31/service_8hpp_source.html">service.hpp</a>.</p>
 </div><a name="doc-func-members" id="doc-func-members"></a><h2 id="header-doc-func-members" class="groupheader">Function Documentation</h2>
+<a id="af1ce9d7e1e327596bee65e840527663b" name="af1ce9d7e1e327596bee65e840527663b"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#af1ce9d7e1e327596bee65e840527663b">&#9670;&#160;</a></span>permittedActions()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">MORPH_API std::vector&lt; std::string &gt; morph::ui::permittedActions </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="../../de/d9f/structmorph_1_1ui_1_1ServedBundle.html">ServedBundle</a> const &amp;</td>          <td class="paramname"><span class="paramname"><em>bundle</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype"><a class="el" href="../../dd/d85/structmorph_1_1session_1_1Context.html">::morph::session::Context</a> const &amp;</td>          <td class="paramname"><span class="paramname"><em>session</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype"><a class="el" href="../../d5/d07/structmorph_1_1session_1_1IAuthorizer.html">::morph::session::IAuthorizer</a> const &amp;</td>          <td class="paramname"><span class="paramname"><em>authorizer</em></span>&#160;)</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>The actions of <code class="param">bundle</code> that the principal of <code class="param">session</code> may run: what <span class="tt">ui-catalog</span> answers as <span class="tt">permitted</span>. </p>
+<p>The candidates are <span class="tt">ServedBundle::allActions</span>, so an action no served document names is never permitted here, whatever the authoriser would say about it. </p><dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">bundle</td><td>The bundle. </td></tr>
+    <tr><td class="paramname">session</td><td>The session, its principal verified. </td></tr>
+    <tr><td class="paramname">authorizer</td><td>The authoriser. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>The permitted action ids, in <span class="tt">allActions</span> order. </dd></dl>
+
+</div>
+</div>
+<a id="ac8a3395864bbe9e7a972d956c80e9f60" name="ac8a3395864bbe9e7a972d956c80e9f60"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ac8a3395864bbe9e7a972d956c80e9f60">&#9670;&#160;</a></span>screenAdmitted()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">MORPH_API bool morph::ui::screenAdmitted </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="../../db/d17/structmorph_1_1ui_1_1ServedScreen.html">ServedScreen</a> const &amp;</td>          <td class="paramname"><span class="paramname"><em>screen</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype"><a class="el" href="../../dd/d85/structmorph_1_1session_1_1Context.html">::morph::session::Context</a> const &amp;</td>          <td class="paramname"><span class="paramname"><em>session</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype"><a class="el" href="../../d5/d07/structmorph_1_1session_1_1IAuthorizer.html">::morph::session::IAuthorizer</a> const &amp;</td>          <td class="paramname"><span class="paramname"><em>authorizer</em></span>&#160;)</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Whether the principal of <code class="param">session</code> may open <code class="param">screen:</code> it is available, and the principal may run every query the screen declares at its top level (spec 5 §12b). </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">screen</td><td>The screen. </td></tr>
+    <tr><td class="paramname">session</td><td>The session, its principal verified. </td></tr>
+    <tr><td class="paramname">authorizer</td><td>The authoriser. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>Whether the screen admits the principal. </dd></dl>
+
+</div>
+</div>
 <a id="ad69b07175bd3a612103673995ff06c20" name="ad69b07175bd3a612103673995ff06c20"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#ad69b07175bd3a612103673995ff06c20">&#9670;&#160;</a></span>isUiServiceRead()</h2>
 
@@ -215,7 +314,34 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Whether it is one of those reads. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d3/d31/service_8hpp_source.html#l00346">346</a> of file <a class="el" href="../../d3/d31/service_8hpp_source.html">service.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d3/d31/service_8hpp_source.html#l00377">377</a> of file <a class="el" href="../../d3/d31/service_8hpp_source.html">service.hpp</a>.</p>
+
+</div>
+</div>
+<a name="doc-var-members" id="doc-var-members"></a><h2 id="header-doc-var-members" class="groupheader">Variable Documentation</h2>
+<a id="a1b0c94b6052ff625b097ffe9e1855a0e" name="a1b0c94b6052ff625b097ffe9e1855a0e"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a1b0c94b6052ff625b097ffe9e1855a0e">&#9670;&#160;</a></span>kCustomScreenIdPrefix</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::string_view morph::ui::kCustomScreenIdPrefix = &quot;custom:&quot;</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel constexpr">constexpr</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>The prefix of every custom screen's id. An application screen's id never starts with it, so a person's screen and an application's can never share an id. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d3/d31/service_8hpp_source.html#l00092">92</a> of file <a class="el" href="../../d3/d31/service_8hpp_source.html">service.hpp</a>.</p>
 
 </div>
 </div>

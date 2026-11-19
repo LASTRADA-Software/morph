@@ -4,10 +4,17 @@ var searchData=
   ['cell_1',['Cell',['../dd/d57/data__source_8hpp.html#a320af04a37b6ab6e7c2b51afbdb90ec4',1,'morph::table']]],
   ['cellcomparator_2',['CellComparator',['../dd/d57/data__source_8hpp.html#a5f3c16f92b558754df3938aa2bea8dbc',1,'morph::table']]],
   ['cellreader_3',['CellReader',['../dd/def/query_8hpp.html#a648c6a63266564266b1221320fe92c0c',1,'morph::table::detail']]],
-  ['choicefetcher_4',['ChoiceFetcher',['../dd/d9b/form__session_8hpp.html#a01186174907c76da4770e087b2e4f898',1,'morph::forms']]],
-  ['clock_5',['Clock',['../d2/d8e/classmorph_1_1tui_1_1Backend.html#abe351b508db22e61f6813430dbb6a78f',1,'morph::tui::Backend::Clock'],['../d3/d6a/session__auth_8hpp.html#a3aad616b0a69657f29d669f1d7dacc9a',1,'morph::session::Clock']]],
-  ['closeguard_6',['CloseGuard',['../dd/d78/host_8hpp.html#a3f0c54da59b34eab53e2408ef84dfbdb',1,'morph::ui']]],
-  ['commands_7',['Commands',['../dd/d39/document_8hpp.html#a6fe69a3d9daee6fa69dda107c09687e7',1,'morph::ui']]],
-  ['config_8',['Config',['../d5/d98/classmorph_1_1net_1_1SocketBackend.html#a755c2c6460ac094c256a5910c2776c7e',1,'morph::net::SocketBackend::Config'],['../dc/d9a/classmorph_1_1net_1_1SocketServer.html#a6e68ace78449e4090392a28fa8c86ca1',1,'morph::net::SocketServer::Config'],['../db/dee/classmorph_1_1offline_1_1NetworkMonitor.html#a8d947c7f41ebffae2073c9e3d32dc3bb',1,'morph::offline::NetworkMonitor::Config'],['../d9/dc4/classmorph_1_1offline_1_1ReconnectCoordinator.html#af3e7ffb97a416c00981893ba53d5421b',1,'morph::offline::ReconnectCoordinator::Config'],['../d4/d0b/classmorph_1_1qt_1_1QtWebSocketBackend.html#abb613465047676a5ca37e4c1962efc7c',1,'morph::qt::QtWebSocketBackend::Config'],['../d9/d42/classmorph_1_1qt_1_1QtWebSocketServer.html#afdc1754208a8fa5c1e2c56c10e68f669',1,'morph::qt::QtWebSocketServer::Config']]],
-  ['connectionid_9',['ConnectionId',['../d6/d12/connection__writer_8hpp.html#a85eb19bfc15378ec6e1719bc0bbd6ad2',1,'morph::backend']]]
+  ['chatdocumentsource_4',['ChatDocumentSource',['../d7/db0/chat_2service_8hpp.html#a4e8bbf849cb16afaedab1f0779e4996f',1,'morph::ui::chat']]],
+  ['chattooldone_5',['ChatToolDone',['../df/d53/extra__tool_8hpp.html#ad344b1d05297cc0fba81fc531dea74b7',1,'morph::ui::chat']]],
+  ['chattoolhandler_6',['ChatToolHandler',['../df/d53/extra__tool_8hpp.html#a19958653fd2611e6fd6cf49a8addd7ff',1,'morph::ui::chat']]],
+  ['chattoolofferdone_7',['ChatToolOfferDone',['../df/d53/extra__tool_8hpp.html#ad819c9aee95f91c82dcfdb96d0c4e0c7',1,'morph::ui::chat']]],
+  ['chattoolofferer_8',['ChatToolOfferer',['../df/d53/extra__tool_8hpp.html#a07ccdfad46ea512bced99e853060b586',1,'morph::ui::chat']]],
+  ['chattoolrecord_9',['ChatToolRecord',['../df/d53/extra__tool_8hpp.html#a4bfda9274e3005a9869fcca871b3f4f4',1,'morph::ui::chat']]],
+  ['choicefetcher_10',['ChoiceFetcher',['../dd/d9b/form__session_8hpp.html#a01186174907c76da4770e087b2e4f898',1,'morph::forms']]],
+  ['clock_11',['Clock',['../d2/d8e/classmorph_1_1tui_1_1Backend.html#abe351b508db22e61f6813430dbb6a78f',1,'morph::tui::Backend::Clock'],['../d3/d6a/session__auth_8hpp.html#a3aad616b0a69657f29d669f1d7dacc9a',1,'morph::session::Clock']]],
+  ['closeguard_12',['CloseGuard',['../dd/d78/host_8hpp.html#a3f0c54da59b34eab53e2408ef84dfbdb',1,'morph::ui']]],
+  ['commands_13',['Commands',['../dd/d39/document_8hpp.html#a6fe69a3d9daee6fa69dda107c09687e7',1,'morph::ui']]],
+  ['config_14',['Config',['../d5/d98/classmorph_1_1net_1_1SocketBackend.html#a755c2c6460ac094c256a5910c2776c7e',1,'morph::net::SocketBackend::Config'],['../dc/d9a/classmorph_1_1net_1_1SocketServer.html#a6e68ace78449e4090392a28fa8c86ca1',1,'morph::net::SocketServer::Config'],['../db/dee/classmorph_1_1offline_1_1NetworkMonitor.html#a8d947c7f41ebffae2073c9e3d32dc3bb',1,'morph::offline::NetworkMonitor::Config'],['../d9/dc4/classmorph_1_1offline_1_1ReconnectCoordinator.html#af3e7ffb97a416c00981893ba53d5421b',1,'morph::offline::ReconnectCoordinator::Config'],['../d4/d0b/classmorph_1_1qt_1_1QtWebSocketBackend.html#abb613465047676a5ca37e4c1962efc7c',1,'morph::qt::QtWebSocketBackend::Config'],['../d9/d42/classmorph_1_1qt_1_1QtWebSocketServer.html#afdc1754208a8fa5c1e2c56c10e68f669',1,'morph::qt::QtWebSocketServer::Config']]],
+  ['connectionid_15',['ConnectionId',['../d6/d12/connection__writer_8hpp.html#a85eb19bfc15378ec6e1719bc0bbd6ad2',1,'morph::backend']]],
+  ['customdocumentdone_16',['CustomDocumentDone',['../d9/d6e/custom__screen__sync_8hpp.html#a82de6a1fe8f860b020a622ae46cba369',1,'morph::ui']]]
 ];

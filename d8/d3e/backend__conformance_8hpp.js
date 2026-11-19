@@ -36,6 +36,7 @@ var backend__conformance_8hpp =
     [ "morph::ui::testing::detail::closedDialogTakesNoInput", "d8/d3e/backend__conformance_8hpp.html#a354217dfe0ff5d5d4e141c83996275df", null ],
     [ "morph::ui::testing::detail::unreachableWidgetsTakeNoInput", "d8/d3e/backend__conformance_8hpp.html#a2584d94cda42ac3afd132ed37946e322", null ],
     [ "morph::ui::testing::detail::unchangedTextKeepsCursor", "d8/d3e/backend__conformance_8hpp.html#aef5c97669d6b7cee7529f06c48241e8e", null ],
+    [ "morph::ui::testing::detail::setCursorMovesTheCursor", "d8/d3e/backend__conformance_8hpp.html#a3f556b49ab5b2e26d6bf5456b909a513", null ],
     [ "morph::ui::testing::detail::textInputIsControlled", "d8/d3e/backend__conformance_8hpp.html#aa756fd3bfa118d8290c0ded01a088611", null ],
     [ "morph::ui::testing::detail::refusedDismissalKeepsDialogOpen", "d8/d3e/backend__conformance_8hpp.html#aa22f097e8766c3ac7cc24e72f6bc5d17", null ],
     [ "morph::ui::testing::detail::settersCallNoHandler", "d8/d3e/backend__conformance_8hpp.html#a90667e8e0e99a96bf8a30c756fcb62c2", null ],

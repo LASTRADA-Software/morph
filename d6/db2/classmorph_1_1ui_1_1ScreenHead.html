@@ -181,7 +181,7 @@ ScreenHead &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (ScreenHead
 <div class="textblock"><p>A screen's head beside its title: the eyebrow, the title's runs, the subtitle, the status badges, the tools, the actions and the head's own menu a shell shows above the screen (the document's <span class="tt"><a class="el" href="#aadf1d780d5fb3569ab42b63a9bf442b8" title="The eyebrow, the line a shell draws above the title, as text; empty when the screen declares none.">eyebrow</a></span>, <span class="tt"><a class="el" href="#aff742f3ae126f276ba823500d7840e31" title="The title as runs, which a shell that knows them draws in its top bar in place of title.">titleSpans</a></span>, <span class="tt"><a class="el" href="#a414ecb0148a1c1793379d2b8af6a39fd" title="The subtitle, as text; empty when the screen declares none.">subtitle</a></span>, <span class="tt"><a class="el" href="#af47c98f80d8766b6f917421a05412c57" title="The status badges that are visible, in order.">status</a></span>, <span class="tt"><a class="el" href="#ac74dac62eb12307f11dd8d3c2d1d2999" title="The head&#39;s tools that are visible, in order: search fields and selects, each with its value.">tools</a></span>, <span class="tt"><a class="el" href="#ad4da8f9f14626826082c39563751c989" title="The actions that are visible, in order, each with whether it is enabled.">actions</a></span> and <span class="tt"><a class="el" href="#a224459e7180bc7305274a9ed8a54504b" title="The head&#39;s own menu: its visible entries, in order, each one that is chosen with its id.">menu</a></span>). </p>
 <p>The head is data: the screen evaluates it and the shell draws it, so a host screen's handle can implement it too. The menu and tool members have defaults, for a head that has neither. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d78/host_8hpp_source.html#l00059">59</a> of file <a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d78/host_8hpp_source.html#l00062">62</a> of file <a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>.</p>
 </div><a name="doc-func-members" id="doc-func-members"></a><h2 id="header-doc-func-members" class="groupheader">Member Function Documentation</h2>
 <a id="aff742f3ae126f276ba823500d7840e31" name="aff742f3ae126f276ba823500d7840e31"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#aff742f3ae126f276ba823500d7840e31">&#9670;&#160;</a></span>titleSpans()</h2>
@@ -209,7 +209,7 @@ ScreenHead &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (ScreenHead
 <p>The title as runs, which a shell that knows them draws in its top bar in place of <span class="tt">title</span>. </p>
 <dl class="section return"><dt>Returns</dt><dd>It, valid as long as the head; null for a head that has none, as a host screen's by default. It keeps its last value once the screen is closed. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d78/host_8hpp_source.html#l00071">71</a> of file <a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d78/host_8hpp_source.html#l00074">74</a> of file <a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>.</p>
 
 </div>
 </div>
@@ -239,7 +239,7 @@ ScreenHead &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (ScreenHead
 <p>Whether the screen's shown root lays itself at the page's edges, so a shell leaves the page uninset around it (the document's <span class="tt"><a class="el" href="#ad053fc7b5b04a0b063331335cfde4b30" title="Whether the screen&#39;s shown root lays itself at the page&#39;s edges, so a shell leaves the page uninset a...">pageEdge</a></span> on the root, seen through <span class="tt">switch</span> cases). </p>
 <dl class="section return"><dt>Returns</dt><dd>It, valid as long as the head; null for a head that has none, as a host screen's by default, which a shell insets. It keeps its last value once the screen is closed. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d78/host_8hpp_source.html#l00077">77</a> of file <a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d78/host_8hpp_source.html#l00080">80</a> of file <a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>.</p>
 
 </div>
 </div>
@@ -269,7 +269,7 @@ ScreenHead &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (ScreenHead
 <p>Whether the screen's shown root continues the head's block (the document's <span class="tt"><a class="el" href="#ae2f47e76dd10f477481e0a60ef0d24e1" title="Whether the screen&#39;s shown root continues the head&#39;s block (the document&#39;s headJoined on the root,...">headJoined</a></span> on the root, seen through <span class="tt">switch</span> cases), so a shell leaves no rule between the head and what follows. </p>
 <dl class="section return"><dt>Returns</dt><dd>It, valid as long as the head; null for a head that has none, as a host screen's by default. It keeps its last value once the screen is closed. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d78/host_8hpp_source.html#l00083">83</a> of file <a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d78/host_8hpp_source.html#l00086">86</a> of file <a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>.</p>
 
 </div>
 </div>
@@ -299,7 +299,7 @@ ScreenHead &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (ScreenHead
 <p>Where the head's lead (the subtitle and the badges) sits. </p>
 <dl class="section return"><dt>Returns</dt><dd>It, valid as long as the head; null for a head that has none, as a host screen's by default, which is <span class="tt">below</span>. It keeps its last value once the screen is closed. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d78/host_8hpp_source.html#l00088">88</a> of file <a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d78/host_8hpp_source.html#l00091">91</a> of file <a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>.</p>
 
 </div>
 </div>
@@ -329,7 +329,7 @@ ScreenHead &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (ScreenHead
 <p>The text role of the head's title. </p>
 <dl class="section return"><dt>Returns</dt><dd>It, valid as long as the head; null for a head that has none, as a host screen's by default, which is <span class="tt">Heading</span>. It keeps its last value once the screen is closed. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d78/host_8hpp_source.html#l00093">93</a> of file <a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d78/host_8hpp_source.html#l00096">96</a> of file <a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>.</p>
 
 </div>
 </div>
@@ -359,7 +359,7 @@ ScreenHead &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (ScreenHead
 <p>The name of the surface a shell draws its top bar on while the screen is shown. </p>
 <dl class="section return"><dt>Returns</dt><dd>It, valid as long as the head; null for a head that has none, as a host screen's by default. It keeps its last value once the screen is closed. An empty name is none. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d78/host_8hpp_source.html#l00098">98</a> of file <a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d78/host_8hpp_source.html#l00101">101</a> of file <a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>.</p>
 
 </div>
 </div>
@@ -389,7 +389,7 @@ ScreenHead &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (ScreenHead
 <p>The name of the surface a shell draws the page area on while the screen is shown. </p>
 <dl class="section return"><dt>Returns</dt><dd>It, valid as long as the head; null for a head that has none, as a host screen's by default. It keeps its last value once the screen is closed. An empty name is the built-in <span class="tt"><a class="el" href="../../d8/d11/view_8hpp.html#ab05064de236d0c6922c839b56c701b96" title="A page node.">page</a></span> surface. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d78/host_8hpp_source.html#l00103">103</a> of file <a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d78/host_8hpp_source.html#l00106">106</a> of file <a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>.</p>
 
 </div>
 </div>
@@ -419,7 +419,7 @@ ScreenHead &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (ScreenHead
 <p>The eyebrow, the line a shell draws above the title, as text; empty when the screen declares none. </p>
 <dl class="section return"><dt>Returns</dt><dd>It, valid as long as the head; null for a head that has none, as a host screen's by default. It keeps its last value once the screen is closed. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d78/host_8hpp_source.html#l00108">108</a> of file <a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d78/host_8hpp_source.html#l00111">111</a> of file <a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>.</p>
 
 </div>
 </div>
@@ -449,7 +449,7 @@ ScreenHead &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (ScreenHead
 <p>The eyebrow as runs, which a shell that knows them draws in place of <span class="tt"><a class="el" href="#aadf1d780d5fb3569ab42b63a9bf442b8" title="The eyebrow, the line a shell draws above the title, as text; empty when the screen declares none.">eyebrow</a></span>. </p>
 <dl class="section return"><dt>Returns</dt><dd>It, valid as long as the head; null for a head that has none, as a host screen's by default. It keeps its last value once the screen is closed. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d78/host_8hpp_source.html#l00113">113</a> of file <a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d78/host_8hpp_source.html#l00116">116</a> of file <a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>.</p>
 
 </div>
 </div>
@@ -507,7 +507,7 @@ ScreenHead &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (ScreenHead
 <p>The subtitle as runs, which a shell that knows them draws in place of <span class="tt"><a class="el" href="#a414ecb0148a1c1793379d2b8af6a39fd" title="The subtitle, as text; empty when the screen declares none.">subtitle</a></span>. </p>
 <dl class="section return"><dt>Returns</dt><dd>It, valid as long as the head; null for a head that has none, as a host screen's by default. It keeps its last value once the screen is closed. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d78/host_8hpp_source.html#l00122">122</a> of file <a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d78/host_8hpp_source.html#l00125">125</a> of file <a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>.</p>
 
 </div>
 </div>
@@ -627,7 +627,7 @@ ScreenHead &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (ScreenHead
 <p>The head's own menu: its visible entries, in order, each one that is chosen with its id. </p>
 <dl class="section return"><dt>Returns</dt><dd>They, valid as long as the head; null for a head that has no menu, as a host screen's by default. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d78/host_8hpp_source.html#l00140">140</a> of file <a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d78/host_8hpp_source.html#l00143">143</a> of file <a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>.</p>
 
 </div>
 </div>
@@ -657,7 +657,7 @@ ScreenHead &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (ScreenHead
 <p>The accessible name of the head menu's trigger. </p>
 <dl class="section return"><dt>Returns</dt><dd>It, valid as long as the head; null for a head that has no menu, which a shell labels "More actions". </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d78/host_8hpp_source.html#l00144">144</a> of file <a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d78/host_8hpp_source.html#l00147">147</a> of file <a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>.</p>
 
 </div>
 </div>
@@ -721,7 +721,7 @@ ScreenHead &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (ScreenHead
 <p>The head's tools that are visible, in order: search fields and selects, each with its value. </p>
 <dl class="section return"><dt>Returns</dt><dd>They, valid as long as the head; null for a head that has no tools, as a host screen's by default. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d78/host_8hpp_source.html#l00154">154</a> of file <a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d78/host_8hpp_source.html#l00157">157</a> of file <a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>.</p>
 
 </div>
 </div>

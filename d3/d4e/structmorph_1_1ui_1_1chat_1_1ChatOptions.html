@@ -145,13 +145,17 @@ Public Attributes</h2></td></tr>
 <tr class="memdesc:a7922fbc4c578c6f9f3cc340c2ad59aed"><td class="mdescLeft">&#160;</td><td class="mdescRight">What the assistant is told about how to behave.  <br /></td></tr>
 <tr class="memitem:a596c51d00d81740da00f466d00a67376" id="r_a596c51d00d81740da00f466d00a67376"><td class="memItemLeft">std::function&lt; std::chrono::steady_clock::time_point()&gt;&#160;</td><td class="memItemRight"><a class="el" href="#a596c51d00d81740da00f466d00a67376">now</a></td></tr>
 <tr class="memdesc:a596c51d00d81740da00f466d00a67376"><td class="mdescLeft">&#160;</td><td class="mdescRight">The clock retention reads; empty for <span class="tt">steady_clock</span>.  <br /></td></tr>
+<tr class="memitem:a1b2748fe7bb84c075627597f10558d27" id="r_a1b2748fe7bb84c075627597f10558d27"><td class="memItemLeft">std::vector&lt; <a class="el" href="../../d2/d2a/structmorph_1_1ui_1_1chat_1_1ChatTool.html">ChatTool</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a1b2748fe7bb84c075627597f10558d27">tools</a></td></tr>
+<tr class="memdesc:a1b2748fe7bb84c075627597f10558d27"><td class="mdescLeft">&#160;</td><td class="mdescRight">Tools offered beside the ones the open screen names. A turn offers each one whose <span class="tt">offer</span> accepts it, and a call of one runs its handler in place of an action. Their names must be valid, and distinct from each other; see <span class="tt"><a class="el" href="../../d2/d2a/structmorph_1_1ui_1_1chat_1_1ChatTool.html" title="A tool added to a chat.">ChatTool</a></span>.  <br /></td></tr>
+<tr class="memitem:a6bda5475840e39d169fe01d66d9bcd77" id="r_a6bda5475840e39d169fe01d66d9bcd77"><td class="memItemLeft"><a class="el" href="../../d7/db0/chat_2service_8hpp.html#a4e8bbf849cb16afaedab1f0779e4996f">ChatDocumentSource</a>&#160;</td><td class="memItemRight"><a class="el" href="#a6bda5475840e39d169fe01d66d9bcd77">documentSource</a></td></tr>
+<tr class="memdesc:a6bda5475840e39d169fe01d66d9bcd77"><td class="mdescLeft">&#160;</td><td class="mdescRight">Where the document of a screen outside the bundle is read, so the chat can offer such a screen's actions. Empty: a screen the bundle does not hold is not available to the chat.  <br /></td></tr>
 <tr class="memitem:a029210c3527b886212dd1aa90ab2e63e" id="r_a029210c3527b886212dd1aa90ab2e63e"><td class="memItemLeft">::morph::model::detail::ActionDispatcher *&#160;</td><td class="memItemRight"><a class="el" href="#a029210c3527b886212dd1aa90ab2e63e">dispatcher</a> = &amp;::morph::model::detail::defaultDispatcher()</td></tr>
 <tr class="memdesc:a029210c3527b886212dd1aa90ab2e63e"><td class="mdescLeft">&#160;</td><td class="mdescRight">The dispatcher the server's actions are registered on. Borrowed.  <br /></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>What a <span class="tt"><a class="el" href="../../db/df0/classmorph_1_1ui_1_1chat_1_1ChatService.html" title="Answers the chat kinds, and runs each turn&#39;s loop on the worker: read what the screen offers,...">ChatService</a></span> is built with. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d7/db0/chat_2service_8hpp_source.html#l00040">40</a> of file <a class="el" href="../../d7/db0/chat_2service_8hpp_source.html">service.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d7/db0/chat_2service_8hpp_source.html#l00052">52</a> of file <a class="el" href="../../d7/db0/chat_2service_8hpp_source.html">service.hpp</a>.</p>
 </div><a name="doc-func-members" id="doc-func-members"></a><h2 id="header-doc-func-members" class="groupheader">Member Function Documentation</h2>
 <a id="aca954f2f1bd5f00d40644501e911ead2" name="aca954f2f1bd5f00d40644501e911ead2"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#aca954f2f1bd5f00d40644501e911ead2">&#9670;&#160;</a></span>configure()</h2>
@@ -193,7 +197,7 @@ Public Attributes</h2></td></tr>
 
 <p>The model behind the chat. Null: the service serves no kind, so a client shows no chat. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d7/db0/chat_2service_8hpp_source.html#l00042">42</a> of file <a class="el" href="../../d7/db0/chat_2service_8hpp_source.html">service.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d7/db0/chat_2service_8hpp_source.html#l00054">54</a> of file <a class="el" href="../../d7/db0/chat_2service_8hpp_source.html">service.hpp</a>.</p>
 
 </div>
 </div>
@@ -211,7 +215,7 @@ Public Attributes</h2></td></tr>
 
 <p>Where turns run. Borrowed: it outlives the service and every turn. Required with a provider. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d7/db0/chat_2service_8hpp_source.html#l00044">44</a> of file <a class="el" href="../../d7/db0/chat_2service_8hpp_source.html">service.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d7/db0/chat_2service_8hpp_source.html#l00056">56</a> of file <a class="el" href="../../d7/db0/chat_2service_8hpp_source.html">service.hpp</a>.</p>
 
 </div>
 </div>
@@ -229,7 +233,7 @@ Public Attributes</h2></td></tr>
 
 <p>The bundle screens are looked up in. Required with a provider. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d7/db0/chat_2service_8hpp_source.html#l00046">46</a> of file <a class="el" href="../../d7/db0/chat_2service_8hpp_source.html">service.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d7/db0/chat_2service_8hpp_source.html#l00058">58</a> of file <a class="el" href="../../d7/db0/chat_2service_8hpp_source.html">service.hpp</a>.</p>
 
 </div>
 </div>
@@ -247,7 +251,7 @@ Public Attributes</h2></td></tr>
 
 <p>The bounds. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d7/db0/chat_2service_8hpp_source.html#l00048">48</a> of file <a class="el" href="../../d7/db0/chat_2service_8hpp_source.html">service.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d7/db0/chat_2service_8hpp_source.html#l00060">60</a> of file <a class="el" href="../../d7/db0/chat_2service_8hpp_source.html">service.hpp</a>.</p>
 
 </div>
 </div>
@@ -265,7 +269,7 @@ Public Attributes</h2></td></tr>
 
 <p>What the assistant is told about how to behave. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d7/db0/chat_2service_8hpp_source.html#l00050">50</a> of file <a class="el" href="../../d7/db0/chat_2service_8hpp_source.html">service.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d7/db0/chat_2service_8hpp_source.html#l00062">62</a> of file <a class="el" href="../../d7/db0/chat_2service_8hpp_source.html">service.hpp</a>.</p>
 
 </div>
 </div>
@@ -283,7 +287,43 @@ Public Attributes</h2></td></tr>
 
 <p>The clock retention reads; empty for <span class="tt">steady_clock</span>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d7/db0/chat_2service_8hpp_source.html#l00052">52</a> of file <a class="el" href="../../d7/db0/chat_2service_8hpp_source.html">service.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d7/db0/chat_2service_8hpp_source.html#l00064">64</a> of file <a class="el" href="../../d7/db0/chat_2service_8hpp_source.html">service.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a1b2748fe7bb84c075627597f10558d27" name="a1b2748fe7bb84c075627597f10558d27"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a1b2748fe7bb84c075627597f10558d27">&#9670;&#160;</a></span>tools</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::vector&lt;<a class="el" href="../../d2/d2a/structmorph_1_1ui_1_1chat_1_1ChatTool.html">ChatTool</a>&gt; morph::ui::chat::ChatOptions::tools</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>Tools offered beside the ones the open screen names. A turn offers each one whose <span class="tt">offer</span> accepts it, and a call of one runs its handler in place of an action. Their names must be valid, and distinct from each other; see <span class="tt"><a class="el" href="../../d2/d2a/structmorph_1_1ui_1_1chat_1_1ChatTool.html" title="A tool added to a chat.">ChatTool</a></span>. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d7/db0/chat_2service_8hpp_source.html#l00068">68</a> of file <a class="el" href="../../d7/db0/chat_2service_8hpp_source.html">service.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a6bda5475840e39d169fe01d66d9bcd77" name="a6bda5475840e39d169fe01d66d9bcd77"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a6bda5475840e39d169fe01d66d9bcd77">&#9670;&#160;</a></span>documentSource</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="../../d7/db0/chat_2service_8hpp.html#a4e8bbf849cb16afaedab1f0779e4996f">ChatDocumentSource</a> morph::ui::chat::ChatOptions::documentSource</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>Where the document of a screen outside the bundle is read, so the chat can offer such a screen's actions. Empty: a screen the bundle does not hold is not available to the chat. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d7/db0/chat_2service_8hpp_source.html#l00071">71</a> of file <a class="el" href="../../d7/db0/chat_2service_8hpp_source.html">service.hpp</a>.</p>
 
 </div>
 </div>
@@ -301,7 +341,7 @@ Public Attributes</h2></td></tr>
 
 <p>The dispatcher the server's actions are registered on. Borrowed. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d7/db0/chat_2service_8hpp_source.html#l00054">54</a> of file <a class="el" href="../../d7/db0/chat_2service_8hpp_source.html">service.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d7/db0/chat_2service_8hpp_source.html#l00073">73</a> of file <a class="el" href="../../d7/db0/chat_2service_8hpp_source.html">service.hpp</a>.</p>
 
 </div>
 </div>

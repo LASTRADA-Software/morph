@@ -17,5 +17,6 @@ var searchData=
   ['concurrency_14',['Concurrency',['../dc/dfd/control_8hpp.html#ac9b5149b64e788db3c18d8c5be3d552c',1,'morph::reactive::Concurrency'],['../dd/d39/document_8hpp.html#a0876310d8741d2490f5e6df05ee936c2',1,'morph::ui::Concurrency']]],
   ['connectionstate_15',['ConnectionState',['../d1/da3/shell__parts__view_8hpp.html#a080e0e0758b25e537386491ddfbd4602',1,'morph::ui']]],
   ['constraintviolationkind_16',['ConstraintViolationKind',['../da/d45/instance__constraints_8hpp.html#aac28b5b09b5e30a5d4e4217d5f5089c7',1,'morph::forms']]],
-  ['controlshape_17',['ControlShape',['../d9/d6d/control__shape_8hpp.html#acb63d4890b58b811a6eab08f80b4c212',1,'morph::ui']]]
+  ['controlshape_17',['ControlShape',['../d9/d6d/control__shape_8hpp.html#acb63d4890b58b811a6eab08f80b4c212',1,'morph::ui']]],
+  ['customscreensoffer_18',['CustomScreensOffer',['../d9/d6e/custom__screen__sync_8hpp.html#abc28690b320382c78c4151a10cac2740',1,'morph::ui']]]
 ];

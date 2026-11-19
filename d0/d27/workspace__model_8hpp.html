@@ -146,6 +146,7 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d0/d27/workspa
 <code>#include &quot;<a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>&quot;</code><br />
 <code>#include &quot;<a class="el" href="../../d4/d2f/route_8hpp_source.html">route.hpp</a>&quot;</code><br />
 <code>#include &quot;<a class="el" href="../../d6/dda/value_8hpp_source.html">value.hpp</a>&quot;</code><br />
+<code>#include &quot;<a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>&quot;</code><br />
 </div>
 <p><a href="../../d0/d27/workspace__model_8hpp_source.html">Go to the source code of this file.</a></p>
 <table class="memberdecls">
@@ -155,10 +156,10 @@ Classes</h2></td></tr>
 <tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">What the shell needs to know of one screen id: the catalog's <span class="tt"><a class="el" href="../../dd/dd9/structmorph_1_1ui_1_1WorkspaceScreen.html#a2bb42fbccc5e03a9a9a46fbd8b3c092f" title="The screen has at most one tab.">singleton</a></span> and <span class="tt"><a class="el" href="../../dd/dd9/structmorph_1_1ui_1_1WorkspaceScreen.html#aca993acff26c8eb05147a1c8e6bbad7c" title="A tab of the screen with no identity and no unsaved changes is replaced, not stacked,...">reuseEmpty</a></span>.  <a href="../../dd/dd9/structmorph_1_1ui_1_1WorkspaceScreen.html#details">More...</a><br /></td></tr>
 <tr class="memitem:morph_3A_3Aui_3A_3AWorkspaceStart" id="r_morph_3A_3Aui_3A_3AWorkspaceStart"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../d1/d90/structmorph_1_1ui_1_1WorkspaceStart.html">morph::ui::WorkspaceStart</a></td></tr>
 <tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">How a workspace starts (spec 6 §7, <span class="tt">app-start</span>).  <a href="../../d1/d90/structmorph_1_1ui_1_1WorkspaceStart.html#details">More...</a><br /></td></tr>
-<tr class="memitem:morph_3A_3Aui_3A_3AWorkspaceOptions" id="r_morph_3A_3Aui_3A_3AWorkspaceOptions"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../de/dca/structmorph_1_1ui_1_1WorkspaceOptions.html">morph::ui::WorkspaceOptions</a></td></tr>
-<tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">How a workspace treats screens.  <a href="../../de/dca/structmorph_1_1ui_1_1WorkspaceOptions.html#details">More...</a><br /></td></tr>
 <tr class="memitem:morph_3A_3Aui_3A_3AWorkspaceTabId" id="r_morph_3A_3Aui_3A_3AWorkspaceTabId"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../d5/d5c/structmorph_1_1ui_1_1WorkspaceTabId.html">morph::ui::WorkspaceTabId</a></td></tr>
 <tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">A tab's identity in a <span class="tt"><a class="el" href="../../d0/df9/classmorph_1_1ui_1_1WorkspaceModel.html" title="The workspace&#39;s tabs with no widgets: which screens are open, in which order, which is active,...">WorkspaceModel</a></span>: issued when it opens, never reused.  <a href="../../d5/d5c/structmorph_1_1ui_1_1WorkspaceTabId.html#details">More...</a><br /></td></tr>
+<tr class="memitem:morph_3A_3Aui_3A_3AWorkspaceOptions" id="r_morph_3A_3Aui_3A_3AWorkspaceOptions"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../de/dca/structmorph_1_1ui_1_1WorkspaceOptions.html">morph::ui::WorkspaceOptions</a></td></tr>
+<tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">How a workspace treats screens.  <a href="../../de/dca/structmorph_1_1ui_1_1WorkspaceOptions.html#details">More...</a><br /></td></tr>
 <tr class="memitem:morph_3A_3Aui_3A_3AWorkspaceOpened" id="r_morph_3A_3Aui_3A_3AWorkspaceOpened"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../d1/da7/structmorph_1_1ui_1_1WorkspaceOpened.html">morph::ui::WorkspaceOpened</a></td></tr>
 <tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">What an open did: the tab it opened or focused, and whether it mounted a screen for it.  <a href="../../d1/da7/structmorph_1_1ui_1_1WorkspaceOpened.html#details">More...</a><br /></td></tr>
 <tr class="memitem:morph_3A_3Aui_3A_3AWorkspaceTabState" id="r_morph_3A_3Aui_3A_3AWorkspaceTabState"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../dc/d6d/structmorph_1_1ui_1_1WorkspaceTabState.html">morph::ui::WorkspaceTabState</a></td></tr>
@@ -167,13 +168,45 @@ Classes</h2></td></tr>
 <tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">A <span class="tt"><a class="el" href="../../d0/df9/classmorph_1_1ui_1_1WorkspaceModel.html" title="The workspace&#39;s tabs with no widgets: which screens are open, in which order, which is active,...">WorkspaceModel</a></span>'s options: the workspace's, and how a tab's page is made and unmade.  <a href="../../d4/d5c/structmorph_1_1ui_1_1WorkspaceModelOptions.html#details">More...</a><br /></td></tr>
 <tr class="memitem:morph_3A_3Aui_3A_3AWorkspaceModel" id="r_morph_3A_3Aui_3A_3AWorkspaceModel"><td class="memItemLeft">class &#160;</td><td class="memItemRight"><a class="el" href="../../d0/df9/classmorph_1_1ui_1_1WorkspaceModel.html">morph::ui::WorkspaceModel</a></td></tr>
 <tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">The workspace's tabs with no widgets: which screens are open, in which order, which is active, and how they open, close and are recorded (spec 6 §7, §15).  <a href="../../d0/df9/classmorph_1_1ui_1_1WorkspaceModel.html#details">More...</a><br /></td></tr>
+</table><table class="memberdecls">
+<tr class="heading"><td colspan="2"><h2 id="header-var-members" class="groupheader"><a id="var-members" name="var-members"></a>
+Variables</h2></td></tr>
+<tr class="memitem:a8de005310d4ec1a00182c73706aa064b" id="r_a8de005310d4ec1a00182c73706aa064b"><td class="memItemLeft">constexpr std::string_view&#160;</td><td class="memItemRight"><a class="el" href="#a8de005310d4ec1a00182c73706aa064b">morph::ui::kStayedOpenReason</a> = &quot;the open screen stayed open&quot;</td></tr>
+<tr class="memdesc:a8de005310d4ec1a00182c73706aa064b"><td class="mdescLeft">&#160;</td><td class="mdescRight">The reason <span class="tt"><a class="el" href="../../d0/df9/classmorph_1_1ui_1_1WorkspaceModel.html#a8d8850d1343bb902afacb50bb10d28ce" title="Opens screenId with params in the place of tab: what a shell&#39;s Open as does.">WorkspaceModel::openInPlace</a></span> answers when the tab's screen stayed open (its close guard kept it).  <br /></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>The workspace's tab logic with no widgets (spec 6 §7, §15): what an application's own tab strip binds to, and what <span class="tt">ui::Workspace</span> draws as a tab bar. </p>
 <p>Specified in <span class="tt">docs/spec/ui/workspace.md</span>, "Model". </p>
 
 <p class="definition">Definition in file <a class="el" href="../../d0/d27/workspace__model_8hpp_source.html">workspace_model.hpp</a>.</p>
-</div></div><!-- contents -->
+</div><a name="doc-var-members" id="doc-var-members"></a><h2 id="header-doc-var-members" class="groupheader">Variable Documentation</h2>
+<a id="a8de005310d4ec1a00182c73706aa064b" name="a8de005310d4ec1a00182c73706aa064b"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a8de005310d4ec1a00182c73706aa064b">&#9670;&#160;</a></span>kStayedOpenReason</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::string_view morph::ui::kStayedOpenReason = &quot;the open screen stayed open&quot;</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel constexpr">constexpr</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>The reason <span class="tt">WorkspaceModel::openInPlace</span> answers when the tab's screen stayed open (its close guard kept it). </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d0/d27/workspace__model_8hpp_source.html#l00040">40</a> of file <a class="el" href="../../d0/d27/workspace__model_8hpp_source.html">workspace_model.hpp</a>.</p>
+
+</div>
+</div>
+</div><!-- contents -->
 </div><!-- doc-content -->
 <div id="page-nav" class="page-nav-panel">
 <div id="page-nav-resize-handle"></div>

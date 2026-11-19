@@ -16,5 +16,8 @@ var searchData=
   ['control_2ehpp_13',['control.hpp',['../dc/dfd/control_8hpp.html',1,'']]],
   ['control_5fshape_2ehpp_14',['control_shape.hpp',['../d9/d6d/control__shape_8hpp.html',1,'']]],
   ['conversations_2ehpp_15',['conversations.hpp',['../dc/dc9/conversations_8hpp.html',1,'']]],
-  ['coroutine_2ehpp_16',['coroutine.hpp',['../de/de0/coroutine_8hpp.html',1,'']]]
+  ['coroutine_2ehpp_16',['coroutine.hpp',['../de/de0/coroutine_8hpp.html',1,'']]],
+  ['custom_5fscreen_5fchrome_2ehpp_17',['custom_screen_chrome.hpp',['../dc/def/custom__screen__chrome_8hpp.html',1,'']]],
+  ['custom_5fscreen_5fsync_2ehpp_18',['custom_screen_sync.hpp',['../d9/d6e/custom__screen__sync_8hpp.html',1,'']]],
+  ['custom_5fscreens_2ehpp_19',['custom_screens.hpp',['../d5/d92/custom__screens_8hpp.html',1,'']]]
 ];

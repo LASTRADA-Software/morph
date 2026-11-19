@@ -241,7 +241,11 @@ void&#160;</td><td class="memItemRight"><b>clear</b> ()</td></tr>
 void&#160;</td><td class="memItemRight"><b>reconnected</b> ()</td></tr>
 <tr class="memdesc:a3c03b7fa3e8260dcce635aa2b34647d4"><td class="mdescLeft">&#160;</td><td class="mdescRight">The connection to the server was made again (spec 8 §7, "Reconnect"): sends the whole watch set with <span class="tt">replace: true</span>, then marks every entry but an <span class="tt"><a class="el" href="../../d8/d0e/expression_8hpp.html#a44b6b7bce3881e4c19594de28faba604" title="Evaluates an expression.">evaluate</a></span> one stale. A mounted entry refetches, and one whose fetch is in flight fetches once more when that fetch settles, so a change missed while the connection was down is read again. <br /></td></tr>
 <tr class="memitem:a6fb2cf7771c05f53a16ce05be8ea496a" id="r_a6fb2cf7771c05f53a16ce05be8ea496a"><td class="memItemLeft"><a class="el" href="../../d6/d4f/structmorph_1_1wire_1_1WatchBody.html">wire::WatchBody</a>&#160;</td><td class="memItemRight"><a class="el" href="#a6fb2cf7771c05f53a16ce05be8ea496a">watchSet</a> () const</td></tr>
-<tr class="memdesc:a6fb2cf7771c05f53a16ce05be8ea496a"><td class="mdescLeft">&#160;</td><td class="mdescRight">The topics the cache holds now: every record an entry holds, and the keyed shared instance of every entry whose action holds no record. What <span class="tt"><a class="el" href="#a3c03b7fa3e8260dcce635aa2b34647d4" title="The connection to the server was made again (spec 8 §7, &quot;Reconnect&quot;): sends the whole watch set with ...">reconnected</a></span> sends.  <br /></td></tr>
+<tr class="memdesc:a6fb2cf7771c05f53a16ce05be8ea496a"><td class="mdescLeft">&#160;</td><td class="mdescRight">The topics the cache holds now: every record an entry holds, every extra watch, and the keyed shared instance of every entry whose action holds no record. What <span class="tt"><a class="el" href="#a3c03b7fa3e8260dcce635aa2b34647d4" title="The connection to the server was made again (spec 8 §7, &quot;Reconnect&quot;): sends the whole watch set with ...">reconnected</a></span> sends.  <br /></td></tr>
+<tr class="memitem:af14032e19eab407d5550ca4a2690e610" id="r_af14032e19eab407d5550ca4a2690e610"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#af14032e19eab407d5550ca4a2690e610">addExtraWatch</a> (std::string const &amp;record)</td></tr>
+<tr class="memdesc:af14032e19eab407d5550ca4a2690e610"><td class="mdescLeft">&#160;</td><td class="mdescRight">Watches a record for something other than the cache, such as a list a client keeps beside it, and keeps watching it in every set the session sends: <span class="tt"><a class="el" href="#a3c03b7fa3e8260dcce635aa2b34647d4" title="The connection to the server was made again (spec 8 §7, &quot;Reconnect&quot;): sends the whole watch set with ...">reconnected</a></span> and a <span class="tt">resync</span> carry it in their <span class="tt">replace: true</span> set, and the cache dropping its last entry on the record does not unwatch it.  <br /></td></tr>
+<tr class="memitem:ac3a8390eb7374af586d7e845fa97f41e" id="r_ac3a8390eb7374af586d7e845fa97f41e"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#ac3a8390eb7374af586d7e845fa97f41e">removeExtraWatch</a> (std::string const &amp;record)</td></tr>
+<tr class="memdesc:ac3a8390eb7374af586d7e845fa97f41e"><td class="mdescLeft">&#160;</td><td class="mdescRight">Stops an extra watch: sends an <span class="tt">unwatch</span> unless an entry of the cache still holds the record.  <br /></td></tr>
 <tr class="memitem:a5ff483a6980bd495a7ee4fae53c8bc80" id="r_a5ff483a6980bd495a7ee4fae53c8bc80"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a5ff483a6980bd495a7ee4fae53c8bc80">deliverEvent</a> (<a class="el" href="../../d7/db7/structmorph_1_1wire_1_1EventBody.html">wire::EventBody</a> const &amp;event)</td></tr>
 <tr class="memdesc:a5ff483a6980bd495a7ee4fae53c8bc80"><td class="mdescLeft">&#160;</td><td class="mdescRight">Applies a server event to the cache (spec 8 §9).  <br /></td></tr>
 <tr class="memitem:ada3da49c7e36630c8153fc56f22b58e1" id="r_ada3da49c7e36630c8153fc56f22b58e1"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#ada3da49c7e36630c8153fc56f22b58e1">applyChanges</a> (<a class="el" href="../../d4/de9/structmorph_1_1wire_1_1ChangesBody.html">wire::ChangesBody</a> const &amp;changes)</td></tr>
@@ -1923,8 +1927,59 @@ Static Public Member Functions</h2></td></tr>
 </table>
 </div><div class="memdoc">
 
-<p>The topics the cache holds now: every record an entry holds, and the keyed shared instance of every entry whose action holds no record. What <span class="tt"><a class="el" href="#a3c03b7fa3e8260dcce635aa2b34647d4" title="The connection to the server was made again (spec 8 §7, &quot;Reconnect&quot;): sends the whole watch set with ...">reconnected</a></span> sends. </p>
+<p>The topics the cache holds now: every record an entry holds, every extra watch, and the keyed shared instance of every entry whose action holds no record. What <span class="tt"><a class="el" href="#a3c03b7fa3e8260dcce635aa2b34647d4" title="The connection to the server was made again (spec 8 §7, &quot;Reconnect&quot;): sends the whole watch set with ...">reconnected</a></span> sends. </p>
 <dl class="section return"><dt>Returns</dt><dd>The topics, records and instances each in name order; <span class="tt">replace</span> is false. </dd></dl>
+
+</div>
+</div>
+<a id="af14032e19eab407d5550ca4a2690e610" name="af14032e19eab407d5550ca4a2690e610"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#af14032e19eab407d5550ca4a2690e610">&#9670;&#160;</a></span>addExtraWatch()</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">void morph::ui::Session::addExtraWatch </td>
+          <td>(</td>
+          <td class="paramtype">std::string const &amp;</td>          <td class="paramname"><span class="paramname"><em>record</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>Watches a record for something other than the cache, such as a list a client keeps beside it, and keeps watching it in every set the session sends: <span class="tt"><a class="el" href="#a3c03b7fa3e8260dcce635aa2b34647d4" title="The connection to the server was made again (spec 8 §7, &quot;Reconnect&quot;): sends the whole watch set with ...">reconnected</a></span> and a <span class="tt">resync</span> carry it in their <span class="tt">replace: true</span> set, and the cache dropping its last entry on the record does not unwatch it. </p>
+<p>The <span class="tt">watch</span> goes out at once when there is a watcher. The events arrive through <span class="tt"><a class="el" href="#a5ff483a6980bd495a7ee4fae53c8bc80" title="Applies a server event to the cache (spec 8 §9).">deliverEvent</a></span> like any other's, for the owner of the extra watch to read.</p>
+<p>A record has one owner: extra watches are not reference-counted, so the first <span class="tt"><a class="el" href="#ac3a8390eb7374af586d7e845fa97f41e" title="Stops an extra watch: sends an unwatch unless an entry of the cache still holds the record.">removeExtraWatch</a></span> ends it for every caller. A refusal of the watch, in the reply or as a failure, is logged at warn. </p><dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">record</td><td>The record's name; one already watched this way changes nothing. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+</div>
+</div>
+<a id="ac3a8390eb7374af586d7e845fa97f41e" name="ac3a8390eb7374af586d7e845fa97f41e"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ac3a8390eb7374af586d7e845fa97f41e">&#9670;&#160;</a></span>removeExtraWatch()</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">void morph::ui::Session::removeExtraWatch </td>
+          <td>(</td>
+          <td class="paramtype">std::string const &amp;</td>          <td class="paramname"><span class="paramname"><em>record</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>Stops an extra watch: sends an <span class="tt">unwatch</span> unless an entry of the cache still holds the record. </p>
+<p>A record has one owner: the watch is not reference-counted, so this ends it whoever else added it. </p><dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">record</td><td>The record's name; one not watched this way changes nothing. </td></tr>
+  </table>
+  </dd>
+</dl>
 
 </div>
 </div>

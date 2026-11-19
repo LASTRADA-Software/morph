@@ -223,7 +223,7 @@ Widget &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (Widget &amp;&a
 <p>A user's selection replaces the requested keys, and the widget shows it whether or not the application binds the selection. <span class="tt">onSelectionChange</span> then gets exactly the keys of the existing rows now selected, in any mode: a key still waiting for its row is dropped by a user's change, while <span class="tt"><a class="el" href="#ae52b435d2acdb2e4d9c18594bf90a8c8" title="Requests the rows with these keys, and marks those it has. Never calls the onSelectionChange handler.">setSelection</a></span> keeps it waiting. It reports the user's selections only: no setter, and no row arriving or going, calls it.</p>
 <p>Every backend selects with the same inputs. In <span class="tt">Multiple</span> mode a click selects only its row and makes it the anchor, Ctrl+click toggles its row and makes it the anchor, Shift+click selects the rows from the anchor to it in place of the rest; Space toggles the current row, Shift+Up and Shift+Down move the current row and select from the anchor to it, and Ctrl+A selects every row, or clears them all when every row is selected already. In <span class="tt">Single</span> mode each of them selects the one row, and Ctrl+A goes on outwards. The arrows, Home, End, PageUp and PageDown move the current row without selecting, and Enter activates it. A report says which kind of change it was: a click, a Shift-click, a Shift+arrow and every <span class="tt">Single</span> change <span class="tt">Replace</span>; a Ctrl-click, Space and Ctrl+A <span class="tt">Extend</span>. A range runs over the keys in row order, rows the backend has not realized included. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dc2/ui_2backend_8hpp_source.html#l00764">764</a> of file <a class="el" href="../../d0/dc2/ui_2backend_8hpp_source.html">backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dc2/ui_2backend_8hpp_source.html#l00776">776</a> of file <a class="el" href="../../d0/dc2/ui_2backend_8hpp_source.html">backend.hpp</a>.</p>
 </div><a name="doc-func-members" id="doc-func-members"></a><h2 id="header-doc-func-members" class="groupheader">Member Function Documentation</h2>
 <a id="a57e44fc23672c4b59cbd608a0f3f6431" name="a57e44fc23672c4b59cbd608a0f3f6431"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a57e44fc23672c4b59cbd608a0f3f6431">&#9670;&#160;</a></span>setColumns()</h2>
@@ -849,7 +849,7 @@ Widget &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (Widget &amp;&a
 
 <p>Reimplemented in <a class="el" href="../../d5/d60/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeTable.html#aeef6d47a7be14ed28904eb6a143e446d">morph::ui::testing::detail::FakeTable</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dc2/ui_2backend_8hpp_source.html#l00864">864</a> of file <a class="el" href="../../d0/dc2/ui_2backend_8hpp_source.html">backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dc2/ui_2backend_8hpp_source.html#l00876">876</a> of file <a class="el" href="../../d0/dc2/ui_2backend_8hpp_source.html">backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -884,7 +884,7 @@ Widget &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (Widget &amp;&a
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dc2/ui_2backend_8hpp_source.html#l00878">878</a> of file <a class="el" href="../../d0/dc2/ui_2backend_8hpp_source.html">backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dc2/ui_2backend_8hpp_source.html#l00890">890</a> of file <a class="el" href="../../d0/dc2/ui_2backend_8hpp_source.html">backend.hpp</a>.</p>
 
 </div>
 </div>

@@ -7,5 +7,7 @@ var structmorph_1_1ui_1_1chat_1_1ChatOptions =
     [ "limits", "d3/d4e/structmorph_1_1ui_1_1chat_1_1ChatOptions.html#a2f3ba5e07f1550c5b4b9bce88e90dc4b", null ],
     [ "systemPrompt", "d3/d4e/structmorph_1_1ui_1_1chat_1_1ChatOptions.html#a7922fbc4c578c6f9f3cc340c2ad59aed", null ],
     [ "now", "d3/d4e/structmorph_1_1ui_1_1chat_1_1ChatOptions.html#a596c51d00d81740da00f466d00a67376", null ],
+    [ "tools", "d3/d4e/structmorph_1_1ui_1_1chat_1_1ChatOptions.html#a1b2748fe7bb84c075627597f10558d27", null ],
+    [ "documentSource", "d3/d4e/structmorph_1_1ui_1_1chat_1_1ChatOptions.html#a6bda5475840e39d169fe01d66d9bcd77", null ],
     [ "dispatcher", "d3/d4e/structmorph_1_1ui_1_1chat_1_1ChatOptions.html#a029210c3527b886212dd1aa90ab2e63e", null ]
 ];

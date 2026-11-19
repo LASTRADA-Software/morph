@@ -29,7 +29,7 @@ var searchData=
   ['units_20time_26',['&lt;span class=&quot;tt&quot;&gt;util/&lt;/span&gt; — exact values, units, time',['../index.html#util--exact-values-units-time',1,'']]],
   ['unittable_27',['UnitTable',['../d8/d0e/expression_8hpp.html#a1b716e9b0352b72447f08451f3ecc33c',1,'morph::ui']]],
   ['unittraits_28',['UnitTraits',['../de/d93/structmorph_1_1units_1_1UnitTraits.html',1,'morph::units']]],
-  ['unknown_29',['Unknown',['../d8/d29/classmorph_1_1forms_1_1RuleExpr.html#a587e8884bfb601bb0fce194508197f79a88183b946cc5f0e8c96b2e66e1c74a7e',1,'morph::forms::RuleExpr::Unknown'],['../d8/d26/rules_8hpp.html#a47ab229d7c8484a52f99e68d3274a865a88183b946cc5f0e8c96b2e66e1c74a7e',1,'Unknownmorph::forms']]],
+  ['unknown_29',['Unknown',['../d8/d29/classmorph_1_1forms_1_1RuleExpr.html#a587e8884bfb601bb0fce194508197f79a88183b946cc5f0e8c96b2e66e1c74a7e',1,'morph::forms::RuleExpr::Unknown'],['../d8/d26/rules_8hpp.html#a47ab229d7c8484a52f99e68d3274a865a88183b946cc5f0e8c96b2e66e1c74a7e',1,'Unknownmorph::forms'],['../d9/d6e/custom__screen__sync_8hpp.html#abc28690b320382c78c4151a10cac2740a88183b946cc5f0e8c96b2e66e1c74a7e',1,'Unknownmorph::ui']]],
   ['unknowncolumn_30',['UnknownColumn',['../dd/d57/data__source_8hpp.html#a9461b7c9496ad6957796a6e7055ca5e0adb842d2175e44d61da678c415cff0786',1,'morph::table']]],
   ['unknowncolumn_31',['unknownColumn',['../d1/dd2/filter_8hpp.html#a30a0b93c2a55f04fb67dd5ca6432722a',1,'morph::table::detail']]],
   ['unknownname_32',['UnknownName',['../d6/d90/structmorph_1_1ui_1_1FrontendError.html#a50c03832fcddff27c12375d02eeba9baa99a8e667c3ee134a930cc4ea6395a366',1,'morph::ui::FrontendError']]],

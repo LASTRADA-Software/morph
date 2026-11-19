@@ -11,6 +11,8 @@ var classmorph_1_1ui_1_1DocumentScreenHost =
     [ "onNavigate", "d9/d53/classmorph_1_1ui_1_1DocumentScreenHost.html#ad8dd83c3ddbad125e85d47671bdc29b6", null ],
     [ "onScreenClosed", "d9/d53/classmorph_1_1ui_1_1DocumentScreenHost.html#a1863293949cffb6da4e6e5181c787342", null ],
     [ "remount", "d9/d53/classmorph_1_1ui_1_1DocumentScreenHost.html#afaec515e8d9cdba197778305f38fc6df", null ],
+    [ "mountDraft", "d9/d53/classmorph_1_1ui_1_1DocumentScreenHost.html#ac7fa61e45d35ae05cc50519af4e8c3c7", null ],
+    [ "discardDraft", "d9/d53/classmorph_1_1ui_1_1DocumentScreenHost.html#aa606fc580060fd1c3b32ec964d67bf3d", null ],
     [ "cancelUnclaimedCalls", "d9/d53/classmorph_1_1ui_1_1DocumentScreenHost.html#a90afa7dd2a8434247066df2a693ad2a8", null ],
     [ "settleCall", "d9/d53/classmorph_1_1ui_1_1DocumentScreenHost.html#aa98c5a031fa0b1992dc68513b9025932", null ],
     [ "onNavigate", "d9/d53/classmorph_1_1ui_1_1DocumentScreenHost.html#a97a76e639a650226c814b0d39f15ed42", null ]

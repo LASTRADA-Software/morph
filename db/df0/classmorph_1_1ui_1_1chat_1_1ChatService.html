@@ -174,7 +174,7 @@ IEnvelopeService &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (IEnv
 <div class="textblock"><p>Answers the chat kinds, and runs each turn's loop on the worker: read what the screen offers, ask the provider, run the tools it calls, and repeat until it has no more. </p>
 <p>Each tool call is an execute carrying the client's session, so it passes every check the GUI's own calls pass. It runs unscoped and names the instance the client's context gave, so it reaches the screen's own instance and leaves the connection's principal baseline alone. A running action therefore cannot be interrupted: cancelling a turn stops it between actions. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d7/db0/chat_2service_8hpp_source.html#l00068">68</a> of file <a class="el" href="../../d7/db0/chat_2service_8hpp_source.html">service.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d7/db0/chat_2service_8hpp_source.html#l00087">87</a> of file <a class="el" href="../../d7/db0/chat_2service_8hpp_source.html">service.hpp</a>.</p>
 </div><a name="doc-constructors" id="doc-constructors"></a><h2 id="header-doc-constructors" class="groupheader">Constructor &amp; Destructor Documentation</h2>
 <a id="ad17b93d0bfb46ff39d41b30f7a2349bf" name="ad17b93d0bfb46ff39d41b30f7a2349bf"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#ad17b93d0bfb46ff39d41b30f7a2349bf">&#9670;&#160;</a></span>ChatService()</h2>
@@ -208,7 +208,7 @@ IEnvelopeService &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (IEnv
 </dl>
 <dl class="exception"><dt>Exceptions</dt><dd>
   <table class="exception">
-    <tr><td class="paramname">std::invalid_argument</td><td>with a provider but no worker or bundle. </td></tr>
+    <tr><td class="paramname">std::invalid_argument</td><td>with a provider but no worker or bundle, or with an extra tool whose name is invalid or taken by another, or which has no handler. </td></tr>
   </table>
   </dd>
 </dl>

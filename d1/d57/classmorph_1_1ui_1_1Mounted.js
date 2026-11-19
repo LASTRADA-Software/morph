@@ -2,5 +2,6 @@ var classmorph_1_1ui_1_1Mounted =
 [
     [ "Mounted", "d1/d57/classmorph_1_1ui_1_1Mounted.html#ada5da0596e8c64666d48cd15b92ef2b2", null ],
     [ "root", "d1/d57/classmorph_1_1ui_1_1Mounted.html#a863f4b15121d79aff06971b8f2a82298", null ],
-    [ "focus", "d1/d57/classmorph_1_1ui_1_1Mounted.html#a8d024812a0c8f292c4812cf27047d959", null ]
+    [ "focus", "d1/d57/classmorph_1_1ui_1_1Mounted.html#a8d024812a0c8f292c4812cf27047d959", null ],
+    [ "placeCursor", "d1/d57/classmorph_1_1ui_1_1Mounted.html#ae25262ed85e8fbf743506fbbf3c989c9", null ]
 ];

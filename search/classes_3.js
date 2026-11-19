@@ -27,10 +27,11 @@ var searchData=
   ['documentscreenhost_24',['DocumentScreenHost',['../d9/d53/classmorph_1_1ui_1_1DocumentScreenHost.html',1,'morph::ui']]],
   ['documentscreenhostoptions_25',['DocumentScreenHostOptions',['../da/df6/structmorph_1_1ui_1_1DocumentScreenHostOptions.html',1,'morph::ui']]],
   ['downloadedfile_26',['DownloadedFile',['../d5/d44/structmorph_1_1ui_1_1DownloadedFile.html',1,'morph::ui']]],
-  ['drawer_27',['Drawer',['../d3/df7/structmorph_1_1ui_1_1Drawer.html',1,'morph::ui']]],
-  ['drawerwidget_28',['DrawerWidget',['../de/d3c/classmorph_1_1ui_1_1DrawerWidget.html',1,'morph::ui']]],
-  ['dropzone_29',['DropZone',['../d0/dcb/structmorph_1_1ui_1_1DropZone.html',1,'morph::ui']]],
-  ['dropzoneoptions_30',['DropZoneOptions',['../d7/d14/structmorph_1_1ui_1_1author_1_1DropZoneOptions.html',1,'morph::ui::author']]],
-  ['dropzonewidget_31',['DropZoneWidget',['../df/df5/classmorph_1_1ui_1_1DropZoneWidget.html',1,'morph::ui']]],
-  ['duplicateregistrationerror_32',['DuplicateRegistrationError',['../d9/dcf/structmorph_1_1model_1_1DuplicateRegistrationError.html',1,'morph::model']]]
+  ['draftproposal_27',['DraftProposal',['../df/d58/structmorph_1_1ui_1_1chat_1_1ChatClient_1_1DraftProposal.html',1,'morph::ui::chat::ChatClient']]],
+  ['drawer_28',['Drawer',['../d3/df7/structmorph_1_1ui_1_1Drawer.html',1,'morph::ui']]],
+  ['drawerwidget_29',['DrawerWidget',['../de/d3c/classmorph_1_1ui_1_1DrawerWidget.html',1,'morph::ui']]],
+  ['dropzone_30',['DropZone',['../d0/dcb/structmorph_1_1ui_1_1DropZone.html',1,'morph::ui']]],
+  ['dropzoneoptions_31',['DropZoneOptions',['../d7/d14/structmorph_1_1ui_1_1author_1_1DropZoneOptions.html',1,'morph::ui::author']]],
+  ['dropzonewidget_32',['DropZoneWidget',['../df/df5/classmorph_1_1ui_1_1DropZoneWidget.html',1,'morph::ui']]],
+  ['duplicateregistrationerror_33',['DuplicateRegistrationError',['../d9/dcf/structmorph_1_1model_1_1DuplicateRegistrationError.html',1,'morph::model']]]
 ];

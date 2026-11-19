@@ -11,6 +11,7 @@ var searchData=
   ['fontfamily_8',['FontFamily',['../d9/df6/ui_2theme_8hpp.html#ae1f780f26df5f3839ead6402c330cf9aadb55ba76fdbfc07bc3f1b88989151092',1,'morph::ui']]],
   ['fontweight_9',['FontWeight',['../d9/df6/ui_2theme_8hpp.html#ae1f780f26df5f3839ead6402c330cf9aa96ddf14771ec21aba53fbc8e27c1fbca',1,'morph::ui']]],
   ['form_10',['Form',['../d9/da5/explorer_8hpp.html#ad1540cdb6e081f60a89952a56cfd1f31ad359c6df99b25183d81f7d728b71de0e',1,'Formmorph::ui'],['../d9/da5/explorer_8hpp.html#a6b393f9a7c4fab3681ed905652701c7dad359c6df99b25183d81f7d728b71de0e',1,'Formmorph::ui']]],
-  ['framed_11',['Framed',['../db/d4f/shell__frame_8hpp.html#aa1bb3f4b9e6e3e5569701df3b781ac79a6b73ad372508225645eb96a2e505a602',1,'morph::ui']]],
-  ['full_12',['full',['../df/d53/classmorph_1_1offline_1_1SqliteOfflineQueue.html#ac68ad977c09782cdd23d3072b0389542ae9dc924f238fa6cc29465942875fe8f0',1,'morph::offline::SqliteOfflineQueue']]]
+  ['formoutcome_11',['FormOutcome',['../d5/d92/custom__screens_8hpp.html#a3a2f4dafa0baa690bf03371bb3c9c18bae4163139756cded67a6765de41d8b728',1,'morph::ui::detail']]],
+  ['framed_12',['Framed',['../db/d4f/shell__frame_8hpp.html#aa1bb3f4b9e6e3e5569701df3b781ac79a6b73ad372508225645eb96a2e505a602',1,'morph::ui']]],
+  ['full_13',['full',['../df/d53/classmorph_1_1offline_1_1SqliteOfflineQueue.html#ac68ad977c09782cdd23d3072b0389542ae9dc924f238fa6cc29465942875fe8f0',1,'morph::offline::SqliteOfflineQueue']]]
 ];

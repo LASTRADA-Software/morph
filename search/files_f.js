@@ -1,13 +1,8 @@
 var searchData=
 [
-  ['rational_2ehpp_0',['rational.hpp',['../d1/de8/rational_8hpp.html',1,'']]],
-  ['recording_5fbackend_2ehpp_1',['recording_backend.hpp',['../de/dd9/recording__backend_8hpp.html',1,'']]],
-  ['records_2ehpp_2',['records.hpp',['../da/d6a/records_8hpp.html',1,'']]],
-  ['reflected_5fmember_2ehpp_3',['reflected_member.hpp',['../df/d31/reflected__member_8hpp.html',1,'']]],
-  ['reply_5frouter_2ehpp_4',['reply_router.hpp',['../d6/d41/reply__router_8hpp.html',1,'']]],
-  ['result_5fwalker_2ehpp_5',['result_walker.hpp',['../dc/d7e/result__walker_8hpp.html',1,'']]],
-  ['route_2ehpp_6',['route.hpp',['../d4/d2f/route_8hpp.html',1,'']]],
-  ['route_5fhistory_2ehpp_7',['route_history.hpp',['../de/df5/route__history_8hpp.html',1,'']]],
-  ['rules_2ehpp_8',['rules.hpp',['../d8/d26/rules_8hpp.html',1,'']]],
-  ['runtime_2ehpp_9',['runtime.hpp',['../d0/df9/runtime_8hpp.html',1,'']]]
+  ['qt_5fchat_5fprovider_2ehpp_0',['qt_chat_provider.hpp',['../db/d99/qt__chat__provider_8hpp.html',1,'']]],
+  ['quantity_2ehpp_1',['quantity.hpp',['../d9/db8/quantity_8hpp.html',1,'']]],
+  ['quantity_5fequation_2ehpp_2',['quantity_equation.hpp',['../d4/dc4/quantity__equation_8hpp.html',1,'']]],
+  ['query_2ehpp_3',['query.hpp',['../dd/def/query_8hpp.html',1,'']]],
+  ['queueing_5fdispatcher_2ehpp_4',['queueing_dispatcher.hpp',['../d2/de0/queueing__dispatcher_8hpp.html',1,'']]]
 ];

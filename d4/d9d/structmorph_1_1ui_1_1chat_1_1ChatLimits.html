@@ -144,6 +144,12 @@ Public Attributes</h2></td></tr>
 <tr class="memdesc:a22e87614933657442ae2d2cd10bcd201"><td class="mdescLeft">&#160;</td><td class="mdescRight">The most of one tool's result the model is given; past it the result is cut, and the model told.  <br /></td></tr>
 <tr class="memitem:ad82cd2c549927ce74835da0a8c75d07e" id="r_ad82cd2c549927ce74835da0a8c75d07e"><td class="memItemLeft">std::size_t&#160;</td><td class="memItemRight"><a class="el" href="#ad82cd2c549927ce74835da0a8c75d07e">maxConversationBytes</a> = std::size_t{1024} * 1024</td></tr>
 <tr class="memdesc:ad82cd2c549927ce74835da0a8c75d07e"><td class="mdescLeft">&#160;</td><td class="mdescRight">The most one conversation holds; past it the oldest messages are dropped. Without it, one large result kept in a conversation would make every later request on that record too large.  <br /></td></tr>
+<tr class="memitem:a4ff5cb7f95113d323d16a26e006f1bbf" id="r_a4ff5cb7f95113d323d16a26e006f1bbf"><td class="memItemLeft">std::size_t&#160;</td><td class="memItemRight"><a class="el" href="#a4ff5cb7f95113d323d16a26e006f1bbf">maxProposalBytes</a> = std::size_t{64} * 1024</td></tr>
+<tr class="memdesc:a4ff5cb7f95113d323d16a26e006f1bbf"><td class="mdescLeft">&#160;</td><td class="mdescRight">The longest document the assistant proposes or is given as a draft. It fits one conversation's bound and a provider's answer; a larger screen is not offered for editing, and a turn carrying a larger draft is refused.  <br /></td></tr>
+<tr class="memitem:a37ab633c837bc39fb2feb327ffadce2b" id="r_a37ab633c837bc39fb2feb327ffadce2b"><td class="memItemLeft">std::size_t&#160;</td><td class="memItemRight"><a class="el" href="#a37ab633c837bc39fb2feb327ffadce2b">maxProposalsPerTurn</a> = 3</td></tr>
+<tr class="memdesc:a37ab633c837bc39fb2feb327ffadce2b"><td class="mdescLeft">&#160;</td><td class="mdescRight">The refused proposals one turn may make. The turn that makes this many ends, with the last refusal told to the person, and leaves the window as it was.  <br /></td></tr>
+<tr class="memitem:a1d0a10eb687b15ce3f12c13f57aaffef" id="r_a1d0a10eb687b15ce3f12c13f57aaffef"><td class="memItemLeft">std::chrono::milliseconds&#160;</td><td class="memItemRight"><a class="el" href="#a1d0a10eb687b15ce3f12c13f57aaffef">toolCallTimeout</a> {std::chrono::seconds{30}}</td></tr>
+<tr class="memdesc:a1d0a10eb687b15ce3f12c13f57aaffef"><td class="mdescLeft">&#160;</td><td class="mdescRight">How long the chat waits for one extra tool's offer or handler, or for the document source, to answer. Past it the call counts as failed (an offer as declined, the source as failing the turn) and a late answer is ignored, so a tool that never answers cannot hold a turn. Zero or less: no deadline.  <br /></td></tr>
 <tr class="memitem:a025dcc86b4799765d5e0533ef69c3e55" id="r_a025dcc86b4799765d5e0533ef69c3e55"><td class="memItemLeft">std::chrono::minutes&#160;</td><td class="memItemRight"><a class="el" href="#a025dcc86b4799765d5e0533ef69c3e55">idleRetention</a> {std::chrono::hours{8}}</td></tr>
 <tr class="memdesc:a025dcc86b4799765d5e0533ef69c3e55"><td class="mdescLeft">&#160;</td><td class="mdescRight">How long an untouched conversation is kept.  <br /></td></tr>
 </table>
@@ -296,6 +302,60 @@ Public Attributes</h2></td></tr>
 
 </div>
 </div>
+<a id="a4ff5cb7f95113d323d16a26e006f1bbf" name="a4ff5cb7f95113d323d16a26e006f1bbf"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a4ff5cb7f95113d323d16a26e006f1bbf">&#9670;&#160;</a></span>maxProposalBytes</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::size_t morph::ui::chat::ChatLimits::maxProposalBytes = std::size_t{64} * 1024</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>The longest document the assistant proposes or is given as a draft. It fits one conversation's bound and a provider's answer; a larger screen is not offered for editing, and a turn carrying a larger draft is refused. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../dc/dc9/conversations_8hpp_source.html#l00045">45</a> of file <a class="el" href="../../dc/dc9/conversations_8hpp_source.html">conversations.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a37ab633c837bc39fb2feb327ffadce2b" name="a37ab633c837bc39fb2feb327ffadce2b"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a37ab633c837bc39fb2feb327ffadce2b">&#9670;&#160;</a></span>maxProposalsPerTurn</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::size_t morph::ui::chat::ChatLimits::maxProposalsPerTurn = 3</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>The refused proposals one turn may make. The turn that makes this many ends, with the last refusal told to the person, and leaves the window as it was. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../dc/dc9/conversations_8hpp_source.html#l00048">48</a> of file <a class="el" href="../../dc/dc9/conversations_8hpp_source.html">conversations.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a1d0a10eb687b15ce3f12c13f57aaffef" name="a1d0a10eb687b15ce3f12c13f57aaffef"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a1d0a10eb687b15ce3f12c13f57aaffef">&#9670;&#160;</a></span>toolCallTimeout</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::chrono::milliseconds morph::ui::chat::ChatLimits::toolCallTimeout {std::chrono::seconds{30}}</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>How long the chat waits for one extra tool's offer or handler, or for the document source, to answer. Past it the call counts as failed (an offer as declined, the source as failing the turn) and a late answer is ignored, so a tool that never answers cannot hold a turn. Zero or less: no deadline. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../dc/dc9/conversations_8hpp_source.html#l00052">52</a> of file <a class="el" href="../../dc/dc9/conversations_8hpp_source.html">conversations.hpp</a>.</p>
+
+</div>
+</div>
 <a id="a025dcc86b4799765d5e0533ef69c3e55" name="a025dcc86b4799765d5e0533ef69c3e55"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a025dcc86b4799765d5e0533ef69c3e55">&#9670;&#160;</a></span>idleRetention</h2>
 
@@ -310,7 +370,7 @@ Public Attributes</h2></td></tr>
 
 <p>How long an untouched conversation is kept. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dc/dc9/conversations_8hpp_source.html#l00043">43</a> of file <a class="el" href="../../dc/dc9/conversations_8hpp_source.html">conversations.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dc/dc9/conversations_8hpp_source.html#l00054">54</a> of file <a class="el" href="../../dc/dc9/conversations_8hpp_source.html">conversations.hpp</a>.</p>
 
 </div>
 </div>

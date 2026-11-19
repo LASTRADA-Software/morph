@@ -140,6 +140,8 @@ Public Attributes</h2></td></tr>
 <tr class="memdesc:a16276db4a55997a41bf8b73b775028db"><td class="mdescLeft">&#160;</td><td class="mdescRight">The aliases the screen holds.  <br /></td></tr>
 <tr class="memitem:a12b15395966395c58c402d029d3ee712" id="r_a12b15395966395c58c402d029d3ee712"><td class="memItemLeft">std::string&#160;</td><td class="memItemRight"><a class="el" href="#a12b15395966395c58c402d029d3ee712">text</a></td></tr>
 <tr class="memdesc:a12b15395966395c58c402d029d3ee712"><td class="mdescLeft">&#160;</td><td class="mdescRight">What the person said.  <br /></td></tr>
+<tr class="memitem:ae256ea87028b244b7ff5a468e6e144d6" id="r_ae256ea87028b244b7ff5a468e6e144d6"><td class="memItemLeft">std::optional&lt; std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="#ae256ea87028b244b7ff5a468e6e144d6">draft</a></td></tr>
+<tr class="memdesc:ae256ea87028b244b7ff5a468e6e144d6"><td class="mdescLeft">&#160;</td><td class="mdescRight">The document of the draft the person has open on this screen, as JSON text; absent with none. It is the screen's document as the assistant should read it, so a conversation of edits builds on the last accepted draft. The server refuses a turn whose draft is over <span class="tt"><a class="el" href="../../d4/d9d/structmorph_1_1ui_1_1chat_1_1ChatLimits.html#a4ff5cb7f95113d323d16a26e006f1bbf" title="The longest document the assistant proposes or is given as a draft. It fits one conversation&#39;s bound ...">ChatLimits::maxProposalBytes</a></span> or is not a JSON object, and treats the text as data: it grants nothing.  <br /></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>One thing a person said, and where they were when they said it. </p>
@@ -252,6 +254,24 @@ Public Attributes</h2></td></tr>
 <p>What the person said. </p>
 
 <p class="definition">Definition at line <a class="el" href="../../d8/dd1/protocol_8hpp_source.html#l00060">60</a> of file <a class="el" href="../../d8/dd1/protocol_8hpp_source.html">protocol.hpp</a>.</p>
+
+</div>
+</div>
+<a id="ae256ea87028b244b7ff5a468e6e144d6" name="ae256ea87028b244b7ff5a468e6e144d6"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ae256ea87028b244b7ff5a468e6e144d6">&#9670;&#160;</a></span>draft</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::optional&lt;std::string&gt; morph::ui::chat::TurnRequest::draft</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>The document of the draft the person has open on this screen, as JSON text; absent with none. It is the screen's document as the assistant should read it, so a conversation of edits builds on the last accepted draft. The server refuses a turn whose draft is over <span class="tt"><a class="el" href="../../d4/d9d/structmorph_1_1ui_1_1chat_1_1ChatLimits.html#a4ff5cb7f95113d323d16a26e006f1bbf" title="The longest document the assistant proposes or is given as a draft. It fits one conversation&#39;s bound ...">ChatLimits::maxProposalBytes</a></span> or is not a JSON object, and treats the text as data: it grants nothing. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d8/dd1/protocol_8hpp_source.html#l00065">65</a> of file <a class="el" href="../../d8/dd1/protocol_8hpp_source.html">protocol.hpp</a>.</p>
 
 </div>
 </div>

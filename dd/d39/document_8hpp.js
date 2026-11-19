@@ -107,6 +107,7 @@ var document_8hpp =
     [ "morph::ui::loadDocument", "dd/d39/document_8hpp.html#ad7dcdfd8c1f620ee9e35f6741b497aad", null ],
     [ "morph::ui::loadDocumentText", "dd/d39/document_8hpp.html#a76e8aa9369b168da3613fafebbc10f81", null ],
     [ "morph::ui::nodeKinds", "dd/d39/document_8hpp.html#ad0aab0ab19d43a29248e8a7a68ddd7ce", null ],
+    [ "morph::ui::partKinds", "dd/d39/document_8hpp.html#a4f06dbb7d6745e43eefd397f9bbd474e", null ],
     [ "morph::ui::kVocabulary", "dd/d39/document_8hpp.html#a3dad84fd95ceb27c0a93bd2c55fa5c4b", null ],
     [ "morph::ui::detail::kInner", "dd/d39/document_8hpp.html#ad41f9407453271cdbf6f401957387c74", null ],
     [ "morph::ui::detail::kRequired", "dd/d39/document_8hpp.html#ae45f8af84d5bf653404e5b226dee105f", null ],

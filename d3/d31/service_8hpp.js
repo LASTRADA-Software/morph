@@ -9,5 +9,8 @@ var service_8hpp =
     [ "morph::ui::BundleFile", "db/d11/structmorph_1_1ui_1_1BundleFile.html", "db/d11/structmorph_1_1ui_1_1BundleFile" ],
     [ "morph::ui::UiRegistry", "d0/dc8/classmorph_1_1ui_1_1UiRegistry.html", "d0/dc8/classmorph_1_1ui_1_1UiRegistry" ],
     [ "morph::ui::UiService", "d1/d38/classmorph_1_1ui_1_1UiService.html", "d1/d38/classmorph_1_1ui_1_1UiService" ],
-    [ "morph::ui::isUiServiceRead", "d3/d31/service_8hpp.html#ad69b07175bd3a612103673995ff06c20", null ]
+    [ "morph::ui::permittedActions", "d3/d31/service_8hpp.html#af1ce9d7e1e327596bee65e840527663b", null ],
+    [ "morph::ui::screenAdmitted", "d3/d31/service_8hpp.html#ac8a3395864bbe9e7a972d956c80e9f60", null ],
+    [ "morph::ui::isUiServiceRead", "d3/d31/service_8hpp.html#ad69b07175bd3a612103673995ff06c20", null ],
+    [ "morph::ui::kCustomScreenIdPrefix", "d3/d31/service_8hpp.html#a1b0c94b6052ff625b097ffe9e1855a0e", null ]
 ];

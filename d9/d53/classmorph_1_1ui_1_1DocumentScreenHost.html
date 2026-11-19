@@ -159,7 +159,11 @@ Public Member Functions</h2></td></tr>
 <tr class="memitem:a1863293949cffb6da4e6e5181c787342" id="r_a1863293949cffb6da4e6e5181c787342"><td class="memItemLeft">virtual void&#160;</td><td class="memItemRight"><a class="el" href="#a1863293949cffb6da4e6e5181c787342">onScreenClosed</a> (<a class="el" href="../../da/de8/classmorph_1_1ui_1_1ScreenHandle.html">ScreenHandle</a> &amp;screen)</td></tr>
 <tr class="memdesc:a1863293949cffb6da4e6e5181c787342"><td class="mdescLeft">&#160;</td><td class="mdescRight">A screen this host mounted closed itself, by <span class="tt">return</span> or <span class="tt">close: self</span> (spec 6 §16). Called after the screen is closed, posted to the owner; the host drops its tab or dialog. The default does nothing.  <br /></td></tr>
 <tr class="memitem:afaec515e8d9cdba197778305f38fc6df" id="r_afaec515e8d9cdba197778305f38fc6df"><td class="memItemLeft">std::expected&lt; void, <a class="el" href="../../d6/dc8/structmorph_1_1ui_1_1MountError.html">MountError</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#afaec515e8d9cdba197778305f38fc6df">remount</a> (<a class="el" href="../../da/de8/classmorph_1_1ui_1_1ScreenHandle.html">ScreenHandle</a> &amp;handle, std::shared_ptr&lt; <a class="el" href="../../d4/d02/structmorph_1_1ui_1_1Document.html">Document</a> const &gt; document)</td></tr>
-<tr class="memdesc:afaec515e8d9cdba197778305f38fc6df"><td class="mdescLeft">&#160;</td><td class="mdescRight">Mounts a screen this host mounted again, on a changed document (spec 5 §12, development reload).  <br /></td></tr>
+<tr class="memdesc:afaec515e8d9cdba197778305f38fc6df"><td class="mdescLeft">&#160;</td><td class="mdescRight">Mounts a screen this host mounted again, on another document of the same screen: a development reload (spec 5 §12) or a draft (<span class="tt"><a class="el" href="#ac7fa61e45d35ae05cc50519af4e8c3c7" title="Mounts draft in place of a screen this host mounted, as remount does, and marks the handle as showing...">mountDraft</a></span>, <span class="tt"><a class="el" href="#aa606fc580060fd1c3b32ec964d67bf3d" title="Mounts the screen&#39;s own document in place of its draft, as remount does: the document documents answe...">discardDraft</a></span>).  <br /></td></tr>
+<tr class="memitem:ac7fa61e45d35ae05cc50519af4e8c3c7" id="r_ac7fa61e45d35ae05cc50519af4e8c3c7"><td class="memItemLeft">std::expected&lt; void, <a class="el" href="../../d6/dc8/structmorph_1_1ui_1_1MountError.html">MountError</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#ac7fa61e45d35ae05cc50519af4e8c3c7">mountDraft</a> (<a class="el" href="../../da/de8/classmorph_1_1ui_1_1ScreenHandle.html">ScreenHandle</a> &amp;handle, std::shared_ptr&lt; <a class="el" href="../../d4/d02/structmorph_1_1ui_1_1Document.html">Document</a> const &gt; draft)</td></tr>
+<tr class="memdesc:ac7fa61e45d35ae05cc50519af4e8c3c7"><td class="mdescLeft">&#160;</td><td class="mdescRight">Mounts <code class="param">draft</code> in place of a screen this host mounted, as <span class="tt"><a class="el" href="#afaec515e8d9cdba197778305f38fc6df" title="Mounts a screen this host mounted again, on another document of the same screen: a development reload...">remount</a></span> does, and marks the handle as showing a draft.  <br /></td></tr>
+<tr class="memitem:aa606fc580060fd1c3b32ec964d67bf3d" id="r_aa606fc580060fd1c3b32ec964d67bf3d"><td class="memItemLeft">std::expected&lt; void, <a class="el" href="../../d6/dc8/structmorph_1_1ui_1_1MountError.html">MountError</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#aa606fc580060fd1c3b32ec964d67bf3d">discardDraft</a> (<a class="el" href="../../da/de8/classmorph_1_1ui_1_1ScreenHandle.html">ScreenHandle</a> &amp;handle)</td></tr>
+<tr class="memdesc:aa606fc580060fd1c3b32ec964d67bf3d"><td class="mdescLeft">&#160;</td><td class="mdescRight">Mounts the screen's own document in place of its draft, as <span class="tt"><a class="el" href="#afaec515e8d9cdba197778305f38fc6df" title="Mounts a screen this host mounted again, on another document of the same screen: a development reload...">remount</a></span> does: the document <span class="tt">documents</span> answers for the screen's id now, so a development reload since the draft began is seen.  <br /></td></tr>
 <tr class="memitem:a90afa7dd2a8434247066df2a693ad2a8" id="r_a90afa7dd2a8434247066df2a693ad2a8"><td class="memItemLeft"><a id="a90afa7dd2a8434247066df2a693ad2a8" name="a90afa7dd2a8434247066df2a693ad2a8"></a>
 void&#160;</td><td class="memItemRight"><b>cancelUnclaimedCalls</b> ()</td></tr>
 <tr class="memdesc:a90afa7dd2a8434247066df2a693ad2a8"><td class="mdescLeft">&#160;</td><td class="mdescRight">Cancels every call no mount has adopted: each one's <span class="tt">onCancel</span> runs, oldest first. What a shell does when it closes every screen, so no call outlives the screens it was filed among and a later mount never answers an opener that is gone. <br /></td></tr>
@@ -177,6 +181,18 @@ ScreenHost &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (ScreenHost
 </table><table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 id="header-pub-static-methods" class="groupheader"><a id="pub-static-methods" name="pub-static-methods"></a>
 Static Public Member Functions</h2></td></tr>
+<tr class="memitem:af3da3a0a6317eeeead5d3c6371bd90ef" id="r_af3da3a0a6317eeeead5d3c6371bd90ef"><td class="memItemLeft">static void&#160;</td><td class="memItemRight"><a class="el" href="#af3da3a0a6317eeeead5d3c6371bd90ef">endDraft</a> (<a class="el" href="../../da/de8/classmorph_1_1ui_1_1ScreenHandle.html">ScreenHandle</a> &amp;handle)</td></tr>
+<tr class="memdesc:af3da3a0a6317eeeead5d3c6371bd90ef"><td class="mdescLeft">&#160;</td><td class="mdescRight">Ends a draft without remounting: what is mounted stays, and the handle no longer shows a draft. What a shell does once the draft was saved.  <br /></td></tr>
+<tr class="memitem:a1f4f0aad28b207726c33a132a2d05aa7" id="r_a1f4f0aad28b207726c33a132a2d05aa7"><td class="memItemLeft">static void&#160;</td><td class="memItemRight"><a class="el" href="#a1f4f0aad28b207726c33a132a2d05aa7">resumeDraft</a> (<a class="el" href="../../da/de8/classmorph_1_1ui_1_1ScreenHandle.html">ScreenHandle</a> &amp;handle)</td></tr>
+<tr class="memdesc:a1f4f0aad28b207726c33a132a2d05aa7"><td class="mdescLeft">&#160;</td><td class="mdescRight">Marks what a handle shows as a draft again, without remounting: the undo of <span class="tt"><a class="el" href="#af3da3a0a6317eeeead5d3c6371bd90ef" title="Ends a draft without remounting: what is mounted stays, and the handle no longer shows a draft....">endDraft</a></span> for a shell whose replacement of the tab did not happen.  <br /></td></tr>
+<tr class="memitem:a687a96c54d5e8f7c1bf2b6dcbe882a04" id="r_a687a96c54d5e8f7c1bf2b6dcbe882a04"><td class="memItemLeft">static bool&#160;</td><td class="memItemRight"><a class="el" href="#a687a96c54d5e8f7c1bf2b6dcbe882a04">drafted</a> (<a class="el" href="../../da/de8/classmorph_1_1ui_1_1ScreenHandle.html">ScreenHandle</a> const &amp;handle)</td></tr>
+<tr class="memdesc:a687a96c54d5e8f7c1bf2b6dcbe882a04"><td class="mdescLeft">&#160;</td><td class="mdescRight">Whether a handle this host mounted shows a draft. A tracked read.  <br /></td></tr>
+<tr class="memitem:a3a9625af2d6585f89c887a40b06b6062" id="r_a3a9625af2d6585f89c887a40b06b6062"><td class="memItemLeft">static bool&#160;</td><td class="memItemRight"><a class="el" href="#a3a9625af2d6585f89c887a40b06b6062">draftedNow</a> (<a class="el" href="../../da/de8/classmorph_1_1ui_1_1ScreenHandle.html">ScreenHandle</a> const &amp;handle)</td></tr>
+<tr class="memdesc:a3a9625af2d6585f89c887a40b06b6062"><td class="mdescLeft">&#160;</td><td class="mdescRight">Whether a handle this host mounted shows a draft, read without tracking: for code that is not a reactive computation.  <br /></td></tr>
+<tr class="memitem:a52786ddd9fca188017ac4528260dc478" id="r_a52786ddd9fca188017ac4528260dc478"><td class="memItemLeft">static std::optional&lt; std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a52786ddd9fca188017ac4528260dc478">screenIdOf</a> (<a class="el" href="../../da/de8/classmorph_1_1ui_1_1ScreenHandle.html">ScreenHandle</a> const &amp;handle)</td></tr>
+<tr class="memdesc:a52786ddd9fca188017ac4528260dc478"><td class="mdescLeft">&#160;</td><td class="mdescRight">The id of the screen a handle this host mounted shows, a draft's included (a draft keeps the screen's).  <br /></td></tr>
+<tr class="memitem:a090a9044f6debd70dbe2cbbfbe97c751" id="r_a090a9044f6debd70dbe2cbbfbe97c751"><td class="memItemLeft">static std::optional&lt; <a class="el" href="../../dd/d78/host_8hpp.html#a5b073a0b5244977f291a4f30780868df">ParamMap</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a090a9044f6debd70dbe2cbbfbe97c751">paramsOf</a> (<a class="el" href="../../da/de8/classmorph_1_1ui_1_1ScreenHandle.html">ScreenHandle</a> const &amp;handle)</td></tr>
+<tr class="memdesc:a090a9044f6debd70dbe2cbbfbe97c751"><td class="mdescLeft">&#160;</td><td class="mdescRight">The params a handle this host mounted was mounted with.  <br /></td></tr>
 <tr class="memitem:a15c7671bd7a65a4fd3d7ed67c25876e8" id="r_a15c7671bd7a65a4fd3d7ed67c25876e8"><td class="memItemLeft">static std::optional&lt; <a class="el" href="../../d5/d78/structmorph_1_1ui_1_1chat_1_1TurnRequest.html">chat::TurnRequest</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a15c7671bd7a65a4fd3d7ed67c25876e8">chatContext</a> (<a class="el" href="../../da/de8/classmorph_1_1ui_1_1ScreenHandle.html">ScreenHandle</a> &amp;handle)</td></tr>
 <tr class="memdesc:a15c7671bd7a65a4fd3d7ed67c25876e8"><td class="mdescLeft">&#160;</td><td class="mdescRight">What a chat turn says about a screen this host mounted: its id and title, its params and identity, and the aliases of its own scope that hold an instance. <span class="tt">TurnRequest::text</span> is left for the caller.  <br /></td></tr>
 <tr class="memitem:a844e396fdd2abf685b93e9ea0b29822b" id="r_a844e396fdd2abf685b93e9ea0b29822b"><td class="memItemLeft">static std::optional&lt; <a class="el" href="../../dd/db3/classmorph_1_1ui_1_1Inspector.html">Inspector</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a844e396fdd2abf685b93e9ea0b29822b">inspector</a> (<a class="el" href="../../da/de8/classmorph_1_1ui_1_1ScreenHandle.html">ScreenHandle</a> &amp;handle)</td></tr>
@@ -193,7 +209,7 @@ Protected Member Functions</h2></td></tr>
 <div class="textblock"><p>The framework's <span class="tt"><a class="el" href="../../de/d1a/classmorph_1_1ui_1_1ScreenHost.html" title="What mounts screens for a host that owns its own shell; the workspace shell is one.">ScreenHost</a></span> over UI documents: it mounts them through an <span class="tt"><a class="el" href="../../da/d2a/classmorph_1_1ui_1_1Interpreter.html" title="Mounts UI documents (spec 5): one per client process or window, over a session and a dispatcher.">Interpreter</a></span>, closes them by the protocol of spec 6 §3, and hands a document's <span class="tt"><a class="el" href="../../dd/ddb/classmorph_1_1ui_1_1InterpreterHost.html#a6b76ddb0f199f53e12cf5d785e89862d" title="Opens another screen.">navigate</a></span> to <span class="tt"><a class="el" href="#ad8dd83c3ddbad125e85d47671bdc29b6" title="A document asked to open another screen, with how (as). The default hands the screen and its params t...">onNavigate</a></span>, which the deriving host implements. </p>
 <p>It is the interpreter's <span class="tt"><a class="el" href="../../dd/ddb/classmorph_1_1ui_1_1InterpreterHost.html" title="What the application answers for the commands a document cannot carry out alone (spec 6)....">InterpreterHost</a></span> for <span class="tt"><a class="el" href="../../dd/ddb/classmorph_1_1ui_1_1InterpreterHost.html#a6b76ddb0f199f53e12cf5d785e89862d" title="Opens another screen.">navigate</a></span>; every other command goes to the application's host, if one was given. Everything runs on the runtime's owner. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d78/host_8hpp_source.html#l00349">349</a> of file <a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d78/host_8hpp_source.html#l00352">352</a> of file <a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>.</p>
 </div><a name="doc-constructors" id="doc-constructors"></a><h2 id="header-doc-constructors" class="groupheader">Constructor &amp; Destructor Documentation</h2>
 <a id="a51c4224debcf787015d0d83ef863a34f" name="a51c4224debcf787015d0d83ef863a34f"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a51c4224debcf787015d0d83ef863a34f">&#9670;&#160;</a></span>DocumentScreenHost()</h2>
@@ -277,7 +293,7 @@ Protected Member Functions</h2></td></tr>
 
 <p>Implements <a class="el" href="../../de/d1a/classmorph_1_1ui_1_1ScreenHost.html#a590ee6f22dd29005a07be8ab5e6df4e2">morph::ui::ScreenHost</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d78/host_8hpp_source.html#l00363">363</a> of file <a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d78/host_8hpp_source.html#l00366">366</a> of file <a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>.</p>
 
 </div>
 </div>
@@ -324,7 +340,7 @@ Protected Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Its handle, or why it could not be mounted. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d78/host_8hpp_source.html#l00374">374</a> of file <a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d78/host_8hpp_source.html#l00377">377</a> of file <a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>.</p>
 
 </div>
 </div>
@@ -504,7 +520,7 @@ Protected Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The screen and its params, or why the route is refused. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d78/host_8hpp_source.html#l00420">420</a> of file <a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d78/host_8hpp_source.html#l00423">423</a> of file <a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>.</p>
 
 </div>
 </div>
@@ -572,7 +588,7 @@ Protected Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d78/host_8hpp_source.html#l00434">434</a> of file <a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d78/host_8hpp_source.html#l00437">437</a> of file <a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>.</p>
 
 </div>
 </div>
@@ -603,15 +619,290 @@ Protected Member Functions</h2></td></tr>
 </table>
 </div><div class="memdoc">
 
-<p>Mounts a screen this host mounted again, on a changed document (spec 5 §12, development reload). </p>
+<p>Mounts a screen this host mounted again, on another document of the same screen: a development reload (spec 5 §12) or a draft (<span class="tt"><a class="el" href="#ac7fa61e45d35ae05cc50519af4e8c3c7" title="Mounts draft in place of a screen this host mounted, as remount does, and marks the handle as showing...">mountDraft</a></span>, <span class="tt"><a class="el" href="#aa606fc580060fd1c3b32ec964d67bf3d" title="Mounts the screen&#39;s own document in place of its draft, as remount does: the document documents answe...">discardDraft</a></span>). </p>
 <p>The new screen is mounted with the same params in the same place, and each state of its own scope starts from the old screen's value of the state of the same name and type; any other state starts from its init. The old screen is then destroyed, which runs its <span class="tt">onUnmount</span>, and the handle shows the new one: its <span class="tt">title</span>, <span class="tt">dirty</span> and <span class="tt">identity</span> follow it, and a pending call stays tied to it. A refused mount keeps the old screen. </p><dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
     <tr><td class="paramname">handle</td><td>A handle this host mounted. </td></tr>
-    <tr><td class="paramname">document</td><td>The changed document of the same screen, loaded. </td></tr>
+    <tr><td class="paramname">document</td><td>The other document of the same screen, loaded. </td></tr>
   </table>
   </dd>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Nothing, or why the old screen was kept: a foreign or closed handle, a close or save in progress, or the interpreter's refusal of the new document. </dd></dl>
+
+</div>
+</div>
+<a id="ac7fa61e45d35ae05cc50519af4e8c3c7" name="ac7fa61e45d35ae05cc50519af4e8c3c7"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ac7fa61e45d35ae05cc50519af4e8c3c7">&#9670;&#160;</a></span>mountDraft()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::expected&lt; void, <a class="el" href="../../d6/dc8/structmorph_1_1ui_1_1MountError.html">MountError</a> &gt; morph::ui::DocumentScreenHost::mountDraft </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="../../da/de8/classmorph_1_1ui_1_1ScreenHandle.html">ScreenHandle</a> &amp;</td>          <td class="paramname"><span class="paramname"><em>handle</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">std::shared_ptr&lt; <a class="el" href="../../d4/d02/structmorph_1_1ui_1_1Document.html">Document</a> const &gt;</td>          <td class="paramname"><span class="paramname"><em>draft</em></span>&#160;)</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Mounts <code class="param">draft</code> in place of a screen this host mounted, as <span class="tt"><a class="el" href="#afaec515e8d9cdba197778305f38fc6df" title="Mounts a screen this host mounted again, on another document of the same screen: a development reload...">remount</a></span> does, and marks the handle as showing a draft. </p>
+<p>A draft keeps the screen's id, so the handle's identity, its route and a shell's record of the tab name the screen, never the draft. While a draft is mounted the handle is <span class="tt">dirty</span>, so a close asks the close guard first. A second draft replaces the first. </p><dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">handle</td><td>A handle this host mounted. </td></tr>
+    <tr><td class="paramname">draft</td><td>The draft, loaded; its <span class="tt">id</span> is the screen's. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>Nothing, or why the screen was kept as it was: a draft whose id is not the screen's, or what <span class="tt"><a class="el" href="#afaec515e8d9cdba197778305f38fc6df" title="Mounts a screen this host mounted again, on another document of the same screen: a development reload...">remount</a></span> refuses. </dd></dl>
+
+</div>
+</div>
+<a id="aa606fc580060fd1c3b32ec964d67bf3d" name="aa606fc580060fd1c3b32ec964d67bf3d"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#aa606fc580060fd1c3b32ec964d67bf3d">&#9670;&#160;</a></span>discardDraft()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::expected&lt; void, <a class="el" href="../../d6/dc8/structmorph_1_1ui_1_1MountError.html">MountError</a> &gt; morph::ui::DocumentScreenHost::discardDraft </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="../../da/de8/classmorph_1_1ui_1_1ScreenHandle.html">ScreenHandle</a> &amp;</td>          <td class="paramname"><span class="paramname"><em>handle</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Mounts the screen's own document in place of its draft, as <span class="tt"><a class="el" href="#afaec515e8d9cdba197778305f38fc6df" title="Mounts a screen this host mounted again, on another document of the same screen: a development reload...">remount</a></span> does: the document <span class="tt">documents</span> answers for the screen's id now, so a development reload since the draft began is seen. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">handle</td><td>A handle this host mounted, showing a draft. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>Nothing, or why the draft was kept: no draft is mounted, <span class="tt">documents</span> answers nothing for the screen's id, or what <span class="tt"><a class="el" href="#afaec515e8d9cdba197778305f38fc6df" title="Mounts a screen this host mounted again, on another document of the same screen: a development reload...">remount</a></span> refuses. </dd></dl>
+
+</div>
+</div>
+<a id="af3da3a0a6317eeeead5d3c6371bd90ef" name="af3da3a0a6317eeeead5d3c6371bd90ef"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#af3da3a0a6317eeeead5d3c6371bd90ef">&#9670;&#160;</a></span>endDraft()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">void morph::ui::DocumentScreenHost::endDraft </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="../../da/de8/classmorph_1_1ui_1_1ScreenHandle.html">ScreenHandle</a> &amp;</td>          <td class="paramname"><span class="paramname"><em>handle</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel static">static</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Ends a draft without remounting: what is mounted stays, and the handle no longer shows a draft. What a shell does once the draft was saved. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">handle</td><td>A handle this host mounted; a foreign one, or one with no draft, is left as it is. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+</div>
+</div>
+<a id="a1f4f0aad28b207726c33a132a2d05aa7" name="a1f4f0aad28b207726c33a132a2d05aa7"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a1f4f0aad28b207726c33a132a2d05aa7">&#9670;&#160;</a></span>resumeDraft()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">void morph::ui::DocumentScreenHost::resumeDraft </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="../../da/de8/classmorph_1_1ui_1_1ScreenHandle.html">ScreenHandle</a> &amp;</td>          <td class="paramname"><span class="paramname"><em>handle</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel static">static</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Marks what a handle shows as a draft again, without remounting: the undo of <span class="tt"><a class="el" href="#af3da3a0a6317eeeead5d3c6371bd90ef" title="Ends a draft without remounting: what is mounted stays, and the handle no longer shows a draft....">endDraft</a></span> for a shell whose replacement of the tab did not happen. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">handle</td><td>A handle this host mounted; a foreign or closed one is left as it is. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+</div>
+</div>
+<a id="a687a96c54d5e8f7c1bf2b6dcbe882a04" name="a687a96c54d5e8f7c1bf2b6dcbe882a04"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a687a96c54d5e8f7c1bf2b6dcbe882a04">&#9670;&#160;</a></span>drafted()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">bool morph::ui::DocumentScreenHost::drafted </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="../../da/de8/classmorph_1_1ui_1_1ScreenHandle.html">ScreenHandle</a> const &amp;</td>          <td class="paramname"><span class="paramname"><em>handle</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel static">static</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Whether a handle this host mounted shows a draft. A tracked read. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">handle</td><td>A handle. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>Whether it does; <span class="tt">false</span> for a foreign or closed handle. </dd></dl>
+
+</div>
+</div>
+<a id="a3a9625af2d6585f89c887a40b06b6062" name="a3a9625af2d6585f89c887a40b06b6062"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a3a9625af2d6585f89c887a40b06b6062">&#9670;&#160;</a></span>draftedNow()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">bool morph::ui::DocumentScreenHost::draftedNow </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="../../da/de8/classmorph_1_1ui_1_1ScreenHandle.html">ScreenHandle</a> const &amp;</td>          <td class="paramname"><span class="paramname"><em>handle</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel static">static</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Whether a handle this host mounted shows a draft, read without tracking: for code that is not a reactive computation. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">handle</td><td>A handle. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>Whether it does; <span class="tt">false</span> for a foreign or closed handle. </dd></dl>
+
+</div>
+</div>
+<a id="a52786ddd9fca188017ac4528260dc478" name="a52786ddd9fca188017ac4528260dc478"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a52786ddd9fca188017ac4528260dc478">&#9670;&#160;</a></span>screenIdOf()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::optional&lt; std::string &gt; morph::ui::DocumentScreenHost::screenIdOf </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="../../da/de8/classmorph_1_1ui_1_1ScreenHandle.html">ScreenHandle</a> const &amp;</td>          <td class="paramname"><span class="paramname"><em>handle</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel static">static</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>The id of the screen a handle this host mounted shows, a draft's included (a draft keeps the screen's). </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">handle</td><td>A handle. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>The id; nothing for a foreign or closed handle. </dd></dl>
+
+</div>
+</div>
+<a id="a090a9044f6debd70dbe2cbbfbe97c751" name="a090a9044f6debd70dbe2cbbfbe97c751"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a090a9044f6debd70dbe2cbbfbe97c751">&#9670;&#160;</a></span>paramsOf()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::optional&lt; <a class="el" href="../../dd/d78/host_8hpp.html#a5b073a0b5244977f291a4f30780868df">ParamMap</a> &gt; morph::ui::DocumentScreenHost::paramsOf </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="../../da/de8/classmorph_1_1ui_1_1ScreenHandle.html">ScreenHandle</a> const &amp;</td>          <td class="paramname"><span class="paramname"><em>handle</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel static">static</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>The params a handle this host mounted was mounted with. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">handle</td><td>A handle. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>The params; nothing for a foreign handle. </dd></dl>
 
 </div>
 </div>

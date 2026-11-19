@@ -135,6 +135,8 @@ Public Member Functions</h2></td></tr>
 <tr class="memdesc:a196583f94b9a5bc630f668ef4596af8e"><td class="mdescLeft">&#160;</td><td class="mdescRight">Mounts <code class="param">node</code> as <span class="tt"><a class="el" href="#ab8bfe2d9fa4c44eb00dbdbdf962d76f7" title="Mounts node under parent; scope owns its widgets and bindings.">mount</a></span> does, as a mount of its own: the first <span class="tt">autofocus</span> widget it mounts, in document order, takes keyboard focus once the whole of it has mounted.  <br /></td></tr>
 <tr class="memitem:a23b1d4173f82e783b38ac19930736743" id="r_a23b1d4173f82e783b38ac19930736743"><td class="memItemLeft">bool&#160;</td><td class="memItemRight"><a class="el" href="#a23b1d4173f82e783b38ac19930736743">focus</a> (std::string_view focusId)</td></tr>
 <tr class="memdesc:a23b1d4173f82e783b38ac19930736743"><td class="mdescLeft">&#160;</td><td class="mdescRight">Moves keyboard focus to the mounted widget whose <span class="tt">focusId</span> is <code class="param">focusId</code>.  <br /></td></tr>
+<tr class="memitem:a8ee6225b66d3e576efd804ce0216a21e" id="r_a8ee6225b66d3e576efd804ce0216a21e"><td class="memItemLeft">bool&#160;</td><td class="memItemRight"><a class="el" href="#a8ee6225b66d3e576efd804ce0216a21e">placeCursor</a> (std::string_view focusId, std::size_t offset)</td></tr>
+<tr class="memdesc:a8ee6225b66d3e576efd804ce0216a21e"><td class="mdescLeft">&#160;</td><td class="mdescRight">Moves the text cursor of the mounted text input whose <span class="tt">focusId</span> is <code class="param">focusId</code> to <code class="param">offset</code>, focuses it and asks it to reveal the cursor's line.  <br /></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>Builds widgets for nodes and wires their props and callbacks. </p>
@@ -308,6 +310,47 @@ Public Member Functions</h2></td></tr>
 <dl class="section return"><dt>Returns</dt><dd>Whether a mounted widget has that name. </dd></dl>
 
 <p class="definition">Definition at line <a class="el" href="../../de/d26/mount_8hpp_source.html#l00366">366</a> of file <a class="el" href="../../de/d26/mount_8hpp_source.html">mount.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a8ee6225b66d3e576efd804ce0216a21e" name="a8ee6225b66d3e576efd804ce0216a21e"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a8ee6225b66d3e576efd804ce0216a21e">&#9670;&#160;</a></span>placeCursor()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">bool morph::ui::detail::Mounter::placeCursor </td>
+          <td>(</td>
+          <td class="paramtype">std::string_view</td>          <td class="paramname"><span class="paramname"><em>focusId</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">std::size_t</td>          <td class="paramname"><span class="paramname"><em>offset</em></span>&#160;)</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Moves the text cursor of the mounted text input whose <span class="tt">focusId</span> is <code class="param">focusId</code> to <code class="param">offset</code>, focuses it and asks it to reveal the cursor's line. </p>
+<p>Of several such widgets, the one mounted first is taken. An offset inside a UTF-8 sequence moves back to the start of that code point. </p><dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">focusId</td><td>The name. </td></tr>
+    <tr><td class="paramname">offset</td><td>A byte offset into the text it shows. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>Whether a mounted text input has that name. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../de/d26/mount_8hpp_source.html#l00388">388</a> of file <a class="el" href="../../de/d26/mount_8hpp_source.html">mount.hpp</a>.</p>
 
 </div>
 </div>
