@@ -56,11 +56,18 @@ std::vector<std::string> CustomDocuments::refresh(CustomScreensListed const& lis
     std::vector<std::string> dropped;
     for (auto kept = _entries.begin(); kept != _entries.end();) {
         auto const shown = std::ranges::find(listed.screens, kept->first, &CustomScreenSummary::id);
-        bool const gone = shown == listed.screens.end() ? !listed.truncated : shown->hash != kept->second.summary.hash;
+        // A screen the list marks broken is dropped whatever its hash: the checks can change without the document
+        // changing, and the cache answers the host's `documents` lookup, which mounts without asking.
+        bool const gone = shown == listed.screens.end()
+                              ? !listed.truncated
+                              : shown->hash != kept->second.summary.hash || shown->broken.has_value();
         if (gone) {
             dropped.push_back(kept->first);
             kept = _entries.erase(kept);
         } else {
+            if (shown != listed.screens.end()) {
+                kept->second.summary = *shown;
+            }
             ++kept;
         }
     }

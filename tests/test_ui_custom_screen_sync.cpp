@@ -454,6 +454,35 @@ TEST_CASE("custom documents: refresh keeps what a list shows unchanged and drops
     CHECK(documents.refresh(listShowing({{a, "sha256:changed"}}, true)) == std::vector<std::string>{a});
 }
 
+// Mutation: drop the `broken` test in `refresh` (a screen broken under an unchanged hash stays answerable).
+TEST_CASE("custom documents: refresh drops a cached screen the list marks broken under the same hash",
+          "[ui][custom-screens][sync]") {
+    morph::ui::LoadOptions const options{.catalog = uiservice::facts()};
+    std::string const id = "custom:a";
+    morph::ui::CustomDocuments documents;
+    REQUIRE(documents.put(foundNamed(id, "sha256:a", id), options).has_value());
+    REQUIRE(documents.find(id) != nullptr);
+    auto listed = listShowing({{id, "sha256:a"}});
+    listed.screens.front().broken = morph::ui::CheckRefusal{};
+    CHECK(documents.refresh(listed) == std::vector<std::string>{id});
+    CHECK(documents.find(id) == nullptr);
+    CHECK(documents.entry(id) == nullptr);
+}
+
+// Mutation: skip the summary update of a kept entry (its cached summary keeps the old title).
+TEST_CASE("custom documents: refresh updates the summary of a kept entry from the list",
+          "[ui][custom-screens][sync]") {
+    morph::ui::LoadOptions const options{.catalog = uiservice::facts()};
+    std::string const id = "custom:a";
+    morph::ui::CustomDocuments documents;
+    REQUIRE(documents.put(foundNamed(id, "sha256:a", id), options).has_value());
+    auto listed = listShowing({{id, "sha256:a"}});
+    listed.screens.front().title = "Renamed";
+    CHECK(documents.refresh(listed).empty());
+    REQUIRE(documents.entry(id) != nullptr);
+    CHECK(documents.entry(id)->summary.title == "Renamed");
+}
+
 // Mutation: skip the id comparison in `put` (the document under another id is kept).
 TEST_CASE("custom documents: put refuses a document that names another id and keeps nothing",
           "[ui][custom-screens][sync]") {
