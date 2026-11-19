@@ -76,6 +76,7 @@ struct LimitsFile {
     std::optional<std::size_t> maxProposalBytes;
     std::optional<std::size_t> maxProposalsPerTurn;
     std::optional<std::int64_t> idleRetentionMinutes;
+    std::optional<std::int64_t> toolCallTimeoutSeconds;
 };
 
 struct ConfigFile {
@@ -161,6 +162,12 @@ struct ConfigFile {
     apply(limits.maxProposalsPerTurn, config.limits.maxProposalsPerTurn, "maxProposalsPerTurn", problem);
     if (!problem.empty()) {
         return std::unexpected(std::move(problem));
+    }
+    if (limits.toolCallTimeoutSeconds) {
+        if (*limits.toolCallTimeoutSeconds <= 0) {
+            return std::unexpected(std::string{"the chat configuration's `toolCallTimeoutSeconds` must be above 0"});
+        }
+        config.limits.toolCallTimeout = std::chrono::seconds{*limits.toolCallTimeoutSeconds};
     }
     if (limits.idleRetentionMinutes) {
         if (*limits.idleRetentionMinutes <= 0) {

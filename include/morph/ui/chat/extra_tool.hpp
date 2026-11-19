@@ -23,6 +23,14 @@ struct ServedBundle;
 
 namespace morph::ui::chat {
 
+/// @brief The document of a screen the bundle does not hold, as `ChatOptions::documentSource` read it.
+struct ChatScreenSource {
+    /// @brief The screen's JSON text.
+    std::string document;
+    /// @brief The application screen it was made from; empty for none.
+    std::string basedOn;
+};
+
 /// @brief What an extra tool is told about the turn that may call it.
 ///
 /// Everything in it comes from the verified session or from the client's `TurnRequest`, which is a hint: a tool treats
@@ -37,6 +45,9 @@ struct ChatToolContext {
     std::shared_ptr<ServedBundle const> bundle;
     /// @brief The chat's bounds.
     ChatLimits limits;
+    /// @brief What `ChatOptions::documentSource` read for the open screen, when the bundle does not hold it. It is
+    ///        read once per turn, so a tool does not read the screen again.
+    std::optional<ChatScreenSource> external;
     /// @brief How many earlier calls of this tool, in this turn, came back as an error.
     std::size_t failedCalls = 0;
     /// @brief Whatever the tool's `offer` handed to `ChatToolOffer::carried`; null without one.
@@ -70,7 +81,8 @@ struct ChatToolOutcome {
 };
 
 /// @brief Where a handler delivers a call's outcome: from any thread, exactly once. A second delivery is ignored. A
-///        turn that stopped meanwhile ignores it too.
+///        turn that stopped meanwhile ignores it too. A handler that has not delivered within
+///        `ChatLimits::toolCallTimeout` is answered with a failed outcome, and a later delivery is ignored.
 using ChatToolDone = std::function<void(ChatToolOutcome)>;
 
 /// @brief Where an offer delivers its answer: from any thread, exactly once.
@@ -79,11 +91,13 @@ using ChatToolOfferDone = std::function<void(ChatToolOffer)>;
 /// @brief Runs one call of a tool.
 ///
 /// Invoked on the turn's worker with the context by value, so a handler that finishes later keeps it. The arguments
-/// are a JSON object: the service refuses any other call before it gets here. A handler that never delivers leaves the
-/// turn waiting until it is cancelled, and one that throws reports the call as failed.
+/// are a JSON object: the service refuses any other call before it gets here. A handler that never delivers is
+/// answered as failed after `ChatLimits::toolCallTimeout`, and one that throws reports the call as failed.
 using ChatToolHandler = std::function<void(ChatToolContext, Json, ChatToolDone)>;
 
-/// @brief Answers whether this turn may call a tool, once at its start. Invoked on the turn's worker.
+/// @brief Answers whether this turn may call a tool, once at its start. Invoked on the turn's worker. An offer that
+/// has
+///        not answered within `ChatLimits::toolCallTimeout` counts as declined.
 using ChatToolOfferer = std::function<void(ChatToolContext, ChatToolOfferDone)>;
 
 /// @brief Rewrites a call's arguments into what the conversation keeps of it; sees the arguments as JSON text and
@@ -102,9 +116,9 @@ struct ChatTool {
     ChatToolOfferer offer;
     /// @brief What a call does. Required.
     ChatToolHandler handler;
-    /// @brief What the conversation keeps of a call's arguments, so a large argument is not carried through every
-    /// later
-    ///        turn. Empty keeps them as the model wrote them. The turn itself still sees the whole call.
+    /// @brief What the conversation keeps of a call's arguments, so a large argument is not carried through later
+    ///        turns. Empty keeps them as the model wrote them. The turn itself still sees the whole call, and a
+    ///        provider's own replay of a message with a rewritten call is dropped from the conversation.
     ChatToolRecord record;
 };
 

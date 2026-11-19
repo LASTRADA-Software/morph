@@ -34,10 +34,11 @@ struct ChatConfig;
 /// @brief Reads the document of a screen the bundle does not hold, such as a person's own custom screen.
 ///
 /// Called on the turn's worker with the turn's session and the screen's id, and answers through the callback, from any
-/// thread, exactly once: the document's JSON text, or why there is none, which fails the turn. It is asked only for an
-/// id the bundle has no screen of, and it must answer for the session's person alone.
+/// thread, exactly once: the document and its base, or why there is none, which fails the turn. It is asked only for
+/// an id the bundle has no screen of, once per turn, and it must answer for the session's person alone. One that has
+/// not answered within `ChatLimits::toolCallTimeout` fails the turn, and a later answer is ignored.
 using ChatDocumentSource = std::function<void(session::Context const&, std::string const&,
-                                              std::function<void(std::expected<std::string, std::string>)>)>;
+                                              std::function<void(std::expected<ChatScreenSource, std::string>)>)>;
 
 /// @brief What an assistant is told about how to behave, before the screen's context.
 inline constexpr std::string_view kDefaultSystemPrompt =
@@ -62,13 +63,11 @@ struct MORPH_API ChatOptions {
     /// @brief The clock retention reads; empty for `steady_clock`.
     std::function<std::chrono::steady_clock::time_point()> now;
     /// @brief Tools offered beside the ones the open screen names. A turn offers each one whose `offer` accepts it,
-    /// and
-    ///        a call of one runs its handler in place of an action. Their names must be valid, and distinct from each
-    ///        other; see `ChatTool`.
+    ///        and a call of one runs its handler in place of an action. Their names must be valid, and distinct from
+    ///        each other; see `ChatTool`.
     std::vector<ChatTool> tools;
     /// @brief Where the document of a screen outside the bundle is read, so the chat can offer such a screen's
-    /// actions.
-    ///        Empty: a screen the bundle does not hold is not available to the chat.
+    ///        actions. Empty: a screen the bundle does not hold is not available to the chat.
     ChatDocumentSource documentSource;
     /// @brief The dispatcher the server's actions are registered on. Borrowed.
     ::morph::model::detail::ActionDispatcher* dispatcher = &::morph::model::detail::defaultDispatcher();

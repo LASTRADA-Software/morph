@@ -29,13 +29,12 @@ inline constexpr std::string_view kProposeScreenTool = "propose_screen";
 /// - **Offered** only on a screen whose document is known and within `ChatLimits::maxProposalBytes`: the turn's draft,
 ///   else the bundle's own text for an application screen, else the person's custom screen as @p screens answers it.
 ///   On any other screen it is not offered, and the system text says the assistant cannot edit the screen.
-/// - **Its context** is that document, wrapped and named as the screen being edited and as data, never as instructions
-///   (a shared custom screen is text someone else may have written), what the base rule allows a screen based on the
-///   same base, and a short reference to the vocabulary.
-/// - **A call** carries the whole document. It is refused as a tool error, with the pointer to the refused part, when
-/// it is
-///   malformed, too large, names another screen id than the open one, or fails the checks of a save under the turn's
-///   session. Only an accepted document becomes the turn's draft. The refusal that is the
+/// - **Its context** is that document, written as one JSON string literal inside a block named as the screen being
+///   edited and as data, never as instructions (a shared custom screen is text someone else may have written), what
+///   the base rule allows a screen based on the same base, and a short reference to the vocabulary.
+/// - **A call** carries the whole document. It is refused as a tool error, with the pointer to the refused part,
+///   when it is malformed, too large, names another screen id than the open one, or fails the checks of a save under
+///   the turn's session. Only an accepted document becomes the turn's draft. The refusal that is the
 ///   `ChatLimits::maxProposalsPerTurn`th of a turn ends the turn, and the screen stays as it was.
 /// - **The conversation** keeps that a draft was proposed and its content hash, not the document.
 ///
@@ -47,9 +46,8 @@ inline constexpr std::string_view kProposeScreenTool = "propose_screen";
 [[nodiscard]] MORPH_API ChatTool customScreensChatTool(std::shared_ptr<CustomScreens> const& screens,
                                                        std::string const& app, exec::IExecutor& executor);
 
-/// @brief A `ChatDocumentSource` that reads a person's custom screens, so the chat offers a custom screen's own
-/// actions
-///        and `propose_screen` can edit it.
+/// @brief A `ChatDocumentSource` that reads a person's custom screens, so the chat offers their own actions and
+///        `propose_screen` can edit them.
 /// @param screens  The handle `registerCustomScreens` returned.
 /// @param app      The application's id, as @p screens serves it.
 /// @param executor Where the reads run. Borrowed: it outlives every turn.

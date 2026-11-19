@@ -234,7 +234,8 @@ struct Rig {
     std::atomic<std::uint64_t> nextCall{1};
 
     explicit Rig(chat::ChatLimits given = {}, bool withProvider = true,
-                 std::shared_ptr<chat::IProvider> const& other = nullptr, std::vector<chat::ChatTool> tools = {})
+                 std::shared_ptr<chat::IProvider> const& other = nullptr, std::vector<chat::ChatTool> tools = {},
+                 chat::ChatDocumentSource source = {})
         : limits{given} {
         {
             std::scoped_lock const lock{chat_service_test::store().mutex};
@@ -268,6 +269,7 @@ struct Rig {
         options.bundle = bundle;
         options.limits = limits;
         options.tools = std::move(tools);
+        options.documentSource = std::move(source);
         chatService = std::make_shared<chat::ChatService>(std::move(options));
         config.services.push_back(chatService);
         server =
@@ -1606,4 +1608,172 @@ TEST_CASE("a_service_refuses_extra_tools_it_cannot_tell_apart", "[chat][service]
     chat::ChatTool noHandler;
     noHandler.spec.name = "empty";
     CHECK_THROWS_AS(build({std::move(noHandler)}), std::invalid_argument);
+}
+
+// Mutation: do not cut the stop text.
+TEST_CASE("a_stop_text_is_bounded_like_a_steps_message", "[chat][service][extra]") {
+    auto const seen = std::make_shared<Seen>();
+    Rig rig{{}, true, nullptr, {extraTool("loud", seen, [](auto const&) {
+                return chat::ChatToolOutcome{
+                    .text = "x", .isError = true, .draft = {}, .stop = std::string(5000, 'y')};
+            })}};
+    auto const cid = rig.gui();
+    auto const id = rig.instance(cid);
+    rig.fake->script(callOf("loud"));
+    auto const state = rig.finished(rig.start(Rig::turnOn(id, "go"), cid), cid);
+    CHECK(state.status == chat::TurnStatus::Failed);
+    CHECK(state.error.size() < 700);
+    CHECK(state.error.contains("cut off"));
+}
+
+// Mutation: let a draft over `maxProposalBytes` through.
+TEST_CASE("a_draft_over_the_bound_from_any_tool_is_dropped_as_a_failed_call", "[chat][service][extra]") {
+    auto const seen = std::make_shared<Seen>();
+    chat::ChatLimits limits;
+    limits.maxProposalBytes = 32;
+    Rig rig{limits, true, nullptr, {extraTool("big", seen, [](auto const&) {
+                return chat::ChatToolOutcome{
+                    .text = "ok", .isError = false, .draft = std::string(100, 'd'), .stop = {}};
+            })}};
+    auto const cid = rig.gui();
+    auto const id = rig.instance(cid);
+    rig.fake->script(callOf("big"));
+    rig.fake->script(chat::Response{.text = "done", .calls = {}, .opaque = {}});
+    auto const state = rig.finished(rig.start(Rig::turnOn(id, "go"), cid), cid);
+    CHECK_FALSE(state.draft.has_value());
+    REQUIRE(state.steps.size() == 1);
+    CHECK_FALSE(state.steps.front().ok);
+    CHECK(state.steps.front().message.contains("longer than 32 bytes"));
+    for (wire::EventBody const& event : rig.eventWire.events()) {
+        if (event.topic == chat::kChatTopic) {
+            CHECK_FALSE(event.payload.str.contains("\"kind\":\"draft\""));
+        }
+    }
+}
+
+namespace {
+chat::ChatLimits quickLimits() {
+    chat::ChatLimits limits;
+    limits.toolCallTimeout = 150ms;
+    return limits;
+}
+}  // namespace
+
+// Mutation: arm no deadline for a handler.
+TEST_CASE("a_handler_that_never_answers_is_answered_as_failed_and_the_turn_goes_on", "[chat][service][extra]") {
+    auto const seen = std::make_shared<Seen>();
+    chat::ChatTool tool;
+    tool.spec = chat::ToolSpec{.name = "silent", .description = "never answers", .inputSchema = {}};
+    tool.handler = [seen](chat::ChatToolContext const&, ui::Json const&, chat::ChatToolDone const& done) {
+        std::scoped_lock const lock{seen->mutex};
+        seen->held.push_back(done);
+    };
+    Rig rig{quickLimits(), true, nullptr, {std::move(tool)}};
+    auto const cid = rig.gui();
+    auto const id = rig.instance(cid);
+    rig.fake->script(callOf("silent"));
+    rig.fake->script(chat::Response{.text = "went on", .calls = {}, .opaque = {}});
+    auto const state = rig.finished(rig.start(Rig::turnOn(id, "go"), cid), cid);
+    CHECK(state.status == chat::TurnStatus::Done);
+    REQUIRE(state.steps.size() == 1);
+    CHECK_FALSE(state.steps.front().ok);
+    CHECK(state.steps.front().message.contains("did not answer in time"));
+    // A late answer changes nothing.
+    chat::ChatToolDone late;
+    {
+        std::scoped_lock const lock{seen->mutex};
+        late = seen->held.front();
+    }
+    late(chat::ChatToolOutcome{.text = "late", .isError = false, .draft = R"({"id":"notes"})", .stop = {}});
+    morph::testing::storageOwner().runFor(100ms);
+    CHECK_FALSE(rig.state(state.turnId, cid).draft.has_value());
+    CHECK(rig.fake->calls() == 2);
+}
+
+// Mutation: arm no deadline for an offer.
+TEST_CASE("an_offer_that_never_answers_counts_as_declined", "[chat][service][extra]") {
+    auto const seen = std::make_shared<Seen>();
+    auto tool = extraTool("mute", seen, [](auto const&) { return chat::ChatToolOutcome{}; });
+    tool.offer = [](chat::ChatToolContext const&, chat::ChatToolOfferDone const&) {};
+    Rig rig{quickLimits(), true, nullptr, {std::move(tool)}};
+    auto const cid = rig.gui();
+    auto const id = rig.instance(cid);
+    rig.fake->script(chat::Response{.text = "ok", .calls = {}, .opaque = {}});
+    auto const state = rig.finished(rig.start(Rig::turnOn(id, "go"), cid), cid);
+    CHECK(state.status == chat::TurnStatus::Done);
+    auto const asked = rig.fake->requests().at(0);
+    CHECK_FALSE(offers(asked.tools, "mute"));
+    CHECK(asked.system.contains("did not answer in time"));
+}
+
+// Mutation: arm no deadline for the document source.
+TEST_CASE("a_document_source_that_never_answers_fails_the_turn", "[chat][service][extra]") {
+    Rig rig{quickLimits(),
+            true,
+            nullptr,
+            {},
+            [](morph::session::Context const&, std::string const&,
+               std::function<void(std::expected<chat::ChatScreenSource, std::string>)> const&) {}};
+    auto const cid = rig.gui();
+    auto const id = rig.instance(cid);
+    auto const state = rig.finished(rig.start(Rig::turnOn(id, "go", "custom:abc"), cid), cid);
+    CHECK(state.status == chat::TurnStatus::Failed);
+    CHECK(state.error.contains("in time"));
+    CHECK(rig.fake->calls() == 0);
+}
+
+// Mutation: consult the source for any screen the bundle fails to give.
+TEST_CASE("the_document_source_is_not_asked_for_a_screen_the_bundle_holds", "[chat][service][extra]") {
+    auto const asks = std::make_shared<std::atomic<int>>(0);
+    Rig rig{{},
+            true,
+            nullptr,
+            {},
+            [asks](morph::session::Context const&, std::string const&,
+                   std::function<void(std::expected<chat::ChatScreenSource, std::string>)> const& done) {
+                ++*asks;
+                done(std::unexpected(std::string{"never"}));
+            }};
+    auto const cid = rig.gui("nosecret");
+    auto const id = rig.instance(cid, "nosecret");
+    auto const state = rig.finished(rig.start(Rig::turnOn(id, "go", "secret"), cid, "nosecret"), cid, "nosecret");
+    CHECK(state.status == chat::TurnStatus::Failed);
+    CHECK(*asks == 0);
+    CHECK(rig.fake->calls() == 0);
+}
+
+// Mutation: leave the pending call's deadline armed after the turn stopped, or let a late answer through.
+TEST_CASE("closing_the_connection_with_a_pending_handler_stops_the_turn_for_good", "[chat][service][extra]") {
+    auto const seen = std::make_shared<Seen>();
+    chat::ChatTool tool;
+    tool.spec = chat::ToolSpec{.name = "slow", .description = "waits", .inputSchema = {}};
+    tool.handler = [seen](chat::ChatToolContext const&, ui::Json const&, chat::ChatToolDone const& done) {
+        std::scoped_lock const lock{seen->mutex};
+        seen->held.push_back(done);
+    };
+    Rig rig{quickLimits(), true, nullptr, {std::move(tool)}};
+    auto const cid = rig.gui();
+    auto const id = rig.instance(cid);
+    rig.fake->script(callOf("slow"));
+    auto const turnId = rig.start(Rig::turnOn(id, "go"), cid);
+    REQUIRE(waitFor([&] {
+        std::scoped_lock const lock{seen->mutex};
+        return !seen->held.empty();
+    }));
+    auto const cid2 = rig.gui();
+    rig.server->closeConnection(cid);
+    REQUIRE(waitFor([&] { return rig.state(turnId, cid2).status == chat::TurnStatus::Cancelled; }));
+    morph::testing::storageOwner().runFor(400ms);
+    auto const state = rig.state(turnId, cid2);
+    CHECK(state.status == chat::TurnStatus::Cancelled);
+    CHECK(state.steps.empty());
+    CHECK(rig.fake->calls() == 1);
+    chat::ChatToolDone late;
+    {
+        std::scoped_lock const lock{seen->mutex};
+        late = seen->held.front();
+    }
+    late(chat::ChatToolOutcome{.text = "late", .isError = false, .draft = R"({"id":"notes"})", .stop = {}});
+    morph::testing::storageOwner().runFor(100ms);
+    CHECK_FALSE(rig.state(turnId, cid2).draft.has_value());
 }

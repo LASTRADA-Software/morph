@@ -281,14 +281,16 @@ shared build carries them for every application, where they are inert.
 on the chat's worker and borrows `executor` for its checks, which must outlive every turn.
 
 - **Offered, or not.** The tool is offered when the screen has a document the assistant can edit: the turn's draft, else
-  the bundle's text of an application screen, else the person's custom screen as `get` answers it, within
+  the bundle's text of an application screen, else the person's custom screen as `get` answers it (read once for the turn, by the chat's document source), within
   `ChatLimits::maxProposalBytes`, and `allowance` answers for its base. Otherwise it is not offered and the system text says
   the assistant cannot change this screen's document, without saying why the store or the base rule refused. A custom screen
   is read under the turn's person: another person's id is not read, and the turn fails as it does for any screen the chat
   cannot open.
-- **The document is data.** The system text carries it between an opening and a closing line that both name the document's
-  content hash (`<screen-document hash="sha256:…">`), under a sentence that it is data and never instructions. A document
-  cannot contain its own hash, so no document can write the closing line, however it is worded. Beside it go what a screen
+- **The document is data.** The system text carries it as one JSON string literal between an opening and a closing line that
+  both name the document's content hash (`<screen-document hash="sha256:…">`), under a sentence that it is data and never
+  instructions. The literal has no raw newline or quote, so nothing in the document can begin a line of its own, and it
+  cannot reproduce the closing line exactly: that line holds the hash of the document, which the document cannot contain.
+  The wording is a labelled boundary, not a guarantee about what a model does with the text. Beside it go what a screen
   based on the same base may use (`allowance`) and a short reference to `ui/1`.
 - **A call** carries `document`, a complete document as a JSON string. A call is a tool error, with the reason, when the
   argument is missing or not a string, the text is over `maxProposalBytes`, is not one JSON object, or its `id` is not the id
@@ -300,7 +302,7 @@ on the chat's worker and borrows `executor` for its checks, which must outlive e
   reaches it ends the turn as failed, with the last refusal in the message, and no draft is made. A turn that already had a
   proposal accepted keeps that draft. Each call also counts against `maxToolCallsPerTurn`.
 - **Out of the history.** The conversation stores a proposal's arguments as `{"document":"[a draft was proposed here,
-  sha256:…]"}`. The turn that proposed it still sees the whole call. The next turn is given the current draft in its context,
+  sha256:…]"}`, and the message's provider replay is dropped with it. The turn that proposed it still sees the whole call. The next turn is given the current draft in its context,
   so edits build on the last accepted one, and a long conversation of edits does not fill `maxConversationBytes`.
 - **Does not save.** The tool never calls `save`. The person's press of **Save as…** does.
 

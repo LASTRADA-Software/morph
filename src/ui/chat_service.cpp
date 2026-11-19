@@ -23,6 +23,7 @@
 #include <morph/core/logger.hpp>
 #include <morph/core/registry.hpp>
 #include <morph/core/remote.hpp>
+#include <morph/core/timeout_scheduler.hpp>
 #include <morph/core/wire.hpp>
 #include <morph/session/session.hpp>
 #include <morph/ui/bundle.hpp>
@@ -66,6 +67,8 @@ struct ChatService::Turn {
     std::vector<ChatTool const*> extras;
     // How many calls of each extra tool failed this turn.
     std::map<std::string, std::size_t, std::less<>> extraFailures;
+    // What the document source read for a screen outside the bundle; read once, for every tool.
+    std::optional<ChatScreenSource> external;
     // What each offered tool's `offer` carried to its handler, by tool name.
     std::map<std::string, std::shared_ptr<void const>, std::less<>> carried;
     std::vector<Message> messages;
@@ -77,6 +80,11 @@ struct ChatService::Turn {
     std::size_t toolCalls = 0;
     // What the person said, until a round of the model's answer goes into the conversation with it.
     std::optional<Message> said;
+    // The pending extra call's answer for when its deadline passes, and the timer that fires it. Guarded by
+    // Shared::mutex; `deadlineSeq` tells a timer that fired late from the call it was set for.
+    std::function<void()> deadline;
+    std::uint64_t deadlineSeq = 0;
+    ::morph::async::detail::TimeoutScheduler::Handle deadlineHandle = 0;
     // Guarded by Shared::mutex.
     TurnState state;
     std::uint64_t seq = 0;
@@ -97,6 +105,8 @@ struct ChatService::Shared {
     // Guarded by `mutex`.
     ConversationStore conversations;
     std::weak_ptr<backend::RemoteServer> server;
+    // Made at the first deadline, since a chat with no extra tool has none. Its thread only posts to the worker.
+    std::unique_ptr<::morph::async::detail::TimeoutScheduler> timers;
     std::map<std::uint64_t, TurnPtr> turns;
     std::map<std::string, std::vector<std::uint64_t>, std::less<>> finished;
     std::atomic<std::uint64_t> nextTurn{1};
@@ -288,10 +298,41 @@ struct ChatService::Shared {
         return turn.state.status == TurnStatus::Running;
     }
 
+    // Takes the turn's pending deadline out, so it cannot fire, and the timer's handle with it. The caller holds the
+    // lock and destroys the function outside it, since it holds the call's completion.
+    [[nodiscard]] static std::function<void()> takeDeadline(
+        Shared const& /*self*/, Turn& turn, std::optional<::morph::async::detail::TimeoutScheduler::Handle>& handle) {
+        std::function<void()> pending = std::move(turn.deadline);
+        turn.deadline = nullptr;
+        ++turn.deadlineSeq;
+        if (turn.deadlineHandle != 0) {
+            handle = turn.deadlineHandle;
+        }
+        turn.deadlineHandle = 0;
+        return pending;
+    }
+
+    static void cancelTimer(Shared& self,
+                            std::optional<::morph::async::detail::TimeoutScheduler::Handle> const& handle) {
+        if (!handle) {
+            return;
+        }
+        ::morph::async::detail::TimeoutScheduler* timers = nullptr;
+        {
+            std::scoped_lock const lock{self.mutex};
+            timers = self.timers.get();
+        }
+        if (timers != nullptr) {
+            timers->cancel(*handle);
+        }
+    }
+
     // Ends a turn, once, with a status. A cancelled one also cancels its provider call.
     static void finish(std::shared_ptr<Shared> const& self, TurnPtr const& turn, TurnStatus status,
                        std::string error = {}) {
         std::shared_ptr<IProviderCall> call;
+        std::function<void()> pending;
+        std::optional<::morph::async::detail::TimeoutScheduler::Handle> handle;
         {
             std::scoped_lock const lock{self->mutex};
             if (turn->state.status != TurnStatus::Running) {
@@ -301,6 +342,7 @@ struct ChatService::Shared {
             turn->state.error = std::move(error);
             call = std::move(turn->call);
             turn->call = nullptr;
+            pending = takeDeadline(*self, *turn, handle);
             auto& kept = self->finished[turn->session.principal];
             kept.push_back(turn->id);
             if (kept.size() > kFinishedTurnsKept) {
@@ -308,6 +350,8 @@ struct ChatService::Shared {
                 kept.erase(kept.begin());
             }
         }
+        cancelTimer(*self, handle);
+        pending = nullptr;
         if (call != nullptr) {
             call->cancel();
         }
@@ -476,17 +520,21 @@ struct ChatService::Shared {
         auto const held =
             std::make_shared<std::pair<CatalogReply, std::map<std::string, Json, std::less<>>>>(catalog, schemas);
         self->options.documentSource(turn->session, turn->request.screenId,
-                                     onWorker<std::expected<std::string, std::string>>(
-                                         self, turn, [self, turn, held](std::expected<std::string, std::string> text) {
-                                             if (!text) {
-                                                 throw std::runtime_error{text.error()};
+                                     onWorker<std::expected<ChatScreenSource, std::string>>(
+                                         self, turn,
+                                         [self, turn, held](std::expected<ChatScreenSource, std::string> read) {
+                                             if (!read) {
+                                                 throw std::runtime_error{read.error()};
                                              }
-                                             auto loaded = loadDocumentText(*text);
+                                             auto loaded = loadDocumentText(read->document);
                                              if (!loaded) {
                                                  throw std::runtime_error{loaded.error().message()};
                                              }
+                                             turn->external = std::move(*read);
                                              assemble(self, turn, held->first, held->second, *loaded);
-                                         }));
+                                         },
+                                         std::optional<std::expected<ChatScreenSource, std::string>>{std::unexpected(
+                                             std::string{"the screen's document could not be read in time"})}));
     }
 
     static void assemble(std::shared_ptr<Shared> const& self, TurnPtr const& turn, CatalogReply const& catalog,
@@ -519,23 +567,98 @@ struct ChatService::Shared {
                                .request = turn.request,
                                .bundle = self.options.bundle,
                                .limits = self.options.limits,
+                               .external = turn.external,
                                .failedCalls = failed == turn.extraFailures.end() ? 0U : failed->second,
                                .carried = std::move(carried)};
     }
 
-    // Wraps a completion so it runs once, on the worker, and only while the turn does: a handler or an offer may
-    // answer from any thread, twice, or after the turn stopped.
+    // Wraps a completion so it runs once, on the worker, and only while the turn does: a handler, an offer or the
+    // document source may answer from any thread, twice, or after the turn stopped. With @p onTimeout, the call is
+    // answered with it once `ChatLimits::toolCallTimeout` passes without an answer.
     template <typename Value>
     [[nodiscard]] static std::function<void(Value)> onWorker(std::shared_ptr<Shared> const& self, TurnPtr const& turn,
-                                                             std::function<void(Value)> then) {
+                                                             std::function<void(Value)> then,
+                                                             std::optional<Value> onTimeout = std::nullopt) {
         auto const fired = std::make_shared<std::atomic<bool>>(false);
-        return [self, turn, then = std::move(then), fired](Value value) {
+        std::function<void(Value)> deliver = [self, turn, then = std::move(then), fired](Value value) {
             if (fired->exchange(true)) {
                 return;
             }
             auto const held = std::make_shared<Value>(std::move(value));
-            step(self, turn, [then, held] { then(std::move(*held)); });
+            step(self, turn, [self, turn, then, held] {
+                disarm(self, turn);
+                then(std::move(*held));
+            });
         };
+        if (onTimeout) {
+            armDeadline(self, turn, deliver, std::move(*onTimeout));
+        }
+        return deliver;
+    }
+
+    // Answers @p deliver with @p onTimeout when the call's time is up. The timer holds the turn and the service weakly
+    // and hands the answer to the worker, so no reference to either is ever released on the timer's own thread, which
+    // would join itself if it were the last.
+    template <typename Value>
+    static void armDeadline(std::shared_ptr<Shared> const& self, TurnPtr const& turn,
+                            std::function<void(Value)> const& deliver, Value onTimeout) {
+        auto const limit = self->options.limits.toolCallTimeout;
+        if (limit.count() <= 0) {
+            return;
+        }
+        // NOLINTNEXTLINE(misc-const-correctness): `schedule` is not const; the template hides that from the check.
+        ::morph::async::detail::TimeoutScheduler* timers = nullptr;
+        std::uint64_t seq = 0;
+        {
+            std::scoped_lock const lock{self->mutex};
+            if (self->timers == nullptr) {
+                self->timers = std::make_unique<::morph::async::detail::TimeoutScheduler>();
+            }
+            timers = self->timers.get();
+            seq = ++turn->deadlineSeq;
+            turn->deadline = [deliver, value = std::move(onTimeout)] { deliver(value); };
+        }
+        auto const handle =
+            timers->schedule(limit, [weakSelf = std::weak_ptr<Shared>{self}, weakTurn = std::weak_ptr<Turn>{turn}, seq,
+                                     worker = self->options.worker] {
+                auto lockedSelf = weakSelf.lock();
+                auto lockedTurn = weakTurn.lock();
+                if (lockedSelf == nullptr || lockedTurn == nullptr) {
+                    return;
+                }
+                std::function<void()> fire;
+                {
+                    std::scoped_lock const lock{lockedSelf->mutex};
+                    if (lockedTurn->deadlineSeq == seq) {
+                        fire = std::move(lockedTurn->deadline);
+                        lockedTurn->deadline = nullptr;
+                    }
+                }
+                if (!fire) {
+                    return;
+                }
+                try {
+                    worker->post([fire = std::move(fire), lockedSelf = std::move(lockedSelf),
+                                  lockedTurn = std::move(lockedTurn)] { fire(); });
+                    // NOLINTNEXTLINE(bugprone-empty-catch): the worker is gone, so the turn is being torn down.
+                } catch (...) {
+                }
+            });
+        std::scoped_lock const lock{self->mutex};
+        if (turn->deadlineSeq == seq) {
+            turn->deadlineHandle = handle;
+        }
+    }
+
+    // The call's answer arrived: its deadline is no longer needed.
+    static void disarm(std::shared_ptr<Shared> const& self, TurnPtr const& turn) {
+        std::function<void()> pending;
+        std::optional<::morph::async::detail::TimeoutScheduler::Handle> handle;
+        {
+            std::scoped_lock const lock{self->mutex};
+            pending = takeDeadline(*self, *turn, handle);
+        }
+        cancelTimer(*self, handle);
     }
 
     // Asks each extra tool, one at a time, whether this turn offers it, and then starts the model.
@@ -568,7 +691,12 @@ struct ChatService::Shared {
             accepted(ChatToolOffer{.offered = true, .system = {}, .carried = nullptr});
             return;
         }
-        auto const answered = onWorker<ChatToolOffer>(self, turn, accepted);
+        auto const answered =
+            onWorker<ChatToolOffer>(self, turn, accepted,
+                                    ChatToolOffer{.offered = false,
+                                                  .system = "You cannot use the tool " + tool.spec.name +
+                                                            " in this turn: it did not answer in time.",
+                                                  .carried = nullptr});
         try {
             tool.offer(contextOf(*self, *turn, tool, nullptr), answered);
         } catch (std::exception const& error) {
@@ -748,9 +876,13 @@ struct ChatService::Shared {
                          ChatTool const& tool, Json arguments) {
         auto const carried = turn->carried.find(tool.spec.name);
         auto context = contextOf(*self, *turn, tool, carried == turn->carried.end() ? nullptr : carried->second);
-        auto const done = onWorker<ChatToolOutcome>(self, turn, [self, turn, call](ChatToolOutcome outcome) {
-            finishExtra(self, turn, call, std::move(outcome));
-        });
+        auto const done = onWorker<ChatToolOutcome>(
+            self, turn,
+            [self, turn, call](ChatToolOutcome outcome) { finishExtra(self, turn, call, std::move(outcome)); },
+            ChatToolOutcome{.text = "the tool did not answer in time",
+                            .isError = true,
+                            .draft = std::nullopt,
+                            .stop = std::nullopt});
         try {
             tool.handler(std::move(context), std::move(arguments), done);
         } catch (std::exception const& error) {
@@ -765,15 +897,30 @@ struct ChatService::Shared {
 
     static void finishExtra(std::shared_ptr<Shared> const& self, TurnPtr const& turn, ToolCall const& call,
                             ChatToolOutcome outcome) {
+        // A draft is bounded here whatever tool made it, so none can send the client more than the limit.
+        std::size_t const limit = self->options.limits.maxProposalBytes;
+        if (!outcome.isError && outcome.draft && outcome.draft->size() > limit) {
+            outcome = ChatToolOutcome{.text = "the tool's draft is longer than " + std::to_string(limit) + " bytes",
+                                      .isError = true,
+                                      .draft = std::nullopt,
+                                      .stop = std::move(outcome.stop)};
+        }
         if (outcome.isError) {
             ++turn->extraFailures[call.name];
         }
-        // A failed call accepted nothing, whatever it carries.
-        if (outcome.draft && !outcome.isError) {
-            {
-                std::scoped_lock const lock{self->mutex};
+        // A failed call accepted nothing, whatever it carries. A turn that stopped meanwhile records nothing, as
+        // `remember` does: the status is read under the lock the draft is set under.
+        bool const accepted = outcome.draft && !outcome.isError;
+        {
+            std::scoped_lock const lock{self->mutex};
+            if (turn->state.status != TurnStatus::Running) {
+                return;
+            }
+            if (accepted) {
                 turn->state.draft = *outcome.draft;
             }
+        }
+        if (accepted) {
             announce(*self, *turn, "draft", *outcome.draft);
         }
         report(self, turn, call, !outcome.isError, outcome.text, std::move(outcome.stop));
@@ -841,7 +988,7 @@ struct ChatService::Shared {
                  EventExtras{
                      .arguments = bounded(call.argumentsJson, kStepMessageBytes), .ok = succeeded, .newRound = false});
         if (stop) {
-            finish(self, turn, TurnStatus::Failed, std::move(*stop));
+            finish(self, turn, TurnStatus::Failed, bounded(*stop, kStepMessageBytes));
             return;
         }
         nextTool(self, turn);

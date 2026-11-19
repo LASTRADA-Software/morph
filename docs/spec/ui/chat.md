@@ -78,24 +78,30 @@ that is not one of the screen's actions. A `ChatTool` is a `ToolSpec`, an `offer
 - **Run by a handler.** A call whose arguments parse to a JSON object runs `handler` on the worker with the context by
   value. It answers through a callback, from any thread: a handler backed by a coroutine starts it with
   `morph::async::spawn` and keeps whatever it captures alive until it answers. The first answer counts and later ones are
-  ignored, and one that arrives after the turn stopped changes nothing. A handler that never answers leaves the turn waiting
-  until it is cancelled.
+  ignored, and one that arrives after the turn stopped changes nothing.
+- **A deadline for every call.** An offer, a handler and the document source that has not answered within
+  `ChatLimits::toolCallTimeout` (30 seconds by default; `toolCallTimeoutSeconds` in the configuration file) are answered by
+  the chat: an offer counts as declined, a handler's call as failed ("the tool did not answer in time"), and the document
+  source fails the turn. The turn goes on, and the late answer is ignored. Stopping the turn, such as by its connection
+  closing, drops a pending deadline.
 - **The same rules as a screen's tools.** An unknown name, or arguments that are not an object, are a tool error counted
   against `maxToolCallsPerTurn`, and the handler is not called. A handler that throws is a failed call, and the model is told
   only that the tool failed. Nothing a provider returns faults the worker. Stopping the turn cancels it.
 - **What an outcome can do.** `isError` marks the call failed, and `ChatToolContext::failedCalls` tells the next call of the
   tool how many already failed, so a tool can set its own limit. `stop` ends the turn as failed with that text, after the
   call's result is recorded. `draft` becomes `TurnState::draft` and goes out as a `draft` event; a failed call's draft is
-  dropped.
+  dropped, and so is a draft longer than `ChatLimits::maxProposalBytes`, which makes the call fail. The `stop` text is cut like
+  a step's message. A turn that stopped before the outcome arrived records neither.
 - **What the conversation keeps.** `record` rewrites a call's arguments before the conversation stores them, so a large
-  argument is not carried through every later turn. The turn itself sees the call as the model wrote it.
+  argument is not carried through every later turn. The message's provider replay (`Message::opaque`) is dropped with it,
+  since it holds the call as the model wrote it. The turn itself sees the call as the model wrote it.
 - **Names.** 1 to 64 characters of letters, digits, `_` and `-`, with no `__`, which every screen tool's name has, and distinct
   from the other extra tools. `ChatService` refuses a tool that breaks the rules, or has no handler, when it is built.
 
 `propose_screen` (`propose_screen.hpp`) is the first extra tool: it proposes a new document for the open screen, and
 [custom_screens.md](custom_screens.md#the-assistant) describes it. A chat reads a screen the bundle does not hold, such as a
-person's own custom screen, through `ChatOptions::documentSource`, which is asked only for an id the bundle has no screen of
-and answers for the turn's person alone.
+person's own custom screen, through `ChatOptions::documentSource`, which is asked only for an id the bundle has no screen of,
+once per turn, and answers for the turn's person alone. What it read reaches each tool as `ChatToolContext::external`.
 
 A tool is data-in, checks-out: it treats the request's fields, the draft above all, as text someone may have written, and
 does what it does under the session it is given.
