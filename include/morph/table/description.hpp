@@ -824,8 +824,10 @@ namespace morph::table {
 ///                    `Measure`: a client has no registry of its own, only the description's units.
 /// @return The page, or `UnknownColumn` naming a `columns` entry the
 ///         description lacks, or `InvalidValue` when the text is not a page, a
-///         row's length differs from `columns`, or `keys` and `rows` differ in
-///         length, or what `registryOf` refuses.
+///         row's length differs from `columns`, `keys` and `rows` differ in
+///         length, an `unloadedRows` index is outside the rows or not above the
+///         one before it, `indices` is neither empty nor one non-negative
+///         view row per row, or what `registryOf` refuses.
 [[nodiscard]] inline std::expected<GenericPage, TableError> readGenericPage(std::string_view json,
                                                                             TableDescription const& description,
                                                                             UnitRegistry const* units = nullptr) {
@@ -856,6 +858,24 @@ namespace morph::table {
             return invalid("row " + std::to_string(row) + " has " + std::to_string(page.rows[row].size()) +
                            " cells under " + std::to_string(kinds.size()) + " columns");
         }
+    }
+    // A window looks a row's levels up by binary search and places a keyed row by its index, so both lists are
+    // checked against the rows here rather than trusted by every reader after.
+    auto const rowCount = static_cast<std::int64_t>(page.rows.size());
+    std::int64_t previous = -1;
+    for (auto const& unloaded : page.unloadedRows) {
+        if (unloaded.index <= previous || unloaded.index >= rowCount) {
+            return invalid("an unloaded row at " + std::to_string(unloaded.index) + " in a page of " +
+                           std::to_string(rowCount) + " rows, or out of order");
+        }
+        previous = unloaded.index;
+    }
+    if (!page.indices.empty() && page.indices.size() != page.rows.size()) {
+        return invalid("a page of " + std::to_string(page.indices.size()) + " indices and " +
+                       std::to_string(page.rows.size()) + " rows");
+    }
+    if (std::ranges::any_of(page.indices, [](std::int64_t index) { return index < 0; })) {
+        return invalid("a negative view row in indices");
     }
     // The rows were read with no kind: a measure's array is text until its column is known to be `Measure`.
     std::shared_ptr<UnitRegistry const> built;

@@ -322,6 +322,29 @@ TEST_CASE("generic page: a malformed reply is refused and a malformed cell is in
     // Mutation: readGenericPage padding a short row with empty cells.
 }
 
+// Mutation: readGenericPage not checking `unloadedRows` and `indices` against the rows (each refused page reads).
+TEST_CASE("generic page: unloaded rows and indices are bounded by the page's rows", "[table][description]") {
+    auto const description = describedOf({column("a", ColumnKind::Integer)});
+    auto const refused = [&](std::string const& members) {
+        auto const read = readGenericPage(R"({"columns":["a"],"keys":[1,2],"rows":[[1],[2]],)" + members + "}",
+                                          description);
+        REQUIRE_FALSE(read.has_value());
+        return read.error().code;
+    };
+    CHECK(refused(R"("unloadedRows":[{"index":2,"levels":["r"]}])") == TableErrorCode::InvalidValue);
+    CHECK(refused(R"("unloadedRows":[{"index":-1,"levels":["r"]}])") == TableErrorCode::InvalidValue);
+    CHECK(refused(R"("unloadedRows":[{"index":1,"levels":["r"]},{"index":0,"levels":["r"]}])") ==
+          TableErrorCode::InvalidValue);
+    CHECK(refused(R"("indices":[4])") == TableErrorCode::InvalidValue);
+    CHECK(refused(R"("indices":[4,-1])") == TableErrorCode::InvalidValue);
+    auto const kept = readGenericPage(
+        R"({"columns":["a"],"keys":[1,2],"rows":[[1],[2]],"unloadedRows":[{"index":0,"levels":["r"]},)"
+        R"({"index":1,"levels":["r"]}],"indices":[4,9]})",
+        description);
+    REQUIRE(kept.has_value());
+    CHECK(kept->indices == std::vector<std::int64_t>{4, 9});
+}
+
 TEST_CASE("table query: columns round-trip and are bounded", "[table][query]") {
     TableQuery const query{.columns = std::vector<std::string>{"a", "b"}};
     auto const json = glz::write_json(query);
