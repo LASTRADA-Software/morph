@@ -268,7 +268,7 @@ TEST_CASE("custom screen sync: a reply that arrives after reset is dropped", "[u
         counting.sync.probe([&answered](bool offered) { answered = offered; });
         while (!answered.has_value()) {
             awaitQueued(counting.owner);
-            steps += counting.owner.runOne() ? 1 : 0;
+            steps += counting.owner.runOne() ? 1U : 0U;
         }
     }
     REQUIRE(steps > 0);
@@ -323,7 +323,7 @@ TEST_CASE("custom screen sync: a reply that arrives after the sync is destroyed 
         counting.sync->probe([&answered](bool offered) { answered = offered; });
         while (!answered.has_value()) {
             awaitQueued(counting.owner);
-            steps += counting.owner.runOne() ? 1 : 0;
+            steps += counting.owner.runOne() ? 1U : 0U;
         }
     }
     REQUIRE(steps > 1);
