@@ -2,13 +2,15 @@
 
 A person's own version of an application screen, stored on the server through the application's store, checked
 whenever it is saved or loaded, and served by the framework's `morph.customScreens` model. The design is in
-`docs/superpowers/specs/2026-11-18-custom-screens-design.md`; this page is the server side of it: the store seam, the
-model, the checks and the base rule.
+`docs/superpowers/specs/2026-11-18-custom-screens-design.md`; this page is the store seam, the model, the checks and the base rule on the server, and the client that offers them.
 
 | Header | What it holds |
 |---|---|
 | `include/morph/ui/custom_screens.hpp` | `ICustomScreenStore` and `MemoryCustomScreenStore`, `checkBaseRule`, `describeAllowance`, `checkCustomScreen`, `withScreenId`, `VerdictCache`, `verdictKey`, the wire types, `CustomScreens`, `CustomScreensModel`, `registerCustomScreens` |
 | `include/morph/ui/service.hpp` | `permittedActions`, `screenAdmitted`, `kCustomScreenIdPrefix`, `ServedBundle::catalog` |
+| `include/morph/ui/custom_screen_sync.hpp` | `isCustomScreenId`, `routeScreen`, `CustomDocuments`, `CustomScreensOffer`, `CustomScreenSync` |
+| `include/morph/ui/custom_screen_chrome.hpp` | `CustomScreenChromeOptions`, `CustomScreenChrome` |
+| `include/morph/ui/json_source.hpp` | `prettyJson`, `pointerOffset`, `lineAt` |
 | `src/ui/custom_screen_checks.cpp` | The checks, the base rule's walk and the table that classifies every command-list key |
 | `src/ui/custom_screens.cpp` | `CustomScreens`, the model, its registration, the record and its effects |
 | `src/ui/document_actions.hpp` | `DocumentActions`: the actions a document names, and the kind of position of each |
@@ -20,6 +22,8 @@ model, the checks and the base rule.
 - [The checks](#the-checks)
 - [The base rule](#the-base-rule)
 - [Records and effects](#records-and-effects)
+- [The client](#the-client)
+- [Not yet](#not-yet)
 - [Design decisions](#design-decisions)
 
 ## The store
@@ -264,6 +268,89 @@ The record, the result slots that let a list be found holding it, and the effect
 initialisation in `src/ui/custom_screens.cpp`, beside `registerCustomScreens`, because the process-level registries
 resolve once, at their first read. A static build links them only into a server that calls `registerCustomScreens`; a
 shared build carries them for every application, where they are inert.
+
+## The client
+
+The client half is three framework pieces and the generic client's wiring
+([`../client/client.md`](../client/client.md#custom-screens)). Drafts themselves are the document host's
+([`host.md`](host.md), "Drafts").
+
+**`CustomScreenSync`** talks to `morph.customScreens` for one application through the interpreter's own `Dispatcher`,
+as `PreferenceSync` talks to the preferences model, so its calls carry the screens' session and go where their models
+go. No call names a person.
+
+- **Discovery.** `probe` calls `list`. An answer makes the offer `Offered`; any refusal makes it `Off`. A server that
+  never registered the model refuses its registration with `unknown model type: morph.customScreens`, the ordinary way
+  to say custom screens are not offered, and is not logged. Any other refusal (a server that has the model and refuses
+  this client, a wrong `app`) is logged at warn, because it is a misconfiguration someone has to hear about, and custom
+  screens are off for the person all the same. `offRefusal()` keeps the text.
+- **The cache.** `CustomDocuments` keeps what `get` answered, loaded against the client's catalog, by id. It is what
+  `DocumentScreenHostOptions::documents` answers for a `custom:` id, and that lookup is synchronous, so whatever opens a
+  custom screen (a navigator entry, **Open as**, a restored route) fetches it first (`open` answers a kept document
+  or `fetch`es one). A list that shows a kept screen with another `hash`, or a whole list that no longer shows it,
+  drops it; the next open fetches the stored document again. A document that does not load in the client, or names
+  another id, is not kept.
+- **Lists stay current.** Once offered, the sync adds the record `morph.customScreens` to the session's extra watches.
+  The session sends them through the source's watcher with `replace: false`, and again after each reconnect and each
+  `resync`, since both replace the connection's watch set; the extra watch outlives the cache's own interest in the
+  record. A `changes` event naming the record relists. An in-process source has no watcher and sends no events, so its
+  lists refresh at a frame, a reconnect and this client's own saves. A refused watch is logged at warn; an admitted
+  one is silent.
+- **Calls.** `check` answers the server's first refusal with its pointer; `save` passes a store's refusal through as
+  the store worded it, and relists after an answer; `get` answers without keeping, for a broken screen's source.
+- **Restore.** `prefetchRoutes(routes, done)` fetches every custom screen a record or a history names that is not
+  kept, and answers the ids no document came for, so a start can tell the person which were not restored.
+- **Sessions.** `reset` forgets the offer, the list, the cache and the binding, and drops replies in flight: what a
+  sign-in or sign-out does before probing again.
+
+**`CustomScreenChrome`** is the window chrome a shell mounts at the top of each document screen's page
+(`WorkspaceOptions::chrome`), built from view nodes so every frontend shows it. A host screen gets none.
+
+| Part | Test id | What it does |
+|---|---|---|
+| The draft bar | `draft_bar_<id>` | Shown while the tab holds a draft: "Draft — not saved", that forms on a draft change real data, the last refusal of a save (`draft_message_<id>`), **Save** (`draft_save_<id>`, for a draft of the person's own custom screen), **Save as…**, **Source**, **Discard** |
+| The tools row | `screen_tools_<id>` | Shown while the tab holds none: **Open as** (`open_as_<id>`) and **Source** (`source_button_<id>`) |
+| The source view | `source_dialog` | The document's JSON pretty-printed in a monospace editor (`source_text`), the refusal (`source_refusal`), **Preview**, **Save as…**, **Close** |
+| The save dialog | `save_as_dialog` | The name (`save_as_title`), the refusal, **Save**, **Cancel** |
+
+- **Source** shows the open draft's text, a custom screen's stored text (fetched again when the cache dropped it), or
+  an application screen's as the bundle has it, through `prettyJson`. While custom screens are not offered it is read only, with no **Preview** and no
+  **Save as…**.
+- **Preview** loads the text in the client (`loadDocumentText`), asks the server's `check` against the screen's base,
+  and mounts what passes with `DocumentScreenHost::mountDraft`, closing the view. A draft keeps the screen's id, so
+  the host refuses a document with another `id` at `/id`, and that refusal's pointer is shown as any other. While the
+  check runs the editor is read only and **Preview** is disabled, so the draft is exactly the text that was checked,
+  and the answer is taken only by the view it was asked for. A refusal shows "Line N: reason", the line its
+  pointer names in the text as the person left it (`pointerOffset`, `lineAt`); choosing it moves the cursor there
+  (`Mounted::placeCursor`); a refusal about the document as a whole names no place and leaves the cursor. The client's checks are fast feedback; the server's decide.
+- **Save as…** asks a name, saves the draft (from the source view, it previews first, so nothing is saved the person
+  has not seen mounted), ends the draft and opens the saved screen in the tab's place, with the same params
+  (`WorkspaceModel::openInPlace`). **Save** overwrites the person's own custom screen with the draft, fetches the
+  stored document again and ends the draft; both tell the person. A refusal shows in the bar and in the dialog, and
+  the draft stays. While a save is in flight the bar's **Save** and **Save as…** are disabled, and its answer acts
+  only on the draft that was saved: if the tab holds a newer draft, none, or is closed by then, the tab is left as it
+  is and the person is told the save completed. Tab ids are issued per workspace, so a chrome attached to another
+  workspace ignores every answer asked under the old one.
+- **Discard** mounts the screen's own document again (`discardDraft`), fetching a custom screen's first when the cache
+  no longer holds it.
+- **One draft per window**: a new preview replaces the tab's draft. Closing a tab with a draft goes to the shell's
+  close guard, since the handle is dirty while a draft is up.
+- **Open as** is offered on a screen whose base takes params, when the list holds custom screens of that base: the
+  base first, then each of them by its store title, "· by <savedBy>" when not the person's, "· broken" when broken. A
+  choice opens in the tab's place with the tab's params.
+- **The navigator's entries** (`navigatorEntries`) are the listed screens whose base takes no params, read from the
+  base rather than from `opensWithoutParams`, which a broken screen does not have, so a broken screen is still listed
+  with its reason.
+- **A broken screen** is never mounted: opening it from the navigator or **Open as** opens its source view as `get`
+  answers it, the breakage shown as the refusal. For the person's own screen while offered, **Check and save**
+  (`source_save`) checks the text on the server and saves it over the screen.
+
+## Not yet
+
+- **The chrome's words** ("Draft", "Save as…", "Source", "Open as", the refusal's "Line N") are English; resolving
+  them through the bundle's message catalogues, as the shell frame's `morph.shell.*` labels are, is still to come.
+- **Removing a custom screen.** The model's `remove` has no control in the client yet.
+- **The terminal's source view** is the same dialog; it is best effort, as the spec says.
 
 ## Design decisions
 

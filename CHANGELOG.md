@@ -42,6 +42,13 @@ API surface).
 
 ### Added
 
+- **Custom screens in the generic client.** A server that registers `morph.customScreens` gets, in every client:
+  **Source** on each document screen (its `ui/1` JSON, pretty-printed), **Preview** through the client's load and the
+  server's check into a draft mounted in place, a draft bar with Save, Save as…, Source and Discard, the navigator's
+  Custom section, **Open as** on screens with params, and custom screens in routes. A server without the model shows
+  the source read only. New framework pieces: `CustomScreenSync`, `CustomScreenChrome`,
+  `DocumentScreenHost::mountDraft`, `WorkspaceModel::openInPlace`, `WorkspaceOptions::chrome`,
+  `Navigator::setCustom`, and `TextInputWidget::setCursor` on every backend.
 - **A chat built into the client, with its assistant on the server.** A server given a `morph::ui::chat::ChatService`
   offers a chat, and the client's shell shows a panel for it. What a person types runs on the server: the assistant
   calls the open screen's actions under their session, with every check the screen's own calls get, and the screen

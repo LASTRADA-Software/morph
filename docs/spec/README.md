@@ -157,7 +157,8 @@ filtered for the principal, and content-addressed bundles verified into the clie
 [`ui/preferences.md`](ui/preferences.md) — customization choices stored per person by the server's
 preferences model, keyed by the verified session, and loaded back into a mounted screen ·
 [`ui/custom_screens.md`](ui/custom_screens.md) — a person's own screens: the store seam the application implements,
-the checks and the base rule every custom document passes, and the model that serves them ·
+the checks and the base rule every custom document passes, the model that serves them, and the client's drafts,
+source view, Open as and navigator section ·
 [`ui/agent.md`](ui/agent.md) — an AI agent acting on the application over MCP, as one more server connection ·
 [`ui/chat.md`](ui/chat.md) — a chat built into a client whose assistant runs on the server: its protocol, turn loop,
 providers and limits ·
