@@ -1197,7 +1197,7 @@ In `tests/net/test_push_tables.cpp` (Linux): `"shared views: a view published ov
   - the lowering builds one `TableViews` per mounted table that has a state key, over `Session::tableStates()`, and calls its `load()` in the same turn as the table's `state` load
 - Rules: the table menu gains `Views` (a submenu): each own view (checked when it is the state's `view`; labelled `{name} (modified)` while the arrangement differs from the fitted view), separator, `Save view…`, `Rename view…`, `Remove view`, `Set as default`, `Start from the default view` (checkable). `Save view…` and `Rename view…` open `table_view_dialog` with `table_view_name` (TextInput) and `table_view_save` (Button); saving under a name the user already has is a `ReplaceView`. Applying a view fits it as stored state is fitted, sets `layout`, `sort` and `filters` (through their handlers where bound) and writes its name to the state's `view`; the status line shows `Saved view {name}` after a save. At mount: with no stored `state`, the `default` view is applied; with `defaultOnMount`, the default view's `sort` and `filters` are applied over the stored state's, and the stored `layout` still applies. A mounted table does not follow saves made elsewhere.
 
-- **Split on landing.** The table menu is not lowered on a screen yet (Task 12a built its model in `table_config.hpp`; the lowering, `menuOf`, `chooseMenu` and the arrangement on screen are Tasks 12b to 12e). So 14b lands `TableViews`, the `MenuCommand` entries, and the lowering's views load in the turn of the state load; its cases drive `TableViews` over `TableStates` directly, as two windows are two `TableStates` over one store. `TableViews` also takes the session's owner (`TableViews(TableStates&, TableStateKey, exec::IExecutor& owner)`), where its completions are delivered: `TableStates` does not expose its own. The `Views` submenu, the name dialog, "Applying a view", the `(modified)` mark, the default view and `defaultOnMount` at mount, and the cases "the default view at mount, and Start from the default view" and "applying a view records its name, and a change marks it modified" move to Task 14c, after 12e; the taken-name case's "Save view… named A" is `ReplaceView` sent by the test, the rule the menu will apply.
+- **Split on landing.** The table menu is not lowered on a screen yet (Task 12a built its model in `table_config.hpp`; the lowering, `menuOf`, `chooseMenu` and the arrangement on screen are Tasks 12b to 12e). So 14b lands `TableViews`, the `MenuCommand` entries, and the lowering's views load in the turn of the state load; its cases drive `TableViews` over `TableStates` directly, as two windows are two `TableStates` over one store. `TableViews` also takes the session's owner (`TableViews(TableStates&, TableStateKey, exec::IExecutor& owner)`), where its completions are delivered: `TableStates` does not expose its own. The `Views` submenu, the name dialog, "Applying a view", the `(modified)` mark, the default view and `defaultOnMount` at mount, and the cases "the default view at mount, and Start from the default view" and "applying a view records its name, and a change marks it modified" move to Task 14c, after 12e; the taken-name case's "Save view… named A" is `ReplaceView` sent by the test, the rule the menu will apply, and its AddView mutation is 14c's. The first case's last clause (both windows change the sort; the state part holds B's whole arrangement) is 9c's behaviour, tested there, and is not repeated. A further case mounts a `rows` table and a model-backed table over a sharing `RecordingTableStateStore` and checks the `views` and `shared` loads beside `state`, and none on a second mount (mutation: the lowering's `views->load()` calls deleted).
 
 - [ ] **Step 1: Write the failing tests** in `tests/test_ui_table_state.cpp`. Two test stores join `tests/ui_table_support.hpp` here: `RecordingTableStateStore` (a map store under the `expected` rule, `kNoDocument` included, delivering on the executor it is given, that records each call as `{op, part, expected, outcome, revision}`, `op` one of `"load"`, `"save"`, `"publish"`; it does not wrap a `MemoryTableStateStore`, whose completions belong to its strand and cannot be attached to from the owner), and `LiteralTableStateStore` (a map store that knows no sentinel: it compares `expected` with the stored revision as text, nothing stored counting as revision `""`, so `expected "-"` over nothing answers `Conflict` with revision `""`; an empty `expected` replaces; revisions `"r1"`, `"r2"`, …). Revisions are asserted as the values a call returned, never as literals.
 
@@ -1256,16 +1256,21 @@ TEST_CASE("views: a taken name is replaced on save and refused on rename", "[ui]
 - [ ] **Step 4: Run to see them pass**, then the whole of `morph_tests`.
 - [ ] **Step 5: Mutations, docs, commit.** Apply each named mutation, see its case fail, revert. Run the docs build (`TableViews` is public). Commit: `feat(ui): saved table views`.
 
-### Task 14c: Shared views on a table
+### Task 14c: Saved views in the table menu, and shared views
+
+Needs the table menu on a screen (Tasks 12b to 12e: the menu's lowering, `menuOf`, `chooseMenu`, and 12c's
+arrangement). 14b landed `TableViews`, the `MenuCommand` entries and the views load at mount, and no menu; what a
+user touches of the saved views is this task's, below, with the shared views.
 
 **Files:**
-- Modify: `include/morph/ui/table_views.hpp`, `src/ui/interpreter.cpp`
+- Modify: `include/morph/ui/table_views.hpp`, `include/morph/ui/table_config.hpp` (the `Views` submenu's entries, built from the `MenuCommand` entries 14b declared), `src/ui/interpreter.cpp` (the `Views` submenu, the name dialog `table_view_dialog`, applying a view, the status messages, the default view and `defaultOnMount` at mount)
 - Test: `tests/test_ui_table_state.cpp`, `tests/net/test_push_tables.cpp`
-- Docs: `docs/spec/ui/interpreter.md` (shared views)
+- Docs: `docs/spec/ui/interpreter.md` (the `Views` submenu, applying a view, the default view at mount, shared views), `docs/spec/ui/document.md` (the table menu's views)
 
 **Interfaces:**
-- Consumes: 14a's `publish`, 14b's `TableViews` and menu.
-- Produces: the `Views` submenu gains, while `shared().views` is not empty, a heading `Shared views` and each shared view (applied as an own view is), and `Save as my view` while the current view is a shared one (an `AddView` of it into the user's views); while `shares()`, `Publish view…` (the name dialog, then a `publish` of `AddView`, or `ReplaceView` over a taken shared name); a refused publish shows `This view could not be published: {reason}`, a done one `Published view {name}`. Over a store whose `shares()` is false none of the publish entries is offered.
+- Consumes: 14a's `publish`; 14b's `TableViews` (`load`, `own`, `shared`, `change`, `publish`, `shares`), its `MenuCommand::{ApplyView, SaveView, RenameView, RemoveView, SetDefaultView, DefaultOnMount, ApplySharedView, PublishView, SaveAsMyView}` and the `TableViews` each table with a state key holds and loads at mount; 12b–12e's table menu and arrangement. 14b delivered no menu.
+- Produces, the user's own views: the table menu gains `Views` (a submenu): each own view (checked when it is the state's `view`; labelled `{name} (modified)` while the arrangement differs from the fitted view), separator, `Save view…`, `Rename view…`, `Remove view`, `Set as default`, `Start from the default view` (checkable). `Save view…` and `Rename view…` open `table_view_dialog` with `table_view_name` (TextInput) and `table_view_save` (Button); saving under a name the user already has is a `ReplaceView`. Applying a view fits it as stored state is fitted, sets `layout`, `sort` and `filters` (through their handlers where bound) and writes its name to the state's `view`; the status line shows `Saved view {name}` after a save. At mount: with no stored `state`, the `default` view is applied; with `defaultOnMount`, the default view's `sort` and `filters` are applied over the stored state's, and the stored `layout` still applies. A mounted table does not follow saves made elsewhere.
+- Produces, shared views: the `Views` submenu gains, while `shared().views` is not empty, a heading `Shared views` and each shared view (applied as an own view is), and `Save as my view` while the current view is a shared one (an `AddView` of it into the user's views); while `shares()`, `Publish view…` (the name dialog, then a `publish` of `AddView`, or `ReplaceView` over a taken shared name); a refused publish shows `This view could not be published: {reason}`, a done one `Published view {name}`. Over a store whose `shares()` is false none of the publish entries is offered.
 
 - [ ] **Step 1: Write the failing tests:**
 
@@ -1281,12 +1286,32 @@ TEST_CASE("shared views on a table: publish, read by another person, Save as my 
 // part "shared". Alice's publish result is asserted by the revision it returned, read back by bob's load.
 ```
 
+```cpp
+// Mutation: defaultOnMount applying the default view's layout too.
+TEST_CASE("views: the default view at mount, and Start from the default view", "[ui][table][state]")
+// no state stored, views {"default":"Open orders", views:[Open orders: sort c2 desc, hidden c3]}: the first query sorts by
+// c2 desc and c3 is hidden. Then state {sort c1 asc, layout hiding c4} and "defaultOnMount": true: the first query sorts
+// by c2 desc and c4 (stored layout) is hidden, c3 is shown.
+
+// Mutation: the modified mark compared against the unfitted view.
+TEST_CASE("views: applying a view records its name, and a change marks it modified", "[ui][table][state]")
+// chooseMenu(table, nullopt, {"Views", "Open orders"}): t.sort is the view's; after h.advance(500ms) the saved state has
+// "view":"Open orders"; clickHeader(table, 0): menuOf(table, nullopt)'s Views submenu labels it "Open orders (modified)".
+// A view whose filter names a removed column applies without that filter.
+
+// Mutation: Save view… with a taken name sending AddView (refused as NameTaken, the sort change lost).
+TEST_CASE("views: Save view… under a taken name replaces that view", "[ui][table][state]")
+// Window 1 over a RecordingTableStateStore holding views "A" and "B" at revision r0: after a sort change,
+// chooseMenu(table, nullopt, {"Views", "Save view…"}), table_view_name "A", table_view_save: one save(views, expected
+// r0) → Saved r1; one view "A" with the new sort, two views in all; the status line shows "Saved view A".
+```
+
 In `tests/net/test_push_tables.cpp`: the publish-then-read flow over a real socket. Gate T2 is held by 14a.
 
 - [ ] **Step 2: Run to see them fail.** `ctest --test-dir build/cl-debug -R "shared views on a table" --output-on-failure`. Expected: FAIL — no `Publish view…` entry.
-- [ ] **Step 3: Implement** the entries and the publish flow.
+- [ ] **Step 3: Implement** the `Views` submenu and its own-view entries, `table_view_dialog` (a taken name saved as a `ReplaceView`), applying a view (fitted, through the handlers where bound, its name written to the state's `view`), the `{name} (modified)` mark, `Saved view {name}`, the default view and `defaultOnMount` at mount; then the shared entries and the publish flow.
 - [ ] **Step 4: Run to see them pass**, then `morph_tests`; on Linux `ctest --test-dir build/linux-everything -R "shared views" --output-on-failure`.
-- [ ] **Step 5: Mutations, docs, commit.** Commit: `feat(ui): saved and shared table views`.
+- [ ] **Step 5: Mutations, docs, commit.** Each case's named mutation run once. Docs: interpreter.md (the `Views` submenu, applying a view, the default view at mount, shared views) and document.md (the table menu's views). Commit: `feat(ui): saved and shared table views`.
 
 ---
 

@@ -51,9 +51,9 @@ public:
     /// @return Completes when every part is read; the reason a part could not be read otherwise.
     [[nodiscard]] async::Completion<Result> load() {
         auto [completion, promise] = async::Completion<Result>::makeSettleable(_held->owner);
-        auto const settle = std::make_shared<Settle>(Settle{.promise = std::move(promise), .waiting = 1, .failure = {}});
         bool const shares = this->shares();
-        settle->waiting = shares ? 2 : 1;
+        auto const settle = std::make_shared<Settle>(
+            Settle{.promise = std::move(promise), .waiting = shares ? 2 : 1, .failure = {}});
         loadPart(_held, &Held::own, settle);
         if (shares) {
             loadPart(_held, &Held::shared, settle);
@@ -262,8 +262,15 @@ private:
                 }
                 attempt(saving, stored ? stored->revision : std::string{});
             })
-            .onError([saving](std::exception_ptr const&) {
-                saving->promise.resolve(Result{std::unexpected(std::string{"Views could not be saved"})});
+            .onError([saving](std::exception_ptr const& error) {
+                std::string text = "Views could not be saved";
+                try {
+                    std::rethrow_exception(error);
+                } catch (std::exception const& failure) {
+                    text += std::string{": "} + failure.what();
+                } catch (...) {
+                }
+                saving->promise.resolve(Result{std::unexpected(std::move(text))});
             });
     }
 

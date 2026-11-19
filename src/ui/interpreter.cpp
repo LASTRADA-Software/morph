@@ -9233,8 +9233,8 @@ std::unique_ptr<RowsTable> ScreenCore::makeRowsTable(ElementState& element, std:
         table.loadTimer = scheduler->after(session.options().tableStateTimeout,
                                            table.scope.token().guard([&table] { table.release(); }));
     }
-    // The saved views load in the same turn as the state, so a store that batches reads them with it. Nothing
-    // shows them yet, so views that cannot be read are left unsaid.
+    // The saved views load in the same turn as the state, so a store that batches reads them with it; views that
+    // cannot be read are left unsaid.
     table.views = std::make_unique<TableViews>(*table.states, *table.stateKey, runtime().owner());
     static_cast<void>(table.views->load());
     table.states->load(*table.stateKey)
@@ -9562,8 +9562,8 @@ void ScreenCore::wireModelTable(ElementState& element) {
         model.loadTimer = scheduler->after(session.options().tableStateTimeout,
                                            model.scope.token().guard([&model] { model.release(); }));
     }
-    // The saved views load in the same turn as the state, so a store that batches reads them with it. Nothing
-    // shows them yet, so views that cannot be read are left unsaid.
+    // The saved views load in the same turn as the state, so a store that batches reads them with it; views that
+    // cannot be read are left unsaid.
     model.views = std::make_unique<TableViews>(*model.states, *model.stateKey, runtime().owner());
     static_cast<void>(model.views->load());
     model.states->load(*model.stateKey)

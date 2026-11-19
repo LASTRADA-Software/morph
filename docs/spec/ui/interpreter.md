@@ -524,8 +524,7 @@ keeps its operands' 0 places and still fills 0.29 of a bar.
   and saves once more, with its revision, or with an empty `expected` when nothing is stored; a second `Conflict`
   is "Views could not be saved: another window changed them at the same time", and an operation that does not
   apply to the document read again ("A view named … exists", "No view named …") saves nothing. A mounted table does
-  not follow saves made elsewhere. The table menu's `Views` submenu and its name dialog are not lowered yet: the
-  table menu itself is not on a screen.
+  not follow saves made elsewhere. Views that cannot be read are left unsaid at mount.
   **Groups.** With `group`, the source splits its rows into runs by `by` (read per row, untracked: what `by` reads
   besides the row regroups the rows when it changes; adjacent rows are one run while their `by` is the same element
   as the run's first row's, by the rule of `runs`, quantities compared through the screen's unit table), holds each
