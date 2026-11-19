@@ -472,4 +472,23 @@ inline void draftHeading(ChromeRig& rig, std::string const& screenId, std::strin
     REQUIRE(rig.pump([&rig] { return !rig.find("Dialog", "source_dialog").has_value(); }));
 }
 
+/// Stores @p screen for `ann` in the rig's store directly, past every check: how a test gets a broken screen listed.
+inline void putDirectly(ChromeRig& rig, morph::ui::CustomScreen screen) {
+    REQUIRE(rig.server.has_value());
+    std::string const id = screen.id;
+    morph::ui::CustomScreenKey key{.person = "ann", .app = "notes", .id = id};
+    // Not consumed: handlers attach on the store's strand, which a test thread is not. The server's own `get` says
+    // when the screen is stored.
+    auto completion = rig.server->store->put(std::move(key), std::move(screen));
+    REQUIRE(rig.pump([&rig, &id] {
+        return rig.server
+                   ->call(morph::ui::kCustomScreensGet, R"({"app":"notes","id":)" + screens_test::quoted(id) + "}",
+                          "ann")
+                   .kind == "ok";
+    }));
+}
+
+/// A custom screen's id: `custom:` and 32 hexadecimal digits ending in @p last.
+inline std::string customId(char last) { return "custom:" + std::string(31, '0') + last; }
+
 }  // namespace custom_client

@@ -4,9 +4,11 @@
 // through the client's load and the server's check into a draft, the refusal and its line, the draft bar's Save,
 // Save as… and Discard, and the store's refusal shown to the person.
 
+#include <algorithm>
 #include <catch2/catch_test_macros.hpp>
 #include <chrono>
 #include <cstddef>
+#include <expected>
 #include <memory>
 #include <morph/core/executor.hpp>
 #include <morph/ui/custom_screen_chrome.hpp>
@@ -21,6 +23,7 @@
 using custom_client::ChromeRig;
 using custom_client::draftHeading;
 using custom_client::kEdit;
+using custom_client::kHome;
 using custom_client::note;
 using custom_client::Offer;
 using morph::ui::DocumentScreenHost;
@@ -487,4 +490,148 @@ TEST_CASE("custom screen chrome: Save as… asked again while the source is bein
     CHECK(rig.field("save_as_title") == "Once");
     REQUIRE(rig.pump([&rig] { return morph::ui::isCustomScreenId(rig.screenOf(0)); }));
     CHECK(rig.sync->listed().screens.size() == 1);
+}
+
+// Mutation: open the chosen screen in a tab of its own (two tabs remain).
+TEST_CASE("custom screen chrome: Open as lists the screens based on this one and opens one in the same tab and params",
+          "[ui][custom-screens][chrome]") {
+    ChromeRig rig;
+    std::string const alpha = rig.saveOnServer("Alpha", "notes.edit", std::string{kEdit});
+    static_cast<void>(rig.saveOnServer("Beta", "notes.edit", std::string{kEdit}));
+    static_cast<void>(rig.saveOnServer("Homely", "notes.home", std::string{kHome}));
+    rig.open("notes.edit", note(7));
+    REQUIRE(rig.pump([&rig] { return rig.find("Menu", "open_as_notes.edit").has_value(); }));
+    int const menu = *rig.find("Menu", "open_as_notes.edit");
+    std::string const items = rig.harness.backend.prop(menu, "items");
+    CHECK(items.contains("Note"));
+    CHECK(items.contains("Alpha"));
+    CHECK(items.contains("Beta"));
+    CHECK_FALSE(items.contains("Homely"));
+
+    // The base first, then the custom screens of that base in the list's order.
+    std::size_t place = 1;
+    for (morph::ui::CustomScreenSummary const& screen : rig.sync->listed().screens) {
+        if (screen.basedOn != "notes.edit") {
+            continue;
+        }
+        if (screen.id == alpha) {
+            break;
+        }
+        ++place;
+    }
+    rig.harness.backend.chooseMenuEntry(menu, {place});
+    REQUIRE(rig.pump([&rig, &alpha] { return rig.workspace->tabs().size() == 1 && rig.screenOf(0) == alpha; }));
+    CHECK(DocumentScreenHost::paramsOf(*rig.workspace->handleOf(0)) == std::optional<ParamMap>{note(7)});
+    CHECK(rig.text("heading") == "Edit note");
+}
+
+// Mutation: show Open as whatever the offer (the menu stays after custom screens are no longer offered).
+TEST_CASE("custom screen chrome: Open as and the navigator's entries go when custom screens are not offered",
+          "[ui][custom-screens][chrome]") {
+    ChromeRig rig;
+    static_cast<void>(rig.saveOnServer("Alpha", "notes.edit", std::string{kEdit}));
+    static_cast<void>(rig.saveOnServer("Homely", "notes.home", std::string{kHome}));
+    rig.open("notes.edit", note(1));
+    REQUIRE(rig.pump([&rig] { return rig.find("Menu", "open_as_notes.edit").has_value(); }));
+    CHECK(rig.chrome->navigatorEntries().size() == 1);
+    rig.chrome->setOffered(false);
+    rig.harness.settle();
+    CHECK_FALSE(rig.find("Menu", "open_as_notes.edit").has_value());
+    CHECK(rig.chrome->navigatorEntries().empty());
+}
+
+// Mutations: leave broken screens out of the entries (`Old` is not listed); mount a broken screen instead of opening
+// its source (no source view shows, and a tab is opened).
+TEST_CASE(
+    "custom screen chrome: navigator entries are the screens of a base without params, a broken one opens its "
+    "source",
+    "[ui][custom-screens][chrome]") {
+    ChromeRig rig;
+    std::string const homely = rig.saveOnServer("Homely", "notes.home", std::string{kHome});
+    static_cast<void>(rig.saveOnServer("Alpha", "notes.edit", std::string{kEdit}));
+    std::string const old = custom_client::customId('1');
+    custom_client::putDirectly(rig, morph::ui::CustomScreen{.id = old,
+                                                            .title = "Old",
+                                                            .basedOn = "notes.home",
+                                                            .document = R"({"vocab":"ui/1","id":")" + old +
+                                                                        R"(","view":{"kind":"hologram"}})",
+                                                            .savedAt = {},
+                                                            .savedBy = "ann"});
+    rig.sync->relist();
+    REQUIRE(rig.pump([&rig] { return rig.sync->listed().screens.size() == 3; }));
+
+    std::vector<morph::ui::NavigatorCustomEntry> const entries = rig.chrome->navigatorEntries();
+    REQUIRE(entries.size() == 2);
+    auto const entryOf = [&entries](std::string const& id) {
+        auto const found = std::ranges::find(entries, id, &morph::ui::NavigatorCustomEntry::id);
+        REQUIRE(found != entries.end());
+        return *found;
+    };
+    CHECK(entryOf(homely).title == "Homely");
+    CHECK(entryOf(homely).mine);
+    CHECK(entryOf(homely).broken.empty());
+    CHECK_FALSE(entryOf(old).broken.empty());
+
+    rig.chrome->openCustom(old, {});
+    REQUIRE(rig.pump([&rig] { return rig.find("Dialog", "source_dialog").has_value(); }));
+    CHECK(rig.shown("Button", "source_refusal"));
+    CHECK(rig.find("Button", "source_save").has_value());
+    CHECK(rig.workspace->tabs().empty());
+
+    // A screen whose base takes no params opens from the navigator, and has no Open as.
+    rig.chrome->openCustom(homely, {});
+    REQUIRE(rig.pump([&rig, &homely] { return !rig.workspace->tabs().empty() && rig.screenOf(0) == homely; }));
+    CHECK_FALSE(rig.find("Menu", "open_as_" + homely).has_value());
+}
+
+// Mutation: close the source view after a passing check without saving (the screen stays broken).
+TEST_CASE("custom screen chrome: the source of a broken screen of mine is fixed and saved from the source view",
+          "[ui][custom-screens][chrome]") {
+    ChromeRig rig;
+    std::string const old = custom_client::customId('2');
+    custom_client::putDirectly(rig, morph::ui::CustomScreen{.id = old,
+                                                            .title = "Old",
+                                                            .basedOn = "notes.home",
+                                                            .document = R"({"vocab":"ui/1","id":")" + old +
+                                                                        R"(","view":{"kind":"hologram"}})",
+                                                            .savedAt = {},
+                                                            .savedBy = "ann"});
+    rig.sync->relist();
+    REQUIRE(rig.pump([&rig] { return rig.sync->listed().screens.size() == 1; }));
+    rig.chrome->showStoredSource(old);
+    REQUIRE(rig.pump([&rig] { return rig.find("Dialog", "source_dialog").has_value(); }));
+    rig.type("source_text",
+             morph::ui::prettyJson(screens_test::replaced(std::string{kHome}, "\"notes.home\"", "\"" + old + "\"")));
+    rig.click("source_save");
+    REQUIRE(rig.pump([&rig, &old] {
+        auto const& screens = rig.sync->listed().screens;
+        return screens.size() == 1 && screens.front().id == old && !screens.front().broken.has_value();
+    }));
+    REQUIRE(rig.pump([&rig] { return !rig.find("Dialog", "source_dialog").has_value(); }));
+}
+
+// Mutation: open a custom screen without fetching it first (the mount finds no document, and openCustom answers why).
+TEST_CASE(
+    "custom screen chrome: a custom screen opens once fetched, is recorded by its route, and reads back once fetched "
+    "again",
+    "[ui][custom-screens][chrome]") {
+    ChromeRig rig;
+    std::string const alpha = rig.saveOnServer("Alpha", "notes.edit", std::string{kEdit});
+    REQUIRE(rig.sync->documents().find(alpha) == nullptr);
+    std::optional<std::expected<void, std::string>> opened;
+    rig.chrome->openCustom(alpha, note(3),
+                           [&opened](std::expected<void, std::string> answer) { opened = std::move(answer); });
+    REQUIRE(rig.pump([&opened] { return opened.has_value(); }));
+    REQUIRE(opened->has_value());
+    REQUIRE(rig.workspace->tabs().size() == 1);
+    std::string const route = alpha + "?noteId=3";
+    CHECK(rig.workspace->record() == std::vector<std::string>{route});
+
+    rig.sync->documents().forget(alpha);
+    CHECK_FALSE(rig.host->parseRoute(route).has_value());
+    std::optional<std::vector<std::string>> missing;
+    rig.sync->prefetchRoutes({route}, [&missing](std::vector<std::string> ids) { missing = std::move(ids); });
+    REQUIRE(rig.pump([&missing] { return missing.has_value(); }));
+    CHECK(missing->empty());
+    CHECK(rig.host->parseRoute(route).has_value());
 }

@@ -2,6 +2,7 @@
 #pragma once
 
 #include <cstdint>
+#include <expected>
 #include <functional>
 #include <map>
 #include <memory>
@@ -10,6 +11,7 @@
 #include <string>
 #include <string_view>
 #include <utility>
+#include <vector>
 
 #include "../reactive/runtime.hpp"
 #include "../reactive/signal.hpp"
@@ -19,6 +21,7 @@
 #include "document.hpp"
 #include "host.hpp"
 #include "mount.hpp"
+#include "navigator.hpp"
 #include "view.hpp"
 #include "workspace_model.hpp"
 
@@ -140,6 +143,32 @@ public:
     /// @param tab The tab.
     void discard(WorkspaceTabId tab);
 
+    /// @brief The navigator's Custom section: the listed screens whose base takes no params, so they open with none,
+    ///        broken ones included with their reason. Empty while custom screens are not offered.
+    /// @return The entries, in the list's order.
+    [[nodiscard]] std::vector<NavigatorCustomEntry> navigatorEntries() const;
+
+    /// @brief Opens a custom screen: fetches its document into the cache when it is not there, then opens it as a tab
+    ///        through `openTab`. A broken one opens its source view instead, since it is never mounted.
+    /// @param screenId The custom screen's id.
+    /// @param params   Its params.
+    /// @param done     Called once with nothing, or why it did not open; may be empty, and then a failure is told
+    ///                 through `notify`.
+    void openCustom(std::string const& screenId, ParamMap params,
+                    std::function<void(std::expected<void, std::string>)> done = {});
+
+    /// @brief Opens the source view of a stored custom screen, as `get` answers it, with its breakage shown as the
+    ///        refusal: editable while custom screens are offered and the screen is the person's own, when
+    ///        **Check and save** checks the text on the server and saves it over the screen.
+    /// @param screenId The custom screen's id.
+    void showStoredSource(std::string const& screenId);
+
+    /// @brief **Open as**: opens @p screenId in @p tab's place with the tab's params, fetching a custom screen's
+    ///        document first; a broken one opens its source view instead.
+    /// @param tab      The tab.
+    /// @param screenId The base screen, or a custom screen based on it.
+    void openAs(WorkspaceTabId tab, std::string const& screenId);
+
 private:
     enum class SourceMode : std::uint8_t { Draft, Stored };
 
@@ -188,6 +217,23 @@ private:
         std::unique_ptr<reactive::Signal<bool>> busy;
         std::optional<Mounted> view;
     };
+
+    // One entry of Open as, and the menu as a whole, keyed so it is drawn again whenever an entry changes.
+    struct OpenAsChoice {
+        std::string id;
+        std::string label;
+        bool current = false;
+        bool operator==(OpenAsChoice const&) const = default;
+    };
+    struct OpenAsShape {
+        std::string key;
+        std::vector<OpenAsChoice> choices;
+        bool operator==(OpenAsShape const&) const = default;
+    };
+    [[nodiscard]] Node openAsMenu(WorkspaceTabId tab, std::string const& screenId);
+    // A tracked read of the list and the offer; no choices while Open as has nothing to offer.
+    [[nodiscard]] OpenAsShape openAsShape(std::string const& screenId) const;
+    void saveFromSource();
 
     // Wraps @p fn so it does nothing once the chrome is gone: replies arrive through the sync, which may outlive it.
     template <typename F>

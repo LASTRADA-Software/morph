@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <expected>
@@ -159,6 +160,7 @@ Node CustomScreenChrome::toolsRow(WorkspaceTabId tab, std::string const& screenI
     row.justify = Justify::End;
     row.common.testId = "screen_tools_" + screenId;
     row.common.visible = Prop<bool>{[this, tab] { return !draftedTracked(tab); }};
+    row.children.push_back(openAsMenu(tab, screenId));
     row.children.push_back(chromeButton("source_button_" + screenId, "Source", ButtonEmphasis::Ghost,
                                         guarded([this, tab] { showSource(tab); })));
     return ui::row(std::move(row));
@@ -392,6 +394,10 @@ void CustomScreenChrome::openSource(SourceMode mode, std::optional<WorkspaceTabI
                                                     }
                                                 }),
                                                 Prop<bool>{true}, notBusy));
+    }
+    if (!readOnly && mode == SourceMode::Stored) {
+        actions.children.push_back(chromeButton("source_save", "Check and save", ButtonEmphasis::Primary,
+                                                guarded([this] { saveFromSource(); }), Prop<bool>{true}, notBusy));
     }
     actions.children.push_back(
         chromeButton("source_close", "Close", ButtonEmphasis::Normal, guarded([this] { closeSourceLater(); })));
@@ -773,6 +779,220 @@ void CustomScreenChrome::discard(WorkspaceTabId tab) {
     }
     // Posted: the press that asked runs in a handler, and a remount must not run inside one.
     _options.runtime->owner().post(guarded(remount));
+}
+
+Node CustomScreenChrome::openAsMenu(WorkspaceTabId tab, std::string const& screenId) {
+    return ui::forEach<OpenAsShape>(
+        [this, screenId] {
+            OpenAsShape shape = openAsShape(screenId);
+            return shape.choices.empty() ? std::vector<OpenAsShape>{} : std::vector<OpenAsShape>{std::move(shape)};
+        },
+        [](OpenAsShape const& shape) { return Key{shape.key}; },
+        [this, tab, screenId](reactive::Signal<OpenAsShape> const& shape) {
+            Menu menu;
+            menu.style = MenuStyle::Button;
+            menu.label = Prop<std::string>{std::string{"Open as"}};
+            menu.common.testId = "open_as_" + screenId;
+            for (OpenAsChoice const& choice : shape.peek().choices) {
+                MenuItem item;
+                item.label = Prop<std::string>{choice.label};
+                item.checked = Prop<std::optional<bool>>{std::optional<bool>{choice.current}};
+                item.onSelect = guarded([this, tab, target = choice.id] { openAs(tab, target); });
+                menu.items.push_back(std::move(item));
+            }
+            return ui::menu(std::move(menu));
+        },
+        Axis::Horizontal, 0);
+}
+
+CustomScreenChrome::OpenAsShape CustomScreenChrome::openAsShape(std::string const& screenId) const {
+    static_cast<void>(_listVersion->get());
+    OpenAsShape shape;
+    if (!_offered->get()) {
+        return shape;
+    }
+    std::string const base = baseOf(screenId);
+    std::shared_ptr<Document const> const baseDocument = base.empty() ? nullptr : _options.documents(base);
+    // A base without params opens from the navigator; Open as is for screens opened with params.
+    if (!baseDocument || baseDocument->params.empty()) {
+        return shape;
+    }
+    std::vector<OpenAsChoice> customs;
+    for (CustomScreenSummary const& screen : _listed.screens) {
+        if (screen.basedOn != base) {
+            continue;
+        }
+        std::string label = screen.title;
+        if (!screen.mine) {
+            label += " · by " + screen.savedBy;
+        }
+        if (screen.broken) {
+            label += " · broken";
+        }
+        customs.push_back(OpenAsChoice{.id = screen.id, .label = std::move(label), .current = screen.id == screenId});
+    }
+    if (customs.empty()) {
+        return shape;
+    }
+    shape.choices.push_back(OpenAsChoice{.id = base, .label = titleOf(base), .current = base == screenId});
+    shape.choices.insert(shape.choices.end(), customs.begin(), customs.end());
+    for (OpenAsChoice const& choice : shape.choices) {
+        shape.key += choice.id + '\x1f' + choice.label + (choice.current ? "\x1f*" : "") + '\x1e';
+    }
+    return shape;
+}
+
+void CustomScreenChrome::openAs(WorkspaceTabId tab, std::string const& screenId) {
+    ScreenHandle* const handle = handleOf(tab);
+    if (_model == nullptr || handle == nullptr || DocumentScreenHost::screenIdOf(*handle) == screenId) {
+        return;
+    }
+    if (std::optional<CustomScreenSummary> const summary = summaryOf(screenId); summary && summary->broken) {
+        showStoredSource(screenId);
+        return;
+    }
+    ParamMap const params = DocumentScreenHost::paramsOf(*handle).value_or(ParamMap{});
+    auto const replace = [this, tab, screenId, params] {
+        if (_model == nullptr || _model->handleOf(tab) == nullptr) {
+            return;
+        }
+        _model->openInPlace(
+            tab, screenId, params, guarded([this, screenId](std::expected<WorkspaceTabId, MountError> opened) {
+                if (!opened) {
+                    notify("Cannot open " + titleOf(screenId) + ": " + opened.error().reason, Tone::Err);
+                }
+            }));
+    };
+    if (!isCustomScreenId(screenId)) {
+        // Posted: the menu that asked runs in a handler, and the tab's screen is about to be replaced.
+        _options.runtime->owner().post(guarded(replace));
+        return;
+    }
+    _options.sync->open(
+        screenId,
+        guarded([this, screenId, replace](std::expected<std::shared_ptr<Document const>, std::string> loaded) {
+            if (!loaded) {
+                notify("Cannot open " + titleOf(screenId) + ": " + loaded.error(), Tone::Err);
+                return;
+            }
+            replace();
+        }));
+}
+
+std::vector<NavigatorCustomEntry> CustomScreenChrome::navigatorEntries() const {
+    std::vector<NavigatorCustomEntry> entries;
+    if (!_offered->peek()) {
+        return entries;
+    }
+    for (CustomScreenSummary const& screen : _listed.screens) {
+        // Read from the base, not `opensWithoutParams`, which is false for a broken screen: a broken screen whose base
+        // takes no params is still listed, so its source can be opened and fixed.
+        std::shared_ptr<Document const> const base = _options.documents(screen.basedOn);
+        if (!base || !base->params.empty()) {
+            continue;
+        }
+        entries.push_back(NavigatorCustomEntry{.id = screen.id,
+                                               .title = screen.title,
+                                               .savedBy = screen.savedBy,
+                                               .mine = screen.mine,
+                                               .broken = screen.broken ? screen.broken->reason : std::string{}});
+    }
+    return entries;
+}
+
+void CustomScreenChrome::openCustom(std::string const& screenId, ParamMap params,
+                                    std::function<void(std::expected<void, std::string>)> done) {
+    if (std::optional<CustomScreenSummary> const summary = summaryOf(screenId); summary && summary->broken) {
+        showStoredSource(screenId);
+        if (done) {
+            done({});
+        }
+        return;
+    }
+    _options.sync->open(screenId, guarded([this, screenId, params = std::move(params),
+                                           done](std::expected<std::shared_ptr<Document const>, std::string> loaded) {
+                            if (!loaded) {
+                                if (done) {
+                                    done(std::unexpected(loaded.error()));
+                                } else {
+                                    notify("Cannot open " + titleOf(screenId) + ": " + loaded.error(), Tone::Err);
+                                }
+                                return;
+                            }
+                            _options.openTab(screenId, params);
+                            if (done) {
+                                done({});
+                            }
+                        }));
+}
+
+void CustomScreenChrome::showStoredSource(std::string const& screenId) {
+    _options.sync->get(
+        screenId, guarded([this, screenId](std::expected<CustomScreenFound, std::string> found) {
+            if (!found) {
+                notify("Cannot open the source of " + titleOf(screenId) + ": " + found.error(), Tone::Err);
+                return;
+            }
+            bool const editable = _offered->peek() && found->summary.mine;
+            openSource(SourceMode::Stored, std::nullopt, screenId, prettyJson(found->document), !editable);
+            if (found->summary.broken) {
+                refuse(found->summary.broken->pointer, found->summary.broken->reason);
+            }
+        }));
+}
+
+void CustomScreenChrome::saveFromSource() {
+    Source* const source = _source.get();
+    if (source == nullptr || source->mode != SourceMode::Stored || source->readOnly || source->busy->peek()) {
+        return;
+    }
+    std::optional<CustomScreenSummary> const summary = summaryOf(source->screenId);
+    if (!summary) {
+        refuse("", "the custom screen is not listed");
+        return;
+    }
+    std::string const text = source->text->peek();
+    std::string const id = source->screenId;
+    std::uint64_t const generation = source->generation;
+    _options.runtime->batch([source] {
+        source->busy->set(true);
+        source->status->set(std::string{"Checking…"});
+    });
+    _options.sync->check(
+        summary->basedOn, text,
+        guarded([this, id, text, generation,
+                 listed = *summary](std::expected<std::optional<CheckRefusal>, std::string> checked) {
+            // The view the check was made for takes the answer, not one opened since.
+            Source* const shown = _source.get();
+            if (shown == nullptr || shown->generation != generation) {
+                return;
+            }
+            if (!checked) {
+                refuse("", checked.error());
+                return;
+            }
+            if (*checked) {
+                refuse((*checked)->pointer, (*checked)->reason);
+                return;
+            }
+            _options.sync->save(
+                CustomScreensSave{
+                    .app = {}, .id = id, .title = listed.title, .basedOn = listed.basedOn, .document = text},
+                guarded([this, generation, title = listed.title](std::expected<std::string, std::string> saved) {
+                    if (!saved) {
+                        if (_source != nullptr && _source->generation == generation) {
+                            refuse("", saved.error());
+                        } else {
+                            notify("Not saved: " + saved.error(), Tone::Err);
+                        }
+                        return;
+                    }
+                    if (_source != nullptr && _source->generation == generation) {
+                        closeSourceLater();
+                    }
+                    notify("Saved " + title, Tone::Ok);
+                }));
+        }));
 }
 
 void CustomScreenChrome::notify(std::string const& text, Tone tone) const {
