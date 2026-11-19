@@ -19,6 +19,8 @@
 #include <morph/ui/catalogue.hpp>
 #include <morph/ui/chat/client.hpp>
 #include <morph/ui/chat/panel.hpp>
+#include <morph/ui/custom_screen_chrome.hpp>
+#include <morph/ui/custom_screen_sync.hpp>
 #include <morph/ui/dev_reload.hpp>
 #include <morph/ui/document.hpp>
 #include <morph/ui/explorer.hpp>
@@ -164,6 +166,9 @@ public:
         resetHead();
         resetParts();
         _badges.reset();
+        if (_customChrome) {
+            _customChrome->attach(nullptr);
+        }
         _workspace.reset();
         _appRoot.reset();
         _frame.reset();
@@ -187,6 +192,9 @@ public:
             if (auto const live = alive.lock(); live != nullptr && *live && _chat) {
                 _chat->reconnected();
             }
+            if (auto const live = alive.lock(); live != nullptr && *live && _customSync) {
+                _customSync->reconnected();
+            }
         });
         source.onEvent([this, alive = std::weak_ptr<bool>{_alive}](wire::EventBody const& event) {
             if (auto const live = alive.lock(); live != nullptr && *live && _session) {
@@ -194,6 +202,9 @@ public:
             }
             if (auto const live = alive.lock(); live != nullptr && *live && _chat) {
                 _chat->deliverEvent(event);
+            }
+            if (auto const live = alive.lock(); live != nullptr && *live && _customSync) {
+                _customSync->deliverEvent(event);
             }
         });
     }
@@ -220,8 +231,16 @@ public:
         followConnection(source);
         listen(source);
         showPermitted();
+        // Through the screens' own dispatcher, so its calls carry their session and go where their models go; the
+        // session carries its watch.
+        _customSync = std::make_unique<ui::CustomScreenSync>(
+            source.dispatcher(), source.bundle() != nullptr ? source.bundle()->applicationId : std::string{},
+            [this] { return _source->catalog(); }, _session.get());
         ui::DocumentScreenHostOptions hostOptions;
         hostOptions.documents = [this](std::string_view screenId) -> std::shared_ptr<ui::Document const> {
+            if (ui::isCustomScreenId(screenId)) {
+                return _customSync->documents().find(screenId);
+            }
             auto const found = _documents.find(screenId);
             if (found != _documents.end()) {
                 return found->second;
@@ -231,6 +250,17 @@ public:
             return generated == _generated.end() ? nullptr : generated->second;
         };
         hostOptions.backend = _backend;
+        // A draft asks before its tab closes, as unsaved edits do; every other dirty screen keeps this client's rule
+        // of staying open.
+        hostOptions.guard = [this](ui::ScreenHandle& screen, std::function<void(ui::CloseChoice)> const& choose) {
+            if (!ui::DocumentScreenHost::drafted(screen) || _frame == nullptr) {
+                choose(ui::CloseChoice::Cancel);
+                return;
+            }
+            _frame->confirm(
+                "Discard the draft of " + screen.title().peek() + "?", "Discard", "Keep",
+                [choose](bool discard) { choose(discard ? ui::CloseChoice::Discard : ui::CloseChoice::Cancel); });
+        };
         _application = std::make_unique<ApplicationHost>(
             source, _options.signIn, _options.downloads,
             [this](SignedIn signedIn) {
@@ -259,6 +289,11 @@ public:
                 if (_workspace) {
                     _workspace->screenClosed(screen);
                 }
+            });
+        _customChrome = std::make_unique<ui::CustomScreenChrome>(customChromeOptions());
+        _customSync->setOnListed(
+            [this](ui::CustomScreensListed const& listed, std::vector<std::string> const& /*dropped*/) {
+                _customChrome->listed(listed);
             });
         _hosts.add(std::string{kExplorer}, [this](ui::ParamMap const& params, ui::ContainerWidget& page) {
             static_cast<void>(params);
@@ -480,6 +515,12 @@ private:
     // The frame and its workspace for the catalog the source holds now: the navigator lists its entries, so a new
     // session's catalog gets a new frame. Every tab of the old one is closed.
     void buildFrame() {
+        // A new frame is a new session's: what the old one learnt about custom screens is forgotten.
+        if (_customChrome) {
+            _customChrome->attach(nullptr);
+            _customSync->reset();
+            _customChrome->setOffered(false);
+        }
         resetHead();
         resetParts();
         _badges.reset();
@@ -519,7 +560,11 @@ private:
             // Posted: the navigator's button is a widget of the frame, which a mount may rebuild.
             _context->executor().post([this, alive = std::weak_ptr<bool>{_alive}, screenId] {
                 if (auto const live = alive.lock(); live != nullptr && *live) {
-                    mount(screenId, {});
+                    if (ui::isCustomScreenId(screenId) && _customChrome) {
+                        _customChrome->openCustom(screenId, {});
+                    } else {
+                        mount(screenId, {});
+                    }
                 }
             });
         };
@@ -563,16 +608,81 @@ private:
         // The shell mounts the head row itself, in its top bar: an in-page head would show it a second time. An
         // application that declares the search, the inbox or the person's menu has the top bar for them, and its
         // screens keep their heads in the page.
+        tabs.chrome = [this](ui::WorkspaceTabId tab, std::string_view screenId) -> ui::Node {
+            return _customChrome ? _customChrome->chromeFor(tab, screenId) : nullptr;
+        };
         _headInPage = _appDocument && _appDocument->shell &&
                       (!_appDocument->shell->search.empty() || _appDocument->shell->inbox ||
                        _appDocument->shell->principal || _appDocument->shell->help);
         _workspace =
             std::make_unique<ui::Workspace>(_context->runtime(), *_backend, *_host, std::move(tabs), &_frame->page(),
                                             _headInPage ? ui::HeadPlacement::InPage : ui::HeadPlacement::External);
+        if (_customChrome) {
+            _customChrome->attach(&_workspace->model());
+            probeCustomScreens();
+        }
         mountApp();
         followBadges();
         followParts();
         buildChat();
+    }
+
+    // Asks the server whether it offers custom screens, for the session the frame was built for.
+    void probeCustomScreens() {
+        _customSync->probe([this, alive = std::weak_ptr<bool>{_alive}](bool offered) {
+            if (auto const live = alive.lock(); live != nullptr && *live && _customChrome) {
+                _customChrome->setOffered(offered);
+            }
+        });
+    }
+
+    // What the custom screens chrome works with: the host, the bundle's documents and catalog, the navigator's
+    // titles, this shell's way of opening a tab, and its toast.
+    ui::CustomScreenChromeOptions customChromeOptions() {
+        ui::CustomScreenChromeOptions options;
+        options.runtime = &_context->runtime();
+        options.backend = _backend;
+        options.host = _host.get();
+        options.sync = _customSync.get();
+        options.documents = [this](std::string_view screenId) -> std::shared_ptr<ui::Document const> {
+            auto const found = _documents.find(screenId);
+            return found == _documents.end() ? nullptr : found->second;
+        };
+        options.sourceOf = [this](std::string_view screenId) -> std::string {
+            ui::Bundle const* const bundle = _source->bundle();
+            if (bundle == nullptr) {
+                return {};
+            }
+            auto const found = bundle->documents.find(screenId);
+            return found == bundle->documents.end() ? std::string{} : found->second;
+        };
+        options.catalog = [this] { return _source->catalog(); };
+        options.titleOf = [this](std::string_view screenId) -> std::string {
+            if (ui::CatalogReply const* const catalog = _source->catalogReply()) {
+                auto const entry = std::ranges::find(catalog->entries, screenId, &ui::CatalogEntry::id);
+                if (entry != catalog->entries.end()) {
+                    std::vector<std::string> const titles = ui::catalogTitlesIn(*entry, &_catalogues, currentLocale());
+                    if (!titles.empty()) {
+                        return titles.front();
+                    }
+                }
+            }
+            return std::string{screenId};
+        };
+        options.openTab = [this](std::string const& screenId, ui::ParamMap const& params) {
+            static_cast<void>(mount(screenId, params));
+        };
+        options.notify = [this](std::string const& text, ui::Tone tone) {
+            if (_frame != nullptr) {
+                _frame->showToast(text, tone);
+            }
+        };
+        options.onListChanged = [this] {
+            if (_frame != nullptr && _customChrome != nullptr) {
+                _frame->navigator().setCustom(_customChrome->navigatorEntries());
+            }
+        };
+        return options;
     }
 
     // The chat's panel in the new frame, shown once the server says it offers one. A document, mounted as any screen
@@ -1126,13 +1236,48 @@ private:
         return opened->mounted;
     }
 
+    // A route to a custom screen whose document is not fetched yet: fetched, then opened; or the person is told it was
+    // not restored and the start screen opens. Answers whether the route was one.
+    bool openCustomRoute(std::string const& route) {
+        std::string const screenId{ui::routeScreen(route)};
+        if (!ui::isCustomScreenId(screenId) || _customSync == nullptr ||
+            _customSync->documents().find(screenId) != nullptr) {
+            return false;
+        }
+        _customSync->open(
+            screenId, [this, alive = std::weak_ptr<bool>{_alive}, route,
+                       screenId](std::expected<std::shared_ptr<ui::Document const>, std::string> const& loaded) {
+                auto const live = alive.lock();
+                if (live == nullptr || !*live || _host == nullptr) {
+                    return;
+                }
+                std::expected<ui::Route, std::string> const parsed =
+                    loaded ? _host->parseRoute(route)
+                           : std::expected<ui::Route, std::string>{std::unexpected(loaded.error())};
+                if (!parsed) {
+                    if (_frame != nullptr) {
+                        _frame->showToast("The custom screen " + screenId + " was not restored: " + parsed.error(),
+                                          ui::Tone::Warn);
+                    }
+                    mount(firstScreen(_signedIn), {});
+                    return;
+                }
+                mount(parsed->screen, parsed->params);
+            });
+        return true;
+    }
+
     // Opens the route the history held at start, once the catalog lists its screen.
     bool openWanted() {
         if (_wanted.empty()) {
             return false;
         }
+        if (openCustomRoute(_wanted)) {
+            _wanted.clear();
+            return true;
+        }
         auto const route = _host->parseRoute(_wanted);
-        if (!route || !_documents.contains(route->screen)) {
+        if (!route || (!_documents.contains(route->screen) && !ui::isCustomScreenId(route->screen))) {
             return false;
         }
         _wanted.clear();
@@ -1150,8 +1295,11 @@ private:
             _wanted = route;  // opened once the catalog is current
             return;
         }
+        if (openCustomRoute(route)) {
+            return;
+        }
         auto const parsed = _host->parseRoute(route);
-        if (parsed && _documents.contains(parsed->screen)) {
+        if (parsed && (_documents.contains(parsed->screen) || ui::isCustomScreenId(parsed->screen))) {
             mount(parsed->screen, parsed->params);
             return;
         }
@@ -1264,6 +1412,10 @@ private:
     bool _listening = false;
     std::unique_ptr<ApplicationHost> _application;
     std::unique_ptr<Host> _host;
+    // The client of the server's custom screens, and their chrome over each frame's workspace. After the host, which
+    // the chrome mounts drafts through, so they go before it; the frame and the workspace go before them.
+    std::unique_ptr<ui::CustomScreenSync> _customSync;
+    std::unique_ptr<ui::CustomScreenChrome> _customChrome;
     std::unique_ptr<ui::chat::ChatClient> _chat;
     std::unique_ptr<ui::chat::ChatPanelBinding> _chatBinding;
     std::unique_ptr<ui::ShellFrame> _frame;

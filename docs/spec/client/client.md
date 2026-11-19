@@ -16,6 +16,7 @@ application host.
 - [The application host](#the-application-host)
 - [Tests](#tests)
 - [Chat](#chat)
+- [Custom screens](#custom-screens)
 
 ## Packaging
 
@@ -219,3 +220,24 @@ without it reports both as not supported.
 When the server offers a chat, the shell mounts its panel in the frame's chat slot and follows the active tab. See
 [`../ui/chat.md`](../ui/chat.md#the-panel). A server with no chat answers the probe with an error, and the shell shows
 nothing and reports nothing.
+
+## Custom screens
+
+The shell offers a person's custom screens when the server does ([`../ui/custom_screens.md`](../ui/custom_screens.md#the-client)).
+
+- **Discovery.** Each frame (the first, and each one a sign-in or sign-out builds) resets a `CustomScreenSync` over
+  the source's dispatcher and asks `list`. A server without the model refuses its registration with `unknown model
+  type: morph.customScreens`, and the shell offers no custom screens; any other refusal is the same for the person and
+  is logged at warn. The sync adds the record `morph.customScreens` to the session's watch, which the session sends
+  through the source's watcher and sends again after each reconnect and resync, and relists on a `changes` event
+  naming it. An in-process source has no events and no watcher, so its lists refresh at a frame, a reconnect and this
+  client's own saves.
+- **The chrome.** Every document screen's tab carries the `CustomScreenChrome` at the top of its page
+  (`WorkspaceOptions::chrome`): **Source**, **Open as** for a screen with params, and the draft bar. A host screen,
+  such as the explorer, has none.
+- **Opening.** The host's documents lookup answers a `custom:` id from the sync's cache. A navigator entry, **Open as**
+  and a route to a custom screen fetch its document first; a route whose screen `get` does not answer is not restored,
+  a toast says so, and the start screen opens.
+- **Closing a draft.** The shell's close guard asks before a tab with a draft closes (`ShellFrame::confirm`:
+  "Discard the draft of …?", Discard or Keep). Every other dirty screen without `onClose` stays open.
+- **The navigator.** The chrome's `navigatorEntries` fill the navigator's Custom section after each list.
