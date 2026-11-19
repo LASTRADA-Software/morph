@@ -1249,7 +1249,7 @@ struct ColumnWindow { std::vector<std::size_t> columns; int leading = 0; int tra
 
 // backend.hpp, TableWidget gains (defaults do nothing; a backend that windows columns overrides them)
 virtual void setColumnWindow(std::span<std::size_t const> columns, std::span<int const> offsets,
-                             std::span<int const> widths, int totalWidth);
+                             std::span<int const> widths, int totalWidth, std::size_t pinned);  // pinned: the leading columns shown pinned
 virtual void setOnHorizontalRange(std::function<void(int scrollX, int viewport)> handler);
 virtual void setHorizontalOffset(int scrollX);                       // anchoring
 virtual void setOnSelectRange(std::function<void(std::size_t anchorRow, std::size_t focusRow, SelectionChange)> handler);
@@ -1260,6 +1260,9 @@ virtual void setOnFocusMove(std::function<void(FocusMove)> handler);
 virtual void setCounts(std::optional<std::int64_t> rows, std::size_t columns);  // nullopt: unknown (AtLeast)
 virtual void scrollToRow(std::size_t viewRow);                         // brings a view row into view
 virtual void setHighlightedRow(std::optional<std::size_t> viewRow);    // marks one row; nullopt: none
+/// Places a cell of a row in a column; nothing pools it (not drawn, no place, its column blank). A backend places cells
+/// by this, not by their order in the row, so a placeholder of the frame budget needs no widget.
+virtual void setCellColumn(Widget& row, Widget& cell, std::optional<std::size_t> column);
 enum class FocusMove : std::uint8_t { Up, Down, Left, Right, Home, End, First, Last, PageUp, PageDown };
 ```
 
@@ -1267,8 +1270,9 @@ Decisions:
 - `windowingOf`: rows when `serverMode` or `rows >= threshold` or `rows × visibleColumns > cellThreshold`; columns when `visibleColumns > columnThreshold` or `rows × visibleColumns > cellThreshold`.
 - `ColumnExtents` keeps widths in a Fenwick tree (prefix sums in O(log n), `columnsAt` by binary descent on the tree), so a width change and a lookup read O(log n) nodes; `columnReads` counts per-column width reads only.
 - Pools: the pooled unit is 9d's cell — its own `reactive::Signal<Value> row`, the `Node` `cellView` built over it once, and its widget — which owns the cell's scope, so its bindings live as long as the pooled cell. Cells of the default cell of one `TextRole` share a pool keyed by role; a column with its own `cell` template has a pool keyed by its column index. A cell leaving either window is detached and pooled, its signal left as it was. One entering takes a pooled cell and is rebound by setting its signal to the record of its new row (`cellsRebound`, and one `cellBinds` when the record differs) and, for a role pool, by the mount telling it its new column; `cellView` is not called again. Only an empty pool creates a cell (`cellsCreated`).
+- As built, pools are per row slot, and row slots are pooled too: the backend has no reparenting, so a cell stays in the row stack it was built in. A row that enters takes the slot (stack and cells) of one that left, its cells rebound to the new row (`cellsRebound`); within a slot, a column that leaves parks its cell (`setCellColumn(row, cell, nullopt)`) in the slot's pool of its role or column, and a column that enters takes one from there. `TableSource` gains `defaultCellView(columnSignal, rowSignal)` and `ownCell` (which columns use `cellView`), so a default cell can follow its column, and `cellReads` (each column's cell's row reads, fetched while the column is in the window). Before the backend reports a horizontal viewport every visible column is in the window, so a backend that does not window columns draws as before.
 - The frame: one pass of the windowing Effect realizes or rebinds at most `realizePerFrame` cells, nearest the viewport centre first; the rest are placeholders of their column's width (`placeholders`) and are realized in later turns posted with `_rt->owner().post`, one batch of `realizePerFrame` a turn.
-- Anchoring: a growth of a column left of the first fully visible unpinned column calls `setHorizontalOffset(scrollX + growth)` in the same pass. The vertical rule is the same for rows above the first visible row.
+- Anchoring: a growth of a column left of the first fully visible unpinned column calls `setHorizontalOffset(scrollX + growth)` in the same pass. The vertical rule is the same for rows above the first visible row; the mount holds no row heights, so it is 10b's, in `MorphTable`, which measures them.
 - Pinned: the first `arrangement.pinned` visible columns are always in the window; while their widths exceed half the viewport, the last pinned columns scroll with the rest (display only; `pinned` is not changed).
 - Focus is `(row key, column id)`, held by the mount, reported through `Table::onFocusCell` and set from `Table::focus` (both a `CellRef` here; Task 19 re-types them, cross-part decision 52); that row and column stay realized; a focused row that leaves the view moves focus to the row now at its view index, or the last row; a move onto an unfetched index focuses the placeholder (announced as loading) and the row takes focus when it arrives; `Last` with an `AtLeast` total goes to the last row known.
 - `setCounts(rows, columns)`: `rows` the view's total when `Exact`, `nullopt` under `AtLeast`; `columns` the visible column count.
@@ -1278,7 +1282,7 @@ Decisions:
 
 - [ ] **Step 1: Write the failing tests** in `tests/test_ui_mount.cpp`. `RecordingBackend` gains the drivers `scrollTableColumns(id, scrollX, viewport)`, `focusMove(id, FocusMove)`, `selectTableRange(id, anchor, focus)`, `measureColumn(id, column, width)` (calls the `setOnColumnMeasured` handler), and records `setColumnWindow` (`windowColumns(id)`: the column indices last given; `totalWidth(id)`), `setCounts` (`lastCounts(id)`), `setFocusCell` (`focusCell(id)`: the last view row and column), `setHorizontalOffset` (`horizontalOffset(id)`: the last one, `nullopt` when never called), `scrollToRow` and `setHighlightedRow` (the props `scrolledToRow` and `highlightedRow`, `none` when cleared).
 
-`tests/ui_table_support.hpp` gains `FakeRows`, a `TableRows` for mount tests: `FakeRows(rows, columns, kind = Exact)` has every row present with the record `{id: i, c0: "r<i>c0", …}`, key `i`; `holdFrom(index)` makes `row()` answer nothing at and after that view index until `arrive()`, which also fires a `Reset`; `setTotal(rows, kind)`; it counts `visibleCalls` and keeps `lastVisible` (first, count, columns). `WindowFixture` (in `test_ui_mount.cpp`) mounts one `Table` over a `FakeRows` on a `RecordingBackend`: `WindowFixture f{rows, columns, {.pinned = p, .custom = {indices}}}` gives every column a fixed width of 100 and the default text cell, except the `custom` ones, which have their own `cell`; the viewport is 30 rows by 2,000 (twenty columns); `f.table` is the widget id, `f.arrangement` the `Signal<TableArrangement>` the table's `arrangement` reads, `f.focus` the signal its `focus` reads; `f.scrollRows(first)` reports rows `[first, first + 30)` and settles; `f.scrollColumns(x)` reports `(x, 2000)` and settles; `f.flingRows(n)` scrolls by one viewport `n` times, settling one owner turn at a time and keeping `f.maxRebindsPerTurn` (the largest growth of `cellsRebound + cellsCreated` across one turn); `f.stats()` is `Mounted::stats()`; `f.cellsAlive()` and `f.headerCellsAlive()` count the backend's live cell and header-cell widgets of the table; `f.realizedRows()` its live row widgets; `f.cellOf(key, column)` the live cell widget of that row and column, or nothing; `f.extents()` the mount's `ColumnExtents` (a test accessor on `Mounted`).
+`test_ui_mount.cpp` holds `FakeRows` (`ui_table_support.hpp` pulls in the interpreter, which the mount tests do not need), a `TableRows` for mount tests: `FakeRows(rows, columns, owner, kind = Exact)` has every row present with the record `{id: i, c0: "r<i>c0", …}`, key `i`; `holdFrom(index)` makes `row()` answer nothing at and after that view index until `arrive()`, which also fires a `Reset`; `setTotal(rows, kind)`; it counts `visibleCalls` and keeps `lastVisible` (first, count, columns). `WindowFixture` (in `test_ui_mount.cpp`) mounts one `Table` over a `FakeRows` on a `RecordingBackend`: `WindowFixture f{rows, columns, {.pinned = p, .custom = {indices}}}` gives every column a fixed width of 100 and the default text cell, except the `custom` ones, which have their own `cell`; the viewport is 30 rows by 2,000 (twenty columns); `f.table` is the widget id, `f.arrangement` the `Signal<TableArrangement>` the table's `arrangement` reads, `f.focus` the signal its `focus` reads; `f.scrollRows(first)` reports rows `[first, first + 30)` and settles; `f.scrollColumns(x)` reports `(x, 2000)` and settles; `f.flingRows(n)` scrolls down over `n` rows one viewport (30 rows) at a time, running the owner one turn at a time after each step and keeping `f.maxRebindsPerTurn` (the largest growth of `cellsRebound + cellsCreated` across one turn); `f.stats()` is `Mounted::stats()`; `f.cellsAlive()` and `f.headerCellsAlive()` count the backend's live cell and header-cell widgets of the table; `f.realizedRows()` its live row widgets; `f.cellOf(key, column)` the live cell widget of that row and column, or nothing; `f.extents()` the mount's `ColumnExtents` (a test accessor on `Mounted`).
 
 ```cpp
 // Mutation: `windowingOf` leaving `cellThreshold` out (the first line's `.columns` and `.rows` are false).
@@ -1291,7 +1295,8 @@ TEST_CASE("windowing: the three thresholds", "[ui][mount]") {
     CHECK(windowingOf(v, 100, 40, false).columns == false);
     CHECK(windowingOf(v, 10, 10, true).rows);       CHECK_FALSE(windowingOf(v, 10, 10, true).columns);
 }
-// Mutation: a column window that ignores cellThreshold (cellsAlive is realized rows × 300).  Gate F2.
+// Mutation: the column window never on (`windowColumns` is all 300). Ignoring `cellThreshold` alone cannot fail
+// this case: 300 visible columns are over `columnThreshold` already.  Gate F2.
 TEST_CASE("table window: 1,999 × 300 realizes only the windows", "[ui][mount]") {
     WindowFixture f{1'999, 300, {.pinned = 2}};
     f.scrollRows(500);  f.scrollColumns(10'000);                              // columns 100 to 119 in view
@@ -1302,8 +1307,8 @@ TEST_CASE("table window: 1,999 × 300 realizes only the windows", "[ui][mount]")
     CHECK(f.backend.totalWidth(f.table) == 300 * 100);
     CHECK(f.rows->lastVisible.columns.size() == 30);                          // the window's columns go to `visible`
 }
-// Mutations: release a leaving cell without pooling it (cellsCreated grows on the second fling); no frame budget
-// (maxRebindsPerTurn is 50 × 30).  Gate F8.
+// Mutations: a leaving row's slot not reused (cellsCreated grows on the second fling); no frame budget
+// (maxRebindsPerTurn is 720: thirty rows entering, twenty-four cells each).  Gate F8.
 TEST_CASE("table window: a fling creates no cell once the pools are warm", "[ui][mount]") {
     WindowFixture f{100'000, 300, {.pinned = 2}};
     f.flingRows(2'000);  auto const created = f.stats().cellsCreated;
@@ -1333,7 +1338,8 @@ TEST_CASE("table window: a column growing left of the view keeps the columns in 
     f.backend.measureColumn(f.table, 110, 180);  f.settle();                  // inside the view: no anchoring
     CHECK(f.backend.horizontalOffset(f.table) == 10'060);
 }
-// Mutations: pinned columns dropped from the window when scrolled away; unpinning by changing `pinned`.
+// Mutations: pinned columns dropped from the window when scrolled away; no display unpinning (`pinnedShown` stays
+// 12). The mount cannot change the fixture's signal, so "unpinning by changing `pinned`" cannot fail the case.
 TEST_CASE("table window: pinned columns stay realized, and a narrow table unpins for display only", "[ui][mount]") {
     WindowFixture f{1'999, 300, {.pinned = 2}};
     f.scrollColumns(20'000);
@@ -1354,7 +1360,8 @@ TEST_CASE("table window: a pass reads no width outside the column window", "[ui]
     std::size_t const window = 2 + 20 + 2 * 4;
     CHECK(f.extents().columnReads() - before <= 20 * window);                 // the window's columns, per pass
 }
-// Mutations: rebuild rows on a layout change (cellsCreated grows); a hide that pools nothing.  Gate D8.
+// Mutations: rebuild rows on a layout change (cellsCreated grows); a hide that pools nothing (the destroyed cell
+// makes the next pass throw).  Gate D8.
 TEST_CASE("table window: hiding and moving a column create no cell widgets", "[ui][mount]") {
     WindowFixture f{1'999, 300, {.pinned = 2}};
     auto const before = f.stats().cellsCreated;  std::size_t const alive = f.cellsAlive();
@@ -1371,7 +1378,7 @@ TEST_CASE("table window: hiding and moving a column create no cell widgets", "[u
     CHECK(f.backend.prop(*f.cellOf(Key{std::int64_t{0}}, 3), "text") == "r0c3");   // every cell still its own
     CHECK(f.rows->lastVisible.first == 0);                                    // rows and their order untouched
 }
-// Mutation: focus held by widget, which recycling drops (the focused cell is gone after the scroll).  Gate F10.
+// Mutation: the focused row not kept realized (the focused cell is gone after the scroll).  Gate F10.
 TEST_CASE("table focus: the focused cell survives a scroll of 10,000 rows and 200 columns", "[ui][mount]") {
     WindowFixture f{100'000, 300, {.pinned = 2}};
     f.focus.set(CellRef{.key = Key{std::int64_t{7}}, .column = "c5"});  f.settle();
@@ -1410,12 +1417,12 @@ TEST_CASE("table focus: the reported row count is the total, or unknown for a lo
 ```
 `allColumnsBut(n, i)` is the indices `0 … n − 1` without `i`; `RecordingBackend::pinnedShown(id)` is how many leading columns of the last `setColumnWindow` the mount marked pinned (the call's first `pinned` entries; the driver reads the count the mount passes in a recorded prop `pinnedShown`).
 
-In `tests/test_ui_table_model.cpp`, over `TableHarness`. `kSelectTable` is `kModelTable` with `"selectionMode":"multiple"`; `kHighlight` is `kModelTable` with `"state":{"hk":{"init":{"lit":null}}}`, `"highlightKey":{"ref":"hk"}` on the table and three buttons (test ids `to5012`, `to77`, `toNone`) whose `onClick` sets `hk` to `5012`, to `77`, and to `null`; `click(h, testId)` clicks one through the recording backend and settles; `replyKeyPages(h)` answers every unanswered `Table.samples` call with a page of keys alone at the offset and limit its query names (`pageJson(offset, limit, total, {})`), settling after each; `replyKeyed(h, {{key, viewRow}…})` answers the oldest unanswered call with `keyedJson`.
+In `tests/test_ui_table_model.cpp`, over `TableHarness`. `selectTable()` is `kModelTable` with `"selectionMode":"multiple"` (a function: `withTableKey` uses Catch macros); `kHighlight` is `kModelTable` with `"state":{"hk":{"init":{"lit":null}}}`, `"highlightKey":{"ref":"hk"}` on the table and three buttons (test ids `to5012`, `to77`, `toNone`) whose `onClick` sets `hk` to `5012`, to `77`, and to `null`; `click(h, testId)` clicks one through the recording backend and settles; `replyKeyPages(h)` answers every unanswered `Table.samples` call with a page of keys alone at the offset and limit its query names (`pageJson(offset, limit, total, {})`), settling after each; `replyKeyed(h, {{key, viewRow}…})` answers the oldest open call whose query names `keys` with `keyedJson` (the page fetch the highlight causes is older and open); `stopped(h, index)` is whether a call was stopped.
 
 ```cpp
 // Mutation: `keysOf` fetching the visible columns (a call's body lacks `"columns":[]`).
 TEST_CASE("model table: a range over rows not held resolves through pages that name no columns", "[ui][table]") {
-    TableHarness h;  auto screen = mountShown(h, kSelectTable, 100'000);      // rows 0 to 199 held
+    TableHarness h;  auto screen = mountShown(h, selectTable(), 100'000);      // rows 0 to 199 held
     std::size_t const sent = h.dispatcher.calls.size();
     h.backend.selectTableRange(tableOf(h), 500, 1'499);  h.settle();
     REQUIRE(h.dispatcher.calls.size() > sent);
@@ -1429,7 +1436,7 @@ TEST_CASE("model table: a range over rows not held resolves through pages that n
 }
 // Mutation: no bound (keysOf is called and the calls go out).
 TEST_CASE("model table: a range over maxRangeRows is refused and selects nothing", "[ui][table]") {
-    TableHarness h;  auto screen = mountShown(h, kSelectTable, 100'000);
+    TableHarness h;  auto screen = mountShown(h, selectTable(), 100'000);
     std::size_t const sent = h.dispatcher.calls.size();
     h.backend.selectTableRange(tableOf(h), 0, 10'000);  h.settle();            // 10,001 rows
     CHECK(h.dispatcher.calls.size() == sent);
@@ -1459,7 +1466,7 @@ TEST_CASE("model table: highlightKey scrolls to the row and marks it", "[ui][tab
     CHECK(h.backend.prop(table, "scrolledToRow") == "5011");                  // nothing scrolled
     std::size_t const first = h.dispatcher.calls.size();
     click(h, "to5012");  click(h, "to77");                                    // two keys before a reply
-    CHECK(h.stopped(first));                                                  // the first key's fetch is cancelled
+    CHECK(stopped(h, first));                                                 // the first key's fetch is cancelled
     click(h, "toNone");  CHECK(h.backend.prop(table, "highlightedRow") == "none");
 }
 ```
