@@ -39,6 +39,7 @@
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <tuple>
 #include <utility>
 #include <vector>
 
@@ -2113,6 +2114,7 @@ struct QuickWindowOptions {
     std::vector<Wrapped> wrapped;
     bool wrap = true;
     std::vector<Level> levels;
+    ui::SelectionMode selection = ui::SelectionMode::None;
 };
 
 std::string groupedCount(std::int64_t n) {
@@ -2144,7 +2146,8 @@ std::vector<std::size_t> allColumnsBut(std::size_t n, std::size_t left) {
 }
 
 // The recording backend's `WindowFixture` on Qt Quick: one table over `FakeRows` in a 1,280 × 800 window, every
-// column 64 px wide with the default text cell, so twenty columns are in view; the status line shows the count.
+// column 8 units wide with the default text cell, and the window made twenty columns wide (`column` px each) once the
+// mount has laid the columns out in the table's measure; the status line shows the count.
 struct QuickWindowFixture {
     QuickWindowFixture(std::int64_t rowCount, std::size_t columnCount, QuickWindowOptions options = {})
         : rows{std::make_shared<FakeRows>(rowCount, columnCount, scene.owner())},
@@ -2157,7 +2160,7 @@ struct QuickWindowFixture {
         for (std::size_t column = 0; column < columnCount; ++column) {
             columns.push_back(ui::TableColumn{.id = "c" + std::to_string(column),
                                               .label = "C" + std::to_string(column),
-                                              .width = ui::Sizing::fixed(64),
+                                              .width = ui::Sizing::fixed(8),
                                               .wrap = options.wrap});
         }
         ui::TableSource source;
@@ -2179,8 +2182,16 @@ struct QuickWindowFixture {
         tableOptions.focus = [this] { return focus.get(); };
         tableOptions.status = [this] { return status.get(); };
         tableOptions.onRetry = [this] { ++retries; };
+        tableOptions.selectionMode = options.selection;
+        tableOptions.onSelectRange = [this](std::size_t anchor, std::size_t focus, ui::SelectionChange change) {
+            ranges.emplace_back(anchor, focus, change);
+        };
         view.emplace(scene.runtime(), scene.backend(),
                      ui::table(std::move(columns), std::move(source), std::move(tableOptions)));
+        settle();
+        column = static_cast<int>(call("columnWidth", 0).toReal());
+        REQUIRE(column > 0);
+        scene.window().resize(20 * column, 800);
         settle();
     }
 
@@ -2222,8 +2233,10 @@ struct QuickWindowFixture {
                 const row = rowsHolder.children[i]
                 if (!row.visible || !row.content)
                     continue
-                for (let j = 0; j < row.content.children.length; ++j)
-                    shown += row.content.children[j].visible ? 1 : 0
+                for (let j = 0; j < row.content.children.length; ++j) {
+                    const cell = row.content.children[j]
+                    shown += cell.measuredIndex !== undefined && cell.visible ? 1 : 0
+                }
             }
             return shown
         })())")};
@@ -2274,8 +2287,10 @@ struct QuickWindowFixture {
     morph::reactive::Signal<ui::TableStatus> status;
     std::vector<QuickWindowOptions::Wrapped> wrapped;
     int retries = 0;
+    std::vector<std::tuple<std::size_t, std::size_t, ui::SelectionChange>> ranges;
     std::size_t firstRow = 0;
     std::size_t maxRebindsPerTurn = 0;
+    int column = 0;  ///< A column's width in pixels, the measure of a fixed column of 8 units and its padding.
     std::optional<ui::Mounted> view;
 };
 
@@ -2285,7 +2300,7 @@ struct QuickWindowFixture {
 TEST_CASE("qt_quick table window: cells and header cells alive are the windows'", "[qt_quick]") {
     QuickWindowFixture f{100'000, 300, {.pinned = 2}};
     f.scrollRows(500);
-    f.scrollColumns(6'400);  // columns 100 to 119 in view
+    f.scrollColumns(100 * f.column);  // columns 100 to 119 in view
     int const window = 2 + 20 + (2 * 4);
     CHECK(f.prop("realizedColumnCount").toInt() == window);
     CHECK(f.prop("pinnedShown").toInt() == 2);
@@ -2297,12 +2312,12 @@ TEST_CASE("qt_quick table window: cells and header cells alive are the windows'"
 TEST_CASE("qt_quick table window: flings create no cell once the pools are warm", "[qt_quick]") {
     QuickWindowFixture f{100'000, 300, {.pinned = 2}};
     f.flingRows(2'000);
-    for (int x = 0; x < 12'800; x += 640) {
+    for (int x = 0; x < 200 * f.column; x += 10 * f.column) {
         f.scrollColumns(x);  // warm both ways
     }
     auto const created = f.stats().cellsCreated;
     f.flingRows(2'000);
-    for (int x = 12'800; x < 19'200; x += 640) {
+    for (int x = 200 * f.column; x < 300 * f.column; x += 10 * f.column) {
         f.scrollColumns(x);
     }
     CHECK(f.stats().cellsCreated == created);
@@ -2315,7 +2330,7 @@ TEST_CASE("qt_quick table window: focus and counts after scrolling far away", "[
     f.focus.set(CellRef{.key = Key{std::int64_t{7}}, .column = "c5"});
     f.settle();
     f.scrollRows(10'000);
-    f.scrollColumns(200 * 64);
+    f.scrollColumns(200 * f.column);
     CHECK(f.call("focusedRow").toInt() == 7);
     CHECK(f.call("focusedColumn").toInt() == 5);
     CHECK(f.call("cellRealized", 7, 5).toBool());
@@ -2377,7 +2392,7 @@ TEST_CASE("qt_quick table: an unloaded cell is a placeholder and a failed one an
 TEST_CASE("qt_quick table: a row's height only grows while it is realized", "[qt_quick]") {
     QuickWindowFixture f{2'000, 300, {.pinned = 0, .wrapped = {{.row = 3, .column = 60, .lines = 2}}}};
     int const low = f.call("rowHeight", 3).toInt();
-    f.scrollColumns(60 * 64);
+    f.scrollColumns(60 * f.column);
     int const tall = f.call("rowHeight", 3).toInt();
     CHECK(tall > low);
     f.scrollColumns(0);
@@ -2398,7 +2413,63 @@ TEST_CASE("qt_quick table: a row growing above the view keeps the rows in view w
     QQuickItem const* const flick = f.item()->findChild<QQuickItem*>(QStringLiteral("flick"));
     REQUIRE(flick != nullptr);
     qreal const offsetBefore = flick->property("contentY").toReal() - f.call("rowTop", 100).toReal();
-    f.scrollColumns(60 * 64);  // row 95, above the view and realized, grows
+    f.scrollColumns(60 * f.column);  // row 95, above the view and realized, grows
     CHECK(f.call("rowHeight", 95).toReal() > f.call("rowHeight", 96).toReal());
     CHECK(flick->property("contentY").toReal() - f.call("rowTop", 100).toReal() == Catch::Approx(offsetBefore));
+}
+
+// Mutation: the Qt Quick table answering the default measure (a windowed column of 8 units is 8 px plus nothing).
+TEST_CASE("qt_quick table: a windowed fixed column is as wide as an unwindowed one", "[qt_quick]") {
+    QuickWindowFixture windowed{100'000, 300};
+    REQUIRE(windowed.prop("arranged").toBool());
+    Scene scene;
+    ui::Mounted const plain{
+        scene.runtime(), scene.backend(),
+        ui::table<std::int64_t>(
+            {{.label = "C0", .width = ui::Sizing::fixed(8)}}, [] { return std::vector<std::int64_t>{1, 2}; },
+            [](std::int64_t const& row) { return ui::Key{row}; },
+            [](morph::reactive::Signal<std::int64_t> const& row) {
+                return std::vector<ui::Node>{ui::text({.text = [&row] { return std::to_string(row.get()); }})};
+            })};
+    scene.settle();
+    QVariantList const widths = Scene::itemOf(plain.root()).property("widths").toList();
+    REQUIRE(widths.size() == 1);
+    CHECK(windowed.call("columnWidth", 0).toReal() == Catch::Approx(widths.at(0).toReal()).margin(1.0));
+}
+
+// Mutations: a tap on a row of a source table focusing the row (the table loses `activeFocus`); MorphTable announcing
+// nothing (no announcement event reaches the accessibility handler).
+TEST_CASE("qt_quick table window: a tap keeps the focus on the table, and the status line is announced",
+          "[qt_quick]") {
+    QuickWindowFixture f{100'000, 30};
+    QQuickItem* const row = f.item()->property("rowsHolder").value<QQuickItem*>()->childItems().value(3);
+    REQUIRE(row != nullptr);
+    f.scene.click(*row);
+    CHECK(f.item()->hasActiveFocus());
+    static std::vector<QString> announced;
+    announced.clear();
+    QAccessible::installUpdateHandler([](QAccessibleEvent* event) {
+        if (event->type() == QAccessible::Announcement) {
+            announced.push_back(static_cast<QAccessibleAnnouncementEvent*>(event)->message());
+        }
+    });
+    QAccessible::setActive(true);
+    f.status.set(ui::TableStatus{.counts = "100,000 rows", .message = "Copied 2 rows", .shown = true});
+    f.settle();
+    QTest::qWait(700);  // the announcement waits for the text to hold half a second
+    QAccessible::installUpdateHandler(nullptr);
+    CHECK(std::ranges::contains(announced, QStringLiteral("100,000 rows  Copied 2 rows")));
+}
+
+// Mutation: Shift with an arrow over a source handled by the realized rows (no range reaches the mount).
+TEST_CASE("qt_quick table window: Shift with an arrow and Ctrl+A select through the mount", "[qt_quick]") {
+    QuickWindowFixture f{100'000, 30, {.selection = ui::SelectionMode::Multiple}};
+    f.item()->forceActiveFocus();
+    f.scene.key(Qt::Key_Down);
+    f.scene.key(Qt::Key_Down, Qt::ShiftModifier);
+    f.scene.key(Qt::Key_Down, Qt::ShiftModifier);
+    REQUIRE_FALSE(f.ranges.empty());
+    CHECK(f.ranges.back() == std::tuple{std::size_t{1}, std::size_t{3}, ui::SelectionChange::Replace});
+    f.scene.key(Qt::Key_A, Qt::ControlModifier);
+    CHECK(f.ranges.back() == std::tuple{std::size_t{0}, std::size_t{99'999}, ui::SelectionChange::Extend});
 }

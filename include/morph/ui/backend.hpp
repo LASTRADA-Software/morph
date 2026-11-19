@@ -764,6 +764,10 @@ struct TableMeasure {
     double monoUnit = 1.0;
     /// @brief The width a column that declares none starts from, in the backend's measure, before its cells measure.
     int contentEstimate = 100;
+    /// @brief What a column takes beyond its content, in the backend's measure: added to a fixed column's width and to
+    ///        a width the user set, so a column is as wide windowed as unwindowed (a graphical backend's cell padding
+    ///        on both sides, a terminal's gap after the column).
+    int padding = 0;
 };
 
 /// @brief A key that moves a table's focused cell, which the mount resolves over rows and columns it may not have
@@ -893,12 +897,13 @@ public:
     /// @param onSort The handler; empty does nothing.
     virtual void setOnSort(std::function<void(std::size_t)> onSort) = 0;
 
-    /// @brief Tells the backend how many of the table's rows are realized, where, and how many exist in total, so
-    ///        it can size a scrollbar and place leading/trailing space for the rows that are not realized. A
-    ///        backend that never virtualizes (the default for every implementer but a windowed Qt Quick table)
-    ///        never calls `setOnVisibleRangeChanged`, so this is never called either.
-    /// @param first The view index of the first realized row.
-    /// @param count How many rows are realized, starting at `first`.
+    /// @brief Tells the backend which contiguous range of view rows is realized and how many rows exist in total, so
+    ///        it can size a scrollbar and place leading/trailing space for the rows that are not realized. Called
+    ///        after each pass for a table over a `TableSource`, and for a table over `rows` at or above its
+    ///        `Virtualization::threshold`, whether or not the backend reports a range. The focused row a source table
+    ///        keeps realized beyond the range is not counted: `setRowIndex` places it.
+    /// @param first The view index of the first row of the range.
+    /// @param count How many rows the range holds, from `first`.
     /// @param total How many rows the table's data has, realized or not.
     virtual void setRealizedWindow(std::size_t first, std::size_t count, std::size_t total);
 

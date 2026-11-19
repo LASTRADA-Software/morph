@@ -100,10 +100,10 @@ public:
     void setOnVisibleRangeChanged(std::function<void(std::size_t, std::size_t)> onVisibleRangeChanged) override;
     /// Throws std::logic_error when @p row is not one of this table's rows.
     void setRowIndex(ui::Widget& row, std::size_t viewRow) override;
-    /// The terminal measures in cells: a unit, and a monospace character, is one cell; a column that declares no width
-    /// starts at twelve.
+    /// The terminal measures in cells: a unit, and a monospace character, is one cell; a column takes its gap after it
+    /// beyond its content, as an unwindowed column does; a column that declares no width starts at twelve.
     [[nodiscard]] ui::TableMeasure tableMeasure() const override {
-        return ui::TableMeasure{.unit = 1.0, .monoUnit = 1.0, .contentEstimate = 12};
+        return ui::TableMeasure{.unit = 1.0, .monoUnit = 1.0, .contentEstimate = 12, .padding = 1};
     }
     void setStatus(ui::TableStatus const& status) override;
     void setOnRetry(std::function<void()> onRetry) override;
@@ -115,6 +115,10 @@ public:
     void setHorizontalOffset(int scrollX) override;
     void setFocusCell(std::size_t viewRow, std::size_t column) override;
     void setOnFocusMove(std::function<void(ui::FocusMove)> handler) override;
+    /// Over a source, Shift with Up or Down, a Shift-click and Ctrl+A (and the header box) go to the handler as view
+    /// rows; the mount resolves them over rows not realized.
+    void setOnSelectRange(
+        std::function<void(std::size_t anchorRow, std::size_t focusRow, ui::SelectionChange)> handler) override;
     void scrollToRow(std::size_t viewRow) override;
     /// Throws std::logic_error when @p row is not one of this table's rows.
     void setCellColumn(ui::Widget& row, ui::Widget& cell, std::optional<std::size_t> column) override;
@@ -265,6 +269,11 @@ private:
                     std::vector<::core::tui::Rect> const& areas) const;
     /// The realized row at view row @p viewRow, or null.
     [[nodiscard]] WidgetBase* rowAtView(std::size_t viewRow) const;
+    /// Calls onSelectRange with a range of view rows in `Multiple` mode; whether it was called.
+    bool selectRange(std::size_t anchorRow, std::size_t focusRow, ui::SelectionChange change);
+    /// The keys of a table over a source: moves and ranges through the mount, Space and Enter on the focused row;
+    /// Ignored for any other key.
+    [[nodiscard]] ::core::tui::EventResult sourceKey(::core::tui::KeyEvent const& key);
     /// The move a key asks of the mount in a table over a source, or none.
     [[nodiscard]] static std::optional<ui::FocusMove> focusMoveOf(::core::tui::KeyEvent const& key);
 
@@ -325,6 +334,8 @@ private:
     std::optional<std::pair<std::size_t, std::size_t>> _reportedRows;
     std::optional<std::pair<int, int>> _reportedColumns;
     std::function<void(ui::FocusMove)> _onFocusMove;
+    std::function<void(std::size_t, std::size_t, ui::SelectionChange)> _onSelectRange;
+    std::optional<std::size_t> _anchorRow;  ///< Over a source, where a range starts: a view row.
     std::optional<std::pair<std::size_t, std::size_t>> _focusCell;  ///< The focused cell's view row and column.
     ui::TableStatus _status;
     std::function<void()> _onRetry;

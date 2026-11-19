@@ -8,6 +8,7 @@
 #include <QVariantList>
 #include <QVariantMap>
 #include <algorithm>
+#include <cmath>
 #include <cstdint>
 #include <ranges>
 #include <span>
@@ -53,6 +54,16 @@ TableImpl::TableImpl(Context& context, ui::ContainerWidget* parent)
         if (auto const handler = _onFocusMove;
             handler && move >= 0 && move <= static_cast<int>(ui::FocusMove::PageDown)) {
             handler(static_cast<ui::FocusMove>(move));
+        }
+    });
+    relay().on(QStringLiteral("selectRange"), [this](QVariant const& payload) {
+        QVariantMap const map = payload.toMap();
+        qlonglong const anchor = map.value(QStringLiteral("anchor")).toLongLong();
+        qlonglong const focus = map.value(QStringLiteral("focus")).toLongLong();
+        if (auto const handler = _onSelectRange; handler && anchor >= 0 && focus >= 0) {
+            handler(static_cast<std::size_t>(anchor), static_cast<std::size_t>(focus),
+                    map.value(QStringLiteral("extend")).toBool() ? ui::SelectionChange::Extend
+                                                                 : ui::SelectionChange::Replace);
         }
     });
     relay().on(QStringLiteral("retry"), [this](QVariant const&) {
@@ -235,19 +246,32 @@ void TableImpl::setHorizontalOffset(int scrollX) {
     }
 }
 
+// The measure the table's widths are in: pixels, from the theme the table item reads.
+ui::TableMeasure TableImpl::tableMeasure() const {
+    return ui::TableMeasure{.unit = read("measureUnit").toDouble(),
+                            .monoUnit = read("measureMonoUnit").toDouble(),
+                            .contentEstimate = static_cast<int>(std::lround(12 * read("measureUnit").toDouble())),
+                            .padding = static_cast<int>(std::lround(read("measurePadding").toDouble()))};
+}
+
 void TableImpl::setOnColumnMeasured(std::function<void(std::size_t column, int width)> handler) {
     _onColumnMeasured = std::move(handler);
 }
 
 void TableImpl::setFocusCell(std::size_t viewRow, std::size_t column) {
-    write("focusRow", static_cast<qlonglong>(viewRow));
-    write("focusColumn", static_cast<int>(column));
+    write("focusedRowIndex", static_cast<qlonglong>(viewRow));
+    write("focusedColumnIndex", static_cast<int>(column));
     if (item() != nullptr) {
         QMetaObject::invokeMethod(item(), "showFocusCell", Qt::DirectConnection);
     }
 }
 
 void TableImpl::setOnFocusMove(std::function<void(ui::FocusMove)> handler) { _onFocusMove = std::move(handler); }
+
+void TableImpl::setOnSelectRange(
+    std::function<void(std::size_t anchorRow, std::size_t focusRow, ui::SelectionChange)> handler) {
+    _onSelectRange = std::move(handler);
+}
 
 // -1 for a row count that is a lower bound or not known yet.
 void TableImpl::setCounts(std::optional<std::int64_t> rows, std::size_t columns) {
@@ -275,8 +299,9 @@ void TableImpl::setCellColumn(ui::Widget& row, ui::Widget& cell, std::optional<s
     }
     base->offer("measuredIndex", column ? static_cast<int>(*column) : -1);
     base->cover(!column.has_value());
+    // Once per row and event loop turn, however many of its cells a pass places.
     if (QQuickItem* const rowItem = tableRow->item(); rowItem != nullptr) {
-        QMetaObject::invokeMethod(rowItem, "place", Qt::DirectConnection);
+        QMetaObject::invokeMethod(rowItem, "schedulePlace", Qt::DirectConnection);
     }
 }
 
@@ -397,6 +422,10 @@ void TableImpl::planSpans(ItemBase const* leaving) {
 }
 
 void TableImpl::stripe(ItemBase const* leaving) const noexcept {
+    // Over a source a row is striped by its view row (`MorphTableRow.viewRow`), not by its place among the children.
+    if (read("sourceRows").toBool()) {
+        return;
+    }
     // Every child is a row, and one being adopted is still being made, so its type is not asked.
     bool alternate = false;
     for (ItemBase const* const child : children()) {

@@ -2216,12 +2216,14 @@ private:
                 add(column);
             }
         }
-        // Widths in the backend's measure: a fixed column's units and a user's width scaled by it, a content column
-        // from the backend's estimate.
+        // Widths in the backend's measure: a fixed column's units and a user's width scaled by it, with the padding a
+        // column takes beyond its content, a content column from the backend's estimate. Monospace characters are
+        // rounded up, so a column of n of them never cuts the last.
         TableMeasure const measure = table.widget->tableMeasure();
         auto const scaled = [&measure, &table](std::size_t column, int units) {
-            double const unit = table.columns.at(column).role == TextRole::Mono ? measure.monoUnit : measure.unit;
-            return static_cast<int>(std::lround(units * unit));
+            bool const mono = table.columns.at(column).role == TextRole::Mono;
+            double const content = units * (mono ? measure.monoUnit : measure.unit);
+            return static_cast<int>(mono ? std::ceil(content) : std::lround(content)) + measure.padding;
         };
         std::vector<int> widths;
         widths.reserve(table.visible.size());

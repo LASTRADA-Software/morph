@@ -6,6 +6,10 @@
 //
 //   morph_qt_quick_tests "[.benchmark][baseline]"
 //
+// The windowed case measures the same figures on a table over a `TableSource` with the column window:
+//
+//   morph_qt_quick_tests "[.benchmark][windowed]"
+//
 // A frame is timed as the spec's CI method says: the test moves the scroll position one step, then times the work
 // that step causes on the software scene graph -- the owner's realization, Qt's events, and polish, sync and render
 // through QQuickWindow::grabWindow. It is CPU time for one frame's work, comparable between commits on one machine.
@@ -25,6 +29,8 @@
 #include <mutex>
 #include <morph/reactive/testing/manual_scheduler.hpp>
 #include <morph/ui/interpreter.hpp>
+#include <morph/ui/mount.hpp>
+#include <morph/ui/view.hpp>
 #include <print>
 #include <string>
 #include <string_view>
@@ -34,6 +40,7 @@
 #include "qt_quick/widget.hpp"
 #include "qt_quick_harness.hpp"
 #include "table/wide_table_model.hpp"
+#include "ui_fake_rows.hpp"
 #include "ui_interpreter_support.hpp"
 #include "wide_rows_document.hpp"
 
@@ -278,6 +285,122 @@ TEST_CASE("qt quick baseline: F2 to F5 on a rows table of 2,000 x 300", "[.bench
                  realized, realizedTaller, static_cast<std::int64_t>(memoryMounted) - static_cast<std::int64_t>(memoryBefore),
                  realizedTaller - realized,
                  static_cast<std::int64_t>(memoryTaller) - static_cast<std::int64_t>(memoryMounted), perRow);
+    static_cast<void>(std::fflush(stdout));
+    watchdog.step("teardown", seconds{300});
+}
+
+namespace {
+
+std::string benchField(ui::Value const& record, std::string const& field) {
+    ui::Value const* const value = record.field(field);
+    return value != nullptr && value->asString() != nullptr ? *value->asString() : std::string{};
+}
+
+}  // namespace
+
+// The same figures with the column window: a table over a `TableSource` of 100,000 x 300, each column 8 units, in the
+// same window. It first asserts the table is windowed both ways, so a mount that realized every column could not pass
+// for the windowed one.
+TEST_CASE("qt quick windowed: F3 to F5 on a source table of 100,000 x 300", "[.benchmark][windowed]") {
+    using std::chrono::seconds;
+    Watchdog watchdog;
+    watchdog.step("mount", seconds{300});
+    BenchHarness harness;
+    auto rows = std::make_shared<morph::testing::FakeRows>(100'000, 300, harness.scene.owner());
+    std::vector<ui::TableColumn> columns;
+    for (std::size_t column = 0; column < 300; ++column) {
+        columns.push_back(ui::TableColumn{
+            .id = "c" + std::to_string(column), .label = "C" + std::to_string(column), .width = ui::Sizing::fixed(8)});
+    }
+    ui::TableSource source;
+    source.rows = rows;
+    source.ownCell.assign(300, false);
+    source.defaultCellView = [](morph::reactive::Signal<std::size_t> const& column,
+                                morph::reactive::Signal<ui::Value> const& row) {
+        return ui::text(
+            {.text = [&column, &row] { return benchField(row.get(), "c" + std::to_string(column.get())); }});
+    };
+    source.cellView = [](std::size_t column, morph::reactive::Signal<ui::Value> const& row) {
+        return ui::text({.text = [&row, column] { return benchField(row.get(), "c" + std::to_string(column)); }});
+    };
+    auto const memoryBefore = bench::processBytes();
+    ui::Mounted const view{harness.scene.runtime(), harness.scene.backend(),
+                           ui::table(std::move(columns), std::move(source), ui::TableOptions{})};
+    harness.scene.settle();
+    static_cast<void>(harness.frame());
+    QQuickItem* const tableItem = &Scene::itemOf(view.root());
+    auto* const flick = tableItem->findChild<QQuickItem*>(QStringLiteral("flick"));
+    auto* const hflick = tableItem->findChild<QQuickItem*>(QStringLiteral("hflick"));
+    REQUIRE(flick != nullptr);
+    REQUIRE(hflick != nullptr);
+    reportRange(harness, *flick);
+
+    // Windowed both ways.
+    int const realized = tableItem->property("realizedCount").toInt();
+    int const windowColumns = tableItem->property("realizedColumnCount").toInt();
+    REQUIRE(tableItem->property("arranged").toBool());
+    REQUIRE(realized > 0);
+    REQUIRE(realized < 100);
+    REQUIRE(windowColumns > 0);
+    REQUIRE(windowColumns < 100);
+    std::println("\nwindowed: {} rows x {} columns realized, {} header cells, {} cells created", realized,
+                 windowColumns, tableItem->property("headerCellCount").toInt(), view.stats().cellsCreated);
+
+    double const rowHeight = tableItem->property("meanRowHeight").toReal();
+    double const columnWidth = tableItem->property("windowTotalWidth").toReal() / 300.0;
+    double const bottom = std::max(0.0, flick->property("contentHeight").toReal() - flick->height());
+    double const right = std::max(0.0, hflick->property("contentWidth").toReal() - hflick->width());
+    REQUIRE(rowHeight > 0);
+    REQUIRE(columnWidth > 0);
+    REQUIRE(right > 0);
+    std::println(
+        "\nF3, F4 windowed: frame time, CPU, software scene graph, offscreen (row {:.1f} px, column {:.1f} px)"
+        "\n\n| scroll | frames | p50 ms | p10-p90 ms | p99 ms | frames over 16.6 ms |\n"
+        "|---|---:|---:|---:|---:|---:|",
+        rowHeight, columnWidth);
+    static_cast<void>(std::fflush(stdout));
+    constexpr int kFrames = 120;
+    struct Scroll {
+        char const* name;
+        QQuickItem* flickable;
+        char const* property;
+        double step;
+        double limit;
+    };
+    std::vector<Scroll> const scrolls{
+        {"F3: vertical, 20 rows/s", flick, "contentY", rowHeight * 20.0 / 60.0, bottom},
+        {"F3: vertical fling, 2,000 rows/s", flick, "contentY", rowHeight * 2'000.0 / 60.0, bottom},
+        {"F3: thumb drag across the table in 2 s", flick, "contentY", bottom / kFrames, bottom},
+        {"F4: horizontal, 10 columns/s", hflick, "contentX", columnWidth * 10.0 / 60.0, right},
+        {"F4: horizontal fling, 100 columns/s", hflick, "contentX", columnWidth * 100.0 / 60.0, right},
+    };
+    for (Scroll const& scroll : scrolls) {
+        watchdog.step(scroll.name, seconds{120});
+        printFrames(scroll.name,
+                    scrollFrames(harness, *scroll.flickable, scroll.property, scroll.step, kFrames, scroll.limit));
+        scroll.flickable->setProperty(scroll.property, 0.0);
+        static_cast<void>(harness.frame());
+        harness.scene.settle();
+    }
+
+    // F5: memory per realized row, from the growth when a taller window realizes more rows.
+    watchdog.step("F5: resize to 1,600 px and report the range", seconds{120});
+    auto const memoryMounted = bench::processBytes();
+    harness.scene.window().resize(1280, 1600);
+    harness.scene.settle();
+    reportRange(harness, *flick);
+    int const realizedTaller = tableItem->property("realizedCount").toInt();
+    auto const memoryTaller = bench::processBytes();
+    REQUIRE(realizedTaller > realized);
+    double const perRow = (static_cast<double>(memoryTaller) - static_cast<double>(memoryMounted)) /
+                          static_cast<double>(realizedTaller - realized);
+    std::println(
+        "\nF5 windowed: memory per realized row, from a window of 800 px to one of 1,600 px\n\n"
+        "| realized rows | process bytes after mount (over before) | rows added | bytes added | bytes per row |\n"
+        "|---|---:|---:|---:|---:|\n| {} -> {} | {} | {} | {} | {:.0f} |",
+        realized, realizedTaller, static_cast<std::int64_t>(memoryMounted) - static_cast<std::int64_t>(memoryBefore),
+        realizedTaller - realized, static_cast<std::int64_t>(memoryTaller) - static_cast<std::int64_t>(memoryMounted),
+        perRow);
     static_cast<void>(std::fflush(stdout));
     watchdog.step("teardown", seconds{300});
 }

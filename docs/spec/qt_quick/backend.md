@@ -343,15 +343,21 @@ row.
 The mount gives it a horizontal-range handler before any row, and `TableImpl::setOnHorizontalRange` sets
 `sourceRows`: the rows then go into a plain item (`rowsPlane`), not the column layout, and each is placed at the top
 of its view row (`setRowIndex` writes `viewRow`), whatever its place among the children, since the focused row stays
-realized outside the row window. **Cells by column.** `setCellColumn` writes the cell's `measuredIndex` (the column it
+realized outside the row window; a row is striped by its view row's parity, not its place. **The measure.**
+`tableMeasure` answers pixels: a unit is `Theme.unitWidth`, a monospace character `Theme.monoAdvance`, a column's
+padding `table.cellPaddingX` a side and a content column's start twelve units, so the mount gives a windowed fixed
+column the width `measure` gives it unwindowed. **Cells by column.** `setCellColumn` writes the cell's `measuredIndex` (the column it
 is placed in and reports its widths for) and pools a cell with none through `ItemBase::cover`, so a pooled cell is
-hidden and placed nowhere; a row never places a source table's cells by their order. **The column window.**
+hidden and placed nowhere; a row never places a source table's cells by their order, and places them once per event
+loop turn however many a pass moves (`schedulePlace`). **The column window.**
 `setColumnWindow` writes `windowColumns` (`[{column, offset, width}]`, pixels, pinned first), `windowTotalWidth` and
 `pinnedShown`, and sets `arranged`: from then on no width is worked out over every column (`widths` is empty and the
 caches are not scanned), the header has a label for each window column only (`headerCellCount`), at its offset, and a
 row places each cell at its column's offset and width. A pinned column's header label and cells are held at the
-leading edge (`x` plus `hflick.contentX`, above the rest, on the surface colour), and only they follow a sideways
-scroll (`placePinned`). `hflick` reports its `contentX` and the viewport less the select column (`hscroll`), unless
+leading edge (`x` plus `hflick.contentX`), above the rest: a header label on the surface colour, and a row's pinned
+cells over an opaque backdrop the row makes in `cells` for a table with pinned columns only (`pinnedBackdrop`: the
+surface, then a further instance of the row's `background` cut to the pinned columns, so the row's state shows there
+too), which the scrolled cells pass beneath. Only they follow a sideways scroll (`placePinned`). `hflick` reports its `contentX` and the viewport less the select column (`hscroll`), unless
 `setHorizontalOffset` moved it; a cell wider than its column reports its width plus the padding (`measured`), which
 the mount grows the column by. **Row height.** A row's `measuredHeight` is its tallest placed cell's plus the padding,
 counted in `rowMeasures`, or the one-line height when every column keeps one line, which measures nothing.
@@ -361,18 +367,24 @@ at `rowTop(viewRow)`, and moves `flick.contentY` so the first visible row keeps 
 or a mean that changes, moves the view by as much (the mount holds no row heights, so this anchoring is
 `MorphTable`'s). The rows in view (`rowAtY` over the top and bottom of the viewport) are what the table reports.
 **Focus** is the table's own: over a source, `activeFocus` stays on `MorphTable`, never on a row, which a recycled
-slot would take away; the arrows, Home, End, PageUp, PageDown, Ctrl+Home and Ctrl+End fire `focusMove` with the
-`FocusMove`, Space and Enter act on the focused row when it is realized, and `setFocusCell` writes `focusRow` and
-`focusColumn`, brings them into view (`showFocusCell`) and makes that row `current`. `setCounts` writes
+slot would take away, and a tap gives it to the table; the arrows, Home, End, PageUp, PageDown, Ctrl+Home and Ctrl+End
+fire `focusMove` with the `FocusMove`, Space and Enter act on the focused row when it is realized, and `setFocusCell`
+writes `focusedRowIndex` and `focusedColumnIndex`, brings them into view (`showFocusCell`) and makes that row
+`current`. A tap does not move the mount's focused cell: no seam carries a pointer's cell. **Ranges.** Shift with Up
+or Down moves the focus and fires `selectRange` from the anchor (`anchorRowIndex`: the row last tapped or toggled, or
+the one the focus left) to the focused row; a Shift-tap fires it to the tapped row; Ctrl+A fires it over every row of
+the view, as `Extend`. `TableImpl` passes them to `setOnSelectRange`, which resolves them over rows not realized and
+refuses one past `maxRangeRows`; each is `multiple` only. `setCounts` writes
 `accessibleRowCount` (-1 for a lower bound) and `accessibleColumnCount`; `Accessible` has no row or column count to
 put them in, so they are properties only. **Load states.** `setCellLoad` writes the row's `cellLoads`; a cell not
 loaded keeps its content bound at opacity 0 under a mark (`loadMarks`): a rounded bar 3 em wide for `Unloaded`, a
 `!` of the same width for `Failed`, whose tooltip and accessible name say "Could not be loaded", each in the
 column's alignment and neither measured into its width. **The status line** (`setStatus`) is one `Text` under the
 rows and outside the sideways scroll (`statusText`: the counts, the state and the message, two spaces apart), with a
-"Retry" `Button` while the state offers it (`retryShown`), firing `retry`; while not shown it takes no height. Its
-text is its accessible name (`StaticText`), so a change is announced as a name change: Qt Quick has no live-region
-attribute.
+"Retry" `Button` while the state offers it (`retryShown`), firing `retry`; while not shown it takes no height. It is a
+polite live region: once its text has held for half a second it is announced (`Accessible.announce`, from Qt 6.8,
+polite by default), so a message is read out once and a count when it settles; before Qt 6.8 the text is the line's
+accessible name (`StaticText`) and nothing is announced.
 
 A heading row (`setRowHeading`, the row's `heading`) places its one cell from the first inset across the select
 column and every column, less two insets; its `TapHandler`, Enter and select box are off, and `shownRows` (the rows the
@@ -686,7 +698,8 @@ software scene graph:
   hiding and moving a column create no cell items (D8); the status line shows the counts and "Retry"; an unloaded
   cell draws its placeholder and a failed one its mark, neither widening the column; a row's height only grows while
   it is realized, and a table of one-line columns measures none; a row growing above the view keeps the rows in view
-  where they are.
+  where they are; a windowed fixed column is as wide as an unwindowed one; a tap keeps the focus on the table and the
+  status line is announced; Shift with an arrow and Ctrl+A select through the mount.
 - **qmllint** over every `MorphUi` component, through the module's lint target, failing on any warning
   (`tests/qt_quick/run_qmllint.cmake`).
 
