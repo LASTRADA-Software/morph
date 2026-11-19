@@ -436,8 +436,13 @@ struct ChromeRig {
         };
         made.catalog = [] { return uiservice::facts(); };
         made.titleOf = [](std::string_view id) { return id == "notes.edit" ? std::string{"Note"} : std::string{id}; };
-        made.openTab = [this](std::string const& id, morph::ui::ParamMap const& params) {
-            static_cast<void>(workspace->openTab(id, params));
+        made.openTab = [this](std::string const& id,
+                              morph::ui::ParamMap const& params) -> std::expected<void, std::string> {
+            auto const opened = workspace->openTab(id, params);
+            if (!opened) {
+                return std::unexpected(opened.error().reason);
+            }
+            return {};
         };
         made.notify = [this](std::string const& text, morph::ui::Tone /*tone*/) { notices.push_back(text); };
         return made;

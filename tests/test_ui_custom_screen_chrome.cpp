@@ -571,6 +571,8 @@ TEST_CASE(
     CHECK(entryOf(homely).mine);
     CHECK(entryOf(homely).broken.empty());
     CHECK_FALSE(entryOf(old).broken.empty());
+    CHECK(rig.chrome->isBroken(old));
+    CHECK_FALSE(rig.chrome->isBroken(homely));
 
     rig.chrome->openCustom(old, {});
     REQUIRE(rig.pump([&rig] { return rig.find("Dialog", "source_dialog").has_value(); }));
@@ -582,6 +584,80 @@ TEST_CASE(
     rig.chrome->openCustom(homely, {});
     REQUIRE(rig.pump([&rig, &homely] { return !rig.workspace->tabs().empty() && rig.screenOf(0) == homely; }));
     CHECK_FALSE(rig.find("Menu", "open_as_" + homely).has_value());
+}
+
+// Mutation: report the kept screen as an error (the notice starts with "Cannot open").
+TEST_CASE("custom screen chrome: Open as on a dirty screen that is kept open says it was cancelled",
+          "[ui][custom-screens][chrome]") {
+    ChromeRig rig;
+    std::string const dirty = rig.saveOnServer(
+        "Alpha", "notes.edit",
+        screens_test::replaced(std::string{kEdit}, R"("params")", R"("dirty":{"lit":true},"params")"));
+    rig.sync->documents().forget(dirty);
+    std::optional<bool> fetched;
+    rig.sync->open(dirty, [&fetched](auto loaded) { fetched = loaded.has_value(); });
+    REQUIRE(rig.pump([&fetched] { return fetched.has_value(); }));
+    REQUIRE(*fetched);
+    rig.open(dirty, note(5));
+    REQUIRE(rig.pump([&rig, &dirty] { return rig.find("Menu", "open_as_" + dirty).has_value(); }));
+    rig.harness.backend.chooseMenuEntry(*rig.find("Menu", "open_as_" + dirty), {0});
+    REQUIRE(rig.pump([&rig] { return !rig.notices.empty(); }));
+    CHECK(rig.notices.back().starts_with("Open as cancelled: "));
+    CHECK(rig.notices.back().ends_with(" stayed open"));
+    CHECK(rig.workspace->tabs().size() == 1);
+    CHECK(rig.screenOf(0) == dirty);
+}
+
+// Mutation: mount a broken screen chosen from Open as (the tab shows it, and no source view opens).
+TEST_CASE("custom screen chrome: Open as onto a broken screen opens its source and leaves the tab as it is",
+          "[ui][custom-screens][chrome]") {
+    ChromeRig rig;
+    static_cast<void>(rig.saveOnServer("Alpha", "notes.edit", std::string{kEdit}));
+    std::string const old = custom_client::customId('3');
+    custom_client::putDirectly(rig, morph::ui::CustomScreen{.id = old,
+                                                            .title = "Old",
+                                                            .basedOn = "notes.edit",
+                                                            .document = R"({"vocab":"ui/1","id":")" + old +
+                                                                        R"(","view":{"kind":"hologram"}})",
+                                                            .savedAt = {},
+                                                            .savedBy = "ann"});
+    rig.sync->relist();
+    REQUIRE(rig.pump([&rig] { return rig.sync->listed().screens.size() == 2; }));
+    rig.open("notes.edit", note(7));
+    REQUIRE(rig.pump([&rig] { return rig.find("Menu", "open_as_notes.edit").has_value(); }));
+    std::size_t place = 1;
+    for (morph::ui::CustomScreenSummary const& screen : rig.sync->listed().screens) {
+        if (screen.id == old) {
+            break;
+        }
+        ++place;
+    }
+    rig.harness.backend.chooseMenuEntry(*rig.find("Menu", "open_as_notes.edit"), {place});
+    REQUIRE(rig.pump([&rig] { return rig.find("Dialog", "source_dialog").has_value(); }));
+    CHECK(rig.shown("Button", "source_refusal"));
+    CHECK(rig.workspace->tabs().size() == 1);
+    CHECK(rig.screenOf(0) == "notes.edit");
+}
+
+// Mutation: treat every stored screen as the person's own (Check and save shows on another person's screen).
+TEST_CASE("custom screen chrome: the stored source of another person's screen is read only, with no Check and save",
+          "[ui][custom-screens][chrome]") {
+    ChromeRig rig;
+    std::string const theirs = custom_client::customId('4');
+    custom_client::putDirectly(rig, morph::ui::CustomScreen{.id = theirs,
+                                                            .title = "Theirs",
+                                                            .basedOn = "notes.home",
+                                                            .document = R"({"vocab":"ui/1","id":")" + theirs +
+                                                                        R"(","view":{"kind":"hologram"}})",
+                                                            .savedAt = {},
+                                                            .savedBy = "bob"});
+    rig.sync->relist();
+    REQUIRE(rig.pump([&rig] { return rig.sync->listed().screens.size() == 1; }));
+    CHECK_FALSE(rig.sync->listed().screens.front().mine);
+    rig.chrome->showStoredSource(theirs);
+    REQUIRE(rig.pump([&rig] { return rig.find("Dialog", "source_dialog").has_value(); }));
+    CHECK_FALSE(rig.find("Button", "source_save").has_value());
+    CHECK(rig.harness.backend.prop(*rig.find("TextInput", "source_text"), "readonly") == "true");
 }
 
 // Mutation: close the source view after a passing check without saving (the screen stays broken).

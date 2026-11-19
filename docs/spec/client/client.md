@@ -237,7 +237,13 @@ The shell offers a person's custom screens when the server does ([`../ui/custom_
   such as the explorer, has none.
 - **Opening.** The host's documents lookup answers a `custom:` id from the sync's cache. A navigator entry, **Open as**
   and a route to a custom screen fetch its document first; a route whose screen `get` does not answer is not restored,
-  a toast says so, and the start screen opens.
+  a toast says so, and the start screen opens (the one asked for at start until a session change, then the new
+  session's). A route opened while signed out whose fetch is refused is kept, not reported, and tried again after the
+  sign-in. A broken screen is never mounted, from the cache or not: its source view opens. A tab that holds a draft
+  does not offer **Open as**; the person saves or discards first.
 - **Closing a draft.** The shell's close guard asks before a tab with a draft closes (`ShellFrame::confirm`:
-  "Discard the draft of …?", Discard or Keep). Every other dirty screen without `onClose` stays open.
+  "Discard the draft of …?", Discard or Keep), before the document's `onClose` runs, so Discard then closes as any
+  close does. Every other dirty screen without `onClose` stays open.
+- **Signing in or out.** The frame is rebuilt for the new session, so every open tab closes without asking and a
+  draft is discarded with it, as an unsaved form is.
 - **The navigator.** The chrome's `navigatorEntries` fill the navigator's Custom section after each list.

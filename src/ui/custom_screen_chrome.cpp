@@ -78,6 +78,10 @@ void CustomScreenChrome::attach(WorkspaceModel* model) {
     _model = model;
     // The old workspace's rows keep the state they read alive themselves.
     _tabs.clear();
+    // The list belongs to the frame that is gone: the new session's list arrives with its own sync.
+    if (model == nullptr) {
+        _listed = CustomScreensListed{};
+    }
 }
 
 void CustomScreenChrome::setOffered(bool offered) {
@@ -855,16 +859,23 @@ void CustomScreenChrome::openAs(WorkspaceTabId tab, std::string const& screenId)
         return;
     }
     ParamMap const params = DocumentScreenHost::paramsOf(*handle).value_or(ParamMap{});
-    auto const replace = [this, tab, screenId, params] {
+    std::string const from = DocumentScreenHost::screenIdOf(*handle).value_or(std::string{});
+    auto const replace = [this, tab, screenId, params, from] {
         if (_model == nullptr || _model->handleOf(tab) == nullptr) {
             return;
         }
-        _model->openInPlace(
-            tab, screenId, params, guarded([this, screenId](std::expected<WorkspaceTabId, MountError> opened) {
-                if (!opened) {
-                    notify("Cannot open " + titleOf(screenId) + ": " + opened.error().reason, Tone::Err);
-                }
-            }));
+        _model->openInPlace(tab, screenId, params,
+                            guarded([this, screenId, from](std::expected<WorkspaceTabId, MountError> opened) {
+                                if (opened) {
+                                    return;
+                                }
+                                if (opened.error().reason == kStayedOpenReason) {
+                                    // The person kept the screen open: a choice, not a failure.
+                                    notify("Open as cancelled: " + titleOf(from) + " stayed open", Tone::Info);
+                                    return;
+                                }
+                                notify("Cannot open " + titleOf(screenId) + ": " + opened.error().reason, Tone::Err);
+                            }));
     };
     if (!isCustomScreenId(screenId)) {
         // Posted: the menu that asked runs in a handler, and the tab's screen is about to be replaced.
@@ -903,12 +914,18 @@ std::vector<NavigatorCustomEntry> CustomScreenChrome::navigatorEntries() const {
     return entries;
 }
 
+bool CustomScreenChrome::isBroken(std::string_view screenId) const {
+    std::optional<CustomScreenSummary> const summary = summaryOf(screenId);
+    return summary && summary->broken;
+}
+
 void CustomScreenChrome::openCustom(std::string const& screenId, ParamMap params,
                                     std::function<void(std::expected<void, std::string>)> const& done) {
-    if (std::optional<CustomScreenSummary> const summary = summaryOf(screenId); summary && summary->broken) {
+    if (isBroken(screenId)) {
+        // Only the source view opens: the screen itself is never mounted, which the caller is told.
         showStoredSource(screenId);
         if (done) {
-            done({});
+            done(std::unexpected(titleOf(screenId) + " is broken; its source is open"));
         }
         return;
     }
@@ -922,9 +939,11 @@ void CustomScreenChrome::openCustom(std::string const& screenId, ParamMap params
                                 }
                                 return;
                             }
-                            _options.openTab(screenId, params);
+                            std::expected<void, std::string> const opened = _options.openTab(screenId, params);
                             if (done) {
-                                done({});
+                                done(opened);
+                            } else if (!opened) {
+                                notify("Cannot open " + titleOf(screenId) + ": " + opened.error(), Tone::Err);
                             }
                         }));
 }
@@ -978,6 +997,7 @@ void CustomScreenChrome::saveFromSource() {
                 refuse((*checked)->pointer, (*checked)->reason);
                 return;
             }
+            shown->status->set(std::string{"Saving…"});
             _options.sync->save(
                 CustomScreensSave{
                     .app = {}, .id = customId, .title = listed.title, .basedOn = listed.basedOn, .document = text},

@@ -53,8 +53,9 @@ struct CustomScreenChromeOptions {
     std::function<Catalog()> catalog;
     /// @brief The title of an application screen, as its navigator entry shows it; empty shows its id.
     std::function<std::string(std::string_view)> titleOf;
-    /// @brief Opens a screen as a tab, as the shell's own navigation does. Required.
-    std::function<void(std::string const& screenId, ParamMap const& params)> openTab;
+    /// @brief Opens a screen as a tab, as the shell's own navigation does, answering why when the mount was refused.
+    ///        Required.
+    std::function<std::expected<void, std::string>(std::string const& screenId, ParamMap const& params)> openTab;
     /// @brief Tells the person something the window does not show, with its tone; may be empty.
     std::function<void(std::string const& text, Tone tone)> notify;
     /// @brief Called after the custom screens listed, or whether they are offered, changed, so the shell lists its
@@ -152,10 +153,15 @@ public:
     ///        through `openTab`. A broken one opens its source view instead, since it is never mounted.
     /// @param screenId The custom screen's id.
     /// @param params   Its params.
-    /// @param done     Called once with nothing, or why it did not open; may be empty, and then a failure is told
-    ///                 through `notify`.
+    /// @param done     Called once with nothing, or why it did not open (a broken screen, which opened its source
+    ///                 view only, or a refused mount); may be empty, and then a failure is told through `notify`.
     void openCustom(std::string const& screenId, ParamMap params,
                     std::function<void(std::expected<void, std::string>)> const& done = {});
+
+    /// @brief Whether the list holds @p screenId as a broken custom screen, which is never mounted.
+    /// @param screenId The screen.
+    /// @return Whether it is listed and broken.
+    [[nodiscard]] bool isBroken(std::string_view screenId) const;
 
     /// @brief Opens the source view of a stored custom screen, as `get` answers it, with its breakage shown as the
     ///        refusal: editable while custom screens are offered and the screen is the person's own, when

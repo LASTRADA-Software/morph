@@ -1,8 +1,9 @@
 # Custom screens — design
 
-A person's own version of an application screen, stored on the server through the application's store, checked
-whenever it is saved or loaded, and served by the framework's `morph.customScreens` model. The design is in
-`docs/superpowers/specs/2026-11-18-custom-screens-design.md`; this page is the store seam, the model, the checks and the base rule on the server, and the client that offers them.
+A person's own version of an application screen, stored on the server through the application's store, checked whenever
+it is saved or loaded, and served by the framework's `morph.customScreens` model. The design is in
+`docs/superpowers/specs/2026-11-18-custom-screens-design.md`; this page is the store seam, the model, the checks and the
+base rule on the server, and the client that offers them.
 
 | Header | What it holds |
 |---|---|
@@ -310,7 +311,7 @@ go. No call names a person.
 |---|---|---|
 | The draft bar | `draft_bar_<id>` | Shown while the tab holds a draft: "Draft — not saved", that forms on a draft change real data, the last refusal of a save (`draft_message_<id>`), **Save** (`draft_save_<id>`, for a draft of the person's own custom screen), **Save as…**, **Source**, **Discard** |
 | The tools row | `screen_tools_<id>` | Shown while the tab holds none: **Open as** (`open_as_<id>`) and **Source** (`source_button_<id>`) |
-| The source view | `source_dialog` | The document's JSON pretty-printed in a monospace editor (`source_text`), the refusal (`source_refusal`), **Preview**, **Save as…**, **Close** |
+| The source view | `source_dialog` | The document's JSON pretty-printed in a monospace editor (`source_text`), the refusal (`source_refusal`), a status line ("Checking…", "Saving…"), **Preview**, **Save as…**, **Check and save** (`source_save`, a stored screen of the person's own), **Close** |
 | The save dialog | `save_as_dialog` | The name (`save_as_title`), the refusal, **Save**, **Cancel** |
 
 - **Source** shows the open draft's text, a custom screen's stored text (fetched again when the cache dropped it), or
@@ -337,7 +338,10 @@ go. No call names a person.
   close guard, since the handle is dirty while a draft is up.
 - **Open as** is offered on a screen whose base takes params, when the list holds custom screens of that base: the
   base first, then each of them by its store title, "· by <savedBy>" when not the person's, "· broken" when broken. A
-  choice opens in the tab's place with the tab's params.
+  choice opens in the tab's place with the tab's params. A tab that holds a draft does not offer **Open as**: the
+  person saves or discards first. When the tab's screen is dirty without a draft and the person keeps it open at the
+  close guard, the choice is cancelled and the person is told "Open as cancelled: <screen> stayed open", which is not
+  an error.
 - **The navigator's entries** (`navigatorEntries`) are the listed screens whose base takes no params, read from the
   base rather than from `opensWithoutParams`, which a broken screen does not have, so a broken screen is still listed
   with its reason.

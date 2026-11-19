@@ -35,6 +35,10 @@
 
 namespace morph::ui {
 
+/// @brief The reason `WorkspaceModel::openInPlace` answers when the tab's screen stayed open (its close guard kept
+/// it).
+inline constexpr std::string_view kStayedOpenReason = "the open screen stayed open";
+
 /// @brief What the shell needs to know of one screen id: the catalog's `singleton` and `reuseEmpty`.
 struct WorkspaceScreen {
     /// @brief The screen has at most one tab.
@@ -264,7 +268,8 @@ public:
                 if (!closed) {
                     removeTab(fresh, true);
                     if (done) {
-                        done(std::unexpected(MountError{.screenId = screen, .reason = "the open screen stayed open"}));
+                        done(
+                            std::unexpected(MountError{.screenId = screen, .reason = std::string{kStayedOpenReason}}));
                     }
                     return;
                 }

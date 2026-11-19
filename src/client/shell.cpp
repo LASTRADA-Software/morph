@@ -671,8 +671,13 @@ private:
             }
             return std::string{screenId};
         };
-        options.openTab = [this](std::string const& screenId, ui::ParamMap const& params) {
-            static_cast<void>(mount(screenId, params));
+        options.openTab = [this](std::string const& screenId,
+                                 ui::ParamMap const& params) -> std::expected<void, std::string> {
+            auto const mounted = tryMount(screenId, params);
+            if (!mounted) {
+                return std::unexpected(mounted.error());
+            }
+            return {};
         };
         options.notify = [this](std::string const& text, ui::Tone tone) {
             if (_frame != nullptr) {
@@ -1205,8 +1210,19 @@ private:
         return entry != catalog->entries.end() && entry->host.has_value() && !entry->host->empty();
     }
 
-    // Opens a screen as a tab, or focuses the tab that already shows it; answers whether a screen was mounted.
+    // Opens a screen as a tab, or focuses the tab that already shows it; answers whether a screen was mounted, and
+    // tells the person why when it was refused.
     bool mount(std::string const& screenId, ui::ParamMap const& params) {
+        auto const opened = tryMount(screenId, params);
+        if (!opened) {
+            show("Cannot open " + screenId + ": " + opened.error());
+            return false;
+        }
+        return *opened;
+    }
+
+    // As `mount`, but the refusal is answered, not shown.
+    std::expected<bool, std::string> tryMount(std::string const& screenId, ui::ParamMap const& params) {
         _message.reset();
         if (!_workspace) {
             buildFrame();
@@ -1230,8 +1246,7 @@ private:
         }
         auto const opened = _workspace->openTab(screenId, params);
         if (!opened) {
-            show("Cannot open " + opened.error().screenId + ": " + opened.error().reason);
-            return false;
+            return std::unexpected(opened.error().reason);
         }
         if (_routes) {
             auto const route = _host->routeOf(screenId, params);
@@ -1252,6 +1267,11 @@ private:
             return false;
         }
         if (_customSync->documents().find(screenId) != nullptr) {
+            // A broken screen is never mounted, cached or not: its source view opens.
+            if (_customChrome != nullptr && _customChrome->isBroken(screenId)) {
+                _customChrome->openCustom(screenId, {});
+                return true;
+            }
             return false;
         }
         _fetchingRoute = true;
