@@ -964,6 +964,39 @@ TEST_CASE("model table: after a new sort, focus is found again by key once its p
     CHECK(h.backend.focusCell(table).first == 20);
 }
 
+// Mutation: the search for a focused key a reset deleted never ending (focus keeps looking for key 7, so the row that
+// took its place is not followed through the next sort: it stays on view row 7).
+TEST_CASE("model table: a focused key a new sort deleted hands focus to the row at its place", "[ui][table]") {
+    TableHarness h;
+    auto screen = mountShown(h, kModelTable, 9'093);
+    int const table = tableOf(h);
+    h.backend.scrollTable(table, 0, 30);
+    h.settle();
+    answerPages(h, 9'093);
+    h.backend.focusMove(table, morph::ui::FocusMove::First);
+    for (int step = 0; step < 7; ++step) {
+        h.backend.focusMove(table, morph::ui::FocusMove::Down);
+    }
+    h.settle();
+    REQUIRE(h.backend.focusCell(table).first == 7);
+    // A new query in which key 7 is gone and key 9,093 is at view row 7: once the rows settle, it takes focus.
+    h.backend.clickHeader(table, 1);
+    h.settle();
+    std::vector<std::int64_t> keys(200);
+    std::iota(keys.begin(), keys.end(), std::int64_t{0});
+    keys.at(7) = 9'093;
+    replyFirstPage(h, keys);
+    answerPages(h, 9'093);
+    REQUIRE(h.backend.focusCell(table).first == 7);
+    // Another sort moves key 9,093 to view row 25: focus follows it there.
+    h.backend.clickHeader(table, 1);
+    h.settle();
+    std::swap(keys.at(7), keys.at(25));
+    replyFirstPage(h, keys);
+    answerPages(h, 9'093);
+    CHECK(h.backend.focusCell(table).first == 25);
+}
+
 // Mutation: an index past the row count before a change moved by the first page's `Inserted` (the mark goes to view
 // row 9,123, past the end).
 TEST_CASE("model table: a highlight located before the first page of a new sort keeps its row", "[ui][table]") {
