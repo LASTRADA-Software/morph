@@ -1238,12 +1238,12 @@ explicit PageWindow(std::int64_t pageSize = 200, std::size_t maxPages = 8, RowKe
                     std::size_t maxKeys = 1000, std::size_t maxColumns = 96);
 
 std::vector<PageFetch> visible(std::int64_t first, std::int64_t count, std::span<std::string const> columns = {});
-std::vector<PageFetch> superseded();                // fetches in flight for pages no longer near the visible rows
+std::vector<PageFetch> superseded() const;          // fetches in flight for pages no longer near the visible rows
 void cancelled(PageFetch const& fetch);
 RefreshPlan refresh(std::span<RowId const> keys);   // a keyed change of the table's record
 RefreshPlan owed();                                 // after each accept
 void invalidate();                                  // a whole-type change, a resync, a refused keyed fetch
-void accept(PageFetch const& fetch, Page<Row> reply);
+bool accept(PageFetch const& fetch, Page<Row> reply);           // false when the reply is ignored
 std::vector<std::int64_t> patch(RowsFetch const& fetch, Page<Row> reply);
 ```
 
@@ -1262,7 +1262,12 @@ The window has no clock and sends nothing: it returns what to fetch, and `Window
 - `accept` of a column fetch adds the columns when the reply's `keys` are the page's keys, row for row. When
   they are not, the rows moved between the two fetches, and the window invalidates.
 - `accept` of a page reply whose `total`, `totalKind` or `undecided` differ from the window's adopts them and
-  marks every other held page stale: the view changed between two replies, whatever the events said.
+  marks every other held page stale: the view changed between two replies, whatever the events said. An absent
+  `total` is neither adopted nor a difference.
+- **A view that shrank holds nothing past its end.** When the total the window holds is exact, a held row at or
+  past it is dropped (a page wholly past it goes, the page it falls in is cut and is complete), and a fetch in
+  flight for a page wholly past it is forgotten, so its late reply is ignored. Otherwise such a page is never
+  fetched again, and its first key would be a probe no reply answers.
 - `superseded()` returns the fetches in flight for pages that are no longer within one page of the visible
   rows. The client cancels them through their stop tokens and tells the window with `cancelled`.
 
@@ -1283,7 +1288,10 @@ view rows say what happened ([`patch`](#patchfetch-reply)).
 **`owed()`** closes the race between an event and a page reply. The reply to a page fetch and the event for a
 change leave the server separately and arrive in either order, so an event can precede the reply whose rows it
 concerns. After each `accept` the client calls `owed`, which returns `Rows` with the keys recorded while the
-fetch was in flight. The recorded keys are dropped when no page fetch is in flight.
+fetch was in flight. The recorded keys are dropped when no page fetch is in flight, and whenever the plan is
+`Pages`: that invalidation leaves every reply still in flight older than the window, so the refetch that follows
+covers every recorded key. Kept, they would invalidate again at every `accept` while two pages are in flight, with
+no event behind it.
 
 ### `patch(fetch, reply)`
 
@@ -2996,6 +3004,9 @@ spread reflects. A row marked *not yet measured* says why; its figure is taken w
 | C1 | 2c | In process, not over a socket (`"table benchmark: C1 C2 C3 many requests through an in-process server"`): fifty `Table.wide` requests on fifty instances, sorted on the `recipe` column `d000` at 100,000 rows, sent together after an arrival on the level: **355.6 ms** from the first send to the last reply (4,484 ms before the level cache's order want was made cheap); one view computed, 7 requests waited for it, the other 42 found it computed. Measured apart (`"table benchmark: C1 where a request's time goes"`): the table function, its description and the pinned snapshot 0.230 ms; a whole `answerQuery` from the cached view 1.05 ms sorted on the `recipe` column and 1.07 ms on a base column, since a view's order keys are a kept set that the level recognises and skips while nothing changed (an order `want` of 100,000 held keys as a fresh list, the path a changed level takes, 23.2 ms); the one sort after the arrival is S7's first request, 75 ms. The rest of the 355.6 ms is not measured apart. The server strand's longest task is not measured: it needs the socket benchmark (`[.benchmark][net]`, POSIX only, not run) | A, Release | 2026-11-19 |
 | C2 | 2c | In process: twenty distinct sorts of `wide` one after another, 21.2 views computed a second | A, Release | 2026-11-19 |
 | C3 | 2c | In process: fifty sorts against a bound of ten 100,000-row views (4,000,000 bytes): 4,000,000 bytes held, 41 evictions (gate: held within the bound) | A, Release | 2026-11-19 |
+| K1 | 2d | `PageWindow<GenericRow>::accept` of a whole 200 × 300 page of integer cells, into a fresh window: 3.05 ms (2.81–3.69), **above the 0.1 ms budget (P)**. Inferred from the code, not measured apart: the page is stored by column, so each of the 60,000 cells is moved into its column's vector, and the reply's 200 row vectors are freed; the cells are moved, never copied | A, Release | 2026-11-19 |
+| K2 | 2d | `refresh` of 900 event keys against 1,600 held rows in eight runs (pages 0, 2, …, 14 of 200): 0.102 ms (0.090–0.194), within the 0.5 ms budget; the fetch holds the 900 keys and eight probes (gate `"window: a refresh of 900 keys over eight runs asks 908"`) | A, Release | 2026-11-19 |
+| K3 | 2d | `patch` of 200 rows and the seven other runs' probes, one column: 0.325 ms (0.306–0.374), just above the 0.3 ms budget (P). It builds an index of the 1,600 held keys for each patch | A, Release | 2026-11-19 |
 | U1 | 0 | A document `rows` table of 100,000 rows on the recording backend, a bound sort set on a text column, click to settled: 2,921.5 ms (2,860.0–3,017.6). The rows realized after the sort are the ones realized before it, reordered, not the view's first rows: the figure is the interpreter's sort and reconcile, not a correct window | A, 82–91% busy | 2026-11-17 |
 | U2 | 0 | The same table sorted, one row's name replaced in `items`, click to settled: 2,941.3 ms (2,881.4–2,992.2) | A, 82–91% busy | 2026-11-17 |
 | U3 | 0 | Text folds of the interpreter's sort of 100,000 rows: *not yet measured* — the interpreter folds with a `CodePointCollator` it constructs inside the comparison and takes none from outside, so no counting collator can be installed; the count needs that seam | — | — |

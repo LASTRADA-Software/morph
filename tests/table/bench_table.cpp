@@ -1248,6 +1248,101 @@ TEST_CASE("table benchmark: S7 S9 the view cache", "[.benchmark][views]") {
     static_cast<void>(std::fflush(stdout));
 }
 
+// ── The window (K1-K3) ──────────────────────────────────────────────────────
+
+namespace {
+
+GenericPage windowPage(std::int64_t offset, std::int64_t rows, std::vector<std::string> const& columns) {
+    GenericPage page;
+    page.columns = columns;
+    page.offset = offset;
+    page.total = 100'000;
+    for (std::int64_t row = 0; row < rows; ++row) {
+        page.keys.emplace_back(offset + row);
+        page.rows.emplace_back(columns.size(), Cell{offset + row});
+    }
+    return page;
+}
+
+std::vector<std::string> windowColumns(std::size_t count) {
+    std::vector<std::string> out;
+    for (std::size_t column = 0; column < count; ++column) {
+        out.push_back(std::format("c{:03}", column));
+    }
+    return out;
+}
+
+}  // namespace
+
+TEST_CASE("table benchmark: K1 K2 K3 the window", "[.benchmark][window]") {
+    auto const wide = windowColumns(300);
+    std::println("\nThe window\n\n| Id | scenario | median ms (p10-p90) |\n|---|---|---:|");
+    std::vector<double> accepts;
+    for (int run = 0; run < 31; ++run) {
+        PageWindow<GenericRow> window{200, 8, 1000, 300};
+        auto const fetches = window.visible(0, 50, wide);
+        REQUIRE_FALSE(fetches.empty());
+        auto page = windowPage(0, 200, wide);
+        auto const began = Clock::now();
+        REQUIRE(window.accept(fetches[0], std::move(page)));
+        accepts.push_back(std::chrono::duration<double, std::milli>(Clock::now() - began).count());
+    }
+    auto spread = spreadOf(accepts);
+    std::println("| K1 | accept of a 200 x 300 page | {:.3f} ({:.3f}-{:.3f}) |", spread.median, spread.p10, spread.p90);
+
+    auto const narrow = windowColumns(1);
+    PageWindow<GenericRow> held{200, 8};
+    for (std::int64_t page = 0; page < 16; page += 2) {
+        for (auto const& fetch : held.visible(page * 200, 1, narrow)) {
+            if (fetch.request.offset == page * 200) {
+                REQUIRE(held.accept(fetch, windowPage(fetch.request.offset, 200, narrow)));
+            }
+        }
+    }
+    std::vector<RowId> event;
+    for (std::int64_t key = 50'000; key < 50'900; ++key) {
+        event.emplace_back(key);
+    }
+    std::vector<double> refreshes;
+    RefreshPlan plan;
+    for (int run = 0; run < 31; ++run) {
+        auto const began = Clock::now();
+        plan = held.refresh(event);
+        refreshes.push_back(std::chrono::duration<double, std::milli>(Clock::now() - began).count());
+    }
+    REQUIRE(plan.rows.keys.size() == 908);
+    spread = spreadOf(refreshes);
+    std::println("| K2 | refresh of 900 keys over 1,600 held rows in eight runs | {:.3f} ({:.3f}-{:.3f}) |",
+                 spread.median, spread.p10, spread.p90);
+
+    std::vector<double> patches;
+    for (int run = 0; run < 31; ++run) {
+        std::vector<RowId> keys;
+        for (std::int64_t key = 0; key < 200; ++key) {
+            keys.emplace_back(key);
+        }
+        auto const rows = held.refresh(keys);
+        REQUIRE(rows.kind == Refresh::Rows);
+        // The 200 keys and the seven other runs' probes, each at its own view row.
+        GenericPage reply;
+        reply.columns = narrow;
+        reply.total = 100'000;
+        for (auto const& key : rows.rows.keys) {
+            auto const index = std::get<std::int64_t>(key);
+            reply.keys.push_back(key);
+            reply.rows.emplace_back(1, Cell{index});
+            reply.indices.push_back(index);
+        }
+        auto const began = Clock::now();
+        auto const replaced = held.patch(rows.rows, std::move(reply));
+        patches.push_back(std::chrono::duration<double, std::milli>(Clock::now() - began).count());
+        REQUIRE(replaced.size() == 207);
+    }
+    spread = spreadOf(patches);
+    std::println("| K3 | patch of 200 rows and seven probes | {:.3f} ({:.3f}-{:.3f}) |", spread.median, spread.p10, spread.p90);
+    static_cast<void>(std::fflush(stdout));
+}
+
 // ── Many clients, in process (C1-C3) ────────────────────────────────────────
 
 TEST_CASE("table benchmark: C1 C2 C3 many requests through an in-process server", "[.benchmark][views]") {
