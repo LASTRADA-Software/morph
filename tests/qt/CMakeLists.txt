@@ -49,6 +49,10 @@ add_executable(morph_qt_tests
     test_qt_websocket_adversarial.cpp
 )
 
+if(MORPH_ENABLE_DICTATION)
+    target_sources(morph_qt_tests PRIVATE test_qt_dictation_recorder.cpp)
+endif()
+
 target_link_libraries(morph_qt_tests
     PRIVATE
         morph_qt_impl

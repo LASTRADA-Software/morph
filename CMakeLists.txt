@@ -1214,6 +1214,19 @@ endif()
 if(MORPH_BUILD_QT)
     find_package(Qt6 COMPONENTS Network WebSockets REQUIRED)
 
+    # The chat's dictation recorder needs Qt Multimedia's audio input (QMediaDevices, Qt 6.2 and later); everything else
+    # about dictation does not.
+    find_package(Qt6 COMPONENTS Multimedia QUIET)
+    set(_morph_dictation_default OFF)
+    if(TARGET Qt6::Multimedia AND Qt6Multimedia_VERSION VERSION_GREATER_EQUAL 6.2)
+        set(_morph_dictation_default ON)
+    endif()
+    option(MORPH_ENABLE_DICTATION "Build the chat's dictation recorder (needs Qt6::Multimedia 6.2 or later)"
+           ${_morph_dictation_default})
+    if(MORPH_ENABLE_DICTATION AND NOT _morph_dictation_default)
+        message(FATAL_ERROR "MORPH_ENABLE_DICTATION=ON needs Qt6::Multimedia 6.2 or later, which was not found.")
+    endif()
+
     # Header-only interface for consumers
     add_library(morph_qt INTERFACE)
     add_library(morph::qt ALIAS morph_qt)
@@ -1245,6 +1258,17 @@ if(MORPH_BUILD_QT)
     )
     target_link_libraries(morph_qt_impl PUBLIC morph_qt)
     set_target_properties(morph_qt_impl PROPERTIES AUTOMOC ON)
+
+    if(MORPH_ENABLE_DICTATION)
+        target_sources(morph_qt
+            INTERFACE
+            FILE_SET HEADERS
+            BASE_DIRS include
+            FILES include/morph/qt/qt_dictation_recorder.hpp)
+        target_sources(morph_qt_impl PRIVATE src/qt/qt_dictation_recorder.cpp)
+        target_link_libraries(morph_qt_impl PUBLIC Qt6::Multimedia)
+        target_compile_definitions(morph_qt_impl PUBLIC MORPH_ENABLE_DICTATION=1)
+    endif()
 
     # The Qt WebSocket server and backend are the only *compiled* translation
     # units in morph's own transport: everything else a Qt test exercises is

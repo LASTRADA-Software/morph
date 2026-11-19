@@ -287,6 +287,19 @@ seconds), swept whenever the table is touched, and then reads as "no such transc
 journaled, logged or added to a conversation; the clip moves into the transcriber's call when it starts. The text
 reaches the assistant only inside a later `ui-chat-turn`, as text like any other.
 
+**Recording.** `dictation.hpp`. `IDictationRecorder` records a clip: `unavailable()` reports what is known without
+asking (no input device), `start(limits)` asks for permission where the platform does and answers through `onStarted`,
+`onProgress` counts seconds, and `onClip` delivers the WAV or why there is none. Each `start` ends in exactly one of a
+failed `onStarted` and an `onClip`; a `stop` before recording began is answered by an `onClip` error. A clip is 16 kHz
+mono 16-bit whatever the device offers, so its size is a function of its length alone: `SpeechResampler` averages the
+channels and the samples each output sample spans, `DictationClip` stops at `maxSeconds` or before the WAV would pass
+`maxBytes`, and `wavFromPcm16` writes the 44-byte header. At this format 60 s is 1,920,044 bytes, 2,560,060 in base64.
+`morph::qt::QtDictationRecorder` is the Qt one, in `morph_qt`, built when `Qt6::Multimedia` 6.2 or later is found
+(`MORPH_ENABLE_DICTATION`, ON when it is; ON without it is refused at configure time): `QAudioSource` on the owner thread
+at the device's preferred format. Microphone permission is asked through `QMicrophonePermission` from Qt 6.5; on an older
+Qt the platform's own prompt, where there is one, appears when the device opens. Audio stays in memory and is never
+written to disk.
+
 ## The client
 
 `client.hpp`. `ChatClient` sends what a person says and keeps what to show per conversation, for display only and for the
