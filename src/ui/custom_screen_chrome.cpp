@@ -345,6 +345,9 @@ void CustomScreenChrome::openSource(SourceMode mode, std::optional<WorkspaceTabI
 
     Dialog dialog;
     dialog.open = Prop<bool>{true};
+    // A sheet, so the editor uses the window: a document is read across, and a small dialog would give it a narrow
+    // column.
+    dialog.sheet = Prop<bool>{true};
     dialog.title = Prop<std::string>{"Source of " + titleOf(source->screenId)};
     if (readOnly) {
         dialog.description = Prop<std::string>{std::string{"Read only: this server does not store custom screens."}};

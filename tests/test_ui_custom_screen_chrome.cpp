@@ -42,6 +42,10 @@ TEST_CASE(
     rig.click("source_button_notes.edit");
     std::string const shown = rig.field("source_text");
     CHECK(shown == morph::ui::prettyJson(kEdit));
+    // A sheet, so the editor has the window and not a small dialog's column.
+    auto const dialog = rig.find("Dialog", "source_dialog");
+    REQUIRE(dialog.has_value());
+    CHECK(rig.harness.backend.prop(*dialog, "sheet") == "true");
     rig.type("source_text", screens_test::replaced(shown, "\"Edit note\"", "\"Edited by hand\""));
     rig.click("source_preview");
     REQUIRE(rig.pump([&rig] { return rig.text("heading") == "Edited by hand"; }));

@@ -8,14 +8,19 @@
 #include <string_view>
 
 /// @file
-/// @brief A document's JSON text as the source view shows it: pretty-printed, and the place a JSON Pointer names in
+/// @brief A document's JSON text as the source view shows it: pretty-printed compactly, and the place a JSON Pointer
+/// names in
 ///        it, so a refusal moves the cursor to the part it is about.
 ///
 /// Specified in `docs/spec/ui/custom_screens.md`, "The client".
 
 namespace morph::ui {
 
-/// @brief @p text pretty-printed: one member or element per line, members in their order.
+/// @brief @p text pretty-printed for reading: indented by 2, with a container that fits within about 100 columns on
+///        one line (`{"kind": "text", "text": "x"}`) and every other member or element on a line of its own.
+///
+/// Members keep their order and scalars their written form, so the text means what @p text meant and is several times
+/// smaller than one value per line.
 /// @param text JSON text.
 /// @return The pretty text; @p text unchanged when it is not JSON, so a hand-edited draft that does not parse is shown
 ///         as the person left it.
