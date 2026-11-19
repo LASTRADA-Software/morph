@@ -194,6 +194,10 @@
 #include "layout.hpp"
 #include "version.hpp"
 
+namespace morph::table {
+struct MeasureValue;
+}  // namespace morph::table
+
 namespace morph::forms {
 
 /// @brief Per-field presentation overrides and scalar bounds: label, help,
@@ -2368,6 +2372,17 @@ inline void annotateDeclaredBounds(glz::generic_u64& property, const FieldMeta& 
     }
 }
 
+/// @brief Whether a member is a `table::MeasureValue`, an amount with its unit's id, or an optional one.
+///
+/// Compared by type alone, so it needs no table header: a translation unit that never includes
+/// `<morph/table/query.hpp>` has no such member and the comparison with the incomplete type is `false`.
+/// @tparam T The member's static type.
+template <typename T>
+inline constexpr bool isMeasureValue = std::same_as<std::remove_cvref_t<T>, ::morph::table::MeasureValue>;
+// An optional member is a measure when its value is.
+template <typename T>
+inline constexpr bool isMeasureValue<std::optional<T>> = isMeasureValue<T>;
+
 /// @brief Whether a member is a bare `math::Rational`, or an optional one.
 /// @tparam T The member's static type.
 template <typename T>
@@ -2607,6 +2622,11 @@ void annotateBasicMemberProperty(glz::generic_u64& property, std::string_view na
     property["title"] = declaredLabel.empty() ? inferTitle(name) : std::string{declaredLabel};
     if (fieldMeta != nullptr) {
         annotateFieldMeta<Owner, Member>(property, name, *fieldMeta);
+    }
+
+    if constexpr (isMeasureValue<Member>) {
+        // The units are the application's at run time, listed by the table's description, not by the schema.
+        property["x-measure"] = true;
     }
     if constexpr (units::isQuantity<Member>) {
         annotateQuantity<Member>(property);

@@ -11,6 +11,7 @@
 // for medians, so the cases time themselves.
 
 #include <algorithm>
+#include <array>
 #include <atomic>
 #include <catch2/catch_test_macros.hpp>
 #include <chrono>
@@ -36,6 +37,8 @@
 #include <morph/table/level_cache.hpp>
 #include <morph/table/query.hpp>
 #include <morph/table/state_store.hpp>
+#include <morph/ui/locale_table.hpp>
+#include <morph/ui/measure.hpp>
 #include <optional>
 #include <print>
 #include <random>
@@ -352,16 +355,35 @@ void printBytes(std::string const& what, std::size_t rows, std::size_t bytes) {
 
 }  // namespace
 
+namespace {
+
+// What every apply over the wide fixture is given: its unit registry, so a query on an `m` column is answered.
+ApplyOptions wideOptions() {
+    ApplyOptions out;
+    out.services.units = bench::wideUnits();
+    return out;
+}
+
+// The same for an engine over the fixture.
+EngineOptions wideEngine(morph::exec::IExecutor* owner = nullptr) {
+    EngineOptions out;
+    out.owner = owner;
+    out.services.units = bench::wideUnits();
+    return out;
+}
+
+}  // namespace
+
 TEST_CASE("table baseline: S1 S2 S7 over the wide table", "[.benchmark][baseline]") {
     bench::WideTableSource const wide{{.rows = kWideRows, .columns = 300, .seed = 1}};
     auto const s1 = wideQuery({{.column = "d000", .dir = kAsc}}, {}, 0);
     auto const s2 = wideQuery({}, filterOn("t001", FilterEntry{.contains = "ka"}), 0);
     {
-        auto const page = apply(wide, s1);
+        auto const page = apply(wide, s1, wideOptions());
         REQUIRE(page.has_value());
         REQUIRE(page->rows.size() == 200);
         REQUIRE(page->total == kWideRows);
-        auto const filtered = apply(wide, s2);
+        auto const filtered = apply(wide, s2, wideOptions());
         REQUIRE(filtered.has_value());
         REQUIRE(filtered->total.has_value());
         REQUIRE(*filtered->total > 0);
@@ -372,7 +394,7 @@ TEST_CASE("table baseline: S1 S2 S7 over the wide table", "[.benchmark][baseline
         std::vector<double> samples;
         for (int run = 0; run < runsFor(kWideRows); ++run) {
             auto const began = Clock::now();
-            auto const page = apply(wide, query);
+            auto const page = apply(wide, query, wideOptions());
             samples.push_back(millisSince(began));
             REQUIRE(page.has_value());
         }
@@ -390,7 +412,7 @@ TEST_CASE("table baseline: S1 S2 S7 over the wide table", "[.benchmark][baseline
         auto const began = Clock::now();
         for (std::int64_t page = 0; page < 10; ++page) {
             auto const call = Clock::now();
-            auto const rows = apply(wide, wideQuery({{.column = "d000", .dir = kAsc}}, {}, page * 200));
+            auto const rows = apply(wide, wideQuery({{.column = "d000", .dir = kAsc}}, {}, page * 200), wideOptions());
             perCall.push_back(millisSince(call));
             REQUIRE(rows.has_value());
             REQUIRE_FALSE(rows->rows.empty());
@@ -447,7 +469,7 @@ TEST_CASE("table baseline: B1 client mode with no worker", "[.benchmark][baselin
         std::vector<double> worst;
         for (int run = 0; run < runsFor(static_cast<std::size_t>(rows)); ++run) {
             morph::exec::MainThreadExecutor owner;
-            Engine engine{source, EngineOptions{.owner = &owner, .worker = nullptr}};
+            Engine engine{source, wideEngine(&owner)};
             REQUIRE(spinUntil(owner, [&] { return !engine.pending(); }));
             auto const firstBefore = engine.rowIdAt(0);
             auto const began = Clock::now();
@@ -584,8 +606,13 @@ void assignCell(std::optional<T>& member, Cell const& cell) {
     if (std::holds_alternative<std::monostate>(cell)) {
         member.reset();
     } else if constexpr (std::is_same_v<T, morph::math::Rational>) {
-        auto const* const quantity = std::get_if<QuantityCell>(&cell);
-        member = quantity != nullptr ? quantity->amount : std::get<morph::math::Rational>(cell);
+        if (auto const* const quantity = std::get_if<QuantityCell>(&cell)) {
+            member = quantity->amount;
+        } else if (auto const* const measure = std::get_if<Measure>(&cell)) {
+            member = measure->amount;
+        } else {
+            member = std::get<morph::math::Rational>(cell);
+        }
     } else {
         member = std::get<T>(cell);
     }
@@ -669,13 +696,14 @@ TEST_CASE("table benchmark: the generic page", "[.benchmark][wire]") {
 
     // W1, W2: 200 rows of the 40 columns at positions 100 to 139.
     auto const forty = columnIds(wide, 100, 140);
-    auto const page40 = writeGenericPage(rows, wide, forty);
+    auto const page40 = writeGenericPage(rows, wide, forty, wide.units().get());
     REQUIRE(cellsOf(page40) == 8'000);
     auto const body40 = jsonOf(page40);
     auto const envelope40 = morph::wire::encode(morph::wire::makeOk(1, body40)).size();
     printWire("W1", "200 x 40 generic page in an ok envelope", envelope40, Spread{});
-    printWire("W2", "encode 200 x 40 from the column store", body40.size(),
-              timed(kRuns, [&] { REQUIRE(jsonOf(writeGenericPage(rows, wide, forty)).size() == body40.size()); }));
+    printWire("W2", "encode 200 x 40 from the column store", body40.size(), timed(kRuns, [&] {
+                  REQUIRE(jsonOf(writeGenericPage(rows, wide, forty, wide.units().get())).size() == body40.size());
+              }));
     printWire("W2", "readGenericPage 200 x 40", body40.size(), timed(kRuns, [&] {
                   auto const read = readGenericPage(body40, description);
                   REQUIRE(read.has_value());
@@ -728,14 +756,15 @@ TEST_CASE("table benchmark: the generic page", "[.benchmark][wire]") {
 
     // W5: the same 200 x 30 rows as generic rows and as a typed page.
     auto const thirty = columnIds(small, 0, 30);
-    auto const page30 = writeGenericPage(rows, small, thirty);
+    auto const page30 = writeGenericPage(rows, small, thirty, small.units().get());
     REQUIRE(cellsOf(page30) == 6'000);
     auto const generic30 = jsonOf(page30).size();
     auto const typed = typedPage30(small, rows);
     REQUIRE(typed.rows.size() == 200);
     auto const typed30 = jsonOf(typed).size();
-    printWire("W5", "200 x 30 generic page, encode", generic30,
-              timed(kRuns, [&] { REQUIRE(jsonOf(writeGenericPage(rows, small, thirty)).size() == generic30); }));
+    printWire("W5", "200 x 30 generic page, encode", generic30, timed(kRuns, [&] {
+                  REQUIRE(jsonOf(writeGenericPage(rows, small, thirty, small.units().get())).size() == generic30);
+              }));
     printWire("W5", "200 x 30 typed Page<Row>, encode", typed30,
               timed(kRuns, [&] { REQUIRE(jsonOf(typedPage30(small, rows)).size() == typed30); }));
     std::println("| W5 | generic / typed bytes | {:.3f} | | |",
@@ -754,14 +783,15 @@ TEST_CASE("table benchmark: the generic page", "[.benchmark][wire]") {
 
     // W7: 200 rows of all 300 columns.
     auto const all = columnIds(wide, 0, 300);
-    auto const page300 = writeGenericPage(rows, wide, all);
+    auto const page300 = writeGenericPage(rows, wide, all, wide.units().get());
     REQUIRE(cellsOf(page300) == 60'000);
     auto const body300 = jsonOf(page300);
     auto const envelope300 = morph::wire::encode(morph::wire::makeOk(1, body300)).size();
     REQUIRE(envelope300 < morph::wire::kMaxEnvelopeBytes);
     printWire("W7", "200 x 300 generic page in an ok envelope", envelope300, Spread{});
-    printWire("W7", "encode 200 x 300 from the column store", body300.size(),
-              timed(15, [&] { REQUIRE(jsonOf(writeGenericPage(rows, wide, all)).size() == body300.size()); }));
+    printWire("W7", "encode 200 x 300 from the column store", body300.size(), timed(15, [&] {
+                  REQUIRE(jsonOf(writeGenericPage(rows, wide, all, wide.units().get())).size() == body300.size());
+              }));
     printWire("W7", "readGenericPage 200 x 300", body300.size(), timed(15, [&] {
                   auto const read = readGenericPage(body300, description);
                   REQUIRE(read.has_value());
@@ -811,10 +841,10 @@ TEST_CASE("table benchmark: S1 S2 with unloaded cells", "[.benchmark][table][unl
     auto const s1 = wideQuery({{.column = "d000", .dir = kAsc}}, {}, 0);
     auto const s2 = wideQuery({}, filterOn("t001", FilterEntry{.contains = "ka"}), 0);
     {
-        auto const page = apply(*partial, s1);
+        auto const page = apply(*partial, s1, wideOptions());
         REQUIRE(page.has_value());
         REQUIRE(page->rows.size() == 200);
-        auto const filtered = apply(*partial, s2);
+        auto const filtered = apply(*partial, s2, wideOptions());
         REQUIRE(filtered.has_value());
         REQUIRE(filtered->undecided > 25'000);
         REQUIRE(filtered->totalKind == TotalKind::AtLeast);
@@ -824,7 +854,7 @@ TEST_CASE("table benchmark: S1 S2 with unloaded cells", "[.benchmark][table][unl
         std::vector<double> samples;
         for (int run = 0; run < runsFor(kWideRows); ++run) {
             auto const began = Clock::now();
-            auto const page = apply(source, query);
+            auto const page = apply(source, query, wideOptions());
             samples.push_back(millisSince(began));
             REQUIRE(page.has_value());
         }
@@ -888,7 +918,7 @@ TEST_CASE("table benchmark: S5 S6 arrivals", "[.benchmark][table][unloaded]") {
     std::vector<double> second;
     for (int run = 0; run < runsFor(kWideRows); ++run) {
         auto const source = bench::withUnloaded(wide, recipe, "recipe", 0.7, 7);
-        Engine engine{source};
+        Engine engine{source, wideEngine()};
         require(engine.setSort({{.column = "d000", .dir = kAsc}}));
         auto const waiting = source->unloadedRows();
         REQUIRE(waiting.size() > 25'000);
@@ -912,7 +942,7 @@ TEST_CASE("table benchmark: S5 S6 arrivals", "[.benchmark][table][unloaded]") {
     auto const filter = filterOn("d000", FilterEntry{.gt = "0"});
     for (int run = 0; run < runsFor(kWideRows); ++run) {
         auto const source = bench::withUnloaded(wide, recipe, "recipe", 0.5, 7);
-        Engine engine{source};
+        Engine engine{source, wideEngine()};
         require(engine.setFilter(filter));
         REQUIRE(engine.undecidedRowCount() > 45'000);
         auto const waiting = source->unloadedRows();
@@ -943,7 +973,7 @@ TEST_CASE("table benchmark: partial pages and keyed replies", "[.benchmark][tabl
     auto const named = columnIds(*wide, 100, 140);
     auto const unloaded = bench::withUnloaded(wide, recipeColumnsOf(*wide), "recipe", 0.0, 7);
     auto const rows = firstRows(200, 1'000);
-    auto const partial = writeGenericPage(rows, *unloaded, named);
+    auto const partial = writeGenericPage(rows, *unloaded, named, wide->units().get());
     REQUIRE(partial.unloadedRows.size() == 200);
     REQUIRE(std::ranges::all_of(partial.unloadedRows,
                                 [](UnloadedRow const& row) { return row.levels == std::vector<std::string>{"recipe"}; }));
@@ -951,7 +981,9 @@ TEST_CASE("table benchmark: partial pages and keyed replies", "[.benchmark][tabl
     bare.unloadedRows.clear();
     auto const withRows = morph::wire::encode(morph::wire::makeOk(1, jsonOf(partial))).size();
     auto const without = morph::wire::encode(morph::wire::makeOk(1, jsonOf(bare))).size();
-    auto const w1 = morph::wire::encode(morph::wire::makeOk(1, jsonOf(writeGenericPage(rows, *wide, named)))).size();
+    auto const w1 =
+        morph::wire::encode(morph::wire::makeOk(1, jsonOf(writeGenericPage(rows, *wide, named, wide->units().get()))))
+            .size();
     printWire("W3", "200 x 40 page, every row naming one unloaded level, in an ok envelope", withRows, Spread{});
     printWire("W3", "the same page without its unloadedRows", without, Spread{});
     std::println("| W3 | unloadedRows bytes {} as a share of W1's {} | {:.4f} | | |", withRows - without, w1,
@@ -964,17 +996,18 @@ TEST_CASE("table benchmark: partial pages and keyed replies", "[.benchmark][tabl
     for (std::int64_t i = 0; i < 20; ++i) {
         keyed.keys->emplace_back(std::int64_t{1 + (i * 50)});
     }
-    auto const keyedRows = apply(*wide, keyed);
+    auto const keyedRows = apply(*wide, keyed, wideOptions());
     REQUIRE(keyedRows.has_value());
     REQUIRE(keyedRows->rows.size() == 20);
     REQUIRE(keyedRows->indices.size() == 20);
-    auto const keyedPage = writeGenericPage(*keyedRows, *wide, *keyed.columns);
+    auto const keyedPage = writeGenericPage(*keyedRows, *wide, *keyed.columns, wide->units().get());
     REQUIRE(cellsOf(keyedPage) == 800);
     auto const keyedBody = jsonOf(keyedPage);
     printWire("W4", "keyed reply, 20 x 40, in an ok envelope",
               morph::wire::encode(morph::wire::makeOk(1, keyedBody)).size(), Spread{});
     printWire("W4", "encode the keyed reply from the column store", keyedBody.size(), timed(kRuns, [&] {
-                  REQUIRE(jsonOf(writeGenericPage(*keyedRows, *wide, *keyed.columns)).size() == keyedBody.size());
+                  REQUIRE(jsonOf(writeGenericPage(*keyedRows, *wide, *keyed.columns, wide->units().get())).size() ==
+                          keyedBody.size());
               }));
     printWire("W4", "readGenericPage of the keyed reply", keyedBody.size(), timed(kRuns, [&] {
                   auto const read = readGenericPage(keyedBody, description);
@@ -1207,7 +1240,7 @@ TEST_CASE("table benchmark: S7 S9 the view cache", "[.benchmark][views]") {
                                                    .levels = {},
                                                    .mayRead = {},
                                                    .scope = {},
-                                                   .services = {},
+                                                   .services = wideOptions().services,
                                                    .limits = {}});
     ViewCache views;
     detail::AnswerContext const context{.views = &views, .record = "WideTableModel.wide", .rowScoped = false};
@@ -1761,4 +1794,92 @@ TEST_CASE("table state benchmark: parse, fit and apply 300 columns, 8 keys, 32 f
     }
     printHeader("T1: parse, fit and apply a stored state (bound 2 ms)");
     printRow("300 columns, 8 keys, 32 filters", kColumns, spreadOf(samples));
+}
+
+// ── Values with units (M1 to M4) ────────────────────────────────────────────
+
+TEST_CASE("table benchmark: values with units", "[.benchmark][table][measure]") {
+    // 100,000 rows: a Measure column `m` over the fixture's registry (three dimensions, ten units), a Quantity column
+    // `q` holding the same amounts with their units' factors, and a Decimal column `d` holding the amounts alone.
+    constexpr std::size_t kRows = 100'000;
+    constexpr int kRuns = 9;
+    auto const& units = bench::wideUnits();
+    // NOLINTNEXTLINE(bugprone-random-generator-seed,cert-msc32-c,cert-msc51-cpp) -- a fixed seed keeps the case reproducible
+    std::mt19937 random{7};
+    std::uniform_int_distribution<std::int64_t> amounts{0, 1'000'000};
+    std::uniform_int_distribution<UnitId> unitOf{0, static_cast<UnitId>(units->size() - 1)};
+    std::vector<std::vector<Cell>> rows;
+    rows.reserve(kRows);
+    for (std::size_t row = 0; row < kRows; ++row) {
+        morph::math::Rational const amount{morph::math::Numerator{amounts(random)}, morph::math::Denominator{100},
+                                           morph::math::DecimalPlaces{2}};
+        auto const unit = unitOf(random);
+        rows.push_back({Cell{Measure{.amount = amount, .unit = unit}},
+                        Cell{QuantityCell{.amount = amount, .toCanonical = units->info(unit).toBase}}, Cell{amount}});
+    }
+    auto const source =
+        tabletest::makeSource({tabletest::col("m", ColumnKind::Measure), tabletest::col("q", ColumnKind::Quantity),
+                               tabletest::col("d", ColumnKind::Decimal)},
+                              std::move(rows));
+    ApplyOptions options;
+    options.services.units = units;
+    auto const sorted = [](std::string column) {
+        TableQuery query;
+        query.sort = {SortKey{.column = std::move(column), .dir = kAsc}};
+        return query;
+    };
+    auto const greater = [](std::string column, std::string operand) {
+        TableQuery query;
+        query.filters.columns.emplace(
+            std::move(column),
+            ColumnFilter{.combine = Combine::Any, .include = {FilterEntry{.gt = std::move(operand)}}, .exclude = {}});
+        return query;
+    };
+    auto const run = [&](TableQuery const& query) {
+        auto const page = apply(*source, query, options);
+        REQUIRE(page.has_value());
+    };
+    printHeader("M1-M4: values with units");
+    printRow("M1: keys and sort, Measure m", kRows, timedRuns(kRuns, [&] { run(sorted("m")); }));
+    printRow("M1: keys and sort, Quantity q", kRows, timedRuns(kRuns, [&] { run(sorted("q")); }));
+    printRow("M2: gt \"250 g\", Measure m", kRows, timedRuns(kRuns, [&] { run(greater("m", "250 g")); }));
+    printRow("M2: gt \"0.25\", Quantity q", kRows, timedRuns(kRuns, [&] { run(greater("q", "0.25")); }));
+
+    std::array<std::string_view, 9> const ids{"kg", "g", "mg", "t", "l", "ml", "m3", "percent", "permille"};
+    std::vector<std::string> operands;
+    std::vector<std::string> typed;
+    for (std::size_t at = 0; at < 1'000; ++at) {
+        auto const amount = std::format("{}.{:02}", at * 7, at % 100);
+        operands.push_back(amount + " " + std::string{ids.at(at % ids.size())});
+        typed.push_back(std::format("{},{:02} {}", at * 7, at % 100, ids.at(at % ids.size())));
+    }
+    FilterSpec oneOf;
+    oneOf.columns.emplace(
+        "m", ColumnFilter{.combine = Combine::Any, .include = {FilterEntry{.oneOf = operands}}, .exclude = {}});
+    auto const columns = source->columns();
+    REQUIRE(compileFilter(oneOf, columns, options.services).has_value());
+    printRow("M3: compile a oneOf of 1,000 operands with units", 1'000,
+             timedRuns(31, [&] { REQUIRE(compileFilter(oneOf, columns, options.services).has_value()); }));
+    std::vector<UnitInfo> listed;
+    for (UnitId unit = 0; unit < units->size(); ++unit) {
+        listed.push_back(units->info(unit));
+    }
+    auto const& de = morph::ui::localeFacts("de");
+    REQUIRE(morph::ui::parseMeasure(typed.front(), listed, de).has_value());
+    std::size_t parsed = 0;
+    printRow("M3: ui::parseMeasure of 1,000 typed texts", 1'000, timedRuns(31, [&] {
+                 for (auto const& text : typed) {
+                     parsed += morph::ui::parseMeasure(text, listed, de).has_value() ? 1 : 0;
+                 }
+             }));
+    REQUIRE(parsed == 31 * typed.size());
+
+    auto const values = [&](std::string column) {
+        auto const listedValues =
+            distinctValues(*source, TableQuery{}, DistinctRequest{.column = std::move(column)}, options);
+        REQUIRE(listedValues.has_value());
+        REQUIRE(listedValues->values.size() == 200);
+    };
+    printRow("M4: distinctValues, Measure m, first 200", kRows, timedRuns(kRuns, [&] { values("m"); }));
+    printRow("M4: distinctValues, Decimal d, first 200", kRows, timedRuns(kRuns, [&] { values("d"); }));
 }

@@ -997,11 +997,16 @@ public:
     /// @return `UnknownColumn` when a key names no column; `ServiceFailed` when
     ///         the sort ran inside the call and an injected service threw;
     ///         `SourceContract` when it ran inside the call and a base-level
-    ///         column holds an unloaded cell. The sort is then unchanged.
+    ///         column holds an unloaded cell, or when a key's column is `Measure` and the services have no unit
+    ///         registry. The sort is then unchanged.
     std::expected<void, TableError> setSort(SortChain chain) {
         for (auto const& key : chain) {
-            if (!detail::findColumn(_columns, key.column)) {
+            auto const index = detail::findColumn(_columns, key.column);
+            if (!index) {
                 return std::unexpected(detail::unknownColumn(key.column));
+            }
+            if (auto missing = detail::unitsMissing(_columns[*index], _options.services)) {
+                return std::unexpected(std::move(*missing));
             }
         }
         if (chain == _sort) {

@@ -24,6 +24,7 @@
 #include <morph/table/sort.hpp>
 #include <morph/ui/backend.hpp>
 #include <morph/ui/locale_table.hpp>
+#include <morph/ui/measure.hpp>
 #include <optional>
 #include <span>
 #include <string>
@@ -867,14 +868,19 @@ namespace detail {
 /// @brief The wire form of an operand the user typed into a condition.
 ///
 /// A number in the locale's form becomes a decimal with a point and no grouping (`"1.234,5"` under a comma locale
-/// is `"1234.5"`), read with the locale's own separators; an `Integer` or `Key` operand has no fraction. A date is
-/// the picker's ISO text and, as text and every other kind, passes unchanged.
-/// @param typed  What the user typed.
-/// @param kind   The column's kind.
-/// @param locale The locale the user types in.
+/// is `"1234.5"`), read with the locale's own separators; an `Integer` or `Key` operand has no fraction. A `Measure`
+/// operand is read by `parseMeasure` with the column's units and written by `measureOperand` (`"0,3 kg"` under a
+/// comma locale is `"0.3 kg"`). A date is the picker's ISO text and, as text and every other kind, passes unchanged.
+/// @param typed      What the user typed.
+/// @param kind       The column's kind.
+/// @param locale     The locale the user types in.
+/// @param units      A `Measure` column's units: the table's description's.
+/// @param chosenUnit A `Measure` operand's unit when the user typed none: the one the menu shows as chosen.
 /// @return The operand, or `nullopt` when it does not read as the kind.
 [[nodiscard]] inline std::optional<std::string> canonicalOperand(std::string_view typed, table::ColumnKind kind,
-                                                                 LocaleFacts const& locale) {
+                                                                 LocaleFacts const& locale,
+                                                                 std::span<table::UnitInfo const> units = {},
+                                                                 std::string_view chosenUnit = {}) {
     using table::ColumnKind;
     auto const number = [&](bool fraction) -> std::optional<std::string> {
         std::size_t first = typed.find_first_not_of(' ');
@@ -906,6 +912,13 @@ namespace detail {
         case ColumnKind::Quantity:
         case ColumnKind::Number:
             return number(true);
+        case ColumnKind::Measure: {
+            auto const measure = parseMeasure(typed, units, locale, chosenUnit);
+            if (!measure) {
+                return std::nullopt;
+            }
+            return measureOperand(*measure);
+        }
         case ColumnKind::Text:
         case ColumnKind::Date:
         case ColumnKind::DateTime:
@@ -1021,8 +1034,8 @@ enum class ConditionOp : std::uint8_t {
 
 /// @brief The conditions a column's kind offers.
 /// @param kind The column's kind.
-/// @return Text: equals, does not equal, contains, begins with, ends with. Numbers and dates: =, ≠, <, ≤, >, ≥,
-///         between. `Bool`: none (the values list alone). `Custom`: is empty, is not empty.
+/// @return Text: equals, does not equal, contains, begins with, ends with. Numbers, measures and dates: =, ≠, <, ≤,
+///         >, ≥, between. `Bool`: none (the values list alone). `Custom`: is empty, is not empty.
 [[nodiscard]] inline std::vector<ConditionOp> conditionOps(table::ColumnKind kind) {
     using enum ConditionOp;
     using table::ColumnKind;
@@ -1036,6 +1049,7 @@ enum class ConditionOp : std::uint8_t {
         case ColumnKind::Number:
         case ColumnKind::Date:
         case ColumnKind::DateTime:
+        case ColumnKind::Measure:
             return {Equals, NotEquals, Less, LessOrEqual, Greater, GreaterOrEqual, Between};
         case ColumnKind::Bool:
             return {};

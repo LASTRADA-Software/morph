@@ -49,6 +49,7 @@ set(MORPH_TABLE_TEST_SOURCES
     table/test_table_level_cache.cpp
     table/test_table_view_cache.cpp
     table/test_table_state.cpp
+    table/test_table_measure.cpp
     table/test_wide_table.cpp
     table/bench_table.cpp
 )

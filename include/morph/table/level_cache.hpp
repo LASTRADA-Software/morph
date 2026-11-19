@@ -146,6 +146,10 @@ struct LevelCacheOptions {
     std::chrono::seconds retryMax{600};
     /// @brief The cache's "now". Empty: the steady clock.
     std::function<std::chrono::steady_clock::time_point()> clock;
+    /// @brief The unit registry the loader's measures are numbered in now. Empty: the level holds no measures.
+    ///        Values are kept under a successor of the registry they were stored with, whose numbers mean the same,
+    ///        and dropped when a registry of another lineage is in place.
+    std::function<std::shared_ptr<UnitRegistry const>()> units;
 };
 
 /// @brief What a `LevelCache` has done since it was made; `bytes` is what it holds now.
@@ -398,8 +402,15 @@ public:
     [[nodiscard]] std::span<ColumnInfo const> columns() const override { return _core->options.columns; }
 
     /// @brief The values held now.
+    ///
+    /// When `LevelCacheOptions::units` gives a registry of another lineage than the one the values were stored
+    /// with, every value is invalidated first (`invalidateAll`, counted in `invalidatedKeys`): their unit numbers mean
+    /// nothing under it.
     /// @return An immutable snapshot: the shard pointers and the generation, copied under the mutex.
-    [[nodiscard]] std::shared_ptr<LevelSnapshot const> snapshot() const override { return _core->snapshot(); }
+    [[nodiscard]] std::shared_ptr<LevelSnapshot const> snapshot() const override {
+        _core->checkLineage();
+        return _core->snapshot();
+    }
 
     /// @brief Says the keys are needed, and starts a load for those neither held, in flight, queued, nor failed
     ///        inside their retry delay.
@@ -1268,6 +1279,7 @@ private:
                 }
             }
             auto const at = nowOrEpoch();
+            auto const lineage = unitLineage();
             Told told;
             bool leasedStored = false;
             for (;;) {
@@ -1348,6 +1360,9 @@ private:
                     }
                     if (edit.changed()) {
                         publish(std::move(next), edit);
+                    }
+                    if (!stored.empty()) {
+                        storedLineage.store(lineage);
                     }
                     if (counted) {
                         loadedKeys.fetch_add(stored.size());
@@ -1611,9 +1626,32 @@ private:
             setsRecheckAt = std::numeric_limits<std::int64_t>::max();
         }
 
+        // The lineage of the registry `options.units` gives now; 0 without one.
+        [[nodiscard]] std::uint64_t unitLineage() const {
+            if (!options.units) {
+                return 0;
+            }
+            auto const registry = options.units();
+            return registry != nullptr ? registry->lineage() : 0;
+        }
+
+        // Drops every value when the registry is of another lineage than the one they were stored with. Read with
+        // no lock: a snapshot never waits for a writer to learn that nothing changed.
+        void checkLineage() {
+            if (!options.units) {
+                return;
+            }
+            auto const stored = storedLineage.load();
+            if (stored == 0 || stored == unitLineage()) {
+                return;
+            }
+            invalidateAll();
+        }
+
         void invalidateAll() {
             std::scoped_lock const lock{writer};
             ++epoch;
+            storedLineage.store(0);
             invalidatedKeys.fetch_add(current->entries);
             auto next = emptyTable(current->generation + 1);
             {
@@ -1733,6 +1771,7 @@ private:
         std::shared_ptr<Table const> current;  // what `published` is, read under `writer`
         std::uint64_t version = 0;             // advances with every published change
         std::uint64_t epoch = 0;
+        std::atomic<std::uint64_t> storedLineage{0};  // the unit lineage of the values held; 0 while none is
         std::uint64_t sequence = 0;
         std::uint64_t wants = 0;
         // Keys of the running batch invalidated after it started, by the sequence number of the invalidation.

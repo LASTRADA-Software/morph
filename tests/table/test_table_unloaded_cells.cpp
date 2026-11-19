@@ -236,6 +236,7 @@ bool anyUnloaded(DataSource const& source, std::string_view column) {
 PageRows wholeView(DataSource const& source, TableQuery query) {
     query.page = PageRequest{.offset = 0, .limit = std::numeric_limits<std::int64_t>::max()};
     ApplyOptions options;
+    options.services.units = bench::wideUnits();
     options.limits.maxLimit = std::numeric_limits<std::int64_t>::max();
     options.limits.totalCap = std::numeric_limits<std::int64_t>::max();
     auto page = apply(source, query, options);
@@ -282,7 +283,9 @@ TEST_CASE("table: apply reads only the sorted and filtered columns", "[table][un
     TableQuery const query{
         .sort = {SortKey{.column = "d003"}},
         .filters = FilterSpec{.columns = {{"t005", ColumnFilter{.include = {FilterEntry{.contains = "a"}}}}}}};
-    auto const page = apply(recording, query);
+    ApplyOptions options;
+    options.services.units = bench::wideUnits();
+    auto const page = apply(recording, query, options);
     REQUIRE(page.has_value());
     CHECK(page->undecided > 0);
     CHECK(recording.log() == std::set<std::size_t>{columnIndex(recording, "d003"), columnIndex(recording, "t005")});

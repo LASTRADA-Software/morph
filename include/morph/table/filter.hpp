@@ -263,6 +263,31 @@ struct RationalHash {
     }
 };
 
+/// @brief A measure's key: its dimension's place in the column and its amount in the dimension's base unit.
+struct MeasureKey {
+    /// @brief The dimension's place.
+    std::uint32_t place = 0;
+    /// @brief The base amount.
+    math::Rational amount;
+
+    /// @brief Member-wise equality, the amount by value.
+    /// @param other The key to compare with.
+    /// @return `true` when the places and the amounts are equal.
+    [[nodiscard]] bool operator==(MeasureKey const& other) const = default;
+};
+
+/// @brief A hash of a measure's key: of its place and its amount's canonical numerator and denominator.
+struct MeasureKeyHash {
+    /// @brief Hashes @p key.
+    /// @param key The key.
+    /// @return The hash.
+    [[nodiscard]] std::size_t operator()(MeasureKey const& key) const noexcept {
+        auto const amount = RationalHash{}(key.amount);
+        return amount ^
+               (std::hash<std::uint32_t>{}(key.place) + 0x9e3779b97f4a7c15ULL + (amount << 6U) + (amount >> 2U));
+    }
+};
+
 /// @brief A transparent string hash, so a set of strings is probed with a view and nothing is copied.
 struct TextHash {
     /// @brief Marks the hash transparent.
@@ -282,7 +307,7 @@ struct TextHash {
 ///
 /// Members are keyed as the column's cells are: integers, keys, decimals and quantities exactly, `Number` as a
 /// double, dates, date-times and booleans as their integer, text by its fold, or as given when the entry sets
-/// `caseSensitive`.
+/// `caseSensitive`, and a measure by its dimension's place and its base amount.
 class ValueSet {
 public:
     /// @brief An empty set for a column of @p kind.
@@ -306,6 +331,13 @@ public:
     /// @brief Adds a text member, already folded unless the set is case-sensitive.
     /// @param value The member.
     void add(std::string value) { _texts.insert(std::move(value)); }
+
+    /// @brief Adds a measure member.
+    /// @param place  Its dimension's place in the column.
+    /// @param amount Its amount in the dimension's base unit.
+    void add(std::uint32_t place, math::Rational const& amount) {
+        _measures.insert(detail::MeasureKey{.place = place, .amount = amount});
+    }
 
     /// @brief Whether a valid cell's value is a member: one probe of the set.
     /// @param keys     The column's keys; the cell at @p row is valid.
@@ -333,6 +365,8 @@ public:
                 return _ints.contains(keys.ints[row]);
             case ColumnKind::Text:
                 return _texts.contains(std::string_view{_caseSensitive ? keys.raw[row] : keys.folded[row]});
+            case ColumnKind::Measure:
+                return _measures.contains(detail::MeasureKey{.place = keys.places[row], .amount = keys.exact[row]});
             case ColumnKind::Custom:
             default:
                 return false;
@@ -342,7 +376,7 @@ public:
     /// @brief The members, duplicates merged.
     /// @return The member count.
     [[nodiscard]] std::size_t size() const noexcept {
-        return _ints.size() + _exact.size() + _reals.size() + _texts.size();
+        return _ints.size() + _exact.size() + _reals.size() + _texts.size() + _measures.size();
     }
 
 private:
@@ -352,12 +386,14 @@ private:
     std::unordered_set<math::Rational, detail::RationalHash> _exact;
     std::unordered_set<double> _reals;
     std::unordered_set<std::string, detail::TextHash, std::equal_to<>> _texts;
+    std::unordered_set<detail::MeasureKey, detail::MeasureKeyHash> _measures;
 };
 
 /// @brief A group column's value entries, by value: one probe gives the bits of every `eq` and `oneOf` entry the
 ///        cell's value matches.
 ///
-/// Keyed as a `ValueSet` is; text by its fold, so only entries that are not `caseSensitive` are indexed.
+/// Keyed as a `ValueSet` is; text by its fold, so only entries that are not `caseSensitive` are indexed, and a measure
+/// by its dimension's place and its base amount, so equal amounts of two dimensions are two values.
 class ValueIndex {
 public:
     /// @brief An empty index for a column of @p kind.
@@ -390,10 +426,18 @@ public:
         }
     }
 
+    /// @brief Adds @p bits to a measure.
+    /// @param place  Its dimension's place in the column.
+    /// @param amount Its amount in the dimension's base unit.
+    /// @param bits   The entries' bits.
+    void add(std::uint32_t place, math::Rational const& amount, std::uint32_t bits) {
+        _measures[detail::MeasureKey{.place = place, .amount = amount}] |= bits;
+    }
+
     /// @brief Whether the index holds no value.
     /// @return `true` when nothing was added.
     [[nodiscard]] bool empty() const noexcept {
-        return _ints.empty() && _exact.empty() && _reals.empty() && _texts.empty();
+        return _ints.empty() && _exact.empty() && _reals.empty() && _texts.empty() && _measures.empty();
     }
 
     /// @brief The bits of the entries a valid cell's value matches: one probe.
@@ -426,6 +470,8 @@ public:
                 return in(_ints, keys.ints[row]);
             case ColumnKind::Text:
                 return in(_texts, std::string_view{keys.folded[row]});
+            case ColumnKind::Measure:
+                return in(_measures, detail::MeasureKey{.place = keys.places[row], .amount = keys.exact[row]});
             case ColumnKind::Custom:
             default:
                 return 0U;
@@ -438,6 +484,7 @@ private:
     std::unordered_map<math::Rational, std::uint32_t, detail::RationalHash> _exact;
     std::unordered_map<double, std::uint32_t> _reals;
     std::unordered_map<std::string, std::uint32_t, detail::TextHash, std::equal_to<>> _texts;
+    std::unordered_map<detail::MeasureKey, std::uint32_t, detail::MeasureKeyHash> _measures;
 };
 
 class CompiledFilter;
@@ -487,8 +534,10 @@ public:
         bool caseSensitive = false;
         /// @brief Integer operands (dates, date-times, booleans).
         std::array<std::int64_t, 2> ints{};
-        /// @brief Exact operands (integers, keys, decimals, quantities).
+        /// @brief Exact operands (integers, keys, decimals, quantities; a measure's base amount).
         std::array<math::Rational, 2> exact{};
+        /// @brief A measure operand's dimension place in the column; `Between`'s two are equal.
+        std::array<std::uint32_t, 2> places{};
         /// @brief Floating-point operands (`Number`).
         std::array<double, 2> reals{};
         /// @brief Text operand: folded, or raw when `caseSensitive`.
@@ -936,6 +985,13 @@ public:
                 return compare(entry, keys.ints[row], entry.ints);
             case ColumnKind::Text:
                 return matchText(entry, entry.caseSensitive ? keys.raw[row] : keys.folded[row]);
+            case ColumnKind::Measure:
+                // `ne` matches a value of another dimension, which is not equal to the operand; every other
+                // comparison is false across dimensions, whose amounts do not compare.
+                if (entry.op == Op::Ne) {
+                    return keys.places[row] != entry.places[0] || !(keys.exact[row] == entry.exact[0]);
+                }
+                return keys.places[row] == entry.places[0] && compare(entry, keys.exact[row], entry.exact);
             case ColumnKind::Custom:
             default:
                 return false;
@@ -1091,14 +1147,18 @@ struct RawEntry {
         case ColumnKind::Number:
         case ColumnKind::Date:
         case ColumnKind::DateTime:
+        case ColumnKind::Measure:
         default:
             return !textOp;
     }
 }
 
 /// @brief Parses one operand for the column's kind into a slot of @p entry.
+///
+/// A `Measure` operand is a decimal, or a decimal, a space and a unit id (`detail::splitMeasureOperand`); its unit is
+/// live in `services.units`, its dimension allowed by the column, and its base amount fits.
 /// @param info     The column.
-/// @param services Collator (text is folded with it) and date parser.
+/// @param services Collator (text is folded with it), date parser and units.
 /// @param text     The operand text.
 /// @param slot     0, or 1 for the upper bound of `between`.
 /// @param entry    Receives the parsed operand.
@@ -1145,6 +1205,25 @@ struct RawEntry {
         case ColumnKind::Text:
             entry.text = entry.caseSensitive ? std::string{text} : services.collatorOrDefault()->fold(text);
             return true;
+        case ColumnKind::Measure: {
+            auto const operand = splitMeasureOperand(text);
+            if (!operand || services.units == nullptr) {
+                return false;
+            }
+            auto const& registry = *services.units;
+            auto const unit = registry.find(operand->second);
+            if (!unit) {
+                return false;
+            }
+            auto const place = dimensionPlace(info, registry, registry.info(*unit).dimension);
+            auto const base = math::checkedMul(operand->first, registry.info(*unit).toBase);
+            if (place < 0 || !base) {
+                return false;
+            }
+            entry.exact.at(slot) = *base;
+            entry.places.at(slot) = static_cast<std::uint32_t>(place);
+            return true;
+        }
         case ColumnKind::Custom:
         default:
             return false;
@@ -1196,6 +1275,9 @@ struct RawEntry {
             case ColumnKind::Text:
                 out.add(std::move(parsed.text));
                 break;
+            case ColumnKind::Measure:
+                out.add(parsed.places[0], parsed.exact[0]);
+                break;
             case ColumnKind::Custom:
             default:
                 break;
@@ -1207,14 +1289,18 @@ struct RawEntry {
 /// @brief Compiles one entry for one column.
 /// @param entry    The entry.
 /// @param info     The column.
-/// @param services Collator and date parser.
-/// @return The compiled entry, or the error naming the column.
+/// @param services Collator, date parser and units.
+/// @return The compiled entry, or the error naming the column: `SourceContract` for a `Measure` column without a
+///         unit registry, and `InvalidValue` for a `between` whose two measure operands are of two dimensions.
 [[nodiscard]] inline std::expected<CompiledFilter::Entry, TableError> compileEntry(FilterEntry const& entry,
                                                                                    ColumnInfo const& info,
                                                                                    Services const& services) {
     auto const raw = readEntry(entry, info.id);
     if (!raw) {
         return std::unexpected(raw.error());
+    }
+    if (auto missing = unitsMissing(info, services)) {
+        return std::unexpected(std::move(*missing));
     }
     if (!operatorDefined(info.kind, raw->op)) {
         return std::unexpected(TableError{.code = TableErrorCode::UnsupportedOperator,
@@ -1244,6 +1330,11 @@ struct RawEntry {
                                               .message = "value \"" + std::string{raw->values.at(slot)} +
                                                          "\" does not parse for column " + info.id});
         }
+    }
+    if (info.kind == ColumnKind::Measure && out.op == CompiledFilter::Op::Between && out.places[0] != out.places[1]) {
+        return std::unexpected(TableError{.code = TableErrorCode::InvalidValue,
+                                          .column = info.id,
+                                          .message = "a between on column " + info.id + " spans two dimensions"});
     }
     return out;
 }
@@ -1343,6 +1434,9 @@ inline void indexEntry(CompiledFilter::Entry const& entry, FilterEntry const& ra
             case ColumnKind::Text:
                 index.add(parsed.text, bit);
                 break;
+            case ColumnKind::Measure:
+                index.add(parsed.places[0], parsed.exact[0], bit);
+                break;
             case ColumnKind::Custom:
             default:
                 break;
@@ -1370,7 +1464,8 @@ inline void indexEntry(CompiledFilter::Entry const& entry, FilterEntry const& ra
 /// @param bits      Receives each compiled entry's bit.
 /// @param index     Receives the values of the compiled `eq` and `oneOf` entries that are not case-sensitive.
 /// @param tested    Receives the place in @p entries of every other compiled entry.
-/// @return Nothing, or an `InvalidSpec` error: an entry that sets no operator, or several.
+/// @return Nothing, or an error that is not one column's: `InvalidSpec` for an entry that sets no operator, or
+///         several, and `SourceContract` for a column read without what it needs.
 [[nodiscard]] inline std::expected<void, TableError> compileGroupSide(
     std::span<FilterEntry const> raw, ColumnInfo const& info, Services const& services,
     std::vector<std::size_t>& appliesTo, std::optional<TableError>& lastError,
@@ -1379,7 +1474,8 @@ inline void indexEntry(CompiledFilter::Entry const& entry, FilterEntry const& ra
     for (std::size_t i = 0; i < raw.size(); ++i) {
         auto compiled = compileEntry(raw[i], info, services);
         if (!compiled) {
-            if (compiled.error().code == TableErrorCode::InvalidSpec) {
+            if (compiled.error().code == TableErrorCode::InvalidSpec ||
+                compiled.error().code == TableErrorCode::SourceContract) {
                 return std::unexpected(std::move(compiled.error()));
             }
             lastError = std::move(compiled.error());

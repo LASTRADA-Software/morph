@@ -25,6 +25,7 @@
 #include <algorithm>
 #include <array>
 #include <atomic>
+#include <cassert>
 #include <charconv>
 #include <cmath>
 #include <core/async/ExecutorContext.hpp>
@@ -125,6 +126,9 @@ struct TableDescription {
     std::vector<ColumnGroupInfo> groups;
     /// @brief Every data level a column names, the base level excluded.
     std::vector<std::string> levels;
+    /// @brief The units of the dimensions the table's `Measure` columns allow (`unitsFor`): the only place a client
+    ///        learns units from, to parse, convert and show a measure.
+    std::vector<UnitInfo> units;
     /// @brief What the server offers on the table.
     TableCapabilities capabilities;
     /// @brief A hash of every other member, set by `describe`; a model leaves it empty.
@@ -161,6 +165,26 @@ struct TableDescription {
         out.push_back(column.info);
     }
     return out;
+}
+
+/// @brief A registry of the units @p description lists: how a client resolves the unit ids of its measures.
+///
+/// The ratio's unit `""` is the builder's own and is skipped when listed; the numbers are this registry's, not the
+/// server's, since the wire names a unit by its id.
+/// @param description The description.
+/// @return The registry, or what `UnitRegistryBuilder::add` refuses for a listed unit.
+[[nodiscard]] inline std::expected<std::shared_ptr<UnitRegistry const>, TableError> registryOf(
+    TableDescription const& description) {
+    UnitRegistryBuilder builder;
+    for (auto const& unit : description.units) {
+        if (unit.id.empty()) {
+            continue;
+        }
+        if (auto added = builder.add(unit); !added) {
+            return std::unexpected(std::move(added.error()));
+        }
+    }
+    return std::move(builder).build();
 }
 
 /// @brief One row of a generic page: one cell per entry of the page's `columns`.
@@ -205,6 +229,9 @@ struct GenericPage {
     std::vector<std::int64_t> indices;
     /// @brief A distinct-values reply only: the values; the page then has no rows.
     std::optional<DistinctValues> distinct;
+    /// @brief The id of each unit number the page's `Measure` cells hold, by which they are written: filled by
+    ///        `writeGenericPage` and `readGenericPage`. Not a member of the JSON, where a measure names its unit's id.
+    std::map<UnitId, std::string> units;
 };
 
 namespace detail {
@@ -331,12 +358,14 @@ inline void appendDouble(std::string& out, double value) {
 /// `double` is written by `appendDouble`; a `Rational` is a pair by
 /// `appendRational`; a `QuantityCell` is `[n, d, [fn, fd]]`, its amount and
 /// factor each written as a `Rational`, or the plain pair of its amount when
-/// the factor is 1.
-/// @param out  The text to append to.
-/// @param cell The cell.
-inline void appendCellJson(std::string& out, Cell const& cell) {
+/// the factor is 1; a `Measure` is `[n, d, "<unit id>"]`, its unit `null` when
+/// @p units has no id for its number.
+/// @param out   The text to append to.
+/// @param cell  The cell.
+/// @param units The id of each unit number a measure may hold.
+inline void appendCellJson(std::string& out, Cell const& cell, std::map<UnitId, std::string> const& units = {}) {
     std::visit(
-        [&out]<typename T>(T const& value) {
+        [&out, &units]<typename T>(T const& value) {
             if constexpr (std::is_same_v<T, std::monostate> || std::is_same_v<T, Unloaded>) {
                 out += "null";
             } else if constexpr (std::is_same_v<T, std::int64_t>) {
@@ -349,6 +378,15 @@ inline void appendCellJson(std::string& out, Cell const& cell) {
                 out += value ? "true" : "false";
             } else if constexpr (std::is_same_v<T, math::Rational>) {
                 appendRational(out, value);
+            } else if constexpr (std::is_same_v<T, Measure>) {
+                appendRational(out, value.amount);
+                out.back() = ',';
+                if (auto const found = units.find(value.unit); found != units.end()) {
+                    appendJsonString(out, found->second);
+                } else {
+                    out += "null";
+                }
+                out += ']';
             } else {
                 static_assert(std::is_same_v<T, QuantityCell>);
                 if (value.toCanonical.numerator == 1 && value.toCanonical.denominator == 1) {
@@ -396,6 +434,13 @@ public:
     [[nodiscard]] bool atEnd() noexcept {
         skipSpace();
         return _at == _text.size();
+    }
+
+    /// @brief The text not consumed yet, after any whitespace.
+    /// @return The rest of the text.
+    [[nodiscard]] std::string_view rest() noexcept {
+        skipSpace();
+        return _text.substr(_at);
     }
 
     /// @brief Consumes a JSON integer token that fits `int64`.
@@ -514,6 +559,36 @@ private:
     return Cell{QuantityCell{.amount = *amount, .toCanonical = *factor}};
 }
 
+/// @brief Reads a measure's JSON: `[n, d, "<unit id>"]`, or `[n, d, null]` for a unit its writer had no id for.
+/// @param text The JSON text, starting with `[`.
+/// @return The amount and the unit's id (nothing for `null`), or nothing when the array has another shape.
+[[nodiscard]] inline std::optional<std::pair<math::Rational, std::optional<std::string>>> readMeasureCell(
+    std::string_view text) {
+    CellCursor cursor{text};
+    if (!cursor.eat('[')) {
+        return std::nullopt;
+    }
+    auto const amount = readPair(cursor);
+    if (!amount || !cursor.eat(',')) {
+        return std::nullopt;
+    }
+    auto unit = cursor.rest();
+    auto const last = unit.find_last_not_of(" \t\n\r");
+    if (last == std::string_view::npos || unit[last] != ']') {
+        return std::nullopt;
+    }
+    unit = unit.substr(0, last);
+    unit = unit.substr(0, unit.find_last_not_of(" \t\n\r") + 1);
+    if (unit == "null") {
+        return std::pair{*amount, std::optional<std::string>{}};
+    }
+    std::string id;
+    if (unit.empty() || unit.front() != '"' || glz::read<glz::opts{.null_terminated = false}>(id, unit)) {
+        return std::nullopt;
+    }
+    return std::pair{*amount, std::optional<std::string>{std::move(id)}};
+}
+
 /// @brief The `double` a `Number` column holds for the strings JSON writes
 ///        a non-finite value as.
 /// @param text The decoded string.
@@ -622,7 +697,7 @@ inline void readPageRows(GenericPage& page, std::vector<std::vector<glz::raw_jso
             if (column > 0) {
                 out.str += ',';
             }
-            appendCellJson(out.str, cells[column]);
+            appendCellJson(out.str, cells[column], page.units);
         }
         out.str += ']';
     }
@@ -676,15 +751,20 @@ namespace morph::table {
 /// `unloadedRows` with the levels of the named columns whose cell it holds as
 /// `Unloaded`, sorted; a level no named column has is not looked up. Every
 /// member of @p page beyond its rows is copied but `distinct`: a distinct-values
-/// reply is built by `detail::answerQuery`, not from a page of rows.
+/// reply is built by `detail::answerQuery`, not from a page of rows. A measure
+/// is written with its unit's id from @p units; a unit @p units does not hold
+/// is written `null`, which reads back as an invalid cell.
 /// @param page    The page's source rows and the view's state, as `apply` returns them.
 /// @param source  The rows; read through one snapshot.
 /// @param columns The column ids to write, already ordered and without
 ///                duplicates (`validate` makes a query's list so). An id the
 ///                source lacks is written as empty cells.
+/// @param units   The registry the source's measures are numbered in. Not null when a written column is `Measure`:
+///                a precondition, which `detail::answerQuery` checks before it calls this.
 /// @return The page, its `revision` left empty for the caller to set.
 [[nodiscard]] inline GenericPage writeGenericPage(PageRows const& page, DataSource const& source,
-                                                  std::span<std::string const> columns) {
+                                                  std::span<std::string const> columns,
+                                                  UnitRegistry const* units = nullptr) {
     auto const snapshot = source.snapshot();
     auto const infos = source.columns();
     std::vector<std::optional<std::size_t>> indices;
@@ -707,6 +787,11 @@ namespace morph::table {
             cells.push_back(index ? snapshot->cell(row, *index) : Cell{});
             if (std::holds_alternative<Unloaded>(cells.back())) {
                 unloaded.emplace_back(infos[*index].level);
+            } else if (auto const* const measure = std::get_if<Measure>(&cells.back())) {
+                assert(units != nullptr && "writeGenericPage: a measure is written with a unit registry");
+                if (units != nullptr && units->contains(measure->unit)) {
+                    out.units.try_emplace(measure->unit, units->info(measure->unit).id);
+                }
             }
         }
         out.rows.push_back(std::move(cells));
@@ -729,15 +814,21 @@ namespace morph::table {
 ///
 /// Each cell is read by `detail::cellFromJson` with its column's kind. A cell
 /// that does not read as its kind keeps the page and is an invalid cell; a
-/// page whose structure is wrong is refused.
+/// page whose structure is wrong is refused. A cell of a `Measure` column
+/// written `[n, d, "<unit id>"]` is a `Measure` whose unit is the id's number
+/// in @p units, or `kUnknownUnit`, an invalid cell, for an id it lacks.
 /// @param json        The page's JSON.
 /// @param description The table's description.
+/// @param units       The registry a measure's unit id is resolved through. Null resolves through
+///                    `registryOf(description)`, built once for the call and only when a column of the page is
+///                    `Measure`: a client has no registry of its own, only the description's units.
 /// @return The page, or `UnknownColumn` naming a `columns` entry the
 ///         description lacks, or `InvalidValue` when the text is not a page, a
 ///         row's length differs from `columns`, or `keys` and `rows` differ in
-///         length.
+///         length, or what `registryOf` refuses.
 [[nodiscard]] inline std::expected<GenericPage, TableError> readGenericPage(std::string_view json,
-                                                                            TableDescription const& description) {
+                                                                            TableDescription const& description,
+                                                                            UnitRegistry const* units = nullptr) {
     auto const invalid = [](std::string message) {
         return std::unexpected(
             TableError{.code = TableErrorCode::InvalidValue, .column = {}, .message = std::move(message)});
@@ -766,8 +857,36 @@ namespace morph::table {
                            " cells under " + std::to_string(kinds.size()) + " columns");
         }
     }
-    // The rows were read with no kind; only a `Number` column reads differently, taking an integer token or a
-    // non-finite string as a double.
+    // The rows were read with no kind: a measure's array is text until its column is known to be `Measure`.
+    std::shared_ptr<UnitRegistry const> built;
+    for (std::size_t column = 0; column < kinds.size(); ++column) {
+        if (kinds[column] != ColumnKind::Measure) {
+            continue;
+        }
+        if (units == nullptr) {
+            auto registry = registryOf(description);
+            if (!registry) {
+                return std::unexpected(std::move(registry.error()));
+            }
+            built = std::move(*registry);
+            units = built.get();
+        }
+        for (auto& cells : page.rows) {
+            auto& cell = cells[column];
+            auto const* const text = std::get_if<std::string>(&cell);
+            auto const measure =
+                text != nullptr && text->starts_with('[') ? detail::readMeasureCell(*text) : std::nullopt;
+            if (!measure) {
+                continue;
+            }
+            auto const unit = measure->second ? units->find(*measure->second) : std::nullopt;
+            if (unit) {
+                page.units.try_emplace(*unit, *measure->second);
+            }
+            cell = Measure{.amount = measure->first, .unit = unit.value_or(kUnknownUnit)};
+        }
+    }
+    // Only a `Number` column reads differently besides, taking an integer token or a non-finite string as a double.
     for (std::size_t column = 0; column < kinds.size(); ++column) {
         if (kinds[column] != ColumnKind::Number) {
             continue;
@@ -785,7 +904,6 @@ namespace morph::table {
     }
     return page;
 }
-
 
 namespace detail {
 
@@ -1035,14 +1153,20 @@ struct ServedTable {
 /// @brief The most sort keys a table's `limits` may allow.
 inline constexpr std::size_t kMaxSortKeysBound = 32;
 
-/// @brief The description a served table answers with: its sort bound from `limits`, then its revision.
+/// @brief The description a served table answers with: its sort bound from `limits` and its units, then its
+///        revision.
 ///
 /// The bound is set before `describe` takes the revision, because `capabilities` is part of what it hashes: a
 /// table whose limits raise the bound has another revision than the same table at the default. Every reply that
 /// names the table's revision, a page included, takes it from here, so a page and the describe reply agree.
 /// @param served The table as its function returned it.
-/// @return The description, its `capabilities.maxSortKeys` the limits' and its revision set; `SourceContract`
-///         when `limits.maxSortKeys` is 0 or above `kMaxSortKeysBound`.
+/// A table with a `Measure` column lists its units (`TableDescription::units`) from `services.units` by `unitsFor`
+/// when its function left them empty, also before the revision is taken, so a client learns them from the
+/// description and from every page's revision alike.
+/// @param served The table as its function returned it.
+/// @return The description, its `capabilities.maxSortKeys` the limits', its units listed and its revision set;
+///         `SourceContract` when `limits.maxSortKeys` is 0 or above `kMaxSortKeysBound`, or when a column is
+///         `Measure` and `services.units` is null.
 [[nodiscard]] inline std::expected<TableDescription, TableError> servedDescription(ServedTable const& served) {
     if (served.limits.maxSortKeys == 0 || served.limits.maxSortKeys > kMaxSortKeysBound) {
         return std::unexpected(TableError{.code = TableErrorCode::SourceContract,
@@ -1051,6 +1175,18 @@ inline constexpr std::size_t kMaxSortKeysBound = 32;
     }
     TableDescription description = served.description;
     description.capabilities.maxSortKeys = static_cast<std::uint32_t>(served.limits.maxSortKeys);
+    auto const measure = std::ranges::find(description.columns, ColumnKind::Measure,
+                                           [](TableColumn const& column) { return column.info.kind; });
+    if (measure != description.columns.end()) {
+        if (served.services.units == nullptr) {
+            return std::unexpected(TableError{.code = TableErrorCode::SourceContract,
+                                              .column = measure->info.id,
+                                              .message = "a table with measures needs a unit registry"});
+        }
+        if (description.units.empty()) {
+            description.units = unitsFor(*served.services.units, columnInfos(description));
+        }
+    }
     return describe(std::move(description));
 }
 
@@ -1633,7 +1769,14 @@ struct AnswerContext {
                                            : pageRows(*view, *snapshot, *checked, served.limits);
     rows.awaiting = entry->awaiting;
     rows.failed = entry->failed;
-    auto page = writeGenericPage(rows, leveled, columns);
+    for (auto const& column : columns) {
+        if (auto const at = findColumn(infos, column)) {
+            if (auto missing = unitsMissing(infos[*at], served.services)) {
+                return std::unexpected(std::move(*missing));
+            }
+        }
+    }
+    auto page = writeGenericPage(rows, leveled, columns, served.services.units.get());
     page.unloadedRows.clear();
     for (std::size_t at = 0; at < rows.rows.size(); ++at) {
         UnloadedRow row{.index = static_cast<std::int64_t>(at), .levels = {}, .failed = {}};
@@ -1786,7 +1929,7 @@ template <typename Row>
     for (std::size_t index = 0; index < readers.size(); ++index) {
         if (glz::reflect<Row>::keys[index] == keyField) {
             return RowKey<Row>{[reader = readers[index]](Row const& row) -> RowId {
-                auto cell = reader(row);
+                auto cell = reader(row, nullptr);
                 if (auto* const text = std::get_if<std::string>(&cell)) {
                     return RowId{std::move(*text)};
                 }
@@ -1806,15 +1949,18 @@ template <typename Row>
 /// The columns are `Row`'s reflected members in member order, each labelled by its field metadata or else by
 /// its name made a title, each with the level `Row::columnLevels()` gives it; `levels` lists those levels, sorted
 /// and each once. The groups are the source's (`Row::columnGroups()`), each labelled by its id made a title, and
-/// each column names the group it is in. The key is the key member of the record registered for `Row`.
+/// each column names the group it is in. The key is the key member of the record registered for `Row`. @p units
+/// resolves the rows' `MeasureValue` unit ids and is the table's `services.units`.
 /// @tparam Row The row type.
-/// @param id   The table's id.
-/// @param rows The rows the caller may see; null serves none.
+/// @param id    The table's id.
+/// @param rows  The rows the caller may see; null serves none.
+/// @param units The model's unit registry (`tableUnits`); null when the model declares none.
 /// @return The served table.
 /// @throws std::logic_error when `Row` is not a registered record with a key.
 /// @throws std::invalid_argument when `Row::columnLevels()` names no column.
 template <typename Row>
-[[nodiscard]] ServedTable typedTable(std::string_view id, std::shared_ptr<std::vector<Row> const> rows) {
+[[nodiscard]] ServedTable typedTable(std::string_view id, std::shared_ptr<std::vector<Row> const> rows,
+                                     std::shared_ptr<UnitRegistry const> units = nullptr) {
     auto const& records = effects::detail::resolved().records;
     auto const record = std::ranges::find(records, std::type_index{typeid(Row)}, &record::RecordInfo::type);
     if (record == records.end() || !record->keyField) {
@@ -1844,7 +1990,10 @@ template <typename Row>
     if (rows == nullptr) {
         rows = std::make_shared<std::vector<Row> const>();
     }
-    auto source = std::make_shared<RowsSource<Row> const>(std::move(rows), std::move(*key));
+    auto source = std::make_shared<RowsSource<Row> const>(
+        std::move(rows), std::move(*key), std::map<std::string, ColumnKind, std::less<>>{},
+        std::map<std::string, std::string, std::less<>>{}, LevelLoaded<Row>{}, units);
+    served.services.units = std::move(units);
     for (auto group : source->groups()) {
         group.label = forms::detail::inferTitle(group.id);
         for (auto& column : served.description.columns) {
@@ -1861,7 +2010,9 @@ template <typename Row>
 /// @brief A table's `ServedTable`, from its model: the one way to it.
 ///
 /// Calls the registered function on @p model, on the model's strand, with @p context; for a `typed<Row>` table
-/// it builds the description and the source from the rows. The description is stamped with its revision.
+/// it builds the description and the source from the rows, and a model that declares
+/// `std::shared_ptr<table::UnitRegistry const> tableUnits(table::TableContext const&)` has it called there too, its
+/// registry resolving the rows' measures. The description is stamped with its revision.
 /// @tparam Function The table's function, as `BRIDGE_REGISTER_TABLE` keys it.
 /// @tparam Model    The model type.
 /// @param model   The model instance.
@@ -1875,7 +2026,13 @@ template <auto Function, typename Model>
     if constexpr (std::is_void_v<typename Traits::row>) {
         served = (model.*Function)(context);
     } else {
-        served = typedTable<typename Traits::row>(Traits::id, (model.*Function)(context));
+        std::shared_ptr<UnitRegistry const> units;
+        if constexpr (requires {
+                          { model.tableUnits(context) } -> std::convertible_to<std::shared_ptr<UnitRegistry const>>;
+                      }) {
+            units = model.tableUnits(context);
+        }
+        served = typedTable<typename Traits::row>(Traits::id, (model.*Function)(context), std::move(units));
     }
     served.description = describe(std::move(served.description));
     return served;

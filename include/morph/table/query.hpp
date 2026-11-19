@@ -141,6 +141,10 @@ struct DistinctValue {
     std::string operand;
     /// @brief The rows that hold the value.
     std::int64_t count = 0;
+    /// @brief A `Measure` column's value only: its dimension's name, by which a menu draws a heading.
+    std::string dimension;
+    /// @brief A `Measure` column's value only: the id of the unit its first row has it in.
+    std::string unit;
 
     /// @brief Member-wise equality.
     /// @param other The value to compare with.
@@ -761,11 +765,19 @@ struct ComputedView {
 /// @param validated The query as `validate` returned it.
 /// @param options   The services; `validate` applied its limits and `mayRead`.
 /// @return The view, or the typed error: `ServiceFailed` from a throwing service, `SourceContract` when a sorted
-///         or filtered base-level column holds an unloaded cell.
+///         or filtered base-level column holds an unloaded cell, or when a sorted or filtered column is `Measure` and
+///         `options.services.units` is null.
 [[nodiscard]] inline std::expected<ComputedView, TableError> computeView(DataSource const& source,
                                                                          TableQuery const& validated,
                                                                          ApplyOptions const& options) {
     auto const columns = source.columns();
+    for (auto const& key : validated.sort) {
+        if (auto const column = findColumn(columns, key.column)) {
+            if (auto missing = unitsMissing(columns[*column], options.services)) {
+                return std::unexpected(std::move(*missing));
+            }
+        }
+    }
     // One copy of the services for this call, the filter's operands included:
     // a collator that is not safe to share clones itself here, so concurrent
     // calls never fold on the one the caller passed.
@@ -1071,10 +1083,39 @@ void groupRows(std::span<std::uint32_t const> rows, std::span<KeyColumn const* c
             return sign(std::strong_order(left.reals[leftRow], right.reals[rightRow]));
         case ColumnKind::Text:
             return sign(left.text[leftRow].compare(right.text[rightRow]) <=> 0);
+        case ColumnKind::Measure:
+            if (left.places[leftRow] != right.places[rightRow]) {
+                return left.places[leftRow] < right.places[rightRow] ? -1 : 1;
+            }
+            return sign(left.exact[leftRow] <=> right.exact[rightRow]);
         case ColumnKind::Custom:
         default:
             return 0;
     }
+}
+
+/// @brief A cell of a `Measure` column as a measure: what its key was read from.
+/// @param cell  The cell; its key is valid.
+/// @param units The registry the key was built with.
+/// @return The measure: a plain number in the ratio's unit, text read as an operand; nothing for any other cell.
+[[nodiscard]] inline std::optional<Measure> measureOf(Cell const& cell, UnitRegistry const* units) {
+    if (auto const* const value = std::get_if<Measure>(&cell)) {
+        return *value;
+    }
+    if (auto const* const value = std::get_if<math::Rational>(&cell)) {
+        return Measure{.amount = *value, .unit = 0};
+    }
+    if (auto const* const value = std::get_if<std::int64_t>(&cell)) {
+        return Measure{.amount = math::Rational{*value, math::DecimalPlaces{0}}, .unit = 0};
+    }
+    if (auto const* const value = std::get_if<std::string>(&cell); value != nullptr && units != nullptr) {
+        if (auto const operand = splitMeasureOperand(*value)) {
+            if (auto const unit = units->find(operand->second)) {
+                return Measure{.amount = operand->first, .unit = *unit};
+            }
+        }
+    }
+    return std::nullopt;
 }
 
 /// @brief The `text` and `operand` of a value: from its first row.
@@ -1084,11 +1125,26 @@ void groupRows(std::span<std::uint32_t const> rows, std::span<KeyColumn const* c
 /// @param keys     The column's keys.
 /// @param row      The value's first row.
 /// @param bucket   The request's bucket.
-/// @return The value, its count zero.
+/// @param units    The registry a `Measure` column's keys were built with.
+/// @return The value, its count zero. A measure's `text` is its first row's amount and its unit's symbol (the ratio's
+///         unit shows none), its `operand` the amount and the unit's id, as a filter takes it.
 [[nodiscard]] inline DistinctValue describeValue(RowSnapshot const& snapshot, std::size_t column,
                                                  ColumnInfo const& info, KeyColumn const& keys, std::uint32_t row,
-                                                 DateBucket bucket) {
+                                                 DateBucket bucket, UnitRegistry const* units = nullptr) {
     auto const both = [](std::string text) { return DistinctValue{.text = text, .operand = text, .count = 0}; };
+    if (info.kind == ColumnKind::Measure) {
+        auto const measure = measureOf(snapshot.cell(row, column), units);
+        if (!measure || units == nullptr || !units->contains(measure->unit)) {
+            return both({});
+        }
+        auto const& unit = units->info(measure->unit);
+        auto const amount = units::detail::formatRationalDecimal(measure->amount);
+        return DistinctValue{.text = unit.symbol.empty() ? amount : amount + " " + unit.symbol,
+                             .operand = unit.id.empty() ? amount : amount + " " + unit.id,
+                             .count = 0,
+                             .dimension = unit.dimension,
+                             .unit = unit.id};
+    }
     switch (info.kind) {
         case ColumnKind::Text:
             return both(keys.raw[row]);
@@ -1135,8 +1191,9 @@ void groupRows(std::span<std::uint32_t const> rows, std::span<KeyColumn const* c
 /// Builds the key columns @p input lacks (the filter's and the listed columns') on the calling thread, into locals.
 /// A row the filter leaves undecided is in no count and sets `partial`; an unloaded cell in a listed column is in no
 /// count and sets `partial`, and the row's loaded cells still count. An unloaded cell in a base-level column the
-/// list reads is `SourceContract`, as a view job reports it. Valid cells group by the key the column sorts
-/// and filters by (text by its fold; a date bucket by its first day); a row counts once per value it holds, once in
+/// list reads is `SourceContract`, as a view job reports it, and so is a listed `Measure` column with no unit
+/// registry. Valid cells group by the key the column sorts and filters by (text by its fold; a date bucket by its
+/// first day; a measure by its dimension's place and its base amount); a row counts once per value it holds, once in
 /// `blanks` when it has an empty cell and once in `invalid` when it has an invalid one. A value's text is that of
 /// its first row and, within the row, its first column. Values are searched by their folded text, ordered ascending
 /// by their keys (ties by first row), counted up to `totalCap`, and then sliced by `offset` and `limit`.
@@ -1159,6 +1216,11 @@ void groupRows(std::span<std::uint32_t const> rows, std::span<KeyColumn const* c
         } else {
             for (auto const& columnId : *groupColumns(input.groups, validated.group)) {
                 listed.push_back(*findColumn(input.columns, columnId));
+            }
+        }
+        for (auto const at : listed) {
+            if (auto missing = unitsMissing(input.columns[at], input.services)) {
+                return std::unexpected(std::move(*missing));
             }
         }
         std::vector<std::shared_ptr<KeyColumn const>> built(input.columns.size());
@@ -1221,6 +1283,14 @@ void groupRows(std::span<std::uint32_t const> rows, std::span<KeyColumn const* c
                     candidates, listedKeys, [](KeyColumn const& keys, std::uint32_t row) { return keys.exact[row]; },
                     groups, out);
                 break;
+            case ColumnKind::Measure:
+                groupRows<MeasureKey, MeasureKeyHash>(
+                    candidates, listedKeys,
+                    [](KeyColumn const& keys, std::uint32_t row) {
+                        return MeasureKey{.place = keys.places[row], .amount = keys.exact[row]};
+                    },
+                    groups, out);
+                break;
             case ColumnKind::Number:
                 groupRows<double>(
                     candidates, listedKeys,
@@ -1257,7 +1327,7 @@ void groupRows(std::span<std::uint32_t const> rows, std::span<KeyColumn const* c
         auto const describe = [&](DistinctGroup const& group) {
             auto const at = listed[group.column];
             return describeValue(snapshot, at, input.columns[at], *listedKeys[group.column], group.first,
-                                 validated.bucket);
+                                 validated.bucket, input.services.units.get());
         };
         if (!validated.search.empty()) {
             auto const& collator = collatorOf(input.services);
@@ -1466,6 +1536,62 @@ struct ColumnLevel {
     std::string_view level;
 };
 
+/// @brief A typed row's amount in a named unit: the member type of a `Measure` column.
+///
+/// Its JSON is `{"num", "den", "unit"}`: the amount as a `Rational` is written, with the unit's string id beside it.
+/// The id is resolved through the registry the row's source is given, and an id it does not hold is an invalid
+/// cell. A row's schema marks such a property `x-measure` and lists no units, which are the application's at run
+/// time.
+struct MeasureValue {
+    /// @brief The amount.
+    math::Rational amount;
+    /// @brief The unit's id; empty is the ratio's unit.
+    std::string unit;
+
+    /// @brief The JSON shape.
+    struct Wire {
+        /// @brief The amount's numerator.
+        std::int64_t num = 0;
+        /// @brief The amount's denominator.
+        std::int64_t den = 1;
+        /// @brief The unit's id.
+        std::string unit;
+    };
+
+    /// @brief Reads the JSON shape; the amount's places are k when the denominator is 10^k, else the most a
+    ///        `Rational` holds, as a generic page reads an exact cell.
+    /// @param wire The shape as read.
+    void setWire(Wire const& wire) {
+        std::uint32_t places = math::kMaxDecimalPlaces;
+        std::int64_t power = 1;
+        for (std::uint32_t k = 0; k <= math::kMaxDecimalPlaces; ++k) {
+            if (power == wire.den) {
+                places = k;
+                break;
+            }
+            if (power > std::numeric_limits<std::int64_t>::max() / 10) {
+                break;
+            }
+            power *= 10;
+        }
+        amount = wire.den > 0 ? math::Rational{math::Numerator{wire.num}, math::Denominator{wire.den},
+                                               math::DecimalPlaces{places}}
+                              : math::Rational{};
+        unit = wire.unit;
+    }
+
+    /// @brief The JSON shape.
+    /// @return The amount's canonical numerator and denominator, and the unit's id.
+    [[nodiscard]] Wire getWire() const {
+        return Wire{.num = amount.numerator, .den = amount.denominator, .unit = unit};
+    }
+
+    /// @brief Member-wise equality, the amount by value.
+    /// @param other The value to compare with.
+    /// @return `true` when the amounts are equal and the units are the same id.
+    [[nodiscard]] bool operator==(MeasureValue const& other) const = default;
+};
+
 /// @brief Whether @p level is loaded for @p row: how a typed table says which of its cells are unloaded. Empty
 ///        means every level is loaded.
 /// @tparam Row The row type.
@@ -1543,6 +1669,8 @@ template <typename T>
         return ColumnKind::Decimal;
     } else if constexpr (units::isQuantity<V>) {
         return ColumnKind::Quantity;
+    } else if constexpr (std::is_same_v<V, MeasureValue>) {
+        return ColumnKind::Measure;
     } else if constexpr (std::is_same_v<V, time::DateTime> || std::is_same_v<V, time::Timestamp>) {
         return ColumnKind::DateTime;
     } else if constexpr (MemberWrapper<V>) {
@@ -1591,12 +1719,16 @@ template <typename T>
 /// @brief A member value as a cell.
 /// @tparam T The member type.
 /// @param value The member.
-/// @return The cell.
+/// @param units The registry a `MeasureValue`'s unit id is resolved through; null resolves none.
+/// @return The cell; a `MeasureValue` whose id @p units does not hold is a measure of `kUnknownUnit`, an invalid cell.
 template <typename T>
-[[nodiscard]] Cell toCell(T const& value) {
+[[nodiscard]] Cell toCell(T const& value, UnitRegistry const* units = nullptr) {
     using V = std::remove_cvref_t<T>;
     if constexpr (IsOptional<V>::value) {
-        return value ? toCell(*value) : Cell{};
+        return value ? toCell(*value, units) : Cell{};
+    } else if constexpr (std::is_same_v<V, MeasureValue>) {
+        auto const unit = units != nullptr ? units->find(value.unit) : std::nullopt;
+        return Cell{Measure{.amount = value.amount, .unit = unit.value_or(kUnknownUnit)}};
     } else if constexpr (std::is_same_v<V, bool> || std::is_same_v<V, std::string> ||
                          std::is_same_v<V, math::Rational>) {
         return Cell{value};
@@ -1611,16 +1743,16 @@ template <typename T>
     } else if constexpr (std::is_same_v<V, time::Timestamp>) {
         return value.value ? toCell(*value.value) : Cell{};
     } else if constexpr (MemberWrapper<V>) {
-        return toCell(value.*(glz::meta<V>::value));
+        return toCell(value.*(glz::meta<V>::value), units);
     } else {
         return writtenCell(value);
     }
 }
 
-/// @brief Reads one column's cell from a row.
+/// @brief Reads one column's cell from a row, a measure's unit through the registry given.
 /// @tparam Row The row type.
 template <typename Row>
-using CellReader = Cell (*)(Row const&);
+using CellReader = Cell (*)(Row const&, UnitRegistry const*);
 
 /// @brief One cell reader per key glaze writes, in key order.
 /// @tparam Row The row type.
@@ -1629,8 +1761,9 @@ template <typename Row>
 [[nodiscard]] std::vector<CellReader<Row>> cellReaders() {
     constexpr auto count = glz::reflect<Row>::size;
     return [&]<std::size_t... I>(std::index_sequence<I...>) {
-        return std::vector<CellReader<Row>>{
-            +[](Row const& row) -> Cell { return toCell(morph::detail::reflectedMember<I>(row)); }...};
+        return std::vector<CellReader<Row>>{+[](Row const& row, UnitRegistry const* units) -> Cell {
+            return toCell(morph::detail::reflectedMember<I>(row), units);
+        }...};
     }(std::make_index_sequence<count>{});
 }
 
@@ -1684,14 +1817,17 @@ public:
     /// @param readers One cell reader per column.
     /// @param levels  Each column's level, by column index; null when no column has one.
     /// @param loaded  Whether a level is loaded for a row; empty when every level is.
+    /// @param units   The registry a measure member's unit id is resolved through; null resolves none.
     RowsSnapshot(std::shared_ptr<std::vector<Row> const> rows, RowKey<Row> key,
                  std::shared_ptr<std::vector<detail::CellReader<Row>> const> readers,
-                 std::shared_ptr<std::vector<std::string> const> levels = nullptr, LevelLoaded<Row> loaded = {})
+                 std::shared_ptr<std::vector<std::string> const> levels = nullptr, LevelLoaded<Row> loaded = {},
+                 std::shared_ptr<UnitRegistry const> units = nullptr)
         : _rows{std::move(rows)},
           _key{std::move(key)},
           _readers{std::move(readers)},
           _levels{std::move(levels)},
-          _loaded{std::move(loaded)} {}
+          _loaded{std::move(loaded)},
+          _units{std::move(units)} {}
 
     /// @brief The number of rows.
     /// @return Row count.
@@ -1719,7 +1855,7 @@ public:
         if (!level.empty() && !_loaded(value, level)) {
             return Cell{Unloaded{}};
         }
-        return (*_readers)[column](value);
+        return (*_readers)[column](value, _units.get());
     }
 
     /// @brief Hands rows `[first, last)` of @p column to @p sink in runs.
@@ -1738,7 +1874,8 @@ public:
             run.clear();
             for (auto row = first; row < end; ++row) {
                 auto const& value = (*_rows)[row];
-                run.push_back(!level.empty() && !_loaded(value, level) ? Cell{Unloaded{}} : reader(value));
+                run.push_back(!level.empty() && !_loaded(value, level) ? Cell{Unloaded{}}
+                                                                       : reader(value, _units.get()));
             }
             sink.cells(first, run);
             first = end;
@@ -1756,6 +1893,7 @@ private:
     std::shared_ptr<std::vector<detail::CellReader<Row>> const> _readers;
     std::shared_ptr<std::vector<std::string> const> _levels;
     LevelLoaded<Row> _loaded;
+    std::shared_ptr<UnitRegistry const> _units;
 };
 
 /// @brief A `DataSource` over typed rows: one column per key glaze writes,
@@ -1763,7 +1901,8 @@ private:
 ///
 /// `bool` is `Bool`; other integers `Integer` (an unsigned value above
 /// `INT64_MAX` is an invalid cell); floating point `Number`; `Rational`
-/// `Decimal`; a `Quantity` `Quantity`; `DateTime` and `Timestamp`
+/// `Decimal`; a `Quantity` `Quantity`; a `MeasureValue` `Measure`, its unit id
+/// resolved through the source's registry; `DateTime` and `Timestamp`
 /// `DateTime`; a type glaze writes as one of its members (`Ranged`,
 /// `Choice`, `Tagged`) that member's kind; everything else `Text` (an enum by
 /// its glaze name). A `std::optional` member's empty state, or anything glaze
@@ -1785,15 +1924,19 @@ public:
     /// @param comparators Comparator names by column id, from
     ///                    `Services::comparators`; a column named here is `Custom`.
     /// @param loaded      Whether a level is loaded for a row; empty means every level is.
+    /// @param units       The registry a `MeasureValue` member's unit id is resolved through: the one the source's
+    ///                    keys are built with (`Services::units`). Null resolves none, so every measure is invalid.
     /// @throws std::invalid_argument when `Row::columnLevels()` names no column.
     RowsSource(std::shared_ptr<std::vector<Row> const> rows, RowKey<Row> key,
                std::map<std::string, ColumnKind, std::less<>> const& kinds = {},
-               std::map<std::string, std::string, std::less<>> const& comparators = {}, LevelLoaded<Row> loaded = {})
+               std::map<std::string, std::string, std::less<>> const& comparators = {}, LevelLoaded<Row> loaded = {},
+               std::shared_ptr<UnitRegistry const> units = nullptr)
         : _columns{detail::reflectedColumns<Row>()},
           _groups{detail::declaredGroups<Row>()},
           _readers{std::make_shared<std::vector<detail::CellReader<Row>> const>(detail::cellReaders<Row>())},
           _key{std::move(key)},
-          _loaded{std::move(loaded)} {
+          _loaded{std::move(loaded)},
+          _units{std::move(units)} {
         auto levels = std::make_shared<std::vector<std::string>>();
         levels->reserve(_columns.size());
         for (auto& column : _columns) {
@@ -1807,7 +1950,7 @@ public:
             levels->push_back(column.level);
         }
         _levels = std::move(levels);
-        _snapshot = std::make_shared<RowsSnapshot<Row>>(std::move(rows), _key, _readers, _levels, _loaded);
+        _snapshot = std::make_shared<RowsSnapshot<Row>>(std::move(rows), _key, _readers, _levels, _loaded, _units);
     }
 
     /// @brief The columns.
@@ -1833,7 +1976,7 @@ public:
     /// @brief Replaces the rows and notifies `Reset`.
     /// @param rows The new rows.
     void setRows(std::shared_ptr<std::vector<Row> const> rows) {
-        _snapshot = std::make_shared<RowsSnapshot<Row>>(std::move(rows), _key, _readers, _levels, _loaded);
+        _snapshot = std::make_shared<RowsSnapshot<Row>>(std::move(rows), _key, _readers, _levels, _loaded, _units);
         _listeners.notify(RowChange{.kind = ChangeKind::Reset, .rows = {}});
     }
 
@@ -1843,6 +1986,7 @@ private:
     std::shared_ptr<std::vector<detail::CellReader<Row>> const> _readers;
     RowKey<Row> _key;
     LevelLoaded<Row> _loaded;
+    std::shared_ptr<UnitRegistry const> _units;
     std::shared_ptr<std::vector<std::string> const> _levels;
     std::shared_ptr<RowsSnapshot<Row> const> _snapshot;
     detail::Listeners _listeners;
@@ -1902,7 +2046,7 @@ template <typename Row>
 /// @param rows    The server's rows; read during the call only.
 /// @param key     The key projection.
 /// @param query   The request body's table query.
-/// @param options     Limits, services and column access.
+/// @param options     Limits, services and column access; `services.units` also resolves `MeasureValue` members.
 /// @param kinds       Column kinds that replace the inferred ones.
 /// @param comparators Comparator names by column id; a column named here is `Custom`.
 /// @param loaded      Whether a level is loaded for a row; empty means every level is.
@@ -1914,7 +2058,7 @@ template <typename Row>
     std::map<std::string, std::string, std::less<>> const& comparators = {}, LevelLoaded<Row> loaded = {}) {
     // Borrowed for the call: an aliasing pointer that owns nothing.
     std::shared_ptr<std::vector<Row> const> const borrowed{std::shared_ptr<void>{}, &rows};
-    RowsSource<Row> const source{borrowed, std::move(key), kinds, comparators, loaded};
+    RowsSource<Row> const source{borrowed, std::move(key), kinds, comparators, loaded, options.services.units};
     if (auto error = detail::checkGroups(source.columns(), source.groups())) {
         return std::unexpected(std::move(*error));
     }
@@ -2962,3 +3106,30 @@ struct glz::meta<morph::table::TotalKind> {
     /// @brief Each enumerator after its JSON name.
     static constexpr auto value = glz::enumerate("exact", Exact, "atLeast", AtLeast);
 };
+
+/// @brief The JSON of `morph::table::MeasureValue`: `{"num", "den", "unit"}`.
+template <>
+struct glz::meta<morph::table::MeasureValue> {
+    /// @brief Read and written through its wire shape.
+    static constexpr auto value =
+        glz::custom<&morph::table::MeasureValue::setWire, &morph::table::MeasureValue::getWire>;
+    /// @brief The schema's name.
+    static constexpr std::string_view name = "MeasureValue";
+};
+
+namespace glz::detail {
+
+/// @brief The schema of `MeasureValue`: its wire object, so its properties are `num`, `den` and `unit`.
+template <>
+struct to_json_schema<morph::table::MeasureValue> {
+    /// @brief Writes the wire shape's schema.
+    /// @tparam Opts The write options.
+    /// @param outSchema The schema written.
+    /// @param defs      The definitions.
+    template <auto Opts>
+    static void op(auto& outSchema, auto& defs) {
+        to_json_schema<morph::table::MeasureValue::Wire>::template op<Opts>(outSchema, defs);
+    }
+};
+
+}  // namespace glz::detail
