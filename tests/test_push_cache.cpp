@@ -350,6 +350,25 @@ TEST_CASE("unwatch_after_eviction", "[push][cache]") {
     CHECK(h.session.watchSet().records.empty());
 }
 
+// Mutation: the unwatch queued by the cache's eviction is sent whatever the extra watches.
+TEST_CASE("extra_watch_outlives_the_cache_entry_on_its_record", "[push][cache]") {
+    Harness h{true};
+    h.session.addExtraWatch("T_Row");
+    REQUIRE(h.watches.size() == 1);
+    CHECK(h.watches.back().kind == "watch");
+    auto screen = h.mount(kRows);
+    h.reply(0, kTwoRows);
+    screen.reset();
+    h.settle();
+    h.advance(std::chrono::minutes{5});
+    // The entry is evicted and nothing is unwatched: the extra watch still holds the record.
+    CHECK(std::ranges::none_of(h.watches, [](auto const& sent) { return sent.kind == "unwatch"; }));
+    CHECK(h.session.watchSet().records == std::vector<std::string>{"T_Row"});
+    h.session.removeExtraWatch("T_Row");
+    REQUIRE(h.watches.size() > 1);
+    CHECK(h.watches.back().kind == "unwatch");
+}
+
 TEST_CASE("no_watcher_counts_and_sends_nothing", "[push][cache]") {
     Harness h;
     auto screen = h.mount(kSameRecordTwice);

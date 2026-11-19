@@ -289,24 +289,72 @@ TEST_CASE("custom screen sync: a reply that arrives after reset is dropped", "[u
     CHECK(client.sync.listed().screens.empty());
 }
 
-// Mutation: drop the scope from `.then` in `call` (the reply runs on the destroyed sync).
+namespace {
+
+/// A sync of "ann" for "lims" that can be destroyed on its own, over a bridge that outlives it.
+struct DestroyableSync {
+    explicit DestroyableSync(morph::backend::RemoteServer& server)
+        : bridge{std::make_unique<morph::backend::SimulatedRemoteBackend>(server), owner} {
+        morph::session::Context signedIn;
+        signedIn.token = "ann";
+        bridge.setDefaultSession(std::move(signedIn));
+        sync.emplace(dispatcher, "lims", [] { return uiservice::facts(); });
+    }
+
+    morph::testing::StepExecutor owner;
+    morph::bridge::Bridge bridge;
+    morph::ui::BridgeDispatcher dispatcher{bridge, &owner};
+    std::optional<morph::ui::CustomScreenSync> sync;
+};
+
+}  // namespace
+
+// Mutation: drop the scope from `.then` in `call` (the `list` reply runs on the destroyed sync; the probe's callback
+// is called).
 TEST_CASE("custom screen sync: a reply that arrives after the sync is destroyed is dropped",
           "[ui][custom-screens][sync]") {
     screens_test::Server server;
-    morph::testing::StepExecutor owner;
-    morph::bridge::Bridge bridge{std::make_unique<morph::backend::SimulatedRemoteBackend>(*server.server), owner};
-    morph::session::Context signedIn;
-    signedIn.token = "ann";
-    bridge.setDefaultSession(std::move(signedIn));
-    morph::ui::BridgeDispatcher dispatcher{bridge, &owner};
+    // The owner runs one task at a time until the probe answers, which counts the tasks up to and including the one
+    // that delivers the `list` reply (the bind's reply comes earlier).
+    std::size_t steps = 0;
+    {
+        DestroyableSync counting{*server.server};
+        std::optional<bool> answered;
+        counting.sync->probe([&answered](bool offered) { answered = offered; });
+        while (!answered.has_value()) {
+            awaitQueued(counting.owner);
+            steps += counting.owner.runOne() ? 1 : 0;
+        }
+    }
+    REQUIRE(steps > 1);
+    DestroyableSync rig{*server.server};
     std::optional<bool> answered;
-    std::optional<morph::ui::CustomScreenSync> sync;
-    sync.emplace(dispatcher, "lims", [] { return uiservice::facts(); });
-    sync->probe([&answered](bool offered) { answered = offered; });
-    awaitQueued(owner);
-    sync.reset();
-    owner.runAll();
+    rig.sync->probe([&answered](bool offered) { answered = offered; });
+    for (std::size_t step = 0; step + 1 < steps; ++step) {
+        awaitQueued(rig.owner);
+        REQUIRE(rig.owner.runOne());
+    }
+    // Only the task that delivers the `list` reply is left, queued.
+    awaitQueued(rig.owner);
+    REQUIRE_FALSE(answered.has_value());
+    REQUIRE(rig.owner.pending() == 1);
+    rig.sync.reset();
+    rig.owner.runAll();
     CHECK_FALSE(answered.has_value());
+}
+
+// Mutation: the session reads no watch reply (no warning names the record).
+TEST_CASE("custom screen sync: a refused watch on the record is logged at warn", "[ui][custom-screens][sync]") {
+    Warnings warnings;
+    screens_test::Server server;
+    SyncClient client{*server.server, "ann", "lims", true};
+    client.refuseWatches = true;
+    REQUIRE(client.probe());
+    REQUIRE(client.pump([&warnings] {
+        return std::ranges::count_if(warnings.seen, [](std::string const& seen) {
+                   return seen.contains("refused the watch") && seen.contains("morph.customScreens");
+               }) == 1;
+    }));
 }
 
 // Mutation: `put` keeps a screen whose summary is broken (`find` answers it, and open answers a document).

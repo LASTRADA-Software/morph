@@ -886,10 +886,15 @@ public:
     ///
     /// The `watch` goes out at once when there is a watcher. The events arrive through `deliverEvent` like any
     /// other's, for the owner of the extra watch to read.
+    ///
+    /// A record has one owner: extra watches are not reference-counted, so the first `removeExtraWatch` ends it for
+    /// every caller. A refusal of the watch, in the reply or as a failure, is logged at warn.
     /// @param record The record's name; one already watched this way changes nothing.
     void addExtraWatch(std::string const& record);
 
     /// @brief Stops an extra watch: sends an `unwatch` unless an entry of the cache still holds the record.
+    ///
+    /// A record has one owner: the watch is not reference-counted, so this ends it whoever else added it.
     /// @param record The record's name; one not watched this way changes nothing.
     void removeExtraWatch(std::string const& record);
 

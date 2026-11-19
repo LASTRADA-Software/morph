@@ -122,11 +122,15 @@ struct SyncClient {
         return [this](std::string const& kind, std::string const& body) {
             watches.push_back(kind + " " + body);
             auto [completion, promise] = morph::async::Completion<std::string>::makeSettleable(&owner);
-            promise.resolve(std::string{R"({"refusedRecords":[],"refusedInstances":[]})"});
+            promise.resolve(refuseWatches
+                                ? std::string{R"({"refusedRecords":["morph.customScreens"],"refusedInstances":[]})"}
+                                : std::string{R"({"refusedRecords":[],"refusedInstances":[]})"});
             return std::move(completion);
         };
     }
 
+    /// Whether the recorded watches are answered as refused for the record `morph.customScreens`.
+    bool refuseWatches = false;
     std::vector<std::string> watches;
     morph::testing::StepExecutor owner;
     morph::reactive::Runtime runtime{owner};

@@ -10,12 +10,14 @@
 #include <expected>
 #include <format>
 #include <functional>
+#include <iterator>
 #include <limits>
 #include <map>
 #include <memory>
 #include <morph/core/backend.hpp>
 #include <morph/core/bridge.hpp>
 #include <morph/core/completion.hpp>
+#include <morph/core/logger.hpp>
 #include <morph/core/wire.hpp>
 #include <morph/forms/engine/collection.hpp>
 #include <morph/forms/engine/collection_view.hpp>
@@ -1767,8 +1769,29 @@ void Session::countTopics(detail::CacheEntry const& entry, int delta) {
 }
 
 void Session::sendWatch(std::string_view kind, wire::WatchBody const& body) const {
+    // The cache's own topics need no answer: a refused one simply sends no events. An extra watch belongs to a
+    // client that cannot work without it, so a refusal of one is reported.
+    std::vector<std::string> extras;
+    if (kind == wire::kWatchKind) {
+        std::ranges::copy_if(body.records, std::back_inserter(extras),
+                             [this](std::string const& record) { return _extraWatch.contains(record); });
+    }
     auto completion = _options.watcher(std::string{kind}, glz::write_json(body).value_or(std::string{}));
-    completion.then([](std::string const&) {}).onError([](std::exception_ptr const&) {});
+    completion
+        .then([extras](std::string const& reply) {
+            auto const read = wire::readWatchReply(reply);
+            for (std::string const& record : extras) {
+                if (!read || std::ranges::find(read->refusedRecords, record) != read->refusedRecords.end()) {
+                    ::morph::log::logWarn("the server refused the watch on `{}`; events for it will not arrive",
+                                          record);
+                }
+            }
+        })
+        .onError([extras](std::exception_ptr const& error) {
+            for (std::string const& record : extras) {
+                ::morph::log::logWarn("the watch on `{}` failed: {}", record, detail::failureText(error));
+            }
+        });
 }
 
 void Session::flushWatches() {
