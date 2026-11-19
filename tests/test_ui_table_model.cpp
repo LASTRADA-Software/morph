@@ -9,6 +9,7 @@
 #include <catch2/catch_test_macros.hpp>
 #include <chrono>
 #include <cstdint>
+#include <iterator>
 #include <memory>
 #include <morph/table/data_source.hpp>
 #include <morph/table/description.hpp>
@@ -262,11 +263,56 @@ std::vector<std::string> refetchFirstPages(RowsFixture& h, WindowRows& rows) {
     return morph::ui::testing::shownKeys(rows);
 }
 
-// Replays @p change on @p before as a mount does, and checks it gives what the rows hold now.
-void checkReplay(std::vector<std::string> before, table::ViewChange const& change, WindowRows const& rows) {
+// Whether no key is held twice; an empty entry is a place not held.
+bool keysUnique(std::vector<std::string> const& list) {
+    std::vector<std::string> keys;
+    std::ranges::copy_if(list, std::back_inserter(keys), [](std::string const& key) { return !key.empty(); });
+    std::ranges::sort(keys);
+    return std::ranges::adjacent_find(keys) == keys.end();
+}
+
+// Replays @p change on @p before as a keyed mount does: each operation must be in bounds of the list the one before
+// it left, no key may be held twice after any of them, an inserted or changed place reads the new view's row, and
+// the end must be what the rows hold now.
+void checkReplay(std::vector<std::string> list, table::ViewChange const& change, WindowRows const& rows) {
     auto const after = morph::ui::testing::shownKeys(rows);
-    table::applyViewChange(before, change, std::span<std::string const>{after});
-    CHECK(before == after);
+    for (std::size_t index = 0; index < change.ops.size(); ++index) {
+        auto const& op = change.ops[index];
+        INFO("op " << index << ": kind " << static_cast<int>(op.kind) << " first " << op.first << " count "
+                   << op.count << " to " << op.to << " on a list of " << list.size());
+        auto const first = static_cast<std::ptrdiff_t>(op.first);
+        auto const count = static_cast<std::ptrdiff_t>(op.count);
+        switch (op.kind) {
+            case table::ViewOp::Kind::Removed:
+                REQUIRE(op.first + op.count <= list.size());
+                list.erase(list.begin() + first, list.begin() + first + count);
+                break;
+            case table::ViewOp::Kind::Moved: {
+                REQUIRE(op.first < list.size());
+                REQUIRE(op.to < list.size());
+                std::string moved = list[op.first];
+                list.erase(list.begin() + first);
+                list.insert(list.begin() + static_cast<std::ptrdiff_t>(op.to), std::move(moved));
+                break;
+            }
+            case table::ViewOp::Kind::Inserted:
+                REQUIRE(op.first <= list.size());
+                REQUIRE(op.first + op.count <= after.size());
+                list.insert(list.begin() + first, after.begin() + first, after.begin() + first + count);
+                break;
+            case table::ViewOp::Kind::Changed:
+                REQUIRE(op.first + op.count <= list.size());
+                REQUIRE(op.first + op.count <= after.size());
+                std::copy(after.begin() + first, after.begin() + first + count, list.begin() + first);
+                break;
+            case table::ViewOp::Kind::Reset:
+            default:
+                list = after;
+                break;
+        }
+        CHECK(keysUnique(list));
+    }
+    CHECK(list == after);
 }
 
 bool has(table::ViewChange const& change, table::ViewOp::Kind kind) {
@@ -301,8 +347,8 @@ TEST_CASE("window rows: a new total with the same keys moves the view's end, not
     REQUIRE(changes.size() == 1);
     CHECK_FALSE(changes[0].isReset());
     REQUIRE_FALSE(changes[0].ops.empty());
-    CHECK(changes[0].ops.front() ==
-          table::ViewOp{.kind = table::ViewOp::Kind::Inserted, .first = 300, .count = 50, .to = 0});
+    CHECK(std::ranges::contains(changes[0].ops,
+                                table::ViewOp{.kind = table::ViewOp::Kind::Inserted, .first = 300, .count = 50, .to = 0}));
     CHECK_FALSE(has(changes[0], table::ViewOp::Kind::Moved));
     checkReplay(before, changes[0], *rows);
 }
@@ -359,4 +405,43 @@ TEST_CASE("table catalog: a table's action holds its record opaquely in the clie
     CHECK(records.front().record == "WideTableModel.small");
     CHECK(records.front().opaque);
     CHECK(records.front().paths.empty());
+}
+
+// Mutation: the view's end removed after the page's diff rather than before it (rows 250 to 299 are held twice while
+// the page's rows move in).
+TEST_CASE("window rows: a page that spans a shrunk view's end gives operations in bounds", "[ui][table]") {
+    RowsFixture h;  auto const rows = h.windowRows("samples");
+    h.answerFirstPage(*rows, /*total*/ 300);
+    rows->retry();  h.settle();
+    h.replyPage(pageJson(0, 200, 300, h.columns));                   // page 0 again, as it was
+    auto const before = morph::ui::testing::shownKeys(*rows);
+    std::vector<table::ViewChange> changes;
+    rows->onChange([&changes](table::ViewChange const& change) { changes.push_back(change); });
+    std::vector<std::int64_t> keys;
+    for (std::int64_t key = 250; key < 300; ++key) { keys.push_back(key); }
+    h.replyPage(morph::ui::testing::pageJsonOfKeys(200, keys, 250, h.columns));   // keys 200 to 249 were deleted
+    REQUIRE_FALSE(changes.empty());
+    CHECK_FALSE(changes[0].isReset());
+    CHECK(rows->total().rows == 250);
+    checkReplay(before, changes[0], *rows);
+}
+
+// Mutation: the view's end inserted before the page's diff rather than after it (rows 250 to 299 are held twice
+// until the page's rows move out).
+TEST_CASE("window rows: a page that spans a grown view's end never holds a key twice", "[ui][table]") {
+    RowsFixture h;  auto const rows = h.windowRows("samples");
+    h.answerFirstPage(*rows, /*total*/ 300);
+    rows->retry();  h.settle();
+    h.replyPage(pageJson(0, 200, 300, h.columns));                   // page 0 again, as it was
+    auto const before = morph::ui::testing::shownKeys(*rows);
+    std::vector<table::ViewChange> changes;
+    rows->onChange([&changes](table::ViewChange const& change) { changes.push_back(change); });
+    std::vector<std::int64_t> keys;
+    for (std::int64_t key = 1000; key < 1050; ++key) { keys.push_back(key); }
+    for (std::int64_t key = 200; key < 300; ++key) { keys.push_back(key); }
+    h.replyPage(morph::ui::testing::pageJsonOfKeys(200, keys, 350, h.columns));   // 50 rows came at view row 200
+    REQUIRE_FALSE(changes.empty());
+    CHECK_FALSE(changes[0].isReset());
+    CHECK(rows->total().rows == 350);
+    checkReplay(before, changes[0], *rows);
 }
