@@ -1627,11 +1627,9 @@ struct AnswerContext {
             page.unloadedRows.push_back(std::move(row));
         }
     }
-    auto orderKeys = entry->orderKeys;
-    if (orderKeys == nullptr && !needed.order.empty()) {
-        // The entry was computed for a caller that read no order level; this caller's keys are built here.
-        orderKeys = keysOf(*view, *entry->snapshot);
-    }
+    // A level reached below has a source, so it is in `generations`; a cached entry is found only for the same
+    // order levels, which its computation read, so it built the keys.
+    auto const& orderKeys = entry->orderKeys;
     std::vector<std::shared_ptr<LevelSource>> leased;
     for (auto const& level : needed.order) {
         auto const source = levelOf(level);

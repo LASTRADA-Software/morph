@@ -1463,6 +1463,21 @@ TEST_CASE("table: a query's levels are wanted with the rows it needed", "[table]
     CHECK(display.retry);
 }
 
+// Mutation: the order keys built for every view (the base-sorted view holds ten keys besides its rows).
+TEST_CASE("view cache: a view keeps order keys only when its query has an order level", "[table][views][levels]") {
+    auto const level = std::make_shared<ScriptedLevel>();
+    ViewCache views;
+    detail::AnswerContext const answer{.views = &views, .record = "T.rows", .rowScoped = false};
+    TableQuery query;
+    query.sort = {SortKey{.column = "id", .dir = SortDirection::Ascending}};
+    query.columns = std::vector<std::string>{"id", "r"};
+    REQUIRE(detail::answerQuery(scriptedTable(level), query, answer).has_value());
+    CHECK(views.stats().bytes == 4 * 10);  // the view's ten rows and nothing else
+    query.sort = {SortKey{.column = "r", .dir = SortDirection::Ascending}};
+    REQUIRE(detail::answerQuery(scriptedTable(level), query, answer).has_value());
+    CHECK(views.stats().bytes >= 2 * 4 * 10 + 10 * sizeof(RowId));  // the level-sorted view keeps its ten keys
+}
+
 // Mutation: a failed row read as merely unloaded (its `failed` left empty).
 TEST_CASE("table: failed levels are read from the snapshots", "[table][levels]") {
     auto const level = std::make_shared<ScriptedLevel>();
