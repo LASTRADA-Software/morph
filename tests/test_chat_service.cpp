@@ -1777,3 +1777,75 @@ TEST_CASE("closing_the_connection_with_a_pending_handler_stops_the_turn_for_good
     morph::testing::storageOwner().runFor(100ms);
     CHECK_FALSE(rig.state(turnId, cid2).draft.has_value());
 }
+
+namespace {
+
+// A handler that keeps the callback it was given, which is all a tool that never answers does. The test holds the
+// handler's state, so the callback outlives the service.
+chat::ChatTool keepingTool(std::shared_ptr<Seen> const& seen) {
+    chat::ChatTool tool;
+    tool.spec = chat::ToolSpec{.name = "keeper", .description = "keeps its callback", .inputSchema = {}};
+    tool.handler = [seen](chat::ChatToolContext const&, ui::Json const&, chat::ChatToolDone const& done) {
+        std::scoped_lock const lock{seen->mutex};
+        seen->held.push_back(done);
+    };
+    return tool;
+}
+
+bool heldCallback(std::shared_ptr<Seen> const& seen) {
+    std::scoped_lock const lock{seen->mutex};
+    return !seen->held.empty();
+}
+
+}  // namespace
+
+// Mutation: have the completion own the service and the turn.
+TEST_CASE("a_callback_a_handler_keeps_does_not_keep_the_service_alive", "[chat][service][extra]") {
+    auto const seen = std::make_shared<Seen>();
+    std::weak_ptr<ui::ServedBundle const> weakBundle;
+    {
+        Rig rig{{}, true, nullptr, {keepingTool(seen)}};
+        weakBundle = rig.bundle;
+        auto const cid = rig.gui();
+        auto const id = rig.instance(cid);
+        rig.fake->script(callOf("keeper"));
+        static_cast<void>(rig.start(Rig::turnOn(id, "go"), cid));
+        REQUIRE(waitFor([&] { return heldCallback(seen); }));
+    }
+    CHECK(weakBundle.expired());
+}
+
+// Mutation: leave the pending call's completion owning the turn after the connection closes.
+TEST_CASE("a_callback_kept_past_a_stopped_turn_does_not_keep_the_service_alive", "[chat][service][extra]") {
+    auto const seen = std::make_shared<Seen>();
+    std::weak_ptr<ui::ServedBundle const> weakBundle;
+    {
+        Rig rig{{}, true, nullptr, {keepingTool(seen)}};
+        weakBundle = rig.bundle;
+        auto const cid = rig.gui();
+        auto const id = rig.instance(cid);
+        rig.fake->script(callOf("keeper"));
+        auto const turnId = rig.start(Rig::turnOn(id, "go"), cid);
+        REQUIRE(waitFor([&] { return heldCallback(seen); }));
+        auto const other = rig.gui();
+        rig.server->closeConnection(cid);
+        REQUIRE(waitFor([&] { return rig.state(turnId, other).status == chat::TurnStatus::Cancelled; }));
+    }
+    CHECK(weakBundle.expired());
+}
+
+// Mutation: leave the answered call's completion owning the turn after its deadline passed.
+TEST_CASE("a_callback_kept_past_its_deadline_does_not_keep_the_service_alive", "[chat][service][extra]") {
+    auto const seen = std::make_shared<Seen>();
+    std::weak_ptr<ui::ServedBundle const> weakBundle;
+    {
+        Rig rig{quickLimits(), true, nullptr, {keepingTool(seen)}};
+        weakBundle = rig.bundle;
+        auto const cid = rig.gui();
+        auto const id = rig.instance(cid);
+        rig.fake->script(callOf("keeper"));
+        rig.fake->script(chat::Response{.text = "went on", .calls = {}, .opaque = {}});
+        REQUIRE(rig.finished(rig.start(Rig::turnOn(id, "go"), cid), cid).status == chat::TurnStatus::Done);
+    }
+    CHECK(weakBundle.expired());
+}
