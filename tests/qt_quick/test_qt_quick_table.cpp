@@ -11,6 +11,7 @@
 #include <QList>
 #include <QObject>
 #include <QPointF>
+#include <QPointer>
 #include <QQmlContext>
 #include <QQmlEngine>
 #include <QQmlExpression>
@@ -1936,4 +1937,66 @@ TEST_CASE("qt_quick table: rows that arrive after the mount fill the viewport wi
     INFO("flick height " << flick->height() << ", realized " << tableItem.property("realizedCount").toInt());
     CHECK(flick->height() > 0);
     CHECK(tableItem.property("realizedCount").toInt() >= rowsToFill(tableItem, *flick));
+}
+
+namespace {
+
+// A row 3 in 4 of whose names run to five lines, so the rows' heights differ.
+std::vector<VirtualRow> mixedRows(std::int64_t count) {
+    std::vector<VirtualRow> rows;
+    for (std::int64_t i = 0; i < count; ++i) {
+        rows.push_back(VirtualRow{.id = i, .name = i % 4 == 0 ? "row\nwith\nfive\nlines\nhere" : "row"});
+    }
+    return rows;
+}
+
+}  // namespace
+
+// Mutation: size the spacers from the realized rows' average (the estimate) instead of the measured heights.
+TEST_CASE("qt_quick table: a scrolling virtualized table of mixed row heights moves its rows by the scroll", "[qt_quick]") {
+    Scene scene;
+    std::vector<VirtualRow> const many = mixedRows(600);
+    ui::Mounted const mounted{scene.runtime(), scene.backend(),
+                              ui::table<VirtualRow>(
+                                  {{.label = "Name"}}, [&many] { return many; },
+                                  [](VirtualRow const& row) { return ui::Key{row.id}; }, virtualRowCell,
+                                  {.virtualize = {.threshold = 5, .overscan = 3},
+                                   .common = {.layout = {.height = ui::Sizing::stretch(1)}}})};
+    scene.settle();
+    QQuickItem const& tableItem = Scene::itemOf(mounted.root());
+    auto* const flick = tableItem.findChild<QQuickItem*>(QStringLiteral("flick"));
+    REQUIRE(flick != nullptr);
+    auto* const body = tableItem.property("content").value<QQuickItem*>();
+    REQUIRE(body != nullptr);
+
+    // The first row whose top is at or below the viewport's top, and where it sits in the viewport.
+    auto const topRow = [&]() -> QQuickItem* {
+        QQuickItem* best = nullptr;
+        for (QQuickItem* const child : body->childItems()) {
+            if (child->isVisible() && child->mapToItem(flick, QPointF{0, 0}).y() >= 0 &&
+                (best == nullptr || child->y() < best->y())) {
+                best = child;
+            }
+        }
+        return best;
+    };
+
+    qreal worst = 0;
+    int compared = 0;
+    for (int step = 0; step < 120; ++step) {
+        QPointer<QQuickItem> const row = topRow();
+        REQUIRE(!row.isNull());
+        qreal const before = row->mapToItem(flick, QPointF{0, 0}).y();
+        qreal const delta = 30;
+        flick->setProperty("contentY", flick->property("contentY").toReal() + delta);
+        scene.settle();
+        if (!row.isNull() && row->isVisible()) {
+            qreal const moved = before - row->mapToItem(flick, QPointF{0, 0}).y();
+            worst = std::max(worst, std::abs(moved - delta));
+            ++compared;
+        }
+    }
+    INFO("rows compared " << compared << ", worst deviation from a 30 px scroll " << worst << " px");
+    CHECK(compared > 60);
+    CHECK(worst < 1.0);
 }
