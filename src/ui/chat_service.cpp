@@ -193,6 +193,9 @@ struct ChatService::Shared {
             } catch (...) {
                 call.argumentsJson = "{}";
             }
+            // A provider's opaque replay holds the message as it wrote it, calls included, so it would carry what
+            // `record` removed; it is valid only for an unedited history, and this edits it.
+            message.opaque.clear();
         }
         return message;
     }

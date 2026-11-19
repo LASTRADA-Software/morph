@@ -336,6 +336,31 @@ TEST_CASE("the_conversation_keeps_the_hash_of_a_proposal_not_its_document", "[ch
     CHECK(rig.asked().at(1).messages.at(1).calls.at(0).argumentsJson.contains("UNIQUE-PROPOSED-TEXT"));
 }
 
+// Mutation: keep `opaque` when `record` rewrites a call of the message.
+TEST_CASE("a_provider_replay_of_a_proposal_does_not_keep_the_document", "[chat][propose]") {
+    Rig rig;
+    auto const document = retitled("lims.base", "DOCUMENT-IN-THE-REPLAY");
+    auto first = proposal(document);
+    first.opaque = "replay of " + document;
+    rig.fake->script(first);
+    rig.fake->script(said("done"));
+    static_cast<void>(rig.finished(rig.start("lims.base")));
+    rig.fake->script(said("again"));
+    static_cast<void>(rig.finished(rig.start("lims.base")));
+    bool found = false;
+    for (chat::Message const& message : rig.asked().at(2).messages) {
+        CHECK_FALSE(message.text.contains("DOCUMENT-IN-THE-REPLAY"));
+        CHECK(message.opaque.empty());
+        for (chat::ToolCall const& call : message.calls) {
+            found = true;
+            CHECK_FALSE(call.argumentsJson.contains("DOCUMENT-IN-THE-REPLAY"));
+        }
+    }
+    CHECK(found);
+    // Within the turn the provider is given the replay it asked for.
+    CHECK(rig.asked().at(1).messages.at(1).opaque.contains("DOCUMENT-IN-THE-REPLAY"));
+}
+
 // Mutation: drop the size check from the offer.
 TEST_CASE("a_screen_over_the_bound_is_not_offered_and_the_system_text_says_so", "[chat][propose]") {
     chat::ChatLimits limits;
