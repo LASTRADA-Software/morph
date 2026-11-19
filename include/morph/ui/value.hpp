@@ -274,7 +274,9 @@ public:
             return *mine == *other.asList();
         }
         if (ValueRecord const* const mine = asRecord()) {
-            return *mine == *other.asRecord();
+            // One shared record is equal to itself without a walk of its fields: a table's row records are compared
+            // per cell on every pass.
+            return mine == other.asRecord() || *mine == *other.asRecord();
         }
         return _data == other._data;
     }

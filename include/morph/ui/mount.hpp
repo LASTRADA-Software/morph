@@ -2,6 +2,7 @@
 
 #pragma once
 #include <algorithm>
+#include <bit>
 #include <cstddef>
 #include <cstdint>
 #include <exception>
@@ -49,12 +50,206 @@ struct MountStats {
     std::size_t cellBinds = 0;
     /// @brief Sets of a realized row's own signal that changed its record; each re-evaluates the row's own parts.
     std::size_t rowBinds = 0;
-    /// @brief `TableSource::cellView` calls: cell widgets built.
+    /// @brief Cells built, by `TableSource::cellView` or `defaultCellView`.
     std::size_t cellsCreated = 0;
-    /// @brief Pooled cells bound to another row or column; cells are not pooled yet, so it stays 0.
+    /// @brief Cells bound to another row or column: a pooled cell taken, or a cell of a row slot given another row.
     std::size_t cellsRebound = 0;
+    /// @brief Cells a pass left blank for the frame's budget, to be realized in a later turn.
+    std::size_t placeholders = 0;
 };
 
+/// @brief Which of a table's dimensions are windowed.
+struct Windowing {
+    /// @brief Only the rows in or near view are realized.
+    bool rows = false;
+    /// @brief Only the columns in or near view are realized.
+    bool columns = false;
+
+    /// @brief Member-wise equality.
+    /// @param other The windowing to compare with.
+    /// @return `true` when both members match.
+    [[nodiscard]] bool operator==(Windowing const& other) const = default;
+};
+
+/// @brief Which dimensions of a table are windowed: rows from `threshold` rows on, or always in server mode; columns
+///        above `columnThreshold` visible columns; both above `cellThreshold` cells.
+/// @param v              The table's limits.
+/// @param rows           The rows of the view.
+/// @param visibleColumns The columns shown.
+/// @param serverMode     Whether the rows come from a server's pages.
+/// @return What is windowed.
+[[nodiscard]] inline Windowing windowingOf(Virtualization const& v, std::size_t rows, std::size_t visibleColumns,
+                                           bool serverMode) {
+    // rows × columns > cellThreshold, compared as a quotient so no product overflows.
+    bool const overCells = visibleColumns != 0 && rows > v.cellThreshold / visibleColumns;
+    return Windowing{.rows = serverMode || rows >= v.threshold || overCells,
+                     .columns = visibleColumns > v.columnThreshold || overCells};
+}
+
+/// @brief The widths of a table's visible columns, in layout order, and their running offsets.
+///
+/// Widths are kept in a Fenwick tree, so a width's change, a column's offset and the columns at a scroll position
+/// each read O(log n) nodes; no call reads every column. `columnReads` counts the reads of single columns' widths
+/// (`widthOf`), which is what a pass over the window does per column.
+class ColumnExtents {
+public:
+    /// @brief Replaces every width.
+    /// @param widths The visible columns' widths, in layout order; a negative width reads as 0.
+    void assign(std::span<int const> widths) {
+        _widths.assign(widths.begin(), widths.end());
+        for (int& width : _widths) {
+            width = std::max(width, 0);
+        }
+        _user.assign(_widths.size(), false);
+        _tree.assign(_widths.size() + 1, 0);
+        for (std::size_t at = 0; at < _widths.size(); ++at) {
+            add(at, _widths[at]);
+        }
+    }
+
+    /// @brief Grows a column to @p width; a measured width never narrows a column, nor changes one the user set.
+    /// @param column The column's place in the layout.
+    /// @param width  The width measured.
+    /// @return Whether the width changed.
+    bool grow(std::size_t column, int width) {
+        if (column >= _widths.size() || _user[column] || width <= _widths[column]) {
+            return false;
+        }
+        add(column, width - _widths[column]);
+        _widths[column] = width;
+        return true;
+    }
+
+    /// @brief Sets a width the user chose; measurement no longer changes it.
+    /// @param column The column's place in the layout.
+    /// @param width  The width.
+    void set(std::size_t column, int width) {
+        if (column >= _widths.size()) {
+            return;
+        }
+        width = std::max(width, 0);
+        add(column, width - _widths[column]);
+        _widths[column] = width;
+        _user[column] = true;
+    }
+
+    /// @brief The columns a horizontal viewport shows.
+    /// @param offset   The scroll offset.
+    /// @param viewport The viewport's width.
+    /// @return `[first, last)`: the column under @p offset to the one past the last under the viewport's end.
+    [[nodiscard]] std::pair<std::size_t, std::size_t> columnsAt(int offset, int viewport) const {
+        std::size_t const count = _widths.size();
+        std::size_t const first = std::min(below(std::max(offset, 0)), count);
+        std::size_t last = first;
+        if (viewport > 0) {
+            int const end = std::max(offset, 0) + viewport - 1;
+            last = std::min(below(end) + 1, count);
+        }
+        return {first, std::max(first, last)};
+    }
+
+    /// @brief Where a column starts: the sum of the widths before it.
+    /// @param column The column's place in the layout; past the last, the total width.
+    /// @return The offset.
+    [[nodiscard]] int offsetOf(std::size_t column) const {
+        std::size_t at = std::min(column, _widths.size());
+        int sum = 0;
+        for (; at > 0; at -= at & (~at + 1)) {
+            sum += _tree[at];
+        }
+        return sum;
+    }
+
+    /// @brief A column's width; one counted read.
+    /// @param column The column's place in the layout.
+    /// @return The width; 0 past the last column.
+    [[nodiscard]] int widthOf(std::size_t column) const {
+        ++_reads;
+        return column < _widths.size() ? _widths[column] : 0;
+    }
+
+    /// @brief The width of every column together.
+    /// @return The total.
+    [[nodiscard]] int totalWidth() const noexcept { return offsetOf(_widths.size()); }
+
+    /// @brief The columns held.
+    /// @return How many.
+    [[nodiscard]] std::size_t size() const noexcept { return _widths.size(); }
+
+    /// @brief How many single widths `widthOf` has read.
+    /// @return The count.
+    [[nodiscard]] std::size_t columnReads() const noexcept { return _reads; }
+
+private:
+    void add(std::size_t column, int delta) {
+        for (std::size_t at = column + 1; at < _tree.size(); at += at & (~at + 1)) {
+            _tree[at] += delta;
+        }
+    }
+
+    // How many leading columns end at or before @p offset: the column under @p offset, by descent on the tree.
+    [[nodiscard]] std::size_t below(int offset) const {
+        std::size_t at = 0;
+        std::size_t step = std::bit_floor(std::max<std::size_t>(_tree.size(), 1));
+        int left = offset;
+        for (; step > 0; step >>= 1U) {
+            std::size_t const next = at + step;
+            if (next < _tree.size() && _tree[next] <= left) {
+                at = next;
+                left -= _tree[next];
+            }
+        }
+        return at;
+    }
+
+    std::vector<int> _widths;
+    std::vector<bool> _user;
+    std::vector<int> _tree;  // 1-based Fenwick tree over _widths
+    mutable std::size_t _reads = 0;
+};
+
+/// @brief The columns a table realizes: the pinned ones, then those in or near the horizontal viewport.
+struct ColumnWindow {
+    /// @brief Places in the layout: the pinned columns first, then the scrolled range, ascending.
+    std::vector<std::size_t> columns;
+    /// @brief The width before the scrolled range's first column that the window does not cover.
+    int leading = 0;
+    /// @brief The width after the window's last column.
+    int trailing = 0;
+
+    /// @brief Member-wise equality.
+    /// @param other The window to compare with.
+    /// @return `true` when every member matches.
+    [[nodiscard]] bool operator==(ColumnWindow const& other) const = default;
+};
+
+/// @brief The column window at a horizontal scroll position: the first @p pinned columns, then the columns under the
+///        viewport and @p overscan more on each side. Reads no width.
+/// @param extents  The visible columns' widths.
+/// @param pinned   How many leading columns stay in the window.
+/// @param scrollX  The scroll offset.
+/// @param viewport The viewport's width.
+/// @param overscan Columns kept beyond the viewport on each side.
+/// @return The window.
+[[nodiscard]] inline ColumnWindow columnWindow(ColumnExtents const& extents, std::size_t pinned, int scrollX,
+                                               int viewport, std::size_t overscan) {
+    ColumnWindow window;
+    std::size_t const count = extents.size();
+    pinned = std::min(pinned, count);
+    auto [first, last] = extents.columnsAt(scrollX, viewport);
+    first = first > overscan ? first - overscan : 0;
+    last = std::min(count, last + overscan);
+    first = std::max(first, pinned);
+    for (std::size_t at = 0; at < pinned; ++at) {
+        window.columns.push_back(at);
+    }
+    for (std::size_t at = first; at < last; ++at) {
+        window.columns.push_back(at);
+    }
+    window.leading = first < last ? extents.offsetOf(first) - extents.offsetOf(pinned) : 0;
+    window.trailing = extents.totalWidth() - extents.offsetOf(std::max(first, last));
+    return window;
+}
 namespace detail {
 
 /// @brief The site names a misuse in this layer is reported under, through the runtime's owner probe.
@@ -375,6 +570,10 @@ public:
     /// @brief What the mount did to the rows of its source tables.
     /// @return The counters.
     [[nodiscard]] MountStats const& stats() const noexcept { return _stats; }
+
+    /// @brief The column extents of the table over a `TableSource` mounted last, for tests.
+    /// @return They, or null when no such table is mounted.
+    [[nodiscard]] ColumnExtents const* columnExtents() const noexcept { return _extents.lock().get(); }
 
     /// @brief Moves keyboard focus to the mounted widget whose `focusId` is @p focusId.
     ///
@@ -1856,22 +2055,45 @@ private:
         }
     }
 
-    // A table over a `TableSource`: the rows in and near view, each built from the source's view index.
+    // The width a column starts from when it declares none; a content column grows from it as its cells measure.
+    static constexpr int kEstimatedColumnWidth = 100;
+
+    // A table over a `TableSource`: the rows in and near view, each built from the source's view index, and in each
+    // row the cells of the columns in or near view.
     struct SourceTable {
-        // One cell of a realized row: its own signal, set to the row's record, and its load state as last told.
+        // Which pool a cell goes back to: the default cell's pool of one role, or a column's own pool.
+        using PoolKey = std::pair<bool, std::size_t>;
+
+        // One cell: its scope owns its view, its bindings and its widget; its signals are the record it shows and,
+        // for the default cell, the column it shows.
         struct Cell {
+            std::unique_ptr<reactive::Scope> scope;
             reactive::Signal<Value>* row = nullptr;
-            CellLoad load = CellLoad::Loaded;
+            reactive::Signal<std::size_t>* column = nullptr;
+            Widget* widget = nullptr;
+            PoolKey pool;
         };
-        // A realized row: a keyed row, or a placeholder for a row not fetched yet.
+        // A cell in a column of its row: `fresh` once bound to the row the slot now shows.
+        struct Placed {
+            Cell cell;
+            bool fresh = false;
+        };
+        // A realized row: a keyed row, or a placeholder for a row not fetched yet. Members go in reverse: the pooled
+        // and placed cells, then the row's look, then the stack and the row's signal.
         struct Realized {
+            std::unique_ptr<reactive::Scope> scope;
+            std::unique_ptr<reactive::Scope> look;
             std::int64_t index = 0;
             std::optional<Key> key;
-            // Owns the row's signals, its cells' views and bindings, and its widget.
-            std::unique_ptr<reactive::Scope> scope;
             Widget* widget = nullptr;
             reactive::Signal<Value>* row = nullptr;
-            std::vector<Cell> cells;
+            bool heading = false;
+            Widget* headingWidget = nullptr;
+            // The stack's children in their order, so a reorder knows where each is.
+            std::vector<Widget*> children;
+            std::map<std::size_t, CellLoad> loads;
+            std::map<std::size_t, Placed> cells;
+            std::map<PoolKey, std::vector<Cell>> pool;
         };
 
         SourceTable() = default;
@@ -1888,15 +2110,44 @@ private:
 
         TableSource source;
         TableWidget* widget = nullptr;
-        std::size_t columns = 0;
-        std::size_t overscan = 0;
+        std::vector<TableColumn> columns;
+        Virtualization virtualize;
         std::size_t depth = 0;
-        // The ids every `visible` call names: the always-fetched columns, then the laid-out ones not among them.
-        std::vector<std::string> fetched;
         // The rows the backend last reported in view; a count of 0 until it reports.
         VisibleRange range;
         // In view order; each widget is the container's child at its place.
         std::vector<Realized> realized;
+
+        // The arrangement, the visible columns in layout order, and each column's place among them.
+        TableArrangement arrangement;
+        std::vector<std::size_t> visible;
+        std::vector<std::optional<std::size_t>> placeOf;
+        std::shared_ptr<ColumnExtents> extents = std::make_shared<ColumnExtents>();
+        // The horizontal viewport, once the backend reported one.
+        bool horizontal = false;
+        int scrollX = 0;
+        int viewport = 0;
+        // The column window: indices into `columns`, the pinned ones first; what the backend was last told of it.
+        std::vector<std::size_t> window;
+        std::size_t pinnedShown = 0;
+        bool windowDirty = true;
+        bool windowedColumns = false;
+        std::vector<std::string> fetched;
+        std::optional<std::pair<std::optional<std::int64_t>, std::size_t>> counts;
+
+        // Focus: a row key and a column, held here, and the view row it is at; a key not known yet while the row
+        // is not fetched.
+        bool focused = false;
+        std::optional<Key> focusKey;
+        std::int64_t focusIndex = 0;
+        std::size_t focusColumn = 0;
+        std::function<void(std::optional<CellRef>)> onFocusCell;
+        // The highlighted row, followed by key.
+        std::optional<Key> highlightKey;
+        std::int64_t highlightIndex = 0;
+
+        bool mounted = false;
+        bool continuing = false;
         // Expires with the table, so a change the rows deliver after it is gone does nothing.
         std::shared_ptr<bool> alive = std::make_shared<bool>(true);
     };
@@ -1914,101 +2165,332 @@ private:
         return std::ranges::contains(levels.levels, level) ? CellLoad::Unloaded : CellLoad::Loaded;
     }
 
-    // Sets a realized row's signals to its record, counting each set that changed one, and tells the widget each
-    // cell's load state that changed.
-    void bindRealized(SourceTable& table, SourceTable::Realized& row, Value const& record,
-                      table::UnloadedLevels const& levels) {
-        if (row.row->peek() != record) {
-            ++_stats.rowBinds;
-            row.row->set(record);
+    [[nodiscard]] static SourceTable::PoolKey poolOf(SourceTable const& table, std::size_t column) {
+        bool const own = !table.source.defaultCellView ||
+                         (column < table.source.ownCell.size() ? table.source.ownCell.at(column) : true);
+        if (own) {
+            return {false, column};
         }
-        for (std::size_t column = 0; column < row.cells.size(); ++column) {
-            SourceTable::Cell& cell = row.cells.at(column);
-            if (cell.row->peek() != record) {
-                ++_stats.cellBinds;
-                cell.row->set(record);
+        return {true, static_cast<std::size_t>(table.columns.at(column).role)};
+    }
+
+    // Whether the columns are laid out by the mount: told to the backend by `setColumnWindow`, and each cell placed
+    // by `setCellColumn`.
+    [[nodiscard]] static bool arranged(SourceTable const& table) {
+        return table.horizontal || table.arrangement != TableArrangement{};
+    }
+
+    // Takes a new arrangement: the visible columns, their places, and their widths, the declared ones and the user's.
+    static void arrange(SourceTable& table, TableArrangement arrangement) {
+        table.arrangement = std::move(arrangement);
+        table.visible.clear();
+        table.placeOf.assign(table.columns.size(), std::nullopt);
+        auto const add = [&table](std::size_t column) {
+            if (column < table.columns.size() && !table.placeOf.at(column)) {
+                table.placeOf.at(column) = table.visible.size();
+                table.visible.push_back(column);
             }
-            CellLoad const load = cellLoadOf(table, levels, column);
-            if (load != cell.load) {
-                cell.load = load;
-                table.widget->setCellLoad(*row.widget, column, load);
+        };
+        if (table.arrangement.visible.empty()) {
+            for (std::size_t column = 0; column < table.columns.size(); ++column) {
+                add(column);
+            }
+        } else {
+            for (std::size_t const column : table.arrangement.visible) {
+                add(column);
+            }
+        }
+        std::vector<int> widths;
+        widths.reserve(table.visible.size());
+        for (std::size_t const column : table.visible) {
+            Sizing const& width = table.columns.at(column).width;
+            widths.push_back(width.kind == Sizing::Kind::Fixed ? width.amount : kEstimatedColumnWidth);
+        }
+        table.extents->assign(widths);
+        for (auto const& [column, width] : table.arrangement.widths) {
+            if (column < table.placeOf.size() && table.placeOf.at(column)) {
+                table.extents->set(*table.placeOf.at(column), width);
+            }
+        }
+        table.windowDirty = true;
+    }
+
+    // The ids every `visible` call names: the always-fetched ones, then each window column's id and what its cell
+    // reads.
+    [[nodiscard]] static std::vector<std::string> fetchedOf(SourceTable const& table) {
+        std::vector<std::string> ids = table.source.alwaysFetched;
+        auto const add = [&ids](std::string const& id) {
+            if (!id.empty() && !std::ranges::contains(ids, id)) {
+                ids.push_back(id);
+            }
+        };
+        for (std::size_t const column : table.window) {
+            add(table.columns.at(column).id);
+            if (column < table.source.cellReads.size()) {
+                for (std::string const& id : table.source.cellReads.at(column)) {
+                    add(id);
+                }
+            }
+        }
+        return ids;
+    }
+
+    // The rows `visible` is told: the reported range, or the first `overscan` rows before any report.
+    [[nodiscard]] static VisibleRange shownOf(SourceTable const& table) {
+        return table.range.count > 0 ? table.range : VisibleRange{.first = 0, .count = table.virtualize.overscan};
+    }
+
+    static void tellVisible(SourceTable& table) {
+        VisibleRange const shown = shownOf(table);
+        table.source.rows->visible(static_cast<std::int64_t>(shown.first), static_cast<std::int64_t>(shown.count),
+                                   table.fetched);
+    }
+
+    // Brings the column window up to date with the scroll, the arrangement, the widths and the rows' count, and tells
+    // the backend and the rows what changed. Reads one width per column of the window, and none outside it.
+    void refreshColumns(SourceTable& table, std::size_t rows) {
+        bool const windowed =
+            table.horizontal &&
+            windowingOf(table.virtualize, rows, table.visible.size(), /*serverMode*/ true).columns;
+        if (!table.windowDirty && windowed == table.windowedColumns) {
+            return;
+        }
+        table.windowDirty = false;
+        table.windowedColumns = windowed;
+        ColumnExtents const& extents = *table.extents;
+        std::size_t pinned = std::min(table.arrangement.pinned, table.visible.size());
+        // Pinned columns wider than half the viewport leave the last of them to scroll with the rest; the
+        // arrangement keeps its count.
+        if (table.horizontal) {
+            while (pinned > 0 && extents.offsetOf(pinned) > table.viewport / 2) {
+                --pinned;
+            }
+        }
+        std::vector<std::size_t> places;
+        if (windowed) {
+            places = columnWindow(extents, pinned, table.scrollX, table.viewport, table.virtualize.columnOverscan)
+                         .columns;
+        } else {
+            places.resize(table.visible.size());
+            std::iota(places.begin(), places.end(), std::size_t{0});
+        }
+        std::vector<std::size_t> window;
+        window.reserve(places.size() + 1);
+        for (std::size_t const place : places) {
+            window.push_back(table.visible.at(place));
+        }
+        // The focused column stays realized whatever the scroll.
+        if (table.focused && table.focusColumn < table.placeOf.size() && table.placeOf.at(table.focusColumn) &&
+            !std::ranges::contains(window, table.focusColumn)) {
+            window.push_back(table.focusColumn);
+            places.push_back(*table.placeOf.at(table.focusColumn));
+        }
+        bool const changed = window != table.window || pinned != table.pinnedShown;
+        table.window = std::move(window);
+        table.pinnedShown = pinned;
+        if (arranged(table)) {
+            std::vector<int> offsets;
+            std::vector<int> widths;
+            offsets.reserve(places.size());
+            widths.reserve(places.size());
+            for (std::size_t const place : places) {
+                offsets.push_back(extents.offsetOf(place));
+                widths.push_back(extents.widthOf(place));
+            }
+            table.widget->setColumnWindow(table.window, offsets, widths, extents.totalWidth(), table.pinnedShown);
+        }
+        if (changed) {
+            std::vector<std::string> fetched = fetchedOf(table);
+            if (fetched != table.fetched) {
+                table.fetched = std::move(fetched);
+                if (table.mounted) {
+                    tellVisible(table);
+                }
             }
         }
     }
 
-    // Builds a realized row at @p index: a keyed row of one cell per column when the rows hold it, a placeholder
-    // otherwise. All or nothing: what throws leaves nothing behind.
-    [[nodiscard]] SourceTable::Realized realizeRow(SourceTable& table, std::int64_t index) {
-        SourceTable::Realized made{.index = index, .key = std::nullopt, .scope = nullptr, .widget = nullptr,
-                                   .row = nullptr, .cells = {}};
-        made.scope = std::make_unique<reactive::Scope>(*_rt, table.depth);
-        reactive::Scope& rowScope = *made.scope;
-        std::optional<TableRowRef> const ref = table.source.rows->row(index);
-        StackWidget& stack = rowScope.adopt(_backend->createStack(table.widget, Axis::Horizontal));
-        made.widget = &stack;
-        if (!ref) {
-            return made;
+    // Builds a cell for @p column of @p row, showing @p record. All or nothing.
+    [[nodiscard]] SourceTable::Cell makeCell(SourceTable& table, SourceTable::Realized& row, std::size_t column,
+                                             Value const& record) {
+        SourceTable::Cell cell;
+        cell.pool = poolOf(table, column);
+        cell.scope = std::make_unique<reactive::Scope>(*_rt, table.depth + 1);
+        reactive::Scope& scope = *cell.scope;
+        cell.row = &scope.make<reactive::Signal<Value>>(*_rt, record);
+        Node made;
+        if (cell.pool.first) {
+            cell.column = &scope.make<reactive::Signal<std::size_t>>(*_rt, column);
+            made = table.source.defaultCellView(*cell.column, *cell.row);
+        } else {
+            made = table.source.cellView(column, *cell.row);
         }
-        made.key = ref->key;
-        Value const record = ref->row;
-        made.row = &rowScope.make<reactive::Signal<Value>>(*_rt, record);
+        Node const& node = scope.make<Node>(std::move(made));
+        auto* const stack = dynamic_cast<ContainerWidget*>(row.widget);
+        Widget* const widget = node ? mount(scope, node, stack) : &scope.adopt(_backend->createSpacer(stack));
+        cell.widget = widget;
+        row.children.push_back(widget);
+        ++_stats.cellsCreated;
+        return cell;
+    }
+
+    // Sets a cell's record, counting a set that changed it.
+    void setRecord(reactive::Signal<Value>& signal, Value const& record) {
+        if (signal.peek() != record) {
+            ++_stats.cellBinds;
+            signal.set(record);
+        }
+    }
+
+    // Gives a slot the row @p ref: its key, its record, its look. Its cells still show the row they showed, until
+    // each is rebound.
+    void assignRow(SourceTable& table, SourceTable::Realized& slot, std::int64_t index, TableRowRef const& ref) {
+        slot.index = index;
+        slot.key = ref.key;
+        if (slot.row->peek() != ref.row) {
+            ++_stats.rowBinds;
+            slot.row->set(ref.row);
+        }
+        if (slot.headingWidget != nullptr) {
+            std::erase(slot.children, slot.headingWidget);
+            slot.headingWidget = nullptr;
+        }
+        slot.look.reset();
+        slot.look = std::make_unique<reactive::Scope>(*_rt, table.depth + 1);
+        reactive::Scope& lookScope = *slot.look;
         TableRowLook look;
         if (table.source.rowView) {
-            look = table.source.rowView(*made.row);
-            rowScope.make<std::shared_ptr<void const>>(look.keep);
+            look = table.source.rowView(*slot.row);
+            lookScope.make<std::shared_ptr<void const>>(look.keep);
         }
-        if (look.heading) {
-            Node const& heading = rowScope.make<Node>(look.heading);
-            static_cast<void>(mount(rowScope, heading, &stack));
-        } else {
-            made.cells.reserve(table.columns);
-            for (std::size_t column = 0; column < table.columns; ++column) {
-                auto& signal = rowScope.make<reactive::Signal<Value>>(*_rt, record);
-                made.cells.push_back(SourceTable::Cell{.row = &signal, .load = CellLoad::Loaded});
-                ++_stats.cellsCreated;
-                Node const& cell = rowScope.make<Node>(table.source.cellView(column, signal));
-                if (cell) {
-                    static_cast<void>(mount(rowScope, cell, &stack));
-                } else {
-                    static_cast<void>(rowScope.adopt(_backend->createSpacer(&stack)));
-                }
+        table.widget->setRowKey(*slot.widget, *slot.key);
+        slot.heading = look.heading != nullptr;
+        if (slot.heading) {
+            Node const& heading = lookScope.make<Node>(look.heading);
+            if (Widget* const made = mount(lookScope, heading, dynamic_cast<ContainerWidget*>(slot.widget))) {
+                slot.children.push_back(made);
+                slot.headingWidget = made;
             }
-        }
-        table.widget->setRowKey(stack, *made.key);
-        if (look.heading) {
-            table.widget->setRowHeading(stack);
+            table.widget->setRowHeading(*slot.widget);
         }
         if (look.tone) {
-            bind(rowScope, *look.tone,
-                 [&table, &stack](std::optional<Tone> const& tone) { table.widget->setRowTone(stack, tone); });
+            bind(lookScope, *look.tone, [&table, widget = slot.widget](std::optional<Tone> const& tone) {
+                table.widget->setRowTone(*widget, tone);
+            });
         }
         if (look.label) {
-            bind(rowScope, *look.label,
-                 [&table, &stack](std::string const& label) { table.widget->setRowLabel(stack, label); });
+            bind(lookScope, *look.label, [&table, widget = slot.widget](std::string const& label) {
+                table.widget->setRowLabel(*widget, label);
+            });
         }
-        table::UnloadedLevels const levels = table.source.rows->unloadedLevels(index);
-        for (std::size_t column = 0; column < made.cells.size(); ++column) {
-            CellLoad const load = cellLoadOf(table, levels, column);
-            if (load != CellLoad::Loaded) {
-                made.cells.at(column).load = load;
-                table.widget->setCellLoad(stack, column, load);
-            }
+        for (auto& [column, placed] : slot.cells) {
+            placed.fresh = false;
+        }
+    }
+
+    // A new slot at @p index: a stack, and the row if the rows hold it. All or nothing.
+    [[nodiscard]] SourceTable::Realized makeRow(SourceTable& table, std::int64_t index) {
+        SourceTable::Realized made;
+        made.index = index;
+        made.scope = std::make_unique<reactive::Scope>(*_rt, table.depth);
+        StackWidget& stack = made.scope->adopt(_backend->createStack(table.widget, Axis::Horizontal));
+        made.widget = &stack;
+        std::optional<TableRowRef> const ref = table.source.rows->row(index);
+        made.row = &made.scope->make<reactive::Signal<Value>>(*_rt, ref ? ref->row : Value{});
+        if (ref) {
+            assignRow(table, made, index, *ref);
         }
         return made;
     }
 
-    // Brings the realized rows to the window around the rows in view: a row the rows still hold keeps its widget,
-    // wherever it moved; a row at an index @p updated names has its signals set to its record again; a row that left
-    // the window, or whose key the rows no longer hold, is unmounted. The container's children follow the view order.
-    // NOLINTNEXTLINE(readability-function-cognitive-complexity): match by key, build, reorder, report the window.
+    // Parks a placed cell in its row's pool: it leaves the row's layout, keeping its widget and its record.
+    void park(SourceTable& table, SourceTable::Realized& slot, std::size_t column) {
+        auto found = slot.cells.find(column);
+        if (found == slot.cells.end()) {
+            return;
+        }
+        SourceTable::Cell cell = std::move(found->second.cell);
+        slot.cells.erase(found);
+        table.widget->setCellColumn(*slot.widget, *cell.widget, std::nullopt);
+        slot.pool[cell.pool].push_back(std::move(cell));
+    }
+
+    // One cell's work in a pass: binding a cell to another row or column, or building one.
+    struct CellWork {
+        std::size_t slot = 0;
+        std::size_t column = 0;
+        std::size_t distance = 0;
+    };
+
+    // Puts a cell at @p column of a slot: a stale placed cell is rebound, a pooled one taken and rebound, and only
+    // an empty pool builds one.
+    void realizeCell(SourceTable& table, SourceTable::Realized& slot, std::size_t column, Value const& record) {
+        if (auto const placed = slot.cells.find(column); placed != slot.cells.end()) {
+            setRecord(*placed->second.cell.row, record);
+            placed->second.fresh = true;
+            ++_stats.cellsRebound;
+            return;
+        }
+        SourceTable::PoolKey const key = poolOf(table, column);
+        SourceTable::Cell cell;
+        if (auto pooled = slot.pool.find(key); pooled != slot.pool.end() && !pooled->second.empty()) {
+            cell = std::move(pooled->second.back());
+            pooled->second.pop_back();
+            if (cell.column != nullptr && cell.column->peek() != column) {
+                cell.column->set(column);
+            }
+            setRecord(*cell.row, record);
+            ++_stats.cellsRebound;
+        } else {
+            cell = mountPass([&] { return makeCell(table, slot, column, record); });
+        }
+        table.widget->setCellColumn(*slot.widget, *cell.widget, column);
+        slot.cells.emplace(column, SourceTable::Placed{.cell = std::move(cell), .fresh = true});
+    }
+
+    // Tells the widget each placed cell's load state that changed.
+    void tellLoads(SourceTable& table, SourceTable::Realized& slot) {
+        table::UnloadedLevels const levels = table.source.rows->unloadedLevels(slot.index);
+        for (auto const& [column, placed] : slot.cells) {
+            if (!placed.fresh) {
+                continue;
+            }
+            CellLoad const load = cellLoadOf(table, levels, column);
+            auto const [was, made] = slot.loads.try_emplace(column, CellLoad::Loaded);
+            if (was->second != load) {
+                was->second = load;
+                table.widget->setCellLoad(*slot.widget, column, load);
+            }
+        }
+    }
+
+    // Brings the realized rows to the window around the rows in view, and their cells to the column window.
+    //
+    // A row the rows still hold keeps its slot, wherever it moved; one at an index @p updated names has its record
+    // set again. A row that enters takes the slot of one that left, and only when none left is a slot built. Within a
+    // row, a cell whose column left the window goes to the row's pool, and a column that enters takes a pooled cell
+    // of its pool. Binding a cell to another row or column, and building one, are counted against
+    // `realizePerFrame`, nearest the viewport's centre first; the rest wait, drawn blank, for the next turn.
+    // NOLINTNEXTLINE(readability-function-cognitive-complexity): rows, cells, the budget, focus and the reports.
     void realizeWindow(SourceTable& table, std::function<bool(std::int64_t)> const& updated) {
         TableRows& rows = *table.source.rows;
         TableTotal const total = rows.total();
         auto const count = static_cast<std::size_t>(std::max<std::int64_t>(total.rows, 0));
-        VisibleRange const shown =
-            table.range.count > 0 ? table.range : VisibleRange{.first = 0, .count = table.overscan};
-        std::size_t const lo = shown.first > table.overscan ? shown.first - table.overscan : 0;
-        std::size_t const hi = std::min(count, shown.first + shown.count + table.overscan);
+        refreshColumns(table, count);
+        VisibleRange const shown = shownOf(table);
+        std::size_t const overscan = table.virtualize.overscan;
+        std::size_t const lo = shown.first > overscan ? shown.first - overscan : 0;
+        std::size_t const hi = std::min(count, shown.first + shown.count + overscan);
+        std::vector<std::int64_t> targets;
+        targets.reserve(hi > lo ? hi - lo + 1 : 1);
+        for (std::size_t at = lo; at < hi; ++at) {
+            targets.push_back(static_cast<std::int64_t>(at));
+        }
+        // The focused row stays realized: one row beyond the window at most.
+        if (table.focused && table.focusIndex >= 0 && static_cast<std::size_t>(table.focusIndex) < count &&
+            (static_cast<std::size_t>(table.focusIndex) < lo || static_cast<std::size_t>(table.focusIndex) >= hi)) {
+            targets.insert(std::ranges::upper_bound(targets, table.focusIndex), table.focusIndex);
+        }
         std::vector<SourceTable::Realized> old = std::move(table.realized);
         table.realized.clear();
         std::unordered_map<Key, std::size_t> keyed;
@@ -2024,34 +2506,74 @@ private:
         for (SourceTable::Realized const& row : old) {
             current.push_back(row.widget);
         }
+        std::vector<std::optional<std::size_t>> match(targets.size());
+        std::vector<bool> taken(old.size(), false);
+        for (std::size_t at = 0; at < targets.size(); ++at) {
+            std::optional<TableRowRef> const ref = rows.row(targets.at(at));
+            if (ref) {
+                if (auto const found = keyed.find(ref->key); found != keyed.end() && !taken.at(found->second)) {
+                    match.at(at) = found->second;
+                }
+            } else if (auto const found = placeholders.find(targets.at(at));
+                       found != placeholders.end() && !taken.at(found->second)) {
+                match.at(at) = found->second;
+            }
+            if (match.at(at)) {
+                taken.at(*match.at(at)) = true;
+            }
+        }
+        // Slots no row kept, for the rows that enter: keyed ones only for a keyed row, so no stack keeps a key it no
+        // longer shows; a placeholder's for either.
+        std::vector<std::size_t> freeKeyed;
+        std::vector<std::size_t> freePlain;
+        for (std::size_t at = old.size(); at-- > 0;) {
+            if (!taken.at(at)) {
+                (old.at(at).key ? freeKeyed : freePlain).push_back(at);
+            }
+        }
         std::exception_ptr failure;
         std::vector<SourceTable::Realized> next;
-        next.reserve(hi > lo ? hi - lo : 0);
-        for (std::size_t at = lo; at < hi; ++at) {
-            auto const index = static_cast<std::int64_t>(at);
+        next.reserve(targets.size());
+        std::vector<bool> moved;
+        for (std::size_t at = 0; at < targets.size(); ++at) {
+            std::int64_t const index = targets.at(at);
             std::optional<TableRowRef> const ref = rows.row(index);
-            std::optional<std::size_t> reuse;
-            if (ref) {
-                if (auto const found = keyed.find(ref->key); found != keyed.end() && old.at(found->second).scope) {
-                    reuse = found->second;
-                }
-            } else if (auto const found = placeholders.find(index);
-                       found != placeholders.end() && old.at(found->second).scope) {
-                reuse = found->second;
-            }
-            if (reuse) {
-                SourceTable::Realized row = std::move(old.at(*reuse));
-                bool const moved = row.index != index;
+            if (match.at(at)) {
+                SourceTable::Realized row = std::move(old.at(*match.at(at)));
+                bool const shifted = row.index != index;
                 row.index = index;
-                if (ref && (moved || updated(index))) {
-                    bindRealized(table, row, ref->row, rows.unloadedLevels(index));
+                if (ref && (shifted || updated(index))) {
+                    if (row.row->peek() != ref->row) {
+                        ++_stats.rowBinds;
+                        row.row->set(ref->row);
+                    }
+                    for (auto& [column, placed] : row.cells) {
+                        if (placed.fresh) {
+                            setRecord(*placed.cell.row, ref->row);
+                        }
+                    }
                 }
                 next.push_back(std::move(row));
                 continue;
             }
             try {
-                next.push_back(mountPass([&] { return realizeRow(table, index); }));
-                current.push_back(next.back().widget);
+                std::vector<std::size_t>* const pool =
+                    ref && !freeKeyed.empty() ? &freeKeyed : (!freePlain.empty() ? &freePlain : nullptr);
+                if (pool != nullptr) {
+                    SourceTable::Realized row = std::move(old.at(pool->back()));
+                    pool->pop_back();
+                    row.index = index;
+                    if (ref) {
+                        mountPass([&] {
+                            assignRow(table, row, index, *ref);
+                            return 0;
+                        });
+                    }
+                    next.push_back(std::move(row));
+                } else {
+                    next.push_back(mountPass([&] { return makeRow(table, index); }));
+                    current.push_back(next.back().widget);
+                }
             } catch (...) {
                 if (!failure) {
                     failure = std::current_exception();
@@ -2062,6 +2584,9 @@ private:
         for (auto row = old.rbegin(); row != old.rend(); ++row) {
             if (row->scope) {
                 std::erase(current, row->widget);
+                row->pool.clear();
+                row->cells.clear();
+                row->look.reset();
                 row->scope.reset();
             }
         }
@@ -2078,9 +2603,326 @@ private:
             }
         }
         table.realized = std::move(next);
+        realizeCells(table, shown);
         table.widget->setRealizedWindow(lo, table.realized.size(), count);
+        afterPass(table, total);
         if (failure) {
             std::rethrow_exception(failure);
+        }
+    }
+
+    // The cells of the realized rows: columns that left the window are pooled, and the cells the window lacks are
+    // bound or built within the frame's budget, nearest the centre first.
+    // NOLINTNEXTLINE(readability-function-cognitive-complexity): pooling, the budget, and the order in each row.
+    void realizeCells(SourceTable& table, VisibleRange const& shown) {
+        TableRows& rows = *table.source.rows;
+        std::unordered_set<std::size_t> const inWindow(table.window.begin(), table.window.end());
+        auto const centreRow = static_cast<std::int64_t>(shown.first + shown.count / 2);
+        std::size_t const centreColumn = table.window.empty() ? 0 : table.window.size() / 2;
+        std::vector<CellWork> work;
+        for (std::size_t at = 0; at < table.realized.size(); ++at) {
+            SourceTable::Realized& slot = table.realized.at(at);
+            bool const keyed = slot.key.has_value() && !slot.heading;
+            std::vector<std::size_t> leaving;
+            for (auto const& [column, placed] : slot.cells) {
+                if (!keyed || !inWindow.contains(column)) {
+                    leaving.push_back(column);
+                }
+            }
+            for (std::size_t const column : leaving) {
+                park(table, slot, column);
+            }
+            if (!keyed) {
+                continue;
+            }
+            auto const rowDistance = static_cast<std::size_t>(std::abs(slot.index - centreRow));
+            for (std::size_t place = 0; place < table.window.size(); ++place) {
+                std::size_t const column = table.window.at(place);
+                auto const placed = slot.cells.find(column);
+                if (placed != slot.cells.end() && placed->second.fresh) {
+                    continue;
+                }
+                std::size_t const columnDistance = place > centreColumn ? place - centreColumn : centreColumn - place;
+                work.push_back(
+                    CellWork{.slot = at, .column = column, .distance = rowDistance * 1'000'000 + columnDistance});
+            }
+        }
+        std::ranges::stable_sort(work, {}, &CellWork::distance);
+        std::size_t const budget = table.virtualize.realizePerFrame;
+        std::exception_ptr failure;
+        for (std::size_t at = 0; at < work.size(); ++at) {
+            SourceTable::Realized& slot = table.realized.at(work.at(at).slot);
+            std::size_t const column = work.at(at).column;
+            if (at >= budget) {
+                // Past the budget: a stale cell leaves its column blank rather than show another row.
+                park(table, slot, column);
+                ++_stats.placeholders;
+                continue;
+            }
+            std::optional<TableRowRef> const ref = rows.row(slot.index);
+            if (!ref) {
+                continue;
+            }
+            try {
+                realizeCell(table, slot, column, ref->row);
+            } catch (...) {
+                if (!failure) {
+                    failure = std::current_exception();
+                }
+            }
+        }
+        for (SourceTable::Realized& slot : table.realized) {
+            tellLoads(table, slot);
+            orderCells(table, slot);
+        }
+        if (work.size() > budget) {
+            continueLater(table);
+        }
+        if (failure) {
+            std::rethrow_exception(failure);
+        }
+    }
+
+    // A row's children in the window's order, then its pooled cells, for a backend that places cells by their order
+    // rather than by `setCellColumn`.
+    static void orderCells(SourceTable const& table, SourceTable::Realized& slot) {
+        if (slot.heading || slot.children.empty()) {
+            return;
+        }
+        std::vector<Widget*> target;
+        target.reserve(slot.children.size());
+        for (std::size_t const column : table.window) {
+            if (auto const placed = slot.cells.find(column); placed != slot.cells.end()) {
+                target.push_back(placed->second.cell.widget);
+            }
+        }
+        for (Widget* const child : slot.children) {
+            if (!std::ranges::contains(target, child)) {
+                target.push_back(child);
+            }
+        }
+        if (target != slot.children) {
+            reorderChildren(*dynamic_cast<ContainerWidget*>(slot.widget), slot.children, target);
+        }
+    }
+
+    // Posts the next turn's realization, once.
+    void continueLater(SourceTable& table) {
+        if (table.continuing) {
+            return;
+        }
+        table.continuing = true;
+        try {
+            _rt->owner().post([this, &table, alive = std::weak_ptr{table.alive}] {
+                if (alive.expired()) {
+                    return;
+                }
+                table.continuing = false;
+                static_cast<void>(runCallback(*_rt, [&] { realizeWindow(table, [](std::int64_t) { return false; }); }));
+            });
+        } catch (...) {
+            table.continuing = false;
+            throw;
+        }
+    }
+
+    // After a pass: the counts, the focused cell and the highlighted row.
+    void afterPass(SourceTable& table, TableTotal const& total) {
+        std::pair<std::optional<std::int64_t>, std::size_t> const counts{
+            total.known && total.kind == table::TotalKind::Exact ? std::optional{total.rows} : std::nullopt,
+            table.visible.size()};
+        if (table.counts != counts) {
+            table.counts = counts;
+            table.widget->setCounts(counts.first, counts.second);
+        }
+        if (table.focused) {
+            std::optional<TableRowRef> const ref = table.source.rows->row(table.focusIndex);
+            if (ref && table.focusKey != ref->key) {
+                // The row at the focused index arrived, or took the place of the focused row that left the view.
+                table.focusKey = ref->key;
+                reportFocus(table);
+            }
+        }
+    }
+
+    void reportFocus(SourceTable const& table) {
+        if (!table.onFocusCell || !table.focusKey) {
+            return;
+        }
+        std::string const& id =
+            table.focusColumn < table.columns.size() ? table.columns.at(table.focusColumn).id : std::string{};
+        table.onFocusCell(CellRef{.key = *table.focusKey, .column = id});
+    }
+
+    // Where a view row is after a change: moved with the rows around it, or nothing when the change removed it. A
+    // reset keeps the index.
+    [[nodiscard]] static std::optional<std::int64_t> followIndex(table::ViewChange const& change, std::int64_t index) {
+        auto at = static_cast<std::size_t>(std::max<std::int64_t>(index, 0));
+        for (table::ViewOp const& op : change.ops) {
+            switch (op.kind) {
+                case table::ViewOp::Kind::Removed:
+                    if (at >= op.first && at < op.first + op.count) {
+                        return std::nullopt;
+                    }
+                    if (at >= op.first + op.count) {
+                        at -= op.count;
+                    }
+                    break;
+                case table::ViewOp::Kind::Inserted:
+                    if (at >= op.first) {
+                        at += op.count;
+                    }
+                    break;
+                case table::ViewOp::Kind::Moved:
+                    if (at == op.first) {
+                        at = op.to;
+                    } else if (op.first < at && at <= op.to) {
+                        --at;
+                    } else if (op.to <= at && at < op.first) {
+                        ++at;
+                    }
+                    break;
+                case table::ViewOp::Kind::Reset:
+                case table::ViewOp::Kind::Changed:
+                default:
+                    break;
+            }
+        }
+        return static_cast<std::int64_t>(at);
+    }
+
+    // Moves focus as a key asks: by rows or columns, to an end of the row, or to the first or last row of the view.
+    // A row not fetched takes focus as a placeholder, and the view scrolls to it.
+    void moveFocus(SourceTable& table, FocusMove move) {
+        TableTotal const total = table.source.rows->total();
+        std::int64_t const last = std::max<std::int64_t>(total.rows - 1, 0);
+        std::int64_t const page = std::max<std::int64_t>(static_cast<std::int64_t>(shownOf(table).count), 1);
+        std::int64_t index = table.focused ? table.focusIndex : 0;
+        std::size_t place =
+            table.focused && table.focusColumn < table.placeOf.size() && table.placeOf.at(table.focusColumn)
+                ? *table.placeOf.at(table.focusColumn)
+                : 0;
+        std::size_t const lastPlace = table.visible.empty() ? 0 : table.visible.size() - 1;
+        switch (move) {
+            case FocusMove::Up:
+                index = std::max<std::int64_t>(index - 1, 0);
+                break;
+            case FocusMove::Down:
+                index = std::min(index + 1, last);
+                break;
+            case FocusMove::PageUp:
+                index = std::max<std::int64_t>(index - page, 0);
+                break;
+            case FocusMove::PageDown:
+                index = std::min(index + page, last);
+                break;
+            case FocusMove::Left:
+                place = place > 0 ? place - 1 : 0;
+                break;
+            case FocusMove::Right:
+                place = std::min(place + 1, lastPlace);
+                break;
+            case FocusMove::Home:
+                place = 0;
+                break;
+            case FocusMove::End:
+                place = lastPlace;
+                break;
+            case FocusMove::First:
+                index = 0;
+                break;
+            case FocusMove::Last:
+                index = last;
+                // A total that is a lower bound: the last row known.
+                if (total.kind == table::TotalKind::AtLeast) {
+                    while (index > 0 && !table.source.rows->row(index)) {
+                        --index;
+                    }
+                }
+                break;
+            default:
+                break;
+        }
+        if (table.visible.empty()) {
+            return;
+        }
+        table.focused = true;
+        table.focusIndex = index;
+        table.focusColumn = table.visible.at(place);
+        std::optional<TableRowRef> const ref = table.source.rows->row(index);
+        table.focusKey = ref ? std::optional<Key>{ref->key} : std::nullopt;
+        VisibleRange range = shownOf(table);
+        auto const at = static_cast<std::size_t>(index);
+        if (at < range.first || at >= range.first + range.count) {
+            range.first = at < range.first ? at : at + 1 - range.count;
+            table.range = range;
+            table.widget->scrollToRow(at);
+            tellVisible(table);
+        }
+        table.windowDirty = true;
+        realizeWindow(table, [](std::int64_t) { return false; });
+        table.widget->setFocusCell(at, table.focusColumn);
+        reportFocus(table);
+    }
+
+    // Takes focus from `Table::focus`: the cell's row by key among the realized rows, and its column by id.
+    void focusFrom(SourceTable& table, std::optional<CellRef> const& cell) {
+        if (!cell) {
+            return;
+        }
+        auto const column = std::ranges::find(table.columns, cell->column, &TableColumn::id);
+        if (column == table.columns.end()) {
+            return;
+        }
+        auto const row = std::ranges::find(table.realized, std::optional<Key>{cell->key}, &SourceTable::Realized::key);
+        if (row == table.realized.end()) {
+            return;
+        }
+        table.focused = true;
+        table.focusKey = cell->key;
+        table.focusIndex = row->index;
+        table.focusColumn = static_cast<std::size_t>(column - table.columns.begin());
+        table.windowDirty = true;
+        realizeWindow(table, [](std::int64_t) { return false; });
+        table.widget->setFocusCell(static_cast<std::size_t>(table.focusIndex), table.focusColumn);
+    }
+
+    // Takes a highlight: the rows fetch around it, the view scrolls to it and marks it, and its key is followed.
+    void highlightFrom(SourceTable& table, std::optional<TableHighlight> const& highlight) {
+        if (!highlight) {
+            if (table.highlightKey) {
+                table.highlightKey.reset();
+                table.widget->setHighlightedRow(std::nullopt);
+            }
+            return;
+        }
+        table.highlightKey = highlight->key;
+        table.highlightIndex = static_cast<std::int64_t>(highlight->row);
+        std::size_t const overscan = table.virtualize.overscan;
+        std::size_t const first = highlight->row > overscan ? highlight->row - overscan : 0;
+        table.source.rows->visible(static_cast<std::int64_t>(first),
+                                   static_cast<std::int64_t>(table.range.count + 2 * overscan), table.fetched);
+        table.widget->scrollToRow(highlight->row);
+        table.widget->setHighlightedRow(highlight->row);
+    }
+
+    // Follows the focused and the highlighted rows through a change of the rows.
+    static void follow(SourceTable& table, table::ViewChange const& change) {
+        if (table.highlightKey) {
+            if (std::optional<std::int64_t> const now = followIndex(change, table.highlightIndex)) {
+                if (*now != table.highlightIndex) {
+                    table.highlightIndex = *now;
+                    table.widget->setHighlightedRow(static_cast<std::size_t>(*now));
+                }
+            } else {
+                table.highlightKey.reset();
+                table.widget->setHighlightedRow(std::nullopt);
+            }
+        }
+        if (table.focused) {
+            // A focused row the change removed leaves focus at its view index, on the row now there, or the last.
+            std::int64_t const last = std::max<std::int64_t>(table.source.rows->total().rows - 1, 0);
+            table.focusIndex = std::min(followIndex(change, table.focusIndex).value_or(table.focusIndex), last);
         }
     }
 
@@ -2105,9 +2947,11 @@ private:
     }
 
     // A table over a `TableSource`. Rows are always windowed: the mount realizes the rows the backend reports in view
-    // and `overscan` rows either side (the first `overscan` rows before any report), tells the rows which rows and
-    // columns are in view, and applies each `ViewChange` to the realized rows by key. Rows first, then the selection,
-    // as for a table over `rows`.
+    // and `overscan` rows either side (the first `overscan` rows before any report). Columns are windowed once the
+    // backend reports its horizontal viewport and `windowingOf` says so; until then every visible column is in the
+    // window. The mount tells the rows which rows and columns are in view, and applies each `ViewChange` to the
+    // realized rows by key. Rows first, then the selection, as for a table over `rows`.
+    // NOLINTNEXTLINE(readability-function-cognitive-complexity): one handler per table seam.
     Widget& mountSourceTable(reactive::Scope& scope, Table const& spec, ContainerWidget* parent) {
         if (!spec.source->rows || !spec.source->cellView) {
             throw std::logic_error{"morph::ui: a table source needs its rows and its cell view"};
@@ -2132,46 +2976,98 @@ private:
         auto& table = scope.make<SourceTable>();
         table.source = *spec.source;
         table.widget = &widget;
-        table.columns = spec.columns.size();
-        table.overscan = spec.virtualize.overscan;
+        table.columns = spec.columns;
+        table.virtualize = spec.virtualize;
         table.depth = scope.depth() + 1;
-        table.fetched = table.source.alwaysFetched;
-        for (TableColumn const& column : spec.columns) {
-            if (!column.id.empty() && !std::ranges::contains(table.fetched, column.id)) {
-                table.fetched.push_back(column.id);
+        table.onFocusCell = event(spec.onFocusCell);
+        _extents = table.extents;
+        arrange(table, TableArrangement{});
+        auto const pass = [this, &table] {
+            if (table.mounted) {
+                static_cast<void>(
+                    runCallback(*_rt, [&] { realizeWindow(table, [](std::int64_t) { return false; }); }));
             }
-        }
-        auto const visible = [&table] {
-            VisibleRange const shown =
-                table.range.count > 0 ? table.range : VisibleRange{.first = 0, .count = table.overscan};
-            table.source.rows->visible(static_cast<std::int64_t>(shown.first), static_cast<std::int64_t>(shown.count),
-                                       table.fetched);
         };
+        bind(scope, spec.arrangement, [&table, pass](TableArrangement const& arrangement) {
+            if (arrangement != table.arrangement) {
+                arrange(table, arrangement);
+                pass();
+            }
+        });
         table.source.rows->onChange(
             [this, &table, alive = std::weak_ptr{table.alive}](table::ViewChange const& change) {
                 if (alive.expired()) {
                     return;
                 }
                 static_cast<void>(runCallback(*_rt, [&] {
+                    follow(table, change);
                     realizeWindow(table, [&change](std::int64_t index) { return namesUpdated(change, index); });
                 }));
             });
-        widget.setOnVisibleRangeChanged([this, &table, visible](std::size_t first, std::size_t count) {
+        widget.setOnVisibleRangeChanged([this, &table](std::size_t first, std::size_t count) {
             static_cast<void>(runCallback(*_rt, [&] {
                 table.range = VisibleRange{.first = first, .count = count};
                 realizeWindow(table, [](std::int64_t) { return false; });
-                visible();
+                tellVisible(table);
             }));
         });
+        widget.setOnHorizontalRange([this, &table](int scrollX, int viewport) {
+            static_cast<void>(runCallback(*_rt, [&] {
+                table.horizontal = true;
+                table.scrollX = std::max(scrollX, 0);
+                table.viewport = std::max(viewport, 0);
+                table.windowDirty = true;
+                realizeWindow(table, [](std::int64_t) { return false; });
+            }));
+        });
+        widget.setOnColumnMeasured([this, &table](std::size_t column, int width) {
+            static_cast<void>(runCallback(*_rt, [&] { measured(table, column, width); }));
+        });
+        widget.setOnFocusMove([this, &table](FocusMove move) {
+            static_cast<void>(runCallback(*_rt, [&] { moveFocus(table, move); }));
+        });
+        widget.setOnSelectRange(event(spec.onSelectRange));
         _rt->untracked([&] {
             realizeWindow(table, [](std::int64_t) { return false; });
-            visible();
+            tellVisible(table);
+            table.mounted = true;
+        });
+        bind(scope, spec.focus, [this, &table](std::optional<CellRef> const& cell) {
+            static_cast<void>(runCallback(*_rt, [&] { focusFrom(table, cell); }));
+        });
+        bind(scope, spec.highlight, [this, &table](std::optional<TableHighlight> const& highlight) {
+            static_cast<void>(runCallback(*_rt, [&] { highlightFrom(table, highlight); }));
         });
         widget.setOnSelectionChange(inputEvent(
             spec.onSelectionChange, controlled(scope, spec.selection, [&widget](std::vector<Key> const& keys) {
                 widget.setSelection(keys);
             })));
         return widget;
+    }
+
+    // A width a cell of @p column measured: the column's extent grows by it, and a growth left of the first column
+    // fully in view moves the scroll offset by as much, so the columns in view stay where they are.
+    void measured(SourceTable& table, std::size_t column, int width) {
+        if (column >= table.placeOf.size() || !table.placeOf.at(column)) {
+            return;
+        }
+        std::size_t const place = *table.placeOf.at(column);
+        ColumnExtents& extents = *table.extents;
+        int const before = extents.offsetOf(place + 1) - extents.offsetOf(place);
+        std::size_t firstFull = extents.columnsAt(table.scrollX, 1).first;
+        if (extents.offsetOf(firstFull) < table.scrollX) {
+            ++firstFull;
+        }
+        firstFull = std::max(firstFull, table.pinnedShown);
+        if (!extents.grow(place, width)) {
+            return;
+        }
+        if (table.horizontal && place >= table.pinnedShown && place < firstFull) {
+            table.scrollX += width - before;
+            table.widget->setHorizontalOffset(table.scrollX);
+        }
+        table.windowDirty = true;
+        realizeWindow(table, [](std::int64_t) { return false; });
     }
 
     // The model, then the session, then the rows, then the Effect(s): destroyed in reverse, so an Effect stops
@@ -2874,6 +3770,8 @@ private:
     std::set<ContainerWidget const*> _shareParents;
     // What the mount did to the rows of its source tables.
     MountStats _stats;
+    // The column extents of the source table mounted last, for tests.
+    std::weak_ptr<ColumnExtents const> _extents;
 };
 
 }  // namespace detail
@@ -2972,6 +3870,10 @@ public:
     /// @brief What the mount did to the rows of its tables mounted over a `TableSource`, the whole mount's.
     /// @return The counters; valid as long as this object.
     [[nodiscard]] MountStats const& stats() const noexcept { return _mounter.stats(); }
+
+    /// @brief The column extents of the table over a `TableSource` mounted last, for tests.
+    /// @return They, or null when no such table is mounted.
+    [[nodiscard]] ColumnExtents const* columnExtents() const noexcept { return _mounter.columnExtents(); }
 
 private:
     [[nodiscard]] static Node nonNull(Node root) {

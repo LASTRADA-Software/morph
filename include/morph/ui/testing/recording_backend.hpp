@@ -2483,6 +2483,162 @@ public:
         store().set(rowId, "load" + std::to_string(column), formatCellLoad(load));
     }
 
+    /// @brief Records the column window, which `windowColumns`, `totalWidth` and `pinnedShown` read, and the
+    ///        properties `columnWindow` (the indices, comma-separated), `totalWidth` and `pinnedShown`.
+    /// @param columns    The columns.
+    /// @param offsets    Their offsets.
+    /// @param widths     Their widths.
+    /// @param totalWidth Every visible column's width together.
+    /// @param pinned     How many of @p columns are pinned.
+    void setColumnWindow(std::span<std::size_t const> columns, std::span<int const> offsets,
+                         std::span<int const> widths, int totalWidth, std::size_t pinned) override {
+        static_cast<void>(offsets);
+        static_cast<void>(widths);
+        _window = std::vector<std::size_t>(columns.begin(), columns.end());
+        _windowSet = true;
+        _totalWidth = totalWidth;
+        _pinnedShown = pinned;
+        std::string text;
+        for (std::size_t const column : columns) {
+            text += (text.empty() ? "" : ",") + std::to_string(column);
+        }
+        set("columnWindow", text);
+        set("totalWidth", std::to_string(totalWidth));
+        set("pinnedShown", std::to_string(pinned));
+    }
+
+    /// @brief Stores the handler `RecordingBackend::scrollTableColumns` calls.
+    /// @param handler The handler.
+    void setOnHorizontalRange(std::function<void(int, int)> handler) override { _onHorizontal = std::move(handler); }
+
+    /// @brief Records property `horizontalOffset`, which `RecordingBackend::horizontalOffset` reads.
+    /// @param scrollX The offset.
+    void setHorizontalOffset(int scrollX) override {
+        _horizontalOffset = scrollX;
+        set("horizontalOffset", std::to_string(scrollX));
+    }
+
+    /// @brief Stores the handler `RecordingBackend::selectTableRange` calls.
+    /// @param handler The handler.
+    void setOnSelectRange(std::function<void(std::size_t, std::size_t, SelectionChange)> handler) override {
+        _onSelectRange = std::move(handler);
+    }
+
+    /// @brief Records property `focusCell` as `<row>:<column>`, which `RecordingBackend::focusCell` reads.
+    /// @param viewRow The row.
+    /// @param column  The column.
+    void setFocusCell(std::size_t viewRow, std::size_t column) override {
+        _focusCell = {viewRow, column};
+        set("focusCell", std::to_string(viewRow) + ":" + std::to_string(column));
+    }
+
+    /// @brief Stores the handler `RecordingBackend::measureColumn` calls.
+    /// @param handler The handler.
+    void setOnColumnMeasured(std::function<void(std::size_t, int)> handler) override {
+        _onMeasured = std::move(handler);
+    }
+
+    /// @brief Stores the handler `RecordingBackend::focusMove` calls.
+    /// @param handler The handler.
+    void setOnFocusMove(std::function<void(FocusMove)> handler) override { _onFocusMove = std::move(handler); }
+
+    /// @brief Records property `counts` as `<rows or unknown>/<columns>`, which `RecordingBackend::lastCounts` reads.
+    /// @param rows    The rows, or nothing.
+    /// @param columns The visible columns.
+    void setCounts(std::optional<std::int64_t> rows, std::size_t columns) override {
+        _counts = {rows, columns};
+        set("counts", (rows ? std::to_string(*rows) : std::string{"unknown"}) + "/" + std::to_string(columns));
+    }
+
+    /// @brief Records property `scrolledToRow`.
+    /// @param viewRow The row.
+    void scrollToRow(std::size_t viewRow) override { set("scrolledToRow", std::to_string(viewRow)); }
+
+    /// @brief Records property `highlightedRow`, `none` for no mark.
+    /// @param viewRow The row, or nothing.
+    void setHighlightedRow(std::optional<std::size_t> viewRow) override {
+        set("highlightedRow", viewRow ? std::to_string(*viewRow) : std::string{"none"});
+    }
+
+    /// @brief Records the cell's property `column`, `none` for a pooled cell.
+    /// @param row    One of this table's rows.
+    /// @param cell   One of the row's children.
+    /// @param column The column, or nothing.
+    /// @throws std::logic_error when @p row is not this table's child, or @p cell not the row's.
+    void setCellColumn(Widget& row, Widget& cell, std::optional<std::size_t> column) override {
+        int const rowId = store().idOf(row);
+        int const cellId = store().idOf(cell);
+        if (store().at(rowId).parent != id() || store().at(cellId).parent != rowId) {
+            throw std::logic_error{"RecordingBackend: setCellColumn of a widget that is not a cell of this table"};
+        }
+        store().set(cellId, "column", column ? std::to_string(*column) : std::string{"none"});
+    }
+
+    /// @brief Calls the handler `setOnHorizontalRange` stored, as a backend's scroll would.
+    /// @param scrollX  The offset.
+    /// @param viewport The viewport's width.
+    void scrollColumns(int scrollX, int viewport) {
+        if (_onHorizontal) {
+            _onHorizontal(scrollX, viewport);
+        }
+    }
+
+    /// @brief Calls the handler `setOnSelectRange` stored, as a Shift+click would.
+    /// @param anchor The anchor's view row.
+    /// @param focus  The end's view row.
+    void selectRange(std::size_t anchor, std::size_t focus) {
+        if (_onSelectRange) {
+            _onSelectRange(anchor, focus, SelectionChange::Replace);
+        }
+    }
+
+    /// @brief Calls the handler `setOnColumnMeasured` stored, as a cell's layout would.
+    /// @param column The column.
+    /// @param width  The width.
+    void measure(std::size_t column, int width) {
+        if (_onMeasured) {
+            _onMeasured(column, width);
+        }
+    }
+
+    /// @brief Calls the handler `setOnFocusMove` stored, as a key would.
+    /// @param move The move.
+    void moveFocus(FocusMove move) {
+        if (_onFocusMove) {
+            _onFocusMove(move);
+        }
+    }
+
+    /// @brief The column window last set.
+    /// @return Its columns; empty before any.
+    [[nodiscard]] std::vector<std::size_t> const& windowColumns() const noexcept { return _window; }
+
+    /// @brief The total width last set.
+    /// @return It; 0 before any.
+    [[nodiscard]] int totalWidth() const noexcept { return _totalWidth; }
+
+    /// @brief How many leading columns of the last window are pinned.
+    /// @return The count.
+    [[nodiscard]] std::size_t pinnedShown() const noexcept { return _pinnedShown; }
+
+    /// @brief The header cells drawn: one per column of the window once one is set, one per column before.
+    /// @return The count.
+    [[nodiscard]] std::size_t headerCells() const noexcept {
+        return _windowSet ? _window.size() : _columns.size();
+    }
+
+    /// @brief The last horizontal offset set.
+    /// @return It, or nothing when never set.
+    [[nodiscard]] std::optional<int> horizontalOffset() const noexcept { return _horizontalOffset; }
+
+    /// @brief The focused cell last set.
+    /// @return Its view row and column; `{0, 0}` before any.
+    [[nodiscard]] std::pair<std::size_t, std::size_t> focusCell() const noexcept { return _focusCell; }
+
+    /// @brief The counts last set.
+    /// @return The rows (or nothing) and the columns.
+    [[nodiscard]] std::pair<std::optional<std::int64_t>, std::size_t> lastCounts() const noexcept { return _counts; }
+
     /// @brief The status line last set.
     /// @return It; the default before any `setStatus`.
     [[nodiscard]] TableStatus const& status() const noexcept { return _status; }
@@ -2628,6 +2784,17 @@ private:
     TableStatus _status;
     std::vector<TableColumn> _columns;
     std::map<std::pair<int, std::size_t>, CellLoad> _loads;  // (row id, column) -> state, as setCellLoad told it
+    std::vector<std::size_t> _window;  // the column window, as setColumnWindow last gave it
+    bool _windowSet = false;
+    int _totalWidth = 0;
+    std::size_t _pinnedShown = 0;
+    std::optional<int> _horizontalOffset;
+    std::pair<std::size_t, std::size_t> _focusCell;
+    std::pair<std::optional<std::int64_t>, std::size_t> _counts;
+    std::function<void(int, int)> _onHorizontal;
+    std::function<void(std::size_t, std::size_t, SelectionChange)> _onSelectRange;
+    std::function<void(std::size_t, int)> _onMeasured;
+    std::function<void(FocusMove)> _onFocusMove;
 
     [[nodiscard]] static std::string formatCellLoad(CellLoad load) {
         switch (load) {
@@ -3401,6 +3568,81 @@ public:
         return table == nullptr ? std::vector<TableColumn>{} : table->columns();
     }
 
+    /// @brief Scrolls a table sideways as the user would: the handler `setOnHorizontalRange` stored gets the offset
+    ///        and the viewport's width.
+    /// @param widgetId The table.
+    /// @param scrollX  The offset.
+    /// @param viewport The viewport's width.
+    /// @throws std::logic_error when the widget is not a table.
+    void scrollTableColumns(int widgetId, int scrollX, int viewport) { fakeTable(widgetId, "scrollTableColumns").scrollColumns(scrollX, viewport); }
+
+    /// @brief Moves a table's focused cell as a key would.
+    /// @param widgetId The table.
+    /// @param move     The move.
+    /// @throws std::logic_error when the widget is not a table.
+    void focusMove(int widgetId, FocusMove move) { fakeTable(widgetId, "focusMove").moveFocus(move); }
+
+    /// @brief Selects a range of view rows as a Shift+click over rows the backend holds no keys for would: the
+    ///        handler `setOnSelectRange` stored gets the two rows and `Replace`.
+    /// @param widgetId The table.
+    /// @param anchor   The anchor's view row.
+    /// @param focus    The end's view row.
+    /// @throws std::logic_error when the widget is not a table.
+    void selectTableRange(int widgetId, std::size_t anchor, std::size_t focus) {
+        fakeTable(widgetId, "selectTableRange").selectRange(anchor, focus);
+    }
+
+    /// @brief Reports the width a cell of a column measured, as a backend's layout would.
+    /// @param widgetId The table.
+    /// @param column   The column: an index into the table's columns.
+    /// @param width    The width.
+    /// @throws std::logic_error when the widget is not a table.
+    void measureColumn(int widgetId, std::size_t column, int width) { fakeTable(widgetId, "measureColumn").measure(column, width); }
+
+    /// @brief A table's column window, as the mount last set it.
+    /// @param widgetId The table.
+    /// @return Its columns, pinned first; empty before any.
+    /// @throws std::logic_error when the widget is not a table.
+    [[nodiscard]] std::vector<std::size_t> windowColumns(int widgetId) { return fakeTable(widgetId, "windowColumns").windowColumns(); }
+
+    /// @brief A table's total width, as the mount last set it.
+    /// @param widgetId The table.
+    /// @return The width; 0 before any.
+    /// @throws std::logic_error when the widget is not a table.
+    [[nodiscard]] int totalWidth(int widgetId) { return fakeTable(widgetId, "totalWidth").totalWidth(); }
+
+    /// @brief How many leading columns of a table's last column window the mount marked pinned.
+    /// @param widgetId The table.
+    /// @return The count.
+    /// @throws std::logic_error when the widget is not a table.
+    [[nodiscard]] std::size_t pinnedShown(int widgetId) { return fakeTable(widgetId, "pinnedShown").pinnedShown(); }
+
+    /// @brief The header cells a table draws: the column window's once one is set, every column's before.
+    /// @param widgetId The table.
+    /// @return The count.
+    /// @throws std::logic_error when the widget is not a table.
+    [[nodiscard]] std::size_t headerCells(int widgetId) { return fakeTable(widgetId, "headerCells").headerCells(); }
+
+    /// @brief A table's horizontal offset, as the mount last moved it.
+    /// @param widgetId The table.
+    /// @return The offset, or nothing when the mount never moved it.
+    /// @throws std::logic_error when the widget is not a table.
+    [[nodiscard]] std::optional<int> horizontalOffset(int widgetId) { return fakeTable(widgetId, "horizontalOffset").horizontalOffset(); }
+
+    /// @brief A table's focused cell, as the mount last set it.
+    /// @param widgetId The table.
+    /// @return Its view row and column.
+    /// @throws std::logic_error when the widget is not a table.
+    [[nodiscard]] std::pair<std::size_t, std::size_t> focusCell(int widgetId) { return fakeTable(widgetId, "focusCell").focusCell(); }
+
+    /// @brief A table's counts, as the mount last set them.
+    /// @param widgetId The table.
+    /// @return The rows (nothing when unknown) and the visible columns.
+    /// @throws std::logic_error when the widget is not a table.
+    [[nodiscard]] std::pair<std::optional<std::int64_t>, std::size_t> lastCounts(int widgetId) {
+        return fakeTable(widgetId, "lastCounts").lastCounts();
+    }
+
     /// @brief A cell's load state in a table whose rows come from a `TableSource`.
     /// @param widgetId The table.
     /// @param rowKey   The row's key.
@@ -3529,6 +3771,11 @@ public:
     }
 
 private:
+    // The fake behind a table, for a helper that drives it; throws as `expectKind` does.
+    detail::FakeTable& fakeTable(int widgetId, std::string_view helper) {
+        return dynamic_cast<detail::FakeTable&>(*expectKind(widgetId, helper, {"Table"}).widget);
+    }
+
     // The fake behind a text field's record.
     static detail::FakeTextInput& textInput(detail::Record const& record) {
         return dynamic_cast<detail::FakeTextInput&>(*record.widget);

@@ -658,7 +658,26 @@ public:
     WindowRows& operator=(WindowRows&&) = delete;
 
     /// @brief Cancels every fetch in flight.
-    ~WindowRows() override { stopAll(); }
+    ~WindowRows() override {
+        stopAll();
+        for (auto const& held : _keyRequests) {
+            if (auto const request = held.lock()) {
+                for (auto& stop : request->stops) {
+                    stop.request_stop();
+                }
+                // Answered now, while the owner it delivers on is alive: the request may outlive it in a reply's
+                // handler.
+                if (request->waiting > 0) {
+                    request->waiting = 0;
+                    request->promise.resolve(std::expected<std::vector<table::RowId>, table::TableError>{
+                        std::unexpected(table::TableError{.code = table::TableErrorCode::Unavailable,
+                                                          .column = {},
+                                                          .message = "the rows are gone"})});
+                }
+            }
+        }
+        _locateStop.request_stop();
+    }
 
     /// @brief Takes the table's description: fits the sort, the filters and the visible columns to it, and starts
     ///        a new query when it is another revision than the one held.
@@ -838,11 +857,13 @@ public:
         pump();
     }
 
-    /// @brief The keys of a range of view rows, when every one of them is held.
+    /// @brief The keys of a range of view rows, for a range selection: the rows held give theirs, and every page of
+    ///        the range with a row not held is fetched naming no columns, so its reply carries keys alone. The pages
+    ///        so fetched are not held.
     /// @param first The first view row.
     /// @param count The rows.
-    /// @return The keys at once; `InvalidSpec` for a negative range, `Unavailable` when a row of the range is not
-    ///         held.
+    /// @return The keys once every page has answered; `InvalidSpec` for a negative range, `Unavailable` when a page
+    ///         failed or a row of the range is in none.
     async::Completion<std::expected<std::vector<table::RowId>, table::TableError>> keysOf(
         std::int64_t first, std::int64_t count) override {
         using Result = std::expected<std::vector<table::RowId>, table::TableError>;
@@ -854,20 +875,102 @@ public:
                 .message = std::format("{} rows from view row {} are not a range", count, first)})});
             return std::move(completion);
         }
-        std::vector<table::RowId> keys;
-        for (std::int64_t at = first; at < first + count; ++at) {
-            auto const* const key = _window.key(at);
-            if (key == nullptr) {
-                promise.resolve(Result{std::unexpected(
-                    table::TableError{.code = table::TableErrorCode::Unavailable,
-                                      .column = {},
-                                      .message = std::format("view row {} is not fetched", at)})});
-                return std::move(completion);
+        auto const size = std::max<std::int64_t>(_options.pageSize, 1);
+        auto state = std::make_shared<KeysRequest>(KeysRequest{.promise = std::move(promise),
+                                                               .first = first,
+                                                               .count = count,
+                                                               .pages = {},
+                                                               .waiting = 0,
+                                                               .failed = std::nullopt});
+        std::vector<std::int64_t> missing;
+        for (std::int64_t page = first / size; count > 0 && page <= (first + count - 1) / size; ++page) {
+            std::int64_t const from = std::max(first, page * size);
+            std::int64_t const to = std::min(first + count, (page + 1) * size);
+            for (std::int64_t at = from; at < to; ++at) {
+                if (_window.key(at) == nullptr) {
+                    missing.push_back(page);
+                    break;
+                }
             }
-            keys.push_back(*key);
         }
-        promise.resolve(Result{std::move(keys)});
+        if (missing.empty() || !_description) {
+            finishKeys(*state);
+            return std::move(completion);
+        }
+        state->waiting = missing.size();
+        std::erase_if(_keyRequests, [](std::weak_ptr<KeysRequest> const& held) { return held.expired(); });
+        _keyRequests.push_back(state);
+        for (std::int64_t const page : missing) {
+            table::TableQuery query = queryOf(table::PageRequest{.offset = page * size, .limit = size}, {});
+            query.columns = std::vector<std::string>{};
+            auto body = bodyOf(query);
+            if (!body) {
+                keysAnswered(*state, page, std::unexpected(body.error()));
+                continue;
+            }
+            std::stop_source stop;
+            auto reply = _session->read(_options.channel, "Table." + _options.table, *body, stop.get_token());
+            state->stops.push_back(std::move(stop));
+            reply.then(_scope, [this, state, page](std::string const& text) {
+                auto read = table::readGenericPage(text, *_description, _units.get());
+                if (!read) {
+                    keysAnswered(*state, page, std::unexpected(read.error()));
+                    return;
+                }
+                keysAnswered(*state, page, std::move(read->keys));
+            });
+            reply.onError(_scope, [this, state, page](std::exception_ptr const& error) {
+                // A stopped fetch is the window going: the range is never answered.
+                if (!wasCancelled(error)) {
+                    keysAnswered(*state, page, std::unexpected(failureOf(error)));
+                }
+            });
+        }
         return std::move(completion);
+    }
+
+    /// @brief Finds a row's view index: a keyed fetch naming no columns, under the current sort and filters. A
+    ///        call stops the fetch an earlier one still has in flight, whose handler is then never called.
+    /// @param key  The row's key.
+    /// @param done Called with the row's view index, or nothing when the view has no row with @p key or the fetch
+    ///        failed.
+    void locate(table::RowId key, std::function<void(std::optional<std::int64_t>)> done) {
+        _locateStop.request_stop();
+        _locateStop = std::stop_source{};
+        ++_locateGeneration;
+        table::TableQuery query = queryOf(table::PageRequest{}, {});
+        query.columns = std::vector<std::string>{};
+        query.keys = std::vector<table::RowId>{std::move(key)};
+        auto body = bodyOf(query);
+        if (!body || !_description) {
+            done(std::nullopt);
+            return;
+        }
+        auto reply = _session->read(_options.channel, "Table." + _options.table, *body, _locateStop.get_token());
+        auto const generation = _locateGeneration;
+        reply.then(_scope, [this, done, generation](std::string const& text) {
+            if (generation != _locateGeneration) {
+                return;
+            }
+            auto read = _description ? table::readGenericPage(text, *_description, _units.get())
+                                     : std::expected<table::GenericPage, table::TableError>{std::unexpected(
+                                           table::TableError{.code = table::TableErrorCode::Unavailable,
+                                                             .column = {},
+                                                             .message = "no description"})};
+            done(read && !read->indices.empty() ? std::optional<std::int64_t>{read->indices.front()} : std::nullopt);
+        });
+        reply.onError(_scope, [this, done, generation](std::exception_ptr const& error) {
+            if (generation == _locateGeneration && !wasCancelled(error)) {
+                done(std::nullopt);
+            }
+        });
+    }
+
+    /// @brief Stops a `locate` fetch in flight; its handler is never called.
+    void stopLocating() {
+        _locateStop.request_stop();
+        _locateStop = std::stop_source{};
+        ++_locateGeneration;
     }
 
     /// @brief Sets the query's sort: a new query.
@@ -942,6 +1045,59 @@ private:
         table::PageFetch fetch;
         std::stop_source stop;
     };
+
+    // A range's keys in the making: the pages fetched for it, by page, and how many it still waits for.
+    struct KeysRequest {
+        async::Completion<std::expected<std::vector<table::RowId>, table::TableError>>::Promise promise;
+        std::int64_t first = 0;
+        std::int64_t count = 0;
+        std::map<std::int64_t, std::vector<table::RowId>> pages;
+        std::size_t waiting = 0;
+        std::optional<table::TableError> failed;
+        std::vector<std::stop_source> stops;
+    };
+
+    void keysAnswered(KeysRequest& request, std::int64_t page,
+                      std::expected<std::vector<table::RowId>, table::TableError> keys) {
+        if (keys) {
+            request.pages.insert_or_assign(page, std::move(*keys));
+        } else if (!request.failed) {
+            request.failed = std::move(keys.error());
+        }
+        if (request.waiting > 0 && --request.waiting == 0) {
+            finishKeys(request);
+        }
+    }
+
+    // The range's keys: a fetched page's where one was fetched, the window's otherwise.
+    void finishKeys(KeysRequest& request) {
+        using Result = std::expected<std::vector<table::RowId>, table::TableError>;
+        if (request.failed) {
+            request.promise.resolve(Result{std::unexpected(*request.failed)});
+            return;
+        }
+        auto const size = std::max<std::int64_t>(_options.pageSize, 1);
+        std::vector<table::RowId> keys;
+        keys.reserve(static_cast<std::size_t>(request.count));
+        for (std::int64_t at = request.first; at < request.first + request.count; ++at) {
+            if (auto const page = request.pages.find(at / size); page != request.pages.end()) {
+                auto const place = static_cast<std::size_t>(at - (at / size) * size);
+                if (place < page->second.size()) {
+                    keys.push_back(page->second.at(place));
+                    continue;
+                }
+            } else if (auto const* const key = _window.key(at)) {
+                keys.push_back(*key);
+                continue;
+            }
+            request.promise.resolve(Result{std::unexpected(table::TableError{
+                .code = table::TableErrorCode::Unavailable,
+                .column = {},
+                .message = std::format("view row {} is in no page", at)})});
+            return;
+        }
+        request.promise.resolve(Result{std::move(keys)});
+    }
 
     struct RowsFlight {
         table::RowsFetch fetch;
@@ -1503,6 +1659,10 @@ private:
     std::function<void()> _onStatus;
     mutable std::unordered_map<table::RowId, Entry> _memo;
     mutable WindowRowsStats _stats;
+    // The stops of the key pages a range selection fetched, and of the fetch that locates a highlighted row.
+    std::vector<std::weak_ptr<KeysRequest>> _keyRequests;
+    std::stop_source _locateStop;
+    std::uint64_t _locateGeneration = 0;
     // Last, so it is the first to go: no reply or timer reaches a half-destroyed object.
     async::CallbackScope _scope;
 };

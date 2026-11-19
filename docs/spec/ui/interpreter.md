@@ -530,8 +530,10 @@ keeps its operands' 0 places and still fills 0.29 of a bar.
   sortable as the description says. A column's `cell` is lowered per cell, in a row scope over the cell's own row
   signal; without one the cell is a text of the record's field. `rowTone` and `rowLabel` are lowered once per
   realized row, in a row scope over the row's signal, which `onActivate` runs in. The rows fetch, with every
-  page, the description's key, each field `{"row": "<id>"}` names in `rowTone`, `rowLabel`, `onActivate` and the
-  laid-out columns' cells, and every column when one of them passes `{"row": ""}` on whole (reported once). A
+  page, the description's key and each field `{"row": "<id>"}` names in `rowTone`, `rowLabel` and `onActivate`; a
+  column's cell's fields (`TableSource::cellReads`) while the column is in the window; and every column when one of
+  them passes `{"row": ""}` on whole (reported once). A column without a `cell` is the default cell, one text that
+  follows the column the mount gives it (`defaultCellView`), so a cell of one role serves any column of it. A
   path read out of the whole row with `get` is the row's own read: a row scope of a model-backed table has
   `RtScope::onMissingRowField`, which a read of a field the record lacks calls from inside the binding; it
   writes nothing there, and one task posted for the turn fetches every missed field that is a described column,
@@ -560,6 +562,17 @@ keeps its operands' 0 places and still fills 0.29 of a bar.
   said the view has, exactly, no row and no row is undecided. Its element values are a table's, with
   `viewCount` the reply's total (`null` before one), `viewCountKind` (`exact` or `atLeast`), `undecided`,
   `awaiting`, `failed`, `pending` (the description or a fetch in flight) and `error`.
+  **Range selection.** A range the backend reports as two view rows (`Table::onSelectRange`) is resolved
+  through `TableRows::keysOf`: the rows held give their keys, and every page of the range with a row not held is
+  fetched naming no columns (`"columns": []`), so its reply carries keys alone and the window holds none of it.
+  The keys select as the gesture says (`Replace`, or `Extend` with the keys selected), and `onSelectionChange`
+  runs. A range of more than `SessionOptions::maxRangeRows` (10,000) rows is refused in the status line, "A range
+  selects at most 10,000 rows" (the number grouped by the locale), and selects nothing. **`highlightKey`.** Each
+  non-null key, once a description is held, is located by one keyed fetch (`Table.<table>`, `keys` the key,
+  `columns` none, the table's sort and filters; `WindowRows::locate`), which stops the one an earlier key still
+  has in flight; the reply's `indices[0]` is the row's view index, and `Table::highlight` becomes
+  `TableHighlight{key, index}`, which the mount scrolls to and marks. A reply with no row, and a `null` key, set it
+  to nothing. It never changes the selection or the keyboard focus.
 - **`boundary`** is a `Switch` over loading, error and children. It owns the queries its children read
   (found statically, through `let`s, not inside a nested boundary): loading while one has neither a
   value nor a failure, error when one failed with no value to keep, children otherwise. Inside `error`,

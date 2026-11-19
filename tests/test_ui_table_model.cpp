@@ -770,6 +770,131 @@ TEST_CASE("model table: a body's query member the table owns is reported", "[ui]
     CHECK(diagnosticsMentioning(h, "limit") == 0);
 }
 
+
+namespace {
+
+// `kModelTable` with `"selectionMode": "multiple"`.
+std::string selectTable() { return withTableKey(kModelTable, R"("selectionMode":"multiple")"); }
+
+// `kModelTable` with a state `hk`, null, as the table's `highlightKey`, and three buttons that set it to 5012, 77 and
+// null.
+std::string const kHighlight =
+    R"({"vocab":"ui/1","id":"samples","models":{"lab":{"type":"Lims_SampleModel"}},)"
+    R"("state":{"hk":{"init":{"lit":null}}},)"
+    R"("view":{"kind":"column","children":[)"
+    R"({"kind":"button","label":"5012","testId":"to5012","onClick":[{"set":"hk","value":5012}]},)"
+    R"({"kind":"button","label":"77","testId":"to77","onClick":[{"set":"hk","value":77}]},)"
+    R"({"kind":"button","label":"none","testId":"toNone","onClick":[{"set":"hk","value":{"lit":null}}]},)"
+    R"({"kind":"table","id":"list","testId":"list","model":"lab","table":"samples","highlightKey":{"ref":"hk"},)"
+    R"("empty":[{"kind":"text","text":"No samples"}]}]}})";
+
+// Clicks the button with @p testId, then settles.
+void click(TableHarness& h, std::string_view testId) {
+    h.backend.click(h.byTestId("Button", testId));
+    h.settle();
+}
+
+// Answers every open `Table.samples` call that names no columns with a page of keys alone, at the offset and limit
+// its query names, of a view of 100,000 rows; settles after each.
+void replyKeyPages(TableHarness& h) {
+    for (int round = 0; round < 64 && openCalls(h, "Table.samples") > 0; ++round) {
+        std::optional<std::size_t> found;
+        for (std::size_t index = 0; index < h.dispatcher.calls.size() && !found; ++index) {
+            auto const& call = h.dispatcher.calls[index];
+            if (call.action == "Table.samples" && !call.answered && !call.options.stop.stop_requested() &&
+                queryOf(h, index).columns == std::optional<std::vector<std::string>>{std::vector<std::string>{}}) {
+                found = index;
+            }
+        }
+        if (!found) {
+            return;
+        }
+        table::TableQuery const query = queryOf(h, *found);
+        h.reply(*found, morph::ui::testing::pageJson(query.page.offset, query.page.limit, 100'000, {}));
+    }
+}
+
+// Answers the oldest open keyed `Table.samples` call with @p rows (key and view row), then settles.
+void replyKeyed(TableHarness& h, std::vector<std::pair<std::int64_t, std::int64_t>> const& rows) {
+    for (std::size_t index = 0; index < h.dispatcher.calls.size(); ++index) {
+        auto const& call = h.dispatcher.calls[index];
+        if (call.action == "Table.samples" && !call.answered && !call.options.stop.stop_requested() &&
+            queryOf(h, index).keys.has_value()) {
+            h.reply(index, keyedJson(rows, 9093, {}));
+            return;
+        }
+    }
+    FAIL("no open keyed call");
+}
+
+// Whether the call at @p index was stopped.
+bool stopped(TableHarness const& h, std::size_t index) {
+    return h.dispatcher.calls.at(index).options.stop.stop_requested();
+}
+
+}  // namespace
+
+// Mutation: `keysOf` fetching the visible columns (a call's body lacks `"columns":[]`).
+TEST_CASE("model table: a range over rows not held resolves through pages that name no columns", "[ui][table]") {
+    TableHarness h;
+    auto screen = mountShown(h, selectTable(), 100'000);  // rows 0 to 399 held
+    std::size_t const sent = h.dispatcher.calls.size();
+    h.backend.selectTableRange(tableOf(h), 500, 1'499);
+    h.settle();
+    REQUIRE(h.dispatcher.calls.size() > sent);
+    for (std::size_t call = sent; call < h.dispatcher.calls.size(); ++call) {
+        CHECK(h.dispatcher.calls.at(call).action == "Table.samples");
+        CHECK(h.dispatcher.calls.at(call).body.contains(R"("columns":[])"));
+    }
+    replyKeyPages(h);
+    CHECK(elementValue(*screen, "list", "selectedCount") == "1000");
+    CHECK(statusOf(h).counts == "1,000 of 100,000 selected");
+}
+
+// Mutation: no bound (keysOf is called and the calls go out).
+TEST_CASE("model table: a range over maxRangeRows is refused and selects nothing", "[ui][table]") {
+    TableHarness h;
+    auto screen = mountShown(h, selectTable(), 100'000);
+    std::size_t const sent = h.dispatcher.calls.size();
+    h.backend.selectTableRange(tableOf(h), 0, 10'000);  // 10,001 rows
+    h.settle();
+    CHECK(h.dispatcher.calls.size() == sent);
+    CHECK(statusOf(h).message == "A range selects at most 10,000 rows");
+    CHECK(elementValue(*screen, "list", "selectedCount") == "0");
+    h.backend.selectTableRange(tableOf(h), 0, 9'999);  // 10,000 rows: allowed
+    h.settle();
+    CHECK(h.dispatcher.calls.size() > sent);
+}
+
+// Mutations: the view index taken from the reply's position (0) instead of `indices`; the highlight written into the
+// selection; no stop of the earlier key's fetch.
+TEST_CASE("model table: highlightKey scrolls to the row and marks it", "[ui][table]") {
+    TableHarness h;
+    auto screen = mountShown(h, kHighlight, 9'093);
+    int const table = tableOf(h);
+    click(h, "to5012");
+    REQUIRE(lastQuery(h).keys.has_value());
+    CHECK(*lastQuery(h).keys == std::vector<table::RowId>{std::int64_t{5012}});
+    CHECK(h.dispatcher.calls.back().body.contains(R"("columns":[])"));
+    replyKeyed(h, {{5012, 5011}});
+    CHECK(h.backend.prop(table, "scrolledToRow") == "5011");
+    CHECK(h.backend.prop(table, "highlightedRow") == "5011");
+    std::size_t const marked = h.dispatcher.calls.size();
+    h.advance(80ms);
+    CHECK(askedForPage(h, marked, 5'000));  // the page that holds view row 5,011
+    CHECK(elementValue(*screen, "list", "selectedCount") == "0");  // never the selection
+    click(h, "to77");
+    replyKeyed(h, {});  // filtered out or gone: no row
+    CHECK(h.backend.prop(table, "highlightedRow") == "none");
+    CHECK(h.backend.prop(table, "scrolledToRow") == "5011");  // nothing scrolled
+    std::size_t const first = h.dispatcher.calls.size();
+    click(h, "to5012");
+    click(h, "to77");  // two keys before a reply
+    CHECK(stopped(h, first));  // the first key's fetch is stopped
+    click(h, "toNone");
+    CHECK(h.backend.prop(table, "highlightedRow") == "none");
+}
+
 // Mutation: the mount leaving out the rows a `Changed` operation names (no row is bound again: 0, and the renamed
 // text is not shown).  Gate K5.
 TEST_CASE("model table: a refetch that changed 20 of 200 rows evaluates 20 rows again", "[ui][table]") {
