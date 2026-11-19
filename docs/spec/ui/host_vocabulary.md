@@ -85,12 +85,15 @@ and the client's commands are not the server's to grant or drop.
 `HostCommand::documents` and `HostValue::documents` list the ids of the documents that may name the command or the
 value; empty, the default, means every document. In any other document the name is absent, exactly as a name nobody
 registered: a value reads as `null`, `{"can": "host:name"}` is false, and a command is reported as
-`host command `name` is missing` and does not run. The session decides, since it knows which document an expression
+"host command `name` is missing" and does not run. The session decides, since it knows which document an expression
 belongs to (`Session::setHostScopes`, `Session::hostNameIn`); a command's `run` is still not told who called it.
 
-A document id is not a credential the server can forge into a client: the chat panel's id, `morph.chat`, is refused for an
-application's screen by `UiRegistry`, a custom screen's id carries the `custom:` prefix, and an assistant's draft takes
-the id of the screen it edits. So a name limited to the panel reaches the client's own panel document and nothing else.
+The scope is keyed on the id a mounted document carries, so the client guarantees that id is its own. The shell
+refuses, with a reported problem, a server document whose `id` differs from its catalog entry's, and a catalog entry
+whose id is the chat panel's, `morph.chat`; the panel's document is resolved from the client's own generated documents
+only, never from the server's. `UiRegistry` also refuses the id for an application's screen, but that is the server's
+check and a client does not rely on it. A name limited to the panel therefore reaches the client's own panel document
+and nothing else, among the documents the shell loads from a server's bundle.
 
 ## The handshake
 

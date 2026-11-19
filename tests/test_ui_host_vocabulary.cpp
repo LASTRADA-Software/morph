@@ -266,3 +266,35 @@ TEST_CASE("host vocabulary: a name limited to one document is absent from every 
     h.settle();
     CHECK(ran == std::vector<std::string>{"start"});
 }
+
+// Mutation: publish the value scopes only when a command has one.
+TEST_CASE("host vocabulary: a value limited to one document needs no command to be scoped", "[ui][host]") {
+    Harness h;
+    HostVocabulary vocabulary;
+    vocabulary.add(HostValue{
+        .name = "panel.secret", .version = 1, .type = "string", .initial = Value{"heard"}, .documents = {"panel"}});
+    vocabulary.connect(h.session);
+    auto const panel = h.mount(scopedScreen("panel"));
+    auto const other = h.mount(scopedScreen("other"));
+
+    CHECK(h.text("secret_panel") == "heard");
+    CHECK(h.text("secret_other") == "null");
+}
+
+// Mutation: read the scopes untracked in Session::hostNameIn.
+TEST_CASE("host vocabulary: a scope set after a screen mounted takes effect on it", "[ui][host]") {
+    Harness h;
+    HostVocabulary vocabulary;
+    vocabulary.add(HostValue{.name = "panel.secret", .version = 1, .type = "string", .initial = Value{"heard"}});
+    vocabulary.connect(h.session);
+    auto const panel = h.mount(scopedScreen("panel"));
+    auto const other = h.mount(scopedScreen("other"));
+    CHECK(h.text("secret_panel") == "heard");
+    CHECK(h.text("secret_other") == "heard");
+
+    h.session.setHostScopes(morph::ui::HostScopes{{"panel.secret", {"panel"}}});
+    h.settle();
+
+    CHECK(h.text("secret_panel") == "heard");
+    CHECK(h.text("secret_other") == "null");
+}

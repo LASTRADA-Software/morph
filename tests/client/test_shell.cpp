@@ -21,6 +21,7 @@
 #include <morph/core/executor.hpp>
 #include <morph/core/wire.hpp>
 #include <morph/session/session.hpp>
+#include <morph/ui/bundle.hpp>
 #include <morph/ui/chat/protocol.hpp>
 #include <morph/ui/service.hpp>
 #include <morph/ui/shell_parts.hpp>
@@ -29,6 +30,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <tuple>
 #include <testkit/fake_app_context.hpp>
 #include <testkit/wait.hpp>
 #include <utility>
@@ -423,7 +425,10 @@ public:
     std::function<void(ui::ExchangeReply)> pendingEnd;
     // NOLINTEND(cppcoreguidelines-non-private-member-variables-in-classes)
 
-    ChatSource() = default;
+    /// @param bundle Builds the application's bundle; by default the signed-in env screen's.
+    explicit ChatSource(
+        std::function<std::expected<std::shared_ptr<ui::ServedBundle const>, ui::Refusal>()> bundle = &signedInBundle)
+        : _bundle{std::move(bundle)} {}
     ~ChatSource() override { close(); }
     ChatSource(ChatSource const&) = delete;
     ChatSource& operator=(ChatSource const&) = delete;
@@ -432,7 +437,7 @@ public:
 
 protected:
     [[nodiscard]] std::expected<Transport, ui::ConnectError> connect(ui::AppContext& /*context*/) override {
-        auto served = signedInBundle();
+        auto served = _bundle();
         REQUIRE(served.has_value());
         _service = std::make_shared<ui::UiService>(std::move(*served), morph::model::detail::defaultDispatcher());
         _workers = std::make_unique<morph::exec::ThreadPoolExecutor>(1);
@@ -464,6 +469,7 @@ protected:
     }
 
 private:
+    std::function<std::expected<std::shared_ptr<ui::ServedBundle const>, ui::Refusal>()> _bundle;
     std::shared_ptr<ui::UiService> _service;
     std::unique_ptr<morph::exec::ThreadPoolExecutor> _workers;
 };
@@ -967,18 +973,28 @@ struct ChatRig {
     FakeAppContext context;
     ui::testing::RecordingBackend backend;
     ChatSource source;
+    std::vector<std::string> problems;
     std::unique_ptr<ui::MountedShell> shell;
 
-    explicit ChatRig(bool offered = true) {
+    explicit ChatRig(bool offered = true,
+                     std::function<std::expected<std::shared_ptr<ui::ServedBundle const>, ui::Refusal>()> bundle =
+                         &signedInBundle,
+                     std::string startScreen = "probe.env")
+        : source{std::move(bundle)} {
+        bool const startScreenIsEnv = startScreen == "probe.env";
         source.chatOffered = offered;
         std::optional<std::expected<ui::Bundle, ui::ConnectError>> opened;
         source.open(context,
                     [&opened](std::expected<ui::Bundle, ui::ConnectError> result) { opened = std::move(result); });
         REQUIRE(pumpUntil(context.owner(), [&opened] { return opened.has_value(); }));
         REQUIRE(opened->has_value());
-        shell = client::mountShell(context, backend, std::move(*opened), source,
-                                   client::ShellOptions{.startScreen = "probe.env"});
-        REQUIRE(pumpUntil(context.owner(), [this] { return shown(backend, "online") == "on"; }));
+        shell = client::mountShell(
+            context, backend, std::move(*opened), source,
+            client::ShellOptions{.startScreen = std::move(startScreen),
+                                 .onProblem = [this](std::string const& text) { problems.push_back(text); }});
+        if (startScreenIsEnv) {
+            REQUIRE(pumpUntil(context.owner(), [this] { return shown(backend, "online") == "on"; }));
+        }
         // Lets a probe's answer reach the frame.
         static_cast<void>(pumpUntil(context.owner(), [] { return false; }, std::chrono::milliseconds{20}));
     }
@@ -1223,4 +1239,107 @@ TEST_CASE("Client shell: Shift Enter opens every hit and the first one is the ac
         CHECK(once("the reply of Probe_Count is not a registered record") == 2);
     }
     source.close();
+}
+
+namespace {
+
+/// The signed-in env screen, and a screen "lims.x" whose served entry id is @p entryId and whose document is @p text,
+/// as a server that ignores the registry's checks would serve them.
+/// @param entryId The catalog id the forged screen is listed under.
+/// @param text    The document served for it.
+/// @return The bundle, or the refusal.
+std::expected<std::shared_ptr<ui::ServedBundle const>, ui::Refusal> forgedBundle(std::string const& entryId,
+                                                                                  std::string const& text) {
+    ui::UiRegistry served{ui::ApplicationInfo{.id = "probe", .version = "1"}};
+    ui::CatalogEntry env;
+    env.id = "probe.env";
+    if (auto added = served.addScreen(std::move(env), std::string{kEnvScreen}); !added) {
+        return std::unexpected(std::move(added.error()));
+    }
+    ui::CatalogEntry honest;
+    honest.id = "lims.x";
+    constexpr std::string_view kHonest = R"({"vocab":"ui/1","id":"lims.x","view":{"kind":"text","text":"honest"}})";
+    if (auto added = served.addScreen(std::move(honest), std::string{kHonest}); !added) {
+        return std::unexpected(std::move(added.error()));
+    }
+    auto built = served.build();
+    if (!built) {
+        return std::unexpected(std::move(built.error()));
+    }
+    auto forged = std::make_shared<ui::ServedBundle>(**built);
+    auto const screen = std::ranges::find_if(forged->screens, [](auto const& each) { return each.entry.id == "lims.x"; });
+    REQUIRE(screen != forged->screens.end());
+    auto node = forged->files.extract(screen->hash);
+    REQUIRE_FALSE(node.empty());
+    screen->hash = ui::contentHash(text);
+    screen->entry.id = entryId;
+    node.key() = screen->hash;
+    node.mapped().bytes = text;
+    for (auto& holder : node.mapped().holders) {
+        holder.id = entryId;
+    }
+    forged->files.insert(std::move(node));
+    ui::Manifest manifest{.application = "probe", .version = "1", .files = {}};
+    for (auto const& [hash, file] : forged->files) {
+        for (auto const& holder : file.holders) {
+            if (holder.kind != "manifest") {
+                manifest.files.push_back(ui::ManifestFile{.id = holder.id,
+                                                          .kind = holder.kind,
+                                                          .hash = hash,
+                                                          .size = file.bytes.size(),
+                                                          .isPublic = holder.isPublic});
+            }
+        }
+    }
+    std::ranges::sort(manifest.files, [](auto const& lhs, auto const& rhs) {
+        return std::tie(lhs.kind, lhs.id) < std::tie(rhs.kind, rhs.id);
+    });
+    auto const oldManifest = forged->digest;
+    auto manifestNode = forged->files.extract(oldManifest);
+    forged->manifest = ui::manifestText(manifest);
+    forged->digest = ui::contentHash(forged->manifest);
+    manifestNode.key() = forged->digest;
+    manifestNode.mapped().bytes = forged->manifest;
+    forged->files.insert(std::move(manifestNode));
+    return forged;
+}
+
+bool reportedProblem(ChatRig const& rig, std::string_view part) {
+    return std::ranges::any_of(rig.problems, [part](std::string const& text) { return text.contains(part); });
+}
+
+}  // namespace
+
+// Mutation: drop the id comparison in the shell's loadDocuments. The control mounts the same entry with an honest
+// document, so the absence of the forged text is a refusal and not a screen that never mounts.
+TEST_CASE("a_server_document_that_names_another_id_than_its_entry_is_refused", "[client][chat]") {
+    constexpr std::string_view kForged =
+        R"({"vocab":"ui/1","id":"morph.chat","view":{"kind":"text","testId":"forged","text":"forged"}})";
+    ChatRig honest{
+        true,
+        [] {
+            return forgedBundle(
+                "lims.x", R"({"vocab":"ui/1","id":"lims.x","view":{"kind":"text","testId":"forged","text":"forged"}})");
+        },
+        "lims.x"};
+    REQUIRE(pumpUntil(honest.context.owner(), [&honest] { return shown(honest.backend, "forged") == "forged"; }));
+    CHECK(honest.problems.empty());
+
+    ChatRig rig{true, [kForged] { return forgedBundle("lims.x", std::string{kForged}); }, "lims.x"};
+    static_cast<void>(pumpUntil(rig.context.owner(), [] { return false; }, std::chrono::milliseconds{50}));
+    CHECK(reportedProblem(rig, "the document of `lims.x` names the id `morph.chat`"));
+    CHECK(shown(rig.backend, "forged").empty());
+    CHECK(rig.panelShown());
+}
+
+// Mutation: drop the chat panel's id check in loadDocuments, or resolve the panel's document from the server's
+// documents first.
+TEST_CASE("a_catalog_that_lists_the_chat_panels_id_does_not_replace_the_panel", "[client][chat]") {
+    constexpr std::string_view kImpostor =
+        R"({"vocab":"ui/1","id":"morph.chat","view":{"kind":"text","testId":"impostor","text":"impostor"}})";
+    ChatRig rig{true, [kImpostor] { return forgedBundle("morph.chat", std::string{kImpostor}); }};
+    static_cast<void>(pumpUntil(rig.context.owner(), [] { return false; }, std::chrono::milliseconds{50}));
+    CHECK(reportedProblem(rig, "which is the chat panel's"));
+    CHECK(shown(rig.backend, "impostor").empty());
+    CHECK(rig.backend.find("TextInput", "testId", "chat_input").has_value());
 }
