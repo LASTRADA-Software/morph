@@ -502,6 +502,48 @@ TEST_CASE("the_provider_is_given_the_screens_tools_and_context", "[chat][service
     CHECK(asked.messages.front().text == "hi there");
 }
 
+// Mutation: drop the bound in `refuseDraft`.
+TEST_CASE("a_draft_over_the_bound_is_refused_at_the_turns_start", "[chat][service][draft]") {
+    chat::ChatLimits limits;
+    limits.maxProposalBytes = 64;
+    Rig rig{limits};
+    auto const cid = rig.gui();
+    auto const id = rig.instance(cid);
+    auto request = Rig::turnOn(id, "hi");
+    request.draft = std::string{R"({"k":")"} + std::string(100, 'x') + R"("})";
+    auto const reply = rig.startRaw(request, cid);
+    CHECK(reply.kind != "ok");
+    CHECK(reply.message.contains("draft"));
+    CHECK(rig.fake->calls() == 0);
+}
+
+// Mutation: skip the parse in `refuseDraft`.
+TEST_CASE("a_draft_that_is_not_a_json_object_is_refused", "[chat][service][draft]") {
+    Rig rig;
+    auto const cid = rig.gui();
+    auto const id = rig.instance(cid);
+    for (std::string_view const bad :
+         {std::string_view{"not json"}, std::string_view{"[1]"}, std::string_view{"\"text\""}, std::string_view{}}) {
+        auto request = Rig::turnOn(id, "hi");
+        request.draft = std::string{bad};
+        auto const reply = rig.startRaw(request, cid);
+        CHECK(reply.kind != "ok");
+    }
+    CHECK(rig.fake->calls() == 0);
+}
+
+// Mutation: refuse every draft.
+TEST_CASE("a_draft_within_the_bound_starts_the_turn", "[chat][service][draft]") {
+    Rig rig;
+    auto const cid = rig.gui();
+    auto const id = rig.instance(cid);
+    rig.fake->script(chat::Response{.text = "ok", .calls = {}, .opaque = {}});
+    auto request = Rig::turnOn(id, "hi");
+    request.draft = R"({"vocab":"ui/1","id":"notes"})";
+    auto const state = rig.finished(rig.start(request, cid), cid);
+    CHECK(state.status == chat::TurnStatus::Done);
+}
+
 TEST_CASE("a_turns_change_reaches_the_watching_gui", "[chat][service]") {
     Rig rig;
     auto const cid = rig.gui();

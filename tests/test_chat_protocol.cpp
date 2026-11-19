@@ -161,3 +161,54 @@ TEST_CASE("a_turns_parts_arguments_and_title_survive_the_wire", "[chat][protocol
     REQUIRE(legacy.has_value());
     CHECK(legacy->parts.empty());
 }
+
+// Mutation: drop `draft` from `TurnRequest`, `TurnState` or the event: the document is lost on the way.
+TEST_CASE("a_draft_round_trips_in_the_request_the_state_and_the_event", "[chat][protocol][draft]") {
+    chat::TurnRequest request;
+    request.screenId = "lims.ignition";
+    request.text = "move the field";
+    request.draft = R"({"vocab":"ui/1","id":"lims.ignition"})";
+    auto const turn = chat::readTurnRequest(chat::writeMessage(request));
+    REQUIRE(turn.has_value());
+    REQUIRE(turn->draft.has_value());
+    CHECK(*turn->draft == *request.draft);
+
+    chat::TurnState state;
+    state.turnId = 3;
+    state.draft = request.draft;
+    auto const read = chat::readTurnState(chat::writeMessage(state));
+    REQUIRE(read.has_value());
+    CHECK(read->draft == request.draft);
+
+    auto const event = chat::readTurnEvent(
+        chat::writeMessage(chat::TurnEvent{.turnId = 3, .seq = 1, .kind = "draft", .text = *request.draft}));
+    REQUIRE(event.has_value());
+    CHECK(event->kind == "draft");
+    CHECK(event->text == *request.draft);
+}
+
+// Mutation: write `draft` as an empty string, or `null`, when there is none.
+TEST_CASE("a_message_without_a_draft_does_not_say_one", "[chat][protocol][draft]") {
+    chat::TurnRequest request;
+    request.screenId = "s";
+    request.text = "hi";
+    CHECK_FALSE(chat::writeMessage(request).contains("draft"));
+    CHECK_FALSE(chat::writeMessage(chat::TurnState{}).contains("draft"));
+    auto const turn = chat::readTurnRequest(chat::writeMessage(request));
+    REQUIRE(turn.has_value());
+    CHECK_FALSE(turn->draft.has_value());
+}
+
+// An older peer neither sends nor understands the field; each side reads what the other wrote.
+// Mutation: make an unknown key a refusal in `readTurnRequest`, or require `draft`.
+TEST_CASE("an_older_peer_and_a_newer_one_read_each_others_messages", "[chat][protocol][draft]") {
+    auto const fromOld = chat::readTurnRequest(R"({"screenId":"s","text":"hi","models":[]})");
+    REQUIRE(fromOld.has_value());
+    CHECK_FALSE(fromOld->draft.has_value());
+    auto const withUnknown = chat::readTurnRequest(R"({"screenId":"s","text":"hi","draft":"{}","fromTheFuture":[1]})");
+    REQUIRE(withUnknown.has_value());
+    CHECK(withUnknown->draft == std::optional<std::string>{"{}"});
+    auto const oldState = chat::readTurnState(R"({"turnId":1,"status":"done","text":"x"})");
+    REQUIRE(oldState.has_value());
+    CHECK_FALSE(oldState->draft.has_value());
+}

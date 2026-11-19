@@ -174,6 +174,20 @@ struct ChatService::Shared {
         }
     }
 
+    // Why a client's draft cannot be used as the screen's document, or nothing. A draft is text from the client, so it
+    // is bounded and parsed before anything reads it; being a JSON object is all this layer asks of it, since the
+    // checks that decide whether a document may be saved belong to whatever proposes one.
+    [[nodiscard]] static std::optional<std::string> refuseDraft(std::string const& draft, std::size_t limit) {
+        if (draft.size() > limit) {
+            return "the draft is longer than " + std::to_string(limit) + " bytes";
+        }
+        auto const parsed = parseJson(draft);
+        if (!parsed || !std::holds_alternative<Json::object_t>(parsed->data)) {
+            return "the draft is not a JSON object";
+        }
+        return std::nullopt;
+    }
+
     [[nodiscard]] static std::string startTurn(std::shared_ptr<Shared> const& self, wire::Envelope const& request,
                                                backend::ConnectionId cid) {
         auto parsed = readTurnRequest(request.body);
@@ -188,6 +202,11 @@ struct ChatService::Shared {
         }
         if (parsed->text.size() > self->options.limits.maxTextBytes) {
             return err(request, "the message is too long");
+        }
+        if (parsed->draft) {
+            if (auto const refused = refuseDraft(*parsed->draft, self->options.limits.maxProposalBytes)) {
+                return err(request, *refused);
+            }
         }
         auto turn = std::make_shared<Turn>();
         turn->id = self->nextTurn.fetch_add(1);
