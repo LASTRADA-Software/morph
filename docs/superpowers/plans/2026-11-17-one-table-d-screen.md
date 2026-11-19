@@ -1843,14 +1843,14 @@ Decisions:
 - A plain list over 20,000 rows or 1,000,000 cells (rows × the node's columns) is reported once as a warning naming the table: `"table <id> holds <n> rows; a table over rows is ordered on the client up to 20,000 rows or 1,000,000 cells — serve it as a model's table"`.
 - The loader (`src/ui/document.cpp`). `kColumnKeys` (`:322`) gains `{"kind", Shape::Text}`, a literal among `text`, `integer`, `decimal`, `number`, `date`, `dateTime`, `bool` (`"`kind` is one of text, integer, decimal, number, date, dateTime, bool"`). A table over `rows` with no `id` gets no state key: a `persist` it writes that is not `false` is refused when the document loads (`"a table over `rows` needs an `id` to persist its arrangement"`); with no `persist` key such a table simply persists nothing. `status` and `persist` are accepted on a `rows` table as 9d added them.
 - The status line of a `rows` table (table.md "The status line"): `TableStatus::shown` is true while `state` or `message` is not empty and false otherwise, so the line takes no space on a table with nothing to say; `status: true` shows it always (with its counts), `status: false` never, a message then going to `InterpreterHost::notify` as in 9d. Its counts are `countsText(counts(), selectedCount, formatting)` whenever it shows.
-- What the screen shows of a row comes from `EngineRows`' record of it, which is read again only for a row a change names. `ValueRowsSource` (11a) notifies `Updated` for a row whose value changed even when no column in use reads the change, and for the first source row of a run whose heading record changed while the runs kept their places; the engine repairs such a row in place. The lowering re-reads `runRecords()` on every `onChange`, and calls `setGroup` again, with the screen's unit table, when what `by` reads besides the row changes, since the source reads `by` untracked. Test: a refetch that changes only a displayed field redraws that row's cell, and a heading's `count` follows a row that joins its run.
+- What the screen shows of a row comes from `EngineRows`' record of it, which is read again only for a row a change names. `ValueRowsSource` (11a) notifies `Updated` for a row whose value changed even when no column in use reads the change, and for the first source row of a run whose heading record changed while the runs kept their places; the engine repairs such a row in place. The lowering re-reads `runRecords()` on every `onChange`, and calls `setGroup` again, with the screen's unit table, when what `by` reads besides the row changes, since the source reads `by` untracked. Test: a refetch that changes only a displayed field redraws that row's cell (mutation: `EngineRows` keeping its record of an `Updated` row), and a heading's `count` follows a row that joins its run. A rows table's mount realizes every row below `Virtualization::threshold` (`TableSource::alwaysWindowed = false`), as table.md's "When a table is windowed" has it, while a model-backed table is always windowed: the "one order" case scrolls the model table over its 200 rows before comparing.
 - An invalid cell in a column of the sort chain is reported once per table at the node's `sort` path, as the interpreter reports a sort value of a mixed kind today: the lowering reads `ValueRowsSource::invalidCells(column)` for each key after a view change and reports when it first is not 0.
 - The mount: a `rows` table lowers onto `Table::source` as a model-backed one does (9d's `TableSource`), `cellView` over each cell's signal, `rowView` giving `rowTone`, `rowLabel`, `rowSpans` and, for a group heading's key, `heading` (the lowered `heading` content), so the two kinds share one mount path.
 - Persisted state for a `rows` table (table.md "Persisted state": "a client-mode table draws placeholder rows"). With a session store, an `id` and `persist` not `false`, the key is `{application = SessionOptions::application, model = "" (a table over a document's rows has none; 9c's bounds allow it), table = the node's id, qualifier = the persist string or the screen's id, part = "state"}`. The lowering calls `setRestoring(true)` before the first `assign`, starts the load through `Session::tableStates()`, and on completion within `tableStateTimeout` applies the fitted sort and filters (bound ones are the document's, as in 9d) and calls `setRestoring(false)`: the first rows drawn are in the stored order. Past the timeout it calls `setRestoring(false)` with the defaults, and a later state is applied unless the user touched the table, as in 9d. Sort and filter changes go to `TableStates::changed` with the same debounce and unmount flush as 9d's; the description passed to `fitState` is built from the node's columns and the inferred kinds (`TableDescription{id, columns, key}` with each `TableColumn{info, label, sortable, filterable}`).
 
-- [ ] **Step 1: Write the failing tests.** `tests/ui_table_support.hpp` gains `rowsDoc(itemsLiteral, tableExtra = "")`: a `ui/1` document whose state `items` is initialised to that literal list and whose view is a column of a table `list` (test id `list`) over `{"ref":"items"}`, `"key":{"ref":"row.id"}`, columns `id`, `name` and `weight`, each `sortable`, with `tableExtra` appended to the table node, and a button `rename` whose `onClick` sets `items` to the same list with the row of id `"b"` renamed `"zz"`; `rowsDocNoId` is the same with no `id` on the table; `rowOrder(h)` is the keys of the table's realized rows in child order, joined by spaces; `engineOf(screen, id)` the `table::Engine` of that table's `EngineRows` (through `ScreenProbe`); `kThree` is `[{"id":"a","name":"a"},{"id":"b","name":"b"},{"id":"c","name":"c"}]`; `mixedRows()` is 200 rows whose names mix accents and case (`"Émile"`, `"emil"`, `"Zoë"`, `"zoe"`, …), with decimal weights and every tenth name and weight `null`, as a JSON list; `kRowsSamples` is `kModelTable`; `pagesOf(rows, query)` answers a `TableQuery` over those rows through `table::apply` with `ValueRowsCollator` as the served collator, as a generic page.
+- [ ] **Step 1: Write the failing tests.** `tests/ui_table_support.hpp` gains `rowsDoc(itemsLiteral, tableExtra = "")`: a `ui/1` document whose state `items` is initialised to that literal list and whose view is a column of a table `list` (test id `list`) over `{"ref":"items"}`, `"key":{"row":"id"}`, columns `id`, `name` and `weight`, each `sortable`, with `tableExtra` appended to the table node, and a button `rename` whose `onClick` sets `items` to the same list with the row of id `"b"` renamed `"zz"`, or the first row when no row has that id, so the list always changes; `rowsDocNoId` is the same with no `id` on the table; `rowOrder(h)` is the keys of the table's realized rows in child order, joined by spaces; `engineOf(screen, id)` the `table::Engine` of that table's `EngineRows` (through `ScreenProbe`); `kThree` is `[{"id":"a","name":"a"},{"id":"b","name":"b"},{"id":"c","name":"c"}]`; `mixedRows()` is 200 rows whose names mix accents and case (`"Émile"`, `"emil"`, `"Zoë"`, `"zoe"`, …), with decimal weights and every tenth name and weight `null`, as a JSON list; `kRowsSamples` is `kModelTable`; `pagesOf(rows, query)` answers a `TableQuery` over those rows through `table::apply` with `ValueRowsCollator` as the served collator, as a generic page.
 
-In `tests/test_ui_document.cpp`:
+In `tests/test_ui_table_model.cpp` (not `test_ui_document.cpp`: `ui_table_support.hpp` there clashes with the Windows `Concurrency` namespace that file names; `loads` and `refusalOf` move into `ui_table_support.hpp`):
 
 ```cpp
 // Mutations: `kind` not in kColumnKeys (the bad kind loads); no `persist` check on a rows table without an id.
@@ -1859,9 +1859,9 @@ TEST_CASE("ui document: a rows table's column kind and its persist need what the
     CHECK(refusalOf(withColumnKey(rowsDoc(kThree), "name", R"("kind":"money")")) ==
           "`kind` is one of text, integer, decimal, number, date, dateTime, bool");
     CHECK(loads(withColumnKey(rowsDoc(kThree), "name", R"("kind":"text")"), tableCatalog()));
-    CHECK(refusalOf(withTableKey(rowsDocNoId(kThree), R"("persist":true)")) ==
+    CHECK(refusalOf(rowsDocNoId(kThree, R"(,"persist":true)")) ==
           "a table over `rows` needs an `id` to persist its arrangement");
-    CHECK(loads(withTableKey(rowsDocNoId(kThree), R"("persist":false)"), tableCatalog()));
+    CHECK(loads(rowsDocNoId(kThree, R"(,"persist":false)"), tableCatalog()));
     CHECK(loads(rowsDocNoId(kThree), tableCatalog()));
 }
 ```
@@ -1884,6 +1884,7 @@ TEST_CASE("one order on every surface: a rows table and a model table order alik
             asModel.backend.clickHeader(tableOf(asModel), column);  asModel.settle();
             replyPage(asModel, pagesOf(rows, lastQuery(asModel)));
         }
+        asModel.backend.scrollTable(tableOf(asModel), 0, 200);  asModel.settle();  // a model table is windowed
         CHECK(rowOrder(asRows) == rowOrder(asModel));
         CHECK_FALSE(rowOrder(asRows).empty());
     }
@@ -1899,7 +1900,8 @@ TEST_CASE("rows table: one changed row is one repair", "[ui][table]") {
     CHECK(engineOf(*screen, "list").stats().fullSorts == before.fullSorts);
     CHECK(rowOrder(h) == "a c b");                                            // "zz" moved last
 }
-// Mutations: no bound check (no warning); a warning per change of the list (two).
+// Mutations: no bound check (no warning); the bound read as `>=` (a warning at 20,000). A warning per change of the
+// list is not observable here: the screen reports a repeated path and reason once.
 TEST_CASE("rows table: a list over 20,000 rows is reported once", "[ui][table]") {
     TableHarness h;  auto screen = h.mount(rowsDoc(idRows(20'001)));
     std::string const warning = "table list holds 20,001 rows; a table over rows is ordered on the client up to "
@@ -1940,7 +1942,8 @@ TEST_CASE("rows table: the status line takes space only while it has something t
     TableHarness always;  auto shown = always.mount(rowsDoc(kThree, R"(,"status":true)"));
     CHECK(statusOf(always).shown);  CHECK(statusOf(always).counts == "3 rows");
 }
-// Mutation: no report of an invalid sort cell (the count is 0), or one per view change (2).
+// Mutation: no report of an invalid sort cell (the count is 0). One report per view change is not observable here:
+// the screen reports a repeated path and reason once.
 TEST_CASE("rows table: a cell not of its column's kind is reported once at the sort path", "[ui][table]") {
     TableHarness h;
     auto screen = h.mount(rowsDoc(R"([{"id":"a","weight":1},{"id":"b","weight":"heavy"},{"id":"c","weight":2}])"));
