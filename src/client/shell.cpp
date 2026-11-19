@@ -1294,6 +1294,10 @@ private:
     // As `mount`, but the refusal is answered, not shown.
     std::expected<bool, std::string> tryMount(std::string const& screenId, ui::ParamMap const& params) {
         _message.reset();
+        // The chat panel is the frame's own slot: a route or a navigation to it must not open a second one.
+        if (screenId == ui::chat::kChatPanelId) {
+            return std::unexpected("the chat panel is not a screen to open");
+        }
         if (!_workspace) {
             buildFrame();
         }

@@ -1387,6 +1387,34 @@ TEST_CASE("a_development_reload_refuses_a_forged_id_and_the_chat_panels_id", "[c
     CHECK(rig.backend.find("TextInput", "testId", "chat_input").has_value());
 }
 
+// Mutation: drop the chat panel's id check in tryMount. The control clicks the same button aimed at another screen's
+// id and the navigation is not reported.
+TEST_CASE("a_server_document_cannot_navigate_to_the_chat_panel_as_a_tab", "[client][chat]") {
+    auto const withButton = [](std::string_view target) {
+        return [target] {
+            return forgedBundle("lims.x",
+                                R"({"vocab":"ui/1","id":"lims.x","view":{"kind":"button","testId":"go","label":"go",)"
+                                R"("onClick":{"navigate":")" +
+                                    std::string{target} + R"("}}})");
+        };
+    };
+    auto const panels = [](ChatRig const& rig) {
+        std::size_t count = 0;
+        std::string const dump = rig.backend.dump();
+        for (std::size_t at = dump.find("chat_input"); at != std::string::npos; at = dump.find("chat_input", at + 1)) {
+            ++count;
+        }
+        return count;
+    };
+    ChatRig rig{true, withButton("morph.chat"), "lims.x"};
+    REQUIRE(pumpUntil(rig.context.owner(), [&rig] { return rig.backend.find("Button", "testId", "go").has_value(); }));
+    std::size_t const before = panels(rig);
+    CHECK(before >= 1);
+    rig.backend.click(*rig.backend.find("Button", "testId", "go"));
+    CHECK(pumpUntil(rig.context.owner(), [&rig] { return reportedProblem(rig, "Cannot open morph.chat"); }));
+    CHECK(panels(rig) == before);
+}
+
 namespace {
 
 /// Opens @p source over @p context and returns once its bundle is loaded.
