@@ -1636,6 +1636,76 @@ TEST_CASE("table: a refused order use takes back the other levels' leases", "[ta
 
 namespace {
 
+// A table of four rows whose column `r` is served by a real level cache and `s` by a level that refuses order uses.
+struct DistinctLevels {
+    DistinctLevels()
+        : recipe{std::make_shared<CellLevelCache>(
+              LevelCacheOptions{.records = {"T.rows"},
+                                .level = "recipe",
+                                .columns = {tabletest::levelCol("r", ColumnKind::Text, "recipe")}},
+              [](std::span<RowId const> keys) {
+                  std::vector<std::pair<RowId, std::vector<Cell>>> out;
+                  for (auto const& key : keys) {
+                      out.emplace_back(key, std::vector<Cell>{Cell{std::to_string(std::get<std::int64_t>(key))}});
+                  }
+                  return out;
+              })},
+          stock{std::make_shared<LeaseLevel>("stock", true)} {
+        auto description = describedOf(
+            {column("id", ColumnKind::Integer), column("r", ColumnKind::Text), column("s", ColumnKind::Text)});
+        description.columns[1].info.level = "recipe";
+        description.columns[2].info.level = "stock";
+        description.levels = {"recipe", "stock"};
+        std::vector<std::vector<Cell>> rows;
+        for (std::int64_t row = 0; row < 4; ++row) {
+            rows.push_back({Cell{row}});
+        }
+        served = detail::pinned(
+            ServedTable{.description = describe(std::move(description)),
+                        .source = tabletest::makeSource({tabletest::col("id", ColumnKind::Integer)}, std::move(rows)),
+                        .levels = {recipe, stock},
+                        .mayRead = {},
+                        .scope = {},
+                        .services = {},
+                        .limits = {}});
+    }
+
+    std::shared_ptr<CellLevelCache> recipe;
+    std::shared_ptr<LeaseLevel> stock;
+    ServedTable served;
+    ViewCache views;
+    detail::AnswerContext context{.views = &views, .record = "T.rows", .rowScoped = false};
+};
+
+}  // namespace
+
+// Mutation: the distinct branch building a new key set for every request (each request fits a set of its own).
+TEST_CASE("table: distinct requests over one snapshot hold one set of an order level's keys", "[table][levels]") {
+    DistinctLevels table;
+    TableQuery distinct;
+    distinct.distinct = DistinctRequest{.column = "r"};
+    REQUIRE(detail::answerQuery(table.served, distinct, table.context).has_value());
+    REQUIRE(detail::answerQuery(table.served, distinct, table.context).has_value());
+    CHECK(detail::LevelCacheAccess::fits(*table.recipe) == 1);  // the second request repeated the kept set
+    CHECK(detail::LevelCacheAccess::acceptedSets(*table.recipe) == 1);
+}
+
+// Mutation: the distinct branch not taking back the accepted levels' wants (recipe keeps the refused request's set).
+TEST_CASE("table: a refused distinct request takes back its set from the levels that accepted it", "[table][levels]") {
+    DistinctLevels table;
+    TableQuery distinct;
+    distinct.filters.columns.emplace(
+        "s", ColumnFilter{.combine = Combine::Any, .include = {FilterEntry{.contains = "a"}}, .exclude = {}});
+    distinct.distinct = DistinctRequest{.column = "r"};
+    auto const refused = detail::answerQuery(table.served, distinct, table.context);
+    REQUIRE_FALSE(refused.has_value());
+    CHECK(refused.error().column == "s");
+    CHECK(detail::LevelCacheAccess::fits(*table.recipe) == 1);  // recipe accepted the set before stock refused
+    CHECK(detail::LevelCacheAccess::acceptedSets(*table.recipe) == 0);
+}
+
+namespace {
+
 // The distinct cases' first query: city oneOf Berlin, Paris; status eq closed; and a distinct request on status.
 TableQuery distinctStatusQuery() {
     TableQuery q;

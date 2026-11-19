@@ -170,7 +170,7 @@ struct LevelCacheStats {
     std::size_t leasedKeys = 0;
     /// @brief Order uses refused because they could not fit.
     std::size_t refusedOrders = 0;
-    /// @brief The deep bytes of the values held now.
+    /// @brief The deep bytes of the values and failures held now, and of the keys of the order sets accepted.
     std::size_t bytes = 0;
 };
 
@@ -297,6 +297,16 @@ struct LevelCacheAccess {
         auto const slot = LevelCache<Value>::findIn(*cache._core->publishedTable(), key);
         auto const nowTicks = cache._core->now().time_since_epoch().count();
         return slot != nullptr && LevelCache<Value>::Core::kept(*slot, nowTicks);
+    }
+
+    /// @brief How many order sets the cache has accepted and not ended.
+    /// @tparam Value The cache's value type.
+    /// @param cache The cache.
+    /// @return The count.
+    template <typename Value>
+    [[nodiscard]] static std::size_t acceptedSets(LevelCache<Value> const& cache) {
+        std::scoped_lock const lock{cache._core->writer};
+        return cache._core->sets.size();
     }
 
     /// @brief Whether a key not held yet has an order lease waiting for its store.
@@ -775,12 +785,36 @@ private:
         // ── want ──
 
         // An order set the cache accepted, by address: the set, held so that its address names it, the order uses
-        // holding it, and its lease's end. While the lease runs and a use holds it, its keys are protected.
+        // holding it, its lease's end, the value of `setEvents` it last looked at its keys for, the level's
+        // generation it was last wanted at, and the bytes its keys own. While the lease runs and a use holds it,
+        // its keys are protected.
         struct AcceptedSet {
             std::shared_ptr<std::vector<RowId> const> keys;
             std::int32_t holders = 0;
             std::int64_t until = 0;
+            std::uint64_t seenEvents = 0;
+            std::uint64_t generation = 0;
+            std::size_t bytes = 0;
         };
+
+        // The bytes a set's keys own, counted in the bound while the set is accepted.
+        [[nodiscard]] static std::size_t setBytesOf(std::vector<RowId> const& keys) noexcept {
+            auto out = sizeof(std::vector<RowId>);
+            for (auto const& key : keys) {
+                out += rowIdBytes(key);
+            }
+            return out;
+        }
+
+        // Under the writer mutex: takes a set out of the accepted sets and out of the bound; the caller unprotects
+        // its keys.
+        AcceptedSet takeSet(typename std::unordered_map<std::vector<RowId> const*, AcceptedSet>::iterator found) {
+            auto out = std::move(found->second);
+            sets.erase(found);
+            setBytes -= std::min(setBytes, out.bytes);
+            storeBytes();
+            return out;
+        }
 
         // How a want's pass treats an order key: a lease of its own, or protection by an accepted set.
         enum class Pass : std::uint8_t { Lease, Protect };
@@ -808,8 +842,10 @@ private:
 
         // An order use of a kept set. The first, fitted, protects every key of the set in one chunked pass; a
         // repeat while the set's lease runs is one more holder and a longer lease, under the lock, and touches no
-        // key unless a protected key was removed or a protected failure's delay has passed since, when it queues
-        // the keys the set misses.
+        // key unless `setEvents` has moved since the set last looked (a protected key removed, a protected
+        // failure's delay passed), when it queues the keys the set misses. A fit also ends the accepted sets that
+        // no use has wanted since the level's generation moved past theirs: a view is found only at its level's
+        // generation, so such a set's view is superseded.
         static std::expected<void, TableError> wantSet(std::shared_ptr<Core> const& core,
                                                        std::shared_ptr<std::vector<RowId> const> const& keys,
                                                        LevelUse use, bool retry) {
@@ -822,6 +858,7 @@ private:
             auto const until = ticks(at + core->options.orderLease);
             core->endExpiredSets(nowTicks);
             std::optional<AcceptedSet> lapsed;
+            std::uint64_t events = 0;
             {
                 std::unique_lock lock{core->writer};
                 // A fitting want of this same set runs: wait for it, so that a repeat learns whether it was
@@ -831,20 +868,25 @@ private:
                     if (found->second.until > nowTicks) {
                         ++found->second.holders;
                         found->second.until = std::max(found->second.until, until);
+                        found->second.generation = core->current->generation;
                         core->hits.fetch_add(keys->size());
-                        if (!core->setsDirty && nowTicks < core->setsRecheckAt) {
+                        if (nowTicks >= core->setsRecheckAt) {
+                            // A protected failure's delay has passed: an event every set sees once.
+                            ++core->setEvents;
+                            core->setsRecheckAt = std::numeric_limits<std::int64_t>::max();
+                        }
+                        if (found->second.seenEvents == core->setEvents) {
                             return {};
                         }
-                        core->setsDirty = false;
-                        core->setsRecheckAt = std::numeric_limits<std::int64_t>::max();
+                        found->second.seenEvents = core->setEvents;
                         lock.unlock();
                         core->requeue(core, *keys, at);
                         return {};
                     }
-                    lapsed = std::move(found->second);
-                    core->sets.erase(found);
+                    lapsed = core->takeSet(found);
                 }
                 core->settling.insert(set);
+                events = core->setEvents;
             }
             Settling const settling{*core, set};
             if (lapsed) {
@@ -852,8 +894,31 @@ private:
             }
             auto wanted = want(core, *keys, use, retry, Pass::Protect);
             if (wanted) {
-                std::scoped_lock const lock{core->writer};
-                core->sets.insert_or_assign(set, AcceptedSet{.keys = keys, .holders = 1, .until = until});
+                auto const bytes = setBytesOf(*keys);
+                std::vector<AcceptedSet> superseded;
+                {
+                    std::scoped_lock const lock{core->writer};
+                    auto const generation = core->current->generation;
+                    for (auto entry = core->sets.begin(); entry != core->sets.end();) {
+                        auto const next = std::next(entry);
+                        if (entry->second.generation < generation) {
+                            superseded.push_back(core->takeSet(entry));
+                        }
+                        entry = next;
+                    }
+                    core->sets.insert_or_assign(set, AcceptedSet{.keys = keys,
+                                                                 .holders = 1,
+                                                                 .until = until,
+                                                                 .seenEvents = events,
+                                                                 .generation = generation,
+                                                                 .bytes = bytes});
+                    core->setBytes += bytes;
+                    core->storeBytes();
+                }
+                // After the new set protects its keys, so that a key both sets hold is never unprotected between.
+                for (auto const& old : superseded) {
+                    core->unprotect(*old.keys);
+                }
             }
             return wanted;
         }
@@ -1008,12 +1073,11 @@ private:
             {
                 std::scoped_lock const lock{writer};
                 for (auto entry = sets.begin(); entry != sets.end();) {
+                    auto const next = std::next(entry);
                     if (entry->second.until <= nowTicks) {
-                        expired.push_back(std::move(entry->second));
-                        entry = sets.erase(entry);
-                    } else {
-                        ++entry;
+                        expired.push_back(takeSet(entry));
                     }
+                    entry = next;
                 }
             }
             for (auto const& set : expired) {
@@ -1095,7 +1159,7 @@ private:
                     if (--found->second.holders > 0) {
                         return;
                     }
-                    sets.erase(found);
+                    static_cast<void>(takeSet(found));
                     ofSet = true;
                 }
             }
@@ -1297,6 +1361,9 @@ private:
             return told;
         }
 
+        // Under the writer mutex: what `stats().bytes` reads, the values, the failures and the accepted sets' keys.
+        void storeBytes() { bytes.store(valueBytes + failureBytes + setBytes); }
+
         void forget(Slot const* slot) {
             if (slot == nullptr) {
                 return;
@@ -1307,7 +1374,7 @@ private:
             } else {
                 failureBytes -= slot->bytes;
             }
-            bytes.store(valueBytes + failureBytes);
+            storeBytes();
         }
 
         void remember(Slot const& slot) {
@@ -1317,7 +1384,7 @@ private:
             } else {
                 failureBytes += slot.bytes;
             }
-            bytes.store(valueBytes + failureBytes);
+            storeBytes();
         }
 
         // When the leased and protected values exceed the bound, stops loading for order, drops every lease and
@@ -1370,7 +1437,7 @@ private:
                     std::scoped_lock const lock{writer};
                     base = current;
                     seen = version;
-                    held = valueBytes + failureBytes;
+                    held = valueBytes + failureBytes + setBytes;
                 }
                 if (held <= options.maxBytes) {
                     return;
@@ -1507,8 +1574,10 @@ private:
                         recorded = true;
                     }
                     pendingLeases.erase(key);
-                    // A protected key removed: the next repeat of an accepted set queues what its set misses.
-                    setsDirty = setsDirty || protectedKeys.contains(key);
+                    // A protected key removed: every accepted set's next repeat queues what its set misses.
+                    if (protectedKeys.contains(key)) {
+                        ++setEvents;
+                    }
                 }
                 if (next != nullptr) {
                     invalidatedKeys.fetch_add(edit.changes.size());
@@ -1526,7 +1595,8 @@ private:
         void endAllSets() {
             sets.clear();
             protectedKeys.clear();
-            setsDirty = false;
+            setBytes = 0;
+            storeBytes();
             setsRecheckAt = std::numeric_limits<std::int64_t>::max();
         }
 
@@ -1629,12 +1699,14 @@ private:
         std::function<void()> storeHook;
         std::function<void(std::size_t)> wantHook;
         std::function<void(std::size_t)> releaseHook;
-        // The order sets accepted, by address; the protection count of each of their keys, held or not; whether a
-        // protected key was removed since a repeat last looked; when a protected failure's delay ends. Under
-        // `writer`.
+        // The order sets accepted, by address, and the bytes their keys own; the protection count of each of their
+        // keys, held or not; the events a set's keys may need a look for, counted (a protected key removed, a
+        // protected failure's delay passed); the earliest end of a protected failure's delay not yet counted.
+        // Under `writer`.
         std::unordered_map<std::vector<RowId> const*, AcceptedSet> sets;
+        std::size_t setBytes = 0;
         std::unordered_map<RowId, std::int32_t> protectedKeys;
-        bool setsDirty = false;
+        std::uint64_t setEvents = 0;
         std::int64_t setsRecheckAt = std::numeric_limits<std::int64_t>::max();
         // The sets a `wantSet` is fitting, and what wakes the repeats of them that wait; under `writer`.
         std::unordered_set<std::vector<RowId> const*> settling;
