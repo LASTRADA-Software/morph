@@ -851,8 +851,8 @@ TEST_CASE("level cache: a held key evicted while an order want runs is queued ag
     CHECK(detail::LevelCacheAccess::leaseEnd(rig.cache, held) > rig.now.time_since_epoch().count());
 }
 
-// Mutation: lease() making a held key's lease one holder whatever runs (the first query's unwant ends the second
-// query's lease).
+// Mutation: a set's last-but-one holder leaving ending the set's protection (the first query's unwant ends the
+// second query's lease).
 TEST_CASE("level cache: a repeated order want keeps its lease when another holder takes its want back",
           "[table][levels]") {
     auto const value = smallValueBytes();
@@ -980,8 +980,8 @@ struct HeldSet {
 
 }  // namespace
 
-// Mutation: lease() making a held key's lease one holder whatever runs (two repeats count as one holder, and the
-// two refusals end the third query's lease).
+// Mutation: a set's last-but-one holder leaving ending the set's protection (the two refusals unprotect the keys the
+// third query still orders by).
 TEST_CASE("level cache: two refusals of one set leave a third holder's lease", "[table][levels]") {
     HeldSet held;  // query A
     REQUIRE(held.rig.cache.wantSet(held.set, LevelUse::Order));  // query B
@@ -996,24 +996,23 @@ TEST_CASE("level cache: two refusals of one set leave a third holder's lease", "
             static_cast<void>(resumed.wait_for(10s));
         }
     });
-    // A's unwant pauses between its chunks while B's runs whole.
+    // A's unwant, paused between chunks should it take the keys one by one, while B's runs whole.
     auto refusedA = std::async(std::launch::async, [&] { held.rig.cache.unwant(*held.set); });
     auto const deadline = std::chrono::steady_clock::now() + 10s;
-    while (!paused.load() && std::chrono::steady_clock::now() < deadline) {
+    while (!paused.load() && refusedA.wait_for(0s) != std::future_status::ready &&
+           std::chrono::steady_clock::now() < deadline) {
         std::this_thread::yield();
     }
-    REQUIRE(paused.load());
     held.rig.cache.unwant(*held.set);
     resume.set_value();
     refusedA.get();
-    auto const nowTicks = held.rig.now.time_since_epoch().count();
-    CHECK(detail::LevelCacheAccess::leaseEnd(held.rig.cache, held.set->front()) > nowTicks);
-    CHECK(detail::LevelCacheAccess::leaseEnd(held.rig.cache, held.set->back()) > nowTicks);
+    CHECK(detail::LevelCacheAccess::kept(held.rig.cache, held.set->front()));
+    CHECK(detail::LevelCacheAccess::kept(held.rig.cache, held.set->back()));
     CHECK_FALSE(held.othersFit());  // C still orders by the set
 }
 
-// Mutation: lease() giving no lease to a held key whose lease has ended (the repeat's second chunk, which A's unwant
-// ended first, is left unleased).
+// Mutation: a set's last-but-one holder leaving ending the set's protection (A's unwant unprotects the keys B's
+// repeat holds).
 TEST_CASE("level cache: a repeat interleaved with another holder's unwant keeps every key leased", "[table][levels]") {
     HeldSet held;  // query A
     std::atomic<bool> paused{false};
@@ -1026,19 +1025,19 @@ TEST_CASE("level cache: a repeat interleaved with another holder's unwant keeps 
             static_cast<void>(resumed.wait_for(10s));
         }
     });
-    // B's repeat pauses between its chunks while A, refused elsewhere, takes its want back.
+    // B's repeat, paused between chunks should it take the keys one by one, while A, refused elsewhere, takes its
+    // want back.
     auto repeatB = std::async(std::launch::async, [&] { return held.rig.cache.wantSet(held.set, LevelUse::Order); });
     auto const deadline = std::chrono::steady_clock::now() + 10s;
-    while (!paused.load() && std::chrono::steady_clock::now() < deadline) {
+    while (!paused.load() && repeatB.wait_for(0s) != std::future_status::ready &&
+           std::chrono::steady_clock::now() < deadline) {
         std::this_thread::yield();
     }
-    REQUIRE(paused.load());
     held.rig.cache.unwant(*held.set);
     resume.set_value();
     CHECK(repeatB.get().has_value());
     detail::LevelCacheAccess::onWantChunk(held.rig.cache, {});
-    auto const nowTicks = held.rig.now.time_since_epoch().count();
-    CHECK(detail::LevelCacheAccess::leaseEnd(held.rig.cache, held.set->front()) > nowTicks);
-    CHECK(detail::LevelCacheAccess::leaseEnd(held.rig.cache, held.set->back()) > nowTicks);
+    CHECK(detail::LevelCacheAccess::kept(held.rig.cache, held.set->front()));
+    CHECK(detail::LevelCacheAccess::kept(held.rig.cache, held.set->back()));
     CHECK_FALSE(held.othersFit());  // B still orders by the set
 }
