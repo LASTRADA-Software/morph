@@ -165,6 +165,9 @@ struct Rig {
     CellLevelCache cache;
 };
 
+// The bytes an accepted set of `n` integer keys owns in the bound.
+std::size_t setKeyBytes(std::size_t n) { return sizeof(std::vector<RowId>) + n * rowIdBytes(RowId{std::int64_t{0}}); }
+
 // Each key's value as the rig's loader returns it, for a store that bypasses the loader.
 Values valuesOf(std::vector<RowId> const& stored) {
     Values out;
@@ -857,7 +860,7 @@ TEST_CASE("level cache: a repeated order want keeps its lease when another holde
           "[table][levels]") {
     auto const value = smallValueBytes();
     Rig rig{[value](LevelCacheOptions& options) {
-        options.maxBytes = 150 * value;
+        options.maxBytes = 150 * value + setKeyBytes(100);  // the set's keys count in the bound
         options.expectedBytes = value;
     }};
     auto const set = std::make_shared<std::vector<RowId> const>(keys(100));
@@ -878,7 +881,7 @@ TEST_CASE("level cache: a repeated order want keeps its lease when another holde
 TEST_CASE("level cache: concurrent repeats of an order set are fitted once", "[table][levels]") {
     auto const value = smallValueBytes();
     Rig rig{[value](LevelCacheOptions& options) {
-        options.maxBytes = 150 * value;
+        options.maxBytes = 150 * value + setKeyBytes(100);  // the set's keys count in the bound
         options.expectedBytes = value;
     }};
     auto const set = std::make_shared<std::vector<RowId> const>(keys(100));
@@ -1119,4 +1122,23 @@ TEST_CASE("level cache: a set superseded by the level's generation is released a
     // Eleven values (SX's ten and the one stored) and SY's keys; SX's keys have left the count.
     auto const setYBytes = sizeof(std::vector<RowId>) + 10 * rowIdBytes(RowId{std::int64_t{10}});
     CHECK(rig.cache.stats().bytes == 11 * smallValueBytes() + setYBytes);
+}
+
+// Mutation: the fit leaving out the set's own key bytes (the set is accepted, and the cache holds more than its
+// bound once the values load).
+TEST_CASE("level cache: a set that fits on its values but not with its keys is refused", "[table][levels]") {
+    auto const set = std::make_shared<std::vector<RowId> const>(keys(100));
+    auto const keyBytes = sizeof(std::vector<RowId>) + 100 * rowIdBytes(RowId{std::int64_t{0}});
+    auto const maxBytes = 100 * smallValueBytes() + keyBytes - 1;
+    Rig rig{[&](LevelCacheOptions& options) {
+        options.maxBytes = maxBytes;
+        options.expectedBytes = smallValueBytes();
+    }};
+    auto const refused = rig.cache.wantSet(set, LevelUse::Order);
+    REQUIRE_FALSE(refused.has_value());
+    CHECK(refused.error().code == TableErrorCode::Unavailable);
+    CHECK(detail::LevelCacheAccess::acceptedSets(rig.cache) == 0);
+    rig.drain();
+    CHECK(rig.callCount() == 0);
+    CHECK(rig.cache.stats().bytes <= maxBytes);
 }
