@@ -147,8 +147,10 @@ struct LevelCacheOptions {
     /// @brief The cache's "now". Empty: the steady clock.
     std::function<std::chrono::steady_clock::time_point()> clock;
     /// @brief The unit registry the loader's measures are numbered in now. Empty: the level holds no measures.
-    ///        Values are kept under a successor of the registry they were stored with, whose numbers mean the same,
-    ///        and dropped when a registry of another lineage is in place.
+    ///        Values are kept under a successor of the registry they were loaded with, whose numbers mean the same,
+    ///        and dropped when a registry of another lineage is in place. Called from any thread that wants keys,
+    ///        stores a load or takes a snapshot, with no lock held, so it must be safe to call concurrently with
+    ///        whatever swaps the registry.
     std::function<std::shared_ptr<UnitRegistry const>()> units;
 };
 
@@ -403,9 +405,9 @@ public:
 
     /// @brief The values held now.
     ///
-    /// When `LevelCacheOptions::units` gives a registry of another lineage than the one the values were stored
+    /// When `LevelCacheOptions::units` gives a registry of another lineage than the one the values were loaded
     /// with, every value is invalidated first (`invalidateAll`, counted in `invalidatedKeys`): their unit numbers mean
-    /// nothing under it.
+    /// nothing under it. A `want` checks the same before it queues keys.
     /// @return An immutable snapshot: the shard pointers and the generation, copied under the mutex.
     [[nodiscard]] std::shared_ptr<LevelSnapshot const> snapshot() const override {
         _core->checkLineage();
@@ -425,6 +427,7 @@ public:
     /// @param retry Load the failed keys among @p keys now.
     /// @return Nothing, or `Unavailable` for an order use that does not fit.
     std::expected<void, TableError> want(std::span<RowId const> keys, LevelUse use, bool retry = false) override {
+        _core->checkLineage();
         return Core::want(_core, keys, use, retry, Core::Pass::Lease);
     }
 
@@ -440,6 +443,7 @@ public:
     /// @return Nothing, or `Unavailable` for an order use that does not fit.
     std::expected<void, TableError> wantSet(std::shared_ptr<std::vector<RowId> const> const& keys, LevelUse use,
                                             bool retry = false) override {
+        _core->checkLineage();
         return Core::wantSet(_core, keys, use, retry);
     }
 
@@ -1246,13 +1250,15 @@ private:
                 keys.push_back(loading.key);
             }
             loaderCalls.fetch_add(1);
+            // The registry the loader numbers its measures in is the one in place when it is called.
+            auto const lineage = unitLineage();
             std::vector<std::pair<RowId, Value>> loaded;
             try {
                 loaded = loader(keys);
             } catch (...) {
                 loaded.clear();
             }
-            auto told = store(batch, loaded, true);
+            auto told = store(batch, loaded, true, lineage);
             std::vector<Loading> next;
             {
                 std::scoped_lock const lock{writer};
@@ -1264,9 +1270,11 @@ private:
 
         // Stores a load's values and failures, then applies the bound. The new state and the eviction are
         // prepared with no lock held; the writer mutex is taken only to check that nothing changed since and to
-        // publish. A change published meanwhile makes the store prepare again.
+        // publish. A change published meanwhile makes the store prepare again. `lineage` is the unit lineage the
+        // load was issued under: a load whose registry was swapped for another lineage while it ran is dropped, as
+        // an invalidated one is, since its unit numbers mean nothing now.
         [[nodiscard]] Told store(std::vector<Loading> const& batch, std::vector<std::pair<RowId, Value>>& loaded,
-                                 bool counted) {
+                                 bool counted, std::uint64_t lineage) {
             // Sizes are read once, before any lock: a throwing `sizeOf` fails its key.
             std::unordered_map<RowId, std::pair<Value*, std::size_t>> returned;
             returned.reserve(loaded.size());
@@ -1279,7 +1287,8 @@ private:
                 }
             }
             auto const at = nowOrEpoch();
-            auto const lineage = unitLineage();
+            checkLineage();
+            bool const otherLineage = lineage != unitLineage();
             Told told;
             bool leasedStored = false;
             for (;;) {
@@ -1291,7 +1300,7 @@ private:
                     base = current;
                     seen = version;
                     for (std::size_t index = 0; index < batch.size(); ++index) {
-                        valid[index] = stillCurrent(batch[index]);
+                        valid[index] = !otherLineage && stillCurrent(batch[index]);
                     }
                 }
                 Edit edit{*base, shardCopies};
@@ -1568,7 +1577,7 @@ private:
                     batch.push_back(Loading{.key = key, .epoch = epoch, .started = started});
                 }
             }
-            static_cast<void>(store(batch, loaded, false));
+            static_cast<void>(store(batch, loaded, false, unitLineage()));
         }
 
         // Removes keys. The new state is prepared with no lock held; the writer mutex is taken to check that
@@ -1635,7 +1644,7 @@ private:
             return registry != nullptr ? registry->lineage() : 0;
         }
 
-        // Drops every value when the registry is of another lineage than the one they were stored with. Read with
+        // Drops every value when the registry is of another lineage than the one they were loaded with. Read with
         // no lock: a snapshot never waits for a writer to learn that nothing changed.
         void checkLineage() {
             if (!options.units) {
@@ -1771,7 +1780,7 @@ private:
         std::shared_ptr<Table const> current;  // what `published` is, read under `writer`
         std::uint64_t version = 0;             // advances with every published change
         std::uint64_t epoch = 0;
-        std::atomic<std::uint64_t> storedLineage{0};  // the unit lineage of the values held; 0 while none is
+        std::atomic<std::uint64_t> storedLineage{0};  // the unit lineage the values held were loaded under; 0: none
         std::uint64_t sequence = 0;
         std::uint64_t wants = 0;
         // Keys of the running batch invalidated after it started, by the sequence number of the invalidation.
