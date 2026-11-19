@@ -25,6 +25,7 @@
 #include <catch2/catch_test_macros.hpp>
 #include <cmath>
 #include <cstdint>
+#include <format>
 #include <functional>
 #include <glaze/glaze.hpp>
 #include <limits>
@@ -2005,6 +2006,14 @@ TEST_CASE("served description: the describe action answers the served descriptio
     morph::exec::MainThreadExecutor owner;
     morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool), owner};
     morph::bridge::BridgeHandler<tabledesc::BoundModel> handler{bridge, &owner};
+    struct Restore {
+        Restore() = default;
+        Restore(Restore const&) = delete;
+        Restore& operator=(Restore const&) = delete;
+        Restore(Restore&&) = delete;
+        Restore& operator=(Restore&&) = delete;
+        ~Restore() { tabledesc::BoundModel::bound = 8; }
+    } const restore;
     tabledesc::BoundModel::bound = 32;
     auto const described =
         morph::testing::awaitValueOn(owner, handler.execute(DescribeTable<&tabledesc::BoundModel::rows>{}));
@@ -2014,5 +2023,45 @@ TEST_CASE("served description: the describe action answers the served descriptio
     CHECK(described.revision == servedDescription(served)->revision);
     tabledesc::BoundModel::bound = 33;
     CHECK_THROWS(morph::testing::awaitValueOn(owner, handler.execute(DescribeTable<&tabledesc::BoundModel::rows>{})));
-    tabledesc::BoundModel::bound = 8;
+}
+
+namespace {
+
+// A served table of 40 Integer columns k00..k39, `k00` the key, no rows, held to `bound` sort keys.
+ServedTable fortyColumns(std::size_t bound) {
+    std::vector<TableColumn> columns;
+    for (int at = 0; at < 40; ++at) {
+        columns.push_back(column(std::format("k{:02}", at), ColumnKind::Integer));
+    }
+    ServedTable served{.description = TableDescription{.id = "forty", .label = "Forty", .columns = std::move(columns),
+                                                       .key = "k00"}};
+    served.source = std::make_shared<VectorSource>(columnInfos(served.description));
+    served.limits.maxSortKeys = bound;
+    return detail::pinned(std::move(served));
+}
+
+// A query sorting by the first `keys` columns.
+TableQuery sortedBy(std::size_t keys) {
+    TableQuery query;
+    for (std::size_t at = 0; at < keys; ++at) {
+        query.sort.push_back(SortKey{.column = std::format("k{:02}", at), .dir = SortDirection::Ascending});
+    }
+    return query;
+}
+
+}  // namespace
+
+// Mutation: validate holding 8 sort keys whatever the table's limits say (the 32-key and 12-key queries are
+// refused). Mutation: validate ignoring the bound (the 33-key and 13-key queries are answered).
+TEST_CASE("served description: a query's sort is held to the table's raised bound", "[table][description]") {
+    ServedTable const wide = fortyColumns(32);
+    CHECK(detail::answerQuery(wide, sortedBy(32)).has_value());
+    auto const over = detail::answerQuery(wide, sortedBy(33));
+    REQUIRE_FALSE(over.has_value());
+    CHECK(over.error().code == TableErrorCode::LimitExceeded);
+    ServedTable const twelve = fortyColumns(12);
+    CHECK(detail::answerQuery(twelve, sortedBy(12)).has_value());
+    auto const thirteen = detail::answerQuery(twelve, sortedBy(13));
+    REQUIRE_FALSE(thirteen.has_value());
+    CHECK(thirteen.error().code == TableErrorCode::LimitExceeded);
 }

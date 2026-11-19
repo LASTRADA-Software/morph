@@ -523,7 +523,21 @@ Expected: all pass, the existing table cases included.
   - element values `layout` (the stored shape), `visibleColumns` (ids in order), `hiddenCount`
   - `SessionOptions::maxCopyRows = 10'000` (used by 12f)
   - the clearing half of the message rule for the gestures this part adds: each one the lowering receives (a header click, a menu choice, a column move or resize, a filter button, a copy) calls `tableMessage(table, "")` before it acts, so the user's next gesture on the table clears a message; a refusal it then makes posts its own
-- The lowering's rules: `onSort(column, click)` maps `Plain` to `SortGesture::Click` and `Shift` to `Extend`, applies `applySortGesture` with the table's bound (8, or Task 16's), and on success calls `TableRows::setSort`, sets the held `sort` (when not bound) and runs `onSortChange`; a refusal goes to `tableMessage`. Menu commands map to the same gestures and to 12d, 12e and 12f's openers; `menu` and `onMenu` are set unless `configurable` is `false`. A layout change updates `Table::arrangement`, calls `TableRows::visible` with the new visible columns, sets the held `layout` (when not bound), runs `onLayoutChange` and marks the state unsaved; the stored state's `layout` member is applied before the first rows, as `sort` and `filters` are, and a bound `layout` is neither applied nor saved. A `rows` table's `TableStatus::shown` holds while its `state` or `message` is not empty (a model-backed table's is always shown, Part D); a literal `status: true` shows it always. Every refusal is shown (invariant 31).
+- The lowering's rules: `onSort(column, click)` maps `Plain` to `SortGesture::Click` and `Shift` to `Extend`, applies `applySortGesture` with the table's bound (on a model-backed table `description.capabilities.maxSortKeys`, which Task 16's `servedDescription` fills from the server's `limits`; on a `rows` table the node's literal `maxSortKeys`, which Task 16's load check already accepts as an integer 1 to 32; else 8), and on success calls `TableRows::setSort`, sets the held `sort` (when not bound) and runs `onSortChange`; a refusal goes to `tableMessage`. Menu commands map to the same gestures and to 12d, 12e and 12f's openers; `menu` and `onMenu` are set unless `configurable` is `false`. A layout change updates `Table::arrangement`, calls `TableRows::visible` with the new visible columns, sets the held `layout` (when not bound), runs `onLayoutChange` and marks the state unsaved; the stored state's `layout` member is applied before the first rows, as `sort` and `filters` are, and a bound `layout` is neither applied nor saved. A `rows` table's `TableStatus::shown` holds while its `state` or `message` is not empty (a model-backed table's is always shown, Part D); a literal `status: true` shows it always. Every refusal is shown (invariant 31).
+
+
+- **Carried from Task 16** (its server half and the document key landed before this lowering existed; this task owns the client half):
+  - The bound above is read by the lowering: Task 16 left `maxSortKeys` checked at load and read by nothing. When this lands, `docs/spec/ui/document.md`'s `maxSortKeys` entry changes from "checked at load; it takes effect when the table's sort gestures are lowered" to the bound the header and menu gestures are held to.
+  - The test, verbatim from Task 16's brief, in `tests/test_ui_table_model.cpp`:
+
+```cpp
+// Mutation: the client holding 8 whatever the description says.
+TEST_CASE("sort chains: a table whose limits set 32 accepts 32 keys from the header and refuses the 33rd", "[ui][table][config]")
+// kConfigModelTable over samplesDescription(40) whose capabilities.maxSortKeys is 32: Shift-click 33 sortable headers: t.sort
+// has 32 keys, the last page request's sort has 32 keys, status message "A table sorts by at most 32 columns".
+// A rows table with "maxSortKeys": 12 over 13 sortable columns: 12 keys, the 13th refused with "…at most 12 columns".
+```
+  - Run the mutation "the client holding 8 whatever the description says" (the lowering passing 8 on both kinds) once and record its failing output in this task's commit, as the spec's Tests row "A raised sort bound" names it.
 
 - [ ] **Step 1: Write the failing tests** in `tests/test_ui_table_model.cpp` (tag `[ui][table][config]`). Every test of this part runs on `ui::testing::TableHarness` (9d, index decision 42) and mounts a whole document.
 
@@ -1241,6 +1255,7 @@ In `tests/net/test_push_tables.cpp`: the publish-then-read flow over a real sock
 **Files:**
 - Modify: `include/morph/table/description.hpp` (`servedDescription`; `table::detail::answerQuery` takes its description from it and answers its `SourceContract`), `table::DescribeTable::invoke` in the same header (the `Table.<id>.describe` handler `BRIDGE_REGISTER_TABLE` registers obtains the description through it; `registry.hpp` only names the action type), `src/ui/document.cpp` (`maxSortKeys` on `table`), `src/ui/interpreter.cpp` (the bound the lowering passes to `applySortGesture`: the description's on a model-backed table, the literal on a `rows` table, else 8)
 - Test: `tests/table/test_table_description.cpp`, `tests/test_ui_table_model.cpp`, `tests/test_ui_document_rules.cpp` (its `rowsTable` and `modelTable` helpers)
+- **Split:** the server half, the document key and its load check are Task 16's; the lowering's bound (`src/ui/interpreter.cpp`) and the `tests/test_ui_table_model.cpp` case below are owned by Task 12c ("Carried from Task 16" there), because the lowering that calls `applySortGesture` is 12c's and did not exist when Task 16 ran. The `test_ui_table_model.cpp` case and the interpreter bound below are kept for reference; 12c writes them.
 - Docs: `docs/spec/ui/document.md` (`maxSortKeys`), `docs/spec/core/registry.md` (the bound carried from `limits`)
 
 **Interfaces:**
