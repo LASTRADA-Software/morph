@@ -118,13 +118,13 @@ struct GatedStore final : morph::ui::ICustomScreenStore {
 
     /// Holds the saves that arrive from now on.
     void hold() {
-        std::lock_guard const lock{mutex};
+        std::scoped_lock const lock{mutex};
         open = false;
     }
     /// Lets the held saves, and the later ones, through.
     void release() {
         {
-            std::lock_guard const lock{mutex};
+            std::scoped_lock const lock{mutex};
             open = true;
         }
         opened.notify_all();
@@ -263,7 +263,13 @@ inline std::string unformatted(std::string_view recorded) {
     for (std::size_t at = 0; at < recorded.size(); ++at) {
         if (recorded[at] == '\\' && at + 1 < recorded.size()) {
             char const next = recorded[++at];
-            out += next == 'n' ? '\n' : next == 'r' ? '\r' : next;
+            if (next == 'n') {
+                out += '\n';
+            } else if (next == 'r') {
+                out += '\r';
+            } else {
+                out += next;
+            }
             continue;
         }
         out += recorded[at];
@@ -348,6 +354,7 @@ struct ChromeRig {
         harness.settle();
     }
 
+    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): the field's test id, then the text typed into it.
     void type(std::string const& testId, std::string text) {
         std::optional<int> const widget = find("TextInput", testId);
         REQUIRE(widget.has_value());
@@ -402,7 +409,10 @@ struct ChromeRig {
             if (morph::ui::isCustomScreenId(id)) {
                 return sync->documents().find(id);
             }
-            return id == "notes.edit" ? edit : id == "notes.home" ? home : nullptr;
+            if (id == "notes.edit") {
+                return edit;
+            }
+            return id == "notes.home" ? home : nullptr;
         };
         made.backend = &harness.backend;
         made.application = &harness.host;
@@ -429,10 +439,16 @@ struct ChromeRig {
         made.host = host.get();
         made.sync = sync.get();
         made.documents = [this](std::string_view id) -> std::shared_ptr<morph::ui::Document const> {
-            return id == "notes.edit" ? edit : id == "notes.home" ? home : nullptr;
+            if (id == "notes.edit") {
+                return edit;
+            }
+            return id == "notes.home" ? home : nullptr;
         };
         made.sourceOf = [](std::string_view id) {
-            return id == "notes.edit" ? std::string{kEdit} : id == "notes.home" ? std::string{kHome} : std::string{};
+            if (id == "notes.edit") {
+                return std::string{kEdit};
+            }
+            return id == "notes.home" ? std::string{kHome} : std::string{};
         };
         made.catalog = [] { return uiservice::facts(); };
         made.titleOf = [](std::string_view id) { return id == "notes.edit" ? std::string{"Note"} : std::string{id}; };
