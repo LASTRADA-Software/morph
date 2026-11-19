@@ -29,7 +29,10 @@
 #include "../reactive/runtime.hpp"
 #include "../reactive/scope.hpp"
 #include "../reactive/signal.hpp"
+#include "../table/view_change.hpp"
 #include "../ui/backend.hpp"
+#include "table_rows.hpp"
+#include "value.hpp"
 #include "view.hpp"
 
 /// @file
@@ -39,6 +42,18 @@
 /// Specified in `docs/spec/ui/view_tree.md`, "Mount".
 
 namespace morph::ui {
+
+/// @brief What a mount did to the rows of its tables mounted over a `TableSource`, for tests.
+struct MountStats {
+    /// @brief Sets of a cell's row signal that changed its record; each re-evaluates the cell.
+    std::size_t cellBinds = 0;
+    /// @brief Sets of a realized row's own signal that changed its record; each re-evaluates the row's own parts.
+    std::size_t rowBinds = 0;
+    /// @brief `TableSource::cellView` calls: cell widgets built.
+    std::size_t cellsCreated = 0;
+    /// @brief Pooled cells bound to another row or column; cells are not pooled yet, so it stays 0.
+    std::size_t cellsRebound = 0;
+};
 
 namespace detail {
 
@@ -356,6 +371,10 @@ public:
     Widget* mountRoot(reactive::Scope& scope, Node const& node, ContainerWidget* parent) {
         return mountPass([&] { return mount(scope, node, parent); });
     }
+
+    /// @brief What the mount did to the rows of its source tables.
+    /// @return The counters.
+    [[nodiscard]] MountStats const& stats() const noexcept { return _stats; }
 
     /// @brief Moves keyboard focus to the mounted widget whose `focusId` is @p focusId.
     ///
@@ -1687,6 +1706,9 @@ private:
     // Rows first, then the selection. The widget marks a selected key whenever its row arrives, so the order only
     // shapes the log: the first setSelection comes after the rows and already marks them.
     Widget& mountKind(reactive::Scope& scope, Table const& spec, ContainerWidget* parent) {
+        if (spec.source) {
+            return mountSourceTable(scope, spec, parent);
+        }
         TableWidget& widget = scope.adopt(_backend->createTable(parent));
         applyCommon(scope, widget, spec.common);
         checkNoShare(spec.columns);
@@ -1832,6 +1854,324 @@ private:
             table.setRealizedWindow(0, rows.list.size(), rows.list.size());
             windowed = false;
         }
+    }
+
+    // A table over a `TableSource`: the rows in and near view, each built from the source's view index.
+    struct SourceTable {
+        // One cell of a realized row: its own signal, set to the row's record, and its load state as last told.
+        struct Cell {
+            reactive::Signal<Value>* row = nullptr;
+            CellLoad load = CellLoad::Loaded;
+        };
+        // A realized row: a keyed row, or a placeholder for a row not fetched yet.
+        struct Realized {
+            std::int64_t index = 0;
+            std::optional<Key> key;
+            // Owns the row's signals, its cells' views and bindings, and its widget.
+            std::unique_ptr<reactive::Scope> scope;
+            Widget* widget = nullptr;
+            reactive::Signal<Value>* row = nullptr;
+            std::vector<Cell> cells;
+        };
+
+        SourceTable() = default;
+        // The rows go last first, as a container's children do.
+        ~SourceTable() {
+            while (!realized.empty()) {
+                realized.pop_back();
+            }
+        }
+        SourceTable(SourceTable const&) = delete;
+        SourceTable& operator=(SourceTable const&) = delete;
+        SourceTable(SourceTable&&) = delete;
+        SourceTable& operator=(SourceTable&&) = delete;
+
+        TableSource source;
+        TableWidget* widget = nullptr;
+        std::size_t columns = 0;
+        std::size_t overscan = 0;
+        std::size_t depth = 0;
+        // The ids every `visible` call names: the always-fetched columns, then the laid-out ones not among them.
+        std::vector<std::string> fetched;
+        // The rows the backend last reported in view; a count of 0 until it reports.
+        VisibleRange range;
+        // In view order; each widget is the container's child at its place.
+        std::vector<Realized> realized;
+        // Expires with the table, so a change the rows deliver after it is gone does nothing.
+        std::shared_ptr<bool> alive = std::make_shared<bool>(true);
+    };
+
+    // A cell's load state: from the row's unloaded and failed levels and the level of the cell's column.
+    [[nodiscard]] static CellLoad cellLoadOf(SourceTable const& table, table::UnloadedLevels const& levels,
+                                             std::size_t column) {
+        if (column >= table.source.levels.size() || table.source.levels.at(column).empty()) {
+            return CellLoad::Loaded;
+        }
+        std::string const& level = table.source.levels.at(column);
+        if (std::ranges::contains(levels.failed, level)) {
+            return CellLoad::Failed;
+        }
+        return std::ranges::contains(levels.levels, level) ? CellLoad::Unloaded : CellLoad::Loaded;
+    }
+
+    // Sets a realized row's signals to its record, counting each set that changed one, and tells the widget each
+    // cell's load state that changed.
+    void bindRealized(SourceTable& table, SourceTable::Realized& row, Value const& record,
+                      table::UnloadedLevels const& levels) {
+        if (row.row->peek() != record) {
+            ++_stats.rowBinds;
+            row.row->set(record);
+        }
+        for (std::size_t column = 0; column < row.cells.size(); ++column) {
+            SourceTable::Cell& cell = row.cells.at(column);
+            if (cell.row->peek() != record) {
+                ++_stats.cellBinds;
+                cell.row->set(record);
+            }
+            CellLoad const load = cellLoadOf(table, levels, column);
+            if (load != cell.load) {
+                cell.load = load;
+                table.widget->setCellLoad(*row.widget, column, load);
+            }
+        }
+    }
+
+    // Builds a realized row at @p index: a keyed row of one cell per column when the rows hold it, a placeholder
+    // otherwise. All or nothing: what throws leaves nothing behind.
+    [[nodiscard]] SourceTable::Realized realizeRow(SourceTable& table, std::int64_t index) {
+        SourceTable::Realized made{.index = index, .key = std::nullopt, .scope = nullptr, .widget = nullptr,
+                                   .row = nullptr, .cells = {}};
+        made.scope = std::make_unique<reactive::Scope>(*_rt, table.depth);
+        reactive::Scope& rowScope = *made.scope;
+        std::optional<TableRowRef> const ref = table.source.rows->row(index);
+        StackWidget& stack = rowScope.adopt(_backend->createStack(table.widget, Axis::Horizontal));
+        made.widget = &stack;
+        if (!ref) {
+            return made;
+        }
+        made.key = ref->key;
+        Value const record = ref->row;
+        made.row = &rowScope.make<reactive::Signal<Value>>(*_rt, record);
+        TableRowLook look;
+        if (table.source.rowView) {
+            look = table.source.rowView(*made.row);
+            rowScope.make<std::shared_ptr<void const>>(look.keep);
+        }
+        if (look.heading) {
+            Node const& heading = rowScope.make<Node>(look.heading);
+            static_cast<void>(mount(rowScope, heading, &stack));
+        } else {
+            made.cells.reserve(table.columns);
+            for (std::size_t column = 0; column < table.columns; ++column) {
+                auto& signal = rowScope.make<reactive::Signal<Value>>(*_rt, record);
+                made.cells.push_back(SourceTable::Cell{.row = &signal, .load = CellLoad::Loaded});
+                ++_stats.cellsCreated;
+                Node const& cell = rowScope.make<Node>(table.source.cellView(column, signal));
+                if (cell) {
+                    static_cast<void>(mount(rowScope, cell, &stack));
+                } else {
+                    static_cast<void>(rowScope.adopt(_backend->createSpacer(&stack)));
+                }
+            }
+        }
+        table.widget->setRowKey(stack, *made.key);
+        if (look.heading) {
+            table.widget->setRowHeading(stack);
+        }
+        if (look.tone) {
+            bind(rowScope, *look.tone,
+                 [&table, &stack](std::optional<Tone> const& tone) { table.widget->setRowTone(stack, tone); });
+        }
+        if (look.label) {
+            bind(rowScope, *look.label,
+                 [&table, &stack](std::string const& label) { table.widget->setRowLabel(stack, label); });
+        }
+        table::UnloadedLevels const levels = table.source.rows->unloadedLevels(index);
+        for (std::size_t column = 0; column < made.cells.size(); ++column) {
+            CellLoad const load = cellLoadOf(table, levels, column);
+            if (load != CellLoad::Loaded) {
+                made.cells.at(column).load = load;
+                table.widget->setCellLoad(stack, column, load);
+            }
+        }
+        return made;
+    }
+
+    // Brings the realized rows to the window around the rows in view: a row the rows still hold keeps its widget,
+    // wherever it moved; a row at an index @p updated names has its signals set to its record again; a row that left
+    // the window, or whose key the rows no longer hold, is unmounted. The container's children follow the view order.
+    // NOLINTNEXTLINE(readability-function-cognitive-complexity): match by key, build, reorder, report the window.
+    void realizeWindow(SourceTable& table, std::function<bool(std::int64_t)> const& updated) {
+        TableRows& rows = *table.source.rows;
+        TableTotal const total = rows.total();
+        auto const count = static_cast<std::size_t>(std::max<std::int64_t>(total.rows, 0));
+        VisibleRange const shown =
+            table.range.count > 0 ? table.range : VisibleRange{.first = 0, .count = table.overscan};
+        std::size_t const lo = shown.first > table.overscan ? shown.first - table.overscan : 0;
+        std::size_t const hi = std::min(count, shown.first + shown.count + table.overscan);
+        std::vector<SourceTable::Realized> old = std::move(table.realized);
+        table.realized.clear();
+        std::unordered_map<Key, std::size_t> keyed;
+        std::unordered_map<std::int64_t, std::size_t> placeholders;
+        for (std::size_t at = 0; at < old.size(); ++at) {
+            if (old.at(at).key) {
+                keyed.emplace(*old.at(at).key, at);
+            } else {
+                placeholders.emplace(old.at(at).index, at);
+            }
+        }
+        std::vector<Widget*> current;
+        for (SourceTable::Realized const& row : old) {
+            current.push_back(row.widget);
+        }
+        std::exception_ptr failure;
+        std::vector<SourceTable::Realized> next;
+        next.reserve(hi > lo ? hi - lo : 0);
+        for (std::size_t at = lo; at < hi; ++at) {
+            auto const index = static_cast<std::int64_t>(at);
+            std::optional<TableRowRef> const ref = rows.row(index);
+            std::optional<std::size_t> reuse;
+            if (ref) {
+                if (auto const found = keyed.find(ref->key); found != keyed.end() && old.at(found->second).scope) {
+                    reuse = found->second;
+                }
+            } else if (auto const found = placeholders.find(index);
+                       found != placeholders.end() && old.at(found->second).scope) {
+                reuse = found->second;
+            }
+            if (reuse) {
+                SourceTable::Realized row = std::move(old.at(*reuse));
+                bool const moved = row.index != index;
+                row.index = index;
+                if (ref && (moved || updated(index))) {
+                    bindRealized(table, row, ref->row, rows.unloadedLevels(index));
+                }
+                next.push_back(std::move(row));
+                continue;
+            }
+            try {
+                next.push_back(mountPass([&] { return realizeRow(table, index); }));
+                current.push_back(next.back().widget);
+            } catch (...) {
+                if (!failure) {
+                    failure = std::current_exception();
+                }
+            }
+        }
+        // What was not taken goes, last first; the container forgets its widgets.
+        for (auto row = old.rbegin(); row != old.rend(); ++row) {
+            if (row->scope) {
+                std::erase(current, row->widget);
+                row->scope.reset();
+            }
+        }
+        std::vector<Widget*> target;
+        target.reserve(next.size());
+        for (SourceTable::Realized const& row : next) {
+            target.push_back(row.widget);
+        }
+        try {
+            reorderChildren(*table.widget, current, target);
+        } catch (...) {
+            if (!failure) {
+                failure = std::current_exception();
+            }
+        }
+        table.realized = std::move(next);
+        table.widget->setRealizedWindow(lo, table.realized.size(), count);
+        if (failure) {
+            std::rethrow_exception(failure);
+        }
+    }
+
+    // Whether a change names the view index @p index as updated: a reset names every row, and a row inserted,
+    // changed or moved to the index is named.
+    [[nodiscard]] static bool namesUpdated(table::ViewChange const& change, std::int64_t index) {
+        auto const at = static_cast<std::size_t>(index);
+        return std::ranges::any_of(change.ops, [at](table::ViewOp const& op) {
+            switch (op.kind) {
+                case table::ViewOp::Kind::Reset:
+                    return true;
+                case table::ViewOp::Kind::Changed:
+                case table::ViewOp::Kind::Inserted:
+                    return at >= op.first && at < op.first + op.count;
+                case table::ViewOp::Kind::Moved:
+                    return at == op.to;
+                case table::ViewOp::Kind::Removed:
+                default:
+                    return false;
+            }
+        });
+    }
+
+    // A table over a `TableSource`. Rows are always windowed: the mount realizes the rows the backend reports in view
+    // and `overscan` rows either side (the first `overscan` rows before any report), tells the rows which rows and
+    // columns are in view, and applies each `ViewChange` to the realized rows by key. Rows first, then the selection,
+    // as for a table over `rows`.
+    Widget& mountSourceTable(reactive::Scope& scope, Table const& spec, ContainerWidget* parent) {
+        if (!spec.source->rows || !spec.source->cellView) {
+            throw std::logic_error{"morph::ui: a table source needs its rows and its cell view"};
+        }
+        TableWidget& widget = scope.adopt(_backend->createTable(parent));
+        applyCommon(scope, widget, spec.common);
+        checkNoShare(spec.columns);
+        widget.setColumns(spec.columns);
+        widget.setShowHeader(spec.showHeader);
+        widget.setSelectionMode(spec.selectionMode);
+        if (spec.selectColumn) {
+            widget.setSelectColumn(true);
+            bind(scope, spec.selectAllLabel, [&widget](std::string const& label) { widget.setSelectAllLabel(label); });
+        }
+        widget.setOnActivate(event(spec.onActivate));
+        if (std::ranges::any_of(spec.columns, &TableColumn::sortable)) {
+            bind(scope, spec.sort, [&widget](std::optional<TableSort> const& sort) { widget.setSort(sort); });
+            widget.setOnSort(event(spec.onSort));
+        }
+        bind(scope, spec.status, [&widget](TableStatus const& status) { widget.setStatus(status); });
+        widget.setOnRetry(event(spec.onRetry));
+        auto& table = scope.make<SourceTable>();
+        table.source = *spec.source;
+        table.widget = &widget;
+        table.columns = spec.columns.size();
+        table.overscan = spec.virtualize.overscan;
+        table.depth = scope.depth() + 1;
+        table.fetched = table.source.alwaysFetched;
+        for (TableColumn const& column : spec.columns) {
+            if (!column.id.empty() && !std::ranges::contains(table.fetched, column.id)) {
+                table.fetched.push_back(column.id);
+            }
+        }
+        auto const visible = [&table] {
+            VisibleRange const shown =
+                table.range.count > 0 ? table.range : VisibleRange{.first = 0, .count = table.overscan};
+            table.source.rows->visible(static_cast<std::int64_t>(shown.first), static_cast<std::int64_t>(shown.count),
+                                       table.fetched);
+        };
+        table.source.rows->onChange(
+            [this, &table, alive = std::weak_ptr{table.alive}](table::ViewChange const& change) {
+                if (alive.expired()) {
+                    return;
+                }
+                static_cast<void>(runCallback(*_rt, [&] {
+                    realizeWindow(table, [&change](std::int64_t index) { return namesUpdated(change, index); });
+                }));
+            });
+        widget.setOnVisibleRangeChanged([this, &table, visible](std::size_t first, std::size_t count) {
+            static_cast<void>(runCallback(*_rt, [&] {
+                table.range = VisibleRange{.first = first, .count = count};
+                realizeWindow(table, [](std::int64_t) { return false; });
+                visible();
+            }));
+        });
+        _rt->untracked([&] {
+            realizeWindow(table, [](std::int64_t) { return false; });
+            visible();
+        });
+        widget.setOnSelectionChange(inputEvent(
+            spec.onSelectionChange, controlled(scope, spec.selection, [&widget](std::vector<Key> const& keys) {
+                widget.setSelection(keys);
+            })));
+        return widget;
     }
 
     // The model, then the session, then the rows, then the Effect(s): destroyed in reverse, so an Effect stops
@@ -2532,6 +2872,8 @@ private:
     FocusMap _focusable;
     // The mounted containers that take a share of their width for a child's.
     std::set<ContainerWidget const*> _shareParents;
+    // What the mount did to the rows of its source tables.
+    MountStats _stats;
 };
 
 }  // namespace detail
@@ -2626,6 +2968,10 @@ public:
     /// @param offset  A byte offset into the text it shows.
     /// @return Whether a mounted text input has that name.
     bool placeCursor(std::string_view focusId, std::size_t offset) { return _mounter.placeCursor(focusId, offset); }
+
+    /// @brief What the mount did to the rows of its tables mounted over a `TableSource`, the whole mount's.
+    /// @return The counters; valid as long as this object.
+    [[nodiscard]] MountStats const& stats() const noexcept { return _mounter.stats(); }
 
 private:
     [[nodiscard]] static Node nonNull(Node root) {

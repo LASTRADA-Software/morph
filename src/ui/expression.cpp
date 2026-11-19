@@ -1227,6 +1227,10 @@ public:
             case ExprKind::Runs:
                 return grouped(expr);
             case ExprKind::Get:
+                // A path out of the whole row is the row's own read, so the environment sees which field it is.
+                if (Expr const& source = *expr.args.at(0); source.kind == ExprKind::Row && source.fieldPath.empty()) {
+                    return _env->row(expr.fieldPath);
+                }
                 return walk(eval(*expr.args.at(0)), expr.fieldPath);
             case ExprKind::Call:
             default:

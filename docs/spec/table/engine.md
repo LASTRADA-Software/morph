@@ -478,9 +478,6 @@ against `wire::decode` both ways.
 - There is no `QueryRowsSource` (a source over a `morph::reactive` query's
   rows, diffing a refetch by key). It is the one header of this module that
   would include the reactive runtime.
-- The document interpreter does not yet lower a model-backed `table` node onto
-  this engine ([`../ui/interpreter.md`, "Not yet lowered"](../ui/interpreter.md#not-yet-lowered));
-  the engine's renderer list model and its mounting measurement belong there.
 
 ## Cross-references
 

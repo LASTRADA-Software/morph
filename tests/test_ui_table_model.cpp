@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 
-// The client table model: `EngineRows` over the engine, `WindowRows` over a server's pages, and the status line's
-// counts (docs/spec/table/table.md, "The client table model", "The window under changes", "The status line").
+// The client table model: `EngineRows` over the engine, `WindowRows` over a server's pages, the status line's counts,
+// and the model-backed `table` node on a screen (docs/spec/table/table.md, "The client table model", "The window
+// under changes", "The status line", "The document `table` node on the engine", "Persisted state").
 //
 // Each case names the mutation it was seen to fail on.
 
@@ -11,6 +12,7 @@
 #include <cstdint>
 #include <iterator>
 #include <memory>
+#include <morph/ui/mount.hpp>
 #include <morph/table/data_source.hpp>
 #include <morph/table/description.hpp>
 #include <morph/table/query.hpp>
@@ -19,8 +21,10 @@
 #include <morph/ui/author.hpp>
 #include <morph/ui/table_rows.hpp>
 #include <morph/ui/value.hpp>
+#include <numeric>
 #include <span>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "table/wide_table_model.hpp"
@@ -35,6 +39,7 @@ using morph::ui::WindowRows;
 using morph::ui::testing::describeJson;
 using morph::ui::testing::formatFor;
 using morph::ui::testing::keyedJson;
+using morph::ui::testing::keyedJsonAt;
 using morph::ui::testing::pageJson;
 using morph::ui::testing::pageJsonAt;
 using morph::ui::testing::RowsFixture;
@@ -453,4 +458,462 @@ TEST_CASE("window rows: a page that spans a grown view's end never holds a key t
     CHECK_FALSE(changes[0].isReset());
     CHECK(rows->total().rows == 350);
     checkReplay(before, changes[0], *rows);
+}
+
+// ── The model-backed table on a screen ──────────────────────────────────────
+
+namespace {
+
+using morph::ui::CellLoad;
+using morph::ui::Key;
+using morph::ui::MountStats;
+using morph::ui::testing::answerPages;
+using morph::ui::testing::change;
+using morph::ui::testing::coreOf;
+using morph::ui::testing::diagnosticsMentioning;
+using morph::ui::testing::elementOf;
+using morph::ui::testing::elementValue;
+using morph::ui::testing::GatedTableStateStore;
+using morph::ui::testing::headerLabels;
+using morph::ui::testing::kBoundSort;
+using morph::ui::testing::keyedJson;
+using morph::ui::testing::kModelTable;
+using morph::ui::testing::kNoPersist;
+using morph::ui::testing::kNoStatus;
+using morph::ui::testing::kStored;
+using morph::ui::testing::lastQuery;
+using morph::ui::testing::mountShown;
+using morph::ui::testing::openCalls;
+using morph::ui::testing::oldestOpen;
+using morph::ui::testing::pageJsonRenaming;
+using morph::ui::testing::pageJsonUnloaded;
+using morph::ui::testing::queryOf;
+using morph::ui::testing::replyDescribe;
+using morph::ui::testing::replyPage;
+using morph::ui::testing::shownText;
+using morph::ui::testing::statsOf;
+using morph::ui::testing::statusOf;
+using morph::ui::testing::storeExecutor;
+using morph::ui::testing::TableHarness;
+using morph::ui::testing::tableOf;
+using morph::ui::testing::withLevel;
+using morph::ui::testing::withTableKey;
+
+// The revision of the description the harness answered last.
+std::string revisionOf(TableHarness const& h) { return h.described.revision; }
+
+// Whether a `Table.samples` call from @p first on asks for the page at @p offset.
+bool askedForPage(TableHarness const& h, std::size_t first, std::int64_t offset) {
+    for (std::size_t index = first; index < h.dispatcher.calls.size(); ++index) {
+        if (h.dispatcher.calls[index].action == "Table.samples" && queryOf(h, index).page.offset == offset) {
+            return true;
+        }
+    }
+    return false;
+}
+
+}  // namespace
+
+// Mutation: a lowering that needs the node's `columns` (no header: `headerLabels` is empty).
+TEST_CASE("model table: a client given only the catalog draws its columns, sorts and pages it", "[ui][table]") {
+    TableHarness h;  auto screen = h.mount(kModelTable);
+    CHECK(h.dispatcher.count("Table.samples.describe") == 1);
+    CHECK(h.dispatcher.count("Table.samples") == 0);                          // no page before its description
+    replyDescribe(h);
+    REQUIRE(h.dispatcher.count("Table.samples") == 1);
+    answerPages(h, 9093);
+    CHECK(headerLabels(h) == std::vector<std::string>{"Id", "Name", "C3"});
+    CHECK(h.backend.find("Text", "text", "row-0").has_value());               // the default cell, by its text
+    CHECK(statusOf(h).counts == "9,093 rows");  CHECK(statusOf(h).shown);
+    h.backend.clickHeader(tableOf(h), 1);  h.settle();
+    CHECK(lastQuery(h).sort == table::SortChain{{.column = "name"}});
+    answerPages(h, 9093);
+    std::size_t const scrolled = h.dispatcher.calls.size();
+    h.backend.scrollTable(tableOf(h), 4'000, 30);  h.advance(80ms);
+    CHECK(askedForPage(h, scrolled, 4'000));                                  // the window pages
+    CHECK(h.dispatcher.count("Table.samples.describe") == 1);                 // W6: one request
+}
+
+// Mutation: a literal `filters` read as an expression (it evaluates to null and the query carries no filter).
+TEST_CASE("model table: a literal filter and the element values reach the query and the document", "[ui][table]") {
+    TableHarness h;
+    auto screen = h.mount(withTableKey(kModelTable, R"("filters":{"columns":{"name":{"include":[{"contains":"a"}]}}})"));
+    replyDescribe(h);
+    REQUIRE(h.dispatcher.count("Table.samples") == 1);
+    REQUIRE(lastQuery(h).filters.columns.contains("name"));
+    CHECK(lastQuery(h).filters.columns.at("name").include.size() == 1);
+    CHECK(elementValue(*screen, "list", "pending") == "true");
+    answerPages(h, 9093, table::TotalKind::AtLeast, /*undecided*/ 40, {"recipe"});
+    CHECK(elementValue(*screen, "list", "viewCount") == "9093");
+    CHECK(elementValue(*screen, "list", "viewCountKind") == R"("atLeast")");
+    CHECK(elementValue(*screen, "list", "undecided") == "40");
+    CHECK(elementValue(*screen, "list", "awaiting") == R"(["recipe"])");
+    CHECK(elementValue(*screen, "list", "failed") == "[]");
+    CHECK(elementValue(*screen, "list", "pending") == "false");
+}
+
+// Mutation: a table that ignores its store sends the default query (the count is 1 before `release`).  Gate T3.
+TEST_CASE("model table: persisted state before the first query", "[ui][table][state]") {
+    auto store = std::make_shared<GatedTableStateStore>(storeExecutor(), std::string{kStored});
+    TableHarness h{store};
+    auto screen = h.mount(kModelTable);  replyDescribe(h);
+    CHECK(h.dispatcher.count("Table.samples") == 0);
+    CHECK(store->lastLoadKey() == table::TableStateKey{.application = "lims", .model = "Lims_SampleModel",
+                                                       .table = "samples", .qualifier = "samples", .part = "state"});
+    store->release();  h.settle();
+    REQUIRE(h.dispatcher.count("Table.samples") == 1);
+    CHECK(lastQuery(h).sort == table::SortChain{{.column = "name", .dir = table::SortDirection::Descending}});
+    CHECK(lastQuery(h).filters.columns.contains("name"));
+}
+
+// Mutations: no debounce (fifty saves); unmount not flushing (the count stays 3); a change during a save dropped
+// (the third save never goes).
+TEST_CASE("model table: saves are coalesced, and unmounting saves at once", "[ui][table][state]") {
+    auto store = std::make_shared<GatedTableStateStore>(storeExecutor(), R"({"version":1})");
+    TableHarness h{store};
+    auto screen = h.mount(kModelTable);  replyDescribe(h);  store->release();  h.settle();
+    for (int i = 0; i < 50; ++i) { h.backend.clickHeader(tableOf(h), i % 2 == 0 ? 0 : 1);  h.advance(5ms); }
+    CHECK(store->saves() == 0);                                               // inside the debounce
+    h.advance(500ms);  CHECK(store->saves() == 1);
+    CHECK(table::readState(store->lastSaved())->sort->at(0).column == "name");   // the last of the fifty
+    store->holdSaves();
+    h.backend.clickHeader(tableOf(h), 0);  h.advance(500ms);  CHECK(store->saves() == 2);   // in flight, held
+    h.backend.clickHeader(tableOf(h), 1);  h.advance(500ms);  CHECK(store->saves() == 2);   // one per key in flight
+    store->releaseSave();  h.settle();  CHECK(store->saves() == 3);           // one more after it
+    store->releaseSave();  h.settle();
+    h.backend.clickHeader(tableOf(h), 0);  screen.reset();  h.settle();
+    CHECK(store->saves() == 4);                                               // at once, no debounce
+}
+
+// Mutations: applying a late state after the user scrolled (a query more in the second section); a failed load
+// reported per table mount or not at all; a failed load that stops saving.
+TEST_CASE("model table: a slow or failed load", "[ui][table][state]") {
+    auto store = std::make_shared<GatedTableStateStore>(storeExecutor(), std::string{kStored});
+    TableHarness h{store};
+    auto screen = h.mount(kModelTable);  replyDescribe(h);
+    h.advance(299ms);  CHECK(h.dispatcher.count("Table.samples") == 0);
+    h.advance(1ms);    REQUIRE(h.dispatcher.count("Table.samples") >= 1);     // defaults after tableStateTimeout
+    CHECK(queryOf(h, h.dispatcher.calls.size() - 1).sort.empty());
+    answerPages(h, 9093);
+    std::size_t const shown = h.dispatcher.count("Table.samples");
+    std::size_t const calls = h.dispatcher.calls.size();
+    SECTION("the late state is applied") {
+        store->release();  h.settle();
+        REQUIRE(h.dispatcher.count("Table.samples") > shown);                // one more query, for the pages in view
+        CHECK(queryOf(h, calls).sort.at(0).column == "name");
+    }
+    SECTION("not under the user's hands") {
+        h.backend.scrollTable(tableOf(h), 40, 30);  h.settle();               // within the held pages: no fetch
+        store->release();  h.settle();
+        CHECK(h.dispatcher.count("Table.samples") == shown);
+        CHECK(lastQuery(h).sort.empty());
+    }
+    SECTION("a failed load") {
+        store->fail();  h.settle();
+        CHECK(diagnosticsMentioning(h, "state") == 1);                        // reported once
+        CHECK(h.dispatcher.count("Table.samples") == shown);
+        h.backend.clickHeader(tableOf(h), 1);  h.advance(500ms);
+        CHECK(store->saves() == 1);                                           // changes still save
+    }
+}
+
+// Mutations: applying a stored sort over a bound one (the query sorts by name); saving a bound sort (the saved
+// document has a `sort`); `persist: false` still loading.
+TEST_CASE("model table: bound values win", "[ui][table][state]") {
+    auto store = std::make_shared<GatedTableStateStore>(storeExecutor(), std::string{kStored});
+    TableHarness h{store};
+    SECTION("a bound sort") {
+        auto screen = h.mount(kBoundSort);  replyDescribe(h);  store->release();  h.settle();
+        REQUIRE(h.dispatcher.count("Table.samples") == 1);
+        CHECK(lastQuery(h).sort == table::SortChain{{.column = "id"}});      // the document's
+        CHECK(lastQuery(h).filters.columns.contains("name"));                 // the stored filter still applies
+        h.backend.clickHeader(tableOf(h), 1);  h.advance(500ms);
+        screen.reset();  h.settle();  CHECK(store->saves() == 0);             // a bound sort is not saved
+    }
+    SECTION("persist: false") {
+        auto screen = h.mount(kNoPersist);  replyDescribe(h);  h.settle();
+        CHECK(store->loads() == 0);
+        REQUIRE(h.dispatcher.count("Table.samples") == 1);                    // no restoring state
+        h.backend.clickHeader(tableOf(h), 1);  h.advance(500ms);  screen.reset();  h.settle();
+        CHECK(store->saves() == 0);
+    }
+}
+
+// Review Focus 3, the table's half. Mutations: no report (the count is 0); the stored text saved back unchanged.
+TEST_CASE("model table: a stored state that does not read starts from the defaults", "[ui][table][state]") {
+    auto store = std::make_shared<GatedTableStateStore>(storeExecutor(), R"({"version":2,"junk":true})");
+    TableHarness h{store};
+    auto screen = h.mount(kModelTable);  replyDescribe(h);  store->release();  h.settle();
+    REQUIRE(h.dispatcher.count("Table.samples") == 1);  CHECK(lastQuery(h).sort.empty());
+    CHECK(diagnosticsMentioning(h, "the stored state of table `list` is not used") == 1);
+    h.advance(1'000ms);  CHECK(store->saves() == 0);                          // nothing written until a change
+    h.backend.clickHeader(tableOf(h), 1);  h.advance(500ms);
+    REQUIRE(store->saves() == 1);
+    CHECK_FALSE(store->lastSaved().contains("junk"));
+    CHECK(table::readState(store->lastSaved())->version == table::kStateVersion);
+}
+
+// Invariant 31. Mutation: `onSaveFailed` not wired to `tableMessage` (the message stays empty).
+TEST_CASE("model table: a refused save is said in the status line and keeps the arrangement", "[ui][table][state]") {
+    auto store = std::make_shared<GatedTableStateStore>(storeExecutor(), R"({"version":1})");
+    TableHarness h{store};
+    auto screen = h.mount(kModelTable);  replyDescribe(h);  store->release();  h.settle();
+    store->refuseSaves("over the table-state quota");
+    h.backend.clickHeader(tableOf(h), 1);  h.advance(500ms);
+    CHECK(statusOf(h).message == "The table's arrangement could not be saved: over the table-state quota");
+    CHECK(lastQuery(h).sort.at(0).column == "name");                          // the arrangement stays
+    CHECK(h.backend.prop(tableOf(h), "sort") == "1:Ascending");
+}
+
+// Mutation: the mount leaving out the rows a `Changed` operation names (no row is bound again: 0, and the renamed
+// text is not shown).  Gate K5.
+TEST_CASE("model table: a refetch that changed 20 of 200 rows evaluates 20 rows again", "[ui][table]") {
+    TableHarness h;  auto screen = mountShown(h);
+    h.backend.scrollTable(tableOf(h), 0, 30);  h.settle();                    // rows 0 to 39 realized (overscan 10)
+    MountStats const before = statsOf(*screen);
+    change(h, std::vector<std::int64_t>{});                                   // a change without keys: the pages again
+    // the same page 0, with rows 0 to 19 renamed and rows 20 to 199 as they were
+    h.reply(oldestOpen(h, "Table.samples"), pageJsonRenaming(revisionOf(h), 0, 200, 9093, h.columns, 0, 20));
+    CHECK(statsOf(*screen).rowBinds - before.rowBinds == 20);                 // K5
+    CHECK(statsOf(*screen).cellsCreated == before.cellsCreated);
+    CHECK(h.backend.find("Text", "text", "renamed-0").has_value());
+}
+
+// Review Focus 1. Mutation: the fitting of a new revision not reporting the dropped filter (the count is 0).
+TEST_CASE("table rows: a new description revision drops what names a removed column", "[ui][table]") {
+    auto store = std::make_shared<GatedTableStateStore>(
+        storeExecutor(),
+        R"({"version":1,"sort":[{"column":"c3","direction":"asc"}],"filters":{"columns":{"c3":{"include":[{"gt":"1"}]}}}})");
+    TableHarness h{store};
+    auto screen = h.mount(kModelTable);  replyDescribe(h);  store->release();  h.settle();   // revision A: id, name, c3
+    REQUIRE(lastQuery(h).sort.at(0).column == "c3");
+    table::TableDescription const b = samplesDescription(2);                 // revision B: id, name
+    h.reply(oldestOpen(h, "Table.samples"),
+            morph::ui::testing::pageJsonAt(b.revision, 0, 200, 9093, h.columns));   // a reply names another revision
+    CHECK(h.dispatcher.count("Table.samples.describe") == 2);                 // exactly one more describe
+    replyDescribe(h, samplesDescription(2));
+    table::TableQuery const q = lastQuery(h);
+    CHECK(std::ranges::none_of(q.sort, [](auto const& key) { return key.column == "c3"; }));
+    CHECK_FALSE(q.filters.columns.contains("c3"));
+    REQUIRE(q.columns.has_value());
+    CHECK(std::ranges::find(*q.columns, "c3") == q.columns->end());
+    CHECK(diagnosticsMentioning(h, "c3") == 1);                               // the filter; a sort key is not reported
+    CHECK(headerLabels(h) == std::vector<std::string>{"Id", "Name"});         // mounted again from revision B
+    CHECK(h.dispatcher.count("Table.samples.describe") == 2);                 // once per revision
+}
+
+// Review Focus 2. Mutation: the load completion run with no liveness check (a query is sent, or the test crashes
+// under the sanitizer build).
+TEST_CASE("model table: unmounted while its state load is held", "[ui][table][state]") {
+    auto store = std::make_shared<GatedTableStateStore>(storeExecutor(), std::string{kStored});
+    TableHarness h{store};
+    auto screen = h.mount(kModelTable);  replyDescribe(h);
+    h.backend.clickHeader(tableOf(h), 0);  h.settle();   // nothing loaded yet: the change is held, not saved
+    CHECK(store->saves() == 0);
+    screen.reset();  h.settle();
+    store->release();  h.settle();
+    CHECK(h.dispatcher.count("Table.samples") == 0);     // nothing applied, no query
+    REQUIRE(store->saves() == 1);                        // the held change, over the loaded document
+    CHECK(store->lastSaved().contains(R"("contains":"a")"));   // the stored filter kept
+    CHECK(table::readState(store->lastSaved())->sort->at(0).column == "id");
+}
+
+// Review Focus 4. Mutation: `empty` shown while `total().known` is false, or while rows are undecided.
+TEST_CASE("model table: empty waits for the first reply and for undecided rows", "[ui][table]") {
+    TableHarness h;  auto screen = h.mount(kModelTable);
+    CHECK_FALSE(shownText(h, "No samples"));                                  // before the description
+    replyDescribe(h);
+    CHECK_FALSE(shownText(h, "No samples"));                                  // before any page
+    CHECK(statusOf(h).counts.empty());  CHECK(statusOf(h).shown);
+    replyPage(h, morph::ui::testing::pageJsonAt(revisionOf(h), 0, 0, 0, h.columns, table::TotalKind::AtLeast, 40));
+    CHECK_FALSE(shownText(h, "No samples"));
+    CHECK(statusOf(h).counts == "0 so far, 40 loading");
+    change(h, std::vector<std::int64_t>{});                                   // the level arrived: the page again,
+    h.advance(80ms);                                                          // which holds no row, after tableSettle
+    replyPage(h, morph::ui::testing::pageJsonAt(revisionOf(h), 0, 0, 0, h.columns));
+    CHECK(shownText(h, "No samples"));
+    CHECK(statusOf(h).counts == "0 rows");
+}
+
+// Mutations: a status line built without `failed` (no state, no retry); Retry sending the query without `retry`.
+TEST_CASE("model table: a failed level offers Retry, which sends `retry`", "[ui][table]") {
+    TableHarness h;  auto screen = h.mount(kModelTable);
+    replyDescribe(h, withLevel(samplesDescription(3), "c3", "recipe"));
+    replyPage(h, pageJsonUnloaded(revisionOf(h), 0, 200, 9093, h.columns,
+                                  {{.index = 1, .levels = {"recipe"}, .failed = {"recipe"}}}, /*failed*/ {"recipe"}));
+    CHECK(statusOf(h).state == "Recipe data could not be loaded.");
+    REQUIRE(statusOf(h).retry);
+    std::size_t const sent = h.dispatcher.count("Table.samples");
+    h.backend.retryTable(tableOf(h));  h.settle();
+    REQUIRE(h.dispatcher.count("Table.samples") > sent);
+    CHECK(lastQuery(h).retry);
+}
+
+// Mutation: `WindowRows` not telling of a failed page fetch (no view change follows a failure, so the status line
+// keeps its empty state).
+TEST_CASE("model table: a failed page fetch is said in the status line", "[ui][table]") {
+    TableHarness h;  auto screen = mountShown(h);
+    CHECK(statusOf(h).state.empty());
+    change(h, std::vector<std::int64_t>{});                                   // the pages again
+    h.fail(oldestOpen(h, "Table.samples"));
+    CHECK(statusOf(h).state == "The rows could not be loaded: it failed");
+    CHECK(statusOf(h).retry);
+}
+
+// Mutation: a page refetch per event (the call names no `keys`, or twenty calls go out).  Gate E3 on a screen.
+TEST_CASE("model table: an arrival is one keyed request", "[ui][table]") {
+    TableHarness h;  auto screen = mountShown(h);
+    std::size_t const sent = h.dispatcher.count("Table.samples");
+    std::vector<std::int64_t> keys(20);  std::ranges::iota(keys, std::int64_t{0});
+    change(h, keys);
+    REQUIRE(h.dispatcher.count("Table.samples") == sent + 1);                 // exactly one more call
+    REQUIRE(lastQuery(h).keys.has_value());
+    CHECK(lastQuery(h).keys->size() == 20);                                   // the twenty keys; the run's probe is key 0
+}
+
+// Mutation: the mount ignoring unloadedLevels (every cell Loaded).  Cross-part decision 29.
+TEST_CASE("model table: a cell of an unloaded level is a placeholder, of a failed one an error mark", "[ui][table]") {
+    TableHarness h;  auto screen = h.mount(kModelTable);
+    replyDescribe(h, withLevel(samplesDescription(3), "c3", "recipe"));       // column 2 has the level
+    replyPage(h, pageJsonUnloaded(revisionOf(h), 0, 200, 9093, h.columns,
+                                  {{.index = 0, .levels = {"recipe"}, .failed = {}},
+                                   {.index = 1, .levels = {"recipe"}, .failed = {"recipe"}}},
+                                  /*failed*/ {"recipe"}));
+    int const table = tableOf(h);
+    CHECK(h.backend.cellLoad(table, Key{std::int64_t{0}}, 2) == CellLoad::Unloaded);
+    CHECK(h.backend.cellLoad(table, Key{std::int64_t{0}}, 1) == CellLoad::Loaded);      // name has no level
+    CHECK(h.backend.cellLoad(table, Key{std::int64_t{1}}, 2) == CellLoad::Failed);
+    CHECK(h.backend.cellLoad(table, Key{std::int64_t{2}}, 2) == CellLoad::Loaded);
+    auto const created = statsOf(*screen).cellsCreated;
+    change(h, std::vector<std::int64_t>{0});                                  // the level arrives for row 0
+    REQUIRE(lastQuery(h).keys.has_value());
+    h.reply(h.dispatcher.last("Table.samples"), keyedJsonAt(revisionOf(h), {{0, 0}}, 9093, h.columns));
+    CHECK(h.backend.cellLoad(table, Key{std::int64_t{0}}, 2) == CellLoad::Loaded);
+    CHECK(statsOf(*screen).cellsCreated == created);                          // the same cell, bound again
+}
+
+// Mutations: the miss fetched inside the binding (a signal write is refused there: the debug build aborts);
+// `WindowRows::visible` keeping an id the description lacks (the query names "nosuch").
+TEST_CASE("model table: a row field the window lacks is fetched once, after the binding", "[ui][table]") {
+    // `c7` is described and not laid out, and read out of the whole row with `get`, which no column names; so is
+    // `nosuch`, which no column of the description has. Each is its own text, so each read is made.
+    std::string const readsAcross = withTableKey(
+        kModelTable, R"("columns":[{"id":"id"},{"id":"name","cell":[)"
+                     R"({"kind":"text","text":{"get":{"row":""},"path":"c7"}},)"
+                     R"({"kind":"text","text":{"get":{"row":""},"path":"nosuch"}}]}])");
+    TableHarness h;  auto screen = h.mount(readsAcross);  replyDescribe(h, samplesDescription(8));
+    std::vector<std::string> const laidOut{"id", "name"};
+    h.dispatcher.reply(oldestOpen(h, "Table.samples"),
+                       morph::ui::testing::pageJsonAt(revisionOf(h), 0, 200, 9093, laidOut));   // no settle yet
+    std::size_t const replied = h.dispatcher.calls.size();
+    h.owner.runOne();                                                          // the reply is accepted, cells bind
+    h.settle();
+    CHECK(h.diagnostics.empty());                                              // no write refused inside a binding
+    std::vector<table::TableQuery> naming;                                     // the calls since that name `c7`
+    for (std::size_t index = replied; index < h.dispatcher.calls.size(); ++index) {
+        table::TableQuery const query = queryOf(h, index);
+        if (query.columns && std::ranges::contains(*query.columns, "c7")) {
+            naming.push_back(query);
+        }
+    }
+    REQUIRE(naming.size() == 1);                                               // one fetch for every row's miss
+    CHECK(naming.front().page.offset == 0);                                    // the page in view
+    CHECK_FALSE(std::ranges::contains(*naming.front().columns, "nosuch"));
+}
+
+// Mutations: no hold timer (the message is still there after six seconds); `status: false` still filling
+// `message`; an empty text notifying.
+TEST_CASE("model table: a message lasts six seconds or until the next gesture", "[ui][table]") {
+    SECTION("in the status line") {
+        TableHarness h;  auto screen = mountShown(h);
+        morph::ui::detail::ScreenCore& core = coreOf(*screen);
+        morph::ui::detail::ElementState& list = elementOf(*screen, "list");
+        core.tableMessage(list, "Refused");  h.settle();  CHECK(statusOf(h).message == "Refused");
+        h.advance(5'999ms);  CHECK(statusOf(h).message == "Refused");
+        h.advance(1ms);      CHECK(statusOf(h).message.empty());
+        core.tableMessage(list, "Again");  h.settle();
+        h.backend.clickHeader(tableOf(h), 1);  h.settle();  CHECK(statusOf(h).message.empty());   // the next gesture
+        core.tableMessage(list, "");  h.settle();  CHECK(h.host.notified.empty());                // notifies nothing
+    }
+    SECTION("status: false") {
+        TableHarness h;  auto screen = mountShown(h, kNoStatus);
+        coreOf(*screen).tableMessage(elementOf(*screen, "list"), "Refused");  h.settle();
+        CHECK(h.host.notified == std::vector<std::pair<std::string, std::string>>{{"Refused", "warning"}});
+        CHECK(statusOf(h).message.empty());  CHECK_FALSE(statusOf(h).shown);
+    }
+}
+
+// Mutation: the mount leaving a realized row's cells unset on a change that names the row (no cell is bound again:
+// `cellBinds` grows by 0).  Gate F6, on the recording backend.
+TEST_CASE("model table: an arrival for 50 rows re-evaluates their cells and no other", "[ui][table]") {
+    TableHarness h;  auto screen = mountShown(h);
+    h.backend.scrollTable(tableOf(h), 10, 30);  h.settle();                   // rows 0 to 49 realized
+    std::vector<std::int64_t> keys(50);  std::ranges::iota(keys, std::int64_t{0});
+    auto const arrive = [&h](std::vector<std::int64_t> const& arrived) {
+        change(h, arrived);
+        table::TableQuery const asked = queryOf(h, h.dispatcher.last("Table.samples"));
+        REQUIRE(asked.keys.has_value());
+        std::vector<std::pair<std::int64_t, std::int64_t>> rows;
+        for (table::RowId const& key : *asked.keys) {
+            rows.emplace_back(std::get<std::int64_t>(key), std::get<std::int64_t>(key));
+        }
+        h.reply(h.dispatcher.last("Table.samples"), keyedJsonAt(revisionOf(h), rows, 9093, h.columns));
+    };
+    MountStats const before = statsOf(*screen);
+    arrive(keys);
+    CHECK(statsOf(*screen).cellBinds - before.cellBinds == 50 * 3);          // every cell of the 50 rows
+    CHECK(statsOf(*screen).rowBinds - before.rowBinds == 50);
+    CHECK(statsOf(*screen).cellsCreated == before.cellsCreated);             // nothing rebuilt
+    MountStats const again = statsOf(*screen);
+    arrive({keys.begin(), keys.begin() + 10});                                // the same values for ten rows
+    CHECK(statsOf(*screen).cellBinds == again.cellBinds);                     // equal records: no bind
+    CHECK(statsOf(*screen).rowBinds == again.rowBinds);
+}
+
+namespace {
+
+// Whether a document loads against @p catalog.
+bool loads(std::string_view text, morph::ui::Catalog const& catalog) {
+    return morph::ui::loadDocumentText(text, morph::ui::LoadOptions{.catalog = catalog}).has_value();
+}
+
+// The reason a document is refused against the table catalog; empty when it loads.
+std::string refusalOf(std::string_view text) {
+    auto const loaded =
+        morph::ui::loadDocumentText(text, morph::ui::LoadOptions{.catalog = morph::ui::testing::tableCatalog()});
+    return loaded ? std::string{} : loaded.error().reason;
+}
+
+}  // namespace
+
+// Mutations: `table` left out of kTableKeys (the first REQUIRE: "names its `action`"); no catalog check of
+// `Table.<id>` (the "nosuch" CHECK loads).
+TEST_CASE("ui document: a model-backed table names a table of its model", "[ui][document]") {
+    using morph::ui::testing::kModelTable;
+    using morph::ui::testing::kNoPersist;
+    using morph::ui::testing::kNoStatus;
+    using morph::ui::testing::tableCatalog;
+    using morph::ui::testing::withTableKey;
+    REQUIRE(refusalOf(kModelTable).empty());
+    CHECK(loads(kNoPersist, tableCatalog()));  CHECK(loads(kNoStatus, tableCatalog()));
+    CHECK(loads(withTableKey(kModelTable, R"("persist":"wide")"), tableCatalog()));
+    CHECK(refusalOf(withTableKey(kModelTable, R"("table":"nosuch")")) == "the table `nosuch` is not in the catalog");
+    CHECK(refusalOf(withTableKey(kModelTable, R"("action":"Lims_ListSamples")")) ==
+          "a table names a `table` or an `action`, not both");
+    CHECK(refusalOf(withTableKey(kModelTable, R"("model":"Lims_SampleModel")")) ==
+          "`Lims_SampleModel` is not a model alias of this scope");          // a type is not an alias
+    CHECK(refusalOf(withTableKey(kModelTable, R"("persist":{"ref":"x"})")) ==
+          "`persist` is a literal: true, false or a name");
+    CHECK(loads(withTableKey(kModelTable, R"("filters":{"columns":{"name":{"include":[{"contains":"a"}]}}})"),
+                tableCatalog()));
+    CHECK(refusalOf(withTableKey(kModelTable, R"("filters":{"columns":7})")).starts_with("`filters` is not a filter"));
+    CHECK(refusalOf(withTableKey(kModelTable, R"("pageSize":20)")) ==
+          "a model-backed table's engine pages; `pageSize` and `page` are for a table over `rows`");
+}
+
+// Mutation: the loader taking `table` without `model` (the document loads).
+TEST_CASE("ui document: a table's `table` needs its `model`", "[ui][document]") {
+    std::string const text =
+        R"({"vocab":"ui/1","id":"samples","view":{"kind":"table","id":"list","table":"samples"}})";
+    CHECK(refusalOf(text) == "`table` names one of a model's tables; give the table its `model`");
 }

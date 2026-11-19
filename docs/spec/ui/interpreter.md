@@ -512,8 +512,54 @@ keeps its operands' 0 places and still fills 0.29 of a bar.
   list, or `null` (a query not answered yet), the reverse. The column takes the node's `visible` and its layout,
   so it is placed as the table would be, and has no test id; every other common property stays on the table
   (`testId`, the element id `focus` finds, `enabled`, `tooltip`, `a11y`, `keys`, drag and drop). A hidden table
-  keeps its element values. No view-tree kind is added, so both backends draw it with what they have. A
-  model-backed table's `empty` waits for the table engine, as the table does.
+  keeps its element values. No view-tree kind is added, so both backends draw it with what they have.
+- **`table`** of a model's table (`model` and `table`): its rows come by view index from a `WindowRows`
+  ([`../table/table.md`](../table/table.md), "The client table model"), which the element makes when it is wired,
+  together with a query of `Table.<table>.describe` on the model's channel (one per mounted table, an entry of the
+  query cache like any query). The rows send no page before the description, and none before the stored state
+  below. The node lowers to a list of one row keyed by the held description's revision, whose row is the `Table`
+  built from that description (`Table::source`, a `TableSource` over the rows); before a description, and after
+  one that does not read, the row is a `Table` with no columns and no source, so its status line keeps its place
+  and `empty` is not shown. A new revision is a new key, so the table is mounted again from it: the rows, their
+  sort and filters, the selection and the status-line message are the element's and stay; the realized rows, the
+  cells and the scroll offset are the mount's and are built again. A reply that names another revision than the
+  one held asks for the description again, once per revision; the fitting of the new one drops a sort key, a
+  filter and a fetched column that name a column it lacks, and reports a dropped filter once at the table.
+  Columns are the description's `shown` columns, or the node's `columns` parts, each naming a described column by
+  `id` (one it lacks is reported and left out) and setting its label, width, role, places and `wrap`; a column is
+  sortable as the description says. A column's `cell` is lowered per cell, in a row scope over the cell's own row
+  signal; without one the cell is a text of the record's field. `rowTone` and `rowLabel` are lowered once per
+  realized row, in a row scope over the row's signal, which `onActivate` runs in. The rows fetch, with every
+  page, the description's key, each field `{"row": "<id>"}` names in `rowTone`, `rowLabel`, `onActivate` and the
+  laid-out columns' cells, and every column when one of them passes `{"row": ""}` on whole (reported once). A
+  path read out of the whole row with `get` is the row's own read: a row scope of a model-backed table has
+  `RtScope::onMissingRowField`, which a read of a field the record lacks calls from inside the binding; it
+  writes nothing there, and one task posted for the turn fetches every missed field that is a described column,
+  once, for the rows in view (a field that is not one is never sent). The read is `null` meanwhile, and the
+  binding runs again when the column arrives. `body` is evaluated once and is the query's fixed part; its
+  `query` member's `sort`, `filters`, `page`, `columns`, `keys` and `retry` are the table's own and replace
+  what the body gives. A literal `sort` is the default a stored one replaces, any other expression binds it; a
+  literal `filters` object (`columns` and `groups` only) is likewise the default, an expression binds them. A
+  header click on a sortable column makes it the single key, `desc` when it is the first key `asc` already;
+  under a bound sort it changes nothing. **Persisted state.** With a session store and `persist` not `false`,
+  the state's key is `{application, model type, table, persist's name or the screen's id, "state"}`; its load
+  starts when the element is wired, and the rows wait for it at most `tableStateTimeout`. A state that comes in
+  time is read (`readState`), fitted to the description held, and its sort and filters applied where the
+  document binds neither, before the first query; one that comes later is applied the same way, one more query,
+  unless the user scrolled, selected or sorted the table meanwhile. A state that does not read is reported once
+  (`the stored state of table <id> is not used: …`) and a failed load once (`… could not be loaded: …`); the
+  table starts from its defaults and changes still save. A header click saves the sort (`TableStates::changed`,
+  debounced), and unmounting saves a pending change at once. **The status line** (`Table::status`) always takes
+  space, unless `status` is `false`: its counts are `countsText` of the rows' counts and the selection's size; a
+  failed level fills its state with "<Level> data could not be loaded." and a failed fetch with "The rows could
+  not be loaded: <reason>", both with Retry (`WindowRows::retry`). `ScreenCore::tableMessage(table, text)` shows
+  a refusal or notice there for `kStatusMessageHold` (6 s) on the session's scheduler, until the table's next
+  gesture (a header click, a selection change, a scroll, Retry) clears it; under `status: false` it goes to
+  `InterpreterHost::notify` as a warning. A table state's save that does not end `Saved` is said there by every
+  mounted table with its key: "The table's arrangement could not be saved: <reason>". `empty` shows once a reply
+  said the view has, exactly, no row and no row is undecided. Its element values are a table's, with
+  `viewCount` the reply's total (`null` before one), `viewCountKind` (`exact` or `atLeast`), `undecided`,
+  `awaiting`, `failed`, `pending` (the description or a fetch in flight) and `error`.
 - **`boundary`** is a `Switch` over loading, error and children. It owns the queries its children read
   (found statically, through `let`s, not inside a nested boundary): loading while one has neither a
   value nor a failure, error when one failed with no value to keep, children otherwise. Inside `error`,
@@ -685,7 +731,7 @@ Reported when met, and shown as a muted text naming the kind:
   `forms::Overrides`.
 - A `form` node's `showErrors`: a field's error shows on its control as soon as its draft does not
   encode.
-- A `table` declared from a model's list action: the table engine (spec 7).
+- A `table` declared from a model's list action (`model` with `action`) rather than one of its tables.
 - Prefetching on hover: the host starts a screen's `prefetch` queries through `Session::prefetch`.
 
 ## Where a screen says what it holds

@@ -714,6 +714,7 @@ public:
                                        .column = {},
                                        .message = "the table's description does not read: " +
                                                   glz::format_error(failed, text)};
+            status();
             return;
         }
         setDescription(std::move(description));
@@ -729,6 +730,12 @@ public:
     ///        The reply is still taken.
     /// @param handler The receiver; empty to stop receiving.
     void onStaleDescription(std::function<void()> handler) { _onStale = std::move(handler); }
+
+    /// @brief Sets what hears that `error()` or `counts()` may have changed: a fetch was sent, answered or failed,
+    ///        or a reply or a description did not read. A failed fetch changes no row, so the view's `onChange` says
+    ///        nothing of it; this is how a status line learns of it. Called after the rows took the event.
+    /// @param handler The receiver; empty to stop receiving.
+    void onStatus(std::function<void()> handler) { _onStatus = std::move(handler); }
 
     /// @brief Leaves the restoring state: the first query goes, with the sort and filter set meanwhile.
     void release() {
@@ -1149,6 +1156,7 @@ private:
         _pageFlights.push_back(PageFlight{.fetch = fetch, .stop = std::move(stop)});
         reply.then(_scope, [this, fetch](std::string const& text) { pageArrived(fetch, text); });
         reply.onError(_scope, [this, fetch](std::exception_ptr const& error) { pageFailed(fetch, error); });
+        status();
     }
 
     void send(table::RowsFetch fetch) {
@@ -1165,6 +1173,7 @@ private:
         _rowsFlights.push_back(RowsFlight{.fetch = fetch, .stop = std::move(stop)});
         reply.then(_scope, [this, fetch](std::string const& text) { rowsArrived(fetch, text); });
         reply.onError(_scope, [this, fetch](std::exception_ptr const& error) { rowsFailed(fetch, error); });
+        status();
     }
 
     [[nodiscard]] static bool wasCancelled(std::exception_ptr const& error) {
@@ -1319,6 +1328,7 @@ private:
         if (!page) {
             _window.fail(fetch, page.error());
             _error = std::move(page.error());
+            status();
             return;
         }
         heardRevision(page->revision);
@@ -1347,6 +1357,7 @@ private:
         }
         planned(_window.owed());
         pump();
+        status();
     }
 
     void pageFailed(table::PageFetch const& fetch, std::exception_ptr const& error) {
@@ -1357,6 +1368,7 @@ private:
         auto failure = failureOf(error);
         _window.fail(fetch, failure);
         _error = std::move(failure);
+        status();
     }
 
     void rowsArrived(table::RowsFetch const& fetch, std::string const& text) {
@@ -1388,6 +1400,7 @@ private:
         if (_window.revision() != revision) {
             pump();
         }
+        status();
     }
 
     void rowsFailed(table::RowsFetch const& fetch, std::exception_ptr const& error) {
@@ -1404,6 +1417,7 @@ private:
         _error = std::move(error);
         _window.invalidate();
         pump();
+        status();
     }
 
     void planned(table::RefreshPlan plan) {
@@ -1434,6 +1448,12 @@ private:
             keys.push_back(std::move(*key));
         }
         planned(_window.refresh(keys));
+    }
+
+    void status() const {
+        if (_onStatus) {
+            _onStatus();
+        }
     }
 
     void emit(table::ViewChange const& change) {
@@ -1480,6 +1500,7 @@ private:
     std::set<std::string, std::less<>> _staleRevisions;
     std::function<void()> _onStale;
     std::function<void(table::ViewChange const&)> _onChange;
+    std::function<void()> _onStatus;
     mutable std::unordered_map<table::RowId, Entry> _memo;
     mutable WindowRowsStats _stats;
     // Last, so it is the first to go: no reply or timer reaches a half-destroyed object.

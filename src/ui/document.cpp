@@ -14,6 +14,7 @@
 #include <memory>
 #include <morph/core/wire.hpp>
 #include <morph/forms/version.hpp>
+#include <morph/table/filter.hpp>
 #include <morph/ui/control_shape.hpp>
 #include <morph/ui/date_pattern.hpp>
 #include <morph/ui/document.hpp>
@@ -293,10 +294,13 @@ constexpr std::array<KeySpec, 7> kForEachKeys = {{{"rows", Shape::Expr, {}, kReq
                                                   {"divided", Shape::Flag},
                                                   {"children", Shape::Nodes, {}, kInner}}};
 /// @brief The keys of `table`.
-constexpr std::array<KeySpec, 29> kTableKeys = {{{"rows", Shape::Expr},
+constexpr std::array<KeySpec, 32> kTableKeys = {{{"rows", Shape::Expr},
                                                  {"key", Shape::Expr, {}, kInner},
                                                  {"model", Shape::Name},
+                                                 {"table", Shape::Name},
                                                  {"action", Shape::Text},
+                                                 {"status", Shape::Flag},
+                                                 {"persist", Shape::Expr},
                                                  {"body", Shape::Expr},
                                                  {"mode", Shape::Expr},
                                                  {"columns", Shape::PartsOrExpr, "column"},
@@ -1983,9 +1987,36 @@ private:
         return made;
     }
 
+    // A table's `filters` written as the literal filter, an object of `columns` and `groups` alone: kept as its
+    // JSON text under the node's names, checked to read as a `table::FilterSpec`. Any other value is an expression.
+    [[nodiscard]] static bool literalFilter(DocNode& made, Json const& value, std::string const& path) {
+        auto const* const object = std::get_if<Json::object_t>(&value.data);
+        if (object == nullptr || object->empty() || !std::ranges::all_of(*object, [](auto const& entry) {
+                return entry.first == "columns" || entry.first == "groups";
+            })) {
+            return false;
+        }
+        std::string const text = glz::write_json(value).value_or(std::string{});
+        table::FilterSpec filter;
+        if (auto const failed = glz::read_json(filter, text)) {
+            refuse(path, "`filters` is not a filter: " + glz::format_error(failed, text));
+        }
+        made.names.emplace("filters", text);
+        return true;
+    }
+
     // NOLINTNEXTLINE(readability-function-cognitive-complexity): one case per shape a key takes.
     void entry(DocNode& made, KeySpec const& key, Json const& value, std::string const& path) {
         std::string const name{key.key};
+        if (made.kind == "table" && name == "filters" && literalFilter(made, value, path)) {
+            return;
+        }
+        if (made.kind == "table" && name == "persist") {
+            auto const* const text = std::get_if<std::string>(&value.data);
+            if (std::get_if<bool>(&value.data) == nullptr && (text == nullptr || text->empty())) {
+                refuse(path, "`persist` is a literal: true, false or a name");
+            }
+        }
         switch (key.shape) {
             case Shape::Expr:
             case Shape::Condition:
@@ -2784,6 +2815,22 @@ private:
         return info;
     }
 
+    // A model-backed table's `table`: its two actions, `Table.<table>` and `Table.<table>.describe`, are in the
+    // catalog and belong to the alias's model type.
+    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): the alias, then the table it names, as the node reads.
+    void checkModelTable(CheckContext const& context, std::string const& alias, std::string const& table,
+                         std::string const& path) {
+        std::string const query = "Table." + table;
+        if (_options->catalog.action &&
+            (!_options->catalog.action(query) || !_options->catalog.action(query + ".describe"))) {
+            static_cast<void>(require(context, alias, pointerAppend(path, "model"), {NameCategory::Model},
+                                      "a model alias"));
+            refuse(path, "the table `" + table + "` is not in the catalog");
+        }
+        static_cast<void>(checkModelAction(context, alias, query, path));
+        static_cast<void>(checkModelAction(context, alias, query + ".describe", path));
+    }
+
     void checkScope(ScopeDecl const& decl, CheckContext const& context) {
         for (ModelDecl const& model : decl.models) {
             if (model.key) {
@@ -3295,7 +3342,16 @@ private:
         checkKindValues(node);
         checkSheet(node);
         std::string_view const model = node.name("model");
-        if (!model.empty()) {
+        std::string_view const table = node.kind == "table" ? node.name("table") : std::string_view{};
+        if (!table.empty()) {
+            if (model.empty()) {
+                refuse(node.path, "`table` names one of a model's tables; give the table its `model`");
+            }
+            if (!node.name("action").empty()) {
+                refuse(node.path, "a table names a `table` or an `action`, not both");
+            }
+            checkModelTable(context, std::string{model}, std::string{table}, node.path);
+        } else if (!model.empty()) {
             if (node.name("action").empty()) {
                 refuse(node.path, "a `" + node.kind + "` with a `model` names its `action`");
             }
@@ -3489,7 +3545,7 @@ private:
         if (!node.prop("rows")) {
             return;
         }
-        if (node.prop("filters") != nullptr) {
+        if (node.prop("filters") != nullptr || !node.name("filters").empty()) {
             refuse(pointerAppend(node.path, "filters"),
                    "`filters` belongs to a model-backed table; filter `rows` with `filter`");
         }
