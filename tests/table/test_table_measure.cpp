@@ -19,6 +19,7 @@
 #include <catch2/catch_test_macros.hpp>
 #include <cstddef>
 #include <cstdint>
+#include <functional>
 #include <glaze/glaze.hpp>
 #include <memory>
 #include <morph/forms/forms.hpp>
@@ -510,6 +511,72 @@ TEST_CASE("units: a level cache keeps values under a successor and drops them un
     // Mutation: the level cache skipping the lineage check (the last read is Loaded).
 }
 
+namespace {
+
+// A one-column level cache whose loader returns 300 g for every key, numbered in `registry()`, and runs `during`
+// while it loads; its registry is whatever `current` holds when the cache asks.
+struct LineageRig {
+    explicit LineageRig(std::function<void()> during = {})
+        : _during{std::move(during)}, cache{optionsOf(current), [this](std::span<RowId const> keys) {
+                                                if (_during) {
+                                                    _during();
+                                                }
+                                                std::vector<std::pair<RowId, std::vector<Cell>>> out;
+                                                for (auto const& key : keys) {
+                                                    out.emplace_back(key, std::vector<Cell>{m("300", "g")});
+                                                }
+                                                return out;
+                                            }} {}
+
+    static LevelCacheOptions optionsOf(std::shared_ptr<UnitRegistry const>& current) {
+        LevelCacheOptions options;
+        options.records = {"Weights"};
+        options.level = "slow";
+        options.columns = {measureCol("w")};
+        options.units = [&current] { return current; };
+        return options;
+    }
+
+    LevelRead read(std::int64_t key) const {
+        std::vector<Cell> out(1);
+        return cache.snapshot()->read(RowId{key}, out);
+    }
+
+    std::shared_ptr<UnitRegistry const> current = registry();
+
+private:
+    std::function<void()> _during;
+
+public:
+    CellLevelCache cache;
+};
+
+}  // namespace
+
+// Mutation: the lineage of a load taken when it is stored rather than when it is issued (the value loaded under
+// `registry()` is stored as the new lineage's, and read Loaded).
+TEST_CASE("units: a load across a swap to another lineage is not stored", "[table][measure]") {
+    LineageRig* rig = nullptr;
+    LineageRig rigged{[&rig] { rig->current = buildRegistry(); }};  // the swap lands while the loader runs
+    rig = &rigged;
+    REQUIRE(rigged.cache.want(std::vector<RowId>{RowId{std::int64_t{1}}}, LevelUse::Display));
+    CHECK(rigged.cache.stats().loaderCalls == 1);
+    CHECK(rigged.cache.stats().droppedLoads == 1);
+    CHECK(rigged.read(1) == LevelRead::Unloaded);
+}
+
+// Mutation: a want and a store not checking the lineage before they add values (key 1, loaded under the old
+// lineage, is still read Loaded after key 2 is stored under the new one).
+TEST_CASE("units: a load under another lineage drops the values of the old one first", "[table][measure]") {
+    LineageRig rig;
+    REQUIRE(rig.cache.want(std::vector<RowId>{RowId{std::int64_t{1}}}, LevelUse::Display));
+    REQUIRE(rig.read(1) == LevelRead::Loaded);
+    rig.current = buildRegistry();  // another lineage, swapped in with no read in between
+    REQUIRE(rig.cache.want(std::vector<RowId>{RowId{std::int64_t{2}}}, LevelUse::Display));
+    CHECK(rig.read(2) == LevelRead::Loaded);
+    CHECK(rig.read(1) == LevelRead::Unloaded);
+}
+
 TEST_CASE("units: addUnitsOf reads a unit enum", "[table][measure]") {
     using tmeasure::TmUnit;
     UnitRegistryBuilder builder;
@@ -532,6 +599,21 @@ TEST_CASE("units: addUnitsOf reads a unit enum", "[table][measure]") {
     REQUIRE(addUnitsOf<TmUnit>(reversed, gFirst, +[](TmUnit) -> std::string_view { return "mass"; }));
     auto const fromG = std::move(reversed).build();
     CHECK(fromG->info(*fromG->find("kg")).toBase == dec("1000"));
+}
+
+// Mutation: addUnitsOf taking the first enumerator of a dimension the builder holds with no unit of factor 1 as its
+// base (kg is added with g as its base, at factor 1000 of a base that is not one).
+TEST_CASE("units: addUnitsOf refuses a dimension held with no base unit", "[table][measure]") {
+    using tmeasure::TmUnit;
+    UnitRegistryBuilder builder;
+    REQUIRE(builder.add(gUnit()));  // mass, at 1/1000 of a base the builder does not hold
+    std::array<TmUnit, 2> const units{TmUnit::g, TmUnit::kg};
+    auto const added = addUnitsOf<TmUnit>(builder, units, +[](TmUnit) -> std::string_view { return "mass"; });
+    REQUIRE_FALSE(added.has_value());
+    CHECK(added.error().code == TableErrorCode::InvalidSpec);
+    auto const built = std::move(builder).build();
+    CHECK_FALSE(built->find("kg"));
+    CHECK(built->info(*built->find("g")).toBase == dec("0.001"));
 }
 
 TEST_CASE("measure: typed rows carry their unit by id", "[table][measure]") {

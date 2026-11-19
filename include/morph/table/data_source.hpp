@@ -447,6 +447,18 @@ public:
         return std::nullopt;
     }
 
+    /// @brief Whether the builder holds a live unit of a dimension.
+    /// @param dimension The dimension's name.
+    /// @return `true` when a live unit measures it.
+    [[nodiscard]] bool holds(std::string_view dimension) const {
+        for (std::size_t at = 0; at < _units.size(); ++at) {
+            if (_live[at] != 0 && _units[at].dimension == dimension) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     /// @brief The registry.
     /// @return An immutable registry of the units added, numbered as they were.
     [[nodiscard]] std::shared_ptr<UnitRegistry const> build() && {
@@ -490,9 +502,10 @@ private:
 /// for `ratio`), reached through the enumerator of @p units whose `UnitMeta::id` is its id; or else the first
 /// enumerator of @p units in that dimension, added with factor 1. Every other unit's factor is the product of
 /// `UnitRelation::fromTo` along a path of `UnitTraits<E>::relations` to the base, each relation usable in both
-/// directions, the reverse taking the reciprocal. A unit's `symbol` is `UnitMeta::display` and its `decimals`
-/// `UnitMeta::defaultDecimals`. Every unit that resolves is added, in the order of @p units; one that does not is
-/// left out.
+/// directions, the reverse taking the reciprocal. A dimension the builder holds units of but no unit of factor 1
+/// has no base to convert to, and none of its units is added. A unit's `symbol` is `UnitMeta::display` and its
+/// `decimals` `UnitMeta::defaultDecimals`. Every unit that resolves is added, in the order of @p units; one that
+/// does not is left out.
 /// @tparam E The unit enum.
 /// @param builder     The builder to add to.
 /// @param units       The enumerators to add.
@@ -572,14 +585,15 @@ std::expected<void, TableError> addUnitsOf(UnitRegistryBuilder& builder, std::sp
         auto base = std::ranges::find(bases, dimension, &Base::first);
         if (base == bases.end()) {
             auto const held = builder.baseOf(dimension);
-            if (!held) {
+            if (!held && !builder.holds(dimension)) {
                 bases.emplace_back(dimension, unit);
                 add(meta, dimension, one);
                 continue;
             }
+            // Held with no unit of factor 1: no enumerator reaches a base, so every unit of it is refused.
             std::optional<E> through;
             for (auto const candidate : units) {
-                if (metaOf(candidate).id == *held) {
+                if (held && metaOf(candidate).id == *held) {
                     through = candidate;
                 }
             }

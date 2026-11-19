@@ -1159,7 +1159,7 @@ inline constexpr std::size_t kMaxSortKeysBound = 32;
 /// The bound is set before `describe` takes the revision, because `capabilities` is part of what it hashes: a
 /// table whose limits raise the bound has another revision than the same table at the default. Every reply that
 /// names the table's revision, a page included, takes it from here, so a page and the describe reply agree.
-/// @param served The table as its function returned it.
+///
 /// A table with a `Measure` column lists its units (`TableDescription::units`) from `services.units` by `unitsFor`
 /// when its function left them empty, also before the revision is taken, so a client learns them from the
 /// description and from every page's revision alike.
@@ -1676,6 +1676,14 @@ struct AnswerContext {
             }
         }
     }
+    // Before any view is computed: `writeGenericPage` writes a measure only through a registry.
+    for (auto const& column : columns) {
+        if (auto const at = findColumn(infos, column)) {
+            if (auto missing = unitsMissing(infos[*at], served.services)) {
+                return std::unexpected(std::move(*missing));
+            }
+        }
+    }
     auto const needed = levelsNeeded(*checked, infos, served.mayRead, served.services.forTask(), groups);
     std::vector<std::string> levels = needed.order;
     levels.insert(levels.end(), needed.display.begin(), needed.display.end());
@@ -1769,13 +1777,6 @@ struct AnswerContext {
                                            : pageRows(*view, *snapshot, *checked, served.limits);
     rows.awaiting = entry->awaiting;
     rows.failed = entry->failed;
-    for (auto const& column : columns) {
-        if (auto const at = findColumn(infos, column)) {
-            if (auto missing = unitsMissing(infos[*at], served.services)) {
-                return std::unexpected(std::move(*missing));
-            }
-        }
-    }
     auto page = writeGenericPage(rows, leveled, columns, served.services.units.get());
     page.unloadedRows.clear();
     for (std::size_t at = 0; at < rows.rows.size(); ++at) {

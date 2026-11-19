@@ -1882,4 +1882,19 @@ TEST_CASE("table benchmark: values with units", "[.benchmark][table][measure]") 
     };
     printRow("M4: distinctValues, Measure m, first 200", kRows, timedRuns(kRuns, [&] { values("m"); }));
     printRow("M4: distinctValues, Decimal d, first 200", kRows, timedRuns(kRuns, [&] { values("d"); }));
+    // As D1 is measured: through an engine that holds the column's keys, so only the grouping is timed.
+    auto const held = [&](std::string column) {
+        EngineOptions engineOptions;
+        engineOptions.services.units = units;
+        Engine engine{source, engineOptions};
+        require(engine.setSort({SortKey{.column = column, .dir = kAsc}}));
+        REQUIRE(engine.stats().keyBuilds == 1);
+        return timedRuns(kRuns, [&] {
+            auto const listed = engine.distinctValues({.column = column});
+            REQUIRE(listed.has_value());
+            REQUIRE(listed->values.size() == 200);
+        });
+    };
+    printRow("M4: distinctValues through an engine holding the keys, Measure m", kRows, held("m"));
+    printRow("M4: distinctValues through an engine holding the keys, Decimal d", kRows, held("d"));
 }

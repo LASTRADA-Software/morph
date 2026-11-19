@@ -119,6 +119,19 @@ TEST_CASE("table state: stale state is fitted", "[table][state]") {
     CHECK(fitState(again, d, second).carried == fitted.carried);
 }
 
+// Mutation: fitState compiling stored filters with no unit registry (the measure filter does not compile and is
+// dropped).
+TEST_CASE("table state: a stored measure filter is fitted with the description's units", "[table][state][measure]") {
+    StateDocument const stored =
+        readState(R"({"version":1,"filters":{"columns":{"weight":{"include":[{"gt":"250 g"}]}},"groups":[]}})")
+            .value();
+    FitReport report;
+    StateDocument const fitted = fitState(stored, describedSamples(), report);
+    REQUIRE(fitted.filters.has_value());
+    CHECK(fitted.filters->columns.contains("weight"));
+    CHECK(report.dropped.empty());
+}
+
 // Mutation: fitState looking up a user group's filter by `group` id (an empty id finds nothing: u3's filter, whose
 // group is dropped for having one column, stays in `filters`).
 TEST_CASE("table state: a user group and its filter are fitted together", "[table][state]") {
