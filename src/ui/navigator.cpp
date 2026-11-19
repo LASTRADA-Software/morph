@@ -63,6 +63,10 @@ bool Navigator::unpin(std::string const& screenId) {
 }
 
 void Navigator::setCurrent(std::string_view screenId) {
+    // Any other screen, or none, cancels a custom screen still waiting for its list.
+    if (screenId != _pendingCustom) {
+        _pendingCustom.clear();
+    }
     if (screenId == _current) {
         return;
     }
@@ -73,7 +77,6 @@ void Navigator::setCurrent(std::string_view screenId) {
         previous->button->setSelected(false);
     }
     _current = std::string{screenId};
-    _pendingCustom.clear();
     if (Item const* const next = itemOf(_current)) {
         next->button->setSelected(true);
         if (CatalogEntry const* const entry = entryOf(_current); entry != nullptr && _openModule != entry->module) {

@@ -233,3 +233,16 @@ TEST_CASE("navigator: an open handler may relist the custom screens", "[ui][navi
     backend.click(widget(backend, "Button", "nav_custom:bb"));
     CHECK(opened == std::vector<std::string>{"custom:bb"});
 }
+
+// Mutation: clear the pending id after the early return (`setCurrent("")` leaves it pending).
+TEST_CASE("navigator: closing the screen cancels a custom screen still waiting for its list",
+          "[ui][navigator][custom-screens]") {
+    RecordingBackend backend;
+    std::vector<std::string> opened;
+    Navigator navigator{backend, nullptr, options(opened)};
+    navigator.setCurrent("custom:bb");
+    navigator.setCurrent("");
+    navigator.setCustom(customs());
+    CHECK(navigator.current().empty());
+    CHECK(backend.prop(widget(backend, "Button", "nav_custom:bb"), "selected") != "true");
+}
