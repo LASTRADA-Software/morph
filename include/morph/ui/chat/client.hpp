@@ -40,8 +40,7 @@ public:
     /// @brief One line to show.
     struct Entry {
         /// @brief `user`, `assistant`, `tool`, `error`, or `note`: a line the client adds itself, such as why a
-        /// dictation
-        ///        failed, which the server never sees.
+        ///        dictation failed, which the server never sees.
         std::string kind;
         /// @brief Its text; a `tool` entry's is the tool's name.
         std::string text;
@@ -173,11 +172,13 @@ public:
     ///             connection.
     void end(std::function<void()> done) {
         _active.reset();
-        _conversations.clear();
-        _dictation.reset();
+        // Answered before the conversations are cleared: what answers it may add a note, which must not outlive the
+        // sign-out.
         if (_transcribing) {
             transcribed(std::unexpected(std::string{"the chat ended, so the dictation stopped"}));
         }
+        _conversations.clear();
+        _dictation.reset();
         notify();
         send(std::string{kEndKind}, "{}", [done = std::move(done)](ExchangeReply const& /*reply*/) {
             if (done) {
@@ -322,14 +323,18 @@ private:
         if (!_transcribing || _transcribing->id == 0) {
             return;
         }
-        std::uint64_t const id = _transcribing->id;
-        send(std::string{kTranscriptionKind}, writeMessage(TranscriptionQuery{.id = id}),
-             [this, id](ExchangeReply const& reply) { transcriptionRead(id, reply); });
+        std::uint64_t const wanted = _transcribing->id;
+        send(std::string{kTranscriptionKind}, writeMessage(TranscriptionQuery{.id = wanted}),
+             [this, wanted](ExchangeReply const& reply) { transcriptionRead(wanted, reply); });
     }
 
-    // A lost exchange leaves it waiting: the next event, a resync or a reconnect settles it.
-    void transcriptionRead(std::uint64_t id, ExchangeReply const& reply) {
-        if (!_transcribing || _transcribing->id != id || !reply) {
+    // A read that fails, or that answers nonsense, ends the dictation with its reason: nothing fails silently.
+    void transcriptionRead(std::uint64_t wanted, ExchangeReply const& reply) {
+        if (!_transcribing || _transcribing->id != wanted) {
+            return;
+        }
+        if (!reply) {
+            transcribed(std::unexpected(reply.error()));
             return;
         }
         if (reply->kind != "ok") {
@@ -337,7 +342,11 @@ private:
             return;
         }
         auto const state = readTranscriptionState(reply->body);
-        if (!state || state->status == TranscriptionStatus::Running) {
+        if (!state) {
+            transcribed(std::unexpected(state.error()));
+            return;
+        }
+        if (state->status == TranscriptionStatus::Running) {
             return;
         }
         if (state->status == TranscriptionStatus::Done) {
@@ -349,7 +358,10 @@ private:
 
     // Clears the waiting transcription before answering, so `done` may start the next one.
     void transcribed(std::expected<std::string, std::string> outcome) {
-        auto done = std::move(_transcribing->done);
+        if (!_transcribing) {
+            return;
+        }
+        auto const done = std::move(_transcribing->done);
         _transcribing.reset();
         if (done) {
             done(std::move(outcome));

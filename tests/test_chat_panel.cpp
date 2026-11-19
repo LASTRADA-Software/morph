@@ -415,3 +415,46 @@ TEST_CASE("chat_panel_dictation_another_document_cannot_start_or_read_it", "[cha
         return refusal.message().contains("host command `chat.dictateStart` is missing");
     }));
 }
+
+// Mutation: remove the offer check from the refresh, so a sign-out leaves the microphone recording.
+TEST_CASE("chat_panel_dictation_sign_out_stops_a_recording_and_drops_its_clip", "[chat][panel][dictation]") {
+    Rig rig;
+    rig.offer();
+    rig.clickDictate();
+    rig.recorder.begin();
+    CHECK(rig.recorder.stops == 0);
+    rig.client.end({});
+    rig.harness.settle();
+    CHECK(rig.recorder.stops == 1);
+    CHECK_FALSE(rig.visible("Button", "chat_dictate"));
+    std::size_t const before = rig.sent.size();
+    rig.recorder.clip(std::string{"RIFF"});
+    rig.harness.settle();
+    CHECK(rig.sent.size() == before);
+}
+
+// Mutation: key the append on the text, so a second identical transcript changes nothing.
+TEST_CASE("chat_panel_dictation_appends_two_identical_transcripts", "[chat][panel][dictation]") {
+    Rig rig;
+    rig.offer();
+    rig.dictate("again");
+    rig.dictate("again");
+    CHECK(rig.input() == "again again");
+}
+
+// Mutation: register the commands for every document (the other document's `can` and the transcript's reading are
+// the control for the panel's own).
+TEST_CASE("chat_panel_dictation_names_are_usable_inside_the_panel_and_cleared_with_the_offer",
+          "[chat][panel][dictation]") {
+    Rig rig;
+    rig.offer();
+    auto const same = rig.harness.mount(R"({"vocab":"ui/1","id":"morph.chat","view":{"kind":"column","children":[
+      {"kind":"text","testId":"heard","text":{"fn":"coalesce","args":[{"get":{"host":"chat.dictated"},"path":"text"},"none"]}},
+      {"kind":"text","testId":"can","text":{"fn":"format","args":["{0}",{"can":"host:chat.dictateStart"}]}}]}})");
+    CHECK(rig.harness.text("can") == "true");
+    rig.dictate("secret words");
+    CHECK(rig.harness.text("heard") == "secret words");
+    rig.client.end({});
+    rig.harness.settle();
+    CHECK(rig.harness.text("heard").empty());
+}

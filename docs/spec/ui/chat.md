@@ -370,7 +370,8 @@ The binding takes the recorder and whether the panel is visible, and registers f
 custom screen or draft can start the microphone or read a transcript. `refresh` stops a recording and drops its clip when
 the panel stops being visible or the offer is gone, as it is after `end` at sign-out. The document's top-level `watch` on
 `{"host": "chat.dictated"}` appends: a watch on a host value fires on each change of the record, so each new `seq`
-appends once, and the seconds' tick, a different value, appends nothing.
+appends once, and the seconds' tick, a different value, appends nothing. `chat.dictated` is cleared (an empty `text`, which the watch appends nothing for) when the offer
+is gone, so no transcript outlives a sign-out. A failed read of a transcription's state ends the dictation with an error note.
 
 A screen's own draft is part of where the person is: the shell reads the draft the active tab holds at each send and
 carries it as `TurnRequest::draft` (`CustomScreenChrome::draftOf`), or nothing for a tab with no draft. The client bounds

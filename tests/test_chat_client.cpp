@@ -713,3 +713,52 @@ TEST_CASE("chat_client_dictation_note_survives_a_turn_redraw", "[chat][client][d
     CHECK(rig.shown() == Shown{"user:hello", "assistant:hi there", "note:the microphone permission was denied"});
     CHECK(rig.fakeExchange.count(chat::kTurnKind) == 1);
 }
+
+// Mutation: clear the conversations before answering the waiting transcription, so its note survives the end.
+TEST_CASE("chat_client_dictation_end_leaves_no_note_a_waiting_answer_added", "[chat][client][dictation]") {
+    Rig rig;
+    rig.client.note("kept until the end");
+    rig.client.transcribe("clip", std::nullopt, [&rig](std::expected<std::string, std::string> text) {
+        REQUIRE_FALSE(text.has_value());
+        rig.client.note(text.error());
+    });
+    CHECK(rig.shown() == Shown{"note:kept until the end"});
+    rig.client.end({});
+    CHECK(rig.shown().empty());
+}
+
+// Mutation: drop the sequence check, so an accept of an ended transcription starts reading the next one's state.
+TEST_CASE("chat_client_dictation_ignores_a_stale_accept", "[chat][client][dictation]") {
+    Rig rig;
+    Outcome first;
+    rig.client.transcribe("clip", std::nullopt, [&](std::expected<std::string, std::string> text) { first = text; });
+    rig.client.end({});
+    REQUIRE(first.has_value());
+    Outcome second;
+    rig.client.transcribe("clip", std::nullopt, [&](std::expected<std::string, std::string> text) { second = text; });
+    // The first clip's accept arrives late, after the second transcription began.
+    rig.fakeExchange.ok(chat::kTranscribeKind, chat::writeMessage(chat::TranscribeAccepted{.id = 3}));
+    CHECK(rig.fakeExchange.count(chat::kTranscriptionKind) == 0);
+    CHECK_FALSE(second.has_value());
+    // Beside it: the second's own accept is read.
+    rig.fakeExchange.ok(chat::kTranscribeKind, chat::writeMessage(chat::TranscribeAccepted{.id = 4}));
+    CHECK(rig.fakeExchange.count(chat::kTranscriptionKind) == 1);
+}
+
+// Mutation: leave the call waiting when the state read fails or answers nonsense.
+TEST_CASE("chat_client_dictation_a_failed_state_read_ends_the_call_with_its_reason", "[chat][client][dictation]") {
+    Rig rig;
+    Outcome lost;
+    rig.client.transcribe("clip", std::nullopt, [&](std::expected<std::string, std::string> text) { lost = text; });
+    rig.fakeExchange.ok(chat::kTranscribeKind, chat::writeMessage(chat::TranscribeAccepted{.id = 2}));
+    rig.fakeExchange.answer(chat::kTranscriptionKind, std::unexpected(std::string{"not delivered"}));
+    REQUIRE(lost.has_value());
+    CHECK(lost->error() == "not delivered");
+
+    Outcome garbled;
+    rig.client.transcribe("clip", std::nullopt, [&](std::expected<std::string, std::string> text) { garbled = text; });
+    rig.fakeExchange.ok(chat::kTranscribeKind, chat::writeMessage(chat::TranscribeAccepted{.id = 3}));
+    rig.fakeExchange.ok(chat::kTranscriptionKind, "not json");
+    REQUIRE(garbled.has_value());
+    CHECK_FALSE(garbled->has_value());
+}

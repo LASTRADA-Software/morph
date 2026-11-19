@@ -38,6 +38,10 @@ inline constexpr std::string_view kChatPanelDocument = R"json({
   "watch": [
     { "on": { "host": "chat.dictated" },
       "do": [ { "set": "draft", "value": { "if": [
+        { "fn": "isEmpty", "args": [
+          { "fn": "trim", "args": [ { "get": { "host": "chat.dictated" }, "path": "text" } ] } ] },
+        { "ref": "draft" },
+        { "if": [
         { "fn": "or", "args": [
           { "fn": "isEmpty", "args": [ { "ref": "draft" } ] },
           { "fn": "lt", "args": [
@@ -47,7 +51,7 @@ inline constexpr std::string_view kChatPanelDocument = R"json({
         { "fn": "concat", "args": [ { "ref": "draft" },
           { "fn": "trim", "args": [ { "get": { "host": "chat.dictated" }, "path": "text" } ] } ] },
         { "fn": "concat", "args": [ { "ref": "draft" }, " ",
-          { "fn": "trim", "args": [ { "get": { "host": "chat.dictated" }, "path": "text" } ] } ] } ] } } ] } ],
+          { "fn": "trim", "args": [ { "get": { "host": "chat.dictated" }, "path": "text" } ] } ] } ] } ] } } ] } ],
   "view": { "kind": "column", "testId": "chat_panel", "gap": 2,
     "sizing": { "lit": { "width": { "stretch": 1 }, "height": { "stretch": 1 } } },
     "children": [
@@ -178,7 +182,7 @@ public:
         }
         bool const onScreen = _context && _context().has_value();
         bool const running = _client->running();
-        if (_state == DictationState::Recording && (!shown() || !_client->dictation())) {
+        if (_state == DictationState::Recording && (!shown() || !_client->dictation().has_value())) {
             dropRecording();
         }
         _host->set("chat.entries", Value{std::move(entries)});
@@ -256,13 +260,23 @@ private:
         _host->set("chat.canDictate", Value{canDictate()});
         _host->set("chat.dictation", Value{std::string{kNames.at(static_cast<std::size_t>(_state))}});
         _host->set("chat.dictationSeconds", Value{_seconds});
+        // A transcript is not kept once the offer is gone: it is cleared, so nothing reads it after a sign-out.
+        if (_hasDictated && !_client->dictation().has_value()) {
+            _hasDictated = false;
+            _host->set("chat.dictated",
+                       Value{ValueRecord{{"seq", Value{_dictatedSeq}}, {"text", Value{std::string{}}}}});
+        }
     }
 
     void startDictation() {
         if (_state != DictationState::Idle || !canDictate()) {
             return;
         }
-        DictationLimits const limits = *_client->dictation();
+        std::optional<DictationLimits> const offered = _client->dictation();
+        if (!offered.has_value()) {
+            return;
+        }
+        DictationLimits const limits = *offered;
         _state = DictationState::Recording;
         _seconds = 0;
         publishDictation();
@@ -316,6 +330,7 @@ private:
             _client->note("Nothing was heard in the recording");
         } else {
             ++_dictatedSeq;
+            _hasDictated = true;
             _host->set("chat.dictated",
                        Value{ValueRecord{{"seq", Value{_dictatedSeq}}, {"text", Value{std::move(*text)}}}});
         }
@@ -367,6 +382,7 @@ private:
     DictationState _state = DictationState::Idle;
     std::int64_t _seconds = 0;
     std::int64_t _dictatedSeq = 0;
+    bool _hasDictated = false;
     std::size_t _droppedClips = 0;
     std::shared_ptr<bool> _alive = std::make_shared<bool>(true);
 };

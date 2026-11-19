@@ -171,8 +171,8 @@ struct ShellOptions {
     /// @brief Maps a sign-in mutation's reply to the principal and token the shell installs. Required.
     SignInMapper signIn = defaultSignIn;
     /// @brief Makes the recorder the chat panel dictates with, once, on the owner, when the chat is built; empty
-    /// offers
-    ///        no dictation. The shell owns what it returns and stops a recording whenever the panel leaves view.
+    ///        offers no dictation. The shell owns what it returns and stops a recording whenever the panel leaves
+    ///        view.
     std::function<std::unique_ptr<ui::chat::IDictationRecorder>()> dictation;
 };
 
