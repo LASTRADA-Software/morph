@@ -1041,3 +1041,82 @@ TEST_CASE("level cache: a repeat interleaved with another holder's unwant keeps 
     CHECK(detail::LevelCacheAccess::kept(held.rig.cache, held.set->back()));
     CHECK_FALSE(held.othersFit());  // B still orders by the set
 }
+
+// Mutation: a repeat marking the event seen for every accepted set (X's repeat consumes it, and SY's failed key is
+// never wanted again).
+TEST_CASE("level cache: a failure only one set holds is retried on that set's repeat after another set's",
+          "[table][levels]") {
+    RowId const failing{std::int64_t{100}};
+    Rig rig{{}, [&](std::span<RowId const> asked) {
+                Values out;
+                for (auto const& key : asked) {
+                    if (key != failing) {
+                        out.emplace_back(key, std::vector<Cell>{Cell{"v" + text(key)}});
+                    }
+                }
+                return out;
+            }};
+    auto const setX = std::make_shared<std::vector<RowId> const>(keys(10));
+    auto setYKeys = keys(10);
+    setYKeys.push_back(failing);
+    auto const setY = std::make_shared<std::vector<RowId> const>(std::move(setYKeys));
+    REQUIRE(rig.cache.wantSet(setX, LevelUse::Order));
+    REQUIRE(rig.cache.wantSet(setY, LevelUse::Order));
+    rig.drain();
+    REQUIRE(stateOf(*rig.cache.snapshot(), failing) == LevelRead::Failed);
+    rig.now += 31s;  // past the failure's delay, within both sets' leases
+    REQUIRE(rig.cache.wantSet(setX, LevelUse::Order));
+    auto const calls = rig.callCount();
+    REQUIRE(rig.cache.wantSet(setY, LevelUse::Order));
+    rig.drain();
+    REQUIRE(rig.callCount() == calls + 1);
+    CHECK(rig.calls.back() == std::vector<RowId>{failing});
+}
+
+// Mutation: a repeat marking the event seen for every accepted set (X's repeat consumes it, and SY's invalidated
+// key is never wanted again).
+TEST_CASE("level cache: a protected key invalidated in flight is queued again on its set's repeat after another set's",
+          "[table][levels]") {
+    RowId const flying{std::int64_t{100}};
+    Rig rig;
+    auto const setX = std::make_shared<std::vector<RowId> const>(keys(10));
+    auto setYKeys = keys(10);
+    setYKeys.push_back(flying);
+    auto const setY = std::make_shared<std::vector<RowId> const>(std::move(setYKeys));
+    REQUIRE(rig.cache.wantSet(setX, LevelUse::Order));
+    rig.drain();
+    REQUIRE(rig.cache.wantSet(setX, LevelUse::Order));  // wanted at the current generation, so SY's fit keeps it
+    REQUIRE(rig.cache.wantSet(setY, LevelUse::Order));  // the key is posted to load
+    rig.cache.invalidate(std::vector<RowId>{flying});    // in flight, not held: nothing is published
+    rig.drain();                                         // its stale load is dropped
+    REQUIRE(stateOf(*rig.cache.snapshot(), flying) == LevelRead::Unloaded);
+    REQUIRE(rig.cache.stats().droppedLoads == 1);
+    REQUIRE(detail::LevelCacheAccess::acceptedSets(rig.cache) == 2);
+    auto const fits = detail::LevelCacheAccess::fits(rig.cache);
+    REQUIRE(rig.cache.wantSet(setX, LevelUse::Order));
+    REQUIRE(detail::LevelCacheAccess::fits(rig.cache) == fits);  // a repeat, not a fit
+    auto const calls = rig.callCount();
+    REQUIRE(rig.cache.wantSet(setY, LevelUse::Order));
+    rig.drain();
+    REQUIRE(rig.callCount() == calls + 1);
+    CHECK(rig.calls.back() == std::vector<RowId>{flying});
+    CHECK(stateOf(*rig.cache.snapshot(), flying) == LevelRead::Loaded);
+}
+
+// Mutation: a fit keeping the superseded sets (SX, not wanted since the level's generation moved, stays accepted and
+// keeps its keys protected).
+TEST_CASE("level cache: a set superseded by the level's generation is released at the next fit", "[table][levels]") {
+    Rig rig;
+    auto const setX = std::make_shared<std::vector<RowId> const>(keys(10));
+    auto const setY = std::make_shared<std::vector<RowId> const>(keyRange(10, 20));
+    REQUIRE(rig.cache.wantSet(setX, LevelUse::Order));
+    rig.drain();
+    REQUIRE(rig.cache.wantSet(setX, LevelUse::Order));  // wanted at the generation its keys were stored at
+    detail::LevelCacheAccess::store(rig.cache, valuesOf(keyRange(50, 51)));  // the generation moves
+    REQUIRE(rig.cache.wantSet(setY, LevelUse::Order));
+    CHECK(detail::LevelCacheAccess::acceptedSets(rig.cache) == 1);
+    CHECK_FALSE(detail::LevelCacheAccess::kept(rig.cache, RowId{std::int64_t{0}}));
+    // Eleven values (SX's ten and the one stored) and SY's keys; SX's keys have left the count.
+    auto const setYBytes = sizeof(std::vector<RowId>) + 10 * rowIdBytes(RowId{std::int64_t{10}});
+    CHECK(rig.cache.stats().bytes == 11 * smallValueBytes() + setYBytes);
+}

@@ -1475,12 +1475,35 @@ struct AnswerContext {
         if (!values) {
             return std::unexpected(std::move(values.error()));
         }
+        // Every row is a candidate: the order levels are wanted for every key of the snapshot. The set is kept in
+        // the view cache, under a key no sort or filter writes, so that the requests over one snapshot want one
+        // kept set, which a level holds once and each later request repeats, as a page's view does.
         auto const snapshot = leveled.snapshot();
-        auto keys = std::make_shared<std::vector<RowId>>();
-        if (!needed.order.empty()) {
-            keys->reserve(snapshot->rowCount());
+        auto const everyRow = [&]() -> std::expected<ViewComputation, TableError> {
+            ViewComputation out{.view = {}, .awaiting = {}, .failed = {}, .orderKeys = {}};
+            auto all = std::make_shared<std::vector<RowId>>();
+            all->reserve(snapshot->rowCount());
+            out.view.rows.reserve(snapshot->rowCount());
             for (std::size_t row = 0; row < snapshot->rowCount(); ++row) {
-                keys->push_back(snapshot->rowId(row));
+                all->push_back(snapshot->rowId(row));
+                out.view.rows.push_back(static_cast<std::uint32_t>(row));
+            }
+            out.orderKeys = std::move(all);
+            return out;
+        };
+        std::shared_ptr<std::vector<RowId> const> keys;
+        if (!needed.order.empty()) {
+            if (context.views != nullptr && !context.record.empty()) {
+                auto const* const pinned = dynamic_cast<PinnedSource const*>(served.source.get());
+                auto found = context.views->find(
+                    ViewKey{.record = std::string{context.record}, .scope = served.scope, .query = "every row"},
+                    served.source->snapshot(), {}, everyRow, pinned != nullptr ? pinned->pinnedAt() : 0);
+                if (!found) {
+                    return std::unexpected(std::move(found.error()));
+                }
+                keys = (*found)->orderKeys;
+            } else {
+                keys = everyRow()->orderKeys;
             }
         }
         std::vector<std::shared_ptr<LevelSource>> leased;
