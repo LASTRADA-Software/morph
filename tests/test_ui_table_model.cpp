@@ -1326,21 +1326,8 @@ TEST_CASE("model table: an arrival for 50 rows re-evaluates their cells and no o
     CHECK(statsOf(*screen).rowBinds == again.rowBinds);
 }
 
-namespace {
-
-// Whether a document loads against @p catalog.
-bool loads(std::string_view text, morph::ui::Catalog const& catalog) {
-    return morph::ui::loadDocumentText(text, morph::ui::LoadOptions{.catalog = catalog}).has_value();
-}
-
-// The reason a document is refused against the table catalog; empty when it loads.
-std::string refusalOf(std::string_view text) {
-    auto const loaded =
-        morph::ui::loadDocumentText(text, morph::ui::LoadOptions{.catalog = morph::ui::testing::tableCatalog()});
-    return loaded ? std::string{} : loaded.error().reason;
-}
-
-}  // namespace
+using morph::ui::testing::loads;
+using morph::ui::testing::refusalOf;
 
 // Mutations: `table` left out of kTableKeys (the first REQUIRE: "names its `action`"); no catalog check of
 // `Table.<id>` (the "nosuch" CHECK loads).
@@ -1939,7 +1926,7 @@ TEST_CASE("value rows source: every value kind infers its column kind", "[ui][ta
 // the run column named plain "group" (the source has two columns of that id, and the count CHECK reads 2).
 TEST_CASE("value rows source: a grouped table sorts within its runs", "[ui][table]") {
     RowsFixture h;  auto const src = sourceOf(h, {col("name"), col("group")});   // a document column named "group"
-    src->setGroup([](Value const& row) { return *row.field("site"); });
+    src->setGroup([](Value const& row) { return *row.field("site"); }, {});
     src->use("name");  src->use("group");
     src->assign(ValueList{rec({{"id", 1}, {"site", "A"}, {"name", "z"}, {"group", "q"}}),
                           rec({{"id", 2}, {"site", "A"}, {"name", "a"}, {"group", "r"}}),
@@ -2017,7 +2004,7 @@ TEST_CASE("value rows source: a group's runs are the interpreter's runs", "[ui][
     REQUIRE(headingCounts(interpreter) == std::vector<std::string>{"3", "1"});
 
     RowsFixture h;  auto const src = sourceOf(h, {col("id")});
-    src->setGroup([](Value const& row) { return *row.field("g"); });
+    src->setGroup([](Value const& row) { return *row.field("g"); }, {});
     auto const json = morph::ui::parseJson(rows);
     REQUIRE(json.has_value());
     auto const list = morph::ui::valueFromJson(*json);
@@ -2059,7 +2046,7 @@ TEST_CASE("value rows source: a field no column reads is redrawn in place", "[ui
 // Mutation: a changed heading record not notified (the change names row 1 alone).
 TEST_CASE("value rows source: a changed run heading is an update of the run's first row", "[ui][table]") {
     RowsFixture h;  auto const src = sourceOf(h, {col("name")});
-    src->setGroup([](Value const& row) { return *row.field("site"); });
+    src->setGroup([](Value const& row) { return *row.field("site"); }, {});
     src->use("name");
     ValueList const rows{rec({{"id", 1}, {"site", "A"}, {"name", "a"}, {"notes", "x"}}),
                          rec({{"id", 2}, {"site", "A"}, {"name", "b"}, {"notes", "x"}}),
@@ -2140,4 +2127,219 @@ TEST_CASE("value rows source: a literal date and a measure record", "[ui][table]
                                         morph::math::DecimalPlaces{1}},
         .unit = *kg}});
     CHECK(src->invalidCells("m") == 1);                                        // the unit "zz" is unknown
+}
+
+// ── A table over `rows` on the engine ───────────────────────────────────────
+
+using morph::ui::Refusal;
+using morph::ui::testing::coreOf;
+using morph::ui::testing::describedFrom;
+using morph::ui::testing::diagnosticsMentioning;
+using morph::ui::testing::elementOf;
+using morph::ui::testing::engineOf;
+using morph::ui::testing::idRows;
+using morph::ui::testing::kRowsSamples;
+using morph::ui::testing::kThree;
+using morph::ui::testing::mixedRows;
+using morph::ui::testing::pagesOf;
+using morph::ui::testing::rowOrder;
+using morph::ui::testing::rowsDoc;
+using morph::ui::testing::rowsDocNoId;
+
+// Mutation: the interpreter's pipeline left in place for `rows` tables (the accented names order apart).
+TEST_CASE("one order on every surface: a rows table and a model table order alike", "[ui][table]") {
+    std::string const rows = mixedRows();
+    for (std::vector<std::size_t> const& clicks : {std::vector<std::size_t>{1},          // by name
+                                                   std::vector<std::size_t>{1, 1},       // by name, descending
+                                                   std::vector<std::size_t>{2}}) {       // by weight
+        TableHarness asRows;  auto rowsScreen = asRows.mount(rowsDoc(rows));
+        TableHarness asModel;  auto modelScreen = asModel.mount(kRowsSamples);
+        replyDescribe(asModel, describedFrom(rows));
+        replyPage(asModel, pagesOf(rows, lastQuery(asModel)));
+        for (std::size_t column : clicks) {
+            asRows.backend.clickHeader(tableOf(asRows), column);  asRows.settle();
+            asModel.backend.clickHeader(tableOf(asModel), column);  asModel.settle();
+            replyPage(asModel, pagesOf(rows, lastQuery(asModel)));
+        }
+        asModel.backend.scrollTable(tableOf(asModel), 0, 200);  asModel.settle();  // a model table is windowed
+        CHECK(rowOrder(asRows) == rowOrder(asModel));
+        CHECK_FALSE(rowOrder(asRows).empty());
+    }
+}
+
+// Mutation: sorting the whole list on a row change (fullSorts grows).  Gate U2 counts, on a screen.
+TEST_CASE("rows table: one changed row is one repair", "[ui][table]") {
+    TableHarness h;  auto screen = h.mount(rowsDoc(kThree));
+    h.backend.clickHeader(tableOf(h), 1);  h.settle();
+    REQUIRE(rowOrder(h) == "a b c");
+    table::EngineStats const before = engineOf(*screen, "list").stats();
+    h.backend.click(h.byTestId("Button", "rename"));  h.settle();
+    CHECK(engineOf(*screen, "list").stats().repairs - before.repairs == 1);
+    CHECK(engineOf(*screen, "list").stats().fullSorts == before.fullSorts);
+    CHECK(rowOrder(h) == "a c b");                                            // "zz" moved last
+}
+
+// Mutations: no bound check (no warning); the bound read as `>=` (a warning at 20,000). A warning per change of the
+// list is not observable here: the screen reports a repeated path and reason once.
+TEST_CASE("rows table: a list over 20,000 rows is reported once", "[ui][table]") {
+    TableHarness h;  auto screen = h.mount(rowsDoc(idRows(20'001)));
+    std::string const warning = "table list holds 20,001 rows; a table over rows is ordered on the client up to "
+                                "20,000 rows or 1,000,000 cells — serve it as a model's table";
+    CHECK(diagnosticsMentioning(h, warning) == 1);
+    h.backend.click(h.byTestId("Button", "rename"));  h.settle();             // the list changes: no second report
+    CHECK(diagnosticsMentioning(h, warning) == 1);
+    TableHarness under;  auto small = under.mount(rowsDoc(idRows(20'000)));
+    CHECK(diagnosticsMentioning(under, "serve it as a model's table") == 0);  // at the bound: nothing
+}
+
+// Mutation: drawing the rows before the load settles (the first CHECK reads "a b c").
+TEST_CASE("rows table: persisted state before the first rows", "[ui][table][state]") {
+    auto store = std::make_shared<GatedTableStateStore>(storeExecutor(),
+                                                        R"({"version":1,"sort":[{"column":"name","direction":"desc"}]})");
+    TableHarness h{store};  auto screen = h.mount(rowsDoc(kThree));
+    CHECK(rowOrder(h).empty());                                               // placeholders only while restoring
+    CHECK(store->lastLoadKey() == table::TableStateKey{.application = "lims", .model = "", .table = "list",
+                                                         .qualifier = "samples", .part = "state"});
+    store->release();  h.settle();
+    CHECK(rowOrder(h) == "c b a");                                            // first drawn: the stored order
+    h.backend.clickHeader(tableOf(h), 1);  h.advance(500ms);  CHECK(store->saves() == 1);
+}
+
+// Mutation: a rows table without `id` given a key (a load goes out with table "").
+TEST_CASE("rows table: a table without an id persists nothing", "[ui][table][state]") {
+    auto store = std::make_shared<GatedTableStateStore>(storeExecutor(), R"({"version":1})");
+    TableHarness h{store};  auto screen = h.mount(rowsDocNoId(kThree));
+    CHECK(rowOrder(h) == "a b c");                                            // no restoring state
+    h.backend.clickHeader(h.backend.all("Table").front(), 1);  h.advance(500ms);
+    CHECK(store->loads() == 0);  CHECK(store->saves() == 0);
+}
+
+// Mutations: `shown` always true for a rows table; a message under `status: false` kept in the line.
+TEST_CASE("rows table: the status line takes space only while it has something to say", "[ui][table]") {
+    TableHarness h;  auto screen = h.mount(rowsDoc(kThree));
+    CHECK_FALSE(statusOf(h).shown);
+    coreOf(*screen).tableMessage(elementOf(*screen, "list"), "Refused");  h.settle();
+    CHECK(statusOf(h).shown);  CHECK(statusOf(h).message == "Refused");  CHECK(statusOf(h).counts == "3 rows");
+    h.advance(6'000ms);  CHECK_FALSE(statusOf(h).shown);
+    TableHarness always;  auto shown = always.mount(rowsDoc(kThree, R"(,"status":true)"));
+    CHECK(statusOf(always).shown);  CHECK(statusOf(always).counts == "3 rows");
+    TableHarness never;  auto hidden = never.mount(rowsDoc(kThree, R"(,"status":false)"));
+    coreOf(*hidden).tableMessage(elementOf(*hidden, "list"), "Refused");  never.settle();
+    CHECK_FALSE(statusOf(never).shown);  CHECK(statusOf(never).message.empty());
+}
+
+// Mutation: no report of an invalid sort cell (the count is 0). One report per view change is not observable here:
+// the screen reports a repeated path and reason once.
+TEST_CASE("rows table: a cell not of its column's kind is reported once at the sort path", "[ui][table]") {
+    TableHarness h;
+    auto screen = h.mount(rowsDoc(R"([{"id":"a","weight":1},{"id":"b","weight":"heavy"},{"id":"c","weight":2}])"));
+    auto const sortReports = [&h] {
+        return std::ranges::count_if(h.diagnostics, [](Refusal const& r) { return r.path.ends_with("/sort"); });
+    };
+    h.backend.clickHeader(tableOf(h), 2);  h.settle();
+    CHECK(rowOrder(h) == "a c b");                                            // the invalid cell sorts last
+    CHECK(sortReports() == 1);
+    h.backend.clickHeader(tableOf(h), 2);  h.settle();
+    CHECK(rowOrder(h) == "c a b");  CHECK(sortReports() == 1);                // last in either direction, once
+}
+
+namespace {
+
+// A grouped rows table: `g` groups, each heading shows its run's count, the column `note` is drawn by the default
+// cell and read by no sort; the button `note` gives row 1 a new note, and `join` then gives row 3 the group of row 2.
+constexpr std::string_view kGroupedRows = R"({"vocab":"ui/1","id":"samples",
+  "state":{"items":{"init":{"lit":[{"id":1,"g":"x","note":"one"},{"id":2,"g":"x","note":"two"},
+                                   {"id":3,"g":"y","note":"three"}]}}},
+  "view":{"kind":"column","children":[
+    {"kind":"table","id":"list","testId":"list","rows":{"ref":"items"},"key":{"row":"id"},
+     "group":{"by":{"row":"g"},"heading":{"kind":"text","text":{"fn":"format","args":["{0}",{"row":"count"}]}}},
+     "columns":[{"id":"id","label":"Id","sortable":true},{"id":"note","label":"Note"}]},
+    {"kind":"button","testId":"note","label":"Note","onClick":[{"set":"items","value":{"lit":[
+      {"id":1,"g":"x","note":"uno"},{"id":2,"g":"x","note":"two"},{"id":3,"g":"y","note":"three"}]}}]},
+    {"kind":"button","testId":"join","label":"Join","onClick":[{"set":"items","value":{"lit":[
+      {"id":1,"g":"x","note":"uno"},{"id":2,"g":"x","note":"two"},{"id":3,"g":"x","note":"three"}]}}]}]}})";
+
+// The texts of the headings of the harness's first table, in order.
+std::vector<std::string> headingTexts(TableHarness const& h) {
+    std::vector<std::string> out;
+    for (int const row : h.backend.children(h.backend.all("Table").front())) {
+        if (h.backend.prop(row, "heading") != "true") {
+            continue;
+        }
+        int cell = row;
+        while (h.backend.kindOf(cell) != "Text" && !h.backend.children(cell).empty()) {
+            cell = h.backend.children(cell).front();
+        }
+        out.push_back(h.backend.prop(cell, "text"));
+    }
+    return out;
+}
+
+}  // namespace
+
+// Mutation: `EngineRows` keeping its record of an `Updated` row (the note stays "one").
+TEST_CASE("rows table: a field no sort reads redraws its row, and a heading's count follows its run", "[ui][table]") {
+    TableHarness h;  auto screen = h.mount(kGroupedRows);
+    h.backend.clickHeader(tableOf(h), 0);  h.settle();
+    REQUIRE(headingTexts(h) == std::vector<std::string>{"2", "1"});
+    REQUIRE(shownText(h, "one"));
+    h.backend.click(h.byTestId("Button", "note"));  h.settle();              // the runs stay: an `Updated` row
+    CHECK(shownText(h, "uno"));
+    CHECK_FALSE(shownText(h, "one"));
+    CHECK(headingTexts(h) == std::vector<std::string>{"2", "1"});
+    h.backend.click(h.byTestId("Button", "join"));  h.settle();              // row 3 joins the first run
+    CHECK(headingTexts(h) == std::vector<std::string>{"3"});
+}
+
+// Mutation: `TableSource::rowScopedCells` false on a rows table (c's cells, rebound from a's place, show a's draft).
+TEST_CASE("rows table: a row's cells share its scope, and a row given another's place builds its own", "[ui][table]") {
+    constexpr char const* kDrafts = R"({"vocab":"ui/1","id":"drafts",
+      "state":{"items":{"init":{"lit":[{"id":"a","name":"a"},{"id":"b","name":"b"}]}}},
+      "view":{"kind":"column","children":[
+        {"kind":"table","id":"list","rows":{"ref":"items"},"key":{"row":"id"},
+         "scope":{"state":{"draft":{"init":{"row":"name"}}}},
+         "columns":[
+           {"id":"edit","label":"Edit","cell":{"kind":"textInput","testId":"edit","commitOn":"change",
+              "value":{"ref":"draft"},"onChange":[{"set":"draft","value":{"ref":"event"}}]}},
+           {"id":"shown","label":"Shown","cell":{"kind":"text","testId":"shown","text":{"ref":"draft"}}}]},
+        {"kind":"button","testId":"swap","label":"Swap",
+         "onClick":[{"set":"items","value":{"lit":[{"id":"b","name":"b"},{"id":"c","name":"c"}]}}]}]}})";
+    TableHarness h;  auto screen = h.mount(kDrafts);
+    REQUIRE(shownText(h, "a"));
+    h.backend.edit(h.byTestId("TextInput", "edit"), "edited");  h.settle();  // the first row's input: a's
+    CHECK(shownText(h, "edited"));                                            // its text cell reads the same draft
+    CHECK_FALSE(shownText(h, "a"));
+    h.backend.click(h.byTestId("Button", "swap"));  h.settle();              // c takes the place a left
+    CHECK(shownText(h, "b"));
+    CHECK(shownText(h, "c"));
+    CHECK_FALSE(shownText(h, "edited"));
+}
+
+// Mutation: `setGroup` given an empty unit table (1 kg and 1000 g are two runs).
+TEST_CASE("value rows source: a group's quantities are compared through the screen's units", "[ui][table]") {
+    RowsFixture h;  auto const src = sourceOf(h, {col("id")});
+    morph::ui::UnitTable const units{
+        {"g", morph::ui::UnitInfo{.canonical = "g", .toCanonical = *table::parseDecimal("1"), .display = {}}},
+        {"kg", morph::ui::UnitInfo{.canonical = "g", .toCanonical = *table::parseDecimal("1000"), .display = {}}}};
+    src->setGroup([](Value const& row) { return *row.field("w"); }, units);
+    src->assign(ValueList{rec({{"id", 1}, {"w", qty("1", "kg")}}), rec({{"id", 2}, {"w", qty("1000", "g")}}),
+                          rec({{"id", 3}, {"w", qty("2", "kg")}})});
+    h.settle();
+    CHECK(src->runRecords().size() == 2);
+    CHECK(src->runOf(1) == 0);
+    CHECK(src->runOf(2) == 1);
+}
+
+// Mutations: `kind` not in kColumnKeys (the bad kind loads); no `persist` check on a rows table without an id.
+TEST_CASE("ui document: a rows table's column kind and its persist need what they name", "[ui][document]") {
+    using morph::ui::testing::tableCatalog;
+    using morph::ui::testing::withColumnKey;
+    CHECK(loads(rowsDoc(kThree, R"(,"persist":"mine")"), tableCatalog()));
+    CHECK(refusalOf(withColumnKey(rowsDoc(kThree), "name", R"("kind":"money")")) ==
+          "`kind` is one of text, integer, decimal, number, date, dateTime, bool");
+    CHECK(loads(withColumnKey(rowsDoc(kThree), "name", R"("kind":"text")"), tableCatalog()));
+    CHECK(refusalOf(rowsDocNoId(kThree, R"(,"persist":true)")) ==
+          "a table over `rows` needs an `id` to persist its arrangement");
+    CHECK(loads(rowsDocNoId(kThree, R"(,"persist":false)"), tableCatalog()));
+    CHECK(loads(rowsDocNoId(kThree), tableCatalog()));
 }

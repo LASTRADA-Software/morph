@@ -1849,6 +1849,8 @@ private:
         std::size_t reconciling = 0;
         bool sorted = false;
         bool anyAsked = false;
+        // Whether the table is windowed whatever its realized rows count: a table over a source above its threshold.
+        bool windowed = false;
         std::set<std::string> lastRefused;
     };
 
@@ -1870,7 +1872,7 @@ private:
             }
             rows.push_back(std::move(row));
         }
-        bool const virtualized = table.order.size() >= table.threshold;
+        bool const virtualized = table.windowed || table.order.size() >= table.threshold;
         ResolvedSpans resolved;
         if (table.sorted) {
             resolved.effective.resize(rows.size());
@@ -2137,6 +2139,8 @@ private:
         std::vector<TableColumn> columns;
         Virtualization virtualize;
         std::size_t depth = 0;
+        // The rows' spans, resolved over the realized rows; drawn only while every row is realized.
+        SpanTable* spans = nullptr;
         // The rows the backend last reported in view; a count of 0 until it reports.
         VisibleRange range;
         // In view order; each widget is the container's child at its place.
@@ -2282,9 +2286,12 @@ private:
         return ids;
     }
 
-    // The rows `visible` is told: the reported range, or the first `overscan` rows before any report.
+    // The rows `visible` is told: the reported range. Before any report, a window over a server's rows shows its
+    // first `overscan` rows, and one over a document's rows the empty view a keyed list starts from.
     [[nodiscard]] static VisibleRange shownOf(SourceTable const& table) {
-        return table.range.count > 0 ? table.range : VisibleRange{.first = 0, .count = table.virtualize.overscan};
+        return table.range.count > 0 || !table.source.alwaysWindowed
+                   ? table.range
+                   : VisibleRange{.first = 0, .count = table.virtualize.overscan};
     }
 
     static void tellVisible(SourceTable& table) {
@@ -2404,8 +2411,11 @@ private:
     }
 
     // Gives a slot the row @p ref: its key, its record, its look. Its cells still show the row they showed, until
-    // each is rebound.
+    // each is rebound; a source's row-scoped cells of another row are dropped, to be built for this one.
     void assignRow(SourceTable& table, SourceTable::Realized& slot, std::int64_t index, TableRowRef const& ref) {
+        if (table.source.rowScopedCells && slot.key && *slot.key != ref.key) {
+            dropCells(slot);
+        }
         slot.index = index;
         slot.key = ref.key;
         if (slot.row->peek() != ref.row) {
@@ -2433,6 +2443,18 @@ private:
                 slot.headingWidget = made;
             }
             table.widget->setRowHeading(*slot.widget);
+        }
+        if (table.spans != nullptr && (look.heading || look.spans)) {
+            SpanTable& spans = *table.spans;
+            spans.rows[*slot.key].heading = static_cast<bool>(look.heading);
+            if (look.spans) {
+                bind(lookScope, *look.spans,
+                     [this, &table, &spans, key = *slot.key](std::vector<RowSpan> const& asked) {
+                         spans.rows[key].requested = asked;
+                         spans.anyAsked = spans.anyAsked || !asked.empty();
+                         resolveSpans(*table.widget, spans);
+                     });
+            }
         }
         if (look.tone) {
             bind(lookScope, *look.tone, [&table, widget = slot.widget](std::optional<Tone> const& tone) {
@@ -2550,10 +2572,13 @@ private:
         TableTotal const total = rows.total();
         auto const count = static_cast<std::size_t>(std::max<std::int64_t>(total.rows, 0));
         refreshColumns(table, count);
+        // A short table over a document's rows realizes every row. A windowed one realizes the rows in view and
+        // `overscan` either side.
+        bool const everyRow = !table.source.alwaysWindowed && count < table.virtualize.threshold;
         VisibleRange const shown = shownOf(table);
         std::size_t const overscan = table.virtualize.overscan;
-        std::size_t const lo = shown.first > overscan ? shown.first - overscan : 0;
-        std::size_t const hi = std::min(count, shown.first + shown.count + overscan);
+        std::size_t const lo = everyRow || shown.first <= overscan ? 0 : shown.first - overscan;
+        std::size_t const hi = everyRow ? count : std::min(count, shown.first + shown.count + overscan);
         std::vector<std::int64_t> targets;
         targets.reserve(hi > lo ? hi - lo + 1 : 1);
         for (std::size_t at = lo; at < hi; ++at) {
@@ -2563,6 +2588,9 @@ private:
         if (table.focused && table.focusIndex >= 0 && static_cast<std::size_t>(table.focusIndex) < count &&
             (static_cast<std::size_t>(table.focusIndex) < lo || static_cast<std::size_t>(table.focusIndex) >= hi)) {
             targets.insert(std::ranges::upper_bound(targets, table.focusIndex), table.focusIndex);
+        }
+        if (table.spans != nullptr) {
+            ++table.spans->reconciling;
         }
         std::vector<SourceTable::Realized> old = std::move(table.realized);
         table.realized.clear();
@@ -2682,9 +2710,38 @@ private:
                 table.widget->setRowIndex(*row.widget, static_cast<std::size_t>(row.index));
             }
         }
+        if (!table.source.alwaysWindowed && !everyRow) {
+            // A backend's own selection needs to know a key exists without a realized row for it.
+            std::vector<Key> keys;
+            keys.reserve(count);
+            for (std::size_t at = 0; at < count; ++at) {
+                if (std::optional<TableRowRef> const ref = rows.row(static_cast<std::int64_t>(at))) {
+                    keys.push_back(ref->key);
+                }
+            }
+            table.widget->setExistingKeys(keys);
+        }
+        if (table.spans != nullptr) {
+            SpanTable& spans = *table.spans;
+            --spans.reconciling;
+            spans.windowed = !everyRow;
+            spans.order.clear();
+            std::unordered_set<Key> present;
+            for (SourceTable::Realized const& row : table.realized) {
+                if (row.key) {
+                    spans.order.push_back({.key = *row.key, .widget = row.widget});
+                    present.insert(*row.key);
+                }
+            }
+            std::erase_if(spans.rows, [&present](auto const& entry) { return !present.contains(entry.first); });
+            resolveSpans(*table.widget, spans);
+        }
         realizeCells(table, shown);
-        // The contiguous range only: a focused row kept beyond it is placed by its own `setRowIndex`.
-        table.widget->setRealizedWindow(lo, hi > lo ? hi - lo : 0, count);
+        // The contiguous range only: a focused row kept beyond it is placed by its own `setRowIndex`. A table that
+        // realizes every row is not windowed, and is told no window.
+        if (!everyRow) {
+            table.widget->setRealizedWindow(lo, hi > lo ? hi - lo : 0, count);
+        }
         afterPass(table, total);
         table.lastCount = count;
         if (failure) {
@@ -2774,6 +2831,15 @@ private:
         if (failure) {
             std::rethrow_exception(failure);
         }
+    }
+
+    // Destroys a row's placed and pooled cells, and forgets their widgets among its children.
+    static void dropCells(SourceTable::Realized& slot) {
+        for (auto const& [column, placed] : slot.cells) {
+            std::erase(slot.children, placed.cell.widget);
+        }
+        slot.cells.clear();
+        dropPools(slot);
     }
 
     // Destroys a row's pooled cells, and forgets their widgets among its children.
@@ -3192,8 +3258,9 @@ private:
         });
     }
 
-    // A table over a `TableSource`. Rows are always windowed: the mount realizes the rows the backend reports in view
-    // and `overscan` rows either side (the first `overscan` rows before any report). Columns are windowed once the
+    // A table over a `TableSource`. Rows are windowed, except a table over a document's rows below its threshold,
+    // which realizes every row: the mount realizes the rows the backend reports in view and `overscan` rows either
+    // side (the first `overscan` rows before any report). Columns are windowed once the
     // backend reports its horizontal viewport and `windowingOf` says so; until then every visible column is in the
     // window. The mount tells the rows which rows and columns are in view, and applies each `ViewChange` to the
     // realized rows by key. Rows first, then the selection, as for a table over `rows`.
@@ -3213,13 +3280,25 @@ private:
             bind(scope, spec.selectAllLabel, [&widget](std::string const& label) { widget.setSelectAllLabel(label); });
         }
         widget.setOnActivate(event(spec.onActivate));
+        auto& table = scope.make<SourceTable>();
+        if (!spec.source->alwaysWindowed) {
+            auto& spans = scope.make<SpanTable>();
+            spans.columns = spec.columns.size();
+            spans.threshold = spec.virtualize.threshold;
+            table.spans = &spans;
+        }
         if (std::ranges::any_of(spec.columns, &TableColumn::sortable)) {
-            bind(scope, spec.sort, [&widget](std::optional<TableSort> const& sort) { widget.setSort(sort); });
+            bind(scope, spec.sort, [this, &widget, &table](std::optional<TableSort> const& sort) {
+                widget.setSort(sort);
+                if (table.spans != nullptr) {
+                    table.spans->sorted = sort.has_value();
+                    resolveSpans(widget, *table.spans);
+                }
+            });
             widget.setOnSort(event(spec.onSort));
         }
         bind(scope, spec.status, [&widget](TableStatus const& status) { widget.setStatus(status); });
         widget.setOnRetry(event(spec.onRetry));
-        auto& table = scope.make<SourceTable>();
         table.source = *spec.source;
         table.widget = &widget;
         table.columns = spec.columns;

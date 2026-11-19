@@ -1269,6 +1269,7 @@ class MutationRuntime;
 struct CheckRuntime;
 struct BoundaryRuntime;
 struct ModelTable;
+struct RowsTable;
 
 /// @brief One state declaration at run time.
 struct StateSlot {
@@ -1391,9 +1392,11 @@ struct MORPH_API ElementState {
     reactive::Computed<Value>* rows = nullptr;
     /// @brief A table's bound `sort`; `nullptr` while the table holds its own.
     reactive::Computed<Value>* sortBound = nullptr;
-    /// @brief A table's rows as it shows them, made beside `rows` so that every reader of the table's element
-    ///        values, the table's own lowering included, sees one order; `nullptr` for a table without `rows`.
+    /// @brief A table's rows as it shows them, in its engine's order, and the page of them it shows: what every
+    ///        reader of the table's element values reads; `nullptr` for a table without `rows`.
     reactive::Computed<TableView>* view = nullptr;
+    /// @brief A table over `rows`: the `EngineRows` that orders its rows; null for any other element.
+    std::shared_ptr<TableRows> tableRows;
     /// @brief A `form`'s session (spec 2), made when the element is wired; null when its schema is unknown.
     std::unique_ptr<forms::FormSession> form;
     /// @brief A `collection`'s session (spec 2), made when the element is wired; null when its view document is
@@ -1405,6 +1408,9 @@ struct MORPH_API ElementState {
     /// @brief A model-backed table's rows, description, persisted state and status line, made when the element is
     ///        wired; null for any other element. It outlives every mount of the table.
     std::unique_ptr<ModelTable> modelTable;
+    /// @brief A table over `rows`: its source, engine and page, its persisted state and its status line, made when
+    ///        the element is wired; null for any other element. It outlives every mount of the table.
+    std::unique_ptr<RowsTable> rowsTable;
 };
 
 /// @brief One check at run time.
@@ -2079,7 +2085,7 @@ public:
     /// @brief Shows @p text as the table's status-line message for `kStatusMessageHold`, on the session's scheduler
     ///        (without one, until the table's next gesture); an empty @p text clears the message and notifies
     ///        nothing. Under `status: false` a non-empty text goes to `InterpreterHost::notify` as a warning instead.
-    /// @param table The table's element; one that is not a model-backed table is left alone.
+    /// @param table The table's element; one that is neither a model-backed table nor one over `rows` is left alone.
     /// @param text  The message, or empty.
     void tableMessage(ElementState& table, std::string text);
 
@@ -2262,8 +2268,8 @@ public:
     std::vector<LoweredNode> loweredNodes;
     /// @brief The screen's live scopes, in creation order.
     std::vector<RtScope*> scopes;
-    /// @brief The elements of the screen's model-backed tables, while each lives: what a failed save of a table
-    ///        state is said in.
+    /// @brief The elements of the screen's tables that keep a persisted state, model-backed or over `rows`, while
+    ///        each lives: what a failed save of a table state is said in.
     std::vector<ElementState*> modelTables;
     /// @brief The latest command lists run, oldest first, at most `kCommandLogSize`.
     std::deque<CommandLogEntry> commandLog;
@@ -2285,15 +2291,21 @@ public:
 private:
     void wireElement(ElementState& element);
     void wireErrors(ElementState& element);
-    /// A table's rows in the order of its sort, read in the table's scope with @p bindings. A sort that is not a
-    /// list of the table's sortable columns, or whose values cannot be ordered, is reported and leaves the source
-    /// order.
-    void sortedRows(ElementState const& element, Bindings const* bindings, TableView& view);
-    /// A grouped table's runs of its source rows by its `group`'s `by`: each row's run index and each run's heading
-    /// entry, into @p view.
-    static void groupRows(ElementState const& element, Bindings const* bindings, TableView& view);
-    /// A table's sorted rows and the page of them it shows, by its `pageSize` and `page`.
-    TableView tableView(ElementState const& element, Bindings const* bindings);
+    /// A table over `rows`: its rows in its engine's view, each grouped row's run and each run's heading entry, and
+    /// the page of them it shows, by its `pageSize` and `page`. Nothing while its stored state is read.
+    TableView tableView(RowsTable const& table);
+    /// The rows, source, engine and page of a table over `rows`, read in the table's scope with @p bindings; with
+    /// @p persisted, its stored state is loaded and its changes saved, and it is the element's own.
+    std::unique_ptr<RowsTable> makeRowsTable(ElementState& element, std::shared_ptr<Bindings const> bindings,
+                                             bool persisted);
+    /// Brings a table over `rows` to its sort: the columns its keys read are in use, and the engine orders by them,
+    /// within the groups first when it has any. A sort that is not a list of its sortable columns is reported.
+    void sortRowsTable(RowsTable& table, Value const& sort);
+    /// What a table over `rows` does when its engine's view changed: reports an invalid cell of a sort column once,
+    /// and lets the rows through once the stored order is in place.
+    void rowsTableChanged(RowsTable& table);
+    /// Applies a table over `rows`' stored state once its load completed, or reports why it could not.
+    void storedRowsState(RowsTable& table, std::optional<std::string> const& json, std::string const& failure);
     void collect(DocNode const& node, RtScope& scope, std::vector<Commands const*>& commands);
     /// The readers every kind's lowering shares, bound to one node.
     class KindKit;
@@ -2344,7 +2356,7 @@ private:
     void tableGesture(ElementState& element);
     /// A grouped table's heading row: its `group`'s `heading`, lowered as one cell in a row scope of its own whose
     /// row is the group's run record and whose key is `key`, the row's canonical key, as a data row's scope has.
-    TableRowView headingRow(DocNode const& node, LowerCtx const& ctx, reactive::Signal<Value> const& row,
+    TableRowLook headingRow(DocNode const& node, LowerCtx const& ctx, reactive::Signal<Value> const& row,
                             std::string key);
     /// A `rowTone` value as a tone: `neutral`, `info`, `ok`, `warn`, `err`, or `null` for none. Another value is
     /// reported, at @p path, while @p noted is still false, and shows no tone.

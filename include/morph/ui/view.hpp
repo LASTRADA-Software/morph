@@ -1357,6 +1357,14 @@ struct TableSource {
     std::vector<std::vector<std::string>> cellReads;
     /// @brief Per `Table::columns` index, the level of that column; empty, or an empty entry: the column has none.
     std::vector<std::string> levels;
+    /// @brief Whether the rows are windowed whatever their count, as a server's rows are. `false` realizes every row
+    ///        while the view holds fewer than `Virtualization::threshold`, as a short table over a document's rows
+    ///        does, and only then draws `TableRowLook::spans`.
+    bool alwaysWindowed = true;
+    /// @brief Whether a cell shows one row only: its view shares state with that row's own parts, so a realized row
+    ///        given to another row has its cells built again rather than rebound by their signal. `false` rebinds a
+    ///        cell to any row.
+    bool rowScopedCells = false;
 };
 
 /// @brief A table's status line: its counts, the state of its fetches and levels, and the latest message.

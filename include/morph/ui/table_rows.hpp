@@ -398,9 +398,33 @@ public:
     /// @return The count.
     [[nodiscard]] std::size_t recordsBuilt() const noexcept { return _built; }
 
-    /// @brief Every row of the view, counted exactly.
-    /// @return The total, always known.
+    /// @brief Holds the rows back while a table's stored arrangement is read, or lets them through.
+    ///
+    /// While restoring, `total().known` is `false` and `row` answers nothing, so a mount draws placeholder rows in
+    /// place of an order the stored state is about to change; the engine still runs. A change of it tells the
+    /// receiver of `onChange` that the whole view changed.
+    /// @param restoring Whether the rows are held back.
+    void setRestoring(bool restoring) {
+        if (std::exchange(_restoring, restoring) == restoring) {
+            return;
+        }
+        if (_onChange) {
+            table::ViewChange change;
+            change.ops.push_back(table::ViewOp{.kind = table::ViewOp::Kind::Reset, .first = 0, .count = 0, .to = 0});
+            _onChange(change);
+        }
+    }
+
+    /// @brief Whether the rows are held back (`setRestoring`).
+    /// @return Whether they are.
+    [[nodiscard]] bool restoring() const noexcept { return _restoring; }
+
+    /// @brief Every row of the view, counted exactly; unknown while restoring.
+    /// @return The total.
     [[nodiscard]] TableTotal total() const override {
+        if (_restoring) {
+            return TableTotal{.rows = 0, .kind = table::TotalKind::Exact, .known = false};
+        }
         return TableTotal{.rows = static_cast<std::int64_t>(_engine->viewRowCount()),
                           .kind = table::TotalKind::Exact,
                           .known = true};
@@ -408,8 +432,11 @@ public:
 
     /// @brief The row at a view index, built once and kept until it changes.
     /// @param index The view index.
-    /// @return The row; nothing past the view.
+    /// @return The row; nothing past the view, and nothing while restoring.
     [[nodiscard]] std::optional<TableRowRef> row(std::int64_t index) const override {
+        if (_restoring) {
+            return std::nullopt;
+        }
         auto const* const entry = entryAt(index);
         if (entry == nullptr) {
             return std::nullopt;
@@ -592,6 +619,7 @@ private:
     mutable std::shared_ptr<table::RowSnapshot const> _memoSnapshot;
     mutable std::deque<Logged> _log;
     mutable std::size_t _built = 0;
+    bool _restoring = false;
 };
 
 // ── A document's rows as a source ───────────────────────────────────────────
@@ -1210,8 +1238,9 @@ public:
     /// `by` is read untracked: what it reads besides the row regroups the rows when `setGroup` or `assign` is called
     /// again.
     /// @param by    The `by`; empty: no groups, and the hidden column goes.
-    /// @param units The unit table two quantities of a run's `by` are compared through.
-    void setGroup(std::function<Value(Value const& row)> by, UnitTable units = {}) {
+    /// @param units The unit table two quantities of a run's `by` are compared through: the screen's, so 1 kg and
+    ///              1000 g are one run.
+    void setGroup(std::function<Value(Value const& row)> by, UnitTable units) {
         _group = std::move(by);
         _groupUnits = std::move(units);
         bool const listed = _infos.size() > _columns.size();
