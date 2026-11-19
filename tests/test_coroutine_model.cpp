@@ -1125,10 +1125,10 @@ TEST_CASE("an exception a Task handler throws after a suspension reaches onError
 TEST_CASE("RemoteServer's executeTimeout stops a suspended Task handler and releases the model",
           "[coroutine][model][remote]") {
     coro_test::SchedulerScope const timers;
-    morph::exec::ThreadPoolExecutor pool{2};
     morph::exec::MainThreadExecutor exec;
     morph::model::detail::ModelRegistryFactory registry;
     morph::model::detail::ActionDispatcher dispatcher;
+    morph::exec::ThreadPoolExecutor pool{2};
     registry.registerModel<CoroModel>("Coro_Model");
     dispatcher.registerAction<CoroModel, CoroHold>("Coro_Model", "Coro_Hold");
     dispatcher.registerAction<CoroModel, CoroLog>("Coro_Model", "Coro_Log");
@@ -1160,10 +1160,10 @@ TEST_CASE("RemoteServer's executeTimeout stops a suspended Task handler and rele
 TEST_CASE("a Task handler behind RemoteServer replies with its result, and its failures as err",
           "[coroutine][model][remote]") {
     coro_test::SchedulerScope const timers;
-    morph::exec::ThreadPoolExecutor pool{2};
     morph::exec::MainThreadExecutor exec;
     morph::model::detail::ModelRegistryFactory registry;
     morph::model::detail::ActionDispatcher dispatcher;
+    morph::exec::ThreadPoolExecutor pool{2};
     registry.registerModel<CoroModel>("Coro_Model");
     dispatcher.registerAction<CoroModel, CoroDouble>("Coro_Model", "Coro_Double");
     dispatcher.registerAction<CoroModel, CoroThrow>("Coro_Model", "Coro_Throw");
@@ -1492,10 +1492,10 @@ TEST_CASE("LocalBackend still stops a running Task handler after sweeping many f
 
 TEST_CASE("RemoteServer queues an ordinary action behind a suspended Task handler", "[coroutine][model][remote]") {
     coro_test::SchedulerScope const timers;
-    morph::exec::ThreadPoolExecutor pool{2};
     morph::exec::MainThreadExecutor exec;
     morph::model::detail::ModelRegistryFactory registry;
     morph::model::detail::ActionDispatcher dispatcher;
+    morph::exec::ThreadPoolExecutor pool{2};
     registry.registerModel<CoroModel>("Coro_Model");
     dispatcher.registerAction<CoroModel, CoroHold>("Coro_Model", "Coro_Hold");
     dispatcher.registerAction<CoroModel, CoroLog>("Coro_Model", "Coro_Log");

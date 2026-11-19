@@ -145,9 +145,9 @@ struct Harness {
         return std::move(*result);
     }
 
-    morph::exec::ThreadPoolExecutor pool{2};
     morph::model::detail::ActionDispatcher dispatcher;
     morph::model::detail::ModelRegistryFactory registry;
+    morph::exec::ThreadPoolExecutor pool{2};
     std::shared_ptr<morph::backend::RemoteServer> server;
     std::shared_ptr<morph::ui::MemoryBundleStore> store = std::make_shared<morph::ui::MemoryBundleStore>();
     std::mutex sentMutex;
