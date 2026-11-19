@@ -63,7 +63,8 @@ public:
     /// @brief Loads what `get` answered and keeps it under its id, replacing what was kept.
     /// @param found   The reply.
     /// @param options How documents load: the catalog facts.
-    /// @return The loaded document, or why it does not load in this client, or names another id; nothing is kept then.
+    /// @return The loaded document, or why it does not load in this client, why the screen is broken, or that it names
+    ///         another id; nothing is kept then: a broken screen is never kept.
     std::expected<std::shared_ptr<Document const>, Refusal> put(CustomScreenFound found, LoadOptions const& options);
 
     /// @brief The loaded document of a kept screen.
@@ -77,8 +78,7 @@ public:
     [[nodiscard]] Entry const* entry(std::string_view id) const;
 
     /// @brief Drops each kept screen @p listed shows with another hash and, unless the list was truncated, each it
-    /// does
-    ///        not show.
+    ///        does not show.
     /// @param listed What `list` answered.
     /// @return The ids dropped.
     std::vector<std::string> refresh(CustomScreensListed const& listed);
@@ -115,17 +115,25 @@ public:
     /// @param dispatcher  Where model calls go: the interpreter's own. Borrowed: it must outlive the sync.
     /// @param application The application's id, the `app` of every call.
     /// @param catalog     The catalog facts a fetched document loads with, read at each load.
-    /// @param watcher     What sends a watch on the record `morph.customScreens`, so a save from anywhere relists;
-    ///                    empty for a source whose server sends no events, such as an in-process one.
+    /// @param session     The session whose watch set carries the record `morph.customScreens` once the server offers
+    ///                    custom screens, so a save from anywhere relists and every watch set the session sends,
+    ///                    `reconnected`'s included, names it; null for a source whose server sends no events, such as
+    ///                    an in-process one. Borrowed: it must outlive the sync.
     CustomScreenSync(Dispatcher& dispatcher MORPH_LIFETIMEBOUND, std::string application,
-                     std::function<Catalog()> catalog, Watcher watcher = {});
+                     std::function<Catalog()> catalog, Session* session = nullptr);
+    CustomScreenSync(CustomScreenSync const&) = delete;
+    CustomScreenSync& operator=(CustomScreenSync const&) = delete;
+    CustomScreenSync(CustomScreenSync&&) = delete;
+    CustomScreenSync& operator=(CustomScreenSync&&) = delete;
+    ~CustomScreenSync();
 
     /// @brief Asks whether the server offers custom screens, by calling `list`.
     ///
-    /// The list answering makes the offer `Offered`, keeps the list, tells `setOnListed`'s handler and watches the
-    /// record. Any refusal makes it `Off`: a server that never registered the model refuses its registration with
-    /// `unknown model type: morph.customScreens`, which is how a client learns custom screens are not offered; any
-    /// other refusal is logged at warn too, since it is a misconfiguration rather than an absence.
+    /// The list answering makes the offer `Offered`, keeps the list, tells `setOnListed`'s handler and has the session
+    /// watch the record. Any refusal makes it `Off`: a server that never registered the model refuses its registration
+    /// with `unknown model type: morph.customScreens`, which is how a client learns custom screens are not offered;
+    /// any other failure is logged at warn too, worded by its cause (refused, unreadable reply, or the transport),
+    /// since it is a misconfiguration or an outage rather than an absence.
     /// @param done Called once with whether they are offered; may be empty.
     void probe(std::function<void(bool offered)> done = {});
 
@@ -138,8 +146,12 @@ public:
     [[nodiscard]] std::string const& offRefusal() const noexcept { return _offRefusal; }
 
     /// @brief Sets what is told each list the sync receives, from a probe or a relist.
-    /// @param onListed The handler; empty tells nothing.
-    void setOnListed(std::function<void(CustomScreensListed const&)> onListed) { _onListed = std::move(onListed); }
+    /// @param onListed The handler: the list, and the ids of the kept documents that list dropped (changed on the
+    ///                 server, or gone); empty tells nothing.
+    void setOnListed(
+        std::function<void(CustomScreensListed const&, std::vector<std::string> const& dropped)> onListed) {
+        _onListed = std::move(onListed);
+    }
 
     /// @brief The last list received.
     /// @return It; empty before the first.
@@ -147,17 +159,22 @@ public:
 
     /// @brief Calls `list` again, while the offer is `Offered`: the cache drops what the list shows changed, and
     ///        `setOnListed`'s handler is told. A refusal is logged at warn and keeps the last list.
+    ///
+    ///        The replies of one sync's calls arrive in the order the calls were made, because every call goes through
+    ///        the one private channel; a list never overtakes a later one.
     void relist();
 
     /// @brief The document of a custom screen: the kept one, or `fetch`ed.
     /// @param id   The screen's id.
-    /// @param done Called once with the document, or why there is none.
+    /// @param done Called once with the document, or why there is none. With a kept document it is called before
+    ///             `open` returns; otherwise later, on the runtime's owner.
     void open(std::string const& id, CustomDocumentDone done);
 
     /// @brief Calls `get` and keeps the document it answers, replacing a kept one.
     /// @param id   The screen's id.
-    /// @param done Called once with the document, or why there is none: the store's refusal as it gave it, or why the
-    ///             document does not load in this client.
+    /// @param done Called once with the document, or why there is none: the store's refusal as it gave it, why the
+    ///             document does not load in this client, or that the screen is broken, with the checks' reason. A
+    ///             broken screen is never kept.
     void fetch(std::string const& id, CustomDocumentDone done);
 
     /// @brief Calls `get` and keeps nothing: what a source view of a broken screen reads.
@@ -184,12 +201,14 @@ public:
     /// @param done   Called once every fetch has answered, with the ids no document came for, in the routes' order.
     void prefetchRoutes(std::vector<std::string> const& routes, std::function<void(std::vector<std::string>)> done);
 
-    /// @brief The connection was made again: while offered, watches the record again (a reconnect replaces the
-    ///        connection's watch set) and relists.
+    /// @brief The connection was made again: while offered, relists; while off for a cause other than the server
+    ///        lacking the model (a refusal, an unreadable reply, an outage), probes again. The watch on the record is
+    ///        the session's: its own `reconnected` sends it.
     void reconnected();
 
-    /// @brief A server event: a `changes` naming the record `morph.customScreens` relists, and a `resync` watches
-    ///        again and relists. Anything else, or anything before the offer is `Offered`, is ignored.
+    /// @brief A server event: a `changes` naming the record `morph.customScreens` relists, and a `resync` relists
+    ///        (the session sends the watch again itself). Anything else, or anything before the offer is `Offered`,
+    ///        is ignored.
     /// @param event The event.
     void deliverEvent(wire::EventBody const& event);
 
@@ -206,22 +225,26 @@ public:
     [[nodiscard]] CustomDocuments const& documents() const noexcept { return _documents; }
 
 private:
-    // Sends one action through the binding, made at the first call; @p ok gets the reply's JSON, @p failed the reason.
+    // What turned the offer off; only an absent model is not reported.
+    enum class OffCause : std::uint8_t { Absent, Refused, Unreadable, Transport };
+
+    // Sends one action through the binding, made at the first call; @p ok gets the reply's JSON, @p failed the reason
+    // and the failure's kind (`detail::defaultErrorKind`).
     void call(std::string_view action, std::string const& body, std::function<void(std::string const&)> ok,
-              std::function<void(std::string const&)> const& failed);
-    void watch();
-    void off(std::string reason);
+              std::function<void(std::string const&, std::string const&)> const& failed);
+    void off(OffCause cause, std::string reason);
     void listedNow(CustomScreensListed listed);
 
     Dispatcher* _dispatcher;
     std::string _application;
     std::function<Catalog()> _catalog;
-    Watcher _watcher;
+    Session* _session;
     std::shared_ptr<ModelChannel> _channel;
     CustomScreensOffer _offer = CustomScreensOffer::Unknown;
     std::string _offRefusal;
+    OffCause _offCause = OffCause::Absent;
     CustomScreensListed _listed;
-    std::function<void(CustomScreensListed const&)> _onListed;
+    std::function<void(CustomScreensListed const&, std::vector<std::string> const&)> _onListed;
     CustomDocuments _documents;
     // Last, so it stops every delivery before anything a reply would touch goes; `reset` replaces it.
     std::unique_ptr<async::CallbackScope> _scope = std::make_unique<async::CallbackScope>();

@@ -1792,17 +1792,35 @@ void Session::flushWatches() {
     if (!_watchRecords.empty() || !_watchInstances.empty()) {
         sendWatch(wire::kWatchKind, take(_watchRecords, _watchInstances));
     }
+    // An extra watch outlives the cache's last entry on the record.
+    std::erase_if(_unwatchRecords, [this](std::string const& record) { return _extraWatch.contains(record); });
     if (!_unwatchRecords.empty() || !_unwatchInstances.empty()) {
         sendWatch(wire::kUnwatchKind, take(_unwatchRecords, _unwatchInstances));
     }
 }
 
+void Session::addExtraWatch(std::string const& record) {
+    if (!_extraWatch.insert(record).second || !_options.watcher) {
+        return;
+    }
+    sendWatch(wire::kWatchKind, wire::WatchBody{.records = {record}, .instances = {}, .replace = false});
+}
+
+void Session::removeExtraWatch(std::string const& record) {
+    if (_extraWatch.erase(record) == 0 || !_options.watcher || _recordRefs.contains(record)) {
+        return;
+    }
+    sendWatch(wire::kUnwatchKind, wire::WatchBody{.records = {record}, .instances = {}, .replace = false});
+}
+
 wire::WatchBody Session::watchSet() const {
     wire::WatchBody body;
+    std::set<std::string, std::less<>> records = _extraWatch;
     for (auto const& [record, refs] : _recordRefs) {
         static_cast<void>(refs);
-        body.records.push_back(record);
+        records.insert(record);
     }
+    body.records.assign(records.begin(), records.end());
     for (auto const& [topic, refs] : _instanceRefs) {
         static_cast<void>(refs);
         body.instances.push_back(

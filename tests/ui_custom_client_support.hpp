@@ -33,9 +33,11 @@ namespace custom_client {
 
 /// A RemoteServer that never registered `morph.customScreens`.
 struct BareServer {
-    morph::exec::ThreadPoolExecutor pool{2};
+    // The dispatcher and the registry come before the pool: the pool joins first, so a call still running when the
+    // fixture goes holds a dispatcher that is still alive.
     morph::model::detail::ActionDispatcher dispatcher;
     morph::model::detail::ModelRegistryFactory registry;
+    morph::exec::ThreadPoolExecutor pool{2};
     std::shared_ptr<uiservice::RuleAuthorizer> authorizer = std::make_shared<uiservice::RuleAuthorizer>();
     std::shared_ptr<morph::backend::RemoteServer> server =
         std::make_shared<morph::backend::RemoteServer>(pool, authorizer, dispatcher, registry);
@@ -86,12 +88,12 @@ inline std::string saveBody(std::string const& app, std::string const& title, st
 }
 
 /// One client of @p server, signed in as @p person, for @p app: a bridge over a simulated connection, the dispatcher
-/// over it, and a sync. With @p recordWatches, the sync's watches are recorded and answered with nothing refused.
+/// over it, and a sync. With @p recordWatches, the session's watches are recorded and answered with nothing refused.
 struct SyncClient {
     SyncClient(morph::backend::RemoteServer& server, std::string person, std::string app, bool recordWatches = false)
-        : bridge{std::make_unique<morph::backend::SimulatedRemoteBackend>(server), owner},
-          sync{dispatcher, std::move(app), [] { return uiservice::facts(); },
-               recordWatches ? watcher() : morph::ui::Watcher{}} {
+        : session{runtime, morph::ui::SessionOptions{.watcher = recordWatches ? watcher() : morph::ui::Watcher{}}},
+          bridge{std::make_unique<morph::backend::SimulatedRemoteBackend>(server), owner},
+          sync{dispatcher, std::move(app), [] { return uiservice::facts(); }, &session} {
         morph::session::Context signedIn;
         signedIn.token = std::move(person);
         bridge.setDefaultSession(std::move(signedIn));
@@ -127,6 +129,8 @@ struct SyncClient {
 
     std::vector<std::string> watches;
     morph::testing::StepExecutor owner;
+    morph::reactive::Runtime runtime{owner};
+    morph::ui::Session session;
     morph::bridge::Bridge bridge;
     morph::ui::BridgeDispatcher dispatcher{bridge, &owner};
     morph::ui::CustomScreenSync sync;

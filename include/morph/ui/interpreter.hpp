@@ -875,10 +875,23 @@ public:
     ///        connection was down is read again.
     void reconnected();
 
-    /// @brief The topics the cache holds now: every record an entry holds, and the keyed shared instance of every
-    ///        entry whose action holds no record. What `reconnected` sends.
+    /// @brief The topics the cache holds now: every record an entry holds, every extra watch, and the keyed shared
+    ///        instance of every entry whose action holds no record. What `reconnected` sends.
     /// @return The topics, records and instances each in name order; `replace` is false.
     [[nodiscard]] wire::WatchBody watchSet() const;
+
+    /// @brief Watches a record for something other than the cache, such as a list a client keeps beside it, and
+    ///        keeps watching it in every set the session sends: `reconnected` and a `resync` carry it in their
+    ///        `replace: true` set, and the cache dropping its last entry on the record does not unwatch it.
+    ///
+    /// The `watch` goes out at once when there is a watcher. The events arrive through `deliverEvent` like any
+    /// other's, for the owner of the extra watch to read.
+    /// @param record The record's name; one already watched this way changes nothing.
+    void addExtraWatch(std::string const& record);
+
+    /// @brief Stops an extra watch: sends an `unwatch` unless an entry of the cache still holds the record.
+    /// @param record The record's name; one not watched this way changes nothing.
+    void removeExtraWatch(std::string const& record);
 
     /// @brief Applies a server event to the cache (spec 8 §9).
     ///
@@ -975,6 +988,8 @@ private:
     std::map<std::string, int, std::less<>> _recordRefs;
     std::map<std::pair<std::string, std::string>, int> _instanceRefs;
     std::set<std::string, std::less<>> _watchRecords;
+    /// The records watched for something other than the cache (`addExtraWatch`).
+    std::set<std::string, std::less<>> _extraWatch;
     std::set<std::string, std::less<>> _unwatchRecords;
     std::set<std::pair<std::string, std::string>> _watchInstances;
     // Installs the facts of @p locale's row, or of the chosen format locale's row where one is chosen, and names

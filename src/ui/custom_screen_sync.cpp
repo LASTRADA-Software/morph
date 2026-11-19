@@ -21,6 +21,11 @@ namespace morph::ui {
 
 std::expected<std::shared_ptr<Document const>, Refusal> CustomDocuments::put(CustomScreenFound found,
                                                                              LoadOptions const& options) {
+    if (found.summary.broken) {
+        return std::unexpected(Refusal{.document = found.summary.id,
+                                       .path = found.summary.broken->pointer,
+                                       .reason = "the screen is broken: " + found.summary.broken->reason});
+    }
     auto loaded = loadDocumentText(found.document, options);
     if (!loaded) {
         return std::unexpected(std::move(loaded.error()));
@@ -69,24 +74,32 @@ void CustomDocuments::forget(std::string_view id) {
 }
 
 CustomScreenSync::CustomScreenSync(Dispatcher& dispatcher MORPH_LIFETIMEBOUND, std::string application,
-                                   std::function<Catalog()> catalog, Watcher watcher)
+                                   std::function<Catalog()> catalog, Session* session)
     : _dispatcher{&dispatcher},
       _application{std::move(application)},
       _catalog{std::move(catalog)},
-      _watcher{std::move(watcher)} {}
+      _session{session} {}
+
+CustomScreenSync::~CustomScreenSync() {
+    if (_offer == CustomScreensOffer::Offered && _session != nullptr) {
+        _session->removeExtraWatch(std::string{kCustomScreenRecord});
+    }
+}
 
 void CustomScreenSync::call(std::string_view action, std::string const& body,
                             std::function<void(std::string const&)> ok,
-                            std::function<void(std::string const&)> const& failed) {
+                            std::function<void(std::string const&, std::string const&)> const& failed) {
     try {
         if (_channel == nullptr) {
             _channel = _dispatcher->bind(std::string{kCustomScreensModel}, bridge::BindSharing::Private, {});
         }
         _channel->execute(std::string{action}, body, CallOptions{})
             .then(*_scope, [ok = std::move(ok)](std::string const& reply) { ok(reply); })
-            .onError(*_scope, [failed](std::exception_ptr const& error) { failed(detail::failureText(error)); });
+            .onError(*_scope, [failed](std::exception_ptr const& error) {
+                failed(detail::failureText(error), detail::defaultErrorKind(error));
+            });
     } catch (std::exception const& error) {
-        failed(error.what());
+        failed(error.what(), "error");
     }
 }
 
@@ -99,7 +112,7 @@ void CustomScreenSync::probe(std::function<void(bool offered)> done) {
             try {
                 listed = model::ActionTraits<CustomScreensList>::resultFromJson(reply);
             } catch (std::exception const& error) {
-                off(std::string{"not a custom screens list: "} + error.what());
+                off(OffCause::Unreadable, error.what());
                 if (*shared) {
                     (*shared)(false);
                 }
@@ -107,26 +120,38 @@ void CustomScreenSync::probe(std::function<void(bool offered)> done) {
             }
             _offer = CustomScreensOffer::Offered;
             _offRefusal.clear();
-            watch();
+            if (_session != nullptr) {
+                _session->addExtraWatch(std::string{kCustomScreenRecord});
+            }
             listedNow(std::move(listed));
             if (*shared) {
                 (*shared)(true);
             }
         },
-        [this, shared](std::string const& reason) {
-            off(reason);
+        [this, shared](std::string const& reason, std::string const& kind) {
+            bool const transport = kind == "offline" || kind == "timeout" || kind == "backendChanged";
+            bool const absent = reason.contains("unknown model type: " + std::string{kCustomScreensModel});
+            off(absent ? OffCause::Absent : transport ? OffCause::Transport : OffCause::Refused, reason);
             if (*shared) {
                 (*shared)(false);
             }
         });
 }
 
-void CustomScreenSync::off(std::string reason) {
+void CustomScreenSync::off(OffCause cause, std::string reason) {
     _offer = CustomScreensOffer::Off;
+    _offCause = cause;
     // A server without the model is the ordinary way to say custom screens are not offered; anything else is a
-    // server that has the model and refuses it, which someone has to hear about.
-    if (!reason.contains("unknown model type")) {
+    // misconfiguration or an outage, which someone has to hear about.
+    if (cause == OffCause::Refused) {
         ::morph::log::logWarn("custom screens are off: the server refused `{}`: {}", kCustomScreensList, reason);
+    } else if (cause == OffCause::Unreadable) {
+        ::morph::log::logWarn("custom screens are off: the server's reply to `{}` is not a custom screens list: {}",
+                              kCustomScreensList, reason);
+    } else if (cause == OffCause::Transport) {
+        ::morph::log::logWarn(
+            "custom screens are off: `{}` did not reach the server ({}); the next reconnect asks again",
+            kCustomScreensList, reason);
     }
     _offRefusal = std::move(reason);
 }
@@ -135,6 +160,8 @@ void CustomScreenSync::relist() {
     if (_offer != CustomScreensOffer::Offered) {
         return;
     }
+    // One private channel carries every call, so this list's reply arrives after the replies of the calls made before
+    // it and before those made after it.
     call(
         kCustomScreensList, model::ActionTraits<CustomScreensList>::toJson(CustomScreensList{.app = _application}),
         [this](std::string const& reply) {
@@ -144,17 +171,17 @@ void CustomScreenSync::relist() {
                 ::morph::log::logWarn("custom screens: not a list from `{}`: {}", kCustomScreensList, error.what());
             }
         },
-        [](std::string const& reason) {
+        [](std::string const& reason, std::string const&) {
             ::morph::log::logWarn("custom screens: `{}` was refused, the last list is kept: {}", kCustomScreensList,
                                   reason);
         });
 }
 
 void CustomScreenSync::listedNow(CustomScreensListed listed) {
-    static_cast<void>(_documents.refresh(listed));
+    std::vector<std::string> const dropped = _documents.refresh(listed);
     _listed = std::move(listed);
     if (_onListed) {
-        _onListed(_listed);
+        _onListed(_listed, dropped);
     }
 }
 
@@ -196,7 +223,7 @@ void CustomScreenSync::get(std::string const& id,
                 (*shared)(std::unexpected(std::string{"not a custom screen: "} + error.what()));
             }
         },
-        [shared](std::string const& reason) { (*shared)(std::unexpected(reason)); });
+        [shared](std::string const& reason, std::string const&) { (*shared)(std::unexpected(reason)); });
 }
 
 void CustomScreenSync::check(std::string basedOn, std::string document,
@@ -214,7 +241,7 @@ void CustomScreenSync::check(std::string basedOn, std::string document,
                 (*shared)(std::unexpected(std::string{"not a check: "} + error.what()));
             }
         },
-        [shared](std::string const& reason) { (*shared)(std::unexpected(reason)); });
+        [shared](std::string const& reason, std::string const&) { (*shared)(std::unexpected(reason)); });
 }
 
 void CustomScreenSync::save(CustomScreensSave request,
@@ -235,7 +262,7 @@ void CustomScreenSync::save(CustomScreensSave request,
             relist();
             (*shared)(std::move(saved.id));
         },
-        [shared](std::string const& reason) { (*shared)(std::unexpected(reason)); });
+        [shared](std::string const& reason, std::string const&) { (*shared)(std::unexpected(reason)); });
 }
 
 void CustomScreenSync::prefetchRoutes(std::vector<std::string> const& routes,
@@ -279,34 +306,11 @@ void CustomScreenSync::prefetchRoutes(std::vector<std::string> const& routes,
     }
 }
 
-void CustomScreenSync::watch() {
-    if (!_watcher) {
-        return;
-    }
-    wire::WatchBody const body{.records = {std::string{kCustomScreenRecord}}, .instances = {}, .replace = false};
-    _watcher(std::string{wire::kWatchKind}, glz::write_json(body).value_or(std::string{}))
-        .then(*_scope,
-              [](std::string const& reply) {
-                  auto const read = wire::readWatchReply(reply);
-                  if (read && std::ranges::find(read->refusedRecords, std::string{kCustomScreenRecord}) !=
-                                  read->refusedRecords.end()) {
-                      ::morph::log::logWarn(
-                          "custom screens: the server refused a watch on `{}`; lists refresh only on sign-in, "
-                          "reconnect and this client's own saves",
-                          kCustomScreenRecord);
-                  }
-              })
-        .onError(*_scope, [](std::exception_ptr const& error) {
-            ::morph::log::logWarn("custom screens: the watch on `{}` failed: {}", kCustomScreenRecord,
-                                  detail::failureText(error));
-        });
-}
-
 void CustomScreenSync::reconnected() {
-    if (_offer != CustomScreensOffer::Offered) {
+    if (_offer == CustomScreensOffer::Off && _offCause != OffCause::Absent) {
+        probe();
         return;
     }
-    watch();
     relist();
 }
 
@@ -315,7 +319,6 @@ void CustomScreenSync::deliverEvent(wire::EventBody const& event) {
         return;
     }
     if (event.topic == wire::kResyncTopic) {
-        watch();
         relist();
         return;
     }
@@ -330,10 +333,14 @@ void CustomScreenSync::deliverEvent(wire::EventBody const& event) {
 }
 
 void CustomScreenSync::reset() {
+    if (_offer == CustomScreensOffer::Offered && _session != nullptr) {
+        _session->removeExtraWatch(std::string{kCustomScreenRecord});
+    }
     _scope = std::make_unique<async::CallbackScope>();
     _channel.reset();
     _offer = CustomScreensOffer::Unknown;
     _offRefusal.clear();
+    _offCause = OffCause::Absent;
     _listed = {};
     _documents.clear();
 }

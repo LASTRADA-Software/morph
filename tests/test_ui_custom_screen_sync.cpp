@@ -8,6 +8,7 @@
 #include <catch2/catch_test_macros.hpp>
 #include <chrono>
 #include <cstddef>
+#include <expected>
 #include <glaze/glaze.hpp>
 #include <memory>
 #include <morph/core/executor.hpp>
@@ -18,6 +19,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 #include "ui_custom_client_support.hpp"
@@ -58,8 +60,8 @@ TEST_CASE("custom screen sync: a server without the model is off, and nothing is
     // wording differs on this transport: stop and report it, since the spec's discovery rests on it.
     CHECK(client.sync.offRefusal().contains("unknown model type: morph.customScreens"));
     // Other parts of the process may warn too (the server about a refused registration); only the sync's own matters.
-    CHECK(
-        std::ranges::none_of(warnings.seen, [](std::string const& seen) { return seen.contains("custom screens"); }));
+    CHECK(std::ranges::none_of(warnings.seen,
+                               [](std::string const& seen) { return seen.contains("custom screens are off"); }));
 }
 
 // Mutation: treat a refused `list` as offered (`offer()` reads Offered and nothing is logged).
@@ -168,26 +170,31 @@ TEST_CASE("custom screen sync: prefetchRoutes loads the custom screens a record 
     CHECK(client.sync.documents().find(id) != nullptr);
 }
 
-// Mutations: ignore a `changes` event (the list stays empty); relist on any record's change (the event naming another
-// record already shows the screen).
+// Mutations: ignore a `changes` event (no list is received); relist on any record's change (two lists are received).
 TEST_CASE("custom screen sync: a changes event naming the record relists, and one naming another does not",
           "[ui][custom-screens][sync]") {
     screens_test::Server server;
     SyncClient client{*server.server, "ann", "lims"};
     REQUIRE(client.probe());
     REQUIRE(client.sync.listed().screens.empty());
-    static_cast<void>(custom_client::savedIdOf(server.save(screens_test::baseScreen("lims.base"), "ann")));
+    std::string const id = custom_client::savedIdOf(server.save(screens_test::baseScreen("lims.base"), "ann"));
+    std::size_t relisted = 0;
+    client.sync.setOnListed(
+        [&relisted](morph::ui::CustomScreensListed const&, std::vector<std::string> const&) { ++relisted; });
 
     client.sync.deliverEvent(changesOf("SomethingElse"));
-    static_cast<void>(client.pump([] { return false; }, std::chrono::milliseconds{200}));
-    CHECK(client.sync.listed().screens.empty());
-
     client.sync.deliverEvent(changesOf(morph::ui::kCustomScreenRecord));
-    REQUIRE(client.pump([&client] { return client.sync.listed().screens.size() == 1; }));
+    // The replies of one sync's calls arrive in call order, so once this `get` answers, every list asked before it has
+    // been received: the count is final without waiting out a time.
+    std::optional<std::expected<morph::ui::CustomScreenFound, std::string>> barrier;
+    client.sync.get(id, [&barrier](auto found) { barrier = std::move(found); });
+    REQUIRE(client.pump([&barrier] { return barrier.has_value(); }));
+    CHECK(relisted == 1);
+    CHECK(client.sync.listed().screens.size() == 1);
 }
 
-// Mutation: skip the watch in reconnected (two watches are sent, not three).
-TEST_CASE("custom screen sync: the record is watched once offered, again after a reconnect and after a resync",
+// Mutation: the session's watch set leaves the extra watch out (the `replace` watch lacks the record).
+TEST_CASE("custom screen sync: the record is watched once offered, and a reconnect or resync keeps it watched",
           "[ui][custom-screens][sync]") {
     screens_test::Server server;
     SyncClient client{*server.server, "ann", "lims", true};
@@ -196,11 +203,217 @@ TEST_CASE("custom screen sync: the record is watched once offered, again after a
     CHECK(client.watches.front().starts_with("watch "));
     CHECK(client.watches.front().contains(R"("records":["morph.customScreens"])"));
     CHECK(client.watches.front().contains(R"("replace":false)"));
-    // Each of the two relists is awaited as well: the server's pool must be idle before the fixture is destroyed.
-    std::size_t relisted = 0;
-    client.sync.setOnListed([&relisted](morph::ui::CustomScreensListed const&) { ++relisted; });
+
+    auto const replaced = [&client](std::size_t index) {
+        REQUIRE(client.watches.size() > index);
+        CHECK(client.watches.at(index).contains(R"("replace":true)"));
+        CHECK(client.watches.at(index).contains(R"("records":["morph.customScreens"])"));
+    };
+    // Either order of the sync's and the session's reconnect leaves the record watched.
     client.sync.reconnected();
-    client.sync.deliverEvent(
-        morph::wire::EventBody{.topic = std::string{morph::wire::kResyncTopic}, .payload = glz::raw_json{"null"}});
-    REQUIRE(client.pump([&client, &relisted] { return client.watches.size() == 3 && relisted == 2; }));
+    client.session.reconnected();
+    replaced(1);
+    client.session.reconnected();
+    client.sync.reconnected();
+    replaced(2);
+    morph::wire::EventBody const resync{.topic = std::string{morph::wire::kResyncTopic},
+                                        .payload = glz::raw_json{"null"}};
+    client.sync.deliverEvent(resync);
+    client.session.deliverEvent(resync);
+    replaced(3);
+    CHECK(client.watches.size() == 4);
+}
+
+// Mutation: `removeExtraWatch` sends nothing (no `unwatch` follows the reset); `addExtraWatch` sends every time.
+TEST_CASE("custom screen sync: reset stops the watch, and watching a record twice sends one watch",
+          "[ui][custom-screens][sync]") {
+    screens_test::Server server;
+    SyncClient client{*server.server, "ann", "lims", true};
+    REQUIRE(client.probe());
+    client.session.addExtraWatch(std::string{morph::ui::kCustomScreenRecord});
+    REQUIRE(client.watches.size() == 1);
+    client.sync.reset();
+    REQUIRE(client.watches.size() == 2);
+    CHECK(client.watches.back().starts_with("unwatch "));
+    CHECK(client.watches.back().contains(R"("records":["morph.customScreens"])"));
+}
+
+// Mutation: the sync asks the session to watch before it knows the server offers custom screens.
+TEST_CASE("custom screen sync: a server that does not offer custom screens is not watched",
+          "[ui][custom-screens][sync]") {
+    custom_client::BareServer server;
+    SyncClient client{*server.server, "ann", "lims", true};
+    CHECK_FALSE(client.probe());
+    CHECK(client.watches.empty());
+}
+
+namespace {
+
+/// Waits until the owner has a task queued, without running it.
+void awaitQueued(morph::testing::StepExecutor& owner) {
+    REQUIRE(morph::testing::waitUntil([&owner] { return owner.pending() > 0; },
+                                      morph::testing::WaitBudget{morph::testing::kDefaultWaitBudget}));
+}
+
+}  // namespace
+
+// Mutation: drop the scope from `.then` in `call` (the reply lands after the reset and the offer reads Offered).
+TEST_CASE("custom screen sync: a reply that arrives after reset is dropped", "[ui][custom-screens][sync]") {
+    screens_test::Server server;
+    // The owner runs one task at a time until the probe answers, which counts the tasks the answer takes.
+    std::size_t steps = 0;
+    {
+        SyncClient counting{*server.server, "ann", "lims"};
+        std::optional<bool> answered;
+        counting.sync.probe([&answered](bool offered) { answered = offered; });
+        while (!answered.has_value()) {
+            awaitQueued(counting.owner);
+            steps += counting.owner.runOne() ? 1 : 0;
+        }
+    }
+    REQUIRE(steps > 0);
+    SyncClient client{*server.server, "ann", "lims"};
+    std::optional<bool> answered;
+    client.sync.probe([&answered](bool offered) { answered = offered; });
+    // All but the task that delivers the reply, which is queued and not run.
+    for (std::size_t step = 0; step + 1 < steps; ++step) {
+        awaitQueued(client.owner);
+        REQUIRE(client.owner.runOne());
+    }
+    awaitQueued(client.owner);
+    REQUIRE_FALSE(answered.has_value());
+    client.sync.reset();
+    client.owner.runAll();
+    CHECK_FALSE(answered.has_value());
+    CHECK(client.sync.offer() == CustomScreensOffer::Unknown);
+    CHECK(client.sync.listed().screens.empty());
+}
+
+// Mutation: drop the scope from `.then` in `call` (the reply runs on the destroyed sync).
+TEST_CASE("custom screen sync: a reply that arrives after the sync is destroyed is dropped",
+          "[ui][custom-screens][sync]") {
+    screens_test::Server server;
+    morph::testing::StepExecutor owner;
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::SimulatedRemoteBackend>(*server.server), owner};
+    morph::session::Context signedIn;
+    signedIn.token = "ann";
+    bridge.setDefaultSession(std::move(signedIn));
+    morph::ui::BridgeDispatcher dispatcher{bridge, &owner};
+    std::optional<bool> answered;
+    std::optional<morph::ui::CustomScreenSync> sync;
+    sync.emplace(dispatcher, "lims", [] { return uiservice::facts(); });
+    sync->probe([&answered](bool offered) { answered = offered; });
+    awaitQueued(owner);
+    sync.reset();
+    owner.runAll();
+    CHECK_FALSE(answered.has_value());
+}
+
+// Mutation: `put` keeps a screen whose summary is broken (`find` answers it, and open answers a document).
+TEST_CASE("custom screen sync: a broken screen is refused with its reason and never cached",
+          "[ui][custom-screens][sync]") {
+    screens_test::Server server;
+    std::string const id = custom_client::savedIdOf(server.save(screens_test::baseScreen("lims.base"), "ann"));
+    server.authorizer->denied["ann"] = {{"Lims_Sample", "Lims_Verify"}};
+    SyncClient client{*server.server, "ann", "lims"};
+    REQUIRE(client.probe());
+    REQUIRE(client.sync.listed().screens.size() == 1);
+    REQUIRE(client.sync.listed().screens.front().broken.has_value());
+
+    std::optional<std::expected<std::shared_ptr<morph::ui::Document const>, std::string>> opened;
+    client.sync.open(id, [&opened](auto loaded) { opened = std::move(loaded); });
+    REQUIRE(client.pump([&opened] { return opened.has_value(); }));
+    REQUIRE_FALSE(opened->has_value());
+    CHECK(opened->error().contains("broken"));
+    CHECK(opened->error().contains(client.sync.listed().screens.front().broken->reason));
+    CHECK(client.sync.documents().find(id) == nullptr);
+
+    std::optional<std::vector<std::string>> missing;
+    client.sync.prefetchRoutes({id}, [&missing](std::vector<std::string> ids) { missing = std::move(ids); });
+    REQUIRE(client.pump([&missing] { return missing.has_value(); }));
+    CHECK(*missing == std::vector<std::string>{id});
+    CHECK(client.sync.documents().find(id) == nullptr);
+}
+
+// Mutation: a reconnect does not probe again (the second warning never comes).
+TEST_CASE("custom screen sync: a reconnect asks again when the offer is off for a reason other than an absent model",
+          "[ui][custom-screens][sync]") {
+    Warnings warnings;
+    screens_test::Server server;
+    // `list` is refused for the application: a refusal, not an absence.
+    SyncClient client{*server.server, "ann", "elsewhere"};
+    REQUIRE_FALSE(client.probe());
+    std::size_t const warned = warnings.seen.size();
+    client.sync.reconnected();
+    REQUIRE(client.pump([&] { return warnings.seen.size() > warned; }));
+    CHECK(client.sync.offer() == CustomScreensOffer::Off);
+}
+
+// Mutation: a reconnect probes whatever the cause (the owner then has a reply queued).
+TEST_CASE("custom screen sync: a reconnect does not ask a server that lacks the model again",
+          "[ui][custom-screens][sync]") {
+    custom_client::BareServer server;
+    SyncClient client{*server.server, "ann", "lims"};
+    REQUIRE_FALSE(client.probe());
+    client.sync.reconnected();
+    // A probe sent now would have its reply queued on the owner. Nothing runs the owner here, so a queued task is
+    // a reply, and the bounded wait for none is a negative that cannot be drained.
+    CHECK_FALSE(morph::testing::waitUntil([&client] { return client.owner.pending() > 0; },
+                                          morph::testing::WaitBudget{std::chrono::milliseconds{100}}));
+}
+
+namespace {
+
+morph::ui::CustomScreenFound foundNamed(std::string const& id, std::string const& hash,
+                                        std::string const& documentId) {
+    return morph::ui::CustomScreenFound{.summary = morph::ui::CustomScreenSummary{.id = id, .hash = hash},
+                                        .document = screens_test::baseScreen(documentId)};
+}
+
+morph::ui::CustomScreensListed listShowing(std::vector<std::pair<std::string, std::string>> const& shown,
+                                           bool truncated = false) {
+    morph::ui::CustomScreensListed listed{.screens = {}, .truncated = truncated};
+    for (auto const& [id, hash] : shown) {
+        listed.screens.push_back(morph::ui::CustomScreenSummary{.id = id, .hash = hash});
+    }
+    return listed;
+}
+
+}  // namespace
+
+// Mutation: `!listed.truncated` -> true (a screen missing from a truncated list is dropped).
+TEST_CASE("custom documents: refresh keeps what a list shows unchanged and drops what it changed or no longer shows",
+          "[ui][custom-screens][sync]") {
+    morph::ui::LoadOptions const options{.catalog = uiservice::facts()};
+    std::string const a = "custom:a";
+    std::string const b = "custom:b";
+    std::string const c = "custom:c";
+    morph::ui::CustomDocuments documents;
+    for (std::string const& id : {a, b, c}) {
+        REQUIRE(documents.put(foundNamed(id, "sha256:" + id, id), options).has_value());
+    }
+    // Same hash kept, another hash dropped, absent from a full list dropped.
+    CHECK(documents.refresh(listShowing({{a, "sha256:" + a}, {b, "sha256:changed"}})) ==
+          std::vector<std::string>{b, c});
+    CHECK(documents.find(a) != nullptr);
+    CHECK(documents.find(b) == nullptr);
+    CHECK(documents.find(c) == nullptr);
+
+    // Absent from a truncated list: it may lie beyond the cut, so it is kept.
+    CHECK(documents.refresh(listShowing({}, true)).empty());
+    CHECK(documents.find(a) != nullptr);
+    // A truncated list still drops what it shows changed.
+    CHECK(documents.refresh(listShowing({{a, "sha256:changed"}}, true)) == std::vector<std::string>{a});
+}
+
+// Mutation: skip the id comparison in `put` (the document under another id is kept).
+TEST_CASE("custom documents: put refuses a document that names another id and keeps nothing",
+          "[ui][custom-screens][sync]") {
+    morph::ui::CustomDocuments documents;
+    auto const put = documents.put(foundNamed("custom:a", "sha256:a", "custom:other"),
+                                   morph::ui::LoadOptions{.catalog = uiservice::facts()});
+    REQUIRE_FALSE(put.has_value());
+    CHECK(put.error().reason.contains("custom:other"));
+    CHECK(documents.find("custom:a") == nullptr);
+    CHECK(documents.find("custom:other") == nullptr);
 }

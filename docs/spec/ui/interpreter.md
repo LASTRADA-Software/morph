@@ -178,6 +178,12 @@ canonical body is the body's JSON with record fields in name order.
       supersedes anything queued, then marks every entry but an `evaluate` one stale. A mounted entry
       refetches, and an entry whose fetch is in flight fetches once more when it settles: that fetch
       may have been filed before the connection came back.
+    - **Extra watches.** `Session::addExtraWatch(record)` watches a record for something other than
+      the cache, such as a list a client keeps beside it (the custom screens list). The `watch` goes out
+      at once, `watchSet()` names the record, so `reconnected()` and every `resync` carry it in their
+      `replace: true` set whatever order the owner and the cache acted in, and the cache dropping its
+      last entry on the record does not unwatch it. `removeExtraWatch(record)` sends the `unwatch`
+      unless an entry still holds the record. Events arrive through `deliverEvent` as any other.
 - **Invalidation** (`refetch`, a backend switch) marks the entry stale and
   refetches it.
 - **A mark during a fetch is kept.** `Session::markStale` marks an entry stale. While the entry's fetch is

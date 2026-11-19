@@ -139,9 +139,11 @@ struct Server {
                     std::move(token));
     }
 
-    morph::exec::ThreadPoolExecutor pool{2};
+    // The dispatcher and the registry come before the pool: the pool joins first, so a call still running when the
+    // fixture goes holds a dispatcher that is still alive.
     morph::model::detail::ActionDispatcher dispatcher;
     morph::model::detail::ModelRegistryFactory registry;
+    morph::exec::ThreadPoolExecutor pool{2};
     std::shared_ptr<morph::ui::ServedBundle const> served;
     std::shared_ptr<uiservice::RuleAuthorizer> authorizer = std::make_shared<uiservice::RuleAuthorizer>();
     std::shared_ptr<morph::ui::ICustomScreenStore> store;
