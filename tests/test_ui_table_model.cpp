@@ -5,18 +5,24 @@
 //
 // Each case names the mutation it was seen to fail on.
 
+#include <algorithm>
 #include <catch2/catch_test_macros.hpp>
 #include <chrono>
 #include <cstdint>
 #include <memory>
 #include <morph/table/data_source.hpp>
+#include <morph/table/description.hpp>
 #include <morph/table/query.hpp>
 #include <morph/table/sort.hpp>
+#include <morph/table/view_change.hpp>
+#include <morph/ui/author.hpp>
 #include <morph/ui/table_rows.hpp>
 #include <morph/ui/value.hpp>
+#include <span>
 #include <string>
 #include <vector>
 
+#include "table/wide_table_model.hpp"
 #include "ui_table_support.hpp"
 
 namespace table = morph::table;
@@ -243,4 +249,114 @@ TEST_CASE("engine rows: a row's record is built once until the row changes", "[u
     source->rename(0, "renamed");  h.settle();
     CHECK(*rows.row(0)->row.field("name")->asString() == "renamed");  CHECK(rows.recordsBuilt() == 2);
     static_cast<void>(rows.row(1));  CHECK(rows.recordsBuilt() == 3);   // another row: its own record
+}
+
+namespace {
+
+// Rows 0 to 299 held in pages 0 and 1, both fetched again; the next reply answers page 0. Returns the view before it.
+std::vector<std::string> refetchFirstPages(RowsFixture& h, WindowRows& rows) {
+    h.answerFirstPage(rows, /*total*/ 300);
+    rows.retry();
+    h.settle();
+    REQUIRE(h.pending("Table.samples") == 2);
+    return morph::ui::testing::shownKeys(rows);
+}
+
+// Replays @p change on @p before as a mount does, and checks it gives what the rows hold now.
+void checkReplay(std::vector<std::string> before, table::ViewChange const& change, WindowRows const& rows) {
+    auto const after = morph::ui::testing::shownKeys(rows);
+    table::applyViewChange(before, change, std::span<std::string const>{after});
+    CHECK(before == after);
+}
+
+bool has(table::ViewChange const& change, table::ViewOp::Kind kind) {
+    return std::ranges::any_of(change.ops, [kind](table::ViewOp const& op) { return op.kind == kind; });
+}
+
+}  // namespace
+
+// Mutation: identities by place rather than by key (no `Moved`; the replay keeps key 5 where it was).
+TEST_CASE("window rows: a row that moves within its page is a move, not a reset", "[ui][table]") {
+    RowsFixture h;  auto const rows = h.windowRows("samples");
+    auto const before = refetchFirstPages(h, *rows);
+    std::vector<table::ViewChange> changes;
+    rows->onChange([&changes](table::ViewChange const& change) { changes.push_back(change); });
+    std::vector<std::int64_t> keys;
+    for (std::int64_t key = 0; key < 200; ++key) { if (key != 5) { keys.push_back(key); } }
+    keys.insert(keys.begin() + 9, 5);                                // key 5 now at view row 9
+    h.replyPage(morph::ui::testing::pageJsonOfKeys(0, keys, 300, h.columns));
+    REQUIRE(changes.size() == 1);
+    CHECK_FALSE(changes[0].isReset());
+    CHECK(has(changes[0], table::ViewOp::Kind::Moved));
+    checkReplay(before, changes[0], *rows);
+}
+
+// Mutation: a new total resets the view.
+TEST_CASE("window rows: a new total with the same keys moves the view's end, not a reset", "[ui][table]") {
+    RowsFixture h;  auto const rows = h.windowRows("samples");
+    auto const before = refetchFirstPages(h, *rows);
+    std::vector<table::ViewChange> changes;
+    rows->onChange([&changes](table::ViewChange const& change) { changes.push_back(change); });
+    h.replyPage(pageJson(0, 200, 350, h.columns));                   // the same rows; the view grew by 50
+    REQUIRE(changes.size() == 1);
+    CHECK_FALSE(changes[0].isReset());
+    REQUIRE_FALSE(changes[0].ops.empty());
+    CHECK(changes[0].ops.front() ==
+          table::ViewOp{.kind = table::ViewOp::Kind::Inserted, .first = 300, .count = 50, .to = 0});
+    CHECK_FALSE(has(changes[0], table::ViewOp::Kind::Moved));
+    checkReplay(before, changes[0], *rows);
+}
+
+// Mutation: a page whose keys differ resets the view.
+TEST_CASE("window rows: a row that came and a row that went are an insert and a remove", "[ui][table]") {
+    RowsFixture h;  auto const rows = h.windowRows("samples");
+    auto const before = refetchFirstPages(h, *rows);
+    std::vector<table::ViewChange> changes;
+    rows->onChange([&changes](table::ViewChange const& change) { changes.push_back(change); });
+    std::vector<std::int64_t> keys;
+    for (std::int64_t key = 0; key < 200; ++key) { if (key != 3) { keys.push_back(key); } }
+    keys.insert(keys.begin() + 7, 1000);                             // 3 went, 1000 came at view row 7
+    h.replyPage(morph::ui::testing::pageJsonOfKeys(0, keys, 300, h.columns));
+    REQUIRE(changes.size() == 1);
+    CHECK_FALSE(changes[0].isReset());
+    CHECK(has(changes[0], table::ViewOp::Kind::Removed));
+    CHECK(has(changes[0], table::ViewOp::Kind::Inserted));
+    checkReplay(before, changes[0], *rows);
+}
+
+// Mutation: `retry` clearing its flag when its own call returns (the held-back refetch goes with `retry: false`).
+TEST_CASE("window rows: a retry held back by the awaited spacing still carries the flag", "[ui][table]") {
+    RowsFixture h;  auto const rows = h.windowRows("samples");
+    std::string const awaited = pageJson(0, 200, 200, h.columns, table::TotalKind::Exact, 0, {"recipe"});
+    rows->visible(0, 30, h.columns);  h.replyPage(awaited);
+    h.change({0});  h.replyPage(awaited);                            // a refetch at 0 ms starts the spacing
+    std::size_t const before = h.dispatcher.count("Table.samples");
+    h.advance(10ms);  rows->retry();  h.settle();
+    CHECK(h.dispatcher.count("Table.samples") == before);            // held back: 10 ms after the last refetch
+    h.advance(240ms);
+    REQUIRE(h.dispatcher.count("Table.samples") == before + 1);
+    CHECK(h.dispatcher.calls.back().body.contains(R"("retry":true)"));
+}
+
+// Mutation: an unreadable keyed reply only setting `error()` (no page goes again).
+TEST_CASE("window rows: a keyed reply that does not read fetches the pages again", "[ui][table]") {
+    RowsFixture h;  auto const rows = h.windowRows("samples");
+    h.answerFirstPage(*rows, /*total*/ 300);
+    h.change({5});
+    REQUIRE(rows->stats().rowsFetches == 1);
+    std::size_t const before = h.dispatcher.count("Table.samples");
+    h.replyPage("not a page");
+    CHECK(rows->error().has_value());
+    CHECK(h.dispatcher.count("Table.samples") == before + 2);        // pages 0 and 1, held and now stale
+}
+
+// Mutation: `recordsInfo` dropping `opaque` (the catalog's record of `Table.small` is not opaque). The catalog entry
+// is built by `recordsInfo` from the process registry, as `CatalogFacts::action` builds an action's records; a table
+// action is not a `Runs` action, so `CatalogFacts::action` cannot name it.
+TEST_CASE("table catalog: a table's action holds its record opaquely in the client's catalog", "[ui][table]") {
+    auto const records = morph::ui::author::detail::recordsInfo("Table.small");
+    REQUIRE(records.size() == 1);
+    CHECK(records.front().record == "WideTableModel.small");
+    CHECK(records.front().opaque);
+    CHECK(records.front().paths.empty());
 }

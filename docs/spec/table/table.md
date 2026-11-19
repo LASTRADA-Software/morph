@@ -1340,9 +1340,9 @@ fetches in flight.
 request that a scroll or an event caused.
 
 - **Scrolling.** A fetch for a page next to a held page is sent at once: that is ordinary scrolling, and the
-  held margin hides the round trip. So is the page of the first visible row while no page is held, the first
-  query's and the one after a sort or filter, since nothing is passing over it. A fetch for a page farther away (a drag of the scroll thumb, a fling,
-  `Ctrl+End`) is sent when the visible rows have stayed within one page for `SessionOptions::tableSettle`
+  held margin hides the round trip. So is the page of the first visible row while no page is held: the first
+  query's page, and the first after a sort or filter, since nothing is passing over it. A fetch for a page
+  farther away (a drag of the scroll thumb, a fling, `Ctrl+End`) is sent when the visible rows have stayed within one page for `SessionOptions::tableSettle`
   (80 ms). Columns follow the same rule sideways. Every fetch `superseded()` returns is cancelled. A drag of the
   thumb across 100,000 rows therefore sends a fetch where it rests, not five hundred on the way.
 - **An awaited order.** While `awaiting()` is not empty, every event invalidates. `WindowRows` sends the first
