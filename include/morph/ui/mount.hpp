@@ -1935,6 +1935,9 @@ private:
             bind(scope, spec.selectAllLabel, [&widget](std::string const& label) { widget.setSelectAllLabel(label); });
         }
         widget.setOnActivate(event(spec.onActivate));
+        if (spec.onSelectAll) {
+            widget.setOnSelectAll(event(spec.onSelectAll));
+        }
         bool const sortable = std::ranges::any_of(spec.columns, &TableColumn::sortable);
         reactive::Computed<std::optional<TableSort>>* sortValue = nullptr;
         if (sortable) {
@@ -3280,6 +3283,9 @@ private:
             bind(scope, spec.selectAllLabel, [&widget](std::string const& label) { widget.setSelectAllLabel(label); });
         }
         widget.setOnActivate(event(spec.onActivate));
+        if (spec.onSelectAll) {
+            widget.setOnSelectAll(event(spec.onSelectAll));
+        }
         auto& table = scope.make<SourceTable>();
         if (!spec.source->alwaysWindowed) {
             auto& spans = scope.make<SpanTable>();

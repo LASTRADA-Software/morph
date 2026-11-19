@@ -1763,7 +1763,7 @@ inline std::string pagesOf(std::string_view rows, table::TableQuery const& query
 }
 
 /// @brief The keys of the realized data rows of the harness's first table, in child order, joined by spaces; a
-///        text key is written without its quotes.
+///        text key is written without its quotes, and a placeholder row, which has none, is left out.
 /// @param h The harness.
 /// @return The keys.
 inline std::string rowOrder(TableHarness const& h) {
@@ -1773,6 +1773,9 @@ inline std::string rowOrder(TableHarness const& h) {
             continue;
         }
         std::string key = h.backend.prop(row, "rowKey");
+        if (key.empty()) {
+            continue;  // a placeholder row
+        }
         if (key.size() >= 2 && key.front() == '"' && key.back() == '"') {
             key = key.substr(1, key.size() - 2);
         }

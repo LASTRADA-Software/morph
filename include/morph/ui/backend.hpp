@@ -929,6 +929,12 @@ public:
     ///        backend has not realized.
     virtual void setExistingKeys(std::vector<Key> const& keys) { static_cast<void>(keys); }
 
+    /// @brief Sets what a `Multiple` table's `Ctrl+A` calls in place of selecting the rows the backend holds and
+    ///        reporting them: the caller selects the whole view, and sets the selection back through `setSelection`.
+    ///        A backend that does not take it selects as before.
+    /// @param onSelectAll The handler; empty to select as before.
+    virtual void setOnSelectAll(std::function<void()> onSelectAll) { static_cast<void>(onSelectAll); }
+
     /// @brief Shows the table's status line: its counts, the state of a failed fetch or level with "Retry" when it
     ///        offers it, and the latest message; a status that is not `shown` takes no space. Called once the table
     ///        is built and on every change. A backend without a status line ignores it.

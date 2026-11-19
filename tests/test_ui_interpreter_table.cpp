@@ -568,8 +568,8 @@ TEST_CASE("table: a selected key whose row is gone drops on the next user change
     CHECK(readJson(*screen, R"({"ref":"selected"})") == "[1,3]");
 }
 
-// Mutation: skip the merge (Ctrl+A on the first page drops row 51).
-TEST_CASE("table: Ctrl+A selects the page's rows and keeps a key selected on another page", "[ui][interpreter]") {
+// Mutation: no select-all handler on the table (Ctrl+A selects the page's 25 rows and keeps row 51).
+TEST_CASE("table: Ctrl+A selects every row of the view, on every page, and again clears them", "[ui][interpreter]") {
     Harness h;
     auto screen = h.mount(pagedTable("multiple"));
     int const table = h.backend.all("Table").front();
@@ -577,11 +577,14 @@ TEST_CASE("table: Ctrl+A selects the page's rows and keeps a key selected on ano
     h.settle();
     CHECK(h.backend.press(table, "Ctrl+A"));
     h.settle();
-    std::string expected = "[51";
-    for (int row = 1; row <= 25; ++row) {
+    std::string expected = "[1";
+    for (int row = 2; row <= 57; ++row) {
         expected += "," + std::to_string(row);
     }
     CHECK(readJson(*screen, R"({"ref":"selected"})") == expected + "]");
+    CHECK(h.backend.press(table, "Ctrl+A"));
+    h.settle();
+    CHECK(readJson(*screen, R"({"ref":"selected"})") == "[]");
 }
 
 namespace {

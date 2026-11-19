@@ -2179,8 +2179,8 @@ TEST_CASE("rows table: one changed row is one repair", "[ui][table]") {
     CHECK(rowOrder(h) == "a c b");                                            // "zz" moved last
 }
 
-// Mutations: no bound check (no warning); the bound read as `>=` (a warning at 20,000). A warning per change of the
-// list is not observable here: the screen reports a repeated path and reason once.
+// Mutations: no bound check (no warning); the bound read as `>=` (a warning at 20,000); a warning per change of the
+// list (two, for the list that grows to 20,002 rows: the screen drops only a repeat of the same words).
 TEST_CASE("rows table: a list over 20,000 rows is reported once", "[ui][table]") {
     TableHarness h;  auto screen = h.mount(rowsDoc(idRows(20'001)));
     std::string const warning = "table list holds 20,001 rows; a table over rows is ordered on the client up to "
@@ -2188,6 +2188,16 @@ TEST_CASE("rows table: a list over 20,000 rows is reported once", "[ui][table]")
     CHECK(diagnosticsMentioning(h, warning) == 1);
     h.backend.click(h.byTestId("Button", "rename"));  h.settle();             // the list changes: no second report
     CHECK(diagnosticsMentioning(h, warning) == 1);
+    // A list of another size would word its report apart: still the one report.
+    std::string const growing = [] {
+        std::string text = rowsDoc(idRows(20'001));
+        std::string const renamed = morph::ui::testing::renamedB(idRows(20'001));
+        text.replace(text.find(renamed), renamed.size(), idRows(20'002));
+        return text;
+    }();
+    TableHarness grows;  auto grown = grows.mount(growing);
+    grows.backend.click(grows.byTestId("Button", "rename"));  grows.settle();
+    CHECK(diagnosticsMentioning(grows, "serve it as a model's table") == 1);
     TableHarness under;  auto small = under.mount(rowsDoc(idRows(20'000)));
     CHECK(diagnosticsMentioning(under, "serve it as a model's table") == 0);  // at the bound: nothing
 }
@@ -2198,6 +2208,7 @@ TEST_CASE("rows table: persisted state before the first rows", "[ui][table][stat
                                                         R"({"version":1,"sort":[{"column":"name","direction":"desc"}]})");
     TableHarness h{store};  auto screen = h.mount(rowsDoc(kThree));
     CHECK(rowOrder(h).empty());                                               // placeholders only while restoring
+    CHECK(h.backend.children(tableOf(h)).size() == 3);
     CHECK(store->lastLoadKey() == table::TableStateKey{.application = "lims", .model = "", .table = "list",
                                                          .qualifier = "samples", .part = "state"});
     store->release();  h.settle();
@@ -2228,8 +2239,8 @@ TEST_CASE("rows table: the status line takes space only while it has something t
     CHECK_FALSE(statusOf(never).shown);  CHECK(statusOf(never).message.empty());
 }
 
-// Mutation: no report of an invalid sort cell (the count is 0). One report per view change is not observable here:
-// the screen reports a repeated path and reason once.
+// Mutations: no report of an invalid sort cell (the count is 0); one per view change (two, once a second column's
+// invalid cell words the report apart).
 TEST_CASE("rows table: a cell not of its column's kind is reported once at the sort path", "[ui][table]") {
     TableHarness h;
     auto screen = h.mount(rowsDoc(R"([{"id":"a","weight":1},{"id":"b","weight":"heavy"},{"id":"c","weight":2}])"));
@@ -2241,6 +2252,12 @@ TEST_CASE("rows table: a cell not of its column's kind is reported once at the s
     CHECK(sortReports() == 1);
     h.backend.clickHeader(tableOf(h), 2);  h.settle();
     CHECK(rowOrder(h) == "c a b");  CHECK(sortReports() == 1);                // last in either direction, once
+    TableHarness two;
+    auto both = two.mount(rowsDoc(R"([{"id":"a","name":"x","weight":1},{"id":"b","name":2,"weight":"heavy"},)"
+                                  R"({"id":"c","name":"y","weight":2}])"));
+    two.backend.clickHeader(tableOf(two), 2);  two.settle();
+    two.backend.clickHeader(tableOf(two), 1);  two.settle();                  // another column, another invalid cell
+    CHECK(std::ranges::count_if(two.diagnostics, [](Refusal const& r) { return r.path.ends_with("/sort"); }) == 1);
 }
 
 namespace {
@@ -2342,4 +2359,35 @@ TEST_CASE("ui document: a rows table's column kind and its persist need what the
           "a table over `rows` needs an `id` to persist its arrangement");
     CHECK(loads(rowsDocNoId(kThree, R"(,"persist":false)"), tableCatalog()));
     CHECK(loads(rowsDocNoId(kThree), tableCatalog()));
+}
+
+// Mutation: no source made for the units the rows bring (every quantity in `m` an invalid cell, left in source
+// order and reported at the sort path).
+TEST_CASE("rows table: a quantity in a unit the screen does not list sorts by its value", "[ui][table]") {
+    TableHarness h;
+    auto screen = h.mount(rowsDoc(R"([{"id":"a","weight":{"num":3,"den":1,"dp":0,"unit":"m"}},)"
+                                  R"({"id":"b","weight":{"num":1,"den":1,"dp":0,"unit":"m"}},)"
+                                  R"({"id":"c","weight":{"num":2,"den":1,"dp":0,"unit":"m"}}])"));
+    h.backend.clickHeader(tableOf(h), 2);  h.settle();
+    CHECK(rowOrder(h) == "b c a");
+    CHECK(std::ranges::none_of(h.diagnostics, [](Refusal const& r) { return r.path.ends_with("/sort"); }));
+}
+
+// Mutation: the lowering grouping with an empty unit table (1 kg and 1000 g are two runs: headings 1, 1, 1).
+TEST_CASE("rows table: a group's quantities are compared through the screen's units", "[ui][table]") {
+    TableHarness h;
+    FormatContext format = formatFor("en");
+    format.units.insert_or_assign("g", morph::ui::UnitInfo{.canonical = "g", .toCanonical = *table::parseDecimal("1"),
+                                                           .display = {}});
+    format.units.insert_or_assign("kg", morph::ui::UnitInfo{.canonical = "g",
+                                                            .toCanonical = *table::parseDecimal("1000"), .display = {}});
+    h.session.setFormatting(format);
+    auto screen = h.mount(R"({"vocab":"ui/1","id":"samples",
+      "state":{"items":{"init":{"lit":[{"id":1,"w":{"num":1,"den":1,"dp":0,"unit":"kg"}},
+                                       {"id":2,"w":{"num":1000,"den":1,"dp":0,"unit":"g"}},
+                                       {"id":3,"w":{"num":2,"den":1,"dp":0,"unit":"kg"}}]}}},
+      "view":{"kind":"table","id":"list","testId":"list","rows":{"ref":"items"},"key":{"row":"id"},
+              "group":{"by":{"row":"w"},"heading":{"kind":"text","text":{"fn":"format","args":["{0}",{"row":"count"}]}}},
+              "columns":[{"id":"id","label":"Id"}]}})");
+    CHECK(headingTexts(h) == std::vector<std::string>{"2", "1"});
 }
