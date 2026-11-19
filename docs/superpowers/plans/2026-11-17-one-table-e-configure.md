@@ -1239,8 +1239,8 @@ In `tests/net/test_push_tables.cpp`: the publish-then-read flow over a real sock
 **Spec:** "Sort chains" (the bound); Failure modes "A table whose `limits` set `maxSortKeys` above 32" and "A sort key past the table's `maxSortKeys`"; the Tests row "A raised sort bound". Depends only on Task 12.
 
 **Files:**
-- Modify: `include/morph/table/description.hpp` (`servedDescription`; `table::detail::answerQuery` takes its description from it and answers its `SourceContract`), `include/morph/core/registry.hpp` (the `Table.<id>.describe` handler `BRIDGE_REGISTER_TABLE` registers obtains the description through it), `src/ui/document.cpp` (`maxSortKeys` on `table`), `src/ui/interpreter.cpp` (the bound the lowering passes to `applySortGesture`: the description's on a model-backed table, the literal on a `rows` table, else 8)
-- Test: `tests/table/test_table_description.cpp`, `tests/test_ui_table_model.cpp`, `tests/test_ui_document.cpp`
+- Modify: `include/morph/table/description.hpp` (`servedDescription`; `table::detail::answerQuery` takes its description from it and answers its `SourceContract`), `table::DescribeTable::invoke` in the same header (the `Table.<id>.describe` handler `BRIDGE_REGISTER_TABLE` registers obtains the description through it; `registry.hpp` only names the action type), `src/ui/document.cpp` (`maxSortKeys` on `table`), `src/ui/interpreter.cpp` (the bound the lowering passes to `applySortGesture`: the description's on a model-backed table, the literal on a `rows` table, else 8)
+- Test: `tests/table/test_table_description.cpp`, `tests/test_ui_table_model.cpp`, `tests/test_ui_document_rules.cpp` (its `rowsTable` and `modelTable` helpers)
 - Docs: `docs/spec/ui/document.md` (`maxSortKeys`), `docs/spec/core/registry.md` (the bound carried from `limits`)
 
 **Interfaces:**
@@ -1293,7 +1293,7 @@ TEST_CASE("sort chains: a table whose limits set 32 accepts 32 keys from the hea
 // A rows table with "maxSortKeys": 12 over 13 sortable columns: 12 keys, the 13th refused with "…at most 12 columns".
 ```
 
-In `tests/test_ui_document.cpp`: `"table: maxSortKeys is a rows table's literal from 1 to 32"` — `33` refused, `{"ref":"n"}` refused, on a model-backed table refused with the reason above.
+In `tests/test_ui_document_rules.cpp`: `"ui document rules: table: maxSortKeys is a rows table's literal from 1 to 32"` — `33` refused, `{"ref":"n"}` refused, on a model-backed table refused with the reason above.
 
 - [ ] **Step 2: Run to see them fail.** `cmake --build --preset cl-debug --target morph_tests morph_table_tests && ctest --test-dir build/cl-debug -R "served description|accepts 32 keys|maxSortKeys is a rows" --output-on-failure`. Expected: compile error for `servedDescription`; the 32-key case stops at 8.
 - [ ] **Step 3: Implement** `servedDescription`, call it from `table::detail::answerQuery` and from the `describe` handler (a `SourceContract` answers the request), the document key and the lowering's bound.
