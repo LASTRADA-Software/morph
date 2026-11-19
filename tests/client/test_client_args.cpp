@@ -2,7 +2,11 @@
 
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_string.hpp>
+#include <functional>
+#include <map>
+#include <morph/client/mcp.hpp>
 #include <morph/client/source.hpp>
+#include <sstream>
 #include <string>
 #include <vector>
 
@@ -85,4 +89,54 @@ TEST_CASE("makeSource: an --app that names no linked application is refused, nam
     morph::client::Args remote;
     remote.server = "ws://127.0.0.1:1";
     CHECK(morph::client::makeSource(remote, {}).has_value());
+}
+
+TEST_CASE("readArgs: --mcp-stdio is a flag, off without it", "[client][args][mcp]") {
+    std::vector<std::string> args{"client", "--app", "probe", "--mcp-stdio"};
+    auto const read = readArgs(args);
+    REQUIRE(read.has_value());
+    CHECK(read->mcpStdio);
+    CHECK(args == std::vector<std::string>{"client"});
+
+    std::vector<std::string> without{"client", "--app", "probe"};
+    auto const off = readArgs(without);
+    REQUIRE(off.has_value());
+    CHECK_FALSE(off->mcpStdio);
+}
+
+TEST_CASE("checkMcpArgs refuses frontend options and leftover arguments", "[client][args][mcp]") {
+    auto const refused = [](std::vector<std::string> args) {
+        auto const read = readArgs(args);
+        REQUIRE(read.has_value());
+        return morph::client::checkMcpArgs(*read, args);
+    };
+    CHECK(refused({"c", "--app", "probe", "--mcp-stdio"}).has_value());
+    CHECK_FALSE(refused({"c", "--app", "probe", "--mcp-stdio", "--screen", "s"}).has_value());
+    CHECK_FALSE(refused({"c", "--app", "probe", "--mcp-stdio", "--exit-after-mount"}).has_value());
+    CHECK_FALSE(refused({"c", "--app", "probe", "--mcp-stdio", "--dev"}).has_value());
+    auto const leftover = refused({"c", "--app", "probe", "--mcp-stdio", "--ui=qt"});
+    REQUIRE_FALSE(leftover.has_value());
+    CHECK_THAT(leftover.error(), Catch::Matchers::ContainsSubstring("--ui=qt"));
+}
+
+TEST_CASE("mcpSession takes the principal and token as the spec says", "[client][mcp]") {
+    std::map<std::string, std::string> env{{"MORPH_MCP_PRINCIPAL", "envuser"}, {"MORPH_MCP_TOKEN", "t0k"}};
+    auto const lookup = [&env](char const* name) -> char const* {
+        auto const found = env.find(name);
+        return found == env.end() ? nullptr : found->second.c_str();
+    };
+    std::ostringstream diagnostics;
+    morph::client::Args remote;
+    remote.server = "ws://h:1";
+    CHECK(morph::client::mcpSession(remote, lookup, diagnostics).principal == "envuser");
+    CHECK(morph::client::mcpSession(remote, lookup, diagnostics).token == "t0k");
+    remote.user = "ann";
+    CHECK(morph::client::mcpSession(remote, lookup, diagnostics).principal == "ann");
+    morph::client::Args local;
+    local.app = "probe";
+    local.user = "ann";
+    auto const session = morph::client::mcpSession(local, lookup, diagnostics);
+    CHECK(session.principal == "ann");
+    CHECK(session.token.empty());
+    CHECK_THAT(diagnostics.str(), Catch::Matchers::ContainsSubstring("MORPH_MCP_TOKEN"));
 }

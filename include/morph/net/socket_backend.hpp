@@ -42,6 +42,15 @@ namespace morph::net {
 struct SocketBackendConfig {
     /// @brief Whether to attempt automatic reconnect after an unsolicited disconnect.
     bool reconnectEnabled = true;
+    /// @brief Whether to keep retrying when the first connect never reaches the server, on the same backoff as a
+    ///        reconnect. Off by default: a client that starts before its server is usually misconfigured, and
+    ///        failing fast says so. A process that may start before its server, such as an agent's MCP server,
+    ///        turns it on. While it retries, requests and private binds are held across every failed attempt and sent
+    ///        once one succeeds (during a reconnect, by contrast, they are rejected at the next failed attempt). The
+    ///        blocking structural verbs (`registerModel`, `registerModelWithContext`) wait for the connect rather than
+    ///        throw, and wait indefinitely if the server never comes up. Needs `reconnectEnabled`: with that off, the
+    ///        first failed connect is final either way.
+    bool retryFirstConnect = false;
     /// @brief Delay before the first reconnect attempt after a disconnect.
     std::chrono::milliseconds initialReconnectDelay{500};
     /// @brief Upper bound on the exponential backoff between reconnect attempts.
@@ -651,6 +660,12 @@ private:
         std::shared_ptr<::core::async::StopCallback<CancelOnStop>> watch;
     };
 
+    /// @brief Whether a connection's end rejects the calls held for the next connect.
+    enum class HeldCalls : std::uint8_t {
+        Reject,  ///< Rejected with the connection's other calls.
+        Keep,    ///< Kept: another attempt follows, and sends them.
+    };
+
     /// @brief What a control call filed while the socket is not connected does.
     enum class BeforeConnect : std::uint8_t {
         Reject,  ///< Rejected with `DisconnectedError`.
@@ -944,10 +959,14 @@ private:
         /// are emptied first, so a settle that re-enters the backend files
         /// into empty tables. With @p onServer, each abandoned execute is
         /// also cancelled on the server, when it advertised `"cancel"`.
-        void cancelAll(const std::exception_ptr& exc, CancelOnServer onServer = CancelOnServer::No) {
+        void cancelAll(const std::exception_ptr& exc, CancelOnServer onServer = CancelOnServer::No,
+                       HeldCalls held = HeldCalls::Reject) {
             auto drained = executes.drain();
             auto drainedControl = controls.drain();
-            auto drainedQueue = std::exchange(queuedControls, {});
+            std::vector<std::pair<::morph::wire::Envelope, PendingControl>> drainedQueue;
+            if (held == HeldCalls::Reject) {
+                drainedQueue = std::exchange(queuedControls, {});
+            }
             if (onServer == CancelOnServer::Yes && cancelAdvertised) {
                 for (auto const& [callId, pending] : drained) {
                     sendCancel(callId, pending.stop ? pending.session : session);
@@ -1000,7 +1019,7 @@ private:
             }
         }
 
-        void onDisconnected() {
+        void onDisconnected(HeldCalls held = HeldCalls::Reject) {
             bool const wasConnected = connected.exchange(false);
             if (wasConnected && disconnectHandler) {
                 try {
@@ -1016,7 +1035,7 @@ private:
                 ::morph::net::detail::closeAfterFlush(conn);
                 conn.reset();
             }
-            cancelAll(std::make_exception_ptr(::morph::backend::DisconnectedError{}));
+            cancelAll(std::make_exception_ptr(::morph::backend::DisconnectedError{}), CancelOnServer::No, held);
         }
 
         /// Arms the backoff timer for the next attempt, and grows the delay.
@@ -1229,17 +1248,26 @@ private:
                     }
                 }
             }
-            self->onDisconnected();
-            if (!reachedServer && !self->everConnected) {
-                // Never reached the server even once — fail fast, no retry
-                // (mirrors QtWebSocketBackend's "no reconnect for
-                // never-connected sockets").
-                self->attemptsOver = true;
-                co_return;
+            self->settleAttempt(reachedServer);
+        }
+
+        /// Decides what follows an attempt that has ended: fail fast on a never-reached server, or schedule the
+        /// next attempt. Runs on the I/O loop, which owns every field it writes.
+        /// @param reachedServer Whether this attempt completed the handshake.
+        void settleAttempt(bool reachedServer) {
+            // A first connect that is retried keeps the calls held for it: they are sent when an attempt succeeds.
+            bool const neverReached = !reachedServer && !everConnected;
+            bool const retryingFirst = neverReached && cfg.retryFirstConnect && cfg.reconnectEnabled;
+            onDisconnected(retryingFirst ? HeldCalls::Keep : HeldCalls::Reject);
+            if (neverReached && !cfg.retryFirstConnect) {
+                // Never reached the server even once: fail fast, no retry (mirrors QtWebSocketBackend's
+                // "no reconnect for never-connected sockets").
+                attemptsOver = true;
+                return;
             }
-            self->attemptsOver = !self->cfg.reconnectEnabled;
-            if (!self->attemptsOver) {
-                self->scheduleReconnect();
+            attemptsOver = !cfg.reconnectEnabled;
+            if (!attemptsOver) {
+                scheduleReconnect();
             }
         }
 

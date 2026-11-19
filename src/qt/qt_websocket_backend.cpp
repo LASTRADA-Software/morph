@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <cassert>
 #include <cctype>
+#include <iterator>
 #include <morph/core/detail/reply_router.hpp>
 #include <morph/core/wire.hpp>
 #include <morph/qt/qt_websocket_backend.hpp>
@@ -74,8 +75,20 @@ QtWebSocketBackend::QtWebSocketBackend(QUrl serverUrl, ::morph::model::detail::A
         if (_disconnectHandler) {
             _disconnectHandler();
         }
-        cancelPending(std::make_exception_ptr(::morph::backend::DisconnectedError{}));
-        if (!_shuttingDown && _cfg.reconnectEnabled && _everConnected) {
+        // A first connect that is retried keeps the calls held for it: they are sent when an attempt succeeds.
+        if (!_shuttingDown && _cfg.reconnectEnabled && !_everConnected && _cfg.retryFirstConnect) {
+            auto heldRegistrations = std::exchange(_queuedRegistrations, {});
+            auto heldRequests = std::exchange(_queuedRequests, {});
+            cancelPending(std::make_exception_ptr(::morph::backend::DisconnectedError{}));
+            // Calls filed while cancelPending settled the others queue behind the ones already held.
+            std::ranges::move(_queuedRegistrations, std::back_inserter(heldRegistrations));
+            std::ranges::move(_queuedRequests, std::back_inserter(heldRequests));
+            _queuedRegistrations = std::move(heldRegistrations);
+            _queuedRequests = std::move(heldRequests);
+        } else {
+            cancelPending(std::make_exception_ptr(::morph::backend::DisconnectedError{}));
+        }
+        if (!_shuttingDown && _cfg.reconnectEnabled && (_everConnected || _cfg.retryFirstConnect)) {
             scheduleReconnect();
         }
     });

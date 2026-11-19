@@ -231,6 +231,14 @@ claude mcp add bank -e MORPH_MCP_PRINCIPAL=alice \
     -- ./build/examples/bank/ladder_bank_server --mcp-stdio
 ```
 
+Bank can also be served to an agent from the generic client, locally and without the server: the client runs
+bank's actions in-process over the same database file, as in its local GUI mode, and a GUI open on a server
+process does not hear of its writes.
+
+```sh
+claude mcp add bank -- ./build/examples/client/morph_examples_client --mcp-stdio --app bank --db "$PWD/bank.db" --user alice
+```
+
 #### Scenarios
 
 `scripts/scenario/scenarios/bank/` holds 22 scenario files that drive this

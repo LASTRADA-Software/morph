@@ -51,10 +51,21 @@ struct LocalApp {
     /// @brief Run once before the first model call, with the client's options; empty for none.
     std::function<void(LocalSetup const&)> setUp;
     /// @brief The authorizer the application's own server checks requests with, for an in-process server to check
-    ///        them the same way; empty for one that lets every request through. Only a test's simulated server calls
-    ///        it.
+    ///        them the same way; empty for one that lets every request through. `makeLocalServer` calls it, which
+    ///        a local MCP server and a test's simulated source run the application on.
     std::function<std::shared_ptr<session::IAuthorizer>()> serverAuthorizer;
 };
+
+/// @brief The in-process server for @p app: a `RemoteServer` whose services hold a `ui::UiService` over the
+///        application's bundle, checked by the application's `serverAuthorizer` when it has one and by allow-all
+///        otherwise. What a local MCP server and a simulated test source run the application on. It does not run
+///        `setUp`, which stays the caller's.
+/// @param app     The application.
+/// @param workers The pool the server's strands run on. Borrowed: it must outlive the server.
+/// @param config  The server's other settings; the UI service is appended to its services.
+/// @return The server, or why the bundle did not build.
+[[nodiscard]] std::expected<std::shared_ptr<backend::RemoteServer>, std::string> makeLocalServer(
+    LocalApp const& app, exec::IExecutor& workers, backend::ServerConfig config = {});
 
 /// @brief The vocabularies the generic client speaks.
 /// @return Their names: `ui/1` and the expression vocabulary.

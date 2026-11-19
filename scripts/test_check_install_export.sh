@@ -171,8 +171,8 @@ expect_caught "morph's install rules not running at all" \
 #
 # That path names whichever detail/ header the consumer TU reaches *first*, not
 # a fixed one, because the compile stops at the first missing include and never
-# reports the rest: today that is `reactive/detail/graph.hpp`, through
-# `client/shell.hpp` -> `ui/view.hpp` -> `reactive/runtime.hpp`. It moves
+# reports the rest: today that is `core/detail/completion_awaiter.hpp`, through
+# `client/mcp.hpp` -> `client/source.hpp` -> `core/backend.hpp` -> `core/completion.hpp`. It moves
 # whenever a public header gains a detail/ include the consumer reaches earlier,
 # and a failure here saying "caught for the WRONG reason" and naming some other
 # detail/ header is that: update this needle, not the install rules. The needle
@@ -183,7 +183,7 @@ expect_caught "the detail/ header set dropped from the install" \
     "edit CMakeLists.txt -e '/^# The detail\/ headers that public headers include\./,/^set_target_properties(morph PROPERTIES INTERFACE_HEADER_SETS_TO_VERIFY HEADERS)$/d' -e '/FILE_SET morph_detail_headers DESTINATION/d'" \
     fast \
     "the consumer project did not compile against the install prefix" \
-    "detail/graph.hpp"
+    "detail/completion_awaiter.hpp"
 
 # Bug 2: INTERFACE_HEADER_SETS_TO_VERIFY defaults to *every* interface header
 # set, including the detail/ one, which is deliberately not held to compiling

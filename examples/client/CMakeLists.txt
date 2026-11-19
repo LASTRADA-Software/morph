@@ -54,6 +54,7 @@ foreach(_morph_client IN LISTS _morph_clients)
             target_link_libraries(${_morph_client} PRIVATE morph::ladder_lims_screens morph::ladder_lims_lib)
             set(_morph_client_lims 1)
         endif()
+        set(_morph_examples_client_lims ${_morph_client_lims})
         target_compile_definitions(${_morph_client} PRIVATE MORPH_CLIENT_HAS_LIMS=${_morph_client_lims})
         set(_morph_client_bookmarks 0)
         if(TARGET ladder_bookmarks_screens)
@@ -88,6 +89,25 @@ foreach(_morph_client IN LISTS _morph_clients)
         apply_coverage(${_morph_client})
     endif()
 endforeach()
+
+# The client's --mcp-stdio, launched as a real process over a shell pipe: a POSIX shell is what the cases launch it with.
+if(MORPH_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32)
+    include(Catch)
+    add_executable(morph_client_mcp_pipe_tests tests/test_mcp_pipe.cpp)
+    target_link_libraries(morph_client_mcp_pipe_tests PRIVATE morph::morph morph_test_main)
+    target_compile_definitions(morph_client_mcp_pipe_tests PRIVATE
+        MORPH_EXAMPLES_CLIENT_PATH="$<TARGET_FILE:morph_examples_client>"
+        MORPH_CLIENT_HAS_LIMS=${_morph_examples_client_lims})
+    add_dependencies(morph_client_mcp_pipe_tests morph_examples_client)
+    apply_warnings(morph_client_mcp_pipe_tests)
+    if(DEFINED AF_SANITIZER)
+        apply_sanitizers(morph_client_mcp_pipe_tests ${AF_SANITIZER})
+    endif()
+    if(AF_COVERAGE)
+        apply_coverage(morph_client_mcp_pipe_tests)
+    endif()
+    catch_discover_tests(morph_client_mcp_pipe_tests DISCOVERY_MODE PRE_TEST PROPERTIES TIMEOUT 120 LABELS "client")
+endif()
 
 # lims alone, for scripts/shoot_lims.sh. lims keeps its action ids distinct from examples/forms (`ListSamples`) and
 # examples/bank (`ListAccounts`) because the registry refuses one action id on two action types.
