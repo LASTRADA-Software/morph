@@ -28,6 +28,7 @@
 #include <morph/ui/preferences.hpp>
 #include <morph/ui/table_state.hpp>
 #include <morph/ui/table_state_model.hpp>
+#include <morph/ui/table_views.hpp>
 #include <optional>
 #include <set>
 #include <stdexcept>
@@ -129,6 +130,8 @@ public:
     }
 
     std::vector<std::string> calls;
+    /// The body of each call, in order.
+    std::vector<std::string> bodies;
     int binds = 0;
 
 private:
@@ -140,6 +143,7 @@ private:
                                                                     std::string const& bodyJson,
                                                                     ui::CallOptions /*options*/) override {
             _dispatcher->calls.push_back(actionId);
+            _dispatcher->bodies.push_back(bodyJson);
             auto const reply = _dispatcher->_server->call(_instance, actionId, bodyJson, _dispatcher->_person);
             auto [completion, promise] = morph::async::Completion<std::string>::makeSettleable(_dispatcher->_owner);
             if (reply.kind == "ok") {
@@ -1373,4 +1377,197 @@ TEST_CASE("table state: a session's store sends a busy save again after tableSta
         REQUIRE(result.has_value());
         CHECK(result->outcome == table::SaveOutcome::Saved);
     }
+}
+
+// --- Saved views ---------------------------------------------------------------------------------------------------
+
+namespace {
+
+using morph::ui::TableViews;
+using morph::ui::testing::LiteralTableStateStore;
+using morph::ui::testing::RecordingTableStateStore;
+using morph::ui::testing::StoreCall;
+
+// A view of a name, sorted by @p column.
+table::SavedView viewNamed(std::string name, std::string column = "name") {
+    return table::SavedView{.name = std::move(name), .layout = {},
+                            .sort = {table::SortKey{.column = std::move(column), .dir = table::SortDirection::Ascending}},
+                            .filters = {}};
+}
+
+// A window: a session's table states over a shared store, and one table's views.
+struct ViewsWindow {
+    ViewsWindow(RowsFixture& h, table::ITableStateStore& store)
+        : states{sharedOf(store), h.owner, &h.scheduler, 500ms}, views{states, kKey, h.owner} {}
+    TableStates states;
+    TableViews views;
+};
+
+// Runs a views change and settles; its answer.
+TableViews::Result changed(RowsFixture& h, morph::async::Completion<TableViews::Result> completion) {
+    return settled(h, std::move(completion));
+}
+
+// The calls of a part, as `op expected outcome` lines: what a test compares.
+std::vector<std::string> callsOf(std::vector<StoreCall> const& calls, std::string_view part, std::size_t from = 0) {
+    std::vector<std::string> out;
+    for (std::size_t at = from; at < calls.size(); ++at) {
+        StoreCall const& call = calls.at(at);
+        if (call.part != part) {
+            continue;
+        }
+        std::string const outcome = call.op == "load"                                  ? ""
+                                    : call.outcome == table::SaveOutcome::Saved    ? " Saved"
+                                    : call.outcome == table::SaveOutcome::Conflict ? " Conflict"
+                                                                                   : " Refused";
+        out.push_back(call.op + (call.op == "load" ? "" : " expected=" + call.expected) + outcome);
+    }
+    return out;
+}
+
+table::TableStateKey viewsKey() {
+    table::TableStateKey key = kKey;
+    key.part = "views";
+    return key;
+}
+
+}  // namespace
+
+// Mutation: a views save with no expected revision (the second window's save overwrites the first's view).
+TEST_CASE("views: views are not lost between windows", "[ui][table][state]") {
+    RowsFixture h;
+    RecordingTableStateStore store{h.owner};
+    auto a = std::make_unique<ViewsWindow>(h, store);
+    auto b = std::make_unique<ViewsWindow>(h, store);
+    REQUIRE(changed(h, a->views.load()).has_value());
+    REQUIRE(changed(h, b->views.load()).has_value());
+    std::size_t const before = store.calls.size();
+    REQUIRE(changed(h, a->views.change(table::AddView{viewNamed("A")})).has_value());
+    REQUIRE(changed(h, b->views.change(table::AddView{viewNamed("B")})).has_value());
+    CHECK(callsOf(store.calls, "views", before) ==
+          std::vector<std::string>{"save expected=- Saved", "save expected=- Conflict", "load",
+                                   "save expected=" + store.calls.at(before).revision + " Saved"});
+    std::string const rA = store.calls.at(before).revision;
+    std::string const rB = store.calls.back().revision;
+    CHECK(store.calls.at(before + 1).revision == rA);                      // the conflict carries A's revision
+    CHECK(rB != rA);
+    CHECK(viewNames(settled(h, store.load(viewsKey()))) == std::vector<std::string>{"A", "B"});
+    // New sessions: each reads the document of revision rB, then each adds a view.
+    a = std::make_unique<ViewsWindow>(h, store);
+    b = std::make_unique<ViewsWindow>(h, store);
+    REQUIRE(changed(h, a->views.load()).has_value());
+    REQUIRE(changed(h, b->views.load()).has_value());
+    std::size_t const again = store.calls.size();
+    REQUIRE(changed(h, a->views.change(table::AddView{viewNamed("C")})).has_value());
+    REQUIRE(changed(h, b->views.change(table::AddView{viewNamed("D")})).has_value());
+    std::string const rC = store.calls.at(again).revision;
+    CHECK(callsOf(store.calls, "views", again) ==
+          std::vector<std::string>{"save expected=" + rB + " Saved", "save expected=" + rB + " Conflict", "load",
+                                   "save expected=" + rC + " Saved"});
+    CHECK(viewNames(settled(h, store.load(viewsKey()))) == std::vector<std::string>{"A", "B", "C", "D"});
+}
+
+// Mutation: TableViews loading through the store directly rather than through TableStates (one call per part).
+// Gate T5, extended to the views parts.
+TEST_CASE("views: a screen's state, views and shared parts load in one call, and a second mount in none",
+          "[ui][table][state]") {
+    StoreFixture h;
+    REQUIRE(h.store.shares());
+    TableStates states{sharedOf(h.store), h.owner, &h.scheduler, 500ms};
+    std::vector<std::unique_ptr<TableViews>> held;
+    auto const mountScreen = [&] {
+        held.clear();
+        int answered = 0;
+        for (int at = 1; at <= 5; ++at) {
+            states.load(keyOf("t" + std::to_string(at)))
+                .then([&answered](std::optional<table::StoredTableState> const&) { ++answered; });
+            held.push_back(std::make_unique<TableViews>(states, keyOf("t" + std::to_string(at)), h.owner));
+            held.back()->load().then([&answered](TableViews::Result const& result) {
+                CHECK(result.has_value());
+                ++answered;
+            });
+        }
+        h.settle();
+        return answered;
+    };
+    CHECK(mountScreen() == 10);
+    REQUIRE(h.client.count("load") == 1);
+    auto const load = std::ranges::find(h.client.calls, std::string{"load"});
+    std::string const& body = h.client.bodies.at(static_cast<std::size_t>(load - h.client.calls.begin()));
+    auto const parts = [&body](std::string_view part) {
+        std::size_t count = 0;
+        std::string const needle = "\"part\":\"" + std::string{part} + "\"";
+        for (auto at = body.find(needle); at != std::string::npos; at = body.find(needle, at + 1)) {
+            ++count;
+        }
+        return count;
+    };
+    CHECK(parts("state") == 5);
+    CHECK(parts("views") == 5);
+    CHECK(parts("shared") == 5);
+    CHECK(mountScreen() == 10);                                               // the remount
+    CHECK(h.client.count("load") == 1);
+
+    RowsFixture p;
+    RecordingTableStateStore privateStore{p.owner};
+    TableStates privateStates{sharedOf(privateStore), p.owner, &p.scheduler, 500ms};
+    TableViews views{privateStates, kKey, p.owner};
+    REQUIRE(settled(p, views.load()).has_value());
+    CHECK(std::ranges::none_of(privateStore.calls, [](StoreCall const& call) { return call.part == "shared"; }));
+}
+
+// Mutation: the retry after a Conflict resending kNoDocument (the second Conflict reports the views unsaved).
+TEST_CASE("views: a store that ignores kNoDocument still saves the first view", "[ui][table][state]") {
+    RowsFixture h;
+    LiteralTableStateStore store{h.owner};
+    TableStates states{sharedOf(store), h.owner, &h.scheduler, 500ms};
+    TableViews views{states, kKey, h.owner};
+    REQUIRE(settled(h, views.load()).has_value());
+    std::size_t const before = store.calls.size();
+    CHECK(changed(h, views.change(table::AddView{viewNamed("A")})).has_value());
+    CHECK(callsOf(store.calls, "views", before) ==
+          std::vector<std::string>{"save expected=- Conflict", "load", "save expected= Saved"});
+    CHECK(store.calls.at(before).revision.empty());                        // the conflict over nothing names ""
+    CHECK(viewNames(store.stored("views")) == std::vector<std::string>{"A"});
+    CHECK(views.own().views.size() == 1);
+}
+
+// Review Focus 5. Mutations: Save view… with a taken name sending AddView (refused as NameTaken, the sort change
+// lost); change() on Conflict saving its own document with the new revision instead of applying the operation to the
+// reloaded one (window 2's view "C" is lost, or two views are named "C").
+TEST_CASE("views: a taken name is replaced on save and refused on rename", "[ui][table][state]") {
+    RowsFixture h;
+    RecordingTableStateStore store{h.owner};
+    table::ViewsDocument seeded;
+    seeded.views = {viewNamed("A"), viewNamed("B")};
+    REQUIRE(settled(h, store.save(viewsKey(), table::writeViews(seeded, table::ViewsPart::Own))).outcome ==
+            table::SaveOutcome::Saved);
+    std::string const r0 = store.calls.back().revision;
+    ViewsWindow one{h, store};
+    REQUIRE(changed(h, one.views.load()).has_value());
+    std::size_t const before = store.calls.size();
+    REQUIRE(changed(h, one.views.change(table::ReplaceView{viewNamed("A", "weight")})).has_value());
+    CHECK(callsOf(store.calls, "views", before) == std::vector<std::string>{"save expected=" + r0 + " Saved"});
+    std::string const r1 = store.calls.back().revision;
+    CHECK(one.views.own().views.size() == 2);
+    CHECK(one.views.own().views.front().sort.front().column == "weight");
+    std::size_t const renaming = store.calls.size();
+    CHECK(changed(h, one.views.change(table::RenameView{.from = "B", .to = "A"})) ==
+          TableViews::Result{std::unexpected(std::string{"A view named A exists"})});
+    CHECK(store.calls.size() == renaming);                                   // no save
+    // Window 2 reads r1 and saves "C"; window 1, holding r1 and no "C", renames "B" to "C".
+    ViewsWindow two{h, store};
+    REQUIRE(changed(h, two.views.load()).has_value());
+    REQUIRE(changed(h, two.views.change(table::AddView{viewNamed("C")})).has_value());
+    std::string const r2 = store.calls.back().revision;
+    std::size_t const late = store.calls.size();
+    CHECK(changed(h, one.views.change(table::RenameView{.from = "B", .to = "C"})) ==
+          TableViews::Result{std::unexpected(std::string{"A view named C exists"})});
+    CHECK(callsOf(store.calls, "views", late) ==
+          std::vector<std::string>{"save expected=" + r1 + " Conflict", "load"});
+    CHECK(store.calls.at(late).revision == r2);
+    auto const stored = settled(h, store.load(viewsKey()));
+    CHECK(viewNames(stored) == std::vector<std::string>{"A", "B", "C"});
+    REQUIRE(stored.has_value());
+    CHECK(stored->revision == r2);
 }

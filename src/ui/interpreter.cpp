@@ -48,6 +48,7 @@
 #include <morph/ui/message.hpp>
 #include <morph/ui/mount.hpp>
 #include <morph/ui/table_rows.hpp>
+#include <morph/ui/table_views.hpp>
 #include <morph/ui/table_state.hpp>
 #include <morph/ui/value.hpp>
 #include <morph/ui/view.hpp>
@@ -433,6 +434,8 @@ struct ModelTable {
     std::function<void(std::string_view)> onMissing;
     /// The row scopes `onActivate` runs in, by the row's canonical key.
     std::map<std::string, std::weak_ptr<RtScope>, std::less<>> rowScopes;
+    /// The table's saved views; none without persistence.
+    std::unique_ptr<TableViews> views;
     /// Last, so it is the first to go: no load, timer or post reaches a half-destroyed table.
     async::CallbackScope scope;
 };
@@ -603,6 +606,8 @@ struct RowsTable {
     /// The engine's change not yet passed on to the mount.
     std::optional<table::ViewChange> pending;
     std::vector<std::unique_ptr<reactive::Effect>> effects;
+    /// The table's saved views; none without persistence.
+    std::unique_ptr<TableViews> views;
     /// Last, so it is the first to go: no load, timer or post reaches a half-destroyed table.
     async::CallbackScope scope;
 };
@@ -9061,6 +9066,10 @@ std::unique_ptr<RowsTable> ScreenCore::makeRowsTable(ElementState& element, std:
         table.loadTimer = scheduler->after(session.options().tableStateTimeout,
                                            table.scope.token().guard([&table] { table.release(); }));
     }
+    // The saved views load in the same turn as the state, so a store that batches reads them with it. Nothing
+    // shows them yet, so views that cannot be read are left unsaid.
+    table.views = std::make_unique<TableViews>(*table.states, *table.stateKey, runtime().owner());
+    static_cast<void>(table.views->load());
     table.states->load(*table.stateKey)
         .then(table.scope,
               [this, &table](std::optional<table::StoredTableState> const& stored) {
@@ -9385,6 +9394,10 @@ void ScreenCore::wireModelTable(ElementState& element) {
         model.loadTimer = scheduler->after(session.options().tableStateTimeout,
                                            model.scope.token().guard([&model] { model.release(); }));
     }
+    // The saved views load in the same turn as the state, so a store that batches reads them with it. Nothing
+    // shows them yet, so views that cannot be read are left unsaid.
+    model.views = std::make_unique<TableViews>(*model.states, *model.stateKey, runtime().owner());
+    static_cast<void>(model.views->load());
     model.states->load(*model.stateKey)
         .then(model.scope,
               [this, &element](std::optional<table::StoredTableState> const& stored) {
