@@ -252,6 +252,34 @@ std::string prettyJson(std::string_view text) {
     return out;
 }
 
+std::string compactJson(std::string_view text) {
+    if (!parseJson(text)) {
+        return std::string{text};
+    }
+    std::string out;
+    out.reserve(text.size());
+    bool inString = false;
+    bool escaped = false;
+    for (char const character : text) {
+        if (inString) {
+            out.push_back(character);
+            if (escaped) {
+                escaped = false;
+            } else if (character == '\\') {
+                escaped = true;
+            } else if (character == '"') {
+                inString = false;
+            }
+        } else if (character == '"') {
+            inString = true;
+            out.push_back(character);
+        } else if (character != ' ' && character != '\t' && character != '\n' && character != '\r') {
+            out.push_back(character);
+        }
+    }
+    return out;
+}
+
 // One walk over the document per pointer token, and the text and the pointer are two strings the caller names by role.
 // NOLINTNEXTLINE(readability-function-cognitive-complexity,bugprone-easily-swappable-parameters)
 std::optional<std::size_t> pointerOffset(std::string_view text, std::string_view pointer) {

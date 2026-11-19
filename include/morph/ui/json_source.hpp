@@ -21,6 +21,15 @@ namespace morph::ui {
 ///         as the person left it.
 [[nodiscard]] MORPH_API std::string prettyJson(std::string_view text);
 
+/// @brief @p text with the white space between tokens removed, so a document indented for reading is sent as the bytes
+///        a bound was meant for.
+///
+/// Strings are untouched and members stay in their order; nothing about the document changes. A JSON Pointer into the
+/// result is the one into @p text, but a byte offset is not.
+/// @param text JSON text.
+/// @return The compact text; @p text unchanged when it is not JSON, so the server refuses what the person wrote.
+[[nodiscard]] MORPH_API std::string compactJson(std::string_view text);
+
 /// @brief Where the part a JSON Pointer names starts in @p text.
 ///
 /// The text is scanned, not parsed into a value, so the offset is into the text as it is, with its own spacing and

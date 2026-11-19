@@ -134,3 +134,13 @@ TEST_CASE("pointerOffset and lineAt agree on CRLF text and non-ASCII values", "[
     CHECK(*target == text.find("\"target\""));
     CHECK(morph::ui::lineAt(text, *target) == 3);
 }
+
+// Mutation: drop spaces inside strings, or reorder members, or compact text that is not JSON.
+TEST_CASE("compactJson removes white space between tokens only, in order, and leaves non-JSON alone",
+          "[ui][json-source]") {
+    std::string const spaced = "{ \"b\" : [ 1 , 2 ],\n  \"a\" : \"x  y \\\" z\\\\\" , \"c\":{ } }";
+    CHECK(morph::ui::compactJson(spaced) == R"({"b":[1,2],"a":"x  y \" z\\","c":{}})");
+    CHECK(morph::ui::compactJson(morph::ui::prettyJson(R"({"k":[1,{"a":" "}],"j":null})")) ==
+          R"({"k":[1,{"a":" "}],"j":null})");
+    CHECK(morph::ui::compactJson("{ not json") == "{ not json");
+}

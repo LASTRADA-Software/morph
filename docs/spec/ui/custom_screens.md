@@ -352,7 +352,10 @@ go. No call names a person.
   record. A `changes` event naming the record relists. An in-process source has no watcher and sends no events, so its
   lists refresh at a frame, a reconnect and this client's own saves. A refused watch is logged at warn; an admitted
   one is silent.
-- **Calls.** `check` answers the server's first refusal with its pointer; `save` passes a store's refusal through as
+- **Calls.** `check` and `save` send the document compact (`compactJson`: the white space between tokens removed, members
+  in their order), since the server bounds the text before it parses it and the Source view's indentation would otherwise
+  count; a refusal's JSON Pointer is the same for either text, a byte offset in it is into the compact one. `check` answers
+  the server's first refusal with its pointer; `save` passes a store's refusal through as
   the store worded it, and relists after an answer; `get` answers without keeping, for a broken screen's source.
 - **Restore.** `prefetchRoutes(routes, done)` fetches every custom screen a record or a history names that is not
   kept, and answers the ids no document came for, so a start can tell the person which were not restored.

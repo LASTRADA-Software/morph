@@ -16,6 +16,7 @@
 #include <morph/core/wire.hpp>
 #include <morph/ui/custom_screen_sync.hpp>
 #include <morph/ui/custom_screens.hpp>
+#include <morph/ui/json_source.hpp>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -133,6 +134,36 @@ TEST_CASE("custom screen sync: check answers the server's refusal with its point
     REQUIRE(client.pump([&passed] { return passed.has_value(); }));
     REQUIRE(passed->has_value());
     CHECK_FALSE((*passed)->has_value());
+}
+
+// Mutation: send the text as it stands, indentation and all.
+TEST_CASE("custom screen sync: a document within the bound, indented past it, is accepted by check and save",
+          "[ui][custom-screens][sync]") {
+    std::string const compact = screens_test::baseScreen("lims.base");
+    std::string const indented = morph::ui::prettyJson(compact);
+    // Room for the longer id a save writes in, and the indented text is past the bound by more than the server's slack
+    // for that rewrite, so it is refused before it is parsed.
+    std::size_t const bound = compact.size() + 64;
+    REQUIRE(indented.size() > bound + 100);
+    screens_test::Server const server{nullptr, morph::ui::CustomScreensOptions{.maxDocumentBytes = bound}};
+    SyncClient client{*server.server, "ann", "lims"};
+    REQUIRE(client.probe());
+
+    std::optional<std::expected<std::optional<morph::ui::CheckRefusal>, std::string>> checked;
+    client.sync.check("lims.base", indented, [&checked](auto answer) { checked = std::move(answer); });
+    REQUIRE(client.pump([&checked] { return checked.has_value(); }));
+    REQUIRE(checked->has_value());
+    CHECK_FALSE((*checked)->has_value());
+
+    std::optional<std::expected<std::string, std::string>> saved;
+    client.sync.save(
+        morph::ui::CustomScreensSave{
+            .app = {}, .id = std::nullopt, .title = "Mine", .basedOn = "lims.base", .document = indented},
+        [&saved](std::expected<std::string, std::string> answer) { saved = std::move(answer); });
+    REQUIRE(client.pump([&saved] { return saved.has_value(); }));
+    REQUIRE(saved.has_value());
+    INFO((saved->has_value() ? std::string{} : saved->error()));
+    CHECK(saved->has_value());
 }
 
 // Mutation: report a refused save as saved (`done` gets an id).
