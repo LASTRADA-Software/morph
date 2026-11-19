@@ -2684,8 +2684,20 @@ private:
                 table.focusSearching = false;
                 table.focusIndex = *now;
                 table.widget->setFocusCell(static_cast<std::size_t>(*now), table.focusColumn);
+                return;
             }
-            return;
+            if (!settled(table, total)) {
+                return;
+            }
+            // The rows settled without the key: it left the view. Focus goes to the row now at its index, or the
+            // last, as for a removed row.
+            table.focusSearching = false;
+            table.focusLeft = true;
+            std::int64_t const last = std::max<std::int64_t>(total.rows - 1, 0);
+            if (table.focusIndex > last) {
+                table.focusIndex = last;
+                table.widget->setFocusCell(static_cast<std::size_t>(last), table.focusColumn);
+            }
         }
         if (table.focused) {
             std::optional<TableRowRef> const ref = table.source.rows->row(table.focusIndex);
@@ -2697,6 +2709,15 @@ private:
             }
             table.focusLeft = table.focusLeft && !ref;
         }
+    }
+
+    // Whether the rows have settled: the total is known and every realized row is fetched, so a key no realized row
+    // has is not among them.
+    [[nodiscard]] static bool settled(SourceTable const& table, TableTotal const& total) {
+        TableRows const& rows = *table.source.rows;
+        return total.known && std::ranges::all_of(table.realized, [&rows](SourceTable::Realized const& row) {
+                   return rows.row(row.index).has_value();
+               });
     }
 
     void reportFocus(SourceTable const& table) {
@@ -2884,11 +2905,16 @@ private:
 
     // Follows the focused and the highlighted rows through a change of the rows. A reset (a new sort, filter or
     // description) gives no places, and the rows may come back later (a server's pages are dropped first), so a key
-    // no realized row has is looked for after each pass until one has it; meanwhile the highlight shows no mark and
-    // focus stays on its key. An index at or past the row count before the change names no row, so nothing moves it.
+    // no realized row has is looked for after each pass until one has it, or, for focus, until the rows settle
+    // without it; meanwhile the highlight shows no mark and focus stays on its key. An index at or past the row count
+    // before the change names no row, so nothing moves it; after a reset no row is counted until the next pass, so a
+    // first page that arrives before it moves nothing either.
     static void follow(SourceTable& table, table::ViewChange const& change) {
         bool const reset = std::ranges::any_of(
             change.ops, [](table::ViewOp const& op) { return op.kind == table::ViewOp::Kind::Reset; });
+        if (reset) {
+            table.lastCount = 0;
+        }
         auto const followed = [&table, &change](std::int64_t index) -> std::optional<std::int64_t> {
             if (index >= static_cast<std::int64_t>(table.lastCount)) {
                 return index;
