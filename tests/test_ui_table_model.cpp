@@ -964,8 +964,37 @@ TEST_CASE("model table: after a new sort, focus is found again by key once its p
     CHECK(h.backend.focusCell(table).first == 20);
 }
 
-// Mutation: the search for a focused key a reset deleted never ending (focus keeps looking for key 7, so the row that
-// took its place is not followed through the next sort: it stays on view row 7).
+// Mutation: the located index ignored, the fallback taken instead (focus stays on view row 7, which another key now
+// holds).
+TEST_CASE("model table: a new sort that moves the focused key off-screen keeps focus on it", "[ui][table]") {
+    TableHarness h;
+    auto screen = mountShown(h, kModelTable, 9'093);
+    int const table = tableOf(h);
+    h.backend.scrollTable(table, 0, 30);
+    h.settle();
+    answerPages(h, 9'093);
+    h.backend.focusMove(table, morph::ui::FocusMove::First);
+    for (int step = 0; step < 7; ++step) {
+        h.backend.focusMove(table, morph::ui::FocusMove::Down);
+    }
+    h.settle();
+    REQUIRE(h.backend.focusCell(table).first == 7);
+    h.backend.clickHeader(table, 1);
+    h.settle();
+    // The first page of the new order lacks key 7, and every row in view is fetched: still no answer, no move.
+    std::vector<std::int64_t> keys(200);
+    std::iota(keys.begin(), keys.end(), std::int64_t{0});
+    keys.at(7) = 9'093;
+    replyFirstPage(h, keys);
+    CHECK(h.backend.focusCell(table).first == 7);
+    replyKeyed(h, {{7, 5'000}});  // key 7 is at view row 5,000
+    CHECK(h.backend.focusCell(table).first == 5'000);
+    answerPages(h, 9'093);
+    CHECK(h.backend.focusCell(table).first == 5'000);
+}
+
+// Mutation: an answer that the view lacks the key leaving focus looking for it (the row that took its place is not
+// followed through the next sort: focus stays on view row 7).
 TEST_CASE("model table: a focused key a new sort deleted hands focus to the row at its place", "[ui][table]") {
     TableHarness h;
     auto screen = mountShown(h, kModelTable, 9'093);
@@ -979,13 +1008,15 @@ TEST_CASE("model table: a focused key a new sort deleted hands focus to the row 
     }
     h.settle();
     REQUIRE(h.backend.focusCell(table).first == 7);
-    // A new query in which key 7 is gone and key 9,093 is at view row 7: once the rows settle, it takes focus.
+    // A new query in which key 7 is gone and key 9,093 is at view row 7: once the rows answer that the view lacks
+    // key 7, the row at its place takes focus.
     h.backend.clickHeader(table, 1);
     h.settle();
     std::vector<std::int64_t> keys(200);
     std::iota(keys.begin(), keys.end(), std::int64_t{0});
     keys.at(7) = 9'093;
     replyFirstPage(h, keys);
+    replyKeyed(h, {});
     answerPages(h, 9'093);
     REQUIRE(h.backend.focusCell(table).first == 7);
     // Another sort moves key 9,093 to view row 25: focus follows it there.

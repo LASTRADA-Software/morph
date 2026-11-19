@@ -53,6 +53,7 @@
 #include <set>
 #include <span>
 #include <stdexcept>
+#include <stop_token>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -284,6 +285,9 @@ public:
     async::Completion<std::expected<std::vector<table::RowId>, table::TableError>> keysOf(std::int64_t first,
                                                                                        std::int64_t count) override {
         return _inner->keysOf(first, count);
+    }
+    void locateRow(table::RowId key, std::stop_token stop, std::function<void(RowLocation const&)> done) override {
+        _inner->locateRow(std::move(key), std::move(stop), std::move(done));
     }
     std::expected<void, table::TableError> setSort(SortChain sort) override { return _inner->setSort(std::move(sort)); }
     std::expected<void, table::TableError> setFilter(table::FilterSpec filter) override {

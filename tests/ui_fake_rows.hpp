@@ -13,6 +13,7 @@
 #include <morph/ui/table_rows.hpp>
 #include <optional>
 #include <span>
+#include <stop_token>
 #include <string>
 #include <utility>
 #include <vector>
@@ -81,6 +82,22 @@ public:
         return std::move(completion);
     }
 
+    // Scans the view for the key, and answers on the owner.
+    void locateRow(table::RowId key, std::stop_token stop, std::function<void(ui::RowLocation const&)> done) override {
+        std::optional<std::int64_t> found;
+        for (std::int64_t index = 0; index < _rows && !found; ++index) {
+            if (table::RowId{_keyAt ? _keyAt(index) : index} == key) {
+                found = index;
+            }
+        }
+        ++locateCalls;
+        _owner->post([stop = std::move(stop), done = std::move(done), found] {
+            if (!stop.stop_requested()) {
+                done(ui::RowLocation{found});
+            }
+        });
+    }
+
     std::expected<void, table::TableError> setSort(ui::SortChain /*sort*/) override { return {}; }
     std::expected<void, table::TableError> setFilter(table::FilterSpec /*filter*/) override { return {}; }
     [[nodiscard]] ui::TableCountsView counts() const override { return ui::TableCountsView{.view = total()}; }
@@ -122,6 +139,7 @@ public:
     }
 
     std::size_t visibleCalls = 0;
+    std::size_t locateCalls = 0;
     Visible lastVisible;
 
 private:

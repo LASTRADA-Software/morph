@@ -1786,6 +1786,32 @@ TEST_CASE("table focus: a new order finds focus and the highlight by key", "[ui]
     CHECK(f.backend.prop(f.table, "highlightedRow") == "none");  // until the key is located again
 }
 
+// Mutations: the located index ignored, the fallback taken instead (focus stays on view row 7 and the row there is
+// reported); an answer that the view lacks the key leaving focus looking for it (nothing is reported).
+TEST_CASE("table focus: a new order follows the focused key off-screen and only its absence moves focus",
+          "[ui][mount]") {
+    WindowFixture f{100'000, 30};
+    std::vector<std::optional<CellRef>> reported;
+    f.onFocusCell = [&reported](std::optional<CellRef> cell) { reported.push_back(std::move(cell)); };
+    f.focus.set(CellRef{.key = Key{std::int64_t{7}}, .column = "c3"});
+    f.settle();
+    REQUIRE(f.backend.focusCell(f.table) == std::pair{std::size_t{7}, std::size_t{3}});
+    // Reversed: key 7 is at view row 99,992, far from the rows realized; the rows are asked where it is.
+    std::size_t const asked = f.rows->locateCalls;
+    f.rows->reorder([](std::int64_t index) { return 99'999 - index; });
+    f.settle();
+    CHECK(f.rows->locateCalls == asked + 1);
+    CHECK(f.backend.focusCell(f.table) == std::pair{std::size_t{99'992}, std::size_t{3}});
+    CHECK(f.cellOf(Key{std::int64_t{7}}, 3).has_value());  // its row realized where it is
+    CHECK(reported.empty());                               // the same cell: nothing to report
+    // A new order without key 7: the row now at its place takes focus, and is reported.
+    f.rows->reorder([](std::int64_t index) { return index == 99'992 ? std::int64_t{100'000} : 99'999 - index; });
+    f.settle();
+    CHECK(f.backend.focusCell(f.table) == std::pair{std::size_t{99'992}, std::size_t{3}});
+    REQUIRE(reported.size() == 1);
+    CHECK(reported.back() == CellRef{.key = Key{std::int64_t{100'000}}, .column = "c3"});
+}
+
 // Mutation: no pooled cell dropped once a row has nothing left to realize (the widgets alive grow with every column
 // scrolled past).  Gate F2.
 TEST_CASE("table window: cells of their own columns scrolled across stay bounded", "[ui][mount]") {
