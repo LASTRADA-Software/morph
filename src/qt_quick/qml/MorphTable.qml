@@ -672,6 +672,9 @@ MorphWidget {
             boundsBehavior: Flickable.StopAtBounds
 
             onContentYChanged: root.reportVisibleRange()
+            // The viewport's own size decides how many rows it shows, so the first layout and a resize report
+            // the range exactly as a scroll does.
+            onHeightChanged: root.reportVisibleRange()
 
             Item {
                 id: topSpace
@@ -728,7 +731,10 @@ MorphWidget {
             return
         root.remeasureRowHeight()
         const first = Math.max(0, Math.floor(flick.contentY / root.estimatedRowHeight))
-        const visibleRows = Math.ceil(flick.height / root.estimatedRowHeight) + 1
+        // The window bounds what can show: before the first layout a table's height is its whole content's, and
+        // realizing every row for that one pass would cost far more than the screen can ever display.
+        const shown = root.Window.height > 0 ? Math.min(flick.height, root.Window.height) : flick.height
+        const visibleRows = Math.ceil(shown / root.estimatedRowHeight) + 1
         root.fire("scroll", {
             "first": first,
             "count": Math.min(visibleRows, Math.max(0, root.totalRows - first))

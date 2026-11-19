@@ -1862,3 +1862,47 @@ TEST_CASE("qt_quick table: hovering the part of a spanning cell over a covered r
     CHECK_FALSE(origin.property("hovered").toBool());
     CHECK(covered.property("hovered").toBool());
 }
+
+namespace {
+
+// How many rows a viewport of this table shows, plus the one a scroll offset can straddle.
+int rowsToFill(QQuickItem const& tableItem, QQuickItem const& flick) {
+    return static_cast<int>(std::ceil(flick.height() / tableItem.property("estimatedRowHeight").toReal())) + 1;
+}
+
+}  // namespace
+
+// Mutation: drop the report a height change makes in MorphTable.qml (the table then keeps its startup window).
+TEST_CASE("qt_quick table: a virtualized table realizes its viewport at mount and again when the viewport grows",
+          "[qt_quick]") {
+    Scene scene;
+    std::vector<VirtualRow> const many = [] {
+        std::vector<VirtualRow> rows;
+        for (std::int64_t i = 0; i < 2000; ++i) {
+            rows.push_back(VirtualRow{.id = i, .name = "row-" + std::to_string(i)});
+        }
+        return rows;
+    }();
+    ui::Mounted const mounted{scene.runtime(), scene.backend(),
+                              ui::table<VirtualRow>(
+                                  {{.label = "Name"}}, [&many] { return many; },
+                                  [](VirtualRow const& row) { return ui::Key{row.id}; }, virtualRowCell,
+                                  {.virtualize = {.threshold = 5, .overscan = 1},
+                                   .common = {.layout = {.height = ui::Sizing::stretch(1)}}})};
+    scene.settle();
+
+    QQuickItem const& tableItem = Scene::itemOf(mounted.root());
+    auto* const flick = tableItem.findChild<QQuickItem*>(QStringLiteral("flick"));
+    REQUIRE(flick != nullptr);
+    REQUIRE(flick->height() > 100);
+    REQUIRE(flick->height() < 1000);
+    INFO("flick height " << flick->height() << ", realized " << tableItem.property("realizedCount").toInt());
+    CHECK(tableItem.property("realizedCount").toInt() >= rowsToFill(tableItem, *flick));
+
+    int const small = tableItem.property("realizedCount").toInt();
+    scene.window().resize(800, 1200);
+    scene.settle();
+    INFO("flick height " << flick->height() << ", realized " << tableItem.property("realizedCount").toInt());
+    CHECK(tableItem.property("realizedCount").toInt() > small);
+    CHECK(tableItem.property("realizedCount").toInt() >= rowsToFill(tableItem, *flick));
+}
