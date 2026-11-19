@@ -19,9 +19,11 @@
 //   verdict F3/F4 budgets hold=<yes|no>
 //   done
 //
-// A frame's figure is `work`: the time this program's step takes (the owner's tasks and the scroll position's change)
-// plus the scene graph's synchronize, render and swap of the frame it caused (`beforeSynchronizing` to
-// `frameSwapped`). Item polish, which runs before `beforeSynchronizing`, is not in it. `interval` is the time between
+// A frame's figure is `work`: everything this program does between two frames, plus the scene graph's synchronize,
+// render and swap of the frame it caused (`beforeSynchronizing` to `frameSwapped`). The program's part is the owner's
+// tasks that run at the top of a frame (fetch replies), the scroll position's change and its own tasks, and the
+// callbacks of the session's `QtScheduler` timers (the settle debounce) that fired since the last frame. Item polish,
+// which runs before `beforeSynchronizing`, is not in it. `interval` is the time between
 // two `frameSwapped` signals, which in a browser follows the display's refresh and holds the idle time, so a table
 // that does no work still shows about 16.7 ms there; `work` is what the budgets of F3 and F4 (p50 <= 8 ms,
 // p99 <= 16.6 ms) are compared with, and `interval` shows whether frames were dropped.
@@ -61,6 +63,7 @@
 #include <morph/qt_quick/backend.hpp>
 #include <morph/qt_quick/scheduler.hpp>
 #include <morph/reactive/runtime.hpp>
+#include <morph/reactive/scheduler.hpp>
 #include <morph/table/description.hpp>
 #include <morph/table/query.hpp>
 #include <morph/testing/step_executor.hpp>
@@ -191,10 +194,39 @@ public:
 
 // One screen's machinery. Declared so that it is destroyed in the order the screen needs: the screen first, then the
 // interpreter and the session it uses, the scheduler and the dispatcher, the bridge last.
+// A scheduler that adds the time of its callbacks to @p total, so the timers' work counts as the frame's.
+class TimedScheduler final : public morph::reactive::Scheduler {
+public:
+    TimedScheduler(morph::reactive::Scheduler& inner, std::function<double()> clock, double& total)
+        : _inner{&inner}, _clock{std::move(clock)}, _total{&total} {}
+
+    [[nodiscard]] morph::reactive::TimerHandle after(std::chrono::milliseconds delay, std::function<void()> fn) override {
+        return _inner->after(delay, timed(std::move(fn)));
+    }
+    [[nodiscard]] morph::reactive::TimerHandle every(std::chrono::milliseconds period,
+                                                     std::function<void()> fn) override {
+        return _inner->every(period, timed(std::move(fn)));
+    }
+
+private:
+    std::function<void()> timed(std::function<void()> fn) {
+        return [this, fn = std::move(fn)] {
+            double const began = _clock();
+            fn();
+            *_total += _clock() - began;
+        };
+    }
+
+    morph::reactive::Scheduler* _inner;
+    std::function<double()> _clock;
+    double* _total;
+};
+
 struct Client {
     std::unique_ptr<morph::bridge::Bridge> bridge;
     std::unique_ptr<ui::Dispatcher> dispatcher;
     std::unique_ptr<morph::qt_quick::QtScheduler> scheduler;
+    std::unique_ptr<TimedScheduler> timed;
     std::unique_ptr<ui::Session> session;
     std::unique_ptr<ui::Interpreter> interpreter;
     std::unique_ptr<ui::Screen> screen;
@@ -205,6 +237,7 @@ struct Client {
         screen.reset();
         interpreter.reset();
         session.reset();
+        timed.reset();
         scheduler.reset();
         dispatcher.reset();
         bridge.reset();
@@ -248,7 +281,8 @@ struct Run {
     QElapsedTimer clock;
     double lastFrame = 0;     // when the last frame was swapped
     double syncBegan = 0;     // when its synchronize began
-    double stepMs = 0;        // the time of the step that caused the frame now measured
+    double carryMs = 0;       // the owner's tasks and the step since the last frame, for the next frame's work
+    double timerMs = 0;       // the time of the scheduler's callbacks since the last frame
     int frames = 0;           // frames waited in the current phase
     double actionAt = 0;      // when U1 or U2's action began
     double handlerMs = 0;
@@ -402,7 +436,8 @@ struct Run {
         scrollFrame = 0;
         work.clear();
         interval.clear();
-        stepMs = 0;
+        carryMs = 0;
+        timerMs = 0;
         phase = Phase::Scrolling;
     }
 
@@ -442,11 +477,12 @@ struct Run {
                 std::make_unique<morph::backend::LocalBackend>(owner), owner);
             built.dispatcher = std::make_unique<ui::BridgeDispatcher>(*built.bridge, &owner);
             built.scheduler = std::make_unique<morph::qt_quick::QtScheduler>(owner, &window);
+            built.timed = std::make_unique<TimedScheduler>(*built.scheduler, [this] { return now(); }, timerMs);
         } else {
             built.dispatcher = std::make_unique<NoModels>();
         }
         ui::SessionOptions options;
-        options.scheduler = built.scheduler.get();
+        options.scheduler = built.timed.get();
         options.catalog = catalog;
         built.session = std::make_unique<ui::Session>(runtime, options);
         built.interpreter =
@@ -536,8 +572,13 @@ struct Run {
     }
 
     void onFrame() {
-        owner.runAll();
         double const swapped = now();
+        double const renderMs = swapped - syncBegan;
+        double const carried = carryMs + timerMs;
+        carryMs = 0;
+        timerMs = 0;
+        owner.runAll();
+        carryMs += now() - swapped;
         switch (phase) {
         case Phase::RowsMount: {
             if (!findTable(QStringLiteral("rows"))) {
@@ -545,7 +586,7 @@ struct Run {
             }
             int const total = table->property("totalRows").toInt();
             int const realized = table->property("realizedCount").toInt();
-            if (static_cast<std::size_t>(total) != kRowsTableRows || realized <= 0) {
+            if (static_cast<std::size_t>(total) != kRowsTableRows || realized <= 0 || realized >= total) {
                 fail("rows=" + std::to_string(total) + " realized=" + std::to_string(realized));
                 return;
             }
@@ -585,7 +626,7 @@ struct Run {
             return;
         case Phase::Scrolling: {
             if (scrollFrame > 0) {
-                work.push_back(stepMs + (swapped - syncBegan));
+                work.push_back(carried + renderMs);
                 interval.push_back(swapped - lastFrame);
             }
             lastFrame = swapped;
@@ -604,7 +645,7 @@ struct Run {
             position = std::min(scroll.limit, position + scroll.step);
             flickable->setProperty(scroll.property, position);
             owner.runAll();
-            stepMs = now() - began;
+            carryMs += now() - began;
             ++scrollFrame;
             window.requestUpdate();
             return;
@@ -675,6 +716,9 @@ struct Run {
             }
             bool const wasFirst = primeStep == 0;
             prime(Phase::Scrolling);
+            if (phase == Phase::Finished) {
+                return;
+            }
             if (!wasFirst) {
                 int const realized = table->property("realizedCount").toInt();
                 int const columns = table->property("realizedColumnCount").toInt();
