@@ -396,15 +396,24 @@ TEST_CASE("window rows: a keyed reply that does not read fetches the pages again
     CHECK(h.dispatcher.count("Table.samples") == before + 2);        // pages 0 and 1, held and now stale
 }
 
-// Mutation: `recordsInfo` dropping `opaque` (the catalog's record of `Table.small` is not opaque). The catalog entry
-// is built by `recordsInfo` from the process registry, as `CatalogFacts::action` builds an action's records; a table
-// action is not a `Runs` action, so `CatalogFacts::action` cannot name it.
-TEST_CASE("table catalog: a table's action holds its record opaquely in the client's catalog", "[ui][table]") {
-    auto const records = morph::ui::author::detail::recordsInfo("Table.small");
-    REQUIRE(records.size() == 1);
-    CHECK(records.front().record == "WideTableModel.small");
-    CHECK(records.front().opaque);
-    CHECK(records.front().paths.empty());
+// Mutations: `Runs` not admitting an action that runs itself (`CatalogFacts::action` of `Table.small` does not
+// compile); `recordsInfo` dropping `opaque` (the catalog's record of `Table.small` is not opaque).
+TEST_CASE("table catalog: a table's actions are catalogued, holding the record opaquely", "[ui][table]") {
+    morph::ui::author::CatalogFacts facts;
+    facts.action<bench::WideTableModel, table::QueryTable<&bench::WideTableModel::small>>();
+    facts.action<bench::WideTableModel, table::DescribeTable<&bench::WideTableModel::small>>();
+    morph::ui::Catalog const catalog = facts.catalog();
+    auto const query = catalog.action("Table.small");
+    REQUIRE(query.has_value());
+    CHECK(query->modelType == "WideTableModel");
+    REQUIRE(query->records.size() == 1);
+    CHECK(query->records.front().record == "WideTableModel.small");
+    CHECK(query->records.front().opaque);
+    CHECK(query->records.front().paths.empty());
+    auto const describe = catalog.action("Table.small.describe");
+    REQUIRE(describe.has_value());
+    CHECK(describe->modelType == "WideTableModel");
+    CHECK(describe->records.empty());
 }
 
 // Mutation: the view's end removed after the page's diff rather than before it (rows 250 to 299 are held twice while
