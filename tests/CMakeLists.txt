@@ -38,6 +38,7 @@ add_executable(morph_tests
     test_chat_screen_tools.cpp
     test_chat_service.cpp
     test_chat_transcription.cpp
+    test_chat_dictation_audio.cpp
     test_chat_propose_screen.cpp
     test_chat_config.cpp
     test_chat_conversations.cpp
