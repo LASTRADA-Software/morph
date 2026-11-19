@@ -55,8 +55,7 @@ struct MORPH_API ChatOptions {
     /// @brief The model behind the chat. Null: the service serves no kind, so a client shows no chat.
     std::shared_ptr<IProvider> provider;
     /// @brief Turns a dictated clip into text. Null: the service serves neither transcription kind and its probe
-    /// offers
-    ///        no dictation. Needs a provider, since the text goes into the chat's input.
+    ///        offers no dictation. Needs a provider, since the text goes into the chat's input.
     std::shared_ptr<ITranscriber> transcriber;
     /// @brief The language a clip is transcribed in when its request names none; nothing leaves it to the transcriber.
     std::optional<std::string> transcriptionLanguage;
@@ -101,7 +100,8 @@ public:
     ///         name is invalid or taken by another, or which has no handler.
     explicit ChatService(ChatOptions options);
 
-    /// @brief Stops every running turn. A provider call answering later reaches nothing.
+    /// @brief Stops every running turn and cancels every running transcription, announcing none. A provider or
+    ///        transcriber answering later reaches nothing.
     ~ChatService() override;
 
     ChatService(ChatService const&) = delete;
@@ -132,7 +132,8 @@ public:
     /// @param server The server.
     void bound(std::weak_ptr<backend::RemoteServer> const& server) override;
 
-    /// @brief Stops the connection's running turns.
+    /// @brief Stops the connection's running turns, and cancels its running transcriptions and forgets them, since no
+    ///        one can read them.
     /// @param cid The connection.
     void connectionClosed(backend::ConnectionId cid) override;
 

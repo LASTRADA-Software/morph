@@ -280,7 +280,9 @@ service's table and sent as a `transcription` event to its connection: the trans
 `ChatLimits::toolCallTimeout`, which cancels the call and fails with "the transcription did not answer in time"; or
 `ui-chat-end`, which cancels the principal's transcription on that connection and fails it with "cancelled". A
 connection closing cancels its calls and drops their entries, since no one can read them, and the service's destruction
-cancels every call and sends nothing. An answer arriving after the entry ended is ignored. The connection's `busy` slot
+cancels every call and sends nothing. With `toolCallTimeout` of zero or less there is no deadline, and a transcriber
+that never answers holds its connection's `busy` slot and the principal's count until `ui-chat-end` or the connection
+closing. An answer arriving after the entry ended is ignored. The connection's `busy` slot
 and the principal's count free when the entry ends.
 
 **Nothing kept beyond the retention.** A finished transcription stays readable for `transcriptionRetention` (60

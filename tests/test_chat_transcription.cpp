@@ -11,6 +11,7 @@
 #include <catch2/catch_test_macros.hpp>
 #include <chrono>
 #include <cstdint>
+#include <functional>
 #include <future>
 #include <memory>
 #include <morph/core/executor.hpp>
@@ -372,9 +373,15 @@ TEST_CASE("chat_dictation_misconfiguration_is_refused_at_construction", "[chat][
     chat::ChatLimits past;
     past.maxDictationBytes = chat::kMaxDictationBytes + 1;
     CHECK_THROWS_AS(static_cast<void>(chat::ChatService{optionsWith(past, true)}), std::invalid_argument);
-    chat::ChatLimits zero;
-    zero.maxTranscriptionsPerPrincipal = 0;
-    CHECK_THROWS_AS(static_cast<void>(chat::ChatService{optionsWith(zero, true)}), std::invalid_argument);
+    for (auto const& zeroed : std::vector<std::function<void(chat::ChatLimits&)>>{
+             [](chat::ChatLimits& limits) { limits.maxDictationSeconds = 0; },
+             [](chat::ChatLimits& limits) { limits.maxDictationBytes = 0; },
+             [](chat::ChatLimits& limits) { limits.maxTranscriptionsPerPrincipal = 0; },
+             [](chat::ChatLimits& limits) { limits.transcriptionRetention = std::chrono::seconds{0}; }}) {
+        chat::ChatLimits zero;
+        zeroed(zero);
+        CHECK_THROWS_AS(static_cast<void>(chat::ChatService{optionsWith(zero, true)}), std::invalid_argument);
+    }
     chat::ChatLimits atTheCap;
     atTheCap.maxDictationBytes = chat::kMaxDictationBytes;
     CHECK_NOTHROW(static_cast<void>(chat::ChatService{optionsWith(atTheCap, true)}));
@@ -502,19 +509,52 @@ TEST_CASE("chat_transcription_answer_after_the_end_changes_nothing", "[chat][dic
     CHECK(eventsFor(rig, id) == 1);
 }
 
-// Mutation: leave the calls running when the service is destroyed, or announce them.
+// Mutation: leave the calls running when the service is destroyed, or announce them (Tell::Yes in the destructor).
+// The service is its own, bound to a server that outlives it, which is the only arrangement in which an announcement
+// could still reach a connection.
 TEST_CASE("chat_transcription_answer_after_the_service_is_gone", "[chat][dictation]") {
+    EventWire wire;
+    morph::exec::ThreadPoolExecutor pool{2};
+    morph::exec::ThreadPoolExecutor worker{2};
+    auto const bundle = bundleOf();
+    auto const authorizer = std::make_shared<Authorizer>();
+    morph::backend::ServerConfig config;
+    config.services.push_back(std::make_shared<ui::UiService>(bundle));
+    auto const server = std::make_shared<morph::backend::RemoteServer>(pool, authorizer, std::move(config));
+    auto const cid = server->openConnection();
+    server->setConnectionWriter(cid, wire.writer());
+
     auto const manual = std::make_shared<ManualTranscriber>();
-    Rig rig{chat::ChatLimits{}, manual};
-    auto const cid = rig.gui();
-    static_cast<void>(rig.transcribe(kClip, cid));
+    chat::ChatOptions options;
+    options.provider = std::make_shared<chat::testing::FakeChatProvider>();
+    options.worker = &worker;
+    options.bundle = bundle;
+    options.transcriber = manual;
+    auto service = std::make_shared<chat::ChatService>(std::move(options));
+    service->bound(server);
+    morph::backend::ConnectionFacts facts;
+    facts.cid = cid;
+    auto const start = [&] {
+        wire::Envelope env;
+        env.kind = std::string{chat::kTranscribeKind};
+        env.body = chat::writeMessage(chat::TranscribeRequest{.audio = std::string{kClip}, .mediaType = "audio/wav"});
+        env.session.token = "alice";
+        env.session.principal = "alice";
+        return wire::decode(service->handle(env, *authorizer, facts));
+    };
+
+    // The control: an answer while the service lives is announced to the connection it came from.
+    REQUIRE(start().kind == "ok");
+    manual->called().done(std::string{"heard"});
+    REQUIRE(waitFor([&] { return wire.transcriptions().size() == 1; }));
+
+    REQUIRE(start().kind == "ok");
     auto sink = manual->called();
-    std::size_t const before = rig.eventWire.transcriptions().size();
-    rig.server.reset();
-    rig.service.reset();
+    service.reset();
     CHECK(manual->cancelled->load());
     sink.done(std::string{"nobody listens"});
-    CHECK(rig.eventWire.transcriptions().size() == before);
+    morph::testing::storageOwner().runFor(50ms);
+    CHECK(wire.transcriptions().size() == 1);
 }
 
 // Mutation: never forget a finished entry, or forget it at once.
@@ -552,4 +592,26 @@ TEST_CASE("chat_transcription_leaves_the_conversation_alone", "[chat][dictation]
     REQUIRE(requests.front().messages.size() == 1);
     CHECK(requests.front().messages.front().text == "typed words");
     CHECK_FALSE(requests.front().system.contains("heard words"));
+}
+
+namespace {
+
+// Throws something that is not a `std::exception`.
+struct ThrowingTranscriber final : chat::ITranscriber {
+    [[nodiscard]] std::shared_ptr<chat::ITranscriberCall> transcribe(chat::TranscriptionInput /*input*/,
+                                                                     chat::TranscriberSink /*sink*/) override {
+        // NOLINTNEXTLINE(hicpp-exception-baseclass,cert-err60-cpp): the point is a type no `std::exception` catch sees.
+        throw 42;
+    }
+};
+
+}  // namespace
+
+// Mutation: remove the catch-all, so the entry stays running and the worker thread dies on the throw.
+TEST_CASE("chat_transcription_a_transcriber_throwing_anything_fails_the_entry", "[chat][dictation]") {
+    Rig rig{chat::ChatLimits{}, std::make_shared<ThrowingTranscriber>()};
+    auto const cid = rig.gui();
+    auto const id = rig.transcribe(kClip, cid);
+    CHECK(rig.settled(id, cid).status == chat::TranscriptionStatus::Failed);
+    CHECK(waitFor([&] { return eventsFor(rig, id) == 1; }));
 }

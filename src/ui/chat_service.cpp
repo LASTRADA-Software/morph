@@ -559,6 +559,10 @@ struct ChatService::Shared {
             endTranscription(self, entry, std::unexpected("the transcription failed: " + std::string{error.what()}),
                              CancelCall::No, Tell::Yes);
             return;
+        } catch (...) {
+            endTranscription(self, entry, std::unexpected(std::string{"the transcription failed"}), CancelCall::No,
+                             Tell::Yes);
+            return;
         }
         bool ended = false;
         {
@@ -705,7 +709,14 @@ struct ChatService::Shared {
             self->transcriptions.erase(entry->id);
             return err(request, error.what());
         }
-        armTranscriptionDeadline(self, entry);
+        // The entry is recorded and its call posted, so a deadline that cannot be armed ends the entry as failed: the
+        // client hears of it through the event and the state, rather than waiting on a call nothing times.
+        try {
+            armTranscriptionDeadline(self, entry);
+        } catch (...) {
+            endTranscription(self, entry, std::unexpected(std::string{"the transcription could not be timed"}),
+                             CancelCall::Yes, Tell::Yes);
+        }
         return wire::encode(wire::makeOk(request.callId, writeMessage(TranscribeAccepted{.id = entry->id})));
     }
 

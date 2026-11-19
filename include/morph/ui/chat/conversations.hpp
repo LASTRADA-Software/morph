@@ -58,9 +58,11 @@ struct ChatLimits {
     /// @brief The refused proposals one turn may make. The turn that makes this many ends, with the last refusal
     ///        told to the person, and leaves the window as it was.
     std::size_t maxProposalsPerTurn = 3;
-    /// @brief How long the chat waits for one extra tool's offer or handler, or for the document source, to answer.
-    ///        Past it the call counts as failed (an offer as declined, the source as failing the turn) and a late
-    ///        answer is ignored, so a tool that never answers cannot hold a turn. Zero or less: no deadline.
+    /// @brief How long the chat waits for one extra tool's offer or handler, for the document source, or for the
+    ///        transcriber, to answer. Past it the call counts as failed (an offer as declined, the source as failing
+    ///        the turn, a transcription as failed) and a late answer is ignored, so a tool that never answers cannot
+    ///        hold a turn or a dictation. Zero or less: no deadline, and a transcriber that never answers holds its
+    ///        slots until `ui-chat-end` or the connection closing.
     std::chrono::milliseconds toolCallTimeout{std::chrono::seconds{30}};
     /// @brief How long an untouched conversation is kept.
     std::chrono::minutes idleRetention{std::chrono::hours{8}};
