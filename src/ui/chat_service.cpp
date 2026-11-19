@@ -522,7 +522,7 @@ struct ChatService::Shared {
         self->options.documentSource(turn->session, turn->request.screenId,
                                      onWorker<std::expected<ChatScreenSource, std::string>>(
                                          self, turn,
-                                         [held](std::shared_ptr<Shared> const& self, TurnPtr const& turn,
+                                         [held](std::shared_ptr<Shared> const& liveSelf, TurnPtr const& liveTurn,
                                                 std::expected<ChatScreenSource, std::string> read) {
                                              if (!read) {
                                                  throw std::runtime_error{read.error()};
@@ -531,8 +531,8 @@ struct ChatService::Shared {
                                              if (!loaded) {
                                                  throw std::runtime_error{loaded.error().message()};
                                              }
-                                             turn->external = std::move(*read);
-                                             assemble(self, turn, held->first, held->second, *loaded);
+                                             liveTurn->external = std::move(*read);
+                                             assemble(liveSelf, liveTurn, held->first, held->second, *loaded);
                                          },
                                          std::optional<std::expected<ChatScreenSource, std::string>>{std::unexpected(
                                              std::string{"the screen's document could not be read in time"})}));
@@ -694,16 +694,16 @@ struct ChatService::Shared {
         }
         ChatTool const& tool = self->options.tools.at(index);
         // NOLINTNEXTLINE(misc-no-recursion): each pass takes the next of the service's fixed list of tools.
-        auto const accepted = [index, &tool](std::shared_ptr<Shared> const& self, TurnPtr const& turn,
+        auto const accepted = [index, &tool](std::shared_ptr<Shared> const& liveSelf, TurnPtr const& liveTurn,
                                              ChatToolOffer const& offer) {
             if (!offer.system.empty()) {
-                turn->system += "\n\n" + offer.system;
+                liveTurn->system += "\n\n" + offer.system;
             }
             if (offer.offered) {
-                turn->extras.push_back(&tool);
-                turn->carried.insert_or_assign(tool.spec.name, offer.carried);
+                liveTurn->extras.push_back(&tool);
+                liveTurn->carried.insert_or_assign(tool.spec.name, offer.carried);
             }
-            offerExtras(self, turn, index + 1);
+            offerExtras(liveSelf, liveTurn, index + 1);
         };
         if (!tool.offer) {
             accepted(self, turn, ChatToolOffer{.offered = true, .system = {}, .carried = nullptr});
