@@ -4,16 +4,23 @@
 // the live case, which runs only when asked for by name with a key:
 //
 //     MORPH_LIVE_STT_KEY=... morph_qt_tests "[.live][dictation]"
+//
+// `MORPH_LIVE_STT_URL` and `MORPH_LIVE_STT_MODEL` choose the endpoint. `MORPH_LIVE_STT_WAV` names a speech clip to
+// send instead of a second of silence, and `MORPH_LIVE_STT_EXPECT` a phrase its transcript must contain.
 
 #include <QCoreApplication>
 #include <QObject>
+#include <algorithm>
 #include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
+#include <cctype>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <cstdlib>
 #include <expected>
+#include <fstream>
+#include <iterator>
 #include <memory>
 #include <morph/qt/qt_transcriber.hpp>
 #include <morph/ui/chat/config.hpp>
@@ -175,11 +182,25 @@ TEST_CASE("qt_transcriber_refuses_a_bad_configuration", "[qt][dictation]") {
     CHECK(morph::qt::makeQtTranscriber(configFor(""), &owner).has_value());
 }
 
+namespace {
+
+// ASCII lowercase, so a phrase is found whatever capitals the provider chose.
+std::string lowered(std::string_view text) {
+    std::string out{text};
+    std::ranges::transform(out, out.begin(),
+                           [](unsigned char const letter) { return static_cast<char>(std::tolower(letter)); });
+    return out;
+}
+
+}  // namespace
+
 TEST_CASE("qt_transcriber_live_endpoint", "[.live][qt][dictation]") {
     // NOLINTBEGIN(concurrency-mt-unsafe): read before any thread starts.
     char const* const key = std::getenv("MORPH_LIVE_STT_KEY");
     char const* const url = std::getenv("MORPH_LIVE_STT_URL");
     char const* const model = std::getenv("MORPH_LIVE_STT_MODEL");
+    char const* const wavPath = std::getenv("MORPH_LIVE_STT_WAV");
+    char const* const expect = std::getenv("MORPH_LIVE_STT_EXPECT");
     // NOLINTEND(concurrency-mt-unsafe)
     if (key == nullptr) {
         SKIP("MORPH_LIVE_STT_KEY is not set");
@@ -192,13 +213,29 @@ TEST_CASE("qt_transcriber_live_endpoint", "[.live][qt][dictation]") {
                                                                        .language = "en"},
                                              &owner);
     REQUIRE(made.has_value());
-    std::vector<std::int16_t> const second(static_cast<std::size_t>(chat::kSpeechSampleRate), 0);
+    std::string audio;
+    if (wavPath != nullptr) {
+        std::ifstream file{wavPath, std::ios::binary};
+        REQUIRE(file.good());
+        audio.assign(std::istreambuf_iterator<char>{file}, std::istreambuf_iterator<char>{});
+        REQUIRE_FALSE(audio.empty());
+    } else {
+        std::vector<std::int16_t> const second(static_cast<std::size_t>(chat::kSpeechSampleRate), 0);
+        audio = chat::wavFromPcm16(second);
+    }
     std::optional<std::expected<std::string, std::string>> done;
     auto const call = (*made)->transcribe(
-        chat::TranscriptionInput{.audio = chat::wavFromPcm16(second), .mediaType = "audio/wav", .language = "en"},
+        chat::TranscriptionInput{.audio = std::move(audio), .mediaType = "audio/wav", .language = "en"},
         chat::TranscriberSink{
             .done = [&done](std::expected<std::string, std::string> outcome) { done = std::move(outcome); }});
     REQUIRE(pumpUntil([&done] { return done.has_value(); }, std::chrono::seconds{60}));
     INFO((done->has_value() ? std::string{} : done->error()));
-    CHECK(done->has_value());
+    REQUIRE(done->has_value());
+    if (wavPath != nullptr) {
+        // A speech clip must come back as words, and as the phrase it holds when one is given.
+        CHECK_FALSE((*done)->empty());
+        if (expect != nullptr) {
+            CHECK(lowered(**done).contains(lowered(expect)));
+        }
+    }
 }

@@ -155,6 +155,10 @@ own network points `baseUrl` at its own server; an empty `baseUrl` is `https://a
 no default, and the key appears in no log and no message: a reason that carries the key, such as a provider echoing it in
 its error text, has it replaced before it is relayed.
 
+OpenRouter is a verified example: `"transcription": {"name": "openai-transcriptions", "baseUrl": "https://openrouter.ai/api",
+"model": "openai/whisper-1", "apiKeyEnv": "..."}`. A spoken clip sent through it, checked on 2026-11-19, came back as the
+exact sentence spoken.
+
 ## Configuration
 
 `config.hpp`. `ChatConfig` is a plain struct of the provider, the limits and the system prompt. An application fills it
