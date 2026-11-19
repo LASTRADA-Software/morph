@@ -8,7 +8,12 @@
 #include <cstddef>
 #include <cstdint>
 #include <memory>
+#include <morph/reactive/runtime.hpp>
+#include <morph/reactive/signal.hpp>
+#include <morph/testing/step_executor.hpp>
+#include <morph/tui/backend.hpp>
 #include <morph/ui/backend.hpp>
+#include <morph/ui/mount.hpp>
 #include <morph/ui/view.hpp>
 #include <optional>
 #include <stdexcept>
@@ -21,6 +26,7 @@
 #include "tui/leaf_widgets.hpp"
 #include "tui/table_widget.hpp"
 #include "tui_harness.hpp"
+#include "ui_fake_rows.hpp"
 
 namespace ui = morph::ui;
 using core::tui::EventResult;
@@ -1166,4 +1172,230 @@ TEST_CASE("tui table: a span whose origin row has scrolled off the top still sho
     // The cursor is on the fourth row; the first is above the view, the second and third are covered and shown.
     CHECK(drawn.at(0) == "  Name  Qty");
     CHECK(drawn.at(1).contains("apple"));
+}
+
+// ── The column window ───────────────────────────────────────────────────────
+
+namespace {
+
+using morph::testing::FakeRows;
+using morph::tui::detail::ContainerBase;
+using morph::tui::detail::WidgetBase;
+
+struct TuiWindowOptions {
+    struct Level {
+        std::size_t column = 0;
+        std::string level;
+    };
+    std::size_t pinned = 0;
+    std::vector<Level> levels;
+};
+
+// `n` with its thousands grouped by commas.
+std::string grouped(std::int64_t n) {
+    std::string digits = std::to_string(n);
+    for (auto at = static_cast<std::ptrdiff_t>(digits.size()) - 3; at > 0; at -= 3) {
+        digits.insert(static_cast<std::size_t>(at), ",");
+    }
+    return digits;
+}
+
+// The text of a record's field, or nothing.
+std::string fieldOf(ui::Value const& record, std::string const& field) {
+    ui::Value const* const value = record.field(field);
+    return value != nullptr && value->asString() != nullptr ? *value->asString() : std::string{};
+}
+
+// One table over `FakeRows` on the terminal backend, in a terminal of 120 × 32: every column 12 cells wide with the
+// default text cell, so ten columns and thirty rows are in view under the header and over the status line. Its
+// window has no overscan, so the cells alive are exactly those in view.
+struct TuiWindowFixture {
+    TuiWindowFixture(std::int64_t rowCount, std::size_t columnCount, TuiWindowOptions const& options = {})
+        : terminal{std::make_unique<core::tui::MockTerminalOutput>(120, 32)},
+          screen{terminal},
+          backend{screen},
+          rows{std::make_shared<FakeRows>(rowCount, columnCount, owner)} {
+        std::vector<ui::TableColumn> columns;
+        for (std::size_t column = 0; column < columnCount; ++column) {
+            columns.push_back(ui::TableColumn{.id = "c" + std::to_string(column),
+                                              .label = "C" + std::to_string(column),
+                                              .width = ui::Sizing::fixed(12)});
+        }
+        ui::TableSource source;
+        source.rows = rows;
+        source.ownCell.assign(columnCount, false);
+        source.levels.assign(columnCount, std::string{});
+        for (TuiWindowOptions::Level const& level : options.levels) {
+            source.levels.at(level.column) = level.level;
+        }
+        source.defaultCellView = [](morph::reactive::Signal<std::size_t> const& column,
+                                    morph::reactive::Signal<ui::Value> const& row) {
+            return ui::text(
+                {.text = [&column, &row] { return fieldOf(row.get(), "c" + std::to_string(column.get())); }});
+        };
+        source.cellView = [](std::size_t column, morph::reactive::Signal<ui::Value> const& row) {
+            return ui::text({.text = [&row, column] { return fieldOf(row.get(), "c" + std::to_string(column)); }});
+        };
+        ui::TableOptions tableOptions;
+        tableOptions.virtualize = ui::Virtualization{.overscan = 0, .columnOverscan = 0};
+        tableOptions.arrangement = ui::TableArrangement{.visible = {}, .pinned = options.pinned, .widths = {}};
+        tableOptions.status = ui::TableStatus{.counts = grouped(rowCount) + " rows", .shown = true};
+        view.emplace(runtime, backend, ui::table(std::move(columns), std::move(source), std::move(tableOptions)));
+        table = &dynamic_cast<TableImpl&>(WidgetBase::of(view->root()));
+        settle();
+    }
+    TuiWindowFixture(TuiWindowFixture const&) = delete;
+    TuiWindowFixture& operator=(TuiWindowFixture const&) = delete;
+    TuiWindowFixture(TuiWindowFixture&&) = delete;
+    TuiWindowFixture& operator=(TuiWindowFixture&&) = delete;
+    ~TuiWindowFixture() { view.reset(); }
+
+    // One frame, as the frontend draws it after an event: the owner's work is not run.
+    void draw() {
+        backend.fit();
+        screen.draw();
+    }
+
+    // Frames and the owner's turns until a frame changes nothing and the owner has nothing left to run.
+    void settle() {
+        Rows last;
+        for (int turn = 0; turn < 64; ++turn) {
+            draw();
+            std::size_t const ran = owner.runAll();
+            Rows lines = morph::tui::testing::rowsOf(screen);
+            if (ran == 0 && lines == last) {
+                return;
+            }
+            last = std::move(lines);
+        }
+        FAIL("the table did not settle");
+    }
+
+    void scrollRows(std::size_t first) {
+        static_cast<void>(table->wheel(static_cast<int>(first) - static_cast<int>(firstRow)));
+        firstRow = first;
+        settle();
+    }
+
+    void scrollColumns(int scrollX) {
+        table->scrollColumnsTo(scrollX);
+        settle();
+    }
+
+    [[nodiscard]] std::size_t cellWidgetsAlive() const {
+        std::size_t alive = 0;
+        for (WidgetBase const* const row : table->children()) {
+            alive += dynamic_cast<ContainerBase const&>(*row).children().size();
+        }
+        return alive;
+    }
+
+    [[nodiscard]] std::string screenLine(std::size_t line) const {
+        Rows const lines = morph::tui::testing::rowsOf(screen);
+        return line < lines.size() ? lines.at(line) : std::string{};
+    }
+
+    morph::testing::StepExecutor owner;
+    morph::reactive::Runtime runtime{owner};
+    core::tui::Terminal terminal;
+    core::tui::Screen screen;
+    morph::tui::Backend backend;
+    std::shared_ptr<FakeRows> rows;
+    std::optional<ui::Mounted> view;
+    TableImpl* table = nullptr;
+    std::size_t firstRow = 0;
+};
+
+// The text in the slot of each of the ten columns in view on @p line, trimmed: the header's labels on line 0.
+std::vector<std::string> slotsOf(std::string const& line) {
+    std::vector<std::string> slots;
+    for (std::size_t at = 2; at < 2 + (10 * 12); at += 12) {
+        std::string slot = at < line.size() ? line.substr(at, 11) : std::string{};
+        while (!slot.empty() && slot.back() == ' ') {
+            slot.pop_back();
+        }
+        slots.push_back(std::move(slot));
+    }
+    return slots;
+}
+
+// Whether every cell drawn on lines 1 to 30 is its own row's, under its own column's header, or blank.
+bool cellsUnderTheirHeaders(TuiWindowFixture const& f) {
+    std::vector<std::string> const headers = slotsOf(f.screenLine(0));
+    for (std::size_t line = 1; line <= 30; ++line) {
+        std::vector<std::string> const cells = slotsOf(f.screenLine(line));
+        for (std::size_t at = 0; at < cells.size(); ++at) {
+            std::string const own = "r" + std::to_string(f.firstRow + line - 1) + "c" +
+                                    (headers.at(at).empty() ? std::string{} : headers.at(at).substr(1));
+            if (!cells.at(at).empty() && cells.at(at) != own) {
+                UNSCOPED_INFO("line " << line << ", slot " << at << ": " << cells.at(at) << ", not " << own);
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
+}  // namespace
+
+// Mutation: the terminal table ignoring the column range (300 cells a row).  Gate U7.
+TEST_CASE("tui table: cell widgets alive are rows in view times columns in view", "[tui]") {
+    TuiWindowFixture f{100'000, 300, {.pinned = 0}};
+    f.scrollRows(5'000);
+    f.scrollColumns(100 * 12);
+    CHECK(f.cellWidgetsAlive() == 30 * 10);               // the terminal keeps no overscan
+    CHECK(f.screenLine(31).starts_with("100,000 rows"));  // the status line, last
+}
+
+// Mutation: the terminal table ignoring setCellLoad (the lines show neither mark).
+TEST_CASE("tui table: an unloaded cell draws its placeholder and a failed one its mark", "[tui]") {
+    TuiWindowFixture f{100, 4, {.pinned = 0, .levels = {{.column = 1, .level = "recipe"}}}};
+    f.rows->unload(0, "recipe");
+    f.rows->fail(1, "recipe");
+    f.settle();
+    CHECK(f.screenLine(1).contains("···"));
+    CHECK(f.screenLine(2).contains("!"));
+    CHECK_FALSE(f.screenLine(3).contains("···"));
+}
+
+// Mutation: the terminal table placing a source table's cells by their order in the row, not by `setCellColumn` (a
+// reused row's parked cells draw the row it showed before, under other columns).
+TEST_CASE("tui table: a reused row shows its own cells under their columns while the frame budget holds some back",
+          "[tui]") {
+    TuiWindowFixture f{100'000, 300, {.pinned = 0}};
+    f.scrollColumns(20 * 12);
+    REQUIRE(cellsUnderTheirHeaders(f));
+    // 300 cells to rebind, over the budget of 240: the rows far from the centre wait a turn with cells parked, and a
+    // parked cell is not drawn. (Their bindings flush after that turn, so the text drawn here is not checked.)
+    static_cast<void>(f.table->wheel(5'000));
+    f.firstRow = 5'000;
+    f.draw();
+    REQUIRE(f.owner.pending() > 0);
+    std::size_t drawn = 0;
+    for (std::size_t line = 1; line <= 30; ++line) {
+        for (std::string const& cell : slotsOf(f.screenLine(line))) {
+            drawn += cell.empty() ? 0U : 1U;
+        }
+    }
+    CHECK(drawn == 240);
+    f.settle();
+    CHECK(cellsUnderTheirHeaders(f));
+    CHECK(slotsOf(f.screenLine(30)).back() == "r5029c29");
+}
+
+// Mutation: the terminal table moving its own cursor for the arrows over a source table (the mount's focus never
+// moves, and no line shows `>`).
+TEST_CASE("tui table: the arrows and PageDown move the focused cell through the mount, and the view follows it",
+          "[tui]") {
+    TuiWindowFixture f{100'000, 300, {.pinned = 0}};
+    f.screen.setFocus(&WidgetBase::of(*f.table).view());
+    static_cast<void>(f.screen.dispatchEvent(core::tui::test::specialKey(KeyCode::Down)));
+    static_cast<void>(f.screen.dispatchEvent(core::tui::test::specialKey(KeyCode::Down)));
+    f.settle();
+    CHECK(f.screenLine(3).starts_with(" >"));
+    static_cast<void>(f.screen.dispatchEvent(core::tui::test::specialKey(KeyCode::PageDown)));
+    f.settle();
+    // Row 32: the view moved down three rows to show it on its last line.
+    CHECK(f.screenLine(30).starts_with(" >"));
+    CHECK(slotsOf(f.screenLine(30)).front() == "r32c0");
 }

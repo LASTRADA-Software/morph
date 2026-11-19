@@ -3,6 +3,7 @@
 #pragma once
 #include <QString>
 #include <QStringList>
+#include <QVariantMap>
 #include <cstddef>
 #include <cstdint>
 #include <functional>
@@ -10,6 +11,7 @@
 #include <morph/qt_quick/backend.hpp>
 #include <morph/ui/backend.hpp>
 #include <optional>
+#include <span>
 #include <string>
 #include <string_view>
 #include <unordered_set>
@@ -636,6 +638,28 @@ public:
     void setExistingKeys(std::vector<ui::Key> const& keys) override;
     void setRealizedWindow(std::size_t first, std::size_t count, std::size_t total) override;
     void setOnVisibleRangeChanged(std::function<void(std::size_t, std::size_t)> onVisibleRangeChanged) override;
+    /// Throws std::logic_error when @p row is not one of this table's rows.
+    void setRowIndex(ui::Widget& row, std::size_t viewRow) override;
+    /// The status line: one line of text under the rows, a polite live region, with "Retry" while the state offers
+    /// it; it takes no space while not shown.
+    void setStatus(ui::TableStatus const& status) override;
+    void setOnRetry(std::function<void()> onRetry) override;
+    /// Throws std::logic_error when @p row is not one of this table's rows.
+    void setCellLoad(ui::Widget& row, std::size_t column, ui::CellLoad load) override;
+    /// The window's columns, offsets and widths are pixels: the header and the rows draw these columns only.
+    void setColumnWindow(std::span<std::size_t const> columns, std::span<int const> offsets,
+                         std::span<int const> widths, int totalWidth, std::size_t pinned) override;
+    /// Only a table over a `TableSource` is given one, before any row: MorphTable then places each row by its view
+    /// index and each cell by its column.
+    void setOnHorizontalRange(std::function<void(int scrollX, int viewport)> handler) override;
+    void setHorizontalOffset(int scrollX) override;
+    void setOnColumnMeasured(std::function<void(std::size_t column, int width)> handler) override;
+    void setFocusCell(std::size_t viewRow, std::size_t column) override;
+    void setOnFocusMove(std::function<void(ui::FocusMove)> handler) override;
+    void setCounts(std::optional<std::int64_t> rows, std::size_t columns) override;
+    void scrollToRow(std::size_t viewRow) override;
+    /// Throws std::logic_error when @p row is not one of this table's rows.
+    void setCellColumn(ui::Widget& row, ui::Widget& cell, std::optional<std::size_t> column) override;
 
     /// A click on a row, or Space or Shift with an arrow on the current row, as @p click; the table's selection model
     /// (`ui::TableWidget`).
@@ -687,6 +711,10 @@ private:
     // The same keys, in row order, for a range or Ctrl+A over rows that are not realized.
     std::vector<ui::Key> _existingOrder;
     std::function<void(std::size_t, std::size_t)> _onVisibleRangeChanged;
+    std::function<void()> _onRetry;
+    std::function<void(int, int)> _onHorizontalRange;
+    std::function<void(std::size_t, int)> _onColumnMeasured;
+    std::function<void(ui::FocusMove)> _onFocusMove;
     /// Each row's effective spans, as last told.
     std::unordered_map<ItemBase const*, std::vector<ui::RowSpan>> _spans;
     /// Whether any row has been told it spans or is covered, so a table that never spans does no work.
@@ -719,6 +747,9 @@ public:
     /// Its key, once the table was told it.
     [[nodiscard]] std::optional<ui::Key> const& key() const noexcept { return _key; }
     void setKey(ui::Key key);
+    /// Writes the load state of the row's cell in @p column to the row's `cellLoads`, which holds the columns not
+    /// loaded.
+    void setLoad(std::size_t column, ui::CellLoad load);
 
 protected:
     /// The table places a row's cells in its columns.
@@ -727,6 +758,8 @@ protected:
 
 private:
     std::optional<ui::Key> _key;
+    /// The columns not loaded, by column as text: `1` unloaded, `2` failed.
+    QVariantMap _loads;
 };
 
 }  // namespace morph::qt_quick::detail

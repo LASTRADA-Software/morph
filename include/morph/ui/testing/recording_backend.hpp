@@ -2323,6 +2323,18 @@ public:
         store().set(cellId, "column", column ? std::to_string(*column) : std::string{"none"});
     }
 
+    /// @brief Records the row's property `viewRow`.
+    /// @param row     One of this table's rows.
+    /// @param viewRow The row's view index.
+    /// @throws std::logic_error when @p row is not this table's child.
+    void setRowIndex(Widget& row, std::size_t viewRow) override {
+        int const rowId = store().idOf(row);
+        if (store().at(rowId).parent != id()) {
+            throw std::logic_error{"RecordingBackend: setRowIndex of a widget that is not this table's row"};
+        }
+        store().set(rowId, "viewRow", std::to_string(viewRow));
+    }
+
     /// @brief Calls the handler `setOnHorizontalRange` stored, as a backend's scroll would.
     /// @param scrollX  The offset.
     /// @param viewport The viewport's width.

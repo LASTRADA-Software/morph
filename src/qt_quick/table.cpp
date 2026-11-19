@@ -3,11 +3,14 @@
 #include <QMetaObject>
 #include <QObject>
 #include <QPointer>
+#include <QQuickItem>
+#include <QStringList>
 #include <QVariantList>
 #include <QVariantMap>
 #include <algorithm>
 #include <cstdint>
 #include <ranges>
+#include <span>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -31,6 +34,32 @@ TableImpl::TableImpl(Context& context, ui::ContainerWidget* parent)
                  static_cast<std::size_t>(std::max<qlonglong>(0, map.value(QStringLiteral("count")).toLongLong())));
     });
     relay().on(QStringLiteral("selectAll"), [this](QVariant const&) { selectAll(); });
+    // A copy of each handler below: it may destroy this table.
+    relay().on(QStringLiteral("hscroll"), [this](QVariant const& payload) {
+        QVariantMap const map = payload.toMap();
+        if (auto const handler = _onHorizontalRange) {
+            handler(map.value(QStringLiteral("scrollX")).toInt(), map.value(QStringLiteral("viewport")).toInt());
+        }
+    });
+    relay().on(QStringLiteral("measured"), [this](QVariant const& payload) {
+        QVariantMap const map = payload.toMap();
+        qlonglong const column = map.value(QStringLiteral("column")).toLongLong();
+        if (auto const handler = _onColumnMeasured; handler && column >= 0) {
+            handler(static_cast<std::size_t>(column), map.value(QStringLiteral("width")).toInt());
+        }
+    });
+    relay().on(QStringLiteral("focusMove"), [this](QVariant const& payload) {
+        int const move = payload.toInt();
+        if (auto const handler = _onFocusMove;
+            handler && move >= 0 && move <= static_cast<int>(ui::FocusMove::PageDown)) {
+            handler(static_cast<ui::FocusMove>(move));
+        }
+    });
+    relay().on(QStringLiteral("retry"), [this](QVariant const&) {
+        if (auto const handler = _onRetry) {
+            handler();
+        }
+    });
     relay().on(QStringLiteral("sort"), [this](QVariant const& payload) {
         if (_onSort && payload.toLongLong() >= 0) {
             // A copy: the handler may destroy this table.
@@ -145,6 +174,110 @@ void TableImpl::setRealizedWindow(std::size_t first, std::size_t count, std::siz
 
 void TableImpl::setOnVisibleRangeChanged(std::function<void(std::size_t, std::size_t)> onVisibleRangeChanged) {
     _onVisibleRangeChanged = std::move(onVisibleRangeChanged);
+}
+
+void TableImpl::setRowIndex(ui::Widget& row, std::size_t viewRow) {
+    auto const* const tableRow = dynamic_cast<TableRowImpl const*>(&row);
+    if (tableRow == nullptr || tableRow->container() != this) {
+        throw std::logic_error{"morph::qt_quick: setRowIndex of a widget that is not this table's row"};
+    }
+    tableRow->write("viewRow", static_cast<qlonglong>(viewRow));
+    if (item() != nullptr) {
+        QMetaObject::invokeMethod(item(), "scheduleRows", Qt::DirectConnection);
+    }
+}
+
+// The counts, the state and the message on one line, two spaces apart.
+void TableImpl::setStatus(ui::TableStatus const& status) {
+    QStringList parts;
+    for (std::string const* const part : {&status.counts, &status.state, &status.message}) {
+        if (!part->empty()) {
+            parts.append(toQString(*part));
+        }
+    }
+    write("statusText", parts.join(QStringLiteral("  ")));
+    write("retryShown", status.shown && status.retry);
+    write("statusShown", status.shown);
+}
+
+void TableImpl::setOnRetry(std::function<void()> onRetry) { _onRetry = std::move(onRetry); }
+
+void TableImpl::setCellLoad(ui::Widget& row, std::size_t column, ui::CellLoad load) {
+    auto* const tableRow = dynamic_cast<TableRowImpl*>(&row);
+    if (tableRow == nullptr || tableRow->container() != this) {
+        throw std::logic_error{"morph::qt_quick: setCellLoad of a widget that is not this table's row"};
+    }
+    tableRow->setLoad(column, load);
+}
+
+void TableImpl::setColumnWindow(std::span<std::size_t const> columns, std::span<int const> offsets,
+                                std::span<int const> widths, int totalWidth, std::size_t pinned) {
+    QVariantList window;
+    for (auto const [column, offset, width] : std::views::zip(columns, offsets, widths)) {
+        window.append(QVariantMap{{QStringLiteral("column"), static_cast<int>(column)},
+                                  {QStringLiteral("offset"), offset},
+                                  {QStringLiteral("width"), width}});
+    }
+    write("windowTotalWidth", totalWidth);
+    write("pinnedShown", static_cast<int>(std::min(pinned, columns.size())));
+    write("windowColumns", window);
+    write("arranged", true);
+}
+
+void TableImpl::setOnHorizontalRange(std::function<void(int scrollX, int viewport)> handler) {
+    _onHorizontalRange = std::move(handler);
+    write("sourceRows", true);
+}
+
+void TableImpl::setHorizontalOffset(int scrollX) {
+    if (item() != nullptr) {
+        QMetaObject::invokeMethod(item(), "setHorizontalOffset", Qt::DirectConnection, Q_ARG(int, scrollX));
+    }
+}
+
+void TableImpl::setOnColumnMeasured(std::function<void(std::size_t column, int width)> handler) {
+    _onColumnMeasured = std::move(handler);
+}
+
+void TableImpl::setFocusCell(std::size_t viewRow, std::size_t column) {
+    write("focusRow", static_cast<qlonglong>(viewRow));
+    write("focusColumn", static_cast<int>(column));
+    if (item() != nullptr) {
+        QMetaObject::invokeMethod(item(), "showFocusCell", Qt::DirectConnection);
+    }
+}
+
+void TableImpl::setOnFocusMove(std::function<void(ui::FocusMove)> handler) { _onFocusMove = std::move(handler); }
+
+// -1 for a row count that is a lower bound or not known yet.
+void TableImpl::setCounts(std::optional<std::int64_t> rows, std::size_t columns) {
+    write("accessibleRowCount", static_cast<qlonglong>(rows.value_or(-1)));
+    write("accessibleColumnCount", static_cast<int>(columns));
+}
+
+void TableImpl::scrollToRow(std::size_t viewRow) {
+    if (item() != nullptr) {
+        QMetaObject::invokeMethod(item(), "scrollToRow", Qt::DirectConnection,
+                                  Q_ARG(QVariant, QVariant{static_cast<qlonglong>(viewRow)}));
+    }
+}
+
+// A cell with no column is pooled: hidden, as a covered cell is, and placed nowhere. `measuredIndex` is the column
+// the row places it in and the one its widths are reported for.
+void TableImpl::setCellColumn(ui::Widget& row, ui::Widget& cell, std::optional<std::size_t> column) {
+    auto const* const tableRow = dynamic_cast<TableRowImpl const*>(&row);
+    if (tableRow == nullptr || tableRow->container() != this) {
+        throw std::logic_error{"morph::qt_quick: setCellColumn of a widget that is not this table's row"};
+    }
+    ItemBase* const base = baseOf(cell);
+    if (base == nullptr) {
+        return;
+    }
+    base->offer("measuredIndex", column ? static_cast<int>(*column) : -1);
+    base->cover(!column.has_value());
+    if (QQuickItem* const rowItem = tableRow->item(); rowItem != nullptr) {
+        QMetaObject::invokeMethod(rowItem, "place", Qt::DirectConnection);
+    }
 }
 
 void TableImpl::scrolled(std::size_t first, std::size_t count) const {
@@ -456,14 +589,15 @@ void TableRowImpl::adopted(ItemBase& child) {
         return;
     }
     int const columnIndex = static_cast<int>(children().size()) - 1;
-    // A cell reports a change of its least or width-free natural width itself, through these.
+    // A cell reports a change of its least or width-free natural width itself, through these. Its column is read when
+    // it reports: a table over a source moves a pooled cell to another column (`TableImpl::setCellColumn`).
     child.offer("measuredBy", QVariant::fromValue<QObject*>(tableItem));
     child.offer("measuredIndex", columnIndex);
     QObject::connect(cell, &QQuickItem::implicitWidthChanged, item(),
-                     [tableRef = QPointer<QQuickItem>{tableItem}, columnIndex, cellRef = QPointer<QQuickItem>{cell}] {
+                     [tableRef = QPointer<QQuickItem>{tableItem}, cellRef = QPointer<QQuickItem>{cell}] {
                          if (tableRef != nullptr && cellRef != nullptr && cellRef->isVisible()) {
                              QMetaObject::invokeMethod(tableRef, "reportCell", Qt::DirectConnection,
-                                                       Q_ARG(int, columnIndex),
+                                                       Q_ARG(int, cellRef->property("measuredIndex").toInt()),
                                                        Q_ARG(QVariant, QVariant::fromValue(cellRef.data())));
                          }
                      });
@@ -471,12 +605,23 @@ void TableRowImpl::adopted(ItemBase& child) {
     // today's widest cell, becoming visible may introduce a wider one. Rescans only this one column, not every
     // column via invalidateAllColumns: every cell in the table carries this connection, so a full-table sweep here
     // costs O(rows) per cell whose visibility ever changes during mount, compounding into O(rows^2) overall.
-    QObject::connect(
-        cell, &QQuickItem::visibleChanged, item(), [tableRef = QPointer<QQuickItem>{tableItem}, columnIndex] {
-            if (tableRef != nullptr) {
-                QMetaObject::invokeMethod(tableRef, "rescanColumn", Qt::DirectConnection, Q_ARG(int, columnIndex));
-            }
-        });
+    QObject::connect(cell, &QQuickItem::visibleChanged, item(),
+                     [tableRef = QPointer<QQuickItem>{tableItem}, cellRef = QPointer<QQuickItem>{cell}] {
+                         if (tableRef != nullptr && cellRef != nullptr) {
+                             QMetaObject::invokeMethod(tableRef, "rescanColumn", Qt::DirectConnection,
+                                                       Q_ARG(int, cellRef->property("measuredIndex").toInt()));
+                         }
+                     });
+}
+
+void TableRowImpl::setLoad(std::size_t column, ui::CellLoad load) {
+    QString const key = QString::number(column);
+    if (load == ui::CellLoad::Loaded) {
+        _loads.remove(key);
+    } else {
+        _loads.insert(key, static_cast<int>(load));
+    }
+    write("cellLoads", _loads);
 }
 
 void TableRowImpl::setGap(int gap) { static_cast<void>(gap); }

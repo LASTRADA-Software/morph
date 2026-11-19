@@ -3,11 +3,13 @@
 #include "tui/table_widget.hpp"
 
 #include <algorithm>
+#include <array>
 #include <core/tui/KeyCode.hpp>
 #include <core/tui/Modifier.hpp>
 #include <core/tui/Screen.hpp>
 #include <core/tui/Theme.hpp>
 #include <iterator>
+#include <limits>
 #include <numeric>
 #include <ranges>
 #include <stdexcept>
@@ -39,6 +41,12 @@ constexpr int kSortMark = 2;
 constexpr int kShrunkColumn = 4;
 /// How soon a second click on a row must follow the first to make a double click.
 constexpr auto kDoubleClick = std::chrono::milliseconds{500};
+/// What a cell whose level has not loaded draws, and one whose level failed to.
+constexpr std::string_view kUnloadedMark = "···";
+constexpr std::string_view kFailedMark = "!";
+constexpr std::string_view kRetry = "[Retry]";
+/// What separates the parts of the status line.
+constexpr std::string_view kStatusGap = "  ";
 
 /// Whether @p key is the special key @p code, not a typed character whose codepoint has the same value.
 bool isKey(::core::tui::KeyEvent const& key, KeyCode code) noexcept { return key.codepoint == 0 && key.key == code; }
@@ -122,6 +130,9 @@ void TableImpl::setRowSpans(ui::Widget& row, std::vector<ui::RowSpan> const& spa
 }
 
 int TableImpl::heightOf(WidgetBase const& row) const {
+    if (_source) {
+        return 1;
+    }
     auto const extra = _extraLines.find(&row);
     return rowHeight(row) + (extra == _extraLines.end() ? 0 : extra->second);
 }
@@ -349,16 +360,15 @@ int TableImpl::headerWidth(ui::TableColumn const& column) {
 }
 
 void TableImpl::clickHeader(int x) {
-    int left = gutter();
-    for (auto const [index, width] : std::views::zip(std::views::iota(std::size_t{0}), columnWidths(_size.width))) {
-        if (x >= left && x < left + width) {
+    for (DrawnColumn const& drawn : drawnColumns(_size.width)) {
+        int const left = gutter() + drawn.x;
+        if (x >= left && x < left + drawn.width) {
             auto const handler = _onSort;
-            if (_columns.at(index).sortable && handler) {
-                handler(index);
+            if (_columns.at(drawn.column).sortable && handler) {
+                handler(drawn.column);
             }
             return;
         }
-        left += width + kColumnGap;
     }
 }
 
@@ -368,6 +378,9 @@ void TableImpl::childForgotten(WidgetBase& child) {
     _headings.erase(&child);
     _spans.erase(&child);
     _extraLines.erase(&child);
+    _viewRows.erase(&child);
+    _cellColumns.erase(&child);
+    _loads.erase(&child);
     // The plan points at rows and at the cells lifted out of them, and is rebuilt only by the next fit: until then a
     // click would hit-test a block of a row that is gone, and read its freed cell.
     _plan.clear();
@@ -405,10 +418,13 @@ std::vector<int> TableImpl::naturalWidths() const {
         if (cells == nullptr || !row->shown() || isHeading(row)) {
             continue;
         }
-        for (auto const [width, cell] : std::views::zip(widths, cells->children())) {
-            // A hidden cell is drawn as nothing, so it asks for no room.
-            if (cell->shown()) {
-                width = std::max(width, requestedSize(*cell).width);
+        std::size_t position = 0;
+        for (auto const* const cell : cells->children()) {
+            auto const column = columnOf(row, cell, position++);
+            // A hidden cell is drawn as nothing, and a mark in place of a cell widens nothing, so neither asks for
+            // room.
+            if (column && *column < widths.size() && cell->shown() && loadOf(row, *column) == ui::CellLoad::Loaded) {
+                widths.at(*column) = std::max(widths.at(*column), requestedSize(*cell).width);
             }
         }
     }
@@ -427,12 +443,16 @@ std::vector<int> TableImpl::leastWidths() const {
         if (cells == nullptr || !row->shown() || isHeading(row)) {
             continue;
         }
-        for (auto const [width, column, cell] : std::views::zip(widths, _columns, cells->children())) {
-            if (!column.wrap || !cell->shown()) {
+        std::size_t position = 0;
+        for (auto const* const cell : cells->children()) {
+            auto const column = columnOf(row, cell, position++);
+            if (!column || *column >= widths.size() || !_columns.at(*column).wrap || !cell->shown() ||
+                loadOf(row, *column) != ui::CellLoad::Loaded) {
                 continue;
             }
             auto const* const text = dynamic_cast<TextImpl const*>(cell);
-            width = std::max(width, text != nullptr ? text->leastWidth() : requestedSize(*cell).width);
+            widths.at(*column) =
+                std::max(widths.at(*column), text != nullptr ? text->leastWidth() : requestedSize(*cell).width);
         }
     }
     return widths;
@@ -463,14 +483,22 @@ std::vector<int> TableImpl::columnWidths(int width) const {
 }
 
 ::core::tui::Size TableImpl::naturalSize() const {
-    auto const widths = naturalWidths();
-    int const width = gutter() + std::accumulate(widths.begin(), widths.end(), 0) +
-                      (kColumnGap * std::max(0, static_cast<int>(widths.size()) - 1));
-    int height = _showHeader ? 1 : 0;
-    for (auto const* row : shownChildren()) {
-        height += heightOf(*row);
+    int width = gutter() + _totalWidth;
+    if (!_arranged) {
+        auto const widths = naturalWidths();
+        width = gutter() + std::accumulate(widths.begin(), widths.end(), 0) +
+                (kColumnGap * std::max(0, static_cast<int>(widths.size()) - 1));
     }
-    return {.width = width, .height = height};
+    std::int64_t height = (_showHeader ? 1 : 0) + (_status.shown ? 1 : 0);
+    if (_source) {
+        height += static_cast<std::int64_t>(_total);  // a line for each row of the view, realized or not
+    } else {
+        for (auto const* row : shownChildren()) {
+            height += heightOf(*row);
+        }
+    }
+    return {.width = width,
+            .height = static_cast<int>(std::min<std::int64_t>(height, std::numeric_limits<int>::max()))};
 }
 
 std::optional<ui::Key> TableImpl::keyOf(WidgetBase const* row) const {
@@ -583,6 +611,22 @@ void TableImpl::showCursor(std::span<WidgetBase* const> rows) {
 std::vector<::core::tui::Rect> TableImpl::childAreas(::core::tui::Size size) const {
     std::vector<::core::tui::Rect> areas(children().size());
     int line = _showHeader ? 1 : 0;
+    if (_source) {
+        // Each realized row on the line of its view index; the line below the rows is the status line's.
+        int const room = rowRoomOf(size.height);
+        for (auto const [row, area] : std::views::zip(children(), areas)) {
+            auto const found = _viewRows.find(row);
+            if (!row->shown() || found == _viewRows.end() || found->second < _top ||
+                found->second - _top >= static_cast<std::size_t>(room)) {
+                continue;
+            }
+            area = {.x = gutter(),
+                    .y = line + static_cast<int>(found->second - _top),
+                    .width = std::max(0, size.width - gutter()),
+                    .height = 1};
+        }
+        return areas;
+    }
     std::size_t place = 0;
     for (auto const [row, area] : std::views::zip(children(), areas)) {
         if (!row->shown()) {
@@ -590,7 +634,8 @@ std::vector<::core::tui::Rect> TableImpl::childAreas(::core::tui::Size size) con
         }
         bool const above = place < _top;
         ++place;
-        if (above || line >= size.height) {
+        // The status line, while shown, is the last line: no row is drawn over it.
+        if (above || line >= size.height - (_status.shown ? 1 : 0)) {
             continue;
         }
         int const height = heightOf(*row);
@@ -600,18 +645,17 @@ std::vector<::core::tui::Rect> TableImpl::childAreas(::core::tui::Size size) con
     return areas;
 }
 
-void TableImpl::paintHeader(::core::tui::Canvas& canvas, std::vector<int> const& widths) const {
+void TableImpl::paintHeader(::core::tui::Canvas& canvas, std::vector<DrawnColumn> const& columns) const {
     auto const& theme = canvas.theme();
     if (_selectColumn) {
         canvas.putString(0, 0, headerBox(), theme.textNormal);
     }
-    int left = gutter();
-    for (auto const [index, column, width] : std::views::zip(std::views::iota(std::size_t{0}), _columns, widths)) {
-        auto label = canvas.subcanvas({.x = left, .y = 0, .width = width, .height = 1});
+    for (DrawnColumn const& drawn : columns) {
+        auto label = canvas.subcanvas({.x = gutter() + drawn.x, .y = 0, .width = drawn.width, .height = 1});
         // Over its cells: a number column's header ends where its digits do.
-        std::string const text = headerText(index);
-        label.putString(0, alignedOffset(column.align, displayWidth(text), width), text, theme.textBold);
-        left += width + kColumnGap;
+        std::string const text = headerText(drawn.column);
+        label.putString(0, alignedOffset(_columns.at(drawn.column).align, displayWidth(text), drawn.width), text,
+                        theme.textBold);
     }
 }
 
@@ -664,28 +708,44 @@ void TableImpl::arrangeRows(std::vector<int> const& widths) {
 void TableImpl::paint(::core::tui::Canvas& canvas) {
     auto const& theme = canvas.theme();
     _size = canvas.size();
-    auto const widths = columnWidths(canvas.width());
+    int const room = rowRoomOf(canvas.height());
+    if (_source) {
+        _rowRoom = room;
+        clampView();
+        reportBeforeNextFrame();
+    }
+    auto const drawn = drawnColumns(canvas.width());
 
     if (_showHeader) {
-        paintHeader(canvas, widths);
+        paintHeader(canvas, drawn);
     }
 
     auto const rows = shownChildren();
-    int const room = std::max(0, canvas.height() - (_showHeader ? 1 : 0));
-    if (room != _rowRoom) {
-        _rowRoom = room;
-        _follow = true;
+    if (!_source) {
+        if (room != _rowRoom) {
+            _rowRoom = room;
+            _follow = true;
+        }
+        followFocus(rows);
+        if (_follow) {
+            _follow = false;
+            showCursor(rows);
+        }
+        _top = std::min(_top, lastTop(rows));
+        _cursorPlace = cursorPlace(rows);
     }
-    followFocus(rows);
-    if (_follow) {
-        _follow = false;
-        showCursor(rows);
-    }
-    _top = std::min(_top, lastTop(rows));
-    _cursorPlace = cursorPlace(rows);
 
     planSpans();
-    arrangeRows(widths);
+    if (_source) {
+        slotCells(drawn);
+    } else {
+        std::vector<int> widths;
+        widths.reserve(drawn.size());
+        for (DrawnColumn const& column : drawn) {
+            widths.push_back(column.width);
+        }
+        arrangeRows(widths);
+    }
     auto const areas = childAreas(_size);
     placeChildren(areas);
     for (auto const [place, area] : std::views::zip(_plan, spanAreas(_size))) {
@@ -697,9 +757,19 @@ void TableImpl::paint(::core::tui::Canvas& canvas) {
         if (area.empty()) {
             continue;
         }
-        bool const cursor = focused && row == rows.at(_cursorPlace);
+        bool cursor = false;
+        if (_source) {
+            auto const found = _viewRows.find(row);
+            cursor = focused && _focusCell && found != _viewRows.end() && found->second == _focusCell->first;
+        } else {
+            cursor = focused && row == rows.at(_cursorPlace);
+        }
         canvas.putString(area.y, 0, rowMark(row, cursor), cursor ? theme.listItemSelected : theme.textNormal);
     }
+    if (_source) {
+        paintLoads(canvas, drawn, areas);
+    }
+    paintStatus(canvas);
 }
 
 // Shift with an arrow moves as the arrow does and, in Multiple mode, selects from the anchor to the new cursor row;
@@ -734,6 +804,26 @@ EventResult TableImpl::modifiedKey(::core::tui::KeyEvent const& key) {
 // Any key ends a double click: the click after it is a first click.
 EventResult TableImpl::key(::core::tui::KeyEvent const& key) {
     _lastClick = {};
+    if (_source) {
+        if (auto const move = focusMoveOf(key); move && _onFocusMove) {
+            auto const handler = _onFocusMove;
+            handler(*move);
+            return EventResult::Handled;
+        }
+        WidgetBase* const row = _focusCell ? rowAtView(_focusCell->first) : nullptr;
+        if (::core::tui::withoutLockKeys(key.modifiers) == ::core::tui::Modifier::None && row != nullptr) {
+            if (key.codepoint == U' ') {
+                static_cast<void>(pick(*row));
+                return EventResult::Handled;
+            }
+            if (isKey(key, KeyCode::Enter)) {
+                if (auto const rowKey = keyOf(row); rowKey && (_mode != ui::SelectionMode::Single || pick(*row))) {
+                    activateRow(*rowKey);
+                }
+                return EventResult::Handled;
+            }
+        }
+    }
     if (::core::tui::withoutLockKeys(key.modifiers) != ::core::tui::Modifier::None) {
         return modifiedKey(key);
     }
@@ -783,6 +873,13 @@ WidgetBase* TableImpl::rowAtLine(int line) const {
 }
 
 void TableImpl::clickWith(::core::tui::Point cell, ::core::tui::Modifier modifiers) {
+    if (_status.shown && cell.y == _size.height - 1) {
+        if (_retryX >= 0 && cell.x >= _retryX && cell.x < _retryX + displayWidth(kRetry) && _onRetry) {
+            auto const handler = _onRetry;
+            handler();
+        }
+        return;
+    }
     bool const onBox = _selectColumn && cell.x < kBoxWidth;
     // The header box is Ctrl+A; it does nothing while the table shows no rows.
     if (onBox && _showHeader && cell.y == 0) {
@@ -826,6 +923,18 @@ void TableImpl::clickWith(::core::tui::Point cell, ::core::tui::Modifier modifie
 // A move the user asked for counts as having followed the cursor and the focus as they are now, so the next frame
 // does not undo it when either moved since the last one.
 bool TableImpl::wheel(int delta) {
+    if (_source) {
+        std::size_t const before = _top;
+        _top = delta < 0 ? _top - std::min(_top, static_cast<std::size_t>(-static_cast<std::int64_t>(delta)))
+                         : _top + static_cast<std::size_t>(delta);
+        clampView();
+        if (_top == before) {
+            return false;
+        }
+        reportRanges();
+        refresh();
+        return true;
+    }
     auto const rows = shownChildren();
     auto const target = delta < 0 ? _top - std::min(_top, static_cast<std::size_t>(-delta))
                                   : std::min(_top + static_cast<std::size_t>(delta), lastTop(rows));
@@ -935,6 +1044,370 @@ void TableImpl::activateRow(ui::Key const& key) {
     if (handler) {
         handler(key);
     }
+}
+
+void TableImpl::setRealizedWindow(std::size_t first, std::size_t count, std::size_t total) {
+    static_cast<void>(first);
+    static_cast<void>(count);
+    _source = true;
+    _total = total;
+    refresh();
+}
+
+void TableImpl::setOnVisibleRangeChanged(std::function<void(std::size_t, std::size_t)> onVisibleRangeChanged) {
+    _onVisibleRange = std::move(onVisibleRangeChanged);
+}
+
+void TableImpl::setRowIndex(ui::Widget& row, std::size_t viewRow) {
+    auto& base = WidgetBase::of(row);
+    if (base.container() != this) {
+        throw std::logic_error{"morph::tui: setRowIndex of a widget that is not this table's row"};
+    }
+    _source = true;
+    _viewRows.insert_or_assign(&base, viewRow);
+    refresh();
+}
+
+void TableImpl::setStatus(ui::TableStatus const& status) {
+    _status = status;
+    refresh();
+}
+
+void TableImpl::setOnRetry(std::function<void()> onRetry) { _onRetry = std::move(onRetry); }
+
+void TableImpl::setCellLoad(ui::Widget& row, std::size_t column, ui::CellLoad load) {
+    auto& base = WidgetBase::of(row);
+    if (base.container() != this) {
+        throw std::logic_error{"morph::tui: setCellLoad of a widget that is not this table's row"};
+    }
+    if (load == ui::CellLoad::Loaded) {
+        if (auto const found = _loads.find(&base); found != _loads.end()) {
+            found->second.erase(column);
+        }
+    } else {
+        _loads[&base].insert_or_assign(column, load);
+    }
+    refresh();
+}
+
+void TableImpl::setColumnWindow(std::span<std::size_t const> columns, std::span<int const> offsets,
+                                std::span<int const> widths, int totalWidth, std::size_t pinned) {
+    _arranged = true;
+    _window.clear();
+    for (auto const [column, offset, width] : std::views::zip(columns, offsets, widths)) {
+        _window.push_back(WindowColumn{.column = column, .offset = offset, .width = std::max(width, 0)});
+    }
+    _pinned = std::min(pinned, _window.size());
+    _totalWidth = std::max(totalWidth, 0);
+    refresh();
+}
+
+void TableImpl::setOnHorizontalRange(std::function<void(int scrollX, int viewport)> handler) {
+    _onHorizontalRange = std::move(handler);
+}
+
+// The mount moved the view to keep the columns in view where they were: it knows the offset, so it is not told.
+void TableImpl::setHorizontalOffset(int scrollX) {
+    _scrollX = std::max(scrollX, 0);
+    if (_reportedColumns) {
+        _reportedColumns->first = _scrollX;
+    }
+    refresh();
+}
+
+// Inside the mount's pass: the view follows the cell now, and the mount hears of the move before the next frame.
+void TableImpl::setFocusCell(std::size_t viewRow, std::size_t column) {
+    _focusCell = std::pair{viewRow, column};
+    scrollToRow(viewRow);
+    int pinnedEdge = 0;
+    for (std::size_t at = 0; at < _pinned; ++at) {
+        pinnedEdge = std::max(pinnedEdge, _window.at(at).offset + _window.at(at).width);
+    }
+    for (std::size_t at = _pinned; at < _window.size(); ++at) {
+        WindowColumn const& shown = _window.at(at);
+        if (shown.column != column) {
+            continue;
+        }
+        if (shown.offset - _scrollX < pinnedEdge) {
+            _scrollX = shown.offset - pinnedEdge;
+        } else if (shown.offset + shown.width - _scrollX > viewport()) {
+            _scrollX = std::min(shown.offset - pinnedEdge, shown.offset + shown.width - viewport());
+        }
+    }
+    clampView();
+    reportBeforeNextFrame();
+    refresh();
+}
+
+void TableImpl::setOnFocusMove(std::function<void(ui::FocusMove)> handler) { _onFocusMove = std::move(handler); }
+
+void TableImpl::scrollToRow(std::size_t viewRow) {
+    auto const room = static_cast<std::size_t>(std::max(_rowRoom, 1));
+    if (viewRow < _top) {
+        _top = viewRow;
+    } else if (viewRow >= _top + room) {
+        _top = viewRow + 1 - room;
+    }
+    clampView();
+    reportBeforeNextFrame();
+    refresh();
+}
+
+void TableImpl::setCellColumn(ui::Widget& row, ui::Widget& cell, std::optional<std::size_t> column) {
+    auto& base = WidgetBase::of(row);
+    if (base.container() != this) {
+        throw std::logic_error{"morph::tui: setCellColumn of a widget that is not this table's row"};
+    }
+    _source = true;
+    _cellColumns[&base].insert_or_assign(&WidgetBase::of(cell), column);
+    refresh();
+}
+
+void TableImpl::scrollColumnsTo(int scrollX) {
+    _scrollX = scrollX;
+    clampView();
+    reportRanges();
+    refresh();
+}
+
+// Columns first: the rows the mount realizes next are then built with the columns in view only.
+void TableImpl::reportRanges() {
+    if (!_source || _size.width <= 0) {
+        return;
+    }
+    std::pair<int, int> const columns{_scrollX, viewport()};
+    if (_onHorizontalRange && _reportedColumns != columns) {
+        _reportedColumns = columns;
+        auto const handler = _onHorizontalRange;
+        handler(columns.first, columns.second);
+    }
+    auto const rows = rowsInView();
+    if (_onVisibleRange && _reportedRows != rows) {
+        _reportedRows = rows;
+        auto const handler = _onVisibleRange;
+        handler(rows.first, rows.second);
+    }
+}
+
+std::vector<TableImpl::DrawnColumn> TableImpl::drawnColumns(int width) const {
+    std::vector<DrawnColumn> drawn;
+    if (!_arranged) {
+        int x = 0;
+        for (auto const [index, columnWidth] :
+             std::views::zip(std::views::iota(std::size_t{0}), columnWidths(width))) {
+            drawn.push_back(DrawnColumn{.column = index, .x = x, .width = columnWidth});
+            x += columnWidth + kColumnGap;
+        }
+        return drawn;
+    }
+    // The pinned columns stay where they are; the rest scroll under them, cut where they pass under the last.
+    int pinnedEdge = 0;
+    for (std::size_t at = 0; at < _pinned; ++at) {
+        pinnedEdge = std::max(pinnedEdge, _window.at(at).offset + _window.at(at).width);
+    }
+    int const room = std::max(0, width - gutter());
+    for (std::size_t at = 0; at < _window.size(); ++at) {
+        WindowColumn const& shown = _window.at(at);
+        int x = shown.offset;
+        int extent = shown.width;
+        if (at >= _pinned) {
+            x -= _scrollX;
+            if (x < pinnedEdge) {
+                extent -= pinnedEdge - x;
+                x = pinnedEdge;
+            }
+        }
+        extent = std::min(extent, room - x) - kColumnGap;
+        if (extent > 0 && shown.column < _columns.size()) {
+            drawn.push_back(DrawnColumn{.column = shown.column, .x = x, .width = extent});
+        }
+    }
+    return drawn;
+}
+
+std::optional<std::size_t> TableImpl::columnOf(WidgetBase const* row, WidgetBase const* cell,
+                                               std::size_t position) const {
+    if (!_source) {
+        return position;
+    }
+    auto const cells = _cellColumns.find(row);
+    if (cells == _cellColumns.end()) {
+        return std::nullopt;
+    }
+    auto const found = cells->second.find(cell);
+    return found == cells->second.end() ? std::nullopt : found->second;
+}
+
+ui::CellLoad TableImpl::loadOf(WidgetBase const* row, std::size_t column) const {
+    auto const cells = _loads.find(row);
+    if (cells == _loads.end()) {
+        return ui::CellLoad::Loaded;
+    }
+    auto const found = cells->second.find(column);
+    return found == cells->second.end() ? ui::CellLoad::Loaded : found->second;
+}
+
+// A cell takes its column's slot; a pooled cell, one whose column is not drawn and one a mark stands for take none.
+// A heading's one cell takes every column drawn.
+void TableImpl::slotCells(std::vector<DrawnColumn> const& drawn) {
+    std::unordered_map<std::size_t, DrawnColumn const*> byColumn;
+    int across = 0;
+    for (DrawnColumn const& column : drawn) {
+        byColumn.emplace(column.column, &column);
+        across = std::max(across, column.x + column.width);
+    }
+    for (auto* const row : children()) {
+        auto* const stack = dynamic_cast<StackImpl*>(row);
+        if (stack == nullptr) {
+            continue;
+        }
+        std::vector<CellSlot> slots;
+        slots.reserve(stack->children().size());
+        for (auto* const cell : stack->children()) {
+            CellSlot slot;
+            auto const column = columnOf(row, cell, 0);
+            if (isHeading(row)) {
+                if (!_cellColumns.contains(row) || !_cellColumns.at(row).contains(cell)) {
+                    slot = CellSlot{.x = 0, .width = across, .place = CellPlace{.across = ui::Align::Start}};
+                }
+            } else if (auto const found = column ? byColumn.find(*column) : byColumn.end();
+                       found != byColumn.end() && loadOf(row, *column) == ui::CellLoad::Loaded) {
+                ui::TableColumn const& spec = _columns.at(*column);
+                slot = CellSlot{.x = found->second->x,
+                                .width = found->second->width,
+                                .place = CellPlace{.across = spec.align, .down = spec.valign}};
+                // The terminal cannot wrap, so a text cell a column cuts ends in an ellipsis.
+                if (auto* const text = dynamic_cast<TextImpl*>(cell)) {
+                    text->setElided(spec.wrap ? TextImpl::Elision::PerLine : TextImpl::Elision::OneLine);
+                } else if (auto* const badge = dynamic_cast<BadgeImpl*>(cell)) {
+                    badge->setElided(true);
+                }
+            }
+            slots.push_back(slot);
+        }
+        // A row with no cell keeps one empty slot, so it is never laid out by extents it was not given.
+        if (slots.empty()) {
+            slots.push_back(CellSlot{});
+        }
+        stack->setCellSlots(std::move(slots));
+    }
+}
+
+int TableImpl::rowRoomOf(int height) const noexcept {
+    return std::max(0, height - (_showHeader ? 1 : 0) - (_status.shown ? 1 : 0));
+}
+
+int TableImpl::viewport() const noexcept { return std::max(0, _size.width - gutter()); }
+
+std::pair<std::size_t, std::size_t> TableImpl::rowsInView() const noexcept {
+    return {_top, static_cast<std::size_t>(std::max(_rowRoom, 0))};
+}
+
+void TableImpl::clampView() {
+    auto const room = static_cast<std::size_t>(std::max(_rowRoom, 0));
+    _top = std::min(_top, _total > room ? _total - room : std::size_t{0});
+    _scrollX = std::clamp(_scrollX, 0, std::max(0, _totalWidth - viewport()));
+}
+
+void TableImpl::reportBeforeNextFrame() {
+    bool const columnsDue = _onHorizontalRange && _reportedColumns != std::pair{_scrollX, viewport()};
+    bool const rowsDue = _onVisibleRange && _reportedRows != rowsInView();
+    if (!columnsDue && !rowsDue) {
+        return;
+    }
+    if (std::ranges::find(context().windowTables, this) == context().windowTables.end()) {
+        context().windowTables.push_back(this);
+    }
+    refresh();
+}
+
+void TableImpl::paintStatus(::core::tui::Canvas& canvas) {
+    _retryX = -1;
+    if (!_status.shown || canvas.height() <= 0) {
+        return;
+    }
+    auto const& theme = canvas.theme();
+    int const line = canvas.height() - 1;
+    std::string lead = _status.counts;
+    if (!_status.state.empty()) {
+        lead += (lead.empty() ? "" : std::string{kStatusGap}) + _status.state;
+    }
+    canvas.putString(line, 0, lead, theme.textMuted);
+    int x = displayWidth(lead);
+    if (_status.retry) {
+        x += lead.empty() ? 0 : displayWidth(kStatusGap);
+        _retryX = x;
+        canvas.putString(line, x, std::string{kRetry}, theme.textAccent);
+        x += displayWidth(kRetry);
+    }
+    if (!_status.message.empty()) {
+        // At the trailing edge, or after the rest when the line is too short for both.
+        int const width = displayWidth(_status.message);
+        int const gap = x == 0 ? 0 : displayWidth(kStatusGap);
+        canvas.putString(line, std::max(x + gap, canvas.width() - width), _status.message, theme.textNormal);
+    }
+}
+
+void TableImpl::paintLoads(::core::tui::Canvas& canvas, std::vector<DrawnColumn> const& drawn,
+                           std::vector<::core::tui::Rect> const& areas) const {
+    auto const& theme = canvas.theme();
+    for (auto const [row, area] : std::views::zip(children(), areas)) {
+        auto const loads = _loads.find(row);
+        if (area.empty() || loads == _loads.end() || isHeading(row)) {
+            continue;
+        }
+        for (DrawnColumn const& column : drawn) {
+            auto const found = loads->second.find(column.column);
+            if (found == loads->second.end()) {
+                continue;
+            }
+            bool const failed = found->second == ui::CellLoad::Failed;
+            std::string const mark{failed ? kFailedMark : kUnloadedMark};
+            auto cell = canvas.subcanvas({.x = gutter() + column.x, .y = area.y, .width = column.width, .height = 1});
+            cell.putString(0, alignedOffset(_columns.at(column.column).align, displayWidth(mark), column.width), mark,
+                           failed ? theme.error : theme.textMuted);
+        }
+    }
+}
+
+WidgetBase* TableImpl::rowAtView(std::size_t viewRow) const {
+    auto const found = std::ranges::find_if(children(), [this, viewRow](WidgetBase const* row) {
+        auto const index = _viewRows.find(row);
+        return index != _viewRows.end() && index->second == viewRow;
+    });
+    return found == children().end() ? nullptr : *found;
+}
+
+std::optional<ui::FocusMove> TableImpl::focusMoveOf(::core::tui::KeyEvent const& key) {
+    auto const held = ::core::tui::withoutLockKeys(key.modifiers);
+    if (held == ::core::tui::Modifier::Ctrl) {
+        if (isKey(key, KeyCode::Home)) {
+            return ui::FocusMove::First;
+        }
+        if (isKey(key, KeyCode::End)) {
+            return ui::FocusMove::Last;
+        }
+        return std::nullopt;
+    }
+    if (held != ::core::tui::Modifier::None) {
+        return std::nullopt;
+    }
+    static constexpr std::array<std::pair<KeyCode, ui::FocusMove>, 8> kMoves{{
+        {KeyCode::Up, ui::FocusMove::Up},
+        {KeyCode::Down, ui::FocusMove::Down},
+        {KeyCode::Left, ui::FocusMove::Left},
+        {KeyCode::Right, ui::FocusMove::Right},
+        {KeyCode::Home, ui::FocusMove::Home},
+        {KeyCode::End, ui::FocusMove::End},
+        {KeyCode::PageUp, ui::FocusMove::PageUp},
+        {KeyCode::PageDown, ui::FocusMove::PageDown},
+    }};
+    for (auto const& [code, move] : kMoves) {
+        if (isKey(key, code)) {
+            return move;
+        }
+    }
+    return std::nullopt;
 }
 
 }  // namespace morph::tui::detail

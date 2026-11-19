@@ -98,8 +98,9 @@ public:
     void takeHover(std::function<void()> onHover) const;
     void takeFocus() const;
 
-    /// Hides the widget's item while a spanning cell above covers it (@p covered), or shows it again as its own
-    /// visibility says. The flag is kept apart from `setVisible`, so uncovering never shows a cell the document hid.
+    /// Hides the widget's item while its table keeps it out of view (@p covered): a spanning cell above covers it, or
+    /// the table pools it; or shows it again as its own visibility says. The flag is kept apart from `setVisible`, so
+    /// uncovering never shows a cell the document hid.
     void cover(bool covered);
     /// Whether a spanning cell covers the widget.
     [[nodiscard]] bool covered() const noexcept { return _covered; }

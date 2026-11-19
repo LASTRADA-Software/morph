@@ -1067,6 +1067,12 @@ void fit(Context& context) {
     if (context.pressed != nullptr && screen.pointerCapture() != &context.pressed->view()) {
         context.endPress();
     }
+    // The rows and columns a table's last frame found in view, reported before any size is asked: the mount realizes
+    // them here, outside a frame's drawing. The list is taken first, so a report that asks for another frame adds
+    // its table for that frame.
+    for (auto* const table : std::exchange(context.windowTables, {})) {
+        table->reportRanges();
+    }
     // Before any size is asked: what a span lifts or covers decides its table's rows' heights. Planning may drop the
     // table from the list, so the loop walks a copy.
     for (auto* const table : std::vector<TableImpl*>{context.spanTables}) {

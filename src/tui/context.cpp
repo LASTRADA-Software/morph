@@ -25,6 +25,8 @@ void Context::forget(WidgetBase& widget) {
     std::erase(popups, &widget);
     std::erase_if(spanTables,
                   [&widget](TableImpl const* table) { return static_cast<WidgetBase const*>(table) == &widget; });
+    std::erase_if(windowTables,
+                  [&widget](TableImpl const* table) { return static_cast<WidgetBase const*>(table) == &widget; });
     if (pressed == &widget) {
         pressed = nullptr;
     }
