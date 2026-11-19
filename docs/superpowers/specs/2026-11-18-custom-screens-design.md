@@ -212,8 +212,9 @@ the client's registration of the model, and the client offers no custom screens.
   listed, so the person can open its source and fix it, and is never mounted.
 - **Effects.** `save` and `remove` declare `changes` on the record type `morph.customScreens`, the whole type: a save
   can add a screen to lists no key names yet. Effects fan out by record type to every connection watching it, not by
-  person, so every client with a list of custom screens open refetches its own `list` after anyone's save. Saves are a person's deliberate act, so this is rare; the
-  verdict cache below keeps each refetch cheap.
+  person. A client's own `list` call is not a query of a mounted screen, so no screen's watch covers it: the client
+  watches `morph.customScreens` itself, watches again after every reconnect and resync, and refetches its `list` on a
+  change event. Saves are a person's deliberate act, so this is rare; the verdict cache below keeps each refetch cheap.
 - **Journal.** The actions are `Loggable::No`. A screen is not application data; the store keeps who saved it and when.
 
 ## The checks
@@ -292,7 +293,8 @@ it opens wherever its base opens with the params the base was given.
   `DocumentScreenHostOptions::documents` for `custom:` ids. It drops an entry when its `list` refetch shows the screen
   changed or gone. Because `documents` is synchronous, anything that opens a custom screen, a navigator entry, **Open
   as** or a restored tab, awaits `get` into the cache first and then opens.
-- **No params.** A custom screen whose base takes no params is an entry in the navigator's **Custom** section, after
+- **No params.** A custom screen whose base takes no params, as the client reads the base's params from the bundle
+  (a broken screen's `opensWithoutParams` is false, and a broken screen is still listed), is an entry in the navigator's **Custom** section, after
   the application's groups, under the store's `title`. Every custom entry carries a custom-screen mark, and one that is
   not `mine` names who saved it, so it never passes for an application entry. A broken one carries a badge with its
   reason.
@@ -313,13 +315,13 @@ and it behaves the same whichever made it.
   keeps the screen's params and place, and each state starts from the screen's value of the same name and type, so a
   half-filled field survives a draft. A refused mount keeps the screen and shows the refusal.
 - **Identity.** A draft keeps the screen id, params, identity and route of the screen it replaced, so the tab's record
-  names the saved screen, never the draft.
+  names the saved screen, never the draft. A draft whose `id` is not the screen's is refused at `/id`.
 - **The bar.** A draft shows a bar above the screen: "Draft — not saved", **Save** (for a draft of a custom screen
   that is `mine`), **Save as…**, **Source** and **Discard**. It says that forms on the draft change real data.
 - **A real screen.** A draft has the same models and params as the screen it replaces, so it shows live data and its
   actions run as on any screen.
-- **Discard** remounts the replaced screen's document the same way. Closing a tab with a draft open asks first, as a
-  tab with unsaved edits does.
+- **Discard** remounts the screen's document current at that moment, from the bundle or from `get`, the same way.
+  Closing a tab with a draft open asks first, through the shell's confirmation; the client asks for drafts only.
 - **One draft per window.** A new draft replaces the current one.
 - **The bundle changes under a draft.** A development reload that changes the base leaves the draft mounted. The draft
   is checked against the new bundle at its next **Preview** or save.
@@ -332,7 +334,7 @@ and it behaves the same whichever made it.
   has it, a custom screen's as `get` answers it, or the open draft's. The overlay is a plain monospace text editor and
   the refusal, so every frontend can host it; the terminal frontend's is best effort.
 - **Preview** runs `loadDocument` at once in the client, and the server's `check` after it. A refusal is shown with
-  its pointer, and choosing it moves the cursor to its line. A document with none becomes the window's draft.
+  its pointer, and choosing it moves the cursor to its line, through the text input's cursor setter. A document with none becomes the window's draft.
 - **Save as…** from the source view previews first and then saves, so it never saves a document the person has not
   seen mounted.
 - The client's checks are fast feedback. The server's are the ones that decide.
@@ -373,13 +375,14 @@ The chat on a document screen offers one more tool beside the screen's action to
 | What happens | What the person sees |
 |---|---|
 | The store refuses a save or a delete | The store's reason, in the draft's bar or the source view; the draft stays open |
-| A stored screen fails the checks today | The navigator's badge, and **Open as** marking it broken; opening it opens its source |
+| A stored screen fails the checks today | The navigator's badge, and **Open as** marking it broken; opening it opens its source, where **Check and save** saves a fix once the server's `check` passes, since a broken screen cannot be mounted to preview |
 | A draft does not load in the client | The refusal in the source view, or a chat message for an assistant draft; the window is unchanged |
 | The server's `check` refuses what the client loaded | The server's refusal, in the source view |
 | The assistant runs out of proposals | A chat message with the last refusal; the window is unchanged |
 | A screen is over `maxProposalBytes` | A chat message that the assistant cannot edit this screen; **Source** still works |
 | A recorded custom screen is gone | A notice that it was not restored |
-| No custom screen store is registered | The client's registration of `morph.customScreens` is refused with `unknown model type: morph.customScreens`, which is how a client learns custom screens are not offered, so **Source** shows the document read-only; no save buttons, no **Open as**, no custom section |
+| No custom screen store is registered | The client's registration of `morph.customScreens` is refused with `unknown model type: morph.customScreens`, which is how a client learns custom screens are not offered; any other refusal of it, or of `list`, also turns custom
+screens off and is logged at warn, so a misconfiguration is reported. Then **Source** shows the document read-only; no save buttons, no **Open as**, no custom section |
 
 ## Testing
 
@@ -418,5 +421,8 @@ The chat on a document screen offers one more tool beside the screen's action to
 - `docs/spec/ui/service.md`: `permittedActions`, the reserved `custom:` prefix, and the catalog kept on
   `ServedBundle`.
 - `docs/spec/ui/host.md` or its section of `interpreter.md`: `remount` for drafts.
-- `docs/spec/ui/workspace.md`: the navigator's custom section, **Open as**, and custom routes.
+- `docs/spec/ui/workspace.md`: the navigator's custom section, **Open as** (`WorkspaceModel::openInPlace`), the
+  per-tab chrome slot (`WorkspaceOptions::chrome`), and custom routes.
+- `docs/spec/ui/backend_contract.md`: a text input's cursor setter.
+- `docs/spec/client/client.md`: the generic client's custom screen wiring and its draft close guard.
 - A new `docs/spec/ui/custom_screens.md` for the store, the model, the checks, the base rule and drafts.
