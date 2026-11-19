@@ -488,15 +488,17 @@ T1 benchmark: `"table state benchmark: parse, fit and apply 300 columns, 8 keys,
 - Produces:
 
 ```cpp
-// table_state_model.hpp, namespace morph::ui
+// preferences.hpp, namespace morph::ui (see "Reserved names")
 inline constexpr std::string_view kTableStateModel = "morph.tableState";
+// table_state_model.hpp, namespace morph::ui
 struct TableStateOptions {
     std::size_t segmentBytes = std::size_t{12} * 1024;
     std::size_t partBytes = std::size_t{1} << 20;            // a save part and a load head
     std::optional<std::size_t> maxBytesPerPerson;            // unset: no quota
 };
 struct TableStateLoad   { std::vector<table::TableStateKey> keys; };
-struct TableStateHead   { bool found = false; std::string revision; std::uint64_t size = 0; std::string text; };
+struct TableStateHead   { bool found = false; std::string revision; std::uint64_t size = 0; std::string text;
+                          std::string error; };        // why this key failed (a missing segment); the others still load
 struct TableStateLoaded { std::vector<TableStateHead> entries; };              // one per key, in order
 struct TableStateRead   { table::TableStateKey key; std::string revision; std::uint64_t offset = 0; };
 struct TableStateChunk  { std::string revision; std::string text; };           // another revision: start again
@@ -518,8 +520,9 @@ public:
 enum class StateParts : std::uint8_t { Layout = 1, Sort = 2, Filters = 4, View = 8 };   // a bit set
 class TableStates {               // one per Session with a store
 public:
-    TableStates(std::shared_ptr<table::ITableStateStore> store, reactive::Scheduler* scheduler,
-                std::chrono::milliseconds debounce);
+    // `owner`: where `load` answers, a kept key at once, with no store completion to deliver on.
+    TableStates(std::shared_ptr<table::ITableStateStore> store, exec::IExecutor& owner,
+                reactive::Scheduler* scheduler, std::chrono::milliseconds debounce);
     [[nodiscard]] std::optional<table::StoredTableState> kept(table::TableStateKey const& key) const;
     async::Completion<std::optional<table::StoredTableState>> load(table::TableStateKey const& key);
     /// Marks @p parts of the key's state changed to those of @p document; a debounced save, one in flight per key.
@@ -538,7 +541,7 @@ Decisions:
 - Reserved names. The preferences model writes to the same `IPreferencesStore` with whatever `app`, `scope` and `point` its caller names (`preferences.hpp`, `keyOf`), so without a rule a person could overwrite the quota's usage entry or a state's head through `morph.preferences`. `PreferencesModel::checkName` therefore refuses, on `load`, `set` and `remove` alike, an `app` equal to `kTableStateModel` (`"morph.tableState"`) and a `scope` that starts with `morph.table` (`std::invalid_argument`, "`<name>` is kept for table state"), before the store is called. The two constants (`kTableStateModel`, `inline constexpr std::string_view kTableStateScopePrefix = "morph.table"`) are declared in `preferences.hpp`, which `table_state_model.hpp` includes, so the model that reserves and the model that refuses read one definition.
 - Server layout per table.md "The framework's stores": person from the verified session (none: `load` answers `found = false` for every key, `save` and `remove` are refused); `app` = the key's `application`; scope `morph.table.` + the first 32 lower-case hex digits of `sha256(model + "\x1F" + table + "\x1F" + qualifier)`; point `<part>` holds `{"key": {…in clear…}, "revision": r, "document": …}` for a document of at most `segmentBytes`, else `{"key": …, "revision": r, "segments": n, "bytes": b}` with segments at `<part>.<r>.<i>`, each a JSON string of at most `segmentBytes`. A head whose clear key differs from the asked key reads as not found. A missing segment fails the load.
 - Write order, with an intent entry because `IPreferencesStore` has only `get`, `set` and `remove` by exact key (`preferences.hpp:62-73`) and so cannot list the segments under a scope: (1) read `<part>.pending`; if present, it names up to two revisions, `{"revision": r, "segments": n, "previous": r0, "previousSegments": n0}`; read the head, and remove the segments `<part>.<x>.<0…count−1>` of each named revision the head does not name, then remove `<part>.pending`; (2) when the new document or the one the head now names is segmented, write `<part>.pending` naming the new revision (`segments` 0 for an unsegmented one) and the head's (`previousSegments` 0 likewise); (3) the segments; (4) the head; (5) remove the previous revision's segments; (6) remove `<part>.pending`. A save stopped before (4) leaves the old head and its segments readable and the new segments stray; one stopped between (4) and (6) leaves the previous revision's segments stray; in both cases the next save of the key removes exactly the strays in step (1), because the head names the one revision to keep. A save that writes no segments and replaces none writes no intent. A removal that fails in steps (5) or (6) does not fail the save, whose head is written: it leaves strays that the intent names, for the next save.
-- Key bounds: `application`, `table`, `qualifier` and `part` are 1 to 256 bytes; `model` is 0 to 256 bytes, because a table over a document's rows has an empty `model` (table.md "Persisted state", the key's comment, the "Bounds" bullet, and Task 11b). The spec already states these bounds and is not edited by this task. The model checks the bounds on every request (`InvalidValue`, naming the member) before it reads the store.
+- Key bounds: `application`, `table`, `qualifier` and `part` are 1 to 256 bytes; `model` is 0 to 256 bytes, because a table over a document's rows has an empty `model` (table.md "Persisted state", the key's comment, the "Bounds" bullet, and Task 11b). The spec already states these bounds and is not edited by this task. The model checks the bounds on every request (a `std::invalid_argument` naming the member, as the preferences model refuses a name) before it reads the store.
 - Revision: the first 16 hex digits of `sha256(previousRevision + document)`.
 - Quota. The spec's quota is "across one person's stored state", so it spans applications: with `maxBytesPerPerson` set, the model keeps the person's total at `PrefKey{.person = person, .app = std::string{kTableStateModel}, .scope = "morph.table", .point = "usage"}` (`"morph.tableState"` is not an application's id and `"morph.table"` is no state's scope, which is always `morph.table.<32 hex>`), as `{"bytes": n}`. Arithmetic, all in `std::uint64_t` document bytes (the length of the document's text as `save` received it; entries, envelopes and segment quoting are not counted): `n` is the stored value, 0 when the entry is absent or does not read as `{"bytes": <unsigned>}`; `b0` is the replaced document's size, 0 when the key has no head, else the head's `bytes` for a segmented head and the length of its `document` member's text for a small one; `b1` the new document's size. A save is refused when `n − b0 + b1 > maxBytesPerPerson` (computed as `n + b1 > quota + b0`, so no subtraction wraps): it answers `SaveResult{Refused, reason = "over the table-state quota"}` and writes nothing, `usage` included. Otherwise it writes the document (the order above), then `usage = n − b0 + b1`. A remove of a present key writes `usage = n − min(n, b0)`; of an absent key writes nothing. A multi-part save is checked once, at its `last` part, against the whole text. Without the option no `usage` entry is read or written. A preferences store has no conditional write, so two saves of one person reaching two model instances in the same moment can both pass the check; the quota can then be overshot by one document, which an operator's ceiling tolerates as the spec's `expected` rule tolerates its own race.
 - `PreferencesTableStateStore::load` calls made in one turn of `owner` go out as one `TableStateLoad`; a head shorter than `size` is completed with `TableStateRead` calls by offset, restarting when the revision changes. A `save` over `partBytes` is sent as parts under one upload id (`upload` = a random 16-hex id), committed by the part with `last`.
@@ -549,12 +552,12 @@ Decisions:
 - [ ] **Step 1: Write the failing tests** in `tests/test_ui_table_state.cpp`, over an in-process server built as `tests/ui_preferences_support.hpp`'s `prefs_test::Server` is (a `RemoteServer` over a `ThreadPoolExecutor`, the `TokenAuthorizer` that makes the request's token the verified principal, and `server->handle` called directly — no socket): `registerTableState(prefs, dispatcher, registry, options)` in place of `registerPreferences`, and a client `Dispatcher` whose channel sends each `execute` through `server->handle` with token `person`. `prefs` is `ProbePreferencesStore` (new, `tests/ui_table_support.hpp`): a `MemoryPreferencesStore` wrapper that records every key it was given so a test can list what the model cannot, with `has(PrefKey)`, `value(PrefKey) -> std::string`, `erase(PrefKey)`, `pointsUnder(scope) -> std::set<std::string>` (the points of every live entry with that scope), `largestValue()`, `setCount()`, `removeCount()`, `failSetsAfter(std::size_t n)` and `failRemovesAfter(std::size_t n)` (every `set`, or `remove`, after the n-th answers `false` and changes nothing), `healSets()` and `healRemoves()`; `usageKey(person)` is the quota entry's `PrefKey` above, `pendingPoint(key)`/`segmentPoint(key, i)`/`scopeOf(key)` the layout's names:
 
 ```cpp
-// Mutation: the store calling the preferences model, which refuses the value over maxValueBytes.
+// Mutation: no segments (the whole document in its head, an entry over segmentBytes).
 TEST_CASE("table state: state of any size", "[ui][state]") {
     std::string const big = stateWithOneOfValues(20'000);           // a 20,000-value oneOf, well over 1 MiB
     REQUIRE(save(store, key, big).outcome == SaveOutcome::Saved);
     CHECK(load(store, key)->json == big);
-    CHECK(prefs.largestValue() <= 12 * 1024 + kSegmentEnvelopeBytes);   // every entry within segmentBytes
+    CHECK(prefs.largestValue() <= 12 * 1024);                          // every entry within segmentBytes, quotes included
     prefs.failSetsAfter(prefs.setCount() + 1 + segmentsOf(big2));      // the intent and the segments are written; the head is not
     CHECK_FALSE(trySave(store, key, big2));
     CHECK(load(store, key)->json == big);                              // the previous state still reads
@@ -581,7 +584,7 @@ TEST_CASE("table state: a key's model may be empty, its table may not", "[ui][st
     CHECK_THROWS(save(store, keyWithTable(""), "{}"));
     CHECK_THROWS(save(store, keyWithModel(std::string(257, 'm')), "{}"));
 }
-// Mutation: the quota checked against the new size alone (a replace of a large state is refused).
+// Mutation: the quota checked as n + b1, the replaced size not subtracted (a replace of a large state is refused).
 TEST_CASE("table state: a save over the quota is refused and the previous state still reads", "[ui][state]") {
     // registerTableState with maxBytesPerPerson = 10'000
     REQUIRE(save(store, keyA, docOf(6'000)).outcome == SaveOutcome::Saved);
@@ -610,7 +613,7 @@ TEST_CASE("table state: no quota, no usage entry", "[ui][state]") {
     REQUIRE(save(store, keyA, docOf(6'000)).outcome == SaveOutcome::Saved);
     CHECK_FALSE(prefs.has(usageKey(person)));
 }
-// Review: a save during a held load. Mutation: saving the change as a whole new document at once.
+// Review: a save during a held load. Mutation: the change saved over an empty document at once.
 TEST_CASE("table state: a change during a held load keeps the stored parts", "[ui][state]") {
     // gated store holding {"version":1,"filters":{"columns":{"name":{"include":[{"contains":"a"}]}}}}
     states.changed(key, docWithSort("name", Descending), StateParts::Sort);  h.advance(600ms);
@@ -623,7 +626,7 @@ TEST_CASE("table state: a change during a held load keeps the stored parts", "[u
 // Review Focus 3, the store's half. Mutation: merging the change into the stored text (the save still holds "junk").
 TEST_CASE("table state: a change over a stored document that does not read replaces it", "[ui][state]") {
     for (std::string const stored : {std::string{"{not json"}, std::string{R"({"version":2,"junk":true})"}}) {
-        GatedTableStateStore gated{h.owner, stored};  TableStates states{sharedOf(gated), &h.scheduler, 500ms};
+        GatedTableStateStore gated{h.owner, stored};  TableStates states{sharedOf(gated), h.owner, &h.scheduler, 500ms};
         gated.release();  REQUIRE(loaded(states, key));
         h.advance(600ms);  CHECK(gated.saves() == 0);                   // nothing is written until a change
         states.changed(key, docWithSort("name", Descending), StateParts::Sort);  h.advance(500ms);
@@ -635,7 +638,7 @@ TEST_CASE("table state: a change over a stored document that does not read repla
 }
 // Mutation: no call of the handler for a Refused save (`failures` stays empty).
 TEST_CASE("table state: a save that is refused reaches the session's handler and keeps the kept copy", "[ui][state]") {
-    GatedTableStateStore gated{h.owner, R"({"version":1})"};  TableStates states{sharedOf(gated), &h.scheduler, 500ms};
+    GatedTableStateStore gated{h.owner, R"({"version":1})"};  TableStates states{sharedOf(gated), h.owner, &h.scheduler, 500ms};
     std::vector<table::SaveResult> failures;
     states.onSaveFailed([&](table::TableStateKey const&, table::SaveResult const& result) { failures.push_back(result); });
     gated.release();  REQUIRE(loaded(states, key));
