@@ -336,6 +336,7 @@ void CustomScreenChrome::openSource(SourceMode mode, std::optional<WorkspaceTabI
     source->tab = tab;
     source->screenId = std::move(screenId);
     source->readOnly = readOnly;
+    source->opened = text;
     source->text = std::make_unique<reactive::Signal<std::string>>(*_options.runtime, std::move(text));
     source->refusal = std::make_unique<reactive::Signal<std::optional<ShownRefusal>>>(*_options.runtime, std::nullopt);
     source->status = std::make_unique<reactive::Signal<std::string>>(*_options.runtime, std::string{});
@@ -566,9 +567,19 @@ bool CustomScreenChrome::proposeDraft(WorkspaceTabId tab, std::string const& scr
         return false;
     }
     // A source view of this tab shows text the draft has replaced, and a check still running for it would mount over
-    // the draft when it answers.
-    if (_source != nullptr && _source->tab == tab) {
-        closeSourceLater();
+    // the draft when it answers; a new generation, taken now, drops that answer. A view the person has edited stays
+    // open with those edits, since closing it would throw them away unseen.
+    if (Source* const source = _source.get(); source != nullptr && source->tab == tab) {
+        source->generation = ++_lastSource;
+        if (source->text->peek() == source->opened) {
+            closeSourceLater();
+        } else {
+            _options.runtime->batch([source] {
+                source->busy->set(false);
+                source->status->set(std::string{});
+            });
+            notify("The assistant's draft is mounted. Your edits are still in the source view.", Tone::Warn);
+        }
     }
     return true;
 }
@@ -763,10 +774,8 @@ void CustomScreenChrome::save(WorkspaceTabId tab) {
         !canSave(*screenId)) {
         return;
     }
+    // `canSave` held, so the screen is listed.
     std::optional<CustomScreenSummary> const summary = summaryOf(*screenId);
-    if (!summary) {
-        return;
-    }
     std::string const& savedId = *screenId;
     std::string const title = summary->title;
     std::uint64_t const generation = state->generation;

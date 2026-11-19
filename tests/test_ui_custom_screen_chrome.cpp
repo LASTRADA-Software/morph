@@ -821,3 +821,41 @@ TEST_CASE("custom screen chrome: a proposal closes the tab's source view, whose 
     REQUIRE(rig.pump([&rig] { return !rig.find("Dialog", "source_dialog").has_value(); }));
     CHECK(rig.text("heading") == "Proposed");
 }
+
+// Mutation: skip the generation bump in proposeDraft (the Preview reply in flight mounts over the proposal).
+TEST_CASE("custom screen chrome: a proposal made while a Preview is checking is not mounted over by its reply",
+          "[ui][custom-screens][chrome][assistant]") {
+    ChromeRig rig;
+    rig.open("notes.edit", note(1));
+    rig.click("source_button_notes.edit");
+    rig.type("source_text", screens_test::replaced(rig.field("source_text"), "\"Edit note\"", "\"By hand\""));
+    rig.click("source_preview");
+    REQUIRE(rig.chrome->proposeDraft(rig.tabAt(0), "notes.edit", editedBy("Proposed")));
+    // A round trip after the proposal: the Preview's check was sent before it and answers first.
+    std::optional<bool> barrier;
+    rig.sync->check("notes.edit", std::string{kEdit},
+                    [&barrier](auto const& answered) { barrier = answered.has_value(); });
+    REQUIRE(rig.pump([&barrier] { return barrier.has_value(); }));
+    CHECK(rig.pump([&rig] { return rig.text("heading") == "By hand"; }, std::chrono::milliseconds{200}) == false);
+    CHECK(rig.text("heading") == "Proposed");
+}
+
+// Mutation: close the source view whatever it holds (the person's unpreviewed edits are thrown away).
+TEST_CASE("custom screen chrome: a proposal keeps a source view with unpreviewed edits and says so",
+          "[ui][custom-screens][chrome][assistant]") {
+    ChromeRig rig;
+    rig.open("notes.edit", note(1));
+    rig.click("source_button_notes.edit");
+    std::string const edited = screens_test::replaced(rig.field("source_text"), "\"Edit note\"", "\"By hand\"");
+    rig.type("source_text", edited);
+    REQUIRE(rig.chrome->proposeDraft(rig.tabAt(0), "notes.edit", editedBy("Proposed")));
+    std::optional<bool> barrier;
+    rig.sync->check("notes.edit", std::string{kEdit},
+                    [&barrier](auto const& answered) { barrier = answered.has_value(); });
+    REQUIRE(rig.pump([&barrier] { return barrier.has_value(); }));
+    CHECK(rig.text("heading") == "Proposed");
+    CHECK(rig.find("Dialog", "source_dialog").has_value());
+    CHECK(rig.field("source_text") == edited);
+    REQUIRE_FALSE(rig.notices.empty());
+    CHECK(rig.notices.back().contains("source view"));
+}

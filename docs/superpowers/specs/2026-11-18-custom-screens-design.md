@@ -383,7 +383,7 @@ conversation keeps of its calls.
 |---|---|
 | The store refuses a save or a delete | The store's reason, in the draft's bar or the source view; the draft stays open |
 | A stored screen fails the checks today | The navigator's badge, and **Open as** marking it broken; opening it opens its source, where **Check and save** saves a fix once the server's `check` passes, since a broken screen cannot be mounted to preview |
-| A draft does not load in the client | The refusal in the source view, or a chat message for an assistant draft; the window is unchanged |
+| A draft does not load in the client | The refusal in the source view, or a warning toast for an assistant draft; the window is unchanged |
 | The server's `check` refuses what the client loaded | The server's refusal, in the source view |
 | The assistant runs out of proposals | A chat message with the last refusal; the window is unchanged |
 | A screen is over `maxProposalBytes` | A chat message that the assistant cannot edit this screen; **Source** still works |

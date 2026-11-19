@@ -94,6 +94,8 @@ public:
 
     /// @brief The workspace whose tabs the chrome is for. Call it with null before that workspace goes, and with the
     ///        new one once it is built: the overlays close, and the tabs' state is forgotten with a new workspace.
+    ///        Call it before any tab opens: it clears the per-tab state, which a tab already open would lose (a
+    ///        draft's text included).
     /// @param model The workspace's model, or null. Borrowed while attached.
     void attach(WorkspaceModel* model);
 
@@ -223,6 +225,8 @@ private:
         std::optional<WorkspaceTabId> tab;
         std::string screenId;
         bool readOnly = false;
+        // The text the view opened with: what differs from it is the person's own edit.
+        std::string opened;
         std::unique_ptr<reactive::Signal<std::string>> text;
         std::unique_ptr<reactive::Signal<std::optional<ShownRefusal>>> refusal;
         std::unique_ptr<reactive::Signal<std::string>> status;
