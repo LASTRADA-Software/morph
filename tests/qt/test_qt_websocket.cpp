@@ -1224,7 +1224,7 @@ TEST_CASE("morph::qt::QtWebSocketBackend: a request or private bind after a refu
           "[qt][ws][lifecycle][disconnect]") {
     ensureApp();
     // Port 1 is reserved and never listening — the first open is refused.
-    QUrl url{QString("ws://127.0.0.1:1")};
+    QUrl const url{QString("ws://127.0.0.1:1")};
     morph::qt::QtWebSocketBackend backend{url};
     REQUIRE_FALSE(backend.waitForConnected(200));
     // Let the refusal's disconnect settle before filing anything.
@@ -1244,7 +1244,7 @@ TEST_CASE("morph::qt::QtWebSocketBackend: a request or private bind after a refu
 TEST_CASE("morph::qt::QtWebSocketBackend: a request or private bind filed before a refused first open rejects",
           "[qt][ws][lifecycle][disconnect]") {
     ensureApp();
-    QUrl url{QString("ws://127.0.0.1:1")};
+    QUrl const url{QString("ws://127.0.0.1:1")};
     morph::qt::QtWebSocketBackend backend{url};
 
     morph::exec::MainThreadExecutor cbExec;

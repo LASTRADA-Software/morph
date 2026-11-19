@@ -405,7 +405,7 @@ TEST_CASE("the_conversation_keeps_the_hash_of_a_large_patch_not_its_text", "[cha
 // Mutation: rewrite every call, or keep none as written.
 TEST_CASE("the_conversation_keeps_a_small_patch_as_written", "[chat][propose]") {
     Rig rig;
-    auto const operations = R"([{"op":"replace","path":"/view/children/0/text","value":"SMALL-PATCH-TEXT"}])";
+    char const* const operations = R"([{"op":"replace","path":"/view/children/0/text","value":"SMALL-PATCH-TEXT"}])";
     rig.fake->script(patching(operations));
     rig.fake->script(said("done"));
     REQUIRE(rig.finished(rig.start("lims.base")).draft.has_value());
@@ -608,7 +608,7 @@ TEST_CASE("every_offered_tools_input_schema_is_an_object_with_type_object", "[ch
         INFO(tool.name);
         auto const* const schema = std::get_if<ui::Json::object_t>(&tool.inputSchema.data);
         REQUIRE(schema != nullptr);
-        auto const type = schema->find("type");
+        ui::Json::object_t::const_iterator const type = schema->find("type");
         REQUIRE(type != schema->end());
         auto const* const name = std::get_if<std::string>(&type->second.data);
         REQUIRE(name != nullptr);
@@ -628,7 +628,7 @@ std::string rowPointer(int row) { return "/view/children/" + std::to_string(row 
 TEST_CASE("a_document_over_the_inline_bound_is_described_by_an_outline_not_included", "[chat][propose]") {
     Rig rig;
     auto const large = largeScreen("lims.base", 1500);
-    REQUIRE(large.size() > 64 * 1024);
+    REQUIRE(large.size() > std::size_t{64} * 1024);
     rig.fake->script(said("ok"));
     auto const state = rig.finished(rig.start("lims.base", large));
     REQUIRE(state.status == chat::TurnStatus::Done);
@@ -639,7 +639,7 @@ TEST_CASE("a_document_over_the_inline_bound_is_described_by_an_outline_not_inclu
     CHECK_FALSE(request.system.contains("filler row"));
     CHECK(request.system.contains("/view/children"));
     CHECK(request.system.contains("too long to show here"));
-    CHECK(request.system.size() < 32 * 1024);
+    CHECK(request.system.size() < std::size_t{32} * 1024);
     for (std::string_view const name : {chat::kScreenOutlineTool, chat::kScreenFindTool, chat::kScreenNodeTool}) {
         CHECK(std::ranges::any_of(request.tools, [&](chat::ToolSpec const& tool) { return tool.name == name; }));
     }
@@ -650,7 +650,7 @@ TEST_CASE("a_document_over_the_inline_bound_is_described_by_an_outline_not_inclu
 TEST_CASE("the_assistant_finds_reads_and_patches_a_screen_over_64_kib", "[chat][propose]") {
     Rig rig;
     auto const large = largeScreen("lims.base", 1500);
-    REQUIRE(large.size() > 64 * 1024);
+    REQUIRE(large.size() > std::size_t{64} * 1024);
     auto const pointer = rowPointer(1200);
     rig.fake->script(calling(std::string{chat::kScreenOutlineTool}, R"({"pointer":"/view","depth":1})", "c1"));
     rig.fake->script(calling(std::string{chat::kScreenFindTool}, R"({"text":"ROW-1200"})", "c2"));
@@ -738,8 +738,8 @@ TEST_CASE("the_proposal_bound_limits_the_patch_and_the_draft_bound_the_document"
     chat::ChatLimits limits;
     limits.maxProposalBytes = 200;
     Rig rig{limits};
-    auto const long_ = std::string(300, 'y');
-    rig.fake->script(patching(R"([{"op":"replace","path":"/view/children/0/text","value":")" + long_ + R"("}])"));
+    auto const longText = std::string(300, 'y');
+    rig.fake->script(patching(R"([{"op":"replace","path":"/view/children/0/text","value":")" + longText + R"("}])"));
     rig.fake->script(said("sorry"));
     auto const state = rig.finished(rig.start("lims.base"));
     CHECK_FALSE(state.draft.has_value());
@@ -748,7 +748,8 @@ TEST_CASE("the_proposal_bound_limits_the_patch_and_the_draft_bound_the_document"
     chat::ChatLimits tight;
     tight.maxDraftBytes = screens_test::baseScreen("lims.base").size() + 20;
     Rig second{tight};
-    second.fake->script(patching(R"([{"op":"replace","path":"/view/children/0/text","value":")" + long_ + R"("}])"));
+    second.fake->script(
+        patching(R"([{"op":"replace","path":"/view/children/0/text","value":")" + longText + R"("}])"));
     second.fake->script(said("sorry"));
     auto const other = second.finished(second.start("lims.base"));
     CHECK_FALSE(other.draft.has_value());
@@ -770,7 +771,7 @@ TEST_CASE("a_read_tools_answer_is_capped_and_a_bad_pointer_is_an_error", "[chat]
     REQUIRE(requests.size() == 5);
     for (std::size_t request = 1; request <= 3; ++request) {
         INFO(request);
-        CHECK(lastResult(requests.at(request)).size() <= 12 * 1024 + 256);
+        CHECK(lastResult(requests.at(request)).size() <= (std::size_t{12} * 1024) + 256);
     }
     CHECK(lastResult(requests.at(3)).contains("1500 nodes match"));
     CHECK(lastResult(requests.at(3)).contains("more not shown"));

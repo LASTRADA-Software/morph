@@ -259,15 +259,23 @@ public:
     std::string print() {
         std::size_t const start = skipSpace(_text, 0);
         _out.reserve(_text.size());
-        write(start, 0, 0, 0);
+        write(start, {.indent = 0, .column = 0, .depth = 0});
         return std::move(_out);
     }
 
 private:
-    // @p pos starts a value. It is written at @p column on the line it starts, nested @p indent columns in. Answers
-    // where the value ends in the text.
+    // Where a value is written: nested @p indent columns in, starting at @p column on its line, @p depth containers
+    // down.
+    struct Placement {
+        std::size_t indent;
+        std::size_t column;
+        std::size_t depth;
+    };
+
+    // @p pos starts a value, written at @p where. Answers where the value ends in the text.
     // NOLINTNEXTLINE(misc-no-recursion): bounded by kMaxJsonDepth, which prettyJson checks first.
-    std::size_t write(std::size_t pos, std::size_t indent, std::size_t column, std::size_t depth) {
+    std::size_t write(std::size_t pos, Placement const& where) {
+        auto const [indent, column, depth] = where;
         char const first = _text.at(pos);
         if (first != '{' && first != '[') {
             std::size_t const end = skipValue(_text, pos, depth).value_or(_text.size());
@@ -283,30 +291,30 @@ private:
         }
         char const close = first == '{' ? '}' : ']';
         _out.push_back(first);
-        std::size_t at = skipSpace(_text, pos + 1);
+        std::size_t cursor = skipSpace(_text, pos + 1);
         bool firstMember = true;
-        while (at < _text.size() && _text.at(at) != close) {
+        while (cursor < _text.size() && _text.at(cursor) != close) {
             _out += firstMember ? "\n" : ",\n";
             firstMember = false;
             std::size_t const inner = indent + kSourceIndent;
             _out.append(inner, ' ');
             std::size_t shown = inner;
             if (first == '{') {
-                std::size_t const nameEnd = scanString(_text, at, nullptr).value_or(_text.size());
-                _out.append(_text.substr(at, nameEnd - at));
+                std::size_t const nameEnd = scanString(_text, cursor, nullptr).value_or(_text.size());
+                _out.append(_text.substr(cursor, nameEnd - cursor));
                 _out += ": ";
-                shown += nameEnd - at + 2;
-                at = skipSpace(_text, skipSpace(_text, nameEnd) + 1);
+                shown += nameEnd - cursor + 2;
+                cursor = skipSpace(_text, skipSpace(_text, nameEnd) + 1);
             }
-            at = skipSpace(_text, write(at, inner, shown, depth + 1));
-            if (at < _text.size() && _text.at(at) == ',') {
-                at = skipSpace(_text, at + 1);
+            cursor = skipSpace(_text, write(cursor, {.indent = inner, .column = shown, .depth = depth + 1}));
+            if (cursor < _text.size() && _text.at(cursor) == ',') {
+                cursor = skipSpace(_text, cursor + 1);
             }
         }
         _out.push_back('\n');
         _out.append(indent, ' ');
         _out.push_back(close);
-        return at + 1;
+        return cursor + 1;
     }
 
     // The value at @p pos on one line, `, ` and `: ` between its parts, appended to @p line; where it ends in the
@@ -322,30 +330,30 @@ private:
         }
         char const close = first == '{' ? '}' : ']';
         line.push_back(first);
-        std::size_t at = skipSpace(_text, pos + 1);
+        std::size_t cursor = skipSpace(_text, pos + 1);
         bool firstMember = true;
-        while (at < _text.size() && _text.at(at) != close) {
+        while (cursor < _text.size() && _text.at(cursor) != close) {
             if (!firstMember) {
                 line += ", ";
             }
             firstMember = false;
             if (first == '{') {
-                std::size_t const nameEnd = scanString(_text, at, nullptr).value_or(_text.size());
-                line.append(_text.substr(at, nameEnd - at));
+                std::size_t const nameEnd = scanString(_text, cursor, nullptr).value_or(_text.size());
+                line.append(_text.substr(cursor, nameEnd - cursor));
                 line += ": ";
-                at = skipSpace(_text, skipSpace(_text, nameEnd) + 1);
+                cursor = skipSpace(_text, skipSpace(_text, nameEnd) + 1);
             }
-            std::optional<std::size_t> const end = oneLine(at, line, room, depth + 1);
+            std::optional<std::size_t> const end = oneLine(cursor, line, room, depth + 1);
             if (!end || line.size() > room) {
                 return std::nullopt;
             }
-            at = skipSpace(_text, *end);
-            if (at < _text.size() && _text.at(at) == ',') {
-                at = skipSpace(_text, at + 1);
+            cursor = skipSpace(_text, *end);
+            if (cursor < _text.size() && _text.at(cursor) == ',') {
+                cursor = skipSpace(_text, cursor + 1);
             }
         }
         line.push_back(close);
-        return line.size() <= room ? std::optional<std::size_t>{at + 1} : std::nullopt;
+        return line.size() <= room ? std::optional<std::size_t>{cursor + 1} : std::nullopt;
     }
 
     std::string_view _text;

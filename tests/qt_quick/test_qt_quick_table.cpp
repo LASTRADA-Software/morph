@@ -1879,6 +1879,7 @@ TEST_CASE("qt_quick table: a virtualized table realizes its viewport at mount an
     Scene scene;
     std::vector<VirtualRow> const many = [] {
         std::vector<VirtualRow> rows;
+        rows.reserve(2000);
         for (std::int64_t i = 0; i < 2000; ++i) {
             rows.push_back(VirtualRow{.id = i, .name = "row-" + std::to_string(i)});
         }
@@ -1886,7 +1887,7 @@ TEST_CASE("qt_quick table: a virtualized table realizes its viewport at mount an
     }();
     ui::Mounted const mounted{scene.runtime(), scene.backend(),
                               ui::table<VirtualRow>(
-                                  {{.label = "Name"}}, [&many] { return many; },
+                                  {{.label = "Name"}}, [&many] -> std::vector<VirtualRow> const& { return many; },
                                   [](VirtualRow const& row) { return ui::Key{row.id}; }, virtualRowCell,
                                   {.virtualize = {.threshold = 5, .overscan = 1},
                                    .common = {.layout = {.height = ui::Sizing::stretch(1)}}})};
@@ -1913,6 +1914,7 @@ TEST_CASE("qt_quick table: rows that arrive after the mount fill the viewport wi
     Scene scene;
     auto const make = [](std::int64_t count) {
         std::vector<VirtualRow> rows;
+        rows.reserve(static_cast<std::size_t>(count));
         for (std::int64_t i = 0; i < count; ++i) {
             rows.push_back(VirtualRow{.id = i, .name = "row-" + std::to_string(i)});
         }
@@ -1944,6 +1946,7 @@ namespace {
 // A row 3 in 4 of whose names run to five lines, so the rows' heights differ.
 std::vector<VirtualRow> mixedRows(std::int64_t count) {
     std::vector<VirtualRow> rows;
+    rows.reserve(static_cast<std::size_t>(count));
     for (std::int64_t i = 0; i < count; ++i) {
         rows.push_back(VirtualRow{.id = i, .name = i % 4 == 0 ? "row\nwith\nfive\nlines\nhere" : "row"});
     }
@@ -1959,7 +1962,7 @@ TEST_CASE("qt_quick table: a scrolling virtualized table of mixed row heights mo
     std::vector<VirtualRow> const many = mixedRows(600);
     ui::Mounted const mounted{scene.runtime(), scene.backend(),
                               ui::table<VirtualRow>(
-                                  {{.label = "Name"}}, [&many] { return many; },
+                                  {{.label = "Name"}}, [&many] -> std::vector<VirtualRow> const& { return many; },
                                   [](VirtualRow const& row) { return ui::Key{row.id}; }, virtualRowCell,
                                   {.virtualize = {.threshold = 5, .overscan = 3},
                                    .common = {.layout = {.height = ui::Sizing::stretch(1)}}})};
@@ -2008,7 +2011,7 @@ TEST_CASE("qt_quick table: a virtualized table scrolls with a vertical bar sized
     std::vector<VirtualRow> const many = mixedRows(600);
     ui::Mounted const mounted{scene.runtime(), scene.backend(),
                               ui::table<VirtualRow>(
-                                  {{.label = "Name"}}, [&many] { return many; },
+                                  {{.label = "Name"}}, [&many] -> std::vector<VirtualRow> const& { return many; },
                                   [](VirtualRow const& row) { return ui::Key{row.id}; }, virtualRowCell,
                                   {.virtualize = {.threshold = 5, .overscan = 3},
                                    .common = {.layout = {.height = ui::Sizing::stretch(1)}}})};
@@ -2019,7 +2022,7 @@ TEST_CASE("qt_quick table: a virtualized table scrolls with a vertical bar sized
     auto const bars = Scene::itemsOf(*flick, "QQuickScrollBar");
     INFO("scroll bars under the flickable: " << bars.size());
     REQUIRE(bars.size() == 1);
-    QQuickItem* const vertical = bars.front();
+    QQuickItem const* const vertical = bars.front();
     CHECK(vertical->isVisible());
     CHECK(vertical->property("orientation").toInt() == Qt::Vertical);
     CHECK(vertical->property("size").toReal() < 0.5);
@@ -2027,15 +2030,15 @@ TEST_CASE("qt_quick table: a virtualized table scrolls with a vertical bar sized
 
     // A table that is not virtualized has no vertical bar: its ancestor scrolls.
     std::vector<VirtualRow> const few = mixedRows(3);
-    ui::Mounted const small{
-        scene.runtime(), scene.backend(),
-        ui::table<VirtualRow>(
-            {{.label = "Name"}}, [&few] { return few; }, [](VirtualRow const& row) { return ui::Key{row.id}; },
-            virtualRowCell, {.virtualize = {.threshold = 5, .overscan = 3}})};
+    ui::Mounted const small{scene.runtime(), scene.backend(),
+                            ui::table<VirtualRow>(
+                                {{.label = "Name"}}, [&few] -> std::vector<VirtualRow> const& { return few; },
+                                [](VirtualRow const& row) { return ui::Key{row.id}; }, virtualRowCell,
+                                {.virtualize = {.threshold = 5, .overscan = 3}})};
     scene.settle();
     auto* const smallFlick = Scene::itemOf(small.root()).findChild<QQuickItem*>(QStringLiteral("flick"));
     REQUIRE(smallFlick != nullptr);
-    for (QQuickItem* const candidate : Scene::itemsOf(*smallFlick, "QQuickScrollBar")) {
+    for (QQuickItem const* const candidate : Scene::itemsOf(*smallFlick, "QQuickScrollBar")) {
         CHECK_FALSE(candidate->isVisible());
     }
 }

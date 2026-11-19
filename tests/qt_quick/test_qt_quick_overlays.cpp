@@ -1317,13 +1317,13 @@ TEST_CASE("qt_quick menu: a trigger draws its avatar before the label and its ch
 
 namespace {
 // The scroll bars of the dialog's body, by orientation.
-std::map<int, QQuickItem*> bodyBarsOf(QQuickItem& dialogItem) {
-    QObject* const popup = popupOf(dialogItem);
+std::map<int, QQuickItem const*> bodyBarsOf(QQuickItem& dialogItem) {
+    QObject const* const popup = popupOf(dialogItem);
     REQUIRE(popup != nullptr);
     auto* const contentItem = popup->property("contentItem").value<QQuickItem*>();
     REQUIRE(contentItem != nullptr);
-    std::map<int, QQuickItem*> bars;
-    for (QQuickItem* const bar : Scene::itemsOf(*contentItem, "QQuickScrollBar")) {
+    std::map<int, QQuickItem const*> bars;
+    for (QQuickItem const* const bar : Scene::itemsOf(*contentItem, "QQuickScrollBar")) {
         bars.emplace(bar->property("orientation").toInt(), bar);
     }
     return bars;

@@ -501,6 +501,7 @@ namespace {
 
 std::vector<Item> itemsNamed(std::int64_t count) {
     std::vector<Item> rows;
+    rows.reserve(static_cast<std::size_t>(count));
     for (std::int64_t i = 0; i < count; ++i) {
         rows.push_back(Item{.id = i, .name = "row-" + std::to_string(i)});
     }
