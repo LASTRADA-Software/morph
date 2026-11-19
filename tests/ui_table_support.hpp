@@ -1899,7 +1899,7 @@ inline table::UnitInfo unitOf(Screen& screen, std::string_view id);
 /// @param id     The table's element id.
 /// @return Its `WindowRows`.
 inline WindowRows& windowOf(Screen& screen, std::string_view id = "list") {
-    auto* const rows = dynamic_cast<WindowRows*>(ScreenProbe::element(screen, id).tableRows.get());
+    WindowRows* const rows = ScreenProbe::element(screen, id).tableWindow.get();
     REQUIRE(rows != nullptr);
     return *rows;
 }

@@ -1985,15 +1985,22 @@ struct JsonDecimal {
     return page;
 }
 
+/// @brief The most units a window lists for the members of its replies that no description lists. Each is a
+///        dimension of its own that the description and its registry keep for the window's life, and one more
+///        is added per unit a reply names; a reply naming more is not describing quantities, and its further
+///        units stay unknown, their cells invalid.
+inline constexpr std::size_t kMaxUnlistedUnits = 64;
+
 /// @brief The units the `Measure` columns' members of @p rows name that @p units does not have, each its own
 ///        canonical unit in a dimension named by its id, in the order first met.
 /// @param rows        The rows.
 /// @param description The description: its `Measure` columns.
 /// @param units       The registry the description's units are in; null has none.
-/// @return The units to list.
+/// @param room        How many more units may be listed: the rest stay unknown.
+/// @return The units to list, at most @p room.
 [[nodiscard]] inline std::vector<table::UnitInfo> unlistedUnits(std::span<glz::generic_u64 const> rows,
                                                                 table::TableDescription const& description,
-                                                                table::UnitRegistry const* units) {
+                                                                table::UnitRegistry const* units, std::size_t room) {
     std::vector<table::UnitInfo> out;
     for (auto const& column : description.columns) {
         if (column.info.kind != table::ColumnKind::Measure) {
@@ -2007,7 +2014,7 @@ struct JsonDecimal {
                 continue;
             }
             auto const decimal = jsonDecimal((*found)->second);
-            if (!decimal || decimal->unit == nullptr || decimal->unit->empty() ||
+            if (out.size() >= room || !decimal || decimal->unit == nullptr || decimal->unit->empty() ||
                 (units != nullptr && units->find(*decimal->unit)) ||
                 std::ranges::contains(out, *decimal->unit, &table::UnitInfo::id)) {
                 continue;
@@ -2278,6 +2285,10 @@ public:
     ///        nothing of it; this is how a status line learns of it. Called after the rows took the event.
     /// @param handler The receiver; empty to stop receiving.
     void onStatus(std::function<void()> handler) { _onStatus = std::move(handler); }
+
+    /// @brief The query's filter.
+    /// @return It.
+    [[nodiscard]] table::FilterSpec const& filter() const noexcept { return _filter; }
 
     /// @brief Whether the kinds of `WindowRowsOptions::inferKinds` still wait for the first reply with rows: until
     ///        then those columns hold a `Text` placeholder, which a filter must not be compiled against.
@@ -2932,12 +2943,15 @@ private:
 
     // A unit a `Measure` column's member names that the description does not list is its own canonical unit, in a
     // dimension of its own named by its id, as an expression reads a unit missing from the screen's table. It is
-    // added after the units listed, so the numbers held cells carry keep their meaning.
+    // added after the units listed, so the numbers held cells carry keep their meaning; at most
+    // `detail::kMaxUnlistedUnits` are, the rest staying unknown.
     void listUnits(std::span<glz::generic_u64 const> rows) {
-        auto const added = detail::unlistedUnits(rows, *_description, _units.get());
+        auto const added = detail::unlistedUnits(rows, *_description, _units.get(),
+                                                 detail::kMaxUnlistedUnits - std::min(_unlisted, detail::kMaxUnlistedUnits));
         if (added.empty()) {
             return;
         }
+        _unlisted += added.size();
         _description->units.insert(_description->units.end(), added.begin(), added.end());
         auto registry = table::registryOf(*_description);
         _units = registry ? std::move(*registry) : nullptr;
@@ -3273,6 +3287,7 @@ private:
     bool _retry = false;
     std::vector<WatchHolder> _watches;
     std::shared_ptr<void> _reconnect;
+    std::size_t _unlisted = 0;
     std::function<void()> _onInferred;
     std::optional<table::TableError> _error;
     std::int64_t _first = 0;

@@ -2581,3 +2581,100 @@ TEST_CASE("model table over an action: a unit no one lists is its own canonical 
     CHECK(measure->unit != table::kUnknownUnit);
     CHECK(unitOf(*screen, "furlong").dimension == "furlong");
 }
+
+
+namespace {
+
+/// `kActionTable` with the literal filter `ratio > 1`.
+std::string literalRatioFilter() {
+    return withTableKey(kActionTable, R"("filters":{"columns":{"ratio":{"include":[{"gt":"1"}]}}})");
+}
+
+/// The first reply of `kActionTable`: `ratio` a Number column, `name` a Text one.
+constexpr std::string_view kRatioRows =
+    R"({"rows":[{"id":1,"name":"a","ratio":0.5},{"id":2,"name":"b","ratio":2}],"total":2})";
+
+/// A filter of one column's one entry.
+table::FilterSpec filterOf(std::string const& column, table::FilterEntry entry) {
+    table::FilterSpec filter;
+    filter.columns[column].include.push_back(std::move(entry));
+    return filter;
+}
+
+}  // namespace
+
+// Mutations: the literal filter compiled against the placeholder kinds (refused unseen: no second query); the bound
+// one likewise (refused and reported: no second query).
+TEST_CASE("model table over an action: a literal or bound filter on an inferred column waits for its kind",
+          "[ui][table]") {
+    SECTION("literal") {
+        TableHarness h;  addPageSamples(h);
+        auto screen = h.mount(literalRatioFilter());
+        REQUIRE(h.dispatcher.count("Lims_PageSamples") == 1);
+        CHECK_FALSE(lastBodyHas(h, "Lims_PageSamples", R"("gt")"));
+        h.reply(h.dispatcher.last("Lims_PageSamples"), std::string{kRatioRows});
+        REQUIRE(h.dispatcher.count("Lims_PageSamples") == 2);
+        CHECK(lastBodyHas(h, "Lims_PageSamples", R"({"gt":"1"})"));
+        CHECK(h.diagnostics.empty());
+    }
+    SECTION("bound") {
+        TableHarness h;  addPageSamples(h);
+        std::string text = withTableKey(kActionTable, R"("filters":{"ref":"f"})");
+        text.replace(text.find(R"("view":)"), 7,
+                     R"("state":{"f":{"init":{"lit":{"columns":{"ratio":{"include":[{"gt":"1"}]}}}}}},"view":)");
+        auto screen = h.mount(text);
+        REQUIRE(h.dispatcher.count("Lims_PageSamples") == 1);
+        CHECK_FALSE(lastBodyHas(h, "Lims_PageSamples", R"("gt")"));
+        h.reply(h.dispatcher.last("Lims_PageSamples"), std::string{kRatioRows});
+        REQUIRE(h.dispatcher.count("Lims_PageSamples") == 2);
+        CHECK(lastBodyHas(h, "Lims_PageSamples", R"({"gt":"1"})"));
+        CHECK(h.diagnostics.empty());
+    }
+}
+
+// Mutation: the held literal filter applied over the user's filter (a third query, filtering `ratio`: 3 == 2).
+TEST_CASE("model table over an action: the user's filter before the first reply survives it", "[ui][table]") {
+    TableHarness h;  addPageSamples(h);
+    auto screen = h.mount(literalRatioFilter());
+    REQUIRE(elementOf(*screen, "list").tableRows->setFilter(filterOf("name", table::FilterEntry{.contains = "a"})));
+    h.settle();
+    REQUIRE(h.dispatcher.count("Lims_PageSamples") == 2);                     // the user's filter is a new query
+    h.reply(h.dispatcher.last("Lims_PageSamples"), std::string{kRatioRows});
+    CHECK(h.dispatcher.count("Lims_PageSamples") == 2);
+    CHECK(lastBodyHas(h, "Lims_PageSamples", R"({"contains":"a"})"));
+    CHECK(windowOf(*screen).filter() == filterOf("name", table::FilterEntry{.contains = "a"}));
+}
+
+// Mutation: the user's filter not fitted again once the kinds are fixed (no report, and `contains` stays on the
+// Number column: 2 == 3).
+TEST_CASE("model table over an action: a user's filter the inferred kind refuses is reported and dropped",
+          "[ui][table]") {
+    TableHarness h;  addPageSamples(h);
+    auto screen = h.mount(kActionTable);
+    REQUIRE(elementOf(*screen, "list").tableRows->setFilter(filterOf("ratio", table::FilterEntry{.contains = "5"})));
+    h.settle();
+    h.reply(h.dispatcher.last("Lims_PageSamples"), std::string{kRatioRows});
+    CHECK(diagnosticsMentioning(h, "the filter on `ratio` is not applied: it does not apply to the column's kind") == 1);
+    CHECK(h.dispatcher.count("Lims_PageSamples") == 3);
+    CHECK(windowOf(*screen).filter() == table::FilterSpec{});
+}
+
+// Mutations: each column's units in a dimension of its own (mg is not g's: "kg" == "g"); a factor of zero listed
+// (no report).
+TEST_CASE("model table over an action: columns that share a unit share its dimension in any order",
+          "[ui][table]") {
+    TableHarness h;
+    addAction(h, "Lims_WeighSamples", std::string{kQuerySchema}, ActionInfo{.modelType = "Lims_SampleModel"});
+    addView(h, "Lims_WeighSamples",
+            R"({"v-kind":"collection","v-query":"Lims_WeighSamples","v-rowKey":"id","v-columns":[)"
+            R"({"field":"id","label":"ID","kind":"integer"},)"
+            R"({"field":"small","kind":"quantity","ExtUnits":{"unitAscii":"g"},)"
+            R"("x-unitAlternatives":[{"id":"kg","num":1000,"den":1},{"id":"bad","num":0,"den":1}]},)"
+            R"({"field":"large","kind":"quantity","ExtUnits":{"unitAscii":"kg"},)"
+            R"("x-unitAlternatives":[{"id":"mg","num":1,"den":1000000}]}]})");
+    auto screen = h.mount(withTableKey(kActionTableNoColumns, R"("action":"Lims_WeighSamples")"));
+    CHECK(unitOf(*screen, "mg").dimension == unitOf(*screen, "g").dimension);
+    CHECK(unitOf(*screen, "mg").toBase ==
+          morph::math::Rational{morph::math::Numerator{1}, morph::math::Denominator{1000}, morph::math::DecimalPlaces{3}});
+    CHECK(diagnosticsMentioning(h, "the unit `bad` has a factor of zero or less") == 1);
+}

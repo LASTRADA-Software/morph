@@ -1208,6 +1208,8 @@ struct MountOptions {
     Screen const* keepStateOf = nullptr;
 };
 
+class WindowRows;
+
 namespace detail {
 
 /// @brief A name bound for the expressions of one place: a command's `event`, a step's `as`, `result` in a
@@ -1355,8 +1357,11 @@ struct MORPH_API ElementState {
     /// @brief A table's rows as it shows them, in its engine's order, and the page of them it shows: what every
     ///        reader of the table's element values reads; `nullptr` for a table without `rows`.
     reactive::Computed<TableView>* view = nullptr;
-    /// @brief A table over `rows`: the `EngineRows` that orders its rows; null for any other element.
+    /// @brief The rows a table's mount reads: a table over `rows` its `EngineRows`, a model-backed table the rows
+    ///        over its window that tell the element of each change and gesture; null for any other element.
     std::shared_ptr<TableRows> tableRows;
+    /// @brief A model-backed table's window over the server's pages; null for any other element.
+    std::shared_ptr<WindowRows> tableWindow;
     /// @brief A `form`'s session (spec 2), made when the element is wired; null when its schema is unknown.
     std::unique_ptr<forms::FormSession> form;
     /// @brief A `collection`'s session (spec 2), made when the element is wired; null when its view document is

@@ -621,15 +621,24 @@ keeps its operands' 0 places and still fills 0.29 of a bar.
   (`Session::onReconnected` for a window that watches none). A keyed refetch sends `keys` in the query member; a
   reply with no `indices` for it drops the window's pages and costs a page refetch. **Units.** A `v-columns`
   entry's `ExtUnits` is a unit (`unitAscii` its id, `unitUnicode` its symbol, `x-decimalPlaces` its places) and
-  each `x-unitAlternatives` entry another of its dimension (`num`/`den` its factor to the first), which the
-  description lists; such a `quantity` column is read as `Measure`. A unit a reply's member names that the
-  description does not list is its own canonical unit, in a dimension of its own, as an expression reads a unit
-  missing from the screen's table, so the cell is a measure in that unit and not an invalid one. **Filters on
+  each `x-unitAlternatives` entry another of its dimension (`num`/`den` its factor to the first, 1 when absent; a
+  factor of zero or less is reported and the unit left out), which the description lists; such a `quantity` column
+  is read as `Measure`. Columns that share a unit share its dimension whatever their order: a column one of whose
+  units is listed already joins that unit's dimension, its factors scaled through it, and a unit two columns
+  declare differently is reported and kept as first listed. A unit a reply's member names that the description
+  does not list is its own canonical unit, in a dimension of its own, as an expression reads a unit missing from
+  the screen's table, so the cell is a measure in that unit and not an invalid one; a window lists at most
+  `kMaxUnlistedUnits` (64) such units, the rest staying unknown and their cells invalid. **Filters on
   inferred columns.** Until the first reply has fixed the inferred kinds, a filter (stored, literal or bound) is
   held, not compiled against the placeholder: the first query goes without it, and once the kinds are fixed the
   stored filter is fitted to them (each filter it drops is reported once, "the stored filter on `<id>` is not
   applied: it does not apply to the column's kind") and the document's is set, or reported as refused; either is a
-  second query. Persisted state is kept as a model's table's, its `table` the action's id. A node the loader would
+  second query, so the first page drawn is unfiltered until the second reply arrives. A filter the user set through
+  the table meanwhile wins over a held literal one, and any gesture over a held stored one, as over a late stored
+  state; a bound filter is the document's and is applied. A filter the rows hold that was compiled against the
+  placeholders, the user's among them, is fitted again to the inferred kinds, each column filter they refuse
+  reported ("the filter on `<id>` is not applied: …") and dropped. A stored state set after the kinds are fixed
+  replaces a filter still held. Persisted state is kept as a model's table's, its `table` the action's id. A node the loader would
   refuse (no member marked `x-table`, or neither `columns` nor a view document) is reported at the table when a
   catalog that lacks the lookup let it load, and a `key` that is not one row field is reported and the view
   document's `v-rowKey`, or `id`, is used.
