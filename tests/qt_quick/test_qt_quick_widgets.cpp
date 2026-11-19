@@ -3632,3 +3632,51 @@ TEST_CASE("qt_quick widgets: a step's detail hangs under its label, shows only w
           QStringLiteral("Received, A. Weber, 12 November 2026 at 09:14 in the receiving bay, done"));
     QAccessible::setActive(wasActive);
 }
+
+// Mutation: size the room under a required field's control from its messages alone.
+TEST_CASE("qt_quick widgets: a required field's error appears without moving what is below", "[qt_quick]") {
+    Scene scene;
+    scene.window().resize(400, 400);
+    auto const column = scene.backend().createStack(nullptr, ui::Axis::Vertical);
+    auto const input = scene.backend().createTextInput(column.get(), ui::TextInputMode::SingleLine);
+    input->setCaption("Name", true);
+    input->setRequired(true);
+    input->setDescription("As on the label.");
+    auto const below = scene.backend().createButton(column.get());
+    below->setLabel("Below");
+    scene.settle();
+    QQuickItem& field = Scene::itemOf(*input);
+    QQuickItem const& belowItem = Scene::itemOf(*below);
+    qreal const fieldHeight = field.height();
+    qreal const belowY = belowItem.y();
+
+    input->setErrors({"Required"});
+    scene.settle();
+    CHECK(field.height() == Catch::Approx(fieldHeight));
+    CHECK(belowItem.y() == Catch::Approx(belowY));
+    QQuickItem const* const description = findNamed(field, QStringLiteral("description"));
+    REQUIRE(description != nullptr);
+    CHECK_FALSE(description->isVisible());
+
+    input->setErrors({});
+    scene.settle();
+    CHECK(field.height() == Catch::Approx(fieldHeight));
+    CHECK(belowItem.y() == Catch::Approx(belowY));
+    CHECK(description->isVisible());
+}
+
+// Mutation: leave the picker button at its default height, past the field's border.
+TEST_CASE("qt_quick widgets: a date input's picker button stays inside the field's border", "[qt_quick]") {
+    Scene scene;
+    auto input = scene.backend().createDateTimeInput(nullptr, ui::DateMode::Date, 0);
+    scene.settle();
+    QQuickItem& item = Scene::itemOf(*input);
+    QQuickItem const* const button = findNamed(item, QStringLiteral("datePickerButton"));
+    REQUIRE(button != nullptr);
+    QQuickItem const* const parent = button->parentItem();
+    INFO("button " << button->width() << "x" << button->height() << " in " << parent->width() << "x"
+                   << parent->height());
+    CHECK(button->height() <= parent->height() - 2 + 0.5);
+    CHECK(button->width() == Catch::Approx(button->height()));
+    CHECK(button->mapToItem(parent, QPointF{button->width(), 0}).x() <= parent->width() - 1 + 0.5);
+}

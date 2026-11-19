@@ -123,7 +123,11 @@ MorphField {
             id: pickerButton
             objectName: "datePickerButton"
             anchors.right: parent.right
+            // Inside the field's one-pixel border, not over it.
+            anchors.rightMargin: 1
             anchors.verticalCenter: parent.verticalCenter
+            height: parent.height - 2
+            width: height
             focusPolicy: Qt.NoFocus
             visible: !root.readOnly
             Accessible.name: "Pick a date"

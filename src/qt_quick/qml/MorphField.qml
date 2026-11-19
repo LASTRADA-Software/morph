@@ -55,6 +55,11 @@ MorphWidget {
         return (announcedPrefix === "" ? lines : [announcedPrefix].concat(lines)).join("\n")
     }
 
+    // A required field is the one whose error comes and goes as the user types, so it keeps the room under its
+    // control whether or not the error shows: the description's height, or one line of messages, whichever is more.
+    // While the error shows it takes the description's place, so what is below the field does not move.
+    readonly property real reservedRoom: required ? Math.max(descriptionLabel.implicitHeight, messageLine.height) : 0
+    readonly property bool descriptionShown: root.description !== "" && !(required && errors.length > 0)
     focusTarget: control ? control : root
     implicitWidth: Math.max(captionLabel.visible ? captionLabel.implicitWidth + (required ? markerRoom : 0)
                                                    + (hintLabel.visible ? hintMetrics.advanceWidth + Theme.spaceOf(1) : 0)
@@ -63,8 +68,9 @@ MorphWidget {
                                                                      : markerFollowsText ? markerRoom
                                                                                          : marker.implicitWidth))
     implicitHeight: captionHeight + (control ? control.implicitHeight : 0) +
-                    (messages.visible ? messages.implicitHeight : 0) +
-                    (descriptionLabel.visible ? descriptionLabel.implicitHeight : 0)
+                    (required ? Math.max(reservedRoom, messages.visible ? messages.implicitHeight : 0)
+                              : (messages.visible ? messages.implicitHeight : 0) +
+                                (descriptionLabel.visible ? descriptionLabel.implicitHeight : 0))
     opacity: stale ? Theme.staleOpacity : 1.0
     Accessible.description: accessibleDescription
 
@@ -124,6 +130,12 @@ MorphWidget {
         elide: Text.ElideRight
     }
 
+    // One line of messages, to size the room a required field keeps for them.
+    FontMetrics {
+        id: messageLine
+        font: Theme.bodyFont
+    }
+
     Label {
         textFormat: Text.PlainText
         font: Theme.bodyFont
@@ -141,9 +153,9 @@ MorphWidget {
         objectName: "description"
         textFormat: Text.PlainText
         font: Theme.bodyFont
-        y: messages.y + (messages.visible ? messages.height : 0)
+        y: messages.y + (root.required ? root.reservedRoom : messages.visible ? messages.height : 0)
         width: root.width
-        visible: root.description !== ""
+        visible: root.descriptionShown
         text: root.description
         color: root.tone !== 0 ? root.toneOf(root.tone) : root.scheme.muted
         wrapMode: Text.Wrap
