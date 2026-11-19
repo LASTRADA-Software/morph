@@ -623,7 +623,10 @@ struct WindowRowsStats {
 /// A change is the diff, by key, of the rows held before a reply against the rows held after it: a new total moves
 /// the view's end (`Inserted` or `Removed` there), a row that moved within its page is `Moved`, a row that came or
 /// went is `Inserted` or `Removed`, and a place whose cells arrived, were replaced or were evicted is `Changed`.
-/// Only a new query (a sort, a filter or a description revision) is a `Reset`.
+/// Each operation is valid on the list the one before it leaves, and no key is held twice between two of them. A new
+/// query (a sort, a filter or a description revision) is a `Reset`, and so is a reply whose page holds a key twice,
+/// which no diff by key can place, or whose page diff would take more than 5,000 operations, the bound of the
+/// `ViewChange` contract.
 ///
 /// Neither copied nor moved: its watch handler and its replies hold it.
 class WindowRows final : public TableRows {
@@ -1201,36 +1204,42 @@ private:
     // The view's length as the mount holds it: the total, or nothing while none is known.
     [[nodiscard]] std::int64_t shownRows() const { return _window.total().value_or(0); }
 
-    // The change a page reply made, by key. The view's length moves at its end first; then the page's places are
-    // diffed by key, so a row that moved keeps its identity, and a place that gained or lost its row's cells is a
-    // change of that place; last, the pages the reply evicted are changed places. Rows of other pages do not move,
-    // since a page's places are fixed by its index.
+    // The change a page reply made, by key, as operations each valid on the list the one before it leaves:
+    // - a view that shrank loses its end first, so no row there is still held when the page's rows move in;
+    // - the page's places both views have are diffed by key, so a row that moved keeps its identity, and a place
+    //   held on one side only is the same row when that row is nowhere else on the other side (its cells arrived
+    //   or left);
+    // - a view that grew gains its end last, taken from the new view, once the rows that moved there have left
+    //   their old places;
+    // - the pages the reply evicted are changed places.
+    // Rows of other pages do not move, since a page's places are fixed by its index.
     [[nodiscard]] table::ViewChange pageChange(std::int64_t page, std::int64_t rowsBefore,
                                                std::vector<std::optional<table::RowId>> const& before,
                                                std::set<std::int64_t> const& heldBefore) const {
         using table::ViewOp;
+        auto const reset = [] {
+            return table::ViewChange{.ops = {ViewOp{.kind = ViewOp::Kind::Reset, .first = 0, .count = 0, .to = 0}}};
+        };
         auto const size = std::max<std::int64_t>(_options.pageSize, 1);
         auto const rowsAfter = shownRows();
         auto const start = page * size;
         auto const after = slotsOfPage(page);
         table::ViewChange change;
-        if (rowsAfter > rowsBefore) {
-            change.ops.push_back(ViewOp{.kind = ViewOp::Kind::Inserted,
-                                        .first = static_cast<std::size_t>(rowsBefore),
-                                        .count = static_cast<std::size_t>(rowsAfter - rowsBefore),
+        if (rowsAfter < rowsBefore) {
+            change.ops.push_back(ViewOp{.kind = ViewOp::Kind::Removed,
+                                        .first = static_cast<std::size_t>(rowsAfter),
+                                        .count = static_cast<std::size_t>(rowsBefore - rowsAfter),
                                         .to = 0});
         }
-        // The page's places inside the view while it is diffed, which is the longer of the two views.
         auto const places = static_cast<std::size_t>(
-            std::clamp<std::int64_t>(std::max(rowsBefore, rowsAfter) - start, 0, size));
+            std::clamp<std::int64_t>(std::min(rowsBefore, rowsAfter) - start, 0, size));
         std::unordered_map<table::RowId, std::size_t> wasAt;
         std::unordered_map<table::RowId, std::size_t> nowAt;
         for (std::size_t at = 0; at < places; ++at) {
             bool const unique = (!before[at] || wasAt.emplace(*before[at], at).second) &&
                                 (!after[at] || nowAt.emplace(*after[at], at).second);
             if (!unique) {
-                return table::ViewChange{
-                    .ops = {ViewOp{.kind = ViewOp::Kind::Reset, .first = 0, .count = 0, .to = 0}}};
+                return reset();
             }
         }
         // Identities: each key one number; each place's own empty slot one number after every key's.
@@ -1249,28 +1258,17 @@ private:
         }
         auto const emptyBase = static_cast<std::uint32_t>(ids.size());
         auto const emptyAt = [emptyBase](std::size_t at) { return emptyBase + static_cast<std::uint32_t>(at); };
-        // A place held on one side only is the same row on both when that row is nowhere else on the other side:
-        // its cells arrived or left there.
         std::vector<std::uint32_t> was(places);
         std::vector<std::uint32_t> now(places);
         for (std::size_t at = 0; at < places; ++at) {
-            std::int64_t const place = start + static_cast<std::int64_t>(at);
-            if (place >= rowsBefore) {
-                // Already inserted at the end, as the new view holds it, unless its row moved here from a place
-                // the old view held.
-                was[at] = after[at] && !wasAt.contains(*after[at]) ? ids.at(*after[at]) : emptyAt(at);
-            } else if (before[at]) {
+            if (before[at]) {
                 was[at] = ids.at(*before[at]);
             } else if (after[at] && !wasAt.contains(*after[at])) {
                 was[at] = ids.at(*after[at]);
             } else {
                 was[at] = emptyAt(at);
             }
-            if (place >= rowsAfter) {
-                // Removed at the end afterwards, whatever it holds, unless its row moved to a place the new view
-                // holds.
-                now[at] = before[at] && nowAt.contains(*before[at]) ? emptyAt(at) : was[at];
-            } else if (after[at]) {
+            if (after[at]) {
                 now[at] = ids.at(*after[at]);
             } else if (before[at] && !nowAt.contains(*before[at])) {
                 now[at] = ids.at(*before[at]);
@@ -1290,10 +1288,10 @@ private:
             }
             change.ops.push_back(op);
         }
-        if (rowsAfter < rowsBefore) {
-            change.ops.push_back(ViewOp{.kind = ViewOp::Kind::Removed,
-                                        .first = static_cast<std::size_t>(rowsAfter),
-                                        .count = static_cast<std::size_t>(rowsBefore - rowsAfter),
+        if (rowsAfter > rowsBefore) {
+            change.ops.push_back(ViewOp{.kind = ViewOp::Kind::Inserted,
+                                        .first = static_cast<std::size_t>(rowsBefore),
+                                        .count = static_cast<std::size_t>(rowsAfter - rowsBefore),
                                         .to = 0});
         }
         for (auto const held : heldBefore) {
