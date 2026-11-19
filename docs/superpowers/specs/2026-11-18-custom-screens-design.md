@@ -300,7 +300,7 @@ it opens wherever its base opens with the params the base was given.
   reason.
 - **With params.** A custom screen whose base takes params opens where its base opens: the base's window chrome
   offers **Open as**, listing the custom screens based on it and the base itself. Choosing one opens it with the same
-  params in the same tab. A tab showing a draft is asked first, through the close guard, as closing it is; if the
+  params in the same tab. A tab showing a draft does not offer **Open as**: the person saves or discards the draft first. If the
   chosen screen with those params is already open in another tab, that tab is focused and the current one is left as
   it is, as opening any screen does.
 - **Titles.** The store's `title` names the entry in the navigator and in **Open as**. The tab caption is the

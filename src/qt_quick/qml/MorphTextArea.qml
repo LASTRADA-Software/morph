@@ -26,10 +26,15 @@ MorphField {
     // Scrolls every scrolling ancestor so that the line the cursor is on is in view.
     function revealCursor() {
         const cursor = area.cursorRectangle
-        for (let up = root.parent; up; up = up.parent) {
-            if (typeof up.revealRect === "function")
-                up.revealRect(area, cursor.x, cursor.y, cursor.width, cursor.height)
-        }
+        for (let up = root.parent; up; up = up.parent)
+            root.revealIn(up, cursor)
+    }
+
+    // Asks `ancestor` to scroll the cursor's rectangle into view when it scrolls. The parameter is untyped because an
+    // ancestor is any item, and only some of them have `revealRect`.
+    function revealIn(ancestor: var, cursor: rect) {
+        if (typeof ancestor.revealRect === "function")
+            ancestor.revealRect(area, cursor.x, cursor.y, cursor.width, cursor.height)
     }
 
     control: area
