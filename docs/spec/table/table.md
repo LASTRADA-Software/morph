@@ -1497,7 +1497,8 @@ Rules:
       a view that is ordering by the level does not lose rows to another query's loads, and two order uses
       cannot evict each other in turn. A query that needs the level for order renews the lease and becomes one
       more holder of it; `unwant`, which a query refused by another level calls, ends one holder, and the lease
-      ends with its last. A view's order keys are one kept set (`wantSet`), and its lease is the set's: the
+      ends with its last. A view's order keys are one kept set (`wantSet`), as are a distinct request's (the
+      "every row" entry of [The view cache](#the-view-cache)), and its lease is the set's: the
       set holds a count of the queries holding it and a lease end. The first query of a set is fitted and
       protects every key of the set, a chunk at a time under the writer mutex, by a per-key count of the sets
       protecting it; that is the only pass over the keys. A repeat while the set's lease runs is one more holder
@@ -1583,7 +1584,11 @@ so a straggler never undoes a newer view.
   `failed`, and, built at the first keyed query, the view row of each source row (4 bytes a row). A view of
   100,000 rows is 400 kB, or 800 kB once a keyed query has asked. A view whose query sorts or filters by a
   level also keeps the keys of its rows and undecided rows, the set its order levels are wanted with:
-  `sizeof(RowId)` a row, plus a text key's heap buffer, counted against the bound like the rest.
+  `sizeof(RowId)` a row, plus a text key's heap buffer, counted against the bound like the rest. A distinct
+  request wants its order levels for every row, so the cache also holds one "every row" entry per table record
+  and `ServedTable::scope`, keyed under a query no sort or filter writes, valid while the table's source has the
+  snapshot it was made from and whatever the levels' generations: its rows and their keys, so the distinct
+  requests over one snapshot share one kept set and repeat it.
 - **One computation.** Requests that need the same entry while it is computed wait for that one computation. So
   fifty watchers of one view that refetch after an arrival cost one `apply`, not fifty.
 - **Where it runs.** Finding, computing and reading an entry, and encoding the reply, run on
