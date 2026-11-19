@@ -1928,3 +1928,91 @@ TEST_CASE("answer query: a distinct request is refused a column the table cannot
     CHECK(refusedLevel.error().code == TableErrorCode::UnknownColumn);
     CHECK(refusedLevel.error().column == "note");
 }
+
+namespace {
+
+// Three columns: `id`, the Integer key, `name` Text and `c3` Decimal.
+TableDescription threeColumns() {
+    return TableDescription{.id = "t",
+                            .label = "T",
+                            .columns = {column("id", ColumnKind::Integer), column("name", ColumnKind::Text),
+                                        column("c3", ColumnKind::Decimal)},
+                            .key = "id"};
+}
+
+}  // namespace
+
+// Mutation: servedDescription leaving capabilities at the default 8.
+TEST_CASE("served description: limits carry the sort bound, up to 32", "[table][description]") {
+    ServedTable served{.description = threeColumns()};
+    auto const eight = servedDescription(served);
+    REQUIRE(eight);
+    CHECK(eight->capabilities.maxSortKeys == 8);
+    CHECK(eight->revision.size() == 16);
+    CHECK(eight->revision == describe(*eight).revision);
+    served.limits.maxSortKeys = 32;
+    auto const wide = servedDescription(served);
+    REQUIRE(wide);
+    CHECK(wide->capabilities.maxSortKeys == 32);
+    CHECK(wide->revision != eight->revision);  // Mutation: the revision taken before the bound is set.
+    served.limits.maxSortKeys = 33;
+    CHECK(servedDescription(served).error().code == TableErrorCode::SourceContract);
+    CHECK(servedDescription(served).error().message == "a table's `limits.maxSortKeys` is 1 to 32");
+    served.limits.maxSortKeys = 0;
+    CHECK(servedDescription(served).error().code == TableErrorCode::SourceContract);
+}
+
+// Mutation: answerQuery hashing served.description as the model gave it (the page names a revision no describe reply
+// has).
+TEST_CASE("served description: a page carries the served description's revision", "[table][description]") {
+    ServedTable served = threeRowTable(true);
+    served.limits.maxSortKeys = 32;
+    auto const page = detail::answerQuery(served, TableQuery{});
+    REQUIRE(page);
+    CHECK(page->revision == servedDescription(served)->revision);
+    CHECK(page->revision != served.description.revision);
+    served.limits.maxSortKeys = 33;
+    auto const refused = detail::answerQuery(served, TableQuery{});
+    REQUIRE_FALSE(refused);
+    CHECK(refused.error().code == TableErrorCode::SourceContract);
+}
+
+namespace tabledesc {
+
+// A model whose one table's `limits.maxSortKeys` is `bound`.
+class BoundModel {
+public:
+    static inline std::size_t bound = 8;
+    morph::table::ServedTable rows(morph::table::TableContext const& context);
+};
+
+}  // namespace tabledesc
+
+BRIDGE_REGISTER_MODEL(tabledesc::BoundModel, "BoundModel")
+BRIDGE_REGISTER_TABLE(tabledesc::BoundModel, "boundRows", &tabledesc::BoundModel::rows)
+
+morph::table::ServedTable tabledesc::BoundModel::rows(morph::table::TableContext const& context) {
+    static_cast<void>(context);
+    ServedTable served{.description = threeColumns()};
+    served.source = std::make_shared<VectorSource>(columnInfos(served.description));
+    served.limits.maxSortKeys = bound;
+    return served;
+}
+
+// Mutation: DescribeTable describing served.description as the model gave it (the bound stays 8).
+TEST_CASE("served description: the describe action answers the served description", "[table][description]") {
+    morph::exec::ThreadPoolExecutor pool{2};
+    morph::exec::MainThreadExecutor owner;
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool), owner};
+    morph::bridge::BridgeHandler<tabledesc::BoundModel> handler{bridge, &owner};
+    tabledesc::BoundModel::bound = 32;
+    auto const described =
+        morph::testing::awaitValueOn(owner, handler.execute(DescribeTable<&tabledesc::BoundModel::rows>{}));
+    CHECK(described.capabilities.maxSortKeys == 32);
+    ServedTable served{.description = threeColumns()};
+    served.limits.maxSortKeys = 32;
+    CHECK(described.revision == servedDescription(served)->revision);
+    tabledesc::BoundModel::bound = 33;
+    CHECK_THROWS(morph::testing::awaitValueOn(owner, handler.execute(DescribeTable<&tabledesc::BoundModel::rows>{})));
+    tabledesc::BoundModel::bound = 8;
+}
