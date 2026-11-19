@@ -300,7 +300,9 @@ it opens wherever its base opens with the params the base was given.
   reason.
 - **With params.** A custom screen whose base takes params opens where its base opens: the base's window chrome
   offers **Open as**, listing the custom screens based on it and the base itself. Choosing one opens it with the same
-  params in the same tab.
+  params in the same tab. A tab showing a draft is asked first, through the close guard, as closing it is; if the
+  chosen screen with those params is already open in another tab, that tab is focused and the current one is left as
+  it is, as opening any screen does.
 - **Titles.** The store's `title` names the entry in the navigator and in **Open as**. The tab caption is the
   document's own title, which may show the record.
 - **Routes and tabs.** A custom screen's route is its id and params, so it is recorded with the workspace's tabs and
@@ -328,7 +330,8 @@ and it behaves the same whichever made it.
 
 ## The source view
 
-**Source** is in the window chrome of every open document screen, and in a draft's bar.
+**Source** is in the chrome of every document screen open in a tab, and in a draft's bar. Dialog and drawer screens
+have no chrome and no **Source**.
 
 - It opens as an overlay holding the document's JSON, pretty-printed: an application screen's document as the bundle
   has it, a custom screen's as `get` answers it, or the open draft's. The overlay is a plain monospace text editor and
