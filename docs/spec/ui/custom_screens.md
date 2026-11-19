@@ -362,7 +362,10 @@ go. No call names a person.
   (`Mounted::placeCursor`); a refusal about the document as a whole names no place and leaves the cursor. The client's checks are fast feedback; the server's decide.
 - **Save as…** asks a name, saves the draft (from the source view, it previews first, so nothing is saved the person
   has not seen mounted), ends the draft and opens the saved screen in the tab's place, with the same params
-  (`WorkspaceModel::openInPlace`). **Save** overwrites the person's own custom screen with the draft, fetches the
+  (`WorkspaceModel::openInPlace`). The saved document is stored, so the old screen closes without asking when the
+  draft was all that kept it dirty; otherwise its close guard decides. When the screen stays open the tab stays a
+  draft as it was (bar, text, generation) and the person is told the document is saved but stays a draft there until
+  the screen can close. **Save** overwrites the person's own custom screen with the draft, fetches the
   stored document again and ends the draft; both tell the person. A refusal shows in the bar and in the dialog, and
   the draft stays. While a save is in flight the bar's **Save** and **Save as…** are disabled, and its answer acts
   only on the draft that was saved: if the tab holds a newer draft, none, or is closed by then, the tab is left as it

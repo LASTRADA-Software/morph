@@ -475,6 +475,11 @@ public:
     /// @param handle A handle this host mounted; a foreign one, or one with no draft, is left as it is.
     static void endDraft(ScreenHandle& handle);
 
+    /// @brief Marks what a handle shows as a draft again, without remounting: the undo of `endDraft` for a shell
+    ///        whose replacement of the tab did not happen.
+    /// @param handle A handle this host mounted; a foreign or closed one is left as it is.
+    static void resumeDraft(ScreenHandle& handle);
+
     /// @brief Whether a handle this host mounted shows a draft. A tracked read.
     /// @param handle A handle.
     /// @return Whether it does; `false` for a foreign or closed handle.
@@ -659,6 +664,11 @@ private:
         /// Ends the draft without remounting.
         void endDraft() {
             _state->runtime->batch([this] { _state->drafted.set(false); });
+        }
+
+        /// Marks the mounted document as a draft again, without remounting.
+        void resumeDraft() {
+            _state->runtime->batch([this] { _state->drafted.set(true); });
         }
 
         /// The screen while it is open; null once it closed.

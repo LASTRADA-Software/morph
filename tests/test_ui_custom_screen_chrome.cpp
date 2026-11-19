@@ -128,6 +128,37 @@ TEST_CASE("custom screen chrome: Save as… names the draft, saves it, and the t
     CHECK(rig.guarded == 0);
 }
 
+// Mutation: end the draft before openInPlace answers (the tab that stayed open shows the draft with no bar).
+TEST_CASE("custom screen chrome: Save as… on a screen that stays open leaves the tab drafted",
+          "[ui][custom-screens][chrome]") {
+    ChromeRig rig;
+    // A screen that is dirty of itself: its close goes to the guard, which keeps it open.
+    std::string const dirty = rig.saveOnServer(
+        "Alpha", "notes.edit",
+        screens_test::replaced(std::string{kEdit}, R"("params")", R"("dirty":{"lit":true},"params")"));
+    rig.sync->documents().forget(dirty);
+    std::optional<bool> fetched;
+    rig.sync->open(dirty, [&fetched](auto loaded) { fetched = loaded.has_value(); });
+    REQUIRE(rig.pump([&fetched] { return fetched.has_value(); }));
+    REQUIRE(*fetched);
+    rig.open(dirty, note(3));
+    draftHeading(rig, dirty, "Edited by hand");
+    REQUIRE(rig.shown("Row", "draft_bar_" + dirty));
+    std::string const draft = *rig.chrome->draftOf(rig.tabAt(0));
+    rig.click("draft_save_as_" + dirty);
+    rig.type("save_as_title", "My note");
+    rig.click("save_as_confirm");
+    REQUIRE(rig.pump([&rig] { return rig.guarded > 0; }));
+    // The save outcome is told once the replacement answered.
+    REQUIRE(rig.pump([&rig] { return !rig.notices.empty(); }));
+    CHECK(rig.notices.back().contains("stays a draft"));
+    CHECK(rig.workspace->tabs().size() == 1);
+    CHECK(rig.screenOf(0) == dirty);
+    CHECK(rig.text("heading") == "Edited by hand");
+    CHECK(rig.shown("Row", "draft_bar_" + dirty));
+    CHECK(rig.chrome->draftOf(rig.tabAt(0)) == std::optional<std::string>{draft});
+}
+
 // Mutation: save from the source view without previewing (the refused document is saved: the list has a screen).
 TEST_CASE("custom screen chrome: Save as… from the source view previews first, and saves nothing it refuses",
           "[ui][custom-screens][chrome]") {

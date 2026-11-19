@@ -725,16 +725,29 @@ void CustomScreenChrome::openSaved(WorkspaceTabId tab, std::uint64_t generation,
                 notify(saved + ", but it could not be opened: " + loaded.error(), Tone::Warn);
                 return;
             }
+            // The draft mark ends for the replacement and stays ended only if the tab is replaced: the saved document
+            // is stored, so the old screen may close without asking when the draft was all that kept it dirty, and
+            // otherwise its own close guard decides. A screen that stays open still shows the draft, so the mark
+            // returns with the draft's text and generation untouched.
             DocumentScreenHost::endDraft(*handle);
-            ++state->generation;
-            state->draftText.clear();
             ParamMap const params = DocumentScreenHost::paramsOf(*handle).value_or(ParamMap{});
             _model->openInPlace(
-                tab, screenId, params, guarded([this, tab, saved](std::expected<WorkspaceTabId, MountError> opened) {
+                tab, screenId, params,
+                guarded([this, tab, generation, saved](std::expected<WorkspaceTabId, MountError> opened) {
                     settled(tab);
                     if (!opened) {
-                        notify(saved + ", but it could not be opened: " + opened.error().reason, Tone::Warn);
+                        ScreenHandle* const shown = handleOf(tab);
+                        if (shown != nullptr && holds(tab, generation)) {
+                            DocumentScreenHost::resumeDraft(*shown);
+                        }
+                        std::string const why =
+                            opened.error().reason == kStayedOpenReason ? std::string{} : ": " + opened.error().reason;
+                        notify(saved + ", but it stays a draft here until this screen can close" + why, Tone::Warn);
                         return;
+                    }
+                    if (std::shared_ptr<TabState> const replaced = stateOf(tab); replaced != nullptr) {
+                        ++replaced->generation;
+                        replaced->draftText.clear();
                     }
                     notify(saved, Tone::Ok);
                 }));

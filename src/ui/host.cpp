@@ -289,6 +289,12 @@ void DocumentScreenHost::endDraft(ScreenHandle& handle) {
     }
 }
 
+void DocumentScreenHost::resumeDraft(ScreenHandle& handle) {
+    if (auto* const own = dynamic_cast<Handle*>(&handle); own != nullptr && own->screen() != nullptr) {
+        own->resumeDraft();
+    }
+}
+
 bool DocumentScreenHost::drafted(ScreenHandle const& handle) {
     auto const* const own = dynamic_cast<Handle const*>(&handle);
     return own != nullptr && own->screen() != nullptr && own->drafted();

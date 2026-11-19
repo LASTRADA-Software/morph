@@ -96,7 +96,8 @@ It is built over the interpreter's `Session` and `Dispatcher`, and `DocumentScre
     calls once the draft is stored.
   - `discardDraft(handle)` remounts the document `documents` answers for the screen's id now, so a reload since the
     draft began is seen, and clears the mark. `endDraft(handle)` clears the mark and keeps what is mounted: what a
-    shell does once the draft is saved.
+    shell does once the draft is saved; `resumeDraft(handle)` sets the mark again, for a shell whose replacement of
+    the tab did not happen.
   - A development reload (`reloadDocuments`) leaves a drafted screen as it is.
   - Mounting a draft and setting the mark are one batch, so no frame shows one without the other.
   - The custom screens client is what makes drafts ([`custom_screens.md`](custom_screens.md#the-client)).
