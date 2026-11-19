@@ -308,3 +308,44 @@ TEST_CASE(
     CHECK(shell.tabs().size() == 1);
     CHECK(shell.tabs()[0].screenId == "home");
 }
+
+// Mutation: append the chrome after the screen without moving it (the page's first child is not the chrome).
+TEST_CASE("workspace: a page's chrome sits at its top, and a null chrome mounts nothing",
+          "[ui][workspace][in-place]") {
+    // The home page's children without any chrome, to compare the null chrome against.
+    std::size_t plainHomeChildren = 0;
+    {
+        Harness plain;
+        Host plainHost{plain, CloseChoice::Discard};
+        Workspace plainShell{plain.runtime, plain.backend, plainHost, WorkspaceOptions{}};
+        REQUIRE(plainShell.open("home", {}).has_value());
+        plain.settle();
+        plainHomeChildren =
+            plain.backend.children(plain.backend.children(plain.backend.idOf(plainShell.root())).at(0)).size();
+    }
+    Harness harness;
+    Host host{harness, CloseChoice::Discard};
+    WorkspaceOptions options;
+    options.chrome = [](WorkspaceTabId /*tab*/, std::string_view screenId) -> morph::ui::Node {
+        if (screenId == "home") {
+            return nullptr;
+        }
+        morph::ui::Text text;
+        text.text = morph::ui::Prop<std::string>{std::string{"chrome"}};
+        text.common.testId = "chrome_" + std::string{screenId};
+        return morph::ui::text(std::move(text));
+    };
+    Workspace shell{harness.runtime, harness.backend, host, std::move(options)};
+    REQUIRE(shell.open("note", note(1)).has_value());
+    REQUIRE(shell.open("home", {}).has_value());
+    harness.settle();
+    std::vector<int> const pages = harness.backend.children(harness.backend.idOf(shell.root()));
+    REQUIRE(pages.size() == 2);
+    REQUIRE_FALSE(harness.backend.children(pages[0]).empty());
+    CHECK(harness.backend.children(pages[0]).front() == harness.byTestId("Text", "chrome_note"));
+    // The null chrome adds no child: the page holds what it holds with no chrome option, and its first child is not
+    // the chrome of the other page.
+    REQUIRE_FALSE(harness.backend.children(pages[1]).empty());
+    CHECK(harness.backend.children(pages[1]).size() == plainHomeChildren);
+    CHECK(harness.backend.children(pages[1]).front() != harness.byTestId("Text", "chrome_note"));
+}

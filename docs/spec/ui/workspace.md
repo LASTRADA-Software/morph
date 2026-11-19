@@ -113,6 +113,9 @@ shell's **Open as** does.
    closed without asking. When it closes, the new screen is made the active tab before the old one is removed, so no
    other tab is activated meanwhile, and takes the old one's place in the order and in the record.
 
+**Open as** on the screen and params the tab already shows mounts a fresh copy and swaps it in through the guard: a
+reload that asks first when the tab is dirty.
+
 `done` answers the tab now showing the screen, or why nothing changed: a refused mount, a screen that stayed open, or a
 new screen that was closed before the old one answered. Until the close is answered, the new screen is a tab beside the
 old one.

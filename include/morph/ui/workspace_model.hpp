@@ -191,11 +191,9 @@ public:
     std::expected<WorkspaceOpened, MountError> openTab(std::string_view screenId, ParamMap const& params) {
         WorkspaceScreen const facts = factsOf(screenId);
         std::optional<std::string> const identity = _host->identityOf(screenId, params);
-        for (auto const& tab : _tabs) {
-            if (tab->screenId == screenId && (facts.singleton || (identity && identityText(*tab) == *identity))) {
-                activateTab(tab->id, false);
-                return WorkspaceOpened{.tab = tab->id, .mounted = false};
-            }
+        if (Tab const* const shown = showing(screenId, facts, identity, std::nullopt)) {
+            activateTab(shown->id, false);
+            return WorkspaceOpened{.tab = shown->id, .mounted = false};
         }
         std::optional<WorkspaceTabId> replaced;
         if (facts.reuseEmpty && identity) {
@@ -238,17 +236,12 @@ public:
     void openInPlace(WorkspaceTabId tab, std::string_view screenId, ParamMap const& params,
                      std::function<void(std::expected<WorkspaceTabId, MountError>)> done) {
         WorkspaceTabId const old = held(tab);
-        WorkspaceScreen const facts = factsOf(screenId);
-        std::optional<std::string> const identity = _host->identityOf(screenId, params);
-        for (auto const& other : _tabs) {
-            if (other->id != old && other->screenId == screenId &&
-                (facts.singleton || (identity && identityText(*other) == *identity))) {
-                activateTab(other->id, false);
-                if (done) {
-                    done(other->id);
-                }
-                return;
+        if (Tab const* const shown = showing(screenId, factsOf(screenId), _host->identityOf(screenId, params), old)) {
+            activateTab(shown->id, false);
+            if (done) {
+                done(shown->id);
             }
+            return;
         }
         auto opened = mountTab(screenId, params);
         if (!opened) {
@@ -480,6 +473,20 @@ private:
         std::vector<WorkspaceTabId> order;
         std::size_t position = 0;
     };
+
+    // The open tab, other than @p except, that already shows the screen: any tab of a singleton screen, otherwise the
+    // one with the same identity.
+    [[nodiscard]] Tab const* showing(std::string_view screenId, WorkspaceScreen const& facts,
+                                     std::optional<std::string> const& identity,
+                                     std::optional<WorkspaceTabId> except) const {
+        for (auto const& tab : _tabs) {
+            if (tab->id != except && tab->screenId == screenId &&
+                (facts.singleton || (identity && identityText(*tab) == *identity))) {
+                return tab.get();
+            }
+        }
+        return nullptr;
+    }
 
     [[nodiscard]] static std::string identityText(Tab const& tab) {
         return identityKey(tab.handle->identity().peek()).value_or(std::string{});
