@@ -1164,3 +1164,19 @@ TEST_CASE("table state: a part holding a dot is refused", "[ui][state]") {
     CHECK_THROWS(save(h, partOf("state.pending"), "{}"));
     CHECK_FALSE(h.prefs.has(pendingPoint(kKey)));
 }
+
+// Mutation: the shared views not counted (no usage entry for the person "", and the large publish is saved).
+TEST_CASE("shared views: a publish over the operator's quota is refused as a save is", "[ui][table][state][remote]") {
+    StoreFixture h{quota(400)};
+    auto const shared = partOf("shared");
+    REQUIRE(settled(h, h.store.publish(shared, addNamed("Open"), std::string{table::kNoDocument})).outcome ==
+            table::SaveOutcome::Saved);
+    auto const stored = load(h, shared);
+    REQUIRE(stored.has_value());
+    CHECK(h.prefs.value(usageKey("")) == std::format(R"({{"bytes":{}}})", stored->json.size()));
+    auto const over = settled(h, h.store.publish(shared, addNamed(std::string(400, 'v')), {}));
+    CHECK(over.outcome == table::SaveOutcome::Refused);
+    CHECK(over.reason == "over the table-state quota");
+    CHECK(viewNames(load(h, shared)) == std::vector<std::string>{"Open"});
+    CHECK(save(h, kKey, docOf(300)).outcome == table::SaveOutcome::Saved);  // alice's own account is apart
+}

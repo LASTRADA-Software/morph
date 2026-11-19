@@ -155,7 +155,8 @@ struct TableStatePublish {
     /// @brief The operation's JSON, as `table::writeViewOperation` writes it.
     std::string operation;
     /// @brief Empty to apply it to whatever is stored; `table::kNoDocument` to apply it only when nothing is;
-    ///        otherwise the revision the stored document must have.
+    ///        otherwise the revision the stored document must have. Even with it empty the model writes over the
+    ///        revision it read, so a publish that lands between that read and its write answers `Conflict`.
     std::string expected;
 };
 
@@ -539,7 +540,8 @@ struct TableStateShared {
 /// The `shared` part is the exception: it is the views published for everyone, so its entries are kept with no
 /// person, and every verified caller's `load` and `read` reach the same document. It is written only by `publish`,
 /// an action of its own, so an authoriser admits or refuses publishing by action id; `save` of it answers `Refused`
-/// and `remove` of it is refused. It is not counted against any person's quota.
+/// and `remove` of it is refused. It counts against the operator's quota as an account of its own, the person "",
+/// so the ceiling bounds it as it bounds each person's state.
 ///
 /// A key's entries are the caller's person's, of the key's `application`, under the scope
 /// `detail::tableStateScope(key)`. The point `<part>` is the head: the key in clear, the revision, and the document
@@ -1086,7 +1088,7 @@ private:
     }
 
     /// @brief Stores a whole document under the `expected` rule and the quota, in the order the class describes. The
-    ///        quota is a person's: entries of no person, the shared views, are not counted.
+    ///        shared views, kept with no person, count as one more account.
     ::core::async::Task<table::SaveResult> commit(std::string person, table::TableStateKey key, std::string expected,
                                                   std::string text) {
         if (auto const error = glz::validate_json(text)) {
@@ -1098,7 +1100,8 @@ private:
             co_return table::SaveResult{
                 .outcome = table::SaveOutcome::Conflict, .revision = head.revision, .reason = {}};
         }
-        bool const counted = _options.maxBytesPerPerson.has_value() && !person.empty();
+        // The shared views, the person "", are an account of their own under the same quota.
+        bool const counted = _options.maxBytesPerPerson.has_value();
         std::uint64_t const replaced = head.found ? head.counted : 0;
         std::uint64_t const added = text.size();
         std::uint64_t used = 0;

@@ -2358,7 +2358,8 @@ How it keeps a document of any size in a store built for small values:
   `TableStateOptions::uploadExpiry` (30 s), and, with a quota set, refuses a part that takes its upload past it.
 - **Bounds.** `application`, `table`, `qualifier` and `part` are 1 to 256 bytes each, and `part` holds no `.`,
   which would name another part's points; `model` is 0 to 256 bytes, empty for a table over a document's rows. `TableStateOptions::maxBytesPerPerson` is the operator's
-  quota across one person's stored state, in every application; it is unset by default, and then nothing limits
+  quota across one person's stored state, in every application, and across the shared views, which count as
+  one more account; it is unset by default, and then nothing limits
   a state. The model checks it before it writes, against a usage total it keeps for the person. A preferences
   store has no conditional write, so two saves of one person's different keys in the same moment can both pass
   the check, and the quota is then overshot by one document; a ceiling tolerates that. A usage that has fallen
@@ -2401,7 +2402,9 @@ when the table mounts and no `state` is stored for it. A stored view is fitted t
     the table. Writing it is a separate action of the model, `morph.tableState.publish`, carrying one operation
     (add, replace, rename or remove one shared view), so the application's authoriser admits or refuses
     publishing by action id, without reading a body. A user's own `save` or `remove` of the `shared` part is
-    refused. The part is no one's, so no person's quota counts it.
+    refused. The part is no one's, so it is an account of its own under the operator's quota: with
+    `maxBytesPerPerson` set it is bounded as each person's state is, and a `publish` that would pass it is
+    `Refused`, "over the table-state quota", as a save is; without a quota nothing limits it, as for everyone.
   - A shared view is changed under the `Conflict` rule, as a user's views are. The shared document has no
     `default` and no `defaultOnMount`; they are the user's choice, kept in the user's own views document.
   - **Which stores share.** `ITableStateStore::shares()` (default `false`) says whether a store keeps the
