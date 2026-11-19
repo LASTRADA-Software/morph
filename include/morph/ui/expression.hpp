@@ -462,6 +462,33 @@ struct Number {
 [[nodiscard]] MORPH_API std::optional<math::Rational> convertUnit(math::Rational const& value, std::string_view from,
                                                                   std::string_view target, UnitTable const& units);
 
+/// @brief Orders two values of one comparable kind as the expression language does: numbers by exact value, a
+///        quantity converted to the other's unit, timestamps by instant, strings by their bytes, and
+///        booleans with `false` before `true`.
+/// @param lhs   A value.
+/// @param rhs   The other.
+/// @param units The unit table quantities convert through.
+/// @return The ordering; `std::nullopt` when the two are not of one comparable kind.
+[[nodiscard]] MORPH_API std::optional<std::strong_ordering> valueOrder(Value const& lhs, Value const& rhs,
+                                                                       UnitTable const& units);
+
+/// @brief Equality of two non-null values as the expression language's `eq` reads it: numbers by value (an `int`
+///        equals the equal `decimal`, places do not count, a quantity equals one of another unit that converts to
+///        it), lists and records element by element, other kinds by `Value ==`.
+/// @param lhs   A value.
+/// @param rhs   The other.
+/// @param units The unit table quantities convert through.
+/// @return Whether they are equal.
+[[nodiscard]] MORPH_API bool valuesEqual(Value const& lhs, Value const& rhs, UnitTable const& units);
+
+/// @brief Equality of two elements, as `valuesEqual` where `null` equals only `null`: whether two adjacent rows
+///        belong to one run of a `runs` or of a table's `group`.
+/// @param left  A value.
+/// @param right The other.
+/// @param units The unit table quantities convert through.
+/// @return Whether they are the same element.
+[[nodiscard]] MORPH_API bool sameElement(Value const& left, Value const& right, UnitTable const& units);
+
 /// @brief The display text of a unit.
 /// @param unit  The unit id.
 /// @param units  The unit table.

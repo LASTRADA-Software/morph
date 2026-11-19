@@ -599,15 +599,16 @@ private:
 /// @brief The expression language's text order: the default collator's fold, then the text itself.
 ///
 /// Texts that fold alike order by their own bytes, so the order is total and is the one the expression language's
-/// `sort` gives text. Safe to call concurrently: `cloneForTask` returns null.
+/// `sort` gives text. A text is folded once for both its sort key and its `fold`: the engine asks for one and then
+/// the other of the same text, and each thread keeps the last text it folded. Safe to call concurrently:
+/// `cloneForTask` returns null.
 class ValueRowsCollator final : public table::TextCollator {
 public:
     /// @brief The fold of @p text, a NUL, then @p text: case-folded order first, then the text's own bytes.
     /// @param text UTF-8 text.
     /// @return The collation key.
     [[nodiscard]] std::string sortKey(std::string_view text) const override {
-        _folds.fetch_add(1, std::memory_order_relaxed);
-        std::string key = table::CodePointCollator{}.fold(text);
+        std::string key = folded(text);
         key.push_back('\0');
         key.append(text);
         return key;
@@ -616,15 +617,30 @@ public:
     /// @brief @p text folded as the default collator folds it, which filters match against.
     /// @param text UTF-8 text.
     /// @return The folded text.
-    [[nodiscard]] std::string fold(std::string_view text) const override {
-        return table::CodePointCollator{}.fold(text);
-    }
+    [[nodiscard]] std::string fold(std::string_view text) const override { return folded(text); }
 
-    /// @brief Sort keys built so far, each of which folds its text once: what an order costs in folds.
+    /// @brief Texts folded so far, by `sortKey` and `fold` together.
     /// @return The count.
     [[nodiscard]] std::size_t folds() const noexcept { return _folds.load(std::memory_order_relaxed); }
 
 private:
+    // The fold of a text: the one this thread made last when it was of the same text, else a new one, counted.
+    [[nodiscard]] std::string folded(std::string_view text) const {
+        struct Last {
+            std::string text;
+            std::string fold;
+            bool held = false;
+        };
+        thread_local Last last;
+        if (!last.held || last.text != text) {
+            _folds.fetch_add(1, std::memory_order_relaxed);
+            last.fold = table::CodePointCollator{}.fold(text);
+            last.text.assign(text);
+            last.held = true;
+        }
+        return last.fold;
+    }
+
     mutable std::atomic<std::size_t> _folds{0};
 };
 
@@ -858,6 +874,7 @@ struct ConvertedCell {
                 return {.cell = table::Cell{static_cast<double>(*integer)}, .invalid = false};
             }
             if (auto const* const decimal = value.asDecimal()) {
+                // One past the most places a decimal holds: the conversion is not rounded to any places.
                 return {.cell = table::Cell{decimal->value.toDouble(math::kMaxDecimalPlaces + 1)}, .invalid = false};
             }
             return invalid();
@@ -1001,10 +1018,16 @@ private:
 /// every row's reads is a `Reset`.
 ///
 /// `assign` matches the new list to the held one by key: a row whose value is the held object is kept unread, any
-/// other has its in-use cells derived and compared with the held ones and is `Updated` only when one differs; new
-/// keys are `Inserted`, missing keys `Removed`, and a list that both adds and drops rows, or reorders them, is a
-/// `Reset`. So is a change of a column's kind, and of a grouped table's runs. A later row with a key already seen is
-/// dropped and reported (`detail::site::kDuplicateKey`), once per duplicate.
+/// other has its in-use cells derived and compared with the held ones. It is `Updated` when a cell differs, and also
+/// when only a field no column in use reads differs, so what the table shows of it is read again; its keys are the
+/// same, so the engine repairs it in place. New keys are `Inserted`, missing keys `Removed`, and a list that both
+/// adds and drops rows, or reorders them, is a `Reset`. So is a change of a column's kind, and of a grouped table's
+/// runs. A later row with a key already seen is dropped and reported (`detail::site::kDuplicateKey`), once per
+/// duplicate.
+///
+/// Grouped, adjacent rows are one run while their `by` is the same element as the run's first row's
+/// (`detail::sameElement`, the rule of the interpreter's `group` and of `runs`). A run whose heading record changed
+/// while the runs kept their places is an `Updated` of its first source row.
 ///
 /// `snapshot()` returns one pointer until the rows or cells change. Every member is called on the runtime's owner.
 class ValueRowsSource final : public table::DataSource {
@@ -1113,6 +1136,11 @@ public:
             }
             reset = reassign(column, *kept, was, same, updated) || reset;
         }
+        for (std::size_t at = 0; at < count; ++at) {
+            if (!same[at] && was[at] != kNone && !updated[at] && !(old[was[at]] == (*kept)[at])) {
+                updated[at] = true;
+            }
+        }
         bool runsMoved = false;
         if (_group) {
             std::vector<Value> by(count);
@@ -1120,9 +1148,17 @@ public:
                 by[at] = same[at] ? _byValues[was[at]] : readBy((*kept)[at]);
             }
             auto const before = _runs;
+            auto const recordsBefore = _runRecords;
             _byValues = std::move(by);
             buildRuns(*kept);
             runsMoved = _runs != before;
+            if (!runsMoved) {
+                for (std::size_t run = 0; run < _runRecords.size(); ++run) {
+                    if (!(_runRecords[run] == recordsBefore[run])) {
+                        updated[_runFirst[run]] = true;
+                    }
+                }
+            }
         }
         _rows = std::move(kept);
         _keys = std::move(keys);
@@ -1170,9 +1206,14 @@ public:
 
     /// @brief Groups the rows by the `group` part's `by`, read per row, and adds the hidden column
     ///        `kGroupRunColumn`; notifies `Reset`.
-    /// @param by The `by`; empty: no groups, and the hidden column goes.
-    void setGroup(std::function<Value(Value const& row)> by) {
+    ///
+    /// `by` is read untracked: what it reads besides the row regroups the rows when `setGroup` or `assign` is called
+    /// again.
+    /// @param by    The `by`; empty: no groups, and the hidden column goes.
+    /// @param units The unit table two quantities of a run's `by` are compared through.
+    void setGroup(std::function<Value(Value const& row)> by, UnitTable units = {}) {
         _group = std::move(by);
+        _groupUnits = std::move(units);
         bool const listed = _infos.size() > _columns.size();
         if (_group && !listed) {
             _infos.push_back(table::ColumnInfo{.id = std::string{kGroupRunColumn}, .kind = table::ColumnKind::Integer,
@@ -1192,8 +1233,8 @@ public:
         notify(table::RowChange{.kind = table::ChangeKind::Reset, .rows = {}});
     }
 
-    /// @brief The run a source row belongs to: its index among the runs of adjacent rows with equal `by`, in
-    ///        source order.
+    /// @brief The run a source row belongs to: its index among the runs of adjacent rows whose `by` is the same
+    ///        element as their run's first row's, in source order.
     /// @param sourceRow The row.
     /// @return The run's index; 0 when the table is not grouped or the row is past the rows.
     [[nodiscard]] std::size_t runOf(std::size_t sourceRow) const {
@@ -1512,9 +1553,11 @@ private:
         return changedKind;
     }
 
-    // Each row's run and each run's heading record, from the `by` values held.
+    // Each row's run, each run's first row and each run's heading record, from the `by` values held. A run's key is
+    // its first row's `by`, as the interpreter keys it.
     void buildRuns(std::vector<Value> const& rows) {
         _runs.clear();
+        _runFirst.clear();
         _runRecords.clear();
         if (!_group) {
             _runCells.reset();
@@ -1527,24 +1570,30 @@ private:
         // keys it: adjacent grouping can give two runs one key.
         std::map<std::string, std::size_t, std::less<>> ordinals;
         ValueList run;
-        auto const close = [&](Value const& key) {
+        std::size_t first = 0;
+        auto const close = [&] {
+            Value const& key = _byValues[first];
             std::string const json = ui::detail::canonicalJson(key);
             Value const record = runRecord(key, std::exchange(run, {}));
             ValueRecord entry = *record.asRecord();
             entry.insert_or_assign(std::string{detail::kGroupHeadingField},
                                    Value{"\x1Fgroup:" + json + ":" + std::to_string(ordinals[json]++)});
             _runRecords.emplace_back(std::move(entry));
+            _runFirst.push_back(first);
         };
         for (std::size_t row = 0; row < rows.size(); ++row) {
-            if (row > 0 && !(_byValues[row] == _byValues[row - 1])) {
-                close(_byValues[row - 1]);
+            if (!run.empty() && !detail::sameElement(_byValues[first], _byValues[row], _groupUnits)) {
+                close();
+            }
+            if (run.empty()) {
+                first = row;
             }
             run.push_back(rows[row]);
             _runs.push_back(_runRecords.size());
             cells->emplace_back(static_cast<std::int64_t>(_runRecords.size()));
         }
         if (!run.empty()) {
-            close(_byValues.back());
+            close();
         }
         _runCells = std::move(cells);
     }
@@ -1560,7 +1609,9 @@ private:
     std::unordered_map<Key, std::size_t> _index;
     std::function<Value(Value const& row)> _group;
     std::vector<Value> _byValues;
+    UnitTable _groupUnits;
     std::vector<std::size_t> _runs;
+    std::vector<std::size_t> _runFirst;
     std::vector<Value> _runRecords;
     std::shared_ptr<std::vector<table::Cell>> _runCells;
     Pending _pending;
