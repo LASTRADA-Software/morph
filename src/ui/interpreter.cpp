@@ -246,11 +246,12 @@ namespace detail {
 class ObservedRows final : public TableRows {
 public:
     ObservedRows(std::shared_ptr<WindowRows> inner, std::function<void()> changed, std::function<void()> scrolled,
-                 std::function<void()> reset)
+                 std::function<void()> reset, std::function<void()> filtered)
         : _inner{std::move(inner)},
           _changed{std::move(changed)},
           _scrolled{std::move(scrolled)},
-          _reset{std::move(reset)} {
+          _reset{std::move(reset)},
+          _filtered{std::move(filtered)} {
         _inner->onChange([this](table::ViewChange const& change) {
             if (_handler) {
                 _handler(change);
@@ -295,8 +296,13 @@ public:
         _inner->locateRow(std::move(key), std::move(stop), std::move(done));
     }
     std::expected<void, table::TableError> setSort(SortChain sort) override { return _inner->setSort(std::move(sort)); }
+    /// A filter set here is the user's, from the table's own gestures.
     std::expected<void, table::TableError> setFilter(table::FilterSpec filter) override {
-        return _inner->setFilter(std::move(filter));
+        auto set = _inner->setFilter(std::move(filter));
+        if (set) {
+            _filtered();
+        }
+        return set;
     }
     [[nodiscard]] TableCountsView counts() const override { return _inner->counts(); }
     void onChange(std::function<void(table::ViewChange const&)> handler) override { _handler = std::move(handler); }
@@ -339,6 +345,7 @@ private:
     std::function<void()> _changed;
     std::function<void()> _scrolled;
     std::function<void()> _reset;
+    std::function<void()> _filtered;
     std::function<void(table::ViewChange const&)> _handler;
     std::int64_t _first = 0;
     std::int64_t _count = 0;
@@ -432,6 +439,9 @@ struct ModelTable {
     /// are fixed; and whether it is the stored one, fitted and reported as stored state is.
     std::optional<table::FilterSpec> heldFilter;
     bool heldStored = false;
+    /// Whether the user set the filter through the table's own gestures: a held literal or stored filter does not
+    /// replace it.
+    bool userFiltered = false;
     /// The described columns' ids.
     std::set<std::string, std::less<>> described;
     /// The fields the row bindings missed this turn; one task fetches them all.
@@ -2608,6 +2618,7 @@ void Session::reconnected() {
 
 std::shared_ptr<void> Session::onReconnected(std::function<void()> handler) {
     auto held = std::make_shared<std::function<void()>>(std::move(handler));
+    std::erase_if(_reconnectListeners, [](auto const& listener) { return listener.expired(); });
     _reconnectListeners.push_back(held);
     return held;
 }
@@ -9429,6 +9440,9 @@ struct ActionTable {
     std::string problem;
     /// Empty when the node's `key`, if any, reads one row field.
     std::string keyProblem;
+    /// What the view document's units say that is not taken: a factor of zero or less, or a unit two columns
+    /// declare differently.
+    std::vector<std::string> unitProblems;
 };
 
 /// One `v-columns` entry of a view document, as a table over the action reads it.
@@ -9442,8 +9456,9 @@ struct ViewColumn {
 
 /// The units a `v-columns` entry declares: its `ExtUnits` (`unitAscii` the id, `unitUnicode` the symbol) as the
 /// canonical unit, at `x-decimalPlaces`, and each `x-unitAlternatives` entry (`id`, `display`, `decimals`, and
-/// `num`/`den`, its factor to the canonical unit), all in one dimension named by the canonical unit's id.
-std::vector<table::UnitInfo> viewUnitsOf(Json::object_t const& fields) {
+/// `num`/`den`, its factor to the canonical unit, 1 when absent), all in one dimension named by the canonical unit's
+/// id. An alternative whose factor is zero or less is left out and said in @p problems.
+std::vector<table::UnitInfo> viewUnitsOf(Json::object_t const& fields, std::vector<std::string>& problems) {
     std::vector<table::UnitInfo> out;
     auto const member = [](Json::object_t const& object, std::string_view name) -> Json const* {
         auto const found = object.find(name);
@@ -9487,21 +9502,54 @@ std::vector<table::UnitInfo> viewUnitsOf(Json::object_t const& fields) {
     for (Json const& entry : entries != nullptr ? std::span<Json const>{*entries} : std::span<Json const>{}) {
         auto const* const alternative = std::get_if<Json::object_t>(&entry.data);
         std::string const* const id = alternative != nullptr ? textOf(*alternative, "id") : nullptr;
-        auto const num = alternative != nullptr ? integerOf(*alternative, "num") : std::nullopt;
-        auto const den = alternative != nullptr ? integerOf(*alternative, "den") : std::nullopt;
-        if (id == nullptr || id->empty() || !num || !den || *den == 0 ||
-            std::ranges::contains(out, *id, &table::UnitInfo::id)) {
+        if (id == nullptr || id->empty() || std::ranges::contains(out, *id, &table::UnitInfo::id)) {
+            continue;
+        }
+        auto const num = integerOf(*alternative, "num").value_or(1);
+        auto const den = integerOf(*alternative, "den").value_or(1);
+        if (num <= 0 || den <= 0) {
+            problems.push_back("the unit `" + *id + "` has a factor of zero or less; it is not listed");
             continue;
         }
         std::string const* const display = textOf(*alternative, "display");
         out.push_back(table::UnitInfo{.id = *id,
                                       .symbol = display != nullptr && !display->empty() ? *display : *id,
                                       .dimension = *ascii,
-                                      .toBase = math::Rational{math::Numerator{*num}, math::Denominator{*den},
+                                      .toBase = math::Rational{math::Numerator{num}, math::Denominator{den},
                                                                math::DecimalPlaces{math::kMaxDecimalPlaces}},
                                       .decimals = places(integerOf(*alternative, "decimals"))});
     }
     return out;
+}
+
+/// Lists one column's units beside the units listed already, so the order of the columns does not matter: a column
+/// one of whose units is listed joins that unit's dimension, its factors scaled through that unit; any other starts
+/// its own. A unit listed already with another dimension or factor is said in @p problems and kept as first listed.
+void listViewUnits(std::span<table::UnitInfo const> column, std::vector<table::UnitInfo>& listed,
+                   std::vector<std::string>& problems) {
+    if (column.empty()) {
+        return;
+    }
+    std::string dimension = column.front().dimension;
+    math::Rational scale{1, math::DecimalPlaces{0}};
+    for (table::UnitInfo const& unit : column) {
+        auto const found = std::ranges::find(listed, unit.id, &table::UnitInfo::id);
+        if (found != listed.end()) {
+            dimension = found->dimension;
+            scale = (found->toBase / unit.toBase).value_or(scale);
+            break;
+        }
+    }
+    for (table::UnitInfo unit : column) {
+        unit.dimension = dimension;
+        unit.toBase = unit.toBase * scale;
+        auto const found = std::ranges::find(listed, unit.id, &table::UnitInfo::id);
+        if (found == listed.end()) {
+            listed.push_back(std::move(unit));
+        } else if (found->dimension != unit.dimension || found->toBase != unit.toBase) {
+            problems.push_back("the unit `" + unit.id + "` is declared differently by two columns; the first is kept");
+        }
+    }
 }
 
 /// The table a typed list action's node describes. The columns are the node's `columns` parts, else the view
@@ -9569,7 +9617,7 @@ ActionTable actionTableOf(DocNode const& node, Catalog const& catalog) {
                 column.hidden = hidden != fields->end() && std::get_if<bool>(&hidden->second.data) != nullptr &&
                                 *std::get_if<bool>(&hidden->second.data);
                 // A column of quantities with units is read as measures, each cell naming its unit.
-                column.units = viewUnitsOf(*fields);
+                column.units = viewUnitsOf(*fields, out.unitProblems);
                 if (!column.units.empty() && column.kind == table::ColumnKind::Quantity) {
                     column.kind = table::ColumnKind::Measure;
                 }
@@ -9583,11 +9631,9 @@ ActionTable actionTableOf(DocNode const& node, Catalog const& catalog) {
     };
     auto const add = [&out](std::string id, std::string label, std::optional<table::ColumnKind> kind, bool shown,
                             ViewColumn const* described) {
-        for (table::UnitInfo const& unit : described != nullptr ? described->units : std::vector<table::UnitInfo>{}) {
-            if (!std::ranges::contains(out.description.units, unit.id, &table::UnitInfo::id)) {
-                out.description.units.push_back(unit);
-            }
-        }
+        listViewUnits(described != nullptr ? std::span<table::UnitInfo const>{described->units}
+                                           : std::span<table::UnitInfo const>{},
+                      out.description.units, out.unitProblems);
         if (!kind) {
             out.inferKinds.push_back(id);
         }
@@ -9694,6 +9740,9 @@ void ScreenCore::wireModelTable(ElementState& element) {
         if (!typed->keyProblem.empty()) {
             report(pointerAppend(node.path, "key"), typed->keyProblem);
         }
+        for (std::string const& problem : typed->unitProblems) {
+            report(node.path, problem);
+        }
     }
     Value const body = node.prop("body") ? runtime().untracked([&] { return evalIn(scope, nullptr, node.prop("body")); })
                                          : Value{};
@@ -9724,18 +9773,23 @@ void ScreenCore::wireModelTable(ElementState& element) {
                                    .maxKeys = 1000,
                                    .maxColumns = 96,
                                    .restoring = model.waiting});
-    element.tableRows = model.window;
+    element.tableWindow = model.window;
     model.rows = std::make_shared<ObservedRows>(
         model.window, model.scope.token().guard([&model] { model.bump(); }),
         model.scope.token().guard([this, &element] { tableGesture(element); }),
-        model.scope.token().guard([&model] { model.resets.set(model.resets.peek() + 1); }));
+        model.scope.token().guard([&model] { model.resets.set(model.resets.peek() + 1); }),
+        model.scope.token().guard([this, &model, &element] {
+            model.userFiltered = true;
+            tableGesture(element);
+        }));
+    element.tableRows = model.rows;
     if (model.describe != nullptr) {
         model.window->onStaleDescription(model.scope.token().guard([&model] { model.describe->invalidate(); }));
     }
     // Heard while the first reply is read: the filter held meanwhile goes once that reply is taken.
-    model.window->onInferred([this, &model, &element] {
+    model.window->onInferred(model.scope.token().guard([this, &model, &element] {
         runtime().owner().post(model.scope.token().guard([this, &element] { inferredTable(element); }));
-    });
+    }));
     // Called inside a binding, where no signal may be written: the misses of one turn are fetched by one task.
     model.onMissing = [this, &model](std::string_view field) {
         bool const first = model.missing.empty();
@@ -9938,6 +9992,7 @@ void ScreenCore::storedTableState(ElementState& element, std::optional<std::stri
     if (!model.filtersBound && document.filters) {
         if (model.window->setFilter(*document.filters)) {
             model.filter = *document.filters;
+            model.heldFilter.reset();
         }
     }
     if (document.layout) {
@@ -10010,26 +10065,36 @@ void ScreenCore::describedTable(ElementState& element, Value const& described) {
 void ScreenCore::inferredTable(ElementState& element) {
     ModelTable& model = *element.modelTable;
     table::TableDescription const* const description = model.window->description();
-    if (!model.heldFilter || description == nullptr) {
+    if (description == nullptr) {
         return;
     }
-    table::FilterSpec filter = *std::exchange(model.heldFilter, std::nullopt);
-    if (std::exchange(model.heldStored, false)) {
-        table::FitReport fitted;
-        table::StateDocument const document = table::fitState(
-            table::StateDocument{
-                .version = table::kStateVersion, .layout = {}, .sort = {}, .filters = filter, .view = {}, .carried = {}},
-            *description, fitted);
-        for (table::FitDrop const& drop : fitted.dropped) {
-            if (drop.what == table::FitDrop::What::Filter || drop.what == table::FitDrop::What::GroupFilter) {
-                report(element.node->path, "the stored filter on `" + drop.id + "` is not applied: " +
-                                               (drop.carried ? "the table has no such column"
-                                                             : "it does not apply to the column's kind"));
-            }
-        }
-        filter = document.filters.value_or(table::FilterSpec{});
+    // The held filter, unless the user filtered meanwhile: a bound filter is the document's and always wins; a
+    // literal one gives way to a user's filter, a stored one to any gesture, as a late stored state does. Without
+    // one, the filter the rows hold, which may have been compiled against the placeholders, is fitted again.
+    std::optional<table::FilterSpec> held = std::exchange(model.heldFilter, std::nullopt);
+    bool const stored = std::exchange(model.heldStored, false);
+    bool const yields = !model.filtersBound && (stored ? model.touched : model.userFiltered);
+    if (held && yields) {
+        held.reset();
     }
-    if (filter == model.filter) {
+    table::FilterSpec filter = held ? *held : model.window->filter();
+    bool const fromStore = held && stored;
+    table::FitReport fitted;
+    table::StateDocument const document = table::fitState(
+        table::StateDocument{
+            .version = table::kStateVersion, .layout = {}, .sort = {}, .filters = filter, .view = {}, .carried = {}},
+        *description, fitted);
+    for (table::FitDrop const& drop : fitted.dropped) {
+        if (drop.what == table::FitDrop::What::Filter || drop.what == table::FitDrop::What::GroupFilter) {
+            report(element.node->path, std::string{fromStore ? "the stored filter" : "the filter"} + " on `" +
+                                           drop.id + "` is not applied: " +
+                                           (drop.carried ? "the table has no such column"
+                                                         : "it does not apply to the column's kind"));
+        }
+    }
+    filter = document.filters.value_or(table::FilterSpec{});
+    if (filter == model.window->filter()) {
+        model.filter = std::move(filter);
         return;
     }
     if (auto const set = model.window->setFilter(filter); !set) {
