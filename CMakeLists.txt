@@ -677,6 +677,7 @@ target_sources(morph
         include/morph/ui/chat/client.hpp
         include/morph/ui/chat/config.hpp
         include/morph/ui/chat/conversations.hpp
+        include/morph/ui/chat/extra_tool.hpp
         include/morph/ui/chat/panel.hpp
         include/morph/ui/chat/protocol.hpp
         include/morph/ui/chat/provider.hpp

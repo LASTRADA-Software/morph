@@ -9,6 +9,7 @@ the push path every other change uses. The design is in
 
 - [Protocol](#protocol)
 - [Tools](#tools)
+- [Extra tools](#extra-tools)
 - [Providers](#providers)
 - [Configuration](#configuration)
 - [The turn loop](#the-turn-loop)
@@ -39,6 +40,14 @@ tool calls. `TurnState::parts` lists the rounds' texts and the tool calls in the
 draw what was said before a call before it, not after. A state without `parts`, from a server that does not send them, is
 read as its `steps` and then its `text`.
 
+**Drafts.** `TurnRequest::draft` is the document of the draft the person has open on the screen, as JSON text, and
+`TurnState::draft` is the last document the server accepted this turn. A `draft` event on the `chat` topic carries that
+document in its `text`, so a client can mount it at once; like every event it is a hint, and a client that missed it reads
+the document from `TurnState`. All three are optional on the wire: a peer that does not know them ignores them, and a
+message with none says nothing. The server refuses a turn whose draft is over `ChatLimits::maxProposalBytes` (64 KiB) or is
+not a JSON object, so a client's text is bounded and parsed before anything reads it. The server reaches a draft only
+through an extra tool, which is also what checks it.
+
 A turn's progress goes out as `TurnEvent`s on the `chat` event topic, to that connection only. **Events are hints.** The
 server writes nothing to a connection that is behind, so a turn's last event can be lost with no error. `TurnState` is
 the record, and a client reads it when a turn starts, on `resync` and on reconnect. A client ignores event topics it does
@@ -56,6 +65,35 @@ has a short list of what this screen can do, and not every action in the applica
   already taken, gets a shortened stem and a hash of its scope, alias and action. Two instances of one model type on one
   screen are told apart this way, which a list keyed by model type could not do.
 - **A credential action gets no tool.** A model should not be handed a password to pass along.
+
+## Extra tools
+
+`extra_tool.hpp`. `ChatOptions::tools` adds tools beside the open screen's own, for what an application's chat can do
+that is not one of the screen's actions. A `ChatTool` is a `ToolSpec`, an `offer`, a `handler` and a `record`.
+
+- **Offered per turn.** `offer` runs once when the turn builds its tools, on the worker, with the turn's session and the
+  `TurnRequest` (screen, params, identity, models, draft) and answers whether this turn offers the tool. It can add text to
+  the system prompt whether or not it offers the tool, which is where a tool that is not offered says why. What it works out
+  can travel to the handler in `ChatToolOffer::carried`. With no `offer` the tool is always offered.
+- **Run by a handler.** A call whose arguments parse to a JSON object runs `handler` on the worker with the context by
+  value. It answers through a callback, from any thread: a handler backed by a coroutine starts it with
+  `morph::async::spawn` and keeps whatever it captures alive until it answers. The first answer counts and later ones are
+  ignored, and one that arrives after the turn stopped changes nothing. A handler that never answers leaves the turn waiting
+  until it is cancelled.
+- **The same rules as a screen's tools.** An unknown name, or arguments that are not an object, are a tool error counted
+  against `maxToolCallsPerTurn`, and the handler is not called. A handler that throws is a failed call, and the model is told
+  only that the tool failed. Nothing a provider returns faults the worker. Stopping the turn cancels it.
+- **What an outcome can do.** `isError` marks the call failed, and `ChatToolContext::failedCalls` tells the next call of the
+  tool how many already failed, so a tool can set its own limit. `stop` ends the turn as failed with that text, after the
+  call's result is recorded. `draft` becomes `TurnState::draft` and goes out as a `draft` event; a failed call's draft is
+  dropped.
+- **What the conversation keeps.** `record` rewrites a call's arguments before the conversation stores them, so a large
+  argument is not carried through every later turn. The turn itself sees the call as the model wrote it.
+- **Names.** 1 to 64 characters of letters, digits, `_` and `-`, with no `__`, which every screen tool's name has, and distinct
+  from the other extra tools. `ChatService` refuses a tool that breaks the rules, or has no handler, when it is built.
+
+A tool is data-in, checks-out: it treats the request's fields, the draft above all, as text someone may have written, and
+does what it does under the session it is given.
 
 ## Providers
 

@@ -13,6 +13,7 @@
 #include <catch2/catch_tostring.hpp>
 #include <chrono>
 #include <cstdint>
+#include <functional>
 #include <future>
 #include <memory>
 #include <morph/core/bridge.hpp>
@@ -233,7 +234,7 @@ struct Rig {
     std::atomic<std::uint64_t> nextCall{1};
 
     explicit Rig(chat::ChatLimits given = {}, bool withProvider = true,
-                 std::shared_ptr<chat::IProvider> const& other = nullptr)
+                 std::shared_ptr<chat::IProvider> const& other = nullptr, std::vector<chat::ChatTool> tools = {})
         : limits{given} {
         {
             std::scoped_lock const lock{chat_service_test::store().mutex};
@@ -266,6 +267,7 @@ struct Rig {
         options.worker = &worker;
         options.bundle = bundle;
         options.limits = limits;
+        options.tools = std::move(tools);
         chatService = std::make_shared<chat::ChatService>(std::move(options));
         config.services.push_back(chatService);
         server =
@@ -1243,4 +1245,365 @@ TEST_CASE("a_cut_tool_result_never_splits_a_character", "[chat][service]") {
     REQUIRE(state.status == chat::TurnStatus::Done);
     auto const sent = rig.fake->requests().at(1).messages.at(2).results.at(0).text;
     CHECK(sent.starts_with(std::string{R"({"id":1,"text":")"} + "\n[cut off"));
+}
+
+namespace {
+
+// What an extra tool's handler saw, for a test to read afterwards.
+struct Seen {
+    std::mutex mutex;
+    std::vector<chat::ChatToolContext> contexts;
+    std::vector<std::string> arguments;
+    std::vector<chat::ChatToolDone> held;
+};
+
+chat::ChatTool extraTool(std::string name, std::shared_ptr<Seen> const& seen,
+                         std::function<chat::ChatToolOutcome(chat::ChatToolContext const&)> outcome) {
+    chat::ChatTool tool;
+    tool.spec = chat::ToolSpec{.name = std::move(name), .description = "an extra tool", .inputSchema = {}};
+    tool.handler = [seen, outcome = std::move(outcome)](chat::ChatToolContext const& context,
+                                                        ui::Json const& arguments, chat::ChatToolDone const& done) {
+        {
+            std::scoped_lock const lock{seen->mutex};
+            seen->contexts.push_back(context);
+            seen->arguments.push_back(glz::write_json(arguments).value_or(""));
+        }
+        done(outcome(context));
+    };
+    return tool;
+}
+
+chat::Response callOf(std::string const& name, std::string arguments = "{}", std::string id = "x1") {
+    return chat::Response{
+        .text = "",
+        .calls = {chat::ToolCall{.id = std::move(id), .name = name, .argumentsJson = std::move(arguments)}}};
+}
+
+std::vector<chat::ToolSpec> offeredTo(Rig& rig, std::size_t call) { return rig.fake->requests().at(call).tools; }
+
+bool offers(std::vector<chat::ToolSpec> const& tools, std::string_view name) {
+    return std::ranges::any_of(tools, [&](chat::ToolSpec const& spec) { return spec.name == name; });
+}
+
+}  // namespace
+
+// Mutation: leave `turn->extras` out of the provider's request.
+TEST_CASE("an_extra_tool_is_offered_beside_the_screens_tools", "[chat][service][extra]") {
+    auto const seen = std::make_shared<Seen>();
+    Rig rig{{}, true, nullptr, {extraTool("echo", seen, [](auto const&) { return chat::ChatToolOutcome{}; })}};
+    auto const cid = rig.gui();
+    auto const id = rig.instance(cid);
+    rig.fake->script(chat::Response{.text = "ok", .calls = {}, .opaque = {}});
+    static_cast<void>(rig.finished(rig.start(Rig::turnOn(id, "hi"), cid), cid));
+    auto const tools = offeredTo(rig, 0);
+    CHECK(tools.size() == 6);
+    CHECK(offers(tools, "echo"));
+    CHECK(offers(tools, "notes__Chat_Add"));
+}
+
+// Mutation: run the handler under another session, or without the request's screen.
+TEST_CASE("a_call_runs_the_handler_with_the_session_the_screen_and_the_arguments", "[chat][service][extra]") {
+    auto const seen = std::make_shared<Seen>();
+    Rig rig{{}, true, nullptr, {extraTool("echo", seen, [](auto const&) {
+                return chat::ChatToolOutcome{.text = "echoed", .isError = false, .draft = {}, .stop = {}};
+            })}};
+    auto const cid = rig.gui();
+    auto const id = rig.instance(cid);
+    rig.fake->script(callOf("echo", R"({"word":"hi"})"));
+    rig.fake->script(chat::Response{.text = "done", .calls = {}, .opaque = {}});
+    auto request = Rig::turnOn(id, "say hi");
+    request.paramsJson = R"({"p":1})";
+    auto const state = rig.finished(rig.start(request, cid), cid);
+    REQUIRE(state.status == chat::TurnStatus::Done);
+    REQUIRE(state.steps.size() == 1);
+    CHECK(state.steps.front().name == "echo");
+    CHECK(state.steps.front().ok);
+    CHECK(state.steps.front().message == "echoed");
+    std::scoped_lock const lock{seen->mutex};
+    REQUIRE(seen->contexts.size() == 1);
+    auto const& context = seen->contexts.front();
+    CHECK(context.session.principal == "alice");
+    CHECK(context.request.screenId == "notes");
+    CHECK(context.request.paramsJson == R"({"p":1})");
+    CHECK(context.request.text == "say hi");
+    CHECK(context.bundle != nullptr);
+    CHECK(context.failedCalls == 0);
+    CHECK(seen->arguments.front().contains("hi"));
+    auto const sent = rig.fake->requests().at(1).messages.at(2).results.at(0);
+    CHECK(sent.callId == "x1");
+    CHECK(sent.text == "echoed");
+    CHECK_FALSE(sent.isError);
+}
+
+// Mutation: run a handler for a call whose arguments are not an object.
+TEST_CASE("an_extra_tools_malformed_arguments_are_a_tool_error_that_counts", "[chat][service][extra]") {
+    auto const seen = std::make_shared<Seen>();
+    chat::ChatLimits limits;
+    limits.maxToolCallsPerTurn = 2;
+    Rig rig{limits, true, nullptr, {extraTool("echo", seen, [](auto const&) { return chat::ChatToolOutcome{}; })}};
+    auto const cid = rig.gui();
+    auto const id = rig.instance(cid);
+    rig.fake->repeat(callOf("echo", "[1,2]"));
+    auto const state = rig.finished(rig.start(Rig::turnOn(id, "go"), cid), cid);
+    CHECK(state.status == chat::TurnStatus::Failed);
+    CHECK(state.error.contains("limit of 2 tool calls"));
+    REQUIRE(state.steps.size() == 2);
+    CHECK_FALSE(state.steps.front().ok);
+    std::scoped_lock const lock{seen->mutex};
+    CHECK(seen->contexts.empty());
+}
+
+// Mutation: let a handler's exception reach the step's catch, which fails the turn.
+TEST_CASE("a_throwing_handler_is_a_failed_call_not_a_failed_turn", "[chat][service][extra]") {
+    chat::ChatTool tool;
+    tool.spec = chat::ToolSpec{.name = "boom", .description = "throws", .inputSchema = {}};
+    tool.handler = [](chat::ChatToolContext const&, ui::Json const&, chat::ChatToolDone const&) {
+        throw std::runtime_error{"secret internals"};
+    };
+    Rig rig{{}, true, nullptr, {std::move(tool)}};
+    auto const cid = rig.gui();
+    auto const id = rig.instance(cid);
+    rig.fake->script(callOf("boom"));
+    rig.fake->script(chat::Response{.text = "recovered", .calls = {}, .opaque = {}});
+    auto const state = rig.finished(rig.start(Rig::turnOn(id, "go"), cid), cid);
+    CHECK(state.status == chat::TurnStatus::Done);
+    REQUIRE(state.steps.size() == 1);
+    CHECK_FALSE(state.steps.front().ok);
+    auto const sent = rig.fake->requests().at(1).messages.at(2).results.at(0);
+    CHECK(sent.isError);
+    CHECK_FALSE(sent.text.contains("secret"));
+}
+
+// Mutation: do not guard the completion: the second delivery runs another round.
+TEST_CASE("a_handler_that_answers_later_from_another_thread_and_twice_counts_once", "[chat][service][extra]") {
+    std::vector<std::jthread> threads;
+    std::mutex threadsMutex;
+    chat::ChatTool tool;
+    tool.spec = chat::ToolSpec{.name = "later", .description = "answers later", .inputSchema = {}};
+    tool.handler = [&](chat::ChatToolContext const&, ui::Json const&, chat::ChatToolDone const& done) {
+        std::scoped_lock const lock{threadsMutex};
+        threads.emplace_back([done] {
+            std::this_thread::sleep_for(20ms);
+            done(chat::ChatToolOutcome{.text = "late", .isError = false, .draft = {}, .stop = {}});
+            done(chat::ChatToolOutcome{.text = "twice", .isError = true, .draft = {}, .stop = {}});
+        });
+    };
+    Rig rig{{}, true, nullptr, {std::move(tool)}};
+    auto const cid = rig.gui();
+    auto const id = rig.instance(cid);
+    rig.fake->script(callOf("later"));
+    rig.fake->script(chat::Response{.text = "done", .calls = {}, .opaque = {}});
+    auto const state = rig.finished(rig.start(Rig::turnOn(id, "go"), cid), cid);
+    CHECK(state.status == chat::TurnStatus::Done);
+    REQUIRE(state.steps.size() == 1);
+    CHECK(state.steps.front().message == "late");
+    CHECK(rig.fake->calls() == 2);
+}
+
+// Mutation: ignore `draft` in the outcome, or announce it without recording it.
+TEST_CASE("an_outcomes_draft_becomes_the_turn_state_and_a_draft_event", "[chat][service][extra]") {
+    auto const seen = std::make_shared<Seen>();
+    Rig rig{{}, true, nullptr, {extraTool("make", seen, [](auto const&) {
+                return chat::ChatToolOutcome{
+                    .text = "accepted", .isError = false, .draft = R"({"id":"notes"})", .stop = {}};
+            })}};
+    auto const cid = rig.gui();
+    auto const id = rig.instance(cid);
+    rig.fake->script(callOf("make"));
+    rig.fake->script(chat::Response{.text = "done", .calls = {}, .opaque = {}});
+    auto const turnId = rig.start(Rig::turnOn(id, "go"), cid);
+    auto const state = rig.finished(turnId, cid);
+    REQUIRE(state.status == chat::TurnStatus::Done);
+    CHECK(state.draft == std::optional<std::string>{R"({"id":"notes"})"});
+    std::vector<chat::TurnEvent> drafts;
+    REQUIRE(waitFor([&] {
+        drafts.clear();
+        for (wire::EventBody const& event : rig.eventWire.events()) {
+            if (event.topic == chat::kChatTopic) {
+                auto read = chat::readTurnEvent(event.payload.str);
+                REQUIRE(read.has_value());
+                if (read->kind == "draft") {
+                    drafts.push_back(*read);
+                }
+            }
+        }
+        return !drafts.empty();
+    }));
+    REQUIRE(drafts.size() == 1);
+    CHECK(drafts.front().text == R"({"id":"notes"})");
+    CHECK(drafts.front().turnId == turnId);
+}
+
+// Mutation: a failed call's draft is applied.
+TEST_CASE("a_turn_with_no_accepted_draft_reports_none", "[chat][service][extra]") {
+    auto const seen = std::make_shared<Seen>();
+    Rig rig{{}, true, nullptr, {extraTool("make", seen, [](auto const&) {
+                return chat::ChatToolOutcome{.text = "no", .isError = true, .draft = R"({"id":"notes"})", .stop = {}};
+            })}};
+    auto const cid = rig.gui();
+    auto const id = rig.instance(cid);
+    rig.fake->script(callOf("make"));
+    rig.fake->script(chat::Response{.text = "done", .calls = {}, .opaque = {}});
+    auto const state = rig.finished(rig.start(Rig::turnOn(id, "go"), cid), cid);
+    CHECK_FALSE(state.draft.has_value());
+}
+
+// Mutation: offer the tool whatever its offer says, or drop the system text of one not offered.
+TEST_CASE("an_offer_decides_whether_the_tool_is_offered_and_what_the_system_text_says", "[chat][service][extra]") {
+    auto const seen = std::make_shared<Seen>();
+    auto declined = extraTool("declined", seen, [](auto const&) { return chat::ChatToolOutcome{}; });
+    declined.offer = [](chat::ChatToolContext const&, chat::ChatToolOfferDone const& done) {
+        done(chat::ChatToolOffer{.offered = false, .system = "THE DECLINED NOTE", .carried = nullptr});
+    };
+    auto accepted = extraTool("accepted", seen, [](auto const&) { return chat::ChatToolOutcome{}; });
+    accepted.offer = [](chat::ChatToolContext const& context, chat::ChatToolOfferDone const& done) {
+        done(chat::ChatToolOffer{
+            .offered = true, .system = "ACCEPTED FOR " + context.request.screenId, .carried = nullptr});
+    };
+    Rig rig{{}, true, nullptr, {std::move(declined), std::move(accepted)}};
+    auto const cid = rig.gui();
+    auto const id = rig.instance(cid);
+    rig.fake->script(callOf("declined"));
+    rig.fake->script(chat::Response{.text = "done", .calls = {}, .opaque = {}});
+    auto const state = rig.finished(rig.start(Rig::turnOn(id, "go"), cid), cid);
+    REQUIRE(state.status == chat::TurnStatus::Done);
+    auto const asked = rig.fake->requests().at(0);
+    CHECK_FALSE(offers(asked.tools, "declined"));
+    CHECK(offers(asked.tools, "accepted"));
+    CHECK(asked.system.contains("THE DECLINED NOTE"));
+    CHECK(asked.system.contains("ACCEPTED FOR notes"));
+    REQUIRE(state.steps.size() == 1);
+    CHECK_FALSE(state.steps.front().ok);
+    CHECK(state.steps.front().message.contains("no tool"));
+    std::scoped_lock const lock{seen->mutex};
+    CHECK(seen->contexts.empty());
+}
+
+// Mutation: pass nothing the offer carried.
+TEST_CASE("what_an_offer_carries_reaches_the_handler", "[chat][service][extra]") {
+    auto const seen = std::make_shared<Seen>();
+    auto tool = extraTool("carry", seen, [](auto const&) { return chat::ChatToolOutcome{}; });
+    tool.offer = [](chat::ChatToolContext const&, chat::ChatToolOfferDone const& done) {
+        done(chat::ChatToolOffer{
+            .offered = true, .system = {}, .carried = std::make_shared<std::string const>("kept")});
+    };
+    Rig rig{{}, true, nullptr, {std::move(tool)}};
+    auto const cid = rig.gui();
+    auto const id = rig.instance(cid);
+    rig.fake->script(callOf("carry"));
+    rig.fake->script(chat::Response{.text = "done", .calls = {}, .opaque = {}});
+    static_cast<void>(rig.finished(rig.start(Rig::turnOn(id, "go"), cid), cid));
+    std::scoped_lock const lock{seen->mutex};
+    REQUIRE(seen->contexts.size() == 1);
+    REQUIRE(seen->contexts.front().carried != nullptr);
+    CHECK(*static_cast<std::string const*>(seen->contexts.front().carried.get()) == "kept");
+}
+
+// Mutation: do not count a failed call, or count it against the wrong tool.
+TEST_CASE("a_handler_is_told_how_many_of_its_calls_failed_and_may_stop_the_turn", "[chat][service][extra]") {
+    auto const seen = std::make_shared<Seen>();
+    Rig rig{{}, true, nullptr, {extraTool("strict", seen, [](chat::ChatToolContext const& context) {
+                bool const last = context.failedCalls >= 2;
+                return chat::ChatToolOutcome{.text = "refused " + std::to_string(context.failedCalls),
+                                             .isError = true,
+                                             .draft = {},
+                                             .stop = last ? std::optional<std::string>{"enough"} : std::nullopt};
+            })}};
+    auto const cid = rig.gui();
+    auto const id = rig.instance(cid);
+    rig.fake->repeat(callOf("strict"));
+    auto const state = rig.finished(rig.start(Rig::turnOn(id, "go"), cid), cid);
+    CHECK(state.status == chat::TurnStatus::Failed);
+    CHECK(state.error == "enough");
+    REQUIRE(state.steps.size() == 3);
+    CHECK(state.steps.at(2).message == "refused 2");
+    CHECK(rig.fake->calls() == 3);
+}
+
+// Mutation: skip `record`, so the conversation keeps the whole arguments.
+TEST_CASE("the_conversation_keeps_what_an_extra_tool_records_of_a_call", "[chat][service][extra]") {
+    auto const seen = std::make_shared<Seen>();
+    auto tool = extraTool("big", seen, [](auto const&) { return chat::ChatToolOutcome{}; });
+    tool.record = [](std::string const& arguments) {
+        return R"({"kept":")" + std::to_string(arguments.size()) + R"("})";
+    };
+    Rig rig{{}, true, nullptr, {std::move(tool)}};
+    auto const cid = rig.gui();
+    auto const id = rig.instance(cid);
+    rig.fake->script(callOf("big", R"({"payload":"THE WHOLE DOCUMENT"})"));
+    rig.fake->script(chat::Response{.text = "done", .calls = {}, .opaque = {}});
+    static_cast<void>(rig.finished(rig.start(Rig::turnOn(id, "first"), cid), cid));
+    // Within the turn, the model's second request still carries the call as written.
+    CHECK(rig.fake->requests().at(1).messages.at(1).calls.at(0).argumentsJson.contains("THE WHOLE DOCUMENT"));
+    rig.fake->script(chat::Response{.text = "again", .calls = {}, .opaque = {}});
+    static_cast<void>(rig.finished(rig.start(Rig::turnOn(id, "second"), cid), cid));
+    auto const later = rig.fake->requests().at(2).messages;
+    REQUIRE(later.size() >= 3);
+    bool found = false;
+    for (chat::Message const& message : later) {
+        for (chat::ToolCall const& call : message.calls) {
+            found = true;
+            CHECK_FALSE(call.argumentsJson.contains("THE WHOLE DOCUMENT"));
+            CHECK(call.argumentsJson.starts_with(R"({"kept":")"));
+        }
+    }
+    CHECK(found);
+}
+
+// Mutation: apply an outcome after the turn stopped.
+TEST_CASE("an_outcome_delivered_after_the_turn_stopped_changes_nothing", "[chat][service][extra]") {
+    auto const seen = std::make_shared<Seen>();
+    chat::ChatTool tool;
+    tool.spec = chat::ToolSpec{.name = "slow", .description = "waits", .inputSchema = {}};
+    tool.handler = [seen](chat::ChatToolContext const&, ui::Json const&, chat::ChatToolDone const& done) {
+        std::scoped_lock const lock{seen->mutex};
+        seen->held.push_back(done);
+    };
+    Rig rig{{}, true, nullptr, {std::move(tool)}};
+    auto const cid = rig.gui();
+    auto const id = rig.instance(cid);
+    rig.fake->script(callOf("slow"));
+    auto const turnId = rig.start(Rig::turnOn(id, "go"), cid);
+    REQUIRE(waitFor([&] {
+        std::scoped_lock const lock{seen->mutex};
+        return !seen->held.empty();
+    }));
+    wire::Envelope cancel;
+    cancel.kind = std::string{chat::kCancelKind};
+    auto const cancelReply = rig.call(std::move(cancel), cid);
+    REQUIRE(cancelReply.kind == "ok");
+    chat::ChatToolDone done;
+    {
+        std::scoped_lock const lock{seen->mutex};
+        done = seen->held.front();
+    }
+    done(chat::ChatToolOutcome{.text = "late", .isError = false, .draft = R"({"id":"notes"})", .stop = {}});
+    morph::testing::storageOwner().runFor(100ms);
+    auto const state = rig.state(turnId, cid);
+    CHECK(state.status == chat::TurnStatus::Cancelled);
+    CHECK_FALSE(state.draft.has_value());
+    CHECK(state.steps.empty());
+    CHECK(rig.fake->calls() == 1);
+}
+
+// Mutation: skip the name checks in the constructor.
+TEST_CASE("a_service_refuses_extra_tools_it_cannot_tell_apart", "[chat][service][extra]") {
+    auto const seen = std::make_shared<Seen>();
+    auto const make = [&](std::string name) {
+        return extraTool(std::move(name), seen, [](auto const&) { return chat::ChatToolOutcome{}; });
+    };
+    auto const build = [&](std::vector<chat::ChatTool> tools) {
+        chat::ChatOptions options;
+        options.tools = std::move(tools);
+        chat::ChatService const service{std::move(options)};
+    };
+    CHECK_NOTHROW(build({make("one"), make("two")}));
+    CHECK_THROWS_AS(build({make("same"), make("same")}), std::invalid_argument);
+    CHECK_THROWS_AS(build({make("")}), std::invalid_argument);
+    CHECK_THROWS_AS(build({make("has space")}), std::invalid_argument);
+    CHECK_THROWS_AS(build({make("notes__Chat_Add")}), std::invalid_argument);
+    CHECK_THROWS_AS(build({make(std::string(65, 'a'))}), std::invalid_argument);
+    chat::ChatTool noHandler;
+    noHandler.spec.name = "empty";
+    CHECK_THROWS_AS(build({std::move(noHandler)}), std::invalid_argument);
 }

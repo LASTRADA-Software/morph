@@ -8,6 +8,7 @@
 #include <morph/export.hpp>
 #include <string>
 #include <string_view>
+#include <vector>
 
 #include "../../core/executor.hpp"
 #include "../../core/registry.hpp"
@@ -15,6 +16,7 @@
 #include "../../core/wire.hpp"
 #include "../../session/session.hpp"
 #include "conversations.hpp"
+#include "extra_tool.hpp"
 #include "provider.hpp"
 
 /// @file
@@ -50,6 +52,11 @@ struct MORPH_API ChatOptions {
     std::string systemPrompt = std::string{kDefaultSystemPrompt};
     /// @brief The clock retention reads; empty for `steady_clock`.
     std::function<std::chrono::steady_clock::time_point()> now;
+    /// @brief Tools offered beside the ones the open screen names. A turn offers each one whose `offer` accepts it,
+    /// and
+    ///        a call of one runs its handler in place of an action. Their names must be valid, and distinct from each
+    ///        other; see `ChatTool`.
+    std::vector<ChatTool> tools;
     /// @brief The dispatcher the server's actions are registered on. Borrowed.
     ::morph::model::detail::ActionDispatcher* dispatcher = &::morph::model::detail::defaultDispatcher();
 
@@ -69,7 +76,8 @@ class MORPH_API ChatService final : public backend::IEnvelopeService {
 public:
     /// @brief A service over @p options.
     /// @param options What it is built with.
-    /// @throws std::invalid_argument with a provider but no worker or bundle.
+    /// @throws std::invalid_argument with a provider but no worker or bundle, or with an extra tool whose name is
+    ///         invalid or taken by another, or which has no handler.
     explicit ChatService(ChatOptions options);
 
     /// @brief Stops every running turn. A provider call answering later reaches nothing.

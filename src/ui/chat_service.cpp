@@ -28,6 +28,7 @@
 #include <morph/ui/bundle.hpp>
 #include <morph/ui/chat/config.hpp>
 #include <morph/ui/chat/conversations.hpp>
+#include <morph/ui/chat/extra_tool.hpp>
 #include <morph/ui/chat/protocol.hpp>
 #include <morph/ui/chat/provider.hpp>
 #include <morph/ui/chat/screen_tools.hpp>
@@ -61,6 +62,12 @@ struct ChatService::Turn {
     TurnRequest request;
     std::string system;
     std::vector<BoundTool> tools;
+    // The extra tools this turn offers, which point into the service's options.
+    std::vector<ChatTool const*> extras;
+    // How many calls of each extra tool failed this turn.
+    std::map<std::string, std::size_t, std::less<>> extraFailures;
+    // What each offered tool's `offer` carried to its handler, by tool name.
+    std::map<std::string, std::shared_ptr<void const>, std::less<>> carried;
     std::vector<Message> messages;
     std::deque<ToolCall> pending;
     std::vector<ToolResult> results;
@@ -170,8 +177,24 @@ struct ChatService::Shared {
             turn.said.reset();
         }
         for (Message const& message : messages) {
-            self.conversations.append(keyOf(turn), message, self.now());
+            self.conversations.append(keyOf(turn), recorded(self, message), self.now());
         }
+    }
+
+    // @p message as the conversation keeps it: a call of an extra tool with the arguments that tool says to keep.
+    [[nodiscard]] static Message recorded(Shared const& self, Message message) {
+        for (ToolCall& call : message.calls) {
+            ChatTool const* const tool = extraNamed(self, call.name);
+            if (tool == nullptr || !tool->record) {
+                continue;
+            }
+            try {
+                call.argumentsJson = tool->record(call.argumentsJson);
+            } catch (...) {
+                call.argumentsJson = "{}";
+            }
+        }
+        return message;
     }
 
     // Why a client's draft cannot be used as the screen's document, or nothing. A draft is text from the client, so it
@@ -442,15 +465,90 @@ struct ChatService::Shared {
         std::set<std::string, std::less<>> const permitted(catalog.permitted.begin(), catalog.permitted.end());
         turn->tools = screenTools(*document, turn->request.models, permitted, schemas,
                                   catalog.actions ? &*catalog.actions : nullptr);
+        // An extra tool's name is the one the model is told, so a screen tool that took it is withheld.
+        std::erase_if(turn->tools, [&](BoundTool const& tool) {
+            bool const taken = extraNamed(*self, tool.spec.name) != nullptr;
+            if (taken) {
+                log::logWarn("[chat] the screen tool {} is withheld: an extra tool has its name", tool.spec.name);
+            }
+            return taken;
+        });
         turn->system = systemText(*self, turn->request);
-        Message said{.role = "user", .text = turn->request.text, .calls = {}, .results = {}, .opaque = {}};
-        {
-            std::scoped_lock const lock{self->mutex};
-            turn->messages = self->conversations.history(keyOf(*turn), self->now());
+        offerExtras(self, turn, 0);
+    }
+
+    [[nodiscard]] static ChatTool const* extraNamed(Shared const& self, std::string_view name) {
+        auto const found =
+            std::ranges::find_if(self.options.tools, [&](ChatTool const& tool) { return tool.spec.name == name; });
+        return found == self.options.tools.end() ? nullptr : &*found;
+    }
+
+    [[nodiscard]] static ChatToolContext contextOf(Shared const& self, Turn const& turn, ChatTool const& tool,
+                                                   std::shared_ptr<void const> carried) {
+        auto const failed = turn.extraFailures.find(tool.spec.name);
+        return ChatToolContext{.session = turn.session,
+                               .request = turn.request,
+                               .bundle = self.options.bundle,
+                               .limits = self.options.limits,
+                               .failedCalls = failed == turn.extraFailures.end() ? 0U : failed->second,
+                               .carried = std::move(carried)};
+    }
+
+    // Wraps a completion so it runs once, on the worker, and only while the turn does: a handler or an offer may
+    // answer from any thread, twice, or after the turn stopped.
+    template <typename Value>
+    [[nodiscard]] static std::function<void(Value)> onWorker(std::shared_ptr<Shared> const& self, TurnPtr const& turn,
+                                                             std::function<void(Value)> then) {
+        auto const fired = std::make_shared<std::atomic<bool>>(false);
+        return [self, turn, then = std::move(then), fired](Value value) {
+            if (fired->exchange(true)) {
+                return;
+            }
+            auto const held = std::make_shared<Value>(std::move(value));
+            step(self, turn, [then, held] { then(std::move(*held)); });
+        };
+    }
+
+    // Asks each extra tool, one at a time, whether this turn offers it, and then starts the model.
+    // NOLINTNEXTLINE(misc-no-recursion): each pass takes the next of the service's fixed list of tools.
+    static void offerExtras(std::shared_ptr<Shared> const& self, TurnPtr const& turn, std::size_t index) {
+        if (index >= self->options.tools.size()) {
+            Message said{.role = "user", .text = turn->request.text, .calls = {}, .results = {}, .opaque = {}};
+            {
+                std::scoped_lock const lock{self->mutex};
+                turn->messages = self->conversations.history(keyOf(*turn), self->now());
+            }
+            turn->said = said;
+            turn->messages.push_back(std::move(said));
+            callProvider(self, turn);
+            return;
         }
-        turn->said = said;
-        turn->messages.push_back(std::move(said));
-        callProvider(self, turn);
+        ChatTool const& tool = self->options.tools.at(index);
+        // NOLINTNEXTLINE(misc-no-recursion): each pass takes the next of the service's fixed list of tools.
+        auto const accepted = [self, turn, index, &tool](ChatToolOffer const& offer) {
+            if (!offer.system.empty()) {
+                turn->system += "\n\n" + offer.system;
+            }
+            if (offer.offered) {
+                turn->extras.push_back(&tool);
+                turn->carried.insert_or_assign(tool.spec.name, offer.carried);
+            }
+            offerExtras(self, turn, index + 1);
+        };
+        if (!tool.offer) {
+            accepted(ChatToolOffer{.offered = true, .system = {}, .carried = nullptr});
+            return;
+        }
+        auto const answered = onWorker<ChatToolOffer>(self, turn, accepted);
+        try {
+            tool.offer(contextOf(*self, *turn, tool, nullptr), answered);
+        } catch (std::exception const& error) {
+            log::logWarn("[chat] the extra tool {} failed to answer whether it is offered: {}", tool.spec.name,
+                         error.what());
+            answered(ChatToolOffer{.offered = false, .system = {}, .carried = nullptr});
+        } catch (...) {
+            answered(ChatToolOffer{.offered = false, .system = {}, .carried = nullptr});
+        }
     }
 
     // Adds a piece of the model's text to the turn, which the caller's lock guards. A round's first piece opens a
@@ -496,9 +594,12 @@ struct ChatService::Shared {
         turn->roundText.clear();
         turn->roundStreamed = false;
         Request request{.system = turn->system, .messages = turn->messages, .tools = {}};
-        request.tools.reserve(turn->tools.size());
+        request.tools.reserve(turn->tools.size() + turn->extras.size());
         for (BoundTool const& tool : turn->tools) {
             request.tools.push_back(tool.spec);
+        }
+        for (ChatTool const* const tool : turn->extras) {
+            request.tools.push_back(tool->spec);
         }
         ProviderSink sink;
         sink.text = [self, turn](std::string const& piece) {
@@ -594,16 +695,59 @@ struct ChatService::Shared {
         turn->pending.pop_front();
         auto const tool = std::ranges::find_if(
             turn->tools, [&](BoundTool const& candidate) { return candidate.spec.name == call.name; });
-        if (tool == turn->tools.end()) {
+        auto const extra = std::ranges::find_if(
+            turn->extras, [&](ChatTool const* candidate) { return candidate->spec.name == call.name; });
+        if (tool == turn->tools.end() && extra == turn->extras.end()) {
             report(self, turn, call, false, "no tool on this screen is named " + call.name);
             return;
         }
-        auto const arguments = parseJson(call.argumentsJson.empty() ? std::string_view{"{}"} : call.argumentsJson);
+        auto arguments = parseJson(call.argumentsJson.empty() ? std::string_view{"{}"} : call.argumentsJson);
         if (!arguments || !std::holds_alternative<Json::object_t>(arguments->data)) {
             report(self, turn, call, false, "the arguments are not a JSON object");
             return;
         }
+        if (extra != turn->extras.end()) {
+            runExtra(self, turn, call, **extra, std::move(*arguments));
+            return;
+        }
         run(self, turn, call, *tool);
+    }
+
+    // Runs an extra tool's handler. Whatever it does, the call ends as a result the model reads: a handler that
+    // throws is a failed call, not a fault of the turn.
+    static void runExtra(std::shared_ptr<Shared> const& self, TurnPtr const& turn, ToolCall const& call,
+                         ChatTool const& tool, Json arguments) {
+        auto const carried = turn->carried.find(tool.spec.name);
+        auto context = contextOf(*self, *turn, tool, carried == turn->carried.end() ? nullptr : carried->second);
+        auto const done = onWorker<ChatToolOutcome>(self, turn, [self, turn, call](ChatToolOutcome outcome) {
+            finishExtra(self, turn, call, std::move(outcome));
+        });
+        try {
+            tool.handler(std::move(context), std::move(arguments), done);
+        } catch (std::exception const& error) {
+            log::logWarn("[chat] the extra tool {} threw: {}", tool.spec.name, error.what());
+            done(ChatToolOutcome{
+                .text = "the tool failed", .isError = true, .draft = std::nullopt, .stop = std::nullopt});
+        } catch (...) {
+            done(ChatToolOutcome{
+                .text = "the tool failed", .isError = true, .draft = std::nullopt, .stop = std::nullopt});
+        }
+    }
+
+    static void finishExtra(std::shared_ptr<Shared> const& self, TurnPtr const& turn, ToolCall const& call,
+                            ChatToolOutcome outcome) {
+        if (outcome.isError) {
+            ++turn->extraFailures[call.name];
+        }
+        // A failed call accepted nothing, whatever it carries.
+        if (outcome.draft && !outcome.isError) {
+            {
+                std::scoped_lock const lock{self->mutex};
+                turn->state.draft = *outcome.draft;
+            }
+            announce(*self, *turn, "draft", *outcome.draft);
+        }
+        report(self, turn, call, !outcome.isError, outcome.text, std::move(outcome.stop));
     }
 
     static void run(std::shared_ptr<Shared> const& self, TurnPtr const& turn, ToolCall const& call,
@@ -652,7 +796,7 @@ struct ChatService::Shared {
     // Records what a tool call came to, and moves on to the next one.
     // NOLINTNEXTLINE(misc-no-recursion): each pass takes one pending call, and maxToolCallsPerTurn bounds them.
     static void report(std::shared_ptr<Shared> const& self, TurnPtr const& turn, ToolCall const& call, bool succeeded,
-                       std::string const& text) {
+                       std::string const& text, std::optional<std::string> stop = std::nullopt) {
         {
             std::scoped_lock const lock{self->mutex};
             ToolStep step{.name = call.name,
@@ -667,11 +811,41 @@ struct ChatService::Shared {
         announce(*self, *turn, "tool", call.name,
                  EventExtras{
                      .arguments = bounded(call.argumentsJson, kStepMessageBytes), .ok = succeeded, .newRound = false});
+        if (stop) {
+            finish(self, turn, TurnStatus::Failed, std::move(*stop));
+            return;
+        }
         nextTool(self, turn);
     }
 };
 
+namespace {
+
+// A tool name a provider's format accepts, without the `__` a screen's own tools carry.
+bool validToolName(std::string const& name) {
+    constexpr std::size_t kLongestName = 64;
+    return !name.empty() && name.size() <= kLongestName && !name.contains("__") &&
+           std::ranges::all_of(name, [](char chr) {
+               return (chr >= 'a' && chr <= 'z') || (chr >= 'A' && chr <= 'Z') || (chr >= '0' && chr <= '9') ||
+                      chr == '_' || chr == '-';
+           });
+}
+
+}  // namespace
+
 ChatService::ChatService(ChatOptions options) : _shared{std::make_shared<Shared>(std::move(options))} {
+    std::set<std::string, std::less<>> names;
+    for (ChatTool const& tool : _shared->options.tools) {
+        if (!validToolName(tool.spec.name)) {
+            throw std::invalid_argument{"ChatService: `" + tool.spec.name + "` is not a name an extra tool may have"};
+        }
+        if (!names.insert(tool.spec.name).second) {
+            throw std::invalid_argument{"ChatService: two extra tools are named `" + tool.spec.name + "`"};
+        }
+        if (!tool.handler) {
+            throw std::invalid_argument{"ChatService: the extra tool `" + tool.spec.name + "` has no handler"};
+        }
+    }
     if (_shared->options.provider != nullptr &&
         (_shared->options.worker == nullptr || _shared->options.bundle == nullptr)) {
         throw std::invalid_argument{"ChatService: a provider needs a worker and a bundle"};
