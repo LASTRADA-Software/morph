@@ -95,9 +95,11 @@ struct ActionFacts {
     [[nodiscard]] static std::vector<std::string> secretFields() { return {}; }
 };
 
-/// @brief Satisfied when `Model` runs `Action`: the model has an `execute` that takes it.
+/// @brief Satisfied when `Model` runs `Action`: the model has an `execute` that takes it, or the action runs itself
+///        on the model through a static `invoke`, as a table's `Table.<id>` and `Table.<id>.describe` do.
 template <typename Model, typename Action>
-concept Runs = requires(Model& model, Action& action) { model.execute(action); };
+concept Runs = requires(Model& model, Action& action) { model.execute(action); } ||
+               ::morph::model::detail::DeclaresInvoke<Model, Action>;
 
 namespace detail {
 
@@ -236,8 +238,9 @@ struct CatalogFacts {
                                       .calculatedFields = ActionFacts<Action>::calculatedFields(),
                                       .secretFields = ActionFacts<Action>::secretFields(),
                                       .credential = ActionFacts<Action>::credential,
-                                      .listFields = detail::listFields<::morph::model::HandlerResultT<
-                                          decltype(std::declval<Model&>().execute(std::declval<Action&>()))>>(),
+                                      .listFields = detail::listFields<
+                                          ::morph::model::HandlerResultT<decltype(::morph::model::detail::invokeExecute(
+                                              std::declval<Model&>(), std::declval<Action&>()))>>(),
                                       .effects = detail::effectsInfo(actionId),
                                       .records = detail::recordsInfo(actionId),
                                   });
