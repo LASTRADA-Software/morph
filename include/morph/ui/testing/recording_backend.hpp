@@ -1107,6 +1107,10 @@ public:
     /// @param cursor The new position; clamped to the text's size.
     void moveCursorByUser(std::size_t cursor) noexcept { _cursor = std::min(cursor, _shown.size()); }
 
+    /// @brief Moves the cursor to @p offset, clamped to the text's size; nothing is logged, as for a user's move.
+    /// @param offset A byte offset into the text shown.
+    void setCursor(std::size_t offset) override { _cursor = std::min(offset, _shown.size()); }
+
     /// @brief Where the cursor is.
     /// @return A byte offset into the text shown.
     [[nodiscard]] std::size_t cursor() const noexcept { return _cursor; }

@@ -242,6 +242,11 @@ public:
     /// @param text The text, UTF-8.
     virtual void setText(std::string_view text) = 0;
 
+    /// @brief Moves the text cursor to @p offset, a byte offset into the text the field shows at the start of a
+    ///        character, clamped to the text's end. Calls no handler and does not move keyboard focus.
+    /// @param offset The byte offset.
+    virtual void setCursor(std::size_t offset) = 0;
+
     /// @brief Sets the text shown while the field is empty.
     /// @param placeholder The text, UTF-8.
     virtual void setPlaceholder(std::string_view placeholder) = 0;

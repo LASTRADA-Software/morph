@@ -257,3 +257,24 @@ TEST_CASE("ui::Mounted::focus moves focus by name after mount, and forgets what 
     REQUIRE(view.focus("later"));
     CHECK(backend.focused() == *backend.find("TextInput", "testId", "new"));
 }
+
+// Mutations: skip setCursor in Mounter::placeCursor (the cursor stays at the end of the text); answer true for a
+// widget that is not a text input.
+TEST_CASE("ui::Mounted::placeCursor moves a named text input's cursor and focuses it", "[ui]") {
+    Owner owner;
+    Runtime runtime{owner};
+    RecordingBackend backend;
+    ui::Mounted view{
+        runtime, backend,
+        ui::column({.children = {ui::textInput({.value = std::string{"ab\ncd"},
+                                                .mode = ui::TextInputMode::Multiline,
+                                                .common = {.testId = "source", .focusId = "source"}}),
+                                 ui::button({.label = "b", .common = {.testId = "b", .focusId = "b"}})}})};
+    int const field = *backend.find("TextInput", "testId", "source");
+    REQUIRE(backend.cursor(field) == 5);
+    CHECK(view.placeCursor("source", 3));
+    CHECK(backend.cursor(field) == 3);
+    CHECK(backend.focused() == field);
+    CHECK_FALSE(view.placeCursor("b", 1));
+    CHECK_FALSE(view.placeCursor("nowhere", 1));
+}

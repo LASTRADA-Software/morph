@@ -49,6 +49,7 @@ class TextInputImpl final : public FieldItemWidget<ui::TextInputWidget> {
 public:
     TextInputImpl(Context& context, ui::ContainerWidget* parent, ui::TextInputMode mode);
     void setText(std::string_view text) override;
+    void setCursor(std::size_t offset) override { moveCursor(offset); }
     void setPlaceholder(std::string_view placeholder) override;
     void setOnChange(std::function<void(std::string)> onChange) override;
     void setOnSubmit(std::function<void(std::string)> onSubmit) override;

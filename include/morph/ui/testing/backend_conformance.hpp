@@ -830,6 +830,36 @@ struct Entry {
     return checks.result();
 }
 
+/// @brief Case: `setCursor` moves a field's cursor to a byte offset, clamps it to the text's end, and calls no
+///        handler.
+/// @param probe The backend under test.
+/// @return `nullopt`, or what went wrong.
+[[nodiscard]] inline std::optional<std::string> setCursorMovesTheCursor(ConformanceProbe& probe) {
+    std::unique_ptr<TextInputWidget> const field = probe.backend().createTextInput(nullptr, TextInputMode::Multiline);
+    int changes = 0;
+    field->setOnChange([&changes](std::string const& /*text*/) { ++changes; });
+    field->setText("ab\ncd");
+    probe.settle();
+    Checks checks;
+    field->setCursor(3);
+    probe.settle();
+    checks.that(probe.cursorOf(*field) == 3,
+                "setCursor(3) left the cursor at " + std::to_string(probe.cursorOf(*field)));
+    field->setCursor(99);
+    probe.settle();
+    checks.that(probe.cursorOf(*field) == 5,
+                "setCursor past the end left the cursor at " + std::to_string(probe.cursorOf(*field)));
+    // A character before the target that takes several bytes: a backend counting in another unit must convert.
+    field->setText("\xC3\xA9\ncd");
+    probe.settle();
+    field->setCursor(3);
+    probe.settle();
+    checks.that(probe.cursorOf(*field) == 3, "setCursor(3) after a two-byte character left the cursor at " +
+                                                 std::to_string(probe.cursorOf(*field)));
+    checks.that(changes == 0, "setCursor called onChange");
+    return checks.result();
+}
+
 /// @brief Case: an edit the document refuses snaps back, and one it transforms shows the transform.
 /// @param probe The backend under test.
 /// @return `nullopt`, or what went wrong.
@@ -4331,7 +4361,7 @@ struct MinColumnGridSpec {
 /// loops over these with its own `ConformanceProbe`.
 /// @return The cases.
 [[nodiscard]] inline std::span<ConformanceCase const> conformanceCases() {
-    static std::array<ConformanceCase, 56> const cases{{
+    static std::array<ConformanceCase, 57> const cases{{
         {.name = "a Text shows its constant text", .run = detail::textShowsItsText},
         {.name = "a bound Text updates once per batch and not for an equal write",
          .run = detail::boundTextUpdatesOncePerChange},
@@ -4351,6 +4381,7 @@ struct MinColumnGridSpec {
         {.name = "a widget inside a hidden, disabled or collapsed container takes no input",
          .run = detail::unreachableWidgetsTakeNoInput},
         {.name = "a setter given the text a field shows keeps the cursor", .run = detail::unchangedTextKeepsCursor},
+        {.name = "setCursor moves a field's cursor and calls no handler", .run = detail::setCursorMovesTheCursor},
         {.name = "a text field shows what the document makes of an edit", .run = detail::textInputIsControlled},
         {.name = "a dismissal the document refuses leaves the dialog open",
          .run = detail::refusedDismissalKeepsDialogOpen},

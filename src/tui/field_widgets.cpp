@@ -314,6 +314,11 @@ void TextInputImpl::setText(std::string_view text) {
     _reported = std::string{_field->text()};
 }
 
+void TextInputImpl::setCursor(std::size_t offset) {
+    _field->setCursor(std::min(offset, _field->text().size()));
+    refresh();
+}
+
 void TextInputImpl::setPlaceholder(std::string_view placeholder) {
     _placeholder = std::string{placeholder};
     refresh();
