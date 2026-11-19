@@ -1218,6 +1218,45 @@ TEST_CASE("morph::qt::QtWebSocketBackend: requests on a never-connected socket r
                         "protocol negotiation failed: disconnected");
 }
 
+// With no retry configured, a first open that never reaches the server is final: the
+// calls that queue for a connection reject rather than wait for one that is not coming.
+TEST_CASE("morph::qt::QtWebSocketBackend: a request or private bind after a refused first open rejects",
+          "[qt][ws][lifecycle][disconnect]") {
+    ensureApp();
+    // Port 1 is reserved and never listening — the first open is refused.
+    QUrl url{QString("ws://127.0.0.1:1")};
+    morph::qt::QtWebSocketBackend backend{url};
+    REQUIRE_FALSE(backend.waitForConnected(200));
+    // Let the refusal's disconnect settle before filing anything.
+    pumpUntil([] { return false; }, 20);
+
+    morph::exec::MainThreadExecutor cbExec;
+    REQUIRE_THROWS_AS(awaitOn(cbExec, backend.request(morph::wire::makeHello(), cbExec)),
+                      morph::backend::DisconnectedError);
+    REQUIRE_THROWS_AS(
+        awaitOn(cbExec, backend.bindModel({.typeId = "WsEchoModel",
+                                           .factory = nullptr,
+                                           .contextKey = {},
+                                           .primary = {},
+                                           .current = {}},
+                                          cbExec)),
+        morph::backend::DisconnectedError);
+}
+
+TEST_CASE("morph::qt::QtWebSocketBackend: a request or private bind filed before a refused first open rejects",
+          "[qt][ws][lifecycle][disconnect]") {
+    ensureApp();
+    QUrl url{QString("ws://127.0.0.1:1")};
+    morph::qt::QtWebSocketBackend backend{url};
+
+    morph::exec::MainThreadExecutor cbExec;
+    auto request = backend.request(morph::wire::makeHello(), cbExec);
+    auto bind = backend.bindModel(
+        {.typeId = "WsEchoModel", .factory = nullptr, .contextKey = {}, .primary = {}, .current = {}}, cbExec);
+    REQUIRE_THROWS_AS(awaitOn(cbExec, std::move(request)), morph::backend::DisconnectedError);
+    REQUIRE_THROWS_AS(awaitOn(cbExec, std::move(bind)), morph::backend::DisconnectedError);
+}
+
 TEST_CASE("morph::qt::QtWebSocketBackend: requests after the server closes reject instead of hanging",
           "[qt][ws][lifecycle][disconnect]") {
     ensureApp();
