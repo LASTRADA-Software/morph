@@ -484,8 +484,16 @@ struct Harness {
     /// @param recordWatches Always true; selects this constructor.
     explicit Harness(bool recordWatches) : tools{ui::DevelopmentTools::On}, recording{recordWatches} {}
 
+    /// @brief A harness whose session and documents read @p read.
+    /// @param read          The catalog.
+    /// @param recordWatches Whether the session's watch changes go to `watches`, each answered at once.
+    explicit Harness(ui::Catalog read, bool recordWatches = false)
+        : tools{ui::DevelopmentTools::On}, recording{recordWatches}, catalog{std::move(read)} {}
+
     ui::DevelopmentTools tools;
     bool recording = false;
+    /// @brief What the session's options and `mount`'s load read.
+    ui::Catalog catalog = corpusCatalog();
     /// @brief The watch requests sent, oldest first; only with `recordWatches`.
     std::vector<WatchSent> watches;
     morph::testing::StepExecutor owner;
@@ -494,7 +502,7 @@ struct Harness {
     ui::Session session{runtime, SessionOptions{.scheduler = &scheduler,
                                                 .clock = [this] { return scheduler.now(); },
                                                 .keepUnused = std::chrono::minutes{5},
-                                                .catalog = corpusCatalog(),
+                                                .catalog = catalog,
                                                 .classify = [](std::exception_ptr const& error) -> std::string {
                                                     try {
                                                         std::rethrow_exception(error);
@@ -522,7 +530,7 @@ struct Harness {
     /// @return The screen.
     std::unique_ptr<Screen> mount(std::string_view text, ValueRecord const& params = {},
                                   MountOptions const& options = {}) {
-        auto screen = interpreter.mount(loadOrFail(text, corpusCatalog()), params, backend, options);
+        auto screen = interpreter.mount(loadOrFail(text, catalog), params, backend, options);
         if (!screen) {
             FAIL(screen.error().message());
         }

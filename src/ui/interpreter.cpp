@@ -79,6 +79,96 @@ private:
 
 namespace detail {
 
+/// @brief The watches a session made without entries, shared with each registration so that a holder that outlives
+///        its session finds nothing to release.
+struct WatchRegistry {
+    /// @brief One watch's record and handler.
+    struct Watch {
+        std::string record;
+        std::function<void(effects::RecordChange const&)> handler;
+    };
+    /// @brief A `watchRecord` whose watch is not answered yet.
+    struct Waiter {
+        std::string record;
+        async::Completion<WatchHolder>::Promise promise;
+        WatchHolder holder;
+    };
+
+    /// @brief The session; null once it is being destroyed.
+    Session* session = nullptr;
+    /// @brief The last watch id given.
+    std::uint64_t next = 0;
+    /// @brief The watches, by id.
+    std::map<std::uint64_t, Watch> watches;
+    /// @brief The records whose `watch` is sent and not answered.
+    std::set<std::string, std::less<>> inFlight;
+    /// @brief The `watchRecord` calls waiting for an answer.
+    std::vector<Waiter> waiters;
+
+    /// @brief A `watch` naming @p records was answered: each waiting `watchRecord` for one of them resolves.
+    /// @param records The records.
+    void answered(std::vector<std::string> const& records) {
+        for (std::string const& record : records) {
+            inFlight.erase(record);
+        }
+        // Moved out first: resolving may release a registration, which reaches back into this registry.
+        std::vector<Waiter> ready;
+        std::erase_if(waiters, [&](Waiter& waiter) {
+            if (std::ranges::find(records, waiter.record) == records.end()) {
+                return false;
+            }
+            ready.push_back(std::move(waiter));
+            return true;
+        });
+        for (Waiter& waiter : ready) {
+            waiter.promise.resolve(waiter.holder);
+        }
+    }
+};
+
+/// @brief One watch of `Session::watchRecord`, released when the last `WatchHolder` copy dies.
+struct WatchRegistration {
+    WatchRegistration() = default;
+    WatchRegistration(WatchRegistration const&) = delete;
+    WatchRegistration& operator=(WatchRegistration const&) = delete;
+    WatchRegistration(WatchRegistration&&) = delete;
+    WatchRegistration& operator=(WatchRegistration&&) = delete;
+
+    ~WatchRegistration() {
+        auto const held = registry.lock();
+        if (!held) {
+            return;
+        }
+        held->watches.erase(id);
+        if (held->session == nullptr) {
+            return;
+        }
+        try {
+            held->session->countRecord(record, -1);
+            held->session->flushWatches();
+        } catch (...) {  // NOLINT(bugprone-empty-catch): a destructor has no one to report a failed unwatch to.
+        }
+    }
+
+    /// @brief The session's registry.
+    std::weak_ptr<WatchRegistry> registry;
+    /// @brief The watch's id there.
+    std::uint64_t id = 0;
+    /// @brief The record.
+    std::string record;
+};
+
+}  // namespace detail
+
+Session::~Session() {
+    if (_watchRegistry) {
+        _watchRegistry->session = nullptr;
+        _watchRegistry->waiters.clear();
+    }
+}
+
+namespace detail {
+
 ElementState::ElementState(reactive::Runtime& runtime)
     : draft{runtime},
       committed{runtime},
@@ -613,6 +703,52 @@ void keyedRowsAt(Value const& value, std::span<std::string const> path, std::str
     return changed ? std::optional<Value>{Value{std::move(out)}} : std::nullopt;
 }
 
+/// @brief Whether a member at a path is set: a non-empty list, a record, `true`, or a number other than zero.
+///
+/// A list on the way is looked through: the member is set when it is set in any element.
+/// @param value The value.
+/// @param path  The members still to follow.
+/// @return `true` when set.
+// NOLINTNEXTLINE(misc-no-recursion): one level per path member or nested list.
+[[nodiscard]] bool memberSetAt(Value const& value, std::span<std::string const> path) {
+    if (!path.empty()) {
+        if (ValueList const* const items = value.asList()) {
+            return std::ranges::any_of(*items, [&](Value const& item) { return memberSetAt(item, path); });
+        }
+        ValueRecord const* const record = value.asRecord();
+        if (record == nullptr) {
+            return false;
+        }
+        auto const found = record->find(path.front());
+        return found != record->end() && memberSetAt(found->second, path.subspan(1));
+    }
+    if (ValueList const* const items = value.asList()) {
+        return !items->empty();
+    }
+    if (value.asRecord() != nullptr) {
+        return true;
+    }
+    if (bool const* const flag = value.asBool()) {
+        return *flag;
+    }
+    if (std::int64_t const* const number = value.asInt()) {
+        return *number != 0;
+    }
+    if (Decimal const* const decimal = value.asDecimal()) {
+        return !decimal->value.isZero();
+    }
+    return false;
+}
+
+/// @brief Whether any member at @p paths is set in @p value.
+/// @param value The value.
+/// @param paths The members' paths.
+/// @return `true` when one is.
+[[nodiscard]] bool anyMemberSet(Value const& value, std::vector<std::string> const& paths) {
+    return std::ranges::any_of(
+        paths, [&](std::string const& path) { return memberSetAt(value, pathMembers(path)); });
+}
+
 }  // namespace
 
 [[nodiscard]] std::vector<Value const*> keyedRowsOf(Value const& value, std::vector<std::string> const& paths,
@@ -655,6 +791,9 @@ async::Completion<std::string> BridgeDispatcher::Channel::execute(std::string co
         auto [refused, promise] = async::Completion<std::string>::makeSettleable(_cbExec);
         promise.reject(std::make_exception_ptr(std::runtime_error{"evaluate needs the UI service"}));
         return std::move(refused);
+    }
+    if (options.stop.stop_possible()) {
+        return _handler.execute(actionId, bodyJson, std::move(options.stop));
     }
     return _handler.execute(actionId, bodyJson);
 }
@@ -1003,8 +1142,12 @@ SessionOptions Session::checkedOptions(SessionOptions options) {
 }
 
 void Session::settleReply(detail::CacheEntry& entry, std::string const& reply) {
+    // A table's page holds its record opaquely, and its Number cells are numbers with fractions, which the strict
+    // rule refuses; every other reply keeps the strict rule.
+    bool const opaque = std::ranges::any_of(entry.records, &ActionRecordInfo::opaque);
     auto json = parseJson(reply);
-    auto value = json ? valueFromJson(*json) : std::unexpected(json.error());
+    auto value = json ? (opaque ? detail::tableValueFromJson(*json) : valueFromJson(*json))
+                      : std::unexpected(json.error());
     if (!value) {
         settleFailure(entry, "the reply is not a document value: " + value.error(), "error");
         return;
@@ -1713,7 +1856,11 @@ void Session::applyRecordEffect(ActionEffect const& effect, std::string const& r
         if (held == nullptr) {
             continue;
         }
-        if (!ownKey || !held->keyField) {
+        // A merge replaces rows by key: it cannot find an opaque entry's rows, nor update what an open or partial
+        // member says about them by position, so such an entry is marked and fetched again.
+        bool const unmergeable = held->opaque || detail::anyMemberSet(entry->confirmed, held->open) ||
+                                 detail::anyMemberSet(entry->confirmed, held->partial);
+        if (!ownKey || !held->keyField || unmergeable) {
             marks.add(*entry);
             continue;
         }
@@ -1755,7 +1902,7 @@ void Session::countTopics(detail::CacheEntry const& entry, int delta) {
     };
     if (!entry.records.empty()) {
         for (ActionRecordInfo const& record : entry.records) {
-            count(_recordRefs, record.record, _watchRecords, _unwatchRecords);
+            countRecord(record.record, delta);
         }
         return;
     }
@@ -1766,9 +1913,37 @@ void Session::countTopics(detail::CacheEntry const& entry, int delta) {
     }
 }
 
+void Session::countRecord(std::string const& record, int delta) {
+    int& refs = _recordRefs[record];
+    refs += delta;
+    if (delta > 0 && refs == 1 && _unwatchRecords.erase(record) == 0) {
+        _watchRecords.insert(record);
+    } else if (refs <= 0) {
+        _recordRefs.erase(record);
+        if (_watchRecords.erase(record) == 0) {
+            _unwatchRecords.insert(record);
+        }
+    }
+}
+
 void Session::sendWatch(std::string_view kind, wire::WatchBody const& body) const {
     auto completion = _options.watcher(std::string{kind}, glz::write_json(body).value_or(std::string{}));
-    completion.then([](std::string const&) {}).onError([](std::exception_ptr const&) {});
+    if (kind != wire::kWatchKind || body.records.empty()) {
+        completion.then([](std::string const&) {}).onError([](std::exception_ptr const&) {});
+        return;
+    }
+    // The records' watch is in flight until its answer: a `watchRecord` for one of them resolves then.
+    std::weak_ptr<detail::WatchRegistry> const weak = _watchRegistry;
+    if (_watchRegistry) {
+        _watchRegistry->inFlight.insert(body.records.begin(), body.records.end());
+    }
+    auto const answered = [weak, records = body.records] {
+        if (auto const registry = weak.lock()) {
+            registry->answered(records);
+        }
+    };
+    completion.then([answered](std::string const&) { answered(); })
+        .onError([answered](std::exception_ptr const&) { answered(); });
 }
 
 void Session::flushWatches() {
@@ -1790,6 +1965,7 @@ void Session::flushWatches() {
         return body;
     };
     if (!_watchRecords.empty() || !_watchInstances.empty()) {
+        static_cast<void>(watchRegistry());
         sendWatch(wire::kWatchKind, take(_watchRecords, _watchInstances));
     }
     if (!_unwatchRecords.empty() || !_unwatchInstances.empty()) {
@@ -1836,6 +2012,16 @@ void Session::reconnected() {
         sendWatch(wire::kWatchKind, body);
     }
     markAllStale();
+    if (_watchRegistry) {
+        std::set<std::string, std::less<>> records;
+        for (auto const& [id, watch] : _watchRegistry->watches) {
+            static_cast<void>(id);
+            records.insert(watch.record);
+        }
+        for (std::string const& record : records) {
+            notifyWatchers(effects::RecordChange{.record = record, .keys = std::nullopt});
+        }
+    }
 }
 
 void Session::deliverEvent(wire::EventBody const& event) {
@@ -1862,6 +2048,93 @@ void Session::applyChanges(wire::ChangesBody const& changes) {
         }
         markAndRefetch(marks);
     });
+    for (effects::RecordChange const& change : changes.records) {
+        notifyWatchers(change);
+    }
+}
+
+void Session::notifyWatchers(effects::RecordChange const& change) {
+    if (!_watchRegistry) {
+        return;
+    }
+    // A handler may drop its own watch, or another, so the handlers are copied out first.
+    std::vector<std::function<void(effects::RecordChange const&)>> handlers;
+    for (auto const& [id, watch] : _watchRegistry->watches) {
+        static_cast<void>(id);
+        if (watch.record == change.record) {
+            handlers.push_back(watch.handler);
+        }
+    }
+    for (auto const& handler : handlers) {
+        handler(change);
+    }
+}
+
+detail::WatchRegistry& Session::watchRegistry() {
+    if (!_watchRegistry) {
+        _watchRegistry = std::make_shared<detail::WatchRegistry>();
+        _watchRegistry->session = this;
+    }
+    return *_watchRegistry;
+}
+
+async::Completion<WatchHolder> Session::watchRecord(std::string const& record,
+                                                    std::function<void(effects::RecordChange const&)> handler) {
+    auto& registry = watchRegistry();
+    auto const id = ++registry.next;
+    registry.watches.emplace(id, detail::WatchRegistry::Watch{.record = record, .handler = std::move(handler)});
+    auto registration = std::make_shared<detail::WatchRegistration>();
+    registration->registry = _watchRegistry;
+    registration->id = id;
+    registration->record = record;
+    WatchHolder holder{std::move(registration)};
+    countRecord(record, +1);
+    flushWatches();
+    auto [completion, promise] = async::Completion<WatchHolder>::makeSettleable(&_runtime->owner());
+    if (registry.inFlight.contains(record)) {
+        registry.waiters.push_back(
+            detail::WatchRegistry::Waiter{.record = record, .promise = std::move(promise), .holder = std::move(holder)});
+    } else {
+        promise.resolve(std::move(holder));
+    }
+    return std::move(completion);
+}
+
+async::Completion<std::string> Session::read(std::shared_ptr<ModelChannel> const& channel, std::string const& actionId,
+                                             Value const& body, ::core::async::StopToken stop) {
+    using Promise = async::Completion<std::string>::Promise;
+    auto [completion, promise] = async::Completion<std::string>::makeSettleable(&_runtime->owner());
+    auto const settle = std::make_shared<Promise>(std::move(promise));
+    if (channel == nullptr) {
+        settle->reject(std::make_exception_ptr(std::runtime_error{"the model alias has no instance"}));
+        return std::move(completion);
+    }
+    if (stop.stop_requested()) {
+        settle->reject(std::make_exception_ptr(::core::async::OperationCancelled{}));
+        return std::move(completion);
+    }
+    // A stop settles the read at once; the reply that may still come is dropped, since the first settlement wins.
+    using OnStop = ::core::async::StopCallback<std::function<void()>>;
+    std::shared_ptr<OnStop> onStop;
+    if (stop.stop_possible()) {
+        onStop = std::make_shared<OnStop>(stop, std::function<void()>{[settle] {
+                                              settle->reject(
+                                                  std::make_exception_ptr(::core::async::OperationCancelled{}));
+                                          }});
+    }
+    try {
+        auto sent = channel->execute(actionId, detail::canonicalJson(body),
+                                     CallOptions{.evaluate = false, .queueOffline = false, .stop = stop});
+        sent.then([settle, onStop, stop](std::string const& reply) {
+                if (!stop.stop_requested()) {
+                    settle->resolve(reply);
+                }
+            })
+            .onError([settle, onStop](std::exception_ptr const& error) { settle->reject(error); });
+    } catch (...) {
+        settle->reject(std::current_exception());
+    }
+    return std::move(completion);
 }
 
 void Session::markRecordChange(effects::RecordChange const& change, detail::Marks& marks) {
@@ -1880,8 +2153,11 @@ void Session::markRecordChange(effects::RecordChange const& change, detail::Mark
         if (held == nullptr) {
             continue;
         }
-        // An entry still waiting for its first value may come to hold a key; keyless rows cannot be told apart.
-        if (!change.keys || !held->keyField || !entry->hasValue.peek()) {
+        // An entry still waiting for its first value may come to hold a key; keyless rows cannot be told apart. An
+        // opaque entry's rows cannot be found by key, and while an open member is set a row the entry does not hold
+        // may come to belong to it.
+        if (!change.keys || !held->keyField || !entry->hasValue.peek() || held->opaque ||
+            detail::anyMemberSet(entry->confirmed, held->open)) {
             marks.add(*entry);
             continue;
         }

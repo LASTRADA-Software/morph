@@ -14,6 +14,7 @@
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
+#include <exception>
 #include <functional>
 #include <map>
 #include <memory>
@@ -27,12 +28,19 @@
 #include <morph/core/wire.hpp>
 #include <morph/net/socket_backend.hpp>
 #include <morph/net/socket_server.hpp>
+#include <morph/reactive/runtime.hpp>
 #include <morph/session/session.hpp>
 #include <morph/table/description.hpp>
 #include <morph/table/level_cache.hpp>
+#include <morph/ui/author.hpp>
+#include <morph/ui/document.hpp>
+#include <morph/ui/interpreter.hpp>
 #include <morph/ui/service_client.hpp>
+#include <morph/ui/testing/recording_backend.hpp>
+#include <morph/ui/value.hpp>
 #include <mutex>
 #include <optional>
+#include <print>
 #include <span>
 #include <string>
 #include <string_view>
@@ -608,4 +616,365 @@ TEST_CASE("table over the bridge: failed keys are not loaded again inside the de
     REQUIRE(waitFor([] { return bench::WideTableModel::recipeCache()->stats().failedLoads >= 2'000; }));
     CHECK(bench::WideTableModel::loaderCalls().size() == calls + 16);  // ceil(1000 / 64)
     // Mutation: a failed key wanted again by every request (the ten requests call the loader).
+}
+
+// ── A window and a query cache over the bridge ──────────────────────────────
+
+namespace {
+
+// Forwards every call, counting page requests (a body without `keys`) and keyed requests apart.
+class CountingChannel final : public ui::ModelChannel {
+public:
+    explicit CountingChannel(std::shared_ptr<ui::ModelChannel> inner) : _inner{std::move(inner)} {}
+
+    [[nodiscard]] morph::async::Completion<std::string> execute(std::string const& actionId,
+                                                                std::string const& bodyJson,
+                                                                ui::CallOptions options) override {
+        if (!actionId.ends_with(".describe")) {
+            if (bodyJson.contains(R"("keys")")) {
+                ++keyedRequests;
+            } else {
+                ++pageRequests;
+            }
+        }
+        return _inner->execute(actionId, bodyJson, std::move(options));
+    }
+
+    [[nodiscard]] ui::ChannelFacts facts() const override { return _inner->facts(); }
+
+    int pageRequests = 0;
+    int keyedRequests = 0;
+
+private:
+    std::shared_ptr<ui::ModelChannel> _inner;
+};
+
+// One client as a UI session over the bridge: its watches and events go through the session, its window's fetches
+// through `Session::read`.
+struct SessionClient {
+    explicit SessionClient(std::string const& url, ui::Catalog catalog = {}) {
+        auto made = std::make_unique<morph::net::SocketBackend>(url);
+        socket = made.get();
+        REQUIRE(socket->waitForConnected());
+        exchange = ui::exchangeOver(*socket, owner);
+        bridge = std::make_unique<morph::bridge::Bridge>(std::move(made), owner);
+        dispatcher = std::make_unique<ui::BridgeDispatcher>(*bridge, &owner);
+        ui::SessionOptions options;
+        options.catalog = std::move(catalog);
+        options.watcher = ui::watcherOver(exchange, [] { return morph::session::Context{}; }, &owner);
+        session = std::make_unique<ui::Session>(runtime, std::move(options));
+        socket->setEventHandler([this](morph::wire::EventBody const& event) { session->deliverEvent(event); }, &owner);
+        bool negotiated = false;
+        morph::wire::Envelope hello;
+        hello.kind = std::string{kHello};
+        exchange(std::move(hello), [&negotiated](ui::ExchangeReply const& reply) {
+            negotiated = reply.has_value() && reply->kind == "ok";
+        });
+        REQUIRE(pumpUntil([&] { return negotiated; }));
+        channel = std::make_shared<CountingChannel>(
+            dispatcher->bind(std::string{kWide}, morph::bridge::BindSharing::Private, std::string{}));
+    }
+
+    template <typename Done>
+    bool pumpUntil(Done done, std::chrono::milliseconds budget = 10s) {
+        auto const deadline = std::chrono::steady_clock::now() + budget;
+        while (!done()) {
+            if (std::chrono::steady_clock::now() > deadline) {
+                return false;
+            }
+            if (!owner.runOnce()) {
+                std::this_thread::sleep_for(1ms);
+            }
+        }
+        return true;
+    }
+
+    void pumpFor(std::chrono::milliseconds span) {
+        static_cast<void>(pumpUntil([] { return false; }, span));
+    }
+
+    // Reads an action's reply text through `Session::read`.
+    std::string read(std::string const& action, std::string const& body) {
+        auto json = ui::parseJson(body);
+        REQUIRE(json);
+        auto value = ui::valueFromJson(*json);
+        REQUIRE(value);
+        std::optional<std::string> text;
+        bool failed = false;
+        auto completion = session->read(channel, action, *value);
+        completion.then([&text](std::string const& reply) { text = reply; })
+            .onError([&failed](std::exception_ptr const&) { failed = true; });
+        REQUIRE(pumpUntil([&] { return text.has_value() || failed; }));
+        REQUIRE(text.has_value());
+        return *text;
+    }
+
+    morph::exec::MainThreadExecutor owner;
+    morph::reactive::Runtime runtime{owner};
+    morph::net::SocketBackend* socket = nullptr;
+    ui::Exchange exchange;
+    std::unique_ptr<morph::bridge::Bridge> bridge;
+    std::unique_ptr<ui::BridgeDispatcher> dispatcher;
+    std::unique_ptr<ui::Session> session;
+    std::shared_ptr<CountingChannel> channel;
+};
+
+bench::WideTableOptions gatedOptions() {
+    return bench::WideTableOptions{.rows = 1'000,
+                                   .columns = 30,
+                                   .seed = 7,
+                                   .loadDelay = {},
+                                   .recipePreloaded = 0.0,
+                                   .recipeBatch = 20,
+                                   .recipeFails = false};
+}
+
+// A window's page fetch as the body of `Table.small`, sorted by key.
+std::string pageBody(morph::table::PageFetch const& fetch) {
+    morph::table::TableQuery query;
+    query.sort = {morph::table::SortKey{.column = "id", .dir = morph::table::SortDirection::Ascending}};
+    query.columns = fetch.columns;
+    query.page = fetch.request;
+    return glz::write_json(query).value_or(std::string{});
+}
+
+// A window's keyed fetch as the body of `Table.small`, under the same sort.
+std::string keyedBody(morph::table::RowsFetch const& fetch) {
+    morph::table::TableQuery query;
+    query.sort = {morph::table::SortKey{.column = "id", .dir = morph::table::SortDirection::Ascending}};
+    query.columns = fetch.columns;
+    query.page = morph::table::PageRequest{.offset = 0, .limit = 200};
+    query.keys = fetch.keys;
+    return glz::write_json(query).value_or(std::string{});
+}
+
+}  // namespace
+
+// Mutations: refresh asking for every held key (the plan holds 230 keys, not 21); refresh dropping the keys the
+// window does not hold (the plan misses the loaded keys of rows past the held ones). Unbuilt on the host that wrote
+// it, and neither mutation has been run.
+TEST_CASE("table over the bridge: exactly the arrived rows update, without polling", "[net][push][levels]") {
+    Server server{gatedOptions()};
+    bench::WideTableModel::recipeGate().hold();
+    SessionClient client{server.url};
+
+    // 1. Watch, then fetch.
+    std::optional<ui::WatchHolder> watch;
+    std::vector<std::vector<RowId>> events;
+    {
+        auto watching = client.session->watchRecord("WideTableModel.small", [&](morph::effects::RecordChange const& change) {
+            std::vector<RowId> keys;
+            for (auto const& key : change.keys.value_or(std::vector<glz::raw_json>{})) {
+                if (auto id = morph::table::rowIdOf(key)) {
+                    keys.push_back(*id);
+                }
+            }
+            events.push_back(std::move(keys));
+        });
+        watching.then([&watch](ui::WatchHolder const& holder) { watch = holder; });
+        REQUIRE(client.pumpUntil([&] { return watch.has_value(); }));
+    }
+    morph::table::TableDescription description;
+    REQUIRE_FALSE(glz::read<glz::opts{.error_on_unknown_keys = false}>(
+        description, client.read("Table.small.describe", "{}")));
+    morph::table::PageWindow<morph::table::GenericRow> window{200, 8};
+    std::vector<std::string> const columns{"id", "d000"};
+    auto const fetches = window.visible(0, 30, columns);
+    REQUIRE(fetches.size() == 2);  // pages 0 and 1: no total is known yet
+    for (auto const& fetch : fetches) {
+        auto page = morph::table::readGenericPage(client.read("Table.small", pageBody(fetch)), description);
+        REQUIRE(page.has_value());
+        REQUIRE(window.accept(fetch, std::move(*page)));
+    }
+    CHECK(client.channel->pageRequests == 2);
+    CHECK(client.channel->keyedRequests == 0);
+    for (std::int64_t row = 0; row < 400; ++row) {
+        INFO("view row " << row);
+        CHECK(std::ranges::equal(window.unloadedLevels(row).levels, std::vector<std::string>{"recipe"}));
+    }
+
+    // 2. Nothing is fetched because time passed.
+    client.pumpFor(200ms);
+    CHECK(client.channel->pageRequests == 2);
+    CHECK(client.channel->keyedRequests == 0);
+
+    // 3. One loader call of 20 keys; the cache stores, then announces them.
+    bench::WideTableModel::recipeGate().release(1);
+    REQUIRE(waitFor([] { return !bench::WideTableModel::loaderCalls().empty(); }));
+    auto const loaded = bench::WideTableModel::loaderCalls().front();
+    REQUIRE(loaded.size() == 20);
+    REQUIRE(client.pumpUntil([&] { return !events.empty(); }));
+
+    // 4. The plan asks for the arrived keys and the one held run's probe.
+    std::vector<RowId> expected = loaded;
+    if (std::ranges::find(expected, RowId{std::int64_t{1}}) == expected.end()) {
+        expected.emplace_back(std::int64_t{1});
+    }
+    auto const plan = window.refresh(events.front());
+    REQUIRE(plan.kind == morph::table::Refresh::Rows);
+    CHECK(std::ranges::is_permutation(plan.rows.keys, expected));
+    auto reply = morph::table::readGenericPage(client.read("Table.small", keyedBody(plan.rows)), description);
+    REQUIRE(reply.has_value());
+    CHECK(client.channel->pageRequests == 2);
+    CHECK(client.channel->keyedRequests == 1);
+
+    // 5. Exactly the arrived rows (and the probe's row) are patched.
+    auto const replaced = window.patch(plan.rows, std::move(*reply));
+    std::vector<std::int64_t> rows;
+    for (auto const& key : expected) {
+        rows.push_back(std::get<std::int64_t>(key) - 1);
+    }
+    std::ranges::sort(rows);
+    CHECK(replaced == rows);
+    for (auto const& key : loaded) {
+        auto const row = std::get<std::int64_t>(key) - 1;
+        INFO("view row " << row);
+        CHECK(window.unloadedLevels(row).levels.empty());
+        auto const* const cell = window.cell(row, "d000");
+        REQUIRE(cell != nullptr);
+        CHECK_FALSE(std::holds_alternative<morph::table::Unloaded>(*cell));
+        CHECK_FALSE(std::holds_alternative<std::monostate>(*cell));
+    }
+    for (std::int64_t row = 0; row < 400; ++row) {
+        if (std::ranges::find(loaded, RowId{row + 1}) == loaded.end()) {
+            INFO("view row " << row);
+            CHECK(std::ranges::equal(window.unloadedLevels(row).levels, std::vector<std::string>{"recipe"}));
+        }
+    }
+    bench::WideTableModel::recipeGate().release();
+}
+
+namespace {
+
+// Binds through a dispatcher and counts the calls of every channel it hands out.
+class CountingDispatcher final : public ui::Dispatcher {
+public:
+    explicit CountingDispatcher(ui::Dispatcher& inner) : _inner{&inner} {}
+
+    [[nodiscard]] std::shared_ptr<ui::ModelChannel> bind(std::string const& typeId, morph::bridge::BindSharing sharing,
+                                                         std::string const& instanceKey) override {
+        auto channel = std::make_shared<CountingChannel>(_inner->bind(typeId, sharing, instanceKey));
+        channels.push_back(channel);
+        return channel;
+    }
+
+    [[nodiscard]] int pageRequests() const {
+        int total = 0;
+        for (auto const& channel : channels) {
+            total += channel->pageRequests;
+        }
+        return total;
+    }
+
+    std::vector<std::shared_ptr<CountingChannel>> channels;
+
+private:
+    ui::Dispatcher* _inner;
+};
+
+}  // namespace
+
+// Mutation: the cache looking for a key member in an opaque entry (the arrival's keys match no row, and nothing
+// refetches). Unbuilt on the host that wrote it, and the mutation has not been run.
+TEST_CASE("table over the bridge: the same arrival through the query cache", "[net][push][levels]") {
+    Server server{gatedOptions()};
+    bench::WideTableModel::recipeGate().hold();
+    ui::author::CatalogFacts facts;
+    facts.action<bench::WideTableModel, morph::table::QueryTable<&bench::WideTableModel::small>>();
+    SessionClient client{server.url, facts.catalog()};
+    CountingDispatcher counting{*client.dispatcher};
+    ui::Interpreter interpreter{*client.session, counting, ui::InterpreterOptions{}};
+    constexpr std::string_view kSmall = R"({
+      "vocab": "ui/1", "id": "small",
+      "models": { "wide": { "type": "WideTableModel" } },
+      "queries": { "page": { "model": "wide", "action": "Table.small",
+        "body": { "obj": { "sort": [ { "obj": { "column": "id", "dir": "asc" } } ], "columns": [ "id", "d000" ],
+                           "page": { "obj": { "offset": 0, "limit": 200 } } } } } },
+      "view": { "kind": "text", "testId": "rows", "text": { "fn": "format", "args": [ "{0}", { "query": "page" } ] } } })";
+    auto loaded = ui::loadDocumentText(kSmall, ui::LoadOptions{.catalog = facts.catalog()});
+    if (!loaded) {
+        FAIL(loaded.error().message());
+    }
+    ui::testing::RecordingBackend view;
+    auto mounted = interpreter.mount(std::make_shared<ui::Document const>(std::move(*loaded)), {}, view, {});
+    REQUIRE(mounted.has_value());
+    REQUIRE(client.pumpUntil([&] { return counting.pageRequests() == 1; }));
+    client.pumpFor(200ms);
+    REQUIRE(counting.pageRequests() == 1);
+    CHECK(client.session->cacheSize() == 1);
+
+    // The arrival marks the one entry, which fetches its page once more: one page request per marked entry.
+    bench::WideTableModel::recipeGate().release(1);
+    REQUIRE(waitFor([] { return !bench::WideTableModel::loaderCalls().empty(); }));
+    CHECK(client.pumpUntil([&] { return counting.pageRequests() == 2; }));
+    client.pumpFor(200ms);
+    CHECK(counting.pageRequests() == 2);
+    bench::WideTableModel::recipeGate().release();
+}
+
+// E1 and E2 over the bridge: the first page of the sorted 100,000 x 300 table with `recipe` unloaded, from request
+// to accepted page; and from a loader's return to patched rows, for 20 rows. Unbuilt and not run on the host that
+// wrote it.
+TEST_CASE("table benchmark: E1 E2 a window over the bridge", "[.benchmark][net]") {
+    Server server{gatedOptions(), bench::WideTableOptions{.rows = 100'000,
+                                                          .columns = 300,
+                                                          .seed = 7,
+                                                          .loadDelay = {},
+                                                          .recipePreloaded = 0.0,
+                                                          .recipeBatch = 20,
+                                                          .recipeFails = false}};
+    bench::WideTableModel::recipeGate().hold();
+    SessionClient client{server.url};
+    morph::table::TableDescription description;
+    REQUIRE_FALSE(glz::read<glz::opts{.error_on_unknown_keys = false}>(
+        description, client.read("Table.wide.describe", "{}")));
+    std::optional<ui::WatchHolder> watch;
+    std::vector<std::vector<RowId>> events;
+    auto watching = client.session->watchRecord("WideTableModel.wide", [&](morph::effects::RecordChange const& change) {
+        std::vector<RowId> keys;
+        for (auto const& key : change.keys.value_or(std::vector<glz::raw_json>{})) {
+            if (auto id = morph::table::rowIdOf(key)) {
+                keys.push_back(*id);
+            }
+        }
+        events.push_back(std::move(keys));
+    });
+    watching.then([&watch](ui::WatchHolder const& holder) { watch = holder; });
+    REQUIRE(client.pumpUntil([&] { return watch.has_value(); }));
+    morph::table::PageWindow<morph::table::GenericRow> window{200, 8};
+    std::vector<std::string> columns;
+    for (auto const& column : description.columns) {
+        columns.push_back(column.info.id);
+    }
+    auto const started = std::chrono::steady_clock::now();
+    auto const fetches = window.visible(0, 30, columns);
+    REQUIRE_FALSE(fetches.empty());
+    auto page = morph::table::readGenericPage(client.read("Table.wide", pageBody(fetches.front())), description);
+    REQUIRE(page.has_value());
+    REQUIRE(window.accept(fetches.front(), std::move(*page)));
+    auto const e1 = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - started).count();
+    std::println("| E1 | first page, request to accepted | {:.3f} ms |", e1);
+
+    std::vector<double> samples;
+    for (int round = 0; round < 20; ++round) {
+        events.clear();
+        auto const calls = bench::WideTableModel::loaderCalls().size();
+        bench::WideTableModel::recipeGate().release(1);
+        REQUIRE(waitFor([&] { return bench::WideTableModel::loaderCalls().size() > calls; }));
+        auto const returned = std::chrono::steady_clock::now();
+        REQUIRE(client.pumpUntil([&] { return !events.empty(); }));
+        auto const plan = window.refresh(events.front());
+        if (plan.kind != morph::table::Refresh::Rows) {
+            continue;
+        }
+        auto reply = morph::table::readGenericPage(client.read("Table.wide", keyedBody(plan.rows)), description);
+        REQUIRE(reply.has_value());
+        static_cast<void>(window.patch(plan.rows, std::move(*reply)));
+        samples.push_back(std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - returned).count());
+    }
+    REQUIRE_FALSE(samples.empty());
+    std::ranges::sort(samples);
+    std::println("| E2 | loader return to patched rows, 20 rows, p50 / p99 | {:.3f} / {:.3f} ms |",
+                 samples[samples.size() / 2], samples.back());
+    bench::WideTableModel::recipeGate().release();
 }

@@ -8,6 +8,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <expected>
+#include <format>
 #include <functional>
 #include <glaze/glaze.hpp>
 #include <limits>
@@ -19,6 +20,7 @@
 #include <variant>
 #include <vector>
 
+#include "../table/data_source.hpp"
 #include "../util/datetime.hpp"
 #include "../util/rational.hpp"
 
@@ -567,8 +569,24 @@ namespace detail {
 /// A timestamp has no structural form — it is a string — so it is read through the typed overload.
 /// @param json The JSON value.
 /// @return The value, or the reason it is refused.
-[[nodiscard]] inline std::expected<Value, std::string> valueFromJson(Json const& json) {
+[[nodiscard]] inline std::expected<Value, std::string> valueFromJson(Json const& json);
+
+namespace detail {
+
+/// @brief How a structural read treats a JSON number with a fraction or an exponent.
+enum class FractionRule : std::uint8_t {
+    Refuse,   ///< Refused: an exact value is never written as a double.
+    Decimal,  ///< The decimal its shortest text spells, or that text when no decimal holds it.
+};
+
+/// @brief `valueFromJson` and `tableValueFromJson`, which differ only in @p rule.
+/// @param json The JSON value.
+/// @param rule What a number with a fraction or an exponent becomes.
+/// @return The value, or the reason it is refused.
+// NOLINTNEXTLINE(misc-no-recursion): arrays and objects are read element by element.
+[[nodiscard]] inline std::expected<Value, std::string> structuralFromJson(Json const& json, FractionRule rule) {
     struct Visitor {
+        FractionRule rule;
         std::expected<Value, std::string> operator()(std::nullptr_t) const { return Value{}; }
         std::expected<Value, std::string> operator()(bool flag) const { return Value{flag}; }
         std::expected<Value, std::string> operator()(std::uint64_t number) const {
@@ -579,16 +597,22 @@ namespace detail {
         }
         std::expected<Value, std::string> operator()(std::int64_t number) const { return Value{number}; }
         std::expected<Value, std::string> operator()(double number) const {
-            static_cast<void>(number);
-            return std::unexpected(
-                std::string{R"(a number with a fraction is not exact; write a decimal as {"num", "den", "dp"})"});
+            if (rule == FractionRule::Refuse) {
+                return std::unexpected(
+                    std::string{R"(a number with a fraction is not exact; write a decimal as {"num", "den", "dp"})"});
+            }
+            std::string text = std::format("{}", number);
+            if (auto const decimal = ::morph::table::parseDecimal(text)) {
+                return Value{Decimal{*decimal}};
+            }
+            return Value{std::move(text)};
         }
         std::expected<Value, std::string> operator()(std::string const& text) const { return Value{text}; }
         std::expected<Value, std::string> operator()(Json::array_t const& array) const {
             ValueList items;
             items.reserve(array.size());
             for (Json const& element : array) {
-                auto item = valueFromJson(element);
+                auto item = structuralFromJson(element, rule);
                 if (!item) {
                     return item;
                 }
@@ -602,7 +626,7 @@ namespace detail {
             }
             ValueRecord fields;
             for (auto const& [name, member] : object) {
-                auto field = valueFromJson(member);
+                auto field = structuralFromJson(member, rule);
                 if (!field) {
                     return field;
                 }
@@ -611,7 +635,26 @@ namespace detail {
             return Value{std::move(fields)};
         }
     };
-    return std::visit(Visitor{}, json.data);
+    return std::visit(Visitor{.rule = rule}, json.data);
+}
+
+/// @brief Reads a value from its JSON form as `valueFromJson` does, except that a number with a fraction or an
+///        exponent is kept: it becomes the decimal its shortest text spells (`table::parseDecimal` of
+///        `std::format("{}", number)`), and that text when `parseDecimal` refuses it (an exponent, more than 18
+///        places, a numerator past int64).
+///
+/// The reply of a query cache entry that holds a record opaquely, a table's page, is read so: its `Number` cells
+/// are such numbers, and the strict rule would refuse the whole page. Every other reply keeps the strict rule.
+/// @param json The JSON value.
+/// @return The value, or the reason it is refused.
+[[nodiscard]] inline std::expected<Value, std::string> tableValueFromJson(Json const& json) {
+    return structuralFromJson(json, FractionRule::Decimal);
+}
+
+}  // namespace detail
+
+inline std::expected<Value, std::string> valueFromJson(Json const& json) {
+    return detail::structuralFromJson(json, detail::FractionRule::Refuse);
 }
 
 /// @brief Reads a value from its JSON form as a value of @p type.

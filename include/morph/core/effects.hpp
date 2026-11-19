@@ -140,11 +140,17 @@ struct ActionRecord {
     /// True when the result holds the record at no path a key can be read at, as a table's page holds its
     /// table's record: the action holds it for watch admission, and no reader finds its rows in the value.
     bool opaque = false;
+    /// The paths of the members that open an entry holding the result: those a holder of the record's rows names in
+    /// its `openMembers()`. While any is set, a row the result does not hold may come to belong to it.
+    std::vector<std::string> open;
+    /// The paths of the members that make an entry holding the result partial: the one each holder of the record's
+    /// rows names as its `partialMember()`. While any is set, a merge by key would leave them describing other rows.
+    std::vector<std::string> partial;
 
     /// @brief Memberwise equality.
     /// @param lhs One entry.
     /// @param rhs The other.
-    /// @return True when record, key field, paths and opacity match.
+    /// @return True when record, key field, paths, opacity and the open and partial members match.
     friend bool operator==(ActionRecord const& lhs, ActionRecord const& rhs) = default;
 };
 
@@ -584,6 +590,29 @@ inline void findDerivationCycles(std::vector<record::RecordInfo> const& records,
                 entry = std::prev(matched.end());
             }
             entry->paths.push_back(slot->path);
+        }
+        // A holder above a record's rows says which of its members open or make partial what holds them.
+        for (auto& entry : matched) {
+            for (auto const& holder : result.holders) {
+                bool const above = std::ranges::any_of(entry.paths, [&](std::string const& path) {
+                    return holder.path != path && pathWithin(holder.path, path);
+                });
+                if (!above) {
+                    continue;
+                }
+                auto const at = [&](std::string const& member) {
+                    return holder.path.empty() ? member : holder.path + "." + member;
+                };
+                for (auto const& member : holder.open) {
+                    if (std::ranges::find(entry.open, at(member)) == entry.open.end()) {
+                        entry.open.push_back(at(member));
+                    }
+                }
+                if (!holder.partial.empty() &&
+                    std::ranges::find(entry.partial, at(holder.partial)) == entry.partial.end()) {
+                    entry.partial.push_back(at(holder.partial));
+                }
+            }
         }
         if (!matched.empty()) {
             for (auto const& entry : matched) {

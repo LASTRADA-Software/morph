@@ -178,6 +178,35 @@ canonical body is the body's JSON with record fields in name order.
       supersedes anything queued, then marks every entry but an `evaluate` one stale. A mounted entry
       refetches, and an entry whose fetch is in flight fetches once more when it settles: that fetch
       may have been filed before the connection came back.
+- **Open, partial and opaque entries.** The catalog's `ActionRecordInfo` carries, beside a record's key
+  field and paths, `open` and `partial` (paths of members a holder of the record's rows declares through
+  `openMembers()` and `partialMember()`, as a table's `Page` declares `awaiting`, `distinct` and
+  `unloadedRows`) and `opaque` (the result holds the record at no path, as `Table.<id>` holds its table's
+  record). A member is set when its value is a non-empty list, a record, `true`, or a number other than zero.
+    - **An open entry is marked by every change of its record**, whatever the keys: while an `open` member is
+      set, a row the entry does not hold may come to belong to it.
+    - **A partial entry is not merged into.** While an `open` or `partial` member is set, an `updates` effect
+      on the record acts as `changes` for that entry: a merge replaces rows by key and cannot update what such
+      a member says about rows by position.
+    - **An opaque entry is both,** always: its rows cannot be found by key. Its reply is read with
+      `detail::tableValueFromJson`, which keeps a JSON number with a fraction or an exponent as the decimal its
+      shortest text spells (`table::parseDecimal`), or as that text where no decimal holds it; a page's
+      `Number` cells are such numbers, and the strict `valueFromJson` would refuse the whole page. Every other
+      entry keeps the strict rule.
+- **Reading and watching without an entry.** A page window's fetches are not queries.
+    - `Session::read(channel, action, body, stop)` sends the action and settles with the reply's JSON text,
+      unparsed: a `Value` holds no number with a fraction or an exponent, and a page's `Number` cells are such
+      numbers, so the caller decodes the text against the table's description (`table::readGenericPage`). It
+      makes no entry, reads none and applies no effects. `stop` goes to the channel as `CallOptions::stop`,
+      which sends the wire's `cancel` where the server takes one; a stop settles the read with
+      `core::async::OperationCancelled` and drops the reply.
+    - `Session::watchRecord(record, handler)` counts the record into the watch set as an entry does and
+      resolves with a `WatchHolder` once the server has the watch (at once when it already had it, or there is
+      no watcher). The holder is copyable: the watch lasts while any copy lives, and the last copy's death
+      removes the handler and counts the record out. A `Completion` hands its value as `const&`, so a caller
+      keeps the watch by copying the holder in its `then` handler. The handler hears each `changes` event that
+      names the record, after the entries are marked, and a whole-type change on reconnect and on `resync`. A
+      holder that outlives its session releases nothing.
 - **Invalidation** (`refetch`, a backend switch) marks the entry stale and
   refetches it.
 - **A mark during a fetch is kept.** `Session::markStale` marks an entry stale. While the entry's fetch is

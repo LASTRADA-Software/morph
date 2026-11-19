@@ -75,6 +75,7 @@ add_executable(morph_tests
     test_push_channel.cpp
     test_push_watch.cpp
     test_push_cache.cpp
+    test_ui_interpreter_cache.cpp
     test_push_agent.cpp
     test_chat_settle.cpp
     test_chat_origin.cpp
