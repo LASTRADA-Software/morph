@@ -45,7 +45,7 @@ Three additions to `protocol.hpp`, under the GUI's session and the chat's gate (
 |---|---|---|
 | `ui-chat-transcribe` | `TranscribeRequest{audio: base64, mediaType: "audio/wav", language?}` | `TranscribeAccepted{id}`, at once |
 | `ui-chat-transcription` | `TranscriptionQuery{id}` | `TranscriptionState{id, status: "running" \| "done" \| "failed", text?, error?}` |
-| event `transcription` on the `chat` topic | `TranscriptionState` | none: a hint |
+| event `transcription` on the `chat` topic | `{kind: "transcription", state: TranscriptionState}` | none: a hint |
 
 - `StateRequest` with no turn (the probe) answers, beside what it answers today, `TurnState::dictation`: an optional
   `{maxSeconds, maxBytes}`. Absent means the server offers no dictation. It is optional on the wire; an older peer
@@ -118,14 +118,16 @@ one, never with the request. `cancel` aborts the reply. The key appears in no lo
 block's rules: an unknown key is refused, `apiKey` and `apiKeyEnv` together are refused, a refusal never quotes the text.
 `ChatLimits` gains `maxDictationSeconds` (60), `maxDictationBytes` (4 MiB), `maxTranscriptionsPerPrincipal` (2) and
 `transcriptionRetention` (60 s, `transcriptionRetentionSeconds` in the file). 0 is refused for each.
-`maxDictationBytes` above `(wire::kMaxEnvelopeBytes - 4096) * 3 / 4` (about 6 MiB) is refused: past that the transport,
+`maxDictationBytes` above `(wire::kMaxEnvelopeBytes - kDictationEnvelopeOverhead) * 3 / 4` (64 KiB of overhead, the
+margin the inline file cap leaves, so about 5.9 MiB) is refused: past that the transport,
 not the service, would refuse the request, and the person would not learn which bound they crossed.
 
 ## Framework seam: host values and commands for one document
 
 `HostValue` and `HostCommand` gain `documents`, a set of document ids; empty means every document, as today. A
-`{"host": name}` expression or command in a document whose id is not in the set resolves as an unknown host name: a
-loaded document that names it is refused as it is today for an unknown name, and nothing runs. The check belongs to the
+`{"host": name}` expression or command in a document whose id is not in the set reads as absent: a value is `null`,
+`{"can": "host:name"}` is false (also through a query or mutation whose action is that command) and a command is
+reported missing when it runs. The document still loads, and nothing runs. The check belongs to the
 session, which knows which document an expression belongs to; `HostCommand::run` still is not told the caller.
 
 The panel's existing `chat.*` names keep `documents` empty, so nothing changes for them. The dictation names are
@@ -150,6 +152,9 @@ public:
 };
 ```
 
+A `start` while a recording runs, or while the input is still opening, is answered through `onStarted` with an error,
+so every `start` gets exactly one answer, and `stop` is always answered by exactly one `onClip`.
+
 Permission is asynchronous on several platforms and in the browser, so `start` answers through `onStarted`.
 `unavailable()` reports what is known without asking, such as no input device; it is not a promise that `start` will
 succeed. The interface sits in the UI layer, so the binding is tested without Qt.
@@ -159,14 +164,18 @@ succeed. The interface sits in the UI layer, so the binding is tested without Qt
 In `morph_qt`, built when `Qt6::Multimedia` is found (`MORPH_ENABLE_DICTATION`, ON when it is). `QAudioSource` on the
 owner thread at the device's preferred format; samples are converted to 16 kHz mono 16-bit (`resampleToSpeech`, a pure
 function), and the clip stops at `maxSeconds` or when the WAV would pass `maxBytes`. `wavFromPcm16` (pure) writes the
-header. Audio stays in memory and is never written to disk. At 16 kHz mono 16-bit, 60 s is 1,920,044 bytes, 2,560,060 in
+header. The input is a seam: `QtDictationOptions::openInput` returns a `DictationInput` (the `QIODevice` the samples
+arrive on, their channel count, rate and sample type, and what keeps the device open), and `askPermission` answers
+whether the microphone may be used. Each empty member takes the platform's own, so tests drive the recorder with a
+device they feed, and only one test, run by name, opens the system's input. Audio stays in memory and is never written to disk. At 16 kHz mono 16-bit, 60 s is 1,920,044 bytes, 2,560,060 in
 base64.
 
 ### `ChatClient`
 
 - `dictation()` answers the probe's limits, or nothing.
 - `transcribe(wav, language, done)` sends `ui-chat-transcribe`, keeps the id, and calls `done` exactly once: with the
-  text when the state reads `done`, with the error when it reads `failed`, when the exchange fails, on a reconnect (the
+  text when the state reads `done`, with the error when it reads `failed`, when the exchange fails, when a state read
+  fails or answers nonsense (the call ends with that error, never silently), on a reconnect (the
   old connection's close dropped the entry), and when `end` runs. A `transcription` event or a `resync` makes it read
   the state.
 - `note(text)` adds a client-side entry of kind `note` to the active conversation's display. Notes sit outside a turn's
@@ -185,12 +194,24 @@ document only:
 | `chat.dictated` | record `{seq: int, text: string}` | The latest transcript; `seq` grows by one per transcript |
 | `chat.dictateStart`, `chat.dictateStop` | command | Start and stop. `dictateStart` does nothing unless `chat.canDictate` holds |
 
-`refresh` stops a recording and drops its clip when the panel stops being visible or the person signs out.
+`refresh` stops a recording and drops its clip when the panel stops being visible, the person signs out, or no screen
+is behind the panel any more: the microphone never runs without the button that shows it. The button stays shown while
+`chat.dictation` is `waiting`, so "Transcribing…" is seen to its end.
+
+The client mounts the panel from its own document only. A server document that names the id `morph.chat`, or a catalog
+that lists it, is refused when the bundle loads, and a navigation to `morph.chat` is refused as a tab, so a server
+cannot replace the panel or open a second one.
 
 The document adds the button, with its label from `if` on `chat.dictation` and the seconds through `format`, enabled
 unless `waiting`, and a top-level `watch` on `{"host": "chat.dictated"}` that sets `draft` to the trimmed concatenation
 described above. A watch on a host value does not fire on its first evaluation and fires on each change of the record,
 so each new `seq` appends once; the seconds tick changes a different value and does not fire it.
+
+## Providers
+
+OpenRouter is a verified provider: `"transcription": {"name": "openai-transcriptions", "baseUrl":
+"https://openrouter.ai/api", "model": "openai/whisper-1", "apiKeyEnv": "..."}` returned the exact sentence spoken in a
+live check on 2026-11-19. Any service speaking the OpenAI transcription format is configured the same way.
 
 ## Failure modes
 
@@ -199,7 +220,7 @@ so each new `seq` appends once; the seconds tick changes a different value and d
 | No input device | No button |
 | Permission denied | A note, from `onStarted` |
 | Server offers no dictation | No button |
-| Panel hidden while recording | Recording stops, the clip is dropped |
+| Panel hidden, or no screen behind it, while recording | Recording stops, the clip is dropped |
 | Clip at a bound | The client stops recording at the bound and sends what it has |
 | Refused by the server | A note naming the bound or `busy` |
 | Provider error, timeout | A note with the provider's message or the timeout; the input is unchanged |
@@ -223,12 +244,12 @@ Each test that shows something does not happen sits beside a case showing it doe
   real endpoint runs only when `MORPH_LIVE_STT_KEY` is set.
 - **Audio:** `wavFromPcm16` header bytes; `resampleToSpeech` from 48 kHz stereo to 16 kHz mono on a known signal; the
   limits stop a clip, with an injected clock.
-- **Host seam:** a document that is not the panel naming `chat.dictateStart` is refused at load and cannot run it, while
-  the panel can.
+- **Host seam:** a document that is not the panel naming `chat.dictateStart` loads, reads `chat.dictated` as `null`, has `can`
+  false and cannot run it (the command is reported missing), while the panel can.
 - **Binding and panel** (recording backend, fake recorder, fake client): button states through a dictation; the
   transcript appended with the spacing rules (empty input, input ending in text, input ending in a space); two
   transcripts appended in order; the seconds tick does not append; a failure note survives a turn redraw; no button
-  without an offer, and the button with one; hiding the panel stops a recording.
+  without an offer, and the button with one; hiding the panel, or losing the screen behind it, stops a recording and drops its clip.
 - **Mutation checks**, each of which must fail its tests: the bound check, `busy`, the per-principal cap, cancel on the
   deadline and on `ui-chat-end`, the append watch, the probe's `dictation` field, the document scoping of host names.
 
