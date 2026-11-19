@@ -77,7 +77,8 @@ inline constexpr std::string_view kChatPanelDocument = R"json({
                                  "args": [ "Stop ({0} s)", { "host": "chat.dictationSeconds" } ] },
                                { "if": [ { "fn": "eq", "args": [ { "host": "chat.dictation" }, "waiting" ] },
                                          "Transcribing\u2026", "Dictate" ] } ] },
-            "visible": { "fn": "coalesce", "args": [ { "host": "chat.canDictate" }, false ] },
+            "visible": { "fn": "or", "args": [ { "fn": "coalesce", "args": [ { "host": "chat.canDictate" }, false ] },
+                                             { "fn": "eq", "args": [ { "host": "chat.dictation" }, "waiting" ] } ] },
             "enabled": { "fn": "ne", "args": [ { "host": "chat.dictation" }, "waiting" ] },
             "onClick": [ { "if": [ { "fn": "eq", "args": [ { "host": "chat.dictation" }, "recording" ] },
                                    [ { "host": "chat.dictateStop" } ],
@@ -172,8 +173,9 @@ public:
     }
 
     /// @brief Publishes what the client shows now, whether the person is on a screen, and the dictation's state. Stops
-    ///        a recording and drops its clip when the panel is no longer visible or the dictation offer is gone, as it
-    ///        is after the client's `end` at sign-out.
+    ///        a recording and drops its clip when the panel is no longer visible, the dictation offer is gone (as
+    ///        after the client's `end` at sign-out) or no document is behind the panel. The microphone never runs
+    ///        without its indicator; the button also stays shown while a clip is being transcribed.
     void refresh() {
         ValueList entries;
         std::int64_t key = 0;
@@ -182,7 +184,7 @@ public:
         }
         bool const onScreen = _context && _context().has_value();
         bool const running = _client->running();
-        if (_state == DictationState::Recording && (!shown() || !_client->dictation().has_value())) {
+        if (_state == DictationState::Recording && !canDictate()) {
             dropRecording();
         }
         _host->set("chat.entries", Value{std::move(entries)});

@@ -395,6 +395,32 @@ TEST_CASE("chat_panel_dictation_hiding_the_panel_stops_and_drops", "[chat][panel
     CHECK(rig.input() == "back again");
 }
 
+// Mutation: leave the context out of the drop condition in refresh.
+TEST_CASE("chat_panel_dictation_losing_the_context_stops_and_drops", "[chat][panel][dictation]") {
+    Rig rig;
+    rig.offer();
+    rig.clickDictate();
+    rig.recorder.begin();
+    SECTION("the context stays") {
+        rig.binding->refresh();
+        rig.harness.settle();
+        CHECK(rig.recorder.stops == 0);
+        CHECK(rig.visible("Button", "chat_dictate"));
+        CHECK(rig.dictateLabel() == "Stop (0 s)");
+    }
+    SECTION("the context is lost") {
+        rig.context.reset();
+        rig.binding->refresh();
+        rig.harness.settle();
+        CHECK(rig.recorder.stops == 1);
+        std::size_t const before = rig.sent.size();
+        rig.recorder.clip(std::string{"RIFF"});
+        rig.harness.settle();
+        CHECK(rig.sent.size() == before);
+        CHECK_FALSE(rig.visible("Button", "chat_dictate"));
+    }
+}
+
 // Mutation: register the dictation names for every document.
 TEST_CASE("chat_panel_dictation_another_document_cannot_start_or_read_it", "[chat][panel][dictation]") {
     Rig rig;
