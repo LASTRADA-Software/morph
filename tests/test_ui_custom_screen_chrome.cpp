@@ -109,7 +109,7 @@ TEST_CASE("custom screen chrome: without a store, Source is read only, with no P
 
 // Mutation: skip endDraft before opening the saved screen (the old tab's close goes to the guard, which keeps it, and
 // the tab stays `notes.edit`).
-TEST_CASE("custom screen chrome: Save as… names the draft, saves it, and the tab becomes the saved screen",
+TEST_CASE("custom screen chrome: Save as... names the draft, saves it, and the tab becomes the saved screen",
           "[ui][custom-screens][chrome]") {
     ChromeRig rig;
     rig.open("notes.edit", note(3));
@@ -129,7 +129,7 @@ TEST_CASE("custom screen chrome: Save as… names the draft, saves it, and the t
 }
 
 // Mutation: end the draft before openInPlace answers (the tab that stayed open shows the draft with no bar).
-TEST_CASE("custom screen chrome: Save as… on a screen that stays open leaves the tab drafted",
+TEST_CASE("custom screen chrome: Save as... on a screen that stays open leaves the tab drafted",
           "[ui][custom-screens][chrome]") {
     ChromeRig rig;
     // A screen that is dirty of itself: its close goes to the guard, which keeps it open.
@@ -160,7 +160,7 @@ TEST_CASE("custom screen chrome: Save as… on a screen that stays open leaves t
 }
 
 // Mutation: save from the source view without previewing (the refused document is saved: the list has a screen).
-TEST_CASE("custom screen chrome: Save as… from the source view previews first, and saves nothing it refuses",
+TEST_CASE("custom screen chrome: Save as... from the source view previews first, and saves nothing it refuses",
           "[ui][custom-screens][chrome]") {
     morph::exec::ThreadPoolExecutor storePool{1};
     auto const store = std::make_shared<custom_client::GatedStore>(storePool);
@@ -417,7 +417,7 @@ TEST_CASE("custom screen chrome: a second Save while one is pending is ignored",
 }
 
 // Mutation: let a second Save as… replace the dialog while one is saving (the typed name is lost).
-TEST_CASE("custom screen chrome: a second Save as… while one is pending does not replace the dialog",
+TEST_CASE("custom screen chrome: a second Save as... while one is pending does not replace the dialog",
           "[ui][custom-screens][chrome]") {
     morph::exec::ThreadPoolExecutor storePool{1};
     auto const store = std::make_shared<custom_client::GatedStore>(storePool);
@@ -508,7 +508,7 @@ TEST_CASE("custom screen chrome: a refusal from the host's mount keeps its point
 }
 
 // Mutation: drop the dialog-busy guard of askSaveAs (the dialog is replaced while its source is being previewed).
-TEST_CASE("custom screen chrome: Save as… asked again while the source is being previewed keeps the dialog",
+TEST_CASE("custom screen chrome: Save as... asked again while the source is being previewed keeps the dialog",
           "[ui][custom-screens][chrome]") {
     ChromeRig rig;
     rig.open("notes.edit", note(1));
