@@ -9,6 +9,7 @@ tab logic with no widgets, for an application's own tab strip; `Workspace` is th
 - [Model](#model)
 - [Shape](#shape)
 - [Opening](#opening)
+- [Opening in place](#opening-in-place)
 - [Closing](#closing)
 - [Switching](#switching)
 - [Captions](#captions)
@@ -60,6 +61,9 @@ answers them by index over its order.
   that height and scrolls inside the page, so no screen is cut off at the window's edge. Scrolling every page
   instead would leave a stretching root no height to stretch to. A stretching root is never shorter than its
   `minHeight`: while the page is shorter than that, the page scrolls it at that height. A page whose content cannot be narrower than the page (a row of content-sized children wider than the window, say) scrolls sideways on Qt Quick and shows a horizontal bar; one that fits is laid out at the page's width.
+- `WorkspaceOptions::chrome(tab, screenId)` is a shell's window chrome for one tab, mounted at the top of the tab's
+  page, above the head row, in either head placement; a null node mounts nothing. The generic client's custom screens
+  chrome (the draft bar, **Source**, **Open as**) is one ([`custom_screens.md`](custom_screens.md#the-client)).
 - `WorkspaceOptions::screens` gives a screen id's catalog facts, `WorkspaceScreen{singleton, reuseEmpty, host,
   available}`; empty treats every screen as a plain, available document screen.
 - Tabs keep the order they were opened in, so a page slot's index is its tab's. `tabs()` lists them as
@@ -93,6 +97,17 @@ answers them by index over its order.
 A refused mount answers its `MountError` and opens nothing; its page is destroyed with it. `openTab(screenId,
 params)` opens the same way and answers `WorkspaceOpened{tab, mounted}`: `mounted` is false when step 2 focused an
 open tab, which is when a host settles the navigation's call rather than leave it for a later mount.
+
+## Opening in place
+
+`WorkspaceModel::openInPlace(tab, screenId, params, done)` opens another screen in a tab's place, which is what a
+shell's **Open as** does. A tab that shows a draft is refused before anything is mounted, and `done` answers why: the
+draft is unsaved work, to be saved or discarded first, and a close guard answered by mistake must not lose it. Otherwise
+the new screen is mounted first, beside the tab, so a refused mount opens nothing and the tab stays. The tab's screen
+is then asked to close (spec 6 section 3): when it closes, the new screen takes its place in the order and in the
+record and is the active tab; when it stays open (a dirty screen whose guard keeps it), the new screen is closed
+without asking and `done` answers why. No open tab is focused instead, whatever its identity. Until the close is
+answered, the new screen is a tab beside the old one.
 
 ## Closing
 

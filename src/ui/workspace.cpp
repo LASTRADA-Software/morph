@@ -40,6 +40,7 @@ Workspace::Workspace(reactive::Runtime& runtime MORPH_LIFETIMEBOUND, IViewBacken
       _screens{options.screens},
       _onChanged{std::move(options.onChanged)},
       _diagnostics{options.diagnostics},
+      _chrome{options.chrome},
       _headPlacement{headPlacement} {
     // The bar and each page fill what they are given, so a screen whose root stretches fills the page.
     _bar->setLayout({.width = Sizing::stretch(), .height = Sizing::stretch()});
@@ -347,6 +348,7 @@ std::vector<WorkspaceTab> Workspace::tabs() const {
 }
 
 Workspace::Page::~Page() {
+    chrome.reset();
     head.reset();
     slot.reset();
 }
@@ -592,6 +594,13 @@ std::expected<std::unique_ptr<ScreenHandle>, MountError> Workspace::mountPage(Wo
         // Mounted after the screen, since it reads the handle, and moved above it.
         page->head.emplace(*_runtime, *_backend, headRow(tab), page->slot.get());
         page->slot->moveChild(page->head->root(), 0);
+    }
+    if (_chrome) {
+        if (Node chrome = _chrome(tab, screenId)) {
+            // Mounted last and moved to the top, so it sits above the head row and the screen.
+            page->chrome.emplace(*_runtime, *_backend, std::move(chrome), page->slot.get());
+            page->slot->moveChild(page->chrome->root(), 0);
+        }
     }
     _pages.insert_or_assign(tab.value, std::move(page));
     _shownOrder.push_back(tab);

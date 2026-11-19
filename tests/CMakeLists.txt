@@ -276,6 +276,7 @@ add_executable(morph_tests
     test_ui_custom_screens.cpp
     test_ui_json_source.cpp
     test_ui_host_drafts.cpp
+    test_ui_workspace_in_place.cpp
     test_ui_host_vocabulary.cpp
     test_ui_catalogue.cpp
     test_ui_locale_table.cpp
