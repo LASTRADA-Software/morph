@@ -143,8 +143,9 @@ For each registered entry, in registration order:
   the same set.
 - **Component fallbacks are walked.** The actions a document names, and so `ServedScreen::actions`,
   `ServedScreen::modelTypes`, `allActions` and `permitted`, include those a delivered component's fallback view names,
-  with its aliases resolved through the scopes around it. A screen whose only use of an action is in a fallback
-  therefore lists that action as permitted when the principal may run it.
+  with its aliases resolved in a scope of its own: a fallback sees nothing of the screen around it, at load and at
+  runtime. A screen whose only use of an action is in a fallback therefore lists that action as permitted when the
+  principal may run it.
 - **The app shell.** The app document is one file for every user, cached and verified by one hash (§12b); the
   catalog carries no shell of its own, and the client's shell omits from its menu what the catalog omits.
 

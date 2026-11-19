@@ -136,24 +136,46 @@ public:
 - **The store holds the policy.** `list` answers the screens this person may open, which may include screens other
   people saved. `put` and `remove` refuse what this person may not do, with a reason for the person: overwriting a
   screen they may only view, a count over the application's limit, anything the application decides. Sharing, roles,
-  approval and limits on how many screens a person keeps belong here.
+  approval and limits on how many screens a person keeps belong here. `put`'s key may name a screen this person can
+  open but not change, which the store must refuse; `savedBy` is the caller, not the screen's first author.
 - **The store is given checked values only.** The model calls it with a person the server derived and a document that
   has passed every check. Atomicity of its own rules, such as a count, is the store's.
 - **`MemoryCustomScreenStore(base)`** is the framework's store, for tests and examples: a map on an `OwnerStrand`, each
-  person seeing and changing only their own screens. Its entries last as long as it does.
+  person seeing and changing only their own screens. Its entries last as long as it does, and it bounds neither their
+  number nor their size.
 
 ## The model
 
 `CustomScreensModel` is registered under `morph.customScreens` by `registerCustomScreens(store, bundle, authorizer,
 dispatcher, registry, options)`, which a server that offers custom screens calls once before it serves. `bundle` is a
-getter for the current `ServedBundle`; `authorizer` is the server's, for `permittedActions`. Its action ids are
+getter for the current `ServedBundle`, called from action strands on any thread, so thread-safe; `authorizer` is the
+server's, for `permittedActions`. Its action ids are
 `morph.customScreens.<action>`, so they cannot meet an application's. It refuses a `maxDocumentBytes` above
 `kMaxFileBytes`, or one whose document, escaped into a reply with its summary, could exceed the envelope bound, so
 every document it accepts is one a reply can carry.
 
+`registerCustomScreens` returns a `std::shared_ptr<CustomScreens>`, the handle the model itself uses: the store, the
+options, the bundle getter, the authoriser and the one `VerdictCache`. Whatever else on the server works with custom
+screens, the assistant's `propose_screen` in particular, holds it and so shares the model's checks and cache:
+
+- `check(session, app, basedOn, document)` answers what the `check` action answers, a refusal or none, with the same
+  cache. A session with no verified principal, an application the server does not serve, and a name outside its bounds
+  are refusals.
+- `get(session, app, id)` answers what the `get` action answers, the summary and the document, or the refusal.
+- `allowance(basedOn)` is a plain text of what the base rule lets a custom screen of that base use: the params; each
+  action with the kind of position it may be named in; each command the base runs without a press, with the trigger;
+  the client-side commands; the host names and host commands; the delivered components. It is written from the same
+  walk as the base rule, so it lists what the rule compares. The assistant's system text carries it.
+
+`check` and `get` are tasks, to be awaited from a coroutine on the server's executors.
+
+A client learns that a server offers custom screens by calling `list`: a server that did not call
+`registerCustomScreens` answers the dispatcher's unknown-model refusal, `unknown model type: morph.customScreens`, to
+the client's registration of the model, and the client offers no custom screens.
+
 | Action | Kind | Body | `ok` reply |
 |---|---|---|---|
-| `list` | query | `{app}` | `{screens: [{id, title, basedOn, savedAt, savedBy, mine, opensWithoutParams, broken?}]}` |
+| `list` | query | `{app}` | `{screens: [{id, title, basedOn, savedAt, savedBy, mine, hash, opensWithoutParams, broken?}], truncated}` |
 | `get` | query | `{app, id}` | `{summary, document}`: the `list` entry of the screen, and its document text |
 | `check` | query | `{app, basedOn, document}` | `{refusal?: {pointer, reason}}`; absent when the document would be saved |
 | `save` | mutation | `{app, id?, title, basedOn, document}` | `{id}`; a refusal is the error's message, its pointer in the text |
@@ -162,11 +184,17 @@ every document it accepts is one a reply can carry.
 - **The person** is `session::current()->principal`, as for preferences. A body naming a person has it ignored. With no
   verified principal, `list` answers nothing and the other actions are refused with
   `custom screens are stored for a signed-in person`.
-- **`save` with an `id`** overwrites only a screen `get` answers for this person; any other id is refused with
-  `no such custom screen`, so a client cannot choose an id. With no `id`, the model issues a new id.
+- **`save` with an `id`** overwrites only a screen `get` answers for this person; any other id is refused with the
+  store's own wording (`no such custom screen` from `MemoryCustomScreenStore`), so a client cannot choose an id. With
+  no `id`, the model issues a new id.
+- **The `custom:` namespace is enforced everywhere.** A request `id` of `get`, `save` or `remove` that does not start
+  with `custom:` is refused before the store is asked. A stored entry whose id lacks the prefix, or whose document's
+  `id` is not the entry's id, is listed `broken`, so a store that answers an application screen's id, or a document
+  stored under another screen's id, never mounts.
 - **`app`** must be the served bundle's application id; a request naming another is refused before anything else, a
   `list` without a principal included, so a screen checked against one application is never stored under another.
-- **A store's refusal reaches the person as the store gave it**, from `get` as from `put` and `remove`; the model adds no wording of its own over it.
+- **A store's refusal reaches the person as the store gave it**, from `get` as from `put` and `remove`; the model adds
+  no wording of its own over it.
 - **Bounded replies.** Every summary field has a cap: `savedBy` and `broken`'s pointer at `kMaxNameBytes`, `broken`'s
   reason at 1 KiB, each cut with an ellipsis when longer, so the part of a reply that is not the document is bounded and
   every `get` reply fits an envelope. `list` answers at most `CustomScreensOptions::maxListed` summaries, 200 by
@@ -174,17 +202,25 @@ every document it accepts is one a reply can carry.
   summaries, at the seven-fold growth a control byte can take through the reply and the envelope, could exceed the
   envelope bound.
 - **`mine`** is whether `savedBy` is the caller, so a screen someone else saved is shown as theirs.
+- **`hash`** is the content hash of the stored document, so a client holding a copy tells from a list alone whether its
+  copy is current.
+- **`opensWithoutParams`** is answered from the base screen: a screen that is not broken declares exactly its base's
+  params, so the stored document is not read again for it.
+- **`get` re-bounds the document it serves.** A store's document longer than `maxDocumentBytes` is refused as the
+  store's document breaking the bound, so every `get` reply fits an envelope whatever the store holds.
 - **`broken`** is the refusal the checks give for a stored document today, with its pointer. A broken screen is still
   listed, so the person can open its source and fix it, and is never mounted.
 - **Effects.** `save` and `remove` declare `changes` on the record type `morph.customScreens`, the whole type: a save
-  can add a screen to lists no key names yet. Effects fan out by record type to every connection watching it, not by person, so every client with a list of custom
+  can add a screen to lists no key names yet. Effects fan out by record type to every connection watching it, not by
+  person, so every client with a list of custom
   screens open refetches its own `list` after anyone's save. Saves are a person's deliberate act, so this is rare; the
   verdict cache below keeps each refetch cheap.
 - **Journal.** The actions are `Loggable::No`. A screen is not application data; the store keeps who saved it and when.
 
 ## The checks
 
-`save` and `check` run them in this order, and `list` and `get` run them on every stored document they answer. Each
+`save` and `check` run them, after the id rewrite below, in this order, and `list` and `get` run them on every stored
+document they answer. Each
 stops at its first refusal, with its JSON Pointer and reason, as `loadDocument` does: `check` and `broken` carry the
 pointer as a field, and a refused `save` carries both in its error message.
 
@@ -192,18 +228,24 @@ pointer as a field, and a refused `save` carries both in its error message.
    within `kMaxJsonDepth`. `title` is 1 to `kMaxNameBytes` bytes.
 2. **The base.** `basedOn` is a screen document of the current bundle that the person's catalog lists. A custom screen
    based on something else, or on a screen the person can no longer open, is refused.
-3. **The application screen checks.** `ui::loadDocument` with the served bundle's catalog; the document is a screen,
-   not the app document.
+3. **The application screen checks.** `ui::loadDocument` with the served bundle's catalog; the document's `id` is the
+   id it is stored under, which starts with `custom:`, so it is a screen and never the app document.
 4. **The accessibility rules**, `author`'s `checkAccessibility`, which application screens built with the author
    builders already pass at registration.
 5. **The base rule**, below.
 6. **Permission.** Every action the document names is in `permittedActions` for this person.
-7. **The id.** The document's screen id is replaced by the custom screen's own id before it is stored or answered.
-   The document is written out again for this, so the stored text keeps its content, not its key order or spacing.
+
+**The id.** The document's screen id is replaced by the custom screen's own id before anything else is checked, and
+checks 1 to 6 run on the text that is stored, so the size bound holds for the longer id too. The document is written out
+again for this, so the stored text keeps its content, not its key order or spacing. `check` uses a placeholder id as
+long as a real one, so its verdict is the one `save` would give.
 
 **The verdict cache.** The result of checks 3 to 6 is kept by the model, keyed by the document's content hash, its
-`basedOn`, the bundle digest, and a hash of the person's permitted set, in a cache bounded by `CustomScreensOptions::verdictCacheSize`
-entries. Check 2 runs before the cache on every call, because what it reads, a catalog entry's availability, is not part of the bundle digest. A `list` over unchanged documents reads verdicts; a reload, a permission change or an edit misses the cache
+`basedOn`, the id it is stored under, the bundle digest, and a hash of the person's permitted set, in a cache bounded by
+`CustomScreensOptions::verdictCacheSize`
+entries. Check 2 runs before the cache on every call, because what it reads, a catalog entry's availability, is not part
+of the bundle digest. A `list` over unchanged documents reads verdicts; a reload, a permission change or an edit misses
+the cache
 and checks again.
 
 The checks are a guide for the person and a bound on what a document contains. The boundary on what it does is still
@@ -235,12 +277,19 @@ Why each row is there:
   bound it. Restricting it to the base's actions still keeps a shared screen from putting an action, say a delete,
   where its base never offers one.
 
+**What the rule does not bound.** The base rule bounds an action and the trigger that runs it, not the arguments. A
+shared screen can run a mutation the base runs unattended with a body its author chose, and can multiply queries
+(`refreshEvery`, a query inside a `forEach`) under the viewer's session. The boundary for argument values is the
+server's checks on every call and the application's own validation of each action; the base rule does not stand in for
+them.
+
 **Params match the base.** The custom document declares exactly the params the base declares, with the same types, so
 it opens wherever its base opens with the params the base was given.
 
 ## Ids and where a screen opens
 
-- **The namespace.** A custom screen's id is `custom:` and 32 random hexadecimal digits issued by the model. A client resolves a `custom:` id
+- **The namespace.** A custom screen's id is `custom:` and 32 random hexadecimal digits issued by the model. A client
+  resolves a `custom:` id
   through its custom document cache and every other id through the bundle.
 - **The client's cache.** `CustomDocuments` holds loaded custom documents by id, filled by `get`, and answers
   `DocumentScreenHostOptions::documents` for `custom:` ids. It drops an entry when its `list` refetch shows the screen
@@ -305,7 +354,8 @@ The chat on a document screen offers one more tool beside the screen's action to
 - **Size.** The assistant edits documents up to `ChatLimits::maxProposalBytes`, 64 KiB by default, which fits the
   conversation bound and a provider's output. For a larger screen the tool is not offered and the chat says so; the
   source view still works.
-- **Its argument** is a complete `ui/1` document for the same base. The tool runs the checks of `check`. A refused
+- **Its argument** is a complete `ui/1` document for the same base. The tool runs the checks of `check`, through the
+  `CustomScreens` handle `registerCustomScreens` returns. A refused
   document comes back to the model as a tool error with the refusal and its pointer.
 - **Its limit.** At most `ChatLimits::maxProposalsPerTurn` refused proposals, 3 by default, each also counting against
   `maxToolCallsPerTurn`. Past it, the turn stops and tells the person why, in the chat, and the window stays as it was.
@@ -332,7 +382,7 @@ The chat on a document screen offers one more tool beside the screen's action to
 | The assistant runs out of proposals | A chat message with the last refusal; the window is unchanged |
 | A screen is over `maxProposalBytes` | A chat message that the assistant cannot edit this screen; **Source** still works |
 | A recorded custom screen is gone | A notice that it was not restored |
-| No custom screen store is registered | **Source** shows the document read-only; no save buttons, no **Open as**, no custom section |
+| No custom screen store is registered | The client's registration of `morph.customScreens` is refused with `unknown model type: morph.customScreens`, which is how a client learns custom screens are not offered, so **Source** shows the document read-only; no save buttons, no **Open as**, no custom section |
 
 ## Testing
 
