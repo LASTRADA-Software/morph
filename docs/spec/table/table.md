@@ -2297,7 +2297,12 @@ debounce.
 **Two windows, two devices.** The two parts differ.
 
 - `state` is saved with no expected revision: the last save wins, whole document. Nothing is merged: an
-  arrangement is a choice, and half of one window's filter joined to half of another's is neither's.
+  arrangement is a choice, and half of one window's filter joined to half of another's is neither's. Every
+  window and device reaching one server has this guarantee in full. Two servers over one preferences store share
+  no lock: two saves of one key reaching two servers in the same moment can interleave, and the worst outcome is
+  a head naming a removed segment, which is a failed load until the next save, and segments no intent names,
+  which stay in the store. A deployment of several servers that needs the guarantee across them keeps state in a
+  store with a conditional write.
 - `views` is a list, and losing a view another window saved is losing work. A change to it is one operation
   (add, replace, rename or remove one view, or set the default). The table saves with the revision it loaded,
   or with `kNoDocument` when it loaded nothing; on `Conflict` it loads again, applies its one operation to what
@@ -2336,15 +2341,18 @@ How it keeps a document of any size in a store built for small values:
   size such stores are built for. The head entry at `<part>` is `{"revision": …, "segments": n, "bytes": b}`.
 - **Order of writes.** The segments of a new revision first, then the head, then the removal of the previous
   revision's segments. A reader takes the head and then the segments it names, so it reads either the old
-  document or the new one and never a mixture. A save that stops halfway leaves segments no head names; the
-  next save of that key removes them. A head whose segment is missing is a failed load. Every write of one key
+  document or the new one and never a mixture. Reads take no lock: a segment missing because a save replaced the
+  head meanwhile sends the reader back to the head stored now, so a load answers the new document and a `read`
+  answers the new revision, which the client starts again from. A save that stops halfway leaves segments no head
+  names; the next save of that key removes them. A segment missing under an unchanged head is a failed load. Every write of one key
   (a save, a removal, a publish) holds that key's lock on the server, shared by all its model instances, so two
   writes of one key run one after the other: the last wins whole, and no save removes segments another is still
   writing.
 - **`expected`.** The model compares it with the head's revision before it writes, under the key's lock. Two
   servers over one preferences store share no lock, and the store has no conditional write, so two saves that
-  reach two servers within the same moment can both pass the comparison and interleave their writes. That window
-  is the store's call time, not a user's think time; a host store with a conditional write closes it.
+  reach two servers within the same moment can both pass the comparison and interleave their writes, with the
+  outcome "Two windows, two devices" states. That window is the store's call time, not a user's think time; a
+  host store with a conditional write closes it.
 - **Transport.** A call is bounded by an envelope (8 MiB). `save` carries a document of up to 1 MiB; a larger
   one is sent as parts of 1 MiB under one upload id and committed when the last arrives. `load` returns the
   first 1 MiB and the document's revision and size, and the client asks for the rest by offset, starting again
@@ -2354,15 +2362,18 @@ How it keeps a document of any size in a store built for small values:
   once their text, as it travels escaped in the reply and again in the envelope, would pass 6 MiB, and answers
   the remaining keys as deferred; the client asks for those in its next call, so a screen of large states takes
   a few round trips and no reply outgrows its envelope. A server keeps at most four uploads in parts open per
-  person, dropping the oldest when a fifth starts, drops one whose next part has not come within
+  person: a save that would start a fifth is `Refused`, "too many table-state uploads in progress", and the
+  client sends it again after a session's `tableStateTimeout`, until one of the four ends. It drops an upload
+  whose next part has not come within
   `TableStateOptions::uploadExpiry` (30 s), and, with a quota set, refuses a part that takes its upload past it.
 - **Bounds.** `application`, `table`, `qualifier` and `part` are 1 to 256 bytes each, and `part` holds no `.`,
-  which would name another part's points; `model` is 0 to 256 bytes, empty for a table over a document's rows. `TableStateOptions::maxBytesPerPerson` is the operator's
-  quota across one person's stored state, in every application, and across the shared views, which count as
+  which would name another part's points; `model` is 0 to 256 bytes, empty for a table over a document's rows.
+  `TableStateOptions::maxBytesPerPerson` is the operator's quota across one person's stored state, in every application, and across the shared views, which count as
   one more account; it is unset by default, and then nothing limits
   a state. The model checks it before it writes, against a usage total it keeps for the person. A preferences
   store has no conditional write, so two saves of one person's different keys in the same moment can both pass
-  the check, and the quota is then overshot by one document; a ceiling tolerates that. A usage that has fallen
+  the check: each such race of two different keys can leave one document uncounted, so the quota is overshot by
+  one document per race, and races add up; a ceiling tolerates that. A usage that has fallen
   below what a replace removes (a quota set over states stored before it, that race, a usage write the store
   refused) counts as nothing rather than going negative, so it never locks a person out.
 - **Reserved names.** The preferences model writes wherever its caller names, so it refuses an application
