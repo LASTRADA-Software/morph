@@ -490,6 +490,7 @@ add_library(morph ${_morph_library_type}
     src/ui/explorer.cpp
     src/ui/navigator.cpp
     src/ui/chat_service.cpp
+    src/ui/chat_propose_screen.cpp
     src/ui/service_client.cpp
     src/ui/theme.cpp
     src/ui/shell_frame.cpp
@@ -680,6 +681,7 @@ target_sources(morph
         include/morph/ui/chat/extra_tool.hpp
         include/morph/ui/chat/panel.hpp
         include/morph/ui/chat/protocol.hpp
+        include/morph/ui/chat/propose_screen.hpp
         include/morph/ui/chat/provider.hpp
         include/morph/ui/chat/screen_tools.hpp
         include/morph/ui/chat/service.hpp

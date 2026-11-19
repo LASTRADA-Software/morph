@@ -459,11 +459,37 @@ struct ChatService::Shared {
     static void buildTools(std::shared_ptr<Shared> const& self, TurnPtr const& turn, CatalogReply const& catalog,
                            std::map<std::string, Json, std::less<>> const& schemas) {
         auto const document = documentOf(*self, catalog, turn->request.screenId);
-        if (!document) {
+        if (document) {
+            assemble(self, turn, catalog, schemas, *document);
+            return;
+        }
+        bool const inBundle = std::ranges::any_of(self->options.bundle->screens, [&](ServedScreen const& screen) {
+            return screen.entry.id == turn->request.screenId;
+        });
+        if (inBundle || !self->options.documentSource) {
             throw std::runtime_error{document.error()};
         }
+        // A screen outside the bundle: its document comes from the source, under the turn's session.
+        auto const held =
+            std::make_shared<std::pair<CatalogReply, std::map<std::string, Json, std::less<>>>>(catalog, schemas);
+        self->options.documentSource(turn->session, turn->request.screenId,
+                                     onWorker<std::expected<std::string, std::string>>(
+                                         self, turn, [self, turn, held](std::expected<std::string, std::string> text) {
+                                             if (!text) {
+                                                 throw std::runtime_error{text.error()};
+                                             }
+                                             auto loaded = loadDocumentText(*text);
+                                             if (!loaded) {
+                                                 throw std::runtime_error{loaded.error().message()};
+                                             }
+                                             assemble(self, turn, held->first, held->second, *loaded);
+                                         }));
+    }
+
+    static void assemble(std::shared_ptr<Shared> const& self, TurnPtr const& turn, CatalogReply const& catalog,
+                         std::map<std::string, Json, std::less<>> const& schemas, Document const& document) {
         std::set<std::string, std::less<>> const permitted(catalog.permitted.begin(), catalog.permitted.end());
-        turn->tools = screenTools(*document, turn->request.models, permitted, schemas,
+        turn->tools = screenTools(document, turn->request.models, permitted, schemas,
                                   catalog.actions ? &*catalog.actions : nullptr);
         // An extra tool's name is the one the model is told, so a screen tool that took it is withheld.
         std::erase_if(turn->tools, [&](BoundTool const& tool) {
