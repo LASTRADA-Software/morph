@@ -145,6 +145,15 @@ one name is `anthropic`, over `QNetworkAccessManager` on `owner`'s thread, and `
 - A tool call cut off by the token limit is reported as a failure and not run, since it usually still parses as a partial
   object.
 
+`morph::qt::makeQtTranscriber(config, owner)` in `qt/qt_transcriber.hpp` is the one place that names a speech-to-text
+provider. Its one name is `openai-transcriptions`: a multipart `POST` to `{baseUrl}/v1/audio/transcriptions` over
+`QNetworkAccessManager` on `owner`'s thread, with the parts `file` (the WAV, as `audio.wav`), `model`,
+`response_format=json`, and `language` when the input carries one, and the header `Authorization: Bearer <key>`. It reads
+`text`. A non-2xx answer fails with the status and the provider's `error.message` when it has one, never with the
+request; an answer without a `text` fails as unreadable. `cancel` aborts the reply. A deployment that keeps audio on its
+own network points `baseUrl` at its own server; an empty `baseUrl` is `https://api.openai.com`. `model` and the key have
+no default, and the key appears in no log and no message.
+
 ## Configuration
 
 `config.hpp`. `ChatConfig` is a plain struct of the provider, the limits and the system prompt. An application fills it

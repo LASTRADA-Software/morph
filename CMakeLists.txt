@@ -1229,6 +1229,7 @@ if(MORPH_BUILD_QT)
             include/morph/qt/qt_chat_provider.hpp
             include/morph/qt/qt_executor.hpp
             include/morph/qt/qt_tls.hpp
+            include/morph/qt/qt_transcriber.hpp
             include/morph/qt/qt_websocket_server.hpp
             include/morph/qt/qt_websocket_backend.hpp
             include/morph/qt/detail/outbound_ledger.hpp
@@ -1237,6 +1238,7 @@ if(MORPH_BUILD_QT)
     # Compiled implementation (QObject subclass needs MOC via a .cpp file)
     add_library(morph_qt_impl STATIC
         src/qt/qt_chat_provider.cpp
+        src/qt/qt_transcriber.cpp
         src/qt/qt_websocket_server.cpp
         src/qt/qt_websocket_backend.cpp
         include/morph/qt/qt_websocket_server.hpp

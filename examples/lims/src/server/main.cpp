@@ -26,6 +26,7 @@
 #include <morph/journal/file_action_log.hpp>
 #include <morph/qt/qt_chat_provider.hpp>
 #include <morph/qt/qt_executor.hpp>
+#include <morph/qt/qt_transcriber.hpp>
 #include <morph/qt/qt_websocket_server.hpp>
 #include <morph/session/session_auth.hpp>
 #include <morph/ui/chat/config.hpp>
@@ -104,6 +105,14 @@ int main(int argc, char** argv) {
             chat.provider = *provider;
             chat.worker = &chatWorkers;
             chat.bundle = *bundle;
+            if (chatConfig->transcription) {
+                auto transcriber = morph::qt::makeQtTranscriber(*chatConfig->transcription, &providerOwner);
+                if (!transcriber) {
+                    std::cerr << "lims-server: " << transcriber.error() << '\n';
+                    return 1;
+                }
+                chat.transcriber = *transcriber;
+            }
             config.services.push_back(std::make_shared<morph::ui::chat::ChatService>(std::move(chat)));
         }
         auto const server = std::make_shared<morph::backend::RemoteServer>(
