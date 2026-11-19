@@ -426,3 +426,29 @@ TEST_CASE("column layout: user-formed groups are fitted to the group rules", "[t
     CHECK(groups[0] == morph::table::ColumnGroupInfo{.id = "g2", .label = "A", .columns = {"c0", "c1", "c2"}});
     CHECK(groups[1].columns == std::vector<std::string>{"c3", "c4"});  // c1 is g2's
 }
+
+// Mutation: formGroup accepting a column already in a user-formed group.
+TEST_CASE("column layout: the user forms and removes groups and sets display units", "[table][columns]") {
+    ColumnLayout layout{{"companyA", "companyB", "companyC", "weight"}};
+    auto const id = layout.formGroup("Company", {"companyA", "companyB"});
+    REQUIRE(id == "g1");
+    CHECK_FALSE(layout.formGroup("Again", {"companyB", "companyC"}));
+    CHECK_FALSE(layout.formGroup("One", {"companyC"}));
+    CHECK_FALSE(layout.formGroup("Ghost", {"companyC", "ghost"}));
+    CHECK(layout.formGroup("Pair", {"companyC", "weight"}) == "g2");
+    CHECK(layout.removeGroup("g2"));
+    CHECK_FALSE(layout.removeGroup("g2"));
+    CHECK(layout.groups().size() == 1);
+    CHECK(layout.setUnit("weight", "mass", "g"));
+    CHECK_FALSE(layout.setUnit("ghost", "mass", "g"));
+    ColumnLayoutValue const value = layout.value();
+    REQUIRE(value.groups.size() == 1);
+    CHECK(value.groups.at(0).columns == std::vector<std::string>{"companyA", "companyB"});
+    CHECK(value.units == std::map<std::string, std::map<std::string, std::string>>{{"weight", {{"mass", "g"}}}});
+    CHECK(layout.setUnit("weight", "mass", std::nullopt));
+    CHECK(layout.units().empty());
+    // Mutation: the first unused id skipped for the next after the highest.
+    CHECK(layout.formGroup("Back", {"companyC", "weight"}) == "g2");
+    CHECK(layout.removeGroup("g1"));
+    CHECK(layout.formGroup("Front", {"companyA", "companyB"}) == "g1");
+}

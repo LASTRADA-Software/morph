@@ -1,0 +1,361 @@
+// SPDX-License-Identifier: Apache-2.0
+//
+// A table's configuration as pure functions: sort and layout gestures, value filters, conditions, menus, copy text
+// and the status line's messages. Each case names the mutation it was seen to fail on.
+
+#include <algorithm>
+#include <array>
+#include <catch2/catch_test_macros.hpp>
+#include <cstddef>
+#include <map>
+#include <morph/table/data_source.hpp>
+#include <morph/table/engine.hpp>
+#include <morph/table/filter.hpp>
+#include <morph/table/sort.hpp>
+#include <morph/ui/backend.hpp>
+#include <morph/ui/locale_table.hpp>
+#include <morph/ui/table_config.hpp>
+#include <optional>
+#include <string>
+#include <vector>
+
+namespace {
+
+namespace ui = morph::ui;
+namespace table = morph::table;
+
+// Mutation: Extend treated as Click (Shift ignored).
+TEST_CASE("sort gesture: a click replaces the chain; Shift adds a key or flips one in place", "[ui][table][config]") {
+    using table::SortDirection::Ascending;
+    using table::SortDirection::Descending;
+    ui::SortChain const two{{"name", Ascending}, {"mass", Descending}};
+    CHECK(ui::applySortGesture(two, "name", ui::SortGesture::Click, 8).chain == ui::SortChain{{"name", Descending}});
+    CHECK(ui::applySortGesture(two, "mass", ui::SortGesture::Click, 8).chain == ui::SortChain{{"mass", Ascending}});
+    CHECK(ui::applySortGesture({{"name", Descending}}, "name", ui::SortGesture::Click, 8).chain ==
+          ui::SortChain{{"name", Ascending}});
+    CHECK(ui::applySortGesture(two, "site", ui::SortGesture::Extend, 8).chain ==
+          ui::SortChain{{"name", Ascending}, {"mass", Descending}, {"site", Ascending}});
+    CHECK(ui::applySortGesture(two, "name", ui::SortGesture::Extend, 8).chain ==
+          ui::SortChain{{"name", Descending}, {"mass", Descending}});
+    CHECK(ui::applySortGesture(two, "mass", ui::SortGesture::Remove, 8).chain == ui::SortChain{{"name", Ascending}});
+    CHECK(ui::applySortGesture(two, "site", ui::SortGesture::Descending, 8).chain ==
+          ui::SortChain{{"site", Descending}});
+}
+
+// Mutation: the bound checked before the "already in the chain" case (the flip at the bound is refused).
+TEST_CASE("sort gesture: at the bound a new key is refused and a key in the chain still flips",
+          "[ui][table][config]") {
+    using table::SortDirection::Ascending;
+    using table::SortDirection::Descending;
+    ui::SortChain const full{{"a", Ascending}, {"b", Ascending}};
+    ui::SortChange const added = ui::applySortGesture(full, "c", ui::SortGesture::Extend, 2);
+    CHECK(added.chain == full);
+    CHECK(added.refusal == "A table sorts by at most 2 columns");
+    CHECK(ui::applySortGesture(full, "c", ui::SortGesture::Add, 2).refusal == "A table sorts by at most 2 columns");
+    ui::SortChange const flipped = ui::applySortGesture(full, "b", ui::SortGesture::Extend, 2);
+    CHECK(flipped.chain == ui::SortChain{{"a", Ascending}, {"b", Descending}});
+    CHECK_FALSE(flipped.refusal);
+}
+
+// Mutation: applyLayoutGesture ignoring `locked`.
+TEST_CASE("layout gesture: moves, hides, pins and resets, refusing a locked column and the last visible one",
+          "[ui][table][config]") {
+    table::ColumnLayout layout{{"id", "name", "mass", "site"}};
+    std::vector<ui::LayoutColumn> const columns{
+        {"id", "ID", true}, {"name", "Name"}, {"mass", "Mass"}, {"site", "Site"}};
+    CHECK(ui::applyLayoutGesture(layout, columns, ui::Configure::All, ui::MoveColumn{"mass", -1}).changed);
+    CHECK(std::ranges::equal(layout.order(), std::vector<std::string>{"id", "mass", "name", "site"}));
+    CHECK(ui::applyLayoutGesture(layout, columns, ui::Configure::All, ui::MoveColumn{"id", 1}).refusal ==
+          "ID is locked");
+    CHECK(ui::applyLayoutGesture(layout, columns, ui::Configure::All, ui::PinColumn{"name"}).changed);
+    CHECK(layout.pinned() == 1);
+    CHECK(layout.visible().front() == "name");
+    CHECK(ui::applyLayoutGesture(layout, columns, ui::Configure::All, ui::ResizeColumn{"mass", 14}).changed);
+    CHECK(layout.widths().at("mass") == 14);
+    for (std::string const id : {"name", "mass", "site"}) {
+        CHECK(ui::applyLayoutGesture(layout, columns, ui::Configure::All, ui::HideColumn{id}).changed);
+    }
+    CHECK(layout.visible() == std::vector<std::string>{"id"});
+    CHECK(ui::applyLayoutGesture(layout, columns, ui::Configure::All, ui::HideColumn{"id"}).refusal == "ID is locked");
+    table::ColumnLayout lone{{"a", "b"}};
+    std::vector<ui::LayoutColumn> const ab{{"a", "A"}, {"b", "B"}};
+    CHECK(ui::applyLayoutGesture(lone, ab, ui::Configure::All, ui::HideColumn{"a"}).changed);
+    CHECK(ui::applyLayoutGesture(lone, ab, ui::Configure::All, ui::HideColumn{"b"}).refusal ==
+          "At least one column stays visible");
+    CHECK(ui::applyLayoutGesture(lone, ab, ui::Configure::Hide, ui::MoveColumn{"b", -1}).refusal ==
+          "This table's columns cannot be moved");
+    CHECK(ui::applyLayoutGesture(layout, columns, ui::Configure::All, ui::ResetColumns{}).changed);
+    CHECK(std::ranges::equal(layout.order(), std::vector<std::string>{"id", "name", "mass", "site"}));
+    CHECK(layout.pinned() == 0);
+    CHECK(layout.widths().empty());
+}
+
+// Mutation: UnpinColumn leaving the column in place (only the count shrinks).
+TEST_CASE("layout gesture: unpinning moves the column after the pinned ones; drags and groups",
+          "[ui][table][config]") {
+    table::ColumnLayout layout{{"a", "b", "c", "d"}};
+    std::vector<ui::LayoutColumn> const columns{
+        {"a", "A"}, {"b", "B"}, {"c", "C"}, {"d", "D", false, table::ColumnKind::Integer}};
+    CHECK(ui::applyLayoutGesture(layout, columns, ui::Configure::All, ui::PinColumn{"c"}).changed);
+    CHECK(ui::applyLayoutGesture(layout, columns, ui::Configure::All, ui::PinColumn{"d"}).changed);
+    CHECK(layout.visible() == std::vector<std::string>{"c", "d", "a", "b"});
+    CHECK(ui::applyLayoutGesture(layout, columns, ui::Configure::All, ui::UnpinColumn{"c"}).changed);
+    CHECK(layout.visible() == std::vector<std::string>{"d", "c", "a", "b"});
+    CHECK(layout.pinned() == 1);
+    CHECK(ui::applyLayoutGesture(layout, columns, ui::Configure::All, ui::MoveColumnTo{"d", 9}).changed);
+    CHECK(layout.visible() == std::vector<std::string>{"c", "a", "b", "d"});
+    CHECK(ui::applyLayoutGesture(layout, columns, ui::Configure::Pin, ui::ResizeColumn{"a", 3}).refusal ==
+          "This table's columns cannot be resized");
+    CHECK(ui::applyLayoutGesture(layout, columns, ui::Configure::None, ui::ResetColumns{}).refusal);
+    CHECK(ui::applyLayoutGesture(layout, columns, ui::Configure::None, ui::FormGroup{"P", {"a", "d"}}).refusal);
+    CHECK(ui::applyLayoutGesture(layout, columns, ui::Configure::None, ui::FormGroup{"P", {"a", "b"}}).changed);
+    CHECK(ui::applyLayoutGesture(layout, columns, ui::Configure::None, ui::SetDisplayUnit{"d", "mass", "g"}).changed);
+    CHECK(ui::applyLayoutGesture(layout, columns, ui::Configure::None, ui::RemoveGroup{"g1"}).changed);
+    CHECK(layout.groups().empty());
+}
+
+// Mutation: planValueFilter always sending the side the operations reached.
+TEST_CASE("value filter: the smaller side is sent, and both sides over the bound disable the list",
+          "[ui][table][config]") {
+    using Side = ui::ValueFilterPlan::Side;
+    auto const covering = [](int count, bool ticked) {
+        std::map<std::string, bool> covered;
+        for (int i = 0; i < count; ++i) {
+            covered.emplace("v" + std::to_string(i), ticked);
+        }
+        return covered;
+    };
+    auto const one =
+        ui::planValueFilter(50'000, ui::ResolvedTicks{.ticked = true, .covered = {{"v00007", false}}}, 10'000);
+    CHECK(one.side == Side::Exclude);
+    CHECK(one.members == 1);
+    CHECK_FALSE(one.needsComplement);
+    CHECK(ui::planValueFilter(25'000, ui::ResolvedTicks{.ticked = true}, 10'000).side == Side::All);
+    CHECK(ui::planValueFilter(25'000, ui::ResolvedTicks{.ticked = false, .covered = covering(12'000, true)}, 10'000)
+              .side == Side::Disabled);
+    auto const complement =
+        ui::planValueFilter(25'000, ui::ResolvedTicks{.ticked = true, .covered = covering(20'000, false)}, 10'000);
+    CHECK(complement.side == Side::Include);
+    CHECK(complement.members == 5'000);
+    CHECK(complement.needsComplement);
+    CHECK(ui::planValueFilter(3, ui::ResolvedTicks{.ticked = false, .blanks = false}, 10'000).side == Side::Nothing);
+    // Mutation: the tie decided as Include (`T <= U`): one of two values unticked sends the other as an include.
+    auto const tie = ui::planValueFilter(
+        2, ui::ResolvedTicks{.ticked = true, .covered = {{"Open", false}}, .blanks = true}, 10'000);
+    CHECK(tie.side == Side::Exclude);
+    CHECK(tie.members == 1);
+    // Mutation: an empty `oneOf` written beside `isEmpty` when only "(Blanks)" is ticked.
+    auto const blanksOnly = ui::planValueFilter(2, ui::ResolvedTicks{.ticked = false, .blanks = true}, 10'000);
+    CHECK(blanksOnly.side == Side::Include);
+    CHECK(blanksOnly.members == 0);
+    auto const onlyBlanks = ui::valueFilter(Side::Include, {}, true);
+    REQUIRE(onlyBlanks);
+    REQUIRE(onlyBlanks->include.size() == 1);
+    CHECK(onlyBlanks->include.at(0).isEmpty == true);
+    CHECK_FALSE(ui::valueFilter(Side::Exclude, {}, std::nullopt));
+    auto const include = ui::valueFilter(Side::Include, {"F", "S"}, true);
+    REQUIRE(include);
+    CHECK(include->combine == table::Combine::Any);
+    REQUIRE(include->include.size() == 2);
+    CHECK(include->include.at(0).oneOf == std::vector<std::string>{"F", "S"});
+    CHECK(include->include.at(1).isEmpty == true);
+    auto const exclude = ui::valueFilter(Side::Exclude, {"X"}, false);
+    REQUIRE(exclude);
+    REQUIRE(exclude->exclude.size() == 2);
+    CHECK(exclude->exclude.at(1).isEmpty == true);
+    auto const ranges = ui::valueFilter(Side::Include, {"2026-03-01..2026-03-31", "2026-05-14..2026-05-14"},
+                                        std::nullopt, ui::ValueForm::Ranges);
+    REQUIRE(ranges);
+    REQUIRE(ranges->include.size() == 2);
+    CHECK(ranges->include.at(0).between == std::array<std::string, 2>{"2026-03-01", "2026-03-31"});
+}
+
+// Mutation: resolveTicks applying the operations in reverse order.
+TEST_CASE("value ticks: operations under searches resolve in order, the last one winning", "[ui][table][config]") {
+    std::map<std::string, std::vector<std::string>> const shows{{"ab", {"ab1", "xab"}}, {"x", {"xab", "xy"}}};
+    auto const under = [&](std::string const& search) { return shows.at(search); };
+    ui::ValueTicks const ticks{.ticked = true,
+                               .ops = {{.search = "", .operand = std::nullopt, .ticked = false},
+                                       {.search = "ab", .operand = std::nullopt, .ticked = true},
+                                       {.search = "x", .operand = std::nullopt, .ticked = false},
+                                       {.search = "", .operand = "xab", .ticked = true}}};
+    ui::ResolvedTicks const resolved = ui::resolveTicks(ticks, under);
+    CHECK_FALSE(resolved.ticked);
+    CHECK(resolved.covered == std::map<std::string, bool>{{"ab1", true}, {"xab", true}, {"xy", false}});
+}
+
+// Mutation: classifyFilter reading a Custom column's lone isEmpty as "(Blanks)".
+TEST_CASE("filter parts: a column's filter is values or conditions, never both", "[ui][table][config]") {
+    using table::ColumnKind;
+    auto const entry = [](auto set) {
+        table::FilterEntry e;
+        set(e);
+        return e;
+    };
+    table::ColumnFilter const values{.combine = table::Combine::Any,
+                                     .include = {entry([](auto& e) { e.oneOf = std::vector<std::string>{"F"}; }),
+                                                 entry([](auto& e) { e.isEmpty = true; })}};
+    CHECK(ui::classifyFilter(values, ColumnKind::Text) == ui::FilterPart::Values);
+    table::ColumnFilter const blanks{.combine = table::Combine::Any,
+                                     .include = {entry([](auto& e) { e.isEmpty = true; })}};
+    CHECK(ui::classifyFilter(blanks, ColumnKind::Text) == ui::FilterPart::Values);
+    CHECK(ui::classifyFilter(blanks, ColumnKind::Custom) == ui::FilterPart::Conditions);
+    table::ColumnFilter const conditions{
+        .combine = table::Combine::All,
+        .include = {entry([](auto& e) { e.gt = "2"; }), entry([](auto& e) { e.lt = "5"; })}};
+    CHECK(ui::classifyFilter(conditions, ColumnKind::Integer) == ui::FilterPart::Conditions);
+    CHECK(ui::classifyFilter({}, ColumnKind::Integer) == ui::FilterPart::None);
+    // Mutation: a `between` read as a date bucket on any kind.
+    auto const range = ui::valueFilter(ui::ValueFilterPlan::Side::Include, {"2026-03-01..2026-03-31"}, std::nullopt,
+                                       ui::ValueForm::Ranges);
+    REQUIRE(range);
+    CHECK(ui::classifyFilter(*range, ColumnKind::Date) == ui::FilterPart::Values);
+    CHECK(ui::classifyFilter(*range, ColumnKind::Integer) == ui::FilterPart::Conditions);
+}
+
+// Mutation: canonicalOperand passing typed text through unchanged.
+TEST_CASE("typed operands: numbers reach the wire with a point and no grouping", "[ui][table][config]") {
+    ui::LocaleFacts const& de = ui::localeFacts("de");
+    CHECK(ui::canonicalOperand("1.234,5", table::ColumnKind::Decimal, de) == "1234.5");
+    CHECK(ui::canonicalOperand("12,5", table::ColumnKind::Integer, de) == std::nullopt);
+    CHECK(ui::canonicalOperand("-7", table::ColumnKind::Integer, de) == "-7");
+    CHECK(ui::canonicalOperand("1,5", table::ColumnKind::Decimal, ui::localeFacts("en")) == std::nullopt);
+    CHECK(ui::canonicalOperand("abc", table::ColumnKind::Text, de) == "abc");
+    CHECK(ui::canonicalOperand("2026-05-14", table::ColumnKind::Date, de) == "2026-05-14");
+}
+
+// Mutation: Together built as one oneOf entry (the row F, F, X would pass).
+TEST_CASE("group filter from ticks: the match line chooses the quantifier, together takes one eq per value",
+          "[ui][table][config]") {
+    auto const atLeast = ui::groupValueFilter("company", 3, {"F", "S"}, std::nullopt, ui::GroupMatch::AtLeast, 2);
+    REQUIRE(atLeast);
+    CHECK(atLeast->match.kind == table::ColumnCount::Kind::AtLeast);
+    CHECK(atLeast->match.n == 2);
+    CHECK(atLeast->include.at(0).oneOf == std::vector<std::string>{"F", "S"});
+    auto const together = ui::groupValueFilter("company", 3, {"F", "S"}, std::nullopt, ui::GroupMatch::Together, 0);
+    REQUIRE(together);
+    CHECK(together->mode == table::GroupMode::Together);
+    REQUIRE(together->include.size() == 2);
+    CHECK(together->include.at(0).eq == "F");
+    CHECK(together->include.at(1).eq == "S");
+    CHECK_FALSE(ui::groupValueFilter("company", 3, {"F"}, std::nullopt, ui::GroupMatch::Together, 0));
+    CHECK_FALSE(ui::groupValueFilter("company", 3, {"F", "S", "T", "U"}, std::nullopt, ui::GroupMatch::Together, 0));
+    auto const blanks = ui::groupValueFilter("company", 3, {"F"}, true, ui::GroupMatch::AnyColumn, 0);
+    REQUIRE(blanks);
+    CHECK(blanks->include.at(1).isEmpty == true);
+    CHECK_FALSE(ui::groupValueFilter("company", 3, {"F"}, std::nullopt, ui::GroupMatch::AtLeast, 4));
+}
+
+// Mutation: conditionOps returning the numeric list for every kind.
+TEST_CASE("conditions follow the column's kind", "[ui][table][config]") {
+    using enum ui::ConditionOp;
+    CHECK(ui::conditionOps(table::ColumnKind::Text) ==
+          std::vector<ui::ConditionOp>{Equals, NotEquals, Contains, BeginsWith, EndsWith});
+    auto const numeric =
+        std::vector<ui::ConditionOp>{Equals, NotEquals, Less, LessOrEqual, Greater, GreaterOrEqual, Between};
+    for (auto const kind :
+         {table::ColumnKind::Integer, table::ColumnKind::Key, table::ColumnKind::Decimal, table::ColumnKind::Quantity,
+          table::ColumnKind::Number, table::ColumnKind::Date, table::ColumnKind::DateTime}) {
+        CHECK(ui::conditionOps(kind) == numeric);
+    }
+    CHECK(ui::conditionOps(table::ColumnKind::Bool).empty());
+    CHECK(ui::conditionOps(table::ColumnKind::Custom) == std::vector<ui::ConditionOp>{IsEmpty, IsNotEmpty});
+    CHECK(ui::conditionLabel(NotEquals, table::ColumnKind::Text) == "does not equal");
+    CHECK(ui::conditionLabel(NotEquals, table::ColumnKind::Integer) == "≠");
+    table::FilterEntry const between = ui::conditionEntry(Between, "1", "5", false);
+    CHECK(between.between == std::array<std::string, 2>{"1", "5"});
+    CHECK(ui::conditionEntry(Contains, "ab", {}, true).caseSensitive == true);
+}
+
+// Mutation: headerMenu leaving "Add to sort" enabled for a column already in the chain.
+TEST_CASE("header menu: entries, order and enablement", "[ui][table][config]") {
+    ui::HeaderMenuInput const input{.column = {"name", "Name"},
+                                    .sortable = true,
+                                    .filterable = true,
+                                    .sortPlace = 0,
+                                    .chainSize = 1,
+                                    .maxSortKeys = 8,
+                                    .visibleIndex = 1,
+                                    .visibleCount = 3,
+                                    .pinned = 0,
+                                    .dimensions = {},
+                                    .groups = {{"company", "Company", 3}},
+                                    .allowed = ui::Configure::All};
+    std::vector<ui::MenuEntry> const entries = ui::menuEntries(ui::headerMenu(input));
+    std::vector<std::string> labels;
+    for (ui::MenuEntry const& entry : entries) {
+        labels.push_back(entry.separator ? "-" : entry.label);
+    }
+    CHECK(labels == std::vector<std::string>{"Sort ascending", "Sort descending", "Add to sort", "Remove from sort",
+                                             "-", "Filter…", "Filter Company, 3 columns…", "-", "Move left",
+                                             "Move right", "Pin column", "Hide column"});
+    CHECK_FALSE(entries.at(2).enabled);
+    CHECK(entries.at(3).enabled);
+    CHECK(entries.at(8).keys == "Ctrl+Shift+Left");
+    ui::HeaderMenuInput locked = input;
+    locked.column.locked = true;
+    std::vector<ui::MenuEntry> const lockedEntries = ui::menuEntries(ui::headerMenu(locked));
+    CHECK_FALSE(lockedEntries.at(8).enabled);
+    CHECK_FALSE(lockedEntries.at(11).enabled);
+    ui::HeaderMenuInput hideOnly = input;
+    hideOnly.allowed = ui::Configure::Hide;
+    CHECK(ui::menuEntries(ui::headerMenu(hideOnly)).back().label == "Hide column");
+    CHECK(ui::menuEntries(ui::headerMenu(hideOnly)).size() == 9);
+    // Mutation: the Display unit submenu drawn with no check on the chosen unit.
+    ui::HeaderMenuInput measure = input;
+    measure.column = {"weight", "Weight", false, table::ColumnKind::Decimal};
+    measure.dimensions = {{.dimension = "mass", .units = {"g", "kg"}, .chosen = "g"}};
+    std::vector<ui::TableMenuEntry> const measureMenu = ui::headerMenu(measure);
+    REQUIRE(measureMenu.back().entry.label == "Display unit");
+    REQUIRE(measureMenu.back().items.size() == 2);
+    CHECK(measureMenu.back().items.at(0).entry.label == "mass: g");
+    CHECK(measureMenu.back().items.at(0).entry.checked == true);
+    CHECK(measureMenu.back().items.at(1).entry.checked == false);
+    CHECK(measureMenu.back().items.at(1).command == ui::MenuCommand::DisplayUnit);
+    CHECK(measureMenu.back().items.at(1).argument == "mass\x1Fkg");
+    std::vector<std::size_t> const path{measureMenu.size() - 1, 1};
+    ui::TableMenuEntry const* const kg = ui::chosen(measureMenu, path);
+    REQUIRE(kg != nullptr);
+    CHECK(kg->argument == "mass\x1Fkg");
+    CHECK(ui::chosen(measureMenu, std::vector<std::size_t>{4}) == nullptr);  // a separator
+    std::vector<ui::MenuEntry> const table =
+        ui::menuEntries(ui::tableMenu({.anyFilter = false, .groups = {}, .allowed = ui::Configure::All}));
+    std::vector<std::string> tableLabels;
+    for (ui::MenuEntry const& entry : table) {
+        tableLabels.push_back(entry.separator ? "-" : entry.label);
+    }
+    CHECK(tableLabels == std::vector<std::string>{"Columns…", "Sort…", "Clear all filters", "Reset columns", "-",
+                                                  "Copy", "Copy with headers"});
+    CHECK_FALSE(table.at(2).enabled);
+    CHECK(table.at(5).keys == "Ctrl+C");
+}
+
+// Mutation: copyText replacing "\r\n" with two spaces.
+TEST_CASE("copy text: tabs and line breaks become one space; unloaded cells are empty and counted",
+          "[ui][table][config]") {
+    std::vector<std::string> const labels{"Na\tme", "N"};
+    std::vector<std::vector<std::optional<std::string>>> const rows{{"a\tb\r\nc", "1"}, {std::nullopt, "x\ry\nz"}};
+    ui::CopiedText const plain = ui::copyText({}, rows);
+    CHECK(plain.text == "a b c\t1\n\tx y z");
+    CHECK(plain.unloaded == 1);
+    CHECK(ui::copyText(labels, rows).text == "Na me\tN\na b c\t1\n\tx y z");
+}
+
+// Mutations: groupedCount writing the digits ungrouped; `copied` using the plural for one row or one cell.
+TEST_CASE("status copy: counts are grouped and messages are exact", "[ui][table][config]") {
+    CHECK(ui::tableText::tooManyDates() == "Too many dates to list; filter with a condition");
+    CHECK(ui::groupedCount(999) == "999");
+    CHECK(ui::groupedCount(10'000) == "10,000");
+    CHECK(ui::groupedCount(-1'234'567) == "-1,234,567");
+    CHECK(ui::groupedCount(10'000, ".") == "10.000");
+    CHECK(ui::tableText::sortBound(32) == "A table sorts by at most 32 columns");
+    CHECK(ui::tableText::rangeBound(10'000) == "A range selects at most 10,000 rows");
+    CHECK(ui::tableText::copyBound(10'000) == "A copy holds at most 10,000 rows");
+    CHECK(ui::tableText::copied(200, 12) == "Copied 200 rows, 12 cells were not loaded");
+    CHECK(ui::tableText::copied(1, 1) == "Copied 1 row, 1 cell was not loaded");
+    CHECK(ui::tableText::copied(3, 0) == "Copied 3 rows");
+    CHECK(ui::tableText::unreadable(1) == "1 cell could not be read");
+    CHECK(ui::tableText::notConfigurable(ui::Configure::Pin) == "This table's columns cannot be pinned");
+}
+
+}  // namespace

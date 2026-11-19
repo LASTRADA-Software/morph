@@ -264,6 +264,7 @@ add_executable(morph_tests
     test_ui_structure.cpp
     test_ui_foreach.cpp
     test_ui_table.cpp
+    test_ui_table_config.cpp
     bench_interpreter.cpp
     bench_mount.cpp
     test_ui_frontend.cpp

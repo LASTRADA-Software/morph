@@ -245,6 +245,84 @@ public:
     /// @return The count.
     [[nodiscard]] std::size_t pinned() const noexcept { return _pinned; }
 
+    /// @brief Forms a group of columns under a label, as the user does in the column chooser.
+    /// @param label   The group's label.
+    /// @param columns The columns, 2 to 16, each a column of the layout and in no other user-formed group.
+    /// @return The new group's id, the first of `g1`, `g2`, … no group has; `InvalidSpec` when @p columns breaks the
+    ///         rule above or repeats a column.
+    std::expected<std::string, TableError> formGroup(std::string label, std::vector<std::string> columns) {
+        auto const refuse = [](std::string message) {
+            return std::unexpected(
+                TableError{.code = TableErrorCode::InvalidSpec, .column = {}, .message = std::move(message)});
+        };
+        if (columns.size() < 2 || columns.size() > kMaxUserGroupColumns) {
+            return refuse("a group has 2 to 16 columns, not " + std::to_string(columns.size()));
+        }
+        for (std::size_t at = 0; at < columns.size(); ++at) {
+            auto const& columnId = columns[at];
+            if (std::ranges::find(_order, columnId) == _order.end()) {
+                return refuse("unknown column: " + columnId);
+            }
+            if (std::ranges::find(columns.begin(), columns.begin() + static_cast<std::ptrdiff_t>(at), columnId) !=
+                columns.begin() + static_cast<std::ptrdiff_t>(at)) {
+                return refuse("column " + columnId + " is named twice");
+            }
+            for (auto const& group : _groups) {
+                if (std::ranges::find(group.columns, columnId) != group.columns.end()) {
+                    return refuse("column " + columnId + " is already in group " + group.label);
+                }
+            }
+        }
+        std::string id;
+        for (std::size_t n = 1;; ++n) {
+            id = "g" + std::to_string(n);
+            if (std::ranges::none_of(_groups, [&](ColumnGroupInfo const& group) { return group.id == id; })) {
+                break;
+            }
+        }
+        _groups.push_back({.id = id, .label = std::move(label), .columns = std::move(columns)});
+        return id;
+    }
+
+    /// @brief Removes a user-formed group.
+    /// @param groupId The group's id.
+    /// @return `false` when no group has that id.
+    bool removeGroup(std::string const& groupId) {
+        return std::erase_if(_groups, [&](ColumnGroupInfo const& group) { return group.id == groupId; }) != 0;
+    }
+
+    /// @brief The groups the user formed, in the order they were formed.
+    /// @return The groups.
+    [[nodiscard]] std::span<ColumnGroupInfo const> groups() const noexcept { return _groups; }
+
+    /// @brief Sets or clears the unit a column shows one of its dimensions in.
+    /// @param columnId  The column.
+    /// @param dimension The dimension, such as `mass`.
+    /// @param unit      The unit's id; `nullopt` clears it, and the cells show their own units.
+    /// @return `false` when the column is unknown, or @p dimension or @p unit is empty.
+    bool setUnit(std::string const& columnId, std::string const& dimension, std::optional<std::string> unit) {
+        if (std::ranges::find(_order, columnId) == _order.end() || dimension.empty() || (unit && unit->empty())) {
+            return false;
+        }
+        if (unit) {
+            _units[columnId][dimension] = std::move(*unit);
+            return true;
+        }
+        if (auto const found = _units.find(columnId); found != _units.end()) {
+            found->second.erase(dimension);
+            if (found->second.empty()) {
+                _units.erase(found);
+            }
+        }
+        return true;
+    }
+
+    /// @brief The display units: by column id, a unit id per dimension.
+    /// @return The units.
+    [[nodiscard]] std::map<std::string, std::map<std::string, std::string>> const& units() const noexcept {
+        return _units;
+    }
+
     /// @brief The layout as it is stored.
     /// @return Order, hidden columns in display order, pinned count, widths, groups and units.
     [[nodiscard]] ColumnLayoutValue value() const {
