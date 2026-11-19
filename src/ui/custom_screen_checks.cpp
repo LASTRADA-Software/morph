@@ -10,6 +10,7 @@
 #include <glaze/glaze.hpp>
 #include <list>
 #include <map>
+#include <memory>
 #include <morph/core/wire.hpp>
 #include <morph/ui/author.hpp>
 #include <morph/ui/bundle.hpp>
@@ -349,8 +350,8 @@ private:
                 json = found == object->end() ? nullptr : &found->second;
             } else if (auto const* const array = std::get_if<Json::array_t>(&json->data)) {
                 std::size_t index = 0;
-                char const* const last = token.data() + token.size();
-                auto const [stop, error] = std::from_chars(token.data(), last, index);
+                char const* const last = std::to_address(token.end());
+                auto const [stop, error] = std::from_chars(std::to_address(token.begin()), last, index);
                 json = error == std::errc{} && stop == last && index < array->size() ? &array->at(index) : nullptr;
             } else {
                 json = nullptr;

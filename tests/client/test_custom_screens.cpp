@@ -622,8 +622,10 @@ struct ChatWindow {
     bool wait(Pred pred) {
         return pumpUntil(context.owner(), pred);
     }
-    /// Says @p text in the panel, and waits until the request reached the provider.
+    /// Says @p text in the panel, and waits until the request reached the provider. The panel takes input only once
+    /// the previous turn has ended, which can come after that turn's last text is shown, so it waits for that first.
     void say(std::string const& text) {
+        REQUIRE(wait([this] { return chatEnabled(); }));
         std::size_t const before = provider->calls();
         auto const input = find("TextInput", "chat_input");
         REQUIRE(input.has_value());
