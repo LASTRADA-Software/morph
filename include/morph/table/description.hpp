@@ -1532,22 +1532,27 @@ struct AnswerContext {
     }
     LeveledSource const leveled{served.source, infos, inputs};
     ApplyOptions const options{.limits = served.limits, .services = served.services, .mayRead = served.mayRead};
+    // The keys of a view's rows and of its undecided rows: what its order levels are wanted for.
+    auto const keysOf = [](ComputedView const& computed, RowSnapshot const& rows) {
+        auto out = std::make_shared<std::vector<RowId>>();
+        out->reserve(computed.rows.size() + computed.undecided.size());
+        for (auto const row : computed.rows) {
+            out->push_back(rows.rowId(row));
+        }
+        for (auto const row : computed.undecided) {
+            out->push_back(rows.rowId(row));
+        }
+        return std::shared_ptr<std::vector<RowId> const>{std::move(out)};
+    };
     auto const compute = [&]() -> std::expected<ViewComputation, TableError> {
         auto view = computeView(leveled, *checked, options);
         if (!view) {
             return std::unexpected(std::move(view.error()));
         }
         ViewComputation out{.view = std::move(*view), .awaiting = {}, .failed = {}, .orderKeys = {}};
-        auto const viewSnapshot = leveled.snapshot();
-        auto orderKeys = std::make_shared<std::vector<RowId>>();
-        orderKeys->reserve(out.view.rows.size() + out.view.undecided.size());
-        for (auto const row : out.view.rows) {
-            orderKeys->push_back(viewSnapshot->rowId(row));
+        if (!needed.order.empty()) {
+            out.orderKeys = keysOf(out.view, *leveled.snapshot());
         }
-        for (auto const row : out.view.undecided) {
-            orderKeys->push_back(viewSnapshot->rowId(row));
-        }
-        out.orderKeys = std::move(orderKeys);
         for (auto const& level : needed.order) {
             bool unloaded = false;
             bool failed = false;
@@ -1622,14 +1627,19 @@ struct AnswerContext {
             page.unloadedRows.push_back(std::move(row));
         }
     }
+    auto orderKeys = entry->orderKeys;
+    if (orderKeys == nullptr && !needed.order.empty()) {
+        // The entry was computed for a caller that read no order level; this caller's keys are built here.
+        orderKeys = keysOf(*view, *entry->snapshot);
+    }
     std::vector<std::shared_ptr<LevelSource>> leased;
     for (auto const& level : needed.order) {
         auto const source = levelOf(level);
         if (source == nullptr) {
             continue;
         }
-        auto const& keys = *entry->orderKeys;
-        if (auto wanted = source->wantSet(entry->orderKeys, LevelUse::Order, query.retry); !wanted) {
+        auto const& keys = *orderKeys;
+        if (auto wanted = source->wantSet(orderKeys, LevelUse::Order, query.retry); !wanted) {
             // The query is refused: the levels that accepted its order use hold nothing for it.
             for (auto const& accepted : leased) {
                 accepted->unwant(keys);

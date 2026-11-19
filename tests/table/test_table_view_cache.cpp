@@ -353,6 +353,43 @@ TEST_CASE("view cache: the bound evicts least recently used", "[table][views]") 
     CHECK(views.stats().computations == 4);  // the first was evicted
 }
 
+// Mutation: bytes() leaving out the order keys (three entries fit the bound, and none is evicted).
+TEST_CASE("view cache: the bound counts a view's order keys", "[table][views]") {
+    constexpr std::size_t kRows = 10'000;
+    std::vector<std::vector<Cell>> rows;
+    for (std::size_t row = 0; row < kRows; ++row) {
+        rows.push_back({Cell{static_cast<std::int64_t>(row)}});
+    }
+    auto const source = tabletest::makeSource({tabletest::col("a", ColumnKind::Integer)}, std::move(rows));
+    auto const snapshot = source->snapshot();
+    auto const orderKeys = [] {
+        std::vector<RowId> out;
+        out.reserve(kRows);
+        for (std::size_t row = 0; row < kRows; ++row) {
+            out.emplace_back("an order key longer than a small buffer " + std::to_string(row));
+        }
+        return out;
+    }();
+    std::size_t keyBytes = sizeof(std::vector<RowId>);
+    for (auto const& key : orderKeys) {
+        keyBytes += rowIdBytes(key);
+    }
+    auto const entryBytes = 4 * kRows + keyBytes;
+    ViewCache views{ViewCacheOptions{.maxBytes = 2 * entryBytes, .onCompute = {}}};
+    auto const compute = [&]() -> std::expected<ViewComputation, TableError> {
+        ViewComputation out;
+        out.view.rows.resize(kRows);
+        std::iota(out.view.rows.begin(), out.view.rows.end(), 0U);
+        out.orderKeys = std::make_shared<std::vector<RowId> const>(orderKeys);
+        return out;
+    };
+    for (auto const* const name : {"one", "two", "three"}) {
+        REQUIRE(views.find(keyOf(name), snapshot, {}, compute).has_value());
+    }
+    CHECK(views.stats().evictions == 1);
+    CHECK(views.stats().bytes == 2 * entryBytes);
+}
+
 // Mutation: a keyed query bypassing the cache (it computes the view again).
 TEST_CASE("view cache: a keyed fetch sorts nothing", "[table][views]") {
     std::vector<std::vector<Cell>> rows;

@@ -165,6 +165,15 @@ struct Rig {
     CellLevelCache cache;
 };
 
+// Each key's value as the rig's loader returns it, for a store that bypasses the loader.
+Values valuesOf(std::vector<RowId> const& stored) {
+    Values out;
+    for (auto const& key : stored) {
+        out.emplace_back(key, std::vector<Cell>{Cell{"v" + text(key)}});
+    }
+    return out;
+}
+
 std::vector<glz::raw_json> rawKeys(std::vector<std::string> const& texts) {
     std::vector<glz::raw_json> out;
     for (auto const& entry : texts) {
@@ -763,15 +772,16 @@ TEST_CASE("level cache: an invalidation between a store's preparation and its pu
     CHECK(stateOf(*rig.cache.snapshot(), one[0]) == LevelRead::Loaded);
 }
 
-// Mutation: the want classifying its keys under the writer mutex (the invalidation waits for the paused want).
-TEST_CASE("level cache: an invalidation does not wait for a paused want", "[table][levels]") {
+// Mutation: one chunk spanning the whole want (the want never stops between chunks, so the hook never pauses it).
+TEST_CASE("level cache: an invalidation waits for one chunk of a large want at most", "[table][levels]") {
     Rig rig;
     std::atomic<bool> paused{false};
+    std::atomic<std::size_t> queuedAtPause{0};
     std::promise<void> resume;
     auto const resumed = resume.get_future().share();
-    std::atomic<bool> first{true};
-    detail::LevelCacheAccess::onWantClassify(rig.cache, [&] {
-        if (first.exchange(false)) {
+    detail::LevelCacheAccess::onWantChunk(rig.cache, [&](std::size_t chunk) {
+        if (chunk == 1) {
+            queuedAtPause = detail::LevelCacheAccess::queuedEntries(rig.cache);
             paused = true;
             static_cast<void>(resumed.wait_for(10s));
         }
@@ -782,12 +792,123 @@ TEST_CASE("level cache: an invalidation does not wait for a paused want", "[tabl
         std::this_thread::yield();
     }
     REQUIRE(paused.load());
+    CHECK(queuedAtPause.load() == detail::kWantChunk);  // the first chunk is queued, and the mutex is free
     auto invalidation = std::async(std::launch::async, [&rig] { rig.cache.invalidate(keys(2)); });
     bool const done = invalidation.wait_for(5s) == std::future_status::ready;
     resume.set_value();
     CHECK(done);
     invalidation.get();
     CHECK(wanting.get().has_value());
+}
+
+// Mutation: a chunk giving a key it finds held a pending lease instead of leasing its slot (the keys stored before
+// their chunk are held with no lease).
+TEST_CASE("level cache: a key stored while an order want runs is leased on its slot", "[table][levels]") {
+    Rig rig;
+    auto const chunk = static_cast<std::int64_t>(detail::kWantChunk);
+    auto const beforeFirst = keyRange(0, 10);              // stored after the fit, before their chunk
+    auto const afterFirst = keyRange(10, 20);              // stored after their chunk gave them a pending lease
+    auto const beforeSecond = keyRange(chunk, chunk + 10);  // stored before the second chunk
+    detail::LevelCacheAccess::onWantChunk(rig.cache, [&](std::size_t index) {
+        if (index == 0) {
+            detail::LevelCacheAccess::store(rig.cache, valuesOf(beforeFirst));
+        } else if (index == 1) {
+            detail::LevelCacheAccess::store(rig.cache, valuesOf(afterFirst));
+            detail::LevelCacheAccess::store(rig.cache, valuesOf(beforeSecond));
+        }
+    });
+    REQUIRE(rig.cache.want(keys(2 * chunk), LevelUse::Order));
+    auto const nowTicks = rig.now.time_since_epoch().count();
+    for (auto const* const stored : {&beforeFirst, &afterFirst, &beforeSecond}) {
+        for (auto const& key : *stored) {
+            CHECK(detail::LevelCacheAccess::leaseEnd(rig.cache, key) > nowTicks);
+            CHECK_FALSE(detail::LevelCacheAccess::leasePending(rig.cache, key));
+        }
+    }
+    CHECK(detail::LevelCacheAccess::leasePending(rig.cache, RowId{chunk + 10}));  // not stored: still loading
+}
+
+// Mutation: the chunks reading the state the fit read (the evicted key is leased on its removed slot and never
+// loaded again).
+TEST_CASE("level cache: a held key evicted while an order want runs is queued again", "[table][levels]") {
+    auto const value = smallValueBytes();
+    Rig rig{[value](LevelCacheOptions& options) { options.maxBytes = 2'100 * value; }};
+    RowId const held{std::int64_t{2'000}};  // in the want's second chunk
+    detail::LevelCacheAccess::store(rig.cache, valuesOf({held}));
+    detail::LevelCacheAccess::onWantChunk(rig.cache, [&](std::size_t index) {
+        if (index == 1) {
+            // One value over the bound: the held key, the least recently used and not yet leased, is evicted.
+            detail::LevelCacheAccess::store(rig.cache, valuesOf(keyRange(10'000, 12'100)));
+        }
+    });
+    REQUIRE(rig.cache.want(keys(2 * static_cast<std::int64_t>(detail::kWantChunk)), LevelUse::Order));
+    CHECK(rig.cache.stats().evictedKeys == 1);
+    CHECK(stateOf(*rig.cache.snapshot(), held) == LevelRead::Unloaded);
+    CHECK(detail::LevelCacheAccess::leasePending(rig.cache, held));
+    rig.drain();
+    CHECK(std::ranges::binary_search(rig.loggedKeys(), held));
+    CHECK(stateOf(*rig.cache.snapshot(), held) == LevelRead::Loaded);
+    CHECK(detail::LevelCacheAccess::leaseEnd(rig.cache, held) > rig.now.time_since_epoch().count());
+}
+
+// Mutation: a repeat of the noted set adding no holder (the first query's unwant ends the second query's lease).
+TEST_CASE("level cache: a repeated order want keeps its lease when another holder takes its want back",
+          "[table][levels]") {
+    auto const value = smallValueBytes();
+    Rig rig{[value](LevelCacheOptions& options) {
+        options.maxBytes = 150 * value;
+        options.expectedBytes = value;
+    }};
+    auto const set = std::make_shared<std::vector<RowId> const>(keys(100));
+    REQUIRE(rig.cache.want(*set, LevelUse::Display));
+    rig.drain();
+    REQUIRE(rig.cache.wantSet(set, LevelUse::Order));  // query A: every key held, so the set is noted
+    auto const classified = detail::LevelCacheAccess::classifications(rig.cache);
+    REQUIRE(rig.cache.wantSet(set, LevelUse::Order));  // query B: a repeat of the noted set
+    REQUIRE(detail::LevelCacheAccess::classifications(rig.cache) == classified);
+    auto const others = keyRange(100, 200);  // fits only while the set is not leased
+    rig.cache.unwant(*set);                  // A is refused by another level and takes its want back
+    CHECK_FALSE(rig.cache.want(others, LevelUse::Order).has_value());
+    rig.cache.unwant(*set);  // B goes too
+    CHECK(rig.cache.want(others, LevelUse::Order).has_value());
+}
+
+// Mutation: no single flight for a set (the second want takes every key while the first is paused).
+TEST_CASE("level cache: concurrent repeats of an order set take its keys once", "[table][levels]") {
+    auto const value = smallValueBytes();
+    Rig rig{[value](LevelCacheOptions& options) {
+        options.maxBytes = 150 * value;
+        options.expectedBytes = value;
+    }};
+    auto const set = std::make_shared<std::vector<RowId> const>(keys(100));
+    REQUIRE(rig.cache.want(*set, LevelUse::Display));
+    rig.drain();
+    std::atomic<bool> paused{false};
+    std::atomic<bool> first{true};
+    std::promise<void> resume;
+    auto const resumed = resume.get_future().share();
+    detail::LevelCacheAccess::onWantChunk(rig.cache, [&](std::size_t) {
+        if (first.exchange(false)) {
+            paused = true;
+            static_cast<void>(resumed.wait_for(10s));
+        }
+    });
+    auto const classified = detail::LevelCacheAccess::classifications(rig.cache);
+    auto one = std::async(std::launch::async, [&] { return rig.cache.wantSet(set, LevelUse::Order); });
+    auto const deadline = std::chrono::steady_clock::now() + 10s;
+    while (!paused.load() && std::chrono::steady_clock::now() < deadline) {
+        std::this_thread::yield();
+    }
+    REQUIRE(paused.load());
+    auto two = std::async(std::launch::async, [&] { return rig.cache.wantSet(set, LevelUse::Order); });
+    CHECK(two.wait_for(1s) == std::future_status::timeout);  // it waits for the first
+    resume.set_value();
+    CHECK(one.get().has_value());
+    CHECK(two.get().has_value());
+    CHECK(detail::LevelCacheAccess::classifications(rig.cache) == classified + 1);
+    auto const others = keyRange(100, 200);  // fits only while the set is not leased
+    rig.cache.unwant(*set);
+    CHECK_FALSE(rig.cache.want(others, LevelUse::Order).has_value());  // the second still holds the lease
 }
 
 // Mutation: unwant ending a lease whatever its holders (the second order use is accepted).

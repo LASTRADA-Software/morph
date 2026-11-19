@@ -235,6 +235,20 @@ struct TableError {
         cell);
 }
 
+/// @brief The bytes a row key owns: what a cache of keys counts against its bound.
+/// @param key The key.
+/// @return `sizeof(RowId)`, plus a text key's heap buffer and its terminator when the text is not in the string's
+///         own small buffer.
+[[nodiscard]] inline std::size_t rowIdBytes(RowId const& key) noexcept {
+    std::size_t bytes = sizeof(RowId);
+    if (auto const* const text = std::get_if<std::string>(&key)) {
+        if (text->capacity() > std::string{}.capacity()) {
+            bytes += text->capacity() + 1;
+        }
+    }
+    return bytes;
+}
+
 /// @brief The bytes a cell owns: what a cache of cells counts against its bound.
 /// @param cell The cell.
 /// @return `sizeof(Cell)`, plus a string's heap buffer and its terminator when the text is not in the string's
