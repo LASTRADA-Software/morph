@@ -839,6 +839,16 @@ MorphWidget {
                 scheme: Qt.binding(() => root.scheme)
             }) as ScrollBar
             root.barItem.policy = Qt.binding(() => hflick.interactive ? ScrollBar.AlwaysOn : ScrollBar.AsNeeded)
+            // The rows' own vertical bar: a virtualized table scrolls inside `flick`, which has no other way to be
+            // dragged. The minimum size keeps the handle grabbable however many rows there are.
+            const vertical = root.bar.createObject(flick, {
+                orientation: Qt.Vertical,
+                minimumSize: 0.08,
+                visible: Qt.binding(() => root.virtualized && flick.contentHeight > flick.height),
+                scheme: Qt.binding(() => root.scheme)
+            }) as ScrollBar
+            vertical.policy = ScrollBar.AlwaysOn
+            flick.ScrollBar.vertical = vertical
         }
     }
 }
