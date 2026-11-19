@@ -45,6 +45,10 @@ struct HostCommand {
     bool safeForUntrusted = false;
     /// @brief Runs the command with its checked arguments, by name; an absent optional argument is `null`.
     std::function<void(ValueRecord const&)> run;
+    /// @brief The ids of the documents that may name it; empty for every document. In any other document
+    ///        `{"host": name}` finds no such command: it is reported missing and nothing runs, and
+    ///        `{"can": "host:name"}` is false.
+    std::set<std::string, std::less<>> documents;
 };
 
 /// @brief A value the application registers, such as `sync.needsYouCount`.
@@ -57,6 +61,9 @@ struct HostValue {
     std::string type;
     /// @brief Its value until the application sets another; it must have the type.
     Value initial;
+    /// @brief The ids of the documents that may read it; empty for every document. In any other document it reads as
+    ///        `null`, as a value nobody registered does.
+    std::set<std::string, std::less<>> documents;
 };
 
 /// @brief The client's host vocabulary: what it registered, and whether its documents came over a verified
@@ -106,6 +113,7 @@ public:
         }
         _valueTypes.emplace(value.name, std::move(type));
         _valueVersions.emplace(value.name, value.version);
+        _valueDocuments.insert_or_assign(value.name, value.documents);
         _values.insert_or_assign(std::move(value.name), std::move(value.initial));
         publish();
     }
@@ -234,19 +242,29 @@ private:
         return std::move(*type);
     }
 
-    /// Hands the session the values and the commands runnable now.
+    /// Hands the session the values, the documents each limited name belongs to, and the commands runnable now.
     void publish() {
         if (_session == nullptr) {
             return;
         }
         std::set<std::string, std::less<>> available;
+        HostScopes scopes;
         for (auto const& [name, registered] : _commands) {
             if (registered.command.safeForUntrusted || _verified) {
                 available.insert(name);
             }
+            if (!registered.command.documents.empty()) {
+                scopes[name].insert(registered.command.documents.begin(), registered.command.documents.end());
+            }
+        }
+        for (auto const& [name, documents] : _valueDocuments) {
+            if (!documents.empty()) {
+                scopes[name].insert(documents.begin(), documents.end());
+            }
         }
         _session->runtime().batch([&] {
             _session->setHostValues(_values);
+            _session->setHostScopes(std::move(scopes));
             _session->setHostCommands(
                 HostCommands{.available = std::move(available),
                              .run = [this](std::string const& name, Value const& args) { return run(name, args); }});
@@ -256,6 +274,7 @@ private:
     std::map<std::string, Registered, std::less<>> _commands;
     std::map<std::string, Type, std::less<>> _valueTypes;
     std::map<std::string, std::int64_t, std::less<>> _valueVersions;
+    std::map<std::string, std::set<std::string, std::less<>>, std::less<>> _valueDocuments;
     ValueRecord _values;
     Session* _session = nullptr;
     bool _verified = false;

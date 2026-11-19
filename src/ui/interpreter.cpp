@@ -830,6 +830,12 @@ void Session::setHostCommands(HostCommands commands) {
     _hostCommandNames.set(std::move(commands.available));
 }
 
+bool Session::hostNameIn(std::string_view name, std::string_view document) const {
+    HostScopes const& scopes = _hostScopes.get();
+    auto const found = scopes.find(name);
+    return found == scopes.end() || found->second.contains(document);
+}
+
 std::function<HostCommandResult(std::string const&, Value const&)> const& Session::hostCommandRunner() const noexcept {
     return _hostCommandRunner;
 }
@@ -2115,6 +2121,11 @@ Value ScopeEnv::control(ExprKind form, std::string_view name) const {
     Session const& session = _scope->core.session;
     NameRef const* const found = _scope->find(name);
     if (form == ExprKind::Can) {
+        static constexpr std::string_view kHostPrefix = "host:";
+        if (name.starts_with(kHostPrefix) &&
+            !session.hostNameIn(name.substr(kHostPrefix.size()), _scope->core.doc().id)) {
+            return Value{false};
+        }
         if (found != nullptr && found->category == NameCategory::Query) {
             return session.can(found->query->decl().action);
         }
@@ -2164,7 +2175,14 @@ Value ScopeEnv::pref(std::string_view point, std::span<std::string const> path) 
     return found == prefs.end() ? Value{} : walk(found->second, path);
 }
 
-Value ScopeEnv::client(ExprKind form, std::string_view name) const { return _scope->core.session.client(form, name); }
+Value ScopeEnv::client(ExprKind form, std::string_view name) const {
+    Session const& session = _scope->core.session;
+    // A host value limited to other documents reads as one nobody registered.
+    if (form == ExprKind::Host && !session.hostNameIn(name, _scope->core.doc().id)) {
+        return Value{};
+    }
+    return session.client(form, name);
+}
 
 FormatContext const& RtScope::formatting() const {
     for (RtScope const* scope = this; scope != nullptr;
@@ -4108,6 +4126,12 @@ void ScreenCore::runReset(Command const& command, CommandCtx const& ctx, Done co
 }
 
 void ScreenCore::runHostCommand(Command const& command, CommandCtx const& ctx, Done const& done) {
+    // A command limited to other documents is one this document cannot see: missing, and nothing runs.
+    if (!session.hostNameIn(command.target, doc().id)) {
+        report(command.path, "host command `" + command.target + "` is missing");
+        done(false);
+        return;
+    }
     Value const args = evalIn(*ctx.scope, ctx.bindings.get(), command.value);
     if (auto const& run = session.hostCommandRunner()) {
         HostCommandResult const result = run(command.target, args);

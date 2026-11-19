@@ -218,3 +218,51 @@ TEST_CASE("host vocabulary: arguments that are not a record are refused, and so 
                                                .run = [](ValueRecord const&) {}}),
                     std::invalid_argument);
 }
+
+namespace {
+
+/// A screen with id @p id that reads `panel.secret`, asks whether it can run `panel.start`, and runs it.
+std::string scopedScreen(std::string const& id) {
+    return R"({"vocab":"ui/1","id":")" + id + R"(","view":{"kind":"column","children":[)" +
+           R"({"kind":"text","testId":"secret_)" + id +
+           R"(","text":{"fn":"coalesce","args":[{"host":"panel.secret"},"null"]}},)" +
+           R"({"kind":"text","testId":"can_)" + id +
+           R"(","text":{"fn":"format","args":["{0}",{"can":"host:panel.start"}]}},)" +
+           R"({"kind":"button","testId":"start_)" + id + R"(","label":"start","onClick":{"host":"panel.start"}}]}})";
+}
+
+}  // namespace
+
+// Mutation: drop the document check in ScopeEnv::client, ScopeEnv::control or ScreenCore::runHostCommand.
+TEST_CASE("host vocabulary: a name limited to one document is absent from every other", "[ui][host]") {
+    Harness h;
+    HostVocabulary vocabulary;
+    std::vector<std::string> ran;
+    vocabulary.add(HostCommand{.name = "panel.start",
+                               .version = 1,
+                               .args = {},
+                               .safeForUntrusted = true,
+                               .run = [&ran](ValueRecord const& /*args*/) { ran.emplace_back("start"); },
+                               .documents = {"panel"}});
+    vocabulary.add(HostValue{
+        .name = "panel.secret", .version = 1, .type = "string", .initial = Value{"heard"}, .documents = {"panel"}});
+    vocabulary.connect(h.session);
+    auto const panel = h.mount(scopedScreen("panel"));
+    auto const other = h.mount(scopedScreen("other"));
+
+    CHECK(h.text("secret_panel") == "heard");
+    CHECK(h.text("secret_other") == "null");
+    CHECK(h.text("can_panel") == "true");
+    CHECK(h.text("can_other") == "false");
+
+    h.backend.click(h.byTestId("Button", "start_other"));
+    h.settle();
+    CHECK(ran.empty());
+    CHECK(std::ranges::any_of(h.diagnostics, [](auto const& refusal) {
+        return refusal.message().contains("host command `panel.start` is missing");
+    }));
+
+    h.backend.click(h.byTestId("Button", "start_panel"));
+    h.settle();
+    CHECK(ran == std::vector<std::string>{"start"});
+}

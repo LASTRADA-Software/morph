@@ -18,6 +18,7 @@ and asks `{"can": "host:name"}` before it shows a control. This implements spec 
 - [Trust](#trust)
 - [Values](#values)
 - [`can`](#can)
+- [Document scope](#document-scope)
 - [The handshake](#the-handshake)
 - [Design decisions](#design-decisions)
 - [Not yet](#not-yet)
@@ -79,6 +80,18 @@ connection is verified. It is answered from `Session::setHostCommands`, never fr
 (`setPermitted`): that set is the server's answer about actions, refreshed after `signIn` and after a `denied` reply,
 and the client's commands are not the server's to grant or drop.
 
+## Document scope
+
+`HostCommand::documents` and `HostValue::documents` list the ids of the documents that may name the command or the
+value; empty, the default, means every document. In any other document the name is absent, exactly as a name nobody
+registered: a value reads as `null`, `{"can": "host:name"}` is false, and a command is reported as
+`host command `name` is missing` and does not run. The session decides, since it knows which document an expression
+belongs to (`Session::setHostScopes`, `Session::hostNameIn`); a command's `run` is still not told who called it.
+
+A document id is not a credential the server can forge into a client: the chat panel's id, `morph.chat`, is refused for an
+application's screen by `UiRegistry`, a custom screen's id carries the `custom:` prefix, and an assistant's draft takes
+the id of the screen it edits. So a name limited to the panel reaches the client's own panel document and nothing else.
+
 ## The handshake
 
 `describe(hello)` fills `HelloRequest::hostCommands` and `hostValues` with every registered name and its version,
@@ -93,6 +106,7 @@ unsafe commands included: the handshake says what the client has, and the trust 
 | Who knows the connection is verified | The application, through `setConnectionVerified` | Nothing in `morph::ui` observes the transport; the default refuses. |
 | `can` for an unsafe command while unverified | `false` | A document shows a control only where it works. |
 | How values update | `set` pushes into the session's signal | A binding updates without the vocabulary knowing the reactive graph. |
+| A value or command for one document | `documents` on the registration, checked by the session per expression | Every screen mounts in one session; without it, a vocabulary is session-wide and any screen could run a command meant for one document. |
 
 ## Not yet
 

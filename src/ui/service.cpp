@@ -35,6 +35,10 @@ namespace {
 
 using detail::DocumentActions;
 
+/// @brief The id the client mounts its chat panel under. The panel reads host values no other document may, so no
+///        screen of an application may take the id.
+constexpr std::string_view kChatPanelScreen = "morph.chat";
+
 /// @brief Whether @p bytes can be served: within `kMaxFileBytes`, and within the envelope bound once escaped into
 ///        an `ok` reply.
 /// @param bytes The file.
@@ -449,6 +453,9 @@ void UiRegistry::logWarnings(Document const& document) {
 std::optional<Refusal> UiRegistry::checkNewEntry(CatalogEntry const& entry) const {
     if (auto reason = checkEntry(entry)) {
         return Refusal{.document = entry.id, .path = {}, .reason = std::move(*reason)};
+    }
+    if (entry.id == kChatPanelScreen) {
+        return Refusal{.document = entry.id, .path = {}, .reason = "the id `morph.chat` is the chat panel's"};
     }
     if (std::ranges::any_of(_screens, [&](Screen const& screen) { return screen.served.entry.id == entry.id; })) {
         return Refusal{.document = entry.id, .path = {}, .reason = "a catalog entry with this id is registered"};
