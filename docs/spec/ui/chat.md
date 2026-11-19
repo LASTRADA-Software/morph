@@ -340,7 +340,8 @@ session. It runs on the owner, and takes the source's exchange, the current sess
 
 `panel.hpp`. The panel is a document like any screen, `kChatPanelDocument`, so every frontend draws it and it uses the same
 vocabulary an application's screens use: a `forEach` of the conversation's lines (`chat_entry`, inside `chat_entries`), an
-input (`chat_input`), a send button (`chat_send`) and, while a turn runs, a stop button (`chat_cancel`).
+input (`chat_input`), a dictate button (`chat_dictate`), a send button (`chat_send`) and, while a turn runs, a stop
+button (`chat_cancel`).
 
 `ChatPanelBinding` connects it to a `ChatClient` through a `HostVocabulary`, the seam a document has to anything the client
 owns: the values `chat.entries`, `chat.running`, `chat.onScreen` and `chat.canSend`, and the commands `chat.send` and
@@ -351,6 +352,25 @@ the explorer, disables the input. So does a running turn: the input takes text o
 (`chat.canSend`, like the send button). Enter runs the input's submit, which clears it, so an enabled input during a turn
 would throw away what the person typed, without sending it. A turn ends for the client when it reads the turn's state
 after the `done` event, one round trip after the turn's last text is shown.
+
+**Dictation.** Beside Send, a **Dictate** button (`chat_dictate`, theme icon `chat.dictate`, a framework icon name, so a
+theme without it draws the label alone and nothing is reported) shows when the server offers dictation, the client can
+record, the person is on a screen and the panel is visible. Pressing it records, and it reads **Stop (12 s)**, counting
+seconds; pressing again stops, and so do `maxDictationSeconds` and `maxDictationBytes`. It then reads **Transcribing…**
+and is disabled. The transcript is appended to the input, trimmed, after one space when the input is not empty and does
+not already end in whitespace; it is never sent, since a misheard word sent to an assistant whose tools change data costs
+more than one more press of Send. Dictating is allowed while a turn runs. A failure (no microphone, permission denied, a
+refusal, a provider error, a timeout, a lost connection, or nothing heard) adds a `note` drawn in the `error` role and
+leaves the input as it was.
+
+The binding takes the recorder and whether the panel is visible, and registers for the panel document alone
+(`HostValue::documents`, `HostCommand::documents`): `chat.canDictate`, `chat.dictation` (`idle`, `recording`,
+`waiting`), `chat.dictationSeconds`, `chat.dictated` (`{seq, text}`, `seq` growing by one per transcript) and the commands
+`chat.dictateStart` and `chat.dictateStop`. In another document these names read `null` and do not run, so no screen,
+custom screen or draft can start the microphone or read a transcript. `refresh` stops a recording and drops its clip when
+the panel stops being visible or the offer is gone, as it is after `end` at sign-out. The document's top-level `watch` on
+`{"host": "chat.dictated"}` appends: a watch on a host value fires on each change of the record, so each new `seq`
+appends once, and the seconds' tick, a different value, appends nothing.
 
 A screen's own draft is part of where the person is: the shell reads the draft the active tab holds at each send and
 carries it as `TurnRequest::draft` (`CustomScreenChrome::draftOf`), or nothing for a tab with no draft. The client bounds

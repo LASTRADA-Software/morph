@@ -346,7 +346,8 @@ file the bundle lacks or one that is not an `icon` file, naming the index and th
   and a panel's chevron), `select.open` and `select.close` (a closed and an open select's drop-down indicator; a set
   that lacks them leaves the select drawing `nav.expand` and `nav.collapse`), `close` (a dismissible banner's close button) and
   `date.pick` (a date input's calendar button), `more` (an overflow menu's trigger, `⋯`) and `nav.menu` (the compact
-  shell frame's navigation menu, `☰`), from the set when it names them, and as their built-in glyph or nothing
+  shell frame's navigation menu, `☰`) and `chat.dictate` (the chat panel's Dictate button, which draws its label alone when the
+  set lacks it), from the set when it names them, and as their built-in glyph or nothing
   otherwise, so a bundle without a set keeps the built-in look. `nav.back` and `nav.forward` are framework names
   too (`kFrameworkIcons`), though no built-in component uses them on its own: a document names them on a button.
   Qt Quick draws them as a vector chevron when the set does not name them: a push button with no label whose icon

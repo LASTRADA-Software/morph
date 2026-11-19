@@ -840,6 +840,8 @@ TEST_CASE("qt_quick theme: a bundle's icon set draws the icons it names, and a n
     // A framework name the set lacks is drawn by the control itself and is not reported.
     auto chevron = scene.backend().createBadge(nullptr);
     chevron->setIcon("nav.back");
+    auto dictate = scene.backend().createBadge(nullptr);
+    dictate->setIcon("chat.dictate");
     scene.settle();
 
     auto iconOf = [](ui::Widget const& widget, char const* name) {

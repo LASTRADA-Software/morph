@@ -698,6 +698,7 @@ target_sources(morph
         include/morph/ui/testing/memory_history.hpp
         include/morph/ui/testing/recording_backend.hpp
         include/morph/ui/testing/fake_chat_provider.hpp
+        include/morph/ui/testing/fake_dictation_recorder.hpp
         include/morph/ui/testing/fake_transcriber.hpp
         include/morph/ui/testing/backend_conformance.hpp
         include/morph/render/i18n.hpp
