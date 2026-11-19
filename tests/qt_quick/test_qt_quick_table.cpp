@@ -44,6 +44,7 @@
 
 #include "qt_quick/kinds.hpp"
 #include "qt_quick_harness.hpp"
+#include "ui_fake_rows.hpp"
 
 namespace ui = morph::ui;
 namespace detail = morph::qt_quick::detail;
@@ -2086,4 +2087,318 @@ TEST_CASE("qt_quick table: a Ctrl-click in a virtualized table keeps selected ke
     scene.click(*rows.at(0)->item(), Qt::ControlModifier);
     REQUIRE(reported.size() == 1);
     CHECK(reported.back().size() == static_cast<std::size_t>(rowCount - 1));
+}
+
+// ── The column window ───────────────────────────────────────────────────────
+
+namespace {
+
+using morph::testing::FakeRows;
+using ui::CellRef;
+using ui::Key;
+using ui::TableArrangement;
+
+struct QuickWindowOptions {
+    // A cell drawn on more lines than one: the row's text, then a line more for each line past the first.
+    struct Wrapped {
+        std::int64_t row = 0;
+        std::size_t column = 0;
+        int lines = 1;
+    };
+    struct Level {
+        std::size_t column = 0;
+        std::string level;
+    };
+    std::size_t pinned = 0;
+    std::vector<Wrapped> wrapped;
+    bool wrap = true;
+    std::vector<Level> levels;
+};
+
+std::string groupedCount(std::int64_t n) {
+    std::string digits = std::to_string(n);
+    for (auto at = static_cast<std::ptrdiff_t>(digits.size()) - 3; at > 0; at -= 3) {
+        digits.insert(static_cast<std::size_t>(at), ",");
+    }
+    return digits;
+}
+
+std::string fieldText(ui::Value const& record, std::string const& field) {
+    ui::Value const* const value = record.field(field);
+    return value != nullptr && value->asString() != nullptr ? *value->asString() : std::string{};
+}
+
+std::int64_t idOf(ui::Value const& record) {
+    ui::Value const* const value = record.field("id");
+    return value != nullptr && value->asInt() != nullptr ? *value->asInt() : -1;
+}
+
+std::vector<std::size_t> allColumnsBut(std::size_t n, std::size_t left) {
+    std::vector<std::size_t> out;
+    for (std::size_t column = 0; column < n; ++column) {
+        if (column != left) {
+            out.push_back(column);
+        }
+    }
+    return out;
+}
+
+// The recording backend's `WindowFixture` on Qt Quick: one table over `FakeRows` in a 1,280 × 800 window, every
+// column 64 px wide with the default text cell, so twenty columns are in view; the status line shows the count.
+struct QuickWindowFixture {
+    QuickWindowFixture(std::int64_t rowCount, std::size_t columnCount, QuickWindowOptions options = {})
+        : rows{std::make_shared<FakeRows>(rowCount, columnCount, scene.owner())},
+          arrangement{scene.runtime(), TableArrangement{.visible = {}, .pinned = options.pinned, .widths = {}}},
+          focus{scene.runtime(), std::nullopt},
+          status{scene.runtime(), ui::TableStatus{.counts = groupedCount(rowCount) + " rows", .shown = true}},
+          wrapped{std::move(options.wrapped)} {
+        scene.window().resize(1280, 800);
+        std::vector<ui::TableColumn> columns;
+        for (std::size_t column = 0; column < columnCount; ++column) {
+            columns.push_back(ui::TableColumn{.id = "c" + std::to_string(column),
+                                              .label = "C" + std::to_string(column),
+                                              .width = ui::Sizing::fixed(64),
+                                              .wrap = options.wrap});
+        }
+        ui::TableSource source;
+        source.rows = rows;
+        source.ownCell.assign(columnCount, false);
+        source.levels.assign(columnCount, std::string{});
+        for (QuickWindowOptions::Level const& level : options.levels) {
+            source.levels.at(level.column) = level.level;
+        }
+        source.defaultCellView = [this](morph::reactive::Signal<std::size_t> const& column,
+                                        morph::reactive::Signal<ui::Value> const& row) {
+            return ui::text({.text = [this, &column, &row] { return textOf(row.get(), column.get()); }});
+        };
+        source.cellView = [this](std::size_t column, morph::reactive::Signal<ui::Value> const& row) {
+            return ui::text({.text = [this, &row, column] { return textOf(row.get(), column); }});
+        };
+        ui::TableOptions tableOptions;
+        tableOptions.arrangement = [this] { return arrangement.get(); };
+        tableOptions.focus = [this] { return focus.get(); };
+        tableOptions.status = [this] { return status.get(); };
+        tableOptions.onRetry = [this] { ++retries; };
+        view.emplace(scene.runtime(), scene.backend(),
+                     ui::table(std::move(columns), std::move(source), std::move(tableOptions)));
+        settle();
+    }
+
+    [[nodiscard]] std::string textOf(ui::Value const& record, std::size_t column) const {
+        std::string text = fieldText(record, "c" + std::to_string(column));
+        for (QuickWindowOptions::Wrapped const& cell : wrapped) {
+            if (cell.row == idOf(record) && cell.column == column) {
+                for (int line = 1; line < cell.lines; ++line) {
+                    text += "\n" + text;
+                }
+            }
+        }
+        return text;
+    }
+
+    void settle() { scene.settle(); }
+
+    [[nodiscard]] QQuickItem* item() const { return &Scene::itemOf(view->root()); }
+    [[nodiscard]] QVariant prop(char const* name) const { return item()->property(name); }
+
+    // Evaluates `name(args…)` on the MorphTable item.
+    template <class... Args>
+    QVariant call(char const* name, Args const&... args) {
+        QStringList list;
+        (list.append(QString::number(args)), ...);
+        QQmlExpression expression{
+            scene.engine().rootContext(), item(),
+            QStringLiteral("%1(%2)").arg(QString::fromLatin1(name), list.join(QStringLiteral(",")))};
+        QVariant const result = expression.evaluate();
+        REQUIRE_FALSE(expression.hasError());
+        return result;
+    }
+
+    // The cell items shown in the realized rows.
+    int cellItems() {
+        QQmlExpression expression{scene.engine().rootContext(), item(), QStringLiteral(R"((() => {
+            let shown = 0
+            for (let i = 0; i < rowsHolder.children.length; ++i) {
+                const row = rowsHolder.children[i]
+                if (!row.visible || !row.content)
+                    continue
+                for (let j = 0; j < row.content.children.length; ++j)
+                    shown += row.content.children[j].visible ? 1 : 0
+            }
+            return shown
+        })())")};
+        QVariant const result = expression.evaluate();
+        REQUIRE_FALSE(expression.hasError());
+        return result.toInt();
+    }
+
+    void scrollRows(std::size_t first) {
+        firstRow = first;
+        static_cast<void>(call("scrollRowToTop", static_cast<qlonglong>(first)));
+        settle();
+    }
+
+    void scrollColumns(int scrollX) {
+        auto* const hflick = item()->findChild<QQuickItem*>(QStringLiteral("hflick"));
+        REQUIRE(hflick != nullptr);
+        hflick->setProperty("contentX", scrollX);
+        settle();
+    }
+
+    // Scrolls down over @p n rows a viewport at a time, one owner turn at a time, and keeps the largest number of
+    // cells built or rebound in one turn.
+    void flingRows(std::size_t n) {
+        auto const work = [this] { return stats().cellsRebound + stats().cellsCreated; };
+        for (std::size_t moved = 0; moved < n; moved += 30) {
+            std::size_t before = work();
+            firstRow += 30;
+            static_cast<void>(call("scrollRowToTop", static_cast<qlonglong>(firstRow)));
+            maxRebindsPerTurn = std::max(maxRebindsPerTurn, work() - before);
+            for (;;) {
+                before = work();
+                if (!scene.owner().runOne()) {
+                    break;
+                }
+                maxRebindsPerTurn = std::max(maxRebindsPerTurn, work() - before);
+            }
+        }
+        settle();
+    }
+
+    [[nodiscard]] ui::MountStats const& stats() const { return view->stats(); }
+
+    Scene scene;
+    std::shared_ptr<FakeRows> rows;
+    morph::reactive::Signal<TableArrangement> arrangement;
+    morph::reactive::Signal<std::optional<CellRef>> focus;
+    morph::reactive::Signal<ui::TableStatus> status;
+    std::vector<QuickWindowOptions::Wrapped> wrapped;
+    int retries = 0;
+    std::size_t firstRow = 0;
+    std::size_t maxRebindsPerTurn = 0;
+    std::optional<ui::Mounted> view;
+};
+
+}  // namespace
+
+// Mutation: MorphTable instantiating a cell per column of a realized row (cellItems is 50 × 300).  Gate F2.
+TEST_CASE("qt_quick table window: cells and header cells alive are the windows'", "[qt_quick]") {
+    QuickWindowFixture f{100'000, 300, {.pinned = 2}};
+    f.scrollRows(500);
+    f.scrollColumns(6'400);  // columns 100 to 119 in view
+    int const window = 2 + 20 + (2 * 4);
+    CHECK(f.prop("realizedColumnCount").toInt() == window);
+    CHECK(f.prop("pinnedShown").toInt() == 2);
+    CHECK(f.cellItems() == f.prop("realizedCount").toInt() * window);
+    CHECK(f.prop("headerCellCount").toInt() == window);
+}
+
+// Mutation: a pool keyed by column for default cells (a column scrolling in creates 50 cells).  Gate F8.
+TEST_CASE("qt_quick table window: flings create no cell once the pools are warm", "[qt_quick]") {
+    QuickWindowFixture f{100'000, 300, {.pinned = 2}};
+    f.flingRows(2'000);
+    for (int x = 0; x < 12'800; x += 640) {
+        f.scrollColumns(x);  // warm both ways
+    }
+    auto const created = f.stats().cellsCreated;
+    f.flingRows(2'000);
+    for (int x = 12'800; x < 19'200; x += 640) {
+        f.scrollColumns(x);
+    }
+    CHECK(f.stats().cellsCreated == created);
+    CHECK(f.maxRebindsPerTurn <= 240);
+}
+
+// Mutation: MorphTable keeping focus on the delegate item, which a recycled row loses.  Gate F10.
+TEST_CASE("qt_quick table window: focus and counts after scrolling far away", "[qt_quick]") {
+    QuickWindowFixture f{100'000, 300, {.pinned = 2}};
+    f.focus.set(CellRef{.key = Key{std::int64_t{7}}, .column = "c5"});
+    f.settle();
+    f.scrollRows(10'000);
+    f.scrollColumns(200 * 64);
+    CHECK(f.call("focusedRow").toInt() == 7);
+    CHECK(f.call("focusedColumn").toInt() == 5);
+    CHECK(f.call("cellRealized", 7, 5).toBool());
+    CHECK(f.prop("accessibleRowCount").toInt() == 100'000);
+    CHECK(f.prop("accessibleColumnCount").toInt() == 300);
+}
+
+// Mutation: MorphTable rebuilding its row delegates when the column window changes.  Gate D8, Qt Quick half.
+TEST_CASE("qt_quick table window: hiding and moving a column create no cell items", "[qt_quick]") {
+    QuickWindowFixture f{100'000, 300, {.pinned = 2}};
+    auto const created = f.stats().cellsCreated;
+    int const items = f.cellItems();
+    TableArrangement hidden = f.arrangement.peek();
+    hidden.visible = allColumnsBut(300, 5);
+    f.arrangement.set(hidden);
+    f.settle();
+    CHECK(f.stats().cellsCreated == created);
+    CHECK(f.cellItems() == items);
+    CHECK_FALSE(f.call("cellRealized", 0, 5).toBool());
+    TableArrangement moved = hidden;
+    std::swap(moved.visible.at(3), moved.visible.at(4));
+    f.arrangement.set(moved);
+    f.settle();
+    CHECK(f.stats().cellsCreated == created);
+    CHECK(f.cellItems() == items);
+}
+
+// Mutation: MorphTable ignoring setStatus (statusText is empty).
+TEST_CASE("qt_quick table: the status line shows counts and Retry", "[qt_quick]") {
+    QuickWindowFixture f{100'000, 30};
+    CHECK(f.prop("statusText").toString() == QStringLiteral("100,000 rows"));
+    CHECK_FALSE(f.prop("retryShown").toBool());
+    f.status.set(ui::TableStatus{
+        .counts = "100,000 rows", .state = "Recipe data could not be loaded.", .retry = true, .shown = true});
+    f.settle();
+    CHECK(f.prop("statusText").toString() == QStringLiteral("100,000 rows  Recipe data could not be loaded."));
+    REQUIRE(f.prop("retryShown").toBool());
+    auto* const retry = f.item()->findChild<QQuickItem*>(QStringLiteral("retry"));
+    REQUIRE(retry != nullptr);
+    f.scene.click(*retry);
+    CHECK(f.retries == 1);
+}
+
+// Mutation: MorphTable ignoring setCellLoad (an unloaded cell draws its empty content: cellLoadAt is 0).
+TEST_CASE("qt_quick table: an unloaded cell is a placeholder and a failed one an error mark", "[qt_quick]") {
+    QuickWindowFixture f{100, 4, {.levels = {{.column = 1, .level = "recipe"}}}};
+    int const widthBefore = f.call("columnWidth", 1).toInt();
+    f.rows->unload(0, "recipe");
+    f.rows->fail(1, "recipe");
+    f.settle();
+    CHECK(f.call("cellLoadAt", 0, 1).toInt() == 1);
+    CHECK(f.call("cellLoadAt", 1, 1).toInt() == 2);
+    CHECK(f.call("cellLoadAt", 2, 1).toInt() == 0);
+    CHECK(f.call("columnWidth", 1).toInt() == widthBefore);  // a placeholder widens nothing
+}
+
+// Mutations: a row's height recomputed from its realized cells each pass (it shrinks when the tall cell leaves);
+// measuring a table whose columns are all wrap:false (rowMeasures grows).
+TEST_CASE("qt_quick table: a row's height only grows while it is realized", "[qt_quick]") {
+    QuickWindowFixture f{2'000, 300, {.pinned = 0, .wrapped = {{.row = 3, .column = 60, .lines = 2}}}};
+    int const low = f.call("rowHeight", 3).toInt();
+    f.scrollColumns(60 * 64);
+    int const tall = f.call("rowHeight", 3).toInt();
+    CHECK(tall > low);
+    f.scrollColumns(0);
+    CHECK(f.call("rowHeight", 3).toInt() == tall);  // scrolled out: not shorter
+    f.scrollRows(1'000);
+    f.scrollRows(0);
+    CHECK(f.call("rowHeight", 3).toInt() == low);  // it left the row window: forgotten
+    QuickWindowFixture flat{2'000, 300, {.pinned = 0, .wrap = false}};
+    flat.flingRows(200);
+    CHECK(flat.prop("rowMeasures").toInt() == 0);
+}
+
+// Mutation: MorphTable keeping the view's offset when a row above the first visible row grows (the first visible
+// row moves down by the growth).
+TEST_CASE("qt_quick table: a row growing above the view keeps the rows in view where they are", "[qt_quick]") {
+    QuickWindowFixture f{2'000, 300, {.pinned = 0, .wrapped = {{.row = 95, .column = 60, .lines = 3}}}};
+    f.scrollRows(100);
+    QQuickItem const* const flick = f.item()->findChild<QQuickItem*>(QStringLiteral("flick"));
+    REQUIRE(flick != nullptr);
+    qreal const offsetBefore = flick->property("contentY").toReal() - f.call("rowTop", 100).toReal();
+    f.scrollColumns(60 * 64);  // row 95, above the view and realized, grows
+    CHECK(f.call("rowHeight", 95).toReal() > f.call("rowHeight", 96).toReal());
+    CHECK(flick->property("contentY").toReal() - f.call("rowTop", 100).toReal() == Catch::Approx(offsetBefore));
 }

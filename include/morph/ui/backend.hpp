@@ -1023,6 +1023,17 @@ public:
         static_cast<void>(cell);
         static_cast<void>(column);
     }
+
+    /// @brief Tells the backend a realized row's view index, for a table whose rows come from a `TableSource`: called
+    ///        for a row once it is realized and whenever its index changes. The realized rows are the children in
+    ///        view order, but not always contiguous: the focused row stays realized beyond `setRealizedWindow`'s
+    ///        range, so a backend places each row by its index, not by its position among the children.
+    /// @param row     One of this table's rows.
+    /// @param viewRow The row's view index.
+    virtual void setRowIndex(Widget& row, std::size_t viewRow) {
+        static_cast<void>(row);
+        static_cast<void>(viewRow);
+    }
 };
 
 /// @brief A date or date-and-time field, in the mode and display zone fixed at creation.

@@ -7,6 +7,21 @@ import QtQuick.Layouts
 // Rows of cells under column headers. Each column's width comes from its sizing: fixed units, the widest of its
 // header and its shown cells for content, or for stretch its content plus a share of what is left; every row places
 // its cells at those widths.
+//
+// A table over a `TableSource` (`sourceRows`) draws what the mount realizes. Each row sits at the top of its view row
+// (`viewRow`), whatever its place among the children, and each cell in the column C++ gave it (`measuredIndex`); a
+// cell with none is pooled and hidden. Once the mount lays the columns out (`arranged`), the header and the rows show
+// the window's columns only (`windowColumns`, pixels), the first `pinnedShown` of them held at the leading edge over
+// the rest, which scroll; the table reports its sideways scroll and viewport, and a cell's width to grow its column.
+// A row is as tall as the tallest of its placed cells, and its height only grows while it is realized; a row that
+// leaves forgets it, and a row not realized counts as the mean of those measured. A table whose columns all keep one
+// line has one row height and measures no cell. When rows above the first visible one change height, the view moves
+// by as much, so the rows in view stay where they were. Keyboard focus stays on the table, never on a row, which a
+// recycled slot would take away: the keys go to the mount (`focusMove`), and the focused cell (`focusRow`,
+// `focusColumn`) is kept in view and drawn as the current row.
+//
+// The status line (`statusShown`) is one line under the rows: the counts, the state and the message, and "Retry"
+// while the state offers it. It takes no space while it is not shown.
 MorphWidget {
     id: root
 
@@ -69,7 +84,70 @@ MorphWidget {
     property int anchorRow: 0
     property real anchorOffset: 0
     property bool restoring: false
-    readonly property Item content: body
+    // Whether the rows come from a `TableSource`; C++ sets it before the first row.
+    property bool sourceRows: false
+    readonly property Item content: root.sourceRows ? rowsPlane : body
+    readonly property Item rowsHolder: root.sourceRows ? rowsPlane : body
+    // The column window, once the mount lays the columns out: [{column, offset, width}] in pixels, the pinned ones
+    // first; the width of every visible column together; how many of the window are pinned. C++ writes them.
+    property bool arranged: false
+    property var windowColumns: []
+    property real windowTotalWidth: 0
+    property int pinnedShown: 0
+    // For tests and assistive technology: the window's size, its first scrolled column, and the header cells alive.
+    readonly property int realizedColumnCount: root.windowColumns.length
+    readonly property int realizedColumnFirst: root.windowColumns.length > root.pinnedShown
+                                               ? root.windowColumns[root.pinnedShown].column : 0
+    readonly property int headerCellCount: root.arranged ? windowHeader.count : headerLabels.count
+    // Each window column's place in `windowColumns`, by column.
+    readonly property var windowPlaces: {
+        const places = {}
+        for (let i = 0; i < root.windowColumns.length; ++i)
+            places[root.windowColumns[i].column] = i
+        return places
+    }
+    // Where the scrolled columns pass under the pinned ones, from the first column's start.
+    readonly property real pinnedEdge: {
+        let edge = 0
+        for (let i = 0; i < root.pinnedShown && i < root.windowColumns.length; ++i)
+            edge = Math.max(edge, root.windowColumns[i].offset + root.windowColumns[i].width)
+        return edge
+    }
+    readonly property real scrollX: hflick.contentX
+    // The view's width across the columns, the select column left out.
+    readonly property real columnViewport: Math.max(0, hflick.width - root.lead)
+    // Whether every column keeps one line: the rows then share one height and no cell is measured.
+    readonly property bool allOneLine: {
+        for (const column of root.columns) {
+            if (column.wrap)
+                return false
+        }
+        return true
+    }
+    readonly property real oneLineRowHeight: root.estimatedRowHeight
+    // Each realized row's height by view row, and the mean of them, which a row not realized counts as.
+    property var rowHeights: ({})
+    property real meanRowHeight: root.estimatedRowHeight
+    // Test-only: how many cell heights the rows have measured for their own heights.
+    property int rowMeasures: 0
+    readonly property real sourceContentHeight: {
+        let height = Math.max(0, root.totalRows) * root.meanRowHeight
+        for (const key in root.rowHeights)
+            height += root.rowHeights[key] - root.meanRowHeight
+        return Math.max(0, height)
+    }
+    // The focused cell, which C++ writes; -1 before any.
+    property int focusRow: -1
+    property int focusColumn: -1
+    // The counts assistive technology is told: the rows, -1 while they are a lower bound or not known, and the visible
+    // columns.
+    property int accessibleRowCount: -1
+    property int accessibleColumnCount: 0
+    // The status line.
+    property string statusText: ""
+    property bool statusShown: false
+    property bool retryShown: false
+    readonly property real statusHeight: root.statusShown ? statusLine.implicitHeight : 0
     // The sideways scroll's bar, made from the `scrollBar` part (`MorphScrollBar` or its restyle), which C++ passes at
     // creation; null without one.
     property Component bar: null
@@ -93,7 +171,8 @@ MorphWidget {
     property var leastCache: []
     // Test-only: how many rows a full column rescan has visited, summed across every rescan. Not a public API.
     property int rowScans: 0
-    readonly property var widths: root.columnWidths(width - root.lead)
+    // Once the mount lays the columns out, no width is worked out here: nothing reads every column per frame.
+    readonly property var widths: root.arranged ? [] : root.columnWidths(width - root.lead)
 
     // A column's declared width describes its content, with `table.cellPaddingX` added on both sides, so the padding
     // never takes room from the content: a fixed column is its units plus the padding (a unit is a body character,
@@ -226,6 +305,8 @@ MorphWidget {
 
     // The columns' summed width: the rows' and the header's width, and what `hflick` scrolls across.
     readonly property real columnsWidth: {
+        if (root.arranged)
+            return root.lead + root.windowTotalWidth
         let sum = root.lead
         for (const w of root.widths)
             sum += w
@@ -267,6 +348,8 @@ MorphWidget {
     // a column whose widest cell really is 0 (an empty table) -- harmless here, since seeding an already-correct
     // zero with the same scan just repeats the (cheap, currently-zero-row) work rather than skipping it wrongly.
     function seedMissingColumns() {
+        if (root.sourceRows)
+            return
         for (let i = 0; i < root.columns.length; ++i) {
             if (root.columns[i].kind !== 1 && i >= root.columnCache.length)
                 root.rescanColumn(i)
@@ -279,9 +362,9 @@ MorphWidget {
     function widestCell(index: int): var {
         let natural = 0
         let least = 0
-        for (let r = 0; r < body.children.length; ++r) {
+        for (let r = 0; r < root.rowsHolder.children.length; ++r) {
             ++root.rowScans
-            const row = body.children[r]
+            const row = root.rowsHolder.children[r]
             // A heading's one cell spans every column, so it widens none.
             if (!row.visible || row.heading || !row.content || index >= row.content.children.length)
                 continue
@@ -302,7 +385,7 @@ MorphWidget {
     // rule from invalidateAllColumns' own comment is enforced here, not duplicated at each call site.
     function rescanColumn(index: int) {
         const column = root.columns[index]
-        if (!column || column.kind === 1)
+        if (!column || column.kind === 1 || root.sourceRows)
             return
         const scanned = root.widestCell(index)
         if (column.kind === 2) {
@@ -344,6 +427,14 @@ MorphWidget {
         const column = root.columns[index]
         if (!column || column.kind === 1 || !cell || !cell.visible || cell.parent?.parent?.heading)
             return
+        // Over a source the mount holds the widths: a cell wider than its column asks it to grow.
+        if (root.sourceRows) {
+            const place = root.windowPlaces[index]
+            const width = Math.ceil(root.naturalOf(cell) + 2 * Theme.tableCellPaddingX)
+            if (place === undefined || width > root.windowColumns[place].width)
+                root.fire("measured", {"column": index, "width": width})
+            return
+        }
         const natural = root.naturalOf(cell)
         const stretch = column.kind === 2
         const least = stretch ? root.leastOf(cell, natural) : 0
@@ -382,6 +473,8 @@ MorphWidget {
     // The accepted cost of the monotonic rule is a column that stays wider than currently necessary after the row
     // that justified it has scrolled away, preferred over that jitter.
     function invalidateAllColumns() {
+        if (root.sourceRows)
+            return
         for (let i = 0; i < root.columns.length; ++i) {
             if (root.columns[i].kind !== 1)
                 root.rescanColumn(i)
@@ -397,7 +490,7 @@ MorphWidget {
     // A Tab stop: the focus goes on to the current row, or the first one.
     activeFocusOnTab: true
     onActiveFocusChanged: {
-        if (activeFocus)
+        if (activeFocus && !root.sourceRows)
             root.focusRow(root.shownRows().includes(root.currentRow) ? root.currentRow : root.shownRows()[0])
     }
 
@@ -416,8 +509,8 @@ MorphWidget {
     function recomputeSpans() {
         root.spansQueued = false
         const rows = []
-        for (let i = 0; i < body.children.length; ++i) {
-            const row = body.children[i]
+        for (let i = 0; i < root.rowsHolder.children.length; ++i) {
+            const row = root.rowsHolder.children[i]
             if (row.visible && row.table === root)
                 rows.push(row)
         }
@@ -453,8 +546,8 @@ MorphWidget {
     // The data rows the user can see, in order: a heading row is never current, selected or counted.
     function shownRows(): var {
         const shown = []
-        for (let i = 0; i < body.children.length; ++i) {
-            const row = body.children[i]
+        for (let i = 0; i < root.rowsHolder.children.length; ++i) {
+            const row = root.rowsHolder.children[i]
             if (row.visible && row.table === root && !row.heading)
                 shown.push(row)
         }
@@ -476,6 +569,8 @@ MorphWidget {
         const focused = root.Window.activeFocusItem
         if (focused !== root && (focused as MorphTableRow)?.table !== root)
             return false
+        if (root.sourceRows)
+            return root.sourceKey(event)
         const rows = root.shownRows()
         const at = rows.indexOf(root.currentRow)
         const mods = event.modifiers & (Qt.ShiftModifier | Qt.ControlModifier | Qt.AltModifier | Qt.MetaModifier)
@@ -523,6 +618,8 @@ MorphWidget {
     // from the caches and the headers. `implicitWidth` follows `width` through the header, so a table that is a cell
     // of another table reports this instead.
     widthFreeNatural: {
+        if (root.arranged)
+            return Math.ceil(root.lead + root.windowTotalWidth)
         let sum = root.lead
         for (const m of root.measure())
             sum += m.natural
@@ -534,11 +631,14 @@ MorphWidget {
     // now -- otherwise the table's own size, and so its container's scrollbar, would shrink every time a row
     // dewindows, which is the "table visually collapses" symptom this design exists to avoid, not just the
     // underlying widget cost.
-    implicitHeight: (root.showHeader ? header.implicitHeight : 0) + body.implicitHeight +
-                    (root.virtualized ? root.heightBefore(root.realizedFirst) +
-                                        root.heightBefore(root.totalRows) -
-                                        root.heightBefore(root.realizedFirst + root.realizedCount) : 0) +
-                    root.barHeight
+    implicitHeight: headerArea.height + root.barHeight + root.statusHeight +
+                    (root.sourceRows ? root.sourceContentHeight
+                                     : body.implicitHeight +
+                                           (root.virtualized ? root.heightBefore(root.realizedFirst) +
+                                                                   root.heightBefore(root.totalRows) -
+                                                                   root.heightBefore(root.realizedFirst +
+                                                                                     root.realizedCount)
+                                                             : 0))
     // A table whose columns are wider than it scrolls sideways, and says so once.
     needWidth: root.columnsWidth
     haveWidth: root.width
@@ -556,6 +656,9 @@ MorphWidget {
         id: hflick
         objectName: "hflick"
         anchors.fill: parent
+        anchors.bottomMargin: root.statusHeight
+        onContentXChanged: root.reportColumns()
+        onWidthChanged: root.reportColumns()
         contentWidth: Math.max(root.columnsWidth, width)
         contentHeight: height
         flickableDirection: Flickable.HorizontalFlick
@@ -570,7 +673,8 @@ MorphWidget {
             visible: root.showHeader
             width: hflick.contentWidth
             implicitWidth: header.implicitWidth
-            height: root.showHeader ? header.implicitHeight : 0
+            height: !root.showHeader ? 0 : root.arranged ? headerMetrics.height + 2 * Theme.tableCellPaddingY
+                                                         : header.implicitHeight
 
             Loader {
                 id: headerBackgroundLoader
@@ -623,7 +727,8 @@ MorphWidget {
                 }
 
                 Repeater {
-                    model: root.columns
+                    id: headerLabels
+                    model: root.arranged ? [] : root.columns
 
                     // A sortable column's header is a Tab stop, and a click, Enter or Space on it asks to sort by
                     // the column; the table shows the sort it is given, never one of its own.
@@ -667,6 +772,59 @@ MorphWidget {
                     }
                 }
             }
+
+            // The header cells of the column window, each at its column's offset; the pinned ones held at the leading
+            // edge, over the rest.
+            Repeater {
+                id: windowHeader
+                model: root.arranged ? root.windowColumns : []
+
+                Label {
+                    id: windowLabel
+                    required property int index
+                    required property var modelData
+                    readonly property var column: root.columns[modelData.column] ?? ({"label": "", "align": 1,
+                                                                                       "sortable": false})
+                    readonly property bool pinned: index < root.pinnedShown
+                    readonly property bool sorted: root.sortColumn === modelData.column
+                    objectName: "header" + modelData.column
+                    x: root.lead + modelData.offset + (pinned ? root.scrollX : 0)
+                    z: pinned ? 1 : 0
+                    width: modelData.width
+                    height: headerArea.height
+                    textFormat: Text.PlainText
+                    font: Theme.tableHeaderFont
+                    text: column.label + (sorted ? (root.sortDescending ? root.descendingMark : root.ascendingMark) : "")
+                    activeFocusOnTab: column.sortable === true
+                    Accessible.role: Accessible.ColumnHeader
+                    Accessible.name: column.label
+                    Accessible.description: !sorted ? "" : root.sortDescending ? "Sorted descending" : "Sorted ascending"
+                    Keys.onPressed: event => {
+                        if (windowLabel.column.sortable === true && (event.key === Qt.Key_Return ||
+                                                                     event.key === Qt.Key_Enter ||
+                                                                     event.key === Qt.Key_Space)) {
+                            root.fire("sort", windowLabel.modelData.column)
+                            event.accepted = true
+                        }
+                    }
+                    TapHandler {
+                        enabled: windowLabel.column.sortable === true
+                        onTapped: root.fire("sort", windowLabel.modelData.column)
+                    }
+                    color: root.scheme.muted
+                    background: Rectangle {
+                        visible: windowLabel.pinned
+                        color: root.scheme.surface
+                    }
+                    topPadding: Theme.tableCellPaddingY
+                    bottomPadding: Theme.tableCellPaddingY
+                    leftPadding: Theme.tableCellPaddingX
+                    rightPadding: Theme.tableCellPaddingX
+                    horizontalAlignment: column.align === 3 ? Text.AlignRight
+                                                            : column.align === 2 ? Text.AlignHCenter : Text.AlignLeft
+                    elide: Text.ElideRight
+                }
+            }
         }
 
         // Unvirtualized, flick is a transparent pass-through: its height is body's own, nothing clips, and it never
@@ -684,11 +842,12 @@ MorphWidget {
             interactive: root.virtualized
             flickableDirection: Flickable.VerticalFlick
             contentWidth: width
-            contentHeight: topSpace.height + body.implicitHeight + bottomSpace.height
+            contentHeight: root.sourceRows ? root.sourceContentHeight
+                                           : topSpace.height + body.implicitHeight + bottomSpace.height
             boundsBehavior: Flickable.StopAtBounds
 
             onContentYChanged: {
-                if (!root.restoring)
+                if (!root.restoring && !root.sourceRows)
                     root.anchorAt(flick.contentY)
                 root.reportVisibleRange()
             }
@@ -699,7 +858,7 @@ MorphWidget {
             Item {
                 id: topSpace
                 width: 1
-                height: root.virtualized ? root.heightBefore(root.realizedFirst) : 0
+                height: root.virtualized && !root.sourceRows ? root.heightBefore(root.realizedFirst) : 0
             }
 
             ColumnLayout {
@@ -714,11 +873,50 @@ MorphWidget {
                 id: bottomSpace
                 width: 1
                 anchors.top: body.bottom
-                height: root.virtualized
+                height: root.virtualized && !root.sourceRows
                             ? root.heightBefore(root.totalRows) -
                               root.heightBefore(root.realizedFirst + root.realizedCount)
                             : 0
             }
+
+            // The rows of a table over a source, each placed at the top of its view row by `layoutRows`.
+            Item {
+                id: rowsPlane
+                width: flick.width
+                height: root.sourceContentHeight
+            }
+        }
+    }
+
+    // The status line, under the rows and outside the sideways scroll. A polite live region: its text is its
+    // accessible name, so a change is read out as the name changes.
+    RowLayout {
+        id: statusLine
+        objectName: "statusLine"
+        visible: root.statusShown
+        x: Theme.tableCellPaddingX
+        y: root.height - root.statusHeight
+        width: root.width - 2 * Theme.tableCellPaddingX
+        spacing: Theme.tableCellPaddingX
+
+        Text {
+            objectName: "statusText"
+            Layout.fillWidth: true
+            text: root.statusText
+            textFormat: Text.PlainText
+            elide: Text.ElideRight
+            font: Theme.smallFont
+            color: root.scheme.muted
+            topPadding: Theme.tableCellPaddingY
+            bottomPadding: Theme.tableCellPaddingY
+            Accessible.role: Accessible.StaticText
+            Accessible.name: text
+        }
+        Button {
+            objectName: "retry"
+            visible: root.retryShown
+            text: "Retry"
+            onClicked: root.fire("retry", undefined)
         }
     }
 
@@ -727,7 +925,7 @@ MorphWidget {
     // the content above the viewport, and the anchor keeps what the user looks at where it was. Only runs
     // virtualized: an unvirtualized table never needs an estimate, since every row is always realized.
     function remeasureRowHeight() {
-        if (!root.virtualized || body.children.length === 0)
+        if (!root.virtualized || root.sourceRows || root.rowsHolder.children.length === 0)
             return
         let changed = false
         let at = root.realizedFirst
@@ -809,6 +1007,13 @@ MorphWidget {
     // every other user-driven event (a tap, an activation) already uses -- a scroll is a user-driven request for
     // different rows to be realized, in the same sense a tap is a request to select a row.
     function reportVisibleRange() {
+        if (root.sourceRows) {
+            const first = root.rowAtY(flick.contentY)
+            const last = root.rowAtY(flick.contentY + Math.max(0, flick.height - 1))
+            root.fire("scroll", {"first": first, "count": Math.max(0, Math.min(last - first + 1,
+                                                                               root.totalRows - first))})
+            return
+        }
         if (!root.virtualized || root.estimatedRowHeight <= 0)
             return
         root.remeasureRowHeight()
@@ -828,6 +1033,215 @@ MorphWidget {
 
     onRealizedFirstChanged: root.remeasureRowHeight()
     onRealizedCountChanged: root.remeasureRowHeight()
+
+    // ── A table over a source ──
+
+    // Where view row `viewRow` starts: the mean height for each row before it, corrected by the rows measured.
+    function rowTop(viewRow: int): real {
+        let top = viewRow * root.meanRowHeight
+        for (const key in root.rowHeights) {
+            if (Number(key) < viewRow)
+                top += root.rowHeights[key] - root.meanRowHeight
+        }
+        return top
+    }
+
+    // The view row at `y`, from the top of the rows.
+    function rowAtY(y: real): int {
+        const mean = Math.max(1, root.meanRowHeight)
+        const known = Object.keys(root.rowHeights).map(Number).sort((a, b) => a - b)
+        let row = 0
+        let base = 0
+        for (const measured of known) {
+            if (y < base + (measured - row) * mean)
+                break
+            base += (measured - row) * mean
+            row = measured
+            if (y < base + root.rowHeights[measured])
+                return measured
+            base += root.rowHeights[measured]
+            row = measured + 1
+        }
+        return Math.max(0, Math.min(Math.max(0, root.totalRows - 1), row + Math.floor((y - base) / mean)))
+    }
+
+    // Lays the realized rows out once per event loop turn: called as rows get their view rows and change height.
+    property bool rowsQueued: false
+    function scheduleRows() {
+        if (root.sourceRows && !root.rowsQueued) {
+            root.rowsQueued = true
+            Qt.callLater(root.layoutRows)
+        }
+    }
+
+    // Keeps each realized row's height (the larger of what it had and what it measures now; a row that left is
+    // forgotten), places every row at its view row, and moves the view by what the rows above the first visible one
+    // changed, so the rows in view stay where they are.
+    function layoutRows() {
+        root.rowsQueued = false
+        const anchor = root.rowAtY(flick.contentY)
+        const into = flick.contentY - root.rowTop(anchor)
+        const rows = []
+        for (let i = 0; i < rowsPlane.children.length; ++i) {
+            const row = rowsPlane.children[i]
+            if (row.table === root && row.viewRow >= 0)
+                rows.push(row)
+        }
+        const heights = {}
+        let sum = 0
+        for (const row of rows) {
+            const height = Math.max(root.rowHeights[row.viewRow] ?? 0, row.measuredHeight)
+            heights[row.viewRow] = height
+            sum += height
+        }
+        root.rowHeights = heights
+        root.meanRowHeight = rows.length > 0 ? sum / rows.length : root.estimatedRowHeight
+        for (const row of rows) {
+            row.y = root.rowTop(row.viewRow)
+            row.height = heights[row.viewRow]
+        }
+        const target = root.rowTop(anchor) + into
+        if (Math.abs(target - flick.contentY) >= 0.5)
+            flick.contentY = target
+    }
+
+    // Reports the sideways scroll and the viewport, in pixels from the first column's start.
+    property bool settingOffset: false
+    function reportColumns() {
+        if (root.sourceRows && !root.settingOffset)
+            root.fire("hscroll", {"scrollX": Math.round(hflick.contentX), "viewport": Math.round(root.columnViewport)})
+    }
+    onSourceRowsChanged: Qt.callLater(root.reportColumns)
+
+    // Called by C++: the mount moved the view so the columns in view stay where they were; it is not told back.
+    function setHorizontalOffset(scrollX: int) {
+        root.settingOffset = true
+        hflick.contentX = Math.max(0, scrollX)
+        root.settingOffset = false
+    }
+
+    // Called by C++: brings a view row into view, as little as it takes.
+    function scrollToRow(viewRow: var) {
+        const top = root.rowTop(viewRow)
+        const bottom = top + (root.rowHeights[viewRow] ?? root.meanRowHeight)
+        if (top < flick.contentY)
+            flick.contentY = top
+        else if (bottom > flick.contentY + flick.height)
+            flick.contentY = Math.max(0, bottom - flick.height)
+    }
+
+    // Puts view row `viewRow` at the top of the view.
+    function scrollRowToTop(viewRow: int) {
+        flick.contentY = root.rowTop(viewRow)
+    }
+
+    // Called by C++ when focus moves: the focused row and its column come into view.
+    function showFocusCell() {
+        if (root.focusRow < 0)
+            return
+        root.scrollToRow(root.focusRow)
+        const place = root.windowPlaces[root.focusColumn]
+        if (place === undefined || place < root.pinnedShown)
+            return
+        const entry = root.windowColumns[place]
+        if (entry.offset - hflick.contentX < root.pinnedEdge)
+            hflick.contentX = Math.max(0, entry.offset - root.pinnedEdge)
+        else if (entry.offset + entry.width - hflick.contentX > root.columnViewport)
+            hflick.contentX = entry.offset + entry.width - root.columnViewport
+    }
+
+    // The keys over a source: the moves go to the mount, which resolves them over rows and columns not realized;
+    // Space and Enter act on the focused row when it is realized. The order of `FocusMove`.
+    function sourceKey(event: var): bool {
+        const mods = event.modifiers & (Qt.ShiftModifier | Qt.ControlModifier | Qt.AltModifier | Qt.MetaModifier)
+        let move = -1
+        if (mods === Qt.ControlModifier && event.key === Qt.Key_Home)
+            move = 6
+        else if (mods === Qt.ControlModifier && event.key === Qt.Key_End)
+            move = 7
+        else if (mods === Qt.NoModifier) {
+            const keys = [Qt.Key_Up, Qt.Key_Down, Qt.Key_Left, Qt.Key_Right, Qt.Key_Home, Qt.Key_End, -1, -1,
+                          Qt.Key_PageUp, Qt.Key_PageDown]
+            move = keys.indexOf(event.key)
+        }
+        if (move >= 0) {
+            root.fire("focusMove", move)
+            return true
+        }
+        const row = root.rowAt(root.focusRow)
+        if (!row || mods !== Qt.NoModifier)
+            return false
+        if (event.key === Qt.Key_Space) {
+            row.fire("tap", {"ctrl": true})
+            return true
+        }
+        if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
+            row.fire("activate", undefined)
+            return true
+        }
+        return false
+    }
+
+    // Where a column's cells go, from the first column's start: its window entry once the mount lays the columns out,
+    // else its place at the table's own widths; null for a column not drawn.
+    function columnSlot(column: int): var {
+        if (root.arranged) {
+            const place = root.windowPlaces[column]
+            if (place === undefined)
+                return null
+            const entry = root.windowColumns[place]
+            return {"offset": entry.offset, "width": entry.width, "pinned": place < root.pinnedShown}
+        }
+        if (column < 0 || column >= root.widths.length)
+            return null
+        let offset = 0
+        for (let i = 0; i < column; ++i)
+            offset += root.widths[i]
+        return {"offset": offset, "width": root.widths[column], "pinned": false}
+    }
+
+    // The realized row at view row `viewRow`, or null.
+    function rowAt(viewRow: int): var {
+        for (let i = 0; i < rowsPlane.children.length; ++i) {
+            const row = rowsPlane.children[i]
+            if (row.table === root && row.viewRow === viewRow && row.visible)
+                return row
+        }
+        return null
+    }
+
+    // For tests: the focused cell; whether a cell is realized and shown; a column's width; a row's height; a
+    // cell's load state as drawn (0 loaded, 1 unloaded, 2 failed).
+    function focusedRow(): int {
+        return root.focusRow
+    }
+    function focusedColumn(): int {
+        return root.focusColumn
+    }
+    function cellRealized(viewRow: int, column: int): bool {
+        const row = root.rowAt(viewRow)
+        if (!row)
+            return false
+        for (let i = 0; i < row.content.children.length; ++i) {
+            const cell = row.content.children[i]
+            if (cell.measuredIndex === column && cell.visible)
+                return true
+        }
+        return false
+    }
+    function columnWidth(column: int): real {
+        const place = root.windowPlaces[column]
+        if (place !== undefined)
+            return root.windowColumns[place].width
+        return column < root.widths.length ? root.widths[column] : 0
+    }
+    function rowHeight(viewRow: int): real {
+        return root.rowHeights[viewRow] ?? root.meanRowHeight
+    }
+    function cellLoadAt(viewRow: int, column: int): int {
+        const row = root.rowAt(viewRow)
+        return row ? row.loadOf(column) : 0
+    }
 
     // The bar is a child of the flickable itself, not of its content: the attached ScrollBar lays out only a bar whose
     // parent is the flickable. It is always on while the table scrolls, so a table at rest does not look cut off.

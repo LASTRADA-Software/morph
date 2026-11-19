@@ -55,6 +55,10 @@ public:
     /// their column rather than by the row's own alignment; an empty list returns the row to the solver and its own
     /// alignment.
     void setColumnLayout(std::vector<int> extents, int gap, std::vector<CellPlace> places);
+    /// One slot per child, in order, for a row of a table whose columns the mount lays out: each child is placed in
+    /// its slot whatever the others, and a child with no slot, or one of width 0, is given no area. An empty list
+    /// returns the row to `setColumnLayout`'s extents.
+    void setCellSlots(std::vector<CellSlot> slots);
     [[nodiscard]] ::core::tui::Size naturalSize() const override;
     /// Along a row the shown children's content minimums with the gaps and the padding, across a column the largest
     /// with the padding; zero while no child has a content minimum, and for a table row, which its table places.
@@ -93,6 +97,7 @@ private:
     int _drawnWidth = 0;
     std::vector<int> _extents;
     std::vector<CellPlace> _places;
+    std::vector<CellSlot> _slots;
     int _extentGap = 0;
     ui::Align _align = ui::Align::Stretch;
     ui::Justify _justify = ui::Justify::Start;

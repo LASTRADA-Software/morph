@@ -16,6 +16,7 @@
 #include <string_view>
 #include <unordered_map>
 #include <unordered_set>
+#include <utility>
 #include <vector>
 
 #include "tui/context.hpp"
@@ -56,6 +57,21 @@ namespace morph::tui::detail {
 /// row, or the room for rows changes, the view brings the cursor row into view. The wheel moves the view one row and
 /// is left to the table's surroundings when the view cannot move that way. A row scrolled out of view is given no
 /// area, so it neither draws nor takes a click.
+///
+/// A table over a `TableSource` draws what the mount realizes. Its view scrolls over every row of the view, one line
+/// each, and each realized row is drawn on the line of its view index (`setRowIndex`); a line whose row is not
+/// realized is blank. Each cell is drawn in the column `setCellColumn` gave it, and a cell with none is not drawn.
+/// Once the mount lays the columns out (`setColumnWindow`), the header and the cells show the window's columns only,
+/// at the mount's offsets and widths in cells, the last cell of each its gap; the pinned columns stay at the leading
+/// edge and the rest scroll under them. The table reports the columns and the rows in view (`setOnHorizontalRange`,
+/// `setOnVisibleRangeChanged`) before the next frame's layout whenever a frame found them changed, and at once when
+/// the wheel or `scrollColumnsTo` moves the view. The arrows, Home, End, PageUp, PageDown, Ctrl+Home and Ctrl+End go
+/// to the mount (`setOnFocusMove`), and the focused cell (`setFocusCell`) is kept in view: Left and Right are how the
+/// user scrolls sideways. A row is one line, so no row grows, and none above the view moves the rows in it. An
+/// `Unloaded` cell draws `···` and a `Failed` one `!`, in its column's alignment, in place of its content.
+///
+/// The status line (`setStatus`), while shown, is the table's last line: the counts, the state, `[Retry]` while the
+/// state offers it, which a click chooses, and the message at the trailing edge.
 class TableImpl final : public TuiContainer<ui::TableWidget> {
 public:
     explicit TableImpl(Context& context) : TuiContainer{context} { adopt(makeView(*this)); }
@@ -80,6 +96,29 @@ public:
     void setOnActivate(std::function<void(ui::Key)> onActivate) override;
     void setSort(std::optional<ui::TableSort> sort) override;
     void setOnSort(std::function<void(std::size_t)> onSort) override;
+    void setRealizedWindow(std::size_t first, std::size_t count, std::size_t total) override;
+    void setOnVisibleRangeChanged(std::function<void(std::size_t, std::size_t)> onVisibleRangeChanged) override;
+    /// Throws std::logic_error when @p row is not one of this table's rows.
+    void setRowIndex(ui::Widget& row, std::size_t viewRow) override;
+    void setStatus(ui::TableStatus const& status) override;
+    void setOnRetry(std::function<void()> onRetry) override;
+    /// Throws std::logic_error when @p row is not one of this table's rows.
+    void setCellLoad(ui::Widget& row, std::size_t column, ui::CellLoad load) override;
+    void setColumnWindow(std::span<std::size_t const> columns, std::span<int const> offsets,
+                         std::span<int const> widths, int totalWidth, std::size_t pinned) override;
+    void setOnHorizontalRange(std::function<void(int scrollX, int viewport)> handler) override;
+    void setHorizontalOffset(int scrollX) override;
+    void setFocusCell(std::size_t viewRow, std::size_t column) override;
+    void setOnFocusMove(std::function<void(ui::FocusMove)> handler) override;
+    void scrollToRow(std::size_t viewRow) override;
+    /// Throws std::logic_error when @p row is not one of this table's rows.
+    void setCellColumn(ui::Widget& row, ui::Widget& cell, std::optional<std::size_t> column) override;
+    /// Moves the view sideways to @p scrollX cells into the columns, kept within them, and reports the columns in
+    /// view.
+    void scrollColumnsTo(int scrollX);
+    /// Reports the columns, then the rows, in view, each when it changed since it was last reported. `fit` calls it
+    /// before a frame's layout for a table whose last frame found them changed.
+    void reportRanges();
     /// The positions among `children()` of the rows the table marks as selected, ascending.
     [[nodiscard]] std::vector<std::size_t> markedRows() const;
     [[nodiscard]] ::core::tui::Size naturalSize() const override;
@@ -101,6 +140,12 @@ protected:
     void childForgotten(WidgetBase& child) override;
 
 private:
+    /// A column as it is drawn: its index into `_columns`, and where its cells go, from the end of the gutter.
+    struct DrawnColumn {
+        std::size_t column = 0;
+        int x = 0;
+        int width = 0;  ///< Without the gap after it.
+    };
     /// A spanning cell as the last plan found it: lifted out of its origin row and drawn over the rows it covers.
     struct SpanPlace {
         WidgetBase* origin = nullptr;  ///< The row that gives the span.
@@ -129,7 +174,7 @@ private:
     /// Calls onSort when the header click at column @p x lands on a sortable column.
     void clickHeader(int x);
     /// Draws the header line: the header box, then each column's label at its alignment.
-    void paintHeader(::core::tui::Canvas& canvas, std::vector<int> const& widths) const;
+    void paintHeader(::core::tui::Canvas& canvas, std::vector<DrawnColumn> const& columns) const;
     /// Gives each row its column layout.
     void arrangeRows(std::vector<int> const& widths);
     /// The gutter of @p row: its selection mark, or its box, then the cursor mark when @p cursor.
@@ -188,6 +233,36 @@ private:
     /// Calls onActivate with @p key when a row the user can reach has it; the handler may destroy this table.
     void activateRow(ui::Key const& key);
 
+    /// The columns drawn in a table @p width cells wide: the mount's window once it lays the columns out, else every
+    /// column at its solved width.
+    [[nodiscard]] std::vector<DrawnColumn> drawnColumns(int width) const;
+    /// The column a cell of @p row is in: by `setCellColumn` in a table over a source, else its @p position.
+    [[nodiscard]] std::optional<std::size_t> columnOf(WidgetBase const* row, WidgetBase const* cell,
+                                                      std::size_t position) const;
+    /// The load state of @p row's cell in @p column.
+    [[nodiscard]] ui::CellLoad loadOf(WidgetBase const* row, std::size_t column) const;
+    /// Gives each row of a table over a source a slot per cell: its column's, or none.
+    void slotCells(std::vector<DrawnColumn> const& drawn);
+    /// The lines below the header that rows take in a table @p height lines tall: all but the status line.
+    [[nodiscard]] int rowRoomOf(int height) const noexcept;
+    /// The view's width across the columns: the table's, less the gutter.
+    [[nodiscard]] int viewport() const noexcept;
+    /// The rows in view, as the mount is told them: the first view row drawn and how many lines rows take.
+    [[nodiscard]] std::pair<std::size_t, std::size_t> rowsInView() const noexcept;
+    /// Keeps the view within the rows and the columns.
+    void clampView();
+    /// Has the next frame report the ranges in view, when they changed.
+    void reportBeforeNextFrame();
+    /// Draws the status line on the last line.
+    void paintStatus(::core::tui::Canvas& canvas);
+    /// Draws the marks of the cells that are not loaded, in their rows' @p areas.
+    void paintLoads(::core::tui::Canvas& canvas, std::vector<DrawnColumn> const& drawn,
+                    std::vector<::core::tui::Rect> const& areas) const;
+    /// The realized row at view row @p viewRow, or null.
+    [[nodiscard]] WidgetBase* rowAtView(std::size_t viewRow) const;
+    /// The move a key asks of the mount in a table over a source, or none.
+    [[nodiscard]] static std::optional<ui::FocusMove> focusMoveOf(::core::tui::KeyEvent const& key);
+
     std::vector<ui::TableColumn> _columns;
     bool _showHeader = true;
     bool _selectColumn = false;
@@ -218,6 +293,37 @@ private:
     std::function<void(ui::Key)> _onActivate;
     std::optional<ui::TableSort> _sort;
     std::function<void(std::size_t)> _onSort;
+
+    /// Whether the rows come from a `TableSource`: the mount places each row by its view index and each cell by its
+    /// column.
+    bool _source = false;
+    std::size_t _total = 0;                                        ///< The rows of the view.
+    std::unordered_map<WidgetBase const*, std::size_t> _viewRows;  ///< Each realized row's view index.
+    /// Each row's cells' columns, by `setCellColumn`; none for a pooled cell.
+    std::unordered_map<WidgetBase const*, std::unordered_map<WidgetBase const*, std::optional<std::size_t>>>
+        _cellColumns;
+    /// Each row's cells that are not loaded, by column.
+    std::unordered_map<WidgetBase const*, std::unordered_map<std::size_t, ui::CellLoad>> _loads;
+    /// A column of the mount's window: its index into `_columns`, its offset and its width.
+    struct WindowColumn {
+        std::size_t column = 0;
+        int offset = 0;
+        int width = 0;
+    };
+    bool _arranged = false;  ///< Whether the mount lays the columns out.
+    std::vector<WindowColumn> _window;
+    std::size_t _pinned = 0;
+    int _totalWidth = 0;
+    int _scrollX = 0;
+    std::function<void(std::size_t, std::size_t)> _onVisibleRange;
+    std::function<void(int, int)> _onHorizontalRange;
+    std::optional<std::pair<std::size_t, std::size_t>> _reportedRows;
+    std::optional<std::pair<int, int>> _reportedColumns;
+    std::function<void(ui::FocusMove)> _onFocusMove;
+    std::optional<std::pair<std::size_t, std::size_t>> _focusCell;  ///< The focused cell's view row and column.
+    ui::TableStatus _status;
+    std::function<void()> _onRetry;
+    int _retryX = -1;  ///< Where `[Retry]` starts on the status line; -1 while it is not drawn.
 };
 
 }  // namespace morph::tui::detail

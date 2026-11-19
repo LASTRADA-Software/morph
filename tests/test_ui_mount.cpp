@@ -30,6 +30,7 @@
 
 #include "test_support.hpp"
 #include "ui_echoing_backend.hpp"
+#include "ui_fake_rows.hpp"
 #include "ui_test_support.hpp"
 
 namespace ui = morph::ui;
@@ -1415,106 +1416,7 @@ using ui::Virtualization;
 using ui::windowingOf;
 namespace table = morph::table;
 
-// Rows for a mount test: every row present, row `i` keyed `i` with the record `{id: i, c0: "r<i>c0", …}`, built when
-// first read. `holdFrom` makes the rows at and after an index not fetched until `arrive`.
-class FakeRows final : public ui::TableRows {
-public:
-    struct Visible {
-        std::int64_t first = 0;
-        std::int64_t count = 0;
-        std::vector<std::string> columns;
-    };
-
-    FakeRows(std::int64_t rows, std::size_t columns, morph::exec::IExecutor& owner,
-             table::TotalKind kind = table::TotalKind::Exact)
-        : _rows{rows}, _columns{columns}, _kind{kind}, _owner{&owner} {}
-
-    [[nodiscard]] ui::TableTotal total() const override {
-        return ui::TableTotal{.rows = _rows, .kind = _kind, .known = true};
-    }
-
-    [[nodiscard]] std::optional<ui::TableRowRef> row(std::int64_t index) const override {
-        if (index < 0 || index >= _rows || (_hold && index >= *_hold)) {
-            return std::nullopt;
-        }
-        auto [found, made] = _records.try_emplace(index);
-        if (made) {
-            ui::ValueRecord record;
-            record.emplace("id", Value{index});
-            for (std::size_t column = 0; column < _columns; ++column) {
-                record.emplace("c" + std::to_string(column),
-                               Value{"r" + std::to_string(index) + "c" + std::to_string(column)});
-            }
-            found->second = Entry{.key = table::RowId{index}, .row = Value{std::move(record)}};
-        }
-        return ui::TableRowRef{.key = found->second.key, .row = found->second.row};
-    }
-
-    [[nodiscard]] table::UnloadedLevels unloadedLevels(std::int64_t /*index*/) const override { return {}; }
-
-    // Records the call, and forgets the records far from it.
-    void visible(std::int64_t first, std::int64_t count, std::span<std::string const> columns) override {
-        ++visibleCalls;
-        lastVisible = Visible{.first = first, .count = count, .columns = {columns.begin(), columns.end()}};
-        std::erase_if(_records, [first, count](auto const& entry) {
-            return entry.first < first - 200 || entry.first >= first + count + 200;
-        });
-    }
-
-    morph::async::Completion<std::expected<std::vector<table::RowId>, table::TableError>> keysOf(
-        std::int64_t /*first*/, std::int64_t /*count*/) override {
-        using Result = std::expected<std::vector<table::RowId>, table::TableError>;
-        auto [completion, promise] = morph::async::Completion<Result>::makeSettleable(_owner);
-        promise.resolve(Result{std::vector<table::RowId>{}});
-        return std::move(completion);
-    }
-
-    std::expected<void, table::TableError> setSort(ui::SortChain /*sort*/) override { return {}; }
-    std::expected<void, table::TableError> setFilter(table::FilterSpec /*filter*/) override { return {}; }
-    [[nodiscard]] ui::TableCountsView counts() const override { return ui::TableCountsView{.view = total()}; }
-    void onChange(std::function<void(table::ViewChange const&)> handler) override { _handler = std::move(handler); }
-
-    // Rows at and after @p index are not fetched until `arrive`.
-    void holdFrom(std::int64_t index) { _hold = index; }
-
-    // The held rows arrive: a reset.
-    void arrive() {
-        _hold.reset();
-        reset();
-    }
-
-    // A new total: a reset.
-    void setTotal(std::int64_t rows, table::TotalKind kind) {
-        _rows = rows;
-        _kind = kind;
-        reset();
-    }
-
-    std::size_t visibleCalls = 0;
-    Visible lastVisible;
-
-private:
-    struct Entry {
-        table::RowId key;
-        Value row;
-    };
-
-    void reset() {
-        _records.clear();
-        if (_handler) {
-            _handler(table::ViewChange{
-                .ops = {table::ViewOp{.kind = table::ViewOp::Kind::Reset, .first = 0, .count = 0, .to = 0}}});
-        }
-    }
-
-    std::int64_t _rows;
-    std::size_t _columns;
-    table::TotalKind _kind;
-    morph::exec::IExecutor* _owner;
-    std::optional<std::int64_t> _hold;
-    mutable std::map<std::int64_t, Entry> _records;
-    std::function<void(table::ViewChange const&)> _handler;
-};
+using morph::testing::FakeRows;
 
 struct WindowOptions {
     std::size_t pinned = 0;
@@ -1842,6 +1744,23 @@ TEST_CASE("table focus: the focused cell survives a scroll of 10,000 rows and 20
     CHECK(f.backend.focusCell(f.table) == std::pair{std::size_t{7}, std::size_t{5}});
     CHECK(f.realizedRows() == 51);  // one row beyond the window at most
     CHECK(f.backend.lastCounts(f.table) == std::pair{std::optional<std::int64_t>{100'000}, std::size_t{300}});
+}
+
+// Mutation: a slot's index told only when it is built (a reused slot keeps the view row of the row it showed before).
+TEST_CASE("table window: every realized row tells the backend its view row, the focused one beyond the window too",
+          "[ui][mount]") {
+    WindowFixture f{100'000, 300, {.pinned = 0}};
+    f.focus.set(CellRef{.key = Key{std::int64_t{7}}, .column = "c5"});
+    f.settle();
+    f.scrollRows(10'000);
+    std::vector<std::string> told;
+    for (int const row : f.backend.children(f.table)) {
+        told.push_back(f.backend.prop(row, "viewRow"));
+    }
+    REQUIRE(told.size() == 51);
+    CHECK(told.front() == "7");   // the focused row, before the window
+    CHECK(told.at(1) == "9990");  // the window: the rows in view and `overscan` above them
+    CHECK(told.back() == "10039");
 }
 
 // Mutation: `Last` clamped to the rows held (focus stays on row 199).

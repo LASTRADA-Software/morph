@@ -607,6 +607,13 @@ struct CellPlace {
     ui::Align down = ui::Align::Center;   ///< Start, Center or End; Stretch fills the row's height.
 };
 
+/// Where a table cell is drawn in its row when the table places each cell by its column: from @p x, @p width cells.
+struct CellSlot {
+    int x = 0;        ///< The slot's start, from the row's start.
+    int width = 0;    ///< The cells it takes; 0 gives the child no area.
+    CellPlace place;  ///< Where the cell sits in the slot.
+};
+
 /// How `arrangeStack` places children.
 struct StackSpec {
     ui::Axis axis = ui::Axis::Vertical;  ///< The main axis.

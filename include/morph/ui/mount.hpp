@@ -2084,6 +2084,8 @@ private:
             std::unique_ptr<reactive::Scope> scope;
             std::unique_ptr<reactive::Scope> look;
             std::int64_t index = 0;
+            // The index the backend was last told (`setRowIndex`); -1 before.
+            std::int64_t toldIndex = -1;
             std::optional<Key> key;
             Widget* widget = nullptr;
             reactive::Signal<Value>* row = nullptr;
@@ -2603,6 +2605,12 @@ private:
             }
         }
         table.realized = std::move(next);
+        for (SourceTable::Realized& row : table.realized) {
+            if (row.toldIndex != row.index) {
+                row.toldIndex = row.index;
+                table.widget->setRowIndex(*row.widget, static_cast<std::size_t>(row.index));
+            }
+        }
         realizeCells(table, shown);
         table.widget->setRealizedWindow(lo, table.realized.size(), count);
         afterPass(table, total);

@@ -16,6 +16,12 @@ import QtQuick.Layouts
 // background, the look of the row over the whole block, and a tap handler of its own, since the block lies outside
 // the row's bounds, which the row's handlers would not reach. Hover is the row's own: its `containmentMask` takes in
 // the blocks. A row ignores a tap in a spanning or covered column: the backdrop took it.
+//
+// In a table whose columns the mount lays out (`table.arranged`), each cell is placed in the column C++ gave it
+// (`measuredIndex`), at the window's offset and width; a pinned column's cell is held at the leading edge, over the
+// rest. A cell whose column has not loaded (`cellLoads`) keeps its content, bound but invisible, under a mark: a
+// rounded bar 3 em wide for one not loaded, an error mark of the same width for one that failed. The row's
+// `measuredHeight` is its tallest placed cell's, unless every column keeps one line; the table sets its height.
 MorphWidget {
     id: root
 
@@ -36,7 +42,26 @@ MorphWidget {
     // row, and the row hands its state to the instance.
     property Component background: null
     readonly property bool hovered: rowHover.hovered
-    readonly property bool current: root.holdsFocus(Window.activeFocusItem)
+    // The row's view row, in a table over a source; C++ writes it.
+    property int viewRow: -1
+    // The height the row's cells ask for, in a table over a source; the table keeps the largest while it is realized.
+    property real measuredHeight: 0
+    onMeasuredHeightChanged: {
+        if (root.table)
+            root.table.scheduleRows()
+    }
+    // The columns whose cells have not loaded, by column as text: 1 not loaded, 2 failed. C++ writes it.
+    property var cellLoads: ({})
+    // The marks drawn over those cells: [{x, width, load, align}].
+    property var loadMarks: []
+    function loadOf(column: int): int {
+        return root.cellLoads[String(column)] ?? 0
+    }
+    onCellLoadsChanged: root.place()
+    // Over a source the table holds the focus and names the focused row; otherwise the row holds it.
+    readonly property bool current: root.table && root.table.sourceRows
+                                    ? root.table.activeFocus && root.viewRow === root.table.focusRow
+                                    : root.holdsFocus(Window.activeFocusItem)
     onCurrentChanged: {
         if (current && root.table)
             root.table.currentRow = root
@@ -163,6 +188,10 @@ MorphWidget {
     function placeOnce() {
         const inset = Theme.tableCellPaddingX
         const insetY = Theme.tableCellPaddingY
+        if (root.table && root.table.sourceRows && !root.heading) {
+            root.placeWindowed()
+            return
+        }
         if (root.heading) {
             let across = root.table ? root.table.lead : 0
             for (const w of root.widths)
@@ -225,6 +254,102 @@ MorphWidget {
             const spare = space - cell.height
             cell.y = insetY + (down === 3 ? spare : down === 2 ? Math.floor(spare / 2) : 0)
         }
+    }
+
+    // Each placed cell in its column (`table.columnSlot`); a pooled cell (no column, hidden by C++) is left where it is.
+    function placeWindowed() {
+        const table = root.table
+        const inset = Theme.tableCellPaddingX
+        const insetY = Theme.tableCellPaddingY
+        const measure = !table.allOneLine
+        const placed = []
+        const marks = []
+        let tallest = 0
+        for (let i = 0; i < cells.children.length; ++i) {
+            const cell = cells.children[i]
+            const column = cell.measuredIndex
+            const slot = table.columnSlot(column)
+            if (!slot)
+                continue
+            const pinned = slot.pinned
+            const left = table.lead + slot.offset + (pinned ? table.scrollX : 0)
+            const room = Math.max(0, slot.width - 2 * inset)
+            const spec = column < root.columns.length ? root.columns[column] : null
+            const across = spec ? spec.align : 1
+            if ((cell as MorphWidget)?.fillsAcross === false) {
+                cell.width = Math.min(cell.implicitWidth, room)
+                const spare = room - cell.width
+                cell.x = left + inset + (across === 3 ? spare : across === 2 ? Math.floor(spare / 2) : 0)
+            } else {
+                cell.width = room
+                cell.x = left + inset
+            }
+            cell.z = pinned ? 1 : 0
+            const load = root.loadOf(column)
+            cell.opacity = load === 0 ? 1 : 0
+            if (load !== 0)
+                marks.push({"x": left + inset, "width": room, "load": load, "align": across, "pinned": pinned})
+            if (cell.textAlign !== undefined && !cell.ownAlign)
+                cell.textAlign = across === 3 ? Qt.AlignRight : across === 2 ? Qt.AlignHCenter : Qt.AlignLeft
+            if (cell.singleLine !== undefined)
+                cell.singleLine = !(spec && spec.wrap)
+            if (cell.elideToWidth !== undefined)
+                cell.elideToWidth = true
+            if (cell.tabularFigures !== undefined)
+                cell.tabularFigures = across === 3
+            if (measure && cell.visible) {
+                ++table.rowMeasures
+                tallest = Math.max(tallest, cell.implicitHeight)
+            }
+            placed.push(cell)
+        }
+        const own = measure ? tallest + 2 * insetY : table.oneLineRowHeight
+        root.measuredHeight = Math.max(own, root.backgroundItem ? root.backgroundItem.implicitHeight : 0)
+        cells.implicitWidth = table.columnsWidth
+        cells.implicitHeight = root.measuredHeight
+        const space = Math.max(0, (root.height > 0 ? root.height : root.measuredHeight) - 2 * insetY)
+        for (const cell of placed) {
+            const down = cell.measuredIndex < root.columns.length ? root.columns[cell.measuredIndex].valign : 2
+            cell.height = down === 0 ? space : Math.min(cell.implicitHeight, space)
+            const spare = space - cell.height
+            cell.y = insetY + (down === 3 ? spare : down === 2 ? Math.floor(spare / 2) : 0)
+        }
+        if (JSON.stringify(marks) !== JSON.stringify(root.loadMarks))
+            root.loadMarks = marks
+    }
+
+    // The pinned cells follow the sideways scroll, so they stay at the leading edge; nothing else moves.
+    function placePinned() {
+        const table = root.table
+        if (!table || !table.arranged || table.pinnedShown === 0)
+            return
+        for (let i = 0; i < cells.children.length; ++i) {
+            const cell = cells.children[i]
+            const place = cell.measuredIndex >= 0 ? table.windowPlaces[cell.measuredIndex] : undefined
+            if (place === undefined || place >= table.pinnedShown)
+                continue
+            const entry = table.windowColumns[place]
+            const room = Math.max(0, entry.width - 2 * Theme.tableCellPaddingX)
+            cell.x = table.lead + entry.offset + table.scrollX + Theme.tableCellPaddingX + (room - cell.width) *
+                     (cell.fillsAcross === false ? (root.columns[cell.measuredIndex].align === 3 ? 1
+                                                    : root.columns[cell.measuredIndex].align === 2 ? 0.5 : 0) : 0)
+        }
+        if (root.loadMarks.some(mark => mark.pinned))
+            root.place()
+    }
+    Connections {
+        target: root.table
+        enabled: root.table !== null && root.table.sourceRows
+        function onScrollXChanged() {
+            root.placePinned()
+        }
+        function onWindowColumnsChanged() {
+            root.place()
+        }
+    }
+    onHeightChanged: {
+        if (root.table && root.table.sourceRows)
+            root.place()
     }
 
     Connections {
@@ -413,6 +538,48 @@ MorphWidget {
         id: cells
         anchors.fill: parent
         onChildrenChanged: root.place()
+    }
+
+    // A cell not loaded draws a rounded bar; one that failed, an error mark; each 3 em wide in its column's alignment.
+    Repeater {
+        model: root.loadMarks
+        delegate: Item {
+            id: mark
+            required property var modelData
+            readonly property real markWidth: Math.min(3 * Theme.bodyFont.pixelSize, modelData.width)
+            objectName: modelData.load === 2 ? "failedMark" : "unloadedMark"
+            x: modelData.x + (modelData.align === 3 ? modelData.width - markWidth
+                                                    : modelData.align === 2 ? (modelData.width - markWidth) / 2 : 0)
+            z: 2
+            width: markWidth
+            height: root.height
+            Rectangle {
+                visible: mark.modelData.load === 1
+                anchors.verticalCenter: parent.verticalCenter
+                width: parent.width
+                height: Math.round(Theme.bodyFont.pixelSize * 0.6)
+                radius: height / 2
+                color: root.scheme.muted
+                opacity: 0.35
+            }
+            Text {
+                id: failedText
+                visible: mark.modelData.load === 2
+                anchors.verticalCenter: parent.verticalCenter
+                width: parent.width
+                horizontalAlignment: Text.AlignHCenter
+                text: "!"
+                font: Theme.strongFont
+                color: root.scheme.error
+                Accessible.role: Accessible.StaticText
+                Accessible.name: "Could not be loaded"
+                HoverHandler {
+                    id: failedHover
+                }
+                ToolTip.visible: failedHover.hovered
+                ToolTip.text: "Could not be loaded"
+            }
+        }
     }
 
     // The row's select box: checked while the row is selected, and a click on it is a Ctrl-click on the row. It shows
