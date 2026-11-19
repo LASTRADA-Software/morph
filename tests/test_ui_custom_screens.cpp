@@ -615,9 +615,9 @@ TEST_CASE("custom screens: opensWithoutParams follows the base's params", "[ui][
 
 TEST_CASE("custom screens: a client that finds no custom screens model is told it is unknown",
           "[ui][custom-screens][remote]") {
-    morph::exec::ThreadPoolExecutor pool{1};
     morph::model::detail::ActionDispatcher dispatcher;
     morph::model::detail::ModelRegistryFactory registry;
+    morph::exec::ThreadPoolExecutor pool{1};
     auto const authorizer = std::make_shared<uiservice::RuleAuthorizer>();
     auto const server = std::make_shared<morph::backend::RemoteServer>(pool, authorizer, dispatcher, registry);
     std::promise<std::string> replied;

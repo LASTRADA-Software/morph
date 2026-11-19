@@ -308,9 +308,9 @@ TEST_CASE("wire::makeRegister: contextKey defaults to empty", "[action_log][phas
 
 TEST_CASE("RemoteServer ServerConfig::logProvider: attaches a log to the server-created holder",
           "[action_log][phase2][remote]") {
-    morph::exec::ThreadPoolExecutor pool{2};
     morph::model::detail::ModelRegistryFactory registry;
     morph::model::detail::ActionDispatcher dispatcher;
+    morph::exec::ThreadPoolExecutor pool{2};
     registry.registerModel<P2Model>("P2_Model");
     dispatcher.registerAction<P2Model, P2Deposit>("P2_Model", "P2_Deposit");
 
@@ -350,9 +350,9 @@ TEST_CASE("RemoteServer ServerConfig::logProvider: attaches a log to the server-
 
 TEST_CASE("RemoteServer ServerConfig::logProvider: not consulted when contextKey is empty",
           "[action_log][phase2][remote]") {
-    morph::exec::ThreadPoolExecutor pool{2};
     morph::model::detail::ModelRegistryFactory registry;
     morph::model::detail::ActionDispatcher dispatcher;
+    morph::exec::ThreadPoolExecutor pool{2};
     registry.registerModel<P2Model>("P2_Model");
 
     bool providerCalled = false;
@@ -370,9 +370,9 @@ TEST_CASE("RemoteServer ServerConfig::logProvider: not consulted when contextKey
 
 TEST_CASE("RemoteServer ServerConfig::logProvider: a provider returning nullptr attaches no log",
           "[action_log][phase2][remote]") {
-    morph::exec::ThreadPoolExecutor pool{2};
     morph::model::detail::ModelRegistryFactory registry;
     morph::model::detail::ActionDispatcher dispatcher;
+    morph::exec::ThreadPoolExecutor pool{2};
     registry.registerModel<P2Model>("P2_Model");
     dispatcher.registerAction<P2Model, P2Deposit>("P2_Model", "P2_Deposit");
 
@@ -406,10 +406,10 @@ TEST_CASE("RemoteServer ServerConfig::logProvider: a provider returning nullptr 
 
 TEST_CASE("End-to-end: HandlerBinding::contextKey reaches the server's LogProvider via SimulatedRemoteBackend",
           "[action_log][phase2][remote]") {
-    morph::exec::ThreadPoolExecutor pool{2};
     morph::exec::MainThreadExecutor cbExec;
     morph::model::detail::ModelRegistryFactory registry;
     morph::model::detail::ActionDispatcher dispatcher;
+    morph::exec::ThreadPoolExecutor pool{2};
     registry.registerModel<P2Model>("P2_Model");
     dispatcher.registerAction<P2Model, P2Deposit>("P2_Model", "P2_Deposit");
 

@@ -122,9 +122,9 @@ struct Server {
         return send(request);
     }
 
-    morph::exec::ThreadPoolExecutor pool{2};
     morph::model::detail::ActionDispatcher dispatcher;
     morph::model::detail::ModelRegistryFactory registry;
+    morph::exec::ThreadPoolExecutor pool{2};
     std::shared_ptr<RecordingStore> store = std::make_shared<RecordingStore>(pool);
     std::shared_ptr<morph::backend::RemoteServer> server;
     std::uint64_t instance = 0;

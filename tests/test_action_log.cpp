@@ -832,11 +832,11 @@ TEST_CASE("Bridge/LocalBackend: local-mode execution without an attached log doe
 
 TEST_CASE("SimulatedRemoteBackend: client-side factory (and its attached log) is never invoked",
           "[action_log][remote]") {
-    morph::exec::ThreadPoolExecutor pool{2};
     morph::exec::MainThreadExecutor cbExec;
 
     morph::model::detail::ModelRegistryFactory serverRegistry;
     morph::model::detail::ActionDispatcher serverDispatcher;
+    morph::exec::ThreadPoolExecutor pool{2};
     serverRegistry.registerModel<ALModel>("AL_Model");
     serverDispatcher.registerAction<ALModel, ALDeposit>("AL_Model", "AL_Deposit");
 
