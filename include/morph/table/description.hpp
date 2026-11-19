@@ -903,10 +903,16 @@ public:
     /// @param reply The keyed reply.
     /// @return The view rows replaced, ascending; empty when the reply was ignored or the window invalidated.
     std::vector<std::int64_t> patch(RowsFetch const& fetch, GenericPage reply) {
-        return patchRows(fetch, replyOf(reply), [&reply](Core::Held& page, std::size_t at, std::size_t from) {
-            std::erase_if(page.content.cells, [&reply](auto const& entry) {
-                return std::ranges::find(reply.columns, entry.first) == reply.columns.end();
-            });
+        // The columns a page holds that the reply lacks go once per page, not once per row.
+        Core::Held const* trimmed = nullptr;
+        return patchRows(fetch, replyOf(reply), [&reply, &trimmed](Core::Held& page, std::size_t at,
+                                                                   std::size_t from) {
+            if (trimmed != &page) {
+                std::erase_if(page.content.cells, [&reply](auto const& entry) {
+                    return std::ranges::find(reply.columns, entry.first) == reply.columns.end();
+                });
+                trimmed = &page;
+            }
             auto& cells = reply.rows[from];
             for (std::size_t column = 0; column < reply.columns.size() && column < cells.size(); ++column) {
                 auto const found = page.content.cells.find(reply.columns[column]);
@@ -960,16 +966,32 @@ private:
                                    .indices = page.indices};
     }
 
-    // Over the bound, the columns least recently named by `visible` go first.
+    // Over the bound, the columns least recently named by `visible` go first, and a column shown now never goes:
+    // dropping one would make the next `visible` fetch it again, and the next accept drop it again. `visible`
+    // takes at most `maxColumns` columns, so the columns not shown always cover the excess.
     void limitColumns(detail::GenericWindowCells& content) const {
-        while (content.cells.size() > maxColumns()) {
-            auto oldest = content.cells.begin();
-            for (auto at = content.cells.begin(); at != content.cells.end(); ++at) {
-                if (namedAt(at->first) < namedAt(oldest->first)) {
-                    oldest = at;
-                }
+        if (content.cells.size() <= maxColumns()) {
+            return;
+        }
+        std::vector<std::pair<std::uint64_t, std::string_view>> candidates;
+        candidates.reserve(content.cells.size());
+        for (auto const& [column, values] : content.cells) {
+            if (!shownNow(column)) {
+                candidates.emplace_back(namedAt(column), column);
             }
-            content.cells.erase(oldest);
+        }
+        std::ranges::sort(candidates);
+        auto excess = content.cells.size() - maxColumns();
+        std::vector<std::string> dropped;
+        for (auto const& candidate : candidates) {
+            if (excess == 0) {
+                break;
+            }
+            dropped.emplace_back(candidate.second);
+            --excess;
+        }
+        for (auto const& column : dropped) {
+            content.cells.erase(column);
         }
     }
 };

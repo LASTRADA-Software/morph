@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include <algorithm>
+#include <array>
 #include <charconv>
 #include <chrono>
 #include <cstddef>
@@ -28,6 +29,7 @@
 #include <morph/reactive/scheduler.hpp>
 #include <morph/reactive/scope.hpp>
 #include <morph/reactive/signal.hpp>
+#include <morph/table/data_source.hpp>
 #include <morph/ui/backend.hpp>
 #include <morph/ui/chart_scale.hpp>
 #include <morph/ui/dev_tools.hpp>
@@ -157,6 +159,32 @@ struct WatchRegistration {
     /// @brief The record.
     std::string record;
 };
+
+}  // namespace detail
+
+namespace detail {
+
+namespace {
+
+// The shortest text that reads back as @p number, in fixed notation: `0.0001`, never `1e-04`, so that every value
+// a decimal can hold is read as one. The buffer holds the longest fixed form of a double (about 330 characters).
+Value decimalOrText(double number) {
+    std::array<char, 512> buffer{};
+    auto const [end, error] = std::to_chars(buffer.data(), buffer.data() + buffer.size(), number,
+                                            std::chars_format::fixed);
+    if (error == std::errc{}) {
+        if (auto const decimal = ::morph::table::parseDecimal(std::string_view{buffer.data(), end})) {
+            return Value{Decimal{*decimal}};
+        }
+    }
+    return Value{std::format("{}", number)};
+}
+
+}  // namespace
+
+std::expected<Value, std::string> tableValueFromJson(Json const& json) {
+    return structuralFromJson(json, &decimalOrText);
+}
 
 }  // namespace detail
 

@@ -2103,12 +2103,16 @@ public:
     /// fetch in flight. A page not held, or held stale, is fetched whole with @p columns. A page held, current and
     /// cut short is fetched from where it ends. A page held, current and complete that lacks some of @p columns
     /// is fetched again for the same rows, naming only those columns. Each returned fetch is in flight.
+    ///
+    /// Only the first `maxColumns` of @p columns are taken: a page holds at most that many, and never drops one
+    /// the latest call named, so a wider set would be dropped and fetched again without end.
     /// @param first   First visible view row.
     /// @param count   Visible rows.
     /// @param columns The columns shown, in order; empty asks for every column.
     /// @return The fetches to send.
     [[nodiscard]] std::vector<PageFetch> visibleColumns(std::int64_t first, std::int64_t count,
                                                         std::span<std::string const> columns) {
+        columns = columns.first(std::min(columns.size(), _maxColumns));
         _visibleFirst = std::max<std::int64_t>(first, 0);
         _visibleCount = std::max<std::int64_t>(count, 0);
         _columns.assign(columns.begin(), columns.end());
@@ -2310,6 +2314,11 @@ public:
     /// @return `true` while a page is awaited.
     [[nodiscard]] bool pending() const noexcept { return !_inFlight.empty(); }
 
+    /// @brief How many held keys the window remembers a keyed fetch for; never more than the rows it holds once a
+    ///        reply has been accepted, whatever the number of events.
+    /// @return The count.
+    [[nodiscard]] std::size_t keysRemembered() const noexcept { return _latestAsked.size(); }
+
 protected:
     /// @brief One held page.
     struct Held {
@@ -2378,9 +2387,14 @@ protected:
         _error.reset();
         if (_keyed && reply.keys.size() != reply.rows) {
             invalidate();
+            _error = TableError{.code = TableErrorCode::InvalidValue,
+                                .column = {},
+                                .message = "a page reply of " + std::to_string(reply.keys.size()) + " keys and " +
+                                           std::to_string(reply.rows) + " rows"};
             return true;
         }
         bool const replyEmpty = reply.rows == 0;
+        bool stored = false;
         if (kind == WindowFetchKind::Columns) {
             auto const held = _pages.find(index);
             if (held != _pages.end()) {
@@ -2398,7 +2412,7 @@ protected:
             fill(held.content, kind, take);
             appendRows(held, reply, take);
             held.stale = fetch.revision != _revision;
-            completeIf(index, held, replyEmpty);
+            stored = true;
         } else {
             auto const held = _pages.find(index);
             if (held != _pages.end() && fetch.request.offset == (index * _pageSize) + held->second.rows) {
@@ -2406,14 +2420,22 @@ protected:
                 auto const take = std::min(room, reply.rows);
                 fill(held->second.content, kind, take);
                 appendRows(held->second, reply, take);
-                completeIf(index, held->second, replyEmpty);
+                stored = true;
             }
         }
         if (fetch.revision >= _totalsRevision) {
             adoptTotals(index, fetch.revision, reply);
         }
+        // After the totals: the reply's own total decides whether a page it cut short is complete, so the first page
+        // of a short view is complete at once, with no fetch for a rest that does not exist.
+        if (stored) {
+            if (auto const held = _pages.find(index); held != _pages.end()) {
+                completeIf(index, held->second, replyEmpty);
+            }
+        }
         dropPastTotal();
         evict();
+        forgetUnheldKeys();
         return true;
     }
 
@@ -2515,6 +2537,13 @@ protected:
         return &found->second;
     }
 
+    /// @brief Whether the latest `visible` call named a column, so a page must keep it.
+    /// @param column The column.
+    /// @return `true` when it is among the columns shown now.
+    [[nodiscard]] bool shownNow(std::string_view column) const {
+        return std::ranges::find(_columns, column) != _columns.end();
+    }
+
     /// @brief The latest `visible` call that named a column.
     /// @param column The column.
     /// @return The call's stamp; 0 when no call named it.
@@ -2610,6 +2639,18 @@ private:
         }
     }
 
+    // A key that left the held pages needs no memory of the fetch that last asked for it.
+    void forgetUnheldKeys() {
+        if (_latestAsked.empty()) {
+            return;
+        }
+        std::unordered_set<RowId> heldKeys;
+        for (auto const& [page, held] : _pages) {
+            heldKeys.insert(held.keys.begin(), held.keys.end());
+        }
+        std::erase_if(_latestAsked, [&](auto const& entry) { return !heldKeys.contains(entry.first); });
+    }
+
     // A view that shrank holds nothing past its end, and awaits no fetch there: a page past an exact total is
     // never fetched again, so a row held there would stay shown, and its key would be a probe no reply answers.
     void dropPastTotal() {
@@ -2680,9 +2721,18 @@ private:
             invalidate();
             return RefreshPlan{.kind = Refresh::Pages, .rows = {}};
         }
+        // Only a held key is remembered: an older reply's row for it must not overwrite the newer one, and its
+        // absence from the latest reply means it left the view. A key the window does not hold needs no memory, since
+        // a row for it is either outside the held pages (ignored) or inside them (the window refetches).
         auto const sequence = ++_sequence;
+        std::unordered_set<RowId> heldKeys;
+        for (auto const& [page, held] : _pages) {
+            heldKeys.insert(held.keys.begin(), held.keys.end());
+        }
         for (auto const& key : asked) {
-            _latestAsked.insert_or_assign(key, sequence);
+            if (heldKeys.contains(key)) {
+                _latestAsked.insert_or_assign(key, sequence);
+            }
         }
         _latestKeyed = sequence;
         return RefreshPlan{.kind = Refresh::Rows,

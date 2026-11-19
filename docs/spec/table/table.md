@@ -1254,7 +1254,9 @@ The window has no clock and sends nothing: it returns what to fetch, and `Window
 
 - A held page stores its cells by column, so a column that scrolls into the column window is added to the page
   and one that has left it is dropped without touching the others. A window holds at most `maxColumns` columns
-  a page; over that, the columns farthest from the column window go first.
+  a page; over that, the columns farthest from the column window go first, and never a column the latest `visible`
+  named. `visible` takes the first `maxColumns` of the columns it is given, so a wider set cannot be dropped and
+  fetched again without end.
 - `visible(first, count, columns)` covers the visible rows and one page either side. For a page it does not
   hold, or holds stale, it returns a fetch of the whole page with `columns`. For a page it holds complete but
   without some of `columns`, it returns a fetch of the same rows naming only the columns the page lacks. One
@@ -1312,10 +1314,12 @@ requested key reports; or brings an unheld key into a held page, which its view 
 total. A check that fires wrongly, because a keyed reply and a page reply crossed, costs one page fetch and
 ends there, since the refetched page agrees with itself.
 
-Each `RowsFetch` has a sequence, and the window remembers the latest sequence that asked for each key: a reply
+Each `RowsFetch` has a sequence, and the window remembers the latest sequence that asked for each held key: a reply
 row whose key a later fetch has asked for is ignored, missing or not, so an out-of-order reply cannot put older
 values over newer ones. A reply of an older query is ignored. `patch` never changes which rows are held or
-their order.
+their order. Only a held key is remembered, and it is forgotten when it leaves the held pages, so the memory
+never outgrows the held rows: a row for a key the window does not hold is ignored outside the held pages and
+refetched inside them, whatever its sequence.
 
 ### `invalidate()`
 
@@ -3005,7 +3009,7 @@ spread reflects. A row marked *not yet measured* says why; its figure is taken w
 | C1 | 2c | In process, not over a socket (`"table benchmark: C1 C2 C3 many requests through an in-process server"`): fifty `Table.wide` requests on fifty instances, sorted on the `recipe` column `d000` at 100,000 rows, sent together after an arrival on the level: **355.6 ms** from the first send to the last reply (4,484 ms before the level cache's order want was made cheap); one view computed, 7 requests waited for it, the other 42 found it computed. Measured apart (`"table benchmark: C1 where a request's time goes"`): the table function, its description and the pinned snapshot 0.230 ms; a whole `answerQuery` from the cached view 1.05 ms sorted on the `recipe` column and 1.07 ms on a base column, since a view's order keys are a kept set that the level recognises and skips while nothing changed (an order `want` of 100,000 held keys as a fresh list, the path a changed level takes, 23.2 ms); the one sort after the arrival is S7's first request, 75 ms. The rest of the 355.6 ms is not measured apart. The server strand's longest task is not measured: it needs the socket benchmark (`[.benchmark][net]`, POSIX only, not run) | A, Release | 2026-11-19 |
 | C2 | 2c | In process: twenty distinct sorts of `wide` one after another, 21.2 views computed a second | A, Release | 2026-11-19 |
 | C3 | 2c | In process: fifty sorts against a bound of ten 100,000-row views (4,000,000 bytes): 4,000,000 bytes held, 41 evictions (gate: held within the bound) | A, Release | 2026-11-19 |
-| K1 | 2d | `PageWindow<GenericRow>::accept` of a whole 200 × 300 page of integer cells, into a fresh window: 3.05 ms (2.81–3.69), **above the 0.1 ms budget (P)**. Inferred from the code, not measured apart: the page is stored by column, so each of the 60,000 cells is moved into its column's vector, and the reply's 200 row vectors are freed; the cells are moved, never copied | A, Release | 2026-11-19 |
+| K1 | 2d | `PageWindow<GenericRow>::accept` of a whole 200 × 300 page of integer cells, into a fresh window built with `maxColumns` 300 (at the default of 96 a page holds no 300 columns): 3.05 ms (2.81–3.69), **above the 0.1 ms budget (P)**. Inferred from the code, not measured apart: the page is stored by column, so each of the 60,000 cells is moved into its column's vector, and the reply's 200 row vectors are freed; the cells are moved, never copied | A, Release | 2026-11-19 |
 | K2 | 2d | `refresh` of 900 event keys against 1,600 held rows in eight runs (pages 0, 2, …, 14 of 200): 0.102 ms (0.090–0.194), within the 0.5 ms budget; the fetch holds the 900 keys and eight probes (gate `"window: a refresh of 900 keys over eight runs asks 908"`) | A, Release | 2026-11-19 |
 | K3 | 2d | `patch` of 200 rows and the seven other runs' probes, one column: 0.325 ms (0.306–0.374), just above the 0.3 ms budget (P). It builds an index of the 1,600 held keys for each patch | A, Release | 2026-11-19 |
 | K4 | 2d | Debug build only (`cl-debug`), so not comparable with the budgets: a 4,096-key event against an entry of 200 rows, 86.4 ms (74.6–101.4); storing a decoded 200 × 300 page of fractional numbers in an opaque entry, 708.1 ms (623.3–759.6). The Release figure is *not yet measured*: a Release build of `morph_tests` did not fit the session; the case is `"interpreter bench: K4 the query cache under an event and a wide page"` | A, Debug | 2026-11-19 |

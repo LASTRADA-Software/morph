@@ -190,7 +190,8 @@ canonical body is the body's JSON with record fields in name order.
       a member says about rows by position.
     - **An opaque entry is both,** always: its rows cannot be found by key. Its reply is read with
       `detail::tableValueFromJson`, which keeps a JSON number with a fraction or an exponent as the decimal its
-      shortest text spells (`table::parseDecimal`), or as that text where no decimal holds it; a page's
+      shortest round-trip text in fixed notation spells (`table::parseDecimal`; `0.0001` stays a decimal), or as
+      its shortest text where no decimal holds it; a page's
       `Number` cells are such numbers, and the strict `valueFromJson` would refuse the whole page. Every other
       entry keeps the strict rule.
 - **Reading and watching without an entry.** A page window's fetches are not queries.

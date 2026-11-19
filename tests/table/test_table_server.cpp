@@ -14,6 +14,9 @@
 #include <initializer_list>
 #include <limits>
 #include <memory>
+#include <morph/core/bridge.hpp>
+#include <morph/core/effects.hpp>
+#include <morph/core/records.hpp>
 #include <morph/forms/choice.hpp>
 #include <morph/forms/widget_hints.hpp>
 #include <morph/table/description.hpp>
@@ -21,6 +24,7 @@
 #include <morph/util/tagged.hpp>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <variant>
 #include <vector>
@@ -470,7 +474,8 @@ TEST_CASE("window: a column scrolled in is fetched for held pages and merged by 
     CHECK_FALSE(window.holds(13, "b"));
 }
 
-// Mutation: dropping the most recently named column first.
+// The columns shown now are kept, so only `a` can go; which column goes first among the ones not shown is held by
+// "window: of the columns not shown, the one named longest ago goes first", and its mutation is named there.
 TEST_CASE("window: over maxColumns the columns farthest from view go first", "[table][window]") {
     Win window{10, 8, 1000, 2};
     std::vector<std::string> const ab{"a", "b"};
@@ -766,4 +771,118 @@ TEST_CASE("window: a refresh of 900 keys over eight runs asks 908", "[table][win
     auto const plan = window.refresh(event);
     REQUIRE(plan.kind == Refresh::Rows);
     CHECK(plan.rows.keys.size() == 908);
+}
+
+// Mutations: the visible set not clamped to maxColumns (the first fetch names three columns); the visible set not
+// clamped and the shown columns not kept (each accept drops columns the next `visible` fetches again, for ever).
+TEST_CASE("window: a visible set wider than maxColumns is clamped and comes to rest", "[table][window]") {
+    Win window{10, 8, 1000, 2};
+    std::vector<std::string> const abc{"a", "b", "c"};
+    auto fetches = window.visible(0, 5, abc);
+    REQUIRE(fetches.size() == 2);  // pages 0 and 1: no total is known yet
+    CHECK(fetches[0].columns == std::vector<std::string>{"a", "b"});
+    for (int round = 0; round < 6 && !fetches.empty(); ++round) {
+        for (auto const& fetch : fetches) {
+            // Page 1's reply is ignored once page 0's total of 10 drops it.
+            static_cast<void>(window.accept(
+                fetch, pageOf(fetch.request.offset, range(fetch.request.offset, 10), fetch.columns, 10)));
+        }
+        fetches = window.visible(0, 5, abc);
+    }
+    CHECK(fetches.empty());
+    CHECK(window.holds(0, "a"));
+    CHECK(window.holds(0, "b"));
+    CHECK_FALSE(window.holds(0, "c"));
+}
+
+// Mutations: every asked key remembered, held or not (the count grows by one an event); keys that left the held
+// pages never forgotten (the count stays at 20 after the pages hold other keys).
+TEST_CASE("window: the keys it remembers stay within the rows it holds", "[table][window]") {
+    Win window{10, 8};
+    std::vector<std::string> const cols{"a"};
+    holdTwoPages(window, cols, 1'000'000);
+    for (std::int64_t inserted = 0; inserted < 5'000; ++inserted) {
+        auto const plan = window.refresh(ids({500'000 + inserted, 3}));
+        REQUIRE(plan.kind == Refresh::Rows);
+        static_cast<void>(window.patch(plan.rows, keyedOf({{0, 0}, {3, 3}}, cols, 1'000'000)));
+    }
+    CHECK(window.keysRemembered() <= 20);
+    auto const all = window.refresh(ids({0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19}));
+    REQUIRE(all.kind == Refresh::Rows);
+    CHECK(window.keysRemembered() == 20);
+    window.invalidate();
+    for (auto const& fetch : window.visible(0, 5, cols)) {
+        REQUIRE(window.accept(fetch, pageOf(fetch.request.offset, range(1'000 + fetch.request.offset, 10), cols,
+                                            1'000'000)));
+    }
+    CHECK(window.keysRemembered() == 0);
+}
+
+// ── A page's members in a registered action's records ───────────────────────
+
+namespace tserver {
+
+struct PagedRow {
+    std::int64_t code = 0;
+};
+
+struct ListPage {
+    int limit{};
+};
+
+struct ListPages {
+    int limit{};
+};
+
+struct PagedModel {
+    Page<PagedRow> execute(ListPage const& /*action*/) { return {}; }
+    std::vector<Page<PagedRow>> execute(ListPages const& /*action*/) { return {}; }
+};
+
+}  // namespace tserver
+
+BRIDGE_REGISTER_RECORD(tserver::PagedRow, "T7_PagedRow", morph::record::key<&tserver::PagedRow::code>)
+BRIDGE_REGISTER_MODEL(tserver::PagedModel, "T7_PagedModel")
+BRIDGE_REGISTER_ACTION(tserver::PagedModel, tserver::ListPage, "T7_ListPage")
+BRIDGE_REGISTER_ACTION(tserver::PagedModel, tserver::ListPages, "T7_ListPages")
+
+// Mutation: resolution giving the records nothing from the holders above them (`open` and `partial` empty).
+TEST_CASE("table: a registered page action's record is open and partial", "[table][server]") {
+    for (std::string_view const action : {"T7_ListPage", "T7_ListPages"}) {
+        INFO(action);
+        auto const records = morph::effects::recordsOf(action);
+        REQUIRE(records.size() == 1);
+        CHECK(records[0].record == "T7_PagedRow");
+        CHECK(records[0].keyField == "code");
+        CHECK(records[0].paths == std::vector<std::string>{"rows"});
+        CHECK(records[0].open == std::vector<std::string>{"awaiting", "distinct"});
+        CHECK(records[0].partial == std::vector<std::string>{"unloadedRows"});
+        CHECK_FALSE(records[0].opaque);
+    }
+}
+
+// Mutation: dropping the most recently named of the columns not shown (`b` goes, `a` stays).
+TEST_CASE("window: of the columns not shown, the one named longest ago goes first", "[table][window]") {
+    Win window{10, 8, 1000, 2};
+    for (std::string const column : {"a", "b", "c"}) {
+        std::vector<std::string> const shown{column};
+        for (auto const& fetch : window.visible(0, 5, shown)) {
+            static_cast<void>(window.accept(fetch, pageOf(fetch.request.offset, range(fetch.request.offset, 10),
+                                                          fetch.columns, 10)));
+        }
+    }
+    CHECK(window.holds(0, "c"));
+    CHECK(window.holds(0, "b"));
+    CHECK_FALSE(window.holds(0, "a"));
+}
+
+// Mutation: a page's completeness decided before the reply's total is adopted (the short first page is not
+// complete, so its rest is fetched).
+TEST_CASE("window: a short first page that reaches its total completes the window", "[table][window]") {
+    PageWindow<int> window{10, 8};
+    auto const fetches = window.visible(0, 5);
+    REQUIRE(fetches.size() == 2);
+    REQUIRE(window.accept(fetches[0], Page<int>{.rows = std::vector<int>(4, 1), .total = 4, .offset = 0}));
+    CHECK_FALSE(window.pending());  // page 1 lies past the total
+    CHECK(window.visible(0, 5).empty());
 }

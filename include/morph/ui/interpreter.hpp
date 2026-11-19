@@ -94,6 +94,8 @@ struct CallOptions {
     bool queueOffline = false;
     /// @brief The caller's cancel: a stop request sends the wire's `cancel` for the call where the server takes one,
     ///        and rejects the call with `core::async::OperationCancelled`. A token with no stop state sends nothing.
+    ///        An `evaluate` call ignores it, and so does a call a `QueueingDispatcher` replays. Holding a stop token,
+    ///        `CallOptions` is not a literal type, and a channel built against it before it had one must recompile.
     ::core::async::StopToken stop;
 };
 
@@ -595,7 +597,9 @@ struct WatchRegistry;
 /// hearing its changes, while any copy lives. When the last copy dies the handler is removed and the record is
 /// counted out, which sends an `unwatch` when nothing else needs it. A `Completion` hands its value to a handler as
 /// `const&`, so a caller that keeps the watch copies the holder there and lets the completion go. A holder that
-/// outlives its session releases nothing. A default-constructed holder holds nothing.
+/// outlives its session releases nothing. A default-constructed holder holds nothing. The last copy must die on the
+/// runtime's owner, since releasing the watch changes the session's watch set. A session destroyed while a
+/// `watchRecord` waits for its answer drops that completion unsettled.
 class MORPH_API WatchHolder {
 public:
     /// @brief A holder of nothing.
