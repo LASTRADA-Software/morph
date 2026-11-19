@@ -995,6 +995,13 @@ public:
     ///        connection was down is read again.
     void reconnected();
 
+    /// @brief Hears every reconnect and `resync`, after the watch set is sent and the cache marked: what a reader
+    ///        that holds rows outside the cache and watches no record (a page window over an action that holds none)
+    ///        refetches by.
+    /// @param handler What hears it, on the runtime's owner.
+    /// @return The holder: the handler is called while a copy of it lives.
+    [[nodiscard]] std::shared_ptr<void> onReconnected(std::function<void()> handler);
+
     /// @brief The topics the cache holds now: every record an entry holds, every extra watch, and the keyed shared
     ///        instance of every entry whose action holds no record. What `reconnected` sends.
     /// @return The topics, records and instances each in name order; `replace` is false.
@@ -1157,6 +1164,7 @@ private:
     reactive::Signal<std::set<std::string, std::less<>>> _permitted;
     std::map<std::string, int, std::less<>> _recordRefs;
     std::shared_ptr<detail::WatchRegistry> _watchRegistry;
+    std::vector<std::weak_ptr<std::function<void()>>> _reconnectListeners;
     std::map<std::pair<std::string, std::string>, int> _instanceRefs;
     std::set<std::string, std::less<>> _watchRecords;
     /// The records watched for something other than the cache (`addExtraWatch`).
@@ -2349,6 +2357,9 @@ private:
     void wireModelTable(ElementState& element);
     /// Takes the description its query holds now: reports the filters a new revision drops, then hands it to the rows.
     void describedTable(ElementState& element, Value const& described);
+    /// Applies the filter a typed list action's table held while its kinds waited for the first reply: a stored
+    /// one fitted to those kinds, each filter it drops reported; another set, or reported as refused.
+    void inferredTable(ElementState& element);
     /// Applies a model-backed table's stored state once its load completed, or reports why it could not.
     void storedTableState(ElementState& element, std::optional<std::string> const& json, std::string const& failure);
     /// A user's gesture on a model-backed table: the stored state no longer replaces the arrangement, and the

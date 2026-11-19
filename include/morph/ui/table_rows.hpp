@@ -1828,8 +1828,8 @@ struct JsonDecimal {
 
 /// @brief A member as a cell of a column of @p kind.
 ///
-/// `null` is an empty cell. An integer is an `int64`, a `Rational` of 0 places under `Decimal` and a `double` under
-/// `Number`; a fractional number a `double`; a string its text, under `Date` its days when it is `YYYY-MM-DD` and
+/// `null` is an empty cell. An integer is an `int64` (beyond its range a `double`), a `Rational` of 0 places under
+/// `Decimal` and a `double` under `Number`; a fractional number a `double`; a string its text, under `Date` its days when it is `YYYY-MM-DD` and
 /// under `DateTime` its seconds rounded down when it is ISO-8601; `{num, den, dp}` its `Rational`; with a `unit` under
 /// `Measure` a measure in @p units' number for the unit (`kUnknownUnit`, invalid, when @p units lacks it). Anything
 /// else is the member's JSON text, which only a `Text` column reads as valid.
@@ -1859,6 +1859,9 @@ struct JsonDecimal {
     }
     if (auto const* const real = member.get_if<double>()) {
         return table::Cell{*real};
+    }
+    if (auto const* const large = member.get_if<std::uint64_t>()) {
+        return table::Cell{static_cast<double>(*large)};
     }
     if (auto const* const text = member.get_if<std::string>()) {
         table::IsoDateParser const parser;
@@ -1982,6 +1985,43 @@ struct JsonDecimal {
     return page;
 }
 
+/// @brief The units the `Measure` columns' members of @p rows name that @p units does not have, each its own
+///        canonical unit in a dimension named by its id, in the order first met.
+/// @param rows        The rows.
+/// @param description The description: its `Measure` columns.
+/// @param units       The registry the description's units are in; null has none.
+/// @return The units to list.
+[[nodiscard]] inline std::vector<table::UnitInfo> unlistedUnits(std::span<glz::generic_u64 const> rows,
+                                                                table::TableDescription const& description,
+                                                                table::UnitRegistry const* units) {
+    std::vector<table::UnitInfo> out;
+    for (auto const& column : description.columns) {
+        if (column.info.kind != table::ColumnKind::Measure) {
+            continue;
+        }
+        for (auto const& row : rows) {
+            auto const* const object = row.get_if<glz::generic_u64::object_t>();
+            auto const found = object == nullptr ? std::optional<glz::generic_u64::object_t::const_iterator>{}
+                                                 : std::optional{object->find(column.info.id)};
+            if (!found || *found == object->end()) {
+                continue;
+            }
+            auto const decimal = jsonDecimal((*found)->second);
+            if (!decimal || decimal->unit == nullptr || decimal->unit->empty() ||
+                (units != nullptr && units->find(*decimal->unit)) ||
+                std::ranges::contains(out, *decimal->unit, &table::UnitInfo::id)) {
+                continue;
+            }
+            out.push_back(table::UnitInfo{.id = *decimal->unit,
+                                          .symbol = *decimal->unit,
+                                          .dimension = *decimal->unit,
+                                          .toBase = math::Rational{1, math::DecimalPlaces{0}},
+                                          .decimals = decimal->amount.decimalPlaces.value});
+        }
+    }
+    return out;
+}
+
 /// @brief Reads a typed list action's reply text as a DOM.
 /// @param json The reply.
 /// @return The DOM, or `InvalidValue` when the text is not a page.
@@ -2041,7 +2081,8 @@ struct WindowRowsOptions {
     ///        what that reply made it for the rows' life.
     std::vector<std::string> inferKinds;
     /// @brief The records watched for the window's life: a model's table its `<model type>.<table>`, a typed list
-    ///        action each record its catalog entry names. None: the pages are fetched again only on `retry`.
+    ///        action each record its catalog entry names. None: a reconnect or `resync` of the session drops the
+    ///        pages, as a record watch's change of every row does.
     std::vector<std::string> records;
     /// @brief The node's `body`: the query's fixed part. A `query` record in it gives the query's other members.
     Value body;
@@ -2080,7 +2121,10 @@ struct WindowRowsStats {
 /// Over a typed list action (`WindowRowsOptions::action`) every fetch is that action, its body the node's body with
 /// the query in `queryMember`, and its reply is read with `readTypedPage`. The reply holds whole rows, so `visible`'s
 /// columns name what a row's record converts and not what is fetched. The columns of `inferKinds` take their kinds
-/// from the first reply that has rows, read once as a DOM for both the kinds and the page.
+/// from the first reply that has rows and reads, read once as a DOM for both the kinds and the page. A unit a
+/// `Measure` member names that the description does not list is added to it as its own canonical unit, so its cell
+/// is a measure in that unit and not an invalid one. A window that watches no record drops its pages on the
+/// session's reconnect and `resync`.
 ///
 /// Timing. A fetch for a page held, or next to a page held, goes at once, and so does the first page while none is
 /// held; any other waits until the first visible row has stayed in one page for `SessionOptions::tableSettle`.
@@ -2113,6 +2157,13 @@ public:
           _watched{_options.records.empty()},
           _unanswered{_options.records.size()},
           _inferring{!_options.action.empty() && !_options.inferKinds.empty()} {
+        // A record watch hears a reconnect as a change of every row; a window that watches none hears it here.
+        if (_options.records.empty()) {
+            _reconnect = _session->onReconnected(_scope.token().guard([this] {
+                _window.invalidate();
+                pump();
+            }));
+        }
         for (auto const& record : _options.records) {
             auto watching = _session->watchRecord(
                 record, _scope.token().guard([this](effects::RecordChange const& change) { heard(change); }));
@@ -2227,6 +2278,16 @@ public:
     ///        nothing of it; this is how a status line learns of it. Called after the rows took the event.
     /// @param handler The receiver; empty to stop receiving.
     void onStatus(std::function<void()> handler) { _onStatus = std::move(handler); }
+
+    /// @brief Whether the kinds of `WindowRowsOptions::inferKinds` still wait for the first reply with rows: until
+    ///        then those columns hold a `Text` placeholder, which a filter must not be compiled against.
+    /// @return `true` while they wait.
+    [[nodiscard]] bool inferring() const noexcept { return _inferring; }
+
+    /// @brief Sets what hears that the first reply with rows fixed the kinds of `inferKinds`, once. Called while
+    ///        that reply is being read, so the receiver posts what it does to the rows.
+    /// @param handler The receiver; empty to stop receiving.
+    void onInferred(std::function<void()> handler) { _onInferred = std::move(handler); }
 
     /// @brief Leaves the restoring state: the first query goes, with the sort and filter set meanwhile.
     void release() {
@@ -2845,11 +2906,43 @@ private:
         if (!dom) {
             return std::unexpected(std::move(dom.error()));
         }
-        if (_inferring && !dom->rows.empty()) {
-            _inferring = false;
-            inferKinds(dom->rows);
+        if (!_inferring || dom->rows.empty()) {
+            listUnits(dom->rows);
+            return detail::typedPageOf(*dom, *_description, _units.get());
         }
-        return detail::typedPageOf(*dom, *_description, _units.get());
+        // The kinds are fixed only by a reply that reads: one that does not leaves them to the next.
+        auto const before = _description->columns;
+        inferKinds(dom->rows);
+        listUnits(dom->rows);
+        auto page = detail::typedPageOf(*dom, *_description, _units.get());
+        if (!page) {
+            _description->columns = before;
+            for (auto const& column : before) {
+                _infos.insert_or_assign(column.info.id, column.info);
+            }
+            ++_columnsStamp;
+            return page;
+        }
+        _inferring = false;
+        if (_onInferred) {
+            _onInferred();
+        }
+        return page;
+    }
+
+    // A unit a `Measure` column's member names that the description does not list is its own canonical unit, in a
+    // dimension of its own named by its id, as an expression reads a unit missing from the screen's table. It is
+    // added after the units listed, so the numbers held cells carry keep their meaning.
+    void listUnits(std::span<glz::generic_u64 const> rows) {
+        auto const added = detail::unlistedUnits(rows, *_description, _units.get());
+        if (added.empty()) {
+            return;
+        }
+        _description->units.insert(_description->units.end(), added.begin(), added.end());
+        auto registry = table::registryOf(*_description);
+        _units = registry ? std::move(*registry) : nullptr;
+        _memo.clear();
+        ++_columnsStamp;
     }
 
     // The kinds the first rows give the columns `inferKinds` names. The description keeps its revision, so the
@@ -3179,6 +3272,8 @@ private:
     bool _inferring = false;
     bool _retry = false;
     std::vector<WatchHolder> _watches;
+    std::shared_ptr<void> _reconnect;
+    std::function<void()> _onInferred;
     std::optional<table::TableError> _error;
     std::int64_t _first = 0;
     std::int64_t _count = 0;

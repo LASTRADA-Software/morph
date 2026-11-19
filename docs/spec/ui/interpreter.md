@@ -631,11 +631,22 @@ keeps its operands' 0 places and still fills 0.29 of a bar.
   request and the query written into the request's one member the schema marks `x-table`
   (`tableQueryMembers`); the reply is a `Page<Row>` read with `readTypedPage`, which turns each row object into
   cells for every described column, whatever the query named. The rows watch each record the action's catalog
-  entry names, and with none they are fetched again only on Retry. A keyed refetch sends `keys` in the query
-  member; a reply with no `indices` for it drops the window's pages and costs a page refetch. Persisted state is
-  kept as a model's table's, its `table` the action's id. A node the loader would refuse (no member marked
-  `x-table`, or neither `columns` nor a view document) is reported at the table when a catalog that lacks the
-  lookup let it load.
+  entry names; a reconnect or `resync` of the session drops their pages whether they watch one or none
+  (`Session::onReconnected` for a window that watches none). A keyed refetch sends `keys` in the query member; a
+  reply with no `indices` for it drops the window's pages and costs a page refetch. **Units.** A `v-columns`
+  entry's `ExtUnits` is a unit (`unitAscii` its id, `unitUnicode` its symbol, `x-decimalPlaces` its places) and
+  each `x-unitAlternatives` entry another of its dimension (`num`/`den` its factor to the first), which the
+  description lists; such a `quantity` column is read as `Measure`. A unit a reply's member names that the
+  description does not list is its own canonical unit, in a dimension of its own, as an expression reads a unit
+  missing from the screen's table, so the cell is a measure in that unit and not an invalid one. **Filters on
+  inferred columns.** Until the first reply has fixed the inferred kinds, a filter (stored, literal or bound) is
+  held, not compiled against the placeholder: the first query goes without it, and once the kinds are fixed the
+  stored filter is fitted to them (each filter it drops is reported once, "the stored filter on `<id>` is not
+  applied: it does not apply to the column's kind") and the document's is set, or reported as refused; either is a
+  second query. Persisted state is kept as a model's table's, its `table` the action's id. A node the loader would
+  refuse (no member marked `x-table`, or neither `columns` nor a view document) is reported at the table when a
+  catalog that lacks the lookup let it load, and a `key` that is not one row field is reported and the view
+  document's `v-rowKey`, or `id`, is used.
 - **`boundary`** is a `Switch` over loading, error and children. It owns the queries its children read
   (found statically, through `let`s, not inside a nested boundary): loading while one has neither a
   value nor a failure, error when one failed with no value to keep, children otherwise. Inside `error`,

@@ -1021,6 +1021,8 @@ inline morph::testing::StepExecutor& storeExecutor() {
 struct ExtraActions {
     /// @brief The actions, by id.
     std::map<std::string, std::pair<std::string, ActionInfo>, std::less<>> extraActions;
+    /// @brief The view documents of actions, by action id: looked up before the table catalog's.
+    std::map<std::string, std::string, std::less<>> extraViews;
 
     /// @brief A catalog that looks in `extraActions` first and in `tableCatalog()` after.
     /// @return The catalog; it reads this object, which must outlive it.
@@ -1035,6 +1037,12 @@ struct ExtraActions {
         out.schema = [this, base = out.schema](std::string_view id) -> std::optional<std::string> {
             if (auto const found = extraActions.find(id); found != extraActions.end()) {
                 return found->second.first;
+            }
+            return base ? base(id) : std::nullopt;
+        };
+        out.view = [this, base = out.view](std::string_view id) -> std::optional<std::string> {
+            if (auto const found = extraViews.find(id); found != extraViews.end()) {
+                return found->second;
             }
             return base ? base(id) : std::nullopt;
         };
@@ -1872,6 +1880,20 @@ inline void addPageSamples(TableHarness& h) {
               ActionInfo{.modelType = "Lims_SampleModel"});
 }
 
+/// @brief Gives an action a view document in the harness's catalog; before `mount`.
+/// @param h      The harness.
+/// @param action The action's id.
+/// @param view   The view document's JSON text.
+inline void addView(TableHarness& h, std::string action, std::string view) {
+    h.extraViews.insert_or_assign(std::move(action), std::move(view));
+}
+
+/// @brief The unit a model-backed table's description lists under @p id.
+/// @param screen The screen.
+/// @param id     The unit's id.
+/// @return The unit; the test fails when it is not listed.
+inline table::UnitInfo unitOf(Screen& screen, std::string_view id);
+
 /// @brief The rows of a model-backed table.
 /// @param screen The screen.
 /// @param id     The table's element id.
@@ -1893,6 +1915,14 @@ inline table::ColumnKind kindOfColumn(Screen& screen, std::string_view column) {
                                          [](table::TableColumn const& c) -> auto const& { return c.info.id; });
     REQUIRE(found != description->columns.end());
     return found->info.kind;
+}
+
+inline table::UnitInfo unitOf(Screen& screen, std::string_view id) {
+    table::TableDescription const* const description = windowOf(screen).description();
+    REQUIRE(description != nullptr);
+    auto const found = std::ranges::find(description->units, id, &table::UnitInfo::id);
+    REQUIRE(found != description->units.end());
+    return *found;
 }
 
 /// @brief A cell a model-backed table's window holds.
