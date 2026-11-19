@@ -10,6 +10,7 @@
 #include <string>
 #include <string_view>
 #include <system_error>
+#include <utility>
 #include <vector>
 
 namespace morph::ui {
@@ -42,8 +43,61 @@ char unescaped(char escape) noexcept {
     }
 }
 
+std::optional<unsigned> hex4(std::string_view text, std::size_t at) {
+    if (at + 4 > text.size()) {
+        return std::nullopt;
+    }
+    unsigned code = 0;
+    auto const [end, error] = std::from_chars(text.data() + at, text.data() + at + 4, code, 16);
+    if (error != std::errc{} || end != text.data() + at + 4) {
+        return std::nullopt;
+    }
+    return code;
+}
+
+// The `\uXXXX` at @p at skipped: how many bytes it takes.
+std::optional<std::size_t> skipUnicodeEscape(std::string_view text, std::size_t at) {
+    return at + 6 <= text.size() ? std::optional<std::size_t>{6} : std::nullopt;
+}
+
+void appendUtf8(std::string& out, unsigned code) {
+    if (code < 0x80) {
+        out.push_back(static_cast<char>(code));
+    } else if (code < 0x800) {
+        out.push_back(static_cast<char>(0xC0 | (code >> 6)));
+        out.push_back(static_cast<char>(0x80 | (code & 0x3F)));
+    } else if (code < 0x10000) {
+        out.push_back(static_cast<char>(0xE0 | (code >> 12)));
+        out.push_back(static_cast<char>(0x80 | ((code >> 6) & 0x3F)));
+        out.push_back(static_cast<char>(0x80 | (code & 0x3F)));
+    } else {
+        out.push_back(static_cast<char>(0xF0 | (code >> 18)));
+        out.push_back(static_cast<char>(0x80 | ((code >> 12) & 0x3F)));
+        out.push_back(static_cast<char>(0x80 | ((code >> 6) & 0x3F)));
+        out.push_back(static_cast<char>(0x80 | (code & 0x3F)));
+    }
+}
+
+// The `\uXXXX` at @p at (with its low surrogate when it opens a pair) appended to @p out as UTF-8: how many bytes of
+// text it took.
+std::optional<std::size_t> appendUnicodeEscape(std::string_view text, std::size_t at, std::string& out) {
+    std::optional<unsigned> const first = hex4(text, at + 2);
+    if (!first) {
+        return std::nullopt;
+    }
+    if (*first >= 0xD800 && *first < 0xDC00 && at + 12 <= text.size() && text[at + 6] == '\\' && text[at + 7] == 'u') {
+        std::optional<unsigned> const second = hex4(text, at + 8);
+        if (second && *second >= 0xDC00 && *second < 0xE000) {
+            appendUtf8(out, 0x10000 + ((*first - 0xD800) << 10) + (*second - 0xDC00));
+            return 12;
+        }
+    }
+    appendUtf8(out, *first);
+    return 6;
+}
+
 // A string at its opening quote: the offset past its closing quote. Its content is appended to @p out when one is
-// given, escapes decoded except `\u`, which is kept as written: the vocabulary's member names are ASCII.
+// given, escapes decoded, `\u` ones to UTF-8.
 std::optional<std::size_t> scanString(std::string_view text, std::size_t at, std::string* out) {
     if (at >= text.size() || text[at] != '"') {
         return std::nullopt;
@@ -63,18 +117,20 @@ std::optional<std::size_t> scanString(std::string_view text, std::size_t at, std
         if (at + 1 >= text.size()) {
             return std::nullopt;
         }
-        std::size_t const length = text[at + 1] == 'u' ? 6 : 2;
-        if (at + length > text.size()) {
-            return std::nullopt;
+        if (text[at + 1] == 'u') {
+            std::optional<std::size_t> const used =
+                out != nullptr ? appendUnicodeEscape(text, at, *out) : skipUnicodeEscape(text, at);
+            if (!used) {
+                return std::nullopt;
+            }
+            at += *used;
+            continue;
         }
         if (out != nullptr) {
-            if (length == 6) {
-                out->append(text.substr(at, length));
-            } else {
-                out->push_back(unescaped(text[at + 1]));
-            }
+            out->push_back(unescaped(text[at + 1]));
         }
-        at += length;
+        at += 2;
+        continue;
     }
     return std::nullopt;
 }
@@ -218,11 +274,13 @@ std::optional<std::size_t> pointerOffset(std::string_view text, std::string_view
             if (object) {
                 std::string name;
                 std::optional<std::size_t> const after = scanString(text, at, &name);
-                if (!after) {
-                    return std::nullopt;
+                if (after) {
+                    at = skipSpace(text, *after);
                 }
-                at = skipSpace(text, *after);
-                if (at >= text.size() || text[at] != ':') {
+                if (!after || at >= text.size() || text[at] != ':') {
+                    if (found) {
+                        break;
+                    }
                     return std::nullopt;
                 }
                 at = skipSpace(text, at + 1);
@@ -231,20 +289,36 @@ std::optional<std::size_t> pointerOffset(std::string_view text, std::string_view
                 matches = place == *wanted;
             }
             if (matches) {
+                if (at >= text.size() || text[at] == ',' || text[at] == '}' || text[at] == ']') {
+                    return std::nullopt;
+                }
+                // The last of equal names wins, as it does in the parsed value, so the scan goes on.
                 value = at;
                 shown = entry;
                 found = true;
-                break;
             }
+            // What follows the match may be cut short or malformed: the match so far stands.
             std::optional<std::size_t> const skipped = skipValue(text, at, depth + 1);
             if (!skipped) {
+                if (found) {
+                    break;
+                }
                 return std::nullopt;
             }
             at = skipSpace(text, *skipped);
             if (at < text.size() && text[at] == ',') {
                 at = skipSpace(text, at + 1);
+                if (at < text.size() && text[at] != (object ? '}' : ']')) {
+                    ++place;
+                    continue;
+                }
+            } else if (at < text.size() && text[at] == (object ? '}' : ']')) {
+                break;
             }
-            ++place;
+            if (found) {
+                break;
+            }
+            return std::nullopt;
         }
         if (!found) {
             return std::nullopt;

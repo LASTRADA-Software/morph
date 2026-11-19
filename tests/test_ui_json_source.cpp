@@ -76,11 +76,61 @@ TEST_CASE("pointerOffset stops at kMaxJsonDepth", "[ui][json-source]") {
     CHECK_FALSE(morph::ui::pointerOffset(deep, tooDeep).has_value());
 }
 
-// Mutation: count lines from 0 (the button's `kind` is on line 5).
+// Mutation: count lines from 0 (it reports 5 where the button's `kind` is on line 6).
 TEST_CASE("lineAt counts lines from 1", "[ui][json-source]") {
     std::optional<std::size_t> const kind = morph::ui::pointerOffset(kEdited, "/view/children/1/kind");
     REQUIRE(kind.has_value());
     CHECK(morph::ui::lineAt(kEdited, *kind) == 6);
     CHECK(morph::ui::lineAt(kEdited, 0) == 1);
     CHECK(morph::ui::lineAt(kEdited, 100000) == 9);
+}
+
+// Mutation: stop at the first match (the first `view` is found instead of the second).
+TEST_CASE("pointerOffset answers the last of equal member names, and the match so far when the rest is cut short",
+          "[ui][json-source]") {
+    std::string_view const twice = R"({"view": 1, "view": {"a": 2}, "view": 3})";
+    std::optional<std::size_t> const last = morph::ui::pointerOffset(twice, "/view");
+    REQUIRE(last.has_value());
+    CHECK(*last == twice.rfind("\"view\""));
+    CHECK(morph::ui::pointerOffset(twice, "/view/a") == std::nullopt);
+    std::string_view const inner = R"({"view": {"a": 1}, "view": {"a": 2}})";
+    CHECK(morph::ui::pointerOffset(inner, "/view/a") == std::optional<std::size_t>{inner.rfind("\"a\"")});
+    std::string_view const cut = "{\n\"view\": 1,\n\"view\": 2, \"x";
+    CHECK(morph::ui::pointerOffset(cut, "/view") == std::optional<std::size_t>{cut.rfind("\"view\"")});
+}
+
+// Mutation: scanString stops at an escaped quote.
+TEST_CASE("pointerOffset reads past escaped quotes in values and names", "[ui][json-source]") {
+    std::string_view const afterValue = R"({"x": "\"q\"", "y": 1})";
+    CHECK(morph::ui::pointerOffset(afterValue, "/y") == std::optional<std::size_t>{afterValue.find("\"y\"")});
+    std::string_view const quoted = R"({"a\"b": 1})";
+    CHECK(morph::ui::pointerOffset(quoted, "/a\"b") == std::optional<std::size_t>{1});
+}
+
+// Mutation: keep `\u` escapes as written.
+TEST_CASE("pointerOffset compares member names with their \\u escapes decoded", "[ui][json-source]") {
+    std::string_view const text = R"({"\u006bind": 1, "\u0041": 2, "\ud83d\ude00": 3})";
+    CHECK(morph::ui::pointerOffset(text, "/kind") == std::optional<std::size_t>{1});
+    CHECK(morph::ui::pointerOffset(text, "/A") == std::optional<std::size_t>{text.find("\"\\u0041\"")});
+    CHECK_FALSE(morph::ui::pointerOffset(text, "/\\u0041").has_value());
+    CHECK(morph::ui::pointerOffset(text, "/\xF0\x9F\x98\x80") == std::optional<std::size_t>{text.find("\"\\ud83d")});
+}
+
+// Mutation: accept anything between members and elements.
+TEST_CASE("pointerOffset refuses members and elements that are not separated", "[ui][json-source]") {
+    CHECK_FALSE(morph::ui::pointerOffset("[1 2]", "/1").has_value());
+    CHECK_FALSE(morph::ui::pointerOffset("[1,,2]", "/1").has_value());
+    CHECK_FALSE(morph::ui::pointerOffset("[1,,2]", "/2").has_value());
+    CHECK_FALSE(morph::ui::pointerOffset("[1,]", "/1").has_value());
+    CHECK_FALSE(morph::ui::pointerOffset(R"({"a": 1 "b": 2})", "/b").has_value());
+    CHECK(morph::ui::pointerOffset("[1, 2]", "/1") == std::optional<std::size_t>{4});
+}
+
+// Mutation: count only `\n` as part of the offset arithmetic by bytes (a multi-byte value shifts the offset).
+TEST_CASE("pointerOffset and lineAt agree on CRLF text and non-ASCII values", "[ui][json-source]") {
+    std::string_view const text = "{\r\n  \"name\": \"h\xC3\xA9llo \xE2\x82\xAC\",\r\n  \"target\": 1\r\n}";
+    std::optional<std::size_t> const target = morph::ui::pointerOffset(text, "/target");
+    REQUIRE(target.has_value());
+    CHECK(*target == text.find("\"target\""));
+    CHECK(morph::ui::lineAt(text, *target) == 3);
 }

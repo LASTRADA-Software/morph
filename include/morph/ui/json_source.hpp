@@ -25,7 +25,9 @@ namespace morph::ui {
 ///
 /// The text is scanned, not parsed into a value, so the offset is into the text as it is, with its own spacing and
 /// member order. For a member, the offset is that of its name's opening quote, where a person looks for it; for an
-/// array element, that of the element's first byte; for the empty pointer, that of the document's first byte.
+/// array element, that of the element's first byte. Of equal member names the last counts, as it does in the parsed
+/// value. The empty pointer answers the first byte that is not white space, whether or not the text is JSON; a byte
+/// order mark before the document is not white space, so a non-empty pointer finds nothing after one.
 /// @param text    JSON text.
 /// @param pointer An RFC 6901 pointer; `~0` and `~1` are unescaped.
 /// @return The byte offset, or `std::nullopt` when the pointer names nothing in @p text, @p text is not JSON up to
