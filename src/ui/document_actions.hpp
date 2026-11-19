@@ -56,7 +56,8 @@ private:
 struct ActionUse {
     /// @brief The action and its model type.
     ActionRef action;
-    /// @brief The position's kind: `query`, `evaluate`, `mutation`, the kind of a model-bound node (`collection`, `wizard`,
+    /// @brief The position's kind: `query`, `evaluate`, `mutation`, the kind of a model-bound node (`collection`,
+    /// `wizard`,
     ///        `table`), or for a form its literal `submit`: `form` when absent, `explicit form`, `auto form`.
     std::string position;
     /// @brief The JSON Pointer of the query, mutation or node.
@@ -67,7 +68,8 @@ struct ActionUse {
 ///        model-bound node's alias through the enclosing scopes, and where each action is first named.
 ///
 /// Load-time validation has already resolved every alias and requires every alias to name a type, so each lookup
-/// here finds one. Component fallbacks are view trees like any other and are walked with the view.
+/// here finds one. Component fallbacks are view trees of their own: they are walked after the screen's own scope is
+/// left.
 class DocumentActions {
 public:
     /// @brief The position kind of a form whose literal `submit` is @p submit. Without a catalog the schema's submit
@@ -88,6 +90,9 @@ public:
         if (document.view) {
             node(*document.view);
         }
+        leave(document.scope);
+        // A component's fallback sees none of the names of the screen around it, at load and at runtime, so it is
+        // walked with none open.
         for (auto const& [name, component] : document.components) {
             static_cast<void>(name);
             if (component.fallback) {

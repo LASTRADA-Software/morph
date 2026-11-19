@@ -4,11 +4,15 @@
 
 #include <algorithm>
 #include <catch2/catch_test_macros.hpp>
+#include <core/async/Task.hpp>
+#include <future>
 #include <initializer_list>
 #include <morph/core/completion.hpp>
+#include <morph/core/coroutine.hpp>
 #include <morph/core/effects.hpp>
 #include <morph/core/executor.hpp>
 #include <morph/core/owner_strand.hpp>
+#include <morph/core/remote.hpp>
 #include <morph/core/wire.hpp>
 #include <morph/ui/custom_screens.hpp>
 #include <optional>
@@ -206,8 +210,8 @@ TEST_CASE("registerCustomScreens refuses what it cannot serve", "[ui][custom-scr
     morph::model::detail::ActionDispatcher dispatcher;
     morph::model::detail::ModelRegistryFactory registry;
     auto const store = std::make_shared<morph::ui::MemoryCustomScreenStore>(pool);
-    auto served = screens_test::bundle();
-    auto getBundle = [served] { return served; };
+    auto const served = screens_test::bundle();
+    auto const getBundle = [served] { return served; };
     auto const authorizer = std::make_shared<uiservice::RuleAuthorizer>();
     CHECK_THROWS_AS(morph::ui::registerCustomScreens(
                         store, getBundle, authorizer, dispatcher, registry,
@@ -368,18 +372,34 @@ TEST_CASE("custom screens: lists hold the record that saves and removes change",
     CHECK(morph::model::ActionTraits<morph::ui::CustomScreensList>::typeId() == morph::ui::kCustomScreensList);
 }
 
-TEST_CASE("custom screens: a save whose stored text would exceed the bound is refused",
+TEST_CASE("custom screens: check and save bound the stored text, which carries the longer id",
           "[ui][custom-screens][remote]") {
     std::string const document = baseScreen("lims.base");
-    Server s{nullptr, morph::ui::CustomScreensOptions{.maxDocumentBytes = document.size()}};
+    auto const checkBody = R"({"app":"lims","basedOn":"lims.base","document":)" + quoted(document) + "}";
+    auto const verdictOf = [&](Server& s) {
+        Envelope const reply = s.call(morph::ui::kCustomScreensCheck, checkBody, "alice");
+        REQUIRE(reply.kind == "ok");
+        morph::ui::CustomScreenChecked verdict;
+        REQUIRE_FALSE(glz::read_json(verdict, reply.body));
+        return verdict;
+    };
     // The document itself is within the bound; the id the model writes into it is longer than the one it had.
-    CHECK(s.call(morph::ui::kCustomScreensCheck,
-                 R"({"app":"lims","basedOn":"lims.base","document":)" + quoted(document) + "}", "alice")
-              .kind == "ok");
-    Envelope const saved = s.save(document, "alice");
+    Server tight{nullptr, morph::ui::CustomScreensOptions{.maxDocumentBytes = document.size()}};
+    auto const refused = verdictOf(tight);
+    REQUIRE(refused.refusal.has_value());
+    CHECK(refused.refusal->reason.contains("longer than"));
+    Envelope const saved = tight.save(document, "alice");
     REQUIRE(saved.kind == "err");
-    CHECK(saved.message.contains("longer than"));
-    CHECK(listed(s, "alice").screens.empty());
+    CHECK(saved.message.contains(refused.refusal->reason));
+    CHECK(listed(tight, "alice").screens.empty());
+
+    // Once the bound holds the rewritten text, both accept.
+    std::size_t const stored =
+        morph::ui::withScreenId(document, std::string{morph::ui::kCustomScreenIdPrefix} + std::string(32, '0'))
+            ->size();
+    Server roomy{nullptr, morph::ui::CustomScreensOptions{.maxDocumentBytes = stored}};
+    CHECK_FALSE(verdictOf(roomy).refusal.has_value());
+    CHECK(roomy.save(document, "alice").kind == "ok");
 }
 
 TEST_CASE("custom screens: a title outside its bound is refused", "[ui][custom-screens][remote]") {
@@ -473,4 +493,241 @@ TEST_CASE("custom screens: a full list of adversarial summaries fits one envelop
     REQUIRE_FALSE(glz::read_json(out, reply.body));
     CHECK(out.screens.size() == options.maxListed);
     CHECK(out.truncated);
+}
+
+TEST_CASE("custom screens: only an id that starts with `custom:` is read, written or removed",
+          "[ui][custom-screens][remote]") {
+    Server s;
+    std::string const doc = quoted(baseScreen("lims.base"));
+    for (auto const& [action, body] : std::vector<std::pair<std::string_view, std::string>>{
+             {morph::ui::kCustomScreensGet, R"({"app":"lims","id":"lims.base"})"},
+             {morph::ui::kCustomScreensRemove, R"({"app":"lims","id":"lims.base"})"},
+             {morph::ui::kCustomScreensSave,
+              joined(
+                  {R"({"app":"lims","id":"lims.base","title":"T","basedOn":"lims.base","document":)", doc, "}"})}}) {
+        Envelope const reply = s.call(action, body, "alice");
+        INFO(action);
+        REQUIRE(reply.kind == "err");
+        CHECK(reply.message.contains("starts with `custom:`"));
+    }
+}
+
+TEST_CASE("custom screens: a stored entry whose id is not its document's is listed broken",
+          "[ui][custom-screens][remote]") {
+    auto const store = std::make_shared<morph::ui::MemoryCustomScreenStore>(morph::exec::detail::inlineExecutor());
+    auto const plant = [&](std::string const& id, std::string const& document) {
+        REQUIRE(settled(
+            store->put({.person = "alice", .app = "lims", .id = id}, morph::ui::CustomScreen{.id = id,
+                                                                                             .title = id,
+                                                                                             .basedOn = "lims.base",
+                                                                                             .document = document,
+                                                                                             .savedAt = {},
+                                                                                             .savedBy = "alice"})));
+    };
+    plant("custom:a", baseScreen("custom:a"));
+    plant("custom:b", baseScreen("custom:other"));
+    plant("lims.base", baseScreen("lims.base"));
+    Server s{store};
+    auto const out = listed(s, "alice");
+    REQUIRE(out.screens.size() == 3);
+    for (auto const& screen : out.screens) {
+        INFO(screen.id);
+        if (screen.id == "custom:a") {
+            CHECK_FALSE(screen.broken.has_value());
+        } else {
+            REQUIRE(screen.broken.has_value());
+            CHECK(screen.broken->pointer == "/id");
+        }
+    }
+}
+
+TEST_CASE("custom screens: a summary's hash is the stored document's and changes with it",
+          "[ui][custom-screens][remote]") {
+    Server s;
+    std::string const id = savedId(s.save(baseScreen("lims.base"), "alice"));
+    auto const hashOf = [&] {
+        auto const out = listed(s, "alice");
+        REQUIRE(out.screens.size() == 1);
+        return out.screens.front().hash;
+    };
+    std::string const first = hashOf();
+    Envelope const got = s.call(morph::ui::kCustomScreensGet, R"({"app":"lims","id":)" + quoted(id) + "}", "alice");
+    REQUIRE(got.kind == "ok");
+    morph::ui::CustomScreenFound found;
+    REQUIRE_FALSE(glz::read_json(found, got.body));
+    CHECK(first == morph::ui::contentHash(found.document));
+    CHECK(found.summary.hash == first);
+
+    Envelope const edited =
+        s.call(morph::ui::kCustomScreensSave,
+               R"({"app":"lims","id":)" + quoted(id) + R"(,"title":"Mine","basedOn":"lims.base","document":)" +
+                   quoted(replaced(baseScreen("lims.base"), R"("text":"Results")", R"("text":"Edited")")) + "}",
+               "alice");
+    REQUIRE(edited.kind == "ok");
+    CHECK(hashOf() != first);
+}
+
+TEST_CASE("custom screens: opensWithoutParams follows the base's params", "[ui][custom-screens][remote]") {
+    std::string const withParams =
+        replaced(baseScreen("lims.params"), R"("models":)", R"("params":{"sampleId":"int"},"models":)");
+    morph::ui::UiRegistry made = uiservice::registry();
+    REQUIRE(made.addScreen(uiservice::entry("lims.base"), baseScreen("lims.base")));
+    REQUIRE(made.addScreen(uiservice::entry("lims.params"), withParams));
+    auto const built = made.build();
+    REQUIRE(built);
+    Server s{nullptr, {}, *built};
+
+    REQUIRE(s.save(baseScreen("lims.base"), "alice").kind == "ok");
+    std::string const custom = replaced(withParams, R"("id":"lims.params")", R"("id":"custom:p")");
+    Envelope const saved =
+        s.call(morph::ui::kCustomScreensSave,
+               R"({"app":"lims","title":"P","basedOn":"lims.params","document":)" + quoted(custom) + "}", "alice");
+    REQUIRE(saved.kind == "ok");
+
+    auto const out = listed(s, "alice");
+    REQUIRE(out.screens.size() == 2);
+    for (auto const& screen : out.screens) {
+        INFO(screen.basedOn);
+        CHECK_FALSE(screen.broken.has_value());
+        CHECK(screen.opensWithoutParams == (screen.basedOn == "lims.base"));
+    }
+}
+
+TEST_CASE("custom screens: a client that finds no custom screens model is told it is unknown",
+          "[ui][custom-screens][remote]") {
+    morph::exec::ThreadPoolExecutor pool{1};
+    morph::model::detail::ActionDispatcher dispatcher;
+    morph::model::detail::ModelRegistryFactory registry;
+    auto const authorizer = std::make_shared<uiservice::RuleAuthorizer>();
+    auto const server = std::make_shared<morph::backend::RemoteServer>(pool, authorizer, dispatcher, registry);
+    std::promise<std::string> replied;
+    auto reply = replied.get_future();
+    server->handle(morph::wire::encode(morph::wire::makeRegister(std::string{morph::ui::kCustomScreensModel})),
+                   [&replied](std::string text) { replied.set_value(std::move(text)); });
+    REQUIRE(reply.wait_for(std::chrono::seconds{5}) == std::future_status::ready);
+    Envelope const answer = morph::wire::decode(reply.get());
+    CHECK(answer.kind == "err");
+    CHECK(answer.message == "unknown model type: morph.customScreens");
+}
+
+TEST_CASE("custom screens: get refuses a stored document longer than the bound", "[ui][custom-screens][remote]") {
+    auto const store = std::make_shared<morph::ui::MemoryCustomScreenStore>(morph::exec::detail::inlineExecutor());
+    std::string const id = "custom:0123456789abcdef0123456789abcdef";
+    std::string const document = baseScreen(id);
+    REQUIRE(settled(
+        store->put({.person = "alice", .app = "lims", .id = id}, morph::ui::CustomScreen{.id = id,
+                                                                                         .title = "Big",
+                                                                                         .basedOn = "lims.base",
+                                                                                         .document = document,
+                                                                                         .savedAt = {},
+                                                                                         .savedBy = "alice"})));
+    Server s{store, morph::ui::CustomScreensOptions{.maxDocumentBytes = document.size() - 1}};
+    Envelope const got = s.call(morph::ui::kCustomScreensGet, R"({"app":"lims","id":)" + quoted(id) + "}", "alice");
+    REQUIRE(got.kind == "err");
+    CHECK(got.message.contains("longer than"));
+    Server roomy{store, morph::ui::CustomScreensOptions{.maxDocumentBytes = document.size()}};
+    CHECK(roomy.call(morph::ui::kCustomScreensGet, R"({"app":"lims","id":)" + quoted(id) + "}", "alice").kind == "ok");
+}
+
+TEST_CASE("custom screens: with no bundle, custom screens are not served", "[ui][custom-screens][remote]") {
+    morph::exec::ThreadPoolExecutor pool{1};
+    morph::model::detail::ActionDispatcher dispatcher;
+    morph::model::detail::ModelRegistryFactory registry;
+    auto const authorizer = std::make_shared<uiservice::RuleAuthorizer>();
+    auto const screens = morph::ui::registerCustomScreens(
+        std::make_shared<morph::ui::MemoryCustomScreenStore>(pool),
+        []() -> std::shared_ptr<morph::ui::ServedBundle const> { return nullptr; }, authorizer, dispatcher, registry);
+    auto const allowance = screens->allowance("lims.base");
+    REQUIRE_FALSE(allowance);
+    CHECK(allowance.error().reason == "custom screens are not served: no bundle");
+}
+
+namespace {
+
+/// Runs `CustomScreens::check` for @p session on @p executor and waits for it.
+::core::async::Task<void> askCheck(morph::ui::CustomScreens* screens, morph::session::Context session,
+                                   std::string document, std::promise<std::optional<morph::ui::Refusal>>* out) {
+    out->set_value(co_await screens->check(session, "lims", "lims.base", std::move(document)));
+}
+
+/// Runs `CustomScreens::get` for @p session.
+::core::async::Task<void> askGet(
+    morph::ui::CustomScreens* screens, morph::session::Context session, std::string id,
+    std::promise<std::expected<morph::ui::CustomScreenFound, morph::ui::CustomScreenRefusal>>* out) {
+    out->set_value(co_await screens->get(session, "lims", std::move(id)));
+}
+
+morph::session::Context asPerson(std::string principal) {
+    morph::session::Context session;
+    session.principal = std::move(principal);
+    return session;
+}
+
+}  // namespace
+
+TEST_CASE("custom screens: the handle answers what the actions answer", "[ui][custom-screens][handle]") {
+    Server s;
+    std::string const id = savedId(s.save(baseScreen("lims.base"), "alice"));
+    // The fixture authorizer admits `alice` by the token the envelope carries; the handle takes the session as is.
+    morph::session::Context const alice = asPerson("alice");
+
+    SECTION("check") {
+        std::promise<std::optional<morph::ui::Refusal>> ok;
+        morph::async::spawn(s.pool, askCheck(s.screens.get(), alice, baseScreen("lims.base"), &ok));
+        auto accepted = ok.get_future();
+        REQUIRE(accepted.wait_for(std::chrono::seconds{5}) == std::future_status::ready);
+        CHECK_FALSE(accepted.get().has_value());
+
+        std::promise<std::optional<morph::ui::Refusal>> no;
+        morph::async::spawn(
+            s.pool, askCheck(s.screens.get(), alice,
+                             replaced(baseScreen("lims.base"), R"({"host":"print"})", R"({"signOut":true})"), &no));
+        auto refused = no.get_future();
+        REQUIRE(refused.wait_for(std::chrono::seconds{5}) == std::future_status::ready);
+        auto const refusal = refused.get();
+        REQUIRE(refusal.has_value());
+        CHECK(refusal->reason.contains("signOut"));
+    }
+    SECTION("check without a verified person") {
+        std::promise<std::optional<morph::ui::Refusal>> none;
+        morph::async::spawn(s.pool, askCheck(s.screens.get(), asPerson(""), baseScreen("lims.base"), &none));
+        auto answer = none.get_future();
+        REQUIRE(answer.wait_for(std::chrono::seconds{5}) == std::future_status::ready);
+        auto const refusal = answer.get();
+        REQUIRE(refusal.has_value());
+        CHECK(refusal->reason.contains("signed-in person"));
+    }
+    SECTION("get") {
+        std::promise<std::expected<morph::ui::CustomScreenFound, morph::ui::CustomScreenRefusal>> found;
+        morph::async::spawn(s.pool, askGet(s.screens.get(), alice, id, &found));
+        auto answer = found.get_future();
+        REQUIRE(answer.wait_for(std::chrono::seconds{5}) == std::future_status::ready);
+        auto const screen = answer.get();
+        REQUIRE(screen);
+        CHECK(screen->summary.id == id);
+        CHECK(screens_test::load(screen->document).id == id);
+
+        std::promise<std::expected<morph::ui::CustomScreenFound, morph::ui::CustomScreenRefusal>> bobs;
+        morph::async::spawn(s.pool, askGet(s.screens.get(), asPerson("bob"), id, &bobs));
+        auto refused = bobs.get_future();
+        REQUIRE(refused.wait_for(std::chrono::seconds{5}) == std::future_status::ready);
+        auto const refusal = refused.get();
+        REQUIRE_FALSE(refusal);
+        CHECK(refusal.error().reason.contains("no such custom screen"));
+    }
+    SECTION("allowance") {
+        auto const text = s.screens->allowance("lims.base");
+        REQUIRE(text);
+        // One of each thing the base rule compares, as the base uses it.
+        CHECK(text->contains("Lims_Sample/Lims_List (query)"));
+        CHECK(text->contains("Lims_Sample/Lims_Save (mutation)"));
+        CHECK(text->contains("onMount: run Lims_Sample/Lims_Save"));
+        CHECK(text->contains("upload"));
+        CHECK(text->contains("host `print`"));
+        CHECK(text->contains("host `ResultGrid`"));
+        CHECK(text->contains(R"({"host":"print"})"));
+        CHECK(text->contains("component `Chart`"));
+        CHECK_FALSE(text->contains("signOut"));
+        CHECK_FALSE(s.screens->allowance("lims.nothing"));
+    }
 }

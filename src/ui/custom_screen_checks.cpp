@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include <algorithm>
+#include <array>
 #include <cstdlib>
 #include <deque>
 #include <expected>
@@ -33,6 +34,22 @@ namespace {
     return Refusal{.document = {}, .path = std::move(path), .reason = std::move(reason)};
 }
 
+using detail::EventClass;
+
+/// @brief What runs the commands under an event key of a node or part kind, as `eventKeys` classifies it.
+/// @param kind The node or part kind.
+/// @param key  A key of `DocNode::events`: a command-list key, or `record.event` for a record of command lists.
+/// @return What runs its commands, or nothing for a key the table does not list.
+[[nodiscard]] std::optional<EventClass> classifyEvent(std::string_view kind, std::string_view key) {
+    std::string_view const name = key.substr(0, key.find('.'));
+    for (detail::EventKey const& entry : detail::eventKeys()) {
+        if (entry.kind == kind && entry.key == name) {
+            return entry.eventClass;
+        }
+    }
+    return std::nullopt;
+}
+
 // NOLINTBEGIN(misc-no-recursion): view nodes, command lists and JSON nest; parseJson bounds the depth at 64.
 
 /// @brief Everything a document can cause that the base rule compares, each as a capability string, with the JSON
@@ -61,6 +78,10 @@ public:
         if (document.view) {
             node(*document.view);
         }
+        leave(document.scope);
+        // A component's fallback is a view of its own: it sees no name of the screen around it, as at load and at
+        // runtime, so it is walked with nothing open.
+        _open.push_back(&_tables.emplace_back());
         for (auto const& [name, component] : document.components) {
             if (!component.qml.empty()) {
                 note("component `" + name + "` " + component.qml, component.path);
@@ -69,7 +90,7 @@ public:
                 node(*component.fallback);
             }
         }
-        leave(document.scope);
+        _open.pop_back();
         hostNames(json, "");
     }
 
@@ -162,15 +183,29 @@ private:
             autoTrigger = "form-auto:" + _aliases.resolve(view.name("model")) + "/" + std::string{view.name("action")};
         }
         for (auto const& [key, commands] : view.events) {
-            // A custom component's own code decides when its events fire, so they run without a press.
             std::string trigger;
-            if (view.kind == "custom" && key.starts_with("on.")) {
-                trigger = "component:" + std::string{view.name("name")} + "." + key.substr(3);
-            } else if (autoForm && (key == "onSubmit" || key == "onSuccess" || key == "onError")) {
-                trigger = autoTrigger;
+            bool picked = false;
+            if (std::optional<EventClass> const eventClass = classifyEvent(view.kind, key)) {
+                switch (*eventClass) {
+                    case EventClass::ChosenFile:
+                        picked = view.kind != "filePicker" || opensFiles(view.path);
+                        break;
+                    case EventClass::FormOutcome:
+                        trigger = autoForm ? autoTrigger : std::string{};
+                        break;
+                    case EventClass::ComponentEvent:
+                        // A custom component's own code decides when its events fire, so they run without a press.
+                        trigger = "component:" + std::string{view.name("name")} + "." + key.substr(key.find('.') + 1);
+                        break;
+                    case EventClass::Press:
+                    default:
+                        break;
+                }
+            } else {
+                // A key the table does not classify is unattended, under a trigger of its own: its commands can only
+                // be allowed by a base that has the same key with the same commands.
+                trigger = "event:" + view.kind + "." + key;
             }
-            bool const picked = (view.kind == "filePicker" && key == "onPick" && opensFiles(view.path)) ||
-                                (view.kind == "dropZone" && key == "onDrop");
             walk(commands, trigger, table, picked);
         }
         for (auto const& [chord, commands] : view.keys) {
@@ -218,7 +253,7 @@ private:
                     std::string pressed = trigger;
                     pressed += ": ";
                     pressed += capability;
-                    note(pressed, command.path);
+                    note(std::move(pressed), command.path);
                 }
             }
             // `run`, `upload` and `signIn` each name a mutation, and run it.
@@ -226,7 +261,10 @@ private:
                               command.kind == CommandKind::SignIn;
             if (runs && !trigger.empty()) {
                 if (command.kind != CommandKind::Run) {
-                    note(trigger + ": run " + actionOf(command.target, table), command.path);
+                    std::string unattended = trigger;
+                    unattended += ": run ";
+                    unattended += actionOf(command.target, table);
+                    note(std::move(unattended), command.path);
                 }
                 follow(command.target, trigger, table);
             }
@@ -265,14 +303,12 @@ private:
         }
     }
 
-    /// @brief Whether @p json reads nothing from the document: a scalar, a `lit`, or an array of those. Any other
-    ///        object is an expression (`ref`, `fn`, …) whose names resolve in the custom document.
+    /// @brief Whether @p json reads nothing from the document: a scalar or a `lit`. Any other object is an expression
+    ///        (`ref`, `fn`, …) whose names resolve in the custom document; an array is no expression, which load
+    ///        refuses, so none reaches here.
     [[nodiscard]] static bool isLiteral(Json const& json) {
         if (auto const* const object = std::get_if<Json::object_t>(&json.data)) {
             return object->size() == 1 && object->contains("lit");
-        }
-        if (auto const* const array = std::get_if<Json::array_t>(&json.data)) {
-            return std::ranges::all_of(*array, [](Json const& item) { return isLiteral(item); });
         }
         return true;
     }
@@ -376,6 +412,9 @@ private:
             case CommandKind::CancelClose:
             case CommandKind::Retry:
             default:
+                // `default:` only because the project builds with -Wswitch-default. -Wswitch-enum, which it also
+                // builds with, refuses a switch over `CommandKind` that lacks a case for any enumerator even with
+                // a default, so a command kind added to the vocabulary must be classified here before this compiles.
                 return {};
         }
     }
@@ -413,6 +452,42 @@ private:
 // NOLINTEND(misc-no-recursion)
 
 }  // namespace
+
+namespace detail {
+
+namespace {
+
+// NOLINTBEGIN(modernize-use-designated-initializers): the table reads as rows.
+constexpr std::array<EventKey, 41> kEventKeys = {{
+    {"button", "onClick", EventClass::Press},         {"button", "onActivate", EventClass::Press},
+    {"textInput", "onChange", EventClass::Press},     {"textInput", "onCommit", EventClass::Press},
+    {"textInput", "onSubmit", EventClass::Press},     {"checkbox", "onToggle", EventClass::Press},
+    {"checkbox", "onChange", EventClass::Press},      {"select", "onChoose", EventClass::Press},
+    {"select", "onChange", EventClass::Press},        {"panel", "onToggle", EventClass::Press},
+    {"tabs", "onChoose", EventClass::Press},          {"dialog", "onDismiss", EventClass::Press},
+    {"dialog", "default", EventClass::Press},         {"dialog", "cancel", EventClass::Press},
+    {"drawer", "onDismiss", EventClass::Press},       {"drawer", "default", EventClass::Press},
+    {"drawer", "cancel", EventClass::Press},          {"table", "onSelectionChange", EventClass::Press},
+    {"table", "onSortChange", EventClass::Press},     {"table", "onActivate", EventClass::Press},
+    {"dateTimeInput", "onChange", EventClass::Press}, {"dateTimeInput", "onCommit", EventClass::Press},
+    {"slider", "onChange", EventClass::Press},        {"slider", "onCommit", EventClass::Press},
+    {"filePicker", "onPick", EventClass::ChosenFile}, {"banner", "onDismiss", EventClass::Press},
+    {"badge", "onRemove", EventClass::Press},         {"collapsible", "onToggle", EventClass::Press},
+    {"dropZone", "onDrop", EventClass::ChosenFile},   {"form", "onSubmit", EventClass::FormOutcome},
+    {"form", "onSuccess", EventClass::FormOutcome},   {"form", "onError", EventClass::FormOutcome},
+    {"custom", "on", EventClass::ComponentEvent},     {"menuItem", "onClick", EventClass::Press},
+    {"action", "onClick", EventClass::Press},         {"drop", "onDrop", EventClass::Press},
+    {"actionButton", "onClick", EventClass::Press},   {"headMenuItem", "onClick", EventClass::Press},
+    {"headTool", "onChange", EventClass::Press},      {"headTool", "onSubmit", EventClass::Press},
+    {"headTool", "onChoose", EventClass::Press},
+}};
+// NOLINTEND(modernize-use-designated-initializers)
+
+}  // namespace
+
+std::span<EventKey const> eventKeys() { return kEventKeys; }
+
+}  // namespace detail
 
 std::optional<Refusal> checkBaseRule(Document const& base, std::string_view baseText, Document const& custom,
                                      std::string_view customText) {
@@ -474,6 +549,79 @@ std::optional<Refusal> checkBaseRule(Document const& base, std::string_view base
     return std::nullopt;
 }
 
+namespace {
+
+/// @brief Appends a line `heading` and, indented below it, each of @p items; nothing when @p items is empty.
+void section(std::string& out, std::string_view heading, std::vector<std::string> const& items) {
+    if (items.empty()) {
+        return;
+    }
+    out += heading;
+    out += '\n';
+    for (std::string const& item : items) {
+        out += "  ";
+        out += item;
+        out += '\n';
+    }
+}
+
+}  // namespace
+
+std::expected<std::string, Refusal> describeAllowance(Document const& base, std::string_view baseText) {
+    auto const json = parseJson(baseText);
+    if (!json) {
+        return std::unexpected(refusalAt("", "a document the base rule describes is JSON text"));
+    }
+    detail::DocumentActions const names{base};
+    Capabilities const has{base, *json};
+    std::vector<std::string> params;
+    if (auto const* const object = std::get_if<Json::object_t>(&json->data)) {
+        if (auto const declared = object->find("params"); declared != object->end()) {
+            if (auto const* const members = std::get_if<Json::object_t>(&declared->second.data)) {
+                for (auto const& [name, type] : *members) {
+                    auto const written = glz::write<::morph::wire::detail::EscapingWriteOpts{}>(type);
+                    params.push_back("`" + name + "`: " + written.value_or("?"));
+                }
+            }
+        }
+    }
+    std::vector<std::string> actions;
+    for (detail::ActionUse const& use : names.uses()) {
+        actions.push_back(use.action.modelType + "/" + use.action.action + " (" + use.position + ")");
+    }
+    std::vector<std::string> unattended;
+    std::vector<std::string> clientSide;
+    std::vector<std::string> hosts;
+    std::vector<std::string> components;
+    for (auto const& [capability, path] : has.uses()) {
+        static_cast<void>(path);
+        if (capability.contains(": ")) {
+            unattended.push_back(capability);
+        } else if (capability.starts_with("host `")) {
+            hosts.push_back(capability);
+        } else if (capability.starts_with("component `")) {
+            components.push_back(capability);
+        } else {
+            clientSide.push_back(capability);
+        }
+    }
+    std::vector<std::string> hostCommands;
+    for (auto const& command : has.hostCommands()) {
+        hostCommands.push_back(command.json);
+    }
+    std::string out = "A custom screen of the base screen `" + base.id + "` may use only the following.\n";
+    out += params.empty() ? "Params: none; a custom screen declares exactly its base's.\n" : "";
+    section(out, "Params, which a custom screen declares exactly:", params);
+    section(out, "Actions, each only in a position of the kind shown in brackets:", actions);
+    section(out, "Run without a person's press, each only from the trigger shown:", unattended);
+    section(out, "Client-side commands:", clientSide);
+    section(out, "Host names:", hosts);
+    section(out, "Host commands, each with exactly these arguments, which are literals:", hostCommands);
+    section(out, "Delivered components:", components);
+    out += "Text, layout, styles, states and expressions are free.\n";
+    return out;
+}
+
 std::optional<std::optional<Refusal>> VerdictCache::find(std::string const& key) {
     std::scoped_lock const lock{_mutex};
     auto const found = _entries.find(key);
@@ -504,14 +652,15 @@ std::size_t VerdictCache::size() const {
     return _entries.size();
 }
 
-std::string verdictKey(std::string_view basedOn, std::string_view document, std::string_view digest,
-                       std::vector<std::string> const& permitted) {
+std::string verdictKey(std::string_view basedOn, std::string_view document, std::string_view screenId,
+                       std::string_view digest, std::vector<std::string> const& permitted) {
     std::string joined;
     for (std::string const& action : permitted) {
         joined += action;
         joined += '\n';
     }
-    return contentHash(document) + ' ' + std::string{basedOn} + ' ' + std::string{digest} + ' ' + contentHash(joined);
+    return contentHash(document) + ' ' + std::string{basedOn} + ' ' + std::string{screenId} + ' ' +
+           std::string{digest} + ' ' + contentHash(joined);
 }
 
 namespace {
@@ -541,8 +690,9 @@ namespace {
 /// @brief Checks 3 to 6 of `checkCustomScreen`, against the base screen `base`.
 [[nodiscard]] std::optional<Refusal> checkAgainstBase(
     ServedBundle const& bundle, ServedScreen const& base,
-    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): the base's id, then the custom text.
-    std::string_view basedOn, std::string_view document, std::vector<std::string> const& permitted) {
+    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): the base's id, the custom text, then its id.
+    std::string_view basedOn, std::string_view document, std::string_view screenId,
+    std::vector<std::string> const& permitted) {
     std::string const& baseText = bundle.files.at(base.hash).bytes;
     LoadOptions const load{.catalog = bundle.catalog};
     auto const baseDocument = loadDocumentText(baseText, load);
@@ -554,8 +704,9 @@ namespace {
     if (!custom) {
         return std::move(custom.error());
     }
-    if (!custom->view) {
-        return refusalAt("", "a custom screen is a screen, not the app document");
+    if (custom->id != screenId) {
+        return refusalAt("/id",
+                         "a custom screen's `id` is the id it is stored under: `" + std::string{screenId} + "`");
     }
     if (auto refusal = author::checkAccessibility(*custom)) {
         return refusal;
@@ -577,13 +728,16 @@ namespace {
 std::optional<Refusal> checkCustomScreen(ServedBundle const& bundle, ::morph::session::Context const& session,
                                          ::morph::session::IAuthorizer const& authorizer,
                                          std::vector<std::string> const& permitted, std::string_view basedOn,
-                                         std::string_view document, CustomScreensOptions const& options,
-                                         VerdictCache* cache) {
+                                         std::string_view document, std::string_view screenId,
+                                         CustomScreensOptions const& options, VerdictCache* cache) {
     if (document.size() > options.maxDocumentBytes) {
         return refusalAt("", "a custom screen is longer than " + std::to_string(options.maxDocumentBytes) + " bytes");
     }
     if (detail::nestsTooDeep(document)) {
         return refusalAt("", "a custom screen nests deeper than " + std::to_string(kMaxJsonDepth) + " levels");
+    }
+    if (!screenId.starts_with(kCustomScreenIdPrefix)) {
+        return refusalAt("/id", "a custom screen's id starts with `" + std::string{kCustomScreenIdPrefix} + "`");
     }
     auto const base = baseOf(bundle, session, authorizer, basedOn);
     if (!base) {
@@ -591,12 +745,12 @@ std::optional<Refusal> checkCustomScreen(ServedBundle const& bundle, ::morph::se
     }
     std::string key;
     if (cache != nullptr) {
-        key = verdictKey(basedOn, document, bundle.digest, permitted);
+        key = verdictKey(basedOn, document, screenId, bundle.digest, permitted);
         if (auto hit = cache->find(key)) {
             return std::move(*hit);
         }
     }
-    std::optional<Refusal> verdict = checkAgainstBase(bundle, **base, basedOn, document, permitted);
+    std::optional<Refusal> verdict = checkAgainstBase(bundle, **base, basedOn, document, screenId, permitted);
     if (cache != nullptr) {
         cache->store(std::move(key), verdict);
     }
@@ -605,10 +759,10 @@ std::optional<Refusal> checkCustomScreen(ServedBundle const& bundle, ::morph::se
 
 std::optional<Refusal> checkCustomScreen(ServedBundle const& bundle, ::morph::session::Context const& session,
                                          ::morph::session::IAuthorizer const& authorizer, std::string_view basedOn,
-                                         std::string_view document, CustomScreensOptions const& options,
-                                         VerdictCache* cache) {
+                                         std::string_view document, std::string_view screenId,
+                                         CustomScreensOptions const& options, VerdictCache* cache) {
     return checkCustomScreen(bundle, session, authorizer, permittedActions(bundle, session, authorizer), basedOn,
-                             document, options, cache);
+                             document, screenId, options, cache);
 }
 
 // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): the document, then its new id.

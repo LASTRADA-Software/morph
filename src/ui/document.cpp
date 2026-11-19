@@ -4989,4 +4989,14 @@ std::vector<std::string_view> nodeKinds() {
     return kinds;
 }
 
+std::vector<std::string_view> partKinds() {
+    std::vector<std::string_view> kinds;
+    for (detail::KindSpec const& spec : detail::kKinds) {
+        if ((spec.flags & detail::kPart) != 0) {
+            kinds.push_back(spec.kind);
+        }
+    }
+    return kinds;
+}
+
 }  // namespace morph::ui

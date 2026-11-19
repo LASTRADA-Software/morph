@@ -124,7 +124,9 @@ struct ServedBundle {
     ///        a document names; absent when it has no wizard lookup.
     std::optional<std::map<std::string, std::string, std::less<>>> wizards;
     /// @brief The catalog the registry loaded every document with, so a document checked after the build, such as
-    ///        a person's custom screen, is loaded against the same facts.
+    ///        a person's custom screen, is loaded against the same facts. Its `std::function` members are called at
+    ///        runtime, on server threads, for as long as the bundle lives, so each must stay valid and be safe to
+    ///        call concurrently.
     Catalog catalog;
 };
 

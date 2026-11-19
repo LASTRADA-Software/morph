@@ -772,4 +772,9 @@ enum class NameCategory : std::uint8_t {
 /// @return Their `kind` spellings.
 [[nodiscard]] MORPH_API std::vector<std::string_view> nodeKinds();
 
+/// @brief The part kinds of `ui/1`: the records inside a node or the head of a document (an action, a menu entry, a
+///        tool, a column, a series, …).
+/// @return Their `kind` spellings.
+[[nodiscard]] MORPH_API std::vector<std::string_view> partKinds();
+
 }  // namespace morph::ui

@@ -92,9 +92,11 @@ inline std::string quoted(std::string const& text) { return glz::write_json(text
 /// A RemoteServer that offers custom screens over @p store, checking against the fixture bundle.
 struct Server {
     explicit Server(std::shared_ptr<morph::ui::ICustomScreenStore> chosen = nullptr,
-                    morph::ui::CustomScreensOptions options = {})
-        : store{chosen != nullptr ? std::move(chosen) : std::make_shared<morph::ui::MemoryCustomScreenStore>(pool)} {
-        morph::ui::registerCustomScreens(
+                    morph::ui::CustomScreensOptions options = {},
+                    std::shared_ptr<morph::ui::ServedBundle const> chosenBundle = nullptr)
+        : served{chosenBundle != nullptr ? std::move(chosenBundle) : bundle()},
+          store{chosen != nullptr ? std::move(chosen) : std::make_shared<morph::ui::MemoryCustomScreenStore>(pool)} {
+        screens = morph::ui::registerCustomScreens(
             store, [held = served] { return held; }, authorizer, dispatcher, registry, options);
         server = std::make_shared<morph::backend::RemoteServer>(pool, authorizer, dispatcher, registry);
         // NOLINTNEXTLINE(cppcoreguidelines-prefer-member-initializer): bind() needs the server built above.
@@ -140,9 +142,11 @@ struct Server {
     morph::exec::ThreadPoolExecutor pool{2};
     morph::model::detail::ActionDispatcher dispatcher;
     morph::model::detail::ModelRegistryFactory registry;
-    std::shared_ptr<morph::ui::ServedBundle const> served = bundle();
+    std::shared_ptr<morph::ui::ServedBundle const> served;
     std::shared_ptr<uiservice::RuleAuthorizer> authorizer = std::make_shared<uiservice::RuleAuthorizer>();
     std::shared_ptr<morph::ui::ICustomScreenStore> store;
+    /// The handle `registerCustomScreens` answered.
+    std::shared_ptr<morph::ui::CustomScreens> screens;
     std::shared_ptr<morph::backend::RemoteServer> server;
     std::uint64_t instance = 0;
     std::uint64_t lastCallId = 0;
