@@ -328,7 +328,7 @@ private:
 /// description, the arrangement it gave the rows, its persisted state's key and load, and its status line's message.
 struct ModelTable {
     explicit ModelTable(reactive::Runtime& runtime)
-        : version{runtime, 0}, revision{runtime, std::string{}}, message{runtime, std::string{}} {}
+        : version{runtime, 0}, revision{runtime, std::string{}}, highlight{runtime, std::nullopt}, message{runtime, std::string{}} {}
 
     ModelTable(ModelTable const&) = delete;
     ModelTable& operator=(ModelTable const&) = delete;
@@ -374,6 +374,8 @@ struct ModelTable {
     reactive::Signal<std::uint64_t> version;
     /// The held description's revision; empty while none is held.
     reactive::Signal<std::string> revision;
+    /// The highlighted row: the key `highlightKey` names and the view row a keyed fetch found it at.
+    reactive::Signal<std::optional<TableHighlight>> highlight;
     /// The status line's message.
     reactive::Signal<std::string> message;
     reactive::TimerHandle messageTimer;
@@ -8583,6 +8585,31 @@ void ScreenCore::wireModelTable(ElementState& element) {
         });
     }
     model.describe->start();
+    // A highlight: each non-null key, once a description is held, is located in the view by a keyed fetch naming no
+    // columns, which stops the one an earlier key still has in flight; a key the view lacks, or null, marks nothing.
+    if (ExprPtr const highlight = node.prop("highlightKey")) {
+        scope.nodes.effect([this, &scope, &element, highlight] {
+            Value const key = evalIn(scope, nullptr, highlight);
+            bool const described = !element.modelTable->revision.get().empty();
+            runtime().untracked([&] {
+                ModelTable& table = *element.modelTable;
+                if (key.isNull() || !described) {
+                    table.window->stopLocating();
+                    table.highlight.set(std::nullopt);
+                    return;
+                }
+                Key const shown = keyOf(key);
+                table.window->locate(std::visit([](auto const& value) { return table::RowId{value}; }, shown),
+                                     [&table, shown](std::optional<std::int64_t> index) {
+                                         table.highlight.set(index && *index >= 0
+                                                                 ? std::optional<TableHighlight>{TableHighlight{
+                                                                       .key = shown,
+                                                                       .row = static_cast<std::size_t>(*index)}}
+                                                                 : std::nullopt);
+                                     });
+            });
+        });
+    }
     // The sort the table shows: the bound one, or the table's own, which a header click and a stored state set.
     scope.nodes.effect([this, &element] {
         Value const value = tableSort(element);
@@ -9004,9 +9031,13 @@ Node ScreenCore::modelTableOf(DocNode const& node, LowerCtx const& ctx, ElementS
     if (Commands const* const activate = node.event("onActivate")) {
         rowReadsOf(*activate, reads);
     }
-    for (DocNode const* const part : parts) {
-        if (part != nullptr) {
-            rowReadsOf(*part, reads);
+    // A column's own reads are fetched while the column is in the window; one that passes the row on whole makes
+    // every column always fetched.
+    std::vector<RowReads> partReads(parts.size());
+    for (std::size_t at = 0; at < parts.size(); ++at) {
+        if (parts.at(at) != nullptr) {
+            rowReadsOf(*parts.at(at), partReads.at(at));
+            reads.whole = reads.whole || partReads.at(at).whole;
         }
     }
     if (reads.whole) {
@@ -9024,6 +9055,28 @@ Node ScreenCore::modelTableOf(DocNode const& node, LowerCtx const& ctx, ElementS
     for (TableColumn const& column : columns) {
         ids.push_back(column.id);
     }
+    source.cellReads.resize(parts.size());
+    source.ownCell.resize(parts.size(), false);
+    for (std::size_t at = 0; at < parts.size(); ++at) {
+        for (std::string const& id : partReads.at(at).ids) {
+            if (id != ids.at(at) && model.described.contains(id) && !std::ranges::contains(source.alwaysFetched, id)) {
+                source.cellReads.at(at).push_back(id);
+            }
+        }
+        source.ownCell.at(at) = parts.at(at) != nullptr && !parts.at(at)->nodes("cell").empty();
+    }
+    // The default cell follows the column the mount gives it, so one cell serves every column of its role.
+    auto const idList = std::make_shared<std::vector<std::string> const>(ids);
+    source.defaultCellView = [this, scope = ctx.scope, idList, roles](reactive::Signal<std::size_t> const& column,
+                                                             reactive::Signal<Value> const& row) -> Node {
+        return ui::text(Text{
+            .text = slotProp<std::string>([scope, &row, &column, idList] {
+                Value const* const value = row.get().field(idList->at(column.get()));
+                return value == nullptr ? std::string{} : textOf(*value, scope->formatting());
+            }),
+            .role = roles.at(column.peek()),
+        });
+    };
     source.rows = model.rows;
     source.cellView = [this, ctx, &node, &model, parts, ids, roles](std::size_t column,
                                                                      reactive::Signal<Value> const& row) -> Node {
@@ -9068,7 +9121,7 @@ Node ScreenCore::modelTableOf(DocNode const& node, LowerCtx const& ctx, ElementS
             auto const scope = rowScope(node, ctx, row, {}, key);
             scope->onMissingRowField = &model.onMissing;
             // A row that left the realized window released its scope; its entry goes when the next row comes, so the
-            // index holds the realized rows and one more at most.
+            // index holds the realized rows and those that left since.
             std::erase_if(model.rowScopes, [](auto const& entry) { return entry.second.expired(); });
             model.rowScopes[std::move(key)] = scope;
             LowerCtx const rowCtx{.scope = scope, .bindings = ctx.bindings, .boundary = ctx.boundary};
@@ -9109,10 +9162,9 @@ Node ScreenCore::modelTableOf(DocNode const& node, LowerCtx const& ctx, ElementS
         }
         return keys;
     });
-    options.onSelectionChange = [this, ctx, &element, commands = node.event("onSelectionChange")](
-                                    std::vector<Key> const& keys, SelectionChange change) {
-        static_cast<void>(change);
-        tableGesture(element);
+    // The selection the user made: held by the element unless the document binds it, then the command list.
+    auto const selectRows = [this, ctx, &element, commands = node.event("onSelectionChange")](
+                                std::vector<Key> const& keys) {
         ValueList items;
         for (Key const& key : keys) {
             items.push_back(valueOfKey(key));
@@ -9128,6 +9180,58 @@ Node ScreenCore::modelTableOf(DocNode const& node, LowerCtx const& ctx, ElementS
             runEvent(commands, ctx, selected);
         });
     };
+    // Held by the table's handlers; a range's reply, which may come after the table is gone, holds it weakly, so it
+    // keeps no scope of the screen alive.
+    auto const select = std::make_shared<std::function<void(std::vector<Key> const&)>>(selectRows);
+    options.onSelectionChange = [this, &element, select](std::vector<Key> const& keys, SelectionChange change) {
+        static_cast<void>(change);
+        tableGesture(element);
+        (*select)(keys);
+    };
+    // A range the backend reports as view rows: its keys come from the rows, fetched as pages of keys alone where the
+    // window does not hold them, and select as the gesture says. Past `maxRangeRows` it is refused and selects
+    // nothing.
+    options.onSelectRange = [this, ctx, &element, &model, select](std::size_t anchor, std::size_t focus,
+                                                                     SelectionChange change) {
+        tableGesture(element);
+        std::size_t const first = std::min(anchor, focus);
+        std::size_t const count = std::max(anchor, focus) - first + 1;
+        std::size_t const bound = session.options().maxRangeRows;
+        if (count > bound) {
+            tableMessage(element, "A range selects at most " +
+                                      render::formatCanonicalNumber(std::to_string(bound),
+                                                                    ctx.scope->formatting().numeric) +
+                                      " rows");
+            return;
+        }
+        model.rows->keysOf(static_cast<std::int64_t>(first), static_cast<std::int64_t>(count))
+            .then(model.scope,
+                  [this, &element, select = std::weak_ptr{select}, change](
+                      std::expected<std::vector<table::RowId>, table::TableError> const& found) {
+                      if (!found) {
+                          tableMessage(element, "The range could not be selected: " + found.error().message);
+                          return;
+                      }
+                      std::vector<Key> keys;
+                      if (change == SelectionChange::Extend) {
+                          if (ValueList const* const held = tableSelection(element).asList()) {
+                              for (Value const& item : *held) {
+                                  keys.push_back(keyOf(item));
+                              }
+                          }
+                      }
+                      for (table::RowId const& id : *found) {
+                          Key const key = std::visit([](auto const& value) { return Key{value}; }, id);
+                          if (!std::ranges::contains(keys, key)) {
+                              keys.push_back(key);
+                          }
+                      }
+                      if (auto const live = select.lock()) {
+                          (*live)(keys);
+                      }
+                  });
+    };
+    options.highlight = slotProp<std::optional<TableHighlight>>([&model] { return model.highlight.get(); });
     options.sort = slotProp<std::optional<TableSort>>([&element, ids] -> std::optional<TableSort> {
         SortChain const chain = sortChainOf(tableSort(element));
         if (chain.empty()) {

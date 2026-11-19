@@ -423,6 +423,9 @@ struct SessionOptions {
     /// @brief How long a table's arrangement must stay unchanged before its state is saved, waited for on
     ///        `scheduler`; without one every change saves at once.
     std::chrono::milliseconds tableStateDebounce{500};
+    /// @brief The most rows a range selection of a model-backed table resolves; a longer range is refused in the
+    ///        table's status line and selects nothing.
+    std::size_t maxRangeRows = 10'000;
     /// @brief The application's id: the `application` of every table-state key.
     std::string application;
 };

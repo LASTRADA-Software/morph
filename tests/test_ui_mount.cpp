@@ -6,17 +6,22 @@
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
+#include <expected>
 #include <functional>
+#include <map>
 #include <memory>
 #include <morph/reactive/runtime.hpp>
 #include <morph/reactive/signal.hpp>
 #include <morph/testing/owner_probe_recorder.hpp>
 #include <morph/ui/backend.hpp>
+#include <morph/table/view_change.hpp>
 #include <morph/ui/mount.hpp>
+#include <morph/ui/table_rows.hpp>
 #include <morph/ui/testing/recording_backend.hpp>
 #include <morph/ui/view.hpp>
 #include <morph/util/datetime.hpp>
 #include <optional>
+#include <span>
 #include <stdexcept>
 #include <string>
 #include <type_traits>
@@ -1372,4 +1377,443 @@ TEST_CASE("ui::Mounted: a tab bar's overflow label reaches the backend when it i
         owner.runAll();
         CHECK(backend.dump().contains("moreLabel=Else"));
     }
+}
+
+// ── The column window ───────────────────────────────────────────────────────
+
+namespace {
+
+using ui::CellRef;
+using ui::ColumnExtents;
+using ui::FocusMove;
+using ui::Key;
+using ui::MountStats;
+using ui::TableArrangement;
+using ui::Value;
+using ui::Virtualization;
+using ui::windowingOf;
+namespace table = morph::table;
+
+// Rows for a mount test: every row present, row `i` keyed `i` with the record `{id: i, c0: "r<i>c0", …}`, built when
+// first read. `holdFrom` makes the rows at and after an index not fetched until `arrive`.
+class FakeRows final : public ui::TableRows {
+public:
+    struct Visible {
+        std::int64_t first = 0;
+        std::int64_t count = 0;
+        std::vector<std::string> columns;
+    };
+
+    FakeRows(std::int64_t rows, std::size_t columns, morph::exec::IExecutor& owner,
+             table::TotalKind kind = table::TotalKind::Exact)
+        : _rows{rows}, _columns{columns}, _kind{kind}, _owner{&owner} {}
+
+    [[nodiscard]] ui::TableTotal total() const override {
+        return ui::TableTotal{.rows = _rows, .kind = _kind, .known = true};
+    }
+
+    [[nodiscard]] std::optional<ui::TableRowRef> row(std::int64_t index) const override {
+        if (index < 0 || index >= _rows || (_hold && index >= *_hold)) {
+            return std::nullopt;
+        }
+        auto [found, made] = _records.try_emplace(index);
+        if (made) {
+            ui::ValueRecord record;
+            record.emplace("id", Value{index});
+            for (std::size_t column = 0; column < _columns; ++column) {
+                record.emplace("c" + std::to_string(column),
+                               Value{"r" + std::to_string(index) + "c" + std::to_string(column)});
+            }
+            found->second = Entry{.key = table::RowId{index}, .row = Value{std::move(record)}};
+        }
+        return ui::TableRowRef{.key = found->second.key, .row = found->second.row};
+    }
+
+    [[nodiscard]] table::UnloadedLevels unloadedLevels(std::int64_t /*index*/) const override { return {}; }
+
+    // Records the call, and forgets the records far from it.
+    void visible(std::int64_t first, std::int64_t count, std::span<std::string const> columns) override {
+        ++visibleCalls;
+        lastVisible = Visible{.first = first, .count = count, .columns = {columns.begin(), columns.end()}};
+        std::erase_if(_records, [first, count](auto const& entry) {
+            return entry.first < first - 200 || entry.first >= first + count + 200;
+        });
+    }
+
+    morph::async::Completion<std::expected<std::vector<table::RowId>, table::TableError>> keysOf(
+        std::int64_t /*first*/, std::int64_t /*count*/) override {
+        using Result = std::expected<std::vector<table::RowId>, table::TableError>;
+        auto [completion, promise] = morph::async::Completion<Result>::makeSettleable(_owner);
+        promise.resolve(Result{std::vector<table::RowId>{}});
+        return std::move(completion);
+    }
+
+    std::expected<void, table::TableError> setSort(ui::SortChain /*sort*/) override { return {}; }
+    std::expected<void, table::TableError> setFilter(table::FilterSpec /*filter*/) override { return {}; }
+    [[nodiscard]] ui::TableCountsView counts() const override { return ui::TableCountsView{.view = total()}; }
+    void onChange(std::function<void(table::ViewChange const&)> handler) override { _handler = std::move(handler); }
+
+    // Rows at and after @p index are not fetched until `arrive`.
+    void holdFrom(std::int64_t index) { _hold = index; }
+
+    // The held rows arrive: a reset.
+    void arrive() {
+        _hold.reset();
+        reset();
+    }
+
+    // A new total: a reset.
+    void setTotal(std::int64_t rows, table::TotalKind kind) {
+        _rows = rows;
+        _kind = kind;
+        reset();
+    }
+
+    std::size_t visibleCalls = 0;
+    Visible lastVisible;
+
+private:
+    struct Entry {
+        table::RowId key;
+        Value row;
+    };
+
+    void reset() {
+        _records.clear();
+        if (_handler) {
+            _handler(table::ViewChange{
+                .ops = {table::ViewOp{.kind = table::ViewOp::Kind::Reset, .first = 0, .count = 0, .to = 0}}});
+        }
+    }
+
+    std::int64_t _rows;
+    std::size_t _columns;
+    table::TotalKind _kind;
+    morph::exec::IExecutor* _owner;
+    std::optional<std::int64_t> _hold;
+    mutable std::map<std::int64_t, Entry> _records;
+    std::function<void(table::ViewChange const&)> _handler;
+};
+
+struct WindowOptions {
+    std::size_t pinned = 0;
+    std::vector<std::size_t> custom;
+};
+
+// The text of a record's field, or nothing.
+std::string fieldText(Value const& record, std::string const& field) {
+    Value const* const value = record.field(field);
+    return value != nullptr && value->asString() != nullptr ? *value->asString() : std::string{};
+}
+
+// One table over `FakeRows` on a recording backend: every column 100 wide with the default text cell, but the
+// `custom` ones, which have a cell of their own; a viewport of 30 rows by 2,000 (twenty columns), reported at once.
+struct WindowFixture {
+    WindowFixture(std::int64_t rowCount, std::size_t columnCount, WindowOptions const& options = {})
+        : rows{std::make_shared<FakeRows>(rowCount, columnCount, runtime.owner())},
+          arrangement{runtime, TableArrangement{.visible = {}, .pinned = options.pinned, .widths = {}}},
+          focus{runtime, std::nullopt} {
+        std::vector<ui::TableColumn> columns;
+        for (std::size_t column = 0; column < columnCount; ++column) {
+            columns.push_back(ui::TableColumn{.id = "c" + std::to_string(column),
+                                              .label = "C" + std::to_string(column),
+                                              .width = ui::Sizing::fixed(100)});
+        }
+        ui::TableSource source;
+        source.rows = rows;
+        source.ownCell.assign(columnCount, false);
+        for (std::size_t const column : options.custom) {
+            source.ownCell.at(column) = true;
+        }
+        source.defaultCellView = [](Signal<std::size_t> const& column, Signal<Value> const& row) {
+            return ui::text(
+                {.text = [&column, &row] { return fieldText(row.get(), "c" + std::to_string(column.get())); }});
+        };
+        source.cellView = [this](std::size_t column, Signal<Value> const& row) {
+            ++cellViewCalls;
+            return ui::text({.text = [&row, column] { return fieldText(row.get(), "c" + std::to_string(column)); }});
+        };
+        ui::TableOptions tableOptions;
+        tableOptions.arrangement = [this] { return arrangement.get(); };
+        tableOptions.focus = [this] { return focus.get(); };
+        tableOptions.onFocusCell = [this](std::optional<CellRef> cell) {
+            if (onFocusCell) {
+                onFocusCell(std::move(cell));
+            }
+        };
+        view = std::make_unique<ui::Mounted>(runtime, backend,
+                                             ui::table(std::move(columns), std::move(source), std::move(tableOptions)));
+        table = backend.all("Table").front();
+        scrollColumns(0);
+        scrollRows(0);
+    }
+
+    void settle() {
+        while (owner.runAll() > 0) {
+        }
+    }
+
+    void scrollRows(std::size_t first) {
+        firstRow = first;
+        backend.scrollTable(table, first, 30);
+        settle();
+    }
+
+    void scrollColumns(int scrollX) {
+        backend.scrollTableColumns(table, scrollX, 2000);
+        settle();
+    }
+
+    // Scrolls down over @p n rows a viewport at a time, settling one owner turn at a time, and keeps the largest
+    // number of cells built or rebound in one turn.
+    void flingRows(std::size_t n) {
+        auto const work = [this] { return stats().cellsRebound + stats().cellsCreated; };
+        for (std::size_t moved = 0; moved < n; moved += 30) {
+            std::size_t before = work();
+            firstRow += 30;
+            backend.scrollTable(table, firstRow, 30);
+            maxRebindsPerTurn = std::max(maxRebindsPerTurn, work() - before);
+            for (;;) {
+                before = work();
+                if (!owner.runOne()) {
+                    break;
+                }
+                maxRebindsPerTurn = std::max(maxRebindsPerTurn, work() - before);
+            }
+        }
+    }
+
+    [[nodiscard]] MountStats const& stats() const { return view->stats(); }
+    [[nodiscard]] std::size_t realizedRows() const { return backend.children(table).size(); }
+
+    [[nodiscard]] std::size_t cellsAlive() const {
+        std::size_t alive = 0;
+        for (int const row : backend.children(table)) {
+            for (int const cell : backend.children(row)) {
+                alive += backend.hasProp(cell, "column") && backend.prop(cell, "column") != "none" ? 1U : 0U;
+            }
+        }
+        return alive;
+    }
+
+    [[nodiscard]] std::size_t headerCellsAlive() { return backend.headerCells(table); }
+
+    [[nodiscard]] std::optional<int> cellOf(Key const& key, std::size_t column) const {
+        for (int const row : backend.children(table)) {
+            if (backend.prop(row, "rowKey") != ui::testing::detail::formatKey(key)) {
+                continue;
+            }
+            for (int const cell : backend.children(row)) {
+                if (backend.prop(cell, "column") == std::to_string(column)) {
+                    return cell;
+                }
+            }
+        }
+        return std::nullopt;
+    }
+
+    [[nodiscard]] ColumnExtents const& extents() const { return *view->columnExtents(); }
+
+    Owner owner;
+    Runtime runtime{owner};
+    RecordingBackend backend;
+    std::shared_ptr<FakeRows> rows;
+    Signal<TableArrangement> arrangement;
+    Signal<std::optional<CellRef>> focus;
+    std::function<void(std::optional<CellRef>)> onFocusCell;
+    std::size_t cellViewCalls = 0;
+    std::size_t maxRebindsPerTurn = 0;
+    std::size_t firstRow = 0;
+    std::unique_ptr<ui::Mounted> view;
+    int table = 0;
+};
+
+// The indices 0 to n - 1 without @p left.
+std::vector<std::size_t> allColumnsBut(std::size_t n, std::size_t left) {
+    std::vector<std::size_t> out;
+    for (std::size_t column = 0; column < n; ++column) {
+        if (column != left) {
+            out.push_back(column);
+        }
+    }
+    return out;
+}
+
+}  // namespace
+
+// Mutation: `windowingOf` leaving `cellThreshold` out (the first line's `.columns` and `.rows` are false).
+TEST_CASE("windowing: the three thresholds", "[ui][mount]") {
+    Virtualization const v{};
+    CHECK(windowingOf(v, 1999, 300, false).rows);
+    CHECK(windowingOf(v, 1999, 300, false).columns);
+    CHECK_FALSE(windowingOf(v, 1999, 10, false).rows);
+    CHECK_FALSE(windowingOf(v, 1999, 10, false).columns);
+    CHECK(windowingOf(v, 2000, 10, false).rows);
+    CHECK_FALSE(windowingOf(v, 2000, 10, false).columns);
+    CHECK(windowingOf(v, 100, 41, false).columns);
+    CHECK_FALSE(windowingOf(v, 100, 41, false).rows);
+    CHECK_FALSE(windowingOf(v, 100, 40, false).columns);
+    CHECK(windowingOf(v, 10, 10, true).rows);
+    CHECK_FALSE(windowingOf(v, 10, 10, true).columns);
+}
+
+// Mutation: the column window never on (`windowColumns` is all 300).  Gate F2.
+TEST_CASE("table window: 1,999 × 300 realizes only the windows", "[ui][mount]") {
+    WindowFixture f{1'999, 300, {.pinned = 2}};
+    f.scrollRows(500);
+    f.scrollColumns(10'000);  // columns 100 to 119 in view
+    CHECK(f.realizedRows() == 50);  // 30 and overscan 10 each side
+    CHECK(f.backend.windowColumns(f.table).size() == 2 + 20 + 2 * 4);
+    CHECK(f.cellsAlive() == f.realizedRows() * f.backend.windowColumns(f.table).size());
+    CHECK(f.headerCellsAlive() == f.backend.windowColumns(f.table).size());
+    CHECK(f.backend.totalWidth(f.table) == 300 * 100);
+    CHECK(f.rows->lastVisible.columns.size() == 30);  // the window's columns go to `visible`
+}
+
+// Mutations: a leaving row's slot not reused (cellsCreated grows on the second fling); no frame
+// budget (maxRebindsPerTurn is 720, thirty rows of twenty-four cells).  Gate F8.
+TEST_CASE("table window: a fling creates no cell once the pools are warm", "[ui][mount]") {
+    WindowFixture f{100'000, 300, {.pinned = 2}};
+    f.flingRows(2'000);
+    auto const created = f.stats().cellsCreated;
+    f.flingRows(2'000);
+    CHECK(f.stats().cellsCreated == created);
+    CHECK(f.maxRebindsPerTurn <= 240);
+    CHECK(f.stats().placeholders > 0);  // the budget left cells blank for a turn
+}
+
+// Mutation: rebinding a cell by building it again through cellView (with the mutant the pass never settles: the
+// built cells never take their columns, so the work comes back each turn; the run is stopped at 580 s).
+TEST_CASE("table window: a pooled cell is rebound by its row signal", "[ui][mount]") {
+    WindowFixture f{100'000, 300, {.pinned = 2, .custom = {5}}};
+    f.flingRows(2'000);
+    auto const views = f.cellViewCalls;
+    auto const rebound = f.stats().cellsRebound;
+    f.flingRows(2'000);
+    CHECK(f.cellViewCalls == views);
+    CHECK(f.stats().cellsRebound > rebound);
+    f.scrollRows(40'000);
+    f.settle();
+    REQUIRE(f.cellOf(Key{std::int64_t{40'000}}, 5).has_value());
+    CHECK(f.backend.prop(*f.cellOf(Key{std::int64_t{40'000}}, 5), "text") == "r40000c5");  // rebound to its new row
+}
+
+// Mutation: no anchoring (`horizontalOffset` is never set).
+TEST_CASE("table window: a column growing left of the view keeps the columns in view where they are", "[ui][mount]") {
+    WindowFixture f{1'999, 300, {.pinned = 0}};
+    f.scrollColumns(10'000);  // column 100 is the first in view
+    f.backend.measureColumn(f.table, 98, 160);
+    f.settle();  // an overscan column grows by 60
+    CHECK(f.backend.horizontalOffset(f.table) == 10'060);
+    CHECK(f.extents().offsetOf(100) == 10'060);
+    f.backend.measureColumn(f.table, 98, 120);
+    f.settle();  // narrower: a width only grows
+    CHECK(f.extents().widthOf(98) == 160);
+    CHECK(f.backend.horizontalOffset(f.table) == 10'060);
+    f.backend.measureColumn(f.table, 110, 180);
+    f.settle();  // inside the view: no anchoring
+    CHECK(f.backend.horizontalOffset(f.table) == 10'060);
+}
+
+// Mutations: pinned columns dropped from the window when scrolled away; no display unpinning (`pinnedShown` 12).
+TEST_CASE("table window: pinned columns stay realized, and a narrow table unpins for display only", "[ui][mount]") {
+    WindowFixture f{1'999, 300, {.pinned = 2}};
+    f.scrollColumns(20'000);
+    std::vector<std::size_t> const window = f.backend.windowColumns(f.table);
+    CHECK(window.at(0) == 0);
+    CHECK(window.at(1) == 1);  // still the first two
+    CHECK(f.cellOf(Key{std::int64_t{0}}, 1).has_value());
+    TableArrangement wide = f.arrangement.peek();
+    wide.pinned = 12;  // 1,200 of a 2,000 viewport: over half
+    f.arrangement.set(wide);
+    f.settle();
+    CHECK(f.backend.pinnedShown(f.table) == 10);  // the last two scroll with the rest
+    CHECK(f.arrangement.peek().pinned == 12);  // display only
+}
+
+// Mutation: a pass that reads every column's width (columnReads grows by 300 a pass).  Gate F9.
+TEST_CASE("table window: a pass reads no width outside the column window", "[ui][mount]") {
+    WindowFixture f{1'999, 300, {.pinned = 2}};
+    f.scrollColumns(10'000);
+    std::size_t const before = f.extents().columnReads();
+    for (int x = 10'000; x < 12'000; x += 100) {
+        f.scrollColumns(x);  // twenty passes, one column each
+    }
+    std::size_t const window = 2 + 20 + 2 * 4;
+    CHECK(f.extents().columnReads() - before <= 20 * window);  // the window's columns, per pass
+}
+
+// Mutations: the rows rebuilt on a layout change (cellsCreated grows); a hide that pools nothing (the destroyed
+// cell, still among its row's children, makes the next pass throw).  Gate D8.
+TEST_CASE("table window: hiding and moving a column create no cell widgets", "[ui][mount]") {
+    WindowFixture f{1'999, 300, {.pinned = 2}};
+    auto const before = f.stats().cellsCreated;
+    std::size_t const alive = f.cellsAlive();
+    TableArrangement hidden = f.arrangement.peek();
+    hidden.visible = allColumnsBut(300, 5);  // column 5 was in the window
+    f.arrangement.set(hidden);
+    f.settle();
+    CHECK(f.stats().cellsCreated == before);
+    CHECK(f.cellsAlive() == alive);  // the entering column took the pooled cells
+    CHECK_FALSE(f.cellOf(Key{std::int64_t{0}}, 5).has_value());
+    CHECK(f.headerCellsAlive() == f.backend.windowColumns(f.table).size());
+    TableArrangement moved = hidden;
+    std::swap(moved.visible.at(3), moved.visible.at(4));
+    f.arrangement.set(moved);
+    f.settle();
+    CHECK(f.stats().cellsCreated == before);
+    REQUIRE(f.cellOf(Key{std::int64_t{0}}, 3).has_value());
+    CHECK(f.backend.prop(*f.cellOf(Key{std::int64_t{0}}, 3), "text") == "r0c3");  // every cell still its own
+    CHECK(f.rows->lastVisible.first == 0);  // rows and their order untouched
+}
+
+// Mutation: the focused row not kept realized (the focused cell is gone after the scroll).  Gate F10.
+TEST_CASE("table focus: the focused cell survives a scroll of 10,000 rows and 200 columns", "[ui][mount]") {
+    WindowFixture f{100'000, 300, {.pinned = 2}};
+    f.focus.set(CellRef{.key = Key{std::int64_t{7}}, .column = "c5"});
+    f.settle();
+    f.scrollRows(10'000);
+    f.scrollColumns(20'000);
+    REQUIRE(f.cellOf(Key{std::int64_t{7}}, 5).has_value());  // its row and its column stay realized
+    CHECK(f.backend.focusCell(f.table) == std::pair{std::size_t{7}, std::size_t{5}});
+    CHECK(f.realizedRows() == 51);  // one row beyond the window at most
+    CHECK(f.backend.lastCounts(f.table) == std::pair{std::optional<std::int64_t>{100'000}, std::size_t{300}});
+}
+
+// Mutation: `Last` clamped to the rows held (focus stays on row 199).
+TEST_CASE("table focus: Ctrl+End over rows not fetched lands on the last row when it arrives", "[ui][mount]") {
+    WindowFixture f{100'000, 300, {.pinned = 0}};
+    std::vector<std::optional<CellRef>> reported;
+    f.onFocusCell = [&reported](std::optional<CellRef> cell) { reported.push_back(std::move(cell)); };
+    f.focus.set(CellRef{.key = Key{std::int64_t{0}}, .column = "c0"});
+    f.settle();
+    f.rows->holdFrom(200);
+    f.backend.focusMove(f.table, FocusMove::Last);
+    f.settle();
+    CHECK(f.backend.focusCell(f.table).first == 99'999);  // the placeholder holds focus
+    CHECK(f.rows->lastVisible.first + f.rows->lastVisible.count >= 100'000);  // and is asked for
+    f.rows->arrive();
+    f.settle();
+    REQUIRE_FALSE(reported.empty());
+    CHECK(reported.back() == CellRef{.key = Key{std::int64_t{99'999}}, .column = "c0"});
+}
+
+// Mutations: the realized row count reported (50); a lower bound reported as exact.
+TEST_CASE("table focus: the reported row count is the total, or unknown for a lower bound", "[ui][mount]") {
+    WindowFixture f{9'093, 300, {.pinned = 0}};
+    CHECK(f.backend.lastCounts(f.table) == std::pair{std::optional<std::int64_t>{9'093}, std::size_t{300}});
+    f.rows->setTotal(100'000, table::TotalKind::AtLeast);
+    f.settle();
+    CHECK(f.backend.lastCounts(f.table) == std::pair{std::optional<std::int64_t>{}, std::size_t{300}});
+    TableArrangement fewer = f.arrangement.peek();
+    fewer.visible = allColumnsBut(300, 5);
+    f.arrangement.set(fewer);
+    f.settle();
+    CHECK(f.backend.lastCounts(f.table).second == 299);  // the visible columns
+    f.rows->holdFrom(200);
+    f.focus.set(CellRef{.key = Key{std::int64_t{0}}, .column = "c0"});
+    f.settle();
+    f.backend.focusMove(f.table, FocusMove::Last);
+    f.settle();
+    CHECK(f.backend.focusCell(f.table).first == 199);  // AtLeast: the last row known
 }

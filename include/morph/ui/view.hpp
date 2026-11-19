@@ -6,6 +6,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <functional>
+#include <map>
 #include <memory>
 #include <optional>
 #include <stdexcept>
@@ -1194,6 +1195,58 @@ struct Virtualization {
     /// @brief How many rows beyond the visible range, on each side, keep a realized widget so a small scroll does
     ///        not have to realize a widget on every frame; set once.
     std::size_t overscan = 10;
+    /// @brief Above this many visible columns, a table over a `TableSource` realizes only the columns in or near the
+    ///        horizontal viewport; set once.
+    std::size_t columnThreshold = 40;
+    /// @brief Above this many cells (rows times visible columns), such a table windows both its rows and its columns;
+    ///        set once.
+    std::size_t cellThreshold = 20'000;
+    /// @brief How many columns beyond the horizontal viewport, on each side, keep realized cells; set once.
+    std::size_t columnOverscan = 4;
+    /// @brief The most cells one pass of a table's windows builds or binds to another row or column; the rest draw
+    ///        blank at their column's width and are realized over the following turns; set once.
+    std::size_t realizePerFrame = 240;
+};
+
+/// @brief Which of a table's columns show, in which order, how many are pinned, and the widths the user set.
+struct TableArrangement {
+    /// @brief Indices into `Table::columns`, in layout order; empty shows every column in its own order.
+    std::vector<std::size_t> visible;
+    /// @brief How many of the leading visible columns stay in view whatever the horizontal scroll.
+    std::size_t pinned = 0;
+    /// @brief Widths the user set, by index into `Table::columns`; measurement does not change such a width.
+    std::map<std::size_t, int> widths;
+
+    /// @brief Member-wise equality.
+    /// @param other The arrangement to compare with.
+    /// @return `true` when every member matches.
+    [[nodiscard]] bool operator==(TableArrangement const& other) const = default;
+};
+
+/// @brief The row a linked chart highlights: its key, and the view row the server has it at.
+struct TableHighlight {
+    /// @brief The row's key.
+    Key key;
+    /// @brief Its view row when the highlight was set.
+    std::size_t row = 0;
+
+    /// @brief Member-wise equality.
+    /// @param other The highlight to compare with.
+    /// @return `true` when key and row match.
+    [[nodiscard]] bool operator==(TableHighlight const& other) const = default;
+};
+
+/// @brief A cell by its row's key and its column's id.
+struct CellRef {
+    /// @brief The row's key.
+    Key key;
+    /// @brief The column's id (`TableColumn::id`).
+    std::string column;
+
+    /// @brief Member-wise equality.
+    /// @param other The cell to compare with.
+    /// @return `true` when key and column match.
+    [[nodiscard]] bool operator==(CellRef const& other) const = default;
 };
 
 /// @brief One widget per row of a keyed collection, updated in place when a row with the same key changes.
@@ -1255,9 +1308,21 @@ struct TableSource {
     /// @brief The row's own parts, built once per realized row key from a signal the mount keeps equal to its
     ///        record; empty for none.
     std::function<TableRowLook(reactive::Signal<Value> const& row)> rowView;
+    /// @brief The default cell, shared by every column whose `ownCell` entry is `false`: built once per cell from a
+    ///        signal holding the column it shows (an index into `Table::columns`, which the mount sets when it moves
+    ///        a pooled cell to another column of the same `TextRole`) and one the mount sets to the row's record.
+    ///        Empty: every column's cells come from `cellView`.
+    std::function<Node(reactive::Signal<std::size_t> const& column, reactive::Signal<Value> const& row)>
+        defaultCellView;
+    /// @brief Per `Table::columns` index, whether the column's cells come from `cellView`, pooled per column, rather
+    ///        than from `defaultCellView`, pooled per role; a missing entry reads as `true`.
+    std::vector<bool> ownCell;
     /// @brief Column ids named to every `TableRows::visible` call, whatever the column window holds: what the row's
-    ///        own parts read. The laid-out columns' ids are added to them per call.
+    ///        own parts read. The ids of the columns in the window, and what their cells read, are added per call.
     std::vector<std::string> alwaysFetched;
+    /// @brief Per `Table::columns` index, the row fields that column's cell reads beside its own id, named to
+    ///        `TableRows::visible` while the column is in the window; a missing entry reads as none.
+    std::vector<std::vector<std::string>> cellReads;
     /// @brief Per `Table::columns` index, the level of that column; empty, or an empty entry: the column has none.
     std::vector<std::string> levels;
 };
@@ -1358,6 +1423,21 @@ struct Table {
     Prop<TableStatus> status;
     /// @brief Called when the user chooses the status line's "Retry".
     std::function<void()> onRetry;
+    /// @brief Which columns show, their order, the pinned count and the user's widths; a table over a `TableSource`
+    ///        only. The default shows every column, none pinned.
+    Prop<TableArrangement> arrangement;
+    /// @brief The row a linked chart highlights, set once a keyed reply has given its view row: the mount scrolls to
+    ///        it, marks it and follows its key through later changes of the rows. Disengaged: no mark. A table over a
+    ///        `TableSource` only; it never changes the selection or the keyboard focus.
+    Prop<std::optional<TableHighlight>> highlight;
+    /// @brief Called with a range gesture the backend cannot resolve itself, as the view rows of its anchor and its
+    ///        end and the kind of change; a table over a `TableSource` only.
+    std::function<void(std::size_t anchorRow, std::size_t focusRow, SelectionChange change)> onSelectRange;
+    /// @brief The focused cell, which the mount keeps realized whatever the windows; disengaged leaves focus where the
+    ///        user put it. A table over a `TableSource` only, focusing a row the mount has realized.
+    Prop<std::optional<CellRef>> focus;
+    /// @brief Called with the cell the user's keys moved focus to, once its row is fetched.
+    std::function<void(std::optional<CellRef>)> onFocusCell;
 };
 
 /// @brief A date, or a date and time, edited in a display zone and reported as an instant.
@@ -2129,6 +2209,16 @@ struct TableOptions {
     Prop<TableStatus> status;
     /// @brief Called when the user chooses the status line's "Retry".
     std::function<void()> onRetry;
+    /// @brief Which columns show, their order, the pinned count and the user's widths.
+    Prop<TableArrangement> arrangement;
+    /// @brief The row a linked chart highlights; disengaged for none.
+    Prop<std::optional<TableHighlight>> highlight;
+    /// @brief Called with a range gesture the backend cannot resolve itself, as two view rows and the kind of change.
+    std::function<void(std::size_t anchorRow, std::size_t focusRow, SelectionChange change)> onSelectRange;
+    /// @brief The focused cell; disengaged leaves focus where the user put it.
+    Prop<std::optional<CellRef>> focus;
+    /// @brief Called with the cell the user's keys moved focus to, once its row is fetched.
+    std::function<void(std::optional<CellRef>)> onFocusCell;
 };
 
 /// @brief What a table's row view builds for one row: its cells, one per column, and its tone.
@@ -2232,6 +2322,11 @@ template <typename RowT>
     spec.source = std::move(options.source);
     spec.status = std::move(options.status);
     spec.onRetry = std::move(options.onRetry);
+    spec.arrangement = std::move(options.arrangement);
+    spec.highlight = std::move(options.highlight);
+    spec.onSelectRange = std::move(options.onSelectRange);
+    spec.focus = std::move(options.focus);
+    spec.onFocusCell = std::move(options.onFocusCell);
     return detail::makeNode(std::move(spec));
 }
 
@@ -2264,6 +2359,11 @@ template <typename RowT>
     spec.source = std::move(source);
     spec.status = std::move(options.status);
     spec.onRetry = std::move(options.onRetry);
+    spec.arrangement = std::move(options.arrangement);
+    spec.highlight = std::move(options.highlight);
+    spec.onSelectRange = std::move(options.onSelectRange);
+    spec.focus = std::move(options.focus);
+    spec.onFocusCell = std::move(options.onFocusCell);
     return detail::makeNode(std::move(spec));
 }
 

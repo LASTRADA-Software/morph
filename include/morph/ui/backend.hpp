@@ -7,6 +7,7 @@
 #include <memory>
 #include <morph/export.hpp>
 #include <optional>
+#include <span>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -737,6 +738,21 @@ enum class RowClick : std::uint8_t {
     Range,   ///< Shift+click: the rows from the anchor to this one are selected, in place of the rest.
 };
 
+/// @brief A key that moves a table's focused cell, which the mount resolves over rows and columns it may not have
+///        realized.
+enum class FocusMove : std::uint8_t {
+    Up,        ///< One row up.
+    Down,      ///< One row down.
+    Left,      ///< One visible column left.
+    Right,     ///< One visible column right.
+    Home,      ///< The row's first visible column.
+    End,       ///< The row's last visible column.
+    First,     ///< The view's first row (Ctrl+Home).
+    Last,      ///< The view's last row, or the last row known under a lower bound (Ctrl+End).
+    PageUp,    ///< Up by the rows in view.
+    PageDown,  ///< Down by the rows in view.
+};
+
 /// @brief Keyed rows under column headers, with selection and activation by key.
 ///
 /// Its children are the rows, each a horizontal stack whose children are the cells in column order. A hidden cell
@@ -775,7 +791,8 @@ public:
     /// @param mode None, one, or any number.
     virtual void setSelectionMode(SelectionMode mode) = 0;
 
-    /// @brief Tells the table which key a row stands for; called once per row, right after it is built. Marks the row
+    /// @brief Tells the table which key a row stands for; called once per row, right after it is built, and again
+    ///        when a table over a `TableSource` gives a row it holds to another key. Marks the row
     ///        when its key is requested.
     /// @param row One of this table's rows.
     /// @param key The row's key.
@@ -898,6 +915,95 @@ public:
         static_cast<void>(row);
         static_cast<void>(column);
         static_cast<void>(load);
+    }
+
+    /// @brief Tells the backend which columns the mount realizes, for a table whose rows come from a `TableSource`
+    ///        and whose columns the mount lays out: once the backend reported its horizontal viewport, or the
+    ///        arrangement is not the default. The header shows these columns only, each at its offset and width; the
+    ///        first @p pinned stay in view whatever the horizontal scroll. Called again whenever any of it changes.
+    /// @param columns    Indices into the columns `setColumns` gave: the pinned ones first, then the scrolled range.
+    /// @param offsets    Each column's offset from the table's left edge, as if every visible column were laid out.
+    /// @param widths     Each column's width.
+    /// @param totalWidth The width of every visible column together, which sizes the horizontal scroll bar.
+    /// @param pinned     How many of @p columns are pinned.
+    virtual void setColumnWindow(std::span<std::size_t const> columns, std::span<int const> offsets,
+                                 std::span<int const> widths, int totalWidth, std::size_t pinned) {
+        static_cast<void>(columns);
+        static_cast<void>(offsets);
+        static_cast<void>(widths);
+        static_cast<void>(totalWidth);
+        static_cast<void>(pinned);
+    }
+
+    /// @brief Sets what the backend calls when its horizontal scroll or viewport changes, so the mount can window the
+    ///        columns. A backend that never calls it gets every visible column realized.
+    /// @param handler The handler, with the scroll offset and the viewport's width; empty does nothing.
+    virtual void setOnHorizontalRange(std::function<void(int scrollX, int viewport)> handler) {
+        static_cast<void>(handler);
+    }
+
+    /// @brief Moves the horizontal scroll offset without reporting it back: the mount keeps the columns in view where
+    ///        they were when a column left of them grew.
+    /// @param scrollX The offset.
+    virtual void setHorizontalOffset(int scrollX) { static_cast<void>(scrollX); }
+
+    /// @brief Sets what the backend calls for a range gesture (Shift+click, Shift+arrow) over rows it does not hold
+    ///        keys for, instead of resolving the range itself.
+    /// @param handler The handler, with the view rows of the range's anchor and end, and the kind of change; empty
+    ///        does nothing.
+    virtual void setOnSelectRange(std::function<void(std::size_t anchorRow, std::size_t focusRow, SelectionChange)>
+                                      handler) {
+        static_cast<void>(handler);
+    }
+
+    /// @brief Shows keyboard focus on a cell, and announces it; a row not fetched yet is announced as loading.
+    /// @param viewRow The cell's view row.
+    /// @param column  The cell's column: an index into the columns `setColumns` gave.
+    virtual void setFocusCell(std::size_t viewRow, std::size_t column) {
+        static_cast<void>(viewRow);
+        static_cast<void>(column);
+    }
+
+    /// @brief Sets what the backend calls with the width a cell measured, so the mount can grow the column.
+    /// @param handler The handler, with the column (an index into the columns `setColumns` gave) and the width;
+    ///        empty does nothing.
+    virtual void setOnColumnMeasured(std::function<void(std::size_t column, int width)> handler) {
+        static_cast<void>(handler);
+    }
+
+    /// @brief Sets what the backend calls for a key that moves the focused cell, which the mount resolves over rows
+    ///        and columns it may not have realized.
+    /// @param handler The handler, with the move; empty does nothing.
+    virtual void setOnFocusMove(std::function<void(FocusMove)> handler) { static_cast<void>(handler); }
+
+    /// @brief Tells the backend the counts it reports to assistive technology.
+    /// @param rows    The view's total when it is exact; nothing when it is a lower bound or not known yet.
+    /// @param columns The visible columns.
+    virtual void setCounts(std::optional<std::int64_t> rows, std::size_t columns) {
+        static_cast<void>(rows);
+        static_cast<void>(columns);
+    }
+
+    /// @brief Scrolls a view row into view.
+    /// @param viewRow The row.
+    virtual void scrollToRow(std::size_t viewRow) { static_cast<void>(viewRow); }
+
+    /// @brief Marks one row as the one a linked view highlights, or none; neither selection nor focus.
+    /// @param viewRow The row's view index; nothing clears the mark.
+    virtual void setHighlightedRow(std::optional<std::size_t> viewRow) { static_cast<void>(viewRow); }
+
+    /// @brief Places a cell of a row in a column, for a table whose rows come from a `TableSource`: called when a cell
+    ///        joins its row's cells and when a pooled cell is given another column, and with nothing when the cell
+    ///        leaves the column window or waits for its turn to be bound. A cell with no column is pooled: it is not
+    ///        drawn and takes no place, and the column it left draws blank at its width until a cell is placed
+    ///        there.
+    /// @param row    One of this table's rows.
+    /// @param cell   One of @p row's children.
+    /// @param column An index into the columns `setColumns` gave, or nothing.
+    virtual void setCellColumn(Widget& row, Widget& cell, std::optional<std::size_t> column) {
+        static_cast<void>(row);
+        static_cast<void>(cell);
+        static_cast<void>(column);
     }
 };
 
