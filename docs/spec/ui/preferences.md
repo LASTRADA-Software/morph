@@ -43,6 +43,11 @@ public:
   where its answers come from.
 - The model calls a store only with a key whose person the server derived and with a value it has already bounded
   and parsed. A store applies no bound and no key check of its own.
+- One kind of entry has an empty person: the views a table's users publish for everyone, which the table-state
+  model (`morph.tableState`) keeps with no person under the table's own scope, so every signed-in caller reads the
+  same document ([table.md, Saved views](../table/table.md#saved-views)). The model writes them only through its
+  `publish` action and never for a caller with no verified person, and no verified person is empty, so no caller's
+  own entries share a key with them. A store needs no case for them: an empty person is a key like any other.
 - An application with its own per-person settings table supplies its own store over it, keyed by the person the
   login resolves to, so choices follow the person across logins and workstations.
 

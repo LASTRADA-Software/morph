@@ -898,3 +898,61 @@ TEST_CASE("table state: the person is the store's", "[net][tables][state]") {
     CHECK(loadedText(alice, aliceState, naming) == R"({"version":1,"view":"alice's"})");
     // Mutation: the model keying by a body member (alice's load naming bob reads bob's state).
 }
+
+TEST_CASE("shared views: a view published over a socket is read by a second client", "[net][tables][state]") {
+    StateServer server;
+    Client alice{server.url, "alice"};
+    Client bob{server.url, "bob"};
+    std::string const model{ui::kTableStateModel};
+    auto const aliceState = alice.create(model);
+    auto const bobState = bob.create(model);
+    morph::table::TableStateKey const shared{.application = "lims",
+                                             .model = "Lims_SampleModel",
+                                             .table = "samples",
+                                             .qualifier = "samples",
+                                             .part = "shared"};
+    // Mutation: publish written under the caller's person (bob does not see it).
+    auto const publish = alice.execute(
+        aliceState, model, "publish",
+        morph::model::ActionTraits<ui::TableStatePublish>::toJson(ui::TableStatePublish{
+            .key = shared,
+            .operation = morph::table::writeViewOperation(morph::table::AddView{morph::table::SavedView{
+                .name = "Mine", .layout = {}, .sort = {}, .filters = {}}}),
+            .expected = std::string{morph::table::kNoDocument}}));
+    REQUIRE(publish.kind == "ok");
+    auto const published = morph::model::ActionTraits<ui::TableStatePublish>::resultFromJson(publish.body).result;
+    REQUIRE(published.outcome == morph::table::SaveOutcome::Saved);
+    auto const read = bob.execute(
+        bobState, model, "load",
+        morph::model::ActionTraits<ui::TableStateLoad>::toJson(ui::TableStateLoad{.keys = {shared}}));
+    REQUIRE(read.kind == "ok");
+    auto const loaded = morph::model::ActionTraits<ui::TableStateLoad>::resultFromJson(read.body);
+    REQUIRE(loaded.entries.size() == 1);
+    CHECK(loaded.entries.front().revision == published.revision);
+    auto const views = morph::table::readViews(loaded.entries.front().text);
+    REQUIRE(views.has_value());
+    REQUIRE(views->views.size() == 1);
+    CHECK(views->views.front().name == "Mine");
+
+    // Mutation: the model treating kNoDocument as an ordinary revision in `save` (the first save answers Conflict).
+    auto own = shared;
+    own.part = "views";
+    auto const saveOnce = [&] {
+        auto const reply = alice.execute(
+            aliceState, model, "save",
+            morph::model::ActionTraits<ui::TableStateSave>::toJson(
+                ui::TableStateSave{.key = own,
+                                   .expected = std::string{morph::table::kNoDocument},
+                                   .upload = {},
+                                   .offset = 0,
+                                   .text = R"({"version":1,"views":[]})",
+                                   .last = true}));
+        REQUIRE(reply.kind == "ok");
+        return morph::model::ActionTraits<ui::TableStateSave>::resultFromJson(reply.body).result;
+    };
+    auto const first = saveOnce();
+    REQUIRE(first.outcome == morph::table::SaveOutcome::Saved);
+    auto const again = saveOnce();
+    CHECK(again.outcome == morph::table::SaveOutcome::Conflict);
+    CHECK(again.revision == first.revision);
+}

@@ -4,6 +4,7 @@
 // and writing back what the description lacks.
 
 #include <catch2/catch_test_macros.hpp>
+#include <expected>
 #include <morph/table/state_store.hpp>
 #include <morph/testing/step_executor.hpp>
 #include <optional>
@@ -70,6 +71,20 @@ std::optional<StoredTableState> loadNow(ITableStateStore& store, TableStateKey c
     executor.runAll();
     REQUIRE(delivered.has_value());
     return *delivered;
+}
+
+SaveResult publishNow(ITableStateStore& store, TableStateKey const& key, ViewOperation const& operation,
+                      std::string expected) {
+    std::optional<SaveResult> delivered;
+    auto completion = store.publish(key, operation, std::move(expected));
+    completion.thenDetached([&delivered](SaveResult const& result) { delivered = result; });
+    executor.runAll();
+    REQUIRE(delivered.has_value());
+    return *delivered;
+}
+
+AddView addNamed(std::string name) {
+    return AddView{SavedView{.name = std::move(name), .layout = {}, .sort = {}, .filters = {}}};
 }
 
 }  // namespace
@@ -183,4 +198,94 @@ TEST_CASE("memory table state store: a save with a stale revision is a conflict"
     CHECK(stale.revision == "2");
     CHECK(loadNow(store, key)->json == R"({"b":1})");  // the conflict wrote nothing
     CHECK(saveNow(store, key, R"({"d":1})").outcome == SaveOutcome::Saved);  // no `expected`: replaces
+}
+
+// Mutation: AddView over a taken name appending a second view of that name.
+TEST_CASE("views document: operations apply to what is stored, and names stay unique", "[table][state]") {
+    ViewsDocument doc;
+    doc = *applyViewOperation(doc, addNamed("Open orders"), ViewsPart::Own);
+    doc = *applyViewOperation(doc, SetDefaultView{"Open orders"}, ViewsPart::Own);
+    CHECK(applyViewOperation(doc, addNamed("Open orders"), ViewsPart::Own) == std::unexpected(ViewError::NameTaken));
+    doc = *applyViewOperation(doc, addNamed("Late"), ViewsPart::Own);
+    CHECK(applyViewOperation(doc, RenameView{"Late", "Open orders"}, ViewsPart::Own) ==
+          std::unexpected(ViewError::NameTaken));
+    doc = *applyViewOperation(doc, RemoveView{"Open orders"}, ViewsPart::Own);
+    CHECK_FALSE(doc.defaultView);
+    CHECK(applyViewOperation(doc, SetDefaultOnMount{true}, ViewsPart::Shared) ==
+          std::unexpected(ViewError::NotShared));
+    CHECK(writeViews(doc, ViewsPart::Shared) ==
+          R"({"version":1,"views":[{"name":"Late","layout":{"order":[],"hidden":[],"pinned":0,"widths":{},"groups":[],"units":{}},"sort":[],"filters":{"columns":{},"groups":[]}}]})");
+    auto const unknown = readViews(R"({"version":2,"views":[]})");
+    REQUIRE_FALSE(unknown.has_value());
+    CHECK(unknown.error().code == TableErrorCode::InvalidSpec);
+}
+
+// Mutation: a view operation written with the wrong member (`{"name": …}` for remove) does not read back.
+TEST_CASE("views document: what is written reads back, and so does every operation", "[table][state]") {
+    ViewsDocument doc;
+    doc = *applyViewOperation(doc, AddView{SavedView{.name = "Late",
+                                                     .layout = {},
+                                                     .sort = SortChain{SortKey{.column = "name",
+                                                                               .dir = SortDirection::Descending}},
+                                                     .filters = {}}},
+                              ViewsPart::Own);
+    doc = *applyViewOperation(doc, SetDefaultView{"Late"}, ViewsPart::Own);
+    doc = *applyViewOperation(doc, SetDefaultOnMount{true}, ViewsPart::Own);
+    std::string const own = writeViews(doc, ViewsPart::Own);
+    CHECK(own.starts_with(R"({"version":1,"default":"Late","defaultOnMount":true,"views":[{"name":"Late",)"));
+    CHECK(own.contains(R"("sort":[{"column":"name","direction":"desc"}])"));
+    auto const back = readViews(own);
+    REQUIRE(back.has_value());
+    CHECK(writeViews(*back, ViewsPart::Own) == own);
+    CHECK(back->defaultView == std::optional<std::string>{"Late"});
+    CHECK(back->defaultOnMount);
+
+    for (ViewOperation const& operation :
+         {ViewOperation{addNamed("A")}, ViewOperation{ReplaceView{SavedView{.name = "A"}}},
+          ViewOperation{RenameView{"A", "B"}}, ViewOperation{RemoveView{"B"}}, ViewOperation{SetDefaultView{"B"}},
+          ViewOperation{SetDefaultView{std::nullopt}}, ViewOperation{SetDefaultOnMount{false}}}) {
+        std::string const text = writeViewOperation(operation);
+        CAPTURE(text);
+        auto const read = readViewOperation(text);
+        REQUIRE(read.has_value());
+        CHECK(writeViewOperation(*read) == text);
+        CHECK(read->index() == operation.index());
+    }
+    CHECK(writeViewOperation(RemoveView{"B"}) == R"({"remove":"B"})");
+    CHECK(writeViewOperation(SetDefaultView{std::nullopt}) == R"({"default":null})");
+    CHECK_FALSE(readViewOperation(R"({"remove":"B","add":{"name":"C"}})").has_value());
+    CHECK_FALSE(readViewOperation(R"({"frobnicate":1})").has_value());
+}
+
+// Mutation: MemoryTableStateStore treating kNoDocument as an ordinary revision (the first save answers Conflict).
+// Mutation: the constructor's Sharing defaulting to Shared (the default store offers publishing).
+TEST_CASE("memory table state store: kNoDocument stores only over nothing, and a default store does not share",
+          "[table][state]") {
+    MemoryTableStateStore store{executor};
+    CHECK_FALSE(store.shares());
+    TableStateKey const key{.application = "lims", .model = "", .table = "t", .qualifier = "s", .part = "views"};
+    SaveResult const first = saveNow(store, key, R"({"version":1,"views":[]})", std::string{kNoDocument});
+    REQUIRE(first.outcome == SaveOutcome::Saved);
+    SaveResult const again = saveNow(store, key, R"({"version":1,"views":[]})", std::string{kNoDocument});
+    CHECK(again.outcome == SaveOutcome::Conflict);
+    CHECK(again.revision == first.revision);
+    CHECK(loadNow(store, key)->revision == first.revision);
+    SaveResult const refused = publishNow(store, key, addNamed("X"), std::string{kNoDocument});
+    CHECK(refused.outcome == SaveOutcome::Refused);
+    CHECK(refused.reason == "this store does not share views");
+    MemoryTableStateStore shared{executor, Sharing::Shared};
+    CHECK(shared.shares());
+    auto sharedKey = key;
+    sharedKey.part = "shared";
+    SaveResult const published = publishNow(shared, sharedKey, addNamed("X"), std::string{kNoDocument});
+    REQUIRE(published.outcome == SaveOutcome::Saved);
+    CHECK(publishNow(shared, sharedKey, addNamed("Y"), std::string{kNoDocument}).revision ==
+          published.revision);  // Conflict
+    SaveResult const second = publishNow(shared, sharedKey, addNamed("Y"), published.revision);
+    REQUIRE(second.outcome == SaveOutcome::Saved);
+    auto const stored = readViews(loadNow(shared, sharedKey)->json);
+    REQUIRE(stored.has_value());
+    REQUIRE(stored->views.size() == 2);
+    CHECK(stored->views[1].name == "Y");
+    CHECK(publishNow(shared, sharedKey, SetDefaultView{"X"}, {}).outcome == SaveOutcome::Refused);
 }

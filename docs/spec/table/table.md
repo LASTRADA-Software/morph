@@ -2204,9 +2204,12 @@ public:
     [[nodiscard]] virtual bool shares() const { return false; }
     /// Applies one operation (add, replace, rename or remove one view; see "Saved views") to the `shared` part,
     /// under the `expected` rule of `save`. A store that does not share answers `Refused`, "this store does not
-    /// share views".
+    /// share views", which `refusePublish` gives it on the store's own executor. Pure: the interface owns no
+    /// executor to deliver a default answer on.
     virtual async::Completion<SaveResult> publish(TableStateKey const& key, ViewOperation const& operation,
-                                                  std::string expected);
+                                                  std::string expected) = 0;
+protected:
+    static async::Completion<SaveResult> refusePublish(exec::IExecutor& executor);
 };
 ```
 
@@ -2388,7 +2391,8 @@ when the table mounts and no `state` is stored for it. A stored view is fitted t
   - **Who may publish.** Reading the part is the `morph.tableState` model's `load`, open to everyone who may use
     the table. Writing it is a separate action of the model, `morph.tableState.publish`, carrying one operation
     (add, replace, rename or remove one shared view), so the application's authoriser admits or refuses
-    publishing by action id, without reading a body. A user's own `save` of the `shared` part is refused.
+    publishing by action id, without reading a body. A user's own `save` or `remove` of the `shared` part is
+    refused. The part is no one's, so no person's quota counts it.
   - A shared view is changed under the `Conflict` rule, as a user's views are. The shared document has no
     `default` and no `defaultOnMount`; they are the user's choice, kept in the user's own views document.
   - **Which stores share.** `ITableStateStore::shares()` (default `false`) says whether a store keeps the
@@ -3037,6 +3041,7 @@ spread reflects. A row marked *not yet measured* says why; its figure is taken w
 | C3 | 2c | In process: fifty sorts against the C1 bound, ten 100,000-row base-column views and one level-sorted view's 100,000 order keys (8,000,024 bytes), which holds about twenty base-column views once the level-sorted one is evicted: 8,000,000 bytes held, 31 evictions (gate: held within the bound). The evictions are fewer than at a bound of ten views because the bound is wider, not because a view holds less | A, Release | 2026-11-19 |
 | K1 | 2d | `PageWindow<GenericRow>::accept` of a whole 200 × 300 page of integer cells, into a fresh window built with `maxColumns` 300 (at the default of 96 a page holds no 300 columns): 3.05 ms (2.81–3.69), **above the 0.1 ms budget (P)**. Inferred from the code, not measured apart: the page is stored by column, so each of the 60,000 cells is moved into its column's vector, and the reply's 200 row vectors are freed; the cells are moved, never copied | A, Release | 2026-11-19 |
 | K2 | 2d | `refresh` of 900 event keys against 1,600 held rows in eight runs (pages 0, 2, …, 14 of 200): 0.102 ms (0.090–0.194), within the 0.5 ms budget; the fetch holds the 900 keys and eight probes (gate `"window: a refresh of 900 keys over eight runs asks 908"`) | A, Release | 2026-11-19 |
+| T2 | 9 | Through the `morph.tableState` model over an in-process server, as the `state` part and alike as the `views` part: a state of 300 columns, 8 sort keys and 32 filters is 7,700 bytes, one store `set` and one entry (gate); a state whose filter ticks 20,000 values is 1,380,070 bytes, 123 segments of at most 12 KiB with a quote and a two-byte character in every value, 125 `set` calls (the intent, the segments, the head) and 124 entries after the save, and reads back byte-equal (gate `"table state: a full state is one entry and one call; …"`) | A, Debug | 2026-11-19 |
 | K3 | 2d | `patch` of 200 rows and the seven other runs' probes, one column: 0.325 ms (0.306–0.374), just above the 0.3 ms budget (P). It builds an index of the 1,600 held keys for each patch | A, Release | 2026-11-19 |
 | K4 | 2d | Debug build only (`cl-debug`), so not comparable with the budgets: a 4,096-key event against an entry of 200 rows, 86.4 ms (74.6–101.4); storing a decoded 200 × 300 page of fractional numbers in an opaque entry, 708.1 ms (623.3–759.6). The Release figure is *not yet measured*: a Release build of `morph_tests` did not fit the session; the case is `"interpreter bench: K4 the query cache under an event and a wide page"` | A, Debug | 2026-11-19 |
 | E1, E2 | 2d | *Not yet measured* — the case `"table benchmark: E1 E2 a window over the bridge"` is a socket benchmark (`[.benchmark][net]`, POSIX only); machine A builds no `morph_net_tests` | — | — |
