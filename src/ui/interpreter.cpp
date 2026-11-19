@@ -2122,17 +2122,18 @@ Value ScopeEnv::control(ExprKind form, std::string_view name) const {
     NameRef const* const found = _scope->find(name);
     if (form == ExprKind::Can) {
         static constexpr std::string_view kHostPrefix = "host:";
-        if (name.starts_with(kHostPrefix) &&
-            !session.hostNameIn(name.substr(kHostPrefix.size()), _scope->core.doc().id)) {
+        std::string_view action = name;
+        if (found != nullptr && found->category == NameCategory::Query) {
+            action = found->query->decl().action;
+        } else if (found != nullptr && found->category == NameCategory::Mutation) {
+            action = found->mutation->decl().action;
+        }
+        // A query or mutation whose action is a host command is held to the same document scope as the command.
+        if (action.starts_with(kHostPrefix) &&
+            !session.hostNameIn(action.substr(kHostPrefix.size()), _scope->core.doc().id)) {
             return Value{false};
         }
-        if (found != nullptr && found->category == NameCategory::Query) {
-            return session.can(found->query->decl().action);
-        }
-        if (found != nullptr && found->category == NameCategory::Mutation) {
-            return session.can(found->mutation->decl().action);
-        }
-        return session.can(name);
+        return session.can(action);
     }
     if (found != nullptr && found->category == NameCategory::Query) {
         QueryRuntime const& query = *found->query;

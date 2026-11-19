@@ -298,3 +298,54 @@ TEST_CASE("host vocabulary: a scope set after a screen mounted takes effect on i
     CHECK(h.text("secret_panel") == "heard");
     CHECK(h.text("secret_other") == "null");
 }
+
+namespace {
+
+/// A screen with id @p id whose mutation `go` runs the host command `panel.start`, and which asks whether it can.
+std::string mutationScreen(std::string const& id) {
+    return R"({"vocab":"ui/1","id":")" + id + R"(","models":{"m":{"type":"Lims_SampleModel"}},)" +
+           R"("mutations":{"go":{"model":"m","action":"host:panel.start"}},)" +
+           R"("view":{"kind":"text","testId":"can_)" + id +
+           R"(","text":{"fn":"format","args":["{0}",{"can":"go"}]}}})";
+}
+
+}  // namespace
+
+// Mutation: skip the document check for a mutation or query whose action is a host command.
+TEST_CASE("host vocabulary: can on a mutation that runs a limited host command follows the document scope",
+          "[ui][host]") {
+    Harness h;
+    HostVocabulary vocabulary;
+    vocabulary.add(HostCommand{.name = "panel.start",
+                               .version = 1,
+                               .args = {},
+                               .safeForUntrusted = true,
+                               .run = [](ValueRecord const& /*args*/) {},
+                               .documents = {"panel"}});
+    vocabulary.connect(h.session);
+    auto const panel = h.mount(mutationScreen("panel"));
+    auto const other = h.mount(mutationScreen("other"));
+
+    CHECK(h.text("can_panel") == "true");
+    CHECK(h.text("can_other") == "false");
+}
+
+// Mutation: drop the equality early return in Session::setHostScopes.
+TEST_CASE("host vocabulary: publishing the same scopes again does not re-run what reads them", "[ui][host]") {
+    Harness h;
+    int reads = 0;
+    morph::reactive::Effect const reader{h.runtime, [&] {
+                                             static_cast<void>(h.session.hostNameIn("panel.secret", "other"));
+                                             ++reads;
+                                         }};
+    h.session.setHostScopes(morph::ui::HostScopes{{"panel.secret", {"panel"}}});
+    h.settle();
+    int const afterFirst = reads;
+    h.session.setHostScopes(morph::ui::HostScopes{{"panel.secret", {"panel"}}});
+    h.settle();
+    CHECK(afterFirst >= 2);
+    CHECK(reads == afterFirst);
+    h.session.setHostScopes(morph::ui::HostScopes{{"panel.secret", {"other"}}});
+    h.settle();
+    CHECK(reads == afterFirst + 1);
+}
