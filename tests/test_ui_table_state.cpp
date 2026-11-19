@@ -1329,3 +1329,48 @@ TEST_CASE("table state: five large saves at once are all stored", "[ui][state]")
         CHECK(load(h, keyOf("t" + std::to_string(at)))->json == docs[at]);
     }
 }
+
+// Mutation: the session not handing its scheduler to the store (the refused save is sent again on the owner's next
+// turn, so all five are stored within the first settle).
+TEST_CASE("table state: a session's store sends a busy save again after tableStateTimeout", "[ui][state]") {
+    StoreFixture h;
+    auto const store = std::make_shared<ui::PreferencesTableStateStore>(h.client, h.owner);   // no timers of its own
+    ui::Session session{h.runtime, ui::SessionOptions{.scheduler = &h.scheduler,
+                                                      .clock = [&h] { return h.scheduler.now(); },
+                                                      .keepUnused = std::chrono::minutes{5},
+                                                      .catalog = {},
+                                                      .classify = {},
+                                                      .developmentTools = ui::DevelopmentTools::Off,
+                                                      .watcher = {},
+                                                      .maxInlineFileBytes = ui::kDefaultInlineFileBytes,
+                                                      .tableSettle = 80ms,
+                                                      .tableAwaitedRefetch = 250ms,
+                                                      .tableState = store,
+                                                      .tableStateTimeout = 300ms,
+                                                      .tableStateDebounce = 500ms,
+                                                      .application = "lims"}};
+    REQUIRE(session.tableStates() != nullptr);
+    std::vector<std::optional<table::SaveResult>> results(5);
+    for (std::size_t at = 0; at < 5; ++at) {
+        std::string doc = stateWithOneOfValues(16'000, std::to_string(at));
+        REQUIRE(doc.size() > ui::kTableStatePartBytes);  // two parts each: an upload the server counts as open
+        session.tableStates()
+            ->store()
+            .save(keyOf("t" + std::to_string(at)), std::move(doc))
+            .then([&results, at](table::SaveResult const& result) { results[at] = result; })
+            .onError([](std::exception_ptr const&) {});
+    }
+    auto const stored = [&results] {
+        return std::ranges::count_if(results, [](auto const& result) { return result.has_value(); });
+    };
+    h.settle();
+    CHECK(stored() == 4);   // the fifth was refused busy and waits
+    h.advance(299ms);
+    CHECK(stored() == 4);
+    h.advance(1ms);         // tableStateTimeout after the refusal
+    CHECK(stored() == 5);
+    for (auto const& result : results) {
+        REQUIRE(result.has_value());
+        CHECK(result->outcome == table::SaveOutcome::Saved);
+    }
+}
