@@ -39,6 +39,7 @@
 #include <glaze/glaze.hpp>
 #include <iterator>
 #include <limits>
+#include <map>
 #include <memory>
 #include <morph/attributes.hpp>
 #include <morph/core/action_refusal.hpp>
@@ -794,6 +795,194 @@ namespace morph::table {
     }
     return page;
 }
+
+
+namespace detail {
+
+/// @brief The cells of one page of a generic window, by column, so a column can be added or dropped without
+///        touching the others.
+struct GenericWindowCells {
+    /// @brief Each held column's cells, one per row.
+    std::map<std::string, std::vector<Cell>, std::less<>> cells;
+
+    /// @brief Whether the page holds a column.
+    /// @param column The column's id.
+    /// @return `true` when held.
+    [[nodiscard]] bool holds(std::string_view column) const { return cells.contains(column); }
+    /// @brief The columns held, which a rest-of-page fetch names.
+    /// @return The ids, sorted.
+    [[nodiscard]] std::vector<std::string> columns() const {
+        std::vector<std::string> out;
+        out.reserve(cells.size());
+        for (auto const& [column, values] : cells) {
+            out.push_back(column);
+        }
+        return out;
+    }
+    /// @brief Keeps the first @p count rows of every column.
+    /// @param count Rows kept.
+    void truncate(std::size_t count) {
+        for (auto& [column, values] : cells) {
+            values.resize(std::min(count, values.size()));
+        }
+    }
+};
+
+}  // namespace detail
+
+/// @brief The window of every `table` node: generic pages, a row's key its entry of the page's `keys`, and the
+///        columns of each page held by column.
+///
+/// The rules are `PageWindow<Row>`'s. In addition `visible` names the columns shown: a page held complete that
+/// lacks some of them is fetched again for the same rows naming only those, and the reply's cells are added
+/// when its keys are the page's, row for row. A page holds at most `maxColumns` columns; over that, the columns
+/// least recently named by `visible` go first. A patch drops from a page the columns its reply lacks, so the
+/// next `visible` fetches them again rather than showing a cell older than its row.
+template <>
+class PageWindow<GenericRow> : public detail::WindowCore<detail::GenericWindowCells> {
+    using Core = detail::WindowCore<detail::GenericWindowCells>;
+
+public:
+    /// @brief An empty window.
+    /// @param pageSize   Rows per page (default 200).
+    /// @param maxPages   Pages held at most; the farthest from the visible rows go first.
+    /// @param maxKeys    Keys one keyed fetch asks for at most; more refetch the pages instead.
+    /// @param maxColumns Columns a page holds at most.
+    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters) - sizes and bounds, each documented above
+    explicit PageWindow(std::int64_t pageSize = 200, std::size_t maxPages = 8, std::size_t maxKeys = 1000,
+                        std::size_t maxColumns = 96)
+        : Core{pageSize, maxPages, true, maxKeys, maxColumns} {}
+
+    /// @brief Declares the visible rows and the columns shown; returns the fetches to send.
+    /// @param first   First visible view row.
+    /// @param count   Visible rows.
+    /// @param columns The columns shown, in order; empty asks for every column.
+    /// @return The fetches to send, each now in flight.
+    [[nodiscard]] std::vector<PageFetch> visible(std::int64_t first, std::int64_t count,
+                                                 std::span<std::string const> columns = {}) {
+        return visibleColumns(first, count, columns);
+    }
+
+    /// @brief Stores a page reply.
+    /// @param fetch The fetch the reply answers, as `visible` returned it.
+    /// @param page  The page the server returned.
+    /// @return `false` when the reply was ignored: its fetch belongs to an earlier query, or is not the one in
+    ///         flight for its page.
+    bool accept(PageFetch const& fetch, GenericPage page) {
+        return acceptReply(fetch, replyOf(page),
+                           [this, &page](detail::GenericWindowCells& content, detail::WindowFetchKind kind,
+                                         std::size_t take) {
+                               if (kind == detail::WindowFetchKind::Whole) {
+                                   content.cells.clear();
+                               }
+                               if (kind == detail::WindowFetchKind::Rest) {
+                                   std::erase_if(content.cells, [&page](auto const& entry) {
+                                       return std::ranges::find(page.columns, entry.first) == page.columns.end();
+                                   });
+                               }
+                               // Each reply column's target, found once; the rows are then read in order, row by
+                               // row, so the reply's cells are visited where they lie.
+                               std::vector<std::vector<Cell>*> targets(page.columns.size(), nullptr);
+                               for (std::size_t column = 0; column < page.columns.size(); ++column) {
+                                   auto const& id = page.columns[column];
+                                   if (kind == detail::WindowFetchKind::Rest && !content.holds(id)) {
+                                       continue;
+                                   }
+                                   auto& values = content.cells[id];
+                                   if (kind != detail::WindowFetchKind::Rest) {
+                                       values.clear();
+                                   }
+                                   values.reserve(values.size() + take);
+                                   targets[column] = &values;
+                               }
+                               for (std::size_t row = 0; row < take; ++row) {
+                                   auto& cells = page.rows[row];
+                                   for (std::size_t column = 0; column < targets.size(); ++column) {
+                                       if (targets[column] != nullptr) {
+                                           targets[column]->push_back(column < cells.size() ? std::move(cells[column])
+                                                                                            : Cell{});
+                                       }
+                                   }
+                               }
+                               limitColumns(content);
+                           });
+    }
+
+    /// @brief Patches held rows from the reply to a `RowsFetch`.
+    /// @param fetch The keyed fetch the reply answers, as `refresh` or `owed` returned it.
+    /// @param reply The keyed reply.
+    /// @return The view rows replaced, ascending; empty when the reply was ignored or the window invalidated.
+    std::vector<std::int64_t> patch(RowsFetch const& fetch, GenericPage reply) {
+        return patchRows(fetch, replyOf(reply), [&reply](Core::Held& page, std::size_t at, std::size_t from) {
+            std::erase_if(page.content.cells, [&reply](auto const& entry) {
+                return std::ranges::find(reply.columns, entry.first) == reply.columns.end();
+            });
+            auto& cells = reply.rows[from];
+            for (std::size_t column = 0; column < reply.columns.size() && column < cells.size(); ++column) {
+                auto const found = page.content.cells.find(reply.columns[column]);
+                if (found != page.content.cells.end() && at < found->second.size()) {
+                    found->second[at] = std::move(cells[column]);
+                }
+            }
+        });
+    }
+
+    /// @brief The key of the held row at a view row.
+    /// @param index View row.
+    /// @return The key, or null when the row is not held.
+    [[nodiscard]] RowId const* key(std::int64_t index) const {
+        auto const* const page = heldAt(index);
+        return page == nullptr ? nullptr : &page->keys[static_cast<std::size_t>(index % pageSize())];
+    }
+
+    /// @brief The cell of a held row in a column.
+    /// @param index  View row.
+    /// @param column The column's id.
+    /// @return The cell, or null when the row or the column is not held.
+    [[nodiscard]] Cell const* cell(std::int64_t index, std::string_view column) const {
+        auto const* const page = heldAt(index);
+        if (page == nullptr) {
+            return nullptr;
+        }
+        auto const found = page->content.cells.find(column);
+        auto const at = static_cast<std::size_t>(index % pageSize());
+        return found == page->content.cells.end() || at >= found->second.size() ? nullptr : &found->second[at];
+    }
+
+    /// @brief Whether a held row's column is held.
+    /// @param index  View row.
+    /// @param column The column's id.
+    /// @return `true` when `cell(index, column)` is not null.
+    [[nodiscard]] bool holds(std::int64_t index, std::string_view column) const {
+        return cell(index, column) != nullptr;
+    }
+
+private:
+    [[nodiscard]] static detail::WindowReply replyOf(GenericPage const& page) {
+        return detail::WindowReply{.keys = page.keys,
+                                   .rows = page.rows.size(),
+                                   .unloadedRows = page.unloadedRows,
+                                   .total = page.total,
+                                   .totalKind = page.totalKind,
+                                   .undecided = page.undecided,
+                                   .awaiting = page.awaiting,
+                                   .failed = page.failed,
+                                   .indices = page.indices};
+    }
+
+    // Over the bound, the columns least recently named by `visible` go first.
+    void limitColumns(detail::GenericWindowCells& content) const {
+        while (content.cells.size() > maxColumns()) {
+            auto oldest = content.cells.begin();
+            for (auto at = content.cells.begin(); at != content.cells.end(); ++at) {
+                if (namedAt(at->first) < namedAt(oldest->first)) {
+                    oldest = at;
+                }
+            }
+            content.cells.erase(oldest);
+        }
+    }
+};
 
 // NOLINTEND(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access)
 

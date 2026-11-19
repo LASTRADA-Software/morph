@@ -300,7 +300,7 @@ TEST_CASE("table: the window fetches the pages around the visible rows", "[table
     for (auto const& fetch : fetches) {
         auto const page = fetch.request.offset / 100;
         CHECK(window.accept(fetch, Page<int>{.rows = std::vector<int>(100, static_cast<int>(page)),
-                                             .total = 600,
+                                             .total = 700,
                                              .offset = fetch.request.offset}));
     }
     CHECK(window.pagesHeld() == 4);
@@ -403,17 +403,19 @@ TEST_CASE("table: the window ignores a reply it does not await or that no longer
     CHECK(window.row(4) == nullptr);
     CHECK_FALSE(window.accept(first[0], Page<int>{.rows = std::vector<int>(10, 8), .total = 100, .offset = 0}));
 
-    // The rest of page 0 is fetched from where it ends; a stale reply for its
-    // start is taken off the flight but stores nothing.
+    // The rest of page 0 is fetched from where it ends; a late reply to its
+    // start is not the fetch in flight, so it stores nothing and the rest
+    // stays awaited.
     auto const rest = window.visible(0, 5);
     REQUIRE(rest.size() == 1);
     CHECK(rest[0].request == PageRequest{.offset = 4, .limit = 6});
-    CHECK(window.accept(first[0], Page<int>{.rows = std::vector<int>(10, 8), .total = 100, .offset = 0}));
+    CHECK_FALSE(window.accept(first[0], Page<int>{.rows = std::vector<int>(10, 8), .total = 100, .offset = 0}));
     CHECK(*window.row(0) == 7);
     CHECK(window.row(4) == nullptr);
-    auto const again = window.visible(0, 5);
-    REQUIRE(again.size() == 1);
-    CHECK(again[0].request == PageRequest{.offset = 4, .limit = 6});
+    CHECK(window.visible(0, 5).empty());
+    CHECK(window.accept(rest[0], Page<int>{.rows = std::vector<int>(6, 9), .total = 100, .offset = 4}));
+    REQUIRE(window.row(4) != nullptr);
+    CHECK(*window.row(4) == 9);
 }
 
 TEST_CASE("table: the window evicts the page farthest from the visible rows", "[table][query]") {

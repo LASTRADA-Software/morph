@@ -42,6 +42,7 @@
 #include <string>
 #include <string_view>
 #include <type_traits>
+#include <unordered_map>
 #include <unordered_set>
 #include <utility>
 #include <variant>
@@ -1192,110 +1193,256 @@ template <typename Row>
 
 // ── Server mode on the client ───────────────────────────────────────────────
 
-/// @brief A request a `PageWindow` asks the client to send, tagged with the
-///        query it belongs to.
+/// @brief A page request a `PageWindow` asks the client to send, tagged with the
+///        query and the revision it belongs to.
 struct PageFetch {
     /// @brief The rows to request.
     PageRequest request;
+    /// @brief The columns to ask for (`TableQuery::columns`). A held page asks only for the columns it lacks; empty
+    ///        asks for every column.
+    std::vector<std::string> columns;
     /// @brief The window's query when the fetch was made (`PageWindow::query`).
     std::uint64_t query = 0;
+    /// @brief The window's revision when the fetch was made (`PageWindow::revision`).
+    std::uint64_t revision = 0;
 
     /// @brief Member-wise equality.
     /// @param other The fetch to compare with.
-    /// @return `true` when request and query match.
+    /// @return `true` when request, columns, query and revision match.
     [[nodiscard]] bool operator==(PageFetch const& other) const = default;
 };
 
-/// @brief The pages a `server`-mode table holds: those around the visible
-///        rows, up to a bound, plus the request state and the last error.
-///
-/// The client calls `visible` as the view scrolls and sends the request of
-/// each fetch it returns, then hands the fetch back with its reply to
-/// `accept` (or with its error to `fail`). A change of sort or filter is a
-/// new query: call `reset`. A reply to a fetch made before the last `reset`
-/// is ignored, so a late page of the old query never shows under the new one.
-///
-/// A server may return fewer rows than a fetch asked for (`validate` clamps
-/// the limit to its `maxLimit`): the window then fetches the rest of the page
-/// from where the reply ended. A page is complete when it is full, reaches the
-/// known total, or a reply to it is empty.
+/// @brief A keyed request a `PageWindow` asks the client to send (`TableQuery::keys`).
+struct RowsFetch {
+    /// @brief The keys to ask for: the event's keys and one probe per run of held rows.
+    std::vector<RowId> keys;
+    /// @brief The columns to ask for: those of the latest `visible` call.
+    std::vector<std::string> columns;
+    /// @brief The window's query when the fetch was made.
+    std::uint64_t query = 0;
+    /// @brief The fetch's place among the window's keyed fetches; a later fetch has a larger one.
+    std::uint64_t sequence = 0;
+
+    /// @brief Member-wise equality.
+    /// @param other The fetch to compare with.
+    /// @return `true` when keys, columns, query and sequence match.
+    [[nodiscard]] bool operator==(RowsFetch const& other) const = default;
+};
+
+/// @brief What a window asks for after a change of its table's record.
+enum class Refresh : std::uint8_t {
+    Nothing,  ///< Nothing: the window holds no row.
+    Rows,     ///< The keyed fetch in `RefreshPlan::rows`.
+    Pages,    ///< The window invalidated itself; the next `visible` fetches its pages again.
+};
+
+/// @brief What `PageWindow::refresh` and `PageWindow::owed` return.
+struct RefreshPlan {
+    /// @brief What to fetch.
+    Refresh kind = Refresh::Nothing;
+    /// @brief The keyed fetch to send when `kind` is `Rows`.
+    RowsFetch rows;
+};
+
+template <typename Row>
+class PageWindow;
+
+/// @brief The window of generic rows; defined in `table/description.hpp`, so a translation unit that does not
+///        include it cannot use the typed window for generic rows by mistake.
+template <>
+class PageWindow<std::vector<Cell>>;
+
+namespace detail {
+
+/// @brief How a fetch in flight relates to the page it is for.
+enum class WindowFetchKind : std::uint8_t {
+    Whole,    ///< The whole page: its reply replaces the page.
+    Rest,     ///< The rows after those held: its reply is appended.
+    Columns,  ///< The same rows with more columns: its reply's cells are added by key.
+};
+
+/// @brief What a window reads of a reply besides its rows' content.
+struct WindowReply {
+    /// @brief One key per row; empty when the window has no key function.
+    std::span<RowId const> keys;
+    /// @brief Rows in the reply.
+    std::size_t rows = 0;
+    /// @brief The reply's `unloadedRows`.
+    std::span<UnloadedRow const> unloadedRows;
+    /// @brief The reply's `total`.
+    std::optional<std::int64_t> total;
+    /// @brief The reply's `totalKind`.
+    TotalKind totalKind = TotalKind::Exact;
+    /// @brief The reply's `undecided`.
+    std::int64_t undecided = 0;
+    /// @brief The reply's `awaiting`.
+    std::span<std::string const> awaiting;
+    /// @brief The reply's `failed`.
+    std::span<std::string const> failed;
+    /// @brief The reply's `indices`.
+    std::span<std::int64_t const> indices;
+};
+
+/// @brief The rows of one page of a typed window.
 /// @tparam Row The row type.
 template <typename Row>
-class PageWindow {
-public:
-    /// @brief An empty window.
-    /// @param pageSize Rows per page (default 200).
-    /// @param maxPages Pages held at most; the farthest from the visible rows go first.
-    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters) - page size then page count, both documented above
-    explicit PageWindow(std::int64_t pageSize = 200, std::size_t maxPages = 8)
-        : _pageSize{std::max<std::int64_t>(pageSize, 1)}, _maxPages{std::max<std::size_t>(maxPages, 1)} {}
+struct TypedWindowRows {
+    /// @brief The rows, in view order.
+    std::vector<Row> rows;
 
-    /// @brief Declares the visible rows; returns the fetches to send.
+    /// @brief A typed row is whole: every column is held.
+    /// @param column Unused.
+    /// @return `true`.
+    [[nodiscard]] static bool holds(std::string_view column) noexcept {
+        static_cast<void>(column);
+        return true;
+    }
+    /// @brief The columns a rest-of-page fetch names: none, since a typed row is whole.
+    /// @return Empty.
+    [[nodiscard]] static std::vector<std::string> columns() { return {}; }
+    /// @brief Keeps the first @p count rows.
+    /// @param count Rows kept.
+    void truncate(std::size_t count) {
+        rows.erase(rows.begin() + static_cast<std::ptrdiff_t>(std::min(count, rows.size())), rows.end());
+    }
+};
+
+/// @brief The bookkeeping both windows share: pages, keys, unloaded levels, staleness, revisions, fetches in
+///        flight, totals and keyed sequences. Everything except a row's content, which @p Content holds.
+///
+/// See `PageWindow` for the rules; each member below states its own.
+/// @tparam Content A page's content: `holds(column)`, `columns()` and `truncate(count)`.
+template <typename Content>
+class WindowCore {
+public:
+    /// @brief Declares the visible rows and the columns shown; returns the fetches to send.
     ///
-    /// Covers the visible rows and one page either side, skipping complete
-    /// pages, pages in flight, and pages past a known total. A page held in
-    /// part is fetched from where it ends. The returned pages are marked in
-    /// flight.
-    /// @param first First visible view row.
-    /// @param count Visible rows.
+    /// Covers the visible rows and one page either side, skipping pages past an exact total and pages with a
+    /// fetch in flight. A page not held, or held stale, is fetched whole with @p columns. A page held, current and
+    /// cut short is fetched from where it ends. A page held, current and complete that lacks some of @p columns
+    /// is fetched again for the same rows, naming only those columns. Each returned fetch is in flight.
+    /// @param first   First visible view row.
+    /// @param count   Visible rows.
+    /// @param columns The columns shown, in order; empty asks for every column.
     /// @return The fetches to send.
-    [[nodiscard]] std::vector<PageFetch> visible(std::int64_t first, std::int64_t count) {
+    [[nodiscard]] std::vector<PageFetch> visibleColumns(std::int64_t first, std::int64_t count,
+                                                        std::span<std::string const> columns) {
         _visibleFirst = std::max<std::int64_t>(first, 0);
         _visibleCount = std::max<std::int64_t>(count, 0);
+        _columns.assign(columns.begin(), columns.end());
+        ++_stamp;
+        for (auto const& column : columns) {
+            _named.insert_or_assign(column, _stamp);
+        }
         auto const firstPage = std::max<std::int64_t>((_visibleFirst / _pageSize) - 1, 0);
         auto const lastPage = ((_visibleFirst + std::max<std::int64_t>(_visibleCount, 1) - 1) / _pageSize) + 1;
+        _coveredFirst = firstPage;
+        _coveredLast = lastPage;
         std::vector<PageFetch> out;
         for (auto page = firstPage; page <= lastPage; ++page) {
             if (exactTotal() && page * _pageSize >= *_total) {
                 break;
             }
-            if (_complete.contains(page) || std::ranges::find(_inFlight, page) != _inFlight.end()) {
+            if (_inFlight.contains(page)) {
                 continue;
             }
+            PageFetch fetch{.request = {}, .columns = {}, .query = _query, .revision = _revision};
+            WindowFetchKind kind = WindowFetchKind::Whole;
             auto const held = _pages.find(page);
-            auto const have = held == _pages.end() ? std::int64_t{0} : static_cast<std::int64_t>(held->second.size());
-            _inFlight.push_back(page);
-            out.push_back(
-                PageFetch{.request = PageRequest{.offset = (page * _pageSize) + have, .limit = _pageSize - have},
-                          .query = _query});
+            if (held == _pages.end() || held->second.stale) {
+                fetch.request = PageRequest{.offset = page * _pageSize, .limit = _pageSize};
+                fetch.columns.assign(columns.begin(), columns.end());
+            } else if (!held->second.complete) {
+                auto const have = held->second.rows;
+                fetch.request = PageRequest{.offset = (page * _pageSize) + have, .limit = _pageSize - have};
+                fetch.columns = held->second.content.columns();
+                kind = WindowFetchKind::Rest;
+            } else {
+                if (held->second.rows == 0) {
+                    continue;
+                }
+                for (auto const& column : columns) {
+                    if (!held->second.content.holds(column) &&
+                        std::ranges::find(fetch.columns, column) == fetch.columns.end()) {
+                        fetch.columns.push_back(column);
+                    }
+                }
+                if (fetch.columns.empty()) {
+                    continue;
+                }
+                fetch.request = PageRequest{.offset = page * _pageSize, .limit = held->second.rows};
+                kind = WindowFetchKind::Columns;
+            }
+            _inFlight.insert_or_assign(page, Flight{.fetch = fetch, .kind = kind});
+            out.push_back(std::move(fetch));
         }
         return out;
     }
 
-    /// @brief Stores a reply.
-    /// @param fetch The fetch the reply answers, as `visible` returned it.
-    /// @param page  The page the server returned.
-    /// @return `false` when the reply was ignored: its fetch belongs to an
-    ///         earlier query, or is not awaited.
-    bool accept(PageFetch const& fetch, Page<Row> page) {
-        if (fetch.query != _query) {
-            return false;
+    /// @brief The fetches in flight for pages outside the range the latest `visible` call covered.
+    ///
+    /// The client cancels them through their stop tokens and tells the window with `cancelled`.
+    /// @return The fetches, by page.
+    [[nodiscard]] std::vector<PageFetch> superseded() const {
+        std::vector<PageFetch> out;
+        for (auto const& [page, flight] : _inFlight) {
+            if (page < _coveredFirst || page > _coveredLast) {
+                out.push_back(flight.fetch);
+            }
         }
-        auto const index = fetch.request.offset / _pageSize;
-        auto const flight = std::ranges::find(_inFlight, index);
-        if (flight == _inFlight.end()) {
-            return false;
+        return out;
+    }
+
+    /// @brief Forgets a fetch the client cancelled; its reply, should one arrive, is ignored.
+    /// @param fetch The fetch, as `visible` returned it.
+    void cancelled(PageFetch const& fetch) {
+        auto const found = _inFlight.find(pageOf(fetch));
+        if (found != _inFlight.end() && found->second.fetch == fetch) {
+            _inFlight.erase(found);
         }
-        _inFlight.erase(flight);
-        if (page.total) {
-            _total = page.total;
-            _totalKind = page.totalKind;
+    }
+
+    /// @brief Plans the answer to a keyed change of the table's record.
+    ///
+    /// While any page fetch is in flight the keys are also recorded for `owed`. `Nothing` when no row is held;
+    /// `Pages` (the window invalidates) without a key function, while `awaiting()` is not empty, or when the keys
+    /// to ask for exceed `maxKeys`; otherwise `Rows`, asking for every key of the event, held or not, and for the
+    /// first key of each run of consecutive held rows (a probe), which tells the window whether rows shifted.
+    /// @param keys The event's keys.
+    /// @return The plan.
+    [[nodiscard]] RefreshPlan refresh(std::span<RowId const> keys) {
+        if (!_inFlight.empty()) {
+            _owed.insert(_owed.end(), keys.begin(), keys.end());
         }
-        _error.reset();
-        auto& rows = _pages[index];
-        bool const replyEmpty = page.rows.empty();
-        if (fetch.request.offset == (index * _pageSize) + static_cast<std::int64_t>(rows.size())) {
-            auto const room = static_cast<std::size_t>(_pageSize) - rows.size();
-            auto const take = std::min(room, page.rows.size());
-            rows.insert(rows.end(), std::make_move_iterator(page.rows.begin()),
-                        std::make_move_iterator(page.rows.begin() + static_cast<std::ptrdiff_t>(take)));
+        return plan(keys);
+    }
+
+    /// @brief Plans the keyed fetch for the events that arrived while a page fetch was in flight.
+    ///
+    /// The client calls it after each `accept`: an event can precede the reply whose rows it concerns. The
+    /// recorded keys are dropped when no page fetch is in flight, and whenever the plan is `Pages`: the
+    /// invalidation leaves every reply still in flight older than the window, so the refetch that follows covers
+    /// every recorded key.
+    /// @return The plan, by the rules of `refresh`; `Nothing` when no key is recorded.
+    [[nodiscard]] RefreshPlan owed() {
+        if (_owed.empty()) {
+            return {};
         }
-        auto const end = (index * _pageSize) + static_cast<std::int64_t>(rows.size());
-        if (std::cmp_greater_equal(rows.size(), _pageSize) || (exactTotal() && end >= *_total) || replyEmpty) {
-            _complete.insert(index);
+        auto keys = std::move(_owed);
+        _owed.clear();
+        auto result = plan(keys);
+        if (!_inFlight.empty() && result.kind != Refresh::Pages) {
+            _owed = std::move(keys);
         }
-        evict();
-        return true;
+        return result;
+    }
+
+    /// @brief Takes a new revision and marks every held page stale. Rows stay shown and fetches stay in flight.
+    void invalidate() {
+        ++_revision;
+        for (auto& [page, held] : _pages) {
+            held.stale = true;
+        }
     }
 
     /// @brief Records a failed request; the error is shown until a reply arrives.
@@ -1306,20 +1453,25 @@ public:
         if (fetch.query != _query) {
             return false;
         }
-        std::erase(_inFlight, fetch.request.offset / _pageSize);
+        cancelled(fetch);
         _error = std::move(error);
         return true;
     }
 
-    /// @brief Drops every page, request and error and starts a new query: the
-    ///        sort or filter changed.
+    /// @brief Drops every page, request, recorded key and error and starts a new query: the sort or filter
+    ///        changed.
     void reset() {
         ++_query;
         _pages.clear();
-        _complete.clear();
         _inFlight.clear();
         _total.reset();
         _totalKind = TotalKind::Exact;
+        _undecided = 0;
+        _awaiting.clear();
+        _failed.clear();
+        _totalsRevision = 0;
+        _owed.clear();
+        _latestAsked.clear();
         _error.reset();
     }
 
@@ -1327,29 +1479,42 @@ public:
     /// @return The query's number.
     [[nodiscard]] std::uint64_t query() const noexcept { return _query; }
 
-    /// @brief The row at a view row, when it is held.
+    /// @brief The current revision, which `invalidate` advances.
+    /// @return The revision's number.
+    [[nodiscard]] std::uint64_t revision() const noexcept { return _revision; }
+
+    /// @brief The unloaded levels of the held row at a view row.
     /// @param index View row.
-    /// @return The row, or null.
-    [[nodiscard]] Row const* row(std::int64_t index) const {
-        if (index < 0) {
-            return nullptr;
+    /// @return Views into the window, valid until it next changes; empty when the row is not held.
+    [[nodiscard]] UnloadedLevels unloadedLevels(std::int64_t index) const {
+        auto const* const page = heldAt(index);
+        if (page == nullptr) {
+            return {};
         }
-        auto const found = _pages.find(index / _pageSize);
-        if (found == _pages.end()) {
-            return nullptr;
-        }
-        auto const offset = static_cast<std::size_t>(index % _pageSize);
-        return offset < found->second.size() ? &found->second[offset] : nullptr;
+        auto const at = static_cast<std::size_t>(index % _pageSize);
+        return UnloadedLevels{.levels = page->levels[at], .failed = page->failedLevels[at]};
     }
 
-    /// @brief The view's total rows, when a reply of this query reported it.
+    /// @brief The view's total rows, when a page reply of this query reported it.
     /// @return The total.
     [[nodiscard]] std::optional<std::int64_t> total() const noexcept { return _total; }
 
-    /// @brief Whether `total()` is the count of the view or a lower bound, as the latest reply that carried a total
-    ///        said.
+    /// @brief Whether `total()` is the count of the view or a lower bound, as the latest page reply that carried
+    ///        a total said.
     /// @return The kind; `Exact` while no total is known.
     [[nodiscard]] TotalKind totalKind() const noexcept { return _totalKind; }
+
+    /// @brief Rows the filter can neither admit nor reject yet, as the latest page reply said.
+    /// @return The count.
+    [[nodiscard]] std::int64_t undecided() const noexcept { return _undecided; }
+
+    /// @brief The order levels with a load wanted or in flight, as the latest page reply said.
+    /// @return The levels.
+    [[nodiscard]] std::span<std::string const> awaiting() const noexcept { return _awaiting; }
+
+    /// @brief The order levels whose load failed, as the latest page reply said.
+    /// @return The levels.
+    [[nodiscard]] std::span<std::string const> failed() const noexcept { return _failed; }
 
     /// @brief The last error, until a reply clears it.
     /// @return The error, or nothing.
@@ -1359,11 +1524,335 @@ public:
     /// @return Page count.
     [[nodiscard]] std::size_t pagesHeld() const noexcept { return _pages.size(); }
 
-    /// @brief Whether any request is in flight.
+    /// @brief Whether any page fetch is in flight.
     /// @return `true` while a page is awaited.
     [[nodiscard]] bool pending() const noexcept { return !_inFlight.empty(); }
 
+protected:
+    /// @brief One held page.
+    struct Held {
+        /// @brief The rows' content.
+        Content content;
+        /// @brief Each row's key; empty without a key function.
+        std::vector<RowId> keys;
+        /// @brief Each row's unloaded levels.
+        std::vector<std::vector<std::string>> levels;
+        /// @brief Each row's failed levels.
+        std::vector<std::vector<std::string>> failedLevels;
+        /// @brief Rows held.
+        std::int64_t rows = 0;
+        /// @brief Whether an invalidation or another page's totals made the page out of date.
+        bool stale = false;
+        /// @brief Whether the page holds every row it will: full, at the total, or ended by an empty reply.
+        bool complete = false;
+    };
+
+    /// @brief A fetch in flight.
+    struct Flight {
+        /// @brief The fetch as `visible` returned it.
+        PageFetch fetch;
+        /// @brief How its reply is stored.
+        WindowFetchKind kind = WindowFetchKind::Whole;
+    };
+
+    /// @brief An empty window.
+    /// @param pageSize   Rows per page.
+    /// @param maxPages   Pages held at most.
+    /// @param keyed      Whether rows have keys, so that a change can be answered with a keyed fetch.
+    /// @param maxKeys    Keys one keyed fetch asks for at most.
+    /// @param maxColumns Columns a page holds at most.
+    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters) - sizes and bounds, each documented above
+    WindowCore(std::int64_t pageSize, std::size_t maxPages, bool keyed, std::size_t maxKeys, std::size_t maxColumns)
+        : _pageSize{std::max<std::int64_t>(pageSize, 1)},
+          _maxPages{std::max<std::size_t>(maxPages, 1)},
+          _maxKeys{maxKeys},
+          _maxColumns{std::max<std::size_t>(maxColumns, 1)},
+          _keyed{keyed} {}
+
+    /// @brief Stores a page reply.
+    ///
+    /// Ignored when the fetch belongs to another query or is not the one in flight for its page. A whole-page
+    /// reply replaces the page, which stays stale when its fetch is older than the window's revision; a
+    /// rest-of-page reply is appended; a column reply is merged when its keys are the page's, row for row, and
+    /// invalidates the window otherwise. A reply not older than the totals held sets them; one whose total or
+    /// undecided count differs marks every other held page stale. An exact total drops every held row past it.
+    /// @tparam Fill `void(Content&, WindowFetchKind, std::size_t take)`: stores the first `take` rows of the reply.
+    /// @param fetch The fetch the reply answers.
+    /// @param reply What the window reads of the reply.
+    /// @param fill  Stores the reply's content.
+    /// @return `false` when the reply was ignored.
+    template <typename Fill>
+    bool acceptReply(PageFetch const& fetch, WindowReply const& reply, Fill&& fill) {
+        if (fetch.query != _query) {
+            return false;
+        }
+        auto const index = pageOf(fetch);
+        auto const flight = _inFlight.find(index);
+        if (flight == _inFlight.end() || flight->second.fetch != fetch) {
+            return false;
+        }
+        auto const kind = flight->second.kind;
+        _inFlight.erase(flight);
+        _error.reset();
+        if (_keyed && reply.keys.size() != reply.rows) {
+            invalidate();
+            return true;
+        }
+        bool const replyEmpty = reply.rows == 0;
+        if (kind == WindowFetchKind::Columns) {
+            auto const held = _pages.find(index);
+            if (held != _pages.end()) {
+                if (sameKeys(held->second, reply)) {
+                    fill(held->second.content, kind, reply.rows);
+                    mergeLevels(held->second, reply);
+                } else {
+                    invalidate();
+                }
+            }
+        } else if (kind == WindowFetchKind::Whole) {
+            auto& held = _pages[index];
+            auto const take = std::min(reply.rows, static_cast<std::size_t>(_pageSize));
+            held = Held{};
+            fill(held.content, kind, take);
+            appendRows(held, reply, take);
+            held.stale = fetch.revision != _revision;
+            completeIf(index, held, replyEmpty);
+        } else {
+            auto const held = _pages.find(index);
+            if (held != _pages.end() && fetch.request.offset == (index * _pageSize) + held->second.rows) {
+                auto const room = static_cast<std::size_t>(_pageSize - held->second.rows);
+                auto const take = std::min(room, reply.rows);
+                fill(held->second.content, kind, take);
+                appendRows(held->second, reply, take);
+                completeIf(index, held->second, replyEmpty);
+            }
+        }
+        if (fetch.revision >= _totalsRevision) {
+            adoptTotals(index, fetch.revision, reply);
+        }
+        dropPastTotal();
+        evict();
+        return true;
+    }
+
+    /// @brief Patches held rows from a keyed reply.
+    ///
+    /// Ignored (empty) for another query or without a key function. A reply row whose key a later fetch asked for
+    /// is ignored. The window invalidates instead of patching when a requested key it holds has no row, a held
+    /// key is at another view row, an unheld key lies inside a held page, or, on the reply to the latest keyed
+    /// fetch, the totals differ from the window's.
+    /// @tparam Replace `void(Held&, std::size_t at, std::size_t from)`: replaces held row `at` with reply row
+    ///                 `from`.
+    /// @param fetch   The fetch the reply answers.
+    /// @param reply   What the window reads of the reply.
+    /// @param replace Stores one row's content.
+    /// @return The view rows replaced, ascending.
+    template <typename Replace>
+    std::vector<std::int64_t> patchRows(RowsFetch const& fetch, WindowReply const& reply, Replace&& replace) {
+        if (fetch.query != _query || !_keyed) {
+            return {};
+        }
+        if (reply.keys.size() != reply.rows || reply.indices.size() != reply.rows) {
+            invalidate();
+            return {};
+        }
+        std::unordered_map<RowId, std::int64_t> held;
+        for (auto const& [page, content] : _pages) {
+            for (std::size_t at = 0; at < content.keys.size(); ++at) {
+                held.emplace(content.keys[at], (page * _pageSize) + static_cast<std::int64_t>(at));
+            }
+        }
+        auto const latest = [this](RowId const& key) {
+            auto const found = _latestAsked.find(key);
+            return found == _latestAsked.end() ? std::uint64_t{0} : found->second;
+        };
+        bool shifted = false;
+        std::unordered_set<RowId> answered;
+        std::vector<std::size_t> current;
+        for (std::size_t from = 0; from < reply.rows; ++from) {
+            auto const& key = reply.keys[from];
+            if (latest(key) > fetch.sequence) {
+                continue;
+            }
+            answered.insert(key);
+            current.push_back(from);
+            auto const index = reply.indices[from];
+            auto const found = held.find(key);
+            if (found != held.end()) {
+                shifted = shifted || found->second != index;
+            } else if (index >= 0 && _pages.contains(index / _pageSize)) {
+                shifted = true;
+            }
+        }
+        for (auto const& key : fetch.keys) {
+            if (latest(key) == fetch.sequence && held.contains(key) && !answered.contains(key)) {
+                shifted = true;
+            }
+        }
+        if (fetch.sequence == _latestKeyed &&
+            ((reply.total && (reply.total != _total || reply.totalKind != _totalKind)) ||
+             reply.undecided != _undecided)) {
+            shifted = true;
+        }
+        if (shifted) {
+            invalidate();
+            return {};
+        }
+        std::vector<std::int64_t> out;
+        for (auto const from : current) {
+            auto const index = reply.indices[from];
+            if (!held.contains(reply.keys[from])) {
+                continue;
+            }
+            auto& page = _pages.at(index / _pageSize);
+            auto const at = static_cast<std::size_t>(index % _pageSize);
+            replace(page, at, from);
+            page.levels[at].clear();
+            page.failedLevels[at].clear();
+            if (auto const* const unloaded = unloadedOf(reply, from)) {
+                page.levels[at] = unloaded->levels;
+                page.failedLevels[at] = unloaded->failed;
+            }
+            out.push_back(index);
+        }
+        std::ranges::sort(out);
+        return out;
+    }
+
+    /// @brief The page holding a view row, when the row is held.
+    /// @param index View row.
+    /// @return The page, or null.
+    [[nodiscard]] Held const* heldAt(std::int64_t index) const {
+        if (index < 0) {
+            return nullptr;
+        }
+        auto const found = _pages.find(index / _pageSize);
+        if (found == _pages.end() || index % _pageSize >= found->second.rows) {
+            return nullptr;
+        }
+        return &found->second;
+    }
+
+    /// @brief The latest `visible` call that named a column.
+    /// @param column The column.
+    /// @return The call's stamp; 0 when no call named it.
+    [[nodiscard]] std::uint64_t namedAt(std::string_view column) const {
+        auto const found = _named.find(column);
+        return found == _named.end() ? std::uint64_t{0} : found->second;
+    }
+
+    /// @brief Rows per page.
+    /// @return The page size.
+    [[nodiscard]] std::int64_t pageSize() const noexcept { return _pageSize; }
+
+    /// @brief Columns a page holds at most.
+    /// @return The bound.
+    [[nodiscard]] std::size_t maxColumns() const noexcept { return _maxColumns; }
+
 private:
+    [[nodiscard]] std::int64_t pageOf(PageFetch const& fetch) const noexcept {
+        return fetch.request.offset / _pageSize;
+    }
+
+    // Whether a known total bounds the view; a lower bound does not.
+    [[nodiscard]] bool exactTotal() const noexcept { return _total && _totalKind == TotalKind::Exact; }
+
+    [[nodiscard]] static UnloadedRow const* unloadedOf(WindowReply const& reply, std::size_t row) {
+        auto const found = std::ranges::lower_bound(reply.unloadedRows, static_cast<std::int64_t>(row), {},
+                                                    &UnloadedRow::index);
+        return found != reply.unloadedRows.end() && found->index == static_cast<std::int64_t>(row) ? &*found
+                                                                                                    : nullptr;
+    }
+
+    [[nodiscard]] bool sameKeys(Held const& held, WindowReply const& reply) const {
+        if (std::cmp_not_equal(reply.rows, held.rows)) {
+            return false;
+        }
+        return !_keyed || std::ranges::equal(held.keys, reply.keys);
+    }
+
+    void appendRows(Held& held, WindowReply const& reply, std::size_t take) {
+        for (std::size_t row = 0; row < take; ++row) {
+            if (_keyed) {
+                held.keys.push_back(reply.keys[row]);
+            }
+            auto const* const unloaded = unloadedOf(reply, row);
+            held.levels.push_back(unloaded != nullptr ? unloaded->levels : std::vector<std::string>{});
+            held.failedLevels.push_back(unloaded != nullptr ? unloaded->failed : std::vector<std::string>{});
+        }
+        held.rows += static_cast<std::int64_t>(take);
+    }
+
+    static void unite(std::vector<std::string>& into, std::vector<std::string> const& more) {
+        into.insert(into.end(), more.begin(), more.end());
+        std::ranges::sort(into);
+        auto const [first, last] = std::ranges::unique(into);
+        into.erase(first, last);
+    }
+
+    void mergeLevels(Held& held, WindowReply const& reply) {
+        for (auto const& unloaded : reply.unloadedRows) {
+            if (unloaded.index < 0 || unloaded.index >= held.rows) {
+                continue;
+            }
+            auto const at = static_cast<std::size_t>(unloaded.index);
+            unite(held.levels[at], unloaded.levels);
+            unite(held.failedLevels[at], unloaded.failed);
+        }
+    }
+
+    void completeIf(std::int64_t index, Held& held, bool replyEmpty) {
+        auto const end = (index * _pageSize) + held.rows;
+        if (held.rows >= _pageSize || (exactTotal() && end >= *_total) || replyEmpty) {
+            held.complete = true;
+        }
+    }
+
+    void adoptTotals(std::int64_t index, std::uint64_t revision, WindowReply const& reply) {
+        bool const differs = (reply.total && (reply.total != _total || reply.totalKind != _totalKind)) ||
+                             reply.undecided != _undecided;
+        _totalsRevision = revision;
+        _undecided = reply.undecided;
+        _awaiting.assign(reply.awaiting.begin(), reply.awaiting.end());
+        _failed.assign(reply.failed.begin(), reply.failed.end());
+        if (reply.total) {
+            _total = reply.total;
+            _totalKind = reply.totalKind;
+        }
+        if (differs) {
+            for (auto& [page, held] : _pages) {
+                if (page != index) {
+                    held.stale = true;
+                }
+            }
+        }
+    }
+
+    // A view that shrank holds nothing past its end, and awaits no fetch there: a page past an exact total is
+    // never fetched again, so a row held there would stay shown, and its key would be a probe no reply answers.
+    void dropPastTotal() {
+        if (!exactTotal()) {
+            return;
+        }
+        auto const total = *_total;
+        std::erase_if(_pages, [&](auto const& entry) { return entry.first * _pageSize >= total; });
+        std::erase_if(_inFlight, [&](auto const& entry) { return entry.first * _pageSize >= total; });
+        for (auto& [page, held] : _pages) {
+            auto const keep = total - (page * _pageSize);
+            if (held.rows > keep) {
+                auto const count = static_cast<std::size_t>(keep);
+                held.content.truncate(count);
+                if (_keyed) {
+                    held.keys.resize(count);
+                }
+                held.levels.resize(count);
+                held.failedLevels.resize(count);
+                held.rows = keep;
+                held.complete = true;
+            }
+        }
+    }
+
     void evict() {
         auto const center = (_visibleFirst + (_visibleCount / 2)) / _pageSize;
         while (_pages.size() > _maxPages) {
@@ -1373,25 +1862,199 @@ private:
                     farthest = at;
                 }
             }
-            _complete.erase(farthest->first);
             _pages.erase(farthest);
         }
     }
 
-    // Whether a known total bounds the view; a lower bound does not.
-    [[nodiscard]] bool exactTotal() const noexcept { return _total && _totalKind == TotalKind::Exact; }
+    [[nodiscard]] RefreshPlan plan(std::span<RowId const> keys) {
+        if (std::ranges::none_of(_pages, [](auto const& entry) { return entry.second.rows > 0; })) {
+            return {};
+        }
+        if (!_keyed || !_awaiting.empty()) {
+            invalidate();
+            return RefreshPlan{.kind = Refresh::Pages, .rows = {}};
+        }
+        std::vector<RowId> asked;
+        asked.reserve(keys.size() + _pages.size());
+        std::unordered_set<RowId> seen;
+        seen.reserve(keys.size() + _pages.size());
+        for (auto const& key : keys) {
+            if (seen.insert(key).second) {
+                asked.push_back(key);
+            }
+        }
+        std::int64_t runEnd = -1;
+        for (auto const& [page, held] : _pages) {
+            if (held.rows == 0) {
+                continue;
+            }
+            auto const start = page * _pageSize;
+            if (start != runEnd && seen.insert(held.keys.front()).second) {
+                asked.push_back(held.keys.front());
+            }
+            runEnd = start + held.rows;
+        }
+        if (asked.size() > _maxKeys) {
+            invalidate();
+            return RefreshPlan{.kind = Refresh::Pages, .rows = {}};
+        }
+        auto const sequence = ++_sequence;
+        for (auto const& key : asked) {
+            _latestAsked.insert_or_assign(key, sequence);
+        }
+        _latestKeyed = sequence;
+        return RefreshPlan{.kind = Refresh::Rows,
+                           .rows = RowsFetch{.keys = std::move(asked), .columns = _columns, .query = _query,
+                                             .sequence = sequence}};
+    }
 
     std::int64_t _pageSize;
     std::size_t _maxPages;
+    std::size_t _maxKeys;
+    std::size_t _maxColumns;
+    bool _keyed;
     std::uint64_t _query = 0;
-    std::map<std::int64_t, std::vector<Row>> _pages;
-    std::set<std::int64_t> _complete;
-    std::vector<std::int64_t> _inFlight;
+    std::uint64_t _revision = 0;
+    std::map<std::int64_t, Held> _pages;
+    std::map<std::int64_t, Flight> _inFlight;
     std::optional<std::int64_t> _total;
     TotalKind _totalKind = TotalKind::Exact;
+    std::int64_t _undecided = 0;
+    std::vector<std::string> _awaiting;
+    std::vector<std::string> _failed;
+    std::uint64_t _totalsRevision = 0;
+    std::uint64_t _sequence = 0;
+    std::unordered_map<RowId, std::uint64_t> _latestAsked;
+    std::uint64_t _latestKeyed = 0;
+    std::vector<RowId> _owed;
+    std::vector<std::string> _columns;
+    std::map<std::string, std::uint64_t, std::less<>> _named;
+    std::uint64_t _stamp = 0;
     std::optional<TableError> _error;
     std::int64_t _visibleFirst = 0;
     std::int64_t _visibleCount = 0;
+    std::int64_t _coveredFirst = 0;
+    std::int64_t _coveredLast = -1;
+};
+
+}  // namespace detail
+
+/// @brief The pages a `server`-mode table holds around the visible rows, kept current under changes.
+///
+/// The client calls `visible` as the view scrolls and sends the request of each fetch it returns, then hands the
+/// fetch back with its reply to `accept` (or with its error to `fail`). A change of sort or filter is a new
+/// query: call `reset`. A reply to a fetch made before the last `reset`, or to a fetch that is no longer the one
+/// in flight for its page, is ignored, so a late page never shows over a newer one.
+///
+/// A change of the table's record goes to `refresh` (its keys) or `invalidate` (the whole type, a resync); the
+/// client sends the keyed fetch a `Rows` plan carries and hands the reply to `patch`, and calls `owed` after each
+/// `accept`. The window has no clock and sends nothing: it returns what to fetch.
+///
+/// A server may return fewer rows than a fetch asked for (`validate` clamps the limit to its `maxLimit`): the
+/// window then fetches the rest of the page from where the reply ended. A page is complete when it is full,
+/// reaches the known total, or a reply to it is empty.
+/// @tparam Row The row type.
+template <typename Row>
+class PageWindow : public detail::WindowCore<detail::TypedWindowRows<Row>> {
+    using Core = detail::WindowCore<detail::TypedWindowRows<Row>>;
+
+public:
+    /// @brief An empty window.
+    /// @param pageSize   Rows per page (default 200).
+    /// @param maxPages   Pages held at most; the farthest from the visible rows go first.
+    /// @param key        The key of a row; without one, every change refetches the visible pages.
+    /// @param maxKeys    Keys one keyed fetch asks for at most; more refetch the pages instead.
+    /// @param maxColumns Unused by a typed window, whose rows are whole; kept so both windows construct alike.
+    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters) - sizes and bounds, each documented above
+    explicit PageWindow(std::int64_t pageSize = 200, std::size_t maxPages = 8, RowKey<Row> key = {},
+                        std::size_t maxKeys = 1000, std::size_t maxColumns = 96)
+        : Core{pageSize, maxPages, static_cast<bool>(key), maxKeys, maxColumns}, _key{std::move(key)} {}
+
+    /// @brief Declares the visible rows; returns the fetches to send.
+    ///
+    /// Covers the visible rows and one page either side, skipping complete pages, pages in flight, and pages past
+    /// an exact total. A page not held or held stale is fetched whole; a page held in part is fetched from where
+    /// it ends. The returned pages are marked in flight.
+    /// @param first   First visible view row.
+    /// @param count   Visible rows.
+    /// @param columns Ignored: a typed row is whole, and every fetch names no column.
+    /// @return The fetches to send.
+    [[nodiscard]] std::vector<PageFetch> visible(std::int64_t first, std::int64_t count,
+                                                 std::span<std::string const> columns = {}) {
+        static_cast<void>(columns);
+        return this->visibleColumns(first, count, {});
+    }
+
+    /// @brief Stores a page reply.
+    /// @param fetch The fetch the reply answers, as `visible` returned it.
+    /// @param page  The page the server returned.
+    /// @return `false` when the reply was ignored: its fetch belongs to an earlier query, or is not the one in
+    ///         flight for its page.
+    bool accept(PageFetch const& fetch, Page<Row> page) {
+        auto const keys = keysOf(page);
+        return this->acceptReply(fetch, replyOf(page, keys),
+                                 [&page](detail::TypedWindowRows<Row>& content, detail::WindowFetchKind kind,
+                                         std::size_t take) {
+                                     auto const end = page.rows.begin() + static_cast<std::ptrdiff_t>(take);
+                                     if (kind == detail::WindowFetchKind::Whole) {
+                                         content.rows.assign(std::make_move_iterator(page.rows.begin()),
+                                                             std::make_move_iterator(end));
+                                     } else if (kind == detail::WindowFetchKind::Rest) {
+                                         content.rows.insert(content.rows.end(),
+                                                             std::make_move_iterator(page.rows.begin()),
+                                                             std::make_move_iterator(end));
+                                     }
+                                 });
+    }
+
+    /// @brief Patches held rows from the reply to a `RowsFetch`.
+    /// @param fetch The keyed fetch the reply answers, as `refresh` or `owed` returned it.
+    /// @param reply The keyed reply.
+    /// @return The view rows replaced, ascending; empty when the reply was ignored or the window invalidated.
+    std::vector<std::int64_t> patch(RowsFetch const& fetch, Page<Row> reply) {
+        if (!_key) {
+            return {};
+        }
+        auto const keys = keysOf(reply);
+        return this->patchRows(fetch, replyOf(reply, keys),
+                               [&reply](typename Core::Held& page, std::size_t at, std::size_t from) {
+                                   page.content.rows[at] = std::move(reply.rows[from]);
+                               });
+    }
+
+    /// @brief The row at a view row, when it is held.
+    /// @param index View row.
+    /// @return The row, or null.
+    [[nodiscard]] Row const* row(std::int64_t index) const {
+        auto const* const page = this->heldAt(index);
+        return page == nullptr ? nullptr : &page->content.rows[static_cast<std::size_t>(index % this->pageSize())];
+    }
+
+private:
+    [[nodiscard]] std::vector<RowId> keysOf(Page<Row> const& page) const {
+        std::vector<RowId> keys;
+        if (_key) {
+            keys.reserve(page.rows.size());
+            for (auto const& row : page.rows) {
+                keys.push_back(_key(row));
+            }
+        }
+        return keys;
+    }
+
+    [[nodiscard]] static detail::WindowReply replyOf(Page<Row> const& page, std::vector<RowId> const& keys) {
+        return detail::WindowReply{.keys = keys,
+                                   .rows = page.rows.size(),
+                                   .unloadedRows = page.unloadedRows,
+                                   .total = page.total,
+                                   .totalKind = page.totalKind,
+                                   .undecided = page.undecided,
+                                   .awaiting = page.awaiting,
+                                   .failed = page.failed,
+                                   .indices = page.indices};
+    }
+
+    RowKey<Row> _key;
 };
 
 // NOLINTEND(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access)
