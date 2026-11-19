@@ -2031,6 +2031,12 @@ private:
         std::int64_t focusIndex = 0;
         // The focused row left the view: focus goes to the row now at its index.
         bool focusLeft = false;
+        // A reset moved the focused or highlighted key where no realized row has it yet: each pass looks for it
+        // until a row has it, or the user moves focus or the highlight changes.
+        bool focusSearching = false;
+        bool highlightSearching = false;
+        // The view's row count at the end of the last pass: an index at or past it names no row a change can move.
+        std::size_t lastCount = 0;
         std::size_t focusColumn = 0;
         std::function<void(std::optional<CellRef>)> onFocusCell;
         // The highlighted row, followed by key.
@@ -2514,6 +2520,7 @@ private:
         // The contiguous range only: a focused row kept beyond it is placed by its own `setRowIndex`.
         table.widget->setRealizedWindow(lo, hi > lo ? hi - lo : 0, count);
         afterPass(table, total);
+        table.lastCount = count;
         if (failure) {
             std::rethrow_exception(failure);
         }
@@ -2540,7 +2547,9 @@ private:
             for (std::size_t const column : leaving) {
                 park(table, slot, column);
             }
-            if (!keyed) {
+            // A row the rows do not hold now takes none of the budget: its cells wait for its arrival, which is a
+            // change of the rows and so a pass of its own.
+            if (!keyed || !rows.row(slot.index)) {
                 continue;
             }
             auto const rowDistance = static_cast<std::size_t>(std::abs(slot.index - centreRow));
@@ -2663,6 +2672,21 @@ private:
             table.counts = counts;
             table.widget->setCounts(counts.first, counts.second);
         }
+        if (table.highlightKey && table.highlightSearching) {
+            if (std::optional<std::int64_t> const now = placeOfKey(table, *table.highlightKey, table.highlightIndex)) {
+                table.highlightSearching = false;
+                table.highlightIndex = *now;
+                table.widget->setHighlightedRow(static_cast<std::size_t>(*now));
+            }
+        }
+        if (table.focused && table.focusSearching) {
+            if (std::optional<std::int64_t> const now = placeOfKey(table, *table.focusKey, table.focusIndex)) {
+                table.focusSearching = false;
+                table.focusIndex = *now;
+                table.widget->setFocusCell(static_cast<std::size_t>(*now), table.focusColumn);
+            }
+            return;
+        }
         if (table.focused) {
             std::optional<TableRowRef> const ref = table.source.rows->row(table.focusIndex);
             // The row at the focused index arrived, or took the place of the focused row that left the view; a row
@@ -2777,6 +2801,7 @@ private:
             return;
         }
         table.focused = true;
+        table.focusSearching = false;
         table.focusIndex = index;
         table.focusColumn = table.visible.at(place);
         std::optional<TableRowRef> const ref = table.source.rows->row(index);
@@ -2809,6 +2834,7 @@ private:
             return;
         }
         table.focused = true;
+        table.focusSearching = false;
         table.focusKey = cell->key;
         table.focusIndex = row->index;
         table.focusColumn = static_cast<std::size_t>(column - table.columns.begin());
@@ -2819,6 +2845,7 @@ private:
 
     // Takes a highlight: the rows fetch around it, the view scrolls to it and marks it, and its key is followed.
     void highlightFrom(SourceTable& table, std::optional<TableHighlight> const& highlight) {
+        table.highlightSearching = false;
         if (!highlight) {
             if (table.highlightKey) {
                 table.highlightKey.reset();
@@ -2856,26 +2883,35 @@ private:
     }
 
     // Follows the focused and the highlighted rows through a change of the rows. A reset (a new sort, filter or
-    // description) gives no places, so they are found by key among the places the window realizes; a highlight not
-    // found there is cleared until the lowering locates it again, and focus not found stays on its key.
+    // description) gives no places, and the rows may come back later (a server's pages are dropped first), so a key
+    // no realized row has is looked for after each pass until one has it; meanwhile the highlight shows no mark and
+    // focus stays on its key. An index at or past the row count before the change names no row, so nothing moves it.
     static void follow(SourceTable& table, table::ViewChange const& change) {
         bool const reset = std::ranges::any_of(
             change.ops, [](table::ViewOp const& op) { return op.kind == table::ViewOp::Kind::Reset; });
-        if (table.highlightKey) {
-            std::optional<std::int64_t> const now = reset
-                                                        ? placeOfKey(table, *table.highlightKey, table.highlightIndex)
-                                                        : followIndex(change, table.highlightIndex);
+        auto const followed = [&table, &change](std::int64_t index) -> std::optional<std::int64_t> {
+            if (index >= static_cast<std::int64_t>(table.lastCount)) {
+                return index;
+            }
+            return followIndex(change, index);
+        };
+        if (table.highlightKey && !table.highlightSearching) {
+            std::optional<std::int64_t> const now =
+                reset ? placeOfKey(table, *table.highlightKey, table.highlightIndex) : followed(table.highlightIndex);
             if (now) {
                 if (*now != table.highlightIndex) {
                     table.highlightIndex = *now;
                     table.widget->setHighlightedRow(static_cast<std::size_t>(*now));
                 }
+            } else if (reset) {
+                table.highlightSearching = true;
+                table.widget->setHighlightedRow(std::nullopt);
             } else {
                 table.highlightKey.reset();
                 table.widget->setHighlightedRow(std::nullopt);
             }
         }
-        if (table.focused) {
+        if (table.focused && !table.focusSearching) {
             std::int64_t const last = std::max<std::int64_t>(table.source.rows->total().rows - 1, 0);
             if (reset && table.focusKey) {
                 if (std::optional<std::int64_t> const now = placeOfKey(table, *table.focusKey, table.focusIndex)) {
@@ -2883,11 +2919,13 @@ private:
                         table.focusIndex = *now;
                         table.widget->setFocusCell(static_cast<std::size_t>(*now), table.focusColumn);
                     }
+                } else {
+                    table.focusSearching = true;
                 }
                 return;
             }
             // A focused row the change removed leaves focus at its view index, on the row now there, or the last.
-            std::optional<std::int64_t> const now = followIndex(change, table.focusIndex);
+            std::optional<std::int64_t> const now = followed(table.focusIndex);
             table.focusLeft = table.focusLeft || !now.has_value();
             table.focusIndex = std::min(now.value_or(table.focusIndex), last);
         }
