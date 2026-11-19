@@ -3783,8 +3783,8 @@ struct TextInputOptions {
     AnyHandle prefix;
     /// @brief Whether the text and the placeholder are drawn in the `mono` text role's face.
     bool mono = false;
-    /// @brief Whether a multiline input wraps a line longer than the field; `false` writes `wrap: false`, and the field
-    ///        scrolls sideways instead. `true` writes no key. Refused on an input that is not multiline.
+    /// @brief Whether a multiline input wraps a line longer than the field. `false` writes `wrap: false`, and the
+    ///        field scrolls sideways instead; `true` writes no key. Refused on an input that is not multiline.
     bool wrap = true;
     /// @brief Where the text sits: `Start`, `Center` or `End`; absent writes no key, the start. Refused on a
     ///        multiline input; `Stretch` is refused by the loader.

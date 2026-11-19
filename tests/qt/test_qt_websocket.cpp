@@ -1234,12 +1234,10 @@ TEST_CASE("morph::qt::QtWebSocketBackend: a request or private bind after a refu
     REQUIRE_THROWS_AS(awaitOn(cbExec, backend.request(morph::wire::makeHello(), cbExec)),
                       morph::backend::DisconnectedError);
     REQUIRE_THROWS_AS(
-        awaitOn(cbExec, backend.bindModel({.typeId = "WsEchoModel",
-                                           .factory = nullptr,
-                                           .contextKey = {},
-                                           .primary = {},
-                                           .current = {}},
-                                          cbExec)),
+        awaitOn(cbExec,
+                backend.bindModel(
+                    {.typeId = "WsEchoModel", .factory = nullptr, .contextKey = {}, .primary = {}, .current = {}},
+                    cbExec)),
         morph::backend::DisconnectedError);
 }
 

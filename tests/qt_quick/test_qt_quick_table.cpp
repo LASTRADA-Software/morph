@@ -1919,12 +1919,12 @@ TEST_CASE("qt_quick table: rows that arrive after the mount fill the viewport wi
         return rows;
     };
     morph::reactive::Signal<std::vector<VirtualRow>> rows{scene.runtime(), make(3)};
-    ui::Mounted const mounted{scene.runtime(), scene.backend(),
-                              ui::table<VirtualRow>(
-                                  {{.label = "Name"}}, [&rows] { return rows.get(); },
-                                  [](VirtualRow const& row) { return ui::Key{row.id}; }, virtualRowCell,
-                                  {.virtualize = {.threshold = 5, .overscan = 1},
-                                   .common = {.layout = {.height = ui::Sizing::fixed(20)}}})};
+    ui::Mounted const mounted{
+        scene.runtime(), scene.backend(),
+        ui::table<VirtualRow>(
+            {{.label = "Name"}}, [&rows] { return rows.get(); }, [](VirtualRow const& row) { return ui::Key{row.id}; },
+            virtualRowCell,
+            {.virtualize = {.threshold = 5, .overscan = 1}, .common = {.layout = {.height = ui::Sizing::fixed(20)}}})};
     scene.settle();
     QQuickItem const& tableItem = Scene::itemOf(mounted.root());
     auto* const flick = tableItem.findChild<QQuickItem*>(QStringLiteral("flick"));
@@ -1953,7 +1953,8 @@ std::vector<VirtualRow> mixedRows(std::int64_t count) {
 }  // namespace
 
 // Mutation: size the spacers from the realized rows' average (the estimate) instead of the measured heights.
-TEST_CASE("qt_quick table: a scrolling virtualized table of mixed row heights moves its rows by the scroll", "[qt_quick]") {
+TEST_CASE("qt_quick table: a scrolling virtualized table of mixed row heights moves its rows by the scroll",
+          "[qt_quick]") {
     Scene scene;
     std::vector<VirtualRow> const many = mixedRows(600);
     ui::Mounted const mounted{scene.runtime(), scene.backend(),
@@ -2026,11 +2027,11 @@ TEST_CASE("qt_quick table: a virtualized table scrolls with a vertical bar sized
 
     // A table that is not virtualized has no vertical bar: its ancestor scrolls.
     std::vector<VirtualRow> const few = mixedRows(3);
-    ui::Mounted const small{scene.runtime(), scene.backend(),
-                            ui::table<VirtualRow>(
-                                {{.label = "Name"}}, [&few] { return few; },
-                                [](VirtualRow const& row) { return ui::Key{row.id}; }, virtualRowCell,
-                                {.virtualize = {.threshold = 5, .overscan = 3}})};
+    ui::Mounted const small{
+        scene.runtime(), scene.backend(),
+        ui::table<VirtualRow>(
+            {{.label = "Name"}}, [&few] { return few; }, [](VirtualRow const& row) { return ui::Key{row.id}; },
+            virtualRowCell, {.virtualize = {.threshold = 5, .overscan = 3}})};
     scene.settle();
     auto* const smallFlick = Scene::itemOf(small.root()).findChild<QQuickItem*>(QStringLiteral("flick"));
     REQUIRE(smallFlick != nullptr);

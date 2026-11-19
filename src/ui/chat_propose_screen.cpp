@@ -186,7 +186,9 @@ struct Carried {
             bool const digits = !token.empty() && std::ranges::all_of(token, [](char chr) {
                 return std::isdigit(static_cast<unsigned char>(chr)) != 0;
             });
-            std::size_t const index = digits && token.size() < 10 ? std::stoull(token) : array->size();
+            // Fewer than 10 digits fits a 32-bit `size_t`, so the cast is exact on every target.
+            std::size_t const index =
+                digits && token.size() < 10 ? static_cast<std::size_t>(std::stoull(token)) : array->size();
             if (index >= array->size()) {
                 return std::unexpected("nothing at " + std::string{pointer.substr(0, next)} + ": the array has " +
                                        std::to_string(array->size()) + " items");
