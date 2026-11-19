@@ -123,7 +123,7 @@ struct ReloadOutcome {
             }
             // A draft stays mounted: it is checked against the new bundle when the person previews or saves it, and
             // discarding it mounts the document the map holds then.
-            if (DocumentScreenHost::drafted(*screen.handle)) {
+            if (DocumentScreenHost::draftedNow(*screen.handle)) {
                 continue;
             }
             if (auto remounted = host.remount(*screen.handle, document); !remounted) {

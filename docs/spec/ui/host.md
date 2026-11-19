@@ -83,10 +83,21 @@ It is built over the interpreter's `Session` and `Dispatcher`, and `DocumentScre
     shell's record of the tab name the screen, never the draft. `screenIdOf(handle)` and `paramsOf(handle)` answer
     the screen's id and params.
   - While a draft is up the handle is `dirty`, so a close asks the close guard, as a screen with unsaved edits does.
+  - The handle's identity is pinned while a draft is up: it answers the identity the screen had when the draft began,
+    whatever the draft's own `identity` says, so tab dedupe, the record and a chat conversation's key stay with the
+    screen. `discardDraft` and `endDraft` hand it back to the mounted document's own expression. The title follows
+    the draft's.
+  - The refusal of a draft whose id differs is a `MountError` whose `pointer` is `/id`, for a source view to put its
+    cursor there.
+  - A second draft replaces the first and starts from the first draft's state, as any remount does.
+  - A save never answers clean while a draft is up, since the draft is still unsaved: the close guard's *Save* on a
+    drafted screen whose draft declares `onSave` runs it and keeps the window open. `endDraft` is what the shell
+    calls once the draft is stored.
   - `discardDraft(handle)` remounts the document `documents` answers for the screen's id now, so a reload since the
     draft began is seen, and clears the mark. `endDraft(handle)` clears the mark and keeps what is mounted: what a
     shell does once the draft is saved.
   - A development reload (`reloadDocuments`) leaves a drafted screen as it is.
+  - Mounting a draft and setting the mark are one batch, so no frame shows one without the other.
   - The custom screens client is what makes drafts ([`custom_screens.md`](custom_screens.md#the-client)).
 - **`inspector(handle)`** is the `Inspector` over a screen it mounted ([`inspector.md`](inspector.md)), or nothing
   for a closed or foreign handle or for a screen whose session is not in development mode. It is the only way a host hands out its

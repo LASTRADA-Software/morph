@@ -260,19 +260,16 @@ std::expected<void, MountError> DocumentScreenHost::mountDraft(ScreenHandle& han
         return std::unexpected(MountError{
             .screenId = draft->id,
             .reason = "a draft keeps the screen's id, `" + std::string{screen->id()} + "`",
+            .pointer = "/id",
         });
     }
-    if (auto mounted = own->remount(_interpreter, std::move(draft), *_options.backend); !mounted) {
-        return mounted;
-    }
-    own->setDrafted(true);
-    return {};
+    return own->remount(_interpreter, std::move(draft), *_options.backend, Handle::DraftChange::Begin);
 }
 
 std::expected<void, MountError> DocumentScreenHost::discardDraft(ScreenHandle& handle) {
     auto* const own = dynamic_cast<Handle*>(&handle);
     Screen const* const screen = own == nullptr ? nullptr : own->screen();
-    if (screen == nullptr || !own->drafted()) {
+    if (screen == nullptr || !own->draftedNow()) {
         return std::unexpected(MountError{
             .screenId = screen == nullptr ? std::string{} : std::string{screen->id()},
             .reason = "no draft is mounted",
@@ -283,22 +280,23 @@ std::expected<void, MountError> DocumentScreenHost::discardDraft(ScreenHandle& h
     if (!document) {
         return std::unexpected(MountError{.screenId = screenId, .reason = "unknown screen"});
     }
-    if (auto mounted = own->remount(_interpreter, std::move(document), *_options.backend); !mounted) {
-        return mounted;
-    }
-    own->setDrafted(false);
-    return {};
+    return own->remount(_interpreter, std::move(document), *_options.backend, Handle::DraftChange::End);
 }
 
 void DocumentScreenHost::endDraft(ScreenHandle& handle) {
     if (auto* const own = dynamic_cast<Handle*>(&handle); own != nullptr) {
-        own->setDrafted(false);
+        own->endDraft();
     }
 }
 
 bool DocumentScreenHost::drafted(ScreenHandle const& handle) {
     auto const* const own = dynamic_cast<Handle const*>(&handle);
     return own != nullptr && own->screen() != nullptr && own->drafted();
+}
+
+bool DocumentScreenHost::draftedNow(ScreenHandle const& handle) {
+    auto const* const own = dynamic_cast<Handle const*>(&handle);
+    return own != nullptr && own->screen() != nullptr && own->draftedNow();
 }
 
 std::optional<std::string> DocumentScreenHost::screenIdOf(ScreenHandle const& handle) {
@@ -418,7 +416,7 @@ MountError DocumentScreenHost::mountErrorOf(std::string_view screenId, Refusal c
     if (!refusal.path.empty()) {
         reason = refusal.path + ": " + reason;
     }
-    return MountError{.screenId = std::string{screenId}, .reason = std::move(reason)};
+    return MountError{.screenId = std::string{screenId}, .reason = std::move(reason), .pointer = {}};
 }
 
 void DocumentScreenHost::Call::answer(std::optional<Value> result) {
@@ -450,7 +448,7 @@ void DocumentScreenHost::Handle::placed(ParamMap params, ContainerWidget* parent
 
 std::expected<void, MountError> DocumentScreenHost::Handle::remount(Interpreter& interpreter,
                                                                     std::shared_ptr<Document const> document,
-                                                                    IViewBackend& backend) {
+                                                                    IViewBackend& backend, DraftChange draft) {
     State& state = *_state;
     std::string const screenId = document->id;
     if (!state.screen) {
@@ -467,7 +465,17 @@ std::expected<void, MountError> DocumentScreenHost::Handle::remount(Interpreter&
     // The old screen goes after the new one has mounted, so its root widget is never missing in between;
     // destroying it runs its `onUnmount`.
     std::unique_ptr<Screen> const replaced = std::exchange(state.screen, std::move(*next));
-    state.runtime->batch([&state] { state.generation.set(state.generation.peek() + 1); });
+    // The new screen and the draft mark change together, so no frame shows one without the other. A draft pins the
+    // identity the screen had, which `identity` read before the swap.
+    if (draft == DraftChange::Begin && !state.drafted.peek()) {
+        state.draftIdentity = state.identity.peek();
+    }
+    state.runtime->batch([&state, draft] {
+        state.generation.set(state.generation.peek() + 1);
+        if (draft != DraftChange::Keep) {
+            state.drafted.set(draft == DraftChange::Begin);
+        }
+    });
     return {};
 }
 
@@ -497,8 +505,8 @@ void DocumentScreenHost::Handle::State::request(std::shared_ptr<State> const& st
     state->closing = true;
     std::shared_ptr<bool const> const cancelled = state->screen->beginClose();
     if (cancelled == nullptr) {
-        // A mounted draft is unsaved work however clean the screen's own state is, as the handle's `dirty` says.
-        bool const isDirty = state->drafted.peek() || state->screen->dirty();
+        // The handle's `dirty`: a mounted draft is unsaved work however clean the screen's own state is.
+        bool const isDirty = state->dirty.peek();
         if (!isDirty) {
             state->finish(true);
         } else if (state->guard && state->self != nullptr) {
@@ -555,7 +563,7 @@ void DocumentScreenHost::Handle::State::save(std::shared_ptr<State> const& state
     // Answered in the settled task itself rather than posted again, so an answer never reaches a handle
     // that closed in between; an answer that closes the screen ends the answering.
     whenSettled(state, &State::saved, [](State& savedState) {
-        bool const clean = !savedState.screen->dirty();
+        bool const clean = !savedState.dirty.peek();
         for (auto const& answer : std::exchange(savedState.saving, {})) {
             if (!savedState.screen) {
                 return;

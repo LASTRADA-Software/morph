@@ -51,6 +51,22 @@ constexpr std::string_view kNoteDraft = R"({
     { "kind": "text", "testId": "body", "text": { "ref": "content" } } ] } })";
 
 /// A draft that needs a param the screen was not given: it loads, and the interpreter refuses the mount.
+/// A draft with no identity of its own.
+constexpr std::string_view kNoteAnonymous = R"({
+  "vocab": "ui/1", "id": "note", "params": { "noteId": "int" }, "title": "Anonymous",
+  "view": { "kind": "text", "testId": "heading", "text": "Anonymous" } })";
+
+/// A draft whose identity is another expression.
+constexpr std::string_view kNoteRekeyed = R"({
+  "vocab": "ui/1", "id": "note", "params": { "noteId": "int" }, "identity": { "lit": "rekeyed" }, "title": "Note",
+  "view": { "kind": "text", "testId": "heading", "text": "Rekeyed" } })";
+
+/// A draft that declares onSave, and so offers Save in the close guard; its save changes nothing.
+constexpr std::string_view kNoteSaves = R"({
+  "vocab": "ui/1", "id": "note", "params": { "noteId": "int" }, "identity": { "ref": "noteId" }, "title": "Note",
+  "onSave": [ { "notify": "saving" } ],
+  "view": { "kind": "text", "testId": "heading", "text": "Saves" } })";
+
 constexpr std::string_view kNoteNeedsOwner = R"({
   "vocab": "ui/1", "id": "note", "params": { "noteId": "int", "owner": "string" },
   "view": { "kind": "text", "testId": "heading", "text": "needs an owner" } })";
@@ -75,16 +91,18 @@ std::shared_ptr<Document const> load(std::string_view text) {
 /// A host over a document map, whose close guard records each screen it is asked about and discards it.
 class Shell final : public DocumentScreenHost {
 public:
-    Shell(Harness& harness, DocumentMap& documents, std::vector<std::string>& asked)
-        : DocumentScreenHost{harness.session, harness.dispatcher, options(harness, documents, asked)} {}
+    Shell(Harness& harness, DocumentMap& documents, std::vector<std::string>& asked, CloseChoice& choice,
+          int& failures)
+        : DocumentScreenHost{harness.session, harness.dispatcher,
+                             options(harness, documents, asked, choice, failures)} {}
 
     void onNavigate(std::string_view /*screenId*/, ParamMap const& /*params*/) override {}
 
     using DocumentScreenHost::onNavigate;
 
 private:
-    static DocumentScreenHostOptions options(Harness& harness, DocumentMap& documents,
-                                             std::vector<std::string>& asked) {
+    static DocumentScreenHostOptions options(Harness& harness, DocumentMap& documents, std::vector<std::string>& asked,
+                                             CloseChoice& choice, int& failures) {
         DocumentScreenHostOptions made;
         made.documents = [&documents](std::string_view screenId) -> std::shared_ptr<Document const> {
             auto const found = documents.find(screenId);
@@ -92,17 +110,18 @@ private:
         };
         made.backend = &harness.backend;
         made.application = &harness.host;
-        made.guard = [&asked](ScreenHandle& screen, std::function<void(CloseChoice)> const& choose) {
+        made.guard = [&asked, &choice](ScreenHandle& screen, std::function<void(CloseChoice)> const& choose) {
             asked.push_back(screen.title().peek());
-            choose(CloseChoice::Discard);
+            choose(choice);
         };
+        made.saveFailed = [&failures](ScreenHandle&) { ++failures; };
         return made;
     }
 };
 
 /// The note mounted with id 7, its body changed by the user.
 struct Opened {
-    explicit Opened(Harness& harnessIn) : harness{&harnessIn}, shell{harnessIn, documents, asked} {
+    explicit Opened(Harness& harnessIn) : harness{&harnessIn}, shell{harnessIn, documents, asked, choice, failures} {
         documents.emplace("note", load(kNote));
         auto mounted = shell.mount("note", ParamMap{{"noteId", Value{std::int64_t{7}}}});
         REQUIRE(mounted.has_value());
@@ -115,6 +134,8 @@ struct Opened {
     Harness* harness;
     DocumentMap documents;
     std::vector<std::string> asked;
+    CloseChoice choice = CloseChoice::Discard;
+    int failures = 0;
     Shell shell;
     std::unique_ptr<ScreenHandle> handle;
 };
@@ -164,6 +185,7 @@ TEST_CASE("A draft the interpreter refuses, or one that names another screen, le
     auto const other = opened.shell.mountDraft(*opened.handle, load(kOther));
     REQUIRE_FALSE(other.has_value());
     CHECK(other.error().reason.contains("keeps the screen's id"));
+    CHECK(other.error().pointer == "/id");
     harness.settle();
     CHECK(harness.text("heading") == "Note");
     CHECK_FALSE(DocumentScreenHost::drafted(*opened.handle));
@@ -216,4 +238,39 @@ TEST_CASE("A development reload leaves a draft mounted, and Discard then mounts 
     REQUIRE(opened.shell.discardDraft(*opened.handle).has_value());
     harness.settle();
     CHECK(harness.text("heading") == "Note v2");
+}
+
+// Mutation: let the handle's identity follow the draft's own expression (it changes while drafted).
+TEST_CASE("A draft cannot change the handle's identity; Discard returns to the screen's own expression",
+          "[ui][host][drafts]") {
+    Harness harness;
+    Opened opened{harness};
+    ScreenHandle& handle = *opened.handle;
+    auto const keyBefore = DocumentScreenHost::chatContext(handle)->identity;
+
+    for (std::string_view const text : {kNoteAnonymous, kNoteRekeyed}) {
+        REQUIRE(opened.shell.mountDraft(handle, load(text)).has_value());
+        harness.settle();
+        CHECK(handle.identity().peek() == Value{std::int64_t{7}});
+        CHECK(DocumentScreenHost::chatContext(handle)->identity == keyBefore);
+    }
+    REQUIRE(opened.shell.discardDraft(handle).has_value());
+    harness.settle();
+    CHECK(handle.identity().peek() == Value{std::int64_t{7}});
+}
+
+// Mutation: answer the save from the screen's own dirty only (the drafted screen answers clean and closes).
+TEST_CASE("Save and close on a drafted screen keeps it open: the draft is still unsaved", "[ui][host][drafts]") {
+    Harness harness;
+    Opened opened{harness};
+    opened.choice = CloseChoice::Save;
+    REQUIRE(opened.shell.mountDraft(*opened.handle, load(kNoteSaves)).has_value());
+    harness.settle();
+    CHECK(opened.handle->canSave());
+    std::optional<bool> closed;
+    opened.handle->requestClose([&closed](bool outcome) { closed = outcome; });
+    harness.settle();
+    CHECK(closed == std::optional<bool>{false});
+    CHECK(opened.failures == 1);
+    CHECK(DocumentScreenHost::rootOf(*opened.handle) != nullptr);
 }

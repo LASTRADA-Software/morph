@@ -47,6 +47,10 @@ struct MountError {
     std::string screenId;
     /// @brief Why: an unknown screen, a refused param, a refused mount.
     std::string reason;
+    /// @brief The JSON Pointer into the document of the refused part when the refusal is about one part, such as
+    /// `/id`;
+    ///        empty otherwise.
+    std::string pointer{};
 };
 
 /// @brief A screen's head beside its title: the eyebrow, the title's runs, the subtitle, the status badges, the tools,
@@ -477,6 +481,12 @@ public:
     /// @return Whether it does; `false` for a foreign or closed handle.
     [[nodiscard]] static bool drafted(ScreenHandle const& handle);
 
+    /// @brief Whether a handle this host mounted shows a draft, read without tracking: for code that is not a
+    ///        reactive computation.
+    /// @param handle A handle.
+    /// @return Whether it does; `false` for a foreign or closed handle.
+    [[nodiscard]] static bool draftedNow(ScreenHandle const& handle);
+
     /// @brief The id of the screen a handle this host mounted shows, a draft's included (a draft keeps the screen's).
     /// @param handle A handle.
     /// @return The id; nothing for a foreign or closed handle.
@@ -637,12 +647,19 @@ private:
 
         [[nodiscard]] Widget* root() const { return _state->screen ? &_state->screen->root() : nullptr; }
 
+        /// What a remount does to the draft mark; `Begin` and `End` change it in the batch that swaps the screen, so
+        /// no frame shows the new screen with the old mark.
+        enum class DraftChange : std::uint8_t { Keep, Begin, End };
+
         /// Whether a draft is mounted; a tracked read.
         [[nodiscard]] bool drafted() const { return _state->drafted.get(); }
 
-        /// Marks the screen as showing a draft, or not.
-        void setDrafted(bool drafted) {
-            _state->runtime->batch([this, drafted] { _state->drafted.set(drafted); });
+        /// Whether a draft is mounted; an untracked read.
+        [[nodiscard]] bool draftedNow() const { return _state->drafted.peek(); }
+
+        /// Ends the draft without remounting.
+        void endDraft() {
+            _state->runtime->batch([this] { _state->drafted.set(false); });
         }
 
         /// The screen while it is open; null once it closed.
@@ -657,7 +674,7 @@ private:
         /// Mounts @p document with the screen's params, keeping its state by name and type, and replaces the
         /// screen with it; on a refusal the screen stays as it was.
         std::expected<void, MountError> remount(Interpreter& interpreter, std::shared_ptr<Document const> document,
-                                                IViewBackend& backend);
+                                                IViewBackend& backend, DraftChange draft = DraftChange::Keep);
 
         /// The call this screen answers, if it was opened as one.
         void answers(std::shared_ptr<Call> call) { _state->call = std::move(call); }
@@ -709,7 +726,13 @@ private:
                   title{*runtime,
                         remembered(lastTitle, [](Screen& open) { return detail::host::titleText(open.title()); })},
                   dirty{*runtime, [this] { return live() && (drafted.get() || screen->dirty()); }},
-                  identity{*runtime, remembered(lastIdentity, [](Screen& open) { return open.identity(); })},
+                  identity{*runtime,
+                           [this] {
+                               if (live() && drafted.get()) {
+                                   return draftIdentity;
+                               }
+                               return remembered(lastIdentity, [](Screen& open) { return open.identity(); })();
+                           }},
                   titleSpans{*runtime, remembered(lastTitleSpans, [](Screen& open) { return open.titleSpans(); })},
                   pageEdge{*runtime, remembered(lastPageEdge, [](Screen& open) { return open.pageEdge(); })},
                   headJoined{*runtime, remembered(lastHeadJoined, [](Screen& open) { return open.headJoined(); })},
@@ -788,6 +811,9 @@ private:
             std::uint64_t watches = 0;
             std::string lastTitle;
             Value lastIdentity;
+            // The identity the screen had when its draft began; the handle answers it while a draft is mounted, so a
+            // draft never changes which screen the handle names.
+            Value draftIdentity;
             std::vector<TextSpan> lastTitleSpans;
             bool lastPageEdge = false;
             bool lastHeadJoined = false;
