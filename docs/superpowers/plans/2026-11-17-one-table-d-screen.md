@@ -1677,7 +1677,7 @@ Decisions:
   | `Quantity` | `Measure` | `Measure{value, units->find(unit)}`; a unit the registry lacks, or no registry, is an invalid cell (the "unknown unit" case) |
   | `List`, `Record` | nothing of its own | invalid, except a `Record` of exactly `num`, `den`, `unit` (cross-part decision 22), read as a `Quantity` |
 
-  All votes alike → that kind; only `Int` and `Decimal` → `Decimal`; any other mix takes the first non-null cell's kind, and a cell not of it is invalid (sorts last, reported once at the `sort` path). A literal `kind` on the column part wins over inference, and a cell not of it is invalid. A change of the inferred kind is a `Reset` of that column. A `DateTime` cell holds seconds (`data_source.hpp:56`), so two timestamps in one second tie and keep their source order, where the expression language's `sort` orders to the millisecond; table.md ("A document's rows as a source", "Timestamps to the second") states this. A rows table orders as a model's `DateTime` column does, which is what "One order on every surface" compares.
+  All votes alike → that kind; only `Int` and `Decimal` → `Decimal`; any other mix takes the first non-null cell's kind, `Decimal` when that is an `Int` and a `Decimal` voted too (table.md's "integers with decimals are one `Decimal` column and a text among them is one invalid cell"), and a cell not of it is invalid (sorts last, reported once at the `sort` path). A literal `kind` on the column part wins over inference, and a cell not of it is invalid. A change of the inferred kind is a `Reset` of that column. A `DateTime` cell holds seconds (`data_source.hpp:56`), so two timestamps in one second tie and keep their source order, where the expression language's `sort` orders to the millisecond; table.md ("A document's rows as a source", "Timestamps to the second") states this. A rows table orders as a model's `DateTime` column does, which is what "One order on every surface" compares.
 - Groups. `kGroupRunColumn` begins with the control character U+001F, written as the escape `"\x1F" "group"` and never as the raw character: a column id is a document name (`[A-Za-z_][A-Za-z0-9_]*`, `document.cpp:770`), so no column a document declares, `group` included, can collide with it. With `setGroup`, the source holds the column `kGroupRunColumn` (`ColumnKind::Integer`, not in `ColumnInfo`s the lowering lays out): row `r`'s cell is `runOf(r)`, runs counted over the rows in source order, a new run starting where `by` differs from the previous row's (`Value ==`). The lowering puts `{kGroupRunColumn, Ascending}` before every sort chain it passes to the engine, so groups keep their places and rows sort within them; `assign` recomputes the runs and notifies `Reset` of that column only when a run boundary moved. `runRecords()` are the heading records the interpreter builds today (`TableView::runs`), placed by the lowering after paging (11b).
 - The source keeps each row's `Value` beside its cells; `recordOf` returns its key and that value.
 
@@ -1776,8 +1776,8 @@ TEST_CASE("value rows source: every value kind infers its column kind", "[ui][ta
     CHECK(kindOf(*src, "e") == Integer);
     CHECK(listener.changes.back().kind == table::ChangeKind::Reset);
 }
-// Mutations: the run index computed after the sort (groups split: 2, 3, 1); the run column named plain "group" (the
-// source has two columns of that id, and the count CHECK reads 2).
+// Mutations: every row given run 0, as an index computed after the sort would leave it (groups split: 2, 3, 1);
+// the run column named plain "group" (the source has two columns of that id, and the count CHECK reads 2).
 TEST_CASE("value rows source: a grouped table sorts within its runs", "[ui][table]") {
     RowsFixture h;  auto const src = sourceOf(h, {col("name"), col("group")});   // a document column named "group"
     src->setGroup([](Value const& row) { return *row.field("site"); });
