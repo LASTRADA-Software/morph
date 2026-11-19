@@ -507,24 +507,70 @@ void CustomScreenChrome::preview(std::function<void(bool drafted)> const& done) 
                                  finish(done, false);
                                  return;
                              }
-                             ScreenHandle* const handle = handleOf(tab);
-                             std::shared_ptr<TabState> const state = stateOf(tab);
-                             if (handle == nullptr || state == nullptr) {
+                             if (handleOf(tab) == nullptr || stateOf(tab) == nullptr) {
                                  refuse("", "the screen is closed");
                                  finish(done, false);
                                  return;
                              }
-                             if (auto mounted = _options.host->mountDraft(*handle, document); !mounted) {
+                             if (auto mounted = mountAsDraft(tab, document, text); !mounted) {
                                  refuse(mounted.error().pointer, mounted.error().reason);
                                  finish(done, false);
                                  return;
                              }
-                             ++state->generation;
-                             state->draftText = text;
-                             state->message->set(std::string{});
                              closeSourceLater();
                              finish(done, true);
                          }));
+}
+
+std::expected<void, MountError> CustomScreenChrome::mountAsDraft(WorkspaceTabId tab,
+                                                                 std::shared_ptr<Document const> const& document,
+                                                                 std::string const& text) {
+    ScreenHandle* const handle = handleOf(tab);
+    std::shared_ptr<TabState> const state = stateOf(tab);
+    if (handle == nullptr || state == nullptr) {
+        return std::unexpected(MountError{.screenId = {}, .reason = "the screen is closed", .pointer = {}});
+    }
+    if (auto mounted = _options.host->mountDraft(*handle, document); !mounted) {
+        return std::unexpected(std::move(mounted.error()));
+    }
+    ++state->generation;
+    state->draftText = text;
+    state->message->set(std::string{});
+    return {};
+}
+
+std::optional<std::string> CustomScreenChrome::draftOf(WorkspaceTabId tab) const {
+    ScreenHandle const* const handle = handleOf(tab);
+    std::shared_ptr<TabState> const state = stateOf(tab);
+    if (handle == nullptr || state == nullptr || !DocumentScreenHost::draftedNow(*handle)) {
+        return std::nullopt;
+    }
+    return state->draftText;
+}
+
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): the screen's id and the document's text are told apart by name.
+bool CustomScreenChrome::proposeDraft(WorkspaceTabId tab, std::string const& screenId, std::string const& text) {
+    ScreenHandle const* const handle = handleOf(tab);
+    std::optional<std::string> const shown =
+        handle == nullptr ? std::nullopt : DocumentScreenHost::screenIdOf(*handle);
+    if (!_offered->peek() || stateOf(tab) == nullptr || shown != screenId) {
+        return false;
+    }
+    auto loaded = loadDocumentText(text, LoadOptions{.catalog = _options.catalog()});
+    if (!loaded) {
+        notify("The assistant's draft could not be shown: " + loaded.error().reason, Tone::Warn);
+        return false;
+    }
+    if (auto mounted = mountAsDraft(tab, std::make_shared<Document const>(std::move(*loaded)), text); !mounted) {
+        notify("The assistant's draft could not be shown: " + mounted.error().reason, Tone::Warn);
+        return false;
+    }
+    // A source view of this tab shows text the draft has replaced, and a check still running for it would mount over
+    // the draft when it answers.
+    if (_source != nullptr && _source->tab == tab) {
+        closeSourceLater();
+    }
+    return true;
 }
 
 void CustomScreenChrome::askSaveAs(WorkspaceTabId tab, bool fromSource) {

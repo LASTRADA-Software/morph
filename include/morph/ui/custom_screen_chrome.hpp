@@ -124,6 +124,23 @@ public:
     /// @param done Called once with whether a draft was mounted; may be empty.
     void preview(std::function<void(bool drafted)> const& done = {});
 
+    /// @brief The text of the draft a tab holds, as the next chat turn sends it as the screen being edited.
+    /// @param tab The tab.
+    /// @return The draft's document text, or nothing for a tab with no draft or a closed one.
+    [[nodiscard]] std::optional<std::string> draftOf(WorkspaceTabId tab) const;
+
+    /// @brief Mounts a document the assistant proposed as @p tab's draft, as **Preview** mounts one: the document is
+    ///        loaded in the client and mounted in the tab's place, so the draft bar, the generation and the unsaved
+    ///        state are the same, and a second draft replaces the first. The server has checked the document before
+    ///        it was proposed, so it is not asked again. Does nothing, and tells nobody, when custom screens are not
+    ///        offered, the tab is closed, or the tab no longer shows @p screenId; a document the client cannot load
+    ///        or mount is reported through `notify` and the tab stays as it was.
+    /// @param tab      The tab the turn was started on.
+    /// @param screenId The screen the turn was started on.
+    /// @param text     The document as JSON text.
+    /// @return Whether the draft was mounted.
+    bool proposeDraft(WorkspaceTabId tab, std::string const& screenId, std::string const& text);
+
     /// @brief Opens the save dialog for a tab's draft, or for the source view's text when @p fromSource holds, which
     ///        is previewed first so nothing is saved the person has not seen mounted.
     /// @param tab        The tab.
@@ -240,6 +257,11 @@ private:
     // A tracked read of the list and the offer; no choices while Open as has nothing to offer.
     [[nodiscard]] OpenAsShape openAsShape(std::string const& screenId) const;
     void saveFromSource();
+    // Mounts @p document as the tab's draft with @p text as its source: the tab's generation moves on and its bar's
+    // message clears. The one place a draft is mounted, for a previewed edit and for a proposal.
+    [[nodiscard]] std::expected<void, MountError> mountAsDraft(WorkspaceTabId tab,
+                                                               std::shared_ptr<Document const> const& document,
+                                                               std::string const& text);
 
     // Wraps @p fn so it does nothing once the chrome is gone: replies arrive through the sync, which may outlive it.
     template <typename F>

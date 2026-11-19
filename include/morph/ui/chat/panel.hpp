@@ -83,8 +83,18 @@ public:
     /// message
     ///                goes to the screen they are looking at when they send it. Nothing for a screen with no document
     ///                behind it, such as a host screen, which disables the input.
-    ChatPanelBinding(HostVocabulary& host, ChatClient& client, std::function<std::optional<TurnRequest>()> context)
-        : _host{&host}, _client{&client}, _context{std::move(context)} {
+    /// @param origin  What the client hands back with each draft the turn proposes (`ChatClient::send`): read at each
+    ///                send, with the context, so it names the tab the message goes from. May be empty, which is 0.
+    /// @param draft   The text of the draft the open screen holds, read at each send and carried as the turn's
+    ///                `TurnRequest::draft`; nothing for a screen with no draft. May be empty, which is nothing.
+    ChatPanelBinding(HostVocabulary& host, ChatClient& client, std::function<std::optional<TurnRequest>()> context,
+                     std::function<std::uint64_t()> origin = {},
+                     std::function<std::optional<std::string>()> draft = {})
+        : _host{&host},
+          _client{&client},
+          _context{std::move(context)},
+          _origin{std::move(origin)},
+          _draft{std::move(draft)} {
         host.add(
             HostValue{.name = "chat.entries", .version = 1, .type = "list<record>", .initial = Value{ValueList{}}});
         host.add(HostValue{.name = "chat.running", .version = 1, .type = "bool", .initial = Value{false}});
@@ -154,12 +164,17 @@ private:
             return;
         }
         request->text = *text;
-        _client->send(*request);
+        if (_draft) {
+            request->draft = _draft();
+        }
+        _client->send(*request, _origin ? _origin() : std::uint64_t{0});
     }
 
     HostVocabulary* _host;
     ChatClient* _client;
     std::function<std::optional<TurnRequest>()> _context;
+    std::function<std::uint64_t()> _origin;
+    std::function<std::optional<std::string>()> _draft;
 };
 
 }  // namespace morph::ui::chat

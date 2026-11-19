@@ -18,6 +18,7 @@
 #include <morph/reactive/signal.hpp>
 #include <morph/ui/catalogue.hpp>
 #include <morph/ui/chat/client.hpp>
+#include <morph/ui/chat/conversations.hpp>
 #include <morph/ui/chat/panel.hpp>
 #include <morph/ui/custom_screen_chrome.hpp>
 #include <morph/ui/custom_screen_sync.hpp>
@@ -616,6 +617,7 @@ private:
         _headInPage = _appDocument && _appDocument->shell &&
                       (!_appDocument->shell->search.empty() || _appDocument->shell->inbox ||
                        _appDocument->shell->principal || _appDocument->shell->help);
+        ++_workspaceNumber;
         _workspace =
             std::make_unique<ui::Workspace>(_context->runtime(), *_backend, *_host, std::move(tabs), &_frame->page(),
                                             _headInPage ? ui::HeadPlacement::InPage : ui::HeadPlacement::External);
@@ -698,8 +700,11 @@ private:
         if (!_chat) {
             _chat = std::make_unique<ui::chat::ChatClient>(
                 _source->exchange(), [this] { return _source->currentSession(); }, [this] { chatChanged(); });
-            _chatBinding =
-                std::make_unique<ui::chat::ChatPanelBinding>(_chatHost, *_chat, [this] { return chatContext(); });
+            _chat->onDraft(
+                [this](ui::chat::ChatClient::DraftProposal const& proposal) { mountProposedDraft(proposal); });
+            _chatBinding = std::make_unique<ui::chat::ChatPanelBinding>(
+                _chatHost, *_chat, [this] { return chatContext(); }, [this] { return chatOrigin(); },
+                [this] { return chatDraft(); });
         }
         auto document = ui::chat::chatPanelDocument();
         if (!document) {
@@ -721,6 +726,41 @@ private:
     [[nodiscard]] std::optional<ui::chat::TurnRequest> chatContext() const {
         ui::ScreenHandle* const shown = _workspace ? _workspace->activeHandle() : nullptr;
         return shown == nullptr ? std::nullopt : ui::DocumentScreenHost::chatContext(*shown);
+    }
+
+    // Names the active tab for a turn: the workspace it belongs to in the high half, since tab ids restart with each
+    // workspace, and the tab in the low half. 0 is no tab.
+    [[nodiscard]] std::uint64_t chatOrigin() const {
+        std::optional<ui::WorkspaceTabId> const tab = _workspace ? _workspace->model().active().peek() : std::nullopt;
+        return tab ? (_workspaceNumber << 32U) | (tab->value & 0xFFFFFFFFU) : std::uint64_t{0};
+    }
+
+    // The draft the active tab holds, for a turn's context; nothing for no draft, or one the server would refuse as
+    // over its bound.
+    [[nodiscard]] std::optional<std::string> chatDraft() const {
+        std::optional<ui::WorkspaceTabId> const tab = _workspace ? _workspace->model().active().peek() : std::nullopt;
+        std::optional<std::string> draft = tab && _customChrome ? _customChrome->draftOf(*tab) : std::nullopt;
+        if (draft && draft->size() > ui::chat::ChatLimits{}.maxProposalBytes) {
+            return std::nullopt;
+        }
+        return draft;
+    }
+
+    // A draft the assistant proposed goes to the chrome, which mounts it as the draft of the tab the turn started in,
+    // and only while that tab is still open and shows the screen the turn was about. A turn started before the
+    // workspace was rebuilt (a sign-in) names a tab that no longer exists, whatever its number.
+    void mountProposedDraft(ui::chat::ChatClient::DraftProposal const& proposal) {
+        if (!_customChrome || !_workspace || proposal.origin == 0 || (proposal.origin >> 32U) != _workspaceNumber) {
+            return;
+        }
+        ui::WorkspaceTabId const tab{proposal.origin & 0xFFFFFFFFU};
+        ui::ScreenHandle* const handle = _workspace->model().handleOf(tab);
+        std::optional<ui::chat::TurnRequest> const context =
+            handle == nullptr ? std::nullopt : ui::DocumentScreenHost::chatContext(*handle);
+        if (!context || context->screenId != proposal.screenId || context->identity != proposal.identity) {
+            return;
+        }
+        static_cast<void>(_customChrome->proposeDraft(tab, proposal.screenId, proposal.document));
     }
 
     // The panel shows the active tab's conversation.
@@ -1463,6 +1503,8 @@ private:
     // the chrome mounts drafts through, so they go before it; the frame and the workspace go before them.
     std::unique_ptr<ui::CustomScreenSync> _customSync;
     std::unique_ptr<ui::CustomScreenChrome> _customChrome;
+    // Counts the workspaces built, so a turn's tab is told from a tab of a later workspace with the same number.
+    std::uint64_t _workspaceNumber = 0;
     std::unique_ptr<ui::chat::ChatClient> _chat;
     std::unique_ptr<ui::chat::ChatPanelBinding> _chatBinding;
     std::unique_ptr<ui::ShellFrame> _frame;
