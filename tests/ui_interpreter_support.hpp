@@ -484,11 +484,11 @@ struct Harness {
     /// @param recordWatches Always true; selects this constructor.
     explicit Harness(bool recordWatches) : tools{ui::DevelopmentTools::On}, recording{recordWatches} {}
 
-    /// @brief A harness whose session and documents read @p read.
-    /// @param read          The catalog.
+    /// @brief A harness whose session and documents read @p withCatalog.
+    /// @param withCatalog   The catalog.
     /// @param recordWatches Whether the session's watch changes go to `watches`, each answered at once.
-    explicit Harness(ui::Catalog read, bool recordWatches = false)
-        : tools{ui::DevelopmentTools::On}, recording{recordWatches}, catalog{std::move(read)} {}
+    explicit Harness(ui::Catalog withCatalog, bool recordWatches = false)
+        : tools{ui::DevelopmentTools::On}, recording{recordWatches}, catalog{std::move(withCatalog)} {}
 
     ui::DevelopmentTools tools;
     bool recording = false;

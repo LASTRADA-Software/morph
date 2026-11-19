@@ -11,6 +11,7 @@
 #include <catch2/catch_test_macros.hpp>
 #include <core/async/Cancellation.hpp>
 #include <core/async/StopToken.hpp>
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <exception>
@@ -26,6 +27,7 @@
 #include <optional>
 #include <stop_token>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <variant>
 #include <vector>
@@ -288,19 +290,21 @@ TEST_CASE("cache: a watch without an entry joins the watch set", "[push][cache][
 }
 
 // Mutations: `settleReply` using `valueFromJson` for every entry (the opaque entry is in error); the table-aware
-// decode used for every entry (the `T_Page` entry settles).
+// decode used for every entry (the `T_Page` entry settles); the fraction written by `std::format("{}")`, which
+// spells 0.0001 as `1e-04` (the cell is that text, not a decimal).
 TEST_CASE("cache: an opaque entry keeps a fractional number", "[push][cache][table]") {
     constexpr char const* kReply =
-        R"({"revision":"r","columns":["n","big","i"],"keys":[1],"rows":[[2.5,1e300,7]],"total":1,"totalKind":"exact","offset":0})";
+        R"({"revision":"r","columns":["n","big","i","small","quarter"],"keys":[1],"rows":[[2.5,1e300,7,0.0001,0.00025]],"total":1,"totalKind":"exact","offset":0})";
     {
         Harness h{tableCatalog()};
         auto screen = h.mount(kOneTablePage);
         h.reply(0, kReply);
         auto const shown = queryJson(*screen, "page");
         INFO(shown);
+        // The shown value is read back with the strict reader: its decimals are exact objects, its text is text.
         auto parsed = ui::parseJson(shown);
         REQUIRE(parsed);
-        auto value = ui::detail::tableValueFromJson(*parsed);
+        auto value = ui::valueFromJson(*parsed);
         REQUIRE(value.has_value());
         auto const* const page = value->asRecord();
         REQUIRE(page != nullptr);
@@ -308,10 +312,16 @@ TEST_CASE("cache: an opaque entry keeps a fractional number", "[push][cache][tab
         REQUIRE(rows != nullptr);
         auto const* const row = rows->at(0).asList();
         REQUIRE(row != nullptr);
-        auto const* const decimal = row->at(0).asDecimal();
-        REQUIRE(decimal != nullptr);
-        CHECK(decimal->value.toDouble() == 2.5);
-        CHECK(decimal->value.getDecimalPlaces().value == 1);
+        auto const decimalAt = [&](std::size_t at, double expected, std::uint32_t places) {
+            INFO("cell " << at);
+            auto const* const decimal = row->at(at).asDecimal();
+            REQUIRE(decimal != nullptr);
+            CHECK(std::abs(decimal->value.toDouble() - expected) < 1e-12);
+            CHECK(decimal->value.getDecimalPlaces().value == places);
+        };
+        decimalAt(0, 2.5, 1);
+        decimalAt(3, 0.0001, 4);
+        decimalAt(4, 0.00025, 5);
         REQUIRE(row->at(1).asString() != nullptr);
         CHECK(*row->at(1).asString() == std::format("{}", 1e300));
         REQUIRE(row->at(2).asInt() != nullptr);
@@ -322,6 +332,7 @@ TEST_CASE("cache: an opaque entry keeps a fractional number", "[push][cache][tab
         auto screen = h.mount(kPageList);
         h.reply(0, kReply);
         CHECK(queryJson(*screen, "page") == "null");
+        CHECK(ui::testing::readJson(*screen, R"({"error":"page"})").contains("the reply is not a document value"));
     }
 }
 

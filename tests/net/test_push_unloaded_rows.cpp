@@ -888,7 +888,8 @@ TEST_CASE("table over the bridge: the same arrival through the query cache", "[n
       "vocab": "ui/1", "id": "small",
       "models": { "wide": { "type": "WideTableModel" } },
       "queries": { "page": { "model": "wide", "action": "Table.small",
-        "body": { "obj": { "sort": [ { "obj": { "column": "id", "dir": "asc" } } ], "columns": [ "id", "d000" ],
+        "body": { "obj": { "sort": { "list": [ { "obj": { "column": "id", "dir": "asc" } } ] },
+                           "columns": { "list": [ "id", "d000" ] },
                            "page": { "obj": { "offset": 0, "limit": 200 } } } } } },
       "view": { "kind": "text", "testId": "rows", "text": { "fn": "format", "args": [ "{0}", { "query": "page" } ] } } })";
     auto loaded = ui::loadDocumentText(kSmall, ui::LoadOptions{.catalog = facts.catalog()});
