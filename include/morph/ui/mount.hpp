@@ -1809,6 +1809,9 @@ private:
                         }
                         std::pair<VisibleRange, std::size_t> const windowAndOverscan{window, overscan};
                         reconcile(depth, session, rows.list, container, keys, onRow, &windowAndOverscan);
+                        // The kept rows have new view positions, and reconcile realizes only new keys: apply the
+                        // window again so the realized rows are the ones now at the window's view positions.
+                        applyWindow(depth, rows.list, container, window, overscan, onRow);
                         // Only above threshold: a backend's own selection-filtering logic may need to know a key
                         // still exists even without a realized row for it right now (backend.hpp's setExistingKeys).
                         // Below threshold every key already has a realized row, so this would add nothing.
@@ -1816,6 +1819,10 @@ private:
                     });
                 });
             });
+            if (keys.size() >= threshold) {
+                auto const [first, count] = realizedExtent(rows.list);
+                table->setRealizedWindow(first, count, rows.list.size());
+            }
         });
         scope.effect([this, &rows, &container, &range, threshold = virtualize->threshold,
                       overscan = virtualize->overscan, depth = scope.depth() + 1, onRow, table, overlay = _overlay,
