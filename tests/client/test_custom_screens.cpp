@@ -201,6 +201,65 @@ TEST_CASE("Client shell: closing a tab with a draft asks first, and Discard clos
 
 namespace {
 
+/// Runs the owner a few rounds, so work a click queued has been carried out.
+void settleRounds(Window& window) {
+    for (int round = 0; round < 3; ++round) {
+        bool ran = false;
+        window.context.owner().post([&ran] { ran = true; });
+        REQUIRE(window.wait([&ran] { return ran; }));
+    }
+}
+
+}  // namespace
+
+// Mutation: answer Keep with Discard in the client's guard (the draft bar goes with the tab).
+TEST_CASE("Client shell: Keep on the close guard leaves the draft in place", "[client][custom-screens]") {
+    Offered const offered;
+    Window window{offered};
+    window.draftMine();
+    auto const tabs = window.backend.all("Tabs");
+    REQUIRE_FALSE(tabs.empty());
+    CHECK(window.backend.press(tabs.front(), "Ctrl+W"));
+    REQUIRE(window.wait([&window] { return window.find("Dialog", "shell_confirm").has_value(); }));
+    window.click("shell_confirm_no");
+    settleRounds(window);
+    CHECK(window.shown("Row", "draft_bar_" + window.mineId));
+    CHECK(window.backend.find("Text", "text", "My home").has_value());
+}
+
+// Mutation: ask the guard for every dirty screen, not only drafted ones (the dialog shows).
+TEST_CASE("Client shell: a dirty screen that is not a draft is not put to the draft guard",
+          "[client][custom-screens]") {
+    Offered const offered;
+    std::string const dirtyId = "custom:" + std::string(31, '0') + "d";
+    std::promise<void> stored;
+    offered.store
+        ->put(ui::CustomScreenKey{.person = "ann", .app = "customs", .id = dirtyId},
+              ui::CustomScreen{.id = dirtyId,
+                               .title = "Dirty",
+                               .basedOn = "customs.home",
+                               .document = replaced(std::string{kHome}, "\"customs.home\"",
+                                                    "\"" + dirtyId + R"(","dirty":{"lit":true})"),
+                               .savedAt = {},
+                               .savedBy = "ann"})
+        .thenDetached(
+            [&stored](std::expected<void, ui::CustomScreenRefusal> const& /*result*/) { stored.set_value(); });
+    REQUIRE(stored.get_future().wait_for(std::chrono::seconds{5}) == std::future_status::ready);
+    Window window{offered};
+    REQUIRE(window.wait([&window, &dirtyId] { return window.find("Button", "nav_" + dirtyId).has_value(); }));
+    window.click("nav_" + dirtyId);
+    REQUIRE(
+        window.wait([&window, &dirtyId] { return window.find("Button", "source_button_" + dirtyId).has_value(); }));
+    auto const tabs = window.backend.all("Tabs");
+    REQUIRE_FALSE(tabs.empty());
+    CHECK(window.backend.press(tabs.front(), "Ctrl+W"));
+    settleRounds(window);
+    CHECK_FALSE(window.find("Dialog", "shell_confirm").has_value());
+    CHECK(window.find("Button", "source_button_" + dirtyId).has_value());
+}
+
+namespace {
+
 /// Whether a Text of the backend shows something containing @p part.
 bool showsText(ui::testing::RecordingBackend const& backend, std::string_view part) {
     for (std::string_view const kind : {"Text", "Toast"}) {
@@ -236,6 +295,68 @@ TEST_CASE("Client shell: a recorded route to a custom screen that is gone is not
     REQUIRE(window.wait([&window] { return showsText(window.backend, "was not restored"); }));
     CHECK(window.wait([&window] { return window.find("Text", "home").has_value(); }));
     CHECK_FALSE(window.find("Button", "source_button_" + gone).has_value());
+}
+
+namespace {
+
+/// A public login screen that signs in through `Probe_Login`.
+constexpr std::string_view kLogin =
+    R"({"vocab":"ui/1","id":"customs.login","models":{"probe":{"type":"Probe_Model"}},)"
+    R"("mutations":{"login":{"model":"probe","action":"Probe_Login","onSuccess":[{"signIn":{"from":"login"}}]}},)"
+    R"("view":{"kind":"column","children":[)"
+    R"({"kind":"button","testId":"login","label":"Log in","onClick":[{"run":"login"}]}]}})";
+
+/// The customs home behind a public login.
+std::expected<std::shared_ptr<ui::ServedBundle const>, ui::Refusal> customsBehindLogin() {
+    ui::UiRegistry served{ui::ApplicationInfo{.id = "customs", .version = "1"}};
+    for (auto const& [screenId, text] : {std::pair{"customs.login", kLogin}, std::pair{"customs.home", kHome}}) {
+        ui::CatalogEntry entry;
+        entry.id = screenId;
+        entry.title = screenId;
+        entry.isPublic = screenId == std::string_view{"customs.login"};
+        if (auto added = served.addScreen(std::move(entry), std::string{text}); !added) {
+            return std::unexpected(std::move(added.error()));
+        }
+    }
+    return served.build();
+}
+
+}  // namespace
+
+// Mutation: drop the route when the fetch is refused while signed out (the sign-in finds nothing wanted and mounts the
+// start screen).
+TEST_CASE("Client shell: a recorded route to a custom screen opened while signed out is opened after the sign-in",
+          "[client][custom-screens]") {
+    Offered const offered;
+    ui::testing::MemoryHistory history{offered.mineId};
+    FakeAppContext context;
+    ui::testing::RecordingBackend backend;
+    client::LocalSource source{client::LocalApp{.name = "customs", .bundle = &customsBehindLogin},
+                               client::LocalSetup{.db = {}, .user = {}}};
+    std::optional<std::expected<ui::Bundle, ui::ConnectError>> opened;
+    source.open(context,
+                [&opened](std::expected<ui::Bundle, ui::ConnectError> result) { opened = std::move(result); });
+    REQUIRE(pumpUntil(context.owner(), [&opened] { return opened.has_value(); }));
+    REQUIRE(opened->has_value());
+    client::ShellOptions options{.history = &history};
+    options.signIn = [](ui::Value const& /*reply*/) {
+        return std::optional<client::SignedIn>{client::SignedIn{.principal = "ann", .token = {}}};
+    };
+    {
+        auto const shell = client::mountShell(context, backend, std::move(*opened), source, std::move(options));
+        auto const find = [&backend](std::string_view kind, std::string const& testId) {
+            return backend.find(kind, "testId", testId);
+        };
+        // Signed out: the login shows, and the refused fetch toasts nothing.
+        REQUIRE(pumpUntil(context.owner(), [&] { return find("Button", "login").has_value(); }));
+        CHECK_FALSE(showsText(backend, "was not restored"));
+        backend.click(*find("Button", "login"));
+        REQUIRE(
+            pumpUntil(context.owner(), [&] { return find("Button", "source_button_" + offered.mineId).has_value(); }));
+        CHECK(find("Text", "home").has_value());
+        CHECK_FALSE(showsText(backend, "was not restored"));
+    }
+    source.close();
 }
 
 /// Lets every call run, and takes a call's token for the principal it is verified as.
@@ -366,6 +487,14 @@ WatchRun measureWatch(Offered const& offered, WatchedSource::Watch watch) {
             return backend.find("Button", "testId", "nav_" + offered.mineId).has_value();
         }));
         REQUIRE(pumpUntil(context.owner(), [&source] { return !source.watchReplies().empty(); }));
+        // The reply is recorded as the exchange hands it on; the session reads it afterwards, on the owner. Tasks
+        // posted now run behind that continuation, so the warning of a refusal has been logged (or not) by the time
+        // the last of them has run.
+        for (int round = 0; round < 3; ++round) {
+            bool ran = false;
+            context.owner().post([&ran] { ran = true; });
+            REQUIRE(pumpUntil(context.owner(), [&ran] { return ran; }));
+        }
     }
     run.bodies = source.watchBodies();
     run.replies = source.watchReplies();

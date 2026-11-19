@@ -1081,6 +1081,7 @@ private:
     // current; then mounts the navigation that waited, or keeps a screen that signed in in place, or mounts the start
     // screen for the new session: after a sign-in the first screen that is not public, after a sign-out the first that
     // is.
+    // NOLINTNEXTLINE(readability-function-cognitive-complexity): the steps of one session change, in order.
     void reloadThen(bool signingIn, std::function<void(std::function<void(bool)>)> const& change) {
         _reloading = true;
         if (std::optional<ui::NavigateRequest> const dropped = std::exchange(_pending, std::nullopt)) {
@@ -1114,6 +1115,10 @@ private:
                 bool const opened = openWanted();
                 if (signingIn) {
                     _wanted.clear();
+                }
+                // A custom screen's fetch still in flight keeps the navigation that waited: its answer decides.
+                if (opened && _fetchingRoute) {
+                    return;
                 }
                 auto const pending = std::exchange(_pending, std::nullopt);
                 if (opened) {
@@ -1239,13 +1244,17 @@ private:
     }
 
     // A route to a custom screen whose document is not fetched yet: fetched, then opened; or the person is told it was
-    // not restored and the start screen opens. Answers whether the route was one.
+    // not restored and the start screen opens. A refusal while signed out is a screen the catalog does not list yet:
+    // the route is kept and tried again after the sign-in. Answers whether the route was one.
     bool openCustomRoute(std::string const& route) {
         std::string const screenId{ui::routeScreen(route)};
-        if (!ui::isCustomScreenId(screenId) || _customSync == nullptr ||
-            _customSync->documents().find(screenId) != nullptr) {
+        if (!ui::isCustomScreenId(screenId) || _customSync == nullptr) {
             return false;
         }
+        if (_customSync->documents().find(screenId) != nullptr) {
+            return false;
+        }
+        _fetchingRoute = true;
         _customSync->open(
             screenId, [this, alive = std::weak_ptr<bool>{_alive}, route,
                        screenId](std::expected<std::shared_ptr<ui::Document const>, std::string> const& loaded) {
@@ -1253,18 +1262,30 @@ private:
                 if (live == nullptr || !*live || _host == nullptr) {
                     return;
                 }
+                _fetchingRoute = false;
+                // A navigation that waited for the fetch: opened when the route did not open, cancelled when it did.
+                std::optional<ui::NavigateRequest> const pending = std::exchange(_pending, std::nullopt);
                 std::expected<ui::Route, std::string> const parsed =
                     loaded ? _host->parseRoute(route)
                            : std::expected<ui::Route, std::string>{std::unexpected(loaded.error())};
-                if (!parsed) {
-                    if (_frame != nullptr) {
-                        _frame->showToast("The custom screen " + screenId + " was not restored: " + parsed.error(),
-                                          ui::Tone::Warn);
+                if (parsed) {
+                    mount(parsed->screen, parsed->params);
+                    if (pending) {
+                        settle(*pending);
                     }
-                    mount(firstScreen(_signedIn), {});
                     return;
                 }
-                mount(parsed->screen, parsed->params);
+                if (!_signedIn) {
+                    _wanted = route;
+                } else if (_frame != nullptr) {
+                    _frame->showToast("The custom screen " + screenId + " was not restored: " + parsed.error(),
+                                      ui::Tone::Warn);
+                }
+                if (pending) {
+                    open(*pending);
+                } else {
+                    mountStart();
+                }
             });
         return true;
     }
@@ -1274,17 +1295,27 @@ private:
         if (_wanted.empty()) {
             return false;
         }
-        if (openCustomRoute(_wanted)) {
-            _wanted.clear();
+        std::string const wanted = std::exchange(_wanted, std::string{});
+        if (openCustomRoute(wanted)) {
             return true;
         }
-        auto const route = _host->parseRoute(_wanted);
+        auto const route = _host->parseRoute(wanted);
         if (!route || (!_documents.contains(route->screen) && !ui::isCustomScreenId(route->screen))) {
+            _wanted = wanted;
             return false;
         }
-        _wanted.clear();
         mount(route->screen, route->params);
         return true;
+    }
+
+    // Mounts the start screen: the one asked for at start, until a session change; then the new session's.
+    void mountStart() {
+        if (!_changed) {
+            mount(_options.startScreen.empty() ? firstScreen(false) : _options.startScreen,
+                  _options.startScreen.empty() ? ui::ParamMap{} : _options.startParams);
+        } else {
+            mount(firstScreen(_signedIn), {});
+        }
     }
 
     // Opens the route of the history entry the user moved to, or the start screen for a route this session cannot
@@ -1305,13 +1336,7 @@ private:
             mount(parsed->screen, parsed->params);
             return;
         }
-        // The start screen: the one asked for at start, until a session change; then the new session's.
-        if (!_changed) {
-            mount(_options.startScreen.empty() ? firstScreen(false) : _options.startScreen,
-                  _options.startScreen.empty() ? ui::ParamMap{} : _options.startParams);
-        } else {
-            mount(firstScreen(_signedIn), {});
-        }
+        mountStart();
     }
 
     // Loads the documents a development poll found changed and remounts the shown screen when its own changed; a
@@ -1464,6 +1489,7 @@ private:
     bool _changed = false;
     bool _signedIn = false;
     std::string _wanted;
+    bool _fetchingRoute = false;
     // The development poll's timer.
     std::optional<reactive::TimerHandle> _poll;
     // Last, so it stops following the history before anything it opens screens with is gone.
