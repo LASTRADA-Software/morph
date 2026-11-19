@@ -20,10 +20,17 @@
 
 namespace morph::ui::chat {
 
+/// @brief What a `transcribe` request carries beyond the base64 audio, in bytes: the request body's own JSON
+///        (`mediaType`, the optional `language`, the framing) escaped once more inside the envelope, and the
+///        envelope's other fields, among them the session context. The session token has no bound in code, so the
+///        margin is the one the inline file cap leaves for the same envelope (`kMaxInlineFileBytes`), far above a
+///        signed token's few hundred bytes.
+inline constexpr std::size_t kDictationEnvelopeOverhead = std::size_t{64} * 1024;
+
 /// @brief The largest dictated clip a server may accept, in bytes before base64: what fits one envelope once grown by
-///        4/3 and wrapped. Past it the transport, not the chat, would refuse the request, and the person would not
-///        learn which bound they crossed.
-inline constexpr std::size_t kMaxDictationBytes = (wire::kMaxEnvelopeBytes - 4096) * 3 / 4;
+///        4/3 and wrapped in `kDictationEnvelopeOverhead`. Past it the transport, not the chat, would refuse the
+///        request, and the person would not learn which bound they crossed.
+inline constexpr std::size_t kMaxDictationBytes = (wire::kMaxEnvelopeBytes - kDictationEnvelopeOverhead) * 3 / 4;
 
 /// @brief Bounds on what chats may consume.
 struct ChatLimits {
