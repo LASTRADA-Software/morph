@@ -8,8 +8,11 @@
 #include <morph/core/wire.hpp>
 #include <morph/session/session.hpp>
 #include <morph/ui/chat/client.hpp>
+#include <morph/ui/chat/panel.hpp>
 #include <morph/ui/chat/protocol.hpp>
+#include <morph/ui/host_vocabulary.hpp>
 #include <morph/ui/service_client.hpp>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -461,4 +464,107 @@ TEST_CASE("the_state_shows_a_turns_tool_steps", "[chat][client]") {
     state.steps.push_back({.name = "lab__Add", .ok = true, .message = "{}"});
     rig.fakeExchange.ok(chat::kStateKind, chat::writeMessage(state));
     CHECK(rig.shown() == Shown{"user:hello", "tool:lab__Add", "assistant:added"});
+}
+
+namespace {
+
+struct DraftRig : Rig {
+    std::vector<chat::ChatClient::DraftProposal> proposals;
+    DraftRig() {
+        client.onDraft([this](chat::ChatClient::DraftProposal const& proposal) { proposals.push_back(proposal); });
+    }
+    void started(std::uint64_t origin) {
+        client.send(turnOn("s", "1", "hello"), origin);
+        fakeExchange.ok(chat::kTurnKind, chat::writeMessage(chat::TurnAccepted{.turnId = 7}));
+    }
+};
+
+chat::TurnEvent draftEvent(std::uint64_t seq, std::string document) {
+    chat::TurnEvent event;
+    event.turnId = 7;
+    event.seq = seq;
+    event.kind = "draft";
+    event.text = std::move(document);
+    return event;
+}
+
+}  // namespace
+
+// Mutation: do not hand a draft event's document on (the event case reads nothing), or hand on the state's draft
+// without remembering it (the same document arrives twice).
+TEST_CASE("a_draft_event_and_the_state_that_carries_it_hand_the_draft_on_once_with_the_turns_origin",
+          "[chat][client][draft]") {
+    DraftRig rig;
+    rig.started(42);
+    rig.client.deliverEvent(eventOf(draftEvent(1, R"({"id":"s"})")));
+    REQUIRE(rig.proposals.size() == 1);
+    CHECK(rig.proposals[0].document == R"({"id":"s"})");
+    CHECK(rig.proposals[0].origin == 42);
+    CHECK(rig.proposals[0].screenId == "s");
+    CHECK(rig.proposals[0].identity == "1");
+
+    chat::TurnState state;
+    state.turnId = 7;
+    state.status = chat::TurnStatus::Done;
+    state.draft = R"({"id":"s"})";
+    rig.fakeExchange.ok(chat::kStateKind, chat::writeMessage(state));
+    CHECK(rig.proposals.size() == 1);
+}
+
+// Mutation: ignore TurnState::draft (a lost event leaves the person without the draft).
+TEST_CASE("a_draft_only_the_state_carries_is_handed_on_when_the_event_was_lost", "[chat][client][draft]") {
+    DraftRig rig;
+    rig.started(5);
+    chat::TurnState state;
+    state.turnId = 7;
+    state.status = chat::TurnStatus::Done;
+    state.text = "done";
+    state.draft = R"({"id":"s"})";
+    rig.fakeExchange.ok(chat::kStateKind, chat::writeMessage(state));
+    REQUIRE(rig.proposals.size() == 1);
+    CHECK(rig.proposals[0].origin == 5);
+    CHECK_FALSE(rig.client.running());
+}
+
+// Mutation: hand on only the first document of a turn (a later proposal never arrives).
+TEST_CASE("a_later_proposal_of_the_same_turn_is_handed_on_too", "[chat][client][draft]") {
+    DraftRig rig;
+    rig.started(1);
+    rig.client.deliverEvent(eventOf(draftEvent(1, R"({"id":"s","n":1})")));
+    rig.client.deliverEvent(eventOf(draftEvent(2, R"({"id":"s","n":2})")));
+    REQUIRE(rig.proposals.size() == 2);
+    CHECK(rig.proposals[1].document == R"({"id":"s","n":2})");
+}
+
+// Mutation: hand on a draft event of a turn that is not the running one.
+TEST_CASE("a_draft_event_of_another_turn_or_an_old_sequence_is_not_handed_on", "[chat][client][draft]") {
+    DraftRig rig;
+    rig.started(1);
+    chat::TurnEvent other = draftEvent(1, R"({"id":"s"})");
+    other.turnId = 99;
+    rig.client.deliverEvent(eventOf(other));
+    rig.client.deliverEvent(eventOf(draftEvent(1, R"({"id":"s","n":1})")));
+    rig.client.deliverEvent(eventOf(draftEvent(1, R"({"id":"s","n":2})")));
+    REQUIRE(rig.proposals.size() == 1);
+    CHECK(rig.proposals[0].document == R"({"id":"s","n":1})");
+}
+
+// Mutation: send ignores the origin (a draft arrives with 0).
+TEST_CASE("the_panel_binding_sends_the_origin_and_the_draft_with_the_message", "[chat][client][draft]") {
+    DraftRig rig;
+    ui::HostVocabulary host;
+    chat::ChatPanelBinding const binding{
+        host, rig.client, [] { return std::optional<chat::TurnRequest>{turnOn("s", "1", "")}; },
+        [] { return std::uint64_t{77}; }, [] { return std::optional<std::string>{R"({"id":"s"})"}; }};
+    ui::ValueRecord args;
+    args.emplace("text", ui::Value{std::string{"change it"}});
+    REQUIRE(host.run("chat.send", ui::Value{args}).kind == ui::HostCommandResult::Kind::Ran);
+    REQUIRE(rig.fakeExchange.count(chat::kTurnKind) == 1);
+    auto const sent = chat::readTurnRequest(rig.fakeExchange.sent.back().request.body);
+    REQUIRE(sent.has_value());
+    CHECK(sent->draft == std::optional<std::string>{R"({"id":"s"})"});
+    rig.fakeExchange.ok(chat::kTurnKind, chat::writeMessage(chat::TurnAccepted{.turnId = 7}));
+    rig.client.deliverEvent(eventOf(draftEvent(1, R"({"id":"s"})")));
+    REQUIRE(rig.proposals.size() == 1);
+    CHECK(rig.proposals[0].origin == 77);
 }

@@ -711,3 +711,82 @@ TEST_CASE(
     CHECK(missing->empty());
     CHECK(rig.host->parseRoute(route).has_value());
 }
+
+namespace {
+
+std::string editedBy(std::string const& heading) {
+    return screens_test::replaced(std::string{kEdit}, "\"Edit note\"", "\"" + heading + "\"");
+}
+
+}  // namespace
+
+// Mutation: skip mountAsDraft in proposeDraft (no draft, no bar, and the heading stays "Edit note").
+TEST_CASE("custom screen chrome: a proposed draft mounts as the tab's draft, with the draft bar and its text",
+          "[ui][custom-screens][chrome][assistant]") {
+    ChromeRig rig;
+    rig.open("notes.edit", note(1));
+    CHECK_FALSE(rig.chrome->draftOf(rig.tabAt(0)).has_value());
+    REQUIRE(rig.chrome->proposeDraft(rig.tabAt(0), "notes.edit", editedBy("By the assistant")));
+    rig.harness.settle();
+    CHECK(rig.text("heading") == "By the assistant");
+    CHECK(rig.shown("Row", "draft_bar_notes.edit"));
+    CHECK(DocumentScreenHost::drafted(*rig.workspace->handleOf(0)));
+    CHECK(rig.chrome->draftOf(rig.tabAt(0)) == std::optional<std::string>{editedBy("By the assistant")});
+
+    // A second proposal replaces the first, and Discard returns the screen's own document.
+    REQUIRE(rig.chrome->proposeDraft(rig.tabAt(0), "notes.edit", editedBy("Second")));
+    rig.harness.settle();
+    CHECK(rig.text("heading") == "Second");
+    rig.click("draft_discard_notes.edit");
+    REQUIRE(rig.pump([&rig] { return rig.text("heading") == "Edit note"; }));
+    CHECK_FALSE(rig.chrome->draftOf(rig.tabAt(0)).has_value());
+}
+
+// Mutation: drop the screen-id comparison (a draft of another screen is handed to the host, which refuses it and the
+// person is told), or drop the offered check (a client without custom screens mounts it).
+TEST_CASE("custom screen chrome: a proposal for another screen, a closed tab or an unoffered client mounts nothing",
+          "[ui][custom-screens][chrome][assistant]") {
+    ChromeRig rig;
+    rig.open("notes.edit", note(1));
+    morph::ui::WorkspaceTabId const tab = rig.tabAt(0);
+    CHECK_FALSE(rig.chrome->proposeDraft(tab, "notes.home", editedBy("Elsewhere")));
+    CHECK_FALSE(rig.chrome->proposeDraft(morph::ui::WorkspaceTabId{999}, "notes.edit", editedBy("Nobody's")));
+    CHECK_FALSE(DocumentScreenHost::drafted(*rig.workspace->handleOf(0)));
+    CHECK(rig.text("heading") == "Edit note");
+
+    rig.chrome->setOffered(false);
+    CHECK_FALSE(rig.chrome->proposeDraft(tab, "notes.edit", editedBy("Unoffered")));
+    CHECK_FALSE(DocumentScreenHost::drafted(*rig.workspace->handleOf(0)));
+    rig.chrome->setOffered(true);
+
+    bool closed = false;
+    rig.workspace->close(0, [&closed](bool done) { closed = done; });
+    REQUIRE(rig.pump([&closed] { return closed; }));
+    CHECK_FALSE(rig.chrome->proposeDraft(tab, "notes.edit", editedBy("Closed")));
+    CHECK(rig.notices.empty());
+}
+
+// Mutation: mount without loading (a document the client cannot load reaches the host), or skip the notify.
+TEST_CASE("custom screen chrome: a proposal the client cannot load leaves the tab as it was and tells the person",
+          "[ui][custom-screens][chrome][assistant]") {
+    ChromeRig rig;
+    rig.open("notes.edit", note(1));
+    CHECK_FALSE(rig.chrome->proposeDraft(rig.tabAt(0), "notes.edit",
+                                         screens_test::replaced(std::string{kEdit}, "\"column\"", "\"hologram\"")));
+    CHECK_FALSE(DocumentScreenHost::drafted(*rig.workspace->handleOf(0)));
+    CHECK(rig.text("heading") == "Edit note");
+    REQUIRE(rig.notices.size() == 1);
+    CHECK(rig.notices.front().starts_with("The assistant's draft could not be shown"));
+}
+
+// Mutation: drop the source-view close in proposeDraft (the view of the replaced text stays open).
+TEST_CASE("custom screen chrome: a proposal closes the tab's source view, whose text it replaced",
+          "[ui][custom-screens][chrome][assistant]") {
+    ChromeRig rig;
+    rig.open("notes.edit", note(1));
+    rig.click("source_button_notes.edit");
+    REQUIRE(rig.find("Dialog", "source_dialog").has_value());
+    REQUIRE(rig.chrome->proposeDraft(rig.tabAt(0), "notes.edit", editedBy("Proposed")));
+    REQUIRE(rig.pump([&rig] { return !rig.find("Dialog", "source_dialog").has_value(); }));
+    CHECK(rig.text("heading") == "Proposed");
+}

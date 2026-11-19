@@ -310,6 +310,19 @@ When the server offers a chat, the shell mounts its panel in the frame's chat sl
 [`../ui/chat.md`](../ui/chat.md#the-panel). A server with no chat answers the probe with an error, and the shell shows
 nothing and reports nothing.
 
+**Drafts from the assistant.** A turn is started from a tab, and the client names that tab with the turn
+(`ChatClient::send`'s `origin`: the workspace's number in the high half, the tab in the low half, since tab ids restart
+with each workspace). When the server accepts a draft in that turn, the `draft` event or the turn's state hands it back
+once per distinct document (`ChatClient::onDraft`), and the shell passes it to `CustomScreenChrome::proposeDraft` for
+that tab, as **Preview** would mount an edit: the same client load, the same draft bar and "Draft — not saved" text,
+the same generation rules, so a second proposal replaces the first and **Discard** restores the screen. The server has
+checked the document, so the chrome does not ask again. The draft is dropped without a word when the tab is closed, is
+no longer the turn's tab (another workspace, another screen or identity), or the client does not offer custom screens;
+a document the client cannot load is reported with a warning toast and the tab stays as it was. The draft goes to the
+turn's tab even when the person has moved to another. The next turn's `TurnRequest::draft` is the text of the draft the
+active tab holds (`CustomScreenChrome::draftOf`), or none, and none when it is over `ChatLimits::maxProposalBytes`
+(64 KiB), which the server would refuse.
+
 ## Custom screens
 
 The shell offers a person's custom screens when the server does ([`../ui/custom_screens.md`](../ui/custom_screens.md#the-client)).

@@ -24,10 +24,13 @@
 #include <morph/core/registry.hpp>
 #include <morph/core/remote.hpp>
 #include <morph/session/session.hpp>
+#include <morph/ui/chat/propose_screen.hpp>
+#include <morph/ui/chat/service.hpp>
 #include <morph/ui/custom_screens.hpp>
 #include <morph/ui/json_source.hpp>
 #include <morph/ui/service.hpp>
 #include <morph/ui/service_client.hpp>
+#include <morph/ui/testing/fake_chat_provider.hpp>
 #include <morph/ui/testing/memory_history.hpp>
 #include <morph/ui/testing/recording_backend.hpp>
 #include <mutex>
@@ -525,4 +528,239 @@ TEST_CASE(
     CHECK(quiet.replies.front() == R"({"refusedRecords":[],"refusedInstances":[]})");
     CHECK(std::ranges::none_of(quiet.warnings, refusedWatch));
     CHECK(std::ranges::any_of(loud.warnings, refusedWatch));
+}
+
+// The assistant's draft on the client (docs/spec/client/client.md, "Custom screens"): a window over a server that runs
+// the chat with `propose_screen` over the customs application and a scripted provider.
+
+namespace {
+
+namespace chat = morph::ui::chat;
+
+/// The customs application behind a real server, with the chat and `propose_screen` over `offered`'s custom screens.
+class ChatServedSource final : public client::Source {
+public:
+    ChatServedSource(Offered const& offered, std::shared_ptr<chat::testing::FakeChatProvider> provider)
+        : _offered{&offered}, _provider{std::move(provider)} {
+        requestSession().token = "ann";
+    }
+    ~ChatServedSource() override { close(); }
+    ChatServedSource(ChatServedSource const&) = delete;
+    ChatServedSource& operator=(ChatServedSource const&) = delete;
+    ChatServedSource(ChatServedSource&&) = delete;
+    ChatServedSource& operator=(ChatServedSource&&) = delete;
+
+protected:
+    [[nodiscard]] std::expected<Transport, ui::ConnectError> connect(ui::AppContext& context) override {
+        auto served = customsBundle();
+        REQUIRE(served.has_value());
+        _pool = std::make_unique<morph::exec::ThreadPoolExecutor>(2);
+        _worker = std::make_unique<morph::exec::ThreadPoolExecutor>(2);
+        chat::ChatOptions options;
+        options.provider = _provider;
+        options.worker = _worker.get();
+        options.bundle = *served;
+        chat::enableCustomScreensChat(options, _offered->screens, "customs", *_worker);
+        morph::backend::ServerConfig config;
+        config.services.push_back(std::make_shared<ui::UiService>(*served));
+        config.services.push_back(std::make_shared<chat::ChatService>(std::move(options)));
+        _server = std::make_shared<morph::backend::RemoteServer>(*_pool, std::make_shared<TokenAuthorizer>(), config);
+        morph::backend::ConnectionId const cid = _server->openConnection();
+        auto made = std::make_unique<morph::backend::SimulatedRemoteBackend>(*_server, cid);
+        ui::Exchange exchange = ui::exchangeOver(*made, context.executor());
+        return Transport{.backend = std::move(made), .exchange = std::move(exchange), .serverEvents = true};
+    }
+    void disconnect() override {
+        _server.reset();
+        _worker.reset();
+        _pool.reset();
+    }
+
+private:
+    Offered const* _offered;
+    std::shared_ptr<chat::testing::FakeChatProvider> _provider;
+    std::unique_ptr<morph::exec::ThreadPoolExecutor> _pool;
+    std::unique_ptr<morph::exec::ThreadPoolExecutor> _worker;
+    std::shared_ptr<morph::backend::RemoteServer> _server;
+};
+
+/// A window on the customs application over a chat-serving source, until the chat panel and "Mine" show.
+struct ChatWindow {
+    explicit ChatWindow(Offered const& offered) : source{offered, provider} {
+        std::optional<std::expected<ui::Bundle, ui::ConnectError>> opened;
+        source.open(context,
+                    [&opened](std::expected<ui::Bundle, ui::ConnectError> result) { opened = std::move(result); });
+        REQUIRE(pumpUntil(context.owner(), [&opened] { return opened.has_value(); }));
+        REQUIRE(opened->has_value());
+        shell = client::mountShell(context, backend, std::move(*opened), source,
+                                   client::ShellOptions{.startScreen = "customs.home"});
+        mineId = offered.mineId;
+        REQUIRE(wait([this] { return find("Button", "nav_" + mineId).has_value(); }));
+        REQUIRE(wait([this] { return find("Button", "chat_send").has_value() && chatEnabled(); }));
+    }
+    ~ChatWindow() {
+        shell.reset();
+        source.close();
+    }
+    ChatWindow(ChatWindow const&) = delete;
+    ChatWindow& operator=(ChatWindow const&) = delete;
+    ChatWindow(ChatWindow&&) = delete;
+    ChatWindow& operator=(ChatWindow&&) = delete;
+
+    [[nodiscard]] std::optional<int> find(std::string_view kind, std::string const& testId) const {
+        return backend.find(kind, "testId", testId);
+    }
+    [[nodiscard]] bool shown(std::string_view kind, std::string const& testId) const {
+        std::optional<int> const widget = find(kind, testId);
+        return widget && backend.prop(*widget, "visible") != "false";
+    }
+    [[nodiscard]] bool chatEnabled() const {
+        std::optional<int> const input = find("TextInput", "chat_input");
+        return input && backend.prop(*input, "enabled") != "false";
+    }
+    template <typename Pred>
+    bool wait(Pred pred) {
+        return pumpUntil(context.owner(), pred);
+    }
+    /// Says @p text in the panel, and waits until the request reached the provider.
+    void say(std::string const& text) {
+        std::size_t const before = provider->calls();
+        auto const input = find("TextInput", "chat_input");
+        REQUIRE(input.has_value());
+        backend.submit(*input, text);
+        REQUIRE(wait([this, before] { return provider->calls() > before; }));
+    }
+    /// Whether the panel shows a line with @p text.
+    [[nodiscard]] bool panelShows(std::string_view text) const {
+        return std::ranges::any_of(backend.all("Text"), [&](int const widget) {
+            return backend.prop(widget, "testId") == "chat_entry" && backend.prop(widget, "text").contains(text);
+        });
+    }
+    /// Opens "Mine" from the navigator, and waits for its tab.
+    void openMine() {
+        auto const nav = find("Button", "nav_" + mineId);
+        REQUIRE(nav.has_value());
+        backend.click(*nav);
+        REQUIRE(wait([this] { return find("Button", "source_button_" + mineId).has_value(); }));
+    }
+
+    std::string mineId;
+    FakeAppContext context;
+    ui::testing::RecordingBackend backend;
+    std::shared_ptr<chat::testing::FakeChatProvider> provider = std::make_shared<chat::testing::FakeChatProvider>();
+    ChatServedSource source;
+    std::unique_ptr<ui::MountedShell> shell;
+};
+
+/// The home screen, saying @p words.
+std::string homeSaying(std::string_view words, std::string const& id = "customs.home") {
+    return replaced(replaced(std::string{kHome}, R"("text":"Home")", R"("text":")" + std::string{words} + "\""),
+                    "\"customs.home\"", "\"" + id + "\"");
+}
+
+chat::Response proposing(std::string const& document) {
+    return chat::Response{.text = {},
+                          .calls = {chat::ToolCall{
+                              .id = "p1",
+                              .name = std::string{chat::kProposeScreenTool},
+                              .argumentsJson = R"({"document":)" + glz::write_json(document).value_or("\"\"") + "}"}},
+                          .opaque = {}};
+}
+
+chat::Response saying(std::string text) { return chat::Response{.text = std::move(text), .calls = {}, .opaque = {}}; }
+
+}  // namespace
+
+// Mutations: drop the draft hand-off in the shell (no bar, the text stays "Home"); mount the proposal without the
+// chrome's bar (the heading changes with no "Draft" row).
+TEST_CASE("Client shell: a draft the assistant proposed is mounted as the tab's draft, with the bar",
+          "[client][custom-screens][assistant]") {
+    Offered const offered;
+    ChatWindow window{offered};
+    window.provider->script(proposing(homeSaying("Hello from the assistant")));
+    window.provider->script(saying("Done."));
+    CHECK_FALSE(window.shown("Row", "draft_bar_customs.home"));
+    window.say("say hello");
+    REQUIRE(window.wait([&window] { return window.shown("Row", "draft_bar_customs.home"); }));
+    REQUIRE(window.wait(
+        [&window] { return window.backend.find("Text", "text", "Hello from the assistant").has_value(); }));
+    REQUIRE(window.wait([&window] { return window.panelShows("Done."); }));
+    // The draft is the screen's draft, like a previewed edit: unsaved, so closing asks first.
+    auto const tabs = window.backend.all("Tabs");
+    REQUIRE_FALSE(tabs.empty());
+    CHECK(window.backend.press(tabs.front(), "Ctrl+W"));
+    CHECK(window.wait([&window] { return window.find("Dialog", "shell_confirm").has_value(); }));
+}
+
+// Mutations: leave the draft out of the next request (the system text lacks it); send the draft before it exists
+// (the first request carries it, the control).
+TEST_CASE("Client shell: the next turn carries the draft the tab holds, and a tab without one sends none",
+          "[client][custom-screens][assistant]") {
+    Offered const offered;
+    ChatWindow window{offered};
+    window.provider->script(saying("Nothing to change."));
+    window.say("hello");
+    REQUIRE(window.wait([&window] { return window.panelShows("Nothing to change."); }));
+    window.provider->script(proposing(homeSaying("MARKER-ONE")));
+    window.provider->script(saying("Changed."));
+    window.say("change it");
+    REQUIRE(window.wait([&window] { return window.shown("Row", "draft_bar_customs.home"); }));
+    REQUIRE(window.wait([&window] { return window.panelShows("Changed."); }));
+    window.provider->script(saying("Seen."));
+    window.say("and again");
+    auto const asked = window.provider->requests();
+    REQUIRE(asked.size() == 4);
+    CHECK_FALSE(asked.at(0).system.contains("MARKER-ONE"));
+    CHECK_FALSE(asked.at(1).system.contains("MARKER-ONE"));
+    CHECK(asked.at(3).system.contains("MARKER-ONE"));
+}
+
+// Mutations: mount into the active tab rather than the turn's (the draft lands on "Mine"); drop the origin (the
+// draft is ignored).
+TEST_CASE("Client shell: a draft goes to the tab its turn started in, even after the person moved to another",
+          "[client][custom-screens][assistant]") {
+    Offered const offered;
+    ChatWindow window{offered};
+    window.provider->hold(true);
+    window.provider->script(proposing(homeSaying("For the first tab")));
+    window.provider->script(saying("Done."));
+    window.say("change the home screen");
+    window.openMine();
+    window.provider->release();
+    // The home tab holds the draft though "Mine" is the active tab, and "Mine" holds none.
+    REQUIRE(window.wait([&window] { return window.shown("Row", "draft_bar_customs.home"); }));
+    CHECK(window.backend.find("Text", "text", "For the first tab").has_value());
+    CHECK_FALSE(window.shown("Row", "draft_bar_" + window.mineId));
+}
+
+// Mutations: mount the proposal of a closed tab into the active tab; tell the person about it.
+TEST_CASE("Client shell: a draft for a tab that was closed is dropped quietly",
+          "[client][custom-screens][assistant]") {
+    Offered const offered;
+    ChatWindow window{offered};
+    window.openMine();
+    window.provider->hold(true);
+    window.provider->script(proposing(homeSaying("For a closed tab", window.mineId)));
+    window.provider->script(saying("Done."));
+    window.say("change this");
+    auto const tabs = window.backend.all("Tabs");
+    REQUIRE_FALSE(tabs.empty());
+    CHECK(window.backend.press(tabs.front(), "Ctrl+W"));
+    REQUIRE(window.wait([&window] { return !window.find("Button", "source_button_" + window.mineId).has_value(); }));
+    window.provider->release();
+    REQUIRE(window.wait([&window] { return window.provider->calls() >= 2; }));
+    for (int round = 0; round < 5; ++round) {
+        bool ran = false;
+        window.context.owner().post([&ran] { ran = true; });
+        REQUIRE(window.wait([&ran] { return ran; }));
+    }
+    // The server accepted the proposal, so the client's silence is its own doing and not a refusal's.
+    auto const asked = window.provider->requests();
+    REQUIRE(asked.size() == 2);
+    REQUIRE_FALSE(asked.at(1).messages.back().results.empty());
+    CHECK_FALSE(asked.at(1).messages.back().results.front().isError);
+    CHECK_FALSE(window.shown("Row", "draft_bar_customs.home"));
+    CHECK_FALSE(window.shown("Row", "draft_bar_" + window.mineId));
+    CHECK_FALSE(window.backend.find("Text", "text", "For a closed tab").has_value());
+    CHECK_FALSE(window.backend.find("Text", "text", "The assistant's draft").has_value());
 }
