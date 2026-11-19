@@ -1033,9 +1033,9 @@ TEST_CASE("interpreter bench: a collection of 20,000 rows: mount, sort, one row 
   - `struct ViewsDocument { int version = 1; std::optional<std::string> defaultView; bool defaultOnMount = false; std::vector<SavedView> views; }` (JSON `{"version", "default", "defaultOnMount", "views"}`; a `Shared` document writes neither `default` nor `defaultOnMount`)
   - operations `AddView{SavedView}`, `ReplaceView{SavedView}`, `RenameView{std::string from; std::string to;}`, `RemoveView{std::string name}`, `SetDefaultView{std::optional<std::string> name}`, `SetDefaultOnMount{bool on}`; `using ViewOperation = std::variant<…>`; JSON `{"add": view}`, `{"replace": view}`, `{"rename": {"from", "to"}}`, `{"remove": name}`, `{"default": name|null}`, `{"defaultOnMount": bool}`
   - `enum class ViewError : std::uint8_t { NameTaken, NoSuchView, NotShared }`; `[[nodiscard]] std::expected<ViewsDocument, ViewError> applyViewOperation(ViewsDocument document, ViewOperation const& operation, ViewsPart part)` (`AddView` and `RenameView` onto a taken name → `NameTaken`; `ReplaceView`, `RenameView`, `RemoveView`, `SetDefaultView` naming no view → `NoSuchView`; `SetDefaultView`/`SetDefaultOnMount` on `Shared` → `NotShared`; removing the default view clears `defaultView`)
-  - `[[nodiscard]] std::expected<ViewsDocument, TableError> readViews(std::string_view json)` (an unknown `version` → `InvalidSpec`), `[[nodiscard]] std::string writeViews(ViewsDocument const&, ViewsPart part)`
+  - `[[nodiscard]] std::expected<ViewsDocument, TableError> readViews(std::string_view json)` (an unknown `version` → `InvalidSpec`), `[[nodiscard]] std::string writeViews(ViewsDocument const&, ViewsPart part)`; an operation's JSON through `[[nodiscard]] std::string writeViewOperation(ViewOperation const&)` and `[[nodiscard]] std::expected<ViewOperation, TableError> readViewOperation(std::string_view)`; `[[nodiscard]] std::string viewErrorText(ViewError, ViewOperation const&)` (`A view named {name} exists`, `No view named {name}`, `The shared views have no default`)
   - `inline constexpr std::string_view kNoDocument = "-";` — an `expected` revision that stores only when nothing is stored under the key and answers `Conflict` otherwise; `MemoryTableStateStore` and `TableStateModel` honour it in `save` and `publish` (a `views` part saved by a table that loaded nothing sends it, so two windows that both start from no views cannot overwrite each other)
-  - `ITableStateStore::publish(TableStateKey const& key, ViewOperation const& operation, std::string expected) -> async::Completion<SaveResult>` (virtual; default answers `Refused` with reason `"this store does not share views"`)
+  - `ITableStateStore::publish(TableStateKey const& key, ViewOperation const& operation, std::string expected) -> async::Completion<SaveResult>` (pure virtual: the interface owns no executor to deliver a default answer on; a store that does not share returns the protected `static async::Completion<SaveResult> refusePublish(exec::IExecutor&)`, which answers `Refused` with reason `"this store does not share views"` on the store's executor; the test store `GatedTableStateStore` does so)
   - `enum class Sharing : std::uint8_t { Private, Shared }`; Part D's constructor gains a defaulted parameter, `explicit MemoryTableStateStore(exec::IExecutor& executor, Sharing sharing = Sharing::Private)`, so every Part D call `MemoryTableStateStore(executor)` compiles unchanged and keeps `shares() == false`; `shares()` is `sharing == Sharing::Shared`; its `publish` applies the operation to the `shared` part under the `expected` rule (`kNoDocument` included); over `Private` its `publish` keeps the base class's refusal
 - Produces (namespace `morph::ui`): `struct TableStatePublish { table::TableStateKey key; std::string operation; std::string expected; }` (the key's `part` must be `"shared"`; `operation` the operation's JSON) → `TableStateSaved`, registered as `morph.tableState`'s action `publish` by `registerTableState`; the model applies it to the person-less `shared` entry (preferences `person` empty: no verified caller is ever empty, since the model refuses one with none), comparing `expected` with the head's revision (`Conflict` with the current revision when they differ), refuses `SetDefaultView`/`SetDefaultOnMount`, and refuses a caller with no verified person; its `save` with `part == "shared"` answers `Refused` (`"the shared views are written by publish"`); `PreferencesTableStateStore::shares()` returns `true` and its `publish` calls `morph.tableState.publish`.
 
@@ -1048,7 +1048,9 @@ TEST_CASE("views document: operations apply to what is stored, and names stay un
     auto const add = [](std::string name) { return table::AddView{table::SavedView{.name = std::move(name)}}; };
     doc = *table::applyViewOperation(doc, add("Open orders"), table::ViewsPart::Own);
     doc = *table::applyViewOperation(doc, table::SetDefaultView{"Open orders"}, table::ViewsPart::Own);
-    CHECK(table::applyViewOperation(doc, add("Open orders"), table::ViewsPart::Own).error() == table::ViewError::NameTaken);
+    // Compared with std::unexpected, not through .error(): under the mutation the result holds a value, and .error()
+    // on it aborts the run instead of failing the check.
+    CHECK(table::applyViewOperation(doc, add("Open orders"), table::ViewsPart::Own) == std::unexpected(table::ViewError::NameTaken));
     doc = *table::applyViewOperation(doc, add("Late"), table::ViewsPart::Own);
     CHECK(table::applyViewOperation(doc, table::RenameView{"Late", "Open orders"}, table::ViewsPart::Own).error() ==
           table::ViewError::NameTaken);
@@ -1057,14 +1059,14 @@ TEST_CASE("views document: operations apply to what is stored, and names stay un
     CHECK(table::applyViewOperation(doc, table::SetDefaultOnMount{true}, table::ViewsPart::Shared).error() ==
           table::ViewError::NotShared);
     CHECK(table::writeViews(doc, table::ViewsPart::Shared) ==
-          R"({"version":1,"views":[{"name":"Late","layout":{"order":[],"hidden":[],"pinned":0,"widths":{}},"sort":[],"filters":{"columns":{},"groups":[]}}]})");
+          R"({"version":1,"views":[{"name":"Late","layout":{"order":[],"hidden":[],"pinned":0,"widths":{},"groups":[],"units":{}},"sort":[],"filters":{"columns":{},"groups":[]}}]})");
     CHECK(table::readViews(R"({"version":2,"views":[]})").error().code == table::TableErrorCode::InvalidSpec);
 }
 ```
 
 (The expected `layout` text follows `ColumnLayoutValue`'s writer as Task 8d lands it; keep the rest exact.)
 
-In the same file, the sentinel and the sharing default on the memory store (completions delivered on an `exec::InlineExecutor`, read through a file-local `resultOf(completion)` that captures the value in `then`; reuse 9b's if that file already has one). Revisions are asserted as the values the store returned, never as literals:
+In the same file, the sentinel and the sharing default on the memory store (completions delivered on the file's `StepExecutor` and read through 9b's `saveNow`/`loadNow` and a `publishNow` beside them; an `exec::InlineExecutor` is not serial, so a `Completion` refuses it as its owner; the code below is written with `resultOf`, read it as those helpers). Revisions are asserted as the values the store returned, never as literals:
 
 ```cpp
 // Mutation: MemoryTableStateStore treating kNoDocument as an ordinary revision (the first save answers Conflict).
