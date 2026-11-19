@@ -101,6 +101,11 @@ template <typename Model, typename Action>
 concept Runs = requires(Model& model, Action& action) { model.execute(action); } ||
                ::morph::model::detail::DeclaresInvoke<Model, Action>;
 
+/// @brief Satisfied when `Model` has an `execute` that takes `Action`: an action of the model's own, which an
+///        `evaluate` or a `mutation` may name. A table's actions run themselves and only read, so they are not.
+template <typename Model, typename Action>
+concept Executes = requires(Model& model, Action& action) { model.execute(action); };
+
 namespace detail {
 
 /// @brief The members of an action result that hold a list, when the result is a record.
@@ -2386,7 +2391,7 @@ public:
     /// @return The query's handle. Its value is the action body as the server reconciled it, computed fields
     ///         filled, with `errors` and `ready` beside the fields.
     template <typename Action, typename Model>
-        requires Runs<Model, Action>
+        requires Executes<Model, Action>
     QueryHandle<Action, Action> evaluate(std::string const& name, ModelHandle<Model> const& model,
                                          Body<Action> const& body = {}, QueryOptions const& options = {}) {
         declareQuery<Model, Action>(name, model.alias(), "evaluate", body, options);
@@ -2401,7 +2406,7 @@ public:
     /// @param options Its body, concurrency, optimistic write and command lists.
     /// @return The mutation's handle.
     template <typename Action, typename Model>
-        requires Runs<Model, Action>
+        requires Executes<Model, Action>
     MutationHandle<Action> mutation(std::string const& name, ModelHandle<Model> const& model,
                                     MutationOptions<Action> const& options = {}) {
         Json decl = Json::object_t{};

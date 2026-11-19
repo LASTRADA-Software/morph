@@ -524,7 +524,7 @@ keeps its operands' 0 places and still fills 0.29 of a bar.
   once, for the rows in view (a field that is not one is never sent). The read is `null` meanwhile, and the
   binding runs again when the column arrives. `body` is evaluated once and is the query's fixed part; its
   `query` member's `sort`, `filters`, `page`, `columns`, `keys` and `retry` are the table's own and replace
-  what the body gives. A literal `sort` is the default a stored one replaces, any other expression binds it; a
+  what the body gives; each the body gives is reported once, at its pointer under `body/query`. A literal `sort` is the default a stored one replaces, any other expression binds it; a
   literal `filters` object (`columns` and `groups` only) is likewise the default, an expression binds them. A
   header click on a sortable column makes it the single key, `desc` when it is the first key `asc` already;
   under a bound sort it changes nothing. **Persisted state.** With a session store and `persist` not `false`,

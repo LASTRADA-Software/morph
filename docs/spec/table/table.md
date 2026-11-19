@@ -2123,11 +2123,13 @@ by each backend from `Table::status`, and it is where every refusal this documen
 | Part | Shows | Examples |
 |---|---|---|
 | Counts, at the leading edge | The view's size and what is still coming, from `TableRows::counts` | "9,093 rows"; "100,000 or more"; "12 so far, 40 loading"; "3 of 9,093 selected" |
-| State | A level that failed, with "Retry"; a fetch that failed, with its error | "Recipe data could not be loaded. Retry" |
+| State | A level that failed, with "Retry"; a fetch that failed, with its error and "Retry" | "Recipe data could not be loaded. Retry" |
 | Message, at the trailing edge | The latest refusal or notice, until the user's next gesture on the table or for six seconds | "A table sorts by at most 8 columns" (the table's bound); "Copied 200 rows, 12 cells were not loaded" |
 
 - "Retry" sends the table's query again with `TableQuery::retry` set, which makes the level cache load the
   failed keys the reply needs at once ([The server level cache](#the-server-level-cache), rule 11).
+- A fetch that failed offers "Retry" too: the refetch carries the same flag, so a level that failed with it is
+  tried again in the same request.
 - The line is a polite live region for assistive technology: a message is read out once, a count when it
   settles.
 - **When it shows.** A model-backed table has it always: its counts are not visible any other way. A table

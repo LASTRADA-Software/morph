@@ -472,7 +472,7 @@ evaluated.
 - **Components and points.** A custom node names a declared component and only its props and
   events; a component names exactly one of `qml` (`sha256:` and 64 lower-case hex digits) and `host`
   with an integer `version`, prop types from `string`, `bool`, `int`, `exact`, `number`, `json`, and
-  a fallback. A `customize` node names a declared point; a `columns` point names a table; a `choice`
+  a fallback. A `customize` node names a declared point; a `columns` point names a table, and a `saved` point that gives `of` names one; a `choice`
   lists its options and defaults to one of them; a `value` point declares its type and its default
   has it; an `arrange` point's `of` names a `column` or `row` of the same screen whose children
   all have ids, no other `arrange` point names the same container, and the app document, which has no view,

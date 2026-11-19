@@ -2034,6 +2034,25 @@ public:
     /// @param result What the store answered.
     void tableSaveFailed(table::TableStateKey const& key, table::SaveResult const& result);
 
+    /// @brief How many entries a model-backed table's index of row scopes holds, for tests: one per realized row
+    ///        whose scope `onActivate` can run in.
+    /// @param table The table's element.
+    /// @return The entries; 0 for an element that is not a model-backed table.
+    [[nodiscard]] static std::size_t tableRowScopes(ElementState const& table);
+
+    /// @brief Shows a model-backed table's state at the `columns` and `saved` points that name it: a `columns` point
+    ///        reads the column layout (`table::ColumnLayoutValue` as a record), a `saved` point the saved view's name.
+    /// @param table The table's element.
+    void tablePoints(ElementState& table);
+
+    /// @brief Writes a choice for a `columns` or `saved` point into the state of the model-backed table it names,
+    ///        which saves it as any change of the table's arrangement is saved.
+    /// @param point The point.
+    /// @param value The choice: a layout record for `columns`, a name or `null` for `saved`.
+    /// @return Nothing when the point names no mounted model-backed table; otherwise whether the choice was taken
+    ///         (a value that does not read as the point's part is refused).
+    [[nodiscard]] std::optional<bool> tablePoint(CustomizePoint const& point, Value const& value);
+
     // --- Commands ----------------------------------------------------------------------------------------------
 
     /// @brief Runs a command list: each command in order in one batch; done when every command in it is.

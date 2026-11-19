@@ -2834,11 +2834,11 @@ private:
         std::set<std::string, std::less<>> arranged;
         for (auto const& [name, point] : _doc->customize) {
             static_cast<void>(name);
-            if (point.kind == "columns" && _doc->view) {
+            if ((point.kind == "columns" || (point.kind == "saved" && !point.of.empty())) && _doc->view) {
                 auto const found = _elements.find(point.of);
                 if (found == _elements.end() || found->second->kind != "table") {
                     refuse(pointerAppend(point.path, "of"),
-                           "a `columns` point names a table; `" + point.of + "` is not one");
+                           "a `" + point.kind + "` point names a table; `" + point.of + "` is not one");
                 }
             }
             if (point.kind == "arrange") {

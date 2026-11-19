@@ -391,6 +391,9 @@ struct ModelTable {
     /// The sort and filters the rows were given, so a new description's fitting can name what it drops.
     SortChain sort;
     table::FilterSpec filter;
+    /// The column layout and the saved view's name, as the stored state or a `columns` or `saved` point gave them.
+    std::optional<table::ColumnLayoutValue> layout;
+    std::optional<std::string> view;
     /// Whether the document binds the filters: they are neither restored nor saved.
     bool filtersBound = false;
     /// The described columns' ids.
@@ -1623,6 +1626,12 @@ bool Screen::setPreference(std::string const& point, Value value) {
     auto const found = _core->doc().customize.find(point);
     if (found == _core->doc().customize.end() || !fits(found->second, value)) {
         return false;
+    }
+    // A point that names a model-backed table edits the table's state, which then says what the point reads.
+    if (std::optional<bool> const taken = _core->tablePoint(found->second, value)) {
+        if (!*taken) {
+            return false;
+        }
     }
     ValueRecord prefs = _core->prefs.peek();
     prefs.insert_or_assign(point, std::move(value));
@@ -8489,6 +8498,18 @@ void ScreenCore::wireModelTable(ElementState& element) {
     model.describe = std::make_unique<QueryRuntime>(model.describeDecl, scope, alias);
     Value const body = node.prop("body") ? runtime().untracked([&] { return evalIn(scope, nullptr, node.prop("body")); })
                                          : Value{};
+    // The table owns these members of the query; a body that gives one has it replaced, which is said, since the
+    // body is the query's fixed part and the author may have meant it to restrict the rows.
+    if (ValueRecord const* const fixed = body.asRecord()) {
+        if (auto const query = fixed->find("query"); query != fixed->end() && query->second.asRecord() != nullptr) {
+            for (std::string_view const owned : {"sort", "filters", "page", "columns", "keys", "retry"}) {
+                if (query->second.asRecord()->contains(owned)) {
+                    report(pointerAppend(pointerAppend(pointerAppend(node.path, "body"), "query"), owned),
+                           "`" + std::string{owned} + "` is the table's own; the body's is not used");
+                }
+            }
+        }
+    }
     model.waiting = model.stateKey.has_value();
     model.window = std::make_shared<WindowRows>(session, WindowRowsOptions{.channel = channelOf(*alias, *this),
                                                                            .table = model.id,
@@ -8645,6 +8666,13 @@ void ScreenCore::storedTableState(ElementState& element, std::optional<std::stri
             model.filter = *document.filters;
         }
     }
+    if (document.layout) {
+        model.layout = std::move(document.layout);
+    }
+    if (document.view) {
+        model.view = std::move(document.view);
+    }
+    tablePoints(element);
     model.release();
 }
 
@@ -8739,6 +8767,77 @@ void ScreenCore::tableMessage(ElementState& table, std::string text) {
                 }
             }));
     }
+}
+
+void ScreenCore::tablePoints(ElementState& table) {
+    ModelTable const* const model = table.modelTable.get();
+    if (model == nullptr || table.node == nullptr) {
+        return;
+    }
+    ValueRecord next = prefs.peek();
+    bool changed = false;
+    for (auto const& [name, point] : doc().customize) {
+        if (point.of != table.node->id || (point.kind != "columns" && point.kind != "saved")) {
+            continue;
+        }
+        Value value;
+        if (point.kind == "saved") {
+            value = model->view ? Value{*model->view} : Value{};
+        } else if (model->layout) {
+            auto const json = parseJson(glz::write_json(*model->layout).value_or("null"));
+            auto read = json ? valueFromJson(*json) : std::expected<Value, std::string>{Value{}};
+            value = read ? std::move(*read) : Value{};
+        } else {
+            continue;
+        }
+        if (auto const held = next.find(name); held == next.end() || held->second != value) {
+            next.insert_or_assign(name, std::move(value));
+            changed = true;
+        }
+    }
+    if (changed) {
+        prefs.set(std::move(next));
+    }
+}
+
+std::optional<bool> ScreenCore::tablePoint(CustomizePoint const& point, Value const& value) {
+    if (point.kind != "columns" && point.kind != "saved") {
+        return std::nullopt;
+    }
+    auto const found = std::ranges::find_if(modelTables, [&point](ElementState const* element) {
+        return element->node != nullptr && element->node->id == point.of;
+    });
+    if (found == modelTables.end()) {
+        return std::nullopt;
+    }
+    ModelTable& model = *(*found)->modelTable;
+    table::StateDocument changed;
+    StateParts part = StateParts::Layout;
+    if (point.kind == "saved") {
+        std::string const* const name = value.asString();
+        if (name == nullptr && !value.isNull()) {
+            return false;
+        }
+        model.view = name == nullptr ? std::nullopt : std::optional<std::string>{*name};
+        changed.view = model.view;
+        part = StateParts::View;
+    } else {
+        table::ColumnLayoutValue layout;
+        if (glz::read_json(layout, canonicalJson(value))) {
+            return false;
+        }
+        model.layout = std::move(layout);
+        changed.layout = model.layout;
+    }
+    model.touched = true;
+    if (model.stateKey) {
+        model.states->changed(*model.stateKey, changed, part);
+    }
+    return true;
+}
+
+std::size_t ScreenCore::tableRowScopes(ElementState const& table) {
+    return table.modelTable == nullptr ? 0 : table.modelTable->rowScopes.size();
 }
 
 void ScreenCore::tableSaveFailed(table::TableStateKey const& key, table::SaveResult const& result) {
@@ -8968,6 +9067,9 @@ Node ScreenCore::modelTableOf(DocNode const& node, LowerCtx const& ctx, ElementS
             });
             auto const scope = rowScope(node, ctx, row, {}, key);
             scope->onMissingRowField = &model.onMissing;
+            // A row that left the realized window released its scope; its entry goes when the next row comes, so the
+            // index holds the realized rows and one more at most.
+            std::erase_if(model.rowScopes, [](auto const& entry) { return entry.second.expired(); });
             model.rowScopes[std::move(key)] = scope;
             LowerCtx const rowCtx{.scope = scope, .bindings = ctx.bindings, .boundary = ctx.boundary};
             TableRowLook look;

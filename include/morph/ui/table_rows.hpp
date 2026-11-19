@@ -997,7 +997,7 @@ private:
         _retry = false;
         _awaitedLast.reset();
         _awaitedTimer = {};
-        emit(table::ViewChange{
+        announce(table::ViewChange{
             .ops = {table::ViewOp{.kind = table::ViewOp::Kind::Reset, .first = 0, .count = 0, .to = 0}}});
         pump();
     }
@@ -1353,7 +1353,7 @@ private:
             if (heldPage(index)) {
                 _heldPages.insert(index);
             }
-            emit(change);
+            announce(change);
         }
         planned(_window.owed());
         pump();
@@ -1396,7 +1396,7 @@ private:
                 change.ops.push_back(table::ViewOp{.kind = table::ViewOp::Kind::Changed, .first = at, .count = 1, .to = 0});
             }
         }
-        emit(change);
+        announce(change);
         if (_window.revision() != revision) {
             pump();
         }
@@ -1456,7 +1456,7 @@ private:
         }
     }
 
-    void emit(table::ViewChange const& change) {
+    void announce(table::ViewChange const& change) {
         if (change.empty()) {
             return;
         }

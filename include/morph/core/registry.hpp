@@ -1700,9 +1700,9 @@ inline bool registerOpaqueResultOnce(std::string_view actionId) noexcept {
         return true;
     }
     std::type_index const record{typeid(Record)};
-    auto& slots = existing->second.resultSlots;
-    if (std::ranges::none_of(slots, [&](ResultSlot const& slot) { return slot.opaque && slot.type == record; })) {
-        slots.push_back(ResultSlot{.type = record, .path = {}, .opaque = true});
+    auto& held = existing->second.resultSlots;
+    if (std::ranges::none_of(held, [&](ResultSlot const& slot) { return slot.opaque && slot.type == record; })) {
+        held.push_back(ResultSlot{.type = record, .path = {}, .opaque = true});
     }
     return true;
 }
