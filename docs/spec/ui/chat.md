@@ -265,6 +265,19 @@ is not `audio/wav`, when the connection already has a transcription running (`bu
 **Reading.** `ui-chat-transcription` answers the state. A query for another principal's id, for one forgotten and for
 one that never was gets the same `failed` answer, "no such transcription", so ids reveal nothing.
 
+**Ending, exactly once.** Each accepted transcription ends in exactly one of `done` and `failed`, recorded in the
+service's table and sent as a `transcription` event to its connection: the transcriber's answer; the deadline,
+`ChatLimits::toolCallTimeout`, which cancels the call and fails with "the transcription did not answer in time"; or
+`ui-chat-end`, which cancels the principal's transcription on that connection and fails it with "cancelled". A
+connection closing cancels its calls and drops their entries, since no one can read them, and the service's destruction
+cancels every call and sends nothing. An answer arriving after the entry ended is ignored. The connection's `busy` slot
+and the principal's count free when the entry ends.
+
+**Nothing kept beyond the retention.** A finished transcription stays readable for `transcriptionRetention` (60
+seconds), swept whenever the table is touched, and then reads as "no such transcription". Neither audio nor text is
+journaled, logged or added to a conversation; the clip moves into the transcriber's call when it starts. The text
+reaches the assistant only inside a later `ui-chat-turn`, as text like any other.
+
 ## The client
 
 `client.hpp`. `ChatClient` sends what a person says and keeps what to show per conversation, for display only and for the

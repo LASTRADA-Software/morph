@@ -392,3 +392,164 @@ TEST_CASE("chat_dictation_language_comes_from_the_configuration", "[chat][dictat
     options.configure(config);
     CHECK_FALSE(options.transcriptionLanguage.has_value());
 }
+
+namespace {
+
+// A transcriber the test answers by hand, whenever it likes, even after the service cancelled the call: a real one
+// can deliver while a cancel is on its way. `called` hands the sink over, since a kept sink would keep the service.
+struct ManualTranscriber final : chat::ITranscriber {
+    struct Call final : chat::ITranscriberCall {
+        explicit Call(std::shared_ptr<std::atomic<bool>> flag) : cancelled{std::move(flag)} {}
+        void cancel() override { cancelled->store(true); }
+        std::shared_ptr<std::atomic<bool>> cancelled;
+    };
+
+    [[nodiscard]] std::shared_ptr<chat::ITranscriberCall> transcribe(chat::TranscriptionInput /*input*/,
+                                                                     chat::TranscriberSink given) override {
+        std::scoped_lock const lock{mutex};
+        sink = std::move(given);
+        return std::make_shared<Call>(cancelled);
+    }
+
+    [[nodiscard]] chat::TranscriberSink called() {
+        REQUIRE(waitFor([&] {
+            std::scoped_lock const lock{mutex};
+            return sink.has_value();
+        }));
+        std::scoped_lock const lock{mutex};
+        return *std::exchange(sink, std::nullopt);
+    }
+
+    std::mutex mutex;
+    std::optional<chat::TranscriberSink> sink;
+    std::shared_ptr<std::atomic<bool>> cancelled = std::make_shared<std::atomic<bool>>(false);
+};
+
+std::size_t eventsFor(Rig& rig, std::uint64_t id) {
+    std::size_t count = 0;
+    for (chat::TranscriptionState const& told : rig.eventWire.transcriptions()) {
+        count += told.id == id ? 1U : 0U;
+    }
+    return count;
+}
+
+}  // namespace
+
+// Mutation: end the entry on the deadline without cancelling its call.
+TEST_CASE("chat_transcription_deadline_fails_and_cancels", "[chat][dictation]") {
+    chat::ChatLimits limits;
+    limits.toolCallTimeout = 150ms;
+    Rig rig{limits};
+    rig.fake->hold(true);
+    auto const cid = rig.gui();
+    auto const id = rig.transcribe(kClip, cid);
+    auto const state = rig.settled(id, cid);
+    CHECK(state.status == chat::TranscriptionStatus::Failed);
+    CHECK(state.error == "the transcription did not answer in time");
+    CHECK(rig.fake->cancelled() == 1);
+    REQUIRE(waitFor([&] { return eventsFor(rig, id) == 1; }));
+}
+
+// Mutation: end the entry on `ui-chat-end` without cancelling its call, or stop every connection's.
+TEST_CASE("chat_transcription_is_cancelled_by_ending_the_chat", "[chat][dictation]") {
+    Rig rig;
+    rig.fake->hold(true);
+    auto const cid = rig.gui();
+    auto const elsewhere = rig.gui();
+    auto const id = rig.transcribe(kClip, cid);
+    auto const other = rig.transcribe(kClip, elsewhere);
+    wire::Envelope end;
+    end.kind = std::string{chat::kEndKind};
+    REQUIRE(rig.call(std::move(end), cid).kind == "ok");
+    auto const state = rig.settled(id, cid);
+    CHECK(state.status == chat::TranscriptionStatus::Failed);
+    CHECK(state.error == "cancelled");
+    CHECK(rig.fake->cancelled() == 1);
+    CHECK(rig.state(other, elsewhere).status == chat::TranscriptionStatus::Running);
+    rig.fake->release();
+}
+
+// Mutation: keep a closed connection's entry, or leave its call running.
+TEST_CASE("chat_transcription_is_dropped_with_its_connection", "[chat][dictation]") {
+    Rig rig;
+    rig.fake->hold(true);
+    auto const cid = rig.gui();
+    auto const id = rig.transcribe(kClip, cid);
+    rig.server->closeConnection(cid);
+    REQUIRE(waitFor([&] { return rig.fake->cancelled() == 1; }));
+    auto const after = rig.state(id, rig.gui());
+    CHECK(after.status == chat::TranscriptionStatus::Failed);
+    CHECK(after.error == "no such transcription");
+    CHECK(eventsFor(rig, id) == 0);
+}
+
+// Mutation: let a later answer overwrite an ended entry.
+TEST_CASE("chat_transcription_answer_after_the_end_changes_nothing", "[chat][dictation]") {
+    chat::ChatLimits limits;
+    limits.toolCallTimeout = 150ms;
+    auto const manual = std::make_shared<ManualTranscriber>();
+    Rig rig{limits, manual};
+    auto const cid = rig.gui();
+    auto const id = rig.transcribe(kClip, cid);
+    auto sink = manual->called();
+    CHECK(rig.settled(id, cid).error == "the transcription did not answer in time");
+    REQUIRE(waitFor([&] { return eventsFor(rig, id) == 1; }));
+    sink.done(std::string{"too late"});
+    auto const after = rig.state(id, cid);
+    CHECK(after.status == chat::TranscriptionStatus::Failed);
+    CHECK_FALSE(after.text.has_value());
+    morph::testing::storageOwner().runFor(20ms);
+    CHECK(eventsFor(rig, id) == 1);
+}
+
+// Mutation: leave the calls running when the service is destroyed, or announce them.
+TEST_CASE("chat_transcription_answer_after_the_service_is_gone", "[chat][dictation]") {
+    auto const manual = std::make_shared<ManualTranscriber>();
+    Rig rig{chat::ChatLimits{}, manual};
+    auto const cid = rig.gui();
+    static_cast<void>(rig.transcribe(kClip, cid));
+    auto sink = manual->called();
+    std::size_t const before = rig.eventWire.transcriptions().size();
+    rig.server.reset();
+    rig.service.reset();
+    CHECK(manual->cancelled->load());
+    sink.done(std::string{"nobody listens"});
+    CHECK(rig.eventWire.transcriptions().size() == before);
+}
+
+// Mutation: never forget a finished entry, or forget it at once.
+TEST_CASE("chat_transcription_is_forgotten_after_its_retention", "[chat][dictation]") {
+    chat::ChatLimits limits;
+    limits.transcriptionRetention = std::chrono::seconds{60};
+    Rig rig{limits};
+    auto const cid = rig.gui();
+    rig.fake->script(std::string{"kept a while"});
+    auto const id = rig.transcribe(kClip, cid);
+    CHECK(rig.settled(id, cid).text == "kept a while");
+    rig.clock->fetch_add(59);
+    CHECK(rig.state(id, cid).text == "kept a while");
+    rig.clock->fetch_add(2);
+    CHECK(rig.state(id, cid).error == "no such transcription");
+}
+
+// Mutation: add the transcript to the conversation.
+TEST_CASE("chat_transcription_leaves_the_conversation_alone", "[chat][dictation]") {
+    Rig rig;
+    auto const cid = rig.gui();
+    rig.fake->script(std::string{"heard words"});
+    static_cast<void>(rig.settled(rig.transcribe(kClip, cid), cid));
+    rig.provider->script(chat::Response{.text = "ok", .calls = {}, .opaque = {}});
+    chat::TurnRequest turn;
+    turn.screenId = "s";
+    turn.text = "typed words";
+    wire::Envelope start;
+    start.kind = std::string{chat::kTurnKind};
+    start.body = chat::writeMessage(turn);
+    auto const accepted = chat::readTurnAccepted(rig.call(std::move(start), cid).body);
+    REQUIRE(accepted.has_value());
+    REQUIRE(waitFor([&] { return rig.provider->calls() == 1; }));
+    auto const requests = rig.provider->requests();
+    REQUIRE(requests.front().messages.size() == 1);
+    CHECK(requests.front().messages.front().text == "typed words");
+    CHECK_FALSE(requests.front().system.contains("heard words"));
+}
