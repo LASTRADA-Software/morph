@@ -178,8 +178,9 @@ public:
     /// @brief The entry of @p key valid for @p snapshot and @p levels, computing it when there is none.
     ///
     /// An entry whose snapshot has the identity of @p snapshot and whose every level generation equals
-    /// @p levels' is a hit. Any other entry of the key is dropped, unless it is newer than the request (a larger
-    /// @p newness): a request on an older snapshot then computes its view without displacing the entry. A miss
+    /// @p levels' is a hit. Any other entry of the key is dropped, unless the request is not at least as new as it
+    /// in every part (its @p newness and each order level's generation): such a request computes its view without
+    /// displacing the entry. A miss
     /// joins a running computation of the same key, identity and generations, or computes on the calling thread,
     /// calling `ViewCacheOptions::onCompute` first. A failed computation is not cached, and an entry replaces the
     /// key's only when it is at least as new. Entries this call evicts or drops are released after the mutex is.
@@ -212,7 +213,7 @@ public:
                     released.clear();
                     return entry;
                 }
-                if (newness >= slot.newness) {
+                if (atLeastAsNew(newness, wanted, slot.newness, slot.entry->levels)) {
                     drop(found, released);
                     _invalidations.fetch_add(1);
                 }
@@ -303,7 +304,12 @@ private:
         }
         if (auto const found = _entries.find(running->key); found != _entries.end()) {
             auto const& slot = found->second;
-            if (std::pair{slot.newness, slot.order} > std::pair{running->newness, running->order}) {
+            // Replaced only by an entry at least as new in its rows and in every order level; of two equally new,
+            // the later computation's.
+            bool const newer = atLeastAsNew(running->newness, running->levels, slot.newness, slot.entry->levels);
+            bool const same =
+                newer && atLeastAsNew(slot.newness, slot.entry->levels, running->newness, running->levels);
+            if (!newer || (same && slot.order > running->order)) {
                 return;
             }
             drop(found, released);
@@ -326,6 +332,24 @@ private:
         _held = _held - slot.bytes + now;
         slot.bytes = now;
         _bytes.store(_held);
+    }
+
+    // Whether (newness, levels) is at least (otherNewness, otherLevels) in every part: the rows were pinned no
+    // earlier, and no order level the other read is at an older generation.
+    [[nodiscard]] static bool atLeastAsNew(std::uint64_t newness,
+                                           std::vector<std::pair<std::string, std::uint64_t>> const& levels,
+                                           std::uint64_t otherNewness,
+                                           std::vector<std::pair<std::string, std::uint64_t>> const& otherLevels) {
+        if (newness < otherNewness) {
+            return false;
+        }
+        for (auto const& [level, generation] : otherLevels) {
+            auto const found = std::ranges::find(levels, level, &std::pair<std::string, std::uint64_t>::first);
+            if (found != levels.end() && found->second < generation) {
+                return false;
+            }
+        }
+        return true;
     }
 
     // Under the mutex: removes an entry, moving it into @p released for the caller to free after the mutex.
