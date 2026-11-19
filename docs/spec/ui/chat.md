@@ -260,7 +260,10 @@ owns: the values `chat.entries`, `chat.running`, `chat.onScreen` and `chat.canSe
 `chat.cancel`. The commands are safe for an untrusted document: they do only what the person could do by typing, under
 their own session, and every action they lead to is checked on the server. The binding reads where the person is at each
 send, so a message goes to the screen they are looking at when they send it. A screen with no document behind it, such as
-the explorer, disables the input.
+the explorer, disables the input. So does a running turn: the input takes text only while a message can be sent
+(`chat.canSend`, like the send button). Enter runs the input's submit, which clears it, so an enabled input during a turn
+would throw away what the person typed, without sending it. A turn ends for the client when it reads the turn's state
+after the `done` event, one round trip after the turn's last text is shown.
 
 A screen's own draft is part of where the person is: the shell reads the draft the active tab holds at each send and
 carries it as `TurnRequest::draft` (`CustomScreenChrome::draftOf`), or nothing for a tab with no draft. The client bounds

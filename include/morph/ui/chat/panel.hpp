@@ -48,7 +48,7 @@ inline constexpr std::string_view kChatPanelDocument = R"({
         "children": [
           { "kind": "textInput", "testId": "chat_input", "placeholder": "Message",
             "sizing": { "lit": { "width": { "stretch": 1 } } },
-            "value": { "ref": "draft" }, "enabled": { "host": "chat.onScreen" },
+            "value": { "ref": "draft" }, "enabled": { "host": "chat.canSend" },
             "onChange": [ { "set": "draft", "value": { "ref": "event" } } ],
             "onSubmit": [ { "host": "chat.send", "args": { "obj": { "text": { "ref": "event" } } } },
                           { "set": "draft", "value": "" } ] },
