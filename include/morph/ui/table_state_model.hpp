@@ -2,11 +2,18 @@
 
 #pragma once
 #include <algorithm>
+#include <chrono>
+#include <core/async/ExecutorContext.hpp>
+#include <core/async/ParkedWork.hpp>
+#include <coroutine>
 #include <cstddef>
 #include <cstdint>
+#include <deque>
 #include <format>
+#include <functional>
 #include <map>
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <stdexcept>
 #include <string>
@@ -30,17 +37,36 @@
 
 namespace morph::ui {
 
+/// @brief The most document bytes one `save` part carries and one `load` head or `read` chunk answers, by default.
+///        `PreferencesTableStateStore` sends parts of this size, so a server's `partBytes` is at least this.
+inline constexpr std::size_t kTableStatePartBytes = std::size_t{1} << 20;
+
 /// @brief The table-state model's bounds.
 struct TableStateOptions {
-    /// @brief The longest entry the model writes, in bytes: a document of at most this many bytes is one entry, a
-    ///        larger one is written as segments, each a JSON string of at most this many bytes.
+    /// @brief The longest document kept in its head entry, in bytes; a larger one is written as segments, each a JSON
+    ///        string of at most this many bytes. A head also holds the key in clear and the revision, so a head of a
+    ///        document near this size is longer than it.
     std::size_t segmentBytes = std::size_t{12} * 1024;
-    /// @brief The most document bytes one `save` part carries and one `load` head or `read` chunk answers.
-    std::size_t partBytes = std::size_t{1} << 20;
+    /// @brief The most document bytes one `save` part carries and one `load` head or `read` chunk answers. The client
+    ///        sends parts of `kTableStatePartBytes`, so a server refuses its saves in parts when this is lower.
+    std::size_t partBytes = kTableStatePartBytes;
     /// @brief The operator's quota: the most document bytes one person may have stored, across every application.
     ///        Unset, nothing limits a state.
     std::optional<std::size_t> maxBytesPerPerson;
+    /// @brief How long an upload in parts may wait for its next part before it is dropped. A client sends each part
+    ///        as soon as the previous one is answered, so a gap a hundred times a session's `tableStateTimeout`
+    ///        (300 ms) is an upload abandoned.
+    std::chrono::milliseconds uploadExpiry = std::chrono::milliseconds{300} * 100;
+    /// @brief The clock `uploadExpiry` is measured on; empty uses `std::chrono::steady_clock`.
+    std::function<std::chrono::milliseconds()> clock;
 };
+
+/// @brief The most uploads in parts one person may have open on a server: starting one more drops their oldest.
+inline constexpr std::size_t kMaxTableStateUploads = 4;
+
+/// @brief The most bytes of head text one `load` answers, counted as the text travels, escaped once in the reply and
+///        again in its envelope: a reply then stays inside the 8 MiB envelope, a head of a full part included.
+inline constexpr std::size_t kTableStateLoadReplyBytes = std::size_t{6} << 20;
 
 /// @brief The longest key member a table-state request may carry, in bytes.
 inline constexpr std::size_t kMaxTableStateNameBytes = 256;
@@ -64,8 +90,11 @@ struct TableStateHead {
     std::uint64_t size = 0;
     /// @brief The document's first bytes, at most `TableStateOptions::partBytes`; the rest is read by `read`.
     std::string text;
-    /// @brief Why this key's document could not be read, such as a missing segment; empty when it could.
+    /// @brief Why this key's document could not be read, such as a key out of bounds or a missing segment; empty
+    ///        when it could.
     std::string error;
+    /// @brief Not answered in this reply, which is full: the caller asks for the key again.
+    bool deferred = false;
 };
 
 /// @brief What `load` answers.
@@ -305,6 +334,169 @@ inline constexpr glz::opts kStoredRead{.null_terminated = false, .error_on_unkno
     return end == 0 ? limit : end;
 }
 
+/// @brief How many bytes @p text takes as it travels in a `load` reply: escaped once as a JSON string in the reply,
+///        and the reply escaped again as the envelope's body.
+/// @param text The text.
+/// @return Its length on the wire, quotes excluded.
+[[nodiscard]] inline std::uint64_t wireBytes(std::string_view text) noexcept {
+    std::uint64_t out = 0;
+    for (char const each : text) {
+        auto const byte = static_cast<unsigned char>(each);
+        switch (escapedBytes(byte)) {
+            case 1:
+                out += 1;
+                break;
+            case 2:  // a short escape: its backslash escaped again, and the escaped quote or backslash too
+                out += 2 + ((byte == '"' || byte == '\\') ? 2 : 1);
+                break;
+            default:  // a six-byte unicode escape: its backslash escaped again
+                out += 7;
+        }
+    }
+    return out;
+}
+
+/// @brief A lock per name for coroutines: one holder at a time, the others waiting their turn in order and resumed
+///        where they were running.
+class TableStateLocks {
+public:
+    /// @brief The held lock of one name, released when it is destroyed.
+    class Lease {
+    public:
+        /// @brief A lease of @p name.
+        /// @param locks The locks. Borrowed.
+        /// @param name  The name held.
+        Lease(TableStateLocks* locks, std::string name) : _locks{locks}, _name{std::move(name)} {}
+        Lease(Lease const&) = delete;
+        Lease& operator=(Lease const&) = delete;
+        /// @brief Takes @p other's lock.
+        /// @param other The lease to take from; it then holds nothing.
+        Lease(Lease&& other) noexcept : _locks{std::exchange(other._locks, nullptr)}, _name{std::move(other._name)} {}
+        Lease& operator=(Lease&&) = delete;
+        /// @brief Releases the lock, handing it to the next waiter.
+        ~Lease() {
+            if (_locks != nullptr) {
+                _locks->release(_name);
+            }
+        }
+
+    private:
+        TableStateLocks* _locks;
+        std::string _name;
+    };
+
+    /// @brief The awaiter `lock` returns.
+    class Acquire {
+    public:
+        /// @brief An acquisition of @p name.
+        /// @param locks The locks. Borrowed.
+        /// @param name  The name.
+        Acquire(TableStateLocks& locks, std::string name) : _locks{&locks}, _name{std::move(name)} {}
+        Acquire(Acquire const&) = delete;
+        Acquire& operator=(Acquire const&) = delete;
+        Acquire(Acquire&&) = delete;
+        Acquire& operator=(Acquire&&) = delete;
+        /// @brief Leaves the queue when the waiting coroutine is destroyed before its turn.
+        ~Acquire() {
+            std::scoped_lock const lock{_locks->_mutex};
+            if (_queued) {
+                std::erase(_locks->_held[_name], this);
+            }
+        }
+
+        /// @brief Never ready before `await_suspend` has decided.
+        /// @return `false`.
+        [[nodiscard]] constexpr bool await_ready() const noexcept { return false; }
+
+        /// @brief Takes the lock when it is free, or queues for it.
+        /// @param awaiting The coroutine taking it.
+        /// @return `false` when taken at once; `true` when queued.
+        bool await_suspend(std::coroutine_handle<> awaiting) {
+            std::scoped_lock const lock{_locks->_mutex};
+            auto [held, free] = _locks->_held.try_emplace(_name);
+            if (free) {
+                return false;
+            }
+            _awaiting = awaiting;
+            _context = ::core::async::ResumeTarget::current();
+            _queued = true;
+            held->second.push_back(this);
+            return true;
+        }
+
+        /// @brief The lease.
+        /// @return It.
+        [[nodiscard]] Lease await_resume() { return Lease{_locks, std::move(_name)}; }
+
+    private:
+        friend class TableStateLocks;
+        TableStateLocks* _locks;
+        std::string _name;
+        std::coroutine_handle<> _awaiting;
+        ::core::async::ResumeTarget _context;
+        bool _queued = false;
+    };
+
+    /// @brief Waits for the lock of @p name.
+    /// @param name The name.
+    /// @return The awaiter; `co_await` it for the lease.
+    [[nodiscard]] Acquire lock(std::string name) { return Acquire{*this, std::move(name)}; }
+
+private:
+    void release(std::string const& name) {
+        std::coroutine_handle<> next;
+        ::core::async::ResumeTarget context;
+        {
+            std::scoped_lock const lock{_mutex};
+            auto const held = _held.find(name);
+            if (held == _held.end()) {
+                return;
+            }
+            if (held->second.empty()) {
+                _held.erase(held);
+                return;
+            }
+            Acquire* const waiter = held->second.front();
+            held->second.pop_front();
+            waiter->_queued = false;
+            next = waiter->_awaiting;
+            context = waiter->_context;
+        }
+        if (context) {
+            context.submit(::core::async::ParkedWork{.resume = next, .abandon = {}});
+        } else {
+            next.resume();
+        }
+    }
+
+    std::mutex _mutex;
+    /// @brief Each held name and its waiters, oldest first.
+    std::map<std::string, std::deque<Acquire*>, std::less<>> _held;
+};
+
+/// @brief What every instance of the table-state model on one server shares: the per-key locks that keep two saves of
+///        one key from interleaving, and the uploads in parts.
+struct TableStateShared {
+    /// @brief A document arriving in parts.
+    struct Upload {
+        /// @brief Which document.
+        table::TableStateKey key;
+        /// @brief The text so far.
+        std::string text;
+        /// @brief When it started, on the options' clock.
+        std::chrono::milliseconds started{0};
+        /// @brief When its last part arrived.
+        std::chrono::milliseconds touched{0};
+    };
+
+    /// @brief The locks, one name per key of one owner.
+    TableStateLocks locks;
+    /// @brief Guards `uploads`.
+    std::mutex mutex;
+    /// @brief Open uploads, by person and upload id.
+    std::map<std::pair<std::string, std::string>, Upload> uploads;
+};
+
 /// @brief Cuts @p text into segments, each written as a JSON string of at most @p segmentBytes bytes and none cutting
 ///        a UTF-8 sequence.
 /// @param text         The document's text.
@@ -363,9 +555,13 @@ public:
     /// @brief A model over @p store.
     /// @param store   Where states are kept. Shared by every instance.
     /// @param options The bounds and the quota.
+    /// @param shared  The locks and uploads every instance on the server shares; null gives this instance its own.
     /// @throws std::invalid_argument for a null store, a `segmentBytes` under 32 or a `partBytes` under 16.
-    TableStateModel(std::shared_ptr<IPreferencesStore> store, TableStateOptions options)
-        : _store{std::move(store)}, _options{options} {
+    TableStateModel(std::shared_ptr<IPreferencesStore> store, TableStateOptions options,
+                    std::shared_ptr<detail::TableStateShared> shared = nullptr)
+        : _store{std::move(store)},
+          _options{std::move(options)},
+          _shared{shared != nullptr ? std::move(shared) : std::make_shared<detail::TableStateShared>()} {
         if (_store == nullptr) {
             throw std::invalid_argument{"TableStateModel: a null store"};
         }
@@ -375,35 +571,60 @@ public:
     }
 
     /// @brief Reads the heads of the caller's documents.
+    ///
+    /// Each key is answered alone: one out of bounds, or whose segment is missing, has its `error` and the others
+    /// load. A reply whose head text would pass `kTableStateLoadReplyBytes` answers its remaining keys `deferred`,
+    /// after at least one head, so a screen of large states takes more than one call and no reply outgrows its
+    /// envelope.
     /// @param request The keys.
     /// @return One head per key, in order.
+    /// @throws std::invalid_argument for more than `kMaxTableStateKeys` keys.
     ::core::async::Task<TableStateLoaded> execute(TableStateLoad request) {
         if (request.keys.size() > kMaxTableStateKeys) {
             throw std::invalid_argument{"a table-state load names more than " + std::to_string(kMaxTableStateKeys) +
                                         " keys"};
         }
-        for (auto const& key : request.keys) {
-            checkKey(key);
-        }
         TableStateLoaded reply;
         std::string const person = verifiedPerson();
+        std::uint64_t spent = 0;
+        bool full = false;
         for (auto& key : request.keys) {
+            TableStateHead entry;
+            if (full) {
+                entry.deferred = true;
+                reply.entries.push_back(std::move(entry));
+                continue;
+            }
+            if (auto problem = keyProblem(key)) {
+                entry.error = std::move(*problem);
+                reply.entries.push_back(std::move(entry));
+                continue;
+            }
             if (person.empty()) {
-                reply.entries.emplace_back();
+                reply.entries.push_back(std::move(entry));
                 continue;
             }
             std::string const owner = ownerOf(person, key);
             Head const head = co_await readHead(owner, key);
-            TableStateHead entry{
-                .found = head.found, .revision = head.revision, .size = head.size(), .text = {}, .error = {}};
+            entry.found = head.found;
+            entry.revision = head.revision;
+            entry.size = head.size();
             if (head.found) {
                 try {
                     entry.text = co_await readRange(owner, key, head, 0);
                 } catch (std::exception const& error) {
-                    entry =
-                        TableStateHead{.found = false, .revision = {}, .size = 0, .text = {}, .error = error.what()};
+                    entry = TableStateHead{};
+                    entry.error = error.what();
                 }
             }
+            std::uint64_t const cost = detail::wireBytes(entry.text);
+            if (spent > 0 && spent + cost > kTableStateLoadReplyBytes) {
+                full = true;
+                reply.entries.push_back(TableStateHead{
+                    .found = false, .revision = {}, .size = 0, .text = {}, .error = {}, .deferred = true});
+                continue;
+            }
+            spent += cost;
             reply.entries.push_back(std::move(entry));
         }
         co_return reply;
@@ -442,14 +663,16 @@ public:
         }
         std::string const person = signedInPerson();
         if (request.key.part == kSharedPart) {
-            co_return TableStateSaved{.result = table::SaveResult{.outcome = table::SaveOutcome::Refused,
-                                                                  .revision = {},
-                                                                  .reason = "the shared views are written by publish"}};
+            co_return TableStateSaved{.result =
+                                          table::SaveResult{.outcome = table::SaveOutcome::Refused,
+                                                            .revision = {},
+                                                            .reason = "the shared views are written by publish"}};
         }
         if (request.upload.empty()) {
             if (request.offset != 0 || !request.last) {
                 throw std::invalid_argument{"a table-state save in parts names its upload"};
             }
+            auto const lease = co_await _shared->locks.lock(lockName(person, request.key));
             co_return TableStateSaved{
                 .result = co_await commit(person, request.key, std::move(request.expected), std::move(request.text))};
         }
@@ -457,22 +680,13 @@ public:
             throw std::invalid_argument{"a table-state upload id is at most " +
                                         std::to_string(kMaxTableStateNameBytes) + " bytes"};
         }
-        if (request.offset == 0) {
-            _uploads.insert_or_assign(request.upload, Upload{.person = person, .key = request.key, .text = {}});
-        }
-        auto const found = _uploads.find(request.upload);
-        if (found == _uploads.end() || found->second.person != person || !(found->second.key == request.key) ||
-            found->second.text.size() != request.offset) {
-            throw std::invalid_argument{"a table-state save part does not continue its upload"};
-        }
-        found->second.text += request.text;
-        if (!request.last) {
+        std::optional<std::string> whole = takePart(person, request);
+        if (!whole) {
             co_return TableStateSaved{};
         }
-        std::string text = std::move(found->second.text);
-        _uploads.erase(found);
+        auto const lease = co_await _shared->locks.lock(lockName(person, request.key));
         co_return TableStateSaved{
-            .result = co_await commit(person, request.key, std::move(request.expected), std::move(text))};
+            .result = co_await commit(person, request.key, std::move(request.expected), std::move(*whole))};
     }
 
     /// @brief Forgets the caller's document.
@@ -485,6 +699,7 @@ public:
         if (request.key.part == kSharedPart) {
             throw std::invalid_argument{"the shared views are written by publish"};
         }
+        auto const lease = co_await _shared->locks.lock(lockName(person, request.key));
         co_await cleanUp(person, request.key);
         Head const head = co_await readHead(person, request.key);
         if (!head.found) {
@@ -504,7 +719,7 @@ public:
         }
         if (_options.maxBytesPerPerson) {
             std::uint64_t const used = co_await usage(person);
-            co_await setUsage(person, used - std::min(used, head.size()));
+            co_await setUsage(person, used - std::min(used, head.counted));
         }
         co_return TableStateRemoved{.removed = true};
     }
@@ -532,12 +747,13 @@ public:
                                                                .reason = std::move(reason)}};
         };
         std::string const owner;  // the shared views are no one's
+        auto const lease = co_await _shared->locks.lock(lockName(owner, request.key));
         co_await cleanUp(owner, request.key);
         Head const head = co_await readHead(owner, request.key);
         if (!holds(request.expected, head)) {
-            co_return TableStateSaved{
-                .result = table::SaveResult{
-                    .outcome = table::SaveOutcome::Conflict, .revision = head.revision, .reason = {}}};
+            co_return TableStateSaved{.result = table::SaveResult{.outcome = table::SaveOutcome::Conflict,
+                                                                  .revision = head.revision,
+                                                                  .reason = {}}};
         }
         table::ViewsDocument document;
         if (head.found) {
@@ -568,16 +784,11 @@ private:
         std::string document;
         std::uint64_t segments = 0;
         std::uint64_t bytes = 0;
+        /// The document's length as its save received it, which the quota counts.
+        std::uint64_t counted = 0;
 
         /// The document's length.
         [[nodiscard]] std::uint64_t size() const { return segments > 0 ? bytes : document.size(); }
-    };
-
-    /// @brief A document arriving in parts.
-    struct Upload {
-        std::string person;
-        table::TableStateKey key;
-        std::string text;
     };
 
     /// @brief Whose entries a key's are: @p person's, or no one's for the `shared` part.
@@ -606,21 +817,108 @@ private:
         return person;
     }
 
-    /// @brief Refuses a key whose members are out of bounds: `model` is 0 to 256 bytes, the others 1 to 256.
+    /// @brief What is wrong with a key: a member out of bounds (`model` is 0 to 256 bytes, the others 1 to 256), or
+    ///        a `part` holding a `.`, which would name another part's intent or segment points.
+    /// @param key The key.
+    /// @return The problem; nothing for a key in bounds.
+    [[nodiscard]] static std::optional<std::string> keyProblem(table::TableStateKey const& key) {
+        auto const check = [](std::string const& member, std::string_view name,
+                              std::size_t least) -> std::optional<std::string> {
+            if (member.size() < least || member.size() > kMaxTableStateNameBytes) {
+                return "a table-state key's `" + std::string{name} + "` is " + std::to_string(least) + " to " +
+                       std::to_string(kMaxTableStateNameBytes) + " bytes";
+            }
+            return std::nullopt;
+        };
+        for (auto problem :
+             {check(key.application, "application", 1), check(key.model, "model", 0), check(key.table, "table", 1),
+              check(key.qualifier, "qualifier", 1), check(key.part, "part", 1)}) {
+            if (problem) {
+                return problem;
+            }
+        }
+        if (key.part.contains('.')) {
+            return std::string{"a table-state key's `part` holds no `.`"};
+        }
+        return std::nullopt;
+    }
+
+    /// @brief Refuses a key out of bounds.
     /// @param key The key.
     static void checkKey(table::TableStateKey const& key) {
-        auto const check = [](std::string const& member, std::string_view name, std::size_t least) {
-            if (member.size() < least || member.size() > kMaxTableStateNameBytes) {
-                throw std::invalid_argument{"a table-state key's `" + std::string{name} + "` is " +
-                                            std::to_string(least) + " to " + std::to_string(kMaxTableStateNameBytes) +
-                                            " bytes"};
+        if (auto problem = keyProblem(key)) {
+            throw std::invalid_argument{std::move(*problem)};
+        }
+    }
+
+    /// @brief The lock of one owner's key: two writes of it never interleave on this server.
+    /// @param owner The person whose entries they are; empty for the shared views.
+    /// @param key   The key.
+    /// @return The lock's name.
+    [[nodiscard]] static std::string lockName(std::string const& owner, table::TableStateKey const& key) {
+        return owner + "\x1F" + key.application + "\x1F" + detail::tableStateScope(key) + "\x1F" + key.part;
+    }
+
+    /// @brief The options' clock now.
+    /// @return It.
+    [[nodiscard]] std::chrono::milliseconds now() const {
+        if (_options.clock) {
+            return _options.clock();
+        }
+        return std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::steady_clock::now().time_since_epoch());
+    }
+
+    /// @brief Adds one part to its upload, after dropping every upload that waited past `uploadExpiry`; a first part
+    ///        over `kMaxTableStateUploads` open uploads of the person drops their oldest.
+    /// @param person  The caller.
+    /// @param request The part.
+    /// @return The whole text at the last part; nothing before it.
+    /// @throws std::invalid_argument for a part that does not continue its upload, or that takes it past the quota.
+    [[nodiscard]] std::optional<std::string> takePart(std::string const& person, TableStateSave& request) {
+        std::scoped_lock const lock{_shared->mutex};
+        auto& uploads = _shared->uploads;
+        auto const at = now();
+        std::erase_if(uploads, [&](auto const& entry) { return at - entry.second.touched > _options.uploadExpiry; });
+        std::pair<std::string, std::string> const id{person, request.upload};
+        if (request.offset == 0) {
+            uploads.erase(id);
+            for (;;) {
+                auto oldest = uploads.end();
+                std::size_t open = 0;
+                for (auto entry = uploads.begin(); entry != uploads.end(); ++entry) {
+                    if (entry->first.first == person) {
+                        ++open;
+                        if (oldest == uploads.end() || entry->second.started < oldest->second.started) {
+                            oldest = entry;
+                        }
+                    }
+                }
+                if (open < kMaxTableStateUploads) {
+                    break;
+                }
+                uploads.erase(oldest);
             }
-        };
-        check(key.application, "application", 1);
-        check(key.model, "model", 0);
-        check(key.table, "table", 1);
-        check(key.qualifier, "qualifier", 1);
-        check(key.part, "part", 1);
+            uploads.emplace(
+                id, detail::TableStateShared::Upload{.key = request.key, .text = {}, .started = at, .touched = at});
+        }
+        auto const found = uploads.find(id);
+        if (found == uploads.end() || !(found->second.key == request.key) ||
+            found->second.text.size() != request.offset) {
+            throw std::invalid_argument{"a table-state save part does not continue its upload"};
+        }
+        if (_options.maxBytesPerPerson && request.offset + request.text.size() > *_options.maxBytesPerPerson) {
+            uploads.erase(found);
+            throw std::invalid_argument{"a table-state upload is over the table-state quota"};
+        }
+        found->second.text += request.text;
+        found->second.touched = at;
+        if (!request.last) {
+            return std::nullopt;
+        }
+        std::string text = std::move(found->second.text);
+        uploads.erase(found);
+        return text;
     }
 
     [[nodiscard]] static std::string pendingPoint(table::TableStateKey const& key) { return key.part + ".pending"; }
@@ -673,9 +971,11 @@ private:
         }
         if (entry.document) {
             head.document = std::move(entry.document->str);
+            head.counted = entry.bytes.value_or(head.document.size());
         } else if (entry.segments && *entry.segments > 0 && entry.bytes) {
             head.segments = *entry.segments;
             head.bytes = *entry.bytes;
+            head.counted = head.bytes;
         } else {
             co_return head;
         }
@@ -799,7 +1099,7 @@ private:
                 .outcome = table::SaveOutcome::Conflict, .revision = head.revision, .reason = {}};
         }
         bool const counted = _options.maxBytesPerPerson.has_value() && !person.empty();
-        std::uint64_t const replaced = head.found ? head.size() : 0;
+        std::uint64_t const replaced = head.found ? head.counted : 0;
         std::uint64_t const added = text.size();
         std::uint64_t used = 0;
         if (counted) {
@@ -834,6 +1134,7 @@ private:
             entry.bytes = added;
         } else {
             entry.document = glz::raw_json{text};
+            entry.bytes = added;  // the text's own length: reading the document back drops surrounding whitespace
         }
         co_await setOrThrow(pointKey(person, key, key.part), write(entry));
         if (replacesSegments) {
@@ -843,15 +1144,16 @@ private:
             static_cast<void>(co_await _store->remove(pointKey(person, key, pendingPoint(key))));
         }
         if (counted) {
-            co_await setUsage(person, used - replaced + added);
+            // A usage below the replaced size undercounts (a quota set over existing states, two instances racing, a
+            // refused usage write): what remains of it is counted as nothing rather than wrapping.
+            co_await setUsage(person, (used > replaced ? used - replaced : 0) + added);
         }
         co_return table::SaveResult{.outcome = table::SaveOutcome::Saved, .revision = revision, .reason = {}};
     }
 
     std::shared_ptr<IPreferencesStore> _store;
     TableStateOptions _options;
-    /// @brief Documents arriving in parts, by upload id.
-    std::map<std::string, Upload, std::less<>> _uploads;
+    std::shared_ptr<detail::TableStateShared> _shared;
 };
 
 }  // namespace morph::ui
@@ -886,8 +1188,11 @@ namespace morph::ui {
 /// The actions declare no effects: what they change is no record a screen shows, and a mounted table reads its state
 /// when it mounts, not as it changes elsewhere.
 ///
-/// Two instances share no lock, and a preferences store has no conditional write, so two saves of one person that
-/// reach two instances in the same moment can both pass the quota: the quota can then be overshot by one document.
+/// Every instance it makes shares one set of per-key locks, so two writes of one key on this server run one after
+/// the other and the last wins whole; and one set of uploads in parts, at most `kMaxTableStateUploads` per person.
+/// Servers share nothing, and a preferences store has no conditional write, so two saves of one person that reach two
+/// servers in the same moment can interleave, and two saves of different keys can both pass the quota: the quota can
+/// then be overshot by one document.
 /// @param store      Where states are kept: the application's preferences store.
 /// @param dispatcher The server's action dispatcher.
 /// @param registry   The server's model registry.
@@ -897,8 +1202,9 @@ inline void registerTableState(std::shared_ptr<IPreferencesStore> store, model::
     if (store == nullptr) {
         throw std::invalid_argument{"registerTableState: a null store"};
     }
-    registry.registerModel<TableStateModel>(kTableStateModel, [store = std::move(store), options] {
-        return std::make_unique<model::detail::ModelHolder<TableStateModel>>(store, options);
+    registry.registerModel<TableStateModel>(kTableStateModel, [store = std::move(store), options = std::move(options),
+                                                               shared = std::make_shared<detail::TableStateShared>()] {
+        return std::make_unique<model::detail::ModelHolder<TableStateModel>>(store, options, shared);
     });
     dispatcher.registerAction<TableStateModel, TableStateLoad>(kTableStateModel, "load");
     dispatcher.registerAction<TableStateModel, TableStateRead>(kTableStateModel, "read");

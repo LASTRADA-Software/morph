@@ -173,9 +173,8 @@ struct NoPublishForBob final : morph::session::IAuthorizer {
 
 // A session's owner and timers, and the preferences-backed store over an in-process server.
 struct StoreFixture : RowsFixture {
-    explicit StoreFixture(TableStateOptions options = {},
-                          std::shared_ptr<morph::session::IAuthorizer> authorizer =
-                              std::make_shared<prefs_test::TokenAuthorizer>())
+    explicit StoreFixture(TableStateOptions options = {}, std::shared_ptr<morph::session::IAuthorizer> authorizer =
+                                                              std::make_shared<prefs_test::TokenAuthorizer>())
         : server{options, std::move(authorizer)} {}
 
     StateServer server;
@@ -765,7 +764,8 @@ TEST_CASE(
     full.layout = layout;
     table::SortChain sort;
     for (int at = 0; at < 8; ++at) {
-        sort.push_back(table::SortKey{.column = std::format("c{:03}", at * 3), .dir = table::SortDirection::Ascending});
+        sort.push_back(
+            table::SortKey{.column = std::format("c{:03}", at * 3), .dir = table::SortDirection::Ascending});
     }
     full.sort = sort;
     table::FilterSpec filters;
@@ -793,11 +793,374 @@ TEST_CASE(
         StoreFixture big;
         REQUIRE(save(big, key, ticked).outcome == table::SaveOutcome::Saved);
         INFO("T2: a 20,000-value filter is " << ticked.size() << " bytes in " << segmentsOf(ticked)
-                                              << " segments; entries " << big.prefs.pointsUnder(scopeOf(key)).size()
-                                              << ", sets " << big.prefs.setCount());
+                                             << " segments; entries " << big.prefs.pointsUnder(scopeOf(key)).size()
+                                             << ", sets " << big.prefs.setCount());
         auto const bigStored = load(big, key);
         REQUIRE(bigStored.has_value());
         CHECK(bigStored->json == ticked);
         CHECK(big.prefs.largestValue() <= 12 * 1024);
     }
+}
+
+// --- Bounds on what one caller can make the server hold, and one key's problems kept to itself ---------------------
+
+namespace {
+
+// A server whose every task runs on a step executor: a test decides what runs when, so two calls can be interleaved
+// at a chosen store call.
+struct SteppedServer {
+    explicit SteppedServer(TableStateOptions options = {}) {
+        ui::registerTableState(prefs, dispatcher, registry, std::move(options));
+        server = std::make_shared<morph::backend::RemoteServer>(pool, std::make_shared<prefs_test::TokenAuthorizer>(),
+                                                                dispatcher, registry);
+    }
+
+    // Sends @p request; @p into receives the reply when the step executor gets to it.
+    void post(morph::wire::Envelope const& request, std::optional<morph::wire::Envelope>& into) {
+        server->handle(morph::wire::encode(request), [&into](std::string text) { into = morph::wire::decode(text); });
+    }
+
+    morph::wire::Envelope sendNow(morph::wire::Envelope const& request) {
+        std::optional<morph::wire::Envelope> reply;
+        post(request, reply);
+        pool.runAll();
+        REQUIRE(reply.has_value());
+        return *reply;
+    }
+
+    std::uint64_t bind() {
+        auto const reply = sendNow(morph::wire::makeRegister(std::string{ui::kTableStateModel}));
+        REQUIRE(reply.kind == "ok");
+        return reply.modelId;
+    }
+
+    morph::wire::Envelope request(std::uint64_t instance, std::string_view action, std::string body) {
+        morph::wire::Envelope out;
+        out.kind = "execute";
+        out.callId = ++lastCallId;
+        out.modelId = instance;
+        out.modelType = std::string{ui::kTableStateModel};
+        out.actionType = std::string{action};
+        out.body = std::move(body);
+        out.session.token = kPerson;
+        return out;
+    }
+
+    morph::testing::StepExecutor pool;
+    morph::model::detail::ActionDispatcher dispatcher;
+    morph::model::detail::ModelRegistryFactory registry;
+    std::shared_ptr<ProbePreferencesStore> prefs = std::make_shared<ProbePreferencesStore>(pool);
+    std::shared_ptr<morph::backend::RemoteServer> server;
+    std::uint64_t lastCallId = 0;
+};
+
+std::string saveBody(table::TableStateKey const& key, std::string text, std::string upload = {},
+                     std::uint64_t offset = 0, bool last = true) {
+    return morph::model::ActionTraits<ui::TableStateSave>::toJson(ui::TableStateSave{.key = key,
+                                                                                     .expected = {},
+                                                                                     .upload = std::move(upload),
+                                                                                     .offset = offset,
+                                                                                     .text = std::move(text),
+                                                                                     .last = last});
+}
+
+std::string loadBody(std::vector<table::TableStateKey> keys) {
+    return morph::model::ActionTraits<ui::TableStateLoad>::toJson(ui::TableStateLoad{.keys = std::move(keys)});
+}
+
+ui::TableStateLoaded loadedOf(morph::wire::Envelope const& reply) {
+    REQUIRE(reply.kind == "ok");
+    return morph::model::ActionTraits<ui::TableStateLoad>::resultFromJson(reply.body);
+}
+
+table::SaveResult savedOf(morph::wire::Envelope const& reply) {
+    REQUIRE(reply.kind == "ok");
+    return morph::model::ActionTraits<ui::TableStateSave>::resultFromJson(reply.body).result;
+}
+
+// A state of about @p bytes bytes whose view is escaped quotes: four bytes on the wire for each of its bytes.
+std::string escapedState(std::size_t bytes) {
+    std::string text = R"({"version":1,"view":")";
+    while (text.size() + 2 < bytes) {
+        text += R"(\")";
+    }
+    return text + R"("})";
+}
+
+// Whether @p text is well-formed UTF-8.
+bool wellFormed(std::string_view text) {
+    for (std::size_t at = 0; at < text.size();) {
+        auto const lead = static_cast<unsigned char>(text[at]);
+        std::size_t const length = lead < 0x80           ? 1
+                                   : (lead >> 5) == 0x6  ? 2
+                                   : (lead >> 4) == 0xE  ? 3
+                                   : (lead >> 3) == 0x1E ? 4
+                                                         : 0;
+        if (length == 0 || at + length > text.size()) {
+            return false;
+        }
+        for (std::size_t each = at + 1; each < at + length; ++each) {
+            if ((static_cast<unsigned char>(text[each]) & 0xC0U) != 0x80U) {
+                return false;
+            }
+        }
+        at += length;
+    }
+    return true;
+}
+
+}  // namespace
+
+// Mutation: the usage write unsaturated, `used - replaced + added` (it wraps to nearly 2^64).
+TEST_CASE("table state: a quota set over existing states counts a replace from nothing", "[ui][state]") {
+    StoreFixture h{quota(100'000)};
+    REQUIRE(save(h, kKey, docOf(9'000)).outcome == table::SaveOutcome::Saved);
+    h.prefs.erase(usageKey(kPerson));  // the state was stored before the operator set the quota
+    REQUIRE(save(h, kKey, docOf(4'000)).outcome == table::SaveOutcome::Saved);
+    CHECK(h.prefs.value(usageKey(kPerson)) == R"({"bytes":4000})");
+    CHECK(save(h, keyOf("b"), docOf(2'000)).outcome == table::SaveOutcome::Saved);  // nothing is locked out
+}
+
+// Mutation: the usage write unsaturated (the replace after the race wraps).
+TEST_CASE("table state: two instances racing on the quota undercount, and a later replace does not wrap",
+          "[ui][state]") {
+    SteppedServer s{quota(100'000)};
+    auto const a = s.bind();
+    auto const b = s.bind();
+    s.prefs->holdSet(s.prefs->setCount() + 1);  // A has read the usage; its head is held
+    std::optional<morph::wire::Envelope> replyA;
+    s.post(s.request(a, "save", saveBody(keyOf("a"), docOf(2'000))), replyA);
+    s.pool.runAll();
+    REQUIRE(s.prefs->holding());
+    REQUIRE(savedOf(s.sendNow(s.request(b, "save", saveBody(keyOf("b"), docOf(6'000))))).outcome ==
+            table::SaveOutcome::Saved);
+    CHECK(s.prefs->value(usageKey(kPerson)) == R"({"bytes":6000})");
+    s.prefs->releaseHeld();
+    s.pool.runAll();
+    REQUIRE(replyA.has_value());
+    REQUIRE(savedOf(*replyA).outcome == table::SaveOutcome::Saved);
+    CHECK(s.prefs->value(usageKey(kPerson)) == R"({"bytes":2000})");  // both read 0: B's bytes went uncounted
+    REQUIRE(savedOf(s.sendNow(s.request(b, "save", saveBody(keyOf("b"), docOf(1'000))))).outcome ==
+            table::SaveOutcome::Saved);
+    CHECK(s.prefs->value(usageKey(kPerson)) == R"({"bytes":1000})");
+}
+
+// Mutation: the usage write unsaturated (a usage left short by a refused write wraps on the next replace).
+TEST_CASE("table state: a refused usage write leaves a usage the next replace does not wrap", "[ui][state]") {
+    StoreFixture h{quota(100'000)};
+    REQUIRE(save(h, keyOf("b"), docOf(500)).outcome == table::SaveOutcome::Saved);
+    h.prefs.failSetsAfter(h.prefs.setCount() + 1);  // the head is written; the usage is not
+    REQUIRE(save(h, kKey, docOf(6'000)).outcome == table::SaveOutcome::Saved);
+    h.prefs.healSets();
+    CHECK(h.prefs.value(usageKey(kPerson)) == R"({"bytes":500})");
+    REQUIRE(save(h, kKey, docOf(1'000)).outcome == table::SaveOutcome::Saved);
+    CHECK(h.prefs.value(usageKey(kPerson)) == R"({"bytes":1000})");
+}
+
+// Mutation: the quota counting a small document by the text read back (" {}" reads as "{}", and usage drifts to 3).
+TEST_CASE("table state: the quota counts a small document by the text its save received", "[ui][state]") {
+    StoreFixture h{quota(1'000)};
+    REQUIRE(save(h, kKey, " {}").outcome == table::SaveOutcome::Saved);
+    CHECK(h.prefs.value(usageKey(kPerson)) == R"({"bytes":3})");
+    REQUIRE(save(h, kKey, "{}").outcome == table::SaveOutcome::Saved);
+    CHECK(h.prefs.value(usageKey(kPerson)) == R"({"bytes":2})");
+}
+
+// Mutation: no cap on a person's open uploads (the first of five still continues).
+TEST_CASE("table state: a person's open uploads are capped, the oldest dropped", "[ui][state]") {
+    StoreFixture h;
+    auto const instance = h.server.bind();
+    std::string const head = R"({"version":1,)";
+    for (int at = 1; at <= 5; ++at) {
+        CHECK(
+            h.server.call(instance, "save", saveBody(kKey, head, "u" + std::to_string(at), 0, false), kPerson).kind ==
+            "ok");
+    }
+    auto const finish = [&](int at) {
+        return h.server.call(instance, "save",
+                             saveBody(kKey, R"("view":"x"})", "u" + std::to_string(at), head.size(), true), kPerson);
+    };
+    CHECK(finish(1).kind != "ok");  // dropped when the fifth started: no client holds more than four
+    for (int at = 2; at <= 5; ++at) {
+        CHECK(finish(at).kind == "ok");
+    }
+    CHECK(load(h, kKey)->json == R"({"version":1,"view":"x"})");
+}
+
+// Mutation: no expiry of uploads (an upload continues after a minute's silence).
+TEST_CASE("table state: an upload abandoned past its expiry is dropped", "[ui][state]") {
+    auto const clock = std::make_shared<std::chrono::milliseconds>(0);
+    TableStateOptions options;
+    options.clock = [clock] { return *clock; };
+    StoreFixture h{options};
+    CHECK(options.uploadExpiry == 30s);
+    auto const instance = h.server.bind();
+    std::string const head = R"({"version":1,)";
+    REQUIRE(h.server.call(instance, "save", saveBody(kKey, head, "late", 0, false), kPerson).kind == "ok");
+    REQUIRE(h.server.call(instance, "save", saveBody(kKey, head, "kept", 0, false), kPerson).kind == "ok");
+    *clock += 20s;
+    REQUIRE(
+        h.server.call(instance, "save", saveBody(kKey, R"("view":"k")", "kept", head.size(), false), kPerson).kind ==
+        "ok");  // a part within the expiry keeps its upload
+    *clock += 20s;
+    CHECK(h.server.call(instance, "save", saveBody(kKey, R"("view":"x"})", "late", head.size(), true), kPerson).kind !=
+          "ok");
+    CHECK(h.server.call(instance, "save", saveBody(kKey, "}", "kept", head.size() + 10, true), kPerson).kind == "ok");
+}
+
+// Mutation: no quota bound on an upload's parts (a part past the quota is kept until the last arrives).
+TEST_CASE("table state: an upload past the quota is refused at the part that passes it", "[ui][state]") {
+    StoreFixture h{quota(1'000)};
+    auto const instance = h.server.bind();
+    CHECK(h.server.call(instance, "save", saveBody(kKey, std::string(1'001, ' '), "big", 0, false), kPerson).kind !=
+          "ok");
+    CHECK(h.server.call(instance, "save", saveBody(kKey, "{}", "big", 1'001, true), kPerson).kind != "ok");
+}
+
+// Mutation: no per-key lock (B writes while A is held, and A's head then names a segment B removed).
+TEST_CASE("table state: two segmented saves of one key run one after the other", "[ui][state]") {
+    SteppedServer s;
+    auto const a = s.bind();
+    auto const b = s.bind();
+    std::string const first = stateWithOneOfValues(400, "a");
+    std::string const docA = stateWithOneOfValues(400, "b");
+    std::string const docB = stateWithOneOfValues(400, "c");
+    REQUIRE(segmentsOf(docA) > 2);
+    REQUIRE(savedOf(s.sendNow(s.request(a, "save", saveBody(kKey, first)))).outcome == table::SaveOutcome::Saved);
+    s.prefs->holdSet(s.prefs->setCount() + 3);  // A's intent and first segment go; its second segment is held
+    std::optional<morph::wire::Envelope> replyA;
+    std::optional<morph::wire::Envelope> replyB;
+    s.post(s.request(a, "save", saveBody(kKey, docA)), replyA);
+    s.pool.runAll();
+    REQUIRE(s.prefs->holding());
+    std::size_t const calls = s.prefs->calls().size();
+    s.post(s.request(b, "save", saveBody(kKey, docB)), replyB);
+    s.pool.runAll();
+    CHECK_FALSE(replyB.has_value());          // B waits for A's key
+    CHECK(s.prefs->calls().size() == calls);  // and has touched nothing
+    s.prefs->releaseHeld();
+    s.pool.runAll();
+    REQUIRE(replyA.has_value());
+    REQUIRE(replyB.has_value());
+    CHECK(savedOf(*replyA).outcome == table::SaveOutcome::Saved);
+    CHECK(savedOf(*replyB).outcome == table::SaveOutcome::Saved);
+    auto const loaded = loadedOf(s.sendNow(s.request(a, "load", loadBody({kKey}))));
+    REQUIRE(loaded.entries.size() == 1);
+    CHECK(loaded.entries.front().error.empty());
+    CHECK(loaded.entries.front().text == docB);  // the last save wins, whole
+    CHECK(s.prefs->pointsUnder(scopeOf(kKey)) == headAndSegmentsOf(*s.prefs, kKey));
+}
+
+// Mutation: a key out of bounds failing the whole load (the good key's change is saved over an empty document).
+TEST_CASE("table state: a key out of bounds fails its own load, and its neighbour's stored parts stay",
+          "[ui][state]") {
+    StoreFixture h;
+    REQUIRE(save(h, kKey, R"({"version":1,"filters":{"columns":{"name":{"include":[{"contains":"a"}]}}}})").outcome ==
+            table::SaveOutcome::Saved);
+    auto const loaded =
+        loadedOf(h.server.call(h.server.bind(), "load", loadBody({keyOf(std::string(257, 't')), kKey}), kPerson));
+    REQUIRE(loaded.entries.size() == 2);
+    CHECK_FALSE(loaded.entries[0].error.empty());
+    CHECK(loaded.entries[1].found);
+
+    TableStates states{sharedOf(h.store), h.owner, &h.scheduler, 500ms};
+    bool badFailed = false;
+    bool goodLoaded = false;
+    states.load(keyOf(std::string(257, 't')))
+        .then([](std::optional<table::StoredTableState> const&) {})
+        .onError([&badFailed](std::exception_ptr const&) { badFailed = true; });
+    states.load(kKey).then(
+        [&goodLoaded](std::optional<table::StoredTableState> const& state) { goodLoaded = state.has_value(); });
+    h.settle();
+    CHECK(badFailed);
+    REQUIRE(goodLoaded);
+    states.changed(kKey, docWithSort("name", table::SortDirection::Descending), StateParts::Sort);
+    h.advance(500ms);
+    auto const stored = load(h, kKey);
+    REQUIRE(stored.has_value());
+    CHECK(stored->json.contains(R"("contains":"a")"));
+    CHECK(stored->json.contains(R"("column":"name")"));
+}
+
+// Mutation: no reply budget (every head in one reply, none deferred).
+TEST_CASE("table state: a load whose heads would outgrow its envelope defers the rest", "[ui][state]") {
+    StoreFixture h;
+    std::string const big = escapedState(800 * 1024);
+    REQUIRE(ui::detail::wireBytes(big) > 3 * 800 * 1024);
+    REQUIRE(save(h, keyOf("t1"), big).outcome == table::SaveOutcome::Saved);
+    REQUIRE(save(h, keyOf("t2"), big).outcome == table::SaveOutcome::Saved);
+    REQUIRE(save(h, keyOf("t3"), "{}").outcome == table::SaveOutcome::Saved);
+    auto const reply =
+        h.server.call(h.server.bind(), "load", loadBody({keyOf("t1"), keyOf("t2"), keyOf("t3")}), kPerson);
+    CHECK(morph::wire::encode(reply).size() < morph::wire::kMaxEnvelopeBytes);
+    auto const loaded = loadedOf(reply);
+    REQUIRE(loaded.entries.size() == 3);
+    CHECK(loaded.entries[0].text == big);
+    CHECK(loaded.entries[1].deferred);
+    CHECK(loaded.entries[2].deferred);
+
+    std::vector<std::string> got;
+    for (auto const* id : {"t1", "t2", "t3"}) {
+        h.store.load(keyOf(id)).then([&got](std::optional<table::StoredTableState> const& state) {
+            got.push_back(state ? state->json : std::string{"none"});
+        });
+    }
+    std::size_t const before = h.client.count("load");
+    h.settle();
+    CHECK(h.client.count("load") - before == 2);  // the second call answers what the first deferred
+    CHECK(got.size() == 3);
+    CHECK(std::ranges::count(got, big) == 2);
+    CHECK(std::ranges::count(got, std::string{"{}"}) == 1);
+}
+
+// Mutation: the client sending a turn's loads in one call however many (the server refuses 300 keys).
+TEST_CASE("table state: a turn of more loads than one call takes is split", "[ui][state]") {
+    StoreFixture h;
+    std::size_t answered = 0;
+    for (int at = 0; at < 300; ++at) {
+        h.store.load(keyOf("t" + std::to_string(at)))
+            .then([&answered](std::optional<table::StoredTableState> const&) { ++answered; })
+            .onError([](std::exception_ptr const&) {});
+    }
+    h.settle();
+    CHECK(answered == 300);
+    CHECK(h.client.count("load") == 2);
+}
+
+// Mutation: segments cut by byte, not by UTF-8 sequence (a segment ends inside the micro sign).
+TEST_CASE("table state: a segment never ends inside a UTF-8 sequence", "[ui][state]") {
+    std::string text(29, 'a');
+    text += "\xC2\xB5";  // straddles the first segment's 30-byte budget
+    text += std::string(27, 'b');
+    text += "\xF0\x9F\x98\x80";  // a four-byte character across the second
+    text += "tail";
+    auto const segments = ui::detail::segmentText(text, 32);
+    REQUIRE(segments.size() > 2);
+    std::string whole;
+    for (auto const& segment : segments) {
+        CHECK(segment.size() <= 32);
+        std::string decoded;
+        REQUIRE_FALSE(glz::read_json(decoded, segment));
+        CHECK(wellFormed(decoded));
+        whole += decoded;
+    }
+    CHECK(whole == text);
+}
+
+// Mutation: a document of exactly segmentBytes written as segments (`>=` for `>`).
+TEST_CASE("table state: a document of exactly 12 KiB is its head, one byte more is segments", "[ui][state]") {
+    StoreFixture h;
+    REQUIRE(save(h, kKey, docOf(12 * 1024)).outcome == table::SaveOutcome::Saved);
+    CHECK(h.prefs.pointsUnder(scopeOf(kKey)) == std::set<std::string>{"state"});
+    CHECK(load(h, kKey)->json == docOf(12 * 1024));
+    REQUIRE(save(h, kKey, docOf(12 * 1024 + 1)).outcome == table::SaveOutcome::Saved);
+    CHECK(headOf(h.prefs, kKey).segments == std::optional<std::uint64_t>{2});
+    CHECK(load(h, kKey)->json == docOf(12 * 1024 + 1));
+}
+
+// Mutation: no refusal of a `.` in `part` ("state.pending" is stored, over the intent point of "state").
+TEST_CASE("table state: a part holding a dot is refused", "[ui][state]") {
+    StoreFixture h;
+    CHECK_THROWS(save(h, partOf("state.pending"), "{}"));
+    CHECK_FALSE(h.prefs.has(pendingPoint(kKey)));
 }

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
+#include <algorithm>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
@@ -39,9 +40,10 @@ namespace morph::ui {
 ///        preferences store under the person the server verified.
 ///
 /// Every call is made, and every completion delivered, on the owner. Loads asked for in one turn of the owner go out
-/// as one `load` call; a document longer than the head the server answers is completed with `read` calls by offset,
-/// started again when its revision changes meanwhile. A document over a part's size is saved as parts under one
-/// upload id.
+/// as one `load` call per `kMaxTableStateKeys` keys, and a key a full reply defers is asked for in the next call, so
+/// one table's state never fails another's load; a document longer than the head the server answers is completed with
+/// `read` calls by offset, started again when its revision changes meanwhile. A document over a part's size is saved
+/// as parts under one upload id.
 class PreferencesTableStateStore final : public table::ITableStateStore {
 public:
     /// @brief A store calling through @p dispatcher.
@@ -136,7 +138,7 @@ public:
 
 private:
     /// The most bytes one `save` part carries: the server's default part size.
-    static constexpr std::size_t kPartBytes = TableStateOptions{}.partBytes;
+    static constexpr std::size_t kPartBytes = kTableStatePartBytes;
     /// How often one load starts again because the document changed while it was read.
     static constexpr int kMaxRestarts = 8;
 
@@ -173,12 +175,18 @@ private:
         }
     }
 
+    /// Sends the turn's loads, in calls of at most `kMaxTableStateKeys` keys.
     void flushLoads() {
-        auto batch = std::make_shared<std::vector<std::shared_ptr<Reading>>>(std::move(_batch));
+        std::vector<std::shared_ptr<Reading>> all = std::move(_batch);
         _batch.clear();
-        if (batch->empty()) {
-            return;
+        for (std::size_t first = 0; first < all.size(); first += kMaxTableStateKeys) {
+            auto const last = std::min(all.size(), first + kMaxTableStateKeys);
+            sendLoads(std::make_shared<std::vector<std::shared_ptr<Reading>>>(
+                all.begin() + static_cast<std::ptrdiff_t>(first), all.begin() + static_cast<std::ptrdiff_t>(last)));
         }
+    }
+
+    void sendLoads(std::shared_ptr<std::vector<std::shared_ptr<Reading>>> batch) {
         TableStateLoad request;
         for (auto const& reading : *batch) {
             request.keys.push_back(reading->key);
@@ -213,6 +221,10 @@ private:
     }
 
     void start(std::shared_ptr<Reading> const& reading, TableStateHead head) {
+        if (head.deferred) {
+            queue(reading);  // the reply was full: asked for again in the next call
+            return;
+        }
         if (!head.error.empty()) {
             reading->promise.reject(std::make_exception_ptr(std::runtime_error{head.error}));
             return;

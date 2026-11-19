@@ -896,7 +896,9 @@ TEST_CASE("table state: the person is the store's", "[net][tables][state]") {
     // A body naming another person is read with that member ignored.
     std::string const naming = keys.substr(0, keys.size() - 1) + R"(,"person":"bob"})";
     CHECK(loadedText(alice, aliceState, naming) == R"({"version":1,"view":"alice's"})");
-    // Mutation: the model keying by a body member (alice's load naming bob reads bob's state).
+    // Mutation: the model keying by a body member (alice's load naming bob reads bob's state). Not run: this case is
+    // in morph_net_tests, which builds only on POSIX, and has been neither built nor run; its in-process twin in
+    // tests/test_ui_table_state.cpp has, with this mutation.
 }
 
 TEST_CASE("shared views: a view published over a socket is read by a second client", "[net][tables][state]") {
