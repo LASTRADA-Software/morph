@@ -41,6 +41,7 @@
 #include <morph/ui/locale_table.hpp>
 #include <morph/ui/message.hpp>
 #include <morph/ui/mount.hpp>
+#include <morph/ui/table_state.hpp>
 #include <morph/ui/value.hpp>
 #include <morph/ui/view.hpp>
 #include <optional>
@@ -189,6 +190,14 @@ std::expected<Value, std::string> tableValueFromJson(Json const& json) {
 }
 
 }  // namespace detail
+
+std::shared_ptr<TableStates> detail::makeTableStates(reactive::Runtime& runtime, SessionOptions const& options) {
+    if (options.tableState == nullptr) {
+        return nullptr;
+    }
+    return std::make_shared<TableStates>(options.tableState, runtime.owner(), options.scheduler,
+                                         options.tableStateDebounce);
+}
 
 Session::~Session() {
     if (_watchRegistry) {

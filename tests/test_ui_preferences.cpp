@@ -177,3 +177,23 @@ TEST_CASE("preferences: run outside any dispatch, the model has no person", "[ui
     CHECK(seen.refusal->contains("signed-in person"));
     CHECK(store->calls().empty());
 }
+
+// Mutation: no reservation in the preferences model (the first call answers "ok" and the store records a `set`).
+TEST_CASE("preferences: the names table state keeps are refused", "[ui][preferences][remote]") {
+    Server server;
+    std::string const scope = "morph.table.0123456789abcdef0123456789abcdef";
+    // The quota's usage entry.
+    CHECK(server
+              .call("set",
+                    R"({"app":"morph.tableState","scope":"morph.table","point":"usage","value":"{\"bytes\":0}"})",
+                    "alice")
+              .kind != "ok");
+    CHECK(server.call("set", R"({"app":"lims","scope":")" + scope + R"(","point":"state","value":"{}"})", "alice")
+              .kind != "ok");
+    CHECK(server.call("remove", R"({"app":"lims","scope":")" + scope + R"(","point":"state"})", "alice").kind != "ok");
+    CHECK(server.call("load", R"({"app":"lims","scope":")" + scope + R"(","points":["state"]})", "alice").kind !=
+          "ok");
+    CHECK(server.store->calls().empty());  // nothing reached the store
+    CHECK(server.call("set", R"({"app":"lims","scope":"lims.results","point":"density","value":"1"})", "alice").kind ==
+          "ok");
+}

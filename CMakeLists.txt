@@ -729,6 +729,8 @@ target_sources(morph
         include/morph/ui/chat/transcriber.hpp
         include/morph/ui/preferences.hpp
         include/morph/ui/preference_sync.hpp
+        include/morph/ui/table_state_model.hpp
+        include/morph/ui/table_state.hpp
         include/morph/ui/host_vocabulary.hpp
         include/morph/ui/catalogue.hpp
         include/morph/ui/chart_scale.hpp

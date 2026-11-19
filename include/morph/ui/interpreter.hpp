@@ -75,9 +75,15 @@ struct FormSessionOptions;
 struct FormViewOptions;
 }  // namespace forms
 
+namespace table {
+class ITableStateStore;
+}  // namespace table
+
 }  // namespace morph
 
 namespace morph::ui {
+
+class TableStates;
 
 class Mounted;
 struct ChartRange;
@@ -406,9 +412,29 @@ struct SessionOptions {
     ///        after change events, waited for on `scheduler` and measured on `clock`: the first goes at once, the
     ///        next no sooner than this after it, whatever the number of events between.
     std::chrono::milliseconds tableAwaitedRefetch{250};
+    /// @brief Where every table's persisted state is loaded from and saved to; with none, a table keeps its state
+    ///        for as long as it is mounted. `PreferencesTableStateStore` keeps it in the application's preferences
+    ///        store.
+    std::shared_ptr<table::ITableStateStore> tableState;
+    /// @brief How long a table waits for its stored state before its first query; past it the table starts from its
+    ///        defaults.
+    std::chrono::milliseconds tableStateTimeout{300};
+    /// @brief How long a table's arrangement must stay unchanged before its state is saved, waited for on
+    ///        `scheduler`; without one every change saves at once.
+    std::chrono::milliseconds tableStateDebounce{500};
+    /// @brief The application's id: the `application` of every table-state key.
+    std::string application;
 };
 
 namespace detail {
+
+/// @brief The table states of a session built with @p options: over `tableState`, debounced by `tableStateDebounce`
+///        on `scheduler`.
+/// @param runtime The session's runtime, whose owner the states answer on.
+/// @param options The session's options.
+/// @return They; `nullptr` without a `tableState`.
+[[nodiscard]] MORPH_API std::shared_ptr<TableStates> makeTableStates(reactive::Runtime& runtime,
+                                                                     SessionOptions const& options);
 
 /// @brief The text of a failure.
 /// @param error The failure.
@@ -652,7 +678,8 @@ public:
           _hostValues{runtime},
           _hostCommandNames{runtime},
           _hostScopesRevision{runtime, 0},
-          _contextOffered{runtime, false} {}
+          _contextOffered{runtime, false},
+          _tableStates{detail::makeTableStates(runtime, _options)} {}
 
     Session(Session const&) = delete;
     Session& operator=(Session const&) = delete;
@@ -667,6 +694,10 @@ public:
     /// @brief The options.
     /// @return They.
     [[nodiscard]] SessionOptions const& options() const noexcept { return _options; }
+
+    /// @brief The table states the session keeps, loads and saves through `SessionOptions::tableState`.
+    /// @return They; `nullptr` when the session has no store.
+    [[nodiscard]] TableStates* tableStates() const noexcept { return _tableStates.get(); }
 
     /// @brief Sets the action ids the principal may run, as the catalog reply lists them; `{"can": ...}` follows them.
     /// @param permitted The ids.
@@ -1144,6 +1175,8 @@ private:
     int _userDepth = 0;
     bool _lastWriteUser = false;
     std::uint64_t _privateTokens = 0;
+    /// After everything a save or load reaches, so it is destroyed first.
+    std::shared_ptr<TableStates> _tableStates;
 };
 // ---------------------------------------------------------------------------------------------------------------
 // Runtime structures
