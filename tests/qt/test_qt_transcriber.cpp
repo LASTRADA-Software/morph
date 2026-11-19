@@ -127,6 +127,17 @@ TEST_CASE("qt_transcriber_fails_with_the_providers_message_not_the_key", "[qt][d
     CHECK_FALSE(rig.done->error().contains(kKey));
 }
 
+// Mutation: relay the provider's message as it came.
+TEST_CASE("qt_transcriber_scrubs_the_key_from_a_providers_message", "[qt][dictation]") {
+    std::string const body = R"({"error":{"message":"invalid key )" + std::string{kKey} + R"( for this account"}})";
+    Rig rig{jsonAnswer(401, "Unauthorized", body)};
+    static_cast<void>(rig.call());
+    rig.finish();
+    REQUIRE_FALSE(rig.done->has_value());
+    CHECK(rig.done->error().contains("invalid key"));
+    CHECK_FALSE(rig.done->error().contains(kKey));
+}
+
 // Mutation: answer an unreadable body with an empty text.
 TEST_CASE("qt_transcriber_fails_on_an_unreadable_answer", "[qt][dictation]") {
     Rig rig{jsonAnswer(200, "OK", "not json")};

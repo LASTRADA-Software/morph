@@ -152,7 +152,8 @@ provider. Its one name is `openai-transcriptions`: a multipart `POST` to `{baseU
 `text`. A non-2xx answer fails with the status and the provider's `error.message` when it has one, never with the
 request; an answer without a `text` fails as unreadable. `cancel` aborts the reply. A deployment that keeps audio on its
 own network points `baseUrl` at its own server; an empty `baseUrl` is `https://api.openai.com`. `model` and the key have
-no default, and the key appears in no log and no message.
+no default, and the key appears in no log and no message: a reason that carries the key, such as a provider echoing it in
+its error text, has it replaced before it is relayed.
 
 ## Configuration
 
@@ -293,12 +294,16 @@ asking (no input device), `start(limits)` asks for permission where the platform
 failed `onStarted` and an `onClip`; a `stop` before recording began is answered by an `onClip` error. A clip is 16 kHz
 mono 16-bit whatever the device offers, so its size is a function of its length alone: `SpeechResampler` averages the
 channels and the samples each output sample spans, `DictationClip` stops at `maxSeconds` or before the WAV would pass
-`maxBytes`, and `wavFromPcm16` writes the 44-byte header. At this format 60 s is 1,920,044 bytes, 2,560,060 in base64.
+`maxBytes` (a `maxBytes` below the 44-byte header holds no sample and gives the bare header), and `wavFromPcm16` writes the 44-byte header. At this format 60 s is 1,920,044 bytes, 2,560,060 in base64.
 `morph::qt::QtDictationRecorder` is the Qt one, in `morph_qt`, built when `Qt6::Multimedia` 6.2 or later is found
-(`MORPH_ENABLE_DICTATION`, ON when it is; ON without it is refused at configure time): `QAudioSource` on the owner thread
-at the device's preferred format. Microphone permission is asked through `QMicrophonePermission` from Qt 6.5; on an older
-Qt the platform's own prompt, where there is one, appears when the device opens. Audio stays in memory and is never
-written to disk.
+(`MORPH_ENABLE_DICTATION`, ON when it is; ON without it, or without `MORPH_BUILD_QT`, is refused at configure time):
+`QAudioSource` on the owner thread at the device's preferred format. A `start` while a recording runs or waits for
+permission fails its own `onStarted` with "a recording is already running" and changes nothing. Microphone permission
+is asked through `QMicrophonePermission` where the Qt has permissions (6.5 and later); on an older Qt the platform's own
+prompt, where there is one, appears when the device opens. The recorder takes its input and its permission question as
+`QtDictationOptions`, so its behaviour on a stream is tested without hardware; the input's `keepAlive` is released from the
+event loop of the recorder's thread after the clip is delivered, never from inside the device's `readyRead`, so the
+device is stopped and destroyed outside its own emission. Audio stays in memory and is never written to disk.
 
 ## The client
 

@@ -35,6 +35,8 @@ using ui::Json;
 // A transcription makes no progress for this long before it is given up on; the service's own deadline is shorter.
 constexpr int kTransferTimeoutMs = 120000;
 
+constexpr std::string_view kRedacted = "[redacted]";
+
 constexpr std::string_view kPublicAddress = "https://api.openai.com";
 
 [[nodiscard]] Json const* memberOf(Json const& value, std::string_view key) {
@@ -71,7 +73,8 @@ constexpr std::string_view kPublicAddress = "https://api.openai.com";
 // One transcription. Runs on the owner's thread, except `cancel`.
 class Call final : public chat::ITranscriberCall, public std::enable_shared_from_this<Call> {
 public:
-    Call(QPointer<QObject> owner, chat::TranscriberSink sink) : _owner{std::move(owner)}, _sink{std::move(sink)} {}
+    Call(QPointer<QObject> owner, chat::TranscriberSink sink, std::string secret)
+        : _owner{std::move(owner)}, _sink{std::move(sink)}, _secret{std::move(secret)} {}
 
     void cancel() override {
         _cancelled.store(true);
@@ -98,11 +101,23 @@ public:
         }
         _ended = true;
         if (!_cancelled.load() && _sink.done) {
-            _sink.done(std::unexpected(std::move(reason)));
+            _sink.done(std::unexpected(scrubbed(std::move(reason))));
         }
     }
 
 private:
+    // A provider's message is relayed to the person, and a misbehaving one may echo the credential it was sent.
+    [[nodiscard]] std::string scrubbed(std::string text) const {
+        if (_secret.empty()) {
+            return text;
+        }
+        for (auto at = text.find(_secret); at != std::string::npos; at = text.find(_secret, at)) {
+            text.replace(at, _secret.size(), kRedacted);
+            at += kRedacted.size();
+        }
+        return text;
+    }
+
     void abort() {
         _ended = true;
         if (_reply != nullptr) {
@@ -153,6 +168,7 @@ private:
 
     QPointer<QObject> _owner;
     chat::TranscriberSink _sink;
+    std::string _secret;
     QPointer<QNetworkReply> _reply;
     std::atomic<bool> _cancelled{false};
     bool _ended = false;
@@ -169,7 +185,7 @@ public:
 
     [[nodiscard]] std::shared_ptr<chat::ITranscriberCall> transcribe(chat::TranscriptionInput input,
                                                                      chat::TranscriberSink sink) override {
-        auto call = std::make_shared<Call>(_owner, std::move(sink));
+        auto call = std::make_shared<Call>(_owner, std::move(sink), _config.apiKey);
         QPointer<QObject> const owner = _owner;
         if (owner == nullptr) {
             call->fail("the transcription provider has shut down");

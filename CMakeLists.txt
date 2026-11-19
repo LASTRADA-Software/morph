@@ -1211,6 +1211,9 @@ if(MORPH_BUILD_LOAD_TESTS)
 endif()
 
 # ── Qt WebSocket backend (optional) ─────────────────────────────────────────
+if(MORPH_ENABLE_DICTATION AND NOT MORPH_BUILD_QT)
+    message(FATAL_ERROR "MORPH_ENABLE_DICTATION=ON needs MORPH_BUILD_QT=ON: the recorder is part of morph_qt.")
+endif()
 if(MORPH_BUILD_QT)
     find_package(Qt6 COMPONENTS Network WebSockets REQUIRED)
 

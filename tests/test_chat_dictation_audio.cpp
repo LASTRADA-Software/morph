@@ -3,6 +3,7 @@
 // What a dictated clip is made of: 16 kHz mono 16-bit PCM in a WAV container, resampled from whatever the device
 // gives, and stopped at the server's bounds.
 
+#include <algorithm>
 #include <array>
 #include <catch2/catch_test_macros.hpp>
 #include <chrono>
@@ -128,4 +129,24 @@ TEST_CASE("chat_audio_clip_stops_at_its_time_bound", "[chat][dictation]") {
     CHECK(clip.elapsed(start + 1500ms) == 1s);
     CHECK(clip.append({}, start + 2s) == chat::ClipState::Full);
     CHECK(clip.samples() == 10);
+}
+
+// Mutation: floor the position as a double, or interpolate from the wrong neighbour.
+TEST_CASE("chat_audio_resample_up_from_8k_interpolates_and_chunks_alike", "[chat][dictation]") {
+    std::vector<float> const input{0.0F, 0.25F, 0.5F, 0.75F, 1.0F, 0.0F, -1.0F, 0.5F};
+    std::vector<std::int16_t> const whole = chat::resampleToSpeech(input, 1, 8000);
+    REQUIRE(whole.size() == 2 * (input.size() - 1));
+    for (std::size_t index = 0; index < whole.size(); ++index) {
+        std::size_t const low = index / 2;
+        float const expected = (index % 2 == 0) ? input.at(low) : (input.at(low) + input.at(low + 1)) / 2.0F;
+        CHECK(whole.at(index) == static_cast<std::int16_t>(std::lround(expected * 32767.0F)));
+    }
+    chat::SpeechResampler chunked{1, 8000};
+    std::vector<std::int16_t> pieces;
+    for (std::size_t at = 0; at < input.size(); at += 3) {
+        std::size_t const count = std::min<std::size_t>(3, input.size() - at);
+        auto const out = chunked.push(std::span<float const>{input}.subspan(at, count));
+        pieces.insert(pieces.end(), out.begin(), out.end());
+    }
+    CHECK(pieces == whole);
 }

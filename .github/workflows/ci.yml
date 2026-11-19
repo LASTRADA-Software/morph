@@ -763,7 +763,7 @@ jobs:
         uses: jurplel/install-qt-action@v4.3.1
         with:
           version: ${{ env.QT_VERSION }}
-          modules: qtwebsockets
+          modules: qtwebsockets qtmultimedia
           cache: true
 
       - name: Set up sccache
@@ -880,14 +880,14 @@ jobs:
           key: cpm-${{ runner.os }}-${{ hashFiles('cmake/CPM.cmake', '**/CMakeLists.txt') }}
           restore-keys: cpm-${{ runner.os }}-
 
-      - name: Install GCC 15, ninja, catch2, Qt6 WebSockets
+      - name: Install GCC 15, ninja, catch2, Qt6 WebSockets and Multimedia
         run: |
           sudo apt-get update -q
           sudo apt-get install -y software-properties-common
           sudo add-apt-repository -y ppa:ubuntu-toolchain-r/test
           sudo apt-get update -q
           sudo apt-get install -y gcc-15 g++-15 ninja-build catch2 \
-            qt6-base-dev qt6-websockets-dev qt6-tools-dev libgl1-mesa-dev
+            qt6-base-dev qt6-websockets-dev qt6-multimedia-dev qt6-tools-dev libgl1-mesa-dev
           sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-15 15
           sudo update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-15 15
 
@@ -1163,7 +1163,7 @@ jobs:
         uses: jurplel/install-qt-action@v4.3.1
         with:
           version: ${{ env.QT_VERSION }}
-          modules: qtwebsockets
+          modules: qtwebsockets qtmultimedia
           cache: true
 
       # Skipped on the self-hosted path, which caches through pace-cc:
@@ -1501,7 +1501,7 @@ jobs:
         uses: jurplel/install-qt-action@v4.3.1
         with:
           version: ${{ env.QT_VERSION }}
-          modules: qtwebsockets
+          modules: qtwebsockets qtmultimedia
           cache: true
 
       # Skipped on the self-hosted path, which caches through pace-cc:
@@ -1857,7 +1857,7 @@ jobs:
         uses: jurplel/install-qt-action@v4.3.1
         with:
           version: ${{ env.QT_VERSION }}
-          modules: qtwebsockets
+          modules: qtwebsockets qtmultimedia
           cache: true
 
       # Every optional feature is ON here purely so its sources land in

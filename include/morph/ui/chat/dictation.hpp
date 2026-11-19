@@ -108,10 +108,10 @@ public:
 
 /// @brief Turns a device's samples, at any rate and channel count, into 16 kHz mono 16-bit, one chunk at a time.
 ///
-/// Channels are averaged. Down-sampling averages the input samples one output sample spans, a box filter that keeps
-/// most of what lies above the new Nyquist frequency out; up-sampling interpolates between neighbours. Every position
-/// is computed from the output sample's index and the samples consumed, never accumulated, so chunks give exactly what
-/// one pass would.
+/// Channels are averaged. Down-sampling averages the input samples one output sample spans, a box filter that
+/// attenuates most of what lies above the new Nyquist frequency; up-sampling interpolates between neighbours. Every
+/// position is computed in integers from the output sample's index and the samples consumed, never accumulated, so
+/// chunks give exactly what one pass would.
 class SpeechResampler {
 public:
     /// @brief A resampler for one device format.
@@ -119,7 +119,7 @@ public:
     /// @param sampleRate The device's sample rate; less than 1 counts as `kSpeechSampleRate`.
     SpeechResampler(int channels, int sampleRate)  // NOLINT(bugprone-easily-swappable-parameters)
         : _channels{static_cast<std::size_t>(std::max(channels, 1))},
-          _step{static_cast<double>(sampleRate > 0 ? sampleRate : kSpeechSampleRate) / kSpeechSampleRate} {}
+          _rate{static_cast<std::uint64_t>(sampleRate > 0 ? sampleRate : kSpeechSampleRate)} {}
 
     /// @brief Takes the next chunk.
     /// @param interleaved Samples in [-1, 1], frame by frame; a trailing partial frame is ignored.
@@ -144,19 +144,19 @@ public:
     }
 
 private:
+    static constexpr auto kSpeechRate = static_cast<std::uint64_t>(kSpeechSampleRate);
+
     // Where output sample @p index starts, counted in input samples from the first one ever pushed.
-    [[nodiscard]] std::uint64_t startOf(std::uint64_t const index) const {
-        return static_cast<std::uint64_t>(std::floor(static_cast<double>(index) * _step));
-    }
+    [[nodiscard]] std::uint64_t startOf(std::uint64_t const index) const { return index * _rate / kSpeechRate; }
 
     [[nodiscard]] bool ready() const {
         std::uint64_t const available = _consumed + _pending.size();
-        return _step >= 1.0 ? startOf(_produced + 1) <= available : startOf(_produced) + 1 < available;
+        return _rate >= kSpeechRate ? startOf(_produced + 1) <= available : startOf(_produced) + 1 < available;
     }
 
     [[nodiscard]] float next() const {
         auto const first = static_cast<std::size_t>(startOf(_produced) - _consumed);
-        if (_step >= 1.0) {
+        if (_rate >= kSpeechRate) {
             auto const end = std::max(static_cast<std::size_t>(startOf(_produced + 1) - _consumed), first + 1);
             float sum = 0.0F;
             for (std::size_t index = first; index < end; ++index) {
@@ -164,8 +164,7 @@ private:
             }
             return sum / static_cast<float>(end - first);
         }
-        double const position = static_cast<double>(_produced) * _step;
-        auto const fraction = static_cast<float>(position - std::floor(position));
+        auto const fraction = static_cast<float>((_produced * _rate) % kSpeechRate) / static_cast<float>(kSpeechRate);
         return _pending.at(first) + ((_pending.at(first + 1) - _pending.at(first)) * fraction);
     }
 
@@ -174,7 +173,7 @@ private:
     }
 
     std::size_t _channels;
-    double _step;
+    std::uint64_t _rate;
     std::uint64_t _produced = 0;
     std::uint64_t _consumed = 0;
     std::vector<float> _pending;
@@ -236,7 +235,8 @@ public:
     [[nodiscard]] std::size_t samples() const noexcept { return _samples.size(); }
 
     /// @brief The clip as a WAV file.
-    /// @return Its bytes, at most `DictationLimits::maxBytes`.
+    /// @return Its bytes: at most `DictationLimits::maxBytes`, or just the header when that bound is smaller than the
+    ///         header, which holds no sample.
     [[nodiscard]] std::string wav() const { return wavFromPcm16(_samples); }
 
 private:

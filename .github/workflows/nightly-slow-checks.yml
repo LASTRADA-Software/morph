@@ -176,7 +176,7 @@ jobs:
         uses: jurplel/install-qt-action@v4.3.1
         with:
           version: ${{ env.QT_VERSION }}
-          modules: qtwebsockets
+          modules: qtwebsockets qtmultimedia
           cache: true
 
       - name: Set up sccache
