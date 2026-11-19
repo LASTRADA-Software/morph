@@ -1906,3 +1906,34 @@ TEST_CASE("qt_quick table: a virtualized table realizes its viewport at mount an
     CHECK(tableItem.property("realizedCount").toInt() > small);
     CHECK(tableItem.property("realizedCount").toInt() >= rowsToFill(tableItem, *flick));
 }
+
+// Mutation: drop MorphTable.qml's report on a change of totalRows and its viewport's height.
+TEST_CASE("qt_quick table: rows that arrive after the mount fill the viewport without a scroll", "[qt_quick]") {
+    Scene scene;
+    auto const make = [](std::int64_t count) {
+        std::vector<VirtualRow> rows;
+        for (std::int64_t i = 0; i < count; ++i) {
+            rows.push_back(VirtualRow{.id = i, .name = "row-" + std::to_string(i)});
+        }
+        return rows;
+    };
+    morph::reactive::Signal<std::vector<VirtualRow>> rows{scene.runtime(), make(3)};
+    ui::Mounted const mounted{scene.runtime(), scene.backend(),
+                              ui::table<VirtualRow>(
+                                  {{.label = "Name"}}, [&rows] { return rows.get(); },
+                                  [](VirtualRow const& row) { return ui::Key{row.id}; }, virtualRowCell,
+                                  {.virtualize = {.threshold = 5, .overscan = 1},
+                                   .common = {.layout = {.height = ui::Sizing::fixed(20)}}})};
+    scene.settle();
+    QQuickItem const& tableItem = Scene::itemOf(mounted.root());
+    auto* const flick = tableItem.findChild<QQuickItem*>(QStringLiteral("flick"));
+    REQUIRE(flick != nullptr);
+    CHECK(tableItem.property("totalRows").toInt() == -1);
+
+    rows.set(make(500));
+    scene.settle();
+    CHECK(tableItem.property("totalRows").toInt() == 500);
+    INFO("flick height " << flick->height() << ", realized " << tableItem.property("realizedCount").toInt());
+    CHECK(flick->height() > 0);
+    CHECK(tableItem.property("realizedCount").toInt() >= rowsToFill(tableItem, *flick));
+}

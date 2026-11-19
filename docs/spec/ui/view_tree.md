@@ -470,7 +470,7 @@ setOnVisibleRangeChanged`), not for every row regardless of scroll position. Thi
 and the signal it reads, kept alive in its own scope for as long as the key exists) survives
 unconditionally, exactly as above, but its *widget* does not — a row outside the realized range has
 no widget at all, and one that scrolls back in is mounted fresh against its already-existing state,
-not resumed. On Qt Quick the table reports its visible range at its first layout and whenever its viewport's height changes, not only on a scroll, counting at most the window's height. A change of the rows or of their order applies the current window again, so the realized rows are always the ones at the window's view positions in the new order, with `setRealizedWindow` told the result. This is a deliberate narrowing, not an unstated exception: a row's widget and its state
+not resumed. On Qt Quick the table reports its visible range at its first layout and whenever its viewport's height changes, not only on a scroll, counting at most the window's height. A change of the rows or of their order applies the current window again, so the realized rows are always the ones at the window's view positions in the new order, with `setRealizedWindow` told the result; a count that falls back below the threshold realizes every row again and tells the backend `setRealizedWindow(0, n, n)`, once. This is a deliberate narrowing, not an unstated exception: a row's widget and its state
 are two separately-owned scopes once virtualization applies, so that releasing the (expensive)
 widget never risks the (cheap) state the row's own signal depends on. A backend that never calls
 `setOnVisibleRangeChanged` (every implementer but a virtualized Qt Quick table) sees no change at

@@ -496,3 +496,54 @@ TEST_CASE("ui::table: above its threshold, only the window's rows get a widget, 
     CHECK(backend.dump().contains("renamed"));
     CHECK_FALSE(backend.dump().contains("text=row-0\n"));
 }
+
+namespace {
+
+std::vector<Item> itemsNamed(std::int64_t count) {
+    std::vector<Item> rows;
+    for (std::int64_t i = 0; i < count; ++i) {
+        rows.push_back(Item{.id = i, .name = "row-" + std::to_string(i)});
+    }
+    return rows;
+}
+
+}  // namespace
+
+// Mutation: leave the window unapplied after a reconcile, or never report the realized extent from the rows Effect.
+TEST_CASE("ui::table: rows that arrive after the mount are windowed and reported", "[ui]") {
+    Owner owner;
+    Runtime runtime{owner};
+    RecordingBackend backend;
+    Signal<std::vector<Item>> items{runtime, itemsNamed(3)};
+    ui::Mounted const mounted{runtime, backend,
+                              ui::table<Item>({{.label = "Name"}}, [&items] { return items.get(); }, keyOf, nameCell,
+                                              {.virtualize = {.threshold = 5, .overscan = 2}})};
+    int const table = backend.idOf(mounted.root());
+    CHECK(backend.prop(table, "realizedWindow").empty());
+    CHECK(backend.dump().contains("text=row-2"));
+
+    items.set(itemsNamed(10));
+    owner.runAll();
+    CHECK(backend.prop(table, "realizedWindow") == "0+2/10");
+    CHECK_FALSE(backend.dump().contains("text=row-5"));
+}
+
+// Mutation: leave the dewindowed rows blank, or the old window reported, once the count drops below the threshold.
+TEST_CASE("ui::table: dropping below the threshold realizes every row and reports them all", "[ui]") {
+    Owner owner;
+    Runtime runtime{owner};
+    RecordingBackend backend;
+    Signal<std::vector<Item>> items{runtime, itemsNamed(10)};
+    ui::Mounted const mounted{runtime, backend,
+                              ui::table<Item>({{.label = "Name"}}, [&items] { return items.get(); }, keyOf, nameCell,
+                                              {.virtualize = {.threshold = 5, .overscan = 2}})};
+    int const table = backend.idOf(mounted.root());
+    REQUIRE(backend.prop(table, "realizedWindow") == "0+2/10");
+
+    items.set(itemsNamed(4));
+    owner.runAll();
+    CHECK(backend.prop(table, "realizedWindow") == "0+4/4");
+    for (int i = 0; i < 4; ++i) {
+        CHECK(backend.dump().contains("text=row-" + std::to_string(i)));
+    }
+}
