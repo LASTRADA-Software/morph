@@ -157,6 +157,8 @@ namespace detail {
 }
 ```
 
+`ui::SortChain` is already declared in `ui/table_config.hpp` (Part E's Task 12a, which landed first) as `using SortChain = table::SortChain;`. Task 9a includes that header and reuses the alias rather than declaring it again.
+
 - `SessionOptions` gains `std::chrono::milliseconds tableSettle{80}`, `std::chrono::milliseconds tableAwaitedRefetch{250}` (this commit) and, in 9c, `std::shared_ptr<table::ITableStateStore> tableState`, `std::chrono::milliseconds tableStateTimeout{300}`, `std::chrono::milliseconds tableStateDebounce{500}`, `std::string application` (the `application` of every table-state key).
 
 Decisions the signatures do not carry:

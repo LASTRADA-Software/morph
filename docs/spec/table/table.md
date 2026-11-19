@@ -1975,8 +1975,9 @@ is in at most one declared group; a declaration that breaks either is refused wh
 
 A user may also form a group: the column chooser has "Group columns…", which offers columns of one kind and asks
 for a name. Such a group is part of the layout (`"groups": [{"id", "label", "columns"}]` in its stored shape) and
-is fitted to the table as the layout is: a column the table lacks leaves the group, and a group left with fewer
-than two columns is dropped, with any filter on it. The column chooser lists the groups a user formed, each with
+is fitted to the table as the layout is: a column the table lacks leaves the group, a column stays only in the
+first group that holds it, and a group left with fewer than two or more than 16 columns, or repeating an earlier
+group's id, is dropped, with any filter on it. The column chooser lists the groups a user formed, each with
 "Remove group", which removes the group and any filter on it.
 
 **The filter.** `GroupFilter` is the engine's filter over several columns, with a name, a quantifier, a mode

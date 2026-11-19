@@ -104,14 +104,91 @@ TEST_CASE("layout gesture: unpinning moves the column after the pinned ones; dra
     CHECK(layout.pinned() == 1);
     CHECK(ui::applyLayoutGesture(layout, columns, ui::Configure::All, ui::MoveColumnTo{"d", 9}).changed);
     CHECK(layout.visible() == std::vector<std::string>{"c", "a", "b", "d"});
+    CHECK(layout.pinned() == 0);  // dropped past the pinned columns
     CHECK(ui::applyLayoutGesture(layout, columns, ui::Configure::Pin, ui::ResizeColumn{"a", 3}).refusal ==
           "This table's columns cannot be resized");
     CHECK(ui::applyLayoutGesture(layout, columns, ui::Configure::None, ui::ResetColumns{}).refusal);
-    CHECK(ui::applyLayoutGesture(layout, columns, ui::Configure::None, ui::FormGroup{"P", {"a", "d"}}).refusal);
-    CHECK(ui::applyLayoutGesture(layout, columns, ui::Configure::None, ui::FormGroup{"P", {"a", "b"}}).changed);
+    // Mutation: forming a group whatever the table allows.
+    CHECK(ui::applyLayoutGesture(layout, columns, ui::Configure::Pin, ui::FormGroup{"P", {"a", "b"}}).refusal ==
+          "This table's columns cannot be moved");
+    CHECK(ui::applyLayoutGesture(layout, columns, ui::Configure::Hide, ui::FormGroup{"P", {"a", "d"}}).refusal ==
+          "A group's columns hold one kind of value");
+    CHECK(ui::applyLayoutGesture(layout, columns, ui::Configure::Hide, ui::FormGroup{"P", {"a"}}).refusal ==
+          "A group has 2 to 16 columns");
+    ui::LayoutResult const ghost =
+        ui::applyLayoutGesture(layout, columns, ui::Configure::Hide, ui::FormGroup{"P", {"a", "ghost"}});
+    CHECK_FALSE(ghost.changed);
+    CHECK_FALSE(ghost.refusal);
+    CHECK(ui::applyLayoutGesture(layout, columns, ui::Configure::Hide, ui::FormGroup{"P", {"a", "b"}}).changed);
+    // Mutation: the already-grouped refusal passed through as the layout's developer text.
+    CHECK(ui::applyLayoutGesture(layout, columns, ui::Configure::Hide, ui::FormGroup{"Q", {"c", "b"}}).refusal ==
+          "B is already in P");
     CHECK(ui::applyLayoutGesture(layout, columns, ui::Configure::None, ui::SetDisplayUnit{"d", "mass", "g"}).changed);
-    CHECK(ui::applyLayoutGesture(layout, columns, ui::Configure::None, ui::RemoveGroup{"g1"}).changed);
+    CHECK(ui::applyLayoutGesture(layout, columns, ui::Configure::Reorder, ui::RemoveGroup{"g1"}).changed);
     CHECK(layout.groups().empty());
+}
+
+// Mutation: HideColumn leaving the pinned count as it was (the next column becomes pinned).
+TEST_CASE("layout gesture: hiding a pinned column unpins no other and pins none", "[ui][table][config]") {
+    table::ColumnLayout layout{{"a", "b", "c", "d"}};
+    std::vector<ui::LayoutColumn> const columns{{"a", "A"}, {"b", "B"}, {"c", "C"}, {"d", "D"}};
+    REQUIRE(ui::applyLayoutGesture(layout, columns, ui::Configure::All, ui::PinColumn{"a"}).changed);
+    // Mutation: a column placed beside itself (pinning the first column with none pinned moves it last).
+    CHECK(layout.visible() == std::vector<std::string>{"a", "b", "c", "d"});
+    REQUIRE(ui::applyLayoutGesture(layout, columns, ui::Configure::All, ui::PinColumn{"b"}).changed);
+    CHECK(ui::applyLayoutGesture(layout, columns, ui::Configure::All, ui::HideColumn{"a"}).changed);
+    CHECK(layout.visible() == std::vector<std::string>{"b", "c", "d"});
+    CHECK(layout.pinned() == 1);
+    CHECK(ui::applyLayoutGesture(layout, columns, ui::Configure::All, ui::HideColumn{"d"}).changed);
+    CHECK(layout.pinned() == 1);
+}
+
+// Mutation: ShowColumn leaving the pinned count as it was (the last pinned column is pushed out).
+TEST_CASE("layout gesture: a column shown among the pinned columns joins them", "[ui][table][config]") {
+    table::ColumnLayout layout{{"a", "b", "c", "d"}};
+    std::vector<ui::LayoutColumn> const columns{{"a", "A"}, {"b", "B"}, {"c", "C"}, {"d", "D"}};
+    REQUIRE(ui::applyLayoutGesture(layout, columns, ui::Configure::All, ui::PinColumn{"a"}).changed);
+    REQUIRE(ui::applyLayoutGesture(layout, columns, ui::Configure::All, ui::PinColumn{"b"}).changed);
+    REQUIRE(ui::applyLayoutGesture(layout, columns, ui::Configure::All, ui::PinColumn{"c"}).changed);
+    REQUIRE(ui::applyLayoutGesture(layout, columns, ui::Configure::All, ui::HideColumn{"b"}).changed);
+    REQUIRE(layout.pinned() == 2);
+    CHECK(ui::applyLayoutGesture(layout, columns, ui::Configure::All, ui::ShowColumn{"b"}).changed);
+    CHECK(layout.visible() == std::vector<std::string>{"a", "b", "c", "d"});
+    CHECK(layout.pinned() == 3);
+    CHECK_FALSE(ui::applyLayoutGesture(layout, columns, ui::Configure::All, ui::ShowColumn{"b"}).changed);
+    CHECK(layout.pinned() == 3);
+}
+
+// Mutation: MoveColumn clamping only to the visible ends (Move left on the first unpinned column pins it).
+TEST_CASE("layout gesture: a move stays on its side of the pin boundary", "[ui][table][config]") {
+    table::ColumnLayout layout{{"a", "b", "c", "d", "e"}};
+    std::vector<ui::LayoutColumn> const columns{{"a", "A"}, {"b", "B"}, {"c", "C"}, {"d", "D"}, {"e", "E"}};
+    layout.setPinned(2);
+    CHECK_FALSE(ui::applyLayoutGesture(layout, columns, ui::Configure::All, ui::MoveColumn{"c", -1}).changed);
+    CHECK_FALSE(ui::applyLayoutGesture(layout, columns, ui::Configure::All, ui::MoveColumn{"b", 1}).changed);
+    CHECK(ui::applyLayoutGesture(layout, columns, ui::Configure::All, ui::MoveColumn{"e", -9}).changed);
+    CHECK(layout.visible() == std::vector<std::string>{"a", "b", "e", "c", "d"});
+    CHECK(ui::applyLayoutGesture(layout, columns, ui::Configure::All, ui::MoveColumn{"a", 9}).changed);
+    CHECK(layout.visible() == std::vector<std::string>{"b", "a", "e", "c", "d"});
+    CHECK(layout.pinned() == 2);
+}
+
+// Mutation: MoveColumnTo leaving the pinned count as it was.
+TEST_CASE("layout gesture: a drag pins a column dropped among the pinned ones and unpins one dropped past them",
+          "[ui][table][config]") {
+    table::ColumnLayout layout{{"a", "b", "c", "d"}};
+    std::vector<ui::LayoutColumn> const columns{{"a", "A"}, {"b", "B"}, {"c", "C"}, {"d", "D"}};
+    layout.setPinned(2);
+    CHECK(ui::applyLayoutGesture(layout, columns, ui::Configure::All, ui::MoveColumnTo{"d", 0}).changed);
+    CHECK(layout.visible() == std::vector<std::string>{"d", "a", "b", "c"});
+    CHECK(layout.pinned() == 3);
+    CHECK(ui::applyLayoutGesture(layout, columns, ui::Configure::All, ui::MoveColumnTo{"a", 3}).changed);
+    CHECK(layout.visible() == std::vector<std::string>{"d", "b", "c", "a"});
+    CHECK(layout.pinned() == 2);
+    CHECK(ui::applyLayoutGesture(layout, columns, ui::Configure::All, ui::MoveColumnTo{"c", 2}).changed == false);
+    CHECK(ui::applyLayoutGesture(layout, columns, ui::Configure::All, ui::MoveColumnTo{"b", 2}).changed);
+    CHECK(layout.visible() == std::vector<std::string>{"d", "c", "b", "a"});
+    CHECK(layout.pinned() == 1);  // b dropped past the pinned columns; c, which it passed, stays unpinned
 }
 
 // Mutation: planValueFilter always sending the side the operations reached.
@@ -301,6 +378,27 @@ TEST_CASE("header menu: entries, order and enablement", "[ui][table][config]") {
     hideOnly.allowed = ui::Configure::Hide;
     CHECK(ui::menuEntries(ui::headerMenu(hideOnly)).back().label == "Hide column");
     CHECK(ui::menuEntries(ui::headerMenu(hideOnly)).size() == 9);
+    // Mutation: Move left and Move right enabled across the pin boundary.
+    ui::HeaderMenuInput firstUnpinned = input;  // visible index 1, one pinned column before it
+    firstUnpinned.pinned = 1;
+    CHECK_FALSE(ui::menuEntries(ui::headerMenu(firstUnpinned)).at(8).enabled);
+    CHECK(ui::menuEntries(ui::headerMenu(firstUnpinned)).at(9).enabled);
+    ui::HeaderMenuInput lastPinned = input;  // visible index 1 of two pinned columns
+    lastPinned.pinned = 2;
+    std::vector<ui::MenuEntry> const lastPinnedEntries = ui::menuEntries(ui::headerMenu(lastPinned));
+    CHECK(lastPinnedEntries.at(8).enabled);
+    CHECK_FALSE(lastPinnedEntries.at(9).enabled);
+    CHECK(lastPinnedEntries.at(10).label == "Unpin");
+    ui::HeaderMenuInput ends = input;
+    ends.visibleIndex = 0;
+    ends.visibleCount = 1;
+    ends.sortPlace = std::nullopt;
+    ends.chainSize = 8;
+    std::vector<ui::MenuEntry> const endEntries = ui::menuEntries(ui::headerMenu(ends));
+    CHECK_FALSE(endEntries.at(2).enabled);  // the chain is at its bound
+    CHECK_FALSE(endEntries.at(8).enabled);
+    CHECK_FALSE(endEntries.at(9).enabled);
+    CHECK_FALSE(endEntries.at(11).enabled);  // the only visible column
     // Mutation: the Display unit submenu drawn with no check on the chosen unit.
     ui::HeaderMenuInput measure = input;
     measure.column = {"weight", "Weight", false, table::ColumnKind::Decimal};
@@ -328,6 +426,15 @@ TEST_CASE("header menu: entries, order and enablement", "[ui][table][config]") {
                                                   "Copy", "Copy with headers"});
     CHECK_FALSE(table.at(2).enabled);
     CHECK(table.at(5).keys == "Ctrl+C");
+    std::vector<ui::MenuEntry> const fixed = ui::menuEntries(
+        ui::tableMenu({.anyFilter = true, .groups = {{"company", "Company", 3}}, .allowed = ui::Configure::None}));
+    std::vector<std::string> fixedLabels;
+    for (ui::MenuEntry const& entry : fixed) {
+        fixedLabels.push_back(entry.separator ? "-" : entry.label);
+    }
+    CHECK(fixedLabels == std::vector<std::string>{"Sort…", "Filter Company, 3 columns…", "Clear all filters", "-",
+                                                  "Copy", "Copy with headers"});
+    CHECK(fixed.at(2).enabled);
 }
 
 // Mutation: copyText replacing "\r\n" with two spaces.
