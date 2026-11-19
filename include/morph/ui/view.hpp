@@ -27,6 +27,7 @@
 #include "input_emphasis.hpp"
 #include "page_layout.hpp"
 #include "text_align.hpp"
+#include "value.hpp"
 
 /// @file
 /// @brief The toolkit-agnostic view tree: props, node kinds and their builders.
@@ -1213,8 +1214,77 @@ struct ForEach {
     bool divided = false;
 };
 
+class TableRows;
+
+/// @brief Whether a cell's value is here, for a table mounted over a `TableSource`: read from the row's
+///        `TableRows::unloadedLevels` and the level of the cell's column.
+enum class CellLoad : std::uint8_t {
+    Loaded,    ///< The value is here, or the column has no level.
+    Unloaded,  ///< The column's level has not loaded for the row: a placeholder of a fixed width.
+    Failed,    ///< The column's level failed to load for the row: an error mark of the same width.
+};
+
+/// @brief A row's own parts beyond its cells, for a table mounted over a `TableSource`: built once per realized row
+///        key, bound in the row's scope. Nothing per cell is carried here.
+struct TableRowLook {
+    /// @brief The row's tone, bound in the row's scope; disengaged for none.
+    std::optional<Prop<std::optional<Tone>>> tone;
+    /// @brief The row's accessible name, bound in the row's scope; disengaged names the row by its key.
+    std::optional<Prop<std::string>> label;
+    /// @brief The cells of this row that cover the rows below, bound in the row's scope; disengaged for none.
+    std::optional<Prop<std::vector<RowSpan>>> spans;
+    /// @brief Non-null: the row is a heading, this node its one cell spanning every column; no cell is built for it.
+    Node heading;
+    /// @brief What the row's parts need kept alive while the row is realized, such as the scope they are bound in;
+    ///        the mount holds it with the row.
+    std::shared_ptr<void const> keep;
+};
+
+/// @brief Where a table's rows come from when they come by view index: the rows, and cells as the mount builds them.
+///
+/// The mount realizes the rows in and near view. A realized row holds a signal the mount keeps equal to its record,
+/// and one cell per column, each with a signal of its own set to the same record: the cell's view is built once from
+/// it, and a change of the row re-evaluates only the cells whose record changed.
+struct TableSource {
+    /// @brief The rows, by view index. Must not be null.
+    std::shared_ptr<TableRows> rows;
+    /// @brief One cell's view for the column at an index into `Table::columns` (which holds every column and does
+    ///        not change with the layout), built once per cell widget from a signal the mount sets to the record of
+    ///        the row the cell shows. Must not be empty.
+    std::function<Node(std::size_t column, reactive::Signal<Value> const& row)> cellView;
+    /// @brief The row's own parts, built once per realized row key from a signal the mount keeps equal to its
+    ///        record; empty for none.
+    std::function<TableRowLook(reactive::Signal<Value> const& row)> rowView;
+    /// @brief Column ids named to every `TableRows::visible` call, whatever the column window holds: what the row's
+    ///        own parts read. The laid-out columns' ids are added to them per call.
+    std::vector<std::string> alwaysFetched;
+    /// @brief Per `Table::columns` index, the level of that column; empty, or an empty entry: the column has none.
+    std::vector<std::string> levels;
+};
+
+/// @brief A table's status line: its counts, the state of its fetches and levels, and the latest message.
+struct TableStatus {
+    /// @brief The leading part: the rows counted, or empty while no total is known.
+    std::string counts;
+    /// @brief A failed level or fetch; empty when none.
+    std::string state;
+    /// @brief Whether the state offers "Retry", which calls `Table::onRetry`.
+    bool retry = false;
+    /// @brief The latest refusal or notice; empty when none.
+    std::string message;
+    /// @brief Whether the line takes space.
+    bool shown = false;
+
+    /// @brief Member-wise equality.
+    /// @param other The status to compare with.
+    /// @return `true` when every member matches.
+    [[nodiscard]] bool operator==(TableStatus const& other) const = default;
+};
+
 /// @brief One column of a `Table`.
 struct TableColumn {
+    /// @brief The column's id; empty for a table built from C++ with no ids.
+    std::string id;
     /// @brief The header caption.
     std::string label;
     /// @brief The column's width request. A `Stretch` column starts from its content (the larger of its header and its
@@ -1282,6 +1352,12 @@ struct Table {
     std::function<void(Key)> onActivate;
     /// @brief Visibility, enablement, layout, drag-and-drop.
     Common common{};
+    /// @brief When set, `rows` is ignored and rows come by view index from the source; set once.
+    std::optional<TableSource> source;
+    /// @brief The status line; the default takes no space.
+    Prop<TableStatus> status;
+    /// @brief Called when the user chooses the status line's "Retry".
+    std::function<void()> onRetry;
 };
 
 /// @brief A date, or a date and time, edited in a display zone and reported as an instant.
@@ -2046,6 +2122,13 @@ struct TableOptions {
     std::function<void(Key)> onActivate;
     /// @brief Visibility, enablement, layout, drag-and-drop of the table.
     Common common{};
+    /// @brief When set, the table's rows come by view index from the source, and the rows a builder is given are
+    ///        ignored.
+    std::optional<TableSource> source;
+    /// @brief The status line; the default takes no space.
+    Prop<TableStatus> status;
+    /// @brief Called when the user chooses the status line's "Retry".
+    std::function<void()> onRetry;
 };
 
 /// @brief What a table's row view builds for one row: its cells, one per column, and its tone.
@@ -2146,6 +2229,41 @@ template <typename RowT>
     spec.onSort = std::move(options.onSort);
     spec.onActivate = std::move(options.onActivate);
     spec.common = std::move(options.common);
+    spec.source = std::move(options.source);
+    spec.status = std::move(options.status);
+    spec.onRetry = std::move(options.onRetry);
+    return detail::makeNode(std::move(spec));
+}
+
+/// @brief A table whose rows come by view index from a `TableSource`: the mount realizes the rows in and near view,
+///        builds each cell from its column's view, and keeps a row's widget when the row moves.
+/// @param columns The columns, in order.
+/// @param source  The rows, the cells and the row's own parts.
+/// @param options Selection, sorting, the status line and `Common`; its `source` is replaced by @p source.
+/// @return The node.
+/// @throws std::invalid_argument when @p source has no rows or no cell view.
+[[nodiscard]] inline Node table(std::vector<TableColumn> columns, TableSource source, TableOptions options = {}) {
+    if (!source.rows || !source.cellView) {
+        throw std::invalid_argument{"ui::table: a table source needs its rows and its cell view"};
+    }
+    Table spec{
+        .columns = std::move(columns),
+        .rows = nullptr,
+        .showHeader = options.showHeader,
+        .virtualize = options.virtualize,
+        .selectionMode = options.selectionMode,
+    };
+    spec.selection = std::move(options.selection);
+    spec.onSelectionChange = std::move(options.onSelectionChange);
+    spec.selectColumn = options.selectColumn;
+    spec.selectAllLabel = std::move(options.selectAllLabel);
+    spec.sort = std::move(options.sort);
+    spec.onSort = std::move(options.onSort);
+    spec.onActivate = std::move(options.onActivate);
+    spec.common = std::move(options.common);
+    spec.source = std::move(source);
+    spec.status = std::move(options.status);
+    spec.onRetry = std::move(options.onRetry);
     return detail::makeNode(std::move(spec));
 }
 

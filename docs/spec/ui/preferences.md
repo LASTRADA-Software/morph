@@ -97,6 +97,12 @@ Checked by the model before the store is called; a request outside them is an `e
 The value bound is the model's, not the store's, so an application's store needs none and every store gets the
 same one.
 
+A table's persisted state is not a preference. It has its own model, `morph.tableState`
+([table.md, Persisted state](../table/table.md#persisted-state)), which keeps it in the same store, in parts and
+under a quota of its own, so `maxValueBytes` does not bound it. The preferences model refuses the names it writes
+under: the application `morph.tableState` and every scope that starts `morph.table` (`` `<name>` is kept for table
+state ``), so no preference overwrites a table's stored state or a person's table-state usage.
+
 ## The client
 
 `PreferenceSync(dispatcher, application, onError)` is the part of an application's `InterpreterHost` that talks to

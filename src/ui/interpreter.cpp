@@ -29,7 +29,12 @@
 #include <morph/reactive/scheduler.hpp>
 #include <morph/reactive/scope.hpp>
 #include <morph/reactive/signal.hpp>
+#include <morph/core/callback_scope.hpp>
 #include <morph/table/data_source.hpp>
+#include <morph/table/description.hpp>
+#include <morph/table/filter.hpp>
+#include <morph/table/state_store.hpp>
+#include <morph/table/view_change.hpp>
 #include <morph/ui/backend.hpp>
 #include <morph/ui/chart_scale.hpp>
 #include <morph/ui/dev_tools.hpp>
@@ -39,6 +44,7 @@
 #include <morph/ui/locale_table.hpp>
 #include <morph/ui/message.hpp>
 #include <morph/ui/mount.hpp>
+#include <morph/ui/table_rows.hpp>
 #include <morph/ui/table_state.hpp>
 #include <morph/ui/value.hpp>
 #include <morph/ui/view.hpp>
@@ -189,7 +195,8 @@ std::expected<Value, std::string> tableValueFromJson(Json const& json) {
 
 }  // namespace detail
 
-std::shared_ptr<TableStates> detail::makeTableStates(reactive::Runtime& runtime, SessionOptions const& options) {
+std::shared_ptr<TableStates> detail::makeTableStates(Session& session, reactive::Runtime& runtime,
+                                                     SessionOptions const& options) {
     if (options.tableState == nullptr) {
         return nullptr;
     }
@@ -199,8 +206,22 @@ std::shared_ptr<TableStates> detail::makeTableStates(reactive::Runtime& runtime,
         preferences != nullptr && options.scheduler != nullptr) {
         preferences->retryOn(*options.scheduler, options.tableStateTimeout);
     }
-    return std::make_shared<TableStates>(options.tableState, runtime.owner(), options.scheduler,
-                                         options.tableStateDebounce);
+    auto states = std::make_shared<TableStates>(options.tableState, runtime.owner(), options.scheduler,
+                                                options.tableStateDebounce);
+    states->onSaveFailed([&session](table::TableStateKey const& key, table::SaveResult const& result) {
+        session.tableSaveFailed(key, result);
+    });
+    return states;
+}
+
+void Session::tableSaveFailed(table::TableStateKey const& key, table::SaveResult const& result) {
+    // A screen a message unmounts is passed over; one it does not stays attached.
+    std::vector<detail::ScreenCore*> const screens = _screens;
+    for (detail::ScreenCore* const screen : screens) {
+        if (std::ranges::find(_screens, screen) != _screens.end()) {
+            screen->tableSaveFailed(key, result);
+        }
+    }
 }
 
 Session::~Session() {
@@ -211,6 +232,177 @@ Session::~Session() {
 }
 
 namespace detail {
+
+/// The rows a model-backed table's mount reads: its `WindowRows`, with what the table hears of them. A change of the
+/// rows, or of their counts and error, bumps the table's version, which its status line, its `empty` content and its
+/// element values read. A `visible` call other than a new mount's first is the user's scroll. The fields the table's
+/// row bindings read and the rows lacked are named to every `visible` call after the mount's own columns.
+class ObservedRows final : public TableRows {
+public:
+    ObservedRows(std::shared_ptr<WindowRows> inner, std::function<void()> changed, std::function<void()> scrolled)
+        : _inner{std::move(inner)}, _changed{std::move(changed)}, _scrolled{std::move(scrolled)} {
+        _inner->onChange([this](table::ViewChange const& change) {
+            if (_handler) {
+                _handler(change);
+            }
+            _changed();
+        });
+        _inner->onStatus([this] { _changed(); });
+    }
+
+    ObservedRows(ObservedRows const&) = delete;
+    ObservedRows& operator=(ObservedRows const&) = delete;
+    ObservedRows(ObservedRows&&) = delete;
+    ObservedRows& operator=(ObservedRows&&) = delete;
+    ~ObservedRows() override {
+        _inner->onChange({});
+        _inner->onStatus({});
+    }
+
+    [[nodiscard]] TableTotal total() const override { return _inner->total(); }
+    [[nodiscard]] std::optional<TableRowRef> row(std::int64_t index) const override { return _inner->row(index); }
+    [[nodiscard]] table::UnloadedLevels unloadedLevels(std::int64_t index) const override {
+        return _inner->unloadedLevels(index);
+    }
+    void visible(std::int64_t first, std::int64_t count, std::span<std::string const> columns) override {
+        _first = first;
+        _count = count;
+        _columns.assign(columns.begin(), columns.end());
+        if (!std::exchange(_mounting, false)) {
+            _scrolled();
+        }
+        send();
+    }
+    async::Completion<std::expected<std::vector<table::RowId>, table::TableError>> keysOf(std::int64_t first,
+                                                                                       std::int64_t count) override {
+        return _inner->keysOf(first, count);
+    }
+    std::expected<void, table::TableError> setSort(SortChain sort) override { return _inner->setSort(std::move(sort)); }
+    std::expected<void, table::TableError> setFilter(table::FilterSpec filter) override {
+        return _inner->setFilter(std::move(filter));
+    }
+    [[nodiscard]] TableCountsView counts() const override { return _inner->counts(); }
+    void onChange(std::function<void(table::ViewChange const&)> handler) override { _handler = std::move(handler); }
+
+    /// The next `visible` call is a new mount's first, not a scroll.
+    void mounting() { _mounting = true; }
+
+    /// Names @p id to every later `visible` call, and fetches it now for the rows in view; an id named already is
+    /// not added again.
+    void fetchAlso(std::span<std::string const> ids) {
+        bool added = false;
+        for (std::string const& id : ids) {
+            if (!std::ranges::contains(_extra, id)) {
+                _extra.push_back(id);
+                added = true;
+            }
+        }
+        if (added) {
+            send();
+        }
+    }
+
+private:
+    void send() {
+        std::vector<std::string> named = _columns;
+        for (std::string const& id : _extra) {
+            if (!std::ranges::contains(named, id)) {
+                named.push_back(id);
+            }
+        }
+        _inner->visible(_first, _count, named);
+    }
+
+    std::shared_ptr<WindowRows> _inner;
+    std::function<void()> _changed;
+    std::function<void()> _scrolled;
+    std::function<void(table::ViewChange const&)> _handler;
+    std::int64_t _first = 0;
+    std::int64_t _count = 0;
+    std::vector<std::string> _columns;
+    std::vector<std::string> _extra;
+    bool _mounting = false;
+};
+
+/// What a model-backed table keeps in its element, across every mount of it: its rows and the query of its
+/// description, the arrangement it gave the rows, its persisted state's key and load, and its status line's message.
+struct ModelTable {
+    explicit ModelTable(reactive::Runtime& runtime)
+        : version{runtime, 0}, revision{runtime, std::string{}}, message{runtime, std::string{}} {}
+
+    ModelTable(ModelTable const&) = delete;
+    ModelTable& operator=(ModelTable const&) = delete;
+    ModelTable(ModelTable&&) = delete;
+    ModelTable& operator=(ModelTable&&) = delete;
+
+    /// A change not yet saved is saved at once: the table is unmounting.
+    ~ModelTable() {
+        if (core != nullptr) {
+            std::erase(core->modelTables, element);
+        }
+        if (states != nullptr && stateKey) {
+            states->flush(*stateKey);
+        }
+    }
+
+    /// Lets the rows send their first query, with the sort and filters set meanwhile; once.
+    void release() {
+        if (std::exchange(waiting, false)) {
+            loadTimer.cancel();
+            window->release();
+        }
+    }
+
+    /// Tells every reader of the rows' counts and error that they may have changed.
+    void bump() { version.set(version.peek() + 1); }
+
+    /// The screen, which lists the table while it lives, and the table's element.
+    ScreenCore* core = nullptr;
+    ElementState* element = nullptr;
+    /// The table's id among its model's tables.
+    std::string id;
+    /// The model's type.
+    std::string modelType;
+    /// The description's key column.
+    std::string keyColumn;
+    /// The query of `Table.<id>.describe`, and its declaration.
+    QueryDecl describeDecl;
+    std::unique_ptr<QueryRuntime> describe;
+    std::shared_ptr<WindowRows> window;
+    std::shared_ptr<ObservedRows> rows;
+    /// Bumped on every change of the rows, their counts or their error.
+    reactive::Signal<std::uint64_t> version;
+    /// The held description's revision; empty while none is held.
+    reactive::Signal<std::string> revision;
+    /// The status line's message.
+    reactive::Signal<std::string> message;
+    reactive::TimerHandle messageTimer;
+    /// Whether the status line takes space; `status: false` sends messages to the host instead.
+    bool statusShown = true;
+    /// The persisted state's key, and the states it is loaded from and saved to; none without persistence.
+    std::optional<table::TableStateKey> stateKey;
+    TableStates* states = nullptr;
+    /// Whether the rows wait for the stored state before their first query.
+    bool waiting = false;
+    reactive::TimerHandle loadTimer;
+    /// Whether the user scrolled, selected or changed the arrangement: a stored state that arrives later is not
+    /// applied over it.
+    bool touched = false;
+    /// The sort and filters the rows were given, so a new description's fitting can name what it drops.
+    SortChain sort;
+    table::FilterSpec filter;
+    /// Whether the document binds the filters: they are neither restored nor saved.
+    bool filtersBound = false;
+    /// The described columns' ids.
+    std::set<std::string, std::less<>> described;
+    /// The fields the row bindings missed this turn; one task fetches them all.
+    std::set<std::string, std::less<>> missing;
+    std::function<void(std::string_view)> onMissing;
+    /// The row scopes `onActivate` runs in, by the row's canonical key.
+    std::map<std::string, std::weak_ptr<RtScope>, std::less<>> rowScopes;
+    /// Last, so it is the first to go: no load, timer or post reaches a half-destroyed table.
+    async::CallbackScope scope;
+};
 
 ElementState::ElementState(reactive::Runtime& runtime)
     : draft{runtime},
@@ -1684,8 +1876,20 @@ Value ScopeEnv::row(std::span<std::string const> path) const {
     if (_row != nullptr) {
         return walk(*_row, path);
     }
-    reactive::Signal<Value> const* const current = _scope->innermostRow();
-    return current == nullptr ? Value{} : walk(current->get(), path);
+    RtScope const* owner = _scope;
+    while (owner != nullptr && owner->row == nullptr) {
+        owner = owner->parent.get();
+    }
+    if (owner == nullptr) {
+        return Value{};
+    }
+    Value const& current = owner->row->get();
+    // A server-mode row holds the columns fetched: a field it lacks is named, to be fetched after this binding.
+    if (owner->onMissingRowField != nullptr && !path.empty() && current.asRecord() != nullptr &&
+        current.field(path.front()) == nullptr) {
+        (*owner->onMissingRowField)(path.front());
+    }
+    return walk(current, path);
 }
 
 void QueryRuntime::invalidate() {
@@ -3309,6 +3513,10 @@ void ScreenCore::wireElement(ElementState& element) {
         wireComposite(element);
         return;
     }
+    if (kind == "table" && !node.name("table").empty()) {
+        wireModelTable(element);
+        return;
+    }
     bool const input = kind == "textInput" || kind == "checkbox" || kind == "select" || kind == "dateTimeInput" ||
                        kind == "slider" || kind == "filePicker";
     if (input) {
@@ -3412,6 +3620,52 @@ namespace {
         return none ? std::int64_t{0} : static_cast<std::int64_t>(view.first + 1);
     }
     return static_cast<std::int64_t>(view.last);
+}
+
+/// @brief A model-backed table's own element values, read from its rows: `viewCount` (the reply's total, `null`
+///        before the first), `viewCountKind` (`exact` or `atLeast`), `undecided`, `awaiting`, `failed`, `pending`
+///        (its description or a fetch in flight) and `error`.
+/// @param table The table.
+/// @param name  The value's name.
+/// @return The value; nothing for a value the table shares with a table over `rows`. Tracked.
+[[nodiscard]] std::optional<Value> modelTableValue(ModelTable const& table, std::string_view name) {
+    static_cast<void>(table.version.get());
+    auto const strings = [](std::vector<std::string> const& list) {
+        ValueList out;
+        for (std::string const& item : list) {
+            out.emplace_back(item);
+        }
+        return Value{std::move(out)};
+    };
+    TableCountsView const counts = table.rows->counts();
+    if (name == "viewCount") {
+        return counts.view.known ? Value{counts.view.rows} : Value{};
+    }
+    if (name == "viewCountKind") {
+        if (!counts.view.known) {
+            return Value{};
+        }
+        return Value{std::string{counts.view.kind == table::TotalKind::AtLeast ? "atLeast" : "exact"}};
+    }
+    if (name == "undecided") {
+        return Value{counts.undecided};
+    }
+    if (name == "awaiting") {
+        return strings(counts.awaiting);
+    }
+    if (name == "failed") {
+        return strings(counts.failed);
+    }
+    if (name == "pending") {
+        return Value{counts.pending || table.describe->pending()};
+    }
+    if (name == "error") {
+        if (auto const& error = table.window->error()) {
+            return Value{error->message};
+        }
+        return table.describe->error();
+    }
+    return std::nullopt;
 }
 
 /// @brief The selected keys of the rows a table holds on pages other than the one shown, in their order: what an
@@ -3788,6 +4042,11 @@ Value ScreenCore::elementValue(ElementState const& element, std::string_view nam
             return element.submitted.get();
         }
         return Value{};
+    }
+    if (kind == "table" && element.modelTable != nullptr && element.modelTable->window != nullptr) {
+        if (std::optional<Value> value = modelTableValue(*element.modelTable, name)) {
+            return std::move(*value);
+        }
     }
     if (kind == "table") {
         if (name == "selection") {
@@ -6756,6 +7015,9 @@ Node ScreenCore::lowerKind(DocNode const& node, LowerCtx const& ctx, ElementStat
         commonOf(node, ctx, element, spec.common);
         return ui::busy(std::move(spec));
     }
+    if (kind == "table" && !node.name("table").empty()) {
+        return lowerModelTable(node, ctx, element);
+    }
     if (kind == "forEach" || kind == "table") {
         return lowerRows(node, ctx, element);
     }
@@ -8049,6 +8311,773 @@ Node ScreenCore::lowerRows(DocNode const& node, LowerCtx const& ctx, ElementStat
                                                 std::move(cellsOf), std::move(options)));
     wrapper.children.push_back(ui::column(std::move(content)));
     return ui::column(std::move(wrapper));
+}
+
+namespace {
+
+/// @brief A sort as a table's element value holds it, a list of `{column, direction}`, as a sort chain; an entry
+///        that names no column is left out.
+/// @param value The list.
+/// @return The chain.
+[[nodiscard]] SortChain sortChainOf(Value const& value) {
+    SortChain chain;
+    ValueList const* const keys = value.asList();
+    if (keys == nullptr) {
+        return chain;
+    }
+    for (Value const& key : *keys) {
+        Value const* const column = key.field("column");
+        if (column == nullptr || column->asString() == nullptr) {
+            continue;
+        }
+        Value const* const direction = key.field("direction");
+        bool const descending =
+            direction != nullptr && direction->asString() != nullptr && *direction->asString() == "desc";
+        chain.push_back(table::SortKey{.column = *column->asString(),
+                                       .dir = descending ? table::SortDirection::Descending
+                                                         : table::SortDirection::Ascending});
+    }
+    return chain;
+}
+
+/// @brief A sort chain as a table's element value holds it.
+/// @param chain The chain.
+/// @return The list of `{column, direction}`.
+[[nodiscard]] Value sortValueOf(SortChain const& chain) {
+    ValueList keys;
+    for (table::SortKey const& key : chain) {
+        ValueRecord entry;
+        entry.insert_or_assign("column", Value{key.column});
+        entry.insert_or_assign(
+            "direction", Value{std::string{key.dir == table::SortDirection::Descending ? "desc" : "asc"}});
+        keys.emplace_back(std::move(entry));
+    }
+    return Value{std::move(keys)};
+}
+
+/// @brief What a table's expressions read of its row: the fields named (`{"row": "id"}`), and whether the row is
+///        read whole (`{"row": ""}` passed on as a value). A path read out of the whole row with `get` is neither:
+///        it is the row's own read, which a binding names at run time.
+struct RowReads {
+    std::set<std::string, std::less<>> ids;
+    bool whole = false;
+};
+
+// NOLINTNEXTLINE(misc-no-recursion): one level per nested expression.
+void rowReadsOf(Expr const& expr, RowReads& out, bool readFrom = false) {
+    if (expr.kind == ExprKind::Row) {
+        if (!expr.fieldPath.empty()) {
+            out.ids.insert(expr.fieldPath.front());
+        } else if (!readFrom) {
+            out.whole = true;
+        }
+        return;
+    }
+    if (expr.kind == ExprKind::Get) {
+        rowReadsOf(*expr.args.at(0), out, true);
+        return;
+    }
+    for (ExprPtr const& arg : expr.args) {
+        if (arg) {
+            rowReadsOf(*arg, out);
+        }
+    }
+    for (auto const& [name, field] : expr.fields) {
+        static_cast<void>(name);
+        if (field) {
+            rowReadsOf(*field, out);
+        }
+    }
+}
+
+// NOLINTNEXTLINE(misc-no-recursion): one level per nested command list.
+void rowReadsOf(Commands const& commands, RowReads& out) {
+    for (Command const& command : commands) {
+        for (ExprPtr const* const expr : {&command.value, &command.extra, &command.mediaType}) {
+            if (*expr) {
+                rowReadsOf(**expr, out);
+            }
+        }
+        rowReadsOf(command.commands, out);
+        rowReadsOf(command.alternative, out);
+    }
+}
+
+// NOLINTNEXTLINE(misc-no-recursion): one level per nested node.
+void rowReadsOf(DocNode const& node, RowReads& out) {
+    for (auto const& [key, expr] : node.props) {
+        static_cast<void>(key);
+        if (expr) {
+            rowReadsOf(*expr, out);
+        }
+    }
+    for (auto const& [key, commands] : node.events) {
+        static_cast<void>(key);
+        rowReadsOf(commands, out);
+    }
+    for (auto const& [key, nodes] : node.children) {
+        static_cast<void>(key);
+        for (DocNodePtr const& child : nodes) {
+            rowReadsOf(*child, out);
+        }
+    }
+    for (auto const& [key, parts] : node.parts) {
+        static_cast<void>(key);
+        for (DocNodePtr const& part : parts) {
+            rowReadsOf(*part, out);
+        }
+    }
+}
+
+/// @brief The status line's words for a level: its id with the first letter raised.
+/// @param level The level's id.
+/// @return The words.
+[[nodiscard]] std::string levelWords(std::string level) {
+    if (!level.empty() && level.front() >= 'a' && level.front() <= 'z') {
+        level.front() = static_cast<char>(level.front() - 'a' + 'A');
+    }
+    return level;
+}
+
+}  // namespace
+
+void ScreenCore::wireModelTable(ElementState& element) {
+    DocNode const& node = *element.node;
+    RtScope& scope = *element.scope;
+    auto made = std::make_unique<ModelTable>(runtime());
+    ModelTable& model = *made;
+    element.modelTable = std::move(made);
+    model.core = this;
+    model.element = &element;
+    modelTables.push_back(&element);
+    NameRef const* const named = scope.find(node.name("model"));
+    ModelAlias* const alias = named != nullptr && named->category == NameCategory::Model ? named->model : nullptr;
+    if (alias == nullptr) {
+        report(node.path, "the table's `model` names no model alias of this scope");
+        return;
+    }
+    model.id = std::string{node.name("table")};
+    model.modelType = alias->decl->type;
+    model.statusShown = node.flag("status", true);
+    std::string qualifier = _doc->id;
+    bool persists = true;
+    if (ExprPtr const persist = node.prop("persist"); persist && persist->kind == ExprKind::Literal) {
+        if (bool const* const flag = persist->literal.asBool()) {
+            persists = *flag;
+        } else if (std::string const* const name = persist->literal.asString()) {
+            qualifier = *name;
+        }
+    }
+    model.states = session.tableStates();
+    if (persists && model.states != nullptr) {
+        model.stateKey = table::TableStateKey{.application = session.options().application,
+                                              .model = model.modelType,
+                                              .table = model.id,
+                                              .qualifier = std::move(qualifier),
+                                              .part = "state"};
+    }
+    model.describeDecl = QueryDecl{.name = {},
+                                   .path = node.path,
+                                   .model = std::string{node.name("model")},
+                                   .action = "Table." + model.id + ".describe",
+                                   .evaluate = false,
+                                   .body = nullptr,
+                                   .when = nullptr,
+                                   .debounce = 0,
+                                   .refreshEvery = 0,
+                                   .staleTime = 0};
+    model.describe = std::make_unique<QueryRuntime>(model.describeDecl, scope, alias);
+    Value const body = node.prop("body") ? runtime().untracked([&] { return evalIn(scope, nullptr, node.prop("body")); })
+                                         : Value{};
+    model.waiting = model.stateKey.has_value();
+    model.window = std::make_shared<WindowRows>(session, WindowRowsOptions{.channel = channelOf(*alias, *this),
+                                                                           .table = model.id,
+                                                                           .record = model.modelType + "." + model.id,
+                                                                           .body = body,
+                                                                           .pageSize = 200,
+                                                                           .maxPages = 8,
+                                                                           .maxKeys = 1000,
+                                                                           .maxColumns = 96,
+                                                                           .restoring = model.waiting});
+    model.rows = std::make_shared<ObservedRows>(
+        model.window, model.scope.token().guard([&model] { model.bump(); }),
+        model.scope.token().guard([this, &element] { tableGesture(element); }));
+    model.window->onStaleDescription(model.scope.token().guard([&model] { model.describe->invalidate(); }));
+    // Called inside a binding, where no signal may be written: the misses of one turn are fetched by one task.
+    model.onMissing = [this, &model](std::string_view field) {
+        bool const first = model.missing.empty();
+        model.missing.emplace(field);
+        if (!first) {
+            return;
+        }
+        // A field no column of the description has is dropped by the rows, which never name it to the server.
+        runtime().owner().post(model.scope.token().guard([&model] {
+            std::set<std::string, std::less<>> const missed = std::exchange(model.missing, {});
+            model.rows->fetchAlso(std::vector<std::string>{missed.begin(), missed.end()});
+        }));
+    };
+    // A literal sort is the default a stored one replaces; any other expression binds it.
+    if (ExprPtr const sort = node.prop("sort"); sort && !(sort->kind == ExprKind::Literal && sort->literal.isNull())) {
+        if (sort->kind == ExprKind::Literal) {
+            element.sort.set(sort->literal);
+        } else {
+            element.sortBound = &scope.nodes.computed([&scope, sort] { return evalIn(scope, nullptr, sort); });
+        }
+    }
+    if (ExprPtr const selection = node.prop("selection");
+        selection && (selection->kind != ExprKind::Literal || !selection->literal.isNull())) {
+        element.bound = &scope.nodes.computed([&scope, selection] { return evalIn(scope, nullptr, selection); });
+    }
+    // A literal filter is the default a stored one replaces; an expression binds the filters.
+    if (std::string_view const literal = node.name("filters"); !literal.empty()) {
+        table::FilterSpec filter;
+        if (!glz::read_json(filter, literal)) {
+            model.filter = filter;
+            static_cast<void>(model.window->setFilter(std::move(filter)));
+        }
+    } else if (ExprPtr const filters = node.prop("filters")) {
+        model.filtersBound = true;
+        scope.nodes.effect([this, &scope, &element, filters] {
+            Value const value = evalIn(scope, nullptr, filters);
+            runtime().untracked([&] {
+                ModelTable& table = *element.modelTable;
+                table::FilterSpec filter;
+                if (!value.isNull()) {
+                    std::string const text = canonicalJson(value);
+                    if (auto const failed = glz::read_json(filter, text)) {
+                        report(pointerAppend(element.node->path, "filters"),
+                               "`filters` is not a filter: " + glz::format_error(failed, text));
+                        return;
+                    }
+                }
+                if (filter == table.filter) {
+                    return;
+                }
+                if (auto const set = table.window->setFilter(filter); !set) {
+                    report(pointerAppend(element.node->path, "filters"), "the filter is refused: " + set.error().message);
+                    return;
+                }
+                table.filter = std::move(filter);
+            });
+        });
+    }
+    model.describe->start();
+    // The sort the table shows: the bound one, or the table's own, which a header click and a stored state set.
+    scope.nodes.effect([this, &element] {
+        Value const value = tableSort(element);
+        runtime().untracked([&] {
+            ModelTable& table = *element.modelTable;
+            SortChain chain = sortChainOf(value);
+            if (chain == table.sort) {
+                return;
+            }
+            if (auto const set = table.window->setSort(chain); !set) {
+                report(pointerAppend(element.node->path, "sort"), "the sort is refused: " + set.error().message);
+                return;
+            }
+            table.sort = std::move(chain);
+        });
+    });
+    scope.nodes.effect([this, &element] {
+        Value const described = element.modelTable->describe->value();
+        runtime().untracked([&] { describedTable(element, described); });
+    });
+    if (!model.stateKey) {
+        return;
+    }
+    // The first query waits for the stored state, at most `tableStateTimeout`; a state that comes later is applied
+    // unless the user changed the table meanwhile.
+    if (reactive::Scheduler* const scheduler = session.options().scheduler) {
+        model.loadTimer = scheduler->after(session.options().tableStateTimeout,
+                                           model.scope.token().guard([&model] { model.release(); }));
+    }
+    model.states->load(*model.stateKey)
+        .then(model.scope,
+              [this, &element](std::optional<table::StoredTableState> const& stored) {
+                  storedTableState(element, stored ? std::optional<std::string>{stored->json} : std::nullopt, {});
+              })
+        .onError(model.scope, [this, &element](std::exception_ptr const& error) {
+            storedTableState(element, std::nullopt, failureText(error));
+        });
+}
+
+void ScreenCore::storedTableState(ElementState& element, std::optional<std::string> const& json,
+                                  std::string const& failure) {
+    ModelTable& model = *element.modelTable;
+    DocNode const& node = *element.node;
+    bool const late = !model.waiting;
+    if (!failure.empty()) {
+        report(node.path, "the stored state of table `" + node.id + "` could not be loaded: " + failure);
+        model.release();
+        return;
+    }
+    if (!json) {
+        model.release();
+        return;
+    }
+    auto read = table::readState(*json);
+    if (!read) {
+        report(node.path, "the stored state of table `" + node.id + "` is not used: " + read.error());
+        model.release();
+        return;
+    }
+    if (late && model.touched) {
+        return;
+    }
+    table::StateDocument document = std::move(*read);
+    if (table::TableDescription const* const description = model.window->description()) {
+        table::FitReport fitted;
+        document = table::fitState(std::move(document), *description, fitted);
+        for (table::FitDrop const& drop : fitted.dropped) {
+            if (drop.what == table::FitDrop::What::Filter || drop.what == table::FitDrop::What::GroupFilter) {
+                report(node.path, "the stored filter on `" + drop.id + "` is not applied: the table has no such column");
+            }
+        }
+    }
+    if (element.sortBound == nullptr && document.sort) {
+        if (model.window->setSort(*document.sort)) {
+            model.sort = *document.sort;
+            element.sort.set(sortValueOf(model.sort));
+        }
+    }
+    if (!model.filtersBound && document.filters) {
+        if (model.window->setFilter(*document.filters)) {
+            model.filter = *document.filters;
+        }
+    }
+    model.release();
+}
+
+void ScreenCore::describedTable(ElementState& element, Value const& described) {
+    ModelTable& model = *element.modelTable;
+    if (described.isNull()) {
+        return;
+    }
+    table::TableDescription const* const held = model.window->description();
+    std::string const before = held != nullptr ? held->revision : std::string{};
+    // The filters a new revision drops are said once, at the table; a dropped sort key is not.
+    if (held != nullptr) {
+        table::TableDescription next;
+        std::string const text = canonicalJson(described);
+        if (!glz::read<glz::opts{.error_on_unknown_keys = false}>(next, text) && next.revision != before) {
+            table::FitReport fitted;
+            static_cast<void>(table::fitState(
+                table::StateDocument{.version = table::kStateVersion,
+                                     .layout = {},
+                                     .sort = model.sort,
+                                     .filters = model.filter,
+                                     .view = {},
+                                     .carried = {}},
+                next, fitted));
+            for (table::FitDrop const& drop : fitted.dropped) {
+                if (drop.what == table::FitDrop::What::Filter || drop.what == table::FitDrop::What::GroupFilter ||
+                    drop.what == table::FitDrop::What::Unit) {
+                    report(element.node->path,
+                           "the filter on `" + drop.id + "` is dropped: the table's new description has no such column");
+                }
+            }
+        }
+    }
+    model.window->setDescription(described);
+    table::TableDescription const* const now = model.window->description();
+    if (now == nullptr) {
+        model.bump();
+        return;
+    }
+    model.keyColumn = now->key;
+    model.described.clear();
+    for (table::TableColumn const& column : now->columns) {
+        model.described.insert(column.info.id);
+    }
+    // The fitted sort and filters are what the rows hold now.
+    table::FitReport ignored;
+    table::StateDocument const fitted = table::fitState(
+        table::StateDocument{
+            .version = table::kStateVersion, .layout = {}, .sort = model.sort, .filters = model.filter, .view = {},
+            .carried = {}},
+        *now, ignored);
+    model.sort = fitted.sort.value_or(SortChain{});
+    model.filter = fitted.filters.value_or(table::FilterSpec{});
+    if (element.sortBound == nullptr) {
+        element.sort.set(sortValueOf(model.sort));
+    }
+    model.revision.set(now->revision);
+    model.bump();
+}
+
+void ScreenCore::tableGesture(ElementState& element) {
+    if (element.modelTable == nullptr) {
+        return;
+    }
+    element.modelTable->touched = true;
+    tableMessage(element, {});
+}
+
+void ScreenCore::tableMessage(ElementState& table, std::string text) {
+    ModelTable* const model = table.modelTable.get();
+    if (model == nullptr) {
+        return;
+    }
+    if (text.empty()) {
+        model->messageTimer.cancel();
+        model->message.set({});
+        return;
+    }
+    if (!model->statusShown) {
+        if (host != nullptr) {
+            static_cast<void>(host->notify(text, "warning"));
+        }
+        return;
+    }
+    model->message.set(text);
+    model->messageTimer.cancel();
+    if (reactive::Scheduler* const scheduler = session.options().scheduler) {
+        model->messageTimer = scheduler->after(
+            kStatusMessageHold, model->scope.token().guard([model, shown = std::move(text)] {
+                if (model->message.peek() == shown) {
+                    model->message.set({});
+                }
+            }));
+    }
+}
+
+void ScreenCore::tableSaveFailed(table::TableStateKey const& key, table::SaveResult const& result) {
+    std::string const text = result.reason.empty()
+                                 ? std::string{"The table's arrangement could not be saved"}
+                                 : "The table's arrangement could not be saved: " + result.reason;
+    std::vector<ElementState*> tables;
+    for (ElementState* const element : modelTables) {
+        if (element->modelTable->stateKey == key) {
+            tables.push_back(element);
+        }
+    }
+    for (ElementState* const table : tables) {
+        tableMessage(*table, text);
+    }
+}
+
+Node ScreenCore::lowerModelTable(DocNode const& node, LowerCtx const& ctx, ElementState* element) {
+    if (element == nullptr || element->modelTable == nullptr || element->modelTable->window == nullptr) {
+        return ui::text(Text{.text = std::string{"table"}, .role = TextRole::Muted});
+    }
+    ModelTable& model = *element->modelTable;
+    // One row, keyed by the description's revision: a new revision mounts the table again, with the columns, levels
+    // and cells of that description, while the rows, their sort and filters, the selection and the message, which
+    // the element holds, stay.
+    Common placed;
+    commonOf(node, ctx, element, placed);
+    Common listCommon;
+    listCommon.layout = placed.layout;
+    Node list = ui::forEach<Value>(
+        [&model] { return std::vector<Value>{Value{model.revision.get()}}; },
+        [](Value const& revision) -> Key { return Key{*revision.asString()}; },
+        [this, ctx, &node, element](reactive::Signal<Value> const& revision) {
+            static_cast<void>(revision);
+            return modelTableOf(node, ctx, *element);
+        },
+        Axis::Vertical, 0, listCommon);
+    std::span<DocNodePtr const> const empty = node.nodes("empty");
+    if (empty.empty()) {
+        return list;
+    }
+    // `empty` shows once a reply said the view has no row, exactly, and no row is undecided.
+    Column wrapper;
+    wrapper.common.layout = placed.layout;
+    wrapper.children.push_back(std::move(list));
+    Column content{.children = {lowerAll(empty, ctx)}};
+    content.common.visible = slotProp<bool>([&model] {
+        static_cast<void>(model.version.get());
+        TableCountsView const counts = model.rows->counts();
+        return counts.view.known && counts.view.rows == 0 && counts.view.kind == table::TotalKind::Exact &&
+               counts.undecided == 0;
+    });
+    wrapper.children.push_back(ui::column(std::move(content)));
+    return ui::column(std::move(wrapper));
+}
+
+// NOLINTNEXTLINE(readability-function-cognitive-complexity): the columns, the cells, the row's parts and the handlers.
+Node ScreenCore::modelTableOf(DocNode const& node, LowerCtx const& ctx, ElementState& element) {
+    ModelTable& model = *element.modelTable;
+    TableOptions options;
+    commonOf(node, ctx, &element, options.common);
+    options.status = slotProp<TableStatus>([this, &element, &model, scope = ctx.scope] {
+        static_cast<void>(model.version.get());
+        TableCountsView const counts = model.rows->counts();
+        TableStatus status;
+        status.shown = model.statusShown;
+        ValueList const* const selected = tableSelection(element).asList();
+        status.counts = countsText(counts, selected == nullptr ? 0 : static_cast<std::int64_t>(selected->size()),
+                                   scope->formatting());
+        if (!counts.failed.empty()) {
+            status.state = levelWords(counts.failed.front()) + " data could not be loaded.";
+            status.retry = true;
+        } else if (auto const& error = model.window->error()) {
+            status.state = "The rows could not be loaded: " + error->message;
+            status.retry = true;
+        } else if (Value const failed = model.describe->error(); failed.asString() != nullptr) {
+            status.state = "The table's description could not be loaded: " + *failed.asString();
+        }
+        if (model.statusShown) {
+            status.message = model.message.get();
+        }
+        return status;
+    });
+    options.onRetry = [this, &element, &model] {
+        tableGesture(element);
+        model.window->retry();
+    };
+    table::TableDescription const* const description = model.window->description();
+    if (description == nullptr) {
+        // Before the description, and after one that does not read: the status line alone.
+        Table spec;
+        spec.status = std::move(options.status);
+        spec.onRetry = std::move(options.onRetry);
+        spec.common = std::move(options.common);
+        return makeNode(std::move(spec));
+    }
+    FormatContext const& format = ctx.scope->formatting();
+    Align const tableValign = cellPlaceNamed(node.name("valign")).value_or(Align::Center);
+    auto const describedColumn = [description](std::string_view id) -> table::TableColumn const* {
+        auto const found = std::ranges::find(description->columns, id,
+                                             [](table::TableColumn const& column) -> auto const& { return column.info.id; });
+        return found == description->columns.end() ? nullptr : &*found;
+    };
+    std::vector<TableColumn> columns;
+    std::vector<DocNode const*> parts;
+    std::vector<TextRole> roles;
+    TableSource source;
+    auto const add = [&](table::TableColumn const& described, DocNode const* part) {
+        TableColumn column{.id = described.info.id,
+                           .label = described.label.empty() ? described.info.id : described.label,
+                           .valign = tableValign,
+                           .sortable = described.sortable};
+        TextRole role = TextRole::Normal;
+        if (part != nullptr) {
+            if (ExprPtr const label = part->prop("label")) {
+                column.label = textOf(once(ctx, label), format);
+            }
+            if (ExprPtr const width = part->prop("width")) {
+                column.width = sizingOf(once(ctx, width));
+            }
+            if (ExprPtr const named = part->prop("role")) {
+                Value const value = once(ctx, named);
+                std::optional<TextRole> const found = roleNamed(textOf(value, format));
+                if (!found) {
+                    report(named->path, "role is " + canonicalJson(value) + "; " + std::string{kRoleNames});
+                }
+                role = found.value_or(TextRole::Normal);
+            }
+            column.role = role;
+            column.align = cellPlaceNamed(part->name("align")).value_or(Align::Start);
+            column.valign = cellPlaceNamed(part->name("valign")).value_or(tableValign);
+            column.wrap = part->flag("wrap", true);
+            column.shrink = part->flag("shrink") && column.width.kind == Sizing::Kind::Stretch;
+        }
+        columns.push_back(std::move(column));
+        parts.push_back(part);
+        roles.push_back(role);
+        source.levels.push_back(described.info.level);
+    };
+    if (auto const laidOut = node.partList("columns"); !laidOut.empty()) {
+        for (DocNodePtr const& part : laidOut) {
+            if (table::TableColumn const* const described = describedColumn(part->id)) {
+                add(*described, part.get());
+            } else {
+                report(part->path, "the table `" + model.id + "` has no column `" + part->id + "`");
+            }
+        }
+    } else {
+        for (table::TableColumn const& described : description->columns) {
+            if (described.shown) {
+                add(described, nullptr);
+            }
+        }
+    }
+    // What the row's own parts and the cells read of the row is fetched with every page: the key, each field named,
+    // and every column when one of them passes the row on whole.
+    RowReads reads;
+    reads.ids.insert(description->key);
+    for (std::string_view const key : {"rowTone", "rowLabel"}) {
+        if (ExprPtr const expr = node.prop(key)) {
+            rowReadsOf(*expr, reads);
+        }
+    }
+    if (Commands const* const activate = node.event("onActivate")) {
+        rowReadsOf(*activate, reads);
+    }
+    for (DocNode const* const part : parts) {
+        if (part != nullptr) {
+            rowReadsOf(*part, reads);
+        }
+    }
+    if (reads.whole) {
+        report(node.path, "the table reads its row whole; every column of `" + model.id + "` is fetched");
+        for (table::TableColumn const& column : description->columns) {
+            reads.ids.insert(column.info.id);
+        }
+    }
+    for (std::string const& id : reads.ids) {
+        if (model.described.contains(id)) {
+            source.alwaysFetched.push_back(id);
+        }
+    }
+    std::vector<std::string> ids;
+    for (TableColumn const& column : columns) {
+        ids.push_back(column.id);
+    }
+    source.rows = model.rows;
+    source.cellView = [this, ctx, &node, &model, parts, ids, roles](std::size_t column,
+                                                                     reactive::Signal<Value> const& row) -> Node {
+        DocNode const* const part = column < parts.size() ? parts.at(column) : nullptr;
+        std::span<DocNodePtr const> const cell = part != nullptr ? part->nodes("cell") : std::span<DocNodePtr const>{};
+        if (!cell.empty()) {
+            std::vector<DocNode const*> content;
+            for (DocNodePtr const& child : cell) {
+                content.push_back(child.get());
+            }
+            std::string key = runtime().untracked([&] {
+                Value const* const id = row.peek().field(model.keyColumn);
+                return id == nullptr ? std::string{} : canonicalJson(*id);
+            });
+            auto const scope = rowScope(node, ctx, row, content, std::move(key));
+            scope->onMissingRowField = &model.onMissing;
+            LowerCtx const rowCtx{.scope = scope, .bindings = ctx.bindings, .boundary = ctx.boundary};
+            // The cell owns its scope for as long as its node lives.
+            auto const owner =
+                std::make_shared<std::pair<Node, std::shared_ptr<RtScope>> const>(lowerAll(cell, rowCtx), scope);
+            return Node{owner, owner->first.get()};
+        }
+        return ui::text(Text{
+            .text = slotProp<std::string>([scope = ctx.scope, &row, field = ids.at(column)] {
+                Value const* const value = row.get().field(field);
+                return value == nullptr ? std::string{} : textOf(*value, scope->formatting());
+            }),
+            .role = roles.at(column),
+        });
+    };
+    ExprPtr const toneExpr = node.prop("rowTone");
+    ExprPtr const labelExpr = node.prop("rowLabel");
+    Commands const* const activateCommands = node.event("onActivate");
+    if (toneExpr || labelExpr || activateCommands != nullptr) {
+        auto const toneReported = std::make_shared<bool>(false);
+        source.rowView = [this, ctx, &node, &model, toneExpr, labelExpr, toneReported](
+                             reactive::Signal<Value> const& row) {
+            std::string key = runtime().untracked([&] {
+                Value const* const id = row.peek().field(model.keyColumn);
+                return id == nullptr ? std::string{} : canonicalJson(*id);
+            });
+            auto const scope = rowScope(node, ctx, row, {}, key);
+            scope->onMissingRowField = &model.onMissing;
+            model.rowScopes[std::move(key)] = scope;
+            LowerCtx const rowCtx{.scope = scope, .bindings = ctx.bindings, .boundary = ctx.boundary};
+            TableRowLook look;
+            look.keep = scope;
+            if (labelExpr) {
+                look.label = bindProp<std::string>(rowCtx, labelExpr, std::string{}, stringOf);
+            }
+            if (toneExpr) {
+                look.tone = slotProp<std::optional<Tone>>(
+                    [this, scope, bindings = ctx.bindings, toneExpr, toneReported] -> std::optional<Tone> {
+                        return rowToneOf(evalIn(*scope, bindings.get(), toneExpr), toneExpr->path, *toneReported);
+                    });
+            }
+            return look;
+        };
+    }
+    options.showHeader = node.flag("showHeader", true);
+    options.selectColumn = node.flag("selectColumn");
+    if (ExprPtr const selectAll = node.prop("selectAllLabel")) {
+        options.selectAllLabel = bindProp<std::string>(ctx, selectAll, std::string{}, stringOf);
+    }
+    if (ExprPtr const overscan = node.prop("virtualizeOverscan")) {
+        options.virtualize.overscan =
+            static_cast<std::size_t>(std::max<std::int64_t>(0, intOf(once(ctx, overscan), 10)));
+    }
+    std::string const mode =
+        node.prop("selectionMode") ? textOf(once(ctx, node.prop("selectionMode")), format) : std::string{};
+    options.selectionMode = mode == "single"     ? SelectionMode::Single
+                            : mode == "multiple" ? SelectionMode::Multiple
+                                                 : SelectionMode::None;
+    options.selection = slotProp<std::vector<Key>>([&element] {
+        std::vector<Key> keys;
+        if (ValueList const* const items = tableSelection(element).asList()) {
+            for (Value const& item : *items) {
+                keys.push_back(keyOf(item));
+            }
+        }
+        return keys;
+    });
+    options.onSelectionChange = [this, ctx, &element, commands = node.event("onSelectionChange")](
+                                    std::vector<Key> const& keys, SelectionChange change) {
+        static_cast<void>(change);
+        tableGesture(element);
+        ValueList items;
+        for (Key const& key : keys) {
+            items.push_back(valueOfKey(key));
+        }
+        Value const selected{std::move(items)};
+        runtime().batch([&] {
+            if (element.bound == nullptr) {
+                session.asUser([&] {
+                    session.noteWrite();
+                    element.selection.set(selected);
+                });
+            }
+            runEvent(commands, ctx, selected);
+        });
+    };
+    options.sort = slotProp<std::optional<TableSort>>([&element, ids] -> std::optional<TableSort> {
+        SortChain const chain = sortChainOf(tableSort(element));
+        if (chain.empty()) {
+            return std::nullopt;
+        }
+        auto const found = std::ranges::find(ids, chain.front().column);
+        if (found == ids.end()) {
+            return std::nullopt;
+        }
+        return TableSort{.column = static_cast<std::size_t>(std::distance(ids.begin(), found)),
+                         .direction = chain.front().dir == table::SortDirection::Descending ? SortDirection::Descending
+                                                                                            : SortDirection::Ascending};
+    });
+    // A header click makes its column the single key: descending when it is the first key ascending already,
+    // ascending otherwise. A bound sort is the document's: the click changes nothing and is not saved.
+    options.onSort = [this, &element, &model, ids](std::size_t index) {
+        if (index >= ids.size()) {
+            return;
+        }
+        tableGesture(element);
+        if (element.sortBound != nullptr) {
+            return;
+        }
+        SortChain const current = runtime().untracked([&] { return sortChainOf(tableSort(element)); });
+        bool const descending = !current.empty() && current.front().column == ids.at(index) &&
+                                current.front().dir == table::SortDirection::Ascending;
+        SortChain const next{table::SortKey{.column = ids.at(index),
+                                            .dir = descending ? table::SortDirection::Descending
+                                                              : table::SortDirection::Ascending}};
+        session.asUser([&] {
+            session.noteWrite();
+            element.sort.set(sortValueOf(next));
+        });
+        if (model.stateKey) {
+            table::StateDocument changed;
+            changed.sort = next;
+            model.states->changed(*model.stateKey, changed, StateParts::Sort);
+        }
+    };
+    options.onActivate = [this, ctx, &element, &model, commands = activateCommands](Key const& key) {
+        Value const activated = valueOfKey(key);
+        session.asUser([&] {
+            session.noteWrite();
+            element.activeKey.set(activated);
+        });
+        auto const found = model.rowScopes.find(canonicalJson(activated));
+        std::shared_ptr<RtScope> const scope = found == model.rowScopes.end() ? nullptr : found->second.lock();
+        LowerCtx const rowCtx{.scope = scope ? scope : ctx.scope, .bindings = ctx.bindings, .boundary = ctx.boundary};
+        runEvent(commands, rowCtx, activated);
+    };
+    model.rows->mounting();
+    return ui::table(std::move(columns), std::move(source), std::move(options));
 }
 
 TableRowView ScreenCore::headingRow(DocNode const& node, LowerCtx const& ctx, reactive::Signal<Value> const& row,

@@ -582,6 +582,8 @@ struct Callbacks {
     std::function<void(Key)> activate;
     /// @brief From `TableWidget::setOnSort`.
     std::function<void(std::size_t)> sort;
+    /// @brief From `TableWidget::setOnRetry`.
+    Action retry;
     /// @brief The drop handler's predicate, from `Widget::setDropHandler`.
     std::function<bool(Key const&)> accepts;
     /// @brief The drop handler, from `Widget::setDropHandler`.
@@ -2000,6 +2002,7 @@ public:
         this->store().at(id()).onChildDestroyed = [this](int childId) {
             _rowKeys.erase(childId);
             _headings.erase(childId);
+            std::erase_if(_loads, [childId](auto const& entry) { return entry.first.first == childId; });
             remark();
         };
     }
@@ -2026,6 +2029,7 @@ public:
     ///        column that may be narrower than its header.
     /// @param columns The columns, in order.
     void setColumns(std::vector<TableColumn> const& columns) override {
+        _columns = columns;
         _sortable.clear();
         for (TableColumn const& column : columns) {
             _sortable.push_back(column.sortable);
@@ -2201,6 +2205,56 @@ public:
         }
     }
 
+    /// @brief Records property `status` as `counts|state|retry|message|shown`, each text escaped.
+    /// @param status The status line.
+    void setStatus(TableStatus const& status) override {
+        _status = status;
+        set("status", formatText(status.counts) + "|" + formatText(status.state) + "|" + formatBool(status.retry) +
+                          "|" + formatText(status.message) + "|" + formatBool(status.shown));
+    }
+
+    /// @brief Stores the handler `RecordingBackend::retryTable` calls.
+    /// @param onRetry The handler.
+    void setOnRetry(std::function<void()> onRetry) override { callbacks().retry = std::move(onRetry); }
+
+    /// @brief Records a cell's load state, which `RecordingBackend::cellLoad` reads, and the row's property
+    ///        `load<column>` (`Loaded`, `Unloaded` or `Failed`).
+    /// @param row    One of this table's rows.
+    /// @param column The cell's column.
+    /// @param load   The state.
+    /// @throws std::logic_error when @p row is not this table's child.
+    void setCellLoad(Widget& row, std::size_t column, CellLoad load) override {
+        int const rowId = store().idOf(row);
+        if (store().at(rowId).parent != id()) {
+            throw std::logic_error{"RecordingBackend: setCellLoad of a widget that is not this table's row"};
+        }
+        _loads.insert_or_assign(std::pair{rowId, column}, load);
+        store().set(rowId, "load" + std::to_string(column), formatCellLoad(load));
+    }
+
+    /// @brief The status line last set.
+    /// @return It; the default before any `setStatus`.
+    [[nodiscard]] TableStatus const& status() const noexcept { return _status; }
+
+    /// @brief The columns last set.
+    /// @return They; empty before any `setColumns`.
+    [[nodiscard]] std::vector<TableColumn> const& columns() const noexcept { return _columns; }
+
+    /// @brief A current row's cell's load state, as `setCellLoad` last set it.
+    /// @param key    The row's key.
+    /// @param column The cell's column.
+    /// @return The state; `Loaded` when none was set.
+    /// @throws std::logic_error when no current row has @p key.
+    [[nodiscard]] CellLoad cellLoad(Key const& key, std::size_t column) const {
+        std::optional<int> const row = rowOf(key);
+        if (!row) {
+            throw std::logic_error{"RecordingBackend: cellLoad of " + formatKey(key) + ", which Table#" +
+                                   std::to_string(id()) + " has no row for"};
+        }
+        auto const found = _loads.find(std::pair{*row, column});
+        return found == _loads.end() ? CellLoad::Loaded : found->second;
+    }
+
     /// @brief The selection mode last set.
     /// @return The mode; `None` until `setSelectionMode` runs.
     [[nodiscard]] SelectionMode mode() const noexcept { return _mode; }
@@ -2318,6 +2372,21 @@ private:
     // The row a Shift-click's range starts from: the last row clicked without Shift.
     std::optional<Key> _anchor;
     std::function<void(std::size_t, std::size_t)> _onVisibleRangeChanged;
+    TableStatus _status;
+    std::vector<TableColumn> _columns;
+    std::map<std::pair<int, std::size_t>, CellLoad> _loads;  // (row id, column) -> state, as setCellLoad told it
+
+    [[nodiscard]] static std::string formatCellLoad(CellLoad load) {
+        switch (load) {
+            case CellLoad::Unloaded:
+                return "Unloaded";
+            case CellLoad::Failed:
+                return "Failed";
+            case CellLoad::Loaded:
+            default:
+                return "Loaded";
+        }
+    }
 };
 
 }  // namespace detail
@@ -3023,6 +3092,51 @@ public:
         if (table != nullptr && table->sortable(column) && reachable(record)) {
             invoke(record.callbacks.sort, column);
         }
+    }
+
+    /// @brief Chooses "Retry" on a table's status line.
+    /// @param widgetId The table.
+    /// @throws std::logic_error when the widget is not a table.
+    void retryTable(int widgetId) {
+        detail::Record const& record = expectKind(widgetId, "retryTable", {"Table"});
+        if (reachable(record)) {
+            invoke(record.callbacks.retry);
+        }
+    }
+
+    /// @brief A table's status line, as the mount last set it.
+    /// @param widgetId The table.
+    /// @return The status; the default before any `setStatus`.
+    /// @throws std::logic_error when the widget is not a table.
+    [[nodiscard]] TableStatus tableStatus(int widgetId) {
+        detail::Record const& record = expectKind(widgetId, "tableStatus", {"Table"});
+        auto const* const table = dynamic_cast<detail::FakeTable const*>(record.widget);
+        return table == nullptr ? TableStatus{} : table->status();
+    }
+
+    /// @brief A table's columns, as the mount last set them.
+    /// @param widgetId The table.
+    /// @return The columns; empty before any `setColumns`.
+    /// @throws std::logic_error when the widget is not a table.
+    [[nodiscard]] std::vector<TableColumn> tableColumns(int widgetId) {
+        detail::Record const& record = expectKind(widgetId, "tableColumns", {"Table"});
+        auto const* const table = dynamic_cast<detail::FakeTable const*>(record.widget);
+        return table == nullptr ? std::vector<TableColumn>{} : table->columns();
+    }
+
+    /// @brief A cell's load state in a table whose rows come from a `TableSource`.
+    /// @param widgetId The table.
+    /// @param rowKey   The row's key.
+    /// @param column   The cell's column: an index into the table's columns.
+    /// @return The state `setCellLoad` last gave the cell; `Loaded` when none.
+    /// @throws std::logic_error when the widget is not a table, or none of its current rows has @p rowKey.
+    [[nodiscard]] CellLoad cellLoad(int widgetId, Key const& rowKey, std::size_t column) {
+        detail::Record const& record = expectKind(widgetId, "cellLoad", {"Table"});
+        auto const* const table = dynamic_cast<detail::FakeTable const*>(record.widget);
+        if (table == nullptr) {
+            throw std::logic_error{"RecordingBackend: cellLoad of a widget that is not a table"};
+        }
+        return table->cellLoad(rowKey, column);
     }
 
     /// @brief Activates a row of a table (Enter or a double click).

@@ -76,6 +76,8 @@ struct FormViewOptions;
 
 namespace table {
 class ITableStateStore;
+struct SaveResult;
+struct TableStateKey;
 }  // namespace table
 
 }  // namespace morph
@@ -425,14 +427,22 @@ struct SessionOptions {
     std::string application;
 };
 
+/// @brief How long a table's status-line message stays, unless the next gesture on the table clears it first.
+inline constexpr std::chrono::seconds kStatusMessageHold{6};
+
+class Session;
+
 namespace detail {
 
 /// @brief The table states of a session built with @p options: over `tableState`, debounced by `tableStateDebounce`
-///        on `scheduler`.
+///        on `scheduler`. A save that does not end `Saved` is said in the status line of every mounted table whose
+///        key it names; a `PreferencesTableStateStore` is given the session's scheduler and `tableStateTimeout` to
+///        wait on before it sends a save the server refused as busy again.
+/// @param session The session the states belong to; its screens hear a failed save.
 /// @param runtime The session's runtime, whose owner the states answer on.
 /// @param options The session's options.
 /// @return They; `nullptr` without a `tableState`.
-[[nodiscard]] MORPH_API std::shared_ptr<TableStates> makeTableStates(reactive::Runtime& runtime,
+[[nodiscard]] MORPH_API std::shared_ptr<TableStates> makeTableStates(Session& session, reactive::Runtime& runtime,
                                                                      SessionOptions const& options);
 
 /// @brief The text of a failure.
@@ -673,7 +683,7 @@ public:
           _hostValues{runtime},
           _hostCommandNames{runtime},
           _contextOffered{runtime, false},
-          _tableStates{detail::makeTableStates(runtime, _options)} {}
+          _tableStates{detail::makeTableStates(*this, runtime, _options)} {}
 
     Session(Session const&) = delete;
     Session& operator=(Session const&) = delete;
@@ -846,6 +856,12 @@ public:
     /// @brief Forgets a screen or app document.
     /// @param screen It.
     void detachScreen(detail::ScreenCore& screen) { std::erase(_screens, &screen); }
+
+    /// @brief Tells every screen of the session that a table state's save did not end `Saved`, so each table
+    ///        mounted with that key says it in its status line.
+    /// @param key    The state's key.
+    /// @param result What the store answered.
+    void tableSaveFailed(table::TableStateKey const& key, table::SaveResult const& result);
 
     /// @brief Starts a query's request before its screen mounts, so the screen mounts on a warm cache.
     /// @param channel The alias's channel.
@@ -1201,6 +1217,7 @@ struct ElementState;
 class MutationRuntime;
 struct CheckRuntime;
 struct BoundaryRuntime;
+struct ModelTable;
 
 /// @brief One state declaration at run time.
 struct StateSlot {
@@ -1334,6 +1351,9 @@ struct MORPH_API ElementState {
     /// @brief A `wizard`'s session (spec 2), made when the element is wired; null when its wizard document or a
     ///        step's schema is unknown or does not build.
     std::unique_ptr<forms::WizardSession> wizard;
+    /// @brief A model-backed table's rows, description, persisted state and status line, made when the element is
+    ///        wired; null for any other element. It outlives every mount of the table.
+    std::unique_ptr<ModelTable> modelTable;
 };
 
 /// @brief One check at run time.
@@ -1459,6 +1479,10 @@ public:
     std::vector<std::unique_ptr<MutationRuntime>> mutations;
     /// @brief Its checks.
     std::vector<std::unique_ptr<CheckRuntime>> checks;
+    /// @brief Called with a field a row expression read that the row's record does not hold; set on a server-mode
+    ///        row scope, whose record holds only the columns fetched. Called from inside a binding's evaluation, so
+    ///        it writes no signal.
+    std::function<void(std::string_view field)> const* onMissingRowField = nullptr;
     /// @brief For a locale scope's scope, the formatting facts it writes in; `nullptr` for any other scope.
     reactive::Computed<std::shared_ptr<FormatContext const>>* localeFormat = nullptr;
     /// @brief Whether the scope declares nothing: the elements of its nodes are the enclosing scope's.
@@ -1998,6 +2022,18 @@ public:
     /// @return The value.
     [[nodiscard]] Value inputValue(ElementState const& element) const;
 
+    /// @brief Shows @p text as the table's status-line message for `kStatusMessageHold`, on the session's scheduler
+    ///        (without one, until the table's next gesture); an empty @p text clears the message and notifies
+    ///        nothing. Under `status: false` a non-empty text goes to `InterpreterHost::notify` as a warning instead.
+    /// @param table The table's element; one that is not a model-backed table is left alone.
+    /// @param text  The message, or empty.
+    void tableMessage(ElementState& table, std::string text);
+
+    /// @brief Says a table state's failed save in the status line of every table of the screen mounted with its key.
+    /// @param key    The state's key.
+    /// @param result What the store answered.
+    void tableSaveFailed(table::TableStateKey const& key, table::SaveResult const& result);
+
     // --- Commands ----------------------------------------------------------------------------------------------
 
     /// @brief Runs a command list: each command in order in one batch; done when every command in it is.
@@ -2153,6 +2189,9 @@ public:
     std::vector<LoweredNode> loweredNodes;
     /// @brief The screen's live scopes, in creation order.
     std::vector<RtScope*> scopes;
+    /// @brief The elements of the screen's model-backed tables, while each lives: what a failed save of a table
+    ///        state is said in.
+    std::vector<ElementState*> modelTables;
     /// @brief The latest command lists run, oldest first, at most `kCommandLogSize`.
     std::deque<CommandLogEntry> commandLog;
     /// @brief Set while the inspector evaluates, so that an expression error it meets is not reported.
@@ -2217,6 +2256,19 @@ private:
     Node lowerDialog(DocNode const& node, LowerCtx const& ctx, ElementState* element);
     Node lowerSwitch(DocNode const& node, LowerCtx const& ctx);
     Node lowerRows(DocNode const& node, LowerCtx const& ctx, ElementState* element);
+    /// A model-backed table: a list of at most one table, keyed by its description's revision, over its rows.
+    Node lowerModelTable(DocNode const& node, LowerCtx const& ctx, ElementState* element);
+    /// The table a model-backed table shows for the description its rows hold, or the status line alone without one.
+    Node modelTableOf(DocNode const& node, LowerCtx const& ctx, ElementState& element);
+    /// Makes a model-backed table's rows, its description query and its persisted state's load.
+    void wireModelTable(ElementState& element);
+    /// Takes the description its query holds now: reports the filters a new revision drops, then hands it to the rows.
+    void describedTable(ElementState& element, Value const& described);
+    /// Applies a model-backed table's stored state once its load completed, or reports why it could not.
+    void storedTableState(ElementState& element, std::optional<std::string> const& json, std::string const& failure);
+    /// A user's gesture on a model-backed table: the stored state no longer replaces the arrangement, and the
+    /// status-line message goes.
+    void tableGesture(ElementState& element);
     /// A grouped table's heading row: its `group`'s `heading`, lowered as one cell in a row scope of its own whose
     /// row is the group's run record and whose key is `key`, the row's canonical key, as a data row's scope has.
     TableRowView headingRow(DocNode const& node, LowerCtx const& ctx, reactive::Signal<Value> const& row,
@@ -2483,6 +2535,11 @@ struct HeadTool {
     bool operator==(HeadTool const&) const = default;
 };
 
+namespace testing {
+/// @brief What a test reads of a `Screen` that its interface does not show; the tests define it.
+struct ScreenProbe;
+}  // namespace testing
+
 /// @brief A mounted screen: its scopes, its view mounted through `Mounted`, and what its host asks of it.
 ///
 /// Neither copyable nor movable. It belongs to the runtime's owner; the runtime, the session, the dispatcher and
@@ -2691,6 +2748,7 @@ public:
 private:
     friend class Interpreter;
     friend class Inspector;
+    friend struct testing::ScreenProbe;
 
     // Out of line: an exported class emits its inline members in every module, and this one destroys a
     // `std::unique_ptr<Mounted>` on a throw, which needs `Mounted` complete.

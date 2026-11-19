@@ -24,8 +24,10 @@
 #include <morph/ui/interpreter.hpp>
 #include <morph/ui/locale_table.hpp>
 #include <morph/ui/preferences.hpp>
+#include <morph/ui/mount.hpp>
 #include <morph/ui/table_rows.hpp>
 #include <morph/ui/table_state.hpp>
+#include <morph/ui/testing/recording_backend.hpp>
 #include <morph/ui/value.hpp>
 #include <mutex>
 #include <optional>
@@ -44,7 +46,8 @@
 /// @file
 /// @brief What table tests share: the test catalog of `Lims_SampleModel`'s table `samples`, builders of its
 ///        description and pages, `RowsFixture`, a session with a scripted dispatcher and no screen, for tests of
-///        `TableRows`, and the stores table-state tests look into.
+///        `TableRows`, the stores table-state tests look into, and `TableHarness`, which mounts whole documents with
+///        a model-backed table on a recording backend.
 
 namespace morph::ui::testing {
 
@@ -59,12 +62,15 @@ struct WindowRowsProbe {
 };
 
 /// @brief The corpus catalog with the table `samples` of `Lims_SampleModel`: `Table.samples`, which holds its record
-///        `Lims_SampleModel.samples` opaquely, and `Table.samples.describe`.
+///        `Lims_SampleModel.samples` opaquely, and `Table.samples.describe`; no other table's actions.
 /// @return The catalog.
 inline Catalog tableCatalog() {
     Catalog catalog = corpusCatalog();
     auto base = catalog.action;
     catalog.action = [base](std::string_view action) -> std::optional<ActionInfo> {
+        if (action.starts_with("Table.") && action != "Table.samples" && action != "Table.samples.describe") {
+            return std::nullopt;
+        }
         auto info = base(action);
         if (info && action == "Table.samples") {
             info->modelType = "Lims_SampleModel";
@@ -83,7 +89,8 @@ inline Catalog tableCatalog() {
     return catalog;
 }
 
-/// @brief The description of `samples`: `id` (the Integer key), `name` (Text), then `c3` … Decimal.
+/// @brief The description of `samples`: `id` (the Integer key), `name` (Text), then `c3` … Decimal, each labelled as
+///        a server labels a column from its id (`Id`, `Name`, `C3`).
 /// @param columns The columns, at least 2.
 /// @return The description, its revision set.
 inline table::TableDescription samplesDescription(int columns) {
@@ -94,7 +101,7 @@ inline table::TableDescription samplesDescription(int columns) {
     auto const add = [&description](std::string id, table::ColumnKind kind) {
         table::TableColumn column;
         column.info = table::ColumnInfo{.id = id, .kind = kind};
-        column.label = std::move(id);
+        column.label = forms::detail::inferTitle(id);
         description.columns.push_back(std::move(column));
     };
     add("id", table::ColumnKind::Integer);
@@ -122,12 +129,12 @@ inline std::string describeJson(table::TableDescription const& description) {
 /// @param kind      Whether the total is exact.
 /// @param undecided Undecided rows.
 /// @param awaiting  The order's awaited levels.
-/// @return The page's JSON.
+/// @return The page.
 // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): a page's numbers, in the order a page names them.
-inline std::string pageJsonAt(std::string revision, std::int64_t offset, std::int64_t count, std::int64_t total,
-                              std::vector<std::string> const& columns,
-                              table::TotalKind kind = table::TotalKind::Exact, std::int64_t undecided = 0,
-                              std::vector<std::string> awaiting = {}) {
+inline table::GenericPage pageAt(std::string revision, std::int64_t offset, std::int64_t count, std::int64_t total,
+                                 std::vector<std::string> const& columns,
+                                 table::TotalKind kind = table::TotalKind::Exact, std::int64_t undecided = 0,
+                                 std::vector<std::string> awaiting = {}) {
     table::GenericPage page;
     page.revision = std::move(revision);
     page.columns = columns;
@@ -148,7 +155,27 @@ inline std::string pageJsonAt(std::string revision, std::int64_t offset, std::in
         }
         page.rows.push_back(std::move(row));
     }
-    return glz::write_json(page).value_or("");
+    return page;
+}
+
+/// @brief A page of `samples` as `Table.samples` answers, against a given revision; see `pageAt`.
+/// @param revision  The description revision the page names.
+/// @param offset    The first row's view index and key.
+/// @param count     Rows.
+/// @param total     The view's total.
+/// @param columns   The columns the page holds.
+/// @param kind      Whether the total is exact.
+/// @param undecided Undecided rows.
+/// @param awaiting  The order's awaited levels.
+/// @return The page's JSON.
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): a page's numbers, in the order a page names them.
+inline std::string pageJsonAt(std::string revision, std::int64_t offset, std::int64_t count, std::int64_t total,
+                              std::vector<std::string> const& columns,
+                              table::TotalKind kind = table::TotalKind::Exact, std::int64_t undecided = 0,
+                              std::vector<std::string> awaiting = {}) {
+    return glz::write_json(pageAt(std::move(revision), offset, count, total, columns, kind, undecided,
+                                  std::move(awaiting)))
+        .value_or("");
 }
 
 /// @brief A page of `samples` against `samplesDescription(3)`'s revision; see `pageJsonAt`.
@@ -218,9 +245,18 @@ inline std::vector<std::string> shownKeys(TableRows const& rows) {
 /// @param columns The columns.
 /// @return The reply's JSON.
 inline std::string keyedJson(std::vector<std::pair<std::int64_t, std::int64_t>> const& rows, std::int64_t total,
-                             std::vector<std::string> const& columns) {
+                             std::vector<std::string> const& columns);
+
+/// @brief A keyed reply of `samples` against @p revision; see `keyedJson`.
+/// @param revision The description revision the reply names.
+/// @param rows     The rows, as key and view row, in view order.
+/// @param total    The view's total.
+/// @param columns  The columns.
+/// @return The reply's JSON.
+inline std::string keyedJsonAt(std::string revision, std::vector<std::pair<std::int64_t, std::int64_t>> const& rows,
+                               std::int64_t total, std::vector<std::string> const& columns) {
     table::GenericPage page;
-    page.revision = samplesDescription(3).revision;
+    page.revision = std::move(revision);
     page.columns = columns;
     page.total = total;
     for (auto const& [key, viewRow] : rows) {
@@ -237,6 +273,11 @@ inline std::string keyedJson(std::vector<std::pair<std::int64_t, std::int64_t>> 
         page.rows.push_back(std::move(row));
     }
     return glz::write_json(page).value_or("");
+}
+
+inline std::string keyedJson(std::vector<std::pair<std::int64_t, std::int64_t>> const& rows, std::int64_t total,
+                             std::vector<std::string> const& columns) {
+    return keyedJsonAt(samplesDescription(3).revision, rows, total, columns);
 }
 
 /// @brief The formatting facts of a locale, built from the locale table as a session's locale scope builds them.
@@ -492,6 +533,37 @@ struct RowsFixture {
     [[nodiscard]] static table::PageWindow<table::GenericRow> const& window(WindowRows const& rows) {
         return WindowRowsProbe::window(rows);
     }
+
+protected:
+    /// @brief A fixture whose session reads @p catalog and keeps table state in @p store, for application `lims`.
+    /// @param catalog The session's catalog.
+    /// @param store   The table-state store; null for none.
+    RowsFixture(Catalog catalog, std::shared_ptr<table::ITableStateStore> store)
+        : session{runtime, SessionOptions{.scheduler = &scheduler,
+                                          .clock = [this] { return scheduler.now(); },
+                                          .keepUnused = std::chrono::minutes{5},
+                                          .catalog = std::move(catalog),
+                                          .classify = {},
+                                          .developmentTools = DevelopmentTools::Off,
+                                          .watcher =
+                                              [this](std::string const& kind, std::string const& body) {
+                                                  watches.push_back(kind + " " + body);
+                                                  auto [completion, promise] =
+                                                      async::Completion<std::string>::makeSettleable(&owner);
+                                                  promise.resolve(std::string{"{}"});
+                                                  return std::move(completion);
+                                              },
+                                          .maxInlineFileBytes = kDefaultInlineFileBytes,
+                                          .tableSettle = std::chrono::milliseconds{80},
+                                          .tableAwaitedRefetch = std::chrono::milliseconds{250},
+                                          .tableState = std::move(store),
+                                          .tableStateTimeout = std::chrono::milliseconds{300},
+                                          .tableStateDebounce = std::chrono::milliseconds{500},
+                                          .application = "lims"}} {
+        session.setLocale("en");
+    }
+
+public:
 
     /// @brief The keys of a range, which must be delivered by one settle and make no `Table.samples` call.
     /// @param rows  The rows.
@@ -798,6 +870,10 @@ public:
         auto [completion, promise] = async::Completion<table::SaveResult>::makeSettleable(_executor);
         ++_saves;
         _lastSaved = json;
+        if (_holdingSaves) {
+            _heldSaves.push_back(HeldSave{.json = std::move(json), .promise = std::move(promise)});
+            return std::move(completion);
+        }
         if (_refusal) {
             promise.resolve(
                 table::SaveResult{.outcome = table::SaveOutcome::Refused, .revision = {}, .reason = *_refusal});
@@ -840,6 +916,19 @@ public:
     /// @param reason The reason.
     void refuseSaves(std::string reason) { _refusal = std::move(reason); }
 
+    /// @brief Holds every later save, unanswered and unstored, until `releaseSave`.
+    void holdSaves() { _holdingSaves = true; }
+
+    /// @brief Stores and answers the oldest held save.
+    void releaseSave() {
+        REQUIRE_FALSE(_heldSaves.empty());
+        HeldSave held = std::move(_heldSaves.front());
+        _heldSaves.erase(_heldSaves.begin());
+        _stored = table::StoredTableState{.json = std::move(held.json), .revision = std::to_string(++_revision)};
+        held.promise.resolve(
+            table::SaveResult{.outcome = table::SaveOutcome::Saved, .revision = _stored->revision, .reason = {}});
+    }
+
     /// @brief The loads asked for.
     /// @return How many.
     [[nodiscard]] std::size_t loads() const { return _loads; }
@@ -867,7 +956,501 @@ private:
     std::uint64_t _revision = 1;
     std::string _lastSaved;
     table::TableStateKey _lastLoadKey;
+    struct HeldSave {
+        std::string json;
+        async::Completion<table::SaveResult>::Promise promise;
+    };
+    bool _holdingSaves = false;
+    std::vector<HeldSave> _heldSaves;
 };
+
+// ── A screen with a model-backed table ──────────────────────────────────────
+
+/// @brief Reaches into a `Screen` for what a test checks and the screen does not show.
+struct ScreenProbe {
+    /// @brief The mount's counters.
+    /// @param screen The screen.
+    /// @return `Mounted::stats()`.
+    [[nodiscard]] static MountStats const& stats(Screen const& screen) { return screen._mounted->stats(); }
+
+    /// @brief The screen's core.
+    /// @param screen The screen.
+    /// @return It.
+    [[nodiscard]] static morph::ui::detail::ScreenCore& core(Screen& screen) { return *screen._core; }
+
+    /// @brief An element of the screen's own scope.
+    /// @param screen The screen.
+    /// @param id     The element's id.
+    /// @return Its state.
+    [[nodiscard]] static morph::ui::detail::ElementState& element(Screen& screen, std::string_view id) {
+        morph::ui::detail::NameRef const* const found = screen._scope->find(id);
+        REQUIRE(found != nullptr);
+        REQUIRE(found->element != nullptr);
+        return *found->element;
+    }
+};
+
+/// @brief Where a test's table-state store delivers: a step executor `TableHarness::settle` runs too, there before
+///        the harness so a store can be built first.
+/// @return The executor, one for the process.
+inline morph::testing::StepExecutor& storeExecutor() {
+    static morph::testing::StepExecutor executor;
+    return executor;
+}
+
+/// @brief The actions a test adds to `TableHarness`'s catalog: action id, then its request schema's JSON text and
+///        its `ActionInfo`. A base of the harness, so the catalog it builds can read them.
+struct ExtraActions {
+    /// @brief The actions, by id.
+    std::map<std::string, std::pair<std::string, ActionInfo>, std::less<>> extraActions;
+
+    /// @brief A catalog that looks in `extraActions` first and in `tableCatalog()` after.
+    /// @return The catalog; it reads this object, which must outlive it.
+    [[nodiscard]] Catalog catalog() const {
+        Catalog out = tableCatalog();
+        out.action = [this, base = out.action](std::string_view id) -> std::optional<ActionInfo> {
+            if (auto const found = extraActions.find(id); found != extraActions.end()) {
+                return found->second.second;
+            }
+            return base ? base(id) : std::nullopt;
+        };
+        out.schema = [this, base = out.schema](std::string_view id) -> std::optional<std::string> {
+            if (auto const found = extraActions.find(id); found != extraActions.end()) {
+                return found->second.first;
+            }
+            return base ? base(id) : std::nullopt;
+        };
+        return out;
+    }
+};
+
+/// @brief A host that keeps every `notify`, as `(text, role)`.
+class NotifyingHost final : public InterpreterHost {
+public:
+    /// @brief Every message notified, oldest first.
+    std::vector<std::pair<std::string, std::string>> notified;
+
+    /// @brief Keeps the message.
+    /// @param text The message.
+    /// @param role Its role.
+    /// @return `true`: shown.
+    bool notify(std::string const& text, std::string const& role) override {
+        notified.emplace_back(text, role);
+        return true;
+    }
+};
+
+/// @brief A screen with a model-backed table over `Table.samples`: a `RowsFixture` with an interpreter, a
+///        `NotifyingHost` and a `RecordingBackend`.
+///
+/// The session's catalog, and the one `mount` loads against, look in `extraActions` first, so an action a test adds
+/// before `mount` is known to both. The session's locale is `en`.
+struct TableHarness : ExtraActions, RowsFixture {
+    /// @brief A harness whose session keeps no table state.
+    TableHarness() : TableHarness(nullptr) {}
+
+    /// @brief A harness whose session keeps table state in @p store.
+    /// @param store The store; null for none.
+    explicit TableHarness(std::shared_ptr<table::ITableStateStore> store)
+        : RowsFixture{ExtraActions::catalog(), std::move(store)} {}
+
+    /// @brief The host.
+    NotifyingHost host;
+    /// @brief The backend.
+    RecordingBackend backend;
+    /// @brief Every diagnostic reported, oldest first.
+    std::vector<Refusal> diagnostics;
+    /// @brief The interpreter.
+    Interpreter interpreter{session, dispatcher,
+                            InterpreterOptions{.host = &host, .diagnostics = [this](Refusal const& refusal) {
+                                                   diagnostics.push_back(refusal);
+                                               }}};
+
+    /// @brief Loads and mounts a document, then settles.
+    /// @param text    The document.
+    /// @param params  The params.
+    /// @param options The mount options.
+    /// @return The screen.
+    std::unique_ptr<Screen> mount(std::string_view text, ValueRecord const& params = {},
+                                  MountOptions const& options = {}) {
+        auto screen = interpreter.mount(loadOrFail(text, session.options().catalog), params, backend, options);
+        if (!screen) {
+            FAIL(screen.error().message());
+        }
+        settle();
+        return std::move(*screen);
+    }
+
+    /// @brief Runs everything posted to the owner and to `storeExecutor()` until both are idle.
+    void settle() {
+        for (int round = 0; round < 100; ++round) {
+            std::size_t const ran = owner.runAll() + storeExecutor().runAll();
+            if (ran == 0) {
+                return;
+            }
+        }
+        FAIL("the owner and the store did not settle");
+    }
+
+    /// @brief Advances the clock, then settles.
+    /// @param delta How far.
+    void advance(std::chrono::milliseconds delta) {
+        scheduler.advance(delta);
+        settle();
+    }
+
+    /// @brief Answers a call, then settles.
+    /// @param index The call.
+    /// @param json  The reply.
+    void reply(std::size_t index, std::string json) {
+        dispatcher.reply(index, std::move(json));
+        settle();
+    }
+
+    /// @brief Fails a call, then settles.
+    /// @param index The call.
+    /// @param kind  The error kind.
+    void fail(std::size_t index, std::string kind = "error") {
+        dispatcher.fail(index, std::move(kind));
+        settle();
+    }
+
+    /// @brief The first widget of a kind whose property has a value.
+    /// @param kind  The kind.
+    /// @param name  The property.
+    /// @param value The value.
+    /// @return Its id.
+    int find(std::string_view kind, std::string_view name, std::string_view value) const {
+        auto const found = backend.find(kind, name, value);
+        if (!found) {
+            FAIL("no " << kind << " with " << name << "=" << value << " in\n" << backend.dump());
+        }
+        return *found;
+    }
+
+    /// @brief The widget whose test id is @p testId.
+    /// @param kind   The kind.
+    /// @param testId The test id.
+    /// @return Its id.
+    int byTestId(std::string_view kind, std::string_view testId) const { return find(kind, "testId", testId); }
+
+    /// @brief A text widget's text.
+    /// @param testId The text widget's test id.
+    /// @return Its text.
+    std::string text(std::string_view testId) const { return backend.prop(byTestId("Text", testId), "text"); }
+};
+
+/// @brief Adds an action to the harness's catalog; before `mount`, so the loader and the session both know it.
+/// @param h          The harness.
+/// @param id         The action's id.
+/// @param schemaJson Its request schema's JSON text.
+/// @param info       Its catalog entry.
+inline void addAction(TableHarness& h, std::string id, std::string schemaJson, ActionInfo info) {
+    h.extraActions.insert_or_assign(std::move(id), std::pair{std::move(schemaJson), std::move(info)});
+}
+
+/// @brief The test document: a table `list` of the table `samples` of the model alias `lab`, with `empty` content.
+inline constexpr std::string_view kModelTable =
+    R"({"vocab":"ui/1","id":"samples","models":{"lab":{"type":"Lims_SampleModel"}},"view":{"kind":"table","id":"list","testId":"list","model":"lab","table":"samples","empty":[{"kind":"text","text":"No samples"}]}})";
+
+/// @brief A stored state: the sort `name` descending and a filter on `name` containing `a`.
+inline constexpr std::string_view kStored =
+    R"({"version":1,"sort":[{"column":"name","direction":"desc"}],"filters":{"columns":{"name":{"include":[{"contains":"a"}]}}}})";
+
+/// @brief A document's text with the table node's member @p member, written `"key":value`, replacing the member of
+///        that name or added.
+/// @param text   The document.
+/// @param member The member.
+/// @return The document.
+inline std::string withTableKey(std::string_view text, std::string_view member) {
+    auto json = parseJson(text);
+    REQUIRE(json.has_value());
+    auto field = parseJson("{" + std::string{member} + "}");
+    REQUIRE(field.has_value());
+    auto& view = std::get<Json::object_t>(std::get<Json::object_t>(json->data).at("view").data);
+    for (auto& [key, value] : std::get<Json::object_t>(field->data)) {
+        view.insert_or_assign(key, std::move(value));
+    }
+    return glz::write_json(*json).value_or("");
+}
+
+/// @brief `kModelTable` sorted by the state `order`, bound: `id` ascending.
+inline std::string const kBoundSort =
+    R"({"vocab":"ui/1","id":"samples","models":{"lab":{"type":"Lims_SampleModel"}},)"
+    R"("state":{"order":{"init":{"lit":[{"column":"id","direction":"asc"}]}}},)"
+    R"("view":{"kind":"table","id":"list","testId":"list","model":"lab","table":"samples","sort":{"ref":"order"},)"
+    R"("empty":[{"kind":"text","text":"No samples"}]}})";
+
+/// @brief `kModelTable` with `"persist": false`.
+inline std::string const kNoPersist =
+    R"({"vocab":"ui/1","id":"samples","models":{"lab":{"type":"Lims_SampleModel"}},)"
+    R"("view":{"kind":"table","id":"list","testId":"list","model":"lab","table":"samples","persist":false,)"
+    R"("empty":[{"kind":"text","text":"No samples"}]}})";
+
+/// @brief `kModelTable` with `"status": false`.
+inline std::string const kNoStatus =
+    R"({"vocab":"ui/1","id":"samples","models":{"lab":{"type":"Lims_SampleModel"}},)"
+    R"("view":{"kind":"table","id":"list","testId":"list","model":"lab","table":"samples","status":false,)"
+    R"("empty":[{"kind":"text","text":"No samples"}]}})";
+
+/// @brief The table widget of the test document.
+/// @param h The harness.
+/// @return Its id.
+inline int tableOf(TableHarness const& h) { return h.byTestId("Table", "list"); }
+
+/// @brief The JSON text of an element value of the screen mounted last.
+/// @param screen The screen.
+/// @param id     The element's id.
+/// @param name   The value's name.
+/// @return `readJson` of `{"ref": "<id>.<name>"}`.
+inline std::string elementValue(Screen const& screen, std::string_view id, std::string_view name) {
+    return readJson(screen, R"({"ref":")" + std::string{id} + "." + std::string{name} + R"("})");
+}
+
+/// @brief The oldest call of an action neither answered nor stopped.
+/// @param h      The harness.
+/// @param action The action.
+/// @return Its index.
+inline std::size_t oldestOpen(TableHarness const& h, std::string_view action) {
+    for (std::size_t index = 0; index < h.dispatcher.calls.size(); ++index) {
+        auto const& call = h.dispatcher.calls[index];
+        if (call.action == action && !call.answered && !call.options.stop.stop_requested()) {
+            return index;
+        }
+    }
+    FAIL("no open call of " << action);
+    return 0;
+}
+
+/// @brief The open calls of an action: neither answered nor stopped.
+/// @param h      The harness.
+/// @param action The action.
+/// @return How many.
+inline std::size_t openCalls(TableHarness const& h, std::string_view action) {
+    std::size_t out = 0;
+    for (auto const& call : h.dispatcher.calls) {
+        out += call.action == action && !call.answered && !call.options.stop.stop_requested() ? 1U : 0U;
+    }
+    return out;
+}
+
+/// @brief Answers the open `Table.samples.describe` call with @p description, then settles.
+/// @param h           The harness.
+/// @param description The description.
+inline void replyDescribe(TableHarness& h, table::TableDescription const& description = samplesDescription(3)) {
+    h.described = description;
+    h.columns = h.columnIds(0, 3);
+    h.reply(oldestOpen(h, "Table.samples.describe"), describeJson(table::describe(description)));
+}
+
+/// @brief Answers the oldest open `Table.samples` call, then settles.
+/// @param h    The harness.
+/// @param json The reply.
+inline void replyPage(TableHarness& h, std::string json) { h.reply(oldestOpen(h, "Table.samples"), std::move(json)); }
+
+/// @brief The query a `Table.samples` call carries.
+/// @param h     The harness.
+/// @param index The call.
+/// @return The `TableQuery` read from the body's `query`.
+inline table::TableQuery queryOf(TableHarness const& h, std::size_t index) {
+    struct Body {
+        table::TableQuery query;
+    };
+    Body body;
+    auto const failed =
+        glz::read<glz::opts{.error_on_unknown_keys = false}>(body, h.dispatcher.calls.at(index).body);
+    if (failed) {
+        FAIL("the call's body does not read: " << glz::format_error(failed, h.dispatcher.calls.at(index).body));
+    }
+    return body.query;
+}
+
+/// @brief The query the latest `Table.samples` call carries.
+/// @param h The harness.
+/// @return It.
+inline table::TableQuery lastQuery(TableHarness const& h) { return queryOf(h, h.dispatcher.last("Table.samples")); }
+
+/// @brief Answers every open `Table.samples` call with its own page of @p total rows, then settles, until none is
+///        open; each reply holds `h.columns`.
+/// @param h         The harness.
+/// @param total     The view's total.
+/// @param kind      Whether the total is exact.
+/// @param undecided Undecided rows.
+/// @param awaiting  The order's awaited levels.
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): a page's numbers, in the order a page names them.
+inline void answerPages(TableHarness& h, std::int64_t total, table::TotalKind kind = table::TotalKind::Exact,
+                        std::int64_t undecided = 0, std::vector<std::string> const& awaiting = {}) {
+    for (int round = 0; round < 16 && openCalls(h, "Table.samples") > 0; ++round) {
+        std::size_t const index = oldestOpen(h, "Table.samples");
+        table::TableQuery const query = queryOf(h, index);
+        std::int64_t const offset = query.page.offset;
+        std::int64_t const count = std::clamp<std::int64_t>(total - offset, 0, 200);
+        h.reply(index, pageJsonAt(h.described.revision, offset, count, total, h.columns, kind, undecided, awaiting));
+    }
+    REQUIRE(openCalls(h, "Table.samples") == 0);
+}
+
+/// @brief Mounts a document, answers its description and every page fetch it causes, and returns the screen.
+/// @param h     The harness.
+/// @param text  The document.
+/// @param total The view's total.
+/// @return The screen.
+inline std::unique_ptr<Screen> mountShown(TableHarness& h, std::string_view text = kModelTable,
+                                          std::int64_t total = 9093) {
+    auto screen = h.mount(text);
+    replyDescribe(h);
+    answerPages(h, total);
+    return screen;
+}
+
+/// @brief The status line the table widget was last given.
+/// @param h The harness.
+/// @return It.
+inline TableStatus statusOf(TableHarness& h) { return h.backend.tableStatus(tableOf(h)); }
+
+/// @brief The table widget's header captions.
+/// @param h The harness.
+/// @return They, in column order.
+inline std::vector<std::string> headerLabels(TableHarness& h) {
+    std::vector<std::string> out;
+    for (TableColumn const& column : h.backend.tableColumns(tableOf(h))) {
+        out.push_back(column.label);
+    }
+    return out;
+}
+
+/// @brief The diagnostics whose reason contains @p text.
+/// @param h    The harness.
+/// @param text The text.
+/// @return How many.
+inline std::size_t diagnosticsMentioning(TableHarness const& h, std::string_view text) {
+    return static_cast<std::size_t>(std::ranges::count_if(
+        h.diagnostics, [text](Refusal const& refusal) { return refusal.reason.find(text) != std::string::npos; }));
+}
+
+/// @brief Delivers a change of `Lims_SampleModel.samples` with @p keys, as a `changes` event does, then settles.
+/// @param h    The harness.
+/// @param keys The changed rows' keys; none for a change that names no keys, which changes every row.
+inline void change(TableHarness& h, std::vector<std::int64_t> const& keys) {
+    effects::RecordChange record{.record = "Lims_SampleModel.samples", .keys = std::nullopt};
+    if (!keys.empty()) {
+        std::vector<glz::raw_json> raw;
+        for (auto const key : keys) {
+            raw.emplace_back(std::to_string(key));
+        }
+        record.keys = std::move(raw);
+    }
+    wire::ChangesBody body;
+    body.records.push_back(std::move(record));
+    h.session.applyChanges(body);
+    h.settle();
+}
+
+/// @brief Whether a widget is shown: neither it nor a column around it is hidden.
+/// @param h      The harness.
+/// @param widget The widget.
+/// @return `true` when shown.
+inline bool shownThroughColumns(TableHarness const& h, int widget) {
+    for (std::optional<int> current = widget; current;) {
+        if (h.backend.prop(*current, "visible") == "false") {
+            return false;
+        }
+        std::optional<int> parent;
+        for (int const column : h.backend.all("Column")) {
+            if (std::ranges::contains(h.backend.children(column), *current)) {
+                parent = column;
+            }
+        }
+        current = parent;
+    }
+    return true;
+}
+
+/// @brief Whether a text with @p text is mounted and shown.
+/// @param h    The harness.
+/// @param text The text.
+/// @return `true` when one is.
+inline bool shownText(TableHarness const& h, std::string_view text) {
+    auto const found = h.backend.find("Text", "text", text);
+    return found.has_value() && shownThroughColumns(h, *found);
+}
+
+/// @brief The mount's counters of a screen.
+/// @param screen The screen.
+/// @return `Mounted::stats()`.
+inline MountStats statsOf(Screen const& screen) { return ScreenProbe::stats(screen); }
+
+/// @brief A screen's core.
+/// @param screen The screen.
+/// @return It.
+inline morph::ui::detail::ScreenCore& coreOf(Screen& screen) { return ScreenProbe::core(screen); }
+
+/// @brief An element of a screen's own scope.
+/// @param screen The screen.
+/// @param id     The element's id.
+/// @return Its state.
+inline morph::ui::detail::ElementState& elementOf(Screen& screen, std::string_view id) { return ScreenProbe::element(screen, id); }
+
+/// @brief A description with @p level on @p column, the level listed in its `levels`.
+/// @param description The description.
+/// @param column      The column's id.
+/// @param level       The level.
+/// @return The description, its revision set again.
+inline table::TableDescription withLevel(table::TableDescription description, std::string_view column,
+                                         std::string level) {
+    for (auto& entry : description.columns) {
+        if (entry.info.id == column) {
+            entry.info.level = level;
+        }
+    }
+    if (!std::ranges::contains(description.levels, level)) {
+        description.levels.push_back(std::move(level));
+    }
+    return table::describe(std::move(description));
+}
+
+/// @brief A page against `h.described`'s revision with the names of rows @p first to `first + n - 1` written
+///        `"renamed-<key>"`.
+/// @param revision The revision the page names.
+/// @param offset   The first row's view index and key.
+/// @param count    Rows.
+/// @param total    The view's total.
+/// @param columns  The columns the page holds.
+/// @param first    The first renamed row.
+/// @param n        How many are renamed.
+/// @return The page's JSON.
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): a page's numbers, in the order a page names them.
+inline std::string pageJsonRenaming(std::string revision, std::int64_t offset, std::int64_t count, std::int64_t total,
+                                    std::vector<std::string> const& columns, std::int64_t first, std::int64_t n) {
+    table::GenericPage page = pageAt(std::move(revision), offset, count, total, columns);
+    auto const name = std::ranges::find(columns, "name");
+    REQUIRE(name != columns.end());
+    auto const at = static_cast<std::size_t>(name - columns.begin());
+    for (std::int64_t key = first; key < first + n; ++key) {
+        page.rows.at(static_cast<std::size_t>(key - offset)).at(at) = table::Cell{"renamed-" + std::to_string(key)};
+    }
+    return glz::write_json(page).value_or("");
+}
+
+/// @brief A page against @p revision whose rows @p unloaded lack levels, and whose `failed` lists @p failed.
+/// @param revision The revision the page names.
+/// @param offset   The first row's view index and key.
+/// @param count    Rows.
+/// @param total    The view's total.
+/// @param columns  The columns the page holds.
+/// @param unloaded The rows with unloaded levels, by index into the page's rows.
+/// @param failed   The levels whose load failed.
+/// @return The page's JSON.
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): a page's numbers, in the order a page names them.
+inline std::string pageJsonUnloaded(std::string revision, std::int64_t offset, std::int64_t count, std::int64_t total,
+                                    std::vector<std::string> const& columns,
+                                    std::vector<table::UnloadedRow> const& unloaded,
+                                    std::vector<std::string> const& failed) {
+    table::GenericPage page = pageAt(std::move(revision), offset, count, total, columns);
+    page.unloadedRows = unloaded;
+    page.failed = failed;
+    return glz::write_json(page).value_or("");
+}
 
 /// @brief A non-owning `std::shared_ptr` to @p store, for an API that shares its store.
 /// @param store The store, which must outlive every copy.

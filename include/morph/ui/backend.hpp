@@ -876,6 +876,29 @@ public:
     /// @param keys Every key currently in the table's data, in row order, so a range or Ctrl+A covers the rows the
     ///        backend has not realized.
     virtual void setExistingKeys(std::vector<Key> const& keys) { static_cast<void>(keys); }
+
+    /// @brief Shows the table's status line: its counts, the state of a failed fetch or level with "Retry" when it
+    ///        offers it, and the latest message; a status that is not `shown` takes no space. Called once the table
+    ///        is built and on every change. A backend without a status line ignores it.
+    /// @param status The status line.
+    virtual void setStatus(TableStatus const& status) { static_cast<void>(status); }
+
+    /// @brief Sets what choosing the status line's "Retry" calls.
+    /// @param onRetry The handler; empty does nothing.
+    virtual void setOnRetry(std::function<void()> onRetry) { static_cast<void>(onRetry); }
+
+    /// @brief Sets a cell's load state; called after the row's key, and on every change, for a table whose rows come
+    ///        from a `TableSource`. `Unloaded` draws a placeholder of a fixed width in the column's alignment and
+    ///        `Failed` an error mark of the same width, over the cell's own content; neither widens the column.
+    ///        A cell no call names is `Loaded`.
+    /// @param row    One of this table's rows.
+    /// @param column The cell's column: an index into the columns `setColumns` gave.
+    /// @param load   The state.
+    virtual void setCellLoad(Widget& row, std::size_t column, CellLoad load) {
+        static_cast<void>(row);
+        static_cast<void>(column);
+        static_cast<void>(load);
+    }
 };
 
 /// @brief A date or date-and-time field, in the mode and display zone fixed at creation.
