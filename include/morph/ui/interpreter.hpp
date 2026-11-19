@@ -2797,6 +2797,12 @@ namespace detail {
 /// @return The value.
 [[nodiscard]] MORPH_API Value jsonTextValue(std::string_view text);
 
+/// @brief Bytes as base64 (RFC 4648, with padding): how a document carries an inline file, and how a dictated clip
+///        travels.
+/// @param bytes The bytes.
+/// @return The text.
+[[nodiscard]] MORPH_API std::string base64Encode(std::string_view bytes);
+
 /// @brief Base64 text as bytes (RFC 4648, with or without padding).
 /// @param text The text.
 /// @return The bytes, or `std::nullopt` for text that is not base64.

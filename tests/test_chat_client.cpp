@@ -3,7 +3,9 @@
 // The client's side of a chat: what it sends, what it shows, and how it recovers what an event lost.
 
 #include <catch2/catch_test_macros.hpp>
+#include <chrono>
 #include <cstdint>
+#include <expected>
 #include <functional>
 #include <morph/core/wire.hpp>
 #include <morph/session/session.hpp>
@@ -11,6 +13,7 @@
 #include <morph/ui/chat/panel.hpp>
 #include <morph/ui/chat/protocol.hpp>
 #include <morph/ui/host_vocabulary.hpp>
+#include <morph/ui/interpreter.hpp>
 #include <morph/ui/service_client.hpp>
 #include <optional>
 #include <string>
@@ -567,4 +570,146 @@ TEST_CASE("the_panel_binding_sends_the_origin_and_the_draft_with_the_message", "
     rig.client.deliverEvent(eventOf(draftEvent(1, R"({"id":"s"})")));
     REQUIRE(rig.proposals.size() == 1);
     CHECK(rig.proposals[0].origin == 77);
+}
+
+namespace {
+
+using Outcome = std::optional<std::expected<std::string, std::string>>;
+
+wire::EventBody transcriptionEvent(std::uint64_t id) {
+    chat::TranscriptionEvent const event{
+        .kind = std::string{chat::kTranscriptionEventKind},
+        .state = {.id = id, .status = chat::TranscriptionStatus::Done, .text = std::nullopt, .error = std::nullopt}};
+    return {.topic = std::string{chat::kChatTopic}, .payload = glz::raw_json{chat::writeMessage(event)}};
+}
+
+std::string transcriptionOf(std::uint64_t id, chat::TranscriptionStatus status, std::optional<std::string> text,
+                            std::optional<std::string> error = std::nullopt) {
+    return chat::writeMessage(
+        chat::TranscriptionState{.id = id, .status = status, .text = std::move(text), .error = std::move(error)});
+}
+
+}  // namespace
+
+// Mutation: keep reading only whether the probe's answer is ok.
+TEST_CASE("chat_client_dictation_offer_comes_from_the_probe", "[chat][client][dictation]") {
+    Rig rig;
+    CHECK_FALSE(rig.client.dictation().has_value());
+    rig.client.probe();
+    chat::TurnState offered;
+    offered.dictation = chat::DictationOffer{.maxSeconds = 60, .maxBytes = 1000};
+    rig.fakeExchange.ok(chat::kStateKind, chat::writeMessage(offered));
+    REQUIRE(rig.client.dictation().has_value());
+    CHECK(rig.client.dictation()->maxSeconds == std::chrono::seconds{60});
+    CHECK(rig.client.dictation()->maxBytes == 1000);
+    rig.client.probe();
+    rig.fakeExchange.ok(chat::kStateKind, chat::writeMessage(chat::TurnState{}));
+    CHECK_FALSE(rig.client.dictation().has_value());
+}
+
+// Mutation: send the clip as raw bytes, or answer on the accept rather than on the state.
+TEST_CASE("chat_client_dictation_transcribes_through_the_state", "[chat][client][dictation]") {
+    Rig rig;
+    Outcome outcome;
+    int calls = 0;
+    rig.client.transcribe(std::string{"RIFF\x00\x01", 6}, std::string{"de"},
+                          [&](std::expected<std::string, std::string> text) {
+                              ++calls;
+                              outcome = std::move(text);
+                          });
+    auto const& sent = rig.fakeExchange.sent.back().request;
+    REQUIRE(sent.kind == chat::kTranscribeKind);
+    auto const request = chat::readTranscribeRequest(sent.body);
+    REQUIRE(request.has_value());
+    CHECK(ui::detail::base64Decode(request->audio) == std::string{"RIFF\x00\x01", 6});
+    CHECK(request->mediaType == "audio/wav");
+    CHECK(request->language == "de");
+
+    rig.fakeExchange.ok(chat::kTranscribeKind, chat::writeMessage(chat::TranscribeAccepted{.id = 5}));
+    REQUIRE(rig.fakeExchange.sent.back().request.kind == chat::kTranscriptionKind);
+    CHECK(chat::readTranscriptionQuery(rig.fakeExchange.sent.back().request.body)->id == 5);
+    rig.fakeExchange.ok(chat::kTranscriptionKind,
+                        transcriptionOf(5, chat::TranscriptionStatus::Running, std::nullopt));
+    CHECK(calls == 0);
+
+    rig.client.deliverEvent(transcriptionEvent(99));
+    CHECK(rig.fakeExchange.count(chat::kTranscriptionKind) == 1);
+    rig.client.deliverEvent(transcriptionEvent(5));
+    CHECK(rig.fakeExchange.count(chat::kTranscriptionKind) == 2);
+    rig.fakeExchange.ok(chat::kTranscriptionKind, transcriptionOf(5, chat::TranscriptionStatus::Done, "words"));
+    CHECK(calls == 1);
+    REQUIRE(outcome.has_value());
+    CHECK(*outcome == std::expected<std::string, std::string>{"words"});
+}
+
+// Mutation: drop a refusal or a failed state on the floor.
+TEST_CASE("chat_client_dictation_reports_a_refused_or_failed_transcription", "[chat][client][dictation]") {
+    Rig rig;
+    Outcome refused;
+    rig.client.transcribe("clip", std::nullopt, [&](std::expected<std::string, std::string> text) { refused = text; });
+    rig.fakeExchange.answer(chat::kTranscribeKind, wire::makeErr("busy: a dictation is already being transcribed", 0));
+    REQUIRE(refused.has_value());
+    CHECK(refused->error().starts_with("busy"));
+
+    Outcome failed;
+    rig.client.transcribe("clip", std::nullopt, [&](std::expected<std::string, std::string> text) { failed = text; });
+    rig.fakeExchange.ok(chat::kTranscribeKind, chat::writeMessage(chat::TranscribeAccepted{.id = 6}));
+    rig.fakeExchange.ok(chat::kTranscriptionKind, transcriptionOf(6, chat::TranscriptionStatus::Failed, std::nullopt,
+                                                                  "the transcription did not answer in time"));
+    REQUIRE(failed.has_value());
+    CHECK(failed->error() == "the transcription did not answer in time");
+}
+
+// Mutation: leave a waiting transcription waiting across a reconnect or an end.
+TEST_CASE("chat_client_dictation_answers_a_waiting_transcription_on_reconnect_and_end", "[chat][client][dictation]") {
+    Rig rig;
+    rig.client.probe();
+    chat::TurnState offered;
+    offered.dictation = chat::DictationOffer{.maxSeconds = 60, .maxBytes = 1000};
+    rig.fakeExchange.ok(chat::kStateKind, chat::writeMessage(offered));
+
+    Outcome lost;
+    rig.client.transcribe("clip", std::nullopt, [&](std::expected<std::string, std::string> text) { lost = text; });
+    rig.client.reconnected();
+    REQUIRE(lost.has_value());
+    CHECK(lost->error().contains("connection was lost"));
+
+    Outcome ended;
+    rig.client.transcribe("clip", std::nullopt, [&](std::expected<std::string, std::string> text) { ended = text; });
+    rig.client.end({});
+    REQUIRE(ended.has_value());
+    CHECK_FALSE(ended->has_value());
+    CHECK_FALSE(rig.client.dictation().has_value());
+}
+
+// Mutation: read nothing on resync while a transcription waits.
+TEST_CASE("chat_client_dictation_reads_a_waiting_transcription_on_resync", "[chat][client][dictation]") {
+    Rig rig;
+    rig.client.transcribe("clip", std::nullopt, [](std::expected<std::string, std::string> /*text*/) {});
+    rig.fakeExchange.ok(chat::kTranscribeKind, chat::writeMessage(chat::TranscribeAccepted{.id = 8}));
+    std::size_t const before = rig.fakeExchange.count(chat::kTranscriptionKind);
+    rig.client.deliverEvent({.topic = std::string{wire::kResyncTopic}, .payload = glz::raw_json{"{}"}});
+    CHECK(rig.fakeExchange.count(chat::kTranscriptionKind) == before + 1);
+}
+
+// Mutation: start a second transcription while one waits.
+TEST_CASE("chat_client_dictation_refuses_a_second_transcription_while_one_waits", "[chat][client][dictation]") {
+    Rig rig;
+    rig.client.transcribe("clip", std::nullopt, [](std::expected<std::string, std::string> /*text*/) {});
+    Outcome second;
+    rig.client.transcribe("clip", std::nullopt, [&](std::expected<std::string, std::string> text) { second = text; });
+    REQUIRE(second.has_value());
+    CHECK_FALSE(second->has_value());
+    CHECK(rig.fakeExchange.count(chat::kTranscribeKind) == 1);
+}
+
+// Mutation: let a turn's redraw cut the note off with the turn's old entries.
+TEST_CASE("chat_client_dictation_note_survives_a_turn_redraw", "[chat][client][dictation]") {
+    Rig rig;
+    rig.started();
+    rig.client.note("the microphone permission was denied");
+    CHECK(rig.shown() == Shown{"user:hello", "note:the microphone permission was denied"});
+    rig.fakeExchange.ok(chat::kStateKind, stateOf(7, chat::TurnStatus::Done, "hi there"));
+    CHECK(rig.shown() == Shown{"user:hello", "assistant:hi there", "note:the microphone permission was denied"});
+    CHECK(rig.fakeExchange.count(chat::kTurnKind) == 1);
 }

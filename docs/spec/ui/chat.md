@@ -327,6 +327,14 @@ session. It runs on the owner, and takes the source's exchange, the current sess
   draft the turn proposes (`onDraft`, once per distinct document, whether the `draft` event or the turn's state brought
   it first). The shell uses it to name the tab, so a draft the assistant proposes belongs to the tab the turn started
   in even when the person has since moved to another.
+- **Dictation.** The probe's answer also carries the dictation offer, which `dictation()` returns, or nothing.
+  `transcribe(wav, language, done)` sends `ui-chat-transcribe` with the clip as base64, keeps the id, and reads
+  `ui-chat-transcription` when the `transcription` event for that id arrives and on `resync`. `done` runs exactly once:
+  with the text when the state reads `done`, with the reason when it reads `failed`, when the server refuses the clip,
+  when the exchange fails, on a reconnect, when `end` runs (which also forgets the offer until the next probe), and at
+  once when another transcription still waits.
+- **Notes.** `note(text)` adds an entry of kind `note` to the selected conversation: a line of the client's own, such as
+  why a dictation failed. A running turn's redraw keeps it, after the turn's lines, and it is never sent.
 
 ## The panel
 

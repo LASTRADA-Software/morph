@@ -4191,9 +4191,8 @@ private:
     State _state = State::NotTaken;
 };
 
-/// @brief Bytes as base64 (RFC 4648, with padding): how a document carries an inline file.
-/// @param bytes The bytes.
-/// @return The text.
+}  // namespace
+
 [[nodiscard]] std::string base64Encode(std::string_view bytes) {
     static constexpr std::string_view kAlphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
     std::string out;
@@ -4213,7 +4212,6 @@ private:
     }
     return out;
 }
-}  // namespace
 
 [[nodiscard]] std::optional<std::string> base64Decode(std::string_view text) {
     while (!text.empty() && text.back() == '=') {

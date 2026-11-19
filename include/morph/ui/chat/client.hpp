@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 #pragma once
 
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <exception>
@@ -16,7 +17,9 @@
 
 #include "../../core/wire.hpp"
 #include "../../session/session.hpp"
+#include "../interpreter.hpp"
 #include "../service_client.hpp"
+#include "dictation.hpp"
 #include "protocol.hpp"
 
 /// @file
@@ -36,7 +39,9 @@ class ChatClient {
 public:
     /// @brief One line to show.
     struct Entry {
-        /// @brief `user`, `assistant`, `tool` or `error`.
+        /// @brief `user`, `assistant`, `tool`, `error`, or `note`: a line the client adds itself, such as why a
+        /// dictation
+        ///        failed, which the server never sees.
         std::string kind;
         /// @brief Its text; a `tool` entry's is the tool's name.
         std::string text;
@@ -71,10 +76,20 @@ public:
     ChatClient& operator=(ChatClient&&) = delete;
     ~ChatClient() = default;
 
-    /// @brief Asks whether this server offers this principal a chat, which `available` then answers.
+    /// @brief Asks whether this server offers this principal a chat, and dictation, which `available` and `dictation`
+    ///        then answer.
     void probe() {
         send(std::string{kStateKind}, "{}", [this](ExchangeReply const& reply) {
             _available = reply.has_value() && reply->kind == "ok";
+            _dictation.reset();
+            if (_available) {
+                auto const state = readTurnState(reply->body);
+                if (state && state->dictation && state->dictation->maxSeconds > 0 && state->dictation->maxBytes > 0) {
+                    _dictation = DictationLimits{
+                        .maxSeconds = std::chrono::seconds{static_cast<std::int64_t>(state->dictation->maxSeconds)},
+                        .maxBytes = static_cast<std::size_t>(state->dictation->maxBytes)};
+                }
+            }
             notify();
         });
     }
@@ -82,6 +97,45 @@ public:
     /// @brief Whether the last probe found a chat.
     /// @return Whether it did.
     [[nodiscard]] bool available() const noexcept { return _available; }
+
+    /// @brief The dictation the last probe found offered.
+    /// @return Its bounds, or nothing when the server offers none.
+    [[nodiscard]] std::optional<DictationLimits> dictation() const noexcept { return _dictation; }
+
+    /// @brief Hands a dictated clip to the server, and answers with its text once the server's state says it is done.
+    ///
+    /// @p done runs exactly once: with the text when the state reads `done`; with the reason when it reads `failed`,
+    /// when the server refuses the clip, when the exchange fails, on a reconnect (the old connection's close dropped
+    /// the transcription), when `end` runs, and at once when another transcription is still waiting.
+    /// @param wav      The clip, WAV bytes.
+    /// @param language The language spoken; nothing leaves it to the server's default.
+    /// @param done     What gets the text or the reason.
+    void transcribe(std::string wav, std::optional<std::string> language,
+                    std::function<void(std::expected<std::string, std::string>)> done) {
+        if (_transcribing) {
+            if (done) {
+                done(std::unexpected(std::string{"a dictation is already being transcribed"}));
+            }
+            return;
+        }
+        std::uint64_t const seq = ++_transcribeSeq;
+        _transcribing = Transcribing{.seq = seq, .id = 0, .done = std::move(done)};
+        TranscribeRequest const request{.audio = detail::base64Encode(wav),
+                                        .mediaType = std::string{kDictationMediaType},
+                                        .language = std::move(language)};
+        wav = std::string{};
+        send(std::string{kTranscribeKind}, writeMessage(request),
+             [this, seq](ExchangeReply const& reply) { transcribeAccepted(seq, reply); });
+    }
+
+    /// @brief Adds a line of the client's own to the selected conversation, such as why a dictation failed. It stays
+    ///        when a running turn is redrawn, after the turn's lines, and is never sent.
+    /// @param text The line.
+    void note(std::string text) {
+        _conversations[_selected].push_back(
+            Entry{.kind = "note", .text = std::move(text), .arguments = {}, .ok = false});
+        notify();
+    }
 
     /// @brief Sets what receives a draft the server accepted. Called on the owner, once per distinct document of a
     ///        turn, from an event or from the state read; whichever carries it first.
@@ -120,6 +174,10 @@ public:
     void end(std::function<void()> done) {
         _active.reset();
         _conversations.clear();
+        _dictation.reset();
+        if (_transcribing) {
+            transcribed(std::unexpected(std::string{"the chat ended, so the dictation stopped"}));
+        }
         notify();
         send(std::string{kEndKind}, "{}", [done = std::move(done)](ExchangeReply const& /*reply*/) {
             if (done) {
@@ -146,9 +204,20 @@ public:
     void deliverEvent(wire::EventBody const& event) {
         if (event.topic == wire::kResyncTopic) {
             readState();
+            readTranscription();
             return;
         }
-        if (event.topic != kChatTopic || !_active) {
+        if (event.topic != kChatTopic) {
+            return;
+        }
+        if (auto const hint = readTranscriptionEvent(event.payload.str);
+            hint && hint->kind == kTranscriptionEventKind) {
+            if (_transcribing && _transcribing->id != 0 && hint->state.id == _transcribing->id) {
+                readTranscription();
+            }
+            return;
+        }
+        if (!_active) {
             return;
         }
         auto const read = readTurnEvent(event.payload.str);
@@ -186,6 +255,9 @@ public:
             show(*_active);
             _active.reset();
         }
+        if (_transcribing) {
+            transcribed(std::unexpected(std::string{"the connection was lost, so the dictation stopped"}));
+        }
         probe();
     }
 
@@ -219,6 +291,70 @@ private:
         // The last draft handed on, so the event and the state that both carry it deliver it once.
         std::optional<std::string> handed;
     };
+
+    // The transcription waiting for its text. `seq` tells this one's accept from an earlier one's; `id` is 0 until
+    // the server accepted it.
+    struct Transcribing {
+        std::uint64_t seq = 0;
+        std::uint64_t id = 0;
+        std::function<void(std::expected<std::string, std::string>)> done;
+    };
+
+    void transcribeAccepted(std::uint64_t seq, ExchangeReply const& reply) {
+        if (!_transcribing || _transcribing->seq != seq) {
+            return;
+        }
+        if (!reply || reply->kind != "ok") {
+            transcribed(std::unexpected(reply ? reply->message : reply.error()));
+            return;
+        }
+        auto const read = readTranscribeAccepted(reply->body);
+        if (!read || read->id == 0) {
+            transcribed(
+                std::unexpected(read ? std::string{"the dictation's reply names no transcription"} : read.error()));
+            return;
+        }
+        _transcribing->id = read->id;
+        readTranscription();
+    }
+
+    void readTranscription() {
+        if (!_transcribing || _transcribing->id == 0) {
+            return;
+        }
+        std::uint64_t const id = _transcribing->id;
+        send(std::string{kTranscriptionKind}, writeMessage(TranscriptionQuery{.id = id}),
+             [this, id](ExchangeReply const& reply) { transcriptionRead(id, reply); });
+    }
+
+    // A lost exchange leaves it waiting: the next event, a resync or a reconnect settles it.
+    void transcriptionRead(std::uint64_t id, ExchangeReply const& reply) {
+        if (!_transcribing || _transcribing->id != id || !reply) {
+            return;
+        }
+        if (reply->kind != "ok") {
+            transcribed(std::unexpected(reply->message));
+            return;
+        }
+        auto const state = readTranscriptionState(reply->body);
+        if (!state || state->status == TranscriptionStatus::Running) {
+            return;
+        }
+        if (state->status == TranscriptionStatus::Done) {
+            transcribed(state->text.value_or(std::string{}));
+        } else {
+            transcribed(std::unexpected(state->error.value_or(std::string{"the transcription failed"})));
+        }
+    }
+
+    // Clears the waiting transcription before answering, so `done` may start the next one.
+    void transcribed(std::expected<std::string, std::string> outcome) {
+        auto done = std::move(_transcribing->done);
+        _transcribing.reset();
+        if (done) {
+            done(std::move(outcome));
+        }
+    }
 
     // Hands a draft on unless this turn already did.
     void hand(Active& active, std::string const& document) {
@@ -322,9 +458,16 @@ private:
         }
     }
 
-    // Redraws the running turn's entries.
+    // Redraws the running turn's entries. Notes added since the turn began are the client's own lines: they are kept,
+    // after the turn's.
     void show(Active const& active) {
         Conversation& conversation = _conversations[active.key];
+        std::vector<Entry> notes;
+        for (std::size_t index = active.base; index < conversation.size(); ++index) {
+            if (conversation.at(index).kind == "note") {
+                notes.push_back(std::move(conversation.at(index)));
+            }
+        }
         conversation.resize(active.base);
         for (TurnPart const& part : active.parts) {
             if (part.kind == "tool") {
@@ -336,6 +479,9 @@ private:
         }
         if (!active.error.empty()) {
             conversation.push_back(Entry{.kind = "error", .text = active.error, .arguments = {}, .ok = false});
+        }
+        for (Entry& kept : notes) {
+            conversation.push_back(std::move(kept));
         }
         notify();
     }
@@ -349,6 +495,9 @@ private:
     Key _selected;
     std::optional<Active> _active;
     bool _available = false;
+    std::optional<DictationLimits> _dictation;
+    std::optional<Transcribing> _transcribing;
+    std::uint64_t _transcribeSeq = 0;
 };
 
 }  // namespace morph::ui::chat
