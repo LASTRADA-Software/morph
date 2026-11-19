@@ -798,7 +798,7 @@ private:
         };
 
         // The bytes a set's keys own, counted in the bound while the set is accepted.
-        [[nodiscard]] static std::size_t setBytesOf(std::vector<RowId> const& keys) noexcept {
+        [[nodiscard]] static std::size_t setBytesOf(std::span<RowId const> keys) noexcept {
             auto out = sizeof(std::vector<RowId>);
             for (auto const& key : keys) {
                 out += rowIdBytes(key);
@@ -888,15 +888,16 @@ private:
                 core->settling.insert(set);
                 events = core->setEvents;
             }
-            Settling const settling{*core, set};
-            if (lapsed) {
-                core->unprotect(*lapsed->keys);
-            }
-            auto wanted = want(core, *keys, use, retry, Pass::Protect);
-            if (wanted) {
-                auto const bytes = setBytesOf(*keys);
-                std::vector<AcceptedSet> superseded;
-                {
+            auto const bytes = setBytesOf(*keys);
+            std::vector<AcceptedSet> superseded;
+            std::expected<void, TableError> wanted;
+            {
+                Settling const settling{*core, set};
+                if (lapsed) {
+                    core->unprotect(*lapsed->keys);
+                }
+                wanted = want(core, *keys, use, retry, Pass::Protect, bytes);
+                if (wanted) {
                     std::scoped_lock const lock{core->writer};
                     auto const generation = core->current->generation;
                     for (auto entry = core->sets.begin(); entry != core->sets.end();) {
@@ -915,10 +916,11 @@ private:
                     core->setBytes += bytes;
                     core->storeBytes();
                 }
-                // After the new set protects its keys, so that a key both sets hold is never unprotected between.
-                for (auto const& old : superseded) {
-                    core->unprotect(*old.keys);
-                }
+            }
+            // After the new set protects its keys, so that a key both sets hold is never unprotected between, and
+            // after the repeats waiting for the set are woken, so that none waits for this pass.
+            for (auto const& old : superseded) {
+                core->unprotect(*old.keys);
             }
             return wanted;
         }
@@ -930,13 +932,13 @@ private:
         // eviction's publish check sees it, and a key not held gets a pending lease, or a protection count, that
         // its store moves onto its slot.
         static std::expected<void, TableError> want(std::shared_ptr<Core> const& core, std::span<RowId const> keys,
-                                                    LevelUse use, bool retry, Pass pass) {
+                                                    LevelUse use, bool retry, Pass pass, std::size_t keyBytes = 0) {
             auto const at = core->now();
             auto const nowTicks = ticks(at);
             auto const until = ticks(at + core->options.orderLease);
             if (use == LevelUse::Order) {
                 core->fits.fetch_add(1);
-                if (auto fitted = core->fitOrder(keys, nowTicks); !fitted) {
+                if (auto fitted = core->fitOrder(keys, nowTicks, keyBytes); !fitted) {
                     return fitted;
                 }
             }
@@ -1086,14 +1088,18 @@ private:
         }
 
         // Whether an order use of `keys` fits: the keys times the mean value size, plus the bytes leased or
-        // protected for keys other than these, against `maxBytes`. Read from the published state with no lock held.
-        [[nodiscard]] std::expected<void, TableError> fitOrder(std::span<RowId const> keys, std::int64_t nowTicks) {
+        // protected for keys other than these, plus the accepted sets' key bytes and `keyBytes`, what the use's own
+        // set of keys will hold, against `maxBytes`. Read from the published state with no lock held.
+        [[nodiscard]] std::expected<void, TableError> fitOrder(std::span<RowId const> keys, std::int64_t nowTicks,
+                                                               std::size_t keyBytes) {
             std::shared_ptr<Table const> base;
             std::size_t mean = 0;
+            std::size_t setsHeld = 0;
             {
                 std::scoped_lock const lock{writer};
                 base = current;
                 mean = meanBytes();
+                setsHeld = setBytes;
             }
             std::size_t ownLeased = 0;
             for (auto const& key : keys) {
@@ -1104,7 +1110,7 @@ private:
             }
             auto const leasedAll = leasedBytes(*base, nowTicks);
             auto const leasedOther = leasedAll - std::min(ownLeased, leasedAll);
-            if (keys.size() * mean + leasedOther <= options.maxBytes) {
+            if (keys.size() * mean + leasedOther + setsHeld + keyBytes <= options.maxBytes) {
                 return {};
             }
             refusedOrders.fetch_add(1);
@@ -1387,13 +1393,18 @@ private:
             storeBytes();
         }
 
-        // When the leased and protected values exceed the bound, stops loading for order, drops every lease and
-        // ends every accepted set. The bytes are summed and the slots cleared over the published state with no lock
+        // When the leased and protected values, with the accepted sets' keys, exceed the bound, stops loading for
+        // order, drops every lease and ends every accepted set. The bytes are summed and the slots cleared over the published state with no lock
         // held; the queue, the pending leases and the sets are changed under it.
         bool dropLeasesOverBound(Clock::time_point at) {
             endExpiredSets(ticks(at));
             auto const table = publishedTable();
-            if (leasedBytes(*table, ticks(at)) <= options.maxBytes) {
+            std::size_t setsHeld = 0;
+            {
+                std::scoped_lock const lock{writer};
+                setsHeld = setBytes;
+            }
+            if (leasedBytes(*table, ticks(at)) + setsHeld <= options.maxBytes) {
                 return false;
             }
             {
