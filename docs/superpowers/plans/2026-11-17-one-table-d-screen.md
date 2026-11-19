@@ -1484,14 +1484,14 @@ TEST_CASE("model table: highlightKey scrolls to the row and marks it", "[ui][tab
 - Test: `tests/qt_quick/test_qt_quick_table.cpp`, `tests/tui/test_tui_table.cpp`
 - Docs: `docs/spec/qt_quick/backend.md` ("Containers and lists": the column window, cell pools, pinned columns, the status line; "Tests": the new cases).
 
-**Interfaces:** consumes 10a's `TableWidget` members; produces nothing new.
+**Interfaces:** consumes 10a's `TableWidget` members; produces `TableWidget::setRowIndex(row, viewRow)`, which the mount calls for a realized row once it is realized and whenever its index changes: the focused row stays realized outside `setRealizedWindow`'s range, so a backend places each row by its index, not by its place among the children. Every backend places a source table's cells by `setCellColumn`, never by their order in the row.
 
 Decisions:
 - MorphTable exposes, for tests, the QML properties `realizedColumnFirst`, `realizedColumnCount`, `pinnedShown`, `headerCellCount`, `statusText`, `rowMeasures` (cell height measurements made), the invokables `rowHeight(viewRow)` and `cellLoadAt(viewRow, column)` (`0` Loaded, `1` Unloaded, `2` Failed, as drawn), and keeps `rowScans`, `realizedFirst`, `realizedCount`, `totalRows`.
 - The status line is one `Text` row under the rows, an accessible polite live region (`Accessible.role: Accessible.StaticText`, announced on change), with a "Retry" button while `TableStatus::retry`; it takes no space while `shown` is false.
-- The terminal table draws the cells of the columns in the window only, and the status line as its last line.
+- The terminal table draws the cells of the columns in the window only, and the status line as its last line. Over a source it scrolls over every row of the view, one line each, draws each realized row on the line of its view index, and reports the columns and then the rows in view before the next frame's layout (and at once for the wheel); the arrows, Home, End, PageUp, PageDown, Ctrl+Home and Ctrl+End go to the mount, and Left and Right, keeping the focused cell in view, are how the user scrolls sideways.
 - Cell load state (from 9d's `setCellLoad`). Qt Quick: an `Unloaded` cell draws a rounded bar of a fixed 3 em width in the column's alignment over the cell's content, which stays bound but invisible; a `Failed` cell draws an error mark of the same width whose tooltip and accessible name say "Could not be loaded". The terminal draws `···` for `Unloaded` and `!` for `Failed`, in the column's alignment. Neither is measured into the column's width, so a level arriving widens a column at most once (F7).
-- Row height (table.md "Cells"), in `MorphTable`, which is what measures cells: a row's height is the tallest of its realized cells and only grows while the row is realized; a row that leaves the row window forgets its height; an unrealized row counts as the mean of the measured heights. When a row above the first visible row grows, the vertical offset grows by the same amount in the same frame (the mount's anchoring, 10a). A table whose columns are all `wrap: false` has one row height and measures no cell (`rowMeasures` stays 0). The terminal's rows are one line each and have no rule here.
+- Row height (table.md "Cells"), in `MorphTable`, which is what measures cells: a row's height is the tallest of its realized cells and only grows while the row is realized; a row that leaves the row window forgets its height; an unrealized row counts as the mean of the measured heights. When a row above the first visible row grows, the vertical offset grows by the same amount in the same frame; the mount holds no row heights, so this anchoring is `MorphTable`'s, here. A table whose columns are all `wrap: false` has one row height and measures no cell (`rowMeasures` stays 0). The terminal's rows are one line each, so none grows and the terminal needs no anchoring.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -1541,26 +1541,25 @@ TEST_CASE("qt_quick table window: hiding and moving a column create no cell item
 }
 // Mutation: MorphTable ignoring setStatus (statusText is empty).
 TEST_CASE("qt_quick table: the status line shows counts and Retry", "[qt_quick]") {
-    WideScreen screen;  screen.shown();
-    CHECK(screen.item()->property("statusText").toString() == QStringLiteral("100,000 rows"));
-    CHECK_FALSE(screen.item()->property("retryShown").toBool());
-    screen.failLevel("recipe");                                               // a page whose `failed` names it
-    CHECK(screen.item()->property("statusText").toString() ==
-          QStringLiteral("100,000 rows  Recipe data could not be loaded."));
-    REQUIRE(screen.item()->property("retryShown").toBool());
-    screen.clickRetry();
-    CHECK(screen.lastQuery().retry);
+    QuickWindowFixture f{100'000, 30};                                        // its status: "100,000 rows"
+    CHECK(f.prop("statusText").toString() == QStringLiteral("100,000 rows"));
+    CHECK_FALSE(f.prop("retryShown").toBool());
+    f.status.set(ui::TableStatus{.counts = "100,000 rows", .state = "Recipe data could not be loaded.",
+                                 .retry = true, .shown = true});  f.settle();
+    CHECK(f.prop("statusText").toString() == QStringLiteral("100,000 rows  Recipe data could not be loaded."));
+    REQUIRE(f.prop("retryShown").toBool());
+    f.scene.click(*f.item()->findChild<QQuickItem*>(QStringLiteral("retry")));
+    CHECK(f.retries == 1);
 }
 // Mutation: MorphTable ignoring setCellLoad (an unloaded cell draws its empty content: cellLoadAt is 0).
 TEST_CASE("qt_quick table: an unloaded cell is a placeholder and a failed one an error mark", "[qt_quick]") {
-    WideScreen screen;  screen.shownWith({{.index = 0, .levels = {"recipe"}, .failed = {}},
-                                          {.index = 1, .levels = {"recipe"}, .failed = {"recipe"}}});
-    int const d000 = 1;                                                       // the node's second column
-    int const widthBefore = screen.call("columnWidth", d000).toInt();
-    CHECK(screen.call("cellLoadAt", 0, d000).toInt() == 1);
-    CHECK(screen.call("cellLoadAt", 1, d000).toInt() == 2);
-    CHECK(screen.call("cellLoadAt", 2, d000).toInt() == 0);
-    CHECK(screen.call("columnWidth", d000).toInt() == widthBefore);           // a placeholder widens nothing
+    QuickWindowFixture f{100, 4, {.levels = {{.column = 1, .level = "recipe"}}}};
+    int const widthBefore = f.call("columnWidth", 1).toInt();
+    f.rows->unload(0, "recipe");  f.rows->fail(1, "recipe");  f.settle();
+    CHECK(f.call("cellLoadAt", 0, 1).toInt() == 1);
+    CHECK(f.call("cellLoadAt", 1, 1).toInt() == 2);
+    CHECK(f.call("cellLoadAt", 2, 1).toInt() == 0);
+    CHECK(f.call("columnWidth", 1).toInt() == widthBefore);                   // a placeholder widens nothing
 }
 // Mutations: a row's height recomputed from its realized cells each pass (it shrinks when the tall cell leaves);
 // measuring a table whose columns are all wrap:false (rowMeasures grows).
@@ -1591,7 +1590,7 @@ TEST_CASE("tui table: an unloaded cell draws its placeholder and a failed one it
     CHECK_FALSE(f.screenLine(3).contains("···"));
 }
 ```
-`MorphTable` therefore also exposes, for tests, the properties `retryShown`, `accessibleRowCount`, `accessibleColumnCount` and the invokables `focusedRow()`, `focusedColumn()`, `cellRealized(viewRow, column)`, `columnWidth(column)`; `FakeRows` gains `unload(row, level)` and `fail(row, level)` (what `unloadedLevels` answers, with a `Changed` for the row); `WideScreen` gains `shownWith(unloadedRows)`, `failLevel(level)`, `clickRetry()` and `lastQuery()`; the fixtures' options gain `wrapped`, `wrap` and `levels`. The terminal's window has no overscan: its `Virtualization` is built with `overscan = 0` and `columnOverscan = 0` by `TuiWindowFixture`, which is what makes U7's count exact.
+`MorphTable` therefore also exposes, for tests, the properties `retryShown`, `accessibleRowCount`, `accessibleColumnCount` and the invokables `focusedRow()`, `focusedColumn()`, `cellRealized(viewRow, column)`, `columnWidth(column)`; `FakeRows` gains `unload(row, level)` and `fail(row, level)` (what `unloadedLevels` answers, with a `Changed` for the row); the status line and load state cases run on `QuickWindowFixture` (its `status` signal and `onRetry` count, and `FakeRows::unload`/`fail`) rather than on 9d's `WideScreen`, which 9d did not write: a fixture over a scripted interpreter cannot be written blind, and these cases test the backend's drawing, not the lowering; the fixtures' options gain `wrapped`, `wrap` and `levels`. The terminal's window has no overscan: its `Virtualization` is built with `overscan = 0` and `columnOverscan = 0` by `TuiWindowFixture`, which is what makes U7's count exact.
 
 Benchmarks, `[.benchmark][qt_quick]`, in `tests/qt_quick/bench_qt_quick_table.cpp` (Part A's, where the step 0 baselines of the same figures are): F3 (vertical at 20 rows/s, a fling at 2,000 rows/s, a thumb drag), F4 (horizontal at 10 and 100 columns/s), F5 (memory per realized row), each first asserting the table is windowed both ways, timed per step through `QQuickRenderControl` (`polishItems`, `sync`, `render`) under `offscreen` and the software scene graph.
 
