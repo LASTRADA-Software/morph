@@ -40,6 +40,7 @@ using detail::EventClass;
 /// @param kind The node or part kind.
 /// @param key  A key of `DocNode::events`: a command-list key, or `record.event` for a record of command lists.
 /// @return What runs its commands, or nothing for a key the table does not list.
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): the node's kind, then its key.
 [[nodiscard]] std::optional<EventClass> classifyEvent(std::string_view kind, std::string_view key) {
     std::string_view const name = key.substr(0, key.find('.'));
     for (detail::EventKey const& entry : detail::eventKeys()) {
@@ -576,7 +577,7 @@ std::expected<std::string, Refusal> describeAllowance(Document const& base, std:
     Capabilities const has{base, *json};
     std::vector<std::string> params;
     if (auto const* const object = std::get_if<Json::object_t>(&json->data)) {
-        if (auto const declared = object->find("params"); declared != object->end()) {
+        if (Json::object_t::const_iterator const declared = object->find("params"); declared != object->end()) {
             if (auto const* const members = std::get_if<Json::object_t>(&declared->second.data)) {
                 for (auto const& [name, type] : *members) {
                     auto const written = glz::write<::morph::wire::detail::EscapingWriteOpts{}>(type);

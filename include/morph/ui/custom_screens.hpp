@@ -580,18 +580,18 @@ public:
     /// @brief One of the person's custom screens, as the `get` action answers it.
     /// @param session The session of the person asking, its principal verified.
     /// @param app     The application.
-    /// @param id      The screen's id, which starts with `kCustomScreenIdPrefix`.
+    /// @param screenId The screen's id, which starts with `kCustomScreenIdPrefix`.
     /// @return The screen's summary and document, or the refusal: the store's, a session with no verified
     ///         principal, an application this server does not serve, an id outside its bounds, or a stored document
     ///         longer than `CustomScreensOptions::maxDocumentBytes`.
     [[nodiscard]] ::core::async::Task<std::expected<CustomScreenFound, CustomScreenRefusal>> get(
-        ::morph::session::Context const& session, std::string app, std::string id) const;
+        ::morph::session::Context const& session, std::string app, std::string screenId) const;
 
     /// @brief What the base rule lets a custom screen based on @p basedOn use, as `describeAllowance` writes it.
     /// @param basedOn The base screen's id.
     /// @return The summary, or the refusal when @p basedOn names no screen document of the bundle being served or the
     ///         document does not load.
-    [[nodiscard]] std::expected<std::string, Refusal> allowance(std::string basedOn) const;
+    [[nodiscard]] std::expected<std::string, Refusal> allowance(std::string_view basedOn) const;
 
 private:
     friend class CustomScreensModel;
@@ -629,7 +629,7 @@ private:
 
     /// @brief The task `get` returns; its arguments are owned by the frame.
     [[nodiscard]] ::core::async::Task<std::expected<CustomScreenFound, CustomScreenRefusal>> getTask(
-        ::morph::session::Context session, std::string app, std::string id) const;
+        ::morph::session::Context session, std::string app, std::string screenId) const;
 
     /// @brief What `opensWithoutParams` memoises, by base screen id.
     using OpensMemo = std::map<std::string, bool, std::less<>>;

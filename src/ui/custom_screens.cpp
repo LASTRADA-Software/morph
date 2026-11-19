@@ -50,11 +50,11 @@ constexpr std::string_view kNoPerson = "custom screens are stored for a signed-i
 
 /// @brief The problem with @p id, if it is not a custom screen's: a name that starts with `custom:`. A request never
 ///        reaches a store with the id of an application screen.
-[[nodiscard]] std::optional<std::string> idProblem(std::string const& id) {
-    if (auto problem = nameProblem(id, "id")) {
+[[nodiscard]] std::optional<std::string> idProblem(std::string const& screenId) {
+    if (auto problem = nameProblem(screenId, "id")) {
         return problem;
     }
-    if (!id.starts_with(kCustomScreenIdPrefix)) {
+    if (!screenId.starts_with(kCustomScreenIdPrefix)) {
         return "a custom screen's `id` starts with `" + std::string{kCustomScreenIdPrefix} + "`";
     }
     return std::nullopt;
@@ -119,9 +119,9 @@ void refuseProblem(std::optional<std::string> const& problem) {
 }
 
 /// @brief The screen document @p bundle serves under @p id, or nothing.
-[[nodiscard]] ServedScreen const* screenOf(ServedBundle const& bundle, std::string_view id) {
+[[nodiscard]] ServedScreen const* screenOf(ServedBundle const& bundle, std::string_view screenId) {
     auto const found =
-        std::ranges::find(bundle.screens, id, [](ServedScreen const& screen) { return screen.entry.id; });
+        std::ranges::find(bundle.screens, screenId, [](ServedScreen const& screen) { return screen.entry.id; });
     return found == bundle.screens.end() || found->hash.empty() ? nullptr : &*found;
 }
 
@@ -189,6 +189,7 @@ std::optional<Refusal> CustomScreens::checkedAsNew(ServedBundle const& bundle,
     return checkTask(session, std::move(app), std::move(basedOn), std::move(document));
 }
 
+// NOLINTBEGIN(bugprone-easily-swappable-parameters): the application, the base, then the document.
 ::core::async::Task<std::optional<Refusal>> CustomScreens::checkTask(::morph::session::Context session,
                                                                      std::string app, std::string basedOn,
                                                                      std::string document) const {
@@ -207,25 +208,26 @@ std::optional<Refusal> CustomScreens::checkedAsNew(ServedBundle const& bundle,
     }
     co_return checkedAsNew(**bundle, session, basedOn, document);
 }
+// NOLINTEND(bugprone-easily-swappable-parameters)
 
 ::core::async::Task<std::expected<CustomScreenFound, CustomScreenRefusal>> CustomScreens::get(
-    ::morph::session::Context const& session, std::string app, std::string id) const {
-    return getTask(session, std::move(app), std::move(id));
+    ::morph::session::Context const& session, std::string app, std::string screenId) const {
+    return getTask(session, std::move(app), std::move(screenId));
 }
 
 ::core::async::Task<std::expected<CustomScreenFound, CustomScreenRefusal>> CustomScreens::getTask(
-    ::morph::session::Context session, std::string app, std::string id) const {
+    ::morph::session::Context session, std::string app, std::string screenId) const {
     auto const bundle = servedFor(app);
     if (!bundle) {
         co_return std::unexpected(CustomScreenRefusal{.reason = bundle.error()});
     }
-    if (auto problem = idProblem(id)) {
+    if (auto problem = idProblem(screenId)) {
         co_return std::unexpected(CustomScreenRefusal{.reason = std::move(*problem)});
     }
     if (session.principal.empty()) {
         co_return std::unexpected(CustomScreenRefusal{.reason = std::string{kNoPerson}});
     }
-    auto found = co_await _store->get(CustomScreenKey{.person = session.principal, .app = app, .id = id});
+    auto found = co_await _store->get(CustomScreenKey{.person = session.principal, .app = app, .id = screenId});
     if (!found) {
         co_return std::unexpected(std::move(found.error()));
     }
@@ -240,7 +242,7 @@ std::optional<Refusal> CustomScreens::checkedAsNew(ServedBundle const& bundle,
     co_return CustomScreenFound{.summary = std::move(summary), .document = std::move(found->document)};
 }
 
-std::expected<std::string, Refusal> CustomScreens::allowance(std::string basedOn) const {
+std::expected<std::string, Refusal> CustomScreens::allowance(std::string_view basedOn) const {
     std::shared_ptr<ServedBundle const> const bundle = _bundle();
     if (bundle == nullptr) {
         return std::unexpected(
@@ -248,10 +250,10 @@ std::expected<std::string, Refusal> CustomScreens::allowance(std::string basedOn
     }
     ServedScreen const* const base = screenOf(*bundle, basedOn);
     if (base == nullptr) {
-        return std::unexpected(
-            Refusal{.document = {},
-                    .path = {},
-                    .reason = "`basedOn` names no screen document of the application: `" + basedOn + "`"});
+        return std::unexpected(Refusal{
+            .document = {},
+            .path = {},
+            .reason = "`basedOn` names no screen document of the application: `" + std::string{basedOn} + "`"});
     }
     std::string const& text = bundle->files.at(base->hash).bytes;
     auto const loaded = loadDocumentText(text, LoadOptions{.catalog = bundle->catalog});
