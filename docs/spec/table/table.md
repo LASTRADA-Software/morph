@@ -525,15 +525,19 @@ smallest row changes.
 - **A new list is matched by key, then by cell.** A row whose value is the same object as before is kept
   without being read. A row whose value is another object (a refetched list shares no storage with the previous
   one) has its cells of the columns in use derived and compared with the cells held, and is `Updated` only when
-  one differs. The comparison is of cells of the columns in use, never of whole row values, so its cost is rows
-  times columns in use and not rows times fields. Keys the previous list lacks are `Inserted`, keys the new one
-  lacks are `Removed`.
+  one differs, or when the row's value differs in a field no column in use reads: what the table shows of the
+  row is then read again, and the row keeps its place, since its keys did not change. The cells compared are those
+  of the columns in use, so deriving costs rows times columns in use, never rows times fields; a row's value is
+  compared whole only when its cells are equal. Keys the previous list lacks are `Inserted`, keys the new one lacks
+  are `Removed`; a list that both adds and drops keys, or reorders the rows it keeps, is a `Reset`.
 - **Kinds.** A column part's `kind` (a literal: `text`, `integer`, `decimal`, `number`, `date`, `dateTime`,
   `bool`) decides the column's kind. Without it the kind is inferred from every non-null cell of the column:
   all integers is `Integer`; integers and exact decimals together is `Decimal`, an integer being an exact
   decimal; all timestamps is `DateTime`; all booleans is `Bool`; all text is `Text`. Any other mix
-  takes the kind of the first non-null cell, and a cell not of that kind is invalid: it sorts last and is
-  reported once at the `sort` path. A change that alters the inferred kind is a `Reset` of that column.
+  takes the kind of the first non-null cell, `Decimal` when that is an integer and a decimal is among the cells,
+  and a cell not of that kind is invalid: it sorts last and is reported once at the `sort` path. So integers,
+  decimals and one text are a `Decimal` column with one invalid cell, and a text followed by numbers is a `Text`
+  column whose numbers are invalid. A change that alters the inferred kind is a `Reset` of that column.
 - **`Number` only by name.** A document value holds no `double`: a number with a fraction that reaches `rows`
   through the query cache is already an exact decimal. So inference never yields `Number`, and a column is
   `Number` only through a literal `kind: "number"`.
@@ -546,6 +550,11 @@ smallest row changes.
   bytes. `null` is an empty cell and sorts last in either direction, as the expression language's `sort` places
   it.
 - It keeps each row's value beside its cells for the row's scope.
+- **Groups.** A grouped table's runs are adjacent rows whose `by` is the same element as the run's first row's, as
+  the interpreter's `group` and `runs` compare them: numbers by value (`1`, `1.0` and `1.00` are one run, a
+  quantity equals one of another unit that converts to it), lists and records element by element, `null` only
+  `null`. A run's key is its first row's `by`. A run whose heading record changed while the runs kept their places
+  is an `Updated` of its first source row, so its heading is read again.
 
 ## The client table model
 

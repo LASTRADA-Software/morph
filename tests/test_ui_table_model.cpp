@@ -1877,7 +1877,7 @@ TEST_CASE("value rows source: a change to what one row's sortBy reads updates th
     CHECK(listener.changes.front().kind == table::ChangeKind::Reset);
 }
 
-// Review Focus 5. Mutation: keep the last duplicate (the view holds "c" and not "a").
+// Mutation: keep the last duplicate (the view holds "c" and not "a").
 TEST_CASE("value rows source: a duplicate key keeps its first row", "[ui][table]") {
     RowsFixture h;  auto const src = sourceOf(h, {col("name")});
     std::size_t const reports = h.reported(morph::ui::detail::site::kDuplicateKey);
@@ -1979,4 +1979,165 @@ TEST_CASE("value rows source: one changed row derives one column and repairs", "
     CHECK(engine->stats().repairs - before.repairs == 1);
     CHECK(engine->stats().fullSorts == before.fullSorts);
     CHECK(keysInView(*engine).back() == 42);
+}
+
+namespace {
+
+// The counts a mounted grouped table's headings show, in order; each heading's text is its run's `count`.
+std::vector<std::string> headingCounts(morph::ui::testing::Harness const& h) {
+    std::vector<std::string> counts;
+    for (int const row : h.backend.children(h.backend.all("Table").front())) {
+        if (h.backend.prop(row, "heading") != "true") {
+            continue;
+        }
+        int cell = row;
+        while (h.backend.kindOf(cell) != "Text" && !h.backend.children(cell).empty()) {
+            cell = h.backend.children(cell).front();
+        }
+        counts.push_back(h.backend.prop(cell, "text"));
+    }
+    return counts;
+}
+
+}  // namespace
+
+// Mutation: runs broken where `Value ==` differs (three runs of one: 1 and 1.0 and 1.00 split; the counts read 1, 1,
+// 1, 1).
+TEST_CASE("value rows source: a group's runs are the interpreter's runs", "[ui][table]") {
+    // `g` is 1, then 1.0, then 1.00, then 2: one value spelled three ways, then another.
+    std::string const rows = R"([ { "id": 1, "g": 1 }, { "id": 2, "g": { "num": 1, "den": 1, "dp": 1 } },
+        { "id": 3, "g": { "num": 1, "den": 1, "dp": 2 } }, { "id": 4, "g": 2 } ])";
+    morph::ui::testing::Harness interpreter;
+    auto screen = interpreter.mount(R"({ "vocab": "ui/1", "id": "runs",
+      "state": { "items": { "init": { "lit": )" + rows + R"( } } },
+      "view": { "kind": "table", "rows": { "ref": "items" },
+                "group": { "by": { "row": "g" }, "heading": { "kind": "text", "text": { "fn": "format",
+                           "args": [ "{0}", { "row": "count" } ] } } },
+                "columns": [ { "id": "id", "label": "Id" } ] } })");
+    REQUIRE(headingCounts(interpreter) == std::vector<std::string>{"3", "1"});
+
+    RowsFixture h;  auto const src = sourceOf(h, {col("id")});
+    src->setGroup([](Value const& row) { return *row.field("g"); });
+    auto const json = morph::ui::parseJson(rows);
+    REQUIRE(json.has_value());
+    auto const list = morph::ui::valueFromJson(*json);
+    REQUIRE(list.has_value());
+    src->assign(*list->asList());  h.settle();
+    std::vector<std::string> counts;
+    for (Value const& record : src->runRecords()) { counts.push_back(std::to_string(*record.field("count")->asInt())); }
+    CHECK(counts == headingCounts(interpreter));
+    CHECK(*src->runRecords().front().field("key") == Value{1});                // the run's first row's `by`
+    CHECK(src->runOf(2) == 0);  CHECK(src->runOf(3) == 1);
+}
+
+// Mutation: the row value not compared when its cells are equal (no change is notified, and the record still reads
+// "x").
+TEST_CASE("value rows source: a field no column reads is redrawn in place", "[ui][table]") {
+    RowsFixture h;  auto const src = sourceOf(h, {col("name"), col("notes")});
+    src->use("name");  src->assign(sampleRows(10));  h.settle();
+    EngineRows rows{src, src->recordOf(), table::EngineOptions{.owner = &h.owner}};
+    REQUIRE(rows.setSort({{.column = "name"}}));  h.settle();
+    RecordingListener listener{*src};
+    auto const viewOf7 = [&rows] {
+        for (std::int64_t at = 0; at < rows.total().rows; ++at) {
+            if (rows.row(at)->key == table::RowId{std::int64_t{7}}) { return at; }
+        }
+        return std::int64_t{-1};
+    };
+    std::int64_t const before = viewOf7();
+    CHECK(*rows.row(before)->row.field("notes")->asString() == "x");
+    std::size_t const sorts = rows.engine().stats().fullSorts;
+    src->assign(withField(freshDecodeOf(sampleRows(10)), 7, "notes", Value{std::string{"y"}}));  h.settle();
+    REQUIRE(listener.changes.size() == 1);
+    CHECK(listener.changes.front().kind == table::ChangeKind::Updated);
+    CHECK(listener.changes.front().rows == std::vector<std::size_t>{7});
+    CHECK(viewOf7() == before);                                               // in place
+    CHECK(*rows.row(before)->row.field("notes")->asString() == "y");          // read again
+    CHECK(rows.engine().stats().fullSorts == sorts);
+}
+
+// Mutation: a changed heading record not notified (the change names row 1 alone).
+TEST_CASE("value rows source: a changed run heading is an update of the run's first row", "[ui][table]") {
+    RowsFixture h;  auto const src = sourceOf(h, {col("name")});
+    src->setGroup([](Value const& row) { return *row.field("site"); });
+    src->use("name");
+    ValueList const rows{rec({{"id", 1}, {"site", "A"}, {"name", "a"}, {"notes", "x"}}),
+                         rec({{"id", 2}, {"site", "A"}, {"name", "b"}, {"notes", "x"}}),
+                         rec({{"id", 3}, {"site", "B"}, {"name", "c"}, {"notes", "x"}})};
+    src->assign(rows);  h.settle();
+    RecordingListener listener{*src};
+    src->assign(withField(rows, 1, "notes", Value{std::string{"y"}}));  h.settle();   // run A's `last` changes
+    REQUIRE(listener.changes.size() == 1);
+    CHECK(listener.changes.front().kind == table::ChangeKind::Updated);
+    CHECK(listener.changes.front().rows == std::vector<std::size_t>{0, 1});    // row 1, and run A's heading at row 0
+    CHECK(*src->runRecords().front().field("last")->field("notes") == Value{std::string{"y"}});
+}
+
+// Mutations: the first cell's kind taken as it is (the number-first column reads Integer, with 2 invalid cells);
+// the clause applied whatever the first cell's kind (the text-first column reads Decimal, with 1 invalid cell).
+TEST_CASE("value rows source: a text among numbers is one invalid cell", "[ui][table]") {
+    RowsFixture h;  auto const src = sourceOf(h, {col("nf"), col("tf")});
+    src->use("nf");  src->use("tf");
+    src->assign(ValueList{rec({{"id", 1}, {"nf", 4}, {"tf", "x"}}), rec({{"id", 2}, {"nf", dec("0.5")}, {"tf", 4}}),
+                          rec({{"id", 3}, {"nf", "x"}, {"tf", dec("0.5")}})});
+    h.settle();
+    CHECK(kindOf(*src, "nf") == table::ColumnKind::Decimal);                  // integers with decimals: one Decimal
+    CHECK(src->invalidCells("nf") == 1);                                      // and the text is the one invalid cell
+    CHECK(cellAt(*src, 0, "nf") == table::Cell{morph::math::Rational{4, morph::math::DecimalPlaces{0}}});
+    CHECK(kindOf(*src, "tf") == table::ColumnKind::Text);                     // text first: a Text column
+    CHECK(src->invalidCells("tf") == 2);                                      // and both numbers are invalid
+}
+
+// Mutations: an insertion notified as Reset (the Inserted CHECK); a removal notified as Reset (the Removed
+// CHECK).
+TEST_CASE("value rows source: a new key is inserted and a missing key removed", "[ui][table]") {
+    RowsFixture h;  auto const src = sourceOf(h, {col("name")});  src->use("name");
+    ValueList rows = sampleRows(3);
+    src->assign(rows);  h.settle();
+    auto engine = engineOver(h, src);
+    REQUIRE(engine->setSort({{.column = "name", .dir = table::SortDirection::Descending}}));  h.settle();
+    RecordingListener listener{*src};
+    rows.push_back(rec({{"id", 3}, {"name", "a"}}));
+    src->assign(rows);  h.settle();
+    REQUIRE(listener.changes.size() == 1);
+    CHECK(listener.changes.front().kind == table::ChangeKind::Inserted);
+    CHECK(listener.changes.front().rows == std::vector<std::size_t>{3});
+    CHECK(keysInView(*engine) == std::vector<std::int64_t>{2, 1, 0, 3});
+    listener.clear();
+    src->assign(ValueList{rows.at(0), rows.at(2), rows.at(3)});  h.settle();
+    REQUIRE(listener.changes.size() == 1);
+    CHECK(listener.changes.front().kind == table::ChangeKind::Removed);
+    CHECK(listener.changes.front().rows == std::vector<std::size_t>{1});      // its index in the old rows
+    CHECK(keysInView(*engine) == std::vector<std::int64_t>{2, 0, 3});
+    listener.clear();
+    src->assign(ValueList{rows.at(2), rows.at(0)});  h.settle();               // one key gone and the rest reordered
+    REQUIRE(listener.changes.size() == 1);
+    CHECK(listener.changes.front().kind == table::ChangeKind::Reset);
+    CHECK(keysInView(*engine) == std::vector<std::int64_t>{2, 0});
+}
+
+// Mutations: days truncated toward 0 (an instant 1 ms before the epoch reads day 0); a {num, den, unit} record not
+// read as a measure (the column reads Text).
+TEST_CASE("value rows source: a literal date and a measure record", "[ui][table]") {
+    RowsFixture h;
+    auto const src = sourceOf(h, {col("d", table::ColumnKind::Date), col("m")}, testUnits());
+    src->use("d");  src->use("m");
+    src->assign(ValueList{
+        rec({{"id", 1}, {"d", ts(86'400'000 + 1)}, {"m", rec({{"num", 3}, {"den", 2}, {"unit", "kg"}})}}),
+        rec({{"id", 2}, {"d", ts(-1)}, {"m", rec({{"num", 1}, {"den", 1}, {"unit", "zz"}})}}),
+        rec({{"id", 3}, {"d", "1970-01-03"}, {"m", Value{}}}),
+        rec({{"id", 4}, {"d", "not a date"}, {"m", Value{}}})});
+    h.settle();
+    CHECK(cellAt(*src, 0, "d") == table::Cell{std::int64_t{1}});
+    CHECK(cellAt(*src, 1, "d") == table::Cell{std::int64_t{-1}});              // the day before the epoch
+    CHECK(cellAt(*src, 2, "d") == table::Cell{std::int64_t{2}});               // ISO text
+    CHECK(src->invalidCells("d") == 1);                                        // text that is no date
+    CHECK(kindOf(*src, "m") == table::ColumnKind::Measure);
+    auto const kg = testUnits()->find("kg");
+    REQUIRE(kg.has_value());
+    CHECK(cellAt(*src, 0, "m") == table::Cell{table::Measure{
+        .amount = morph::math::Rational{morph::math::Numerator{3}, morph::math::Denominator{2},
+                                        morph::math::DecimalPlaces{1}},
+        .unit = *kg}});
+    CHECK(src->invalidCells("m") == 1);                                        // the unit "zz" is unknown
 }
