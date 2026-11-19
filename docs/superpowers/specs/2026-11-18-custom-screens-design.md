@@ -344,7 +344,10 @@ have no chrome and no **Source**.
 
 ## The assistant
 
-The chat on a document screen offers one more tool beside the screen's action tools: `propose_screen`.
+The chat on a document screen offers one more tool beside the screen's action tools: `propose_screen`. It is the first
+tool added through a general extra-tool hook on the chat (`ChatOptions::tools`): each such tool decides per turn whether it
+is offered, runs a handler under the turn's session, may set the turn's draft, may end the turn, and may rewrite what the
+conversation keeps of its calls.
 
 - **Its context.** With a draft open, the client sends the draft's document in the `TurnRequest`. The server bounds and
   parses it as a `check` would before using it. With no draft, the server reads the screen's own document from the
@@ -356,7 +359,8 @@ The chat on a document screen offers one more tool beside the screen's action to
 - **Size.** The assistant edits documents up to `ChatLimits::maxProposalBytes`, 64 KiB by default, which fits the
   conversation bound and a provider's output. For a larger screen the tool is not offered and the chat says so; the
   source view still works.
-- **Its argument** is a complete `ui/1` document for the same base. The tool runs the checks of `check`, through the
+- **Its argument** is a complete `ui/1` document for the same base, carrying the open screen's own `id`, since a draft
+  keeps the screen's id. The tool runs the checks of `check`, through the
   `CustomScreens` handle `registerCustomScreens` returns. A refused
   document comes back to the model as a tool error with the refusal and its pointer.
 - **Its limit.** At most `ChatLimits::maxProposalsPerTurn` refused proposals, 3 by default, each also counting against

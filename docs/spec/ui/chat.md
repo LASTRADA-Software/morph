@@ -92,6 +92,11 @@ that is not one of the screen's actions. A `ChatTool` is a `ToolSpec`, an `offer
 - **Names.** 1 to 64 characters of letters, digits, `_` and `-`, with no `__`, which every screen tool's name has, and distinct
   from the other extra tools. `ChatService` refuses a tool that breaks the rules, or has no handler, when it is built.
 
+`propose_screen` (`propose_screen.hpp`) is the first extra tool: it proposes a new document for the open screen, and
+[custom_screens.md](custom_screens.md#the-assistant) describes it. A chat reads a screen the bundle does not hold, such as a
+person's own custom screen, through `ChatOptions::documentSource`, which is asked only for an id the bundle has no screen of
+and answers for the turn's person alone.
+
 A tool is data-in, checks-out: it treats the request's fields, the draft above all, as text someone may have written, and
 does what it does under the session it is given.
 
@@ -152,7 +157,8 @@ and the limits, replies at once, and posts the work to the worker. Each turn the
 
 1. Read `ui-catalog` and each bound model type's `schemas`, under the turn's session. Permissions are read fresh each
    turn, and a screen the principal may not open fails the turn.
-2. Build the tools, and call the provider with the system prompt and the screen's context.
+2. Build the tools: the screen's own, then each extra tool whose `offer` accepts the turn. Call the provider with the
+   system prompt, what the extra tools added to it, and the screen's context.
 3. Run each tool call, and feed the results back, until a response has no calls, a limit is reached, or the turn stops.
 
 **A tool call is an unscoped execute.** It goes through `RemoteServer::executeWithOrigin` with the client's session and

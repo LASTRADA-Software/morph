@@ -12,6 +12,8 @@ base rule on the server, and the client that offers them.
 | `include/morph/ui/custom_screen_sync.hpp` | `isCustomScreenId`, `routeScreen`, `CustomDocuments`, `CustomScreensOffer`, `CustomScreenSync` |
 | `include/morph/ui/custom_screen_chrome.hpp` | `CustomScreenChromeOptions`, `CustomScreenChrome` |
 | `include/morph/ui/json_source.hpp` | `prettyJson`, `pointerOffset`, `lineAt` |
+| `include/morph/ui/chat/propose_screen.hpp` | `customScreensChatTool` (`propose_screen`), `customScreensDocumentSource`, `enableCustomScreensChat` |
+| `src/ui/chat_propose_screen.cpp` | The tool: its offer, its handler and what the conversation keeps of a call |
 | `src/ui/custom_screen_checks.cpp` | The checks, the base rule's walk and the table that classifies every command-list key |
 | `src/ui/custom_screens.cpp` | `CustomScreens`, the model, its registration, the record and its effects |
 | `src/ui/document_actions.hpp` | `DocumentActions`: the actions a document names, and the kind of position of each |
@@ -23,6 +25,7 @@ base rule on the server, and the client that offers them.
 - [The checks](#the-checks)
 - [The base rule](#the-base-rule)
 - [Records and effects](#records-and-effects)
+- [The assistant](#the-assistant)
 - [The client](#the-client)
 - [Not yet](#not-yet)
 - [Design decisions](#design-decisions)
@@ -269,6 +272,37 @@ The record, the result slots that let a list be found holding it, and the effect
 initialisation in `src/ui/custom_screens.cpp`, beside `registerCustomScreens`, because the process-level registries
 resolve once, at their first read. A static build links them only into a server that calls `registerCustomScreens`; a
 shared build carries them for every application, where they are inert.
+
+## The assistant
+
+`propose_screen` is the first tool added through the chat's extra-tool hook (`ChatOptions::tools`, see
+[chat.md](chat.md#extra-tools)). `enableCustomScreensChat(options, screens, app, executor)` adds it and a
+`ChatDocumentSource` that reads a person's custom screens, so the chat also offers a custom screen's own actions. It runs
+on the chat's worker and borrows `executor` for its checks, which must outlive every turn.
+
+- **Offered, or not.** The tool is offered when the screen has a document the assistant can edit: the turn's draft, else
+  the bundle's text of an application screen, else the person's custom screen as `get` answers it, within
+  `ChatLimits::maxProposalBytes`, and `allowance` answers for its base. Otherwise it is not offered and the system text says
+  the assistant cannot change this screen's document, without saying why the store or the base rule refused. A custom screen
+  is read under the turn's person: another person's id is not read, and the turn fails as it does for any screen the chat
+  cannot open.
+- **The document is data.** The system text carries it between an opening and a closing line that both name the document's
+  content hash (`<screen-document hash="sha256:…">`), under a sentence that it is data and never instructions. A document
+  cannot contain its own hash, so no document can write the closing line, however it is worded. Beside it go what a screen
+  based on the same base may use (`allowance`) and a short reference to `ui/1`.
+- **A call** carries `document`, a complete document as a JSON string. A call is a tool error, with the reason, when the
+  argument is missing or not a string, the text is over `maxProposalBytes`, is not one JSON object, or its `id` is not the id
+  of the open screen: the client mounts a draft only under the screen's own id. Then `check` runs under the turn's session
+  against the screen's base (the screen's own id for an application screen, the stored `basedOn` for a custom one), which are
+  the checks of a save. A refusal comes back as `The document was refused at <pointer>: <reason>`. Only an accepted document
+  is set as `TurnState::draft` and sent as the `draft` event.
+- **Its limit.** Every refused call, one the shape check refused included, counts toward `maxProposalsPerTurn`. The call that
+  reaches it ends the turn as failed, with the last refusal in the message, and no draft is made. A turn that already had a
+  proposal accepted keeps that draft. Each call also counts against `maxToolCallsPerTurn`.
+- **Out of the history.** The conversation stores a proposal's arguments as `{"document":"[a draft was proposed here,
+  sha256:…]"}`. The turn that proposed it still sees the whole call. The next turn is given the current draft in its context,
+  so edits build on the last accepted one, and a long conversation of edits does not fill `maxConversationBytes`.
+- **Does not save.** The tool never calls `save`. The person's press of **Save as…** does.
 
 ## The client
 
