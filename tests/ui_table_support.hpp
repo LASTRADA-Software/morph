@@ -549,6 +549,10 @@ public:
                 settle.resolve(false);
                 return;
             }
+            if (_holdSet == _sets) {
+                _held.emplace(Held{.entry = std::move(entry), .text = std::move(text), .settle = std::move(settle)});
+                return;
+            }
             _largest = std::max(_largest, text.size());
             _entries.insert_or_assign(std::move(entry), std::move(text));
             settle.resolve(true);
@@ -644,6 +648,31 @@ public:
         _failRemovesAfter = n;
     }
 
+    /// @brief Holds the @p n-th `set` since the store was made, unanswered and unwritten, until `releaseHeld`.
+    /// @param n The `set` to hold.
+    void holdSet(std::size_t n) {
+        std::scoped_lock const lock{_mutex};
+        _holdSet = n;
+    }
+
+    /// @brief Whether a `set` is held.
+    /// @return `true` while one is.
+    [[nodiscard]] bool holding() const {
+        std::scoped_lock const lock{_mutex};
+        return _held.has_value();
+    }
+
+    /// @brief Writes and answers the held `set`.
+    void releaseHeld() {
+        std::scoped_lock const lock{_mutex};
+        REQUIRE(_held.has_value());
+        _largest = std::max(_largest, _held->text.size());
+        _entries.insert_or_assign(std::move(_held->entry), std::move(_held->text));
+        _held->settle.resolve(true);
+        _held.reset();
+        _holdSet = 0;
+    }
+
     /// @brief Lets every `set` succeed again.
     void healSets() {
         std::scoped_lock const lock{_mutex};
@@ -681,6 +710,14 @@ private:
     std::size_t _removes = 0;
     std::optional<std::size_t> _failSetsAfter;
     std::optional<std::size_t> _failRemovesAfter;
+    /// @brief A held `set`.
+    struct Held {
+        Key entry;
+        std::string text;
+        async::Completion<bool>::Promise settle;
+    };
+    std::size_t _holdSet = 0;
+    std::optional<Held> _held;
     /// After the map, so it is destroyed first: a task running on it reads the map.
     exec::OwnerStrand _strand;
 };

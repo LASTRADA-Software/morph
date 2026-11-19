@@ -2337,24 +2337,33 @@ How it keeps a document of any size in a store built for small values:
 - **Order of writes.** The segments of a new revision first, then the head, then the removal of the previous
   revision's segments. A reader takes the head and then the segments it names, so it reads either the old
   document or the new one and never a mixture. A save that stops halfway leaves segments no head names; the
-  next save of that key removes them. A head whose segment is missing is a failed load.
-- **`expected`.** The model compares it with the head's revision before it writes. A preferences store has no
-  conditional write, so two saves that reach the server within the same moment can both pass the comparison,
-  and the later then wins. That window is the store's call time, not a user's think time, and it is the only
-  case in which a view saved in one window is lost to another; a host store with a conditional write closes
-  it.
+  next save of that key removes them. A head whose segment is missing is a failed load. Every write of one key
+  (a save, a removal, a publish) holds that key's lock on the server, shared by all its model instances, so two
+  writes of one key run one after the other: the last wins whole, and no save removes segments another is still
+  writing.
+- **`expected`.** The model compares it with the head's revision before it writes, under the key's lock. Two
+  servers over one preferences store share no lock, and the store has no conditional write, so two saves that
+  reach two servers within the same moment can both pass the comparison and interleave their writes. That window
+  is the store's call time, not a user's think time; a host store with a conditional write closes it.
 - **Transport.** A call is bounded by an envelope (8 MiB). `save` carries a document of up to 1 MiB; a larger
   one is sent as parts of 1 MiB under one upload id and committed when the last arrives. `load` returns the
   first 1 MiB and the document's revision and size, and the client asks for the rest by offset, starting again
   if the revision changes meanwhile. Loads made in one turn of the owner go out as one call naming all their
-  keys, so a screen of five tables waits for one round trip.
-- **Bounds.** `application`, `table`, `qualifier` and `part` are 1 to 256 bytes each; `model` is 0 to 256
-  bytes, empty for a table over a document's rows. `TableStateOptions::maxBytesPerPerson` is the operator's
+  keys (at most 256 a call), so a screen of five tables waits for one round trip. Each key is answered alone: a
+  key out of bounds, or one whose segment is missing, fails its own load and no other. A reply stops adding heads
+  once their text, as it travels escaped in the reply and again in the envelope, would pass 6 MiB, and answers
+  the remaining keys as deferred; the client asks for those in its next call, so a screen of large states takes
+  a few round trips and no reply outgrows its envelope. A server keeps at most four uploads in parts open per
+  person, dropping the oldest when a fifth starts, drops one whose next part has not come within
+  `TableStateOptions::uploadExpiry` (30 s), and, with a quota set, refuses a part that takes its upload past it.
+- **Bounds.** `application`, `table`, `qualifier` and `part` are 1 to 256 bytes each, and `part` holds no `.`,
+  which would name another part's points; `model` is 0 to 256 bytes, empty for a table over a document's rows. `TableStateOptions::maxBytesPerPerson` is the operator's
   quota across one person's stored state, in every application; it is unset by default, and then nothing limits
-  a state. The model checks it before it writes, against a usage total it keeps for the person. As with
-  `expected`, a preferences store has no conditional write, so two saves of one person that reach two model
-  instances in the same moment can both pass the check, and the quota is then overshot by one document; a
-  ceiling tolerates that as the `expected` rule tolerates its own race.
+  a state. The model checks it before it writes, against a usage total it keeps for the person. A preferences
+  store has no conditional write, so two saves of one person's different keys in the same moment can both pass
+  the check, and the quota is then overshot by one document; a ceiling tolerates that. A usage that has fallen
+  below what a replace removes (a quota set over states stored before it, that race, a usage write the store
+  refused) counts as nothing rather than going negative, so it never locks a person out.
 - **Reserved names.** The preferences model writes wherever its caller names, so it refuses an application
   `morph.tableState` and a scope that starts with `morph.table`, on every call: without that rule a person could
   overwrite a state's head or the quota's usage entry through the preferences model. The same rule means a
@@ -3246,7 +3255,7 @@ Each case names the mutation it was seen to fail on, as the module's other tests
 | Range selection in server mode | A range over rows not held resolves to the view's keys through pages that name no columns; over `maxRangeRows` it is refused with a status message and selects nothing. | `tests/test_ui_table_model.cpp` |
 | Copy | Selected rows copy as tab-separated display text in layout order, in the chosen display units; rows not held are fetched; unloaded cells are empty and counted in the message; over `maxCopyRows` is refused. | `tests/test_ui_table_model.cpp` |
 | The status line | Counts for exact, lower-bound and undecided totals; a failed level with "Retry", which sends `retry`; a refusal shown once; `status: false` sends the message to the session's notifications. Mutation: a refusal with no message. | `tests/test_ui_table_model.cpp` |
-| State of any size | A state with a 20,000-value filter saves through `PreferencesTableStateStore` and reads back equal, as segments each within `segmentBytes`; a save stopped after its segments leaves the previous state readable; a missing segment is a failed load. Mutation: the store calling the preferences model, which refuses the value. | `tests/test_ui_table_state.cpp` |
+| State of any size | A state with a 20,000-value filter saves through `PreferencesTableStateStore` and reads back equal, as segments each within `segmentBytes`; a save stopped after its segments leaves the previous state readable; a missing segment is a failed load. Mutation: no segments, the whole document in its head. | `tests/test_ui_table_state.cpp` |
 | Views are not lost between windows | Two windows each add a view from the same loaded revision: the second save answers `Conflict`, reloads, and both views are stored. A table that loaded no views saves with `kNoDocument`; over a store that does not honour it, the retry after a `Conflict` whose reload finds nothing saves with an empty `expected`. A `state` save overwrites. | `tests/test_ui_table_state.cpp` |
 | Unit numbers across registries | A successor registry keeps every number and tombstones a removed unit; a level cache keeps its values under a successor and invalidates under another lineage; a unit id with a space is refused. | `tests/table/test_table_measure.cpp` |
 | A column's display | 0.125 at two places shows "0.12" under `HalfEven` and "0.13" under `HalfUp`; `eq 0.13` matches neither; an empty cell shows `empty`, an unloaded one its placeholder; a `Bool` with labels orders false first; `decimals` on a `Measure` column is `SourceContract`; copy writes the formatted text. Mutation: a sort over the formatted text, which orders "10.00" before "9.00". | `tests/test_ui_cell_format.cpp`; `test_table_description.cpp` |
