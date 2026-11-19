@@ -55,6 +55,20 @@ MorphWidget {
     // self-corrects is the more broadly applicable of the two options the design named, at the cost of an
     // imprecise scrollbar thumb position until enough real rows have been measured to average.
     property real estimatedRowHeight: Theme.unitHeight + 2 * Theme.tableCellPaddingY
+    // The height each row had when it was last realized, by view index (a sparse array), the view indices that have
+    // one, and the sum of their heights. A row not realized now keeps its measured height in the spacers, so the
+    // content above and below the viewport changes only when a row is measured for the first time. The estimate is
+    // the average of every measured row, which moves far less than the average of the rows realized right now.
+    // `measuredRevision` changes whenever a height does, for the bindings that read the spacers.
+    property var measured: []
+    property var measuredIndices: []
+    property real measuredSum: 0
+    property int measuredRevision: 0
+    // The row at the viewport's top and how far into it the viewport is, kept while the user scrolls and restored
+    // after a measurement changes the content above the viewport, so the rows the user looks at stay where they are.
+    property int anchorRow: 0
+    property real anchorOffset: 0
+    property bool restoring: false
     readonly property Item content: body
     // The sideways scroll's bar, made from the `scrollBar` part (`MorphScrollBar` or its restyle), which C++ passes at
     // creation; null without one.
@@ -521,7 +535,9 @@ MorphWidget {
     // dewindows, which is the "table visually collapses" symptom this design exists to avoid, not just the
     // underlying widget cost.
     implicitHeight: (root.showHeader ? header.implicitHeight : 0) + body.implicitHeight +
-                    (root.virtualized ? (root.totalRows - root.realizedCount) * root.estimatedRowHeight : 0) +
+                    (root.virtualized ? root.heightBefore(root.realizedFirst) +
+                                        root.heightBefore(root.totalRows) -
+                                        root.heightBefore(root.realizedFirst + root.realizedCount) : 0) +
                     root.barHeight
     // A table whose columns are wider than it scrolls sideways, and says so once.
     needWidth: root.columnsWidth
@@ -671,7 +687,11 @@ MorphWidget {
             contentHeight: topSpace.height + body.implicitHeight + bottomSpace.height
             boundsBehavior: Flickable.StopAtBounds
 
-            onContentYChanged: root.reportVisibleRange()
+            onContentYChanged: {
+                if (!root.restoring)
+                    root.anchorAt(flick.contentY)
+                root.reportVisibleRange()
+            }
             // The viewport's own size decides how many rows it shows, so the first layout and a resize report
             // the range exactly as a scroll does.
             onHeightChanged: root.reportVisibleRange()
@@ -679,7 +699,7 @@ MorphWidget {
             Item {
                 id: topSpace
                 width: 1
-                height: root.virtualized ? root.realizedFirst * root.estimatedRowHeight : 0
+                height: root.virtualized ? root.heightBefore(root.realizedFirst) : 0
             }
 
             ColumnLayout {
@@ -687,6 +707,7 @@ MorphWidget {
                 anchors.top: topSpace.bottom
                 width: flick.width
                 spacing: 0
+                onImplicitHeightChanged: root.remeasureRowHeight()
             }
 
             Item {
@@ -694,50 +715,114 @@ MorphWidget {
                 width: 1
                 anchors.top: body.bottom
                 height: root.virtualized
-                            ? Math.max(0, root.totalRows - root.realizedFirst - root.realizedCount) *
-                              root.estimatedRowHeight
+                            ? root.heightBefore(root.totalRows) -
+                              root.heightBefore(root.realizedFirst + root.realizedCount)
                             : 0
             }
         }
     }
 
-    // Measures the realized rows actually mounted right now and folds their average into estimatedRowHeight, so
-    // the spacers above correct themselves toward the real average the longer the table is used -- the "corrected
-    // once real rows are measured" half of the row-height-estimation spike (§4.3). Only runs virtualized: an
-    // unvirtualized table never needs an estimate, since every row is always realized.
+    // Records the height of every realized row against its view index, takes the estimate from every row measured so
+    // far, and then puts the viewport back on its anchor row: a row that was only estimated and is now measured moves
+    // the content above the viewport, and the anchor keeps what the user looks at where it was. Only runs
+    // virtualized: an unvirtualized table never needs an estimate, since every row is always realized.
     function remeasureRowHeight() {
         if (!root.virtualized || body.children.length === 0)
             return
-        let total = 0
-        let counted = 0
+        let changed = false
+        let at = root.realizedFirst
         for (let i = 0; i < body.children.length; ++i) {
             const row = body.children[i]
-            if (row.visible && row.height > 0) {
-                total += row.height
-                ++counted
+            if (!row.visible || row.height <= 0)
+                continue
+            const known = root.measured[at]
+            if (known === undefined) {
+                root.measuredIndices.push(at)
+                root.measuredSum += row.height
+                root.measured[at] = row.height
+                changed = true
+            } else if (Math.abs(known - row.height) > 0.01) {
+                root.measuredSum += row.height - known
+                root.measured[at] = row.height
+                changed = true
+            }
+            ++at
+        }
+        if (!changed)
+            return
+        root.estimatedRowHeight = root.measuredSum / root.measuredIndices.length
+        ++root.measuredRevision
+        root.restoreAnchor()
+    }
+
+    // The height of the first `count` rows in view order: the measured height of each that has one, the estimate for
+    // the rest.
+    function heightBefore(count: int): real {
+        void root.measuredRevision
+        let sum = 0
+        let known = 0
+        for (const index of root.measuredIndices) {
+            if (index < count) {
+                sum += root.measured[index]
+                ++known
             }
         }
-        if (counted > 0)
-            root.estimatedRowHeight = total / counted
+        return sum + Math.max(0, count - known) * root.estimatedRowHeight
+    }
+
+    // The view index of the row that covers vertical position `y` of the content, and the position of its top.
+    function rowAt(y: real): var {
+        if (!root.virtualized || y <= 0)
+            return {"index": 0, "top": 0}
+        let low = 0
+        let high = Math.max(0, root.totalRows - 1)
+        while (low < high) {
+            const middle = Math.ceil((low + high) / 2)
+            if (root.heightBefore(middle) <= y)
+                low = middle
+            else
+                high = middle - 1
+        }
+        return {"index": low, "top": root.heightBefore(low)}
+    }
+
+    function anchorAt(y: real) {
+        const found = root.rowAt(y)
+        root.anchorRow = found.index
+        root.anchorOffset = y - found.top
+    }
+
+    function restoreAnchor() {
+        const bar = flick.ScrollBar.vertical
+        if (!root.virtualized || (bar && bar.pressed))
+            return
+        const target = root.heightBefore(root.anchorRow) + root.anchorOffset
+        if (Math.abs(flick.contentY - target) < 0.5)
+            return
+        root.restoring = true
+        flick.contentY = target
+        root.restoring = false
     }
 
     // Converts the Flickable's contentY (how far scrolled) and height (how much is visible) into the view-index
-    // range C++ should realize, folding in the estimate's own correction first so a remeasure and a scroll report
-    // always agree on the same estimatedRowHeight. Reported via fire(), the same channel every other user-driven
-    // event (a tap, an activation) already uses -- a scroll is a user-driven request for different rows to be
-    // realized, in the same sense a tap is a request to select a row.
+    // range C++ should realize, from the same row heights the spacers use. Reported via fire(), the same channel
+    // every other user-driven event (a tap, an activation) already uses -- a scroll is a user-driven request for
+    // different rows to be realized, in the same sense a tap is a request to select a row.
     function reportVisibleRange() {
         if (!root.virtualized || root.estimatedRowHeight <= 0)
             return
         root.remeasureRowHeight()
-        const first = Math.max(0, Math.floor(flick.contentY / root.estimatedRowHeight))
+        const first = root.rowAt(flick.contentY).index
         // The window bounds what can show: before the first layout a table's height is its whole content's, and
         // realizing every row for that one pass would cost far more than the screen can ever display.
         const shown = root.Window.height > 0 ? Math.min(flick.height, root.Window.height) : flick.height
-        const visibleRows = Math.ceil(shown / root.estimatedRowHeight) + 1
+        const bottom = flick.contentY + shown
+        let last = first
+        while (last < root.totalRows && root.heightBefore(last) < bottom)
+            ++last
         root.fire("scroll", {
             "first": first,
-            "count": Math.min(visibleRows, Math.max(0, root.totalRows - first))
+            "count": Math.min(Math.max(1, last - first) + 1, Math.max(0, root.totalRows - first))
         })
     }
 
