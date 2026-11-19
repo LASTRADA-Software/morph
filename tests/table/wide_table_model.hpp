@@ -34,7 +34,7 @@ namespace bench {
 enum class WideRole : std::uint8_t { Key, Integer, Decimal, Quantity, Measure, Text, LongText, Date, DateTime, Bool };
 
 struct WideColumn {
-    morph::table::ColumnInfo info;  // id, kind and level; Measure-role columns are ColumnKind::Decimal
+    morph::table::ColumnInfo info;  // id, kind and level; Measure-role columns are ColumnKind::Measure
     WideRole role = WideRole::Integer;
     bool sparse = false;  // 10% of its cells empty
     std::string level;    // "recipe" or empty
@@ -55,6 +55,10 @@ struct WideTableOptions {
     bool recipeFails = false;
 };
 
+// The fixture's unit registry, one for the process: mass kg 1, g 1/1000, mg 1/1,000,000, t 1000; volume l 1,
+// ml 1/1000, m3 1000; ratio "" 1, percent 1/100, permille 1/1000. A Measure-role cell's unit is drawn from its bits.
+[[nodiscard]] std::shared_ptr<morph::table::UnitRegistry const> const& wideUnits();
+
 // The bits a cell is generated from: splitmix64(splitmix64(seed ^ fnv1a64(column)) + row).
 [[nodiscard]] std::uint64_t cellBits(std::uint64_t seed, std::string_view column, std::int64_t row) noexcept;
 
@@ -67,7 +71,8 @@ struct WideTableOptions {
 
 // The description of wideColumns(columns): `id` as given, `label` = `id`, each column's label its id, `group` from
 // the layout and `groups` the source's (wideGroups), key "id",
-// `levels` the levels its columns name (`recipe`), `revision` empty.
+// `levels` the levels its columns name (`recipe`), `units` those of wideUnits() its measures allow (all ten),
+// `revision` empty.
 [[nodiscard]] morph::table::TableDescription wideDescription(std::string id, int columns);
 
 // The bytes a cell costs held as a `Cell`: the variant, plus a string's heap buffer when it has one.
@@ -96,6 +101,8 @@ public:
     [[nodiscard]] std::span<morph::table::ColumnGroupInfo const> groups() const override;
 
     [[nodiscard]] std::vector<WideColumn> const& layout() const noexcept;
+    // The registry its measures are numbered in (wideUnits()): what every sort, filter and page over it is given.
+    [[nodiscard]] std::shared_ptr<morph::table::UnitRegistry const> units() const;
     // A copy, since regenerate() changes the seed.
     [[nodiscard]] WideTableOptions options() const;
     // Bytes of the column arrays, capacity included.

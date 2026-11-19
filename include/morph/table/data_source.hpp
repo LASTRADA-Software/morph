@@ -18,6 +18,7 @@
 
 #include <algorithm>
 #include <array>
+#include <atomic>
 #include <chrono>
 #include <compare>
 #include <cstddef>
@@ -57,6 +58,7 @@ enum class ColumnKind : std::uint8_t {
     Bool,      ///< `false` before `true`.
     Key,       ///< An `int64` key, compared numerically.
     Custom,    ///< Ordered by a named comparator from `Services::comparators`.
+    Measure,   ///< An exact amount in a unit each cell names, ordered by dimension and then by base amount.
 };
 
 /// @brief A row's identity: the table's key, stable across reloads.
@@ -93,13 +95,38 @@ struct Unloaded {
     friend constexpr bool operator==(Unloaded, Unloaded) noexcept = default;
 };
 
+/// @brief A unit's number in one `UnitRegistry` lineage: a place in the registry, stable across its successors.
+using UnitId = std::uint32_t;
+
+/// @brief The number no registry gives a unit: a cell holding it is invalid.
+inline constexpr UnitId kUnknownUnit = std::numeric_limits<UnitId>::max();
+
+/// @brief An exact amount in a named unit: a cell of a `Measure` column.
+///
+/// The unit is a number of the registry the cell was made with (`Services::units`); on the wire it is always the
+/// unit's string id.
+struct Measure {
+    /// @brief The amount, in the cell's own unit.
+    math::Rational amount;
+    /// @brief The unit's number in the registry.
+    UnitId unit = 0;
+
+    /// @brief Member-wise equality: the amounts by `Rational`'s equality, which ignores decimal places.
+    /// @param other The cell to compare with.
+    /// @return `true` when the amounts are equal and the units are the same number.
+    [[nodiscard]] bool operator==(Measure const& other) const = default;
+};
+
 /// @brief One cell as a data source hands it out.
 ///
 /// `std::monostate` is an empty cell. A `std::string` in a non-text column is
 /// parsed for the column's kind when its key is built; text that does not parse
-/// is an invalid cell. `Unloaded` is a cell whose value has not arrived.
-using Cell =
-    std::variant<std::monostate, std::int64_t, math::Rational, double, std::string, bool, QuantityCell, Unloaded>;
+/// is an invalid cell. `Unloaded` is a cell whose value has not arrived. `Measure` is an amount with its unit.
+using Cell = std::variant<std::monostate, std::int64_t, math::Rational, double, std::string, bool, QuantityCell,
+                          Unloaded, Measure>;
+
+// A measure is no larger than a quantity, so adding it does not grow a cell.
+static_assert(sizeof(Measure) <= sizeof(QuantityCell));
 
 /// @brief A column's identity and kind.
 struct ColumnInfo {
@@ -113,10 +140,13 @@ struct ColumnInfo {
     std::string format;
     /// @brief The data level the column's cells need. Empty is the base level, which every row has when it exists.
     std::string level;
+    /// @brief For a `Measure` column, the dimensions it allows, in the order their groups sort; empty allows every
+    ///        dimension of the registry, in the registry's order.
+    std::vector<std::string> dimensions;
 
     /// @brief Member-wise equality.
     /// @param other The column to compare with.
-    /// @return `true` when id, kind, comparator, format and level match.
+    /// @return `true` when id, kind, comparator, format, level and dimensions match.
     [[nodiscard]] bool operator==(ColumnInfo const& other) const = default;
 };
 
@@ -210,11 +240,376 @@ struct TableError {
                           math::DecimalPlaces{fractionDigits}};
 }
 
+// ── Units ───────────────────────────────────────────────────────────────────
+
+/// @brief A unit known to a table: which dimension it measures and how it converts to that dimension's base unit.
+///
+/// Not `ui::UnitInfo` (`ui/expression.hpp`), which describes a form field's unit.
+struct UnitInfo {
+    /// @brief What a cell and an operand name: `"kg"`, `"g"`, `"percent"`; the ratio's unit is the one empty id.
+    std::string id;
+    /// @brief What is shown: `"kg"`, `"g"`, `"%"`.
+    std::string symbol;
+    /// @brief The dimension it measures: `"mass"`, `"ratio"`.
+    std::string dimension;
+    /// @brief The exact factor to the dimension's base unit: 1 for kg, 1/1000 for g, 1/100 for percent.
+    math::Rational toBase;
+    /// @brief The places an amount in this unit is shown to.
+    std::uint32_t decimals = 0;
+
+    /// @brief Member-wise equality.
+    /// @param other The unit to compare with.
+    /// @return `true` when every member matches.
+    [[nodiscard]] bool operator==(UnitInfo const& other) const = default;
+};
+
+namespace detail {
+
+/// @brief A transparent string hash, so a unit is found by a view and nothing is copied.
+struct UnitIdHash {
+    /// @brief Marks the hash transparent.
+    using is_transparent = void;
+    /// @brief Hashes @p text.
+    /// @param text The text.
+    /// @return The hash.
+    [[nodiscard]] std::size_t operator()(std::string_view text) const noexcept {
+        return std::hash<std::string_view>{}(text);
+    }
+};
+
+/// @brief The next registry lineage of the process: one per registry built from nothing.
+/// @return A lineage no registry of the process has had; never 0.
+[[nodiscard]] inline std::uint64_t nextUnitLineage() noexcept {
+    static std::atomic<std::uint64_t> counter{0};
+    return counter.fetch_add(1, std::memory_order_relaxed) + 1;
+}
+
+}  // namespace detail
+
+class UnitRegistryBuilder;
+
+/// @brief The units of a process, immutable once built and safe to read from any thread.
+///
+/// A unit's number (`UnitId`) is its place in the registry. A registry is changed by building its successor from it
+/// (`UnitRegistryBuilder{previous}`), which keeps every number, so cells holding numbers keep their meaning under
+/// the successor; a removed unit's number stays a tombstone that `find` does not return and that no unit is given
+/// again. A registry and its successors share a `lineage()`.
+class UnitRegistry {
+public:
+    /// @brief The live unit of id @p id.
+    /// @param id The unit's id.
+    /// @return Its number, or nothing when no live unit has the id. Each call is counted in `findCalls()`.
+    [[nodiscard]] std::optional<UnitId> find(std::string_view id) const {
+        _findCalls.fetch_add(1, std::memory_order_relaxed);
+        auto const found = _ids.find(id);
+        return found == _ids.end() ? std::nullopt : std::optional{found->second};
+    }
+
+    /// @brief A unit by number.
+    /// @param unit A number for which `contains` is `true`.
+    /// @return The unit.
+    [[nodiscard]] UnitInfo const& info(UnitId unit) const { return _units[unit]; }
+
+    /// @brief Whether @p unit is the number of a live unit.
+    /// @param unit A number.
+    /// @return `false` for a tombstone, a number beyond the registry, and `kUnknownUnit`.
+    [[nodiscard]] bool contains(UnitId unit) const noexcept { return unit < _units.size() && _live[unit] != 0; }
+
+    /// @brief How many numbers the registry has given out, tombstones included: every number below it is a unit's.
+    /// @return The count.
+    [[nodiscard]] std::size_t size() const noexcept { return _units.size(); }
+
+    /// @brief The dimensions, in the order they were first registered.
+    /// @return The dimensions' names.
+    [[nodiscard]] std::span<std::string const> dimensions() const noexcept { return _dimensions; }
+
+    /// @brief The live units of one dimension, largest base factor first.
+    /// @param dimension The dimension's name.
+    /// @return The units' numbers; none for a dimension the registry does not have.
+    [[nodiscard]] std::span<UnitId const> unitsOf(std::string_view dimension) const {
+        auto const found = std::ranges::find(_dimensions, dimension);
+        if (found == _dimensions.end()) {
+            return {};
+        }
+        return _byDimension[static_cast<std::size_t>(found - _dimensions.begin())];
+    }
+
+    /// @brief The registry's lineage: shared with the registry it was built from and with its successors.
+    /// @return The lineage, never 0.
+    [[nodiscard]] std::uint64_t lineage() const noexcept { return _lineage; }
+
+    /// @brief How often `find` was called.
+    /// @return The count, read relaxed: a measurement, not a synchronisation.
+    [[nodiscard]] std::uint64_t findCalls() const noexcept { return _findCalls.load(std::memory_order_relaxed); }
+
+private:
+    friend class UnitRegistryBuilder;
+
+    std::vector<UnitInfo> _units;
+    std::vector<std::uint8_t> _live;
+    std::unordered_map<std::string, UnitId, detail::UnitIdHash, std::equal_to<>> _ids;
+    std::vector<std::string> _dimensions;
+    std::vector<std::vector<UnitId>> _byDimension;
+    std::uint64_t _lineage = 0;
+    mutable std::atomic<std::uint64_t> _findCalls{0};
+};
+
+/// @brief Builds an immutable `UnitRegistry`, from nothing or as the successor of another.
+class UnitRegistryBuilder {
+public:
+    /// @brief A builder of a new lineage, holding the ratio's unit `{"", "", "ratio", 1, 6}` as number 0.
+    UnitRegistryBuilder() : _lineage{detail::nextUnitLineage()} {
+        _units.push_back(UnitInfo{.id = {},
+                                  .symbol = {},
+                                  .dimension = "ratio",
+                                  .toBase = math::Rational{1, math::DecimalPlaces{0}},
+                                  .decimals = 6});
+        _live.push_back(1);
+    }
+
+    /// @brief A builder of @p previous's successor: its units keep their numbers, its tombstones stay, and the
+    ///        lineage is the same.
+    /// @param previous The registry to build from; null builds from nothing, as the default constructor does.
+    explicit UnitRegistryBuilder(std::shared_ptr<UnitRegistry const> const& previous) : UnitRegistryBuilder{} {
+        if (previous == nullptr) {
+            return;
+        }
+        _units = previous->_units;
+        _live = previous->_live;
+        _lineage = previous->_lineage;
+    }
+
+    /// @brief Adds a unit, giving it the next number.
+    /// @param unit The unit. Its id is 1 to 32 bytes, holds no white space and does not begin with a digit, a sign,
+    ///             a point or a comma, since an operand is an amount, a space and an id; its factor is positive and
+    ///             its dimension named.
+    /// @return The unit's number; `InvalidSpec` naming the id for an id, factor or dimension that breaks a rule, or
+    ///         for an id a live unit already has.
+    std::expected<UnitId, TableError> add(UnitInfo unit) {
+        auto const refuse = [&unit](std::string const& why) {
+            return std::unexpected(TableError{
+                .code = TableErrorCode::InvalidSpec, .column = unit.id, .message = "unit \"" + unit.id + "\" " + why});
+        };
+        constexpr std::size_t kMaxIdBytes = 32;
+        auto const& id = unit.id;
+        if (id.empty() || id.size() > kMaxIdBytes) {
+            return refuse("has an id of " + std::to_string(id.size()) + " bytes, not 1 to 32");
+        }
+        if (id.find_first_of(" \t\n\r\f\v") != std::string::npos) {
+            return refuse("has white space in its id");
+        }
+        if (char const first = id.front();
+            (first >= '0' && first <= '9') || first == '+' || first == '-' || first == '.' || first == ',') {
+            return refuse("has an id that begins like a number");
+        }
+        if (unit.toBase.numerator <= 0 || unit.toBase.denominator <= 0) {
+            return refuse("has a factor that is not positive");
+        }
+        if (unit.dimension.empty()) {
+            return refuse("names no dimension");
+        }
+        for (std::size_t at = 0; at < _units.size(); ++at) {
+            if (_live[at] != 0 && _units[at].id == id) {
+                return refuse("is registered already");
+            }
+        }
+        _units.push_back(std::move(unit));
+        _live.push_back(1);
+        return static_cast<UnitId>(_units.size() - 1);
+    }
+
+    /// @brief Removes a live unit; its number becomes a tombstone.
+    /// @param id The unit's id; the ratio's unit `""` cannot be removed.
+    /// @return `false` when no live unit has the id, or it is the ratio's.
+    bool remove(std::string_view id) {
+        if (id.empty()) {
+            return false;
+        }
+        for (std::size_t at = 0; at < _units.size(); ++at) {
+            if (_live[at] != 0 && _units[at].id == id) {
+                _live[at] = 0;
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /// @brief The base unit the builder holds for a dimension: its first live unit of factor 1.
+    /// @param dimension The dimension's name.
+    /// @return The unit's id, or nothing when the dimension has no such unit.
+    [[nodiscard]] std::optional<std::string> baseOf(std::string_view dimension) const {
+        auto const one = math::Rational{1, math::DecimalPlaces{0}};
+        for (std::size_t at = 0; at < _units.size(); ++at) {
+            if (_live[at] != 0 && _units[at].dimension == dimension && _units[at].toBase == one) {
+                return _units[at].id;
+            }
+        }
+        return std::nullopt;
+    }
+
+    /// @brief The registry.
+    /// @return An immutable registry of the units added, numbered as they were.
+    [[nodiscard]] std::shared_ptr<UnitRegistry const> build() && {
+        auto out = std::make_shared<UnitRegistry>();
+        out->_units = std::move(_units);
+        out->_live = std::move(_live);
+        out->_lineage = _lineage;
+        for (std::size_t at = 0; at < out->_units.size(); ++at) {
+            auto const& unit = out->_units[at];
+            auto dimension = std::ranges::find(out->_dimensions, unit.dimension);
+            if (dimension == out->_dimensions.end()) {
+                out->_dimensions.push_back(unit.dimension);
+                out->_byDimension.emplace_back();
+                dimension = std::prev(out->_dimensions.end());
+            }
+            if (out->_live[at] == 0) {
+                continue;
+            }
+            out->_ids.emplace(unit.id, static_cast<UnitId>(at));
+            out->_byDimension[static_cast<std::size_t>(dimension - out->_dimensions.begin())].push_back(
+                static_cast<UnitId>(at));
+        }
+        for (auto& units : out->_byDimension) {
+            std::ranges::stable_sort(units, [&out](UnitId left, UnitId right) {
+                return out->_units[left].toBase > out->_units[right].toBase;
+            });
+        }
+        return out;
+    }
+
+private:
+    std::vector<UnitInfo> _units;
+    std::vector<std::uint8_t> _live;
+    std::uint64_t _lineage = 0;
+};
+
+/// @brief Adds the units of one of morph's compile-time unit enums, as a convenience for an application that has
+///        them.
+///
+/// Within a dimension the base is the unit the builder already holds for it (`UnitRegistryBuilder::baseOf`: `""`
+/// for `ratio`), reached through the enumerator of @p units whose `UnitMeta::id` is its id; or else the first
+/// enumerator of @p units in that dimension, added with factor 1. Every other unit's factor is the product of
+/// `UnitRelation::fromTo` along a path of `UnitTraits<E>::relations` to the base, each relation usable in both
+/// directions, the reverse taking the reciprocal. A unit's `symbol` is `UnitMeta::display` and its `decimals`
+/// `UnitMeta::defaultDecimals`. Every unit that resolves is added, in the order of @p units; one that does not is
+/// left out.
+/// @tparam E The unit enum.
+/// @param builder     The builder to add to.
+/// @param units       The enumerators to add.
+/// @param dimensionOf The dimension of an enumerator.
+/// @return Nothing, or the first refusal: `InvalidSpec` naming a unit with no path to its dimension's base, or what
+///         `UnitRegistryBuilder::add` refuses.
+template <units::UnitEnum E>
+std::expected<void, TableError> addUnitsOf(UnitRegistryBuilder& builder, std::span<E const> units,
+                                           std::string_view (*dimensionOf)(E)) {
+    using Base = std::pair<std::string, std::optional<E>>;
+    auto const metaOf = [](E unit) -> units::UnitMeta { return units::UnitTraits<E>::meta(unit); };
+    auto const one = math::Rational{1, math::DecimalPlaces{0}};
+    // The factor that converts one `from` to `to`: a breadth-first search of the relations.
+    auto const factor = [&one](E from, E to) -> std::optional<math::Rational> {
+        if (from == to) {
+            return one;
+        }
+        if constexpr (units::HasUnitRelations<E>) {
+            std::vector<std::pair<E, math::Rational>> frontier{{from, one}};
+            std::vector<E> seen{from};
+            for (std::size_t next = 0; next < frontier.size(); ++next) {
+                auto const [at, product] = frontier[next];
+                for (auto const& relation : units::UnitTraits<E>::relations) {
+                    E reached{};
+                    math::Rational step;
+                    if (relation.from == at) {
+                        reached = relation.to;
+                        step = relation.fromTo;
+                    } else if (relation.to == at) {
+                        auto const reverse = relation.fromTo.reciprocal();
+                        if (!reverse) {
+                            continue;
+                        }
+                        reached = relation.from;
+                        step = *reverse;
+                    } else {
+                        continue;
+                    }
+                    if (std::ranges::find(seen, reached) != seen.end()) {
+                        continue;
+                    }
+                    auto const scaled = math::checkedMul(product, step);
+                    if (!scaled) {
+                        continue;
+                    }
+                    if (reached == to) {
+                        return *scaled;
+                    }
+                    seen.push_back(reached);
+                    frontier.emplace_back(reached, *scaled);
+                }
+            }
+        }
+        return std::nullopt;
+    };
+    std::optional<TableError> first;
+    auto const keep = [&first](TableError error) {
+        if (!first) {
+            first = std::move(error);
+        }
+    };
+    auto const add = [&](units::UnitMeta const& meta, std::string const& dimension, math::Rational const& toBase) {
+        if (auto added = builder.add(UnitInfo{.id = std::string{meta.id},
+                                              .symbol = std::string{meta.display},
+                                              .dimension = dimension,
+                                              .toBase = toBase,
+                                              .decimals = meta.defaultDecimals});
+            !added) {
+            keep(std::move(added.error()));
+        }
+    };
+    // Per dimension met, the enumerator its base is reached through: none when the builder's base has none.
+    std::vector<Base> bases;
+    for (auto const unit : units) {
+        auto const meta = metaOf(unit);
+        auto const dimension = std::string{dimensionOf(unit)};
+        auto base = std::ranges::find(bases, dimension, &Base::first);
+        if (base == bases.end()) {
+            auto const held = builder.baseOf(dimension);
+            if (!held) {
+                bases.emplace_back(dimension, unit);
+                add(meta, dimension, one);
+                continue;
+            }
+            std::optional<E> through;
+            for (auto const candidate : units) {
+                if (metaOf(candidate).id == *held) {
+                    through = candidate;
+                }
+            }
+            bases.emplace_back(dimension, through);
+            base = std::prev(bases.end());
+        }
+        if (base->second == unit) {
+            continue;  // the dimension's base, which the builder holds
+        }
+        auto const toBase = base->second ? factor(unit, *base->second) : std::nullopt;
+        if (!toBase) {
+            keep(TableError{
+                .code = TableErrorCode::InvalidSpec,
+                .column = std::string{meta.id},
+                .message = "unit \"" + std::string{meta.id} + "\" has no relation to the base of " + dimension});
+            continue;
+        }
+        add(meta, dimension, *toBase);
+    }
+    if (first) {
+        return std::unexpected(std::move(*first));
+    }
+    return {};
+}
+
 /// @brief The text a cell shows when it has to be ordered or matched as text.
 /// @param cell The cell.
 /// @return Its text: the string itself, a number in decimal form (a decimal
-///         to its own places, `"12.5"`), `true` or `false`, or empty for an
-///         empty or an unloaded cell.
+///         to its own places, `"12.5"`; a quantity's or a measure's amount, without its unit, whose symbol is the
+///         display layer's), `true` or `false`, or empty for an empty or an unloaded cell.
 [[nodiscard]] inline std::string displayText(Cell const& cell) {
     return std::visit(
         []<typename T>(T const& value) -> std::string {
@@ -224,7 +619,7 @@ struct TableError {
                 return value;
             } else if constexpr (std::is_same_v<T, bool>) {
                 return value ? "true" : "false";
-            } else if constexpr (std::is_same_v<T, QuantityCell>) {
+            } else if constexpr (std::is_same_v<T, QuantityCell> || std::is_same_v<T, Measure>) {
                 return units::detail::formatRationalDecimal(value.amount);
             } else if constexpr (std::is_same_v<T, math::Rational>) {
                 return units::detail::formatRationalDecimal(value);
@@ -452,6 +847,9 @@ struct Services {
     std::map<std::string, CellComparator, std::less<>> comparators;
     /// @brief Optional progress receiver.
     std::shared_ptr<ProgressSink> progress;
+    /// @brief The units a `Measure` column's cells and operands name; a `Measure` column with none is a
+    ///        `SourceContract` error.
+    std::shared_ptr<UnitRegistry const> units;
 
     /// @brief The collator to use.
     /// @return `collator`, or the shared default.
@@ -483,6 +881,51 @@ struct Services {
         return out;
     }
 };
+
+/// @brief The units a table's description lists: the live units of every dimension a `Measure` column of
+///        @p columns allows.
+/// @param registry The registry.
+/// @param columns  The columns; a `Measure` column with no `dimensions` allows every dimension of @p registry.
+/// @return The units, in registry order; none when no column is `Measure`.
+[[nodiscard]] inline std::vector<UnitInfo> unitsFor(UnitRegistry const& registry,
+                                                    std::span<ColumnInfo const> columns) {
+    std::vector<std::string_view> allowed;
+    for (auto const& column : columns) {
+        if (column.kind != ColumnKind::Measure) {
+            continue;
+        }
+        if (column.dimensions.empty()) {
+            allowed.assign(registry.dimensions().begin(), registry.dimensions().end());
+            break;
+        }
+        allowed.insert(allowed.end(), column.dimensions.begin(), column.dimensions.end());
+    }
+    std::vector<UnitInfo> out;
+    for (UnitId unit = 0; unit < registry.size(); ++unit) {
+        if (registry.contains(unit) &&
+            std::ranges::contains(allowed, std::string_view{registry.info(unit).dimension})) {
+            out.push_back(registry.info(unit));
+        }
+    }
+    return out;
+}
+
+namespace detail {
+
+/// @brief Whether a `Measure` column is read without a registry: a broken contract, not a column to guess units for.
+/// @param info     The column.
+/// @param services The services it is read with.
+/// @return `SourceContract` naming the column when it is `Measure` and `services.units` is null; else nothing.
+[[nodiscard]] inline std::optional<TableError> unitsMissing(ColumnInfo const& info, Services const& services) {
+    if (info.kind != ColumnKind::Measure || services.units != nullptr) {
+        return std::nullopt;
+    }
+    return TableError{.code = TableErrorCode::SourceContract,
+                      .column = info.id,
+                      .message = "column " + info.id + " holds measures and the table has no unit registry"};
+}
+
+}  // namespace detail
 
 // ── Snapshots ───────────────────────────────────────────────────────────────
 
@@ -1055,9 +1498,9 @@ template <>
 struct glz::meta<morph::table::ColumnKind> {
     using enum morph::table::ColumnKind;
     /// @brief Each enumerator after its JSON name.
-    static constexpr auto value =
-        glz::enumerate("integer", Integer, "decimal", Decimal, "quantity", Quantity, "number", Number, "text", Text,
-                       "date", Date, "dateTime", DateTime, "bool", Bool, "key", Key, "custom", Custom);
+    static constexpr auto value = glz::enumerate("integer", Integer, "decimal", Decimal, "quantity", Quantity,
+                                                 "number", Number, "text", Text, "date", Date, "dateTime", DateTime,
+                                                 "bool", Bool, "key", Key, "custom", Custom, "measure", Measure);
 };
 
 /// @brief JSON names of `morph::table::TableErrorCode`, for a typed error on the wire.

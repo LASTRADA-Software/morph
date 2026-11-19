@@ -310,19 +310,16 @@ struct StateVersion {
 /// @brief Reads state documents leniently: a member this version does not know is skipped.
 inline constexpr glz::opts kStateRead{.error_on_unknown_keys = false};
 
-/// @brief Whether @p description lists unit @p unit of dimension @p dimension.
-///
-/// A description carries no units, so it lists none and every stored display unit is dropped.
+/// @brief Whether @p description lists unit @p unit of dimension @p dimension: whether a stored display unit still
+///        names a unit the table's measures may be shown in.
 /// @param description The description.
 /// @param dimension   The dimension, such as `mass`.
 /// @param unit        The unit's id.
-/// @return `false`.
+/// @return `true` when `description.units` holds a unit of that id and dimension.
 [[nodiscard]] inline bool listsUnit(TableDescription const& description, std::string_view dimension,
                                     std::string_view unit) {
-    static_cast<void>(description);
-    static_cast<void>(dimension);
-    static_cast<void>(unit);
-    return false;
+    return std::ranges::any_of(
+        description.units, [&](UnitInfo const& listed) { return listed.dimension == dimension && listed.id == unit; });
 }
 
 /// @brief Whether @p a and @p b hold the same column ids, in any order.
@@ -566,8 +563,11 @@ inline constexpr glz::opts kStateRead{.error_on_unknown_keys = false};
     if (document.filters) {
         FilterSpec& filters = *document.filters;
         auto const infos = columnInfos(description);
-        auto const compiles = [&infos, &description](FilterSpec const& spec) {
-            return compileFilterGuarded(spec, infos, Services{}, description.groups).has_value();
+        // A measure operand compiles against the units the description lists, the only ones a client knows.
+        Services services;
+        services.units = registryOf(description).value_or(nullptr);
+        auto const compiles = [&infos, &description, &services](FilterSpec const& spec) {
+            return compileFilterGuarded(spec, infos, services, description.groups).has_value();
         };
         for (auto entry = filters.columns.begin(); entry != filters.columns.end();) {
             auto const& [id, filter] = *entry;

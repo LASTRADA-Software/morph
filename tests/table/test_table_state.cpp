@@ -25,16 +25,23 @@ TableColumn stateColumn(std::string id, ColumnKind kind, std::string group = {})
 }
 
 // `id` (the key), `name`, `alias`, `weight`, each sortable, filterable and shown; one declared group
-// `g1 = {name, alias}`. No column `gone`, `a` or `b`, and no group `g2`. `weight` holds amounts with a unit.
+// `g1 = {name, alias}`. No column `gone`, `a` or `b`, and no group `g2`. `weight` holds measures, and the
+// description lists the units `g` and `kg` of dimension `mass`.
 TableDescription describedSamples() {
+    auto const unit = [](std::string id, morph::math::Rational toBase) {
+        return UnitInfo{.id = id, .symbol = id, .dimension = "mass", .toBase = toBase, .decimals = 0};
+    };
     return describe(TableDescription{
         .id = "samples",
         .label = "Samples",
         .columns = {stateColumn("id", ColumnKind::Integer), stateColumn("name", ColumnKind::Text, "g1"),
-                    stateColumn("alias", ColumnKind::Text, "g1"), stateColumn("weight", ColumnKind::Quantity)},
+                    stateColumn("alias", ColumnKind::Text, "g1"), stateColumn("weight", ColumnKind::Measure)},
         .key = "id",
         .groups = {ColumnGroupInfo{.id = "g1", .label = "Names", .columns = {"name", "alias"}}},
         .levels = {},
+        .units = {unit("kg", morph::math::Rational{1, morph::math::DecimalPlaces{0}}),
+                  unit("g", morph::math::Rational{morph::math::Numerator{1}, morph::math::Denominator{1000},
+                                                  morph::math::DecimalPlaces{3}})},
         .capabilities = {},
         .revision = {}});
 }
@@ -68,11 +75,12 @@ std::optional<StoredTableState> loadNow(ITableStateStore& store, TableStateKey c
 }  // namespace
 
 // Mutation: fitState returning the document unchanged (the sort, filter and hidden CHECKs fail).
+// Mutation: listsUnit returning false (the listed display unit `mass` -> `g` is dropped).
 TEST_CASE("table state: stale state is fitted", "[table][state]") {
     TableDescription const d = describedSamples();
     StateDocument const stored = readState(R"({"version":1,
       "layout":{"order":["id","gone","name","alias","weight"],"hidden":["id","name","alias","weight"],"pinned":2,
-                "widths":{"gone":9},"units":{"weight":{"mass":"zz"}}},
+                "widths":{"gone":9},"units":{"weight":{"mass":"g","ratio":"zz"}}},
       "sort":[{"column":"gone","direction":"asc"},{"column":"name","direction":"desc"}],
       "filters":{"columns":{"gone":{"include":[{"eq":"x"}]},"weight":{"include":[{"gt":"abc"}]}},
                  "groups":[{"group":"g2","include":[{"eq":"x"}]}]}})")
@@ -85,14 +93,16 @@ TEST_CASE("table state: stale state is fitted", "[table][state]") {
     CHECK(*fitted.sort == SortChain{{.column = "name", .dir = SortDirection::Descending}});
     CHECK(fitted.filters->columns.empty());
     CHECK(fitted.filters->groups.empty());
-    CHECK_FALSE(fitted.layout->units.contains("weight"));  // unknown unit "zz" dropped
+    REQUIRE(fitted.layout->units.contains("weight"));
+    CHECK_FALSE(fitted.layout->units.at("weight").contains("ratio"));  // unknown unit "zz" dropped
+    CHECK(fitted.layout->units.at("weight").at("mass") == "g");        // a unit the description lists is kept
     using W = FitDrop::What;
     CHECK(report.dropped == std::vector<FitDrop>{{W::Column, "gone", true},
                                                  {W::SortKey, "gone", true},
                                                  {W::Filter, "gone", true},
                                                  {W::Filter, "weight", false},
                                                  {W::GroupFilter, "g2", true},
-                                                 {W::Unit, "weight/mass", false}});
+                                                 {W::Unit, "weight/ratio", false}});
     CHECK(fitted.carried.columns == std::vector<CarriedState::Column>{{.id = "gone", .after = "id", .width = 9}});
     std::string const written = writeState(fitted);
     CHECK(written.contains(R"("direction":"desc")"));  // the stored name, not the wire's "dir"

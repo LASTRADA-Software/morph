@@ -196,7 +196,9 @@ TEST_CASE("wide table: apply reads only the sorted and filtered columns", "[tabl
                                                                      .include = {{.contains = "a"}},
                                                                      .exclude = {}});
     query.page = {.offset = 0, .limit = 200};
-    auto const page = morph::table::apply(recording, query);
+    morph::table::ApplyOptions options;
+    options.services.units = wide.units();
+    auto const page = morph::table::apply(recording, query, options);
     REQUIRE(page.has_value());
     REQUIRE(page->rows.size() == 200);
     auto const i001 = columnIndex(wide, "i001");

@@ -51,6 +51,8 @@ inline void appendDocumentValue(std::string& out, morph::table::Cell const& cell
                 exact(value, kind == morph::table::ColumnKind::Quantity ? "g" : nullptr);
             } else if constexpr (std::is_same_v<T, morph::table::QuantityCell>) {
                 exact(value.amount, "kg");
+            } else if constexpr (std::is_same_v<T, morph::table::Measure>) {
+                exact(value.amount, nullptr);
             } else {
                 static_cast<void>(value);
                 out += morph::table::displayText(cell);

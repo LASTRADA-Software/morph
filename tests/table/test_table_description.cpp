@@ -380,10 +380,12 @@ TEST_CASE("table query: a columns list is answered in the description's order, o
     CHECK(unknown.error().code == TableErrorCode::UnknownColumn);
     CHECK(unknown.error().column == "zz");
     bench::WideTableSource const source{{.rows = 1'000, .columns = 30, .seed = 7}};
-    CHECK(apply(source, asked).has_value());
+    ApplyOptions withUnits;
+    withUnits.services.units = source.units();
+    CHECK(apply(source, asked, withUnits).has_value());
     CHECK(detail::orderedColumns(infos, {"i001", "nope", "id"}) == std::vector<std::string>{"id", "i001"});
 
-    auto const keysOnly = writeGenericPage(pageOf(200), source, std::vector<std::string>{});
+    auto const keysOnly = writeGenericPage(pageOf(200), source, std::vector<std::string>{}, source.units().get());
     CHECK(keysOnly.keys.size() == 200);
     REQUIRE(keysOnly.rows.size() == 200);
     CHECK(std::ranges::all_of(keysOnly.rows, [](GenericRow const& row) { return row.empty(); }));
@@ -396,7 +398,7 @@ TEST_CASE("generic page: a page names only the asked columns", "[table][descript
     for (std::size_t i = 100; i < 140; ++i) {
         asked.push_back(source.columns()[i].id);
     }
-    auto const json = toJson(writeGenericPage(pageOf(200), source, asked));
+    auto const json = toJson(writeGenericPage(pageOf(200), source, asked, source.units().get()));
     auto const read = readGenericPage(json, bench::wideDescription("wide", 300));
     REQUIRE(read.has_value());
     CHECK(read->columns == asked);
@@ -411,7 +413,7 @@ TEST_CASE("generic page: a whole page fits an envelope", "[table][description]")
     for (auto const& info : source.columns()) {
         all.push_back(info.id);
     }
-    auto const page = writeGenericPage(pageOf(200), source, all);
+    auto const page = writeGenericPage(pageOf(200), source, all, source.units().get());
     REQUIRE(page.rows.size() == 200);
     std::size_t cells = 0;
     for (auto const& row : page.rows) {
@@ -705,7 +707,9 @@ private:
 };
 
 std::vector<RowId> keysOfApply(DataSource const& source, TableQuery const& query) {
-    auto const page = apply(source, query);
+    ApplyOptions options;
+    options.services.units = bench::wideUnits();
+    auto const page = apply(source, query, options);
     REQUIRE(page.has_value());
     auto const snapshot = source.snapshot();
     std::vector<RowId> out;
@@ -2149,4 +2153,124 @@ TEST_CASE("served description: a query's sort is held to the table's raised boun
     auto const thirteen = detail::answerQuery(twelve, sortedBy(13));
     REQUIRE_FALSE(thirteen.has_value());
     CHECK(thirteen.error().code == TableErrorCode::LimitExceeded);
+}
+
+namespace tabledesc {
+
+// A typed row with an amount in a named unit.
+struct MeasureRow {
+    std::int64_t id = 0;
+    morph::table::MeasureValue weight;
+};
+
+// The units a measured model's rows name: "", t, kg; kg's number is 2 here.
+inline std::shared_ptr<UnitRegistry const> const& modelUnits() {
+    static auto const built = [] {
+        UnitRegistryBuilder builder;
+        static_cast<void>(builder.add(UnitInfo{.id = "t",
+                                               .symbol = "t",
+                                               .dimension = "mass",
+                                               .toBase = Rational{1000, DecimalPlaces{0}},
+                                               .decimals = 3}));
+        static_cast<void>(builder.add(UnitInfo{
+            .id = "kg", .symbol = "kg", .dimension = "mass", .toBase = Rational{1, DecimalPlaces{0}}, .decimals = 3}));
+        return std::move(builder).build();
+    }();
+    return built;
+}
+
+inline std::shared_ptr<std::vector<MeasureRow> const> measureRows() {
+    return std::make_shared<std::vector<MeasureRow> const>(
+        std::vector<MeasureRow>{{.id = 1, .weight = {.amount = dec("0.3"), .unit = "kg"}}});
+}
+
+// A typed table with a measure whose model gives its units.
+class MeasuredModel {
+public:
+    std::shared_ptr<std::vector<MeasureRow> const> rows(morph::table::TableContext const& context) {
+        static_cast<void>(context);
+        return measureRows();
+    }
+    std::shared_ptr<UnitRegistry const> tableUnits(morph::table::TableContext const& context) {
+        static_cast<void>(context);
+        return modelUnits();
+    }
+};
+
+// The same table, its model declaring no units.
+class UnmeasuredModel {
+public:
+    std::shared_ptr<std::vector<MeasureRow> const> rows(morph::table::TableContext const& context) {
+        static_cast<void>(context);
+        return measureRows();
+    }
+};
+
+}  // namespace tabledesc
+
+BRIDGE_REGISTER_RECORD(tabledesc::MeasureRow, "MeasureRow")
+BRIDGE_REGISTER_MODEL(tabledesc::MeasuredModel, "MeasuredModel")
+BRIDGE_REGISTER_TABLE(tabledesc::MeasuredModel, "measured",
+                      morph::table::typed<tabledesc::MeasureRow>(&tabledesc::MeasuredModel::rows))
+BRIDGE_REGISTER_MODEL(tabledesc::UnmeasuredModel, "UnmeasuredModel")
+BRIDGE_REGISTER_TABLE(tabledesc::UnmeasuredModel, "unmeasured",
+                      morph::table::typed<tabledesc::MeasureRow>(&tabledesc::UnmeasuredModel::rows))
+
+// Mutation: readGenericPage with no registry returning SourceContract instead of resolving through
+// registryOf(description) (the no-registry read fails).
+TEST_CASE("generic page: a measure round-trips", "[table][description][measure]") {
+    auto const& server = tabledesc::modelUnits();
+    auto description = describedOf({column("w", ColumnKind::Measure)});
+    description.units = {server->info(*server->find("kg"))};
+    description = describe(std::move(description));
+    VectorSource source{columnInfos(description)};
+    source.setRows(intKeys(2), {{Cell{Measure{.amount = dec("0.3"), .unit = *server->find("kg")}}},
+                                {Cell{Measure{.amount = dec("1"), .unit = kUnknownUnit}}}});
+    std::vector<std::string> const columns{"w"};
+    auto const json = toJson(writeGenericPage(pageOf(2), source, columns, server.get()));
+    CHECK(json.contains(R"("rows":[[[3,10,"kg"]],[[1,1,null]]])"));
+    auto const client = registryOf(description);
+    REQUIRE(client.has_value());
+    auto const kg = (*client)->find("kg");
+    REQUIRE(kg.has_value());
+    CHECK(*kg != *server->find("kg"));  // the numbers are each registry's own; the wire names the id
+    auto const withRegistry = readGenericPage(json, description, client->get());
+    REQUIRE(withRegistry.has_value());
+    CHECK(std::get<Measure>(withRegistry->rows[0][0]) == Measure{.amount = dec("0.3"), .unit = *kg});
+    CHECK(std::get<Measure>(withRegistry->rows[1][0]).unit == kUnknownUnit);
+    auto const withoutRegistry = readGenericPage(json, description);
+    REQUIRE(withoutRegistry.has_value());
+    CHECK(std::get<Measure>(withoutRegistry->rows[0][0]) == Measure{.amount = dec("0.3"), .unit = *kg});
+    CHECK(toJson(*withoutRegistry) == json);  // a page read is written back with its units' ids
+    std::string unknown = json;
+    unknown.replace(unknown.find(R"("kg")"), 4, R"("lb")");
+    auto const read = readGenericPage(unknown, description);
+    REQUIRE(read.has_value());
+    CHECK(std::get<Measure>(read->rows[0][0]) == Measure{.amount = dec("0.3"), .unit = kUnknownUnit});
+}
+
+// Mutation: serve leaving a typed table's served.services.units null (the measured table's description is refused
+// SourceContract).
+TEST_CASE("typed table: a model's units reach its measures", "[table][registration][measure]") {
+    morph::session::Context const session{};
+    TableContext const context{.session = session};
+    tabledesc::MeasuredModel measured;
+    auto const served = detail::serve<&tabledesc::MeasuredModel::rows>(measured, context);
+    CHECK(served.description.columns.at(1).info.kind == ColumnKind::Measure);
+    auto const described = servedDescription(served);
+    REQUIRE(described.has_value());
+    REQUIRE(described->units.size() == 3);  // every dimension's units, for a column naming none: "", t and kg
+    CHECK(described->units[2].id == "kg");
+    auto const page = detail::answerQuery(detail::pinned(served), TableQuery{});
+    REQUIRE(page.has_value());
+    CHECK(page->revision == described->revision);
+    CHECK(toJson(*page).contains(R"("rows":[[1,[3,10,"kg"]]])"));
+    tabledesc::UnmeasuredModel unmeasured;
+    auto const bare = detail::serve<&tabledesc::UnmeasuredModel::rows>(unmeasured, context);
+    auto const refused = detail::answerQuery(detail::pinned(bare), TableQuery{});
+    REQUIRE_FALSE(refused.has_value());
+    CHECK(refused.error().code == TableErrorCode::SourceContract);
+    auto const refusedDescription = servedDescription(bare);
+    REQUIRE_FALSE(refusedDescription.has_value());
+    CHECK(refusedDescription.error().code == TableErrorCode::SourceContract);
 }

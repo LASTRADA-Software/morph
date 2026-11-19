@@ -37,7 +37,7 @@ namespace detail {
 struct ColumnData {
     WideRole role = WideRole::Integer;
     std::vector<std::int64_t> values;    // integers, dates, date-times, numerators at the role's fixed denominator
-    std::vector<std::uint8_t> flags;     // a quantity's unit (1 = kilograms), a boolean
+    std::vector<std::uint8_t> flags;     // a quantity's unit (1 = kilograms), a measure's unit number, a boolean
     std::string text;                    // every text of the column, one after another
     std::vector<std::uint32_t> offsets;  // row r's text is [offsets[r], offsets[r + 1])
     std::vector<bool> empty;             // only for a sparse column
@@ -63,6 +63,8 @@ using morph::table::QuantityCell;
 using detail::ColumnData;
 
 constexpr std::int64_t kDecimalScale = 100;
+// The fixture registry's units: "", kg, g, mg, t, l, ml, m3, percent, permille, numbered 0 to 9.
+constexpr std::uint64_t kWideUnits = 10;
 constexpr std::int64_t kGramScale = 1000;
 constexpr std::int64_t kKilogramScale = 1'000'000;
 
@@ -90,8 +92,9 @@ constexpr std::array<std::string_view, 32> kSyllables{
 [[nodiscard]] ColumnKind kindOf(WideRole role) noexcept {
     switch (role) {
         case WideRole::Decimal:
-        case WideRole::Measure:
             return ColumnKind::Decimal;
+        case WideRole::Measure:
+            return ColumnKind::Measure;
         case WideRole::Quantity:
             return ColumnKind::Quantity;
         case WideRole::Text:
@@ -112,7 +115,9 @@ constexpr std::array<std::string_view, 32> kSyllables{
 
 [[nodiscard]] bool isText(WideRole role) noexcept { return role == WideRole::Text || role == WideRole::LongText; }
 
-[[nodiscard]] bool usesFlags(WideRole role) noexcept { return role == WideRole::Quantity || role == WideRole::Bool; }
+[[nodiscard]] bool usesFlags(WideRole role) noexcept {
+    return role == WideRole::Quantity || role == WideRole::Measure || role == WideRole::Bool;
+}
 
 void appendText(std::string& out, std::uint64_t bits, WideRole role) {
     auto const length = role == WideRole::LongText ? 200 + (bits % 1801) : 4 + (bits % 57);
@@ -160,6 +165,7 @@ std::shared_ptr<ColumnData const> generate(std::uint64_t seed, WideColumn const&
                 break;
             case WideRole::Measure:
                 data->values.push_back(empty ? 0 : static_cast<std::int64_t>(bits % 1'000'001));
+                data->flags.push_back(empty ? 0 : static_cast<std::uint8_t>((bits >> 40U) % kWideUnits));
                 break;
             case WideRole::Text:
             case WideRole::LongText:
@@ -194,8 +200,11 @@ std::shared_ptr<ColumnData const> generate(std::uint64_t seed, WideColumn const&
         case WideRole::DateTime:
             return Cell{data.values[row]};
         case WideRole::Decimal:
-        case WideRole::Measure:
             return Cell{Rational{Numerator{data.values[row]}, Denominator{kDecimalScale}, DecimalPlaces{2}}};
+        case WideRole::Measure:
+            return Cell{morph::table::Measure{
+                .amount = Rational{Numerator{data.values[row]}, Denominator{kDecimalScale}, DecimalPlaces{2}},
+                .unit = data.flags[row]}};
         case WideRole::Quantity:
             if (data.flags[row] != 0) {
                 return Cell{QuantityCell{
@@ -274,11 +283,22 @@ void store(ColumnData& data, std::size_t rows, std::size_t row, Cell const& valu
             data.values[row] = empty ? 0 : std::get<std::int64_t>(value);
             return;
         case WideRole::Decimal:
-        case WideRole::Measure:
             if (!empty && !std::holds_alternative<Rational>(value)) {
                 throw mismatch();
             }
             data.values[row] = empty ? 0 : exactlyScaled(std::get<Rational>(value), kDecimalScale);
+            return;
+        case WideRole::Measure:
+            if (empty) {
+                data.values[row] = 0;
+                data.flags[row] = 0;
+            } else if (auto const* const measure = std::get_if<morph::table::Measure>(&value);
+                       measure != nullptr && measure->unit < kWideUnits) {
+                data.values[row] = exactlyScaled(measure->amount, kDecimalScale);
+                data.flags[row] = static_cast<std::uint8_t>(measure->unit);
+            } else {
+                throw mismatch();
+            }
             return;
         case WideRole::Quantity:
             if (empty) {
@@ -321,6 +341,37 @@ void store(ColumnData& data, std::size_t rows, std::size_t row, Cell const& valu
 }
 
 }  // namespace
+
+std::shared_ptr<morph::table::UnitRegistry const> const& wideUnits() {
+    static auto const built = [] {
+        morph::table::UnitRegistryBuilder builder;
+        auto const add = [&builder](std::string id, std::string dimension, Rational toBase, std::uint32_t decimals) {
+            auto symbol = id == "percent" ? std::string{"%"} : id == "permille" ? std::string{"\xE2\x80\xB0"} : id;
+            if (!builder.add(morph::table::UnitInfo{.id = std::move(id),
+                                                    .symbol = std::move(symbol),
+                                                    .dimension = std::move(dimension),
+                                                    .toBase = toBase,
+                                                    .decimals = decimals})) {
+                throw std::logic_error{"wide table: the fixture's units do not build"};
+            }
+        };
+        auto const one = [](std::int64_t value) { return Rational{value, DecimalPlaces{0}}; };
+        auto const part = [](std::int64_t denominator, std::uint32_t places) {
+            return Rational{Numerator{1}, Denominator{denominator}, DecimalPlaces{places}};
+        };
+        add("kg", "mass", one(1), 3);
+        add("g", "mass", part(1'000, 3), 0);
+        add("mg", "mass", part(1'000'000, 6), 0);
+        add("t", "mass", one(1'000), 3);
+        add("l", "volume", one(1), 3);
+        add("ml", "volume", part(1'000, 3), 0);
+        add("m3", "volume", one(1'000), 3);
+        add("percent", "ratio", part(100, 2), 2);
+        add("permille", "ratio", part(1'000, 3), 1);
+        return std::move(builder).build();
+    }();
+    return built;
+}
 
 std::uint64_t cellBits(std::uint64_t seed, std::string_view column, std::int64_t row) noexcept {
     return splitmix64(columnBase(seed, column) + static_cast<std::uint64_t>(row));
@@ -441,6 +492,7 @@ morph::table::TableDescription wideDescription(std::string id, int columns) {
     }
     out.groups = wideGroups(layout);
     out.levels = levelsOf(out);
+    out.units = morph::table::unitsFor(*wideUnits(), morph::table::columnInfos(out));
     return out;
 }
 
@@ -481,6 +533,8 @@ void WideTableSource::subscribe(morph::table::ChangeListener& listener) { _liste
 void WideTableSource::unsubscribe(morph::table::ChangeListener& listener) { _listeners.remove(listener); }
 
 std::vector<WideColumn> const& WideTableSource::layout() const noexcept { return _layout; }
+
+std::shared_ptr<morph::table::UnitRegistry const> WideTableSource::units() const { return wideUnits(); }
 
 WideTableOptions WideTableSource::options() const {
     std::scoped_lock const lock{_mutex};
@@ -963,6 +1017,7 @@ morph::table::ServedTable served(morph::table::TableDescription const& descripti
                                  std::shared_ptr<WideTableSource> source) {
     morph::table::ServedTable out;
     out.description = description;
+    out.services.units = source->units();
     out.source = std::move(source);
     out.levels = recipeLevels();
     return out;

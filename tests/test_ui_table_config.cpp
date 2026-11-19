@@ -24,6 +24,21 @@ namespace {
 namespace ui = morph::ui;
 namespace table = morph::table;
 
+// The units `kg` and `g` of dimension mass, as a table's description lists them.
+std::vector<table::UnitInfo> massUnits() {
+    return {table::UnitInfo{.id = "kg",
+                            .symbol = "kg",
+                            .dimension = "mass",
+                            .toBase = morph::math::Rational{1, morph::math::DecimalPlaces{0}},
+                            .decimals = 3},
+            table::UnitInfo{.id = "g",
+                            .symbol = "g",
+                            .dimension = "mass",
+                            .toBase = morph::math::Rational{morph::math::Numerator{1}, morph::math::Denominator{1000},
+                                                            morph::math::DecimalPlaces{3}},
+                            .decimals = 0}};
+}
+
 // Mutation: Extend treated as Click (Shift ignored).
 TEST_CASE("sort gesture: a click replaces the chain; Shift adds a key or flips one in place", "[ui][table][config]") {
     using table::SortDirection::Ascending;
@@ -299,6 +314,9 @@ TEST_CASE("typed operands: numbers reach the wire with a point and no grouping",
     CHECK(ui::canonicalOperand("1,5", table::ColumnKind::Decimal, ui::localeFacts("en")) == std::nullopt);
     CHECK(ui::canonicalOperand("abc", table::ColumnKind::Text, de) == "abc");
     CHECK(ui::canonicalOperand("2026-05-14", table::ColumnKind::Date, de) == "2026-05-14");
+    // Mutation: the Measure branch passing the typed text through ("0,3 kg" reaches the wire unchanged).
+    CHECK(ui::canonicalOperand("0,3 kg", table::ColumnKind::Measure, de, massUnits()) == "0.3 kg");
+    CHECK(ui::canonicalOperand("250", table::ColumnKind::Measure, de, massUnits(), "g") == "250 g");
 }
 
 // Mutation: Together built as one oneOf entry (the row F, F, X would pass).
@@ -330,9 +348,9 @@ TEST_CASE("conditions follow the column's kind", "[ui][table][config]") {
           std::vector<ui::ConditionOp>{Equals, NotEquals, Contains, BeginsWith, EndsWith});
     auto const numeric =
         std::vector<ui::ConditionOp>{Equals, NotEquals, Less, LessOrEqual, Greater, GreaterOrEqual, Between};
-    for (auto const kind :
-         {table::ColumnKind::Integer, table::ColumnKind::Key, table::ColumnKind::Decimal, table::ColumnKind::Quantity,
-          table::ColumnKind::Number, table::ColumnKind::Date, table::ColumnKind::DateTime}) {
+    for (auto const kind : {table::ColumnKind::Integer, table::ColumnKind::Key, table::ColumnKind::Decimal,
+                            table::ColumnKind::Quantity, table::ColumnKind::Number, table::ColumnKind::Date,
+                            table::ColumnKind::DateTime, table::ColumnKind::Measure}) {
         CHECK(ui::conditionOps(kind) == numeric);
     }
     CHECK(ui::conditionOps(table::ColumnKind::Bool).empty());
@@ -401,7 +419,7 @@ TEST_CASE("header menu: entries, order and enablement", "[ui][table][config]") {
     CHECK_FALSE(endEntries.at(11).enabled);  // the only visible column
     // Mutation: the Display unit submenu drawn with no check on the chosen unit.
     ui::HeaderMenuInput measure = input;
-    measure.column = {"weight", "Weight", false, table::ColumnKind::Decimal};
+    measure.column = {"weight", "Weight", false, table::ColumnKind::Measure};
     measure.dimensions = {{.dimension = "mass", .units = {"g", "kg"}, .chosen = "g"}};
     std::vector<ui::TableMenuEntry> const measureMenu = ui::headerMenu(measure);
     REQUIRE(measureMenu.back().entry.label == "Display unit");

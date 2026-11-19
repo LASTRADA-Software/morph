@@ -628,6 +628,7 @@ target_sources(morph
         include/morph/ui/value.hpp
         include/morph/ui/locale_table.hpp
         include/morph/ui/table_config.hpp
+        include/morph/ui/measure.hpp
         include/morph/ui/page_layout.hpp
         include/morph/ui/message.hpp
         include/morph/ui/expression.hpp

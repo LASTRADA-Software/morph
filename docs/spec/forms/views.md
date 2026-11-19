@@ -161,6 +161,9 @@ type it is instantiated on. Each derived column carries:
   indirection.
 - `kind` — the column's table kind, by the names
   `morph::table::ColumnKind` reads: `custom` for an `x-comparator` member;
+  `measure` for an `x-measure` member, an amount with its unit's id
+  (`table::MeasureValue`), tested before the exact-value rule since its object
+  has `num` and `den` too;
   `quantity` for an exact value (`num`/`den`) with `ExtUnits`, `decimal`
   without; `date` / `dateTime` for an integer with `x-widget` `epochDays` /
   `epochSeconds`, or a string with `format` `date` / `date-time`; `integer`,
