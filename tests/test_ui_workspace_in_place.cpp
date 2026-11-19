@@ -31,6 +31,7 @@ using morph::ui::ScreenHandle;
 using morph::ui::Value;
 using morph::ui::Workspace;
 using morph::ui::WorkspaceOptions;
+using morph::ui::WorkspaceScreen;
 using morph::ui::WorkspaceTabId;
 using morph::ui::testing::Harness;
 using morph::ui::testing::loadOrFail;
@@ -55,18 +56,25 @@ constexpr std::string_view kNeedsOwner = R"({
   "vocab": "ui/1", "id": "needsOwner", "params": { "noteId": "int", "owner": "string" },
   "view": { "kind": "text", "text": "x" } })";
 
+/// What a host's close guard did: how often it was asked, and, when `defer` is set, the answer it is waiting for.
+struct Guard {
+    int asked = 0;
+    bool defer = false;
+    std::function<void(CloseChoice)> pending;
+};
+
 /// A host whose close guard keeps a dirty screen open, or discards it.
 class Host final : public DocumentScreenHost {
 public:
-    Host(Harness& harness, CloseChoice guardChoice)
-        : DocumentScreenHost{harness.session, harness.dispatcher, options(harness, guardChoice)} {}
+    Host(Harness& harness, CloseChoice guardChoice, Guard* probe = nullptr)
+        : DocumentScreenHost{harness.session, harness.dispatcher, options(harness, guardChoice, probe)} {}
 
     void onNavigate(std::string_view /*screenId*/, ParamMap const& /*params*/) override {}
 
     using DocumentScreenHost::onNavigate;
 
 private:
-    static DocumentScreenHostOptions options(Harness& harness, CloseChoice guardChoice) {
+    static DocumentScreenHostOptions options(Harness& harness, CloseChoice guardChoice, Guard* probe) {
         static std::map<std::string, std::shared_ptr<Document const>, std::less<>> const documents{
             {"note", loadOrFail(kNote, morph::ui::testing::corpusCatalog())},
             {"variant", loadOrFail(kVariant, morph::ui::testing::corpusCatalog())},
@@ -79,7 +87,14 @@ private:
         };
         made.backend = &harness.backend;
         made.application = &harness.host;
-        made.guard = [guardChoice](ScreenHandle& /*screen*/, std::function<void(CloseChoice)> const& choose) {
+        made.guard = [guardChoice, probe](ScreenHandle& /*screen*/, std::function<void(CloseChoice)> const& choose) {
+            if (probe != nullptr) {
+                ++probe->asked;
+                if (probe->defer) {
+                    probe->pending = choose;
+                    return;
+                }
+            }
             choose(guardChoice);
         };
         return made;
@@ -138,59 +153,158 @@ TEST_CASE("workspace: openInPlace keeps the tab when its screen stays open, and 
     harness.settle();
     harness.backend.click(harness.byTestId("Button", "edit"));
     harness.settle();
+    ScreenHandle* const handle = shell.model().handleOf(shell.model().order().at(0));
 
     CHECK_FALSE(inPlace(harness, shell, 0, "variant", note(4)).has_value());
     REQUIRE(shell.tabs().size() == 1);
     CHECK(shell.tabs()[0].screenId == "note");
+    CHECK(shell.active() == 0U);
+    CHECK(shell.model().handleOf(shell.model().order().at(0)) == handle);
+    CHECK(handle->dirty().peek());
+    CHECK(harness.backend.children(harness.backend.idOf(shell.root())).size() == 1);
 
     CHECK_FALSE(inPlace(harness, shell, 0, "needsOwner", note(4)).has_value());
     REQUIRE(shell.tabs().size() == 1);
     CHECK(shell.tabs()[0].screenId == "note");
+    CHECK(harness.backend.children(harness.backend.idOf(shell.root())).size() == 1);
 }
 
-// Mutation: append the chrome after the screen without moving it (the page's first child is not the chrome).
-TEST_CASE("workspace: a page's chrome sits at its top, and a null chrome mounts nothing",
+// Mutation: ask for the draft's close with no guard (Cancel still replaces it); keep the new page on Cancel.
+TEST_CASE("workspace: openInPlace on a drafted tab asks the close guard, and a Cancel keeps the draft",
+          "[ui][workspace][in-place]") {
+    for (CloseChoice const choice : {CloseChoice::Cancel, CloseChoice::Discard}) {
+        Harness harness;
+        Guard guard;
+        Host host{harness, choice, &guard};
+        Workspace shell{harness.runtime, harness.backend, host, WorkspaceOptions{}};
+        REQUIRE(shell.open("note", note(4)).has_value());
+        harness.settle();
+        ScreenHandle* const handle = shell.model().handleOf(shell.model().order().at(0));
+        REQUIRE(host.mountDraft(*handle, loadOrFail(kNote, morph::ui::testing::corpusCatalog())).has_value());
+        harness.settle();
+        REQUIRE(DocumentScreenHost::draftedNow(*handle));
+
+        auto const answer = inPlace(harness, shell, 0, "variant", note(4));
+        CHECK(guard.asked == 1);
+        REQUIRE(shell.tabs().size() == 1);
+        if (choice == CloseChoice::Cancel) {
+            CHECK_FALSE(answer.has_value());
+            CHECK(shell.tabs()[0].screenId == "note");
+            CHECK(DocumentScreenHost::draftedNow(*handle));
+            CHECK(harness.backend.children(harness.backend.idOf(shell.root())).size() == 1);
+        } else {
+            CHECK(answer.has_value());
+            CHECK(shell.tabs()[0].screenId == "variant");
+            CHECK(harness.backend.children(harness.backend.idOf(shell.root())).size() == 1);
+        }
+    }
+}
+
+// Mutations: mount a second tab for a screen another tab shows; lose the focus (the active tab stays the current one).
+TEST_CASE("workspace: openInPlace focuses the tab that already shows the screen, and mounts nothing",
           "[ui][workspace][in-place]") {
     Harness harness;
     Host host{harness, CloseChoice::Discard};
     WorkspaceOptions options;
-    options.chrome = [](WorkspaceTabId /*tab*/, std::string_view screenId) -> morph::ui::Node {
-        if (screenId == "home") {
-            return nullptr;
-        }
-        morph::ui::Text text;
-        text.text = morph::ui::Prop<std::string>{std::string{"chrome"}};
-        text.common.testId = "chrome_" + std::string{screenId};
-        return morph::ui::text(std::move(text));
+    options.screens = [](std::string_view id) {
+        WorkspaceScreen facts;
+        facts.singleton = id == "home";
+        return facts;
     };
     Workspace shell{harness.runtime, harness.backend, host, std::move(options)};
-    REQUIRE(shell.open("note", note(1)).has_value());
     REQUIRE(shell.open("home", {}).has_value());
+    REQUIRE(shell.open("note", note(4)).has_value());
+    REQUIRE(shell.open("note", note(5)).has_value());
     harness.settle();
-    std::vector<int> const pages = harness.backend.children(harness.backend.idOf(shell.root()));
-    REQUIRE(pages.size() == 2);
-    REQUIRE_FALSE(harness.backend.children(pages[0]).empty());
-    CHECK(harness.backend.children(pages[0]).front() == harness.byTestId("Text", "chrome_note"));
-    CHECK_FALSE(harness.backend.find("Text", "testId", "chrome_home").has_value());
+    REQUIRE(shell.active() == 2U);
+    auto const pages = [&] { return harness.backend.children(harness.backend.idOf(shell.root())).size(); };
+    REQUIRE(pages() == 3);
+
+    auto const byIdentity = inPlace(harness, shell, 1, "note", note(5));
+    REQUIRE(byIdentity.has_value());
+    CHECK(*byIdentity == shell.model().order().at(2));
+    CHECK(shell.active() == 2U);
+    CHECK(shell.tabs().size() == 3);
+    CHECK(shell.tabs()[1].identity == Value{std::int64_t{4}});
+    CHECK(pages() == 3);
+
+    auto const bySingleton = inPlace(harness, shell, 1, "home", {});
+    REQUIRE(bySingleton.has_value());
+    CHECK(*bySingleton == shell.model().order().at(0));
+    CHECK(shell.active() == 0U);
+    CHECK(shell.tabs().size() == 3);
+    CHECK(shell.tabs()[1].screenId == "note");
+    CHECK(pages() == 3);
 }
 
-// Mutation: drop the draft check (the draft is closed through the guard and the tab replaced).
-TEST_CASE("workspace: openInPlace refuses a tab that shows a draft, and mounts nothing", "[ui][workspace][in-place]") {
+// Mutation: activate the new tab after the old one is removed (the tab before it is shown meanwhile).
+TEST_CASE("workspace: openInPlace on the active tab activates no other tab on the way", "[ui][workspace][in-place]") {
     Harness harness;
     Host host{harness, CloseChoice::Discard};
-    Workspace shell{harness.runtime, harness.backend, host, WorkspaceOptions{}};
+    std::vector<std::optional<WorkspaceTabId>> seen;
+    Workspace* shellPtr = nullptr;
+    WorkspaceOptions options;
+    options.onChanged = [&] {
+        if (shellPtr != nullptr) {
+            seen.push_back(shellPtr->model().active().peek());
+        }
+    };
+    Workspace shell{harness.runtime, harness.backend, host, std::move(options)};
+    shellPtr = &shell;
+    REQUIRE(shell.open("home", {}).has_value());
+    REQUIRE(shell.open("note", note(4)).has_value());
+    REQUIRE(shell.open("note", note(5)).has_value());
+    harness.settle();
+    shell.model().activate(shell.model().order().at(1));
+    harness.settle();
+    WorkspaceTabId const old = shell.model().order().at(1);
+    seen.clear();
+
+    auto const opened = inPlace(harness, shell, 1, "variant", note(4));
+    REQUIRE(opened.has_value());
+    REQUIRE_FALSE(seen.empty());
+    for (auto const& tab : seen) {
+        CHECK((tab == old || tab == *opened));
+    }
+    CHECK(shell.active() == 1U);
+    CHECK(shell.tabs()[1].screenId == "variant");
+}
+
+// Mutations: skip the record write after the move; answer success for a closed new tab.
+TEST_CASE(
+    "workspace: openInPlace records the tabs in order while the guard is pending, and fails when the new tab closed",
+    "[ui][workspace][in-place]") {
+    Harness harness;
+    Guard guard;
+    guard.defer = true;
+    Host host{harness, CloseChoice::Discard, &guard};
+    std::vector<std::vector<std::string>> records;
+    WorkspaceOptions options;
+    options.onRecord = [&records](std::vector<std::string> const& routes) { records.push_back(routes); };
+    Workspace shell{harness.runtime, harness.backend, host, std::move(options)};
     REQUIRE(shell.open("note", note(4)).has_value());
     harness.settle();
-    ScreenHandle* const handle = shell.model().handleOf(shell.model().order().at(0));
-    REQUIRE(handle != nullptr);
-    REQUIRE(host.mountDraft(*handle, loadOrFail(kNote, morph::ui::testing::corpusCatalog())).has_value());
+    harness.backend.click(harness.byTestId("Button", "edit"));
     harness.settle();
-    REQUIRE(DocumentScreenHost::draftedNow(*handle));
+    REQUIRE(shell.open("home", {}).has_value());
+    harness.settle();
 
-    auto const refused = inPlace(harness, shell, 0, "variant", note(4));
-    REQUIRE_FALSE(refused.has_value());
-    CHECK(refused.error().reason.find("draft") != std::string::npos);
-    REQUIRE(shell.tabs().size() == 1);
-    CHECK(shell.tabs()[0].screenId == "note");
-    CHECK(DocumentScreenHost::draftedNow(*handle));
+    std::optional<std::expected<WorkspaceTabId, MountError>> answer;
+    shell.model().openInPlace(
+        shell.model().order().at(0), "variant", note(4),
+        [&answer](std::expected<WorkspaceTabId, MountError> opened) { answer = std::move(opened); });
+    harness.settle();
+    REQUIRE(guard.pending);
+    CHECK_FALSE(answer.has_value());
+    REQUIRE_FALSE(records.empty());
+    CHECK(records.back() == std::vector<std::string>{"note?noteId=4", "variant?noteId=4", "home"});
+
+    shell.model().close(shell.model().order().at(1), nullptr);
+    harness.settle();
+    guard.pending(CloseChoice::Discard);
+    harness.settle();
+    REQUIRE(answer.has_value());
+    CHECK_FALSE(answer->has_value());
+    CHECK(shell.tabs().size() == 1);
+    CHECK(shell.tabs()[0].screenId == "home");
 }

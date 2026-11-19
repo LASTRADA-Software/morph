@@ -101,13 +101,21 @@ open tab, which is when a host settles the navigation's call rather than leave i
 ## Opening in place
 
 `WorkspaceModel::openInPlace(tab, screenId, params, done)` opens another screen in a tab's place, which is what a
-shell's **Open as** does. A tab that shows a draft is refused before anything is mounted, and `done` answers why: the
-draft is unsaved work, to be saved or discarded first, and a close guard answered by mistake must not lose it. Otherwise
-the new screen is mounted first, beside the tab, so a refused mount opens nothing and the tab stays. The tab's screen
-is then asked to close (spec 6 section 3): when it closes, the new screen takes its place in the order and in the
-record and is the active tab; when it stays open (a dirty screen whose guard keeps it), the new screen is closed
-without asking and `done` answers why. No open tab is focused instead, whatever its identity. Until the close is
-answered, the new screen is a tab beside the old one.
+shell's **Open as** does.
+
+1. When another tab already shows that screen with those params (by identity, or a `singleton` screen whatever the
+   params), that tab is focused, the given tab is left as it is, nothing is mounted, and `done` answers the focused
+   tab, as `openTab` does when it focuses.
+2. Otherwise the new screen is mounted first, beside the tab, and the record is written in that order, so a refused
+   mount opens nothing and the tab stays.
+3. The tab's screen is then asked to close through its close guard, as any close is (spec 6 §3). A tab that shows a
+   draft is asked first like any dirty tab: when the guard keeps it, the draft and the tab stay and the new screen is
+   closed without asking. When it closes, the new screen is made the active tab before the old one is removed, so no
+   other tab is activated meanwhile, and takes the old one's place in the order and in the record.
+
+`done` answers the tab now showing the screen, or why nothing changed: a refused mount, a screen that stayed open, or a
+new screen that was closed before the old one answered. Until the close is answered, the new screen is a tab beside the
+old one.
 
 ## Closing
 

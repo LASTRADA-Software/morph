@@ -222,26 +222,33 @@ public:
 
     /// @brief Opens @p screenId with @p params in the place of @p tab: what a shell's **Open as** does.
     ///
-    /// A tab that shows a draft is refused, and nothing is mounted: the draft is the person's unsaved work, to be
-    /// saved or discarded first. Otherwise the new screen is mounted beside the tab, and a refused mount opens nothing
-    /// and leaves the tab. The tab's screen is then asked to close (spec 6 section 3). When it closes, the new screen
-    /// takes its place in the order and in the record, and is the active tab; when it stays open, the new screen is
-    /// closed without asking. No open tab is focused instead, whatever its identity: the person asked for this tab.
+    /// When another tab already shows that screen with those params (by identity, or a `singleton` screen whatever
+    /// the params), that tab is focused, @p tab is left as it is and nothing is mounted. Otherwise the new screen is
+    /// mounted beside the tab, and a refused mount opens nothing and leaves the tab. The tab's screen is then asked to
+    /// close through its close guard, as any close is, so a tab that shows a draft is asked first (spec 6 §3). When it
+    /// closes, the new screen becomes the active tab and takes the tab's place in the order and in the record; when it
+    /// stays open, the new screen is closed without asking.
     /// @param tab      The tab.
     /// @param screenId The screen to open in its place.
     /// @param params   Its params.
-    /// @param done     Called once with the new tab, or why nothing changed: a draft, a refused mount, or a screen
-    ///                 that stayed open. May be empty.
+    /// @param done     Called once with the tab now showing the screen (the new one, or the one that was focused), or
+    ///                 why nothing changed: a refused mount, a screen that stayed open, or a new screen closed
+    ///                 before the old one answered. May be empty.
     /// @throws std::out_of_range for a tab the model does not hold.
     void openInPlace(WorkspaceTabId tab, std::string_view screenId, ParamMap const& params,
                      std::function<void(std::expected<WorkspaceTabId, MountError>)> done) {
         WorkspaceTabId const old = held(tab);
-        if (DocumentScreenHost::draftedNow(*_tabs.at(indexOf(old))->handle)) {
-            if (done) {
-                done(std::unexpected(MountError{.screenId = std::string{screenId},
-                                                .reason = "the tab shows a draft; save or discard it first"}));
+        WorkspaceScreen const facts = factsOf(screenId);
+        std::optional<std::string> const identity = _host->identityOf(screenId, params);
+        for (auto const& other : _tabs) {
+            if (other->id != old && other->screenId == screenId &&
+                (facts.singleton || (identity && identityText(*other) == *identity))) {
+                activateTab(other->id, false);
+                if (done) {
+                    done(other->id);
+                }
+                return;
             }
-            return;
         }
         auto opened = mountTab(screenId, params);
         if (!opened) {
@@ -252,31 +259,34 @@ public:
         }
         WorkspaceTabId const fresh = *opened;
         moveTab(fresh, indexOf(old) + 1);
+        recordChanged();
         std::weak_ptr<bool> const alive = _alive;
         _tabs.at(indexOf(old))
-            ->handle->requestClose(
-                [this, alive, old, fresh, id = std::string{screenId}, done = std::move(done)](bool closed) mutable {
-                    if (alive.expired()) {
-                        return;
-                    }
-                    if (!closed) {
-                        removeTab(fresh, true);
-                        if (done) {
-                            done(std::unexpected(MountError{.screenId = id, .reason = "the open screen stayed open"}));
-                        }
-                        return;
-                    }
-                    std::size_t const place = indexOf(old);
-                    removeTab(old, false);
-                    if (indexOf(fresh) != kNone) {
-                        moveTab(fresh, std::min(place, _tabs.size() - 1));
-                        activateTab(fresh, false);
-                    }
-                    recordChanged();
+            ->handle->requestClose([this, alive, old, fresh, id = std::string{screenId},
+                                    done = std::move(done)](bool closed) mutable {
+                if (alive.expired()) {
+                    return;
+                }
+                bool const freshOpen = indexOf(fresh) != kNone;
+                if (!closed) {
+                    removeTab(fresh, true);
                     if (done) {
-                        done(fresh);
+                        done(std::unexpected(MountError{.screenId = id, .reason = "the open screen stayed open"}));
                     }
-                });
+                    return;
+                }
+                // The new screen is active before the old one goes, so no other tab is activated meanwhile.
+                if (freshOpen) {
+                    activateTab(fresh, false);
+                }
+                removeTab(old, false);
+                if (done) {
+                    done(freshOpen
+                             ? std::expected<WorkspaceTabId, MountError>{fresh}
+                             : std::unexpected(MountError{
+                                   .screenId = id, .reason = "the new screen was closed before it took the place"}));
+                }
+            });
     }
 
     /// @brief Opens the start screens: with `resume`, every recorded route whose screen is known and available, in
