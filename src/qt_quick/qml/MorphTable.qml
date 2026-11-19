@@ -55,10 +55,10 @@ MorphWidget {
         }
         return count
     }
-    // Set by C++ (TableImpl::setRealizedWindow) only above a virtualized table's threshold; totalRows stays -1
-    // (its default, meaning "not virtualizing") otherwise, which is what keeps every binding below referencing
-    // these three properties a no-op for a table that never crosses its threshold -- body has no spacers, and the
-    // Flickable's own reporting never fires, since nothing ever asks "what rows exist beyond what's realized."
+    // Set by C++ (TableImpl::setRealizedWindow) for a table over a source, and for a table over `rows` at or above
+    // its virtualization threshold: the contiguous range realized and the view's rows. totalRows stays -1 (its
+    // default, "not virtualizing") otherwise, which keeps every binding below that reads these three a no-op for a
+    // short table -- body has no spacers, and the Flickable's own reporting never fires.
     property int realizedFirst: 0
     property int realizedCount: 0
     property int totalRows: -1
@@ -726,7 +726,17 @@ MorphWidget {
                         nextCheckState: function() {
                             return checkState
                         }
-                        onClicked: root.fire("selectAll", undefined)
+                        // Over a source, every row of the view through the mount, as Ctrl+A.
+                        onClicked: {
+                            if (root.sourceRows) {
+                                if (root.totalRows > 0) {
+                                    root.anchorRowIndex = 0
+                                    root.selectRangeTo(root.totalRows - 1, true)
+                                }
+                            } else {
+                                root.fire("selectAll", undefined)
+                            }
+                        }
                         Accessible.name: root.selectAllLabel
                     }
                 }
@@ -915,9 +925,12 @@ MorphWidget {
                 id: announceTimer
                 interval: 500
                 onTriggered: {
+                    // `announce` is Qt 6.8's; before it the lookup is undefined and nothing is called.
+                    // qmllint disable missing-property
                     if (root.statusShown && statusLabel.text !== "" &&
                             typeof statusLabel.Accessible.announce === "function")
                         statusLabel.Accessible.announce(statusLabel.text)
+                    // qmllint enable missing-property
                 }
             }
             textFormat: Text.PlainText
