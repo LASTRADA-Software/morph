@@ -731,7 +731,7 @@ void Navigator::setCustom(std::vector<NavigatorCustomEntry> entries) {
         std::string const screenId = entry.id;
         item.button->setOnClick([this, screenId] {
             // A copy: the handler may list the custom screens again, which destroys this closure and its capture.
-            std::string const opening = screenId;
+            std::string const opening = screenId;  // NOLINT(performance-unnecessary-copy-initialization): see above
             if (_options.onOpen) {
                 _options.onOpen(opening);
             }

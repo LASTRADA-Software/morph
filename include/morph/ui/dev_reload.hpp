@@ -118,12 +118,10 @@ struct ReloadOutcome {
         auto const document = std::make_shared<Document const>(std::move(*loaded));
         bool kept = true;
         for (MountedScreen const& screen : mounted) {
-            if (screen.screenId != screenId || screen.handle == nullptr) {
-                continue;
-            }
             // A draft stays mounted: it is checked against the new bundle when the person previews or saves it, and
             // discarding it mounts the document the map holds then.
-            if (DocumentScreenHost::draftedNow(*screen.handle)) {
+            if (screen.screenId != screenId || screen.handle == nullptr ||
+                DocumentScreenHost::draftedNow(*screen.handle)) {
                 continue;
             }
             if (auto remounted = host.remount(*screen.handle, document); !remounted) {

@@ -215,6 +215,8 @@ public:
         }
         refuseSelfRead();
         detail::TrackingFrame const untracked{core(), nullptr};
+        // NOLINTNEXTLINE(clang-analyzer-core.StackAddressEscape): the frame unlinks itself from the thread-local
+        // tracking chain in its destructor, so nothing outlives this call.
         return mutableSelf().current();
     }
 

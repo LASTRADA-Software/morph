@@ -255,7 +255,7 @@ public:
         recordChanged();
         std::weak_ptr<bool> const alive = _alive;
         _tabs.at(indexOf(old))
-            ->handle->requestClose([this, alive, old, fresh, id = std::string{screenId},
+            ->handle->requestClose([this, alive, old, fresh, screen = std::string{screenId},
                                     done = std::move(done)](bool closed) mutable {
                 if (alive.expired()) {
                     return;
@@ -264,7 +264,7 @@ public:
                 if (!closed) {
                     removeTab(fresh, true);
                     if (done) {
-                        done(std::unexpected(MountError{.screenId = id, .reason = "the open screen stayed open"}));
+                        done(std::unexpected(MountError{.screenId = screen, .reason = "the open screen stayed open"}));
                     }
                     return;
                 }
@@ -274,10 +274,10 @@ public:
                 }
                 removeTab(old, false);
                 if (done) {
-                    done(freshOpen
-                             ? std::expected<WorkspaceTabId, MountError>{fresh}
-                             : std::unexpected(MountError{
-                                   .screenId = id, .reason = "the new screen was closed before it took the place"}));
+                    done(freshOpen ? std::expected<WorkspaceTabId, MountError>{fresh}
+                                   : std::unexpected(
+                                         MountError{.screenId = screen,
+                                                    .reason = "the new screen was closed before it took the place"}));
                 }
             });
     }

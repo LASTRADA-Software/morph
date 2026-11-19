@@ -49,7 +49,7 @@ struct MountError {
     std::string reason;
     /// @brief The JSON Pointer into the document of the refused part when the refusal is about one part, such as
     ///        `/id`; empty otherwise.
-    std::string pointer{};
+    std::string pointer;
 };
 
 /// @brief A screen's head beside its title: the eyebrow, the title's runs, the subtitle, the status badges, the tools,
@@ -473,7 +473,7 @@ public:
     /// @brief Ends a draft without remounting: what is mounted stays, and the handle no longer shows a draft. What a
     ///        shell does once the draft was saved.
     /// @param handle A handle this host mounted; a foreign one, or one with no draft, is left as it is.
-    void endDraft(ScreenHandle& handle);
+    static void endDraft(ScreenHandle& handle);
 
     /// @brief Whether a handle this host mounted shows a draft. A tracked read.
     /// @param handle A handle.

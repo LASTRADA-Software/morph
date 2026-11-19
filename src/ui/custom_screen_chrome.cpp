@@ -99,17 +99,17 @@ void CustomScreenChrome::listed(CustomScreensListed const& listed) {
 }
 
 Node CustomScreenChrome::chromeFor(WorkspaceTabId tab, std::string_view screenId) {
-    std::string const id{screenId};
-    if (!isCustomScreenId(id) && !_options.documents(id)) {
+    std::string const custom{screenId};
+    if (!isCustomScreenId(custom) && !_options.documents(custom)) {
         return nullptr;
     }
     std::shared_ptr<TabState> const state = ensureState(tab);
     prune();
     Column column;
     column.gap = 1;
-    column.common.testId = "screen_chrome_" + id;
-    column.children.push_back(draftBar(tab, id, state));
-    column.children.push_back(toolsRow(tab, id));
+    column.common.testId = "screen_chrome_" + custom;
+    column.children.push_back(draftBar(tab, custom, state));
+    column.children.push_back(toolsRow(tab, custom));
     return ui::column(std::move(column));
 }
 
@@ -294,7 +294,7 @@ std::string CustomScreenChrome::titleOf(std::string const& screenId) const {
 }
 
 void CustomScreenChrome::showSource(WorkspaceTabId tab) {
-    ScreenHandle* const handle = handleOf(tab);
+    ScreenHandle const* const handle = handleOf(tab);
     std::shared_ptr<TabState> const state = stateOf(tab);
     std::optional<std::string> const screenId =
         handle == nullptr ? std::nullopt : DocumentScreenHost::screenIdOf(*handle);
@@ -304,17 +304,17 @@ void CustomScreenChrome::showSource(WorkspaceTabId tab) {
     bool const drafted = DocumentScreenHost::drafted(*handle);
     if (!drafted && isCustomScreenId(*screenId) && _options.sync->documents().entry(*screenId) == nullptr) {
         // The cache dropped the document (a list that no longer has it): it is fetched again before it is shown.
-        _options.sync->open(
-            *screenId,
-            guarded([this, tab, id = *screenId](std::expected<std::shared_ptr<Document const>, std::string> loaded) {
-                if (loaded && _options.sync->documents().entry(id) != nullptr) {
-                    showSource(tab);
-                    return;
-                }
-                notify("The source of " + titleOf(id) + " could not be read" +
-                           (loaded ? std::string{} : ": " + loaded.error()),
-                       Tone::Warn);
-            }));
+        _options.sync->open(*screenId,
+                            guarded([this, tab, stored = *screenId](
+                                        std::expected<std::shared_ptr<Document const>, std::string> loaded) {
+                                if (loaded && _options.sync->documents().entry(stored) != nullptr) {
+                                    showSource(tab);
+                                    return;
+                                }
+                                notify("The source of " + titleOf(stored) + " could not be read" +
+                                           (loaded ? std::string{} : ": " + loaded.error()),
+                                       Tone::Warn);
+                            }));
         return;
     }
     std::string const text = drafted ? state->draftText : currentText(*screenId);
@@ -457,7 +457,7 @@ void CustomScreenChrome::closeSaveAsLater() {
 }
 
 // NOLINTNEXTLINE(readability-function-cognitive-complexity): the client's load, the server's check, then the mount.
-void CustomScreenChrome::preview(std::function<void(bool drafted)> done) {
+void CustomScreenChrome::preview(std::function<void(bool drafted)> const& done) {
     Source* const source = _source.get();
     if (source == nullptr || source->mode != SourceMode::Draft || source->readOnly || !source->tab ||
         source->busy->peek()) {
@@ -488,7 +488,7 @@ void CustomScreenChrome::preview(std::function<void(bool drafted)> done) {
                          guarded([this, tab, generation, text, document,
                                   done](std::expected<std::optional<CheckRefusal>, std::string> checked) {
                              // The view this check was made for, and not one opened since, takes the answer.
-                             Source* const shown = _source.get();
+                             Source const* const shown = _source.get();
                              if (shown == nullptr || shown->generation != generation) {
                                  finish(done, false);
                                  return;
@@ -609,7 +609,7 @@ void CustomScreenChrome::confirmSaveAs() {
 }
 
 void CustomScreenChrome::saveAs(WorkspaceTabId tab, std::string const& title) {
-    ScreenHandle* const handle = handleOf(tab);
+    ScreenHandle const* const handle = handleOf(tab);
     std::shared_ptr<TabState> const state = stateOf(tab);
     std::optional<std::string> const screenId =
         handle == nullptr ? std::nullopt : DocumentScreenHost::screenIdOf(*handle);
@@ -655,11 +655,11 @@ void CustomScreenChrome::failSaveAs(WorkspaceTabId tab, std::uint64_t generation
     }
 }
 
-void CustomScreenChrome::openSaved(WorkspaceTabId tab, std::uint64_t generation, std::string const& id,
+void CustomScreenChrome::openSaved(WorkspaceTabId tab, std::uint64_t generation, std::string const& screenId,
                                    std::string const& title) {
     _options.sync->open(
-        id, guarded([this, tab, generation, id,
-                     title](std::expected<std::shared_ptr<Document const>, std::string> loaded) {
+        screenId, guarded([this, tab, generation, screenId,
+                           title](std::expected<std::shared_ptr<Document const>, std::string> loaded) {
             std::string const saved = "Saved as " + title;
             ScreenHandle* const handle = handleOf(tab);
             std::shared_ptr<TabState> const state = stateOf(tab);
@@ -680,7 +680,7 @@ void CustomScreenChrome::openSaved(WorkspaceTabId tab, std::uint64_t generation,
             state->draftText.clear();
             ParamMap const params = DocumentScreenHost::paramsOf(*handle).value_or(ParamMap{});
             _model->openInPlace(
-                tab, id, params, guarded([this, tab, saved](std::expected<WorkspaceTabId, MountError> opened) {
+                tab, screenId, params, guarded([this, tab, saved](std::expected<WorkspaceTabId, MountError> opened) {
                     settled(tab);
                     if (!opened) {
                         notify(saved + ", but it could not be opened: " + opened.error().reason, Tone::Warn);
@@ -692,7 +692,7 @@ void CustomScreenChrome::openSaved(WorkspaceTabId tab, std::uint64_t generation,
 }
 
 void CustomScreenChrome::save(WorkspaceTabId tab) {
-    ScreenHandle* const handle = handleOf(tab);
+    ScreenHandle const* const handle = handleOf(tab);
     std::shared_ptr<TabState> const state = stateOf(tab);
     std::optional<std::string> const screenId =
         handle == nullptr ? std::nullopt : DocumentScreenHost::screenIdOf(*handle);
@@ -701,14 +701,17 @@ void CustomScreenChrome::save(WorkspaceTabId tab) {
         return;
     }
     std::optional<CustomScreenSummary> const summary = summaryOf(*screenId);
-    std::string const id = *screenId;
+    if (!summary) {
+        return;
+    }
+    std::string const& savedId = *screenId;
     std::string const title = summary->title;
     std::uint64_t const generation = state->generation;
     state->pending->set(true);
     _options.sync->save(
         CustomScreensSave{
-            .app = {}, .id = id, .title = title, .basedOn = summary->basedOn, .document = state->draftText},
-        guarded([this, tab, id, title, generation](std::expected<std::string, std::string> saved) {
+            .app = {}, .id = savedId, .title = title, .basedOn = summary->basedOn, .document = state->draftText},
+        guarded([this, tab, savedId, title, generation](std::expected<std::string, std::string> saved) {
             if (!saved) {
                 settled(tab);
                 if (holds(tab, generation)) {
@@ -722,8 +725,8 @@ void CustomScreenChrome::save(WorkspaceTabId tab) {
                 return;
             }
             _options.sync->fetch(
-                id, guarded([this, tab, generation,
-                             title](std::expected<std::shared_ptr<Document const>, std::string> const& loaded) {
+                savedId, guarded([this, tab, generation,
+                                  title](std::expected<std::shared_ptr<Document const>, std::string> const& loaded) {
                     settled(tab);
                     if (!holds(tab, generation)) {
                         saveOutcome(tab, generation, "Saved " + title);
@@ -745,7 +748,7 @@ void CustomScreenChrome::save(WorkspaceTabId tab) {
 }
 
 void CustomScreenChrome::discard(WorkspaceTabId tab) {
-    ScreenHandle* const handle = handleOf(tab);
+    ScreenHandle const* const handle = handleOf(tab);
     std::optional<std::string> const screenId =
         handle == nullptr ? std::nullopt : DocumentScreenHost::screenIdOf(*handle);
     if (!screenId || !DocumentScreenHost::drafted(*handle)) {
@@ -843,7 +846,7 @@ CustomScreenChrome::OpenAsShape CustomScreenChrome::openAsShape(std::string cons
 }
 
 void CustomScreenChrome::openAs(WorkspaceTabId tab, std::string const& screenId) {
-    ScreenHandle* const handle = handleOf(tab);
+    ScreenHandle const* const handle = handleOf(tab);
     if (_model == nullptr || handle == nullptr || DocumentScreenHost::screenIdOf(*handle) == screenId) {
         return;
     }
@@ -901,7 +904,7 @@ std::vector<NavigatorCustomEntry> CustomScreenChrome::navigatorEntries() const {
 }
 
 void CustomScreenChrome::openCustom(std::string const& screenId, ParamMap params,
-                                    std::function<void(std::expected<void, std::string>)> done) {
+                                    std::function<void(std::expected<void, std::string>)> const& done) {
     if (std::optional<CustomScreenSummary> const summary = summaryOf(screenId); summary && summary->broken) {
         showStoredSource(screenId);
         if (done) {
@@ -952,7 +955,7 @@ void CustomScreenChrome::saveFromSource() {
         return;
     }
     std::string const text = source->text->peek();
-    std::string const id = source->screenId;
+    std::string const customId = source->screenId;
     std::uint64_t const generation = source->generation;
     _options.runtime->batch([source] {
         source->busy->set(true);
@@ -960,10 +963,10 @@ void CustomScreenChrome::saveFromSource() {
     });
     _options.sync->check(
         summary->basedOn, text,
-        guarded([this, id, text, generation,
+        guarded([this, customId, text, generation,
                  listed = *summary](std::expected<std::optional<CheckRefusal>, std::string> checked) {
             // The view the check was made for takes the answer, not one opened since.
-            Source* const shown = _source.get();
+            Source const* const shown = _source.get();
             if (shown == nullptr || shown->generation != generation) {
                 return;
             }
@@ -977,7 +980,7 @@ void CustomScreenChrome::saveFromSource() {
             }
             _options.sync->save(
                 CustomScreensSave{
-                    .app = {}, .id = id, .title = listed.title, .basedOn = listed.basedOn, .document = text},
+                    .app = {}, .id = customId, .title = listed.title, .basedOn = listed.basedOn, .document = text},
                 guarded([this, generation, title = listed.title](std::expected<std::string, std::string> saved) {
                     if (!saved) {
                         if (_source != nullptr && _source->generation == generation) {

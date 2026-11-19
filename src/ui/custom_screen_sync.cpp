@@ -36,19 +36,19 @@ std::expected<std::shared_ptr<Document const>, Refusal> CustomDocuments::put(Cus
                                        .reason = "the stored document names another screen, " + loaded->id});
     }
     auto document = std::make_shared<Document const>(std::move(*loaded));
-    std::string const id = found.summary.id;
+    std::string const stored = found.summary.id;
     _entries.insert_or_assign(
-        id, Entry{.summary = std::move(found.summary), .text = std::move(found.document), .document = document});
+        stored, Entry{.summary = std::move(found.summary), .text = std::move(found.document), .document = document});
     return document;
 }
 
-std::shared_ptr<Document const> CustomDocuments::find(std::string_view id) const {
-    auto const found = _entries.find(id);
+std::shared_ptr<Document const> CustomDocuments::find(std::string_view screenId) const {
+    auto const found = _entries.find(screenId);
     return found == _entries.end() ? nullptr : found->second.document;
 }
 
-CustomDocuments::Entry const* CustomDocuments::entry(std::string_view id) const {
-    auto const found = _entries.find(id);
+CustomDocuments::Entry const* CustomDocuments::entry(std::string_view screenId) const {
+    auto const found = _entries.find(screenId);
     return found == _entries.end() ? nullptr : &found->second;
 }
 
@@ -67,8 +67,8 @@ std::vector<std::string> CustomDocuments::refresh(CustomScreensListed const& lis
     return dropped;
 }
 
-void CustomDocuments::forget(std::string_view id) {
-    if (auto const found = _entries.find(id); found != _entries.end()) {
+void CustomDocuments::forget(std::string_view screenId) {
+    if (auto const found = _entries.find(screenId); found != _entries.end()) {
         _entries.erase(found);
     }
 }
@@ -87,21 +87,21 @@ CustomScreenSync::~CustomScreenSync() {
 }
 
 void CustomScreenSync::call(std::string_view action, std::string const& body,
-                            std::function<void(std::string const&)> ok,
+                            std::function<void(std::string const&)> onReply,
                             std::function<void(std::string const&, std::string const&)> const& failed) {
     try {
         if (_channel == nullptr) {
             _channel = _dispatcher->bind(std::string{kCustomScreensModel}, bridge::BindSharing::Private, {});
         }
         _channel->execute(std::string{action}, body, CallOptions{})
-            .then(*_scope, [ok = std::move(ok)](std::string const& reply) { ok(reply); })
+            .then(*_scope, [onReply = std::move(onReply)](std::string const& reply) { onReply(reply); })
             .onError(*_scope, [failed](std::exception_ptr const& error) {
                 failed(detail::failureText(error), detail::defaultErrorKind(error));
             });
     } catch (std::exception const& error) {
         failed(error.what(), "error");
     }
-}
+}  // NOLINT(clang-analyzer-cplusplus.NewDeleteLeaks): the continuations the chain registers are owned by the scope.
 
 void CustomScreenSync::probe(std::function<void(bool offered)> done) {
     auto const shared = std::make_shared<std::function<void(bool)>>(std::move(done));
@@ -131,7 +131,13 @@ void CustomScreenSync::probe(std::function<void(bool offered)> done) {
         [this, shared](std::string const& reason, std::string const& kind) {
             bool const transport = kind == "offline" || kind == "timeout" || kind == "backendChanged";
             bool const absent = reason.contains("unknown model type: " + std::string{kCustomScreensModel});
-            off(absent ? OffCause::Absent : transport ? OffCause::Transport : OffCause::Refused, reason);
+            OffCause cause = OffCause::Refused;
+            if (absent) {
+                cause = OffCause::Absent;
+            } else if (transport) {
+                cause = OffCause::Transport;
+            }
+            off(cause, reason);
             if (*shared) {
                 (*shared)(false);
             }
@@ -185,17 +191,17 @@ void CustomScreenSync::listedNow(CustomScreensListed listed) {
     }
 }
 
-void CustomScreenSync::open(std::string const& id, CustomDocumentDone done) {
-    if (std::shared_ptr<Document const> kept = _documents.find(id)) {
+void CustomScreenSync::open(std::string const& screenId, CustomDocumentDone done) {
+    if (std::shared_ptr<Document const> kept = _documents.find(screenId)) {
         done(std::move(kept));
         return;
     }
-    fetch(id, std::move(done));
+    fetch(screenId, std::move(done));
 }
 
-void CustomScreenSync::fetch(std::string const& id, CustomDocumentDone done) {
+void CustomScreenSync::fetch(std::string const& screenId, CustomDocumentDone done) {
     auto const shared = std::make_shared<CustomDocumentDone>(std::move(done));
-    get(id, [this, shared](std::expected<CustomScreenFound, std::string> found) {
+    get(screenId, [this, shared](std::expected<CustomScreenFound, std::string> found) {
         if (!found) {
             (*shared)(std::unexpected(std::move(found.error())));
             return;
@@ -209,13 +215,13 @@ void CustomScreenSync::fetch(std::string const& id, CustomDocumentDone done) {
     });
 }
 
-void CustomScreenSync::get(std::string const& id,
+void CustomScreenSync::get(std::string const& screenId,
                            std::function<void(std::expected<CustomScreenFound, std::string>)> done) {
     auto const shared =
         std::make_shared<std::function<void(std::expected<CustomScreenFound, std::string>)>>(std::move(done));
     call(
         kCustomScreensGet,
-        model::ActionTraits<CustomScreensGet>::toJson(CustomScreensGet{.app = _application, .id = id}),
+        model::ActionTraits<CustomScreensGet>::toJson(CustomScreensGet{.app = _application, .id = screenId}),
         [shared](std::string const& reply) {
             try {
                 (*shared)(model::ActionTraits<CustomScreensGet>::resultFromJson(reply));
@@ -269,9 +275,10 @@ void CustomScreenSync::prefetchRoutes(std::vector<std::string> const& routes,
                                       std::function<void(std::vector<std::string>)> done) {
     std::vector<std::string> wanted;
     for (std::string const& route : routes) {
-        std::string const id{routeScreen(route)};
-        if (isCustomScreenId(id) && _documents.find(id) == nullptr && std::ranges::find(wanted, id) == wanted.end()) {
-            wanted.push_back(id);
+        std::string const screen{routeScreen(route)};
+        if (isCustomScreenId(screen) && _documents.find(screen) == nullptr &&
+            std::ranges::find(wanted, screen) == wanted.end()) {
+            wanted.push_back(screen);
         }
     }
     if (wanted.empty()) {

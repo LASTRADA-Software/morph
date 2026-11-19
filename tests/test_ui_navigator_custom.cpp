@@ -139,7 +139,6 @@ TEST_CASE("navigator: custom titles and author names are shown as written, not t
 TEST_CASE("navigator: a custom entry never passes for an application entry in the menu",
           "[ui][navigator][custom-screens]") {
     RecordingBackend backend;
-    std::vector<std::string> opened;
     NavigatorOptions made;
     made.entries = {CatalogEntry{.id = "notes.home", .title = "Home", .group = "Custom"}};
     Navigator navigator{backend, nullptr, std::move(made)};

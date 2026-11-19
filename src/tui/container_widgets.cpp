@@ -828,11 +828,11 @@ void ScrollViewport::revealRow(ContainerBase const& owner, int row) {
     if (!area) {
         return;
     }
-    int const at = area->y + row;
-    if (at + 1 > _offset + _viewport) {
-        _offset = at + 1 - _viewport;
+    int const line = area->y + row;
+    if (line + 1 > _offset + _viewport) {
+        _offset = line + 1 - _viewport;
     }
-    _offset = std::max(0, std::min(_offset, at));
+    _offset = std::max(0, std::min(_offset, line));
     _followed = {.view = owner.context().screen->focusedComponent(), .area = *area, .viewport = _viewportSize};
     owner.refresh();
 }

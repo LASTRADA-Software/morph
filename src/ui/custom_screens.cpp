@@ -35,7 +35,7 @@ namespace {
 ///        id's `kCustomScreenIdPrefix` and 32 hexadecimal digits. A document longer than the bound plus this cannot
 ///        fit it once rewritten, so it is refused without being parsed.
 inline constexpr std::size_t kCustomScreenIdSlack =
-    std::string_view{",\"id\":\"\""}.size() + kCustomScreenIdPrefix.size() + 32;
+    std::string_view{R"(,"id":"")"}.size() + kCustomScreenIdPrefix.size() + 32;
 
 /// @brief The session of the action being run, copied: the session is the dispatching thread's, and an action
 ///        resumes elsewhere after its first await.

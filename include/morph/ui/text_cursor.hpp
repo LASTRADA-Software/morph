@@ -15,12 +15,13 @@ namespace morph::ui {
 /// @param offset The requested byte offset.
 /// @return A byte offset at most @p offset, at most `text.size()`, and at the start of a code point.
 [[nodiscard]] constexpr std::size_t snapToCodePointStart(std::string_view text, std::size_t offset) noexcept {
-    std::size_t at = std::min(offset, text.size());
+    std::size_t snapped = std::min(offset, text.size());
     // A continuation byte is 0b10xxxxxx.
-    while (at > 0 && at < text.size() && (static_cast<unsigned char>(text[at]) & 0b1100'0000U) == 0b1000'0000U) {
-        --at;
+    while (snapped > 0 && snapped < text.size() &&
+           (static_cast<unsigned char>(text.at(snapped)) & 0b1100'0000U) == 0b1000'0000U) {
+        --snapped;
     }
-    return at;
+    return snapped;
 }
 
 }  // namespace morph::ui

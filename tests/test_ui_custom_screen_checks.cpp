@@ -36,7 +36,8 @@ struct Fixture {
     static std::string idOf(std::string const& document) {
         auto const parsed = morph::ui::parseJson(document);
         auto const* const object = parsed ? std::get_if<morph::ui::Json::object_t>(&parsed->data) : nullptr;
-        auto const found = object == nullptr ? morph::ui::Json::object_t::const_iterator{} : object->find("id");
+        morph::ui::Json::object_t::const_iterator const found =
+            object == nullptr ? morph::ui::Json::object_t::const_iterator{} : object->find("id");
         auto const* const text =
             object == nullptr || found == object->end() ? nullptr : std::get_if<std::string>(&found->second.data);
         return text == nullptr ? std::string{} : *text;
@@ -240,7 +241,7 @@ TEST_CASE("the verdict key changes with the document, the base, the bundle and t
 }
 
 TEST_CASE("checkCustomScreen reads and fills the verdict cache", "[ui][custom-screens][cache]") {
-    Fixture f;
+    Fixture const f;
     morph::ui::VerdictCache cache{8};
     std::string const document = baseScreen("custom:mine");
     CHECK_FALSE(f.check(document, "lims.base", {}, &cache));

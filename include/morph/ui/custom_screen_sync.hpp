@@ -68,14 +68,14 @@ public:
     std::expected<std::shared_ptr<Document const>, Refusal> put(CustomScreenFound found, LoadOptions const& options);
 
     /// @brief The loaded document of a kept screen.
-    /// @param id The screen's id.
+    /// @param screenId The screen's id.
     /// @return It, or null when the screen is not kept.
-    [[nodiscard]] std::shared_ptr<Document const> find(std::string_view id) const;
+    [[nodiscard]] std::shared_ptr<Document const> find(std::string_view screenId) const;
 
     /// @brief A kept screen.
-    /// @param id The screen's id.
+    /// @param screenId The screen's id.
     /// @return It, valid until the cache next changes; null when the screen is not kept.
-    [[nodiscard]] Entry const* entry(std::string_view id) const;
+    [[nodiscard]] Entry const* entry(std::string_view screenId) const;
 
     /// @brief Drops each kept screen @p listed shows with another hash and, unless the list was truncated, each it
     ///        does not show.
@@ -84,8 +84,8 @@ public:
     std::vector<std::string> refresh(CustomScreensListed const& listed);
 
     /// @brief Drops a kept screen.
-    /// @param id The screen's id; one not kept changes nothing.
-    void forget(std::string_view id);
+    /// @param screenId The screen's id; one not kept changes nothing.
+    void forget(std::string_view screenId);
 
     /// @brief Drops every kept screen: what a change of session does.
     void clear() noexcept { _entries.clear(); }
@@ -165,22 +165,22 @@ public:
     void relist();
 
     /// @brief The document of a custom screen: the kept one, or `fetch`ed.
-    /// @param id   The screen's id.
+    /// @param screenId The screen's id.
     /// @param done Called once with the document, or why there is none. With a kept document it is called before
     ///             `open` returns; otherwise later, on the runtime's owner.
-    void open(std::string const& id, CustomDocumentDone done);
+    void open(std::string const& screenId, CustomDocumentDone done);
 
     /// @brief Calls `get` and keeps the document it answers, replacing a kept one.
-    /// @param id   The screen's id.
+    /// @param screenId The screen's id.
     /// @param done Called once with the document, or why there is none: the store's refusal as it gave it, why the
     ///             document does not load in this client, or that the screen is broken, with the checks' reason. A
     ///             broken screen is never kept.
-    void fetch(std::string const& id, CustomDocumentDone done);
+    void fetch(std::string const& screenId, CustomDocumentDone done);
 
     /// @brief Calls `get` and keeps nothing: what a source view of a broken screen reads.
-    /// @param id   The screen's id.
+    /// @param screenId The screen's id.
     /// @param done Called once with the summary and the document, or the refusal.
-    void get(std::string const& id, std::function<void(std::expected<CustomScreenFound, std::string>)> done);
+    void get(std::string const& screenId, std::function<void(std::expected<CustomScreenFound, std::string>)> done);
 
     /// @brief Asks the server whether @p document would be saved as a custom screen based on @p basedOn.
     /// @param basedOn  The base screen's id.
@@ -228,9 +228,9 @@ private:
     // What turned the offer off; only an absent model is not reported.
     enum class OffCause : std::uint8_t { Absent, Refused, Unreadable, Transport };
 
-    // Sends one action through the binding, made at the first call; @p ok gets the reply's JSON, @p failed the reason
-    // and the failure's kind (`detail::defaultErrorKind`).
-    void call(std::string_view action, std::string const& body, std::function<void(std::string const&)> ok,
+    // Sends one action through the binding, made at the first call; @p onReply gets the reply's JSON, @p failed the
+    // reason and the failure's kind (`detail::defaultErrorKind`).
+    void call(std::string_view action, std::string const& body, std::function<void(std::string const&)> onReply,
               std::function<void(std::string const&, std::string const&)> const& failed);
     void off(OffCause cause, std::string reason);
     void listedNow(CustomScreensListed listed);

@@ -210,6 +210,7 @@ public:
     }
 
     /// Loads the bundle's screens and mounts the start screen.
+    // NOLINTNEXTLINE(readability-function-cognitive-complexity): one step per part of the session the shell wires.
     void start(ui::Bundle const& bundle, Source& source) {
         _source = &source;
         loadDocuments(bundle);
@@ -514,11 +515,12 @@ private:
 
     // The frame and its workspace for the catalog the source holds now: the navigator lists its entries, so a new
     // session's catalog gets a new frame. Every tab of the old one is closed.
+    // NOLINTNEXTLINE(readability-function-cognitive-complexity): one step per part of the frame the shell builds.
     void buildFrame() {
         // A new frame is a new session's: what the old one learnt about custom screens is forgotten.
         if (_customChrome) {
             _customChrome->attach(nullptr);
-            _customSync->reset();
+            (*_customSync).reset();
             _customChrome->setOffered(false);
         }
         resetHead();

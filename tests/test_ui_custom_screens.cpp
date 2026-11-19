@@ -211,6 +211,7 @@ TEST_CASE("registerCustomScreens refuses what it cannot serve", "[ui][custom-scr
     morph::model::detail::ModelRegistryFactory registry;
     auto const store = std::make_shared<morph::ui::MemoryCustomScreenStore>(pool);
     auto const served = screens_test::bundle();
+    // NOLINTNEXTLINE(performance-no-automatic-move): the closure returns a copy of its capture on every call.
     auto const getBundle = [served] { return served; };
     auto const authorizer = std::make_shared<uiservice::RuleAuthorizer>();
     CHECK_THROWS_AS(morph::ui::registerCustomScreens(

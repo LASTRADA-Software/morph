@@ -93,7 +93,7 @@ struct Offered {
         REQUIRE(stored.get_future().wait_for(std::chrono::seconds{5}) == std::future_status::ready);
     }
 
-    std::string const mineId = "custom:" + std::string(31, '0') + "a";
+    std::string mineId = "custom:" + std::string(31, '0') + "a";
     // Inline: the seeding below settles at once on this thread, where handlers may attach.
     std::shared_ptr<ui::MemoryCustomScreenStore> store =
         std::make_shared<ui::MemoryCustomScreenStore>(morph::exec::detail::inlineExecutor());
@@ -149,7 +149,7 @@ struct Window {
         REQUIRE(field.has_value());
         std::string const pretty =
             ui::prettyJson(replaced(std::string{kHome}, "\"customs.home\"", "\"" + mineId + "\""));
-        backend.edit(*field, replaced(pretty, "\"text\": \"Home\"", "\"text\": \"My home\""));
+        backend.edit(*field, replaced(pretty, R"("text": "Home")", R"("text": "My home")"));
         click("source_preview");
         REQUIRE(wait([this] { return shown("Row", "draft_bar_" + mineId); }));
     }
@@ -168,7 +168,7 @@ struct Window {
 // it shows); drop the custom branch of the host's documents lookup (the same).
 TEST_CASE("Client shell: the navigator opens a custom screen, Source previews a draft, and Save overwrites it",
           "[client][custom-screens]") {
-    Offered offered;
+    Offered const offered;
     Window window{offered};
     window.draftMine();
     REQUIRE(window.wait([&window] {
@@ -188,7 +188,7 @@ TEST_CASE("Client shell: the navigator opens a custom screen, Source previews a 
 
 // Mutation: answer every close of a drafted screen with Cancel in the client's guard (no confirmation is asked).
 TEST_CASE("Client shell: closing a tab with a draft asks first, and Discard closes it", "[client][custom-screens]") {
-    Offered offered;
+    Offered const offered;
     Window window{offered};
     window.draftMine();
     auto const tabs = window.backend.all("Tabs");
@@ -199,11 +199,13 @@ TEST_CASE("Client shell: closing a tab with a draft asks first, and Discard clos
     REQUIRE(window.wait([&window] { return !window.find("Button", "draft_save_" + window.mineId).has_value(); }));
 }
 
+namespace {
+
 /// Whether a Text of the backend shows something containing @p part.
-static bool showsText(ui::testing::RecordingBackend const& backend, std::string_view part) {
+bool showsText(ui::testing::RecordingBackend const& backend, std::string_view part) {
     for (std::string_view const kind : {"Text", "Toast"}) {
         for (int const widget : backend.all(kind)) {
-            if (backend.prop(widget, "text").find(part) != std::string::npos) {
+            if (backend.prop(widget, "text").contains(part)) {
                 return true;
             }
         }
@@ -211,10 +213,12 @@ static bool showsText(ui::testing::RecordingBackend const& backend, std::string_
     return false;
 }
 
+}  // namespace
+
 // Mutation: leave `custom:` routes out of the history's restore (the start screen opens, and no home text of "Mine"
 // shows under its id).
 TEST_CASE("Client shell: a recorded route to a custom screen is fetched and opened", "[client][custom-screens]") {
-    Offered offered;
+    Offered const offered;
     ui::testing::MemoryHistory history{offered.mineId};
     Window window{offered, {}, &history};
     REQUIRE(window.wait([&window] { return window.find("Text", "home").has_value(); }));
@@ -225,7 +229,7 @@ TEST_CASE("Client shell: a recorded route to a custom screen is fetched and open
 // Mutation: mount the start screen without telling the person (no toast).
 TEST_CASE("Client shell: a recorded route to a custom screen that is gone is not restored, and says so",
           "[client][custom-screens]") {
-    Offered offered;
+    Offered const offered;
     std::string const gone = "custom:" + std::string(31, '0') + "f";
     ui::testing::MemoryHistory history{gone};
     Window window{offered, {}, &history};
@@ -334,9 +338,11 @@ struct WatchRun {
     std::vector<std::string> replies;
 };
 
+namespace {
+
 /// Opens the customs application over a server, mounts the shell, and waits until it listed "Mine" and a watch was
 /// answered.
-static WatchRun measureWatch(Offered const& offered, WatchedSource::Watch watch) {
+WatchRun measureWatch(Offered const& offered, WatchedSource::Watch watch) {
     WatchRun run;
     std::mutex logged;
     morph::log::ScopedLoggerOverride const capture{[&](morph::log::LogLevel level, std::string_view message) {
@@ -368,6 +374,8 @@ static WatchRun measureWatch(Offered const& offered, WatchedSource::Watch watch)
     return run;
 }
 
+}  // namespace
+
 // Measurement: the production watcher (`Source::watcher()`, `ui::watcherOver`) carries the real server's watch reply
 // to the session, so the warning about a refused extra watch does not fire when the server admits the record. The
 // control makes the exchange answer with the record refused and must warn, so a silent run here is not a silent
@@ -376,7 +384,7 @@ TEST_CASE(
     "Client shell: the extra watch's warning stays silent when the server admits the record, and fires when it "
     "does not",
     "[client][custom-screens][watch]") {
-    Offered offered;
+    Offered const offered;
     WatchRun const quiet = measureWatch(offered, WatchedSource::Watch::Server);
     WatchRun const loud = measureWatch(offered, WatchedSource::Watch::Refuse);
     auto const refusedWatch = [](std::string const& line) { return line.contains("refused the watch on"); };

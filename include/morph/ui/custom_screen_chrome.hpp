@@ -121,7 +121,7 @@ public:
     /// @brief The source view's **Preview**: loads its text in the client, checks it on the server, and mounts it as
     ///        the tab's draft, closing the view; or shows the first refusal.
     /// @param done Called once with whether a draft was mounted; may be empty.
-    void preview(std::function<void(bool drafted)> done = {});
+    void preview(std::function<void(bool drafted)> const& done = {});
 
     /// @brief Opens the save dialog for a tab's draft, or for the source view's text when @p fromSource holds, which
     ///        is previewed first so nothing is saved the person has not seen mounted.
@@ -155,7 +155,7 @@ public:
     /// @param done     Called once with nothing, or why it did not open; may be empty, and then a failure is told
     ///                 through `notify`.
     void openCustom(std::string const& screenId, ParamMap params,
-                    std::function<void(std::expected<void, std::string>)> done = {});
+                    std::function<void(std::expected<void, std::string>)> const& done = {});
 
     /// @brief Opens the source view of a stored custom screen, as `get` answers it, with its breakage shown as the
     ///        refusal: editable while custom screens are offered and the screen is the person's own, when
@@ -281,7 +281,8 @@ private:
     void closeSaveAsLater();
     void saveAs(WorkspaceTabId tab, std::string const& title);
     void failSaveAs(WorkspaceTabId tab, std::uint64_t generation, std::string const& reason);
-    void openSaved(WorkspaceTabId tab, std::uint64_t generation, std::string const& id, std::string const& title);
+    void openSaved(WorkspaceTabId tab, std::uint64_t generation, std::string const& screenId,
+                   std::string const& title);
     void notify(std::string const& text, Tone tone) const;
 
     CustomScreenChromeOptions _options;
