@@ -522,7 +522,8 @@ struct ChatService::Shared {
         self->options.documentSource(turn->session, turn->request.screenId,
                                      onWorker<std::expected<ChatScreenSource, std::string>>(
                                          self, turn,
-                                         [self, turn, held](std::expected<ChatScreenSource, std::string> read) {
+                                         [held](std::shared_ptr<Shared> const& self, TurnPtr const& turn,
+                                                std::expected<ChatScreenSource, std::string> read) {
                                              if (!read) {
                                                  throw std::runtime_error{read.error()};
                                              }
@@ -572,22 +573,37 @@ struct ChatService::Shared {
                                .carried = std::move(carried)};
     }
 
+    // What a completion runs once its answer reaches the worker: the service, the turn and the answer.
+    template <typename Value>
+    using Continuation = std::function<void(std::shared_ptr<Shared> const&, TurnPtr const&, Value)>;
+
     // Wraps a completion so it runs once, on the worker, and only while the turn does: a handler, an offer or the
     // document source may answer from any thread, twice, or after the turn stopped. With @p onTimeout, the call is
     // answered with it once `ChatLimits::toolCallTimeout` passes without an answer.
+    //
+    // The completion holds the service and the turn weakly, and @p then must not own either: a tool may keep the
+    // completion for as long as it likes, and one that owned them would keep a stopped turn, or the whole service,
+    // alive through its own handler, which the service owns. An answer that finds either gone is dropped.
     template <typename Value>
     [[nodiscard]] static std::function<void(Value)> onWorker(std::shared_ptr<Shared> const& self, TurnPtr const& turn,
-                                                             std::function<void(Value)> then,
+                                                             Continuation<Value> then,
                                                              std::optional<Value> onTimeout = std::nullopt) {
         auto const fired = std::make_shared<std::atomic<bool>>(false);
-        std::function<void(Value)> deliver = [self, turn, then = std::move(then), fired](Value value) {
+        std::function<void(Value)> deliver = [weakSelf = std::weak_ptr<Shared>{self},
+                                              weakTurn = std::weak_ptr<Turn>{turn}, then = std::move(then),
+                                              fired](Value value) {
             if (fired->exchange(true)) {
                 return;
             }
+            auto lockedSelf = weakSelf.lock();
+            auto lockedTurn = weakTurn.lock();
+            if (lockedSelf == nullptr || lockedTurn == nullptr) {
+                return;
+            }
             auto const held = std::make_shared<Value>(std::move(value));
-            step(self, turn, [self, turn, then, held] {
-                disarm(self, turn);
-                then(std::move(*held));
+            step(lockedSelf, lockedTurn, [lockedSelf, lockedTurn, then, held] {
+                disarm(lockedSelf, lockedTurn);
+                then(lockedSelf, lockedTurn, std::move(*held));
             });
         };
         if (onTimeout) {
@@ -678,7 +694,8 @@ struct ChatService::Shared {
         }
         ChatTool const& tool = self->options.tools.at(index);
         // NOLINTNEXTLINE(misc-no-recursion): each pass takes the next of the service's fixed list of tools.
-        auto const accepted = [self, turn, index, &tool](ChatToolOffer const& offer) {
+        auto const accepted = [index, &tool](std::shared_ptr<Shared> const& self, TurnPtr const& turn,
+                                             ChatToolOffer const& offer) {
             if (!offer.system.empty()) {
                 turn->system += "\n\n" + offer.system;
             }
@@ -689,7 +706,7 @@ struct ChatService::Shared {
             offerExtras(self, turn, index + 1);
         };
         if (!tool.offer) {
-            accepted(ChatToolOffer{.offered = true, .system = {}, .carried = nullptr});
+            accepted(self, turn, ChatToolOffer{.offered = true, .system = {}, .carried = nullptr});
             return;
         }
         auto const answered =
@@ -879,7 +896,9 @@ struct ChatService::Shared {
         auto context = contextOf(*self, *turn, tool, carried == turn->carried.end() ? nullptr : carried->second);
         auto const done = onWorker<ChatToolOutcome>(
             self, turn,
-            [self, turn, call](ChatToolOutcome outcome) { finishExtra(self, turn, call, std::move(outcome)); },
+            [call](std::shared_ptr<Shared> const& stillSelf, TurnPtr const& stillTurn, ChatToolOutcome outcome) {
+                finishExtra(stillSelf, stillTurn, call, std::move(outcome));
+            },
             ChatToolOutcome{.text = "the tool did not answer in time",
                             .isError = true,
                             .draft = std::nullopt,
