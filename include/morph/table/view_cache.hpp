@@ -62,7 +62,8 @@ struct ViewComputation {
     /// @brief The order levels failed for some such row.
     std::vector<std::string> failed;
     /// @brief The keys of the view's rows and of the undecided rows: what the query's order levels are wanted
-    ///        for, kept with the view so that a repeated want is one a level can recognise.
+    ///        for, kept with the view so that a repeated want is one a level can recognise. Null for a query with
+    ///        no order level.
     std::shared_ptr<std::vector<RowId> const> orderKeys;
 };
 
@@ -83,7 +84,8 @@ public:
           view{std::move(computation.view)},
           awaiting{std::move(computation.awaiting)},
           failed{std::move(computation.failed)},
-          orderKeys{std::move(computation.orderKeys)} {}
+          orderKeys{std::move(computation.orderKeys)},
+          _orderKeyBytes{keysBytes(orderKeys.get())} {}
 
     ViewEntry(ViewEntry const&) = delete;
     ViewEntry& operator=(ViewEntry const&) = delete;
@@ -102,7 +104,8 @@ public:
     std::vector<std::string> awaiting;
     /// @brief The order levels failed for some such row.
     std::vector<std::string> failed;
-    /// @brief The keys of the view's rows and of the undecided rows, for the order levels' wants.
+    /// @brief The keys of the view's rows and of the undecided rows, for the order levels' wants; null for a
+    ///        query with no order level.
     std::shared_ptr<std::vector<RowId> const> orderKeys;
 
     /// @brief The view row of each source row, `detail::kNotInView` for a row not in the view.
@@ -129,10 +132,11 @@ public:
     }
 
     /// @brief What the entry holds.
-    /// @return 4 bytes a row of the view and of the undecided rows; once the keyed lookups are built, 4 bytes a
-    ///         source row for the view rows and one `(hash, row)` pair a source row for the key index.
+    /// @return 4 bytes a row of the view and of the undecided rows; the order keys, each by `rowIdBytes`, and
+    ///         their vector's spare capacity; once the keyed lookups are built, 4 bytes a source row for the view
+    ///         rows and one `(hash, row)` pair a source row for the key index.
     [[nodiscard]] std::size_t bytes() const {
-        auto out = 4 * (view.rows.size() + view.undecided.size());
+        auto out = 4 * (view.rows.size() + view.undecided.size()) + _orderKeyBytes;
         if (_built.load()) {
             out += (sizeof(std::uint32_t) + sizeof(std::pair<std::size_t, std::uint32_t>)) * snapshot->rowCount();
         }
@@ -140,6 +144,18 @@ public:
     }
 
 private:
+    // Counted once: the keys never change after the entry is made.
+    [[nodiscard]] static std::size_t keysBytes(std::vector<RowId> const* keys) noexcept {
+        if (keys == nullptr) {
+            return 0;
+        }
+        auto out = sizeof(std::vector<RowId>) + (keys->capacity() - keys->size()) * sizeof(RowId);
+        for (auto const& key : *keys) {
+            out += rowIdBytes(key);
+        }
+        return out;
+    }
+
     void build() const {
         std::call_once(_once, [this] {
             auto const rows = snapshot->rowCount();
@@ -157,6 +173,7 @@ private:
     }
 
     mutable std::once_flag _once;
+    std::size_t _orderKeyBytes = 0;
     mutable std::atomic<bool> _built{false};
     mutable std::vector<std::uint32_t> _viewRowOf;
     mutable std::vector<std::pair<std::size_t, std::uint32_t>> _byHash;

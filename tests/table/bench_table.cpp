@@ -1393,10 +1393,12 @@ TEST_CASE("table benchmark: C1 C2 C3 many requests through an in-process server"
     bench::WideTableModel::configure({.rows = 100'000, .columns = 300, .seed = 7, .loadDelay = {}},
                                      {.rows = 1'000, .columns = 30, .seed = 7, .loadDelay = {}});
     constexpr std::size_t kViewBytes = 4 * 100'000;
+    // Ten base-column views, and one view sorted by a level, which also keeps its 100,000 integer order keys.
+    constexpr std::size_t kBound = 10 * kViewBytes + sizeof(std::vector<RowId>) + 100'000 * sizeof(RowId);
     morph::exec::ThreadPoolExecutor pool{4};
     morph::backend::ServerConfig config;
     config.tableWork = std::make_shared<morph::exec::ThreadPoolExecutor>(8);
-    config.views.maxBytes = 10 * kViewBytes;
+    config.views.maxBytes = kBound;
     auto const server = std::make_shared<morph::backend::RemoteServer>(pool, std::move(config));
     server->attach(bench::WideTableModel::recipeCache());
     // An instance per request of C1: one instance runs its executes one at a time.
@@ -1436,6 +1438,7 @@ TEST_CASE("table benchmark: C1 C2 C3 many requests through an in-process server"
     morph::table::detail::LevelCacheAccess::store(
         *cache, std::vector<std::pair<RowId, std::vector<Cell>>>{{RowId{std::int64_t{1}}, cells}});
     auto const before = server->viewStats();
+    auto const classifiedBefore = morph::table::detail::LevelCacheAccess::classifications(*cache);
     auto const began = Clock::now();
     std::vector<std::shared_ptr<morph::testing::WaitReply>> waiters;
     for (std::size_t request = 0; request < 50; ++request) {
@@ -1447,8 +1450,10 @@ TEST_CASE("table benchmark: C1 C2 C3 many requests through an in-process server"
     auto const c1 = std::chrono::duration<double, std::milli>(Clock::now() - began).count();
     auto const after = server->viewStats();
     std::println(
-        "| C1 | fifty concurrent refetches after an arrival, send to last reply | {:.1f} ms; {} computed, {} waited |",
-        c1, after.computations - before.computations, after.waits - before.waits);
+        "| C1 | fifty concurrent refetches after an arrival, send to last reply | {:.1f} ms; {} computed, {} waited; "
+        "{} order wants took their keys one by one |",
+        c1, after.computations - before.computations, after.waits - before.waits,
+        morph::table::detail::LevelCacheAccess::classifications(*cache) - classifiedBefore);
     // C2: distinct sorts, one after another.
     auto const c2Began = Clock::now();
     for (int column = 1; column <= 20; ++column) {
@@ -1466,8 +1471,8 @@ TEST_CASE("table benchmark: C1 C2 C3 many requests through an in-process server"
     }
     auto const stats = server->viewStats();
     std::println("| C3 | after fifty sorts | {} bytes held of a {} bound, {} evictions |", stats.bytes,
-                 10 * kViewBytes, stats.evictions);
-    CHECK(stats.bytes <= 10 * kViewBytes);
+                 kBound, stats.evictions);
+    CHECK(stats.bytes <= kBound);
     std::println("| C1 | the server strand's longest task | not measured in process |");
     static_cast<void>(std::fflush(stdout));
 }

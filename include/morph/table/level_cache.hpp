@@ -17,6 +17,7 @@
 #include <atomic>
 #include <chrono>
 #include <concepts>
+#include <condition_variable>
 #include <cstddef>
 #include <cstdint>
 #include <exception>
@@ -183,6 +184,10 @@ inline constexpr std::size_t kMinLevelShards = 16;
 /// @brief The most entries a level cache's shard averages: the shard count, a power of two, doubles past it.
 inline constexpr std::size_t kRowsPerShard = 64;
 
+/// @brief The most keys a `want` takes under the cache's writer mutex at once; the mutex is released between such
+///        chunks, so an invalidation waits for one chunk of a large want at most.
+inline constexpr std::size_t kWantChunk = 1024;
+
 /// @brief A cell vector's deep size: the vector, and what each cell owns.
 /// @param cells The cells.
 /// @return The bytes.
@@ -232,7 +237,8 @@ struct LevelCacheAccess {
         return cache._core->shardCount();
     }
 
-    /// @brief How many times a want has classified its keys one by one.
+    /// @brief How many wants have taken their keys one by one: every `want`, and every `wantSet` that did not
+    ///        repeat the noted set.
     /// @tparam Value The cache's value type.
     /// @param cache The cache.
     /// @return The count.
@@ -250,13 +256,36 @@ struct LevelCacheAccess {
         cache._core->storeHook = std::move(hook);
     }
 
-    /// @brief Sets what a want calls before it classifies its keys, with no lock held.
+    /// @brief Sets what a want calls before each chunk of its keys, with no lock held: after an order use's fit and
+    ///        before the first chunk, then between chunks.
     /// @tparam Value The cache's value type.
     /// @param cache The cache.
-    /// @param hook  The call; empty for none. Set before any want.
+    /// @param hook  The call, given the index of the chunk about to be taken; empty for none. Set before any want.
     template <typename Value>
-    static void onWantClassify(LevelCache<Value>& cache, std::function<void()> hook) {
+    static void onWantChunk(LevelCache<Value>& cache, std::function<void(std::size_t)> hook) {
         cache._core->wantHook = std::move(hook);
+    }
+
+    /// @brief The end of a held value's order lease.
+    /// @tparam Value The cache's value type.
+    /// @param cache The cache.
+    /// @param key   The key.
+    /// @return The lease's end in clock ticks; 0 when the key is not held or its value has no lease.
+    template <typename Value>
+    [[nodiscard]] static std::int64_t leaseEnd(LevelCache<Value> const& cache, RowId const& key) {
+        auto const slot = LevelCache<Value>::findIn(*cache._core->publishedTable(), key);
+        return slot != nullptr ? slot->leaseUntil.load() : 0;
+    }
+
+    /// @brief Whether a key not held yet has an order lease waiting for its store.
+    /// @tparam Value The cache's value type.
+    /// @param cache The cache.
+    /// @param key   The key.
+    /// @return Whether the cache keeps a pending lease for @p key.
+    template <typename Value>
+    [[nodiscard]] static bool leasePending(LevelCache<Value> const& cache, RowId const& key) {
+        std::scoped_lock const lock{cache._core->writer};
+        return cache._core->pendingLeases.contains(key);
     }
 
     /// @brief Sets what each eviction scan calls first, with no lock held: how a test pauses a store mid-eviction.
@@ -281,7 +310,8 @@ struct LevelCacheAccess {
 /// with no lock held: the shard copies, the scans and sorts, the re-spread. They then take a writer mutex only to
 /// check that nothing was published meanwhile (and prepare again if it was) and to publish, under a second mutex
 /// held for the pointer swap alone. So neither a reader nor the server strand's observer call waits behind
-/// another change's slow work. A value's recency and order lease are atomics beside it, and neither is part of a
+/// another change's slow work. A `want` takes its keys a chunk at a time under the writer mutex, so a change waits
+/// for one chunk of it at most. A value's recency and order lease are atomics beside it, and neither is part of a
 /// snapshot's state.
 ///
 /// The application's callbacks (the sink, the failure handler, `sizeOf`, `loads->post`) may throw: a throw is
@@ -344,7 +374,9 @@ public:
     ///
     /// A held key is a hit and its recency is renewed. An order use is first fitted: the keys times the mean
     /// size of the values held (`expectedBytes` while none is), plus the bytes other keys' leases hold, against
-    /// `maxBytes`; over it nothing changes. Otherwise every key is leased for `orderLease`.
+    /// `maxBytes`; over it nothing changes. Otherwise every key is leased for `orderLease`, and the use is one more
+    /// holder of each lease. The keys are taken `detail::kWantChunk` at a time under the writer mutex, each key
+    /// classified, leased and queued at once, and the mutex is released between chunks.
     /// @param keys  The keys.
     /// @param use   Display or order.
     /// @param retry Load the failed keys among @p keys now.
@@ -355,7 +387,10 @@ public:
 
     /// @brief Says a kept set of keys is needed. An order use of the same set again, unretried, while nothing was
     ///        published since the set was last found wholly held and with more than half its lease left, costs
-    ///        nothing per key: its keys are held, current, leased and fitted already. Anything else is `want`.
+    ///        nothing per key: its keys are held, current, leased and fitted already, so the lease is not renewed,
+    ///        and the use is counted as one more holder of the set's leases. An order use of a set whose `want`
+    ///        another call is running waits for that call, then is such a repeat or a `want` of its own. Anything
+    ///        else is `want`.
     /// @param keys  The keys; not null.
     /// @param use   Display or order.
     /// @param retry Load the failed keys among @p keys now.
@@ -365,7 +400,8 @@ public:
         return Core::wantSet(_core, keys, use, retry);
     }
 
-    /// @brief Ends the order leases of @p keys.
+    /// @brief Ends one holder's order lease of each of @p keys; a lease ends with its last holder. The noted set
+    ///        is forgotten, so its next order want is a full `want`.
     /// @param keys The keys.
     void unwant(std::span<RowId const> keys) override { _core->release(keys); }
 
@@ -714,155 +750,183 @@ private:
 
         // ── want ──
 
-        // Classifies `keys` against the published state with no lock held: the held values (their recency renewed,
-        // and leased for an order use), the keys to queue, and the bytes the order use's own leased values hold.
-        // The writer mutex is then taken only to check that nothing was published meanwhile (classifying again if
-        // something was) and to merge the keys to queue, a chunk at a time.
-        // What a want found: whether every key was held, at which version, and the lease it gave.
+        // What a want found: whether every key was held, with nothing published while it ran, and its lease's end.
         struct WantNote {
             bool allHeld = false;
             std::uint64_t version = 0;
             std::int64_t until = 0;
         };
 
+        // The last order set found wholly held: the set, the version it was found at, its lease's end, and the
+        // repeats of it since, each a holder of the set's leases not yet counted on the keys.
+        struct Memo {
+            std::shared_ptr<std::vector<RowId> const> keys;
+            std::uint64_t version = 0;
+            std::int64_t until = 0;
+            std::int32_t holders = 0;
+        };
+
         static std::expected<void, TableError> wantSet(std::shared_ptr<Core> const& core,
                                                        std::shared_ptr<std::vector<RowId> const> const& keys,
                                                        LevelUse use, bool retry) {
-            if (use == LevelUse::Order && !retry) {
-                auto const nowTicks = ticks(core->now());
-                auto const half = ticks(Clock::time_point{} + core->options.orderLease / 2);
-                std::scoped_lock const lock{core->writer};
-                if (core->memo.keys == keys && core->memo.version == core->version &&
-                    core->memo.until - half > nowTicks) {
-                    core->hits.fetch_add(keys->size());
-                    return {};
-                }
+            if (use != LevelUse::Order || retry) {
+                return want(core, *keys, use, retry);
             }
+            auto const nowTicks = ticks(core->now());
+            auto const half = ticks(Clock::time_point{} + core->options.orderLease / 2);
+            {
+                std::unique_lock lock{core->writer};
+                for (;;) {
+                    auto& noted = core->memo;
+                    if (noted.keys == keys && noted.version == core->version && noted.until - half > nowTicks) {
+                        // The keys' leases run: this use holds them too, so another holder's `unwant` leaves them
+                        // leased.
+                        ++noted.holders;
+                        core->hits.fetch_add(keys->size());
+                        return {};
+                    }
+                    if (core->settingSet != keys) {
+                        break;
+                    }
+                    // A want of this same set runs: concurrent repeats wait for its note rather than each take
+                    // every key under the writer mutex in turn.
+                    core->setSettled.wait(lock);
+                }
+                core->settingSet = keys;
+            }
+            struct Settling {
+                explicit Settling(Core& owner) : core{owner} {}
+                Settling(Settling const&) = delete;
+                Settling& operator=(Settling const&) = delete;
+                Settling(Settling&&) = delete;
+                Settling& operator=(Settling&&) = delete;
+                ~Settling() {
+                    {
+                        std::scoped_lock const lock{core.writer};
+                        core.settingSet = nullptr;
+                    }
+                    core.setSettled.notify_all();
+                }
+                Core& core;
+            } const settling{*core};
             WantNote note;
             auto wanted = want(core, *keys, use, retry, &note);
-            if (wanted && use == LevelUse::Order && !retry && note.allHeld) {
-                std::scoped_lock const lock{core->writer};
-                core->memo = Memo{.keys = keys, .version = note.version, .until = note.until};
+            if (wanted && note.allHeld) {
+                Memo old;
+                {
+                    std::scoped_lock const lock{core->writer};
+                    old = std::exchange(core->memo, Memo{.keys = keys, .version = note.version, .until = note.until});
+                }
+                core->settle(old);
             }
             return wanted;
         }
 
+        // An order use is fitted first, against the published state with no lock held: the fit is an estimate.
+        // The keys are then taken a chunk of `detail::kWantChunk` at a time under the writer mutex, which is
+        // released between chunks, so an invalidation or a store waits for one chunk at most. Inside a chunk a
+        // key is classified, leased and queued at once: a held key's slot is leased where an eviction's publish
+        // check sees it, and a key not held gets a pending lease that its store moves onto its slot.
         static std::expected<void, TableError> want(std::shared_ptr<Core> const& core, std::span<RowId const> keys,
                                                     LevelUse use, bool retry, WantNote* note = nullptr) {
             auto const at = core->now();
             auto const nowTicks = ticks(at);
-            constexpr int kAttempts = 4;
-            std::vector<RowId> toQueue;
-            std::vector<SlotPtr> held;
+            auto const until = ticks(at + core->options.orderLease);
+            core->classified.fetch_add(1);
+            if (use == LevelUse::Order) {
+                if (auto fitted = core->fit(keys, nowTicks); !fitted) {
+                    return fitted;
+                }
+            }
+            std::uint64_t want = 0;
+            std::uint64_t seen = 0;
+            std::size_t hit = 0;
+            bool allHeld = true;
             std::vector<Loading> batch;
-            for (int attempt = 0;; ++attempt) {
-                std::shared_ptr<Table const> base;
-                std::uint64_t seen = 0;
-                std::size_t mean = 0;
-                {
-                    std::scoped_lock const lock{core->writer};
-                    base = core->current;
-                    seen = core->version;
-                    mean = core->meanBytes();
-                }
+            for (std::size_t first = 0;; first += detail::kWantChunk) {
                 if (core->wantHook) {
-                    core->wantHook();
+                    core->wantHook(first / detail::kWantChunk);
                 }
-                core->classified.fetch_add(1);
-                toQueue.clear();
-                held.clear();
-                std::size_t ownLeased = 0;
-                std::size_t hit = 0;
-                for (auto const& key : keys) {
-                    auto const slot = findIn(*base, key);
+                std::scoped_lock const lock{core->writer};
+                if (first == 0) {
+                    want = ++core->wants;
+                    seen = core->version;
+                }
+                auto const& table = *core->current;
+                auto const last = std::min(keys.size(), first + detail::kWantChunk);
+                for (auto index = first; index < last; ++index) {
+                    auto const& key = keys[index];
+                    auto const slot = findIn(table, key);
                     if (slot != nullptr && slot->value) {
                         ++hit;
-                        if (slot->leaseUntil.load() > nowTicks) {
-                            ownLeased += slot->bytes;
+                        slot->lastUse.store(core->useCounter.fetch_add(1) + 1);
+                        if (use == LevelUse::Order) {
+                            lease(*slot, until, nowTicks);
                         }
-                        held.push_back(slot);
                         continue;
                     }
+                    allHeld = false;
                     if (slot != nullptr && !retry && at < slot->failedAt + core->retryDelay(slot->failures)) {
                         continue;
                     }
-                    toQueue.push_back(key);
-                }
-                if (use == LevelUse::Order) {
-                    auto const leasedAll = leasedBytes(*base, nowTicks);
-                    auto const leasedOther = leasedAll - std::min(ownLeased, leasedAll);
-                    if (keys.size() * mean + leasedOther > core->options.maxBytes) {
-                        core->refusedOrders.fetch_add(1);
-                        return std::unexpected(TableError{.code = TableErrorCode::Unavailable,
-                                                          .column = {},
-                                                          .message = "the level " + core->options.level +
-                                                                     " cannot hold every row this order needs"});
-                    }
-                }
-                {
-                    std::scoped_lock const lock{core->writer};
-                    if (core->version != seen && attempt + 1 < kAttempts) {
-                        continue;  // a change was published meanwhile: classify again over it
-                    }
-                    if (core->version != seen) {
-                        ::morph::log::logError("[levelCache] a want classified {} keys over a changing level",
-                                               keys.size());
-                    }
-                    if (note != nullptr) {
-                        note->allHeld = toQueue.empty() && held.size() == keys.size();
-                        note->version = seen;
-                        note->until = ticks(at + core->options.orderLease);
-                    }
-                }
-                core->hits.fetch_add(hit);
-                core->misses.fetch_add(keys.size() - hit);
-                auto const until = ticks(at + core->options.orderLease);
-                for (auto const& slot : held) {
-                    slot->lastUse.store(core->useCounter.fetch_add(1) + 1);
-                    if (use == LevelUse::Order) {
-                        lease(*slot, until, nowTicks);
-                    }
-                }
-                if (use == LevelUse::Order) {
-                    core->leasedKeys.fetch_add(keys.size());
-                }
-                break;
-            }
-            // The keys to queue, merged a chunk at a time so that the mutex is never held for a whole page of keys.
-            constexpr std::size_t kChunk = 4096;
-            std::uint64_t want = 0;
-            {
-                std::scoped_lock const lock{core->writer};
-                want = ++core->wants;
-            }
-            for (std::size_t first = 0; first < toQueue.size() || first == 0; first += kChunk) {
-                std::scoped_lock const lock{core->writer};
-                auto const last = std::min(toQueue.size(), first + kChunk);
-                for (auto index = first; index < last; ++index) {
-                    auto const& key = toQueue[index];
                     if (use == LevelUse::Order) {
                         auto& pending = core->pendingLeases[key];
                         pending.holders = pending.until > nowTicks ? pending.holders + 1 : 1;
-                        pending.until = std::max(pending.until, ticks(at + core->options.orderLease));
+                        pending.until = std::max(pending.until, until);
                     }
-                    // A key stored or put in flight since it was classified needs nothing more.
-                    if (auto const slot = findIn(*core->current, key); slot != nullptr && slot->value) {
-                        continue;
+                    if (!core->inFlightNow(key)) {
+                        core->enqueue(key, use, core->priorityOf(want, index));
                     }
-                    if (core->inFlightNow(key)) {
-                        continue;
-                    }
-                    core->enqueue(key, use, core->priorityOf(want, index));
                 }
-                if (last >= toQueue.size() && !core->running) {
-                    batch = core->takeBatch();
-                }
-                if (toQueue.empty()) {
+                if (last == keys.size()) {
+                    if (note != nullptr) {
+                        // A change published while the chunks ran may have removed a key an earlier chunk found.
+                        note->allHeld = allHeld && core->version == seen;
+                        note->version = seen;
+                        note->until = until;
+                    }
+                    if (!core->running) {
+                        batch = core->takeBatch();
+                    }
                     break;
                 }
             }
+            core->hits.fetch_add(hit);
+            core->misses.fetch_add(keys.size() - hit);
+            if (use == LevelUse::Order) {
+                core->leasedKeys.fetch_add(keys.size());
+            }
             dispatch(core, std::move(batch));
             return {};
+        }
+
+        // Whether an order use of `keys` fits: the keys times the mean value size, plus the bytes leased to keys
+        // other than these, against `maxBytes`. Read from the published state with no lock held.
+        [[nodiscard]] std::expected<void, TableError> fit(std::span<RowId const> keys, std::int64_t nowTicks) {
+            std::shared_ptr<Table const> base;
+            std::size_t mean = 0;
+            {
+                std::scoped_lock const lock{writer};
+                base = current;
+                mean = meanBytes();
+            }
+            std::size_t ownLeased = 0;
+            for (auto const& key : keys) {
+                if (auto const slot = findIn(*base, key);
+                    slot != nullptr && slot->value && slot->leaseUntil.load() > nowTicks) {
+                    ownLeased += slot->bytes;
+                }
+            }
+            auto const leasedAll = leasedBytes(*base, nowTicks);
+            auto const leasedOther = leasedAll - std::min(ownLeased, leasedAll);
+            if (keys.size() * mean + leasedOther <= options.maxBytes) {
+                return {};
+            }
+            refusedOrders.fetch_add(1);
+            return std::unexpected(TableError{.code = TableErrorCode::Unavailable,
+                                              .column = {},
+                                              .message = "the level " + options.level +
+                                                         " cannot hold every row this order needs"});
         }
 
         // Gives a held value an order lease until `until`, one more holder while its lease runs.
@@ -890,25 +954,48 @@ private:
             return out;
         }
 
-        // Ends one holder's lease of each key; the lease ends when its last holder goes.
+        // Adds `change` to the lease holders of each key, a chunk at a time under the writer mutex: on a held
+        // value's slot while its lease runs, otherwise on the key's pending lease. A lease left with no holder
+        // ends.
+        void changeHolders(std::span<RowId const> keys, std::int32_t change, std::int64_t nowTicks) {
+            for (std::size_t first = 0; first < keys.size(); first += detail::kWantChunk) {
+                std::scoped_lock const lock{writer};
+                auto const last = std::min(keys.size(), first + detail::kWantChunk);
+                for (auto index = first; index < last; ++index) {
+                    auto const& key = keys[index];
+                    if (auto const slot = findIn(*current, key);
+                        slot != nullptr && slot->leaseUntil.load() > nowTicks) {
+                        if (slot->leaseHolders.fetch_add(change) + change <= 0) {
+                            slot->leaseHolders.store(0);
+                            slot->leaseUntil.store(0);
+                        }
+                    } else if (auto const pending = pendingLeases.find(key); pending != pendingLeases.end()) {
+                        pending->second.holders += change;
+                        if (pending->second.holders <= 0) {
+                            pendingLeases.erase(pending);
+                        }
+                    }
+                }
+            }
+        }
+
+        // Gives a noted set the holders its repeats added, once the note is no longer the cache's.
+        void settle(Memo const& old) {
+            if (old.keys != nullptr && old.holders > 0) {
+                changeHolders(*old.keys, old.holders, ticks(now()));
+            }
+        }
+
+        // Ends one holder's lease of each key; the lease ends with its last holder. The noted set's holders are
+        // settled first, so a use whose want repeated the noted set keeps its share of the lease.
         void release(std::span<RowId const> keys) {
-            auto const base = publishedTable();
-            for (auto const& key : keys) {
-                if (auto const slot = findIn(*base, key); slot != nullptr) {
-                    if (slot->leaseHolders.fetch_sub(1) <= 1) {
-                        slot->leaseHolders.store(0);
-                        slot->leaseUntil.store(0);
-                    }
-                }
+            Memo old;
+            {
+                std::scoped_lock const lock{writer};
+                old = std::exchange(memo, Memo{});
             }
-            std::scoped_lock const lock{writer};
-            for (auto const& key : keys) {
-                if (auto const pending = pendingLeases.find(key); pending != pendingLeases.end()) {
-                    if (--pending->second.holders <= 0) {
-                        pendingLeases.erase(pending);
-                    }
-                }
-            }
+            settle(old);
+            changeHolders(keys, -1, ticks(now()));
         }
 
         // ── loading ──
@@ -1107,6 +1194,7 @@ private:
                 queues[static_cast<std::size_t>(LevelUse::Order)].clear();
                 std::erase_if(queued, [](auto const& entry) { return entry.second.use == LevelUse::Order; });
                 pendingLeases.clear();
+                memo = Memo{};  // its keys lose their leases: a repeat of the set must be fitted again
             }
             for (auto const& shard : table->shards) {
                 for (auto const& [key, slot] : *shard) {
@@ -1302,6 +1390,7 @@ private:
             ++version;
             invalidatedAt.clear();
             pendingLeases.clear();
+            memo = Memo{};
             valueBytes = 0;
             failureBytes = 0;
             values = 0;
@@ -1382,17 +1471,14 @@ private:
         std::shared_ptr<Cells const> cells;
         // Called at each eviction scan, with no lock held: what a test pauses a store with.
         std::function<void()> evictionHook;
-        // Called by a store between preparing and publishing, and by a want before it classifies; with no lock
-        // held. What a test interleaves a change with.
+        // Called by a store between preparing and publishing, and by a want before each chunk of its keys with the
+        // chunk's index; with no lock held. What a test interleaves a change with.
         std::function<void()> storeHook;
-        std::function<void()> wantHook;
-        // The last order set found wholly held: the set, the version it was found at, and its lease's end.
-        struct Memo {
-            std::shared_ptr<std::vector<RowId> const> keys;
-            std::uint64_t version = 0;
-            std::int64_t until = 0;
-        };
+        std::function<void(std::size_t)> wantHook;
         Memo memo;
+        // The set a `wantSet` is taking key by key, and what wakes the repeats of it that wait; under `writer`.
+        std::shared_ptr<std::vector<RowId> const> settingSet;
+        std::condition_variable setSettled;
         std::atomic<std::size_t> classified{0};
 
         // Orders every change; guards everything below but `published`. Held only to read or publish state,
