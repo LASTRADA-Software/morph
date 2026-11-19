@@ -193,6 +193,22 @@ for its lifetime. The initial view is every row in source order.
 one column stays visible, `reset` restores the defaults, and `rebuild` adopts a
 new column list keeping what remains.
 
+It also holds what the user forms over the columns, in the same members
+`value()` writes and `apply` reads:
+
+- **Groups.** `formGroup(label, columns)` forms a group of 2 to 16 of the
+  layout's columns, none already in a user-formed group, and returns its id,
+  the first of `g1`, `g2`, … no group has (`InvalidSpec` otherwise);
+  `removeGroup(id)` removes one; `groups()` lists them. Whether the columns
+  are of one kind is the caller's check: the layout knows only ids.
+- **Display units.** `setUnit(column, dimension, unit)` sets the unit a
+  column shows one dimension in, and `nullopt` clears it; `units()` maps a
+  column to a unit id per dimension.
+
+`apply` and `rebuild` fit both as they fit the rest: a column the table lacks
+leaves its group and loses its units, a group left with fewer than two
+columns is dropped, and `reset` keeps groups and units.
+
 ## Execution and threading
 
 Every recomputation is a `detail::ViewJob`: a snapshot, the key columns it may
