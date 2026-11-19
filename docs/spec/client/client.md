@@ -320,8 +320,8 @@ checked the document, so the chrome does not ask again. The draft is dropped wit
 no longer the turn's tab (another workspace, another screen or identity), or the client does not offer custom screens;
 a document the client cannot load is reported with a warning toast and the tab stays as it was. The draft goes to the
 turn's tab even when the person has moved to another. The next turn's `TurnRequest::draft` is the text of the draft the
-active tab holds (`CustomScreenChrome::draftOf`), or none, and none when it is over `ChatLimits::maxProposalBytes`
-(64 KiB), which the server would refuse.
+active tab holds (`CustomScreenChrome::draftOf`), or none, and none when it is over `ChatLimits::maxDraftBytes`
+(256 KiB), which the server would refuse.
 
 ## Custom screens
 

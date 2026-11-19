@@ -96,15 +96,35 @@ std::string overreaching() {
         R"("verify":{"model":"sample","action":"Lims_Verify"},"report":{"model":"sample","action":"Lims_Report"}})");
 }
 
+// The arguments of a call that replaces the whole document: the one operation `replace` of the root.
 std::string argumentsFor(std::string const& document) {
-    return R"({"document":)" + screens_test::quoted(document) + "}";
+    return R"({"patch":[{"op":"replace","path":"","value":)" + document + "}]}";
+}
+
+chat::Response calling(std::string name, std::string arguments, std::string id = "p1") {
+    return chat::Response{.text = "",
+                          .calls = {chat::ToolCall{
+                              .id = std::move(id), .name = std::move(name), .argumentsJson = std::move(arguments)}}};
 }
 
 chat::Response proposal(std::string const& document, std::string id = "p1") {
-    return chat::Response{.text = "",
-                          .calls = {chat::ToolCall{.id = std::move(id),
-                                                   .name = std::string{chat::kProposeScreenTool},
-                                                   .argumentsJson = argumentsFor(document)}}};
+    return calling(std::string{chat::kProposeScreenTool}, argumentsFor(document), std::move(id));
+}
+
+chat::Response patching(std::string const& operations, std::string id = "p1") {
+    return calling(std::string{chat::kProposeScreenTool}, R"({"patch":)" + operations + "}", std::move(id));
+}
+
+// The base screen with @p rows more text nodes in its column, each carrying a number only it has; far past the
+// inline bound, and past the default patch bound when written whole.
+std::string largeScreen(std::string_view id, int rows) {
+    std::string rowsText;
+    for (int row = 0; row < rows; ++row) {
+        rowsText += R"({"kind":"text","testId":"row-)" + std::to_string(row) + R"(","text":"filler row )" +
+                    std::to_string(row) + R"( with some words to take up room"},)";
+    }
+    return screens_test::replaced(screens_test::baseScreen(id), R"({"kind":"text","text":"Results"},)",
+                                  R"({"kind":"text","text":"Results"},)" + rowsText);
 }
 
 chat::Response said(std::string text) { return chat::Response{.text = std::move(text), .calls = {}, .opaque = {}}; }
@@ -251,6 +271,9 @@ morph::session::Context alicesSession() {
     return session;
 }
 
+// The text of the last tool result the provider was given in @p request.
+std::string lastResult(chat::Request const& request) { return request.messages.back().results.at(0).text; }
+
 bool offers(chat::Request const& request) {
     return std::ranges::any_of(request.tools,
                                [](chat::ToolSpec const& tool) { return tool.name == chat::kProposeScreenTool; });
@@ -346,10 +369,20 @@ TEST_CASE("the_drafts_document_is_the_context_not_the_bundles", "[chat][propose]
     CHECK_FALSE(system.contains(ui::contentHash(screens_test::baseScreen("lims.base"))));
 }
 
+namespace {
+
+// A document long enough that a patch replacing it whole is over what the conversation keeps as written.
+std::string padded(std::string_view marker) {
+    return screens_test::replaced(screens_test::baseScreen("lims.base"), "Results",
+                                  std::string{marker} + std::string(5000, 'x'));
+}
+
+}  // namespace
+
 // Mutation: keep the whole arguments in the conversation.
-TEST_CASE("the_conversation_keeps_the_hash_of_a_proposal_not_its_document", "[chat][propose]") {
+TEST_CASE("the_conversation_keeps_the_hash_of_a_large_patch_not_its_text", "[chat][propose]") {
     Rig rig;
-    auto const document = retitled("lims.base", "UNIQUE-PROPOSED-TEXT");
+    auto const document = padded("UNIQUE-PROPOSED-TEXT");
     rig.fake->script(proposal(document));
     rig.fake->script(said("done"));
     static_cast<void>(rig.finished(rig.start("lims.base")));
@@ -361,7 +394,7 @@ TEST_CASE("the_conversation_keeps_the_hash_of_a_proposal_not_its_document", "[ch
         for (chat::ToolCall const& call : message.calls) {
             found = true;
             CHECK_FALSE(call.argumentsJson.contains("UNIQUE-PROPOSED-TEXT"));
-            CHECK(call.argumentsJson.contains(ui::contentHash(document)));
+            CHECK(call.argumentsJson.contains(ui::contentHash(argumentsFor(document))));
         }
     }
     CHECK(found);
@@ -369,10 +402,29 @@ TEST_CASE("the_conversation_keeps_the_hash_of_a_proposal_not_its_document", "[ch
     CHECK(rig.asked().at(1).messages.at(1).calls.at(0).argumentsJson.contains("UNIQUE-PROPOSED-TEXT"));
 }
 
+// Mutation: rewrite every call, or keep none as written.
+TEST_CASE("the_conversation_keeps_a_small_patch_as_written", "[chat][propose]") {
+    Rig rig;
+    auto const operations = R"([{"op":"replace","path":"/view/children/0/text","value":"SMALL-PATCH-TEXT"}])";
+    rig.fake->script(patching(operations));
+    rig.fake->script(said("done"));
+    REQUIRE(rig.finished(rig.start("lims.base")).draft.has_value());
+    rig.fake->script(said("again"));
+    static_cast<void>(rig.finished(rig.start("lims.base")));
+    bool found = false;
+    for (chat::Message const& message : rig.asked().at(2).messages) {
+        for (chat::ToolCall const& call : message.calls) {
+            found = true;
+            CHECK(call.argumentsJson == std::string{R"({"patch":)"} + operations + "}");
+        }
+    }
+    CHECK(found);
+}
+
 // Mutation: keep `opaque` when `record` rewrites a call of the message.
 TEST_CASE("a_provider_replay_of_a_proposal_does_not_keep_the_document", "[chat][propose]") {
     Rig rig;
-    auto const document = retitled("lims.base", "DOCUMENT-IN-THE-REPLAY");
+    auto const document = padded("DOCUMENT-IN-THE-REPLAY");
     auto first = proposal(document);
     first.opaque = "replay of " + document;
     rig.fake->script(first);
@@ -397,7 +449,7 @@ TEST_CASE("a_provider_replay_of_a_proposal_does_not_keep_the_document", "[chat][
 // Mutation: drop the size check from the offer.
 TEST_CASE("a_screen_over_the_bound_is_not_offered_and_the_system_text_says_so", "[chat][propose]") {
     chat::ChatLimits limits;
-    limits.maxProposalBytes = 100;
+    limits.maxDraftBytes = 100;
     Rig rig{limits};
     rig.fake->script(said("ok"));
     auto const state = rig.finished(rig.start("lims.base"));
@@ -424,14 +476,23 @@ TEST_CASE("a_document_that_names_another_screen_is_refused_at_its_id", "[chat][p
 TEST_CASE("malformed_or_hostile_arguments_are_tool_errors_never_faults", "[chat][propose]") {
     Rig rig;
     std::vector<std::pair<std::string, std::string>> const bad = {
-        {"{}", "need a `document`"},
-        {R"({"document":5})", "must be a string"},
-        {R"({"document":null})", "must be a string"},
-        {R"({"document":"not json"})", "not valid JSON"},
-        {R"({"document":"[1]"})", "one JSON object"},
-        {R"({"document":"{\"id\":\"lims.base\"}"})", "refused"},
-        {R"({"document":"{\"id\":7}"})", "/id"},
-        {R"({"document":")" + std::string(70000, 'x') + R"("})", "longer than 65536 bytes"}};
+        {"{}", "need a `patch`"},
+        {R"({"patch":5})", "must be a JSON array"},
+        {R"({"patch":"[]"})", "must be a JSON array"},
+        {R"({"patch":null})", "must be a JSON array"},
+        {R"({"patch":[]})", "no operations"},
+        {R"({"patch":[5]})", "op 0 is not a JSON object"},
+        {R"({"patch":[{"op":"explode","path":""}]})", "`op` must be one of"},
+        {R"({"patch":[{"op":"replace"}]})", "`path` must be a string"},
+        {R"({"patch":[{"op":"replace","path":"/id"}]})", "needs a `value`"},
+        {R"({"patch":[{"op":"move","path":"/a"}]})", "needs a `from`"},
+        {R"({"patch":[{"op":"replace","path":"/id","value":"x"},{"op":"remove","path":"/nope"}]})",
+         "op 1 (remove /nope)"},
+        {R"({"patch":[{"op":"replace","path":"","value":[1]}]})", "one JSON object"},
+        {R"({"patch":[{"op":"replace","path":"","value":{"id":7}}]})", "/id"},
+        {R"({"patch":[{"op":"replace","path":"","value":{"id":"lims.base"}}]})", "refused"},
+        {R"({"patch":[{"op":"add","path":"/x","value":")" + std::string(70000, 'x') + R"("}]})",
+         "longer than 65536 bytes"}};
     for (auto const& [arguments, expected] : bad) {
         rig.fake->script(chat::Response{
             .text = "",
@@ -553,4 +614,166 @@ TEST_CASE("every_offered_tools_input_schema_is_an_object_with_type_object", "[ch
         REQUIRE(name != nullptr);
         CHECK(*name == "object");
     }
+}
+
+// A pointer to the row numbered @p row of `largeScreen`'s column: the base screen's own four children come after the
+// extra ones, which sit at the start.
+namespace {
+
+std::string rowPointer(int row) { return "/view/children/" + std::to_string(row + 1); }
+
+}  // namespace
+
+// Mutation: put the whole document in the system text however long it is; or send the outline without a pointer.
+TEST_CASE("a_document_over_the_inline_bound_is_described_by_an_outline_not_included", "[chat][propose]") {
+    Rig rig;
+    auto const large = largeScreen("lims.base", 1500);
+    REQUIRE(large.size() > 64 * 1024);
+    rig.fake->script(said("ok"));
+    auto const state = rig.finished(rig.start("lims.base", large));
+    REQUIRE(state.status == chat::TurnStatus::Done);
+    auto const request = rig.asked().at(0);
+    REQUIRE(offers(request));
+    CHECK_FALSE(request.system.contains(glz::write_json(large).value_or("")));
+    CHECK_FALSE(request.system.contains("row-1200"));
+    CHECK_FALSE(request.system.contains("filler row"));
+    CHECK(request.system.contains("/view/children"));
+    CHECK(request.system.contains("too long to show here"));
+    CHECK(request.system.size() < 32 * 1024);
+    for (std::string_view const name : {chat::kScreenOutlineTool, chat::kScreenFindTool, chat::kScreenNodeTool}) {
+        CHECK(std::ranges::any_of(request.tools, [&](chat::ToolSpec const& tool) { return tool.name == name; }));
+    }
+}
+
+// Mutation: ignore the patch and return the base document; or read the start of the turn instead of its current
+// document; or fail to keep the draft past `maxProposalBytes`.
+TEST_CASE("the_assistant_finds_reads_and_patches_a_screen_over_64_kib", "[chat][propose]") {
+    Rig rig;
+    auto const large = largeScreen("lims.base", 1500);
+    REQUIRE(large.size() > 64 * 1024);
+    auto const pointer = rowPointer(1200);
+    rig.fake->script(calling(std::string{chat::kScreenOutlineTool}, R"({"pointer":"/view","depth":1})", "c1"));
+    rig.fake->script(calling(std::string{chat::kScreenFindTool}, R"({"text":"ROW-1200"})", "c2"));
+    rig.fake->script(calling(std::string{chat::kScreenNodeTool}, R"({"pointer":")" + pointer + R"("})", "c3"));
+    rig.fake->script(patching(R"([{"op":"replace","path":")" + pointer + R"(/text","value":"EDITED-ROW"}])", "c4"));
+    rig.fake->script(said("done"));
+    auto const state = rig.finished(rig.start("lims.base", large));
+    REQUIRE(state.status == chat::TurnStatus::Done);
+    REQUIRE(state.steps.size() == 4);
+    for (auto const& step : state.steps) {
+        CHECK(step.ok);
+    }
+    auto const requests = rig.asked();
+    REQUIRE(requests.size() == 5);
+    auto const outline = lastResult(requests.at(1));
+    CHECK(outline.contains("/view/children"));
+    CHECK(outline.contains("1504 items"));
+    auto const found = lastResult(requests.at(2));
+    CHECK(found.contains("1 node matches"));
+    CHECK(found.contains(pointer + " "));
+    CHECK(found.contains("row-1200"));
+    auto const node = lastResult(requests.at(3));
+    CHECK(node.contains("filler row 1200"));
+    CHECK_FALSE(node.contains("filler row 1199"));
+    // The draft is the large document with only that text changed, and it is past the proposal bound.
+    REQUIRE(state.draft.has_value());
+    CHECK(state.draft->size() > chat::ChatLimits{}.maxProposalBytes);
+    CHECK(state.draft->contains("EDITED-ROW"));
+    CHECK(state.draft->contains("filler row 1199"));
+    CHECK_FALSE(state.draft->contains("filler row 1200"));
+    CHECK(state.draft->size() == large.size() - std::string{"filler row 1200 with some words to take up room"}.size() +
+                                     std::string{"EDITED-ROW"}.size());
+}
+
+// Mutation: say only that the patch was refused; or number the operations from 1.
+TEST_CASE("a_refused_operation_is_named_by_its_index_kind_and_path", "[chat][propose]") {
+    Rig rig;
+    rig.fake->script(patching(R"([{"op":"replace","path":"/view/children/0/text","value":"A"},
+                                   {"op":"replace","path":"/view/children/1/label","value":"B"},
+                                   {"op":"replace","path":"/view/children/9/label","value":"C"}])"));
+    rig.fake->script(said("sorry"));
+    auto const state = rig.finished(rig.start("lims.base"));
+    CHECK_FALSE(state.draft.has_value());
+    auto const result = rig.asked().at(1).messages.at(2).results.at(0);
+    CHECK(result.isError);
+    CHECK(result.text.contains("op 2 (replace /view/children/9/label)"));
+    CHECK(result.text.contains("nothing was applied"));
+}
+
+// Mutation: patch the document in place, so ops 0 and 1 survive op 2's failure.
+TEST_CASE("a_patch_whose_last_operation_fails_changes_nothing", "[chat][propose]") {
+    Rig rig;
+    rig.fake->script(patching(R"([{"op":"replace","path":"/view/children/0/text","value":"ROLLED-BACK-ONE"},
+                                   {"op":"replace","path":"/view/children/1/label","value":"ROLLED-BACK-TWO"},
+                                   {"op":"remove","path":"/view/children/9"}])",
+                              "c1"));
+    rig.fake->script(calling(std::string{chat::kScreenFindTool}, R"({"text":"rolled-back"})", "c2"));
+    rig.fake->script(said("sorry"));
+    auto const state = rig.finished(rig.start("lims.base"));
+    CHECK_FALSE(state.draft.has_value());
+    auto const requests = rig.asked();
+    REQUIRE(requests.size() == 3);
+    CHECK(lastResult(requests.at(2)).contains("0 nodes match"));
+}
+
+// Mutation: apply every patch to the document the turn started with; or never update the context's document.
+TEST_CASE("a_second_patch_applies_on_top_of_the_first_and_the_read_tools_see_it", "[chat][propose]") {
+    Rig rig;
+    rig.fake->script(patching(R"([{"op":"replace","path":"/view/children/0/text","value":"FIRST-EDIT"}])", "c1"));
+    rig.fake->script(calling(std::string{chat::kScreenFindTool}, R"({"text":"first-edit"})", "c2"));
+    rig.fake->script(patching(R"([{"op":"replace","path":"/view/children/1/label","value":"SECOND-EDIT"}])", "c3"));
+    rig.fake->script(said("done"));
+    auto const state = rig.finished(rig.start("lims.base"));
+    REQUIRE(state.status == chat::TurnStatus::Done);
+    auto const requests = rig.asked();
+    REQUIRE(requests.size() == 4);
+    CHECK(lastResult(requests.at(2)).contains("1 node matches"));
+    REQUIRE(state.draft.has_value());
+    CHECK(state.draft->contains("FIRST-EDIT"));
+    CHECK(state.draft->contains("SECOND-EDIT"));
+}
+
+// Mutation: bound the patch by `maxDraftBytes`, or the draft by `maxProposalBytes`.
+TEST_CASE("the_proposal_bound_limits_the_patch_and_the_draft_bound_the_document", "[chat][propose]") {
+    chat::ChatLimits limits;
+    limits.maxProposalBytes = 200;
+    Rig rig{limits};
+    auto const long_ = std::string(300, 'y');
+    rig.fake->script(patching(R"([{"op":"replace","path":"/view/children/0/text","value":")" + long_ + R"("}])"));
+    rig.fake->script(said("sorry"));
+    auto const state = rig.finished(rig.start("lims.base"));
+    CHECK_FALSE(state.draft.has_value());
+    CHECK(rig.asked().at(1).messages.at(2).results.at(0).text.contains("longer than 200 bytes"));
+
+    chat::ChatLimits tight;
+    tight.maxDraftBytes = screens_test::baseScreen("lims.base").size() + 20;
+    Rig second{tight};
+    second.fake->script(patching(R"([{"op":"replace","path":"/view/children/0/text","value":")" + long_ + R"("}])"));
+    second.fake->script(said("sorry"));
+    auto const other = second.finished(second.start("lims.base"));
+    CHECK_FALSE(other.draft.has_value());
+    CHECK(second.asked().at(1).messages.at(2).results.at(0).text.contains("would be longer than"));
+}
+
+// Mutation: let a read tool answer past its byte cap.
+TEST_CASE("a_read_tools_answer_is_capped_and_a_bad_pointer_is_an_error", "[chat][propose]") {
+    Rig rig;
+    auto const large = largeScreen("lims.base", 1500);
+    rig.fake->script(calling(std::string{chat::kScreenNodeTool}, R"({"pointer":"/view","depth":6})", "c1"));
+    rig.fake->script(calling(std::string{chat::kScreenOutlineTool}, R"({"pointer":"/view","depth":6})", "c2"));
+    rig.fake->script(calling(std::string{chat::kScreenFindTool}, R"({"text":"filler"})", "c3"));
+    rig.fake->script(calling(std::string{chat::kScreenNodeTool}, R"({"pointer":"/nope"})", "c4"));
+    rig.fake->script(said("done"));
+    auto const state = rig.finished(rig.start("lims.base", large));
+    REQUIRE(state.status == chat::TurnStatus::Done);
+    auto const requests = rig.asked();
+    REQUIRE(requests.size() == 5);
+    for (std::size_t request = 1; request <= 3; ++request) {
+        INFO(request);
+        CHECK(lastResult(requests.at(request)).size() <= 12 * 1024 + 256);
+    }
+    CHECK(lastResult(requests.at(3)).contains("1500 nodes match"));
+    CHECK(lastResult(requests.at(3)).contains("more not shown"));
+    CHECK(requests.at(4).messages.back().results.at(0).isError);
+    CHECK(lastResult(requests.at(4)).contains("no member `nope`"));
 }

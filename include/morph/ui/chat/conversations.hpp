@@ -39,10 +39,16 @@ struct ChatLimits {
     /// @brief The most one conversation holds; past it the oldest messages are dropped. Without it, one large result
     ///        kept in a conversation would make every later request on that record too large.
     std::size_t maxConversationBytes = std::size_t{1024} * 1024;
-    /// @brief The longest document the assistant proposes or is given as a draft. It fits one conversation's bound and
-    ///        a provider's answer; a larger screen is not offered for editing, and a turn carrying a larger draft is
-    ///        refused.
+    /// @brief The longest patch the assistant sends to change a screen. It bounds the proposal only: the document it
+    ///        is applied to and the draft that results are bounded by `maxDraftBytes`.
     std::size_t maxProposalBytes = std::size_t{64} * 1024;
+    /// @brief The longest document the assistant is given as a draft or offered to edit, and the longest draft a turn
+    ///        carries or accepts. A turn carrying a larger draft is refused, and a larger screen is not offered for
+    ///        editing.
+    std::size_t maxDraftBytes = std::size_t{256} * 1024;
+    /// @brief The longest document the system text carries whole. A larger one is described by an outline, and the
+    ///        assistant reads the rest through the screen's read tools.
+    std::size_t maxInlineDocumentBytes = std::size_t{16} * 1024;
     /// @brief The refused proposals one turn may make. The turn that makes this many ends, with the last refusal
     ///        told to the person, and leaves the window as it was.
     std::size_t maxProposalsPerTurn = 3;

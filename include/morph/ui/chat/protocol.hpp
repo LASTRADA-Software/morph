@@ -60,7 +60,7 @@ struct TurnRequest {
     std::string text;
     /// @brief The document of the draft the person has open on this screen, as JSON text; absent with none. It is the
     ///        screen's document as the assistant should read it, so a conversation of edits builds on the last
-    ///        accepted draft. The server refuses a turn whose draft is over `ChatLimits::maxProposalBytes` or is not a
+    ///        accepted draft. The server refuses a turn whose draft is over `ChatLimits::maxDraftBytes` or is not a
     ///        JSON object, and treats the text as data: it grants nothing.
     std::optional<std::string> draft;
 };

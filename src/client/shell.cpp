@@ -742,7 +742,7 @@ private:
     [[nodiscard]] std::optional<std::string> chatDraft() const {
         std::optional<ui::WorkspaceTabId> const tab = _workspace ? _workspace->model().active().peek() : std::nullopt;
         std::optional<std::string> draft = tab && _customChrome ? _customChrome->draftOf(*tab) : std::nullopt;
-        if (draft && draft->size() > ui::chat::ChatLimits{}.maxProposalBytes) {
+        if (draft && draft->size() > ui::chat::ChatLimits{}.maxDraftBytes) {
             return std::nullopt;
         }
         return draft;

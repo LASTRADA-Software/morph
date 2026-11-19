@@ -41,6 +41,11 @@ struct ChatToolContext {
     session::Context session;
     /// @brief The screen the person is on: its id, title, identity, params, models and draft, and what they said.
     TurnRequest request;
+    /// @brief The document the turn is working on, as JSON text: the latest draft a tool accepted in this turn, else
+    ///        the draft the request carried; absent when neither exists, in which case the screen's own document is
+    ///        where the turn started (`bundle`, `external`). A tool that reads or patches the screen reads this, so
+    ///        a call sees what the calls before it accepted.
+    std::optional<std::string> document;
     /// @brief The bundle the chat serves, which is where an application screen's own document is read.
     std::shared_ptr<ServedBundle const> bundle;
     /// @brief The chat's bounds.

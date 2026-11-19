@@ -665,7 +665,7 @@ chat::Response proposing(std::string const& document) {
                           .calls = {chat::ToolCall{
                               .id = "p1",
                               .name = std::string{chat::kProposeScreenTool},
-                              .argumentsJson = R"({"document":)" + glz::write_json(document).value_or("\"\"") + "}"}},
+                              .argumentsJson = R"({"patch":[{"op":"replace","path":"","value":)" + document + "}]}"}},
                           .opaque = {}};
 }
 

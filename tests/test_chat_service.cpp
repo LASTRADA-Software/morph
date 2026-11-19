@@ -509,7 +509,7 @@ TEST_CASE("the_provider_is_given_the_screens_tools_and_context", "[chat][service
 // Mutation: drop the bound in `refuseDraft`.
 TEST_CASE("a_draft_over_the_bound_is_refused_at_the_turns_start", "[chat][service][draft]") {
     chat::ChatLimits limits;
-    limits.maxProposalBytes = 64;
+    limits.maxDraftBytes = 64;
     Rig rig{limits};
     auto const cid = rig.gui();
     auto const id = rig.instance(cid);
@@ -1626,11 +1626,11 @@ TEST_CASE("a_stop_text_is_bounded_like_a_steps_message", "[chat][service][extra]
     CHECK(state.error.contains("cut off"));
 }
 
-// Mutation: let a draft over `maxProposalBytes` through.
+// Mutation: let a draft over `maxDraftBytes` through.
 TEST_CASE("a_draft_over_the_bound_from_any_tool_is_dropped_as_a_failed_call", "[chat][service][extra]") {
     auto const seen = std::make_shared<Seen>();
     chat::ChatLimits limits;
-    limits.maxProposalBytes = 32;
+    limits.maxDraftBytes = 32;
     Rig rig{limits, true, nullptr, {extraTool("big", seen, [](auto const&) {
                 return chat::ChatToolOutcome{
                     .text = "ok", .isError = false, .draft = std::string(100, 'd'), .stop = {}};
