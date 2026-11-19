@@ -1837,6 +1837,16 @@ handler contributes `R`.
   `heldRecord` type and a `heldMember()` also yields a slot of `heldRecord` at
   that member, as `table::ChangedRows<F>` does. An `opaque` slot is added by
   `BRIDGE_REGISTER_TABLE` only, for a record the result holds at no path.
+- **A holder's members.** A visited type with `openMembers()` (a range of
+  names) or `partialMember()` (one name) is also recorded in
+  `ActionResult::holders` as `HolderMembers{path, open, partial}`
+  (`detail::walkHolders<R>()`), a named member its reflection lacks left out.
+  `table::Page` names `awaiting` and `distinct` as open and `unloadedRows` as
+  partial. Resolution gives each `ActionRecord` the `open` and `partial`
+  member paths of every holder above one of its paths: while one is set, a row
+  the result does not hold may come to belong to it, or a merge by key would
+  leave it describing other rows. The client's catalog copies `open`,
+  `partial` and `opaque` into `ui::ActionRecordInfo`.
 - **Visited:** the result; the value of a `std::vector`, `std::optional` or
   `std::map` (adds no path segment); the members of a type glaze writes as an
   object, either by pure reflection or through a `glz::meta` object mapping.

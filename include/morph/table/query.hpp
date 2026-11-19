@@ -151,6 +151,19 @@ struct Page {
     std::vector<std::string> failed;
     /// @brief A keyed reply only: the view row of each of `rows`.
     std::vector<std::int64_t> indices;
+
+    /// @brief The members that open a query cache entry holding the page: while either is set, a row the page
+    ///        does not hold may come to belong to it, so every change of its record marks the entry. A member the
+    ///        page does not have is skipped.
+    /// @return `awaiting` and `distinct`.
+    [[nodiscard]] static constexpr std::array<std::string_view, 2> openMembers() noexcept {
+        return {"awaiting", "distinct"};
+    }
+
+    /// @brief The member that makes a query cache entry holding the page partial: while it is set, a merge by key
+    ///        would leave it describing rows it no longer indexes, so an `updates` effect marks the entry instead.
+    /// @return `unloadedRows`.
+    [[nodiscard]] static constexpr std::string_view partialMember() noexcept { return "unloadedRows"; }
 };
 
 /// @brief The bounds a server applies to every `TableQuery`, an untrusted body.

@@ -1671,7 +1671,9 @@ inline bool registerActionResultOnce(std::string_view actionId) noexcept {
     }
     entries.emplace(
         std::string{actionId},
-        ActionResult{.action = action, .resultSlots = walkResult<typename ActionTraits<Action>::Result>()});
+        ActionResult{.action = action,
+                     .resultSlots = walkResult<typename ActionTraits<Action>::Result>(),
+                     .holders = walkHolders<typename ActionTraits<Action>::Result>()});
     return true;
 }
 

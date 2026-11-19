@@ -175,7 +175,12 @@ template <typename Result>
 [[nodiscard]] inline std::vector<ActionRecordInfo> recordsInfo(std::string_view actionId) {
     std::vector<ActionRecordInfo> out;
     for (auto const& held : ::morph::effects::recordsOf(actionId)) {
-        out.push_back(ActionRecordInfo{.record = held.record, .keyField = held.keyField, .paths = held.paths});
+        out.push_back(ActionRecordInfo{.record = held.record,
+                                       .keyField = held.keyField,
+                                       .paths = held.paths,
+                                       .open = held.open,
+                                       .partial = held.partial,
+                                       .opaque = held.opaque});
     }
     return out;
 }

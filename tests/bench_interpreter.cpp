@@ -15,6 +15,7 @@
 #include <cstdio>
 #include <format>
 #include <glaze/glaze.hpp>
+#include <morph/core/wire.hpp>
 #include <morph/forms/engine/collection.hpp>
 #include <morph/table/data_source.hpp>
 #include <morph/table/engine.hpp>
@@ -406,3 +407,91 @@ TEST_CASE("interpreter baseline: U5 a collection of 20,000", "[.benchmark][basel
     printRow("U5: one row edited (the list reloaded) and the sorted view repaired", kRows, spreadOf(edits));
 }
 
+
+namespace {
+
+// `T_Page` holds `T_Row` keyed by `code` at `rows`; `T_TablePage` holds it opaquely, as `Table.<id>` does.
+ui::Catalog k4Catalog() {
+    ui::Catalog catalog = ui::testing::corpusCatalog();
+    auto base = catalog.action;
+    catalog.action = [base](std::string_view action) -> std::optional<ui::ActionInfo> {
+        auto info = base(action);
+        if (info && action == "T_Page") {
+            info->records = {ui::ActionRecordInfo{
+                .record = "T_Row", .keyField = "code", .paths = {"rows"}, .open = {}, .partial = {}, .opaque = false}};
+        }
+        if (info && action == "T_TablePage") {
+            info->records = {ui::ActionRecordInfo{
+                .record = "T_Row", .keyField = "code", .paths = {}, .open = {}, .partial = {}, .opaque = true}};
+        }
+        return info;
+    };
+    return catalog;
+}
+
+std::string k4Document(std::string_view action) {
+    return std::format(R"({{
+  "vocab": "ui/1", "id": "k4",
+  "models": {{ "sample": {{ "type": "Lims_SampleModel" }} }},
+  "queries": {{ "page": {{ "model": "sample", "action": "{}" }} }},
+  "view": {{ "kind": "text", "text": "k4" }} }})",
+                       action);
+}
+
+}  // namespace
+
+TEST_CASE("interpreter bench: K4 the query cache under an event and a wide page", "[.benchmark][interpreter]") {
+    std::string rows;
+    for (int row = 0; row < 200; ++row) {
+        rows += std::format(R"({}{{"code":{},"name":"row-{}"}})", row == 0 ? "" : ",", row, row);
+    }
+    morph::wire::ChangesBody event;
+    event.records.push_back(morph::effects::RecordChange{.record = "T_Row", .keys = std::vector<glz::raw_json>{}});
+    for (int key = 0; key < 4'096; ++key) {
+        event.records.back().keys->emplace_back(std::to_string(100'000 + key));
+    }
+    std::vector<double> events;
+    for (int run = 0; run < 15; ++run) {
+        Harness h{k4Catalog()};
+        auto screen = h.mount(k4Document("T_Page"));
+        h.reply(0, std::format(R"({{"rows":[{}]}})", rows));
+        auto const began = std::chrono::steady_clock::now();
+        h.session.applyChanges(event);
+        events.push_back(std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - began).count());
+        REQUIRE(h.dispatcher.calls.size() == 1);
+    }
+
+    std::string page = R"({"revision":"r","columns":[)";
+    for (int column = 0; column < 300; ++column) {
+        page += std::format(R"({}"c{:03}")", column == 0 ? "" : ",", column);
+    }
+    page += R"(],"keys":[)";
+    for (int row = 0; row < 200; ++row) {
+        page += std::format("{}{}", row == 0 ? "" : ",", row);
+    }
+    page += R"(],"rows":[)";
+    for (int row = 0; row < 200; ++row) {
+        page += row == 0 ? "[" : ",[";
+        for (int column = 0; column < 300; ++column) {
+            page += std::format("{}{}.5", column == 0 ? "" : ",", row + column);
+        }
+        page += "]";
+    }
+    page += R"(],"total":200,"totalKind":"exact","offset":0})";
+    std::vector<double> stores;
+    for (int run = 0; run < 7; ++run) {
+        Harness h{k4Catalog()};
+        auto screen = h.mount(k4Document("T_TablePage"));
+        auto const began = std::chrono::steady_clock::now();
+        h.reply(0, page);
+        stores.push_back(std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - began).count());
+    }
+    std::ranges::sort(events);
+    std::ranges::sort(stores);
+    std::println("\n| K4 | a 4,096-key event against an entry of 200 rows | {:.3f} ms median ({:.3f}-{:.3f}) |",
+                 events[events.size() / 2], events.front(), events.back());
+    std::println("| K4 | storing a decoded 200 x 300 page of fractional numbers in an opaque entry | {:.3f} ms median "
+                 "({:.3f}-{:.3f}) |",
+                 stores[stores.size() / 2], stores.front(), stores.back());
+    static_cast<void>(std::fflush(stdout));
+}

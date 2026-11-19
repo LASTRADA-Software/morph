@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <charconv>
 #include <chrono>
+#include <core/async/StopToken.hpp>
 #include <cstddef>
 #include <cstdint>
 #include <deque>
@@ -92,6 +93,9 @@ struct CallOptions {
     /// @brief The mutation declares `"offline": "queue"`: a dispatcher with an offline queue holds a call that cannot
     ///        reach the server and settles the completion when the replay settles.
     bool queueOffline = false;
+    /// @brief The caller's cancel: a stop request sends the wire's `cancel` for the call where the server takes one,
+    ///        and rejects the call with `core::async::OperationCancelled`. A token with no stop state sends nothing.
+    ::core::async::StopToken stop;
 };
 
 /// @brief What a channel can say about the instance it is bound to.
@@ -585,6 +589,35 @@ struct HostCommands {
 ///        listed is in scope for every document.
 using HostScopes = std::map<std::string, std::set<std::string, std::less<>>, std::less<>>;
 
+namespace detail {
+struct WatchRegistration;
+struct WatchRegistry;
+}  // namespace detail
+
+/// @brief A watch of one record that no cache entry holds, made by `Session::watchRecord`.
+///
+/// A copyable handle over one registration: the record stays in the session's watch set, and the handler keeps
+/// hearing its changes, while any copy lives. When the last copy dies the handler is removed and the record is
+/// counted out, which sends an `unwatch` when nothing else needs it. A `Completion` hands its value to a handler as
+/// `const&`, so a caller that keeps the watch copies the holder there and lets the completion go. A holder that
+/// outlives its session releases nothing. A default-constructed holder holds nothing.
+class MORPH_API WatchHolder {
+public:
+    /// @brief A holder of nothing.
+    WatchHolder() = default;
+
+    /// @brief Whether the holder holds a registration.
+    /// @return `true` for a holder `watchRecord` resolved with, and its copies.
+    [[nodiscard]] bool holds() const noexcept { return _registration != nullptr; }
+
+private:
+    friend class Session;
+    explicit WatchHolder(std::shared_ptr<detail::WatchRegistration> registration)
+        : _registration{std::move(registration)} {}
+
+    std::shared_ptr<detail::WatchRegistration> _registration;
+};
+
 /// @brief What screens of one client session share (spec 5 §5, §12b): the query cache, the mounted queries, the
 ///        principal's permitted actions, the formatting facts and the client's `env`, `session` and `host` values.
 ///
@@ -612,7 +645,7 @@ public:
     Session& operator=(Session const&) = delete;
     Session(Session&&) = delete;
     Session& operator=(Session&&) = delete;
-    ~Session() = default;
+    ~Session();
 
     /// @brief The runtime.
     /// @return It.
@@ -945,6 +978,36 @@ public:
     /// @param entry The entry.
     static void markStale(detail::CacheEntry& entry);
 
+    /// @brief Runs a read action and settles with its reply's JSON text, making no cache entry and reading none.
+    ///
+    /// A page window's fetches go through it. The reply is not read into a `Value`: a page's `Number` cells are JSON
+    /// numbers with fractions or exponents, which a `Value` cannot hold, so the caller decodes the text against the
+    /// table's description (`table::readGenericPage`). No effects are applied: a read has none, and the caller's own
+    /// change events reach it as anyone's do.
+    /// @param channel  The alias's channel; `nullptr` fails the read at once.
+    /// @param actionId The action.
+    /// @param body     The body, sent as its canonical JSON.
+    /// @param stop     The caller's cancel: passed to the channel as `CallOptions::stop`, so the wire's `cancel` goes
+    ///                 out where the server takes one; the read then settles cancelled and its reply is dropped.
+    /// @return The reply's JSON text, byte for byte as the channel returned it, delivered on the runtime's owner; or
+    ///         the call's failure, or `core::async::OperationCancelled` after a stop.
+    [[nodiscard]] async::Completion<std::string> read(std::shared_ptr<ModelChannel> const& channel,
+                                                      std::string const& actionId, Value const& body,
+                                                      ::core::async::StopToken stop = {});
+
+    /// @brief Watches a record without a cache entry, for as long as a copy of the returned holder lives.
+    ///
+    /// The record is counted in the watch set as an entry's records are, so a count that leaves zero sends a
+    /// `watch` at once. @p handler hears, on the runtime's owner, each `changes` event that names the record (after
+    /// the cache's entries are marked), and a whole-type change (`keys` absent) on reconnect and on `resync`.
+    /// @param record  The record's wire name.
+    /// @param handler What hears its changes.
+    /// @return The holder, once the server has the watch: when the `watch` this call sent, or the one in flight for
+    ///         the record, is answered (whatever the answer, since a refused topic only sends no events); at once
+    ///         when the record was already watched and answered, or the session has no watcher.
+    [[nodiscard]] async::Completion<WatchHolder> watchRecord(
+        std::string const& record, std::function<void(effects::RecordChange const&)> handler);
+
 private:
     // A cap of 0 moves nothing inline, and one above the largest would not fit an envelope once encoded.
     [[nodiscard]] static SessionOptions checkedOptions(SessionOptions options);
@@ -969,6 +1032,21 @@ private:
     /// @param entry The entry.
     /// @param delta `+1` when the entry is made, `-1` when it is dropped.
     void countTopics(detail::CacheEntry const& entry, int delta);
+
+    /// @brief Counts one record in or out of the watch set, as `countTopics` counts an entry's.
+    /// @param record The record.
+    /// @param delta  `+1` or `-1`.
+    void countRecord(std::string const& record, int delta);
+
+    /// @brief Hands a record change to every watch holder of its record.
+    /// @param change The change.
+    void notifyWatchers(effects::RecordChange const& change);
+
+    /// @brief The watch registry, made on first use.
+    /// @return It.
+    detail::WatchRegistry& watchRegistry();
+
+    friend struct detail::WatchRegistration;
 
     /// @brief Sends the queued watch changes, at most one `watch` and one `unwatch`; drops them when there is no
     ///        watcher.
@@ -1015,6 +1093,7 @@ private:
     SessionOptions _options;
     reactive::Signal<std::set<std::string, std::less<>>> _permitted;
     std::map<std::string, int, std::less<>> _recordRefs;
+    std::shared_ptr<detail::WatchRegistry> _watchRegistry;
     std::map<std::pair<std::string, std::string>, int> _instanceRefs;
     std::set<std::string, std::less<>> _watchRecords;
     /// The records watched for something other than the cache (`addExtraWatch`).
