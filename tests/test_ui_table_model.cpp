@@ -2433,6 +2433,16 @@ using morph::ui::testing::kActionTableNoColumns;
 using morph::ui::testing::kActionTableNoQuery;
 using morph::ui::testing::kindOfColumn;
 using morph::ui::testing::refusalOf;
+using morph::ui::testing::unitOf;
+using morph::ui::testing::windowOf;
+
+/// The x-table request of the typed list actions these cases add.
+constexpr std::string_view kQuerySchema = R"({"type":"object","properties":{"query":{"type":"object","x-table":true}}})";
+
+/// Whether the body of the last call of @p action names @p text.
+bool lastBodyHas(TableHarness const& h, std::string_view action, std::string_view text) {
+    return h.dispatcher.calls.at(h.dispatcher.last(action)).body.contains(text);
+}
 
 }  // namespace
 
@@ -2474,10 +2484,100 @@ TEST_CASE("model table over an action: columns and kinds come from the action's 
 }
 
 // Mutations: the loader accepting an action with no x-table member (the first fetch sends a bare body); accepting
-// one with neither `columns` nor a view document.
+// one with neither `columns` nor a view document; accepting two members marked x-table.
 TEST_CASE("model table over an action: an action the table cannot page is refused at load", "[ui][table]") {
     TableHarness h;  addPageSamples(h);
+    addAction(h, "Lims_TwoQueries",
+              R"({"type":"object","properties":{"a":{"type":"object","x-table":true},"b":{"type":"object","x-table":true}}})",
+              ActionInfo{.modelType = "Lims_SampleModel"});
     CHECK(refusalOf(h, kActionTableNoQuery) == "a table over an action needs a query member marked x-table");
     CHECK(refusalOf(h, kActionTableNoColumns) ==
           "a table over an action needs its columns, or a view document for the action");
+    CHECK(refusalOf(h, withTableKey(kActionTable, R"("action":"Lims_TwoQueries")")) ==
+          "a table over an action needs one query member marked x-table; `Lims_TwoQueries` marks 2");
+}
+
+// Mutation: no reconnect handler on a window that watches no record (the reconnect fetches nothing: 1 == 2).
+TEST_CASE("model table over an action: a reconnect fetches the rows again with no record watched", "[ui][table]") {
+    TableHarness h;  addPageSamples(h);
+    auto screen = h.mount(kActionTable);
+    h.reply(h.dispatcher.last("Lims_PageSamples"), R"({"rows":[{"id":1,"name":"a"}],"total":1})");
+    REQUIRE(h.dispatcher.count("Lims_PageSamples") == 1);
+    h.session.reconnected();  h.settle();
+    CHECK(h.dispatcher.count("Lims_PageSamples") == 2);
+}
+
+// Mutation: only the first record of the action watched (the second watch is never answered, so no page is
+// fetched: 0 == 1).
+TEST_CASE("model table over an action: every record the action holds is watched", "[ui][table]") {
+    TableHarness h;
+    addAction(h, "Lims_PageSamples", std::string{kQuerySchema},
+              ActionInfo{.modelType = "Lims_SampleModel",
+                         .records = {morph::ui::ActionRecordInfo{.record = "Lims_SampleModel.samples"},
+                                     morph::ui::ActionRecordInfo{.record = "Lims_Result"}}});
+    auto screen = h.mount(kActionTable);
+    REQUIRE(h.dispatcher.count("Lims_PageSamples") == 1);                     // both watches answered
+    h.reply(h.dispatcher.last("Lims_PageSamples"), R"({"rows":[{"id":1,"name":"a"}],"total":1})");
+    morph::wire::ChangesBody body;
+    body.records.push_back(morph::effects::RecordChange{.record = "Lims_Result", .keys = std::nullopt});
+    h.session.applyChanges(body);  h.settle();
+    CHECK(h.dispatcher.count("Lims_PageSamples") == 2);
+}
+
+// Mutations: the stored filter fitted to the placeholder kinds (`ratio` dropped: no second query); a held filter
+// dropped without a report (no diagnostic for `name`).
+TEST_CASE("model table over an action: a stored filter on an inferred column waits for its kind", "[ui][table][state]") {
+    auto store = std::make_shared<GatedTableStateStore>(
+        storeExecutor(),
+        R"({"version":1,"filters":{"columns":{"ratio":{"include":[{"gt":"1"}]},"name":{"include":[{"gt":"b"}]}}}})");
+    TableHarness h{store};  addPageSamples(h);
+    auto screen = h.mount(kActionTable);  store->release();  h.settle();
+    REQUIRE(h.dispatcher.count("Lims_PageSamples") == 1);
+    CHECK_FALSE(lastBodyHas(h, "Lims_PageSamples", R"("gt")"));              // no kind yet: the filter waits
+    h.reply(h.dispatcher.last("Lims_PageSamples"),
+            R"({"rows":[{"id":1,"name":"a","ratio":0.5},{"id":2,"name":"b","ratio":2}],"total":2})");
+    REQUIRE(kindOfColumn(*screen, "ratio") == table::ColumnKind::Number);
+    REQUIRE(h.dispatcher.count("Lims_PageSamples") == 2);                     // the stored filter, now it applies
+    CHECK(lastBodyHas(h, "Lims_PageSamples", R"({"gt":"1"})"));
+    CHECK_FALSE(lastBodyHas(h, "Lims_PageSamples", R"({"gt":"b"})"));
+    CHECK(diagnosticsMentioning(h, "the stored filter on `name` is not applied") == 1);   // Text takes no `gt`
+    CHECK(diagnosticsMentioning(h, "`ratio`") == 0);
+}
+
+// Mutation: the view document's units not read (mass stays a Quantity column and lists neither kg nor g).
+TEST_CASE("model table over an action: a view document's units read its measures", "[ui][table]") {
+    TableHarness h;
+    addAction(h, "Lims_WeighSamples", std::string{kQuerySchema}, ActionInfo{.modelType = "Lims_SampleModel"});
+    addView(h, "Lims_WeighSamples",
+            R"({"v-kind":"collection","v-query":"Lims_WeighSamples","v-rowKey":"id","v-columns":[)"
+            R"({"field":"id","label":"ID","kind":"integer"},)"
+            R"({"field":"mass","label":"Mass","kind":"quantity","x-decimalPlaces":3,)"
+            R"("ExtUnits":{"unitAscii":"kg","unitUnicode":"kg"},)"
+            R"("x-unitAlternatives":[{"id":"g","display":"g","decimals":1,"num":1,"den":1000}]}]})");
+    auto screen = h.mount(withTableKey(kActionTableNoColumns, R"("action":"Lims_WeighSamples")"));
+    h.reply(h.dispatcher.last("Lims_WeighSamples"),
+            R"({"rows":[{"id":1,"mass":{"num":5,"den":2,"dp":1,"unit":"kg"}},)"
+            R"({"id":2,"mass":{"num":1500,"den":1,"dp":0,"unit":"g"}}],"total":2})");
+    CHECK(kindOfColumn(*screen, "mass") == table::ColumnKind::Measure);
+    CHECK(unitOf(*screen, "g").dimension == unitOf(*screen, "kg").dimension);
+    CHECK(unitOf(*screen, "g").toBase ==
+          morph::math::Rational{morph::math::Numerator{1}, morph::math::Denominator{1000}, morph::math::DecimalPlaces{3}});
+    for (std::int64_t row : {0, 1}) {
+        auto const* const measure = std::get_if<table::Measure>(cellOf(*screen, row, "mass"));
+        REQUIRE(measure != nullptr);
+        CHECK(measure->unit != table::kUnknownUnit);
+    }
+}
+
+// Mutation: a unit no description lists left unknown (the cell's unit is kUnknownUnit, an invalid cell).
+TEST_CASE("model table over an action: a unit no one lists is its own canonical unit", "[ui][table]") {
+    TableHarness h;  addPageSamples(h);
+    auto screen = h.mount(kActionTable);
+    h.reply(h.dispatcher.last("Lims_PageSamples"),
+            R"({"rows":[{"id":1,"name":"a","weight":{"num":5,"den":1,"dp":0,"unit":"furlong"}}],"total":1})");
+    CHECK(kindOfColumn(*screen, "weight") == table::ColumnKind::Measure);
+    auto const* const measure = std::get_if<table::Measure>(cellOf(*screen, 0, "weight"));
+    REQUIRE(measure != nullptr);
+    CHECK(measure->unit != table::kUnknownUnit);
+    CHECK(unitOf(*screen, "furlong").dimension == "furlong");
 }
