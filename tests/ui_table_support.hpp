@@ -1853,7 +1853,8 @@ struct StoreCall {
 
 /// @brief A map store under `ITableStateStore`'s `expected` rule, `kNoDocument` included, that records each call and
 ///        its answer in the order the calls were made. Revisions are `"1"`, `"2"`, … per store; completions are
-///        delivered on the executor it was given. Built with `Sharing::Shared`, `publish` applies operations to the
+///        delivered on the executor it was given. It keeps one document per `part` and ignores the rest of the key,
+///        so it holds the state of one table. Built with `Sharing::Shared`, `publish` applies operations to the
 ///        `shared` part.
 class RecordingTableStateStore final : public table::ITableStateStore {
 public:
@@ -1955,7 +1956,8 @@ private:
 
 /// @brief A map store that knows no sentinel: `expected` is compared with the stored revision as text, nothing stored
 ///        counting as revision `""`, so `kNoDocument` over nothing is a `Conflict` with revision `""`; an empty
-///        `expected` replaces. Revisions are `"r1"`, `"r2"`, … per store.
+///        `expected` replaces. Revisions are `"r1"`, `"r2"`, … per store. It keeps one document per `part` and ignores
+///        the rest of the key, so it holds the state of one table.
 class LiteralTableStateStore final : public table::ITableStateStore {
 public:
     /// @brief A store delivering on @p executor.

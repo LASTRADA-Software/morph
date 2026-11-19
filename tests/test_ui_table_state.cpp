@@ -1403,11 +1403,6 @@ struct ViewsWindow {
     TableViews views;
 };
 
-// Runs a views change and settles; its answer.
-TableViews::Result changed(RowsFixture& h, morph::async::Completion<TableViews::Result> completion) {
-    return settled(h, std::move(completion));
-}
-
 // The calls of a part, as `op expected outcome` lines: what a test compares.
 std::vector<std::string> callsOf(std::vector<StoreCall> const& calls, std::string_view part, std::size_t from = 0) {
     std::vector<std::string> out;
@@ -1433,17 +1428,18 @@ table::TableStateKey viewsKey() {
 
 }  // namespace
 
-// Mutation: a views save with no expected revision (the second window's save overwrites the first's view).
+// Mutation: a views save with no expected revision (the second window's save overwrites the first's view). The
+// state part's last-save-wins clause of the brief is 9c's, tested there.
 TEST_CASE("views: views are not lost between windows", "[ui][table][state]") {
     RowsFixture h;
     RecordingTableStateStore store{h.owner};
     auto a = std::make_unique<ViewsWindow>(h, store);
     auto b = std::make_unique<ViewsWindow>(h, store);
-    REQUIRE(changed(h, a->views.load()).has_value());
-    REQUIRE(changed(h, b->views.load()).has_value());
+    REQUIRE(settled(h, a->views.load()).has_value());
+    REQUIRE(settled(h, b->views.load()).has_value());
     std::size_t const before = store.calls.size();
-    REQUIRE(changed(h, a->views.change(table::AddView{viewNamed("A")})).has_value());
-    REQUIRE(changed(h, b->views.change(table::AddView{viewNamed("B")})).has_value());
+    REQUIRE(settled(h, a->views.change(table::AddView{viewNamed("A")})).has_value());
+    REQUIRE(settled(h, b->views.change(table::AddView{viewNamed("B")})).has_value());
     CHECK(callsOf(store.calls, "views", before) ==
           std::vector<std::string>{"save expected=- Saved", "save expected=- Conflict", "load",
                                    "save expected=" + store.calls.at(before).revision + " Saved"});
@@ -1455,11 +1451,11 @@ TEST_CASE("views: views are not lost between windows", "[ui][table][state]") {
     // New sessions: each reads the document of revision rB, then each adds a view.
     a = std::make_unique<ViewsWindow>(h, store);
     b = std::make_unique<ViewsWindow>(h, store);
-    REQUIRE(changed(h, a->views.load()).has_value());
-    REQUIRE(changed(h, b->views.load()).has_value());
+    REQUIRE(settled(h, a->views.load()).has_value());
+    REQUIRE(settled(h, b->views.load()).has_value());
     std::size_t const again = store.calls.size();
-    REQUIRE(changed(h, a->views.change(table::AddView{viewNamed("C")})).has_value());
-    REQUIRE(changed(h, b->views.change(table::AddView{viewNamed("D")})).has_value());
+    REQUIRE(settled(h, a->views.change(table::AddView{viewNamed("C")})).has_value());
+    REQUIRE(settled(h, b->views.change(table::AddView{viewNamed("D")})).has_value());
     std::string const rC = store.calls.at(again).revision;
     CHECK(callsOf(store.calls, "views", again) ==
           std::vector<std::string>{"save expected=" + rB + " Saved", "save expected=" + rB + " Conflict", "load",
@@ -1524,7 +1520,7 @@ TEST_CASE("views: a store that ignores kNoDocument still saves the first view", 
     TableViews views{states, kKey, h.owner};
     REQUIRE(settled(h, views.load()).has_value());
     std::size_t const before = store.calls.size();
-    CHECK(changed(h, views.change(table::AddView{viewNamed("A")})).has_value());
+    CHECK(settled(h, views.change(table::AddView{viewNamed("A")})).has_value());
     CHECK(callsOf(store.calls, "views", before) ==
           std::vector<std::string>{"save expected=- Conflict", "load", "save expected= Saved"});
     CHECK(store.calls.at(before).revision.empty());                        // the conflict over nothing names ""
@@ -1532,9 +1528,9 @@ TEST_CASE("views: a store that ignores kNoDocument still saves the first view", 
     CHECK(views.own().views.size() == 1);
 }
 
-// Review Focus 5. Mutations: Save view… with a taken name sending AddView (refused as NameTaken, the sort change
-// lost); change() on Conflict saving its own document with the new revision instead of applying the operation to the
-// reloaded one (window 2's view "C" is lost, or two views are named "C").
+// Review Focus 5. Mutation: change() on Conflict saving its own document with the new revision instead of applying
+// the operation to the reloaded one (window 2's view "C" is lost, or two views are named "C"). The menu's rule that
+// Save view… under a taken name is a `ReplaceView`, and its mutation, are Task 14c's.
 TEST_CASE("views: a taken name is replaced on save and refused on rename", "[ui][table][state]") {
     RowsFixture h;
     RecordingTableStateStore store{h.owner};
@@ -1544,24 +1540,24 @@ TEST_CASE("views: a taken name is replaced on save and refused on rename", "[ui]
             table::SaveOutcome::Saved);
     std::string const r0 = store.calls.back().revision;
     ViewsWindow one{h, store};
-    REQUIRE(changed(h, one.views.load()).has_value());
+    REQUIRE(settled(h, one.views.load()).has_value());
     std::size_t const before = store.calls.size();
-    REQUIRE(changed(h, one.views.change(table::ReplaceView{viewNamed("A", "weight")})).has_value());
+    REQUIRE(settled(h, one.views.change(table::ReplaceView{viewNamed("A", "weight")})).has_value());
     CHECK(callsOf(store.calls, "views", before) == std::vector<std::string>{"save expected=" + r0 + " Saved"});
     std::string const r1 = store.calls.back().revision;
     CHECK(one.views.own().views.size() == 2);
     CHECK(one.views.own().views.front().sort.front().column == "weight");
     std::size_t const renaming = store.calls.size();
-    CHECK(changed(h, one.views.change(table::RenameView{.from = "B", .to = "A"})) ==
+    CHECK(settled(h, one.views.change(table::RenameView{.from = "B", .to = "A"})) ==
           TableViews::Result{std::unexpected(std::string{"A view named A exists"})});
     CHECK(store.calls.size() == renaming);                                   // no save
     // Window 2 reads r1 and saves "C"; window 1, holding r1 and no "C", renames "B" to "C".
     ViewsWindow two{h, store};
-    REQUIRE(changed(h, two.views.load()).has_value());
-    REQUIRE(changed(h, two.views.change(table::AddView{viewNamed("C")})).has_value());
+    REQUIRE(settled(h, two.views.load()).has_value());
+    REQUIRE(settled(h, two.views.change(table::AddView{viewNamed("C")})).has_value());
     std::string const r2 = store.calls.back().revision;
     std::size_t const late = store.calls.size();
-    CHECK(changed(h, one.views.change(table::RenameView{.from = "B", .to = "C"})) ==
+    CHECK(settled(h, one.views.change(table::RenameView{.from = "B", .to = "C"})) ==
           TableViews::Result{std::unexpected(std::string{"A view named C exists"})});
     CHECK(callsOf(store.calls, "views", late) ==
           std::vector<std::string>{"save expected=" + r1 + " Conflict", "load"});
@@ -1570,4 +1566,44 @@ TEST_CASE("views: a taken name is replaced on save and refused on rename", "[ui]
     CHECK(viewNames(stored) == std::vector<std::string>{"A", "B", "C"});
     REQUIRE(stored.has_value());
     CHECK(stored->revision == r2);
+}
+
+// Mutation: the lowering's `views->load()` calls deleted (no load of part "views" or "shared" at mount).
+TEST_CASE("views: a mounted table loads its views with its state, and a second mount reads them kept",
+          "[ui][table][state]") {
+    using morph::ui::testing::kModelTable;
+    using morph::ui::testing::kThree;
+    using morph::ui::testing::replyDescribe;
+    using morph::ui::testing::rowsDoc;
+    using morph::ui::testing::storeExecutor;
+    using morph::ui::testing::TableHarness;
+    auto const parts = [](std::vector<StoreCall> const& calls) {
+        std::multiset<std::string> loaded;
+        for (StoreCall const& call : calls) {
+            if (call.op == "load") {
+                loaded.insert(call.part);
+            }
+        }
+        return loaded;
+    };
+    for (bool const model : {false, true}) {
+        CAPTURE(model);
+        auto store = std::make_shared<RecordingTableStateStore>(storeExecutor(), table::Sharing::Shared);
+        TableHarness h{store};
+        auto const mountOne = [&] {
+            auto screen = h.mount(model ? std::string{kModelTable} : rowsDoc(kThree));
+            if (model) {
+                replyDescribe(h);
+            }
+            h.settle();
+            return screen;
+        };
+        auto first = mountOne();
+        CHECK(parts(store->calls) == std::multiset<std::string>{"shared", "state", "views"});
+        first.reset();
+        h.settle();
+        std::size_t const before = store->calls.size();
+        auto second = mountOne();
+        CHECK(parts({store->calls.begin() + static_cast<std::ptrdiff_t>(before), store->calls.end()}).empty());
+    }
 }
