@@ -401,8 +401,8 @@ public:
     /// @brief Holds the rows back while a table's stored arrangement is read, or lets them through.
     ///
     /// While restoring, `total()` is the view's rows, not known, and `row` answers nothing, so a mount draws
-    /// placeholder rows in place of an order the stored state is about to change; the engine still runs. A change of it tells the
-    /// receiver of `onChange` that the whole view changed.
+    /// placeholder rows in place of an order the stored state is about to change; the engine still runs. A change of
+    /// it tells the receiver of `onChange` that the whole view changed.
     /// @param restoring Whether the rows are held back.
     void setRestoring(bool restoring) {
         if (std::exchange(_restoring, restoring) == restoring) {

@@ -243,3 +243,26 @@ TEST_CASE("tui forms: an inline form draws each label on its control's row", "[t
         }
     }
 }
+
+// Mutation: the terminal table ignoring its select-all handler (Ctrl+A selects the page's two rows).
+TEST_CASE("tui forms: Ctrl+A on a paged table selects every row of the view", "[tui][forms][table]") {
+    TuiClient client;
+    auto screen = client.interpreter.mount(ui::testing::loadOrFail(R"({
+      "vocab": "ui/1", "id": "paged", "state": { "rows": { "init": { "lit": [
+        { "id": 1, "n": "one" }, { "id": 2, "n": "two" }, { "id": 3, "n": "three" }, { "id": 4, "n": "four" },
+        { "id": 5, "n": "five" } ] } } },
+      "view": { "kind": "column", "children": [
+        { "kind": "table", "id": "t", "testId": "list", "rows": { "ref": "rows" }, "key": { "row": "id" },
+          "selectionMode": "multiple", "pageSize": 2, "columns": [ { "id": "n", "label": "Name" } ] },
+        { "kind": "text", "text": { "fn": "format", "args": [ "{0} picked", { "ref": "t.selectedCount" } ] } } ] } })",
+                                                                   ui::testing::corpusCatalog()),
+                                           {}, client.backend);
+    REQUIRE(screen.has_value());
+    client.settle();
+    client.backend.focusFirst();
+    client.settle();
+    static_cast<void>(client.screen.dispatchEvent(core::tui::test::charKey('a', core::tui::Modifier::Ctrl)));
+    client.settle();
+    INFO(client.drawn());
+    CHECK(client.shows("5 picked"));
+}

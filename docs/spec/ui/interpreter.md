@@ -484,7 +484,10 @@ keeps its operands' 0 places and still fills 0.29 of a bar.
   the row's one scope, found by its key, so a realized row the mount gives to another key has its cells built
   again rather than rebound. A change of the engine's view reaches the mount as the engine's
   own operations when the page is the whole view and the table is not grouped, and as a reset otherwise; the
-  mount rebinds only the rows whose record changed. A `multiple` table's `Ctrl+A` (`Table::onSelectAll`) selects
+  mount rebinds only the rows whose record changed. Each change still costs the lowering a pass over every row: the
+  view's records are read again for `TableView`, the page's entries are rebuilt, each evaluation of `rows` reads
+  every field of every row for a unit the screen does not list, and above the virtualization threshold the mount
+  gives the backend every key (`setExistingKeys`). A `multiple` table's `Ctrl+A` (`Table::onSelectAll`) selects
   the engine's whole view, every page, through `table::Selection::selectAll`, or clears the selection when every row
   of the view is selected already; a backend that does not take the handler selects the rows it holds. On a user's change of the selection, an `Extend` report keeps
   the selected keys of the rows on other pages, in their order, before the reported keys; a `Replace` report is the

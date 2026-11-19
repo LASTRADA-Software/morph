@@ -93,6 +93,7 @@ public:
     void setSelection(std::vector<ui::Key> const& selection) override;
     void setOnSelectionChange(
         std::function<void(std::vector<ui::Key>, ui::SelectionChange)> onSelectionChange) override;
+    void setOnSelectAll(std::function<void()> onSelectAll) override;
     void setOnActivate(std::function<void(ui::Key)> onActivate) override;
     void setSort(std::optional<ui::TableSort> sort) override;
     void setOnSort(std::function<void(std::size_t)> onSort) override;
@@ -312,6 +313,8 @@ private:
     };
     LastClick _lastClick;
     std::function<void(std::vector<ui::Key>, ui::SelectionChange)> _onSelectionChange;
+    /// Ctrl+A's and the header box's handler in place of selecting the rows held; empty for none.
+    std::function<void()> _onSelectAll;
     std::function<void(ui::Key)> _onActivate;
     std::optional<ui::TableSort> _sort;
     std::function<void(std::size_t)> _onSort;
