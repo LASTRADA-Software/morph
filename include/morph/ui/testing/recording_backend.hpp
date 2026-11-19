@@ -2165,6 +2165,14 @@ public:
         callbacks().selection = std::move(onSelectionChange);
     }
 
+    /// @brief Stores what `Ctrl+A` calls in place of selecting the rows held.
+    /// @param onSelectAll The handler; empty to select the rows held.
+    void setOnSelectAll(std::function<void()> onSelectAll) override { _onSelectAll = std::move(onSelectAll); }
+
+    /// @brief The handler `setOnSelectAll` stored.
+    /// @return It; empty when none.
+    [[nodiscard]] std::function<void()> const& onSelectAll() const noexcept { return _onSelectAll; }
+
     /// @brief Stores the handler `RecordingBackend::activateRow` calls.
     /// @param onActivate The handler.
     void setOnActivate(std::function<void(Key)> onActivate) override { callbacks().activate = std::move(onActivate); }
@@ -2583,6 +2591,7 @@ private:
     // The row a Shift-click's range starts from: the last row clicked without Shift.
     std::optional<Key> _anchor;
     std::function<void(std::size_t, std::size_t)> _onVisibleRangeChanged;
+    std::function<void()> _onSelectAll;
     TableStatus _status;
     std::vector<TableColumn> _columns;
     std::map<std::pair<int, std::size_t>, CellLoad> _loads;  // (row id, column) -> state, as setCellLoad told it
@@ -2944,7 +2953,8 @@ public:
     /// when the field has a submit handler, and goes on after the commit when it has none; a `Checkbox`'s `Space`
     /// toggles it; a segmented `Select`'s `Left` and `Right` choose the previous or the next option, stopping at the
     /// ends; a `Table`'s `Enter` activates its first marked row, and stops whether or not one is marked; a
-    /// `Multiple` table's `Ctrl+A` selects every row, or clears them when every row is selected, as `Extend`. Then
+    /// `Multiple` table's `Ctrl+A` calls its select-all handler when it has one (`setOnSelectAll`), and otherwise
+    /// selects every row, or clears them when every row is selected, as `Extend`. Then
     /// the chords of its ancestors, innermost first. A handler that destroys the focused widget stops the key there.
     /// Like every helper it acts only when a user could reach @p widgetId.
     /// @param widgetId The widget focus is on.
@@ -3645,6 +3655,11 @@ private:
             auto* const table = dynamic_cast<detail::FakeTable*>(record.widget);
             if (table == nullptr || table->mode() != SelectionMode::Multiple) {
                 return false;
+            }
+            if (table->onSelectAll()) {
+                std::function<void()> const selectAll = table->onSelectAll();
+                selectAll();
+                return true;
             }
             std::vector<Key> keys = table->allOrNone();
             table->select(keys);

@@ -463,7 +463,10 @@ keeps its operands' 0 places and still fills 0.29 of a bar.
   sort, the bound `sort` or the table's own (starting at `[]`), is the engine's sort chain. A key names a sortable
   column, whose cells the source holds while a key reads it: the column's `sortBy`, read per row in a tracked
   computation with the row bound in the table's scope, or the row's field of the column's `id`, converted to the
-  column's kind, its literal `kind` or else the kind its cells infer. Values of one kind order as `sort` orders
+  column's kind, its literal `kind` or else the kind its cells infer. A quantity reads its unit from a registry of
+  the screen's unit table, each unit in its canonical unit's dimension; a unit the table does not list is its own
+  canonical unit, as an expression reads it: when a row's field brings one, the source and the engine are made
+  again over a registry that holds it (a unit only a `sortBy` produces is not seen, and is an invalid cell). Values of one kind order as `sort` orders
   them (`expressions.md`, Sorting). A cell not of its column's kind is invalid, sorts last in either direction,
   and is reported once for the table at its `sort` path. A sort that is not a list of `{column, direction}` records
   naming sortable columns keeps the source order and is reported at the table's `sort` path, so a data error does
@@ -479,7 +482,11 @@ keeps its operands' 0 places and still fills 0.29 of a bar.
   model-backed table's mount takes: below the virtualization threshold it realizes every row of the page, as a
   short table does, and above it the rows in view. Its `rowScopedCells` is `true`: a row's cells are lowered in
   the row's one scope, found by its key, so a realized row the mount gives to another key has its cells built
-  again rather than rebound. On a user's change of the selection, an `Extend` report keeps
+  again rather than rebound. A change of the engine's view reaches the mount as the engine's
+  own operations when the page is the whole view and the table is not grouped, and as a reset otherwise; the
+  mount rebinds only the rows whose record changed. A `multiple` table's `Ctrl+A` (`Table::onSelectAll`) selects
+  the engine's whole view, every page, through `table::Selection::selectAll`, or clears the selection when every row
+  of the view is selected already; a backend that does not take the handler selects the rows it holds. On a user's change of the selection, an `Extend` report keeps
   the selected keys of the rows on other pages, in their order, before the reported keys; a `Replace` report is the
   whole new selection, so a plain click or a range clears the other pages' keys as it clears the rest of its own,
   and every `Single` change is one. A key whose row `rows` no longer has drops on any user change. `empty` shows
@@ -487,8 +494,9 @@ keeps its operands' 0 places and still fills 0.29 of a bar.
   **Its state and its status line.** A table over `rows` with an `id`, while the session has a table-state store and
   its `persist` is not `false`, keeps its sort under the key `{application, model "", table <id>, qualifier <the
   persist name or the screen's id>, part "state"}`. Its rows are held back (`EngineRows::setRestoring`) until the
-  stored state has been applied and the engine has ordered by it, or until `tableStateTimeout` passes, so the first
-  rows drawn are in the stored order; a state that arrives later is applied unless the user changed the table
+  stored state has been applied and the engine has ordered by it, or until `tableStateTimeout` passes (without a
+  scheduler, once the work the stored sort posted has run), so the first rows drawn are in the stored order, the
+  mount drawing placeholder rows meanwhile; a state that arrives later is applied unless the user changed the table
   meanwhile. The stored state is fitted to the node's column parts, of the kinds their cells infer. A header click
   is saved as a model-backed table's is, debounced, and an unmount saves at once. A table with no `id` keeps no
   state. Its status line shows its counts and the latest message (`ScreenCore::tableMessage`), and takes space only

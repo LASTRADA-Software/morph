@@ -400,8 +400,8 @@ public:
 
     /// @brief Holds the rows back while a table's stored arrangement is read, or lets them through.
     ///
-    /// While restoring, `total().known` is `false` and `row` answers nothing, so a mount draws placeholder rows in
-    /// place of an order the stored state is about to change; the engine still runs. A change of it tells the
+    /// While restoring, `total()` is the view's rows, not known, and `row` answers nothing, so a mount draws
+    /// placeholder rows in place of an order the stored state is about to change; the engine still runs. A change of it tells the
     /// receiver of `onChange` that the whole view changed.
     /// @param restoring Whether the rows are held back.
     void setRestoring(bool restoring) {
@@ -419,11 +419,13 @@ public:
     /// @return Whether they are.
     [[nodiscard]] bool restoring() const noexcept { return _restoring; }
 
-    /// @brief Every row of the view, counted exactly; unknown while restoring.
+    /// @brief Every row of the view, counted exactly; not known while restoring.
     /// @return The total.
     [[nodiscard]] TableTotal total() const override {
         if (_restoring) {
-            return TableTotal{.rows = 0, .kind = table::TotalKind::Exact, .known = false};
+            return TableTotal{.rows = static_cast<std::int64_t>(_engine->viewRowCount()),
+                              .kind = table::TotalKind::Exact,
+                              .known = false};
         }
         return TableTotal{.rows = static_cast<std::int64_t>(_engine->viewRowCount()),
                           .kind = table::TotalKind::Exact,

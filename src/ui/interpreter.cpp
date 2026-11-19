@@ -45,6 +45,7 @@
 #include <morph/ui/locale_table.hpp>
 #include <morph/ui/message.hpp>
 #include <morph/ui/mount.hpp>
+#include <morph/table/selection.hpp>
 #include <morph/ui/table_rows.hpp>
 #include <morph/ui/table_views.hpp>
 #include <morph/ui/table_state.hpp>
@@ -449,13 +450,17 @@ public:
         Value row;
     };
 
-    explicit PageRows(std::shared_ptr<EngineRows> engine) : _engine{std::move(engine)} {}
+    PageRows(std::shared_ptr<EngineRows> engine, exec::IExecutor& owner)
+        : _engine{std::move(engine)}, _owner{&owner} {}
 
     PageRows(PageRows const&) = delete;
     PageRows& operator=(PageRows const&) = delete;
     PageRows(PageRows&&) = delete;
     PageRows& operator=(PageRows&&) = delete;
-    ~PageRows() override { _engine->onChange({}); }
+    ~PageRows() override = default;
+
+    /// Reads a new engine's rows from now on: the table made one for units its rows brought.
+    void setEngine(std::shared_ptr<EngineRows> engine) { _engine = std::move(engine); }
 
     /// Takes the page's new entries and tells the mount how the view changed.
     void show(std::vector<Entry> entries, table::ViewChange const& change) {
@@ -465,9 +470,19 @@ public:
         }
     }
 
+    /// Tells the mount the whole view changed, the entries kept: the engine's rows changed under a page that did
+    /// not, such as while they are held back.
+    void reset() {
+        if (_handler) {
+            table::ViewChange change;
+            change.ops.push_back(table::ViewOp{.kind = table::ViewOp::Kind::Reset, .first = 0, .count = 0, .to = 0});
+            _handler(change);
+        }
+    }
+
     [[nodiscard]] TableTotal total() const override {
         if (_engine->restoring()) {
-            return TableTotal{.rows = 0, .kind = table::TotalKind::Exact, .known = false};
+            return _engine->total();
         }
         return TableTotal{.rows = static_cast<std::int64_t>(_entries.size()), .kind = table::TotalKind::Exact,
                           .known = true};
@@ -488,9 +503,26 @@ public:
         static_cast<void>(count);
         static_cast<void>(columns);
     }
+    /// The keys of a range of the page's entries, headings included, at once.
     async::Completion<std::expected<std::vector<table::RowId>, table::TableError>> keysOf(std::int64_t first,
                                                                                        std::int64_t count) override {
-        return _engine->keysOf(first, count);
+        using Result = std::expected<std::vector<table::RowId>, table::TableError>;
+        auto [completion, promise] = async::Completion<Result>::makeSettleable(_owner);
+        auto const size = static_cast<std::int64_t>(_entries.size());
+        if (first < 0 || count < 0 || count > size - first) {
+            promise.resolve(Result{std::unexpected(table::TableError{
+                .code = table::TableErrorCode::InvalidSpec,
+                .column = {},
+                .message = std::format("{} rows from row {} are not in a page of {}", count, first, size)})});
+            return std::move(completion);
+        }
+        std::vector<table::RowId> keys;
+        keys.reserve(static_cast<std::size_t>(count));
+        for (std::int64_t at = first; at < first + count; ++at) {
+            keys.push_back(_entries.at(static_cast<std::size_t>(at)).key);
+        }
+        promise.resolve(Result{std::move(keys)});
+        return std::move(completion);
     }
     /// Where the key is among the page's entries, read when the engine answers: a row of the engine's view the page
     /// does not hold is not in the view the mount sees. The caller requests @p stop before this is destroyed, as the
@@ -516,6 +548,7 @@ public:
 
 private:
     std::shared_ptr<EngineRows> _engine;
+    exec::IExecutor* _owner;
     std::vector<Entry> _entries;
     std::function<void(table::ViewChange const&)> _handler;
 };
@@ -574,6 +607,8 @@ struct RowsTable {
     std::shared_ptr<Bindings const> bindings;
     /// Whether the screen lists the table among those that keep a state.
     bool listed = false;
+    /// Whether the table is its element's own, whose `tableRows` reads its engine.
+    bool elementOwn = false;
     std::shared_ptr<ValueRowsSource> source;
     std::shared_ptr<EngineRows> engine;
     std::shared_ptr<PageRows> rows;
@@ -603,6 +638,15 @@ struct RowsTable {
     bool invalidReported = false;
     /// The engine's change not yet passed on to the mount.
     std::optional<table::ViewChange> pending;
+    /// What a new source and engine are made from: the columns, a row's key, the `group`'s `by`, the screen's unit
+    /// table and the units the rows brought that it does not list.
+    std::vector<ValueColumn> columns;
+    std::function<Key(Value const&)> keyOfRow;
+    std::function<Value(Value const&)> byOf;
+    UnitTable units;
+    std::set<std::string, std::less<>> unitsSeen;
+    /// What the table does on each change of its engine's view.
+    std::function<void(table::ViewChange const&)> heard;
     std::vector<std::unique_ptr<reactive::Effect>> effects;
     /// The table's saved views; none without persistence.
     std::unique_ptr<TableViews> views;
@@ -3796,7 +3840,6 @@ void ScreenCore::wireElement(ElementState& element) {
         }
         element.rowsTable = makeRowsTable(element, nullptr, true);
         element.view = element.rowsTable->view.get();
-        element.tableRows = element.rowsTable->engine;
     }
 }
 
@@ -8384,6 +8427,7 @@ Node ScreenCore::lowerRows(DocNode const& node, LowerCtx const& ctx, ElementStat
             return headingRow(node, ctx, row, std::move(key));
         }
         auto const scope = rowScope(node, ctx, row, cellContent, key);
+        std::erase_if(*registry, [](auto const& entry) { return entry.second.expired(); });
         (*registry)[std::move(key)] = scope;
         LowerCtx const rowCtx{.scope = scope, .bindings = ctx.bindings, .boundary = ctx.boundary};
         TableRowLook look;
@@ -8543,6 +8587,44 @@ Node ScreenCore::lowerRows(DocNode const& node, LowerCtx const& ctx, ElementStat
             runEvent(commands, ctx, selected);
         });
     };
+    // Select-all selects the engine's view, every page, through the table's selection; when every row of the view
+    // is selected already it clears them, as a short table's Ctrl+A does.
+    if (options.selectionMode == SelectionMode::Multiple) {
+        options.onSelectAll = [this, ctx, element, table, own, commands = node.event("onSelectionChange")] {
+            auto selection = table::Selection::create(table::SelectionOptions{
+                .mode = table::SelectionMode::Multiple, .pruneOnFilter = false, .tableMode = table::TableMode::Client});
+            if (!selection || !selection->selectAll(table->engine->engine())) {
+                return;
+            }
+            std::unordered_set<Key> held;
+            runtime().untracked([&] {
+                if (ValueList const* const items = tableSelection(*element).asList()) {
+                    for (Value const& item : *items) {
+                        held.insert(keyOf(item));
+                    }
+                }
+            });
+            bool const every = std::ranges::all_of(selection->keys(), [&held](table::RowId const& key) {
+                return held.contains(key);
+            });
+            ValueList items;
+            if (!every) {
+                for (table::RowId const& key : selection->keys()) {
+                    items.push_back(valueOfKey(key));
+                }
+            }
+            Value const selected{std::move(items)};
+            runtime().batch([&] {
+                if (element->bound == nullptr) {
+                    session.asUser([&] {
+                        session.noteWrite();
+                        element->selection.set(selected);
+                    });
+                }
+                runEvent(commands, ctx, selected);
+            });
+        };
+    }
     // The header marks the sort's first key; a sort that names no sortable column marks none.
     auto const columnIndex = [&node, derivedCount](std::string_view columnId) -> std::optional<std::size_t> {
         auto const parts = node.partList("columns");
@@ -8788,10 +8870,13 @@ namespace {
 }
 
 /// @brief The registry a table over `rows` reads its quantities' units from: each unit of the screen's table in the
-///        dimension of its canonical unit, and each canonical unit the table names but does not list.
+///        dimension of its canonical unit, each canonical unit the table names but does not list, and each unit the
+///        rows brought that the table does not know, which is its own canonical unit, as an expression reads it.
 /// @param units The screen's units.
+/// @param seen  The units the rows brought.
 /// @return The registry.
-[[nodiscard]] std::shared_ptr<table::UnitRegistry const> registryOfUnits(UnitTable const& units) {
+[[nodiscard]] std::shared_ptr<table::UnitRegistry const> registryOfUnits(
+    UnitTable const& units, std::set<std::string, std::less<>> const& seen) {
     table::UnitRegistryBuilder builder;
     auto const add = [&builder](std::string const& id, std::string const& canonical, math::Rational factor) {
         static_cast<void>(builder.add(table::UnitInfo{
@@ -8805,7 +8890,65 @@ namespace {
             add(info.canonical, info.canonical, math::Rational{1, math::DecimalPlaces{0}});
         }
     }
+    // A unit already added (a canonical one) is refused by the builder and keeps its first entry.
+    for (std::string const& id : seen) {
+        if (!units.contains(id)) {
+            add(id, id, math::Rational{1, math::DecimalPlaces{0}});
+        }
+    }
     return std::move(builder).build();
+}
+
+/// @brief Gives a table over `rows` a new source and engine over the units known now. The columns in use, the
+///        groups, the sort and whether the rows are held back carry over from the ones they replace; the caller
+///        assigns the rows.
+/// @param table   The table.
+/// @param runtime The screen's runtime.
+void startRowsEngine(RowsTable& table, reactive::Runtime& runtime) {
+    auto registry = registryOfUnits(table.units, table.unitsSeen);
+    auto source = std::make_shared<ValueRowsSource>(runtime, table.columns, table.keyOfRow, registry);
+    // The runs are the leading key of every sort the engine is given, a column the engine knows from its start.
+    if (table.byOf) {
+        source->setGroup(table.byOf, table.units);
+    }
+    table::EngineOptions options;
+    options.owner = &runtime.owner();
+    options.worker = nullptr;
+    options.frameBudget = std::chrono::milliseconds{4};
+    options.services.collator = std::make_shared<ValueRowsCollator const>();
+    options.services.units = registry;
+    auto engine = std::make_shared<EngineRows>(source, source->recordOf(), std::move(options));
+    bool const restoring = table.engine != nullptr && table.engine->restoring();
+    if (table.engine != nullptr) {
+        table.engine->onChange({});
+        for (std::string const& column : table.used) {
+            table.source->unuse(column);
+        }
+        if (table.byOf) {
+            table.source->setGroup({}, {});
+        }
+    }
+    for (std::string const& column : table.used) {
+        source->use(column);
+    }
+    engine->setRestoring(restoring);
+    table.source = std::move(source);
+    table.engine = engine;
+    if (table.rows != nullptr) {
+        table.rows->setEngine(engine);
+    } else {
+        table.rows = std::make_shared<PageRows>(engine, runtime.owner());
+    }
+    if (table.elementOwn) {
+        table.element->tableRows = engine;
+    }
+    engine->onChange(table.heard);
+    SortChain ordered;
+    if (table.byOf) {
+        ordered.push_back(table::SortKey{.column = std::string{kGroupRunColumn}, .dir = table::SortDirection::Ascending});
+    }
+    ordered.insert(ordered.end(), table.sort.begin(), table.sort.end());
+    static_cast<void>(engine->setSort(std::move(ordered)));
 }
 
 /// @brief A count of rows with its thousands grouped by commas, as a diagnostic writes it.
@@ -8839,7 +8982,6 @@ std::unique_ptr<RowsTable> ScreenCore::makeRowsTable(ElementState& element, std:
     if (node.flags.contains("status")) {
         table.status = node.flag("status");
     }
-    std::vector<ValueColumn> columns;
     for (DocNodePtr const& part : node.partList("columns")) {
         ValueColumn column{.id = part->id, .kind = columnKindNamed(part->name("kind")), .sortBy = {}};
         if (ExprPtr const sortBy = part->prop("sortBy")) {
@@ -8847,19 +8989,15 @@ std::unique_ptr<RowsTable> ScreenCore::makeRowsTable(ElementState& element, std:
                 return evaluate(*sortBy, ScopeEnv{scope, bindings.get(), &row});
             };
         }
-        columns.push_back(std::move(column));
+        table.columns.push_back(std::move(column));
     }
-    auto keyOfRow = [&scope, bindings, keyExpr = node.prop("key")](Value const& row) -> Key {
+    table.keyOfRow = [&scope, bindings, keyExpr = node.prop("key")](Value const& row) -> Key {
         if (!keyExpr) {
             Value const rowKey = rowId(row);
             return keyOf(rowKey.isNull() ? row : rowKey);
         }
         return keyOf(evaluate(*keyExpr, ScopeEnv{scope, bindings.get(), &row}));
     };
-    table.source = std::make_shared<ValueRowsSource>(runtime(), std::move(columns), std::move(keyOfRow),
-                                                     registryOfUnits(scope.formatting().units));
-    // The `group`'s `by`, read per row: its runs are the leading key of every sort the engine is given, a
-    // column the engine knows from its start.
     auto const groups = node.partList("group");
     ExprPtr const by = groups.empty() ? nullptr : groups.front()->prop("by");
     auto const byOf = [&scope, bindings, by](Value const& row) {
@@ -8867,15 +9005,22 @@ std::unique_ptr<RowsTable> ScreenCore::makeRowsTable(ElementState& element, std:
     };
     if (by) {
         table.grouped = true;
-        table.source->setGroup(byOf, scope.formatting().units);
+        table.byOf = byOf;
     }
-    table::EngineOptions options;
-    options.owner = &runtime().owner();
-    options.worker = nullptr;
-    options.frameBudget = std::chrono::milliseconds{4};
-    options.services.collator = std::make_shared<ValueRowsCollator const>();
-    table.engine = std::make_shared<EngineRows>(table.source, table.source->recordOf(), std::move(options));
-    table.rows = std::make_shared<PageRows>(table.engine);
+    table.units = scope.formatting().units;
+    table.elementOwn = persisted;
+    table.heard = [this, &table](table::ViewChange const& change) {
+        // Passed on as it is when the page is the whole view, else the page is rebuilt whole.
+        table.pending = table.pending ? table::ViewChange{} : change;
+        table.bump();
+        if (table.pending) {
+            // The page did not change, and so was not shown again: the mount still hears of the engine's rows.
+            table.pending.reset();
+            table.rows->reset();
+        }
+        rowsTableChanged(table);
+    };
+    startRowsEngine(table, runtime());
     if (persisted) {
         std::string qualifier = _doc->id;
         bool persists = true;
@@ -8896,11 +9041,6 @@ std::unique_ptr<RowsTable> ScreenCore::makeRowsTable(ElementState& element, std:
                                                   .part = "state"};
         }
     }
-    table.engine->onChange([this, &table](table::ViewChange const& change) {
-        static_cast<void>(change);
-        table.bump();
-        rowsTableChanged(table);
-    });
     table.view = std::make_unique<reactive::Computed<TableView>>(runtime(), [this, &table] { return tableView(table); });
     // The page the mount shows: rebuilt whenever the view or the page changes, each group's heading entry placed
     // before the first of its rows the page holds.
@@ -8922,8 +9062,15 @@ std::unique_ptr<RowsTable> ScreenCore::makeRowsTable(ElementState& element, std:
                 }
                 entries.push_back(PageRows::Entry{.key = engine.rowIdAt(index), .row = shown.rows.at(index)});
             }
+            bool const whole = shown.runOf.empty() && shown.first == 0 && shown.last == shown.rows.size();
             table::ViewChange change;
-            change.ops.push_back(table::ViewOp{.kind = table::ViewOp::Kind::Reset, .first = 0, .count = 0, .to = 0});
+            if (whole && table.pending && !table.pending->ops.empty()) {
+                change = *table.pending;
+            } else {
+                change.ops.push_back(
+                    table::ViewOp{.kind = table::ViewOp::Kind::Reset, .first = 0, .count = 0, .to = 0});
+            }
+            table.pending.reset();
             table.rows->show(std::move(entries), change);
         });
     }));
@@ -8943,6 +9090,26 @@ std::unique_ptr<RowsTable> ScreenCore::makeRowsTable(ElementState& element, std:
                 ValueList rows;
                 if (ValueList const* const items = value.asList()) {
                     rows = *items;
+                }
+                // A quantity in a unit the screen's table does not list is its own canonical unit: the source and
+                // the engine are made again over a registry that has it.
+                bool brought = false;
+                for (Value const& row : rows) {
+                    ValueRecord const* const fields = row.asRecord();
+                    if (fields == nullptr) {
+                        continue;
+                    }
+                    for (auto const& [name, field] : *fields) {
+                        static_cast<void>(name);
+                        if (auto const measure = detail::measureOf(field);
+                            measure && !table.units.contains(*measure->unit) &&
+                            table.unitsSeen.insert(*measure->unit).second) {
+                            brought = true;
+                        }
+                    }
+                }
+                if (brought) {
+                    startRowsEngine(table, runtime());
                 }
                 if (!table.boundReported && (rows.size() > kClientRows || rows.size() * parts > kClientCells)) {
                     table.boundReported = true;
@@ -9111,11 +9278,12 @@ void ScreenCore::storedRowsState(RowsTable& table, std::optional<std::string> co
     }
     if (!late) {
         // The rows come through once the engine's view is in the stored order: after the work the new sort posted.
-        runtime().owner().post(table.scope.token().guard([&table] {
+        bool const timed = session.options().scheduler != nullptr;
+        runtime().owner().post(table.scope.token().guard([&table, timed] {
             if (!table.waiting) {
                 return;
             }
-            if (table.engine->engine().pending()) {
+            if (table.engine->engine().pending() && timed) {
                 table.releasing = true;
                 return;
             }
@@ -9582,9 +9750,11 @@ void ScreenCore::tableSaveFailed(table::TableStateKey const& key, table::SaveRes
                                  : "The table's arrangement could not be saved: " + result.reason;
     std::vector<ElementState*> tables;
     for (ElementState* const element : modelTables) {
-        std::optional<table::TableStateKey> const& held =
-            element->modelTable != nullptr ? element->modelTable->stateKey : element->rowsTable->stateKey;
-        if (held == key) {
+        std::optional<table::TableStateKey> const* const held =
+            element->modelTable != nullptr ? &element->modelTable->stateKey
+            : element->rowsTable != nullptr ? &element->rowsTable->stateKey
+                                            : nullptr;
+        if (held != nullptr && *held == key) {
             tables.push_back(element);
         }
     }

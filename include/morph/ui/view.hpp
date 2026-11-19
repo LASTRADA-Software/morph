@@ -1477,6 +1477,10 @@ struct Table {
     Prop<std::optional<CellRef>> focus;
     /// @brief Called with the cell the user's keys moved focus to, once its row is fetched.
     std::function<void(std::optional<CellRef>)> onFocusCell;
+    /// @brief Called, in place of `onSelectionChange`, when the user asks a `Multiple` table to select every row
+    ///        (`Ctrl+A`): the handler selects the whole view, rows the backend does not hold included. Empty: the
+    ///        backend selects the rows it holds and reports them through `onSelectionChange`.
+    std::function<void()> onSelectAll;
 };
 
 /// @brief A date, or a date and time, edited in a display zone and reported as an instant.
@@ -2270,6 +2274,10 @@ struct TableOptions {
     Prop<std::optional<CellRef>> focus;
     /// @brief Called with the cell the user's keys moved focus to, once its row is fetched.
     std::function<void(std::optional<CellRef>)> onFocusCell;
+    /// @brief Called, in place of `onSelectionChange`, when the user asks a `Multiple` table to select every row
+    ///        (`Ctrl+A`): the handler selects the whole view, rows the backend does not hold included. Empty: the
+    ///        backend selects the rows it holds and reports them through `onSelectionChange`.
+    std::function<void()> onSelectAll;
 };
 
 /// @brief What a table's row view builds for one row: its cells, one per column, and its tone.
@@ -2378,6 +2386,7 @@ template <typename RowT>
     spec.onSelectRange = std::move(options.onSelectRange);
     spec.focus = std::move(options.focus);
     spec.onFocusCell = std::move(options.onFocusCell);
+    spec.onSelectAll = std::move(options.onSelectAll);
     return detail::makeNode(std::move(spec));
 }
 
@@ -2415,6 +2424,7 @@ template <typename RowT>
     spec.onSelectRange = std::move(options.onSelectRange);
     spec.focus = std::move(options.focus);
     spec.onFocusCell = std::move(options.onFocusCell);
+    spec.onSelectAll = std::move(options.onSelectAll);
     return detail::makeNode(std::move(spec));
 }
 

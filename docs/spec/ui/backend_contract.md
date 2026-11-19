@@ -453,6 +453,10 @@ the list it refers to may arrive in either order.
   | Ctrl+A | goes on outwards | selects every row; with every row selected already, clears them | `Extend` |
   | Enter | activates the current row | activates the current row | — |
 
+  A table given `setOnSelectAll` calls it for Ctrl+A in place of selecting and reporting: the caller selects its
+  whole view, rows the backend does not hold included, and sets the selection back. The recording backend takes
+  it; a backend that does not, selects as the table above says.
+
   A **select column** (`setSelectColumn(true)`) draws the same selection as a leading column of check boxes. A row's
   box is checked while the row is selected, and toggling it is a Ctrl-click on the row. The header box is checked
   while every row shown is selected, partly checked while some are, clear while none are, and disabled while the
