@@ -19,6 +19,7 @@
 #include <QStringList>
 #include <QTest>
 #include <QVariantList>
+#include <QtGlobal>
 #include <algorithm>
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
@@ -1890,6 +1891,7 @@ struct QuickWindowOptions {
     bool wrap = true;
     std::vector<Level> levels;
     ui::SelectionMode selection = ui::SelectionMode::None;
+    bool selectColumn = false;
 };
 
 std::string groupedCount(std::int64_t n) {
@@ -1958,6 +1960,7 @@ struct QuickWindowFixture {
         tableOptions.status = [this] { return status.get(); };
         tableOptions.onRetry = [this] { ++retries; };
         tableOptions.selectionMode = options.selection;
+        tableOptions.selectColumn = options.selectColumn;
         tableOptions.onSelectRange = [this](std::size_t anchor, std::size_t focus, ui::SelectionChange change) {
             ranges.emplace_back(anchor, focus, change);
         };
@@ -2221,6 +2224,8 @@ TEST_CASE("qt_quick table window: a tap keeps the focus on the table, and the st
     REQUIRE(row != nullptr);
     f.scene.click(*row);
     CHECK(f.item()->hasActiveFocus());
+#if QT_VERSION >= QT_VERSION_CHECK(6, 8, 0)
+    // Announcements are Qt 6.8's.
     static std::vector<QString> announced;
     announced.clear();
     QAccessible::installUpdateHandler([](QAccessibleEvent* event) {
@@ -2234,6 +2239,18 @@ TEST_CASE("qt_quick table window: a tap keeps the focus on the table, and the st
     QTest::qWait(700);  // the announcement waits for the text to hold half a second
     QAccessible::installUpdateHandler(nullptr);
     CHECK(std::ranges::contains(announced, QStringLiteral("100,000 rows  Copied 2 rows")));
+#endif
+}
+
+// Mutation: the select-all box over a source selecting the realized rows (`TableImpl::selectAll`: no range reaches
+// the mount).
+TEST_CASE("qt_quick table window: the select-all box selects the view through the mount", "[qt_quick]") {
+    QuickWindowFixture f{100'000, 30, {.selection = ui::SelectionMode::Multiple, .selectColumn = true}};
+    auto* const box = f.item()->findChild<QQuickItem*>(QStringLiteral("selectAll"));
+    REQUIRE(box != nullptr);
+    f.scene.click(*box);
+    REQUIRE_FALSE(f.ranges.empty());
+    CHECK(f.ranges.back() == std::tuple{std::size_t{0}, std::size_t{99'999}, ui::SelectionChange::Extend});
 }
 
 // Mutation: Shift with an arrow over a source handled by the realized rows (no range reaches the mount).

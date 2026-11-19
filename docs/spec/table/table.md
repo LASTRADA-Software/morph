@@ -1808,7 +1808,9 @@ and filters go where the mode puts them.
   scroll with the rest, and the stored count is not changed. At 300 columns this is what keeps a row's name
   beside whichever of its values the user has scrolled to.
 - **Resize.** Dragging a header's trailing edge sets the column's width in units; a width the user set stays as
-  set, whatever the cells measure. Double-clicking the edge removes it, and the column takes its declared
+  set, whatever the cells measure. A stored width is the content's, as a declared fixed width is: each backend adds
+  its own padding around it (`TableMeasure::padding`: Qt Quick's cell padding, the terminal's gap), so a stored
+  layout means the same on every backend. Double-clicking the edge removes it, and the column takes its declared
   width again.
 - **Reset.** "Reset columns" restores the declared order, visibility, pinning and widths.
 

@@ -601,6 +601,8 @@ Needs Tasks 9 and 15. Four commits, each its own reviewer gate.
 
 ### Task 17a: A selection of the view
 
+**Takes over Ctrl+A and the select-all box.** Until this task, Ctrl+A and the select-all box over a source table go to `setOnSelectRange` over every row of the view (Task 10b), which the lowering refuses past `SessionOptions::maxRangeRows`. That refusal is interim: this task routes both, in Qt Quick and the terminal, to the whole-view selection (`setOnSelectAll`), which needs no keys and has no such bound, and removes the range path for them.
+
 **Spec:** "A selection of the view" (2264–2357); test rows "A selection of the view", "Resolving from elsewhere", "The view revision is membership", "Copy of a selection of the view"; invariants 33, 34; failure modes 3314–3315.
 
 **Files:**

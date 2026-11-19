@@ -370,8 +370,8 @@ fire `focusMove` with the `FocusMove`, Space and Enter act on the focused row wh
 writes `focusedRowIndex` and `focusedColumnIndex`, brings them into view (`showFocusCell`) and makes that row
 `current`. A tap does not move the mount's focused cell: no seam carries a pointer's cell. **Ranges.** Shift with Up
 or Down moves the focus and fires `selectRange` from the anchor (`anchorRowIndex`: the row last tapped or toggled, or
-the one the focus left) to the focused row; a Shift-tap fires it to the tapped row; Ctrl+A fires it over every row of
-the view, as `Extend`. `TableImpl` passes them to `setOnSelectRange`, which resolves them over rows not realized and
+the one the focus left) to the focused row; a Shift-tap fires it to the tapped row; Ctrl+A and the select-all box
+fire it over every row of the view, as `Extend`. `TableImpl` passes them to `setOnSelectRange`, which resolves them over rows not realized and
 refuses one past `maxRangeRows`; each is `multiple` only. `setCounts` writes
 `accessibleRowCount` (-1 for a lower bound) and `accessibleColumnCount`; `Accessible` has no row or column count to
 put them in, so they are properties only. **Load states.** `setCellLoad` writes the row's `cellLoads`; a cell not
@@ -666,7 +666,7 @@ software scene graph:
   cell draws its placeholder and a failed one its mark, neither widening the column; a row's height only grows while
   it is realized, and a table of one-line columns measures none; a row growing above the view keeps the rows in view
   where they are; a windowed fixed column is as wide as an unwindowed one; a tap keeps the focus on the table and the
-  status line is announced; Shift with an arrow and Ctrl+A select through the mount.
+  status line is announced (from Qt 6.8); Shift with an arrow, Ctrl+A and the select-all box select through the mount.
 - **qmllint** over every `MorphUi` component, through the module's lint target, failing on any warning
   (`tests/qt_quick/run_qmllint.cmake`).
 
