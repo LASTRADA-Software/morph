@@ -597,8 +597,9 @@ struct ChatService::Shared {
     }
 
     // Answers @p deliver with @p onTimeout when the call's time is up. The timer holds the turn and the service weakly
-    // and hands the answer to the worker, so no reference to either is ever released on the timer's own thread, which
-    // would join itself if it were the last.
+    // and hands the answer to the worker. The timer's thread may still end up releasing the last reference to either,
+    // which destroys the scheduler from its own callback; that is safe because `TimeoutScheduler::fire` touches
+    // nothing after running the callback, and `~IoLoop` detaches instead of joining when it runs on its own thread.
     template <typename Value>
     static void armDeadline(std::shared_ptr<Shared> const& self, TurnPtr const& turn,
                             std::function<void(Value)> const& deliver, Value onTimeout) {

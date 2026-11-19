@@ -96,8 +96,7 @@ using ChatToolOfferDone = std::function<void(ChatToolOffer)>;
 using ChatToolHandler = std::function<void(ChatToolContext, Json, ChatToolDone)>;
 
 /// @brief Answers whether this turn may call a tool, once at its start. Invoked on the turn's worker. An offer that
-/// has
-///        not answered within `ChatLimits::toolCallTimeout` counts as declined.
+///        has not answered within `ChatLimits::toolCallTimeout` counts as declined.
 using ChatToolOfferer = std::function<void(ChatToolContext, ChatToolOfferDone)>;
 
 /// @brief Rewrites a call's arguments into what the conversation keeps of it; sees the arguments as JSON text and

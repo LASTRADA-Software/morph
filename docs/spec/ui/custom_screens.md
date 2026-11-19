@@ -370,6 +370,15 @@ go. No call names a person.
   workspace ignores every answer asked under the old one.
 - **Discard** mounts the screen's own document again (`discardDraft`), fetching a custom screen's first when the cache
   no longer holds it.
+- **The assistant's draft.** `proposeDraft(tab, screenId, text)` mounts a document the assistant proposed as the
+  tab's draft the way **Preview** mounts an edit: the client loads it, and the draft bar, the generation and the
+  unsaved state are the same, so a second proposal replaces the first and **Discard** restores the screen. The server
+  checked the document before proposing it, so it is not asked again. It does nothing, and tells nobody, when custom
+  screens are not offered, the tab is closed, or the tab no longer shows `screenId`; a document the client cannot load
+  or mount is reported with a warning toast and the tab stays as it was. A source view open on the tab is closed, since
+  its text is the one the draft replaced. The shell calls it only for the tab the turn was started in. `draftOf(tab)`
+  gives the text of the draft a tab holds, or nothing for a tab with no draft or a closed one; the shell sends it as the
+  next turn's draft, bounded by the default `ChatLimits::maxProposalBytes` ([`chat.md`](chat.md#the-panel)).
 - **One draft per window**: a new preview replaces the tab's draft. Closing a tab with a draft goes to the shell's
   close guard, since the handle is dirty while a draft is up.
 - **Open as** is offered on a screen whose base takes params, when the list holds custom screens of that base: the

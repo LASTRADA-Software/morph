@@ -80,9 +80,8 @@ public:
     /// @param host    The vocabulary. Borrowed: it outlives this binding.
     /// @param client  The client. Borrowed: it outlives this binding.
     /// @param context Where the person is now: the open screen's context, with no text. Read at each send, so a
-    /// message
-    ///                goes to the screen they are looking at when they send it. Nothing for a screen with no document
-    ///                behind it, such as a host screen, which disables the input.
+    ///                message goes to the screen they are looking at when they send it. Nothing for a screen with no
+    ///                document behind it, such as a host screen, which disables the input.
     /// @param origin  What the client hands back with each draft the turn proposes (`ChatClient::send`): read at each
     ///                send, with the context, so it names the tab the message goes from. May be empty, which is 0.
     /// @param draft   The text of the draft the open screen holds, read at each send and carried as the turn's

@@ -69,14 +69,13 @@ struct CustomScreenChromeOptions {
 ///
 /// For each document screen's tab, `chromeFor` gives a draft bar, shown while the tab holds a draft (Save for a draft
 /// of the person's own custom screen, Save as…, Source and Discard, and the last refusal of a save), and a row with
-/// the
-/// **Source** button, shown while it does not. **Source** opens the source view, an overlay with the document's JSON
-/// pretty-printed: read only while custom screens are not offered. **Preview** loads the text in the client, asks the
-/// server's `check`, and mounts what passes as the tab's draft (`DocumentScreenHost::mountDraft`); a refusal is shown
-/// with the line its pointer names, and choosing it moves the cursor there; the editor is read only while the check
-/// runs, so the draft is exactly the text previewed. **Save as…** asks a name, saves, and opens the saved screen in
-/// the tab's place. A reply to a save acts only on the draft that was saved: a tab that holds a newer draft, or none,
-/// keeps it and the person is told. Everything runs on the runtime's owner. Neither copyable nor movable.
+/// the **Source** button, shown while it does not. **Source** opens the source view, an overlay with the document's
+/// JSON pretty-printed: read only while custom screens are not offered. **Preview** loads the text in the client, asks
+/// the server's `check`, and mounts what passes as the tab's draft (`DocumentScreenHost::mountDraft`); a refusal is
+/// shown with the line its pointer names, and choosing it moves the cursor there; the editor is read only while the
+/// check runs, so the draft is exactly the text previewed. **Save as…** asks a name, saves, and opens the saved screen
+/// in the tab's place. A reply to a save acts only on the draft that was saved: a tab that holds a newer draft, or
+/// none, keeps it and the person is told. Everything runs on the runtime's owner. Neither copyable nor movable.
 class MORPH_API CustomScreenChrome {
 public:
     /// @brief The chrome.

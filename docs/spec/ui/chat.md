@@ -238,6 +238,10 @@ session. It runs on the owner, and takes the source's exchange, the current sess
   turn on the server. What was shown stays, and the server's conversation continues from the next turn.
 - **`end` calls back whatever happens**, including when the exchange fails, so a sign-out never waits on a dead
   connection.
+- **A draft goes back to the tab that asked.** `send` takes an opaque `origin`, which the client hands back with each
+  draft the turn proposes (`onDraft`, once per distinct document, whether the `draft` event or the turn's state brought
+  it first). The shell uses it to name the tab, so a draft the assistant proposes belongs to the tab the turn started
+  in even when the person has since moved to another.
 
 ## The panel
 
@@ -251,6 +255,13 @@ owns: the values `chat.entries`, `chat.running`, `chat.onScreen` and `chat.canSe
 their own session, and every action they lead to is checked on the server. The binding reads where the person is at each
 send, so a message goes to the screen they are looking at when they send it. A screen with no document behind it, such as
 the explorer, disables the input.
+
+A screen's own draft is part of where the person is: the shell reads the draft the active tab holds at each send and
+carries it as `TurnRequest::draft` (`CustomScreenChrome::draftOf`), or nothing for a tab with no draft. The client bounds
+it with the default `ChatLimits` (`maxProposalBytes`) and sends none when the draft is over the bound, which the server
+would refuse. A draft the assistant proposes is mounted through the custom-screen chrome's draft path
+([`custom_screens.md`](custom_screens.md#the-client): `CustomScreenChrome::proposeDraft`) for the turn's own tab only,
+and only while that tab is open and still shows the screen the turn was about; the next turn then carries that draft.
 
 The client shell mounts the document in `ShellFrame::chatSlot()`. It shows the slot only after a probe finds a chat, selects the
 active tab's conversation as tabs change, and forwards the source's events and reconnects to the `ChatClient`. A sign-out
