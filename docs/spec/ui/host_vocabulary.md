@@ -93,7 +93,9 @@ refuses, with a reported problem, a server document whose `id` differs from its 
 whose id is the chat panel's, `morph.chat`; the panel's document is resolved from the client's own generated documents
 only, never from the server's. `UiRegistry` also refuses the id for an application's screen, but that is the server's
 check and a client does not rely on it. A name limited to the panel therefore reaches the client's own panel document
-and nothing else, among the documents the shell loads from a server's bundle.
+and nothing else, among the documents the shell loads from a server's bundle, at start-up, at a sign-in or sign-out,
+and on a development reload alike: `servedScreenRefusal` and `servedDocumentRefusal` are the one check, used by the
+shell's load and by `reloadDocuments`, so every host gets it. A refused reload keeps the old document and is reported.
 
 ## The handshake
 

@@ -430,6 +430,12 @@ public:
         std::function<std::expected<std::shared_ptr<ui::ServedBundle const>, ui::Refusal>()> bundle = &signedInBundle)
         : _bundle{std::move(bundle)} {}
     ~ChatSource() override { close(); }
+
+    /// Makes the server answer from @p bundle from now on, as a redeploy does.
+    /// @param bundle The new bundle.
+    void redeploy(std::shared_ptr<ui::ServedBundle const> bundle) {
+        _service = std::make_shared<ui::UiService>(std::move(bundle), morph::model::detail::defaultDispatcher());
+    }
     ChatSource(ChatSource const&) = delete;
     ChatSource& operator=(ChatSource const&) = delete;
     ChatSource(ChatSource&&) = delete;
@@ -979,7 +985,7 @@ struct ChatRig {
     explicit ChatRig(bool offered = true,
                      std::function<std::expected<std::shared_ptr<ui::ServedBundle const>, ui::Refusal>()> bundle =
                          &signedInBundle,
-                     std::string startScreen = "probe.env")
+                     std::string startScreen = "probe.env", bool dev = false)
         : source{std::move(bundle)} {
         bool const startScreenIsEnv = startScreen == "probe.env";
         source.chatOffered = offered;
@@ -991,7 +997,8 @@ struct ChatRig {
         shell = client::mountShell(
             context, backend, std::move(*opened), source,
             client::ShellOptions{.startScreen = std::move(startScreen),
-                                 .onProblem = [this](std::string const& text) { problems.push_back(text); }});
+                                 .onProblem = [this](std::string const& text) { problems.push_back(text); },
+                                 .dev = dev});
         if (startScreenIsEnv) {
             REQUIRE(pumpUntil(context.owner(), [this] { return shown(backend, "online") == "on"; }));
         }
@@ -1326,8 +1333,7 @@ TEST_CASE("a_server_document_that_names_another_id_than_its_entry_is_refused", "
     CHECK(honest.problems.empty());
 
     ChatRig rig{true, [kForged] { return forgedBundle("lims.x", std::string{kForged}); }, "lims.x"};
-    static_cast<void>(pumpUntil(rig.context.owner(), [] { return false; }, std::chrono::milliseconds{50}));
-    CHECK(reportedProblem(rig, "the document of `lims.x` names the id `morph.chat`"));
+    CHECK(pumpUntil(rig.context.owner(), [&rig] { return reportedProblem(rig, "the document of `lims.x` names the id `morph.chat`"); }));
     CHECK(shown(rig.backend, "forged").empty());
     CHECK(rig.panelShown());
 }
@@ -1338,8 +1344,41 @@ TEST_CASE("a_catalog_that_lists_the_chat_panels_id_does_not_replace_the_panel", 
     constexpr std::string_view kImpostor =
         R"({"vocab":"ui/1","id":"morph.chat","view":{"kind":"text","testId":"impostor","text":"impostor"}})";
     ChatRig rig{true, [kImpostor] { return forgedBundle("morph.chat", std::string{kImpostor}); }};
-    static_cast<void>(pumpUntil(rig.context.owner(), [] { return false; }, std::chrono::milliseconds{50}));
-    CHECK(reportedProblem(rig, "which is the chat panel's"));
+    CHECK(pumpUntil(rig.context.owner(), [&rig] { return reportedProblem(rig, "which is the chat panel's"); }));
     CHECK(shown(rig.backend, "impostor").empty());
+    CHECK(rig.backend.find("TextInput", "testId", "chat_input").has_value());
+}
+
+namespace {
+
+/// A document for "lims.x" that shows @p text under the test id `doc`, and names the id @p id.
+std::string limsDocument(std::string_view id, std::string_view text) {
+    return R"({"vocab":"ui/1","id":")" + std::string{id} + R"(","view":{"kind":"text","testId":"doc","text":")" +
+           std::string{text} + R"("}})";
+}
+
+}  // namespace
+
+// Mutation: drop either refusal from reloadDocuments (the forged document remounts the open tab and shows
+// "forged", or the chat panel's id is taken from the server without a report).
+TEST_CASE("a_development_reload_refuses_a_forged_id_and_the_chat_panels_id", "[client][chat][dev-reload]") {
+    ChatRig rig{
+        true, [] { return forgedBundle("lims.x", limsDocument("lims.x", "honest")); }, "lims.x", true};
+    REQUIRE(pumpUntil(rig.context.owner(), [&rig] { return shown(rig.backend, "doc") == "honest"; }));
+    auto const redeploy = [&rig](std::string const& entryId, std::string const& text, std::string_view reported) {
+        auto bundle = forgedBundle(entryId, text);
+        REQUIRE(bundle.has_value());
+        rig.source.redeploy(std::move(*bundle));
+        return pumpUntil(rig.context.owner(), [&rig, reported] {
+            rig.context.clock().advance(std::chrono::seconds{1});
+            return reportedProblem(rig, reported);
+        });
+    };
+
+    CHECK(redeploy("lims.x", limsDocument("morph.chat", "forged"), "reload refused: document lims.x at /: the document of `lims.x` names the id `morph.chat`"));
+    CHECK(shown(rig.backend, "doc") == "honest");
+
+    CHECK(redeploy("morph.chat", limsDocument("morph.chat", "impostor"), "reload refused: document morph.chat at /: the catalog lists the id `morph.chat`"));
+    CHECK(shown(rig.backend, "doc") != "impostor");
     CHECK(rig.backend.find("TextInput", "testId", "chat_input").has_value());
 }

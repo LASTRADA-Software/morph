@@ -5,6 +5,7 @@
 #include <functional>
 #include <map>
 #include <memory>
+#include <optional>
 #include <span>
 #include <string>
 #include <string_view>
@@ -12,6 +13,7 @@
 #include <vector>
 
 #include "bundle.hpp"
+#include "chat/panel.hpp"
 #include "document.hpp"
 #include "frontend.hpp"
 #include "host.hpp"
@@ -64,6 +66,40 @@ using DocumentMap = std::map<std::string, std::shared_ptr<Document const>, std::
     return changed;
 }
 
+/// @brief Why a server's catalog entry may not be mounted as a screen, when it may not.
+///
+/// The chat panel's id carries host values and commands no other document may reach, so the panel is the client's
+/// own document and never a server's.
+/// @param screenId The catalog entry's id.
+/// @return The refusal when @p screenId is the chat panel's, otherwise nothing.
+[[nodiscard]] inline std::optional<Refusal> servedScreenRefusal(std::string const& screenId) {
+    if (screenId == chat::kChatPanelId) {
+        return Refusal{.document = screenId,
+                       .path = {},
+                       .reason = "the catalog lists the id `" + std::string{chat::kChatPanelId} +
+                                 "`, which is the chat panel's; the entry is refused"};
+    }
+    return std::nullopt;
+}
+
+/// @brief Why a loaded server document may not be mounted under its catalog entry, when it may not.
+///
+/// Host names are scoped by the id a mounted document carries, so a document that names another id than its entry
+/// could take that id's scope.
+/// @param screenId   The catalog entry's id.
+/// @param documentId The id the loaded document names.
+/// @return The refusal when the ids differ, otherwise nothing.
+[[nodiscard]] inline std::optional<Refusal> servedDocumentRefusal(std::string const& screenId,
+                                                                  std::string const& documentId) {
+    if (documentId != screenId) {
+        return Refusal{.document = screenId,
+                       .path = {},
+                       .reason = "the document of `" + screenId + "` names the id `" + documentId +
+                                 "`; it is refused"};
+    }
+    return std::nullopt;
+}
+
 /// @brief A mounted screen a reload may remount.
 struct MountedScreen {
     /// @brief The screen id it was mounted from.
@@ -88,7 +124,8 @@ struct ReloadOutcome {
 /// `DocumentScreenHost::remount`, on every screen of @p mounted showing it, which keeps each state of the screen's own
 /// scope declared under the same name and type. A screen showing a draft (`DocumentScreenHost::mountDraft`) is left as
 /// it is. A remount the interpreter refuses keeps that screen on the old document, and keeps the old document in @p
-/// documents. A changed id the bundle no longer holds, and the app document, which is the session's root scope and not
+/// documents. A changed id that is the chat panel's, and a document that names another id than its screen's, are
+/// refused the same way. A changed id the bundle no longer holds, and the app document, which is the session's root scope and not
 /// a screen (`DocumentScreenHost::mountApp`), change nothing here.
 /// @param changed   The ids of the changed documents (`changedDocuments`).
 /// @param bundle    The new bundle's documents.
@@ -106,7 +143,17 @@ struct ReloadOutcome {
         if (screenId == "app" || text == bundle.documents.end()) {
             continue;
         }
+        if (auto refusal = servedScreenRefusal(screenId)) {
+            outcome.refused.push_back(std::move(*refusal));
+            continue;
+        }
         auto loaded = loadDocumentText(text->second, options);
+        if (loaded) {
+            if (auto refusal = servedDocumentRefusal(screenId, loaded->id)) {
+                outcome.refused.push_back(std::move(*refusal));
+                continue;
+            }
+        }
         if (!loaded) {
             Refusal refusal = std::move(loaded.error());
             if (refusal.document.empty()) {

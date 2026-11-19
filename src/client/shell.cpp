@@ -1102,11 +1102,8 @@ private:
             }
         }
         for (std::string const& screenId : _source->screens()) {
-            // The chat panel is the client's own document, never a server's: its id carries host values and
-            // commands no other document may reach.
-            if (screenId == ui::chat::kChatPanelId) {
-                problem("the catalog lists the id `" + std::string{ui::chat::kChatPanelId} +
-                        "`, which is the chat panel's; the entry is refused");
+            if (auto refusal = ui::servedScreenRefusal(screenId)) {
+                problem(refusal->message());
                 continue;
             }
             auto loaded = ui::loadDocumentText(bundle.documents.at(screenId), ui::LoadOptions{.catalog = catalog});
@@ -1114,10 +1111,8 @@ private:
                 problem(loaded.error().message());
                 continue;
             }
-            // Host names are scoped by the document's own id, so a document that names another id than its catalog
-            // entry could take that id's scope.
-            if (loaded->id != screenId) {
-                problem("the document of `" + screenId + "` names the id `" + loaded->id + "`; it is refused");
+            if (auto refusal = ui::servedDocumentRefusal(screenId, loaded->id)) {
+                problem(refusal->message());
                 continue;
             }
             _documents.emplace(screenId, std::make_shared<ui::Document const>(std::move(*loaded)));
