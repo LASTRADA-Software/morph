@@ -18,6 +18,7 @@
 #include <set>
 #include <span>
 #include <stdexcept>
+#include <stop_token>
 #include <string>
 #include <string_view>
 #include <type_traits>
@@ -2113,6 +2114,7 @@ private:
         SourceTable() = default;
         // The rows go last first, as a container's children do.
         ~SourceTable() {
+            focusLocate.request_stop();
             while (!realized.empty()) {
                 realized.pop_back();
             }
@@ -2157,9 +2159,11 @@ private:
         // The focused row left the view: focus goes to the row now at its index.
         bool focusLeft = false;
         // A reset moved the focused or highlighted key where no realized row has it yet: each pass looks for it
-        // until a row has it, or the user moves focus or the highlight changes.
+        // until a row has it, or the user moves focus or the highlight changes. Focus also asks the rows where its
+        // key is, an ask `focusLocate` stops, and their answer ends its search.
         bool focusSearching = false;
         bool highlightSearching = false;
+        std::stop_source focusLocate;
         // The view's row count at the end of the last pass: an index at or past it names no row a change can move.
         std::size_t lastCount = 0;
         std::size_t focusColumn = 0;
@@ -2806,23 +2810,12 @@ private:
         }
         if (table.focused && table.focusSearching) {
             if (std::optional<std::int64_t> const now = placeOfKey(table, *table.focusKey, table.focusIndex)) {
+                table.focusLocate.request_stop();
                 table.focusSearching = false;
                 table.focusIndex = *now;
                 table.widget->setFocusCell(static_cast<std::size_t>(*now), table.focusColumn);
-                return;
             }
-            if (!settled(table, total)) {
-                return;
-            }
-            // The rows settled without the key: it left the view. Focus goes to the row now at its index, or the
-            // last, as for a removed row.
-            table.focusSearching = false;
-            table.focusLeft = true;
-            std::int64_t const last = std::max<std::int64_t>(total.rows - 1, 0);
-            if (table.focusIndex > last) {
-                table.focusIndex = last;
-                table.widget->setFocusCell(static_cast<std::size_t>(last), table.focusColumn);
-            }
+            return;
         }
         if (table.focused) {
             std::optional<TableRowRef> const ref = table.source.rows->row(table.focusIndex);
@@ -2836,13 +2829,37 @@ private:
         }
     }
 
-    // Whether the rows have settled: the total is known and every realized row is fetched, so a key no realized row
-    // has is not among them.
-    [[nodiscard]] static bool settled(SourceTable const& table, TableTotal const& total) {
-        TableRows const& rows = *table.source.rows;
-        return total.known && std::ranges::all_of(table.realized, [&rows](SourceTable::Realized const& row) {
-                   return rows.row(row.index).has_value();
-               });
+    // Asks the rows where the focused key is now, stopping an earlier ask.
+    void locateFocus(SourceTable& table) {
+        table.focusLocate.request_stop();
+        table.focusLocate = std::stop_source{};
+        std::stop_token const stop = table.focusLocate.get_token();
+        table.source.rows->locateRow(
+            *table.focusKey, stop, [this, &table, stop, alive = std::weak_ptr{table.alive}](RowLocation const& found) {
+                if (alive.expired() || stop.stop_requested()) {
+                    return;
+                }
+                static_cast<void>(runCallback(*_rt, [&] { focusLocated(table, found); }));
+            });
+    }
+
+    // The rows' answer to where the focused key is. A key in the view takes focus at its index, its row kept
+    // realized wherever it is; a key the view lacks has left it, and focus goes to the row now at its index, or the
+    // last, as for a removed row. An answer the rows could not give leaves focus looking among the realized rows.
+    void focusLocated(SourceTable& table, RowLocation const& found) {
+        if (!table.focused || !table.focusSearching || !found) {
+            return;
+        }
+        table.focusSearching = false;
+        std::int64_t const last = std::max<std::int64_t>(table.source.rows->total().rows - 1, 0);
+        if (*found && **found >= 0) {
+            table.focusIndex = **found;
+        } else {
+            table.focusLeft = true;
+            table.focusIndex = std::min(table.focusIndex, last);
+        }
+        realizeWindow(table, [](std::int64_t) { return false; });
+        table.widget->setFocusCell(static_cast<std::size_t>(table.focusIndex), table.focusColumn);
     }
 
     void reportFocus(SourceTable const& table) {
@@ -2948,6 +2965,7 @@ private:
         }
         table.focused = true;
         table.focusSearching = false;
+        table.focusLocate.request_stop();
         table.focusIndex = index;
         table.focusColumn = table.visible.at(place);
         std::optional<TableRowRef> const ref = table.source.rows->row(index);
@@ -2981,6 +2999,7 @@ private:
         }
         table.focused = true;
         table.focusSearching = false;
+        table.focusLocate.request_stop();
         table.focusKey = cell->key;
         table.focusIndex = row->index;
         table.focusColumn = static_cast<std::size_t>(column - table.columns.begin());
@@ -3030,11 +3049,12 @@ private:
 
     // Follows the focused and the highlighted rows through a change of the rows. A reset (a new sort, filter or
     // description) gives no places, and the rows may come back later (a server's pages are dropped first), so a key
-    // no realized row has is looked for after each pass until one has it, or, for focus, until the rows settle
-    // without it; meanwhile the highlight shows no mark and focus stays on its key. An index at or past the row count
-    // before the change names no row, so nothing moves it; after a reset no row is counted until the next pass, so a
-    // first page that arrives before it moves nothing either.
-    static void follow(SourceTable& table, table::ViewChange const& change) {
+    // no realized row has is looked for after each pass until one has it; meanwhile the highlight shows no mark and
+    // focus stays on its key. Focus also asks the rows where its key is, since a new order can move it far from the
+    // rows realized; only their answer that the view lacks it moves focus to another row. An index at or past the
+    // row count before the change names no row, so nothing moves it; after a reset no row is counted until the next
+    // pass, so a first page that arrives before it moves nothing either.
+    void follow(SourceTable& table, table::ViewChange const& change) {
         bool const reset = std::ranges::any_of(
             change.ops, [](table::ViewOp const& op) { return op.kind == table::ViewOp::Kind::Reset; });
         if (reset) {
@@ -3062,19 +3082,22 @@ private:
                 table.widget->setHighlightedRow(std::nullopt);
             }
         }
+        if (table.focused && reset && table.focusKey) {
+            if (std::optional<std::int64_t> const now = placeOfKey(table, *table.focusKey, table.focusIndex)) {
+                table.focusLocate.request_stop();
+                table.focusSearching = false;
+                if (*now != table.focusIndex) {
+                    table.focusIndex = *now;
+                    table.widget->setFocusCell(static_cast<std::size_t>(*now), table.focusColumn);
+                }
+            } else {
+                table.focusSearching = true;
+                locateFocus(table);
+            }
+            return;
+        }
         if (table.focused && !table.focusSearching) {
             std::int64_t const last = std::max<std::int64_t>(table.source.rows->total().rows - 1, 0);
-            if (reset && table.focusKey) {
-                if (std::optional<std::int64_t> const now = placeOfKey(table, *table.focusKey, table.focusIndex)) {
-                    if (*now != table.focusIndex) {
-                        table.focusIndex = *now;
-                        table.widget->setFocusCell(static_cast<std::size_t>(*now), table.focusColumn);
-                    }
-                } else {
-                    table.focusSearching = true;
-                }
-                return;
-            }
             // A focused row the change removed leaves focus at its view index, on the row now there, or the last.
             std::optional<std::int64_t> const now = followed(table.focusIndex);
             table.focusLeft = table.focusLeft || !now.has_value();

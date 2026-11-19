@@ -114,6 +114,10 @@ struct TableCountsView {
     std::vector<std::string> failed;
 };
 
+/// @brief Where a key's row is in the view: its view index, nothing when the view has no row with the key, or why
+///        that cannot be told.
+using RowLocation = std::expected<std::optional<std::int64_t>, table::TableError>;
+
 /// @brief What a table's mount reads, whatever serves the rows.
 ///
 /// Every member is called on the runtime's owner.
@@ -153,6 +157,14 @@ public:
     /// @return The keys in view order, or why they cannot be had.
     virtual async::Completion<std::expected<std::vector<table::RowId>, table::TableError>> keysOf(std::int64_t first,
                                                                                                std::int64_t count) = 0;
+
+    /// @brief Finds the view index of the row with a key, under the current sort and filters, whether or not the row
+    ///        is held: what focus follows its key by when a new order moves it away from the rows in view.
+    /// @param key  The row's key.
+    /// @param stop Once a stop is requested, @p done is not called.
+    /// @param done Called once on the owner, never before this returns, with the row's view index, nothing when the
+    ///        view has no row with @p key, or the error that kept the model from telling.
+    virtual void locateRow(table::RowId key, std::stop_token stop, std::function<void(RowLocation const&)> done) = 0;
 
     /// @brief Sets the sort chain.
     /// @param sort The keys, most significant first; empty is the table's own order.
@@ -448,6 +460,20 @@ public:
         }
         promise.resolve(Result{std::move(keys)});
         return std::move(completion);
+    }
+
+    /// @brief Finds the view index of the row with a key in the engine's view, as it is now.
+    /// @param key  The row's key.
+    /// @param stop Once a stop is requested, @p done is not called.
+    /// @param done Called on the engine's owner with the row's view index, or nothing when the view lacks it.
+    void locateRow(table::RowId key, std::stop_token stop, std::function<void(RowLocation const&)> done) override {
+        std::optional<std::size_t> const at = _engine->viewRowOfKey(key);
+        RowLocation const found{at ? std::optional{static_cast<std::int64_t>(*at)} : std::nullopt};
+        _owner->post([stop = std::move(stop), done = std::move(done), found] {
+            if (!stop.stop_requested()) {
+                done(found);
+            }
+        });
     }
 
     /// @brief Sets the engine's sort.
@@ -929,48 +955,65 @@ public:
         return std::move(completion);
     }
 
-    /// @brief Finds a row's view index: a keyed fetch naming no columns, under the current sort and filters. A
-    ///        call stops the fetch an earlier one still has in flight, whose handler is then never called.
+    /// @brief Finds the view index of the row with a key: a keyed fetch naming no columns, under the current sort and
+    ///        filters.
+    /// @param key  The row's key.
+    /// @param stop Stops the fetch; once a stop is requested, @p done is not called.
+    /// @param done Called on the owner with the row's view index, nothing when the reply has no row, or the error the
+    ///        fetch failed with; `Unavailable` while no description is held.
+    void locateRow(table::RowId key, std::stop_token stop, std::function<void(RowLocation const&)> done) override {
+        table::TableQuery query = queryOf(table::PageRequest{}, {});
+        query.columns = std::vector<std::string>{};
+        query.keys = std::vector<table::RowId>{std::move(key)};
+        auto body = _description ? bodyOf(query)
+                                 : std::expected<Value, table::TableError>{std::unexpected(unavailable())};
+        if (!body) {
+            _session->runtime().owner().post(
+                [stop = std::move(stop), done = std::move(done), error = std::move(body.error())] {
+                    if (!stop.stop_requested()) {
+                        done(std::unexpected(error));
+                    }
+                });
+            return;
+        }
+        auto reply = _session->read(_options.channel, "Table." + _options.table, *body, stop);
+        reply.then(_scope, [this, done, stop](std::string const& text) {
+            if (stop.stop_requested()) {
+                return;
+            }
+            if (!_description) {
+                done(std::unexpected(unavailable()));
+                return;
+            }
+            auto read = table::readGenericPage(text, *_description, _units.get());
+            if (!read) {
+                done(std::unexpected(read.error()));
+                return;
+            }
+            done(read->indices.empty() ? std::nullopt : std::optional<std::int64_t>{read->indices.front()});
+        });
+        reply.onError(_scope, [done, stop](std::exception_ptr const& error) {
+            if (!stop.stop_requested() && !wasCancelled(error)) {
+                done(std::unexpected(failureOf(error)));
+            }
+        });
+    }
+
+    /// @brief Finds a row's view index, as `locateRow` does, stopping the fetch an earlier call still has in flight,
+    ///        whose handler is then never called.
     /// @param key  The row's key.
     /// @param done Called with the row's view index, or nothing when the view has no row with @p key or the fetch
     ///        failed.
     void locate(table::RowId key, std::function<void(std::optional<std::int64_t>)> done) {
-        _locateStop.request_stop();
-        _locateStop = std::stop_source{};
-        ++_locateGeneration;
-        table::TableQuery query = queryOf(table::PageRequest{}, {});
-        query.columns = std::vector<std::string>{};
-        query.keys = std::vector<table::RowId>{std::move(key)};
-        auto body = bodyOf(query);
-        if (!body || !_description) {
-            done(std::nullopt);
-            return;
-        }
-        auto reply = _session->read(_options.channel, "Table." + _options.table, *body, _locateStop.get_token());
-        auto const generation = _locateGeneration;
-        reply.then(_scope, [this, done, generation](std::string const& text) {
-            if (generation != _locateGeneration) {
-                return;
-            }
-            auto read = _description ? table::readGenericPage(text, *_description, _units.get())
-                                     : std::expected<table::GenericPage, table::TableError>{std::unexpected(
-                                           table::TableError{.code = table::TableErrorCode::Unavailable,
-                                                             .column = {},
-                                                             .message = "no description"})};
-            done(read && !read->indices.empty() ? std::optional<std::int64_t>{read->indices.front()} : std::nullopt);
-        });
-        reply.onError(_scope, [this, done, generation](std::exception_ptr const& error) {
-            if (generation == _locateGeneration && !wasCancelled(error)) {
-                done(std::nullopt);
-            }
-        });
+        stopLocating();
+        locateRow(std::move(key), _locateStop.get_token(),
+                  [done = std::move(done)](RowLocation const& found) { done(found ? *found : std::nullopt); });
     }
 
     /// @brief Stops a `locate` fetch in flight; its handler is never called.
     void stopLocating() {
         _locateStop.request_stop();
         _locateStop = std::stop_source{};
-        ++_locateGeneration;
     }
 
     /// @brief Sets the query's sort: a new query.
@@ -1347,6 +1390,10 @@ private:
             .code = table::TableErrorCode::Unavailable, .column = {}, .message = ui::detail::failureText(error)};
     }
 
+    [[nodiscard]] static table::TableError unavailable() {
+        return table::TableError{.code = table::TableErrorCode::Unavailable, .column = {}, .message = "no description"};
+    }
+
     void heardRevision(std::string const& revision) {
         if (_description && revision != _description->revision && _staleRevisions.insert(revision).second &&
             _onStale) {
@@ -1662,7 +1709,6 @@ private:
     // The stops of the key pages a range selection fetched, and of the fetch that locates a highlighted row.
     std::vector<std::weak_ptr<KeysRequest>> _keyRequests;
     std::stop_source _locateStop;
-    std::uint64_t _locateGeneration = 0;
     // Last, so it is the first to go: no reply or timer reaches a half-destroyed object.
     async::CallbackScope _scope;
 };
