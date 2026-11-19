@@ -2578,14 +2578,6 @@ public:
     /// @param row     One of this table's rows.
     /// @param viewRow The row's view index.
     /// @throws std::logic_error when @p row is not this table's child.
-    /// @brief The measure the backend was given, `TableMeasure{}` unless `RecordingBackend::setTableMeasure` set one.
-    /// @return It.
-    [[nodiscard]] TableMeasure tableMeasure() const override { return _measure ? *_measure : TableMeasure{}; }
-
-    /// @brief Shares the backend's measure, which `tableMeasure` answers.
-    /// @param measure The measure; null for the default.
-    void measureBy(std::shared_ptr<TableMeasure const> measure) { _measure = std::move(measure); }
-
     void setRowIndex(Widget& row, std::size_t viewRow) override {
         int const rowId = store().idOf(row);
         if (store().at(rowId).parent != id()) {
@@ -2593,6 +2585,14 @@ public:
         }
         store().set(rowId, "viewRow", std::to_string(viewRow));
     }
+
+    /// @brief The measure the backend was given, `TableMeasure{}` unless `RecordingBackend::setTableMeasure` set one.
+    /// @return It.
+    [[nodiscard]] TableMeasure tableMeasure() const override { return _measure ? *_measure : TableMeasure{}; }
+
+    /// @brief Shares the backend's measure, which `tableMeasure` answers.
+    /// @param measure The measure; null for the default.
+    void measureBy(std::shared_ptr<TableMeasure const> measure) { _measure = std::move(measure); }
 
     /// @brief Calls the handler `setOnHorizontalRange` stored, as a backend's scroll would.
     /// @param scrollX  The offset.

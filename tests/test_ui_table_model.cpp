@@ -918,6 +918,70 @@ std::string rowKeyHolding(TableHarness const& h, int widget) {
 
 }  // namespace
 
+namespace {
+
+// Answers the open `Table.samples` call for the page at offset 0 with @p keys, then settles.
+void replyFirstPage(TableHarness& h, std::vector<std::int64_t> const& keys) {
+    for (std::size_t index = 0; index < h.dispatcher.calls.size(); ++index) {
+        auto const& call = h.dispatcher.calls[index];
+        if (call.action == "Table.samples" && !call.answered && !call.options.stop.stop_requested() &&
+            !queryOf(h, index).keys && queryOf(h, index).page.offset == 0) {
+            h.reply(index, morph::ui::testing::pageJsonOfKeys(0, keys, 9'093, h.columns));
+            return;
+        }
+    }
+    FAIL("no open call for the first page");
+}
+
+// The keys 0 to 199 with @p a and @p b swapped: the first page in another order.
+std::vector<std::int64_t> swappedPage(std::int64_t a, std::int64_t b) {
+    std::vector<std::int64_t> keys(200);
+    std::iota(keys.begin(), keys.end(), std::int64_t{0});
+    std::swap(keys.at(static_cast<std::size_t>(a)), keys.at(static_cast<std::size_t>(b)));
+    return keys;
+}
+
+}  // namespace
+
+// Mutation: focus not looked for by key after a reset (it stays on view row 7, which another row now holds).
+TEST_CASE("model table: after a new sort, focus is found again by key once its page arrives", "[ui][table]") {
+    TableHarness h;
+    auto screen = mountShown(h, kModelTable, 9'093);
+    int const table = tableOf(h);
+    h.backend.scrollTable(table, 0, 30);
+    h.settle();
+    answerPages(h, 9'093);
+    h.backend.focusMove(table, morph::ui::FocusMove::First);
+    for (int step = 0; step < 7; ++step) {
+        h.backend.focusMove(table, morph::ui::FocusMove::Down);
+    }
+    h.settle();
+    REQUIRE(h.backend.focusCell(table).first == 7);
+    h.backend.clickHeader(table, 1);  // a new query: the window drops its pages, then announces a reset
+    h.settle();
+    replyFirstPage(h, swappedPage(7, 20));  // key 7 is at view row 20 now
+    answerPages(h, 9'093);
+    CHECK(h.backend.focusCell(table).first == 20);
+}
+
+// Mutation: an index past the row count before a change moved by the first page's `Inserted` (the mark goes to view
+// row 9,123, past the end).
+TEST_CASE("model table: a highlight located before the first page of a new sort keeps its row", "[ui][table]") {
+    TableHarness h;
+    auto screen = mountShown(h, kHighlight, 9'093);
+    int const table = tableOf(h);
+    click(h, "to77");
+    replyKeyed(h, {{77, 77}});
+    REQUIRE(h.backend.prop(table, "highlightedRow") == "77");
+    h.backend.clickHeader(table, 1);  // a new query: the lowering locates key 77 again
+    h.settle();
+    replyKeyed(h, {{77, 30}});  // the one-row reply comes first
+    REQUIRE(h.backend.prop(table, "highlightedRow") == "30");
+    replyFirstPage(h, swappedPage(30, 77));
+    answerPages(h, 9'093);
+    CHECK(h.backend.prop(table, "highlightedRow") == "30");
+}
+
 // Mutation: a cell's row scope keyed by the row it was built for (the focus lands on no cell, or on another row's).
 TEST_CASE("model table: a reused cell's elements are focused by the row it shows", "[ui][table]") {
     TableHarness h;

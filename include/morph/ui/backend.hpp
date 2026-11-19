@@ -955,9 +955,11 @@ public:
     ///        arrangement is not the default. The header shows these columns only, each at its offset and width; the
     ///        first @p pinned stay in view whatever the horizontal scroll. Called again whenever any of it changes.
     /// @param columns    Indices into the columns `setColumns` gave: the pinned ones first, then the scrolled range.
-    /// @param offsets    Each column's offset from the table's left edge, as if every visible column were laid out.
-    /// @param widths     Each column's width.
-    /// @param totalWidth The width of every visible column together, which sizes the horizontal scroll bar.
+    /// @param offsets    Each column's offset from the table's left edge, as if every visible column were laid out,
+    ///                   in the backend's measure (`tableMeasure`).
+    /// @param widths     Each column's width, in the backend's measure.
+    /// @param totalWidth The width of every visible column together, in the backend's measure, which sizes the
+    ///                   horizontal scroll bar.
     /// @param pinned     How many of @p columns are pinned.
     virtual void setColumnWindow(std::span<std::size_t const> columns, std::span<int const> offsets,
                                  std::span<int const> widths, int totalWidth, std::size_t pinned) {
@@ -970,14 +972,15 @@ public:
 
     /// @brief Sets what the backend calls when its horizontal scroll or viewport changes, so the mount can window the
     ///        columns. A backend that never calls it gets every visible column realized.
-    /// @param handler The handler, with the scroll offset and the viewport's width; empty does nothing.
+    /// @param handler The handler, with the scroll offset and the viewport's width, both in the backend's measure
+    ///        (`tableMeasure`); empty does nothing.
     virtual void setOnHorizontalRange(std::function<void(int scrollX, int viewport)> handler) {
         static_cast<void>(handler);
     }
 
     /// @brief Moves the horizontal scroll offset without reporting it back: the mount keeps the columns in view where
     ///        they were when a column left of them grew.
-    /// @param scrollX The offset.
+    /// @param scrollX The offset, in the backend's measure.
     virtual void setHorizontalOffset(int scrollX) { static_cast<void>(scrollX); }
 
     /// @brief Sets what the backend calls for a range gesture (Shift+click, Shift+arrow) over rows it does not hold
@@ -998,8 +1001,8 @@ public:
     }
 
     /// @brief Sets what the backend calls with the width a cell measured, so the mount can grow the column.
-    /// @param handler The handler, with the column (an index into the columns `setColumns` gave) and the width;
-    ///        empty does nothing.
+    /// @param handler The handler, with the column (an index into the columns `setColumns` gave) and the width, in the
+    ///        backend's measure (`tableMeasure`); empty does nothing.
     virtual void setOnColumnMeasured(std::function<void(std::size_t column, int width)> handler) {
         static_cast<void>(handler);
     }
