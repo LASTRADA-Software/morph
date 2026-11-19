@@ -97,6 +97,19 @@ public:
     /// @return Nothing, or `Unavailable` when an order use cannot fit the cache's bound.
     virtual std::expected<void, TableError> want(std::span<RowId const> keys, LevelUse use, bool retry = false) = 0;
 
+    /// @brief Says a set of keys the caller keeps is needed: what a cached view wants for its order levels.
+    ///
+    /// The set is shared and never changed, so a level may tell from its address that a want repeats one it has
+    /// served; the default wants its keys as `want` does.
+    /// @param keys  The keys; not null.
+    /// @param use   Display or order.
+    /// @param retry Load the failed keys among @p keys now.
+    /// @return Nothing, or `Unavailable` when an order use cannot fit the cache's bound.
+    virtual std::expected<void, TableError> wantSet(std::shared_ptr<std::vector<RowId> const> const& keys,
+                                                    LevelUse use, bool retry = false) {
+        return want(*keys, use, retry);
+    }
+
     /// @brief Takes back an order use's want of @p keys: the leases it gave end now. A reply calls it when a later
     ///        level refuses its order use, so the earlier levels do not hold rows for a query that was refused.
     ///        The default does nothing.
@@ -219,6 +232,33 @@ struct LevelCacheAccess {
         return cache._core->shardCount();
     }
 
+    /// @brief How many times a want has classified its keys one by one.
+    /// @tparam Value The cache's value type.
+    /// @param cache The cache.
+    /// @return The count.
+    template <typename Value>
+    [[nodiscard]] static std::size_t classifications(LevelCache<Value> const& cache) {
+        return cache._core->classified.load();
+    }
+
+    /// @brief Sets what a store calls between preparing its state and publishing it, with no lock held.
+    /// @tparam Value The cache's value type.
+    /// @param cache The cache.
+    /// @param hook  The call; empty for none. Set before any load runs.
+    template <typename Value>
+    static void onStorePrepared(LevelCache<Value>& cache, std::function<void()> hook) {
+        cache._core->storeHook = std::move(hook);
+    }
+
+    /// @brief Sets what a want calls before it classifies its keys, with no lock held.
+    /// @tparam Value The cache's value type.
+    /// @param cache The cache.
+    /// @param hook  The call; empty for none. Set before any want.
+    template <typename Value>
+    static void onWantClassify(LevelCache<Value>& cache, std::function<void()> hook) {
+        cache._core->wantHook = std::move(hook);
+    }
+
     /// @brief Sets what each eviction scan calls first, with no lock held: how a test pauses a store mid-eviction.
     /// @tparam Value The cache's value type.
     /// @param cache The cache.
@@ -313,6 +353,18 @@ public:
         return Core::want(_core, keys, use, retry);
     }
 
+    /// @brief Says a kept set of keys is needed. An order use of the same set again, unretried, while nothing was
+    ///        published since the set was last found wholly held and with more than half its lease left, costs
+    ///        nothing per key: its keys are held, current, leased and fitted already. Anything else is `want`.
+    /// @param keys  The keys; not null.
+    /// @param use   Display or order.
+    /// @param retry Load the failed keys among @p keys now.
+    /// @return Nothing, or `Unavailable` for an order use that does not fit.
+    std::expected<void, TableError> wantSet(std::shared_ptr<std::vector<RowId> const> const& keys, LevelUse use,
+                                            bool retry = false) override {
+        return Core::wantSet(_core, keys, use, retry);
+    }
+
     /// @brief Ends the order leases of @p keys.
     /// @param keys The keys.
     void unwant(std::span<RowId const> keys) override { _core->release(keys); }
@@ -361,7 +413,8 @@ private:
         Clock::time_point failedAt{};
         std::size_t bytes = 0;  // a value's deep bytes; a failure's own size
         mutable std::atomic<std::int64_t> lastUse{0};
-        mutable std::atomic<std::int64_t> leaseUntil{0};  // clock ticks; 0: no lease
+        mutable std::atomic<std::int64_t> leaseUntil{0};    // clock ticks; 0: no lease
+        mutable std::atomic<std::int32_t> leaseHolders{0};  // the order uses holding the lease
     };
     using SlotPtr = std::shared_ptr<Slot const>;
     using Entry = std::pair<RowId, SlotPtr>;
@@ -661,58 +714,175 @@ private:
 
         // ── want ──
 
+        // Classifies `keys` against the published state with no lock held: the held values (their recency renewed,
+        // and leased for an order use), the keys to queue, and the bytes the order use's own leased values hold.
+        // The writer mutex is then taken only to check that nothing was published meanwhile (classifying again if
+        // something was) and to merge the keys to queue, a chunk at a time.
+        // What a want found: whether every key was held, at which version, and the lease it gave.
+        struct WantNote {
+            bool allHeld = false;
+            std::uint64_t version = 0;
+            std::int64_t until = 0;
+        };
+
+        static std::expected<void, TableError> wantSet(std::shared_ptr<Core> const& core,
+                                                       std::shared_ptr<std::vector<RowId> const> const& keys,
+                                                       LevelUse use, bool retry) {
+            if (use == LevelUse::Order && !retry) {
+                auto const nowTicks = ticks(core->now());
+                auto const half = ticks(Clock::time_point{} + core->options.orderLease / 2);
+                std::scoped_lock const lock{core->writer};
+                if (core->memo.keys == keys && core->memo.version == core->version &&
+                    core->memo.until - half > nowTicks) {
+                    core->hits.fetch_add(keys->size());
+                    return {};
+                }
+            }
+            WantNote note;
+            auto wanted = want(core, *keys, use, retry, &note);
+            if (wanted && use == LevelUse::Order && !retry && note.allHeld) {
+                std::scoped_lock const lock{core->writer};
+                core->memo = Memo{.keys = keys, .version = note.version, .until = note.until};
+            }
+            return wanted;
+        }
+
         static std::expected<void, TableError> want(std::shared_ptr<Core> const& core, std::span<RowId const> keys,
-                                                    LevelUse use, bool retry) {
+                                                    LevelUse use, bool retry, WantNote* note = nullptr) {
             auto const at = core->now();
             auto const nowTicks = ticks(at);
-            // An order use's fit reads the leases of other keys from the published state, with no lock held.
-            std::size_t leasedOther = 0;
-            std::unordered_set<RowId> own;
-            if (use == LevelUse::Order) {
-                own.insert(keys.begin(), keys.end());
-                leasedOther = core->leasedBytes(*core->publishedTable(), nowTicks, &own);
-            }
+            constexpr int kAttempts = 4;
+            std::vector<RowId> toQueue;
+            std::vector<SlotPtr> held;
             std::vector<Loading> batch;
-            {
-                std::scoped_lock const lock{core->writer};
-                if (use == LevelUse::Order) {
-                    if (auto fitted = core->fitOrder(own, leasedOther, at); !fitted) {
-                        return fitted;
-                    }
+            for (int attempt = 0;; ++attempt) {
+                std::shared_ptr<Table const> base;
+                std::uint64_t seen = 0;
+                std::size_t mean = 0;
+                {
+                    std::scoped_lock const lock{core->writer};
+                    base = core->current;
+                    seen = core->version;
+                    mean = core->meanBytes();
                 }
-                auto const want = ++core->wants;
-                std::size_t index = 0;
+                if (core->wantHook) {
+                    core->wantHook();
+                }
+                core->classified.fetch_add(1);
+                toQueue.clear();
+                held.clear();
+                std::size_t ownLeased = 0;
+                std::size_t hit = 0;
                 for (auto const& key : keys) {
-                    auto const slot = findIn(*core->current, key);
+                    auto const slot = findIn(*base, key);
                     if (slot != nullptr && slot->value) {
-                        core->hits.fetch_add(1);
-                        slot->lastUse.store(++core->useCounter);
+                        ++hit;
+                        if (slot->leaseUntil.load() > nowTicks) {
+                            ownLeased += slot->bytes;
+                        }
+                        held.push_back(slot);
                         continue;
                     }
-                    core->misses.fetch_add(1);
                     if (slot != nullptr && !retry && at < slot->failedAt + core->retryDelay(slot->failures)) {
+                        continue;
+                    }
+                    toQueue.push_back(key);
+                }
+                if (use == LevelUse::Order) {
+                    auto const leasedAll = leasedBytes(*base, nowTicks);
+                    auto const leasedOther = leasedAll - std::min(ownLeased, leasedAll);
+                    if (keys.size() * mean + leasedOther > core->options.maxBytes) {
+                        core->refusedOrders.fetch_add(1);
+                        return std::unexpected(TableError{.code = TableErrorCode::Unavailable,
+                                                          .column = {},
+                                                          .message = "the level " + core->options.level +
+                                                                     " cannot hold every row this order needs"});
+                    }
+                }
+                {
+                    std::scoped_lock const lock{core->writer};
+                    if (core->version != seen && attempt + 1 < kAttempts) {
+                        continue;  // a change was published meanwhile: classify again over it
+                    }
+                    if (core->version != seen) {
+                        ::morph::log::logError("[levelCache] a want classified {} keys over a changing level",
+                                               keys.size());
+                    }
+                    if (note != nullptr) {
+                        note->allHeld = toQueue.empty() && held.size() == keys.size();
+                        note->version = seen;
+                        note->until = ticks(at + core->options.orderLease);
+                    }
+                }
+                core->hits.fetch_add(hit);
+                core->misses.fetch_add(keys.size() - hit);
+                auto const until = ticks(at + core->options.orderLease);
+                for (auto const& slot : held) {
+                    slot->lastUse.store(core->useCounter.fetch_add(1) + 1);
+                    if (use == LevelUse::Order) {
+                        lease(*slot, until, nowTicks);
+                    }
+                }
+                if (use == LevelUse::Order) {
+                    core->leasedKeys.fetch_add(keys.size());
+                }
+                break;
+            }
+            // The keys to queue, merged a chunk at a time so that the mutex is never held for a whole page of keys.
+            constexpr std::size_t kChunk = 4096;
+            std::uint64_t want = 0;
+            {
+                std::scoped_lock const lock{core->writer};
+                want = ++core->wants;
+            }
+            for (std::size_t first = 0; first < toQueue.size() || first == 0; first += kChunk) {
+                std::scoped_lock const lock{core->writer};
+                auto const last = std::min(toQueue.size(), first + kChunk);
+                for (auto index = first; index < last; ++index) {
+                    auto const& key = toQueue[index];
+                    if (use == LevelUse::Order) {
+                        auto& pending = core->pendingLeases[key];
+                        pending.holders = pending.until > nowTicks ? pending.holders + 1 : 1;
+                        pending.until = std::max(pending.until, ticks(at + core->options.orderLease));
+                    }
+                    // A key stored or put in flight since it was classified needs nothing more.
+                    if (auto const slot = findIn(*core->current, key); slot != nullptr && slot->value) {
                         continue;
                     }
                     if (core->inFlightNow(key)) {
                         continue;
                     }
-                    core->enqueue(key, use, core->priorityOf(want, index++));
+                    core->enqueue(key, use, core->priorityOf(want, index));
                 }
-                if (!core->running) {
+                if (last >= toQueue.size() && !core->running) {
                     batch = core->takeBatch();
+                }
+                if (toQueue.empty()) {
+                    break;
                 }
             }
             dispatch(core, std::move(batch));
             return {};
         }
 
-        // The bytes the unexpired leases of keys other than `own` hold in `table`. Run with no lock held.
-        [[nodiscard]] static std::size_t leasedBytes(Table const& table, std::int64_t nowTicks,
-                                                     std::unordered_set<RowId> const* own) {
+        // Gives a held value an order lease until `until`, one more holder while its lease runs.
+        static void lease(Slot const& slot, std::int64_t until, std::int64_t nowTicks) {
+            if (slot.leaseUntil.load() > nowTicks) {
+                slot.leaseHolders.fetch_add(1);
+            } else {
+                slot.leaseHolders.store(1);
+            }
+            auto current = slot.leaseUntil.load();
+            while (current < until && !slot.leaseUntil.compare_exchange_weak(current, until)) {
+            }
+        }
+
+        // The bytes the unexpired leases hold in `table`. Run with no lock held.
+        [[nodiscard]] static std::size_t leasedBytes(Table const& table, std::int64_t nowTicks) {
             std::size_t out = 0;
             for (auto const& shard : table.shards) {
                 for (auto const& [key, slot] : *shard) {
-                    if (slot->leaseUntil.load() > nowTicks && (own == nullptr || !own->contains(key))) {
+                    if (slot->leaseUntil.load() > nowTicks) {
                         out += slot->bytes;
                     }
                 }
@@ -720,34 +890,23 @@ private:
             return out;
         }
 
-        // Under the writer mutex: refuses an order use that cannot fit, or leases its keys.
-        std::expected<void, TableError> fitOrder(std::unordered_set<RowId> const& own, std::size_t leasedOther,
-                                                 Clock::time_point at) {
-            if (own.size() * meanBytes() + leasedOther > options.maxBytes) {
-                refusedOrders.fetch_add(1);
-                return std::unexpected(
-                    TableError{.code = TableErrorCode::Unavailable,
-                               .column = {},
-                               .message = "the level " + options.level + " cannot hold every row this order needs"});
-            }
-            auto const until = ticks(at + options.orderLease);
-            for (auto const& key : own) {
-                if (auto const slot = findIn(*current, key); slot != nullptr && slot->value) {
-                    slot->leaseUntil.store(until);
-                } else {
-                    pendingLeases.insert_or_assign(key, until);
-                }
-                leasedKeys.fetch_add(1);
-            }
-            return {};
-        }
-
+        // Ends one holder's lease of each key; the lease ends when its last holder goes.
         void release(std::span<RowId const> keys) {
+            auto const base = publishedTable();
+            for (auto const& key : keys) {
+                if (auto const slot = findIn(*base, key); slot != nullptr) {
+                    if (slot->leaseHolders.fetch_sub(1) <= 1) {
+                        slot->leaseHolders.store(0);
+                        slot->leaseUntil.store(0);
+                    }
+                }
+            }
             std::scoped_lock const lock{writer};
             for (auto const& key : keys) {
-                pendingLeases.erase(key);
-                if (auto const slot = findIn(*current, key); slot != nullptr) {
-                    slot->leaseUntil.store(0);
+                if (auto const pending = pendingLeases.find(key); pending != pendingLeases.end()) {
+                    if (--pending->second.holders <= 0) {
+                        pendingLeases.erase(pending);
+                    }
                 }
             }
         }
@@ -862,6 +1021,9 @@ private:
                     edit.put(key, std::move(slot));
                 }
                 auto next = edit.table();
+                if (storeHook) {
+                    storeHook();
+                }
                 {
                     std::scoped_lock const lock{writer};
                     if (version != seen) {
@@ -876,9 +1038,12 @@ private:
                     }
                     for (auto const& key : stored) {
                         auto const slot = findIn(*next, key);
-                        slot->lastUse.store(++useCounter);
+                        slot->lastUse.store(useCounter.fetch_add(1) + 1);
                         if (auto const lease = pendingLeases.find(key); lease != pendingLeases.end()) {
-                            slot->leaseUntil.store(lease->second);
+                            if (lease->second.until > ticks(at)) {
+                                slot->leaseHolders.store(lease->second.holders);
+                                slot->leaseUntil.store(lease->second.until);
+                            }
                             pendingLeases.erase(lease);
                             leasedStored = true;
                         }
@@ -934,7 +1099,7 @@ private:
         // summed and cleared over the published state with no lock held; only the queue is changed under it.
         bool dropLeasesOverBound(Clock::time_point at) {
             auto const table = publishedTable();
-            if (leasedBytes(*table, ticks(at), nullptr) <= options.maxBytes) {
+            if (leasedBytes(*table, ticks(at)) <= options.maxBytes) {
                 return false;
             }
             {
@@ -960,7 +1125,14 @@ private:
             auto const nowTicks = ticks(at);
             std::unordered_set<RowId> fresh(stored.begin(), stored.end());
             fresh.insert(failed.begin(), failed.end());
-            for (int attempt = 0; attempt < 8; ++attempt) {
+            for (int attempt = 0;; ++attempt) {
+                if (attempt == 8) {
+                    ::morph::log::logError(
+                        "[levelCache] {}: eviction lost to other changes eight times; the level "
+                        "stays over its bound until the next store",
+                        options.level);
+                    return;
+                }
                 std::shared_ptr<Table const> base;
                 std::uint64_t seen = 0;
                 std::size_t held = 0;
@@ -1098,15 +1270,20 @@ private:
                 if (version != seen) {
                     continue;
                 }
+                bool recorded = false;
                 for (auto const& key : keys) {
                     if (inFlight.contains(key)) {
                         invalidatedAt.insert_or_assign(key, ++sequence);
+                        recorded = true;
                     }
                     pendingLeases.erase(key);
                 }
                 if (next != nullptr) {
                     invalidatedKeys.fetch_add(edit.changes.size());
                     publish(std::move(next), edit);
+                } else if (recorded) {
+                    // A store preparing a key in flight checks `version` before it publishes: it must see this.
+                    ++version;
                 }
                 return;
             }
@@ -1205,6 +1382,18 @@ private:
         std::shared_ptr<Cells const> cells;
         // Called at each eviction scan, with no lock held: what a test pauses a store with.
         std::function<void()> evictionHook;
+        // Called by a store between preparing and publishing, and by a want before it classifies; with no lock
+        // held. What a test interleaves a change with.
+        std::function<void()> storeHook;
+        std::function<void()> wantHook;
+        // The last order set found wholly held: the set, the version it was found at, and its lease's end.
+        struct Memo {
+            std::shared_ptr<std::vector<RowId> const> keys;
+            std::uint64_t version = 0;
+            std::int64_t until = 0;
+        };
+        Memo memo;
+        std::atomic<std::size_t> classified{0};
 
         // Orders every change; guards everything below but `published`. Held only to read or publish state,
         // never across a scan, a sort or a shard copy.
@@ -1224,11 +1413,15 @@ private:
         std::unordered_map<RowId, Queued> queued;
         bool running = false;
         // Order leases of keys not held yet, by key, until a clock tick; a held key's lease is on its slot.
-        std::unordered_map<RowId, std::int64_t> pendingLeases;
+        struct PendingLease {
+            std::int64_t until = 0;
+            std::int32_t holders = 0;
+        };
+        std::unordered_map<RowId, PendingLease> pendingLeases;
         std::size_t valueBytes = 0;
         std::size_t failureBytes = 0;
         std::size_t values = 0;
-        std::int64_t useCounter = 0;
+        std::atomic<std::int64_t> useCounter{0};
         effects::AnnounceSink sink;
         std::function<void(std::span<RowId const>)> failedHandler;
 
