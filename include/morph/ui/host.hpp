@@ -433,18 +433,59 @@ public:
     /// @param screen The handle, closed.
     virtual void onScreenClosed(ScreenHandle& screen) { static_cast<void>(screen); }
 
-    /// @brief Mounts a screen this host mounted again, on a changed document (spec 5 §12, development reload).
+    /// @brief Mounts a screen this host mounted again, on another document of the same screen: a development reload
+    ///        (spec 5 §12) or a draft (`mountDraft`, `discardDraft`).
     ///
     /// The new screen is mounted with the same params in the same place, and each state of its own scope starts from
     /// the old screen's value of the state of the same name and type; any other state starts from its init. The old
     /// screen is then destroyed, which runs its `onUnmount`, and the handle shows the new one: its `title`, `dirty`
     /// and `identity` follow it, and a pending call stays tied to it. A refused mount keeps the old screen.
     /// @param handle   A handle this host mounted.
-    /// @param document The changed document of the same screen, loaded.
+    /// @param document The other document of the same screen, loaded.
     /// @return Nothing, or why the old screen was kept: a foreign or closed handle, a close or save in progress, or
     ///         the interpreter's refusal of the new document.
     [[nodiscard]] std::expected<void, MountError> remount(ScreenHandle& handle,
                                                           std::shared_ptr<Document const> document);
+
+    /// @brief Mounts @p draft in place of a screen this host mounted, as `remount` does, and marks the handle as
+    ///        showing a draft.
+    ///
+    /// A draft keeps the screen's id, so the handle's identity, its route and a shell's record of the tab name the
+    /// screen, never the draft. While a draft is mounted the handle is `dirty`, so a close asks the close guard first.
+    /// A second draft replaces the first.
+    /// @param handle A handle this host mounted.
+    /// @param draft  The draft, loaded; its `id` is the screen's.
+    /// @return Nothing, or why the screen was kept as it was: a draft whose id is not the screen's, or what `remount`
+    ///         refuses.
+    [[nodiscard]] std::expected<void, MountError> mountDraft(ScreenHandle& handle,
+                                                             std::shared_ptr<Document const> draft);
+
+    /// @brief Mounts the screen's own document in place of its draft, as `remount` does: the document `documents`
+    ///        answers for the screen's id now, so a development reload since the draft began is seen.
+    /// @param handle A handle this host mounted, showing a draft.
+    /// @return Nothing, or why the draft was kept: no draft is mounted, `documents` answers nothing for the screen's
+    ///         id, or what `remount` refuses.
+    [[nodiscard]] std::expected<void, MountError> discardDraft(ScreenHandle& handle);
+
+    /// @brief Ends a draft without remounting: what is mounted stays, and the handle no longer shows a draft. What a
+    ///        shell does once the draft was saved.
+    /// @param handle A handle this host mounted; a foreign one, or one with no draft, is left as it is.
+    void endDraft(ScreenHandle& handle);
+
+    /// @brief Whether a handle this host mounted shows a draft. A tracked read.
+    /// @param handle A handle.
+    /// @return Whether it does; `false` for a foreign or closed handle.
+    [[nodiscard]] static bool drafted(ScreenHandle const& handle);
+
+    /// @brief The id of the screen a handle this host mounted shows, a draft's included (a draft keeps the screen's).
+    /// @param handle A handle.
+    /// @return The id; nothing for a foreign or closed handle.
+    [[nodiscard]] static std::optional<std::string> screenIdOf(ScreenHandle const& handle);
+
+    /// @brief The params a handle this host mounted was mounted with.
+    /// @param handle A handle.
+    /// @return The params; nothing for a foreign handle.
+    [[nodiscard]] static std::optional<ParamMap> paramsOf(ScreenHandle const& handle);
 
     /// @brief What a chat turn says about a screen this host mounted: its id and title, its params and identity, and
     ///        the aliases of its own scope that hold an instance. `TurnRequest::text` is left for the caller.
@@ -596,6 +637,14 @@ private:
 
         [[nodiscard]] Widget* root() const { return _state->screen ? &_state->screen->root() : nullptr; }
 
+        /// Whether a draft is mounted; a tracked read.
+        [[nodiscard]] bool drafted() const { return _state->drafted.get(); }
+
+        /// Marks the screen as showing a draft, or not.
+        void setDrafted(bool drafted) {
+            _state->runtime->batch([this, drafted] { _state->drafted.set(drafted); });
+        }
+
         /// The screen while it is open; null once it closed.
         [[nodiscard]] Screen* screen() const { return _state->screen.get(); }
 
@@ -656,9 +705,10 @@ private:
                   saveFailed{std::move(onSaveFailed)},
                   closed{*runtime, false},
                   generation{*runtime, 0},
+                  drafted{*runtime, false},
                   title{*runtime,
                         remembered(lastTitle, [](Screen& open) { return detail::host::titleText(open.title()); })},
-                  dirty{*runtime, [this] { return live() && screen->dirty(); }},
+                  dirty{*runtime, [this] { return live() && (drafted.get() || screen->dirty()); }},
                   identity{*runtime, remembered(lastIdentity, [](Screen& open) { return open.identity(); })},
                   titleSpans{*runtime, remembered(lastTitleSpans, [](Screen& open) { return open.titleSpans(); })},
                   pageEdge{*runtime, remembered(lastPageEdge, [](Screen& open) { return open.pageEdge(); })},
@@ -756,6 +806,8 @@ private:
             reactive::Signal<bool> closed;
             // Bumped when a remount replaces the screen, so the values below read the new one.
             reactive::Signal<int> generation;
+            // Whether a draft is mounted in place of the screen's own document; the handle is dirty while it is.
+            reactive::Signal<bool> drafted;
             reactive::Computed<std::string> title;
             reactive::Computed<bool> dirty;
             reactive::Computed<Value> identity;

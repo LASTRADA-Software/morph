@@ -352,6 +352,8 @@ switch are the client's.
      map on the old document too.
    - Every refusal is returned as a `Refusal` naming the document, for the client to report.
    - The app document is not remounted: no `DocumentScreenHost` mounts it.
+   - A screen showing a draft is left as it is; the draft is checked against the new bundle at its next preview or
+     save.
 4. **What a remount keeps.** `DocumentScreenHost::remount(handle, document)` mounts the new document with the
    params and the container of the old screen, then destroys the old screen (its `onUnmount` runs, and the new
    screen's `onMount`).

@@ -246,6 +246,72 @@ std::expected<void, MountError> DocumentScreenHost::remount(ScreenHandle& handle
     return own->remount(_interpreter, std::move(document), *_options.backend);
 }
 
+std::expected<void, MountError> DocumentScreenHost::mountDraft(ScreenHandle& handle,
+                                                               std::shared_ptr<Document const> draft) {
+    auto* const own = dynamic_cast<Handle*>(&handle);
+    Screen const* const screen = own == nullptr ? nullptr : own->screen();
+    if (screen == nullptr || !draft) {
+        return std::unexpected(MountError{
+            .screenId = draft ? draft->id : std::string{},
+            .reason = "not an open document screen of this host",
+        });
+    }
+    if (draft->id != screen->id()) {
+        return std::unexpected(MountError{
+            .screenId = draft->id,
+            .reason = "a draft keeps the screen's id, `" + std::string{screen->id()} + "`",
+        });
+    }
+    if (auto mounted = own->remount(_interpreter, std::move(draft), *_options.backend); !mounted) {
+        return mounted;
+    }
+    own->setDrafted(true);
+    return {};
+}
+
+std::expected<void, MountError> DocumentScreenHost::discardDraft(ScreenHandle& handle) {
+    auto* const own = dynamic_cast<Handle*>(&handle);
+    Screen const* const screen = own == nullptr ? nullptr : own->screen();
+    if (screen == nullptr || !own->drafted()) {
+        return std::unexpected(MountError{
+            .screenId = screen == nullptr ? std::string{} : std::string{screen->id()},
+            .reason = "no draft is mounted",
+        });
+    }
+    std::string const screenId{screen->id()};
+    std::shared_ptr<Document const> document = _options.documents(screenId);
+    if (!document) {
+        return std::unexpected(MountError{.screenId = screenId, .reason = "unknown screen"});
+    }
+    if (auto mounted = own->remount(_interpreter, std::move(document), *_options.backend); !mounted) {
+        return mounted;
+    }
+    own->setDrafted(false);
+    return {};
+}
+
+void DocumentScreenHost::endDraft(ScreenHandle& handle) {
+    if (auto* const own = dynamic_cast<Handle*>(&handle); own != nullptr) {
+        own->setDrafted(false);
+    }
+}
+
+bool DocumentScreenHost::drafted(ScreenHandle const& handle) {
+    auto const* const own = dynamic_cast<Handle const*>(&handle);
+    return own != nullptr && own->screen() != nullptr && own->drafted();
+}
+
+std::optional<std::string> DocumentScreenHost::screenIdOf(ScreenHandle const& handle) {
+    auto const* const own = dynamic_cast<Handle const*>(&handle);
+    Screen const* const screen = own == nullptr ? nullptr : own->screen();
+    return screen == nullptr ? std::nullopt : std::optional<std::string>{std::string{screen->id()}};
+}
+
+std::optional<ParamMap> DocumentScreenHost::paramsOf(ScreenHandle const& handle) {
+    auto const* const own = dynamic_cast<Handle const*>(&handle);
+    return own == nullptr ? std::nullopt : std::optional<ParamMap>{own->params()};
+}
+
 std::optional<chat::TurnRequest> DocumentScreenHost::chatContext(ScreenHandle& handle) {
     auto const* const own = dynamic_cast<Handle const*>(&handle);
     Screen const* const screen = own == nullptr ? nullptr : own->screen();
@@ -431,7 +497,8 @@ void DocumentScreenHost::Handle::State::request(std::shared_ptr<State> const& st
     state->closing = true;
     std::shared_ptr<bool const> const cancelled = state->screen->beginClose();
     if (cancelled == nullptr) {
-        bool const isDirty = state->screen->dirty();
+        // A mounted draft is unsaved work however clean the screen's own state is, as the handle's `dirty` says.
+        bool const isDirty = state->drafted.peek() || state->screen->dirty();
         if (!isDirty) {
             state->finish(true);
         } else if (state->guard && state->self != nullptr) {

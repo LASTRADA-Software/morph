@@ -80,7 +80,7 @@ scope, lowers the view, mounts it through `Mounted` at `MountOptions::depth + 1`
 own Effects at `depth`, so they run first), wraps the root in a column carrying the document's `keys`
 when it has any, and runs `onMount`.
 
-A mount that replaces a screen, such as a development reload's remount, names it in
+A mount that replaces a screen, a development reload's remount or a draft's (host.md, "Drafts"), names it in
 `MountOptions::keepStateOf`. Each state of the new screen scope then starts from the old screen scope's
 value of the state of the same name, when the two declared types have the same name (`int` and `int?`
 differ; untyped is `any`) and the new type admits the value; any other state is initialised from its init.
