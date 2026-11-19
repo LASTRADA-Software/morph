@@ -323,6 +323,14 @@ turn's tab even when the person has moved to another. The next turn's `TurnReque
 active tab holds (`CustomScreenChrome::draftOf`), or none, and none when it is over `ChatLimits::maxDraftBytes`
 (256 KiB), which the server would refuse.
 
+Dictation needs a recorder, which the client application hands the shell as `ShellOptions::dictation`, a factory the
+shell calls once when it builds the chat; the generic Qt Quick client passes a `QtDictationRecorder` when
+`MORPH_ENABLE_DICTATION` is on, and a client without one shows no Dictate button. The binding reads whether the panel is
+in view from `ShellFrame::chatVisible()` (a chat, signed in, not compact), and the shell refreshes it when the frame turns
+compact, when the sign-in state changes and when the frame is rebuilt, so a recording never runs without the panel in
+view. Signing out sends `ui-chat-end` first, which answers a waiting transcription with an error and forgets the offer
+until the next probe.
+
 ## Custom screens
 
 The shell offers a person's custom screens when the server does ([`../ui/custom_screens.md`](../ui/custom_screens.md#the-client)).

@@ -210,6 +210,10 @@ public:
     /// @return It.
     [[nodiscard]] bool compact() const noexcept { return _compact; }
 
+    /// @brief Whether the chat column is in view: there is a chat, someone is signed in, and the frame is not compact.
+    /// @return It.
+    [[nodiscard]] bool chatVisible() const noexcept { return _chatWanted && _signedIn && !_compact; }
+
     /// @brief Installs what the frame draws of the application's declared parts ([`ShellPartsView`]): the scope
     ///        switcher at the sidebar's top, and in the top bar the search with its results panel, the inbox button
     ///        and the person's menu. Compact, the switcher, the module rows and the person's menu are entries of the
@@ -276,7 +280,7 @@ private:
     // The chrome that shows for the sign-in state and the form.
     void showChrome();
 
-    void showChat() { _chat->setVisible(_chatWanted && _signedIn && !_compact); }
+    void showChat() { _chat->setVisible(chatVisible()); }
 
     // What the trail holds shows: the principal while it sits in the head, the frame is expanded and there is a name,
     // the slot while the head shows, and the row while either does. Every call that changes one of those ends here,

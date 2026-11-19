@@ -428,6 +428,9 @@ public:
                 }
                 if (_frame) {
                     _frame->setCompact(compactFrame(widthClass));
+                    if (_chatBinding) {
+                        _chatBinding->refresh();
+                    }
                 }
             }
         });
@@ -539,6 +542,10 @@ private:
         _workspace.reset();
         _appRoot.reset();
         _frame.reset();
+        // No frame, no panel in view: a recording stops before the new frame is built.
+        if (_chatBinding) {
+            _chatBinding->refresh();
+        }
         ui::CatalogReply const* const catalog = _source->catalogReply();
         std::vector<ui::CatalogEntry> entries;
         if (catalog != nullptr) {
@@ -710,9 +717,13 @@ private:
                 _source->exchange(), [this] { return _source->currentSession(); }, [this] { chatChanged(); });
             _chat->onDraft(
                 [this](ui::chat::ChatClient::DraftProposal const& proposal) { mountProposedDraft(proposal); });
+            if (_options.dictation) {
+                _recorder = _options.dictation();
+            }
             _chatBinding = std::make_unique<ui::chat::ChatPanelBinding>(
                 _chatHost, *_chat, [this] { return chatContext(); }, [this] { return chatOrigin(); },
-                [this] { return chatDraft(); });
+                [this] { return chatDraft(); }, _recorder.get(),
+                [this] { return _frame != nullptr && _frame->chatVisible(); });
         }
         auto document = ui::chat::chatPanelDocument();
         if (!document) {
@@ -998,6 +1009,9 @@ private:
     // The sidebar and the top bar, with the principal, while the shell is signed in; the page alone otherwise.
     void showSignedIn() {
         _frame->showSignedIn(_signedIn);
+        if (_chatBinding) {
+            _chatBinding->refresh();
+        }
         _frame->setPrincipal(_signedIn ? _source->principal() : std::string{});
     }
 
@@ -1521,6 +1535,8 @@ private:
     std::unique_ptr<ui::CustomScreenChrome> _customChrome;
     // Counts the workspaces built, so a turn's tab is told from a tab of a later workspace with the same number.
     std::uint64_t _workspaceNumber = 0;
+    // What the chat panel dictates with; made once, before the binding, which goes first.
+    std::unique_ptr<ui::chat::IDictationRecorder> _recorder;
     std::unique_ptr<ui::chat::ChatClient> _chat;
     std::unique_ptr<ui::chat::ChatPanelBinding> _chatBinding;
     std::unique_ptr<ui::ShellFrame> _frame;

@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "../ui/backend.hpp"
+#include "../ui/chat/dictation.hpp"
 #include "../ui/frontend.hpp"
 #include "../ui/host.hpp"
 #include "../ui/interpreter.hpp"
@@ -169,6 +170,10 @@ struct ShellOptions {
     std::function<void(std::string const& locale)> onLocale;
     /// @brief Maps a sign-in mutation's reply to the principal and token the shell installs. Required.
     SignInMapper signIn = defaultSignIn;
+    /// @brief Makes the recorder the chat panel dictates with, once, on the owner, when the chat is built; empty
+    /// offers
+    ///        no dictation. The shell owns what it returns and stops a recording whenever the panel leaves view.
+    std::function<std::unique_ptr<ui::chat::IDictationRecorder>()> dictation;
 };
 
 /// @brief Mounts the client's shell for what @p source delivered.
