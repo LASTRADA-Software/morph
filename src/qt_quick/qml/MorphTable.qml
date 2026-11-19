@@ -91,6 +91,8 @@ MorphWidget {
     readonly property real measurePadding: 2 * Theme.tableCellPaddingX
     // Whether the rows come from a `TableSource`; C++ sets it before the first row.
     property bool sourceRows: false
+    // Whether C++ selects the whole view itself on "selectAll", in place of a range through the mount.
+    property bool selectAllHandled: false
     readonly property Item content: root.sourceRows ? rowsPlane : body
     readonly property Item rowsHolder: root.sourceRows ? rowsPlane : body
     // The column window, once the mount lays the columns out: [{column, offset, width}] in pixels, the pinned ones
@@ -729,7 +731,7 @@ MorphWidget {
                         }
                         // Over a source, every row of the view through the mount, as Ctrl+A.
                         onClicked: {
-                            if (root.sourceRows) {
+                            if (root.sourceRows && !root.selectAllHandled) {
                                 if (root.totalRows > 0) {
                                     root.anchorRowIndex = 0
                                     root.selectRangeTo(root.totalRows - 1, true)
@@ -1201,6 +1203,10 @@ MorphWidget {
     function sourceKey(event: var): bool {
         const mods = event.modifiers & (Qt.ShiftModifier | Qt.ControlModifier | Qt.AltModifier | Qt.MetaModifier)
         if (mods === Qt.ControlModifier && event.key === Qt.Key_A) {
+            if (root.multiple && root.selectAllHandled) {
+                root.fire("selectAll", undefined)
+                return true
+            }
             if (!root.multiple || root.totalRows <= 0)
                 return false
             root.anchorRowIndex = 0

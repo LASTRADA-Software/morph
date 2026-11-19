@@ -339,6 +339,8 @@ void TableImpl::setOnSelectionChange(
     _onSelectionChange = std::move(onSelectionChange);
 }
 
+void TableImpl::setOnSelectAll(std::function<void()> onSelectAll) { _onSelectAll = std::move(onSelectAll); }
+
 void TableImpl::setOnActivate(std::function<void(ui::Key)> onActivate) { _onActivate = std::move(onActivate); }
 
 void TableImpl::setSort(std::optional<ui::TableSort> sort) {
@@ -797,6 +799,12 @@ EventResult TableImpl::modifiedKey(::core::tui::KeyEvent const& key) {
         return EventResult::Handled;
     }
     if (matchesChord("Ctrl+A", key) && _mode == ui::SelectionMode::Multiple) {
+        if (_onSelectAll) {
+            // A copy: the handler may destroy this table.
+            auto const handler = _onSelectAll;
+            handler();
+            return EventResult::Handled;
+        }
         static_cast<void>(change(allOrNone(), ui::SelectionChange::Extend));
         return EventResult::Handled;
     }
@@ -875,12 +883,20 @@ void TableImpl::clickWith(::core::tui::Point cell, ::core::tui::Modifier modifie
     // The header box is Ctrl+A; it does nothing while the table shows no rows. Over a source it selects the view.
     if (onBox && _showHeader && cell.y == 0) {
         if (_source) {
-            if (_total > 0) {
+            if (_mode == ui::SelectionMode::Multiple && _onSelectAll) {
+                auto const handler = _onSelectAll;
+                handler();
+            } else if (_total > 0) {
                 static_cast<void>(selectRange(0, _total - 1, ui::SelectionChange::Extend));
             }
             return;
         }
         if (_mode == ui::SelectionMode::Multiple && !shownChildren().empty()) {
+            if (_onSelectAll) {
+                auto const handler = _onSelectAll;
+                handler();
+                return;
+            }
             static_cast<void>(change(allOrNone(), ui::SelectionChange::Extend));
         }
         return;
@@ -1152,9 +1168,15 @@ bool TableImpl::selectRange(std::size_t anchorRow, std::size_t focusRow, ui::Sel
 }
 
 EventResult TableImpl::sourceKey(::core::tui::KeyEvent const& key) {
-    // The whole view, through the mount, which resolves it over the rows not realized; in Single mode it goes on
-    // outwards.
+    // The whole view: through the select-all handler when the table has one, else through the mount, which resolves
+    // it over the rows not realized; in Single mode it goes on outwards.
     if (matchesChord("Ctrl+A", key) && _mode == ui::SelectionMode::Multiple) {
+        if (_onSelectAll) {
+            // A copy: the handler may destroy this table.
+            auto const handler = _onSelectAll;
+            handler();
+            return EventResult::Handled;
+        }
         if (_total > 0) {
             _anchorRow = 0;
             static_cast<void>(selectRange(0, _total - 1, ui::SelectionChange::Extend));

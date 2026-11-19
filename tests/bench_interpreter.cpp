@@ -664,3 +664,47 @@ TEST_CASE("interpreter bench: B1 a rows table's sort and filter in owner steps",
         printRow("B1: the longest owner step", rows, spreadOf(steps));
     }
 }
+
+// Where U1's and U2's time goes on the engine: the source's part (putting a column in use, matching a new list) and
+// the engine's (absorbing the change, sorting or repairing), each call to settled. Timings only.
+TEST_CASE("interpreter bench: U1 U2 split between the source and the engine", "[.benchmark][interpreter]") {
+    constexpr std::size_t kRows = 100'000;
+    bench::WideTableSource const fixture{{.rows = kRows, .columns = 300, .seed = 1}};
+    ui::ValueList const rows = listOf(fixtureItems(fixture));
+    std::println("\nU1, U2 split: a document's rows of 100,000, the source's call and the engine's settling\n\n"
+                 "| scenario | rows | median ms | p10-p90 ms |\n|---|---:|---:|---:|");
+    std::vector<double> use;
+    std::vector<double> useSettled;
+    std::vector<double> sort;
+    std::vector<double> assign;
+    std::vector<double> repair;
+    for (int run = 0; run < 7; ++run) {
+        RowsOnEngine h{plainColumns({"id", "name", "qty"})};
+        h.source->assign(rows);
+        h.owner.runAll();
+        auto began = Clock::now();
+        h.source->use("name");
+        use.push_back(millisSince(began));
+        began = Clock::now();
+        h.owner.runAll();
+        useSettled.push_back(millisSince(began));
+        began = Clock::now();
+        REQUIRE(h.engine.setSort({{.column = "name", .dir = morph::table::SortDirection::Ascending}}));
+        h.owner.runAll();
+        sort.push_back(millisSince(began));
+        auto const first = std::get<std::int64_t>(h.engine.rowIdAt(0));
+        ui::ValueList const next = renamed(rows, static_cast<std::size_t>(first - 1));
+        began = Clock::now();
+        h.source->assign(next);
+        assign.push_back(millisSince(began));
+        began = Clock::now();
+        h.owner.runAll();
+        repair.push_back(millisSince(began));
+        REQUIRE(std::get<std::int64_t>(h.engine.rowIdAt(kRows - 1)) == first);
+    }
+    printRow("U1 split: use(name), the source deriving the column's cells", kRows, spreadOf(use));
+    printRow("U1 split: the engine absorbing the new column (no sort yet)", kRows, spreadOf(useSettled));
+    printRow("U1 split: setSort(name) to settled", kRows, spreadOf(sort));
+    printRow("U2 split: assign of the list with one row renamed, the source matching it", kRows, spreadOf(assign));
+    printRow("U2 split: the engine absorbing and repairing it", kRows, spreadOf(repair));
+}

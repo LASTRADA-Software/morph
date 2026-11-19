@@ -542,8 +542,19 @@ void TableImpl::anchorAt(TableRowImpl const& row) {
     }
 }
 
+void TableImpl::setOnSelectAll(std::function<void()> onSelectAll) {
+    _onSelectAll = std::move(onSelectAll);
+    write("selectAllHandled", static_cast<bool>(_onSelectAll));
+}
+
 void TableImpl::selectAll() {
     if (_mode != ui::SelectionMode::Multiple) {
+        return;
+    }
+    if (_onSelectAll) {
+        // A copy: the handler may destroy this table.
+        auto const handler = _onSelectAll;
+        handler();
         return;
     }
     std::vector<ui::Key> keys = rowKeys();

@@ -696,6 +696,7 @@ public:
     void setSort(std::optional<ui::TableSort> sort) override;
     void setOnSort(std::function<void(std::size_t)> onSort) override;
     void setExistingKeys(std::vector<ui::Key> const& keys) override;
+    void setOnSelectAll(std::function<void()> onSelectAll) override;
     void setRealizedWindow(std::size_t first, std::size_t count, std::size_t total) override;
     void setOnVisibleRangeChanged(std::function<void(std::size_t, std::size_t)> onVisibleRangeChanged) override;
     /// Throws std::logic_error when @p row is not one of this table's rows.
@@ -770,6 +771,8 @@ private:
     ui::SelectionMode _mode = ui::SelectionMode::None;
     std::vector<ui::Key> _requested;
     std::function<void(std::vector<ui::Key>, ui::SelectionChange)> _onSelectionChange;
+    // Ctrl+A's and the header box's handler in place of selecting the rows held; empty for none.
+    std::function<void()> _onSelectAll;
     // Where a range starts: the row last clicked or toggled.
     std::optional<ui::Key> _anchor;
     std::function<void(ui::Key)> _onActivate;

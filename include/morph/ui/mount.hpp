@@ -58,6 +58,10 @@ struct MountStats {
     std::size_t cellsRebound = 0;
     /// @brief Cells a pass left blank for the frame's budget, to be realized in a later turn.
     std::size_t placeholders = 0;
+    /// @brief `TableRows` changes applied to the realized rows.
+    std::size_t viewChanges = 0;
+    /// @brief Of `viewChanges`, those that replaced the whole view.
+    std::size_t viewResets = 0;
 };
 
 /// @brief Which of a table's dimensions are windowed.
@@ -3329,6 +3333,11 @@ private:
             [this, &table, alive = std::weak_ptr{table.alive}](table::ViewChange const& change) {
                 if (alive.expired()) {
                     return;
+                }
+                ++_stats.viewChanges;
+                if (std::ranges::any_of(change.ops,
+                                        [](table::ViewOp const& op) { return op.kind == table::ViewOp::Kind::Reset; })) {
+                    ++_stats.viewResets;
                 }
                 static_cast<void>(runCallback(*_rt, [&] {
                     follow(table, change);

@@ -2391,3 +2391,33 @@ TEST_CASE("rows table: a group's quantities are compared through the screen's un
               "columns":[{"id":"id","label":"Id"}]}})");
     CHECK(headingTexts(h) == std::vector<std::string>{"2", "1"});
 }
+
+// Mutation: the page always sending the mount a reset (one reset, and no change of the row alone).
+TEST_CASE("rows table: one changed row reaches the mount as its own change, not a reset", "[ui][table]") {
+    TableHarness h;  auto screen = h.mount(rowsDoc(kThree));
+    h.backend.clickHeader(tableOf(h), 1);  h.settle();
+    REQUIRE(rowOrder(h) == "a b c");
+    MountStats const before = statsOf(*screen);
+    h.backend.click(h.byTestId("Button", "rename"));  h.settle();
+    CHECK(rowOrder(h) == "a c b");
+    CHECK(statsOf(*screen).viewChanges - before.viewChanges == 1);
+    CHECK(statsOf(*screen).viewResets == before.viewResets);
+    CHECK(statsOf(*screen).cellsCreated == before.cellsCreated);              // b kept its widgets as it moved
+}
+
+// Mutation: the rebuild for a brought unit not carrying the engine's filter over (the new engine has none).
+TEST_CASE("rows table: a unit the rows bring keeps the engine's filter", "[ui][table]") {
+    std::string const quantities = R"([{"id":"a","name":"a","weight":{"num":1,"den":1,"dp":0,"unit":"m"}},)"
+                                   R"({"id":"b","name":"b","weight":{"num":2,"den":1,"dp":0,"unit":"m"}}])";
+    std::string text = rowsDoc(kThree);
+    std::string const renamed = morph::ui::testing::renamedB(kThree);
+    text.replace(text.find(renamed), renamed.size(), quantities);
+    TableHarness h;  auto screen = h.mount(text);
+    table::FilterSpec filter;
+    filter.columns["name"].include.push_back(table::FilterEntry{.contains = "a"});
+    REQUIRE(engineOf(*screen, "list").setFilter(filter));
+    table::Engine const* const first = &engineOf(*screen, "list");
+    h.backend.click(h.byTestId("Button", "rename"));  h.settle();             // the rows bring the unit `m`
+    REQUIRE(&engineOf(*screen, "list") != first);                              // a new engine
+    CHECK(engineOf(*screen, "list").filter() == filter);
+}
