@@ -1791,7 +1791,10 @@ private:
                 observer.end(rows.list);
             }
         };
-        scope.effect([this, &session, &rows, &container, &range, threshold = virtualize->threshold,
+        // Whether the backend was last told the rows are windowed: a count that falls back below the threshold then
+        // owes it the end of the window.
+        auto& windowed = scope.make<bool>(false);
+        scope.effect([this, &session, &rows, &container, &range, &windowed, threshold = virtualize->threshold,
                       overscan = virtualize->overscan, depth = scope.depth() + 1, onRow, table, overlay = _overlay,
                       around, track = observer.track] {
             // tracked: the rows are one source, and the sort that `track` reads is the other
@@ -1805,6 +1808,12 @@ private:
                     _rt->untracked([&] {
                         if (keys.size() < threshold) {
                             reconcile(depth, session, rows.list, container, keys, onRow);
+                            if (windowed) {
+                                // Rows released while the table was windowed come back: below the threshold every
+                                // row is realized.
+                                applyWindow(depth, rows.list, container, {.first = 0, .count = rows.list.size()}, 0,
+                                            onRow);
+                            }
                             return;
                         }
                         std::pair<VisibleRange, std::size_t> const windowAndOverscan{window, overscan};
@@ -1822,6 +1831,10 @@ private:
             if (keys.size() >= threshold) {
                 auto const [first, count] = realizedExtent(rows.list);
                 table->setRealizedWindow(first, count, rows.list.size());
+                windowed = true;
+            } else if (windowed) {
+                table->setRealizedWindow(0, rows.list.size(), rows.list.size());
+                windowed = false;
             }
         });
         scope.effect([this, &rows, &container, &range, threshold = virtualize->threshold,
