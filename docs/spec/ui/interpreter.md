@@ -634,8 +634,10 @@ keeps its operands' 0 places and still fills 0.29 of a bar.
   stored filter is fitted to them (each filter it drops is reported once, "the stored filter on `<id>` is not
   applied: it does not apply to the column's kind") and the document's is set, or reported as refused; either is a
   second query, so the first page drawn is unfiltered until the second reply arrives. A filter the user set through
-  the table meanwhile wins over a held literal one, and any gesture over a held stored one, as over a late stored
-  state; a bound filter is the document's and is applied. A filter the rows hold that was compiled against the
+  the table meanwhile wins over a held literal or stored one; any other gesture (a sort, a scroll) does not, since
+  a stored state held here arrived in time; a bound filter is the document's and is applied. A held literal or
+  bound filter is fitted as a stored one is, so a column filter the inferred kind refuses is reported and dropped
+  and the rest applied, where on a table of known kinds the same filter is refused whole. A filter the rows hold that was compiled against the
   placeholders, the user's among them, is fitted again to the inferred kinds, each column filter they refuse
   reported ("the filter on `<id>` is not applied: …") and dropped. A stored state set after the kinds are fixed
   replaces a filter still held. Persisted state is kept as a model's table's, its `table` the action's id. A node the loader would

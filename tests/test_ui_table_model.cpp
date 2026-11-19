@@ -2678,3 +2678,79 @@ TEST_CASE("model table over an action: columns that share a unit share its dimen
           morph::math::Rational{morph::math::Numerator{1}, morph::math::Denominator{1000}, morph::math::DecimalPlaces{3}});
     CHECK(diagnosticsMentioning(h, "the unit `bad` has a factor of zero or less") == 1);
 }
+
+
+// Mutation: a held stored filter giving way to any gesture (the sort and the scroll drop it: no `gt` in the last
+// query).
+TEST_CASE("model table over an action: a sort and a scroll before the first reply keep the stored filter",
+          "[ui][table][state]") {
+    auto store = std::make_shared<GatedTableStateStore>(
+        storeExecutor(), R"({"version":1,"filters":{"columns":{"ratio":{"include":[{"gt":"1"}]}}}})");
+    TableHarness h{store};  addPageSamples(h);
+    auto screen = h.mount(kActionTable);  store->release();  h.settle();
+    REQUIRE(h.dispatcher.count("Lims_PageSamples") == 1);
+    h.backend.clickHeader(tableOf(h), 1);  h.settle();                        // a sort
+    h.backend.scrollTable(tableOf(h), 0, 5);  h.advance(80ms);                 // a scroll
+    h.reply(h.dispatcher.last("Lims_PageSamples"), std::string{kRatioRows});
+    CHECK(lastBodyHas(h, "Lims_PageSamples", R"({"gt":"1"})"));
+    CHECK(lastBodyHas(h, "Lims_PageSamples", R"("sort":[{"column":"name")"));
+    CHECK(h.diagnostics.empty());
+}
+
+// Mutation: the kinds a first reply that does not read voted kept (ratio is Number before any reply read).
+TEST_CASE("model table over an action: a first reply that does not read fixes no kind", "[ui][table]") {
+    TableHarness h;  addPageSamples(h);
+    auto screen = h.mount(kActionTable);
+    h.reply(h.dispatcher.last("Lims_PageSamples"), R"({"rows":[{"name":"a","ratio":0.5}],"total":1})");   // no key
+    CHECK(kindOfColumn(*screen, "ratio") == table::ColumnKind::Text);
+    CHECK(windowOf(*screen).inferring());
+    windowOf(*screen).retry();  h.settle();
+    h.reply(h.dispatcher.last("Lims_PageSamples"), std::string{kRatioRows});
+    CHECK(kindOfColumn(*screen, "ratio") == table::ColumnKind::Number);
+    CHECK_FALSE(windowOf(*screen).inferring());
+}
+
+// Mutation: no report for a `key` that is not one row field.
+TEST_CASE("model table over an action: a key that is not one row field is reported", "[ui][table]") {
+    TableHarness h;  addPageSamples(h);
+    auto screen = h.mount(withTableKey(kActionTable, R"("key":{"lit":"id"})"));
+    CHECK(diagnosticsMentioning(h, "the key of a table over an action is one row field") == 1);
+}
+
+// Mutation: an integer beyond int64 read as its JSON text (a string cell).
+TEST_CASE("model table over an action: an integer beyond int64 is a double", "[ui][table]") {
+    TableHarness h;  addPageSamples(h);
+    auto screen = h.mount(kActionTable);
+    h.reply(h.dispatcher.last("Lims_PageSamples"),
+            R"({"rows":[{"id":1,"name":"a","ratio":18446744073709551615}],"total":1})");
+    CHECK(kindOfColumn(*screen, "ratio") == table::ColumnKind::Number);
+    CHECK(*cellOf(*screen, 0, "ratio") == table::Cell{18446744073709551615.0});
+}
+
+// Mutation: no bound on the units a window lists (the 65th unit is listed and its cell is valid).
+TEST_CASE("model table over an action: a window lists at most 64 units no one declares", "[ui][table]") {
+    TableHarness h;  addPageSamples(h);
+    auto screen = h.mount(kActionTable);
+    std::string rows;
+    for (int at = 0; at < 65; ++at) {
+        rows += std::string{at == 0 ? "" : ","} + R"({"id":)" + std::to_string(at) +
+                R"(,"weight":{"num":1,"den":1,"dp":0,"unit":"u)" + std::to_string(at) + R"("}})";
+    }
+    h.reply(h.dispatcher.last("Lims_PageSamples"), R"({"rows":[)" + rows + R"(],"total":65})");
+    REQUIRE(kindOfColumn(*screen, "weight") == table::ColumnKind::Measure);
+    CHECK(windowOf(*screen).description()->units.size() == morph::ui::detail::kMaxUnlistedUnits);
+    CHECK(std::get<table::Measure>(*cellOf(*screen, 63, "weight")).unit != table::kUnknownUnit);
+    CHECK(std::get<table::Measure>(*cellOf(*screen, 64, "weight")).unit == table::kUnknownUnit);
+}
+
+// Mutation: the inference handler not guarded by the table's scope (it reaches the unmounted table's state).
+TEST_CASE("model table over an action: a window that outlives its table reads its reply alone", "[ui][table]") {
+    TableHarness h;  addPageSamples(h);
+    auto screen = h.mount(kActionTable);
+    std::shared_ptr<WindowRows> const window = elementOf(*screen, "list").tableWindow;
+    std::size_t const pending = h.dispatcher.last("Lims_PageSamples");
+    screen.reset();  h.settle();
+    h.reply(pending, std::string{kRatioRows});
+    CHECK_FALSE(window->inferring());                                         // the reply was read
+    CHECK(h.diagnostics.empty());
+}

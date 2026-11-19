@@ -9990,11 +9990,12 @@ void ScreenCore::inferredTable(ElementState& element) {
         return;
     }
     // The held filter, unless the user filtered meanwhile: a bound filter is the document's and always wins; a
-    // literal one gives way to a user's filter, a stored one to any gesture, as a late stored state does. Without
-    // one, the filter the rows hold, which may have been compiled against the placeholders, is fitted again.
+    // literal or a stored one gives way only to a filter the user set, since a stored state held here arrived in
+    // time and a sort or a scroll since does not undo it. Without one, the filter the rows hold, which may have been
+    // compiled against the placeholders, is fitted again.
     std::optional<table::FilterSpec> held = std::exchange(model.heldFilter, std::nullopt);
     bool const stored = std::exchange(model.heldStored, false);
-    bool const yields = !model.filtersBound && (stored ? model.touched : model.userFiltered);
+    bool const yields = !model.filtersBound && model.userFiltered;
     if (held && yields) {
         held.reset();
     }
