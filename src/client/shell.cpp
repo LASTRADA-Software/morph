@@ -521,7 +521,7 @@ private:
         // A new frame is a new session's: what the old one learnt about custom screens is forgotten.
         if (_customChrome) {
             _customChrome->attach(nullptr);
-            _customSync->reset();
+            (*_customSync).reset();
             // The fetch of a route the old session asked for is dropped with the sync's replies.
             _fetchingRoute = false;
             _customChrome->setOffered(false);

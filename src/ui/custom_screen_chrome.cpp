@@ -774,15 +774,15 @@ void CustomScreenChrome::save(WorkspaceTabId tab) {
         !canSave(*screenId)) {
         return;
     }
-    // `canSave` held, so the screen is listed.
-    std::optional<CustomScreenSummary> const summary = summaryOf(*screenId);
+    // `canSave` held, so the screen is listed and the default is never read.
+    CustomScreenSummary const summary = summaryOf(*screenId).value_or(CustomScreenSummary{});
     std::string const& savedId = *screenId;
-    std::string const title = summary->title;
+    std::string const title = summary.title;
     std::uint64_t const generation = state->generation;
     state->pending->set(true);
     _options.sync->save(
         CustomScreensSave{
-            .app = {}, .id = savedId, .title = title, .basedOn = summary->basedOn, .document = state->draftText},
+            .app = {}, .id = savedId, .title = title, .basedOn = summary.basedOn, .document = state->draftText},
         guarded([this, tab, savedId, title, generation](std::expected<std::string, std::string> saved) {
             if (!saved) {
                 settled(tab);
