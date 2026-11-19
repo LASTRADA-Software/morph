@@ -350,6 +350,8 @@ switch are the client's.
    - A document that does not load is refused, and the old one stays, in the host's document map and on screen.
    - A remount the interpreter refuses, such as a new param the mounted instance lacks, keeps that screen and the
      map on the old document too.
+   - A changed id equal to the chat panel's id, and a document that names an id other than its screen's, are
+     refused the same way: reported, and the old document stays (`served_document.hpp`).
    - Every refusal is returned as a `Refusal` naming the document, for the client to report.
    - The app document is not remounted: no `DocumentScreenHost` mounts it.
    - A screen showing a draft is left as it is; the draft is checked against the new bundle at its next preview or

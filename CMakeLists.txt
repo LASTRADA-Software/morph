@@ -667,6 +667,7 @@ target_sources(morph
         include/morph/ui/navigator.hpp
         include/morph/ui/route.hpp
         include/morph/ui/route_history.hpp
+        include/morph/ui/served_document.hpp
         include/morph/ui/service_client.hpp
         include/morph/ui/shell_frame.hpp
         include/morph/ui/shell_parts.hpp
@@ -680,6 +681,7 @@ target_sources(morph
         include/morph/ui/chat/conversations.hpp
         include/morph/ui/chat/extra_tool.hpp
         include/morph/ui/chat/panel.hpp
+        include/morph/ui/chat/panel_id.hpp
         include/morph/ui/chat/protocol.hpp
         include/morph/ui/chat/propose_screen.hpp
         include/morph/ui/chat/provider.hpp

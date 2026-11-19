@@ -17,6 +17,7 @@
 #include "../host_vocabulary.hpp"
 #include "../value.hpp"
 #include "client.hpp"
+#include "panel_id.hpp"
 #include "protocol.hpp"
 
 /// @file
@@ -24,9 +25,6 @@
 ///        `docs/spec/ui/chat.md`.
 
 namespace morph::ui::chat {
-
-/// @brief The panel document's id.
-inline constexpr std::string_view kChatPanelId = "morph.chat";
 
 /// @brief The panel. What it shows and does comes through the `chat.*` host values and commands a `ChatPanelBinding`
 ///        registers, so it is written in the same vocabulary as any screen and every frontend draws it.

@@ -30,9 +30,9 @@
 #include <optional>
 #include <string>
 #include <string_view>
-#include <tuple>
 #include <testkit/fake_app_context.hpp>
 #include <testkit/wait.hpp>
+#include <tuple>
 #include <utility>
 #include <vector>
 
@@ -982,10 +982,10 @@ struct ChatRig {
     std::vector<std::string> problems;
     std::unique_ptr<ui::MountedShell> shell;
 
-    explicit ChatRig(bool offered = true,
-                     std::function<std::expected<std::shared_ptr<ui::ServedBundle const>, ui::Refusal>()> bundle =
-                         &signedInBundle,
-                     std::string startScreen = "probe.env", bool dev = false)
+    explicit ChatRig(
+        bool offered = true,
+        std::function<std::expected<std::shared_ptr<ui::ServedBundle const>, ui::Refusal>()> bundle = &signedInBundle,
+        std::string startScreen = "probe.env", bool dev = false)
         : source{std::move(bundle)} {
         bool const startScreenIsEnv = startScreen == "probe.env";
         source.chatOffered = offered;
@@ -1256,7 +1256,7 @@ namespace {
 /// @param text    The document served for it.
 /// @return The bundle, or the refusal.
 std::expected<std::shared_ptr<ui::ServedBundle const>, ui::Refusal> forgedBundle(std::string const& entryId,
-                                                                                  std::string const& text) {
+                                                                                 std::string const& text) {
     ui::UiRegistry served{ui::ApplicationInfo{.id = "probe", .version = "1"}};
     ui::CatalogEntry env;
     env.id = "probe.env";
@@ -1274,7 +1274,8 @@ std::expected<std::shared_ptr<ui::ServedBundle const>, ui::Refusal> forgedBundle
         return std::unexpected(std::move(built.error()));
     }
     auto forged = std::make_shared<ui::ServedBundle>(**built);
-    auto const screen = std::ranges::find_if(forged->screens, [](auto const& each) { return each.entry.id == "lims.x"; });
+    auto const screen =
+        std::ranges::find_if(forged->screens, [](auto const& each) { return each.entry.id == "lims.x"; });
     REQUIRE(screen != forged->screens.end());
     auto node = forged->files.extract(screen->hash);
     REQUIRE_FALSE(node.empty());
@@ -1326,14 +1327,16 @@ TEST_CASE("a_server_document_that_names_another_id_than_its_entry_is_refused", "
         true,
         [] {
             return forgedBundle(
-                "lims.x", R"({"vocab":"ui/1","id":"lims.x","view":{"kind":"text","testId":"forged","text":"forged"}})");
+                "lims.x",
+                R"({"vocab":"ui/1","id":"lims.x","view":{"kind":"text","testId":"forged","text":"forged"}})");
         },
         "lims.x"};
     REQUIRE(pumpUntil(honest.context.owner(), [&honest] { return shown(honest.backend, "forged") == "forged"; }));
     CHECK(honest.problems.empty());
 
     ChatRig rig{true, [kForged] { return forgedBundle("lims.x", std::string{kForged}); }, "lims.x"};
-    CHECK(pumpUntil(rig.context.owner(), [&rig] { return reportedProblem(rig, "the document of `lims.x` names the id `morph.chat`"); }));
+    CHECK(pumpUntil(rig.context.owner(),
+                    [&rig] { return reportedProblem(rig, "the document of `lims.x` names the id `morph.chat`"); }));
     CHECK(shown(rig.backend, "forged").empty());
     CHECK(rig.panelShown());
 }
@@ -1362,8 +1365,7 @@ std::string limsDocument(std::string_view id, std::string_view text) {
 // Mutation: drop either refusal from reloadDocuments (the forged document remounts the open tab and shows
 // "forged", or the chat panel's id is taken from the server without a report).
 TEST_CASE("a_development_reload_refuses_a_forged_id_and_the_chat_panels_id", "[client][chat][dev-reload]") {
-    ChatRig rig{
-        true, [] { return forgedBundle("lims.x", limsDocument("lims.x", "honest")); }, "lims.x", true};
+    ChatRig rig{true, [] { return forgedBundle("lims.x", limsDocument("lims.x", "honest")); }, "lims.x", true};
     REQUIRE(pumpUntil(rig.context.owner(), [&rig] { return shown(rig.backend, "doc") == "honest"; }));
     auto const redeploy = [&rig](std::string const& entryId, std::string const& text, std::string_view reported) {
         auto bundle = forgedBundle(entryId, text);
@@ -1375,10 +1377,57 @@ TEST_CASE("a_development_reload_refuses_a_forged_id_and_the_chat_panels_id", "[c
         });
     };
 
-    CHECK(redeploy("lims.x", limsDocument("morph.chat", "forged"), "reload refused: document lims.x at /: the document of `lims.x` names the id `morph.chat`"));
+    CHECK(redeploy("lims.x", limsDocument("morph.chat", "forged"),
+                   "reload refused: document lims.x at /: the document of `lims.x` names the id `morph.chat`"));
     CHECK(shown(rig.backend, "doc") == "honest");
 
-    CHECK(redeploy("morph.chat", limsDocument("morph.chat", "impostor"), "reload refused: document morph.chat at /: the catalog lists the id `morph.chat`"));
+    CHECK(redeploy("morph.chat", limsDocument("morph.chat", "impostor"),
+                   "reload refused: document morph.chat at /: the catalog lists the id `morph.chat`"));
     CHECK(shown(rig.backend, "doc") != "impostor");
     CHECK(rig.backend.find("TextInput", "testId", "chat_input").has_value());
+}
+
+namespace {
+
+/// Opens @p source over @p context and returns once its bundle is loaded.
+void openSource(ChatSource& source, FakeAppContext& context) {
+    std::optional<std::expected<ui::Bundle, ui::ConnectError>> opened;
+    source.open(context,
+                [&opened](std::expected<ui::Bundle, ui::ConnectError> result) { opened = std::move(result); });
+    REQUIRE(pumpUntil(context.owner(), [&opened] { return opened.has_value(); }));
+    REQUIRE(opened->has_value());
+}
+
+}  // namespace
+
+// Mutation: drop either refusal from Source::documents. The control serves the same entry with an honest document.
+TEST_CASE("a_source_refuses_a_forged_id_and_the_chat_panels_id_when_it_hands_out_documents", "[client][chat]") {
+    FakeAppContext context;
+    std::vector<std::string> refused;
+    auto const lookup = [&refused](ChatSource& source) {
+        return source.documents([&refused](ui::Refusal const& refusal) { refused.push_back(refusal.message()); });
+    };
+    {
+        ChatSource honest{[] { return forgedBundle("lims.x", limsDocument("lims.x", "honest")); }};
+        openSource(honest, context);
+        CHECK(lookup(honest)("lims.x") != nullptr);
+        CHECK(refused.empty());
+        honest.close();
+    }
+    {
+        ChatSource forged{[] { return forgedBundle("lims.x", limsDocument("morph.chat", "forged")); }};
+        openSource(forged, context);
+        CHECK(lookup(forged)("lims.x") == nullptr);
+        REQUIRE(refused.size() == 1);
+        CHECK(refused.front().contains("the document of `lims.x` names the id `morph.chat`"));
+        forged.close();
+    }
+    {
+        ChatSource impostor{[] { return forgedBundle("morph.chat", limsDocument("morph.chat", "impostor")); }};
+        openSource(impostor, context);
+        CHECK(lookup(impostor)("morph.chat") == nullptr);
+        REQUIRE(refused.size() == 2);
+        CHECK(refused.back().contains("which is the chat panel's"));
+        impostor.close();
+    }
 }

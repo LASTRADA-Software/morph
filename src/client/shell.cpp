@@ -33,6 +33,7 @@
 #include <morph/ui/mount.hpp>
 #include <morph/ui/navigator.hpp>
 #include <morph/ui/route_history.hpp>
+#include <morph/ui/served_document.hpp>
 #include <morph/ui/service_client.hpp>
 #include <morph/ui/shell_frame.hpp>
 #include <morph/ui/shell_parts.hpp>
