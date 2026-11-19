@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <array>
+#include <charconv>
 #include <cstdlib>
 #include <deque>
 #include <expected>
@@ -21,6 +22,7 @@
 #include <set>
 #include <string>
 #include <string_view>
+#include <system_error>
 #include <utility>
 #include <variant>
 #include <vector>
@@ -346,8 +348,10 @@ private:
                 Json::object_t::const_iterator const found = object->find(token);
                 json = found == object->end() ? nullptr : &found->second;
             } else if (auto const* const array = std::get_if<Json::array_t>(&json->data)) {
-                std::size_t const index = std::strtoull(token.c_str(), nullptr, 10);
-                json = index < array->size() ? &array->at(index) : nullptr;
+                std::size_t index = 0;
+                char const* const last = token.data() + token.size();
+                auto const [stop, error] = std::from_chars(token.data(), last, index);
+                json = error == std::errc{} && stop == last && index < array->size() ? &array->at(index) : nullptr;
             } else {
                 json = nullptr;
             }
