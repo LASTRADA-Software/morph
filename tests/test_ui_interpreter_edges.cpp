@@ -227,3 +227,41 @@ TEST_CASE("interpreter edges: a table, tabs and a dialog answer only the propert
     CHECK(readJson(*screen, R"({"ref": "dlg.submitted"})") == "false");
     CHECK(readJson(*screen, R"({"ref": "dlg.nothing"})") == "null");
 }
+
+namespace {
+
+/// Ten rows named j..a, virtualized from five rows on; the button sorts them by name.
+constexpr std::string_view kVirtualSort = R"({
+  "vocab": "ui/1", "id": "virtual-sort",
+  "state": { "items": { "init": { "lit": [
+    {"id":1,"n":"j"},{"id":2,"n":"i"},{"id":3,"n":"h"},{"id":4,"n":"g"},{"id":5,"n":"f"},
+    {"id":6,"n":"e"},{"id":7,"n":"d"},{"id":8,"n":"c"},{"id":9,"n":"b"},{"id":10,"n":"a"} ] } },
+    "order": { "init": { "lit": [] } } },
+  "view": { "kind": "column", "children": [
+    { "kind": "button", "testId": "sort", "label": "sort",
+      "onClick": { "set": "order", "value": { "lit": [ { "column": "n", "direction": "asc" } ] } } },
+    { "kind": "table", "rows": { "ref": "items" }, "sort": { "ref": "order" },
+      "virtualizeThreshold": 5, "virtualizeOverscan": 2,
+      "columns": [ { "id": "id", "label": "Id" }, { "id": "n", "label": "N", "sortable": true } ] } ] } })";
+
+}  // namespace
+
+// Mutation: leave the realized rows as they were when only the order changes.
+TEST_CASE("interpreter edges: a virtualized table whose order changes realizes the new view's rows",
+          "[ui][interpreter]") {
+    Harness h;
+    auto const screen = h.mount(kVirtualSort);
+    int const table = h.backend.all("Table").front();
+    CHECK(h.backend.prop(table, "realizedWindow") == "0+2/10");
+    std::string const before = h.backend.dump();
+    h.backend.click(h.backend.all("Button").front());
+    h.settle();
+    std::string const sorted = h.backend.dump();
+    INFO(before);
+    INFO(sorted);
+    CHECK(h.backend.prop(table, "realizedWindow") == "0+2/10");
+    CHECK(sorted.contains("text=a"));
+    CHECK(sorted.contains("text=b"));
+    CHECK_FALSE(sorted.contains("text=j"));
+    CHECK_FALSE(sorted.contains("text=i"));
+}
