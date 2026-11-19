@@ -262,17 +262,18 @@ ChatTool customScreensChatTool(std::shared_ptr<CustomScreens> const& screens, st
             "Propose a new version of the open screen's document. Give the complete document, not a patch. It is "
             "checked at once: an accepted proposal is shown to the person as a draft in place of the screen, and a "
             "refused one comes back to you with the reason and the part that broke the rule. Nothing is saved.",
-        .inputSchema = Json{Json::object_t{
-            {"type", Json{std::string{"object"}}},
+        // Parentheses throughout: braces pick glaze's initializer-list constructor and wrap each value in an array.
+        .inputSchema = Json(Json::object_t{
+            {"type", Json(std::string{"object"})},
             {"properties",
-             Json{Json::object_t{
+             Json(Json::object_t{
                  {"document",
-                  Json{Json::object_t{
-                      {"type", Json{std::string{"string"}}},
+                  Json(Json::object_t{
+                      {"type", Json(std::string{"string"})},
                       {"description",
-                       Json{std::string{"The complete ui/1 document of the screen, as JSON text, with the same "
-                                        "`vocab` and `id` as the screen being edited."}}}}}}}}},
-            {"required", Json{Json::array_t{Json{std::string{"document"}}}}}}}};
+                       Json(std::string{"The complete ui/1 document of the screen, as JSON text, with the same "
+                                        "`vocab` and `id` as the screen being edited."})}})}})},
+            {"required", Json(Json::array_t{Json(std::string{"document"})})}})};
     tool.offer = [screens, app, &executor](ChatToolContext context, ChatToolOfferDone done) {
         async::spawn(executor, offerTask(screens, app, std::move(context), std::move(done)));
     };

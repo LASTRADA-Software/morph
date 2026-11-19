@@ -535,3 +535,22 @@ TEST_CASE("the_tool_is_not_offered_when_the_allowance_is_refused", "[chat][propo
     CHECK(request.system.contains("cannot change this screen's document"));
     CHECK_FALSE(request.system.contains("ORPHAN"));
 }
+
+// Mutation: build a tool's schema with braces, which wraps every value in an array.
+TEST_CASE("every_offered_tools_input_schema_is_an_object_with_type_object", "[chat][propose]") {
+    Rig rig;
+    rig.fake->script(said("ok"));
+    REQUIRE(rig.finished(rig.start("lims.base")).status == chat::TurnStatus::Done);
+    auto const request = rig.asked().at(0);
+    REQUIRE_FALSE(request.tools.empty());
+    for (chat::ToolSpec const& tool : request.tools) {
+        INFO(tool.name);
+        auto const* const schema = std::get_if<ui::Json::object_t>(&tool.inputSchema.data);
+        REQUIRE(schema != nullptr);
+        auto const type = schema->find("type");
+        REQUIRE(type != schema->end());
+        auto const* const name = std::get_if<std::string>(&type->second.data);
+        REQUIRE(name != nullptr);
+        CHECK(*name == "object");
+    }
+}
