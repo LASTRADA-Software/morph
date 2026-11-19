@@ -22,6 +22,7 @@
 #include <morph/util/datetime.hpp>
 #include <optional>
 #include <span>
+#include <numeric>
 #include <stdexcept>
 #include <string>
 #include <type_traits>
@@ -1414,7 +1415,8 @@ struct WindowFixture {
     WindowFixture(std::int64_t rowCount, std::size_t columnCount, WindowOptions const& options = {})
         : rows{std::make_shared<FakeRows>(rowCount, columnCount, runtime.owner())},
           arrangement{runtime, TableArrangement{.visible = {}, .pinned = options.pinned, .widths = {}}},
-          focus{runtime, std::nullopt} {
+          focus{runtime, std::nullopt},
+          highlight{runtime, std::nullopt} {
         std::vector<ui::TableColumn> columns;
         for (std::size_t column = 0; column < columnCount; ++column) {
             columns.push_back(ui::TableColumn{.id = "c" + std::to_string(column),
@@ -1433,11 +1435,15 @@ struct WindowFixture {
         };
         source.cellView = [this](std::size_t column, Signal<Value> const& row) {
             ++cellViewCalls;
+            if (throwing) {
+                throw std::runtime_error{"the cell does not build"};
+            }
             return ui::text({.text = [&row, column] { return fieldText(row.get(), "c" + std::to_string(column)); }});
         };
         ui::TableOptions tableOptions;
         tableOptions.arrangement = [this] { return arrangement.get(); };
         tableOptions.focus = [this] { return focus.get(); };
+        tableOptions.highlight = [this] { return highlight.get(); };
         tableOptions.onFocusCell = [this](std::optional<CellRef> cell) {
             if (onFocusCell) {
                 onFocusCell(std::move(cell));
@@ -1492,7 +1498,8 @@ struct WindowFixture {
         std::size_t alive = 0;
         for (int const row : backend.children(table)) {
             for (int const cell : backend.children(row)) {
-                alive += backend.hasProp(cell, "column") && backend.prop(cell, "column") != "none" ? 1U : 0U;
+                static_cast<void>(cell);
+                ++alive;
             }
         }
         return alive;
@@ -1522,8 +1529,11 @@ struct WindowFixture {
     std::shared_ptr<FakeRows> rows;
     Signal<TableArrangement> arrangement;
     Signal<std::optional<CellRef>> focus;
+    Signal<std::optional<ui::TableHighlight>> highlight;
     std::function<void(std::optional<CellRef>)> onFocusCell;
     std::size_t cellViewCalls = 0;
+    // Every own cell's build throws while set.
+    bool throwing = false;
     std::size_t maxRebindsPerTurn = 0;
     std::size_t firstRow = 0;
     std::unique_ptr<ui::Mounted> view;
@@ -1543,7 +1553,7 @@ std::vector<std::size_t> allColumnsBut(std::size_t n, std::size_t left) {
 
 }  // namespace
 
-// Mutation: `windowingOf` leaving `cellThreshold` out (the first line's `.columns` and `.rows` are false).
+// Mutation: `windowingOf` leaving `cellThreshold` out of the columns (the 1,000 × 30 line's `.columns` is false).
 TEST_CASE("windowing: the three thresholds", "[ui][mount]") {
     Virtualization const v{};
     CHECK(windowingOf(v, 1999, 300, false).rows);
@@ -1557,6 +1567,8 @@ TEST_CASE("windowing: the three thresholds", "[ui][mount]") {
     CHECK_FALSE(windowingOf(v, 100, 40, false).columns);
     CHECK(windowingOf(v, 10, 10, true).rows);
     CHECK_FALSE(windowingOf(v, 10, 10, true).columns);
+    CHECK(windowingOf(v, 1000, 30, false).columns);  // 30,000 cells in 30 columns: by cellThreshold alone
+    CHECK_FALSE(windowingOf(v, 600, 30, false).columns);
 }
 
 // Mutation: the column window never on (`windowColumns` is all 300).  Gate F2.
@@ -1584,8 +1596,7 @@ TEST_CASE("table window: a fling creates no cell once the pools are warm", "[ui]
     CHECK(f.stats().placeholders > 0);  // the budget left cells blank for a turn
 }
 
-// Mutation: rebinding a cell by building it again through cellView (with the mutant the pass never settles: the
-// built cells never take their columns, so the work comes back each turn; the run is stopped at 580 s).
+// Mutation: rebinding a cell by building it again through cellView (cellViewCalls grows on the second fling).
 TEST_CASE("table window: a pooled cell is rebound by its row signal", "[ui][mount]") {
     WindowFixture f{100'000, 300, {.pinned = 2, .custom = {5}}};
     f.flingRows(2'000);
@@ -1617,7 +1628,8 @@ TEST_CASE("table window: a column growing left of the view keeps the columns in 
     CHECK(f.backend.horizontalOffset(f.table) == 10'060);
 }
 
-// Mutations: pinned columns dropped from the window when scrolled away; no display unpinning (`pinnedShown` 12).
+// Mutations: pinned columns dropped from the window when scrolled away; no display unpinning (`pinnedShown` 12);
+// the pins not given back when the viewport widens (`pinnedShown` stays 10).
 TEST_CASE("table window: pinned columns stay realized, and a narrow table unpins for display only", "[ui][mount]") {
     WindowFixture f{1'999, 300, {.pinned = 2}};
     f.scrollColumns(20'000);
@@ -1631,6 +1643,9 @@ TEST_CASE("table window: pinned columns stay realized, and a narrow table unpins
     f.settle();
     CHECK(f.backend.pinnedShown(f.table) == 10);  // the last two scroll with the rest
     CHECK(f.arrangement.peek().pinned == 12);  // display only
+    f.backend.scrollTableColumns(f.table, 20'000, 4'000);  // 1,200 of 4,000: the pins come back
+    f.settle();
+    CHECK(f.backend.pinnedShown(f.table) == 12);
 }
 
 // Mutation: a pass that reads every column's width (columnReads grows by 300 a pass).  Gate F9.
@@ -1669,7 +1684,8 @@ TEST_CASE("table window: hiding and moving a column create no cell widgets", "[u
     CHECK(f.rows->lastVisible.first == 0);  // rows and their order untouched
 }
 
-// Mutation: the focused row not kept realized (the focused cell is gone after the scroll).  Gate F10.
+// Mutations: the focused row not kept realized (the focused cell is gone after the scroll); the focused row counted
+// in `setRealizedWindow`'s contiguous range (`9990+51`).  Gate F10.
 TEST_CASE("table focus: the focused cell survives a scroll of 10,000 rows and 200 columns", "[ui][mount]") {
     WindowFixture f{100'000, 300, {.pinned = 2}};
     f.focus.set(CellRef{.key = Key{std::int64_t{7}}, .column = "c5"});
@@ -1679,6 +1695,7 @@ TEST_CASE("table focus: the focused cell survives a scroll of 10,000 rows and 20
     REQUIRE(f.cellOf(Key{std::int64_t{7}}, 5).has_value());  // its row and its column stay realized
     CHECK(f.backend.focusCell(f.table) == std::pair{std::size_t{7}, std::size_t{5}});
     CHECK(f.realizedRows() == 51);  // one row beyond the window at most
+    CHECK(f.backend.prop(f.table, "realizedWindow") == "9990+50/100000");  // the contiguous rows; row 7 apart
     CHECK(f.backend.lastCounts(f.table) == std::pair{std::optional<std::int64_t>{100'000}, std::size_t{300}});
 }
 
@@ -1735,4 +1752,91 @@ TEST_CASE("table focus: the reported row count is the total, or unknown for a lo
     f.backend.focusMove(f.table, FocusMove::Last);
     f.settle();
     CHECK(f.backend.focusCell(f.table).first == 199);  // AtLeast: the last row known
+}
+
+// Mutation: the column window ignoring `cellThreshold` (thirty columns are under `columnThreshold`, so all 30 are in
+// the window).  Gate F2.
+TEST_CASE("table window: 1,000 × 30 is windowed by its cells alone", "[ui][mount]") {
+    WindowFixture f{1'000, 30};
+    CHECK(f.backend.windowColumns(f.table).size() == 20 + 4);  // twenty in view, four overscan on the right
+    CHECK(f.cellsAlive() == f.realizedRows() * 24);
+}
+
+// Mutations: a reset followed by view index (focus moves to row 7's place and is reported; the mark stays on 12);
+// focus taken by the row now at its index although its key is still in the view.
+TEST_CASE("table focus: a new order finds focus and the highlight by key", "[ui][mount]") {
+    WindowFixture f{100'000, 30};
+    std::vector<std::optional<CellRef>> reported;
+    f.onFocusCell = [&reported](std::optional<CellRef> cell) { reported.push_back(std::move(cell)); };
+    f.focus.set(CellRef{.key = Key{std::int64_t{7}}, .column = "c3"});
+    f.highlight.set(ui::TableHighlight{.key = Key{std::int64_t{12}}, .row = 12});
+    f.settle();
+    REQUIRE(f.backend.focusCell(f.table) == std::pair{std::size_t{7}, std::size_t{3}});
+    REQUIRE(f.backend.prop(f.table, "highlightedRow") == "12");
+    // Every row one place down: key k at view index k + 1.
+    f.rows->reorder([](std::int64_t index) { return index == 0 ? std::int64_t{99'999} : index - 1; });
+    f.settle();
+    CHECK(f.backend.focusCell(f.table) == std::pair{std::size_t{8}, std::size_t{3}});
+    CHECK(f.backend.prop(f.table, "highlightedRow") == "13");
+    CHECK(reported.empty());  // the user moved nothing
+    // Reversed: keys 7 and 12 are far from the rows realized.
+    f.rows->reorder([](std::int64_t index) { return 99'999 - index; });
+    f.settle();
+    CHECK(reported.empty());  // focus stays on its key; the row now at its place does not take it
+    CHECK(f.backend.prop(f.table, "highlightedRow") == "none");  // until the key is located again
+}
+
+// Mutation: no pooled cell dropped once a row has nothing left to realize (the widgets alive grow with every column
+// scrolled past).  Gate F2.
+TEST_CASE("table window: cells of their own columns scrolled across stay bounded", "[ui][mount]") {
+    std::vector<std::size_t> every(300);
+    std::iota(every.begin(), every.end(), std::size_t{0});
+    WindowFixture f{1'999, 300, {.pinned = 0, .custom = every}};
+    for (int x = 0; x <= 20'000; x += 1'000) {
+        f.scrollColumns(x);
+        CHECK(f.cellsAlive() == f.realizedRows() * f.backend.windowColumns(f.table).size());
+    }
+}
+
+// Mutation: a pass that realized nothing posts the next anyway (the owner never goes idle).
+TEST_CASE("table window: cells whose build throws on every pass stop being retried", "[ui][mount]") {
+    std::vector<std::size_t> every(300);
+    std::iota(every.begin(), every.end(), std::size_t{0});
+    WindowFixture f{1'999, 300, {.pinned = 0, .custom = every}};
+    Probe const probe{f.owner.coreExecutor()};  // each failed pass is reported, not asserted
+    f.throwing = true;
+    f.backend.scrollTableColumns(f.table, 10'000, 2'000);  // twenty-eight new columns of their own, none builds
+    std::size_t turns = 0;
+    while (f.owner.runOne() && ++turns < 1'000) {
+    }
+    CHECK(turns < 1'000);
+}
+
+// Mutation: a fixed width taken as the backend's measure (every extent is 10).
+TEST_CASE("table window: widths are in the backend's measure", "[ui][mount]") {
+    Owner owner;
+    Runtime runtime{owner};
+    RecordingBackend backend;
+    backend.setTableMeasure(ui::TableMeasure{.unit = 8.0, .monoUnit = 10.0, .contentEstimate = 64});
+    auto rows = std::make_shared<FakeRows>(50, 4, runtime.owner());
+    std::vector<ui::TableColumn> columns{
+        {.id = "c0", .label = "A", .width = ui::Sizing::fixed(10)},
+        {.id = "c1", .label = "B", .width = ui::Sizing::fixed(10), .role = ui::TextRole::Mono},
+        {.id = "c2", .label = "C"},
+        {.id = "c3", .label = "D", .width = ui::Sizing::fixed(10)},
+    };
+    ui::TableSource source;
+    source.rows = rows;
+    source.cellView = [](std::size_t column, Signal<Value> const& row) {
+        return ui::text({.text = [&row, column] { return fieldText(row.get(), "c" + std::to_string(column)); }});
+    };
+    ui::TableOptions options;
+    options.arrangement = TableArrangement{.visible = {}, .pinned = 0, .widths = {{3, 5}}};  // the user's 5 units
+    ui::Mounted const view{runtime, backend, ui::table(std::move(columns), std::move(source), std::move(options))};
+    owner.runAll();
+    ColumnExtents const& extents = *view.columnExtents();
+    CHECK(extents.widthOf(0) == 80);
+    CHECK(extents.widthOf(1) == 100);  // monospace characters
+    CHECK(extents.widthOf(2) == 64);   // the backend's estimate
+    CHECK(extents.widthOf(3) == 40);
 }

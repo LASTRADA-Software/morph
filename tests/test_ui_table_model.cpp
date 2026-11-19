@@ -895,6 +895,46 @@ TEST_CASE("model table: highlightKey scrolls to the row and marks it", "[ui][tab
     CHECK(h.backend.prop(table, "highlightedRow") == "none");
 }
 
+namespace {
+
+// A model-backed table whose `name` column's cell is a button `pick`, and a button that focuses `pick` in row 250.
+std::string const kPick =
+    R"({"vocab":"ui/1","id":"samples","models":{"lab":{"type":"Lims_SampleModel"}},)"
+    R"("view":{"kind":"column","children":[)"
+    R"({"kind":"button","label":"250","testId":"to250","onClick":{"focus":"pick","row":250}},)"
+    R"({"kind":"table","id":"list","testId":"list","model":"lab","table":"samples",)"
+    R"("columns":[{"id":"id"},{"id":"name","cell":[{"kind":"button","id":"pick","label":{"row":"name"}}]}],)"
+    R"("empty":[{"kind":"text","text":"No samples"}]}]}})";
+
+// The key of the table row whose cell @p widget is.
+std::string rowKeyHolding(TableHarness const& h, int widget) {
+    for (int const row : h.backend.children(tableOf(h))) {
+        if (std::ranges::contains(h.backend.children(row), widget)) {
+            return h.backend.prop(row, "rowKey");
+        }
+    }
+    return {};
+}
+
+}  // namespace
+
+// Mutation: a cell's row scope keyed by the row it was built for (the focus lands on no cell, or on another row's).
+TEST_CASE("model table: a reused cell's elements are focused by the row it shows", "[ui][table]") {
+    TableHarness h;
+    auto screen = mountShown(h, kPick, 9'093);
+    h.backend.scrollTable(tableOf(h), 0, 30);  // rows 0 to 39
+    h.settle();
+    answerPages(h, 9'093);
+    h.backend.scrollTable(tableOf(h), 240, 30);  // row 250 takes the slot, and the cell, row 20 had
+    h.settle();
+    answerPages(h, 9'093);
+    REQUIRE(statsOf(*screen).cellsRebound > 0);
+    h.backend.click(h.byTestId("Button", "to250"));
+    h.settle();
+    REQUIRE(h.backend.focused() != 0);
+    CHECK(rowKeyHolding(h, h.backend.focused()) == "250");
+}
+
 // Mutation: the mount leaving out the rows a `Changed` operation names (no row is bound again: 0, and the renamed
 // text is not shown).  Gate K5.
 TEST_CASE("model table: a refetch that changed 20 of 200 rows evaluates 20 rows again", "[ui][table]") {

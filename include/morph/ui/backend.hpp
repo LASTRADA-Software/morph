@@ -738,6 +738,16 @@ enum class RowClick : std::uint8_t {
     Range,   ///< Shift+click: the rows from the anchor to this one are selected, in place of the rest.
 };
 
+/// @brief A backend's horizontal measure for a table's columns (`TableWidget::tableMeasure`).
+struct TableMeasure {
+    /// @brief The backend's measure of one `Sizing` unit: a fixed column of `n` units is `n * unit` wide.
+    double unit = 1.0;
+    /// @brief The measure of one monospace character, the unit of a fixed column whose role is `TextRole::Mono`.
+    double monoUnit = 1.0;
+    /// @brief The width a column that declares none starts from, in the backend's measure, before its cells measure.
+    int contentEstimate = 100;
+};
+
 /// @brief A key that moves a table's focused cell, which the mount resolves over rows and columns it may not have
 ///        realized.
 enum class FocusMove : std::uint8_t {
@@ -1016,6 +1026,14 @@ public:
         static_cast<void>(row);
         static_cast<void>(viewRow);
     }
+
+    /// @brief How this backend measures a table's widths, for a table whose rows come from a `TableSource`. The
+    ///        horizontal scroll and viewport it reports, the widths it measures and the offsets and widths
+    ///        `setColumnWindow` gives it are all in its own measure (pixels for a graphical backend, cells for a
+    ///        terminal); the mount turns a column's `Sizing::fixed` amount, and a width the user set, into that
+    ///        measure with these factors. The default measure is one per unit, with a content column estimated at 100.
+    /// @return The measure.
+    [[nodiscard]] virtual TableMeasure tableMeasure() const { return {}; }
 };
 
 /// @brief A date or date-and-time field, in the mode and display zone fixed at creation.

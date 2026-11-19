@@ -100,6 +100,11 @@ public:
     void setOnVisibleRangeChanged(std::function<void(std::size_t, std::size_t)> onVisibleRangeChanged) override;
     /// Throws std::logic_error when @p row is not one of this table's rows.
     void setRowIndex(ui::Widget& row, std::size_t viewRow) override;
+    /// The terminal measures in cells: a unit, and a monospace character, is one cell; a column that declares no width
+    /// starts at twelve.
+    [[nodiscard]] ui::TableMeasure tableMeasure() const override {
+        return ui::TableMeasure{.unit = 1.0, .monoUnit = 1.0, .contentEstimate = 12};
+    }
     void setStatus(ui::TableStatus const& status) override;
     void setOnRetry(std::function<void()> onRetry) override;
     /// Throws std::logic_error when @p row is not one of this table's rows.

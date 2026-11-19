@@ -1457,6 +1457,9 @@ public:
     reactive::Signal<Value> const* row = nullptr;
     /// @brief The canonical key of a row scope's row; empty for any other scope.
     std::string rowKey;
+    /// @brief For a row scope whose row signal is set to other rows (a pooled table cell): the canonical key of the
+    ///        row it holds now, read in place of `rowKey`; empty for any other scope.
+    std::function<std::string()> rowKeyNow;
     /// @brief For a component fallback's scope, the focus key of the `custom` node it is lowered for, so one
     ///        fallback lowered for two uses keys its elements apart; empty for any other scope.
     std::string usePrefix;

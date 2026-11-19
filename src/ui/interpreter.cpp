@@ -239,13 +239,21 @@ namespace detail {
 /// row bindings read and the rows lacked are named to every `visible` call after the mount's own columns.
 class ObservedRows final : public TableRows {
 public:
-    ObservedRows(std::shared_ptr<WindowRows> inner, std::function<void()> changed, std::function<void()> scrolled)
-        : _inner{std::move(inner)}, _changed{std::move(changed)}, _scrolled{std::move(scrolled)} {
+    ObservedRows(std::shared_ptr<WindowRows> inner, std::function<void()> changed, std::function<void()> scrolled,
+                 std::function<void()> reset)
+        : _inner{std::move(inner)},
+          _changed{std::move(changed)},
+          _scrolled{std::move(scrolled)},
+          _reset{std::move(reset)} {
         _inner->onChange([this](table::ViewChange const& change) {
             if (_handler) {
                 _handler(change);
             }
             _changed();
+            // A new query moves every row: what is found by key is found again.
+            if (change.isReset() && _reset) {
+                _reset();
+            }
         });
         _inner->onStatus([this] { _changed(); });
     }
@@ -316,6 +324,7 @@ private:
     std::shared_ptr<WindowRows> _inner;
     std::function<void()> _changed;
     std::function<void()> _scrolled;
+    std::function<void()> _reset;
     std::function<void(table::ViewChange const&)> _handler;
     std::int64_t _first = 0;
     std::int64_t _count = 0;
@@ -328,7 +337,11 @@ private:
 /// description, the arrangement it gave the rows, its persisted state's key and load, and its status line's message.
 struct ModelTable {
     explicit ModelTable(reactive::Runtime& runtime)
-        : version{runtime, 0}, revision{runtime, std::string{}}, highlight{runtime, std::nullopt}, message{runtime, std::string{}} {}
+        : version{runtime, 0},
+          resets{runtime, 0},
+          revision{runtime, std::string{}},
+          highlight{runtime, std::nullopt},
+          message{runtime, std::string{}} {}
 
     ModelTable(ModelTable const&) = delete;
     ModelTable& operator=(ModelTable const&) = delete;
@@ -372,6 +385,8 @@ struct ModelTable {
     std::shared_ptr<ObservedRows> rows;
     /// Bumped on every change of the rows, their counts or their error.
     reactive::Signal<std::uint64_t> version;
+    /// Bumped on every reset of the rows (a new query): a row found by key is located again.
+    reactive::Signal<std::uint64_t> resets;
     /// The held description's revision; empty while none is held.
     reactive::Signal<std::string> revision;
     /// The highlighted row: the key `highlightKey` names and the view row a keyed fetch found it at.
@@ -5905,7 +5920,7 @@ struct FocusPlace {
     FocusPlace place;
     for (RtScope const* current = &scope; current != nullptr; current = current->parent.get()) {
         if (current->row != nullptr) {
-            place.rows.push_back(current->rowKey);
+            place.rows.push_back(current->rowKeyNow ? current->rowKeyNow() : current->rowKey);
         }
         if (current->parent == nullptr) {
             place.prefix = current->usePrefix;
@@ -5946,7 +5961,17 @@ void ScreenCore::commonOf(DocNode const& node, LowerCtx const& ctx, ElementState
     layoutOf(node, ctx, common.layout);
     common.testId = std::string{node.name("testId")};
     if (!node.id.empty()) {
-        common.focusId = focusKeyOf(node.path, *ctx.scope);
+        // Under a scope whose row changes (a pooled table cell), the key follows the row it holds now.
+        bool live = false;
+        for (RtScope const* current = ctx.scope.get(); current != nullptr; current = current->parent.get()) {
+            live = live || static_cast<bool>(current->rowKeyNow);
+        }
+        if (live) {
+            common.focusId = slotProp<std::string>(
+                [scope = ctx.scope, path = node.path] { return focusKeyOf(path, *scope); });
+        } else {
+            common.focusId = focusKeyOf(node.path, *ctx.scope);
+        }
     }
     common.surface = surfaceOf(node, ctx);
     if (ExprPtr const autofocus = node.prop("autofocus")) {
@@ -8524,7 +8549,8 @@ void ScreenCore::wireModelTable(ElementState& element) {
                                                                            .restoring = model.waiting});
     model.rows = std::make_shared<ObservedRows>(
         model.window, model.scope.token().guard([&model] { model.bump(); }),
-        model.scope.token().guard([this, &element] { tableGesture(element); }));
+        model.scope.token().guard([this, &element] { tableGesture(element); }),
+        model.scope.token().guard([&model] { model.resets.set(model.resets.peek() + 1); }));
     model.window->onStaleDescription(model.scope.token().guard([&model] { model.describe->invalidate(); }));
     // Called inside a binding, where no signal may be written: the misses of one turn are fetched by one task.
     model.onMissing = [this, &model](std::string_view field) {
@@ -8591,6 +8617,8 @@ void ScreenCore::wireModelTable(ElementState& element) {
         scope.nodes.effect([this, &scope, &element, highlight] {
             Value const key = evalIn(scope, nullptr, highlight);
             bool const described = !element.modelTable->revision.get().empty();
+            // A new query (sort, filter) moves the row: located again, the mark cleared meanwhile.
+            static_cast<void>(element.modelTable->resets.get());
             runtime().untracked([&] {
                 ModelTable& table = *element.modelTable;
                 if (key.isNull() || !described) {
@@ -8599,6 +8627,7 @@ void ScreenCore::wireModelTable(ElementState& element) {
                     return;
                 }
                 Key const shown = keyOf(key);
+                table.highlight.set(std::nullopt);
                 table.window->locate(std::visit([](auto const& value) { return table::RowId{value}; }, shown),
                                      [&table, shown](std::optional<std::int64_t> index) {
                                          table.highlight.set(index && *index >= 0
@@ -9074,6 +9103,7 @@ Node ScreenCore::modelTableOf(DocNode const& node, LowerCtx const& ctx, ElementS
                 Value const* const value = row.get().field(idList->at(column.get()));
                 return value == nullptr ? std::string{} : textOf(*value, scope->formatting());
             }),
+            // Read once: the mount pools default cells by role, so a cell only ever moves to a column of its own role.
             .role = roles.at(column.peek()),
         });
     };
@@ -9093,6 +9123,12 @@ Node ScreenCore::modelTableOf(DocNode const& node, LowerCtx const& ctx, ElementS
             });
             auto const scope = rowScope(node, ctx, row, content, std::move(key));
             scope->onMissingRowField = &model.onMissing;
+            // The mount rebinds a pooled cell to other rows by its signal: the row its elements are keyed by is the
+            // one the signal holds now.
+            scope->rowKeyNow = [&row, &model] {
+                Value const* const id = row.get().field(model.keyColumn);
+                return id == nullptr ? std::string{} : canonicalJson(*id);
+            };
             LowerCtx const rowCtx{.scope = scope, .bindings = ctx.bindings, .boundary = ctx.boundary};
             // The cell owns its scope for as long as its node lives.
             auto const owner =

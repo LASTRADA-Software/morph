@@ -42,15 +42,16 @@ public:
         if (index < 0 || index >= _rows || (_hold && index >= *_hold)) {
             return std::nullopt;
         }
+        std::int64_t const key = _keyAt ? _keyAt(index) : index;
         auto [found, made] = _records.try_emplace(index);
         if (made) {
             ui::ValueRecord record;
-            record.emplace("id", ui::Value{index});
+            record.emplace("id", ui::Value{key});
             for (std::size_t column = 0; column < _columns; ++column) {
                 record.emplace("c" + std::to_string(column),
-                               ui::Value{"r" + std::to_string(index) + "c" + std::to_string(column)});
+                               ui::Value{"r" + std::to_string(key) + "c" + std::to_string(column)});
             }
-            found->second = Entry{.key = table::RowId{index}, .row = ui::Value{std::move(record)}};
+            found->second = Entry{.key = table::RowId{key}, .row = ui::Value{std::move(record)}};
         }
         return ui::TableRowRef{.key = found->second.key, .row = found->second.row};
     }
@@ -91,6 +92,12 @@ public:
     // The held rows arrive: a reset.
     void arrive() {
         _hold.reset();
+        reset();
+    }
+
+    // A new order, as a sort gives: the row at view index `i` is keyed `keyAt(i)` from now; a reset.
+    void reorder(std::function<std::int64_t(std::int64_t)> keyAt) {
+        _keyAt = std::move(keyAt);
         reset();
     }
 
@@ -158,6 +165,7 @@ private:
     mutable std::map<std::int64_t, Entry> _records;
     std::map<std::int64_t, Levels> _levels;
     std::function<void(table::ViewChange const&)> _handler;
+    std::function<std::int64_t(std::int64_t)> _keyAt;
 };
 
 }  // namespace morph::testing
