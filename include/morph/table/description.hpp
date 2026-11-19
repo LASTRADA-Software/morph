@@ -1218,7 +1218,17 @@ struct AnswerContext {
         if (!view) {
             return std::unexpected(std::move(view.error()));
         }
-        ViewComputation out{.view = std::move(*view), .awaiting = {}, .failed = {}};
+        ViewComputation out{.view = std::move(*view), .awaiting = {}, .failed = {}, .orderKeys = {}};
+        auto const viewSnapshot = leveled.snapshot();
+        auto orderKeys = std::make_shared<std::vector<RowId>>();
+        orderKeys->reserve(out.view.rows.size() + out.view.undecided.size());
+        for (auto const row : out.view.rows) {
+            orderKeys->push_back(viewSnapshot->rowId(row));
+        }
+        for (auto const row : out.view.undecided) {
+            orderKeys->push_back(viewSnapshot->rowId(row));
+        }
+        out.orderKeys = std::move(orderKeys);
         for (auto const& level : needed.order) {
             bool unloaded = false;
             bool failed = false;
@@ -1299,15 +1309,8 @@ struct AnswerContext {
         if (source == nullptr) {
             continue;
         }
-        std::vector<RowId> keys;
-        keys.reserve(view->rows.size() + view->undecided.size());
-        for (auto const row : view->rows) {
-            keys.push_back(snapshot->rowId(row));
-        }
-        for (auto const row : view->undecided) {
-            keys.push_back(snapshot->rowId(row));
-        }
-        if (auto wanted = source->want(keys, LevelUse::Order, query.retry); !wanted) {
+        auto const& keys = *entry->orderKeys;
+        if (auto wanted = source->wantSet(entry->orderKeys, LevelUse::Order, query.retry); !wanted) {
             // The query is refused: the levels that accepted its order use hold nothing for it.
             for (auto const& accepted : leased) {
                 accepted->unwant(keys);

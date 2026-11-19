@@ -61,6 +61,9 @@ struct ViewComputation {
     std::vector<std::string> awaiting;
     /// @brief The order levels failed for some such row.
     std::vector<std::string> failed;
+    /// @brief The keys of the view's rows and of the undecided rows: what the query's order levels are wanted
+    ///        for, kept with the view so that a repeated want is one a level can recognise.
+    std::shared_ptr<std::vector<RowId> const> orderKeys;
 };
 
 /// @brief One cached view: what it was computed from, and the lookups a keyed query reads, built at its first.
@@ -79,7 +82,8 @@ public:
           levels{std::move(levelsIn)},
           view{std::move(computation.view)},
           awaiting{std::move(computation.awaiting)},
-          failed{std::move(computation.failed)} {}
+          failed{std::move(computation.failed)},
+          orderKeys{std::move(computation.orderKeys)} {}
 
     ViewEntry(ViewEntry const&) = delete;
     ViewEntry& operator=(ViewEntry const&) = delete;
@@ -98,6 +102,8 @@ public:
     std::vector<std::string> awaiting;
     /// @brief The order levels failed for some such row.
     std::vector<std::string> failed;
+    /// @brief The keys of the view's rows and of the undecided rows, for the order levels' wants.
+    std::shared_ptr<std::vector<RowId> const> orderKeys;
 
     /// @brief The view row of each source row, `detail::kNotInView` for a row not in the view.
     /// @return The table, built at the first call.

@@ -741,3 +741,91 @@ TEST_CASE("level cache: a failure stays through its retry delay under memory pre
         CHECK(stateOf(*snapshot, key) == LevelRead::Failed);
     }
 }
+
+// Mutation: invalidate advancing the version only when it removes a value (the store publishes key 1's stale value).
+TEST_CASE("level cache: an invalidation between a store's preparation and its publication is not lost",
+          "[table][levels]") {
+    Rig rig;
+    std::vector<RowId> const one{RowId{std::int64_t{1}}};
+    bool first = true;
+    detail::LevelCacheAccess::onStorePrepared(rig.cache, [&] {
+        if (std::exchange(first, false)) {
+            rig.cache.invalidate(one);  // the key is in flight: the store has prepared its old value
+        }
+    });
+    REQUIRE(rig.cache.want(one, LevelUse::Display));
+    rig.drain();
+    CHECK(stateOf(*rig.cache.snapshot(), one[0]) == LevelRead::Unloaded);
+    CHECK(rig.cache.stats().droppedLoads == 1);
+    REQUIRE(rig.cache.want(one, LevelUse::Display));
+    rig.drain();
+    CHECK(rig.callCount() == 2);
+    CHECK(stateOf(*rig.cache.snapshot(), one[0]) == LevelRead::Loaded);
+}
+
+// Mutation: the want classifying its keys under the writer mutex (the invalidation waits for the paused want).
+TEST_CASE("level cache: an invalidation does not wait for a paused want", "[table][levels]") {
+    Rig rig;
+    std::atomic<bool> paused{false};
+    std::promise<void> resume;
+    auto const resumed = resume.get_future().share();
+    std::atomic<bool> first{true};
+    detail::LevelCacheAccess::onWantClassify(rig.cache, [&] {
+        if (first.exchange(false)) {
+            paused = true;
+            static_cast<void>(resumed.wait_for(10s));
+        }
+    });
+    auto wanting = std::async(std::launch::async, [&rig] { return rig.cache.want(keys(100'000), LevelUse::Order); });
+    auto const deadline = std::chrono::steady_clock::now() + 10s;
+    while (!paused.load() && std::chrono::steady_clock::now() < deadline) {
+        std::this_thread::yield();
+    }
+    REQUIRE(paused.load());
+    auto invalidation = std::async(std::launch::async, [&rig] { rig.cache.invalidate(keys(2)); });
+    bool const done = invalidation.wait_for(5s) == std::future_status::ready;
+    resume.set_value();
+    CHECK(done);
+    invalidation.get();
+    CHECK(wanting.get().has_value());
+}
+
+// Mutation: unwant ending a lease whatever its holders (the second order use is accepted).
+TEST_CASE("level cache: an order lease ends with its last holder", "[table][levels]") {
+    auto const value = smallValueBytes();
+    Rig rig{[value](LevelCacheOptions& options) {
+        options.maxBytes = 150 * value;
+        options.expectedBytes = value;
+    }};
+    REQUIRE(rig.cache.want(keys(100), LevelUse::Order));
+    rig.drain();
+    REQUIRE(rig.cache.want(keys(100), LevelUse::Order));  // a second query orders by the same rows
+    auto const others = keyRange(100, 200);
+    rig.cache.unwant(keys(100));  // the first query is refused elsewhere and takes its want back
+    CHECK_FALSE(rig.cache.want(others, LevelUse::Order).has_value());
+    rig.cache.unwant(keys(100));  // the second goes too
+    CHECK(rig.cache.want(others, LevelUse::Order).has_value());
+}
+
+// Mutation: the repeated set skipped whatever was published since (key 3, invalidated, is not loaded again).
+TEST_CASE("level cache: a repeated order want of an unchanged held set costs nothing per key", "[table][levels]") {
+    Rig rig;
+    auto const set = std::make_shared<std::vector<RowId> const>(keys(100));
+    REQUIRE(rig.cache.wantSet(set, LevelUse::Order));
+    rig.drain();
+    REQUIRE(rig.cache.wantSet(set, LevelUse::Order));  // every key held: the set is noted
+    auto const classified = detail::LevelCacheAccess::classifications(rig.cache);
+    REQUIRE(rig.cache.wantSet(set, LevelUse::Order));
+    REQUIRE(rig.cache.wantSet(set, LevelUse::Order));
+    CHECK(detail::LevelCacheAccess::classifications(rig.cache) == classified);
+    rig.cache.invalidate(std::vector<RowId>{RowId{std::int64_t{3}}});
+    auto const calls = rig.callCount();
+    REQUIRE(rig.cache.wantSet(set, LevelUse::Order));
+    rig.drain();
+    REQUIRE(rig.callCount() == calls + 1);
+    CHECK(rig.calls.back() == std::vector<RowId>{RowId{std::int64_t{3}}});
+    rig.now += 31s;  // more than half the lease gone: the set is classified again, and its leases renewed
+    REQUIRE(rig.cache.wantSet(set, LevelUse::Order));
+    REQUIRE(rig.cache.wantSet(set, LevelUse::Order));
+    CHECK(detail::LevelCacheAccess::classifications(rig.cache) == classified + 2);
+}
