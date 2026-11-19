@@ -17,8 +17,8 @@ import QtQuick.Layouts
 // leaves forgets it, and a row not realized counts as the mean of those measured. A table whose columns all keep one
 // line has one row height and measures no cell. When rows above the first visible one change height, the view moves
 // by as much, so the rows in view stay where they were. Keyboard focus stays on the table, never on a row, which a
-// recycled slot would take away: the keys go to the mount (`focusMove`), and the focused cell (`focusRow`,
-// `focusColumn`) is kept in view and drawn as the current row.
+// recycled slot would take away: the keys go to the mount (`focusMove`), and the focused cell (`focusedRowIndex`,
+// `focusedColumnIndex`) is kept in view and drawn as the current row.
 //
 // The status line (`statusShown`) is one line under the rows: the counts, the state and the message, and "Retry"
 // while the state offers it. It takes no space while it is not shown.
@@ -70,6 +70,11 @@ MorphWidget {
     // self-corrects is the more broadly applicable of the two options the design named, at the cost of an
     // imprecise scrollbar thumb position until enough real rows have been measured to average.
     property real estimatedRowHeight: Theme.unitHeight + 2 * Theme.tableCellPaddingY
+    // The table's horizontal measure, which C++ gives the mount (`TableImpl::tableMeasure`): a unit, a monospace
+    // character and a column's padding, in pixels, as `measure` sizes an unwindowed fixed column.
+    readonly property real measureUnit: Theme.unitWidth
+    readonly property real measureMonoUnit: Theme.monoAdvance
+    readonly property real measurePadding: 2 * Theme.tableCellPaddingX
     // Whether the rows come from a `TableSource`; C++ sets it before the first row.
     property bool sourceRows: false
     readonly property Item content: root.sourceRows ? rowsPlane : body
@@ -123,8 +128,8 @@ MorphWidget {
         return Math.max(0, height)
     }
     // The focused cell, which C++ writes; -1 before any.
-    property int focusRow: -1
-    property int focusColumn: -1
+    property int focusedRowIndex: -1
+    property int focusedColumnIndex: -1
     // The counts assistive technology is told: the rows, -1 while they are a lower bound or not known, and the visible
     // columns.
     property int accessibleRowCount: -1
@@ -862,8 +867,9 @@ MorphWidget {
         }
     }
 
-    // The status line, under the rows and outside the sideways scroll. A polite live region: its text is its
-    // accessible name, so a change is read out as the name changes.
+    // The status line, under the rows and outside the sideways scroll. A polite live region: its text is announced
+    // once it has held for half a second, so a message is read out once and a count when it settles
+    // (`Accessible.announce`, from Qt 6.8; before it, the text is the line's accessible name and nothing more).
     RowLayout {
         id: statusLine
         objectName: "statusLine"
@@ -874,9 +880,20 @@ MorphWidget {
         spacing: Theme.tableCellPaddingX
 
         Text {
+            id: statusLabel
             objectName: "statusText"
             Layout.fillWidth: true
             text: root.statusText
+            onTextChanged: announceTimer.restart()
+            Timer {
+                id: announceTimer
+                interval: 500
+                onTriggered: {
+                    if (root.statusShown && statusLabel.text !== "" &&
+                            typeof statusLabel.Accessible.announce === "function")
+                        statusLabel.Accessible.announce(statusLabel.text)
+                }
+            }
             textFormat: Text.PlainText
             elide: Text.ElideRight
             font: Theme.smallFont
@@ -1044,10 +1061,10 @@ MorphWidget {
 
     // Called by C++ when focus moves: the focused row and its column come into view.
     function showFocusCell() {
-        if (root.focusRow < 0)
+        if (root.focusedRowIndex < 0)
             return
-        root.scrollToRow(root.focusRow)
-        const place = root.windowPlaces[root.focusColumn]
+        root.scrollToRow(root.focusedRowIndex)
+        const place = root.windowPlaces[root.focusedColumnIndex]
         if (place === undefined || place < root.pinnedShown)
             return
         const entry = root.windowColumns[place]
@@ -1057,10 +1074,38 @@ MorphWidget {
             hflick.contentX = entry.offset + entry.width - root.columnViewport
     }
 
+    // Where a range over a source starts: the view row last clicked or toggled, or the one Shift with an arrow
+    // left; -1 for none.
+    property int anchorRowIndex: -1
+    // A range over a source, from the anchor to `viewRow`: the mount resolves it over rows not realized, in
+    // `multiple` mode only.
+    function selectRangeTo(viewRow: int, extend: bool) {
+        if (!root.multiple)
+            return
+        if (root.anchorRowIndex < 0)
+            root.anchorRowIndex = viewRow
+        root.fire("selectRange", {"anchor": root.anchorRowIndex, "focus": viewRow, "extend": extend})
+    }
+
     // The keys over a source: the moves go to the mount, which resolves them over rows and columns not realized;
-    // Space and Enter act on the focused row when it is realized. The order of `FocusMove`.
+    // Shift with Up or Down moves and selects from the anchor through the mount, as Ctrl+A selects every row of the
+    // view; Space and Enter act on the focused row when it is realized. The order of `FocusMove`.
     function sourceKey(event: var): bool {
         const mods = event.modifiers & (Qt.ShiftModifier | Qt.ControlModifier | Qt.AltModifier | Qt.MetaModifier)
+        if (mods === Qt.ControlModifier && event.key === Qt.Key_A) {
+            if (!root.multiple || root.totalRows <= 0)
+                return false
+            root.anchorRowIndex = 0
+            root.selectRangeTo(root.totalRows - 1, true)
+            return true
+        }
+        if (mods === Qt.ShiftModifier && (event.key === Qt.Key_Up || event.key === Qt.Key_Down)) {
+            if (root.anchorRowIndex < 0)
+                root.anchorRowIndex = Math.max(0, root.focusedRowIndex)
+            root.fire("focusMove", event.key === Qt.Key_Up ? 0 : 1)
+            root.selectRangeTo(root.focusedRowIndex, false)
+            return true
+        }
         let move = -1
         if (mods === Qt.ControlModifier && event.key === Qt.Key_Home)
             move = 6
@@ -1075,10 +1120,11 @@ MorphWidget {
             root.fire("focusMove", move)
             return true
         }
-        const row = root.rowAt(root.focusRow)
+        const row = root.rowAt(root.focusedRowIndex)
         if (!row || mods !== Qt.NoModifier)
             return false
         if (event.key === Qt.Key_Space) {
+            root.anchorRowIndex = root.focusedRowIndex
             row.fire("tap", {"ctrl": true})
             return true
         }
@@ -1120,10 +1166,10 @@ MorphWidget {
     // For tests: the focused cell; whether a cell is realized and shown; a column's width; a row's height; a
     // cell's load state as drawn (0 loaded, 1 unloaded, 2 failed).
     function focusedRow(): int {
-        return root.focusRow
+        return root.focusedRowIndex
     }
     function focusedColumn(): int {
-        return root.focusColumn
+        return root.focusedColumnIndex
     }
     function cellRealized(viewRow: int, column: int): bool {
         const row = root.rowAt(viewRow)

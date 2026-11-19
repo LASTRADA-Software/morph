@@ -42,8 +42,19 @@ MorphWidget {
     // row, and the row hands its state to the instance.
     property Component background: null
     readonly property bool hovered: rowHover.hovered
-    // The row's view row, in a table over a source; C++ writes it.
+    // The row's view row, in a table over a source; C++ writes it. A recycled slot measures its cells again for the
+    // row it now shows, and is striped by the view row's parity, not by its place among the children.
     property int viewRow: -1
+    onViewRowChanged: {
+        if (root.viewRow >= 0) {
+            root.alternate = root.viewRow % 2 === 1
+            root.schedulePlace()
+        }
+    }
+    // Places the cells once, from the event loop: C++ asks for it as each cell of a pass is placed or pooled.
+    function schedulePlace() {
+        Qt.callLater(root.place)
+    }
     // The height the row's cells ask for, in a table over a source; the table keeps the largest while it is realized.
     property real measuredHeight: 0
     onMeasuredHeightChanged: {
@@ -60,7 +71,7 @@ MorphWidget {
     onCellLoadsChanged: root.place()
     // Over a source the table holds the focus and names the focused row; otherwise the row holds it.
     readonly property bool current: root.table && root.table.sourceRows
-                                    ? root.table.activeFocus && root.viewRow === root.table.focusRow
+                                    ? root.table.activeFocus && root.viewRow === root.table.focusedRowIndex
                                     : root.holdsFocus(Window.activeFocusItem)
     onCurrentChanged: {
         if (current && root.table)
@@ -268,7 +279,7 @@ MorphWidget {
         for (let i = 0; i < cells.children.length; ++i) {
             const cell = cells.children[i]
             const column = cell.measuredIndex
-            const slot = table.columnSlot(column)
+            const slot = cell === root.pinnedBackdrop || column === undefined ? null : table.columnSlot(column)
             if (!slot)
                 continue
             const pinned = slot.pinned
@@ -316,6 +327,83 @@ MorphWidget {
         }
         if (JSON.stringify(marks) !== JSON.stringify(root.loadMarks))
             root.loadMarks = marks
+        root.placeBackdrop()
+    }
+
+    // The opaque surface under the pinned cells, which the scrolled cells pass beneath: the surface, then the row's
+    // own background cut to the pinned columns, so the row's state shows there as on the rest of the row. It is made
+    // in `cells` (the cells' sibling, so it can lie between the scrolled cells and the pinned ones) only for a table
+    // over a source with pinned columns, so a row of any other table holds nothing in `cells` but its cells.
+    property Item pinnedBackdrop: null
+    Component {
+        id: pinnedBackdropComponent
+        Item {
+            id: backdrop
+            objectName: "pinnedBackdrop"
+            z: 0.5
+            clip: true
+            Rectangle {
+                anchors.fill: parent
+                color: root.scheme.surface
+            }
+            Loader {
+                id: backdropLoader
+                x: -backdrop.x
+                width: root.width
+                height: backdrop.height
+                sourceComponent: root.background
+            }
+            Binding {
+                target: backdropLoader.item
+                property: "selected"
+                value: root.selected
+            }
+            Binding {
+                target: backdropLoader.item
+                property: "hovered"
+                value: root.hovered
+            }
+            Binding {
+                target: backdropLoader.item
+                property: "current"
+                value: root.current
+            }
+            Binding {
+                target: backdropLoader.item
+                property: "alternate"
+                value: root.alternate
+            }
+            Binding {
+                target: backdropLoader.item
+                property: "tone"
+                value: root.tone
+            }
+            Binding {
+                target: backdropLoader.item
+                property: "scheme"
+                value: root.scheme
+            }
+            Binding {
+                target: backdropLoader.item
+                property: "selectColumn"
+                value: root.table ? root.table.selectColumn : false
+                when: backdropLoader.item !== null && ("selectColumn" in backdropLoader.item)
+            }
+        }
+    }
+    function placeBackdrop() {
+        const table = root.table
+        const shown = table && table.arranged && table.pinnedShown > 0 && table.pinnedEdge > 0
+        if (shown && !root.pinnedBackdrop)
+            root.pinnedBackdrop = pinnedBackdropComponent.createObject(cells)
+        if (!root.pinnedBackdrop)
+            return
+        root.pinnedBackdrop.visible = shown
+        if (shown) {
+            root.pinnedBackdrop.x = table.lead + table.scrollX
+            root.pinnedBackdrop.width = table.pinnedEdge
+            root.pinnedBackdrop.height = root.height
+        }
     }
 
     // The pinned cells follow the sideways scroll, so they stay at the leading edge; nothing else moves.
@@ -334,6 +422,7 @@ MorphWidget {
                      (cell.fillsAcross === false ? (root.columns[cell.measuredIndex].align === 3 ? 1
                                                     : root.columns[cell.measuredIndex].align === 2 ? 0.5 : 0) : 0)
         }
+        root.placeBackdrop()
         if (root.loadMarks.some(mark => mark.pinned))
             root.place()
     }
@@ -626,9 +715,20 @@ MorphWidget {
         // A click on the select box is the box's own.
         if (fromRow && selectBox.visible && selectBox.contains(selectBox.mapFromItem(root, Qt.point(x, y))))
             return
-        // The row takes the focus unless a control in one of its cells took it with the press.
-        if (!root.holdsFocus(root.Window.activeFocusItem))
+        // Over a source the table takes the focus, never the row, which a recycled slot would take away; a
+        // Shift-click selects through the mount, from the table's anchor, and any other click makes this row the anchor.
+        // Otherwise the row takes the focus unless a control in one of its cells took it with the press.
+        if (root.table && root.table.sourceRows) {
+            if (!root.holdsFocus(root.Window.activeFocusItem))
+                root.table.forceActiveFocus(Qt.MouseFocusReason)
+            if ((modifiers & Qt.ShiftModifier) !== 0 && (modifiers & Qt.ControlModifier) === 0 && root.table.multiple) {
+                root.table.selectRangeTo(root.viewRow, false)
+                return
+            }
+            root.table.anchorRowIndex = root.viewRow
+        } else if (!root.holdsFocus(root.Window.activeFocusItem)) {
             root.forceActiveFocus(Qt.MouseFocusReason)
+        }
         root.fire("tap", {
             "ctrl": (modifiers & Qt.ControlModifier) !== 0,
             "shift": (modifiers & Qt.ShiftModifier) !== 0

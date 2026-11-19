@@ -1812,12 +1812,12 @@ TEST_CASE("table window: cells whose build throws on every pass stop being retri
     CHECK(turns < 1'000);
 }
 
-// Mutation: a fixed width taken as the backend's measure (every extent is 10).
+// Mutations: a fixed width taken as the backend's measure (every extent is 10); the padding left out (78, not 84).
 TEST_CASE("table window: widths are in the backend's measure", "[ui][mount]") {
     Owner owner;
     Runtime runtime{owner};
     RecordingBackend backend;
-    backend.setTableMeasure(ui::TableMeasure{.unit = 8.0, .monoUnit = 10.0, .contentEstimate = 64});
+    backend.setTableMeasure(ui::TableMeasure{.unit = 7.8, .monoUnit = 10.12, .contentEstimate = 64, .padding = 6});
     auto rows = std::make_shared<FakeRows>(50, 4, runtime.owner());
     std::vector<ui::TableColumn> columns{
         {.id = "c0", .label = "A", .width = ui::Sizing::fixed(10)},
@@ -1835,8 +1835,8 @@ TEST_CASE("table window: widths are in the backend's measure", "[ui][mount]") {
     ui::Mounted const view{runtime, backend, ui::table(std::move(columns), std::move(source), std::move(options))};
     owner.runAll();
     ColumnExtents const& extents = *view.columnExtents();
-    CHECK(extents.widthOf(0) == 80);
-    CHECK(extents.widthOf(1) == 100);  // monospace characters
+    CHECK(extents.widthOf(0) == 84);   // 10 units of 7.8, rounded, and the padding
+    CHECK(extents.widthOf(1) == 108);  // 10 monospace characters of 10.12, rounded up, and the padding
     CHECK(extents.widthOf(2) == 64);   // the backend's estimate
-    CHECK(extents.widthOf(3) == 40);
+    CHECK(extents.widthOf(3) == 45);
 }

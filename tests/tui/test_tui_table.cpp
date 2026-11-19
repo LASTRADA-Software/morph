@@ -1189,6 +1189,7 @@ struct TuiWindowOptions {
     };
     std::size_t pinned = 0;
     std::vector<Level> levels;
+    ui::SelectionMode selection = ui::SelectionMode::None;
 };
 
 // `n` with its thousands grouped by commas.
@@ -1206,9 +1207,10 @@ std::string fieldOf(ui::Value const& record, std::string const& field) {
     return value != nullptr && value->asString() != nullptr ? *value->asString() : std::string{};
 }
 
-// One table over `FakeRows` on the terminal backend, in a terminal of 120 × 32: every column 12 cells wide with the
-// default text cell, so ten columns and thirty rows are in view under the header and over the status line. Its
-// window has no overscan, so the cells alive are exactly those in view.
+// One table over `FakeRows` on the terminal backend, in a terminal of 120 × 32: every column 11 cells and its gap
+// wide with the default text cell, so ten columns and thirty rows are in view under the header and over the status
+// line. Its window has no overscan, so the cells alive are exactly those in view. The ranges the table asks the mount
+// for are kept in `ranges`.
 struct TuiWindowFixture {
     TuiWindowFixture(std::int64_t rowCount, std::size_t columnCount, TuiWindowOptions const& options = {})
         : terminal{std::make_unique<core::tui::MockTerminalOutput>(120, 32)},
@@ -1219,7 +1221,7 @@ struct TuiWindowFixture {
         for (std::size_t column = 0; column < columnCount; ++column) {
             columns.push_back(ui::TableColumn{.id = "c" + std::to_string(column),
                                               .label = "C" + std::to_string(column),
-                                              .width = ui::Sizing::fixed(12)});
+                                              .width = ui::Sizing::fixed(11)});
         }
         ui::TableSource source;
         source.rows = rows;
@@ -1240,6 +1242,10 @@ struct TuiWindowFixture {
         tableOptions.virtualize = ui::Virtualization{.overscan = 0, .columnOverscan = 0};
         tableOptions.arrangement = ui::TableArrangement{.visible = {}, .pinned = options.pinned, .widths = {}};
         tableOptions.status = ui::TableStatus{.counts = grouped(rowCount) + " rows", .shown = true};
+        tableOptions.selectionMode = options.selection;
+        tableOptions.onSelectRange = [this](std::size_t anchor, std::size_t focus, ui::SelectionChange change) {
+            ranges.push_back(Range{.anchor = anchor, .focus = focus, .change = change});
+        };
         view.emplace(runtime, backend, ui::table(std::move(columns), std::move(source), std::move(tableOptions)));
         table = &dynamic_cast<TableImpl&>(WidgetBase::of(view->root()));
         settle();
@@ -1295,8 +1301,16 @@ struct TuiWindowFixture {
         return line < lines.size() ? lines.at(line) : std::string{};
     }
 
+    struct Range {
+        std::size_t anchor = 0;
+        std::size_t focus = 0;
+        ui::SelectionChange change = ui::SelectionChange::Replace;
+        bool operator==(Range const& other) const = default;
+    };
+
     morph::testing::StepExecutor owner;
     morph::reactive::Runtime runtime{owner};
+    std::vector<Range> ranges;
     core::tui::Terminal terminal;
     core::tui::Screen screen;
     morph::tui::Backend backend;
@@ -1338,7 +1352,8 @@ bool cellsUnderTheirHeaders(TuiWindowFixture const& f) {
 
 }  // namespace
 
-// Mutation: the terminal table ignoring the column range (300 cells a row).  Gate U7.
+// Mutation: the terminal table never reporting the columns in view (every column realized: 300 cells a row).
+// Gate U7.
 TEST_CASE("tui table: cell widgets alive are rows in view times columns in view", "[tui]") {
     TuiWindowFixture f{100'000, 300, {.pinned = 0}};
     f.scrollRows(5'000);
@@ -1398,4 +1413,62 @@ TEST_CASE("tui table: the arrows and PageDown move the focused cell through the 
     // Row 32: the view moved down three rows to show it on its last line.
     CHECK(f.screenLine(30).starts_with(" >"));
     CHECK(slotsOf(f.screenLine(30)).front() == "r32c0");
+}
+
+// Mutation: the terminal table taking a realized window as the mark of a source table (a long `rows` table draws its
+// header over blank lines).
+TEST_CASE("tui table: a rows table of 2,000 rows draws its rows", "[tui]") {
+    morph::testing::StepExecutor owner;
+    morph::reactive::Runtime runtime{owner};
+    core::tui::Terminal terminal{std::make_unique<core::tui::MockTerminalOutput>(40, 12)};
+    core::tui::Screen screen{terminal};
+    morph::tui::Backend backend{screen};
+    std::vector<std::int64_t> numbers(2'000);
+    std::ranges::iota(numbers, std::int64_t{0});
+    morph::reactive::Signal<std::vector<std::int64_t>> rows{runtime, numbers};
+    ui::Mounted const view{
+        runtime, backend,
+        ui::table<std::int64_t>(
+            {{.label = "Name"}}, [&rows] { return rows.get(); }, [](std::int64_t const& row) { return ui::Key{row}; },
+            [](morph::reactive::Signal<std::int64_t> const& row) {
+                return std::vector<ui::Node>{
+                    ui::text({.text = [&row] { return "row " + std::to_string(row.get()); }})};
+            })};
+    owner.runAll();
+    backend.fit();
+    screen.draw();
+    Rows const lines = morph::tui::testing::rowsOf(screen);
+    REQUIRE(lines.size() >= 3);
+    CHECK(lines.at(1).contains("row 0"));
+    CHECK(lines.at(2).contains("row 1"));
+}
+
+// Mutation: Shift with the arrows, a Shift-click and Ctrl+A over a source handled as on a short table (no range
+// reaches the mount; Ctrl+A selects the thirty realized rows).
+TEST_CASE("tui table: ranges and Ctrl+A over a source go to the mount as view rows", "[tui]") {
+    TuiWindowFixture f{100'000, 300, {.pinned = 0, .selection = ui::SelectionMode::Multiple}};
+    f.screen.setFocus(&WidgetBase::of(*f.table).view());
+    static_cast<void>(f.screen.dispatchEvent(core::tui::test::specialKey(KeyCode::Down)));  // focus row 1
+    f.settle();
+    static_cast<void>(f.screen.dispatchEvent(core::tui::test::specialKey(KeyCode::Down, core::tui::Modifier::Shift)));
+    static_cast<void>(f.screen.dispatchEvent(core::tui::test::specialKey(KeyCode::Down, core::tui::Modifier::Shift)));
+    f.settle();
+    using Range = TuiWindowFixture::Range;
+    REQUIRE(f.ranges.size() == 2);
+    CHECK(f.ranges.back() == Range{.anchor = 1, .focus = 3, .change = ui::SelectionChange::Replace});
+    static_cast<void>(f.screen.dispatchEvent(core::tui::test::charKey('a', core::tui::Modifier::Ctrl)));
+    f.settle();
+    CHECK(f.ranges.back() == Range{.anchor = 0, .focus = 99'999, .change = ui::SelectionChange::Extend});
+    // A click on view row 4 makes it the anchor; a Shift-click on view row 9 selects from it.
+    using Type = core::tui::MouseEvent::Type;
+    auto const click = [&f](int line, core::tui::Modifier modifiers) {
+        static_cast<void>(f.screen.dispatchEvent(
+            core::tui::MouseEvent{.type = Type::Press, .button = 0, .x = 10, .y = line + 1, .modifiers = modifiers}));
+        static_cast<void>(f.screen.dispatchEvent(core::tui::MouseEvent{
+            .type = Type::Release, .button = 0, .x = 10, .y = line + 1, .modifiers = modifiers}));
+        f.settle();
+    };
+    click(5, core::tui::Modifier::None);
+    click(10, core::tui::Modifier::Shift);
+    CHECK(f.ranges.back() == Range{.anchor = 4, .focus = 9, .change = ui::SelectionChange::Replace});
 }

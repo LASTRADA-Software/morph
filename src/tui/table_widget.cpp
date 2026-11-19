@@ -805,23 +805,12 @@ EventResult TableImpl::modifiedKey(::core::tui::KeyEvent const& key) {
 EventResult TableImpl::key(::core::tui::KeyEvent const& key) {
     _lastClick = {};
     if (_source) {
-        if (auto const move = focusMoveOf(key); move && _onFocusMove) {
-            auto const handler = _onFocusMove;
-            handler(*move);
-            return EventResult::Handled;
+        if (auto const result = sourceKey(key); result == EventResult::Handled) {
+            return result;
         }
-        WidgetBase* const row = _focusCell ? rowAtView(_focusCell->first) : nullptr;
-        if (::core::tui::withoutLockKeys(key.modifiers) == ::core::tui::Modifier::None && row != nullptr) {
-            if (key.codepoint == U' ') {
-                static_cast<void>(pick(*row));
-                return EventResult::Handled;
-            }
-            if (isKey(key, KeyCode::Enter)) {
-                if (auto const rowKey = keyOf(row); rowKey && (_mode != ui::SelectionMode::Single || pick(*row))) {
-                    activateRow(*rowKey);
-                }
-                return EventResult::Handled;
-            }
+        // A modified key the source path leaves goes on outwards: no range runs over the realized rows alone.
+        if (::core::tui::withoutLockKeys(key.modifiers) != ::core::tui::Modifier::None) {
+            return EventResult::Ignored;
         }
     }
     if (::core::tui::withoutLockKeys(key.modifiers) != ::core::tui::Modifier::None) {
@@ -881,8 +870,14 @@ void TableImpl::clickWith(::core::tui::Point cell, ::core::tui::Modifier modifie
         return;
     }
     bool const onBox = _selectColumn && cell.x < kBoxWidth;
-    // The header box is Ctrl+A; it does nothing while the table shows no rows.
+    // The header box is Ctrl+A; it does nothing while the table shows no rows. Over a source it selects the view.
     if (onBox && _showHeader && cell.y == 0) {
+        if (_source) {
+            if (_total > 0) {
+                static_cast<void>(selectRange(0, _total - 1, ui::SelectionChange::Extend));
+            }
+            return;
+        }
         if (_mode == ui::SelectionMode::Multiple && !shownChildren().empty()) {
             static_cast<void>(change(allOrNone(), ui::SelectionChange::Extend));
         }
@@ -905,6 +900,15 @@ void TableImpl::clickWith(::core::tui::Point cell, ::core::tui::Modifier modifie
         click = ui::RowClick::Toggle;
     } else if (::core::tui::hasModifier(held, ::core::tui::Modifier::Shift)) {
         click = ui::RowClick::Range;
+    }
+    // Over a source a Shift-click is a range through the mount, from the anchor; any other click makes the row the
+    // anchor.
+    if (auto const index = _viewRows.find(row); _source && index != _viewRows.end()) {
+        if (click == ui::RowClick::Range &&
+            selectRange(_anchorRow.value_or(index->second), index->second, ui::SelectionChange::Replace)) {
+            return;
+        }
+        _anchorRow = index->second;
     }
     // Only plain clicks make a double click, so two quick Ctrl-clicks toggle a row twice.
     auto const now = context().now();
@@ -1049,7 +1053,6 @@ void TableImpl::activateRow(ui::Key const& key) {
 void TableImpl::setRealizedWindow(std::size_t first, std::size_t count, std::size_t total) {
     static_cast<void>(first);
     static_cast<void>(count);
-    _source = true;
     _total = total;
     refresh();
 }
@@ -1063,7 +1066,6 @@ void TableImpl::setRowIndex(ui::Widget& row, std::size_t viewRow) {
     if (base.container() != this) {
         throw std::logic_error{"morph::tui: setRowIndex of a widget that is not this table's row"};
     }
-    _source = true;
     _viewRows.insert_or_assign(&base, viewRow);
     refresh();
 }
@@ -1102,8 +1104,71 @@ void TableImpl::setColumnWindow(std::span<std::size_t const> columns, std::span<
     refresh();
 }
 
+// Only a table over a `TableSource` is given one, before any row: its rows are then placed by their view index and its
+// cells by their column. A table over `rows` is told its realized window too, once it is long enough, and is no
+// source.
 void TableImpl::setOnHorizontalRange(std::function<void(int scrollX, int viewport)> handler) {
     _onHorizontalRange = std::move(handler);
+    _source = true;
+}
+
+void TableImpl::setOnSelectRange(
+    std::function<void(std::size_t anchorRow, std::size_t focusRow, ui::SelectionChange)> handler) {
+    _onSelectRange = std::move(handler);
+}
+
+bool TableImpl::selectRange(std::size_t anchorRow, std::size_t focusRow, ui::SelectionChange change) {
+    if (_mode != ui::SelectionMode::Multiple || !_onSelectRange) {
+        return false;
+    }
+    auto const handler = _onSelectRange;
+    handler(anchorRow, focusRow, change);
+    return true;
+}
+
+EventResult TableImpl::sourceKey(::core::tui::KeyEvent const& key) {
+    // The whole view, through the mount, which resolves it over the rows not realized; in Single mode it goes on
+    // outwards.
+    if (matchesChord("Ctrl+A", key) && _mode == ui::SelectionMode::Multiple) {
+        if (_total > 0) {
+            _anchorRow = 0;
+            static_cast<void>(selectRange(0, _total - 1, ui::SelectionChange::Extend));
+        }
+        return EventResult::Handled;
+    }
+    bool const upward = matchesChord("Shift+Up", key);
+    if ((upward || matchesChord("Shift+Down", key)) && _onFocusMove) {
+        // Without an anchor, the range starts at the row the focus leaves.
+        if (!_anchorRow) {
+            _anchorRow = _focusCell ? _focusCell->first : 0;
+        }
+        auto const move = _onFocusMove;
+        move(upward ? ui::FocusMove::Up : ui::FocusMove::Down);
+        if (_focusCell) {
+            static_cast<void>(selectRange(*_anchorRow, _focusCell->first, ui::SelectionChange::Replace));
+        }
+        return EventResult::Handled;
+    }
+    if (auto const move = focusMoveOf(key); move && _onFocusMove) {
+        auto const handler = _onFocusMove;
+        handler(*move);
+        return EventResult::Handled;
+    }
+    WidgetBase* const row = _focusCell ? rowAtView(_focusCell->first) : nullptr;
+    if (::core::tui::withoutLockKeys(key.modifiers) == ::core::tui::Modifier::None && row != nullptr) {
+        if (key.codepoint == U' ') {
+            _anchorRow = _focusCell->first;
+            static_cast<void>(pick(*row));
+            return EventResult::Handled;
+        }
+        if (isKey(key, KeyCode::Enter)) {
+            if (auto const rowKey = keyOf(row); rowKey && (_mode != ui::SelectionMode::Single || pick(*row))) {
+                activateRow(*rowKey);
+            }
+            return EventResult::Handled;
+        }
+    }
+    return EventResult::Ignored;
 }
 
 // The mount moved the view to keep the columns in view where they were: it knows the offset, so it is not told.
@@ -1158,7 +1223,6 @@ void TableImpl::setCellColumn(ui::Widget& row, ui::Widget& cell, std::optional<s
     if (base.container() != this) {
         throw std::logic_error{"morph::tui: setCellColumn of a widget that is not this table's row"};
     }
-    _source = true;
     _cellColumns[&base].insert_or_assign(&WidgetBase::of(cell), column);
     refresh();
 }
@@ -1289,6 +1353,13 @@ void TableImpl::slotCells(std::vector<DrawnColumn> const& drawn) {
         if (slots.empty()) {
             slots.push_back(CellSlot{});
         }
+        // A cell that is gone leaves its row: what is kept is the row's children's columns.
+        if (auto const cells = _cellColumns.find(row);
+            cells != _cellColumns.end() && cells->second.size() > stack->children().size()) {
+            std::erase_if(cells->second, [stack](auto const& entry) {
+                return !std::ranges::contains(stack->children(), entry.first);
+            });
+        }
         stack->setCellSlots(std::move(slots));
     }
 }
@@ -1310,6 +1381,10 @@ void TableImpl::clampView() {
 }
 
 void TableImpl::reportBeforeNextFrame() {
+    // A table drawn at no width reports nothing (`reportRanges`), so it asks for no frame either.
+    if (_size.width <= 0) {
+        return;
+    }
     bool const columnsDue = _onHorizontalRange && _reportedColumns != std::pair{_scrollX, viewport()};
     bool const rowsDue = _onVisibleRange && _reportedRows != rowsInView();
     if (!columnsDue && !rowsDue) {

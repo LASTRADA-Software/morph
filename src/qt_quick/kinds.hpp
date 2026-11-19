@@ -654,8 +654,14 @@ public:
     void setOnHorizontalRange(std::function<void(int scrollX, int viewport)> handler) override;
     void setHorizontalOffset(int scrollX) override;
     void setOnColumnMeasured(std::function<void(std::size_t column, int width)> handler) override;
+    /// Pixels: a unit is `Theme.unitWidth`, a monospace character `Theme.monoAdvance`, a content column starts at
+    /// twelve units, and a column's padding is `table.cellPaddingX` a side, as the unwindowed table sizes them.
+    [[nodiscard]] ui::TableMeasure tableMeasure() const override;
     void setFocusCell(std::size_t viewRow, std::size_t column) override;
     void setOnFocusMove(std::function<void(ui::FocusMove)> handler) override;
+    /// Shift with an arrow, a Shift-click and Ctrl+A over a source go to the handler as view rows.
+    void setOnSelectRange(
+        std::function<void(std::size_t anchorRow, std::size_t focusRow, ui::SelectionChange)> handler) override;
     void setCounts(std::optional<std::int64_t> rows, std::size_t columns) override;
     void scrollToRow(std::size_t viewRow) override;
     /// Throws std::logic_error when @p row is not one of this table's rows.
@@ -715,6 +721,7 @@ private:
     std::function<void(int, int)> _onHorizontalRange;
     std::function<void(std::size_t, int)> _onColumnMeasured;
     std::function<void(ui::FocusMove)> _onFocusMove;
+    std::function<void(std::size_t, std::size_t, ui::SelectionChange)> _onSelectRange;
     /// Each row's effective spans, as last told.
     std::unordered_map<ItemBase const*, std::vector<ui::RowSpan>> _spans;
     /// Whether any row has been told it spans or is covered, so a table that never spans does no work.
