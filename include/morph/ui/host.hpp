@@ -778,6 +778,10 @@ private:
             static void whenSettled(std::shared_ptr<State> const& state, Watch State::* slot,
                                     std::function<void(State&)> then);
 
+            /// Runs `onClose` and decides the close; @p guarded is whether the close guard was already asked, so a
+            /// dirty screen without `onClose` closes rather than asks again.
+            static void proceed(std::shared_ptr<State> const& state, bool guarded);
+
             /// Whether the screen is open and declares `onSave`.
             [[nodiscard]] bool canSave() const { return screen && screen->declares("onSave"); }
 

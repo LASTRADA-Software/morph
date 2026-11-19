@@ -504,11 +504,32 @@ void DocumentScreenHost::Handle::State::request(std::shared_ptr<State> const& st
         return;
     }
     state->closing = true;
+    // A draft is unsaved work whatever `onClose` would do: the guard is asked before `onClose` runs, and its answer
+    // decides. Discard then closes the way a close without a draft does.
+    if (state->drafted.peek() && state->guard && state->self != nullptr) {
+        std::weak_ptr<State> const weak = state;
+        state->guard(*state->self, [weak](CloseChoice choice) {
+            auto const held = weak.lock();
+            if (!held || !held->closing) {
+                return;
+            }
+            if (choice == CloseChoice::Discard) {
+                proceed(held, true);
+            } else {
+                choose(held, choice);
+            }
+        });
+        return;
+    }
+    proceed(state, false);
+}
+
+void DocumentScreenHost::Handle::State::proceed(std::shared_ptr<State> const& state, bool guarded) {
     std::shared_ptr<bool const> const cancelled = state->screen->beginClose();
     if (cancelled == nullptr) {
         // The handle's `dirty`: a mounted draft is unsaved work however clean the screen's own state is.
         bool const isDirty = state->dirty.peek();
-        if (!isDirty) {
+        if (guarded || !isDirty) {
             state->finish(true);
         } else if (state->guard && state->self != nullptr) {
             std::weak_ptr<State> const weak = state;

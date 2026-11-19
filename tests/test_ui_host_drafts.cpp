@@ -4,6 +4,7 @@
 // screen's id, params and state by name; dirty while it is up, so a close asks the guard; discarded back to the
 // screen's own document; left alone by a development reload.
 
+#include <algorithm>
 #include <catch2/catch_test_macros.hpp>
 #include <cstdint>
 #include <functional>
@@ -70,6 +71,12 @@ constexpr std::string_view kNoteSaves = R"({
 constexpr std::string_view kNoteNeedsOwner = R"({
   "vocab": "ui/1", "id": "note", "params": { "noteId": "int", "owner": "string" },
   "view": { "kind": "text", "testId": "heading", "text": "needs an owner" } })";
+
+/// A draft that declares onClose, which notifies.
+constexpr std::string_view kNoteClosing = R"({
+  "vocab": "ui/1", "id": "note", "params": { "noteId": "int" }, "identity": { "ref": "noteId" }, "title": "Note",
+  "onClose": [ { "notify": "closing" } ],
+  "view": { "kind": "text", "testId": "heading", "text": "Closing" } })";
 
 /// A document of another screen.
 constexpr std::string_view kOther = R"({
@@ -201,6 +208,35 @@ TEST_CASE("Closing a screen with a draft up asks the close guard first", "[ui][h
     harness.settle();
     CHECK(opened.asked == std::vector<std::string>{"Note"});
     CHECK(closed == std::optional<bool>{true});
+}
+
+// Mutation: run onClose before the guard is asked for a drafted screen (the cancelled close has already notified, and
+// a Discard no longer closes after the guard's answer alone).
+TEST_CASE("A draft whose document declares onClose is put to the guard before onClose runs", "[ui][host][drafts]") {
+    SECTION("Keep leaves the screen open and onClose unrun") {
+        Harness harness;
+        Opened opened{harness};
+        opened.choice = CloseChoice::Cancel;
+        REQUIRE(opened.shell.mountDraft(*opened.handle, load(kNoteClosing)).has_value());
+        std::optional<bool> closed;
+        opened.handle->requestClose([&closed](bool outcome) { closed = outcome; });
+        harness.settle();
+        CHECK(opened.asked == std::vector<std::string>{"Note"});
+        CHECK(closed == std::optional<bool>{false});
+        CHECK(std::ranges::count(harness.host.log, "notify  closing") == 0);
+        CHECK(DocumentScreenHost::drafted(*opened.handle));
+    }
+    SECTION("Discard asks once, then closes through onClose") {
+        Harness harness;
+        Opened opened{harness};
+        REQUIRE(opened.shell.mountDraft(*opened.handle, load(kNoteClosing)).has_value());
+        std::optional<bool> closed;
+        opened.handle->requestClose([&closed](bool outcome) { closed = outcome; });
+        harness.settle();
+        CHECK(opened.asked == std::vector<std::string>{"Note"});
+        CHECK(closed == std::optional<bool>{true});
+        CHECK(std::ranges::count(harness.host.log, "notify  closing") == 1);
+    }
 }
 
 // Mutation: make endDraft remount the screen's own document (the heading goes back to "Note").
