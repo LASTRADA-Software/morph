@@ -3777,7 +3777,7 @@ void ScreenCore::wireElement(ElementState& element) {
         wireComposite(element);
         return;
     }
-    if (kind == "table" && !node.name("table").empty()) {
+    if (kind == "table" && !node.name("model").empty()) {
         wireModelTable(element);
         return;
     }
@@ -3922,13 +3922,13 @@ namespace {
         return strings(counts.failed);
     }
     if (name == "pending") {
-        return Value{counts.pending || table.describe->pending()};
+        return Value{counts.pending || (table.describe != nullptr && table.describe->pending())};
     }
     if (name == "error") {
         if (auto const& error = table.window->error()) {
             return Value{error->message};
         }
-        return table.describe->error();
+        return table.describe != nullptr ? table.describe->error() : Value{};
     }
     return std::nullopt;
 }
@@ -7196,7 +7196,7 @@ Node ScreenCore::lowerKind(DocNode const& node, LowerCtx const& ctx, ElementStat
         commonOf(node, ctx, element, spec.common);
         return ui::busy(std::move(spec));
     }
-    if (kind == "table" && !node.name("table").empty()) {
+    if (kind == "table" && !node.name("model").empty()) {
         return lowerModelTable(node, ctx, element);
     }
     if (kind == "forEach" || kind == "table") {
@@ -9317,6 +9317,142 @@ void ScreenCore::storedRowsState(RowsTable& table, std::optional<std::string> co
     }
 }
 
+namespace {
+
+/// What a table over a typed list action is built from: its description, the columns whose kind its first reply
+/// decides, the request member its query goes in, the records it watches, and what stops it being paged.
+struct ActionTable {
+    table::TableDescription description;
+    std::vector<std::string> inferKinds;
+    std::string queryMember;
+    std::vector<std::string> records;
+    /// Empty when the table can be paged.
+    std::string problem;
+};
+
+/// One `v-columns` entry of a view document, as a table over the action reads it.
+struct ViewColumn {
+    std::string label;
+    std::optional<table::ColumnKind> kind;
+    bool hidden = false;
+};
+
+/// The table a typed list action's node describes. The columns are the node's `columns` parts, else the view
+/// document's `v-columns`; the key is the node's `key` when it reads one row field, else the view document's
+/// `v-rowKey`, else `id`; a column's kind is the part's literal `kind`, else its `v-columns` entry's, else the first
+/// reply's. A catalog carries no reply schema, so nothing else can say what the rows hold.
+// NOLINTNEXTLINE(readability-function-cognitive-complexity): the schema, the view document, then the columns.
+ActionTable actionTableOf(DocNode const& node, Catalog const& catalog) {
+    ActionTable out;
+    std::string const action{node.name("action")};
+    if (catalog.action) {
+        if (std::optional<ActionInfo> const info = catalog.action(action)) {
+            for (ActionRecordInfo const& record : info->records) {
+                out.records.push_back(record.record);
+            }
+        }
+    }
+    if (catalog.schema) {
+        if (std::optional<std::string> const schema = catalog.schema(action)) {
+            std::vector<std::string> const members = tableQueryMembers(*schema);
+            if (members.size() == 1) {
+                out.queryMember = members.front();
+            }
+        }
+    }
+    if (out.queryMember.empty()) {
+        out.problem = "a table over an action needs a query member marked x-table";
+        out.queryMember = "query";
+    }
+    std::vector<std::pair<std::string, ViewColumn>> viewColumns;
+    std::string viewKey;
+    std::optional<std::string> const view = catalog.view ? catalog.view(action) : std::nullopt;
+    if (view) {
+        auto const json = parseJson(*view);
+        auto const* const object = json ? std::get_if<Json::object_t>(&json->data) : nullptr;
+        if (object != nullptr) {
+            if (auto const key = object->find("v-rowKey"); key != object->end()) {
+                if (auto const* const text = std::get_if<std::string>(&key->second.data)) {
+                    viewKey = *text;
+                }
+            }
+            auto const columns = object->find("v-columns");
+            auto const* const entries =
+                columns != object->end() ? std::get_if<Json::array_t>(&columns->second.data) : nullptr;
+            for (Json const& entry : entries != nullptr ? std::span<Json const>{*entries} : std::span<Json const>{}) {
+                auto const* const fields = std::get_if<Json::object_t>(&entry.data);
+                auto const text = [fields](std::string_view name) -> std::string const* {
+                    auto const found = fields->find(name);
+                    return found == fields->end() ? nullptr : std::get_if<std::string>(&found->second.data);
+                };
+                std::string const* const field = fields != nullptr ? text("field") : nullptr;
+                if (field == nullptr) {
+                    continue;
+                }
+                ViewColumn column;
+                std::string const* const label = text("label");
+                column.label = label != nullptr ? *label : *field;
+                if (std::string const* const kind = text("kind")) {
+                    table::ColumnKind parsed{};
+                    if (!glz::read_json(parsed, "\"" + *kind + "\"")) {
+                        column.kind = parsed;
+                    }
+                }
+                auto const hidden = fields->find("v-hidden");
+                column.hidden = hidden != fields->end() && std::get_if<bool>(&hidden->second.data) != nullptr &&
+                                *std::get_if<bool>(&hidden->second.data);
+                viewColumns.emplace_back(*field, std::move(column));
+            }
+        }
+    }
+    auto const viewColumn = [&viewColumns](std::string_view id) -> ViewColumn const* {
+        auto const found = std::ranges::find(viewColumns, id, [](auto const& entry) -> auto const& { return entry.first; });
+        return found == viewColumns.end() ? nullptr : &found->second;
+    };
+    auto const add = [&out](std::string id, std::string label, std::optional<table::ColumnKind> kind, bool shown) {
+        if (!kind) {
+            out.inferKinds.push_back(id);
+        }
+        out.description.columns.push_back(table::TableColumn{
+            .info = table::ColumnInfo{.id = std::move(id),
+                                      .kind = kind.value_or(table::ColumnKind::Text),
+                                      .comparator = {},
+                                      .format = {},
+                                      .level = {}},
+            .label = std::move(label),
+            .group = {},
+            .sortable = true,
+            .filterable = true,
+            .shown = shown});
+    };
+    if (auto const parts = node.partList("columns"); !parts.empty()) {
+        for (DocNodePtr const& part : parts) {
+            ViewColumn const* const described = viewColumn(part->id);
+            std::optional<table::ColumnKind> kind = columnKindNamed(part->name("kind"));
+            if (!kind && described != nullptr) {
+                kind = described->kind;
+            }
+            add(part->id, described != nullptr ? described->label : part->id, kind, true);
+        }
+    } else if (view) {
+        for (auto const& [id, column] : viewColumns) {
+            add(id, column.label, column.kind, !column.hidden);
+        }
+    } else if (out.problem.empty()) {
+        out.problem = "a table over an action needs its columns, or a view document for the action";
+    }
+    ExprPtr const key = node.prop("key");
+    if (key && key->kind == ExprKind::Row && key->fieldPath.size() == 1) {
+        out.description.key = key->fieldPath.front();
+    } else {
+        out.description.key = viewKey.empty() ? std::string{"id"} : viewKey;
+    }
+    out.description.id = action;
+    return out;
+}
+
+}  // namespace
+
 void ScreenCore::wireModelTable(ElementState& element) {
     DocNode const& node = *element.node;
     RtScope& scope = *element.scope;
@@ -9332,7 +9468,8 @@ void ScreenCore::wireModelTable(ElementState& element) {
         report(node.path, "the table's `model` names no model alias of this scope");
         return;
     }
-    model.id = std::string{node.name("table")};
+    std::string const action{node.name("action")};
+    model.id = action.empty() ? std::string{node.name("table")} : action;
     model.modelType = alias->decl->type;
     model.statusShown = node.flag("status", true);
     std::string qualifier = _doc->id;
@@ -9352,17 +9489,27 @@ void ScreenCore::wireModelTable(ElementState& element) {
                                               .qualifier = std::move(qualifier),
                                               .part = "state"};
     }
-    model.describeDecl = QueryDecl{.name = {},
-                                   .path = node.path,
-                                   .model = std::string{node.name("model")},
-                                   .action = "Table." + model.id + ".describe",
-                                   .evaluate = false,
-                                   .body = nullptr,
-                                   .when = nullptr,
-                                   .debounce = 0,
-                                   .refreshEvery = 0,
-                                   .staleTime = 0};
-    model.describe = std::make_unique<QueryRuntime>(model.describeDecl, scope, alias);
+    // A model's table is described by its `describe` action; a typed list action by the client, from the node's
+    // columns or the action's view document.
+    std::optional<ActionTable> typed;
+    if (action.empty()) {
+        model.describeDecl = QueryDecl{.name = {},
+                                       .path = node.path,
+                                       .model = std::string{node.name("model")},
+                                       .action = "Table." + model.id + ".describe",
+                                       .evaluate = false,
+                                       .body = nullptr,
+                                       .when = nullptr,
+                                       .debounce = 0,
+                                       .refreshEvery = 0,
+                                       .staleTime = 0};
+        model.describe = std::make_unique<QueryRuntime>(model.describeDecl, scope, alias);
+    } else {
+        typed = actionTableOf(node, session.options().catalog);
+        if (!typed->problem.empty()) {
+            report(node.path, typed->problem);
+        }
+    }
     Value const body = node.prop("body") ? runtime().untracked([&] { return evalIn(scope, nullptr, node.prop("body")); })
                                          : Value{};
     // The table owns these members of the query; a body that gives one has it replaced, which is said, since the
@@ -9378,20 +9525,28 @@ void ScreenCore::wireModelTable(ElementState& element) {
         }
     }
     model.waiting = model.stateKey.has_value();
-    model.window = std::make_shared<WindowRows>(session, WindowRowsOptions{.channel = channelOf(*alias, *this),
-                                                                           .table = model.id,
-                                                                           .record = model.modelType + "." + model.id,
-                                                                           .body = body,
-                                                                           .pageSize = 200,
-                                                                           .maxPages = 8,
-                                                                           .maxKeys = 1000,
-                                                                           .maxColumns = 96,
-                                                                           .restoring = model.waiting});
+    model.window = std::make_shared<WindowRows>(
+        session, WindowRowsOptions{.channel = channelOf(*alias, *this),
+                                   .table = typed ? std::string{} : model.id,
+                                   .action = action,
+                                   .queryMember = typed ? typed->queryMember : std::string{},
+                                   .inferKinds = typed ? typed->inferKinds : std::vector<std::string>{},
+                                   .records = typed ? typed->records
+                                                    : std::vector<std::string>{model.modelType + "." + model.id},
+                                   .body = body,
+                                   .pageSize = 200,
+                                   .maxPages = 8,
+                                   .maxKeys = 1000,
+                                   .maxColumns = 96,
+                                   .restoring = model.waiting});
+    element.tableRows = model.window;
     model.rows = std::make_shared<ObservedRows>(
         model.window, model.scope.token().guard([&model] { model.bump(); }),
         model.scope.token().guard([this, &element] { tableGesture(element); }),
         model.scope.token().guard([&model] { model.resets.set(model.resets.peek() + 1); }));
-    model.window->onStaleDescription(model.scope.token().guard([&model] { model.describe->invalidate(); }));
+    if (model.describe != nullptr) {
+        model.window->onStaleDescription(model.scope.token().guard([&model] { model.describe->invalidate(); }));
+    }
     // Called inside a binding, where no signal may be written: the misses of one turn are fetched by one task.
     model.onMissing = [this, &model](std::string_view field) {
         bool const first = model.missing.empty();
@@ -9450,13 +9605,47 @@ void ScreenCore::wireModelTable(ElementState& element) {
             });
         });
     }
-    model.describe->start();
+    if (model.describe != nullptr) {
+        model.describe->start();
+    }
+    // The sort the table shows: the bound one, or the table's own, which a header click and a stored state set.
+    scope.nodes.effect([this, &element] {
+        Value const value = tableSort(element);
+        runtime().untracked([&] {
+            ModelTable& table = *element.modelTable;
+            SortChain chain = sortChainOf(value);
+            if (chain == table.sort) {
+                return;
+            }
+            if (auto const set = table.window->setSort(chain); !set) {
+                report(pointerAppend(element.node->path, "sort"), "the sort is refused: " + set.error().message);
+                return;
+            }
+            table.sort = std::move(chain);
+        });
+    });
+    if (typed) {
+        model.window->setDescription(std::move(typed->description));
+        if (table::TableDescription const* const now = model.window->description()) {
+            model.keyColumn = now->key;
+            for (table::TableColumn const& column : now->columns) {
+                model.described.insert(column.info.id);
+            }
+        }
+        model.bump();
+    } else {
+        scope.nodes.effect([this, &element] {
+            Value const described = element.modelTable->describe->value();
+            runtime().untracked([&] { describedTable(element, described); });
+        });
+    }
     // A highlight: each non-null key, once a description is held, is located in the view by a keyed fetch naming no
     // columns, which stops the one an earlier key still has in flight; a key the view lacks, or null, marks nothing.
+    // A typed list action's description is held from here on.
     if (ExprPtr const highlight = node.prop("highlightKey")) {
-        scope.nodes.effect([this, &scope, &element, highlight] {
+        scope.nodes.effect([this, &scope, &element, highlight, typedTable = typed.has_value()] {
             Value const key = evalIn(scope, nullptr, highlight);
-            bool const described = !element.modelTable->revision.get().empty();
+            bool const described = typedTable || !element.modelTable->revision.get().empty();
             // A new query (sort, filter) moves the row: located again, the mark cleared meanwhile.
             static_cast<void>(element.modelTable->resets.get());
             runtime().untracked([&] {
@@ -9479,26 +9668,6 @@ void ScreenCore::wireModelTable(ElementState& element) {
             });
         });
     }
-    // The sort the table shows: the bound one, or the table's own, which a header click and a stored state set.
-    scope.nodes.effect([this, &element] {
-        Value const value = tableSort(element);
-        runtime().untracked([&] {
-            ModelTable& table = *element.modelTable;
-            SortChain chain = sortChainOf(value);
-            if (chain == table.sort) {
-                return;
-            }
-            if (auto const set = table.window->setSort(chain); !set) {
-                report(pointerAppend(element.node->path, "sort"), "the sort is refused: " + set.error().message);
-                return;
-            }
-            table.sort = std::move(chain);
-        });
-    });
-    scope.nodes.effect([this, &element] {
-        Value const described = element.modelTable->describe->value();
-        runtime().untracked([&] { describedTable(element, described); });
-    });
     if (!model.stateKey) {
         return;
     }
@@ -9846,7 +10015,8 @@ Node ScreenCore::modelTableOf(DocNode const& node, LowerCtx const& ctx, ElementS
         } else if (auto const& error = model.window->error()) {
             status.state = "The rows could not be loaded: " + error->message;
             status.retry = true;
-        } else if (Value const failed = model.describe->error(); failed.asString() != nullptr) {
+        } else if (Value const failed = model.describe != nullptr ? model.describe->error() : Value{};
+                   failed.asString() != nullptr) {
             status.state = "The table's description could not be loaded: " + *failed.asString();
         }
         if (model.statusShown) {

@@ -596,13 +596,32 @@ keeps its operands' 0 places and still fills 0.29 of a bar.
   The keys select as the gesture says (`Replace`, or `Extend` with the keys selected), and `onSelectionChange`
   runs. A range of more than `SessionOptions::maxRangeRows` (10,000) rows is refused in the status line, "A range
   selects at most 10,000 rows" (the number grouped by the locale), and selects nothing. **`highlightKey`.** Each
-  non-null key, once a description is held, is located by one keyed fetch (`Table.<table>`, `keys` the key,
-  `columns` none, the table's sort and filters; `WindowRows::locate`), which stops the one an earlier key still
-  has in flight; the reply's `indices[0]` is the row's view index, and `Table::highlight` becomes
+  non-null key, once a description is held, is located by one keyed fetch (`Table.<table>`, or a typed list
+  action itself, `keys` the key, `columns` none, the table's sort and filters; `WindowRows::locate`), which stops
+  the one an earlier key still has in flight; the reply's `indices[0]` is the row's view index, and `Table::highlight` becomes
   `TableHighlight{key, index}`, which the mount scrolls to and marks. A reply with no row, and a `null` key, set it
   to nothing. A reset of the rows (a new sort or filter) clears it and locates the key again. It never changes
   the selection or the keyboard focus. An element in a column's `cell` is focused by the row the cell shows now
   (`RtScope::rowKeyNow`), since the mount rebinds a pooled cell to other rows.
+- **`table`** over a typed list action (`model` and `action`): lowered as a model's table is, through the same
+  element state, `WindowRows` (`WindowRowsOptions::action`) and `Table`, with no `describe` query: a catalog carries
+  an action's request schema and never its reply's, so the description is built when the element is wired, from
+  the node's `columns` parts (each part's id, its label from the action's view document when that names the
+  column) or else the view document's `v-columns` (its `field`, `label`, and `v-hidden` as not `shown`). The key
+  is the node's `key` when it reads one row field (`{"row": "<id>"}`), else the view document's `v-rowKey`, else
+  `id`. A column's kind is the part's literal `kind`, else its `v-columns` entry's `kind`, else inferred from the
+  first reply that has rows (`readTypedPage`'s vote over the JSON members of its id) and then fixed for the
+  window's life: a later member not of it is an invalid cell, and a fractional number makes the column `Number`
+  where the same number in a document's `rows` is a `Decimal`. The description's revision is empty and never
+  changes, so the table is mounted once. Every fetch is the action itself, with `body` evaluated once as the
+  request and the query written into the request's one member the schema marks `x-table`
+  (`tableQueryMembers`); the reply is a `Page<Row>` read with `readTypedPage`, which turns each row object into
+  cells for every described column, whatever the query named. The rows watch each record the action's catalog
+  entry names, and with none they are fetched again only on Retry. A keyed refetch sends `keys` in the query
+  member; a reply with no `indices` for it drops the window's pages and costs a page refetch. Persisted state is
+  kept as a model's table's, its `table` the action's id. A node the loader would refuse (no member marked
+  `x-table`, or neither `columns` nor a view document) is reported at the table when a catalog that lacks the
+  lookup let it load.
 - **`boundary`** is a `Switch` over loading, error and children. It owns the queries its children read
   (found statically, through `let`s, not inside a nested boundary): loading while one has neither a
   value nor a failure, error when one failed with no value to keep, children otherwise. Inside `error`,

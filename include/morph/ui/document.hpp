@@ -781,4 +781,11 @@ enum class NameCategory : std::uint8_t {
 /// @return Their `kind` spellings.
 [[nodiscard]] MORPH_API std::vector<std::string_view> nodeKinds();
 
+/// @brief The top-level members of an action's request schema that hold a table query: each property marked
+///        `x-table` (`table::TableQuery::schemaMarker()`), in name order. A table over the action writes its
+///        query into the one member this names.
+/// @param schemaJson The schema, as `Catalog::schema` answers it.
+/// @return The members' names; empty when the text is not a schema object or no property is marked.
+[[nodiscard]] MORPH_API std::vector<std::string> tableQueryMembers(std::string_view schemaJson);
+
 }  // namespace morph::ui

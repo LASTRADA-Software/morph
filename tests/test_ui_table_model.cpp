@@ -2421,3 +2421,63 @@ TEST_CASE("rows table: a unit the rows bring keeps the engine's filter", "[ui][t
     REQUIRE(&engineOf(*screen, "list") != first);                              // a new engine
     CHECK(engineOf(*screen, "list").filter() == filter);
 }
+
+namespace {
+
+using morph::ui::ActionInfo;
+using morph::ui::testing::addAction;
+using morph::ui::testing::addPageSamples;
+using morph::ui::testing::cellOf;
+using morph::ui::testing::kActionTable;
+using morph::ui::testing::kActionTableNoColumns;
+using morph::ui::testing::kActionTableNoQuery;
+using morph::ui::testing::kindOfColumn;
+using morph::ui::testing::refusalOf;
+
+}  // namespace
+
+// Mutations: `{num, den, dp}` read as text (weight is Integer, from 3 alone, and not a Rational); a fractional number voted
+// Decimal (ratio is Decimal); the query written at the body's top level (no "query" member in the body).
+TEST_CASE("model table over an action: a typed list action's rows read into the window", "[ui][table]") {
+    TableHarness h;  addPageSamples(h);
+    auto screen = h.mount(kActionTable);
+    REQUIRE(h.dispatcher.count("Lims_PageSamples") == 1);                     // no describe call: none exists
+    CHECK(h.dispatcher.calls.back().body.contains(R"("query":{)"));          // the query in the x-table member
+    h.reply(h.dispatcher.last("Lims_PageSamples"),
+            R"({"rows":[{"id":1,"name":"a","weight":{"num":5,"den":2,"dp":1},"ratio":0.5,"day":"2026-11-17"},
+                        {"id":2,"name":"b","weight":3,"ratio":2,"day":null}],"total":2})");
+    using enum table::ColumnKind;
+    CHECK(kindOfColumn(*screen, "id") == Integer);    CHECK(kindOfColumn(*screen, "name") == Text);
+    CHECK(kindOfColumn(*screen, "weight") == Decimal);                        // {num,den,dp} with an integer
+    CHECK(kindOfColumn(*screen, "ratio") == Number);                          // a fraction with an integer
+    CHECK(kindOfColumn(*screen, "day") == Date);                              // the literal kind
+    CHECK(*cellOf(*screen, 0, "ratio") == table::Cell{0.5});  CHECK(*cellOf(*screen, 1, "ratio") == table::Cell{2.0});
+    CHECK(std::holds_alternative<morph::math::Rational>(*cellOf(*screen, 1, "weight")));
+    CHECK(*cellOf(*screen, 0, "day") == table::Cell{std::int64_t{20'774}});   // days since 1970-01-01
+    CHECK(std::holds_alternative<std::monostate>(*cellOf(*screen, 1, "day")));
+    CHECK(statusOf(h).counts == "2 rows");
+    h.backend.clickHeader(tableOf(h), 1);  h.settle();
+    CHECK(h.dispatcher.calls.back().body.contains(R"("sort":[{"column":"name")"));
+    h.reply(h.dispatcher.last("Lims_PageSamples"), R"({"rows":[{"id":3,"name":"c","weight":"heavy","ratio":1}],"total":1})");
+    CHECK(kindOfColumn(*screen, "weight") == Decimal);                        // fixed by the first reply
+}
+
+// Mutation: the view document's `kind` ignored (id is inferred Text from a reply whose ids are strings).
+TEST_CASE("model table over an action: columns and kinds come from the action's view document", "[ui][table]") {
+    TableHarness h;                                                           // Lims_ListSamples has a v-columns view
+    addAction(h, "Lims_ListSamples", R"({"type":"object","properties":{"query":{"type":"object","x-table":true}}})",
+              ActionInfo{.modelType = "Lims_SampleModel"});
+    auto screen = h.mount(withTableKey(kActionTableNoColumns, R"("action":"Lims_ListSamples")"));
+    h.reply(h.dispatcher.last("Lims_ListSamples"), R"({"rows":[{"id":"7","name":"a"}],"total":1})");
+    CHECK(headerLabels(h) == std::vector<std::string>{"Name"});               // v-columns' label; `id` is v-hidden
+    CHECK(kindOfColumn(*screen, "id") == table::ColumnKind::Integer);         // v-columns' kind, not the reply's
+}
+
+// Mutations: the loader accepting an action with no x-table member (the first fetch sends a bare body); accepting
+// one with neither `columns` nor a view document.
+TEST_CASE("model table over an action: an action the table cannot page is refused at load", "[ui][table]") {
+    TableHarness h;  addPageSamples(h);
+    CHECK(refusalOf(h, kActionTableNoQuery) == "a table over an action needs a query member marked x-table");
+    CHECK(refusalOf(h, kActionTableNoColumns) ==
+          "a table over an action needs its columns, or a view document for the action");
+}

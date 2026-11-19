@@ -1654,16 +1654,395 @@ private:
     async::CallbackScope _alive;
 };
 
+// ── A typed list action's pages ─────────────────────────────────────────────
+
+namespace detail {
+
+/// @brief A typed list action's reply as read before its rows are cells: `Page<Row>`'s members, each row a JSON DOM.
+using TypedPageDom = table::Page<glz::generic_u64>;
+
+/// @brief What one JSON member says its column's kind is.
+enum class JsonVote : std::uint8_t {
+    None,     ///< Nothing: `null`, an array, or an object that is neither a decimal nor a measure.
+    Bool,     ///< `true` or `false`: a `Bool` column.
+    Integer,  ///< An integer: an `Integer` column.
+    Number,   ///< A number with a fraction or an exponent: a `Number` column.
+    Decimal,  ///< `{num, den, dp}`: a `Decimal` column.
+    Measure,  ///< `{num, den, dp, unit}`: a `Measure` column.
+    Text,     ///< A string: a `Text` column.
+};
+
+/// @brief How many `JsonVote`s there are.
+inline constexpr std::size_t kJsonVotes = 7;
+
+/// @brief A JSON integer as an `int64`.
+/// @param member The member.
+/// @return Its value, or nothing when it is not an integer or does not fit.
+[[nodiscard]] inline std::optional<std::int64_t> jsonInteger(glz::generic_u64 const& member) {
+    if (auto const* const value = member.get_if<std::int64_t>()) {
+        return *value;
+    }
+    if (auto const* const value = member.get_if<std::uint64_t>();
+        value != nullptr && *value <= static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max())) {
+        return static_cast<std::int64_t>(*value);
+    }
+    return std::nullopt;
+}
+
+/// @brief An exact amount written `{num, den, dp}`, with a `unit` or without.
+struct JsonDecimal {
+    /// @brief The amount, its places kept.
+    math::Rational amount;
+    /// @brief The unit's id; null when the object names none.
+    std::string const* unit = nullptr;
+};
+
+/// @brief An object of exactly `num`, `den` and `dp` (integers, `den` not 0, `dp` 0 to 18), and optionally a `unit`
+///        string, read as an exact amount.
+/// @param member The member.
+/// @return The amount and its unit, or nothing for any other member.
+[[nodiscard]] inline std::optional<JsonDecimal> jsonDecimal(glz::generic_u64 const& member) {
+    auto const* const object = member.get_if<glz::generic_u64::object_t>();
+    if (object == nullptr || (object->size() != 3 && object->size() != 4)) {
+        return std::nullopt;
+    }
+    auto const integer = [object](std::string_view name) -> std::optional<std::int64_t> {
+        auto const found = object->find(name);
+        return found == object->end() ? std::nullopt : jsonInteger(found->second);
+    };
+    auto const num = integer("num");
+    auto const den = integer("den");
+    auto const dp = integer("dp");
+    if (!num || !den || !dp || *den == 0 || *dp < 0 || *dp > static_cast<std::int64_t>(math::kMaxDecimalPlaces)) {
+        return std::nullopt;
+    }
+    std::string const* unit = nullptr;
+    if (object->size() == 4) {
+        auto const found = object->find("unit");
+        unit = found == object->end() ? nullptr : found->second.get_if<std::string>();
+        if (unit == nullptr) {
+            return std::nullopt;
+        }
+    }
+    auto const amount = math::Rational::from(math::Numerator{*num}, math::Denominator{*den},
+                                             math::DecimalPlaces{static_cast<std::uint32_t>(*dp)});
+    if (!amount) {
+        return std::nullopt;
+    }
+    return JsonDecimal{.amount = *amount, .unit = unit};
+}
+
+/// @brief The kind a member votes its column.
+/// @param member The member.
+/// @return The vote; `None` for `null`, an array and any object that is not a decimal or a measure.
+[[nodiscard]] inline JsonVote jsonVoteOf(glz::generic_u64 const& member) {
+    if (member.is_boolean()) {
+        return JsonVote::Bool;
+    }
+    if (member.is_string()) {
+        return JsonVote::Text;
+    }
+    if (member.is_number()) {
+        return jsonInteger(member) ? JsonVote::Integer : JsonVote::Number;
+    }
+    if (auto const decimal = jsonDecimal(member)) {
+        return decimal->unit != nullptr ? JsonVote::Measure : JsonVote::Decimal;
+    }
+    return JsonVote::None;
+}
+
+/// @brief The column kind a vote names.
+/// @param vote A vote other than `None`.
+/// @return The kind.
+[[nodiscard]] constexpr table::ColumnKind kindOfJsonVote(JsonVote vote) noexcept {
+    switch (vote) {
+        case JsonVote::Bool:
+            return table::ColumnKind::Bool;
+        case JsonVote::Integer:
+            return table::ColumnKind::Integer;
+        case JsonVote::Number:
+            return table::ColumnKind::Number;
+        case JsonVote::Decimal:
+            return table::ColumnKind::Decimal;
+        case JsonVote::Measure:
+            return table::ColumnKind::Measure;
+        case JsonVote::Text:
+        case JsonVote::None:
+        default:
+            return table::ColumnKind::Text;
+    }
+}
+
+/// @brief A column's kind from the members its rows hold under its id.
+///
+/// No vote is `Text`; votes all alike are their kind; integers and decimals alone are `Decimal`; integers with
+/// fractional numbers, decimals or not, are `Number`; any other mix is the first non-null member's kind.
+/// @param rows   The rows.
+/// @param column The column's id.
+/// @return The kind.
+[[nodiscard]] inline table::ColumnKind inferredJsonKind(std::span<glz::generic_u64 const> rows,
+                                                        std::string_view column) {
+    std::array<std::size_t, kJsonVotes> counts{};
+    JsonVote first = JsonVote::None;
+    for (auto const& row : rows) {
+        auto const* const object = row.get_if<glz::generic_u64::object_t>();
+        if (object == nullptr) {
+            continue;
+        }
+        auto const found = object->find(column);
+        if (found == object->end()) {
+            continue;
+        }
+        JsonVote const vote = jsonVoteOf(found->second);
+        if (vote == JsonVote::None) {
+            continue;
+        }
+        ++counts.at(static_cast<std::size_t>(vote));
+        if (first == JsonVote::None) {
+            first = vote;
+        }
+    }
+    auto const count = [&counts](JsonVote vote) { return counts.at(static_cast<std::size_t>(vote)); };
+    std::size_t kinds = 0;
+    for (std::size_t at = 1; at < kJsonVotes; ++at) {
+        kinds += counts.at(at) > 0 ? 1U : 0U;
+    }
+    if (kinds == 0) {
+        return table::ColumnKind::Text;
+    }
+    if (kinds == 1) {
+        return kindOfJsonVote(first);
+    }
+    bool const integers = count(JsonVote::Integer) > 0;
+    bool const numbers = count(JsonVote::Number) > 0;
+    bool const decimals = count(JsonVote::Decimal) > 0;
+    std::size_t const numeric = (integers ? 1U : 0U) + (numbers ? 1U : 0U) + (decimals ? 1U : 0U);
+    if (numeric == kinds && integers && !numbers) {
+        return table::ColumnKind::Decimal;
+    }
+    if (numeric == kinds && integers && numbers) {
+        return table::ColumnKind::Number;
+    }
+    return kindOfJsonVote(first);
+}
+
+/// @brief A member as a cell of a column of @p kind.
+///
+/// `null` is an empty cell. An integer is an `int64`, a `Rational` of 0 places under `Decimal` and a `double` under
+/// `Number`; a fractional number a `double`; a string its text, under `Date` its days when it is `YYYY-MM-DD` and
+/// under `DateTime` its seconds rounded down when it is ISO-8601; `{num, den, dp}` its `Rational`; with a `unit` under
+/// `Measure` a measure in @p units' number for the unit (`kUnknownUnit`, invalid, when @p units lacks it). Anything
+/// else is the member's JSON text, which only a `Text` column reads as valid.
+/// @param member The member.
+/// @param kind   The column's kind.
+/// @param units  The registry a measure's unit is found in; null finds none.
+/// @param named  The unit ids of the page's measures, by number: what a measure found adds to.
+/// @return The cell.
+[[nodiscard]] inline table::Cell typedCell(glz::generic_u64 const& member, table::ColumnKind kind,
+                                           table::UnitRegistry const* units,
+                                           std::map<table::UnitId, std::string>& named) {
+    using table::ColumnKind;
+    if (member.is_null()) {
+        return table::Cell{};
+    }
+    if (auto const* const flag = member.get_if<bool>()) {
+        return table::Cell{*flag};
+    }
+    if (auto const integer = jsonInteger(member)) {
+        if (kind == ColumnKind::Decimal) {
+            return table::Cell{math::Rational{*integer, math::DecimalPlaces{0}}};
+        }
+        if (kind == ColumnKind::Number) {
+            return table::Cell{static_cast<double>(*integer)};
+        }
+        return table::Cell{*integer};
+    }
+    if (auto const* const real = member.get_if<double>()) {
+        return table::Cell{*real};
+    }
+    if (auto const* const text = member.get_if<std::string>()) {
+        table::IsoDateParser const parser;
+        if (kind == ColumnKind::Date) {
+            if (auto const days = parser.parseDate(*text, {})) {
+                return table::Cell{*days};
+            }
+        } else if (kind == ColumnKind::DateTime) {
+            if (auto const seconds = parser.parseDateTime(*text, {})) {
+                return table::Cell{*seconds};
+            }
+        }
+        return table::Cell{*text};
+    }
+    if (auto const decimal = jsonDecimal(member)) {
+        if (decimal->unit == nullptr) {
+            return table::Cell{decimal->amount};
+        }
+        if (kind == ColumnKind::Measure) {
+            auto const unit = units == nullptr ? std::nullopt : units->find(*decimal->unit);
+            if (unit) {
+                named.try_emplace(*unit, *decimal->unit);
+            }
+            return table::Cell{table::Measure{.amount = decimal->amount, .unit = unit.value_or(table::kUnknownUnit)}};
+        }
+    }
+    return table::Cell{glz::write_json(member).value_or(std::string{})};
+}
+
+/// @brief A key member read as a row's id: an integer, or a string.
+/// @param member The member.
+/// @return The id, or nothing for any other member.
+[[nodiscard]] inline std::optional<table::RowId> typedKey(glz::generic_u64 const& member) {
+    if (auto const integer = jsonInteger(member)) {
+        return table::RowId{*integer};
+    }
+    if (auto const* const text = member.get_if<std::string>()) {
+        return table::RowId{*text};
+    }
+    return std::nullopt;
+}
+
+/// @brief A typed list action's reply, read as a DOM, as a generic page over @p description's columns.
+/// @param dom         The reply.
+/// @param description The description: its columns, their kinds and its key.
+/// @param units       The registry a measure's unit is found in; null resolves through `registryOf(description)`,
+///                    built only when a column is `Measure`.
+/// @return The page, or `InvalidValue` when a row is not an object or has no key, or `unloadedRows` or `indices` do
+///         not fit the rows, or what `registryOf` refuses.
+[[nodiscard]] inline std::expected<table::GenericPage, table::TableError> typedPageOf(
+    TypedPageDom const& dom, table::TableDescription const& description, table::UnitRegistry const* units) {
+    auto const invalid = [](std::string message) {
+        return std::unexpected(
+            table::TableError{.code = table::TableErrorCode::InvalidValue, .column = {}, .message = std::move(message)});
+    };
+    std::shared_ptr<table::UnitRegistry const> built;
+    bool const measures = std::ranges::any_of(description.columns, [](table::TableColumn const& column) {
+        return column.info.kind == table::ColumnKind::Measure;
+    });
+    if (measures && units == nullptr) {
+        auto registry = table::registryOf(description);
+        if (!registry) {
+            return std::unexpected(std::move(registry.error()));
+        }
+        built = std::move(*registry);
+        units = built.get();
+    }
+    auto const rowCount = static_cast<std::int64_t>(dom.rows.size());
+    std::int64_t previous = -1;
+    for (auto const& unloaded : dom.unloadedRows) {
+        if (unloaded.index <= previous || unloaded.index >= rowCount) {
+            return invalid("an unloaded row at " + std::to_string(unloaded.index) + " in a page of " +
+                           std::to_string(rowCount) + " rows, or out of order");
+        }
+        previous = unloaded.index;
+    }
+    if (!dom.indices.empty() && dom.indices.size() != dom.rows.size()) {
+        return invalid("a page of " + std::to_string(dom.indices.size()) + " indices and " +
+                       std::to_string(dom.rows.size()) + " rows");
+    }
+    if (std::ranges::any_of(dom.indices, [](std::int64_t index) { return index < 0; })) {
+        return invalid("a negative view row in indices");
+    }
+    table::GenericPage page;
+    page.columns.reserve(description.columns.size());
+    for (auto const& column : description.columns) {
+        page.columns.push_back(column.info.id);
+    }
+    page.keys.reserve(dom.rows.size());
+    page.rows.reserve(dom.rows.size());
+    glz::generic_u64 const absent{};
+    for (std::size_t at = 0; at < dom.rows.size(); ++at) {
+        auto const* const object = dom.rows[at].get_if<glz::generic_u64::object_t>();
+        if (object == nullptr) {
+            return invalid("row " + std::to_string(at) + " is not an object");
+        }
+        auto const keyMember = object->find(description.key);
+        auto key = keyMember == object->end() ? std::nullopt : typedKey(keyMember->second);
+        if (!key) {
+            return invalid("row " + std::to_string(at) + " has no key `" + description.key + "`");
+        }
+        page.keys.push_back(std::move(*key));
+        table::GenericRow cells;
+        cells.reserve(description.columns.size());
+        for (auto const& column : description.columns) {
+            auto const found = object->find(column.info.id);
+            cells.push_back(
+                typedCell(found == object->end() ? absent : found->second, column.info.kind, units, page.units));
+        }
+        page.rows.push_back(std::move(cells));
+    }
+    page.total = dom.total;
+    page.totalKind = dom.totalKind;
+    page.offset = dom.offset;
+    page.unloadedRows = dom.unloadedRows;
+    page.undecided = dom.undecided;
+    page.awaiting = dom.awaiting;
+    page.failed = dom.failed;
+    page.indices = dom.indices;
+    page.distinct = dom.distinct;
+    return page;
+}
+
+/// @brief Reads a typed list action's reply text as a DOM.
+/// @param json The reply.
+/// @return The DOM, or `InvalidValue` when the text is not a page.
+[[nodiscard]] inline std::expected<TypedPageDom, table::TableError> typedPageDom(std::string_view json) {
+    TypedPageDom dom;
+    if (auto const failed =
+            glz::read<glz::opts{.null_terminated = false, .error_on_unknown_keys = false}>(dom, json)) {
+        return std::unexpected(table::TableError{.code = table::TableErrorCode::InvalidValue,
+                                                 .column = {},
+                                                 .message = "not a page: " + glz::format_error(failed, json)});
+    }
+    return dom;
+}
+
+}  // namespace detail
+
+/// @brief A typed list action's reply (`Page<Row>`'s JSON: `rows`, `total`, `totalKind`, `offset`, `indices`) as a
+///        generic page over @p description's columns: each row object's member of a column's id read by its kind.
+///
+/// The text is read as a `glz::generic_u64` DOM, so an `int64` keeps every digit. A member absent or `null` is an
+/// empty cell; an integer an `int64` (a `Rational` of 0 places under `Decimal`, a `double` under `Number`); a number
+/// with a fraction a `double`; a string its text, under `Date` `YYYY-MM-DD` its days and under `DateTime` ISO-8601
+/// its seconds rounded down; `true` and `false` a `bool`; `{num, den, dp}` its `Rational`, and with a `unit` under
+/// `Measure` a measure through @p units, invalid when the unit is not there. Anything else is the member's JSON
+/// text, invalid outside `Text`. A row's key is its member named by the description's `key`. The page's `columns`
+/// are every description column, whatever the query named, and its `revision` is empty.
+/// @param json        The reply's text.
+/// @param description The description: the columns, their kinds and the key.
+/// @param units       The registry a measure's unit is found in; null resolves through `registryOf(description)`,
+///                    built only when a column is `Measure`.
+/// @return The page, or `InvalidValue` when the text is not a page, a row is not an object or has no key, or
+///         `unloadedRows` or `indices` do not fit the rows, or what `registryOf` refuses.
+[[nodiscard]] inline std::expected<table::GenericPage, table::TableError> readTypedPage(
+    std::string_view json, table::TableDescription const& description, table::UnitRegistry const* units = nullptr) {
+    auto dom = detail::typedPageDom(json);
+    if (!dom) {
+        return std::unexpected(std::move(dom.error()));
+    }
+    return detail::typedPageOf(*dom, description, units);
+}
+
 // ── Over a server's pages ───────────────────────────────────────────────────
 
 /// @brief How a `WindowRows` reaches its table.
 struct WindowRowsOptions {
     /// @brief The model's channel.
     std::shared_ptr<ModelChannel> channel;
-    /// @brief The table's id: its actions are `Table.<table>` and `Table.<table>.describe`.
+    /// @brief The table's id: its actions are `Table.<table>` and `Table.<table>.describe`. Empty with `action`.
     std::string table;
-    /// @brief The table's record, `<model type>.<table>`, watched for the window's life.
-    std::string record;
+    /// @brief A typed list action's id, sent in place of `Table.<table>`: its reply is a `Page<Row>`, read with
+    ///        `readTypedPage`. Empty for a model's table.
+    std::string action;
+    /// @brief With `action`: the request member the query is written into, the one its schema marks `x-table`.
+    std::string queryMember;
+    /// @brief With `action`: the columns whose kind the first reply with rows decides, by the members of their id
+    ///        (`detail::inferredJsonKind`). Their kind in the description is a placeholder until then, and stays
+    ///        what that reply made it for the rows' life.
+    std::vector<std::string> inferKinds;
+    /// @brief The records watched for the window's life: a model's table its `<model type>.<table>`, a typed list
+    ///        action each record its catalog entry names. None: the pages are fetched again only on `retry`.
+    std::vector<std::string> records;
     /// @brief The node's `body`: the query's fixed part. A `query` record in it gives the query's other members.
     Value body;
     /// @brief Rows per page.
@@ -1693,10 +2072,15 @@ struct WindowRowsStats {
 /// @brief A table's rows over a server's pages: a `table::PageWindow` of generic rows, the table's description
 ///        and the session.
 ///
-/// It watches the table's record first and sends no page fetch until the watch is answered, a description is set
-/// and, when restoring, `release` is called. Every fetch goes through `Session::read` as `Table.<table>`, makes no
-/// cache entry and is cancelled through its own stop token; its reply's text is read with
+/// It watches the table's records first and sends no page fetch until every watch is answered, a description is
+/// set and, when restoring, `release` is called. Every fetch goes through `Session::read` as `Table.<table>`, makes
+/// no cache entry and is cancelled through its own stop token; its reply's text is read with
 /// `table::readGenericPage` against the held description.
+///
+/// Over a typed list action (`WindowRowsOptions::action`) every fetch is that action, its body the node's body with
+/// the query in `queryMember`, and its reply is read with `readTypedPage`. The reply holds whole rows, so `visible`'s
+/// columns name what a row's record converts and not what is fetched. The columns of `inferKinds` take their kinds
+/// from the first reply that has rows, read once as a DOM for both the kinds and the page.
 ///
 /// Timing. A fetch for a page held, or next to a page held, goes at once, and so does the first page while none is
 /// held; any other waits until the first visible row has stayed in one page for `SessionOptions::tableSettle`.
@@ -1725,18 +2109,19 @@ public:
         : _session{&session},
           _options{std::move(options)},
           _window{_options.pageSize, _options.maxPages, _options.maxKeys, _options.maxColumns},
-          _restoring{_options.restoring} {
-        auto watching = _session->watchRecord(
-            _options.record, _scope.token().guard([this](effects::RecordChange const& change) { heard(change); }));
-        watching.then(_scope, [this](WatchHolder const& holder) {
-            _watch = holder;
-            _watched = true;
-            pump();
-        });
-        watching.onError(_scope, [this](std::exception_ptr const&) {
-            _watched = true;
-            pump();
-        });
+          _restoring{_options.restoring},
+          _watched{_options.records.empty()},
+          _unanswered{_options.records.size()},
+          _inferring{!_options.action.empty() && !_options.inferKinds.empty()} {
+        for (auto const& record : _options.records) {
+            auto watching = _session->watchRecord(
+                record, _scope.token().guard([this](effects::RecordChange const& change) { heard(change); }));
+            watching.then(_scope, [this](WatchHolder const& holder) {
+                _watches.push_back(holder);
+                answered();
+            });
+            watching.onError(_scope, [this](std::exception_ptr const&) { answered(); });
+        }
     }
 
     WindowRows(WindowRows const&) = delete;
@@ -2037,7 +2422,7 @@ public:
                 }));
             return;
         }
-        auto reply = _session->read(_options.channel, "Table." + _options.table, *body, stop);
+        auto reply = _session->read(_options.channel, actionName(), *body, stop);
         reply.then(_scope, [this, done, stop](std::string const& text) {
             if (stop.stop_requested()) {
                 return;
@@ -2046,7 +2431,9 @@ public:
                 done(std::unexpected(unavailable()));
                 return;
             }
-            auto read = table::readGenericPage(text, *_description, _units.get());
+            // Only the indices are read: a typed reply here fixes no inferred kind, which a page's first rows do.
+            auto read = _options.action.empty() ? table::readGenericPage(text, *_description, _units.get())
+                                                : readTypedPage(text, *_description, _units.get());
             if (!read) {
                 done(std::unexpected(read.error()));
                 return;
@@ -2357,8 +2744,8 @@ private:
         }
     }
 
-    // The request body: the node's body, its `query` record overlaid with the window's sort, filter, rows and
-    // columns.
+    // The request body: the node's body, its query member (`query`, or a typed list action's `queryMember`)
+    // overlaid with the window's sort, filter, rows and columns.
     [[nodiscard]] std::expected<Value, table::TableError> bodyOf(table::TableQuery const& query) const {
         auto const invalid = [](std::string message) {
             return std::unexpected(
@@ -2380,14 +2767,15 @@ private:
         if (auto const* const fixed = _options.body.asRecord()) {
             body = *fixed;
         }
+        std::string const member = _options.action.empty() ? std::string{"query"} : _options.queryMember;
         ValueRecord members;
-        if (auto const found = body.find("query"); found != body.end() && found->second.asRecord() != nullptr) {
+        if (auto const found = body.find(member); found != body.end() && found->second.asRecord() != nullptr) {
             members = *found->second.asRecord();
         }
-        for (auto const& [name, member] : *value->asRecord()) {
-            members.insert_or_assign(name, member);
+        for (auto const& [name, field] : *value->asRecord()) {
+            members.insert_or_assign(name, field);
         }
-        body.insert_or_assign("query", Value{std::move(members)});
+        body.insert_or_assign(member, Value{std::move(members)});
         return Value{std::move(body)};
     }
 
@@ -2412,7 +2800,7 @@ private:
         }
         std::stop_source stop;
         ++_stats.pageFetches;
-        auto reply = _session->read(_options.channel, "Table." + _options.table, *body, stop.get_token());
+        auto reply = _session->read(_options.channel, actionName(), *body, stop.get_token());
         _pageFlights.push_back(PageFlight{.fetch = fetch, .stop = std::move(stop)});
         reply.then(_scope, [this, fetch](std::string const& text) { pageArrived(fetch, text); });
         reply.onError(_scope, [this, fetch](std::exception_ptr const& error) { pageFailed(fetch, error); });
@@ -2429,11 +2817,54 @@ private:
         }
         std::stop_source stop;
         ++_stats.rowsFetches;
-        auto reply = _session->read(_options.channel, "Table." + _options.table, *body, stop.get_token());
+        auto reply = _session->read(_options.channel, actionName(), *body, stop.get_token());
         _rowsFlights.push_back(RowsFlight{.fetch = fetch, .stop = std::move(stop)});
         reply.then(_scope, [this, fetch](std::string const& text) { rowsArrived(fetch, text); });
         reply.onError(_scope, [this, fetch](std::exception_ptr const& error) { rowsFailed(fetch, error); });
         status();
+    }
+
+    [[nodiscard]] std::string actionName() const {
+        return _options.action.empty() ? "Table." + _options.table : _options.action;
+    }
+
+    void answered() {
+        if (_unanswered > 0 && --_unanswered == 0) {
+            _watched = true;
+            pump();
+        }
+    }
+
+    // A reply's page against the held description. A typed list action's first reply with rows also fixes the kinds
+    // of the columns `inferKinds` names, from the same DOM the page is read from.
+    [[nodiscard]] std::expected<table::GenericPage, table::TableError> decode(std::string const& text) {
+        if (_options.action.empty()) {
+            return table::readGenericPage(text, *_description, _units.get());
+        }
+        auto dom = detail::typedPageDom(text);
+        if (!dom) {
+            return std::unexpected(std::move(dom.error()));
+        }
+        if (_inferring && !dom->rows.empty()) {
+            _inferring = false;
+            inferKinds(dom->rows);
+        }
+        return detail::typedPageOf(*dom, *_description, _units.get());
+    }
+
+    // The kinds the first rows give the columns `inferKinds` names. The description keeps its revision, so the
+    // query, the window and the fetches in flight stand; only the records made of the cells are made again.
+    void inferKinds(std::span<glz::generic_u64 const> rows) {
+        for (auto& column : _description->columns) {
+            if (std::ranges::contains(_options.inferKinds, column.info.id)) {
+                column.info.kind = detail::inferredJsonKind(rows, column.info.id);
+                _infos.insert_or_assign(column.info.id, column.info);
+            }
+        }
+        auto registry = table::registryOf(*_description);
+        _units = registry ? std::move(*registry) : nullptr;
+        _memo.clear();
+        ++_columnsStamp;
     }
 
     [[nodiscard]] static bool wasCancelled(std::exception_ptr const& error) {
@@ -2588,7 +3019,7 @@ private:
         if (!_description) {
             return;
         }
-        auto page = table::readGenericPage(text, *_description, _units.get());
+        auto page = decode(text);
         if (!page) {
             _window.fail(fetch, page.error());
             _error = std::move(page.error());
@@ -2640,7 +3071,7 @@ private:
         if (!_description) {
             return;
         }
-        auto page = table::readGenericPage(text, *_description, _units.get());
+        auto page = decode(text);
         if (!page) {
             keyedFailed(std::move(page.error()));
             return;
@@ -2744,8 +3175,10 @@ private:
     table::FilterSpec _filter;
     bool _restoring;
     bool _watched = false;
+    std::size_t _unanswered = 0;
+    bool _inferring = false;
     bool _retry = false;
-    WatchHolder _watch;
+    std::vector<WatchHolder> _watches;
     std::optional<table::TableError> _error;
     std::int64_t _first = 0;
     std::int64_t _count = 0;

@@ -430,6 +430,10 @@ inline Catalog corpusCatalog() {
             return std::string{R"({"type":"object","title":"Measure","properties":{
               "reading":{"type":"number","title":"Reading","x-displayDecimals":2,"x-order":0}}})"};
         }
+        // A typed list action a table pages: its query goes in the member marked `x-table`.
+        if (action == "Lims_PageResults") {
+            return std::string{R"({"type":"object","properties":{"query":{"type":"object","x-table":true}}})"};
+        }
         if (action != "Lims_CaptureConcentration") {
             return std::nullopt;
         }
