@@ -904,9 +904,11 @@ TEST_CASE("measure: filters compare base amounts within a dimension", "[table][m
 
 TEST_CASE("measure: a group of measure columns filters by base amount", "[table][measure][groups]") {
     // columns w1, w2 (Measure, dimensions {"mass", "ratio"}), declared group {"weights", "Weights", {w1, w2}}
-    // 0: 0.3 kg, 1 kg     1: 5 %, 300 g     2: 0.3 %, 2 kg     3: empty, 0.3 kg     4: 300 g, 0.3 kg
-    CHECK(groupRows({.group = "weights", .include = {eq("300 g")}}) == Rows{0, 1, 3, 4});     // not row 2: 0.3 % is not 0.3 kg
-    CHECK(groupRows({.group = "weights", .include = {oneOf({"0.3 kg", "0.003"})}}) == Rows{0, 1, 2, 3, 4});
+    // 0: 0.3 kg, 1 kg     1: 5 %, 300 g     2: 30 %, 2 kg     3: empty, 0.3 kg     4: 300 g, 0.3 kg
+    // row 2's 30 % is 0.3 in the ratio's base unit: equal in amount to 300 g's 0.3 kg, of another dimension, so a
+    // value index keyed by the amount alone puts it in the first result (0.3 % would be 0.003 and never collide)
+    CHECK(groupRows({.group = "weights", .include = {eq("300 g")}}) == Rows{0, 1, 3, 4});     // not row 2: 30 % is not 0.3 kg
+    CHECK(groupRows({.group = "weights", .include = {oneOf({"0.3 kg", "0.3"})}}) == Rows{0, 1, 2, 3, 4});
     CHECK(groupRows({.group = "weights", .match = {.kind = ColumnCount::Kind::All, .n = 1},
                      .include = {eq("300 g")}}) == Rows{4});
     CHECK(groupRows({.group = "weights", .mode = GroupMode::Together, .include = {eq("300 g"), eq("1 kg")}}) == Rows{0});
