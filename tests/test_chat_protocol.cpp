@@ -212,3 +212,52 @@ TEST_CASE("an_older_peer_and_a_newer_one_read_each_others_messages", "[chat][pro
     REQUIRE(oldState.has_value());
     CHECK_FALSE(oldState->draft.has_value());
 }
+
+// Mutation: drop `dictation` from TurnState, or write a null text into a finished state.
+TEST_CASE("chat_wire_dictation_bodies_round_trip", "[chat][protocol][dictation]") {
+    chat::TranscribeRequest const request{.audio = "UklGRg==", .mediaType = "audio/wav", .language = "de"};
+    auto const readRequest = chat::readTranscribeRequest(chat::writeMessage(request));
+    REQUIRE(readRequest.has_value());
+    CHECK(readRequest->audio == "UklGRg==");
+    CHECK(readRequest->mediaType == "audio/wav");
+    CHECK(readRequest->language == "de");
+    CHECK(chat::readTranscribeAccepted(chat::writeMessage(chat::TranscribeAccepted{.id = 9}))->id == 9);
+    CHECK(chat::readTranscriptionQuery(chat::writeMessage(chat::TranscriptionQuery{.id = 9}))->id == 9);
+
+    chat::TranscriptionState const done{
+        .id = 9, .status = chat::TranscriptionStatus::Done, .text = "hello", .error = std::nullopt};
+    std::string const doneText = chat::writeMessage(done);
+    CHECK(doneText.contains(R"("status":"done")"));
+    CHECK_FALSE(doneText.contains("error"));
+    auto const readDone = chat::readTranscriptionState(doneText);
+    REQUIRE(readDone.has_value());
+    CHECK(readDone->status == chat::TranscriptionStatus::Done);
+    CHECK(readDone->text == "hello");
+
+    chat::TranscriptionEvent const event{.kind = std::string{chat::kTranscriptionEventKind}, .state = done};
+    auto const readEvent = chat::readTranscriptionEvent(chat::writeMessage(event));
+    REQUIRE(readEvent.has_value());
+    CHECK(readEvent->kind == "transcription");
+    CHECK(readEvent->state.id == 9);
+
+    chat::TurnState offer;
+    offer.dictation = chat::DictationOffer{.maxSeconds = 60, .maxBytes = 4194304};
+    auto const readOffer = chat::readTurnState(chat::writeMessage(offer));
+    REQUIRE(readOffer.has_value());
+    REQUIRE(readOffer->dictation.has_value());
+    CHECK(readOffer->dictation->maxSeconds == 60);
+    CHECK(readOffer->dictation->maxBytes == 4194304);
+    CHECK_FALSE(chat::writeMessage(chat::TurnState{}).contains("dictation"));
+}
+
+// Mutation: drop the event's `kind`, so an older client could not tell it from a turn's.
+TEST_CASE("chat_wire_an_older_client_drops_a_transcription_event", "[chat][protocol][dictation]") {
+    chat::TranscriptionEvent const event{
+        .kind = std::string{chat::kTranscriptionEventKind},
+        .state = {.id = 3, .status = chat::TranscriptionStatus::Failed, .text = std::nullopt, .error = "cancelled"}};
+    auto const asTurn = chat::readTurnEvent(chat::writeMessage(event));
+    REQUIRE(asTurn.has_value());
+    CHECK(asTurn->turnId == 0);
+    CHECK(asTurn->seq == 0);
+    CHECK(asTurn->kind == "transcription");
+}

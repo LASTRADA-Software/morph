@@ -38,6 +38,20 @@ struct ProviderConfig {
     std::optional<int> maxTokens;
 };
 
+/// @brief Which speech-to-text provider a chat's dictation uses, and how to reach it.
+struct TranscriptionConfig {
+    /// @brief The provider's name, as whatever makes transcribers knows it.
+    std::string name;
+    /// @brief Where it is reached; empty for its public address.
+    std::string baseUrl;
+    /// @brief The model.
+    std::string model;
+    /// @brief The secret it is called with. It appears in no log and no message.
+    std::string apiKey;
+    /// @brief The language a clip is transcribed in when its request names none; absent leaves it to the provider.
+    std::optional<std::string> language;
+};
+
 /// @brief Everything a chat is configured with.
 struct ChatConfig {
     /// @brief The provider.
@@ -46,6 +60,8 @@ struct ChatConfig {
     ChatLimits limits;
     /// @brief What the assistant is told about how to behave; empty for the framework's default.
     std::string systemPrompt;
+    /// @brief The dictation's provider; absent when the chat offers no dictation.
+    std::optional<TranscriptionConfig> transcription;
 };
 
 /// @brief Looks an environment variable up; nothing when it is not set.
@@ -64,6 +80,15 @@ struct ProviderFile {
     std::optional<int> maxTokens;
 };
 
+struct TranscriptionFile {
+    std::string name;
+    std::string baseUrl;
+    std::optional<std::string> apiKey;
+    std::optional<std::string> apiKeyEnv;
+    std::string model;
+    std::optional<std::string> language;
+};
+
 struct LimitsFile {
     std::optional<std::size_t> maxToolCallsPerTurn;
     std::optional<std::size_t> maxTurnsPerPrincipal;
@@ -79,10 +104,15 @@ struct LimitsFile {
     std::optional<std::size_t> maxProposalsPerTurn;
     std::optional<std::int64_t> idleRetentionMinutes;
     std::optional<std::int64_t> toolCallTimeoutSeconds;
+    std::optional<std::size_t> maxDictationSeconds;
+    std::optional<std::size_t> maxDictationBytes;
+    std::optional<std::size_t> maxTranscriptionsPerPrincipal;
+    std::optional<std::int64_t> transcriptionRetentionSeconds;
 };
 
 struct ConfigFile {
     ProviderFile provider;
+    std::optional<TranscriptionFile> transcription;
     LimitsFile limits;
     std::string systemPrompt;
 };
@@ -94,6 +124,32 @@ struct ConfigFile {
     // NOLINTNEXTLINE(concurrency-mt-unsafe): read at startup, before a server's threads run.
     char const* const value = std::getenv(std::string{name}.c_str());
     return value == nullptr ? std::nullopt : std::optional<std::string>{std::string{value}};
+}
+
+/// @brief The key a provider block names: inline, from the environment, or none.
+/// @param given       The inline `apiKey`.
+/// @param variable    The `apiKeyEnv`.
+/// @param environment How the variable is looked up.
+/// @param where       What the block is, for the refusal.
+/// @return The key, empty for none, or why not: both named, or a variable that is not set.
+[[nodiscard]] inline std::expected<std::string, std::string> keyOf(std::optional<std::string> given,
+                                                                   std::optional<std::string> const& variable,
+                                                                   EnvironmentLookup const& environment,
+                                                                   std::string_view where) {
+    if (given && variable) {
+        return std::unexpected(std::string{where} + " names both `apiKey` and `apiKeyEnv`");
+    }
+    if (given) {
+        return std::move(*given);
+    }
+    if (!variable) {
+        return std::string{};
+    }
+    auto key = environment ? environment(*variable) : std::nullopt;
+    if (!key) {
+        return std::unexpected("the environment variable `" + *variable + "` named by `apiKeyEnv` is not set");
+    }
+    return std::move(*key);
 }
 
 }  // namespace detail
@@ -119,18 +175,24 @@ struct ConfigFile {
     config.provider.baseUrl = std::move(file.provider.baseUrl);
     config.provider.model = std::move(file.provider.model);
     config.systemPrompt = std::move(file.systemPrompt);
-    if (file.provider.apiKey && file.provider.apiKeyEnv) {
-        return std::unexpected(std::string{"the chat configuration names both `apiKey` and `apiKeyEnv`"});
+    auto providerKey =
+        detail::keyOf(std::move(file.provider.apiKey), file.provider.apiKeyEnv, environment, "the chat configuration");
+    if (!providerKey) {
+        return std::unexpected(std::move(providerKey.error()));
     }
-    if (file.provider.apiKey) {
-        config.provider.apiKey = std::move(*file.provider.apiKey);
-    } else if (file.provider.apiKeyEnv) {
-        auto key = environment ? environment(*file.provider.apiKeyEnv) : std::nullopt;
+    config.provider.apiKey = std::move(*providerKey);
+    if (file.transcription) {
+        detail::TranscriptionFile& block = *file.transcription;
+        auto key = detail::keyOf(std::move(block.apiKey), block.apiKeyEnv, environment,
+                                 "the chat configuration's `transcription`");
         if (!key) {
-            return std::unexpected("the environment variable `" + *file.provider.apiKeyEnv +
-                                   "` named by `apiKeyEnv` is not set");
+            return std::unexpected(std::move(key.error()));
         }
-        config.provider.apiKey = std::move(*key);
+        config.transcription = TranscriptionConfig{.name = std::move(block.name),
+                                                   .baseUrl = std::move(block.baseUrl),
+                                                   .model = std::move(block.model),
+                                                   .apiKey = std::move(*key),
+                                                   .language = std::move(block.language)};
     }
     if (file.provider.maxTokens) {
         if (*file.provider.maxTokens <= 0) {
@@ -164,8 +226,23 @@ struct ConfigFile {
     apply(limits.maxDraftBytes, config.limits.maxDraftBytes, "maxDraftBytes", problem);
     apply(limits.maxInlineDocumentBytes, config.limits.maxInlineDocumentBytes, "maxInlineDocumentBytes", problem);
     apply(limits.maxProposalsPerTurn, config.limits.maxProposalsPerTurn, "maxProposalsPerTurn", problem);
+    apply(limits.maxDictationSeconds, config.limits.maxDictationSeconds, "maxDictationSeconds", problem);
+    apply(limits.maxDictationBytes, config.limits.maxDictationBytes, "maxDictationBytes", problem);
+    apply(limits.maxTranscriptionsPerPrincipal, config.limits.maxTranscriptionsPerPrincipal,
+          "maxTranscriptionsPerPrincipal", problem);
     if (!problem.empty()) {
         return std::unexpected(std::move(problem));
+    }
+    if (config.limits.maxDictationBytes > kMaxDictationBytes) {
+        return std::unexpected("the chat configuration's `maxDictationBytes` must be at most " +
+                               std::to_string(kMaxDictationBytes));
+    }
+    if (limits.transcriptionRetentionSeconds) {
+        if (*limits.transcriptionRetentionSeconds <= 0) {
+            return std::unexpected(
+                std::string{"the chat configuration's `transcriptionRetentionSeconds` must be above 0"});
+        }
+        config.limits.transcriptionRetention = std::chrono::seconds{*limits.transcriptionRetentionSeconds};
     }
     if (limits.toolCallTimeoutSeconds) {
         if (*limits.toolCallTimeoutSeconds <= 0) {

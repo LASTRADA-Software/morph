@@ -12,12 +12,18 @@
 #include <utility>
 #include <vector>
 
+#include "../../core/wire.hpp"
 #include "provider.hpp"
 
 /// @file
 /// @brief What a chat remembers between turns. Specified in `docs/spec/ui/chat.md`.
 
 namespace morph::ui::chat {
+
+/// @brief The largest dictated clip a server may accept, in bytes before base64: what fits one envelope once grown by
+///        4/3 and wrapped. Past it the transport, not the chat, would refuse the request, and the person would not
+///        learn which bound they crossed.
+inline constexpr std::size_t kMaxDictationBytes = (wire::kMaxEnvelopeBytes - 4096) * 3 / 4;
 
 /// @brief Bounds on what chats may consume.
 struct ChatLimits {
@@ -58,6 +64,15 @@ struct ChatLimits {
     std::chrono::milliseconds toolCallTimeout{std::chrono::seconds{30}};
     /// @brief How long an untouched conversation is kept.
     std::chrono::minutes idleRetention{std::chrono::hours{8}};
+    /// @brief The longest clip a person may dictate, in seconds; the client stops recording there.
+    std::size_t maxDictationSeconds = 60;
+    /// @brief The largest clip the server takes, in bytes after decoding; the client stops recording before a clip
+    ///        would pass it. At most `kMaxDictationBytes`.
+    std::size_t maxDictationBytes = std::size_t{4} * 1024 * 1024;
+    /// @brief Transcriptions one principal may have running across connections. One connection may have one.
+    std::size_t maxTranscriptionsPerPrincipal = 2;
+    /// @brief How long a finished transcription stays readable before it is forgotten.
+    std::chrono::seconds transcriptionRetention{60};
 };
 
 /// @brief Which conversation a turn belongs to.

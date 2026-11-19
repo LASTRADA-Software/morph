@@ -19,7 +19,7 @@ the push path every other change uses. The design is in
 
 ## Protocol
 
-`protocol.hpp`. Four envelope kinds on the GUI's connection, under its session:
+`protocol.hpp`. Six envelope kinds on the GUI's connection, under its session:
 
 | Kind | Body | Reply |
 |---|---|---|
@@ -27,6 +27,13 @@ the push path every other change uses. The design is in
 | `ui-chat-state` | `StateRequest{turnId?}`; with no id, it only asks whether a chat is available | `TurnState` |
 | `ui-chat-cancel` | none | `ok` |
 | `ui-chat-end` | none | `ok` |
+| `ui-chat-transcribe` | `TranscribeRequest{audio, mediaType, language?}`: a dictated clip, base64, `audio/wav` | `TranscribeAccepted{id}`, at once |
+| `ui-chat-transcription` | `TranscriptionQuery{id}` | `TranscriptionState{id, status: running \| done \| failed, text?, error?}` |
+
+`ui-chat-state` with no turn (the probe) also answers `TurnState::dictation`, `{maxSeconds, maxBytes}`, when the server
+offers dictation, and leaves it out when it does not. A transcription ends with a `TranscriptionEvent` on the `chat`
+topic, `{kind: "transcription", state}`; its `kind` tells it from a `TurnEvent`, and an older client reads it as a turn
+event with turn id 0 and drops it. Like a turn's events it is a hint: the client reads `TranscriptionState`.
 
 A `TurnRequest` describes where the person is, and is a hint about what they mean. It grants nothing, because every
 action it leads to is checked under the envelope's session. Its `title` is the screen's title as the person sees it
@@ -146,6 +153,7 @@ optional reader that fills it from a JSON file:
 ```json
 {
   "provider": { "name": "anthropic", "model": "...", "apiKeyEnv": "THE_KEY_VARIABLE" },
+  "transcription": { "name": "openai-transcriptions", "model": "whisper-1", "apiKeyEnv": "STT_KEY", "language": "en" },
   "limits": { "maxToolCallsPerTurn": 16, "idleRetentionMinutes": 480 },
   "systemPrompt": "..."
 }
@@ -153,6 +161,12 @@ optional reader that fills it from a JSON file:
 
 - `provider` takes `name`, `model`, `baseUrl`, `maxTokens`, and one of `apiKeyEnv` and `apiKey`. `apiKeyEnv` names an
   environment variable, which keeps the secret out of the file. Naming both is refused.
+- `transcription`, optional, names the dictation's provider with `name`, `baseUrl`, `model`, `language`, and one of
+  `apiKeyEnv` and `apiKey`, with the provider block's rules: an unknown key is refused, both keys are refused, and a
+  refusal never quotes the text. Without it the chat offers no dictation.
+- `limits` also takes `maxDictationSeconds` (60), `maxDictationBytes` (4 MiB), `maxTranscriptionsPerPrincipal` (2) and
+  `transcriptionRetentionSeconds` (60). 0 is refused for each, and so is a `maxDictationBytes` above
+  `kMaxDictationBytes` (about 6 MiB, what one envelope carries once base64 grows it by 4/3).
 - `limits` takes each field of `ChatLimits`, with `idleRetentionMinutes` for its time limit. What is left out keeps its
   default.
 - A key the format does not have is refused, so a misspelled limit cannot silently leave the default in force. A limit of
