@@ -421,6 +421,32 @@ TEST_CASE("table catalog: a table's actions are catalogued, holding the record o
     CHECK(describe->records.empty());
 }
 
+// A table's actions only read: the builder's `evaluate` and `mutation` refuse them at compile time, while `query`
+// and the catalog take them.
+template <typename Action>
+concept TableEvaluatable = requires(morph::ui::author::DeclScope& scope,
+                                    morph::ui::author::ModelHandle<bench::WideTableModel> const& model) {
+    scope.evaluate<Action>("e", model);
+};
+template <typename Action>
+concept TableMutable = requires(morph::ui::author::DeclScope& scope,
+                                morph::ui::author::ModelHandle<bench::WideTableModel> const& model) {
+    scope.mutation<Action>("m", model);
+};
+template <typename Action>
+concept TableQueryable = requires(morph::ui::author::DeclScope& scope,
+                                  morph::ui::author::ModelHandle<bench::WideTableModel> const& model) {
+    scope.query<Action>("q", model);
+};
+
+// Mutation: `evaluate` and `mutation` constrained by `Runs` (both static_asserts on them fail to hold).
+TEST_CASE("table catalog: a table's actions are no builder's evaluate or mutation", "[ui][table]") {
+    using Query = table::QueryTable<&bench::WideTableModel::small>;
+    STATIC_CHECK_FALSE(TableEvaluatable<Query>);
+    STATIC_CHECK_FALSE(TableMutable<Query>);
+    STATIC_CHECK(TableQueryable<Query>);
+}
+
 // Mutation: the view's end removed after the page's diff rather than before it (rows 250 to 299 are held twice while
 // the page's rows move in).
 TEST_CASE("window rows: a page that spans a shrunk view's end gives operations in bounds", "[ui][table]") {
@@ -488,6 +514,7 @@ using morph::ui::testing::oldestOpen;
 using morph::ui::testing::pageJsonRenaming;
 using morph::ui::testing::pageJsonUnloaded;
 using morph::ui::testing::queryOf;
+using morph::ui::testing::readJson;
 using morph::ui::testing::replyDescribe;
 using morph::ui::testing::replyPage;
 using morph::ui::testing::shownText;
@@ -663,6 +690,84 @@ TEST_CASE("model table: a refused save is said in the status line and keeps the 
     CHECK(statusOf(h).message == "The table's arrangement could not be saved: over the table-state quota");
     CHECK(lastQuery(h).sort.at(0).column == "name");                          // the arrangement stays
     CHECK(h.backend.prop(tableOf(h), "sort") == "1:Ascending");
+}
+
+namespace {
+
+// `kModelTable` with a `columns` point `cols` and a `saved` point `views`, both naming the table.
+std::string withTablePoints() {
+    std::string text{kModelTable};
+    std::string const models = R"("models":)";
+    text.insert(text.find(models),
+                R"("customize":{"cols":{"kind":"columns","of":"list"},"views":{"kind":"saved","of":"list"}},)");
+    return text;
+}
+
+}  // namespace
+
+// Mutations: the stored state's layout and view not shown at the points (`cols.pinned` reads null); a point's choice
+// not written into the table's state (no save goes).
+TEST_CASE("model table: the columns and saved points read and write the table's state", "[ui][table][state]") {
+    auto store = std::make_shared<GatedTableStateStore>(
+        storeExecutor(), R"({"version":1,"layout":{"order":["id","name","c3"],"hidden":["c3"],"pinned":1},"view":"Mine"})");
+    TableHarness h{store};
+    auto screen = h.mount(withTablePoints());  replyDescribe(h);  store->release();  h.settle();
+    CHECK(readJson(*screen, R"({"pref":"cols.pinned"})") == "1");
+    CHECK(readJson(*screen, R"({"pref":"cols.hidden"})") == R"(["c3"])");
+    CHECK(readJson(*screen, R"({"pref":"views"})") == R"("Mine")");
+    auto const layout = morph::ui::parseJson(R"({"order":["name","id","c3"],"hidden":[],"pinned":2})");
+    REQUIRE(layout.has_value());
+    CHECK(screen->setPreference("cols", *morph::ui::valueFromJson(*layout)));
+    CHECK(screen->setPreference("views", morph::ui::Value{std::string{"Shared"}}));
+    CHECK_FALSE(screen->setPreference("cols", morph::ui::Value{std::int64_t{7}}));   // not a layout
+    h.advance(500ms);
+    REQUIRE(store->saves() == 1);
+    auto const saved = table::readState(store->lastSaved());
+    REQUIRE(saved.has_value());
+    REQUIRE(saved->layout.has_value());
+    CHECK(saved->layout->pinned == 2);
+    CHECK(saved->layout->order.front() == "name");
+    CHECK(saved->view == std::optional<std::string>{"Shared"});
+    CHECK(readJson(*screen, R"({"pref":"cols.pinned"})") == "2");
+}
+
+// Mutation: the row-scope index never pruned (it holds an entry for every row scrolled past).
+TEST_CASE("model table: scrolling 10,000 rows keeps one row scope per realized row", "[ui][table]") {
+    TableHarness h;
+    auto screen = mountShown(h, withTableKey(kModelTable, R"("rowLabel":{"lit":"a row"})"), 100'000);
+    for (std::size_t first = 0; first < 10'000; first += 30) {
+        h.backend.scrollTable(tableOf(h), first, 30);  h.settle();
+        answerPages(h, 100'000);
+    }
+    // The realized rows, and at most one scroll's worth that left and are pruned when the next row comes.
+    CHECK(morph::ui::detail::ScreenCore::tableRowScopes(elementOf(*screen, "list")) <= 2 * 50);
+}
+
+// Mutation: a new revision clearing the element's selection (`selectedCount` is 0 after it).
+TEST_CASE("model table: a new revision keeps the selection and the message", "[ui][table]") {
+    auto store = std::make_shared<GatedTableStateStore>(storeExecutor(), R"({"version":1})");
+    TableHarness h{store};
+    auto screen = h.mount(withTableKey(kModelTable, R"("selectionMode":"multiple")"));
+    replyDescribe(h);  store->release();  h.settle();  answerPages(h, 9093);
+    h.backend.selectRows(tableOf(h), {Key{std::int64_t{1}}, Key{std::int64_t{2}}});  h.settle();
+    store->refuseSaves("over the table-state quota");
+    h.backend.clickHeader(tableOf(h), 1);  h.advance(500ms);
+    REQUIRE(statusOf(h).message == "The table's arrangement could not be saved: over the table-state quota");
+    table::TableDescription const b = samplesDescription(2);
+    h.reply(oldestOpen(h, "Table.samples"), morph::ui::testing::pageJsonAt(b.revision, 0, 200, 9093, h.columns));
+    replyDescribe(h, b);
+    REQUIRE(headerLabels(h) == std::vector<std::string>{"Id", "Name"});      // mounted again from revision B
+    CHECK(elementValue(*screen, "list", "selectedCount") == "2");
+    CHECK(statusOf(h).message == "The table's arrangement could not be saved: over the table-state quota");
+}
+
+// Mutation: the body's `query` members replaced without a report (no diagnostic names `filters`).
+TEST_CASE("model table: a body's query member the table owns is reported", "[ui][table]") {
+    TableHarness h;
+    auto screen = mountShown(
+        h, withTableKey(kModelTable, R"("body":{"lit":{"query":{"filters":{"columns":{}},"limit":3}}})"));
+    CHECK(diagnosticsMentioning(h, "`filters` is the table's own; the body's is not used") == 1);
+    CHECK(diagnosticsMentioning(h, "limit") == 0);
 }
 
 // Mutation: the mount leaving out the rows a `Changed` operation names (no row is bound again: 0, and the renamed
@@ -911,9 +1016,12 @@ TEST_CASE("ui document: a model-backed table names a table of its model", "[ui][
           "a model-backed table's engine pages; `pageSize` and `page` are for a table over `rows`");
 }
 
-// Mutation: the loader taking `table` without `model` (the document loads).
+// Mutations: the loader taking `table` without `model` (the document loads); a `saved` point's `of` left unchecked
+// (the second document loads).
 TEST_CASE("ui document: a table's `table` needs its `model`", "[ui][document]") {
     std::string const text =
         R"({"vocab":"ui/1","id":"samples","view":{"kind":"table","id":"list","table":"samples"}})";
     CHECK(refusalOf(text) == "`table` names one of a model's tables; give the table its `model`");
+    CHECK(refusalOf(R"({"vocab":"ui/1","id":"s","customize":{"v":{"kind":"saved","of":"nosuch"}},)"
+                    R"("view":{"kind":"text","text":"x"}})") == "a `saved` point names a table; `nosuch` is not one");
 }

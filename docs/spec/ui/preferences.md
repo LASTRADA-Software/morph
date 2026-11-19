@@ -103,6 +103,14 @@ under a quota of its own, so `maxValueBytes` does not bound it. The preferences 
 under: the application `morph.tableState` and every scope that starts `morph.table` (`` `<name>` is kept for table
 state ``), so no preference overwrites a table's stored state or a person's table-state usage.
 
+The `columns` and `saved` points that name a model-backed table read and write the table's state, not a
+preference of their own. A `columns` point reads the table's column layout as a record (`order`, `hidden`,
+`pinned`, `widths`, `groups`, `units`) and a `saved` point the name of the saved view the arrangement was taken
+from, or `null`; both read what the table's stored state loaded, and the document's default until it has. A
+choice for either (`Screen::setPreference`) is written into the table's state and saved as any change of its
+arrangement is, debounced; a choice that does not read as a layout, or as a name or `null`, is refused. A
+`saved` point names its table with `of`, as a `columns` point does.
+
 ## The client
 
 `PreferenceSync(dispatcher, application, onError)` is the part of an application's `InterpreterHost` that talks to
@@ -138,5 +146,6 @@ owner, where their replies arrive.
   yet, and for a settings screen that can name an app point (spec 6 §19).
 - **Offline.** Spec 5 §12b keeps choices locally while offline and writes them on reconnect; that is the backend
   switch's (spec 6 §9).
-- **The fit of `columns`, `layout` and `saved`.** Their stored shapes are their editors', and the interpreter
-  lowers only `choice` and string `value` editors, so `setPreference` accepts any value for them.
+- **The fit of `layout`, and of `columns` and `saved` points that name no model-backed table.** Their stored
+  shapes are their editors', and the interpreter lowers only `choice` and string `value` editors, so
+  `setPreference` accepts any value for them.

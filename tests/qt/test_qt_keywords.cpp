@@ -13,7 +13,9 @@
 #include <morph/ui/chat/panel.hpp>
 #include <morph/ui/chat/service.hpp>
 #include <morph/ui/chat/transcriber.hpp>
+#include <morph/ui/mount.hpp>
 #include <morph/ui/service.hpp>
+#include <morph/ui/table_rows.hpp>
 
 namespace ui = morph::ui::author;
 
