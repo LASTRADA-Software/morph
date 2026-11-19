@@ -14,6 +14,7 @@
 #include <morph/ui/json_source.hpp>
 #include <optional>
 #include <string>
+#include <vector>
 
 #include "ui_custom_client_support.hpp"
 
@@ -127,7 +128,9 @@ TEST_CASE("custom screen chrome: Save as… names the draft, saves it, and the t
 // Mutation: save from the source view without previewing (the refused document is saved: the list has a screen).
 TEST_CASE("custom screen chrome: Save as… from the source view previews first, and saves nothing it refuses",
           "[ui][custom-screens][chrome]") {
-    ChromeRig rig;
+    morph::exec::ThreadPoolExecutor storePool{1};
+    auto const store = std::make_shared<custom_client::GatedStore>(storePool);
+    ChromeRig rig{Offer::Store, store};
     rig.open("notes.edit", note(1));
     rig.click("source_button_notes.edit");
     rig.type("source_text", screens_test::replaced(rig.field("source_text"), "\"notes.edit\"", "\"notes.other\""));
@@ -135,7 +138,12 @@ TEST_CASE("custom screen chrome: Save as… from the source view previews first,
     rig.type("save_as_title", "Never");
     rig.click("save_as_confirm");
     REQUIRE(rig.pump([&rig] { return rig.shown("Button", "source_refusal"); }));
-    static_cast<void>(rig.pump([] { return false; }, std::chrono::milliseconds{200}));
+    // A round trip after the refused press: a save sent by it would have reached the store before this answers.
+    std::optional<bool> barrier;
+    rig.sync->check("notes.edit", std::string{kEdit},
+                    [&barrier](auto const& answered) { barrier = answered.has_value(); });
+    REQUIRE(rig.pump([&barrier] { return barrier.has_value(); }));
+    CHECK(store->puts == 0);
     CHECK(rig.sync->listed().screens.empty());
 
     rig.type("source_text", screens_test::replaced(rig.field("source_text"), "\"notes.other\"", "\"notes.edit\""));
@@ -162,6 +170,8 @@ TEST_CASE("custom screen chrome: Save overwrites a draft of my own custom screen
         return !rig.shown("Row", "draft_bar_" + id) && rig.sync->listed().screens.front().hash != before;
     }));
     CHECK(rig.text("heading") == "Saved by hand");
+    REQUIRE_FALSE(rig.notices.empty());
+    CHECK(rig.notices.back().starts_with("Saved"));
     REQUIRE(rig.sync->documents().entry(id) != nullptr);
     CHECK(rig.sync->documents().entry(id)->text.contains("Saved by hand"));
     CHECK(rig.workspace->tabs().size() == 1);
@@ -203,4 +213,278 @@ TEST_CASE("custom screen chrome: Discard restores the screen, and closing a draf
     CHECK(rig.guarded == 1);
     CHECK_FALSE(*closed);
     CHECK(rig.workspace->tabs().size() == 1);
+}
+
+// Mutation: drop the read-only flag while a check runs (the editor stays editable, `readonly` is "false").
+TEST_CASE("custom screen chrome: while a check runs the editor is read only, and a second Preview does nothing",
+          "[ui][custom-screens][chrome]") {
+    ChromeRig rig;
+    rig.open("notes.edit", note(1));
+    rig.click("source_button_notes.edit");
+    int const editor = *rig.find("TextInput", "source_text");
+    CHECK(rig.harness.backend.prop(editor, "readonly") != "true");
+    rig.click("source_preview");
+    REQUIRE(rig.find("TextInput", "source_text").has_value());
+    CHECK(rig.harness.backend.prop(*rig.find("TextInput", "source_text"), "readonly") == "true");
+    CHECK_FALSE(rig.enabled("Button", "source_preview"));
+    std::optional<bool> again;
+    rig.chrome->preview([&again](bool drafted) { again = drafted; });
+    REQUIRE(again.has_value());
+    CHECK_FALSE(*again);
+    REQUIRE(rig.pump([&rig] { return rig.shown("Row", "draft_bar_notes.edit"); }));
+}
+
+// Mutation: take a check's reply whichever view asked it (the reply of the closed view mounts a draft the reopened
+// view never asked for).
+TEST_CASE("custom screen chrome: a reply to a check made for a view that was reopened does nothing",
+          "[ui][custom-screens][chrome]") {
+    ChromeRig rig;
+    rig.open("notes.edit", note(1));
+    rig.click("source_button_notes.edit");
+    rig.type("source_text", screens_test::replaced(rig.field("source_text"), "\"Edit note\"", "\"Stale\""));
+    rig.click("source_preview");
+    REQUIRE(rig.find("Dialog", "source_dialog").has_value());
+    rig.chrome->showSource(rig.tabAt(0));
+    REQUIRE(rig.pump([&rig] { return rig.field("source_text") == morph::ui::prettyJson(kEdit); }));
+    static_cast<void>(
+        rig.pump([&rig] { return rig.shown("Row", "draft_bar_notes.edit"); }, std::chrono::milliseconds{300}));
+    CHECK(rig.text("heading") == "Edit note");
+    CHECK_FALSE(rig.shown("Row", "draft_bar_notes.edit"));
+    CHECK(rig.find("Dialog", "source_dialog").has_value());
+}
+
+// Mutation: leave the editor read only after a refusal (`refuse` does not clear the busy flag).
+TEST_CASE(
+    "custom screen chrome: after a refusal the editor takes edits again, and the refusal is labelled with its line",
+    "[ui][custom-screens][chrome]") {
+    ChromeRig rig;
+    rig.open("notes.edit", note(1));
+    rig.click("source_button_notes.edit");
+    std::string const edited = screens_test::replaced(rig.field("source_text"), "\"notes.edit\"", "\"notes.other\"");
+    rig.type("source_text", edited);
+    rig.click("source_preview");
+    REQUIRE(rig.pump([&rig] { return rig.shown("Button", "source_refusal"); }));
+    int const refusal = *rig.find("Button", "source_refusal");
+    CHECK(rig.harness.backend.prop(refusal, "label")
+              .starts_with("Line " + std::to_string(morph::ui::lineAt(edited, edited.find("\"id\""))) + ":"));
+    CHECK(rig.harness.backend.prop(*rig.find("TextInput", "source_text"), "readonly") != "true");
+}
+
+// Mutation: move the cursor for a refusal whose pointer is empty (the cursor jumps to the start of the text).
+TEST_CASE("custom screen chrome: a refusal that names no place leaves the cursor where it is",
+          "[ui][custom-screens][chrome]") {
+    ChromeRig rig;
+    rig.open("notes.edit", note(1));
+    rig.click("source_button_notes.edit");
+    rig.type("source_text", "{ not json");
+    rig.click("source_preview");
+    REQUIRE(rig.pump([&rig] { return rig.shown("Button", "source_refusal"); }));
+    int const editor = *rig.find("TextInput", "source_text");
+    std::size_t const before = rig.harness.backend.cursor(editor);
+    rig.click("source_refusal");
+    CHECK(rig.harness.backend.cursor(editor) == before);
+}
+
+// Mutation: show the source of a custom screen the cache dropped as an empty editor.
+TEST_CASE("custom screen chrome: Source of a custom screen the cache dropped fetches it first",
+          "[ui][custom-screens][chrome]") {
+    ChromeRig rig;
+    std::string const id = rig.saveOnServer("Mine", "notes.edit", std::string{kEdit});
+    std::optional<bool> fetched;
+    rig.sync->open(id, [&fetched](auto loaded) { fetched = loaded.has_value(); });
+    REQUIRE(rig.pump([&fetched] { return fetched.has_value(); }));
+    rig.open(id, note(1));
+    rig.sync->documents().forget(id);
+    REQUIRE(rig.sync->documents().entry(id) == nullptr);
+    rig.click("source_button_" + id);
+    REQUIRE(rig.pump([&rig] { return rig.find("TextInput", "source_text").has_value(); }));
+    REQUIRE(rig.sync->documents().entry(id) != nullptr);
+    CHECK(rig.field("source_text") == morph::ui::prettyJson(rig.sync->documents().entry(id)->text));
+}
+
+// Mutation: show Save whenever custom screens are offered (`canSave` returns the offer).
+TEST_CASE("custom screen chrome: Save is hidden on a draft of an application screen and of another person's screen",
+          "[ui][custom-screens][chrome]") {
+    ChromeRig rig;
+    rig.open("notes.edit", note(1));
+    draftHeading(rig, "notes.edit", "Edited by hand");
+    CHECK(rig.shown("Row", "draft_bar_notes.edit"));
+    CHECK_FALSE(rig.shown("Button", "draft_save_notes.edit"));
+    CHECK(rig.shown("Button", "draft_save_as_notes.edit"));
+
+    std::string const id = rig.saveOnServer("Mine", "notes.edit", std::string{kEdit});
+    std::optional<bool> fetched;
+    rig.sync->open(id, [&fetched](auto loaded) { fetched = loaded.has_value(); });
+    REQUIRE(rig.pump([&fetched] { return fetched.has_value(); }));
+    rig.open(id, note(2));
+    draftHeading(rig, id, "Edited by hand");
+    CHECK(rig.shown("Button", "draft_save_" + id));
+    morph::ui::CustomScreensListed others = rig.sync->listed();
+    others.screens.front().mine = false;
+    rig.chrome->listed(others);
+    rig.harness.settle();
+    CHECK_FALSE(rig.shown("Button", "draft_save_" + id));
+}
+
+// Mutation: skip the generation check in the save reply (the tab is replaced by the saved screen although the draft
+// that was saved is gone). The server runs one action of the model at a time, so a newer draft cannot be previewed
+// before a held save answers; a discard is what ends the draft meanwhile.
+TEST_CASE("custom screen chrome: a save that finishes after its draft was discarded leaves the tab as it is",
+          "[ui][custom-screens][chrome]") {
+    morph::exec::ThreadPoolExecutor storePool{1};
+    auto const store = std::make_shared<custom_client::GatedStore>(storePool);
+    ChromeRig rig{Offer::Store, store};
+    custom_client::GateGuard const guard{*store};
+    rig.open("notes.edit", note(1));
+    draftHeading(rig, "notes.edit", "First");
+    store->hold();
+    rig.click("draft_save_as_notes.edit");
+    rig.type("save_as_title", "First");
+    rig.click("save_as_confirm");
+    CHECK_FALSE(rig.enabled("Button", "draft_save_as_notes.edit"));
+    rig.click("draft_discard_notes.edit");
+    REQUIRE(rig.pump([&rig] { return rig.text("heading") == "Edit note"; }));
+    store->release();
+    REQUIRE(rig.pump([&rig] { return !rig.notices.empty(); }));
+    CHECK(rig.notices.back().contains("is gone"));
+    CHECK(rig.screenOf(0) == "notes.edit");
+    CHECK(rig.text("heading") == "Edit note");
+    CHECK_FALSE(rig.shown("Row", "draft_bar_notes.edit"));
+    CHECK(rig.workspace->tabs().size() == 1);
+    CHECK(rig.guarded == 0);
+    rig.click("source_button_notes.edit");
+    rig.type("source_text", screens_test::replaced(rig.field("source_text"), "\"Edit note\"", "\"Next\""));
+    rig.click("source_preview");
+    REQUIRE(rig.pump([&rig] { return rig.text("heading") == "Next"; }));
+    CHECK(rig.enabled("Button", "draft_save_as_notes.edit"));
+}
+
+// Mutation: let Save run while one is pending (the store gets two puts).
+TEST_CASE("custom screen chrome: a second Save while one is pending is ignored", "[ui][custom-screens][chrome]") {
+    morph::exec::ThreadPoolExecutor storePool{1};
+    auto const store = std::make_shared<custom_client::GatedStore>(storePool);
+    ChromeRig rig{Offer::Store, store};
+    custom_client::GateGuard const guard{*store};
+    std::string const id = rig.saveOnServer("Mine", "notes.edit", std::string{kEdit});
+    std::optional<bool> fetched;
+    rig.sync->open(id, [&fetched](auto loaded) { fetched = loaded.has_value(); });
+    REQUIRE(rig.pump([&fetched] { return fetched.has_value(); }));
+    rig.open(id, note(1));
+    draftHeading(rig, id, "Saved by hand");
+    int const before = store->puts;
+    store->hold();
+    rig.click("draft_save_" + id);
+    CHECK_FALSE(rig.enabled("Button", "draft_save_" + id));
+    rig.chrome->save(rig.tabAt(0));
+    rig.chrome->save(rig.tabAt(0));
+    store->release();
+    REQUIRE(rig.pump([&rig, &id] { return !rig.shown("Row", "draft_bar_" + id); }));
+    CHECK(store->puts == before + 1);
+}
+
+// Mutation: let a second Save as… replace the dialog while one is saving (the typed name is lost).
+TEST_CASE("custom screen chrome: a second Save as… while one is pending does not replace the dialog",
+          "[ui][custom-screens][chrome]") {
+    morph::exec::ThreadPoolExecutor storePool{1};
+    auto const store = std::make_shared<custom_client::GatedStore>(storePool);
+    ChromeRig rig{Offer::Store, store};
+    custom_client::GateGuard const guard{*store};
+    rig.open("notes.edit", note(1));
+    draftHeading(rig, "notes.edit", "Edited by hand");
+    store->hold();
+    rig.click("draft_save_as_notes.edit");
+    rig.type("save_as_title", "Once");
+    rig.click("save_as_confirm");
+    rig.chrome->askSaveAs(rig.tabAt(0), false);
+    REQUIRE(rig.find("TextInput", "save_as_title").has_value());
+    CHECK(rig.field("save_as_title") == "Once");
+    store->release();
+    REQUIRE(rig.pump([&rig] { return morph::ui::isCustomScreenId(rig.screenOf(0)); }));
+    CHECK(rig.sync->listed().screens.size() == 1);
+    CHECK(store->puts == 1);
+}
+
+// Mutation: act on the tab's id without finding it (the reply dereferences or reopens a closed tab).
+TEST_CASE("custom screen chrome: a save that finishes after its tab closed tells the person and opens nothing",
+          "[ui][custom-screens][chrome]") {
+    morph::exec::ThreadPoolExecutor storePool{1};
+    auto const store = std::make_shared<custom_client::GatedStore>(storePool);
+    ChromeRig rig{Offer::Store, store};
+    custom_client::GateGuard const guard{*store};
+    rig.open("notes.edit", note(1));
+    draftHeading(rig, "notes.edit", "Edited by hand");
+    store->hold();
+    rig.click("draft_save_as_notes.edit");
+    rig.type("save_as_title", "Late");
+    rig.click("save_as_confirm");
+    rig.guardChoice = morph::ui::CloseChoice::Discard;
+    std::optional<bool> closed;
+    rig.workspace->close(0, [&closed](bool outcome) { closed = outcome; });
+    REQUIRE(rig.pump([&closed] { return closed.has_value(); }));
+    REQUIRE(*closed);
+    CHECK(rig.workspace->tabs().empty());
+    store->release();
+    REQUIRE(rig.pump([&rig] { return !rig.notices.empty(); }));
+    CHECK(rig.notices.back().contains("tab was closed"));
+    CHECK(rig.workspace->tabs().empty());
+}
+
+// Mutation: key a pending reply by tab id alone (a tab of the replacement workspace with the same id is acted on).
+TEST_CASE("custom screen chrome: a reply asked under a replaced workspace does nothing to the new one",
+          "[ui][custom-screens][chrome]") {
+    morph::exec::ThreadPoolExecutor storePool{1};
+    auto const store = std::make_shared<custom_client::GatedStore>(storePool);
+    ChromeRig rig{Offer::Store, store};
+    custom_client::GateGuard const guard{*store};
+    rig.open("notes.edit", note(1));
+    draftHeading(rig, "notes.edit", "Edited by hand");
+    store->hold();
+    rig.click("draft_save_as_notes.edit");
+    rig.type("save_as_title", "Old");
+    rig.click("save_as_confirm");
+    morph::ui::WorkspaceTabId const oldTab = rig.tabAt(0);
+
+    rig.chrome->attach(nullptr);
+    rig.workspace = std::make_unique<morph::ui::Workspace>(rig.harness.runtime, rig.harness.backend, *rig.host,
+                                                           rig.workspaceOptions());
+    rig.chrome->attach(&rig.workspace->model());
+    rig.open("notes.edit", note(1));
+    REQUIRE(rig.tabAt(0) == oldTab);
+    store->release();
+    REQUIRE(rig.pump([&rig] { return rig.sync->listed().screens.size() == 1; }));
+    // Round trips after the save's reply: a reply that acted would have opened a custom screen by now.
+    std::string const id = rig.sync->listed().screens.front().id;
+    std::optional<bool> fetched;
+    rig.sync->open(id, [&fetched](auto loaded) { fetched = loaded.has_value(); });
+    REQUIRE(rig.pump([&fetched] { return fetched.has_value(); }));
+    CHECK(rig.screenOf(0) == "notes.edit");
+    CHECK(rig.notices.empty());
+}
+
+// Mutation: drop the pointer of the host's mount refusal (`refuse("", ...)`, the label names no line).
+TEST_CASE("custom screen chrome: a refusal from the host's mount keeps its pointer", "[ui][custom-screens][chrome]") {
+    ChromeRig rig;
+    rig.open("notes.edit", note(1));
+    rig.click("source_button_notes.edit");
+    std::string const edited = screens_test::replaced(rig.field("source_text"), "\"notes.edit\"", "\"notes.other\"");
+    rig.type("source_text", edited);
+    rig.click("source_preview");
+    REQUIRE(rig.pump([&rig] { return rig.shown("Button", "source_refusal"); }));
+    CHECK(rig.harness.backend.prop(*rig.find("Button", "source_refusal"), "label").starts_with("Line "));
+}
+
+// Mutation: drop the dialog-busy guard of askSaveAs (the dialog is replaced while its source is being previewed).
+TEST_CASE("custom screen chrome: Save as… asked again while the source is being previewed keeps the dialog",
+          "[ui][custom-screens][chrome]") {
+    ChromeRig rig;
+    rig.open("notes.edit", note(1));
+    rig.click("source_button_notes.edit");
+    rig.click("source_save_as");
+    rig.type("save_as_title", "Once");
+    rig.click("save_as_confirm");
+    rig.chrome->askSaveAs(rig.tabAt(0), true);
+    REQUIRE(rig.find("TextInput", "save_as_title").has_value());
+    CHECK(rig.field("save_as_title") == "Once");
+    REQUIRE(rig.pump([&rig] { return morph::ui::isCustomScreenId(rig.screenOf(0)); }));
+    CHECK(rig.sync->listed().screens.size() == 1);
 }

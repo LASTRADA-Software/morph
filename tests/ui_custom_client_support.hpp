@@ -8,6 +8,7 @@
 #include <atomic>
 #include <catch2/catch_test_macros.hpp>
 #include <chrono>
+#include <condition_variable>
 #include <cstdint>
 #include <expected>
 #include <functional>
@@ -31,6 +32,7 @@
 #include <morph/ui/json_source.hpp>
 #include <morph/ui/service.hpp>
 #include <morph/ui/workspace.hpp>
+#include <mutex>
 #include <optional>
 #include <stdexcept>
 #include <string>
@@ -81,6 +83,70 @@ struct RefusingStore final : morph::ui::ICustomScreenStore {
     morph::ui::MemoryCustomScreenStore inner;
     /// The serial owner the refusal is delivered on, declared last so it is destroyed first.
     morph::exec::OwnerStrand strand;
+};
+
+/// A store that keeps what a memory store keeps, and holds every save at the door while it is closed, so a test can
+/// act while a save is in flight.
+struct GatedStore final : morph::ui::ICustomScreenStore {
+    explicit GatedStore(morph::exec::IExecutor& base) : inner{base} {}
+    ~GatedStore() override { release(); }
+    GatedStore(GatedStore const&) = delete;
+    GatedStore& operator=(GatedStore const&) = delete;
+    GatedStore(GatedStore&&) = delete;
+    GatedStore& operator=(GatedStore&&) = delete;
+
+    morph::async::Completion<std::vector<morph::ui::CustomScreen>> list(std::string person, std::string app) override {
+        return inner.list(std::move(person), std::move(app));
+    }
+    morph::async::Completion<std::expected<morph::ui::CustomScreen, morph::ui::CustomScreenRefusal>> get(
+        morph::ui::CustomScreenKey key) override {
+        return inner.get(std::move(key));
+    }
+    morph::async::Completion<std::expected<void, morph::ui::CustomScreenRefusal>> put(
+        morph::ui::CustomScreenKey key, morph::ui::CustomScreen screen) override {
+        ++puts;
+        {
+            std::unique_lock lock{mutex};
+            opened.wait(lock, [this] { return open; });
+        }
+        return inner.put(std::move(key), std::move(screen));
+    }
+    morph::async::Completion<std::expected<void, morph::ui::CustomScreenRefusal>> remove(
+        morph::ui::CustomScreenKey key) override {
+        return inner.remove(std::move(key));
+    }
+
+    /// Holds the saves that arrive from now on.
+    void hold() {
+        std::lock_guard const lock{mutex};
+        open = false;
+    }
+    /// Lets the held saves, and the later ones, through.
+    void release() {
+        {
+            std::lock_guard const lock{mutex};
+            open = true;
+        }
+        opened.notify_all();
+    }
+
+    /// The saves that reached the store, held or not.
+    std::atomic<int> puts{0};
+    std::mutex mutex;
+    std::condition_variable opened;
+    bool open = true;
+    morph::ui::MemoryCustomScreenStore inner;
+};
+
+/// Opens a gate when the test's scope ends, so a save held at it does not keep the server from stopping.
+struct GateGuard {
+    explicit GateGuard(GatedStore& held) : gate{held} {}
+    ~GateGuard() { gate.release(); }
+    GateGuard(GateGuard const&) = delete;
+    GateGuard& operator=(GateGuard const&) = delete;
+    GateGuard(GateGuard&&) = delete;
+    GateGuard& operator=(GateGuard&&) = delete;
+    GatedStore& gate;
 };
 
 /// The id a `save` reply carries.
@@ -298,6 +364,17 @@ struct ChromeRig {
         return unformatted(harness.backend.prop(*widget, "text"));
     }
 
+    /// Whether the widget is mounted and enabled.
+    [[nodiscard]] bool enabled(std::string_view kind, std::string const& testId) const {
+        std::optional<int> const widget = find(kind, testId);
+        return widget && harness.backend.prop(*widget, "enabled") != "false";
+    }
+
+    /// The id of the tab at @p index.
+    [[nodiscard]] morph::ui::WorkspaceTabId tabAt(std::size_t index) const {
+        return workspace->model().order().at(index);
+    }
+
     void open(std::string_view screenId, morph::ui::ParamMap const& params) {
         REQUIRE(workspace->open(screenId, params).has_value());
         harness.settle();
@@ -383,11 +460,13 @@ struct ChromeRig {
     morph::ui::CloseChoice guardChoice = morph::ui::CloseChoice::Cancel;
 };
 
-/// Opens @p screenId's source, renames the heading "Edit note" to @p heading and previews it, until the draft shows
-/// and the source view has closed.
-inline void draftHeading(ChromeRig& rig, std::string const& screenId, std::string const& heading) {
-    rig.click("source_button_" + screenId);
-    rig.type("source_text", screens_test::replaced(rig.field("source_text"), "\"Edit note\"", "\"" + heading + "\""));
+/// Opens @p screenId's source, renames the heading @p from to @p heading and previews it, until the draft shows and
+/// the source view has closed.
+inline void draftHeading(ChromeRig& rig, std::string const& screenId, std::string const& heading,
+                         std::string const& from = "Edit note") {
+    rig.click((rig.shown("Row", "draft_bar_" + screenId) ? "draft_source_" : "source_button_") + screenId);
+    rig.type("source_text",
+             screens_test::replaced(rig.field("source_text"), "\"" + from + "\"", "\"" + heading + "\""));
     rig.click("source_preview");
     REQUIRE(rig.pump([&rig, &heading] { return rig.text("heading") == heading; }));
     REQUIRE(rig.pump([&rig] { return !rig.find("Dialog", "source_dialog").has_value(); }));
