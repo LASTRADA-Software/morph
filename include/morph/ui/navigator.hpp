@@ -80,6 +80,12 @@ struct NavigatorOptions {
     std::string customHeading = "Custom";
     /// @brief The mark every custom entry carries, so none passes for an application screen's entry.
     std::string customMark = "Custom";
+    /// @brief What precedes the name of who saved a custom screen that is not the person's own: "by ann".
+    std::string customAuthor = "by ";
+    /// @brief The text of the badge on a custom entry that may not be mounted.
+    std::string customBrokenMark = "Broken";
+    /// @brief What the accessible name of a broken custom entry says.
+    std::string customBrokenName = "broken";
 };
 
 /// @brief The catalog as a list a person opens screens from, with a title search and pinned shortcuts.
@@ -133,7 +139,9 @@ public:
 
     /// @brief Marks the entry of the screen that is open, and clears the mark of the one marked before. A pin is not
     ///        marked.
-    /// @param screenId The open screen's id; one the navigator does not list, or empty, leaves no entry marked.
+    /// @param screenId The open screen's id; one the navigator does not list, or empty, leaves no entry marked. A
+    ///                 custom screen's id the navigator does not list yet is remembered, and its entry is marked when
+    ///                 `setCustom` lists it.
     void setCurrent(std::string_view screenId);
 
     /// @brief The screen whose entry is marked.
@@ -156,6 +164,8 @@ public:
     ///        submenu labelled by its heading (the entries of a group with no heading at the top level instead).
     ///        An entry's label is its title with its count after it ("Review · 4"), the current screen's entry is
     ///        checked, and an unavailable one is disabled.
+    ///        A Custom submenu follows the groups: each entry's label starts with the custom mark ("Custom: Home"),
+    ///        and its description names who saved it when that was someone else and why it is broken.
     /// @return The entries; `choose` takes a path into them.
     [[nodiscard]] std::vector<MenuEntry> menuEntries() const { return menu().entries; }
 
@@ -222,9 +232,10 @@ public:
     /// (`nav_mark_<id>`), the title (`nav_title_<id>`), who saved it when it is not the person's own
     /// (`nav_author_<id>`, "by <savedBy>") and, for a broken screen, a badge (`nav_broken_<id>`) with the reason as
     /// the entry's tooltip. Choosing an entry calls `onOpen` with its id, a broken one included: what opening it does
-    /// is the application's. Titles and names are shown as text, never read as markup or as a message key. The search
-    /// filters the section as it filters the groups, `setCurrent` marks its entries, and `menuEntries` ends with it as
-    /// a submenu. An empty list hides the section.
+    /// is the application's. Titles and names are shown as written, never translated or read as a message key. An
+    /// entry whose id does not start with `kCustomScreenIdPrefix`, or repeats an earlier entry's id, is skipped and
+    /// logged. The search filters the section as it filters the groups, `setCurrent` marks its entries, and
+    /// `menuEntries` ends with it as a submenu. An empty list hides the section.
     /// @param entries The screens, in order.
     void setCustom(std::vector<NavigatorCustomEntry> entries);
 
@@ -301,6 +312,9 @@ private:
     [[nodiscard]] MenuEntry menuEntry(CatalogEntry const& entry) const;
 
     [[nodiscard]] Menu menu() const;
+
+    // The groups as menu entries, in catalog order, while modules are not collapsed.
+    void groupMenu(Menu& out) const;
 
     // The collapsed form as a menu: one submenu per module, its count after the label, the module's later groups as
     // heading entries inside it; a module with one entry is that entry at the top level.
@@ -394,6 +408,8 @@ private:
     // After the section, so the rows go before the column that holds them.
     std::vector<CustomItem> _customItems;
     std::vector<NavigatorCustomEntry> _custom;
+    // A custom screen `setCurrent` named before `setCustom` listed it.
+    std::string _pendingCustom;
     bool _moduleGroups = false;
     // Whether the sections are placed module by module, which is how they are made.
     bool _moduleMajor = true;

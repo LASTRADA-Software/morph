@@ -313,7 +313,7 @@ A name with no factory refuses the mount with `no host screen `<name>` is regist
   (`nav_row_<id>`, `nav_<id>`), whose content holds the custom mark (`nav_mark_<id>`, `customMark`), the title, who
   saved it when it is not the person's own (`nav_author_<id>`, "by <savedBy>"), and for a broken screen a badge
   (`nav_broken_<id>`) with its reason as the tooltip, so a custom entry never passes for an application entry. The
-  accessible name says the same. Titles and names are text, never markup or a message key. Choosing one calls
+  accessible name says the same. Titles and names are shown as written, never translated or read as a message key; an entry whose id lacks the `custom:` prefix or repeats an earlier id is skipped and logged at warn. The words "by ", "Broken" and "broken" are `customAuthor`, `customBrokenMark` and `customBrokenName`. A custom id given to `setCurrent` before `setCustom` lists it is remembered and marked on arrival. In the menu each entry's label leads with the mark ("Custom: Home") and its description names the author and the reason. Choosing one calls
   `onOpen` with its id, a broken one included; the search filters the section, `setCurrent` marks its entries, and
   `menuEntries` ends with a submenu of it. An empty list hides the section.
 - **Search.** The search (`navigator_search`) shows the entries one of whose titles contains the text, ignoring

@@ -5,10 +5,12 @@
 #include <cstddef>
 #include <functional>
 #include <memory>
+#include <morph/core/logger.hpp>
 #include <morph/ui/backend.hpp>
 #include <morph/ui/bundle.hpp>
 #include <morph/ui/catalogue.hpp>
 #include <morph/ui/navigator.hpp>
+#include <morph/ui/service.hpp>
 #include <morph/ui/view.hpp>
 #include <optional>
 #include <string>
@@ -71,6 +73,7 @@ void Navigator::setCurrent(std::string_view screenId) {
         previous->button->setSelected(false);
     }
     _current = std::string{screenId};
+    _pendingCustom.clear();
     if (Item const* const next = itemOf(_current)) {
         next->button->setSelected(true);
         if (CatalogEntry const* const entry = entryOf(_current); entry != nullptr && _openModule != entry->module) {
@@ -80,6 +83,10 @@ void Navigator::setCurrent(std::string_view screenId) {
     } else if (CustomItem const* const shown = customItemOf(_current)) {
         shown->button->setSelected(true);
     } else {
+        // A custom screen may be open before the list that names it has arrived: its entry is marked when it does.
+        if (_current.starts_with(kCustomScreenIdPrefix)) {
+            _pendingCustom = std::move(_current);
+        }
         _current.clear();
     }
     changed();
@@ -258,8 +265,38 @@ Navigator::Menu Navigator::menu() const {
     }
     if (_moduleGroups) {
         moduleMenu(out);
+    } else {
+        groupMenu(out);
     }
-    for (Group const* const listed : _moduleGroups ? std::vector<Group const*>{} : catalogOrder()) {
+    if (!_customItems.empty()) {
+        MenuEntry submenu;
+        submenu.label = _options.customHeading;
+        MenuSlot slot;
+        for (CustomItem const& item : _customItems) {
+            MenuEntry made;
+            // The mark leads the label, so a custom "Home" never reads as an application's "Home"; the author and the
+            // reason are the entry's help line.
+            made.label = _options.customMark + ": " + item.entry.title;
+            if (!item.entry.mine) {
+                made.description = _options.customAuthor + item.entry.savedBy;
+            }
+            if (!item.entry.broken.empty()) {
+                made.description += (made.description.empty() ? "" : "; ") + item.entry.broken;
+            }
+            if (item.entry.id == _current) {
+                made.checked = true;
+            }
+            submenu.items.push_back(std::move(made));
+            slot.items.push_back(MenuSlot{.screenId = item.entry.id, .items = {}});
+        }
+        out.entries.push_back(std::move(submenu));
+        out.targets.push_back(std::move(slot));
+    }
+    return out;
+}
+
+void Navigator::groupMenu(Menu& out) const {
+    for (Group const* const listed : catalogOrder()) {
         Group const& group = *listed;
         std::string const heading = headingOf(group);
         MenuEntry submenu;
@@ -274,29 +311,6 @@ Navigator::Menu Navigator::menu() const {
             out.targets.push_back(std::move(slot));
         }
     }
-    if (!_customItems.empty()) {
-        MenuEntry submenu;
-        submenu.label = _options.customHeading;
-        MenuSlot slot;
-        for (CustomItem const& item : _customItems) {
-            MenuEntry made;
-            made.label = item.entry.title;
-            if (!item.entry.mine) {
-                made.label += " · " + item.entry.savedBy;
-            }
-            if (!item.entry.broken.empty()) {
-                made.label += " · !";
-            }
-            if (item.entry.id == _current) {
-                made.checked = true;
-            }
-            submenu.items.push_back(std::move(made));
-            slot.items.push_back(MenuSlot{.screenId = item.entry.id, .items = {}});
-        }
-        out.entries.push_back(std::move(submenu));
-        out.targets.push_back(std::move(slot));
-    }
-    return out;
 }
 
 // NOLINTNEXTLINE(readability-function-cognitive-complexity): one block per module and per group within it.
@@ -672,11 +686,22 @@ void Navigator::makeCustomSection() {
 }
 
 void Navigator::setCustom(std::vector<NavigatorCustomEntry> entries) {
-    if (entries == _custom) {
+    std::vector<NavigatorCustomEntry> accepted;
+    for (NavigatorCustomEntry& entry : entries) {
+        if (!entry.id.starts_with(kCustomScreenIdPrefix)) {
+            log::logWarn("[navigator] a custom entry is skipped: its id {} does not start with {}", entry.id,
+                         kCustomScreenIdPrefix);
+        } else if (std::ranges::contains(accepted, entry.id, &NavigatorCustomEntry::id)) {
+            log::logWarn("[navigator] a custom entry is skipped: its id {} is listed twice", entry.id);
+        } else {
+            accepted.push_back(std::move(entry));
+        }
+    }
+    if (accepted == _custom) {
         return;
     }
     _customItems.clear();
-    _custom = std::move(entries);
+    _custom = std::move(accepted);
     for (NavigatorCustomEntry const& entry : _custom) {
         CustomItem item{.entry = entry,
                         .row = _backend->createStack(_customSection.get(), Axis::Horizontal),
@@ -695,15 +720,17 @@ void Navigator::setCustom(std::vector<NavigatorCustomEntry> entries) {
         item.button->setLayout({.width = Sizing::stretch(), .height = {}});
         item.button->setLabel(entry.title);
         item.button->setAccessibleName(_options.customMark + ", " + entry.title +
-                                       (entry.mine ? std::string{} : ", by " + entry.savedBy) +
-                                       (entry.broken.empty() ? std::string{} : ", broken"));
+                                       (entry.mine ? std::string{} : ", " + _options.customAuthor + entry.savedBy) +
+                                       (entry.broken.empty() ? std::string{} : ", " + _options.customBrokenName));
         if (!entry.broken.empty()) {
             item.button->setTooltip(entry.broken);
         }
         std::string const screenId = entry.id;
         item.button->setOnClick([this, screenId] {
+            // A copy: the handler may list the custom screens again, which destroys this closure and its capture.
+            std::string const opening = screenId;
             if (_options.onOpen) {
-                _options.onOpen(screenId);
+                _options.onOpen(opening);
             }
         });
         // The mark, the title, the author and the badge are the button's content, so its selection spans them all.
@@ -724,17 +751,24 @@ void Navigator::setCustom(std::vector<NavigatorCustomEntry> entries) {
         item.author = _backend->createText(item.content.get());
         item.author->setTestId("nav_author_" + entry.id);
         item.author->setRole(TextRole::Muted);
-        item.author->setText("by " + entry.savedBy);
+        item.author->setText(_options.customAuthor + entry.savedBy);
         item.author->setVisible(!entry.mine);
         item.broken = _backend->createBadge(item.content.get());
         item.broken->setTestId("nav_broken_" + entry.id);
-        item.broken->setText("Broken");
+        item.broken->setText(_options.customBrokenMark);
         item.broken->setTone(Tone::Err);
         item.broken->setVisible(!entry.broken.empty());
         if (entry.id == _current) {
             item.button->setSelected(true);
         }
         _customItems.push_back(std::move(item));
+    }
+    if (!_pendingCustom.empty()) {
+        if (CustomItem const* const arrived = customItemOf(_pendingCustom)) {
+            _current = std::move(_pendingCustom);
+            _pendingCustom.clear();
+            arrived->button->setSelected(true);
+        }
     }
     if (!_current.empty() && itemOf(_current) == nullptr && customItemOf(_current) == nullptr) {
         _current.clear();
