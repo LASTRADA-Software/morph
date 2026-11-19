@@ -206,8 +206,10 @@ It also holds what the user forms over the columns, in the same members
   column to a unit id per dimension.
 
 `apply` and `rebuild` fit both as they fit the rest: a column the table lacks
-leaves its group and loses its units, a group left with fewer than two
-columns is dropped, and `reset` keeps groups and units.
+leaves its group and loses its units, a column stays only in the first group
+that holds it, a group left with fewer than two or more than 16 columns, or
+repeating an earlier group's id, is dropped, and `reset` keeps groups and
+units.
 
 ## Execution and threading
 

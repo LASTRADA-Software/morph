@@ -35,8 +35,11 @@
 
 namespace morph::ui {
 
+/// @brief A group's column bound, `QueryLimits::maxGroupColumns`.
+inline constexpr std::size_t kMaxGroupColumns = 16;
+
 /// @brief A table's sort chain, most significant key first.
-using SortChain = std::vector<table::SortKey>;
+using SortChain = table::SortChain;
 
 // ---------------------------------------------------------------------------------------------------------------
 // The status line's messages
@@ -159,6 +162,22 @@ namespace tableText {
         }
     }
     return "This table's columns cannot be " + std::string{verb};
+}
+
+/// @brief The refusal of a group of too few or too many columns.
+/// @return `A group has 2 to 16 columns`.
+[[nodiscard]] inline std::string groupSize() { return "A group has 2 to 16 columns"; }
+
+/// @brief The refusal of a group of columns of different kinds.
+/// @return `A group's columns hold one kind of value`.
+[[nodiscard]] inline std::string groupKind() { return "A group's columns hold one kind of value"; }
+
+/// @brief The refusal of a group that takes a column another user-formed group holds.
+/// @param label The column's label.
+/// @param group The other group's label.
+/// @return `{label} is already in {group}`.
+[[nodiscard]] inline std::string alreadyGrouped(std::string_view label, std::string_view group) {
+    return std::string{label} + " is already in " + std::string{group};
 }
 
 /// @brief The refusal of hiding the last visible column.
@@ -405,9 +424,12 @@ struct GestureNeeds {
 /// @brief Moves a column next to another in a layout's order.
 /// @param layout The layout.
 /// @param id     The column to move.
-/// @param anchor The column it moves beside; a column of the layout other than @p id.
+/// @param anchor The column it moves beside; @p id itself leaves the order as it is.
 /// @param after  `true` to place it right after @p anchor, `false` right before.
 inline void placeBeside(table::ColumnLayout& layout, std::string const& id, std::string const& anchor, bool after) {
+    if (anchor == id) {
+        return;
+    }
     std::vector<std::string> order(layout.order().begin(), layout.order().end());
     std::erase(order, id);
     auto const at = static_cast<std::size_t>(std::ranges::find(order, anchor) - order.begin());
@@ -428,9 +450,14 @@ inline void placeBeside(table::ColumnLayout& layout, std::string const& id, std:
 ///
 /// A move, hide, pin, unpin or resize of a locked column is refused with `tableText::locked(label)` before anything
 /// else; then a gesture whose capability @p allowed lacks with `tableText::notConfigurable`. A reset is allowed while
-/// any capability is. Display units and user-formed groups need no capability: they change what the columns show
-/// and how they filter, not how they are arranged. Hiding the last visible column is refused with
-/// `tableText::lastVisible()`. A gesture on a column @p columns does not list changes nothing.
+/// any capability is; forming or removing a group while `reorder` or `hide` is, as the column chooser offers it.
+/// Display units need no capability: they change what a column shows, not how the columns are arranged. Hiding the
+/// last visible column is refused with `tableText::lastVisible()`. A gesture on a column @p columns does not list
+/// changes nothing.
+///
+/// The set of pinned columns changes only by `PinColumn` and `UnpinColumn`, and by `MoveColumnTo`, which pins a
+/// column dropped among the pinned ones and unpins one dropped past them: `MoveColumn` stays on its side of the pin
+/// boundary, and hiding a pinned column or showing one among the pinned columns adjusts the count.
 /// @param layout  The layout, changed in place.
 /// @param columns The table's columns.
 /// @param allowed What the table lets its user change.
@@ -457,6 +484,10 @@ inline void placeBeside(table::ColumnLayout& layout, std::string const& id, std:
     if (std::holds_alternative<ResetColumns>(gesture) && allowed == Configure::None) {
         return {.changed = false, .refusal = tableText::notConfigurable(Configure::None)};
     }
+    bool const grouping = std::holds_alternative<FormGroup>(gesture) || std::holds_alternative<RemoveGroup>(gesture);
+    if (grouping && (allowed & (Configure::Reorder | Configure::Hide)) == Configure::None) {
+        return {.changed = false, .refusal = tableText::notConfigurable(Configure::Reorder)};
+    }
 
     table::ColumnLayoutValue const before = layout.value();
     std::optional<std::string> refusal;
@@ -464,18 +495,23 @@ inline void placeBeside(table::ColumnLayout& layout, std::string const& id, std:
         [&](auto const& g) {
             using G = std::decay_t<decltype(g)>;
             std::vector<std::string> const visible = layout.visible();
+            [[maybe_unused]] std::size_t const pinned = layout.pinned();
             if constexpr (std::is_same_v<G, MoveColumn>) {
                 std::size_t const from = detail::visibleIndex(visible, g.id);
                 if (from == visible.size() || g.by == 0) {
                     return;
                 }
-                auto const last = static_cast<std::ptrdiff_t>(visible.size()) - 1;
-                auto const to = std::clamp(static_cast<std::ptrdiff_t>(from) + g.by, std::ptrdiff_t{0}, last);
+                // A move stays on its side of the pin boundary; crossing it is Pin's and Unpin's.
+                bool const isPinned = from < pinned;
+                auto const first = static_cast<std::ptrdiff_t>(isPinned ? 0 : pinned);
+                auto const last = static_cast<std::ptrdiff_t>(isPinned ? pinned : visible.size()) - 1;
+                auto const to = std::clamp(static_cast<std::ptrdiff_t>(from) + g.by, first, last);
                 if (static_cast<std::size_t>(to) != from) {
                     detail::placeBeside(layout, g.id, visible[static_cast<std::size_t>(to)], g.by > 0);
                 }
             } else if constexpr (std::is_same_v<G, MoveColumnTo>) {
-                if (detail::visibleIndex(visible, g.id) == visible.size()) {
+                std::size_t const from = detail::visibleIndex(visible, g.id);
+                if (from == visible.size()) {
                     return;
                 }
                 std::vector<std::string> others = visible;
@@ -489,15 +525,29 @@ inline void placeBeside(table::ColumnLayout& layout, std::string const& id, std:
                 } else {
                     detail::placeBeside(layout, g.id, others[to], false);
                 }
+                // The other pinned columns stay pinned: a drop among them pins the column, a drop past them unpins
+                // it, and a drop on the boundary keeps its state.
+                bool const wasPinned = from < pinned;
+                std::size_t const otherPinned = pinned - (wasPinned ? 1 : 0);
+                bool const nowPinned = to < otherPinned || (to == otherPinned && wasPinned);
+                layout.setPinned(otherPinned + (nowPinned ? 1 : 0));
             } else if constexpr (std::is_same_v<G, HideColumn>) {
+                bool const wasPinned = detail::visibleIndex(visible, g.id) < pinned;
                 if (!layout.setVisible(g.id, false)) {
                     refusal = tableText::lastVisible();
+                } else if (wasPinned) {
+                    layout.setPinned(pinned - 1);
                 }
             } else if constexpr (std::is_same_v<G, ShowColumn>) {
-                static_cast<void>(layout.setVisible(g.id, true));
+                if (detail::visibleIndex(visible, g.id) != visible.size() || !layout.setVisible(g.id, true)) {
+                    return;
+                }
+                // A column shown among the pinned columns joins them, so none of them is pushed out.
+                if (detail::visibleIndex(layout.visible(), g.id) < pinned) {
+                    layout.setPinned(pinned + 1);
+                }
             } else if constexpr (std::is_same_v<G, PinColumn>) {
                 std::size_t const at = detail::visibleIndex(visible, g.id);
-                std::size_t const pinned = layout.pinned();
                 if (at == visible.size() || at < pinned) {
                     return;
                 }
@@ -509,7 +559,6 @@ inline void placeBeside(table::ColumnLayout& layout, std::string const& id, std:
                 layout.setPinned(pinned + 1);
             } else if constexpr (std::is_same_v<G, UnpinColumn>) {
                 std::size_t const at = detail::visibleIndex(visible, g.id);
-                std::size_t const pinned = layout.pinned();
                 if (at >= pinned) {
                     return;
                 }
@@ -528,12 +577,25 @@ inline void placeBeside(table::ColumnLayout& layout, std::string const& id, std:
             } else if constexpr (std::is_same_v<G, SetDisplayUnit>) {
                 static_cast<void>(layout.setUnit(g.id, g.dimension, g.unit));
             } else if constexpr (std::is_same_v<G, FormGroup>) {
-                LayoutColumn const* first = g.columns.empty() ? nullptr : find(g.columns.front());
+                if (std::ranges::any_of(g.columns, [&](std::string const& id) { return find(id) == nullptr; })) {
+                    return;
+                }
+                if (g.columns.size() < 2 || g.columns.size() > kMaxGroupColumns) {
+                    refusal = tableText::groupSize();
+                    return;
+                }
+                LayoutColumn const& first = *find(g.columns.front());
                 for (std::string const& id : g.columns) {
-                    LayoutColumn const* const member = find(id);
-                    if (member == nullptr || first == nullptr || member->kind != first->kind) {
-                        refusal = "A group's columns hold one kind of value";
+                    LayoutColumn const& member = *find(id);
+                    if (member.kind != first.kind) {
+                        refusal = tableText::groupKind();
                         return;
+                    }
+                    for (table::ColumnGroupInfo const& group : layout.groups()) {
+                        if (std::ranges::find(group.columns, id) != group.columns.end()) {
+                            refusal = tableText::alreadyGrouped(member.label, group.label);
+                            return;
+                        }
                     }
                 }
                 if (auto formed = layout.formGroup(g.label, g.columns); !formed) {
@@ -794,6 +856,14 @@ namespace detail {
     return detail::valuesShape(side, kind) ? FilterPart::Values : FilterPart::Conditions;
 }
 
+// Every switch over `ColumnKind` here names each kind and has no `default`, so a kind added to the enum fails to
+// compile until it is handled: clang and gcc warn through -Wswitch, and MSVC, whose C4062 is off by default, is told
+// to treat it as an error.
+#if defined(_MSC_VER) && !defined(__clang__)
+#pragma warning(push)
+#pragma warning(error : 4062)
+#endif
+
 /// @brief The wire form of an operand the user typed into a condition.
 ///
 /// A number in the locale's form becomes a decimal with a point and no grouping (`"1.234,5"` under a comma locale
@@ -845,6 +915,10 @@ namespace detail {
     }
     return std::string{typed};
 }
+
+#if defined(_MSC_VER) && !defined(__clang__)
+#pragma warning(pop)
+#endif
 
 /// @brief How a column group's ticked values must be found among its columns.
 enum class GroupMatch : std::uint8_t {
@@ -940,6 +1014,11 @@ enum class ConditionOp : std::uint8_t {
     IsNotEmpty,      ///< `notEmpty`.
 };
 
+#if defined(_MSC_VER) && !defined(__clang__)
+#pragma warning(push)
+#pragma warning(error : 4062)
+#endif
+
 /// @brief The conditions a column's kind offers.
 /// @param kind The column's kind.
 /// @return Text: equals, does not equal, contains, begins with, ends with. Numbers and dates: =, ≠, <, ≤, >, ≥,
@@ -965,6 +1044,10 @@ enum class ConditionOp : std::uint8_t {
     }
     return {};
 }
+
+#if defined(_MSC_VER) && !defined(__clang__)
+#pragma warning(pop)
+#endif
 
 /// @brief A condition's label in the menu.
 /// @param op   The condition.
@@ -1211,7 +1294,8 @@ namespace detail {
 /// ("Move left" and "Move right" for reorder, "Pin column" or "Unpin" for pin, "Hide column" for hide), disabled on
 /// a locked column; and "Display unit", with a checkable entry `{dimension}: {unit}` a unit, when the column has
 /// dimensions. "Add to sort" is disabled for a column in the chain and at the bound, "Remove from sort" for one
-/// not in it; choosing the checked unit clears the display unit.
+/// not in it. "Move left" and "Move right" stop at the pin boundary as at the ends. The lowering turns a choice of
+/// the checked unit into `SetDisplayUnit` with no unit, which clears it.
 /// @param input What the menu is built from.
 /// @return The entries.
 [[nodiscard]] inline std::vector<TableMenuEntry> headerMenu(HeaderMenuInput const& input) {
@@ -1234,10 +1318,13 @@ namespace detail {
     std::vector<TableMenuEntry> arrange;
     bool const free = !input.column.locked;
     if (allows(input.allowed, Configure::Reorder)) {
+        arrange.push_back(command("Move left", MenuCommand::MoveLeft,
+                                  free && input.visibleIndex > 0 && input.visibleIndex != input.pinned,
+                                  "Ctrl+Shift+Left"));
         arrange.push_back(
-            command("Move left", MenuCommand::MoveLeft, free && input.visibleIndex > 0, "Ctrl+Shift+Left"));
-        arrange.push_back(command("Move right", MenuCommand::MoveRight,
-                                  free && input.visibleIndex + 1 < input.visibleCount, "Ctrl+Shift+Right"));
+            command("Move right", MenuCommand::MoveRight,
+                    free && input.visibleIndex + 1 < input.visibleCount && input.visibleIndex + 1 != input.pinned,
+                    "Ctrl+Shift+Right"));
     }
     if (allows(input.allowed, Configure::Pin)) {
         bool const pinned = input.visibleIndex < input.pinned;
