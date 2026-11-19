@@ -396,6 +396,14 @@ struct SessionOptions {
     /// @brief The most bytes a document moves inline in one file (`download` from bytes, `upload` into bytes, a
     ///        field component writing a base64 member); 1 to `kMaxInlineFileBytes`.
     std::size_t maxInlineFileBytes = kDefaultInlineFileBytes;
+    /// @brief How long a model-backed table's visible rows must stay within one page before it fetches a page that
+    ///        is not next to one it holds, measured on `scheduler`: a scroll that passes over pages fetches none of
+    ///        them. Without a scheduler every fetch goes at once.
+    std::chrono::milliseconds tableSettle{80};
+    /// @brief While a model-backed table's order waits for a level, the least time between two of its refetches
+    ///        after change events, measured on `scheduler`: the first goes at once, the next no sooner than this
+    ///        after it, whatever the number of events between.
+    std::chrono::milliseconds tableAwaitedRefetch{250};
 };
 
 namespace detail {
