@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
+#include <algorithm>
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
 #include <chrono>
@@ -28,6 +29,7 @@
 #include <utility>
 #include <vector>
 
+#include "tui/field_widgets.hpp"
 #include "tui/list_widgets.hpp"
 #include "tui/table_widget.hpp"
 #include "tui/widget.hpp"
@@ -532,4 +534,56 @@ TEST_CASE("tui::Backend: a mounted Table marks a selected row again when it retu
     live.settle();
     CHECK(table.markedRows() == std::vector<std::size_t>{0});
     CHECK(reports.size() == 1);
+}
+
+// Mutations: drop the scroll's revealRow call in TextInputImpl::revealCursor (the view keeps the field's last lines);
+// make setCursor skip snapToCodePointStart.
+TEST_CASE(
+    "tui::Backend: revealCursor brings the cursor's line into a scroll around a tall field, and focusing "
+    "after setCursor keeps the cursor",
+    "[tui][backend]") {
+    Stage stage{std::make_unique<core::tui::MockTerminalOutput>(12, 5)};
+    auto const scroll = stage.backend.createScroll(nullptr, ui::Axis::Vertical);
+    scroll->setLayout({.width = ui::Sizing::stretch(), .height = ui::Sizing::fixed(5)});
+    auto const field = stage.backend.createTextInput(scroll.get(), ui::TextInputMode::Multiline);
+    std::string text;
+    for (int line = 0; line < 12; ++line) {
+        text += (line == 0 ? "" : "\n") + std::string{"l"} + std::to_string(line);
+    }
+    field->setText(text);
+    stage.backend.fit();
+    stage.screen.draw();
+    // "l8" starts at byte 24.
+    field->setCursor(24);
+    field->focus();
+    CHECK(dynamic_cast<morph::tui::detail::TextInputImpl&>(*field).cursor() == 24);
+    stage.backend.fit();
+    stage.screen.draw();
+    auto const lastLines = rowsOf(stage.screen);
+    CHECK(std::ranges::find_if(lastLines, [](std::string const& row) { return row == "l8"; }) == lastLines.end());
+    field->revealCursor();
+    stage.backend.fit();
+    stage.screen.draw();
+    auto const shown = rowsOf(stage.screen);
+    CHECK(std::ranges::any_of(shown, [](std::string const& row) { return row == "l8"; }));
+    CHECK(dynamic_cast<morph::tui::detail::TextInputImpl&>(*field).cursor() == 24);
+}
+
+// Mutation: drop the `revealCursor` call in Mounter::placeCursor (the view keeps showing the top of the field).
+TEST_CASE("tui::Backend: Mounted::placeCursor puts the cursor's line in view in a scroll", "[tui][backend]") {
+    Live live{{.width = 12, .height = 5}};
+    std::string text;
+    for (int line = 0; line < 12; ++line) {
+        text += (line == 0 ? "" : "\n") + std::string{"l"} + std::to_string(line);
+    }
+    ui::Mounted view{
+        live.runtime, live.backend,
+        ui::scroll({.child = ui::textInput(
+                        {.value = text, .mode = ui::TextInputMode::Multiline, .common = {.focusId = "source"}}),
+                    .common = {.layout = {.width = ui::Sizing::stretch(), .height = ui::Sizing::fixed(5)}}})};
+    live.settle();
+    CHECK(view.placeCursor("source", 24));
+    live.settle();
+    auto const shown = rowsOf(live.screen);
+    CHECK(std::ranges::any_of(shown, [](std::string const& row) { return row == "l8"; }));
 }

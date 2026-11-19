@@ -242,10 +242,17 @@ public:
     /// @param text The text, UTF-8.
     virtual void setText(std::string_view text) = 0;
 
-    /// @brief Moves the text cursor to @p offset, a byte offset into the text the field shows at the start of a
-    ///        character, clamped to the text's end. Calls no handler and does not move keyboard focus.
+    /// @brief Moves the text cursor to @p offset, a byte offset into the text the field shows. An offset past the
+    ///        text's end moves it to the end; one inside a UTF-8 sequence moves it back to the start of that code
+    ///        point (a "character" here is a code point). Clears the selection. Calls no handler, does not move
+    ///        keyboard focus and does not scroll: `revealCursor` does that.
     /// @param offset The byte offset.
     virtual void setCursor(std::size_t offset) = 0;
+
+    /// @brief Scrolls the scrolling containers around the field so that the line the cursor is on is in view. Best
+    ///        effort: a backend that cannot does nothing, and the default does nothing. Calls no handler and does not
+    ///        move keyboard focus or the cursor.
+    virtual void revealCursor() {}
 
     /// @brief Sets the text shown while the field is empty.
     /// @param placeholder The text, UTF-8.

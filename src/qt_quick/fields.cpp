@@ -13,6 +13,7 @@
 #include <chrono>
 #include <cmath>
 #include <morph/ui/date_pattern.hpp>
+#include <morph/ui/text_cursor.hpp>
 #include <stdexcept>
 #include <utility>
 
@@ -233,9 +234,17 @@ void TextInputImpl::moveCursor(std::size_t position) const {
         return;
     }
     QByteArray const bytes = control->property("text").toString().toUtf8();
-    auto const clamped =
-        static_cast<qsizetype>(std::min<std::size_t>(position, static_cast<std::size_t>(bytes.size())));
+    auto const clamped = static_cast<qsizetype>(ui::snapToCodePointStart(
+        std::string_view{bytes.constData(), static_cast<std::size_t>(bytes.size())}, position));
     control->setProperty("cursorPosition", static_cast<int>(QString::fromUtf8(bytes.left(clamped)).size()));
+}
+
+// Only the multi-line area sits in a scrolling container with a cursor line of its own; a single line is as tall as
+// the field.
+void TextInputImpl::revealCursor() {
+    if (_multiline) {
+        call("revealCursor");
+    }
 }
 
 // ── Checkbox ──────────────────────────────────────────────────────────────

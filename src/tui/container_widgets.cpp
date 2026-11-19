@@ -301,6 +301,12 @@ void SlotImpl::paint(::core::tui::Canvas& canvas) {
 
 bool SlotImpl::wheel(int delta) { return scrolls(height()) && _scroller.wheel(*this, delta); }
 
+void SlotImpl::revealFocusedRow(int row) {
+    if (scrolls(height())) {
+        _scroller.revealRow(*this, row);
+    }
+}
+
 void SlotImpl::setScrollable(bool scrollable) {
     if (scrollable != _scrollable) {
         _scrollable = scrollable;
@@ -813,6 +819,23 @@ bool ScrollViewport::scrollBy(ContainerBase const& owner, int cells) {
 }
 
 bool ScrollViewport::wheel(ContainerBase const& owner, int delta) { return scrollBy(owner, delta); }
+
+void ScrollViewport::revealRow(ContainerBase const& owner, int row) {
+    if (_axis != ui::Axis::Vertical) {
+        return;
+    }
+    auto const area = focusedArea(owner, _viewportSize);
+    if (!area) {
+        return;
+    }
+    int const at = area->y + row;
+    if (at + 1 > _offset + _viewport) {
+        _offset = at + 1 - _viewport;
+    }
+    _offset = std::max(0, std::min(_offset, at));
+    _followed = {.view = owner.context().screen->focusedComponent(), .area = *area, .viewport = _viewportSize};
+    owner.refresh();
+}
 
 // Each widget below says whether it wants the focus; a scroll among them asks its own content in turn.
 bool ScrollViewport::wantsFocus(ContainerBase const& owner) {

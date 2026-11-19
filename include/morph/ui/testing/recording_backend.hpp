@@ -25,6 +25,7 @@
 
 #include "../../util/datetime.hpp"
 #include "../backend.hpp"
+#include "../text_cursor.hpp"
 #include "../view.hpp"
 
 /// @file
@@ -1107,9 +1108,10 @@ public:
     /// @param cursor The new position; clamped to the text's size.
     void moveCursorByUser(std::size_t cursor) noexcept { _cursor = std::min(cursor, _shown.size()); }
 
-    /// @brief Moves the cursor to @p offset, clamped to the text's size; nothing is logged, as for a user's move.
+    /// @brief Moves the cursor to @p offset, clamped to the text's size and moved back to the start of a code point;
+    ///        nothing is logged, as for a user's move.
     /// @param offset A byte offset into the text shown.
-    void setCursor(std::size_t offset) override { _cursor = std::min(offset, _shown.size()); }
+    void setCursor(std::size_t offset) override { _cursor = snapToCodePointStart(_shown, offset); }
 
     /// @brief Where the cursor is.
     /// @return A byte offset into the text shown.

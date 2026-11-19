@@ -643,6 +643,7 @@ target_sources(morph
         include/morph/ui/date_pattern.hpp
         include/morph/ui/input_emphasis.hpp
         include/morph/ui/text_align.hpp
+        include/morph/ui/text_cursor.hpp
         include/morph/ui/button_emphasis.hpp
         include/morph/ui/control_shape.hpp
         include/morph/ui/banner_action_style.hpp

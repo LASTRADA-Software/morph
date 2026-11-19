@@ -375,6 +375,12 @@ several widgets with one name (rows), the one mounted first is taken. Each name 
 widget's own scope, after the widget, so content that unmounts is no longer found. It answers whether
 a mounted widget had the name; the move itself is `Widget::focus()`, a request a backend may decline.
 
+`Mounted::placeCursor(name, offset)` does the same for a text input: it moves the input's cursor to the byte
+offset (`TextInputWidget::setCursor`; an offset inside a UTF-8 sequence moves back to the start of that code
+point), focuses it, and asks it to reveal the cursor's line (`TextInputWidget::revealCursor`, best effort). Of
+several inputs with one name, the one mounted first is taken. It answers whether a mounted text input had the
+name; a widget of another kind with that name answers false and is left alone.
+
 ### Callbacks
 
 Every callback the mount hands a widget, a drop's `accepts` predicate included, runs:

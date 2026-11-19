@@ -23,6 +23,15 @@ MorphField {
         root.assigning = false
     }
 
+    // Scrolls every scrolling ancestor so that the line the cursor is on is in view.
+    function revealCursor() {
+        const cursor = area.cursorRectangle
+        for (let up = root.parent; up; up = up.parent) {
+            if (typeof up.revealRect === "function")
+                up.revealRect(area, cursor.x, cursor.y, cursor.width, cursor.height)
+        }
+    }
+
     control: area
     accessibleItem: area
     defaultRole: Accessible.EditableText
