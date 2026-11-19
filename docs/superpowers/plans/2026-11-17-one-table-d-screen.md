@@ -1986,10 +1986,16 @@ table.md "The document `table` node on the engine": a node with `model` and `act
 // WindowRowsOptions gains
 std::string action;        // non-empty: a typed list action's id, sent in place of "Table.<table>"; `table` empty
 std::string queryMember;   // with `action`: the body member the query is written into (the x-table member)
+std::vector<std::string> inferKinds;  // with `action`: the columns the first reply with rows gives a kind
+std::vector<std::string> records;     // replaces `record`: every record watched (an action's catalog records; none
+                                      // for an action without one)
 /// A typed list action's reply (`Page<Row>`'s JSON: `rows`, `total`, `totalKind`, `offset`, `indices`) as a generic
 /// page over @p description's columns: each row object's member of a column's id read by its kind.
 [[nodiscard]] std::expected<table::GenericPage, table::TableError> readTypedPage(std::string_view json,
-                                                                                table::TableDescription const& description);
+                                                                                table::TableDescription const& description,
+                                                                                table::UnitRegistry const* units = nullptr);
+// document.hpp: the members a request schema marks `x-table`, which the loader and the lowering both read
+[[nodiscard]] std::vector<std::string> tableQueryMembers(std::string_view schemaJson);
 ```
 
 Decisions:
@@ -2012,7 +2018,7 @@ Decisions:
 - `WindowRows` with `action` sends `session.read(options.channel, action, body with body[queryMember] = the query, token)` and decodes the text with `readTypedPage`; the reply holds whole rows, so `visible`'s columns name what the record converts (K8 holds) but not what is fetched. Keyed refetches and `highlightKey` send `keys` in the query member; an action whose reply has no `indices` for a keyed query invalidates the window (`PageWindow::patch`'s rule), which costs a page refetch and not a wrong row.
 - The record watched is each `ActionInfo::records` entry of the action (`document.hpp:56`); with none, the window refetches only on `invalidate` (reconnect).
 
-- [ ] **Step 1: Write the failing tests.** `kActionTable` is `{"vocab":"ui/1","id":"samples","models":{"lab":{"type":"Lims_SampleModel"}},"view":{"kind":"table","id":"list","testId":"list","model":"lab","action":"Lims_PageSamples","key":{"ref":"row.id"},"columns":[{"id":"id"},{"id":"name"},{"id":"weight"},{"id":"ratio"},{"id":"day","kind":"date"}]}}`; the test adds `Lims_PageSamples` to the harness with `addAction(h, "Lims_PageSamples", R"({"type":"object","properties":{"query":{"type":"object","x-table":true},"site":{"type":"string"}}})", ActionInfo{.modelType = "Lims_SampleModel"})`; `kActionTableNoQuery` names `Lims_ListSamples`, whose schema (the corpus catalog's) has no `x-table` member; `kActionTableNoColumns` is `kActionTable` without `columns` (and `Lims_PageSamples` has no view document); `kindOfColumn(screen, column)` reads the window's description through `ScreenProbe`; `cellOf(screen, row, column)` the window's `cell(row, column)`.
+- [ ] **Step 1: Write the failing tests.** `kActionTable` is `{"vocab":"ui/1","id":"samples","models":{"lab":{"type":"Lims_SampleModel"}},"view":{"kind":"table","id":"list","testId":"list","model":"lab","action":"Lims_PageSamples","key":{"row":"id"},"columns":[{"id":"id"},{"id":"name"},{"id":"weight"},{"id":"ratio"},{"id":"day","kind":"date"}]}}`; the test adds `Lims_PageSamples` to the harness with `addAction(h, "Lims_PageSamples", R"({"type":"object","properties":{"query":{"type":"object","x-table":true},"site":{"type":"string"}}})", ActionInfo{.modelType = "Lims_SampleModel"})`; `kActionTableNoQuery` names `Lims_ListSamples`, whose schema (the corpus catalog's) has no `x-table` member; `kActionTableNoColumns` is `kActionTable` without `columns` (and `Lims_PageSamples` has no view document); `kindOfColumn(screen, column)` reads the window's description through `ScreenProbe`; `cellOf(screen, row, column)` the window's `cell(row, column)`.
 
 ```cpp
 // Mutations: `{num, den, dp}` read as text (weight is Text and its cell a string); a fractional number voted
@@ -2047,7 +2053,7 @@ TEST_CASE("model table over an action: columns and kinds come from the action's 
               ActionInfo{.modelType = "Lims_SampleModel"});
     auto screen = h.mount(withTableKey(kActionTableNoColumns, R"("action":"Lims_ListSamples")"));
     h.reply(h.dispatcher.last("Lims_ListSamples"), R"({"rows":[{"id":"7","name":"a"}],"total":1})");
-    CHECK(headerLabels(h) == std::vector<std::string>{"ID", "Name"});         // v-columns' labels
+    CHECK(headerLabels(h) == std::vector<std::string>{"Name"});               // v-columns' label; `id` is v-hidden
     CHECK(kindOfColumn(*screen, "id") == table::ColumnKind::Integer);         // v-columns' kind, not the reply's
 }
 // Mutations: the loader accepting an action with no x-table member (the first fetch sends a bare body); accepting
