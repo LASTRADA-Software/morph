@@ -750,7 +750,9 @@ jobs:
           # "Install Qt6 WebSockets" to "Install ODBC + SQLite driver" —
           # every other job that builds the ladder on Linux (Application
           # ladder, all optional features) already carries this pair.
-          sudo apt-get install -y libgl1-mesa-dev unixodbc-dev libsqliteodbc libyaml-cpp-dev libzip-dev
+          # libpulse0: aqtinstall's libQt6Multimedia links libpulse.so.0, which the
+          # runner image does not carry.
+          sudo apt-get install -y libgl1-mesa-dev unixodbc-dev libsqliteodbc libyaml-cpp-dev libzip-dev libpulse0
 
       # Not the distro's Qt: examples/common/CMakeLists.txt requires 6.5+
       # and Ubuntu 24.04 still ships 6.4.2 -- the identical gap the "all optional
@@ -1151,7 +1153,7 @@ jobs:
           # that step's comment for why the distro package is unusable here.
           sudo apt-get install -y gcc-15 g++-15 ninja-build catch2 \
             libsqlite3-dev libyaml-cpp-dev libzip-dev libgl1-mesa-dev \
-            unixodbc-dev libsqliteodbc
+            unixodbc-dev libsqliteodbc libpulse0
           sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-15 15
           sudo update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-15 15
 
@@ -1485,7 +1487,7 @@ jobs:
           # time. libyaml-cpp-dev/libzip-dev/libgl1-mesa-dev round out the
           # same set every other ladder-building Linux job installs.
           sudo apt-get install -y ninja-build catch2 libsqlite3-dev \
-            unixodbc-dev libsqliteodbc libyaml-cpp-dev libzip-dev libgl1-mesa-dev
+            unixodbc-dev libsqliteodbc libyaml-cpp-dev libzip-dev libgl1-mesa-dev libpulse0
           # --fail, a file, and a non-empty check -- never `wget -qO- | sudo
           # bash`: see linux-compilers' identical install step for why the piped
           # form reports success having installed nothing.

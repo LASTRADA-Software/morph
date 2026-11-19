@@ -286,7 +286,9 @@ TEST_CASE("qt_dictation_recorder_on_a_worker_thread_releases_its_input_there", "
 }
 
 // Smoke test on whatever input this machine has; what the recorder does with a stream is tested below, without one.
-TEST_CASE("qt_dictation_recorder_smoke_on_the_system_input", "[qt][dictation]") {
+// Hidden (`[.]`, run by name): it is the only test that loads a real audio backend, which a runner may lack or which
+// may trip a leak checker, so ctest does not run it.
+TEST_CASE("qt_dictation_recorder_smoke_on_the_system_input", "[.][qt][dictation]") {
     morph::qt::QtDictationRecorder recorder;
     std::optional<std::expected<void, std::string>> started;
     std::optional<std::expected<std::string, std::string>> clip;
