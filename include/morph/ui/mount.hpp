@@ -1103,6 +1103,9 @@ private:
         if (spec.mono) {
             widget.setMono(true);
         }
+        if (!spec.wrap) {
+            widget.setWrap(false);
+        }
         if (spec.align != Align::Start) {
             widget.setAlign(spec.align);
         }

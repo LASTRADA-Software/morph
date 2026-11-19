@@ -156,6 +156,14 @@ void TextInputImpl::setPrefix(std::string_view prefix) {
 // MorphTextInput's and MorphTextArea's `mono`.
 void TextInputImpl::setMono(bool mono) { write("mono", mono); }
 
+// MorphTextArea's `wrap`; a single-line input has no lines to wrap.
+void TextInputImpl::setWrap(bool wrap) {
+    if (!_multiline) {
+        throw std::logic_error{"morph::qt_quick: a single-line text input has no lines to wrap"};
+    }
+    write("wrap", wrap);
+}
+
 // MorphTextInput's `textAlign`; an end-aligned field also draws its digits at one width each.
 void TextInputImpl::setAlign(ui::Align align) {
     if (_multiline) {

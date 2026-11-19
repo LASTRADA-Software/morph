@@ -365,6 +365,9 @@ void CustomScreenChrome::openSource(SourceMode mode, std::optional<WorkspaceTabI
     };
     input.mode = TextInputMode::Multiline;
     input.mono = true;
+    // A document is read across: its lines stay whole and the editor scrolls sideways, which also costs less to lay
+    // out than a wrapped text of this size.
+    input.wrap = false;
     input.label = Prop<std::string>{std::string{"Document source"}};
     // Read only while a check runs, so the draft that mounts is exactly the text the check saw.
     input.field.readonly = Prop<bool>{[source] { return source->readOnly || source->busy->get(); }};

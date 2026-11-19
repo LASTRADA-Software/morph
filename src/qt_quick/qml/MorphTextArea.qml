@@ -11,6 +11,8 @@ MorphField {
     property string placeholder: ""
     // Whether the text and the placeholder are drawn in the mono face; set once.
     property bool mono: false
+    // Whether a line longer than the field wraps; without it the area scrolls sideways. Set once.
+    property bool wrap: true
     property bool edited: false
     // Set while C++ writes the text, so the write is not taken for an edit.
     property bool assigning: false
@@ -73,7 +75,7 @@ MorphField {
         }
         readOnly: root.readOnly
         placeholderText: root.placeholder
-        wrapMode: TextEdit.Wrap
+        wrapMode: root.wrap ? TextEdit.Wrap : TextEdit.NoWrap
         // Declared, as the text input's field declares them.
         Accessible.role: root.accessibleRole
         Accessible.name: root.accessibleName

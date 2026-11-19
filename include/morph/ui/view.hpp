@@ -650,6 +650,9 @@ struct TextInput {
     InputEmphasis emphasis = InputEmphasis::Normal;
     /// @brief Whether the text and the placeholder are drawn in the `mono` text role's face; set once.
     bool mono = false;
+    /// @brief Whether a multiline input wraps a line longer than the field; `false` keeps each line whole and the field
+    ///        scrolls sideways. Set once; never `false` on a single-line or password input, which has no lines to wrap.
+    bool wrap = true;
     /// @brief Where the text sits in the field: `Start`, `Center` or `End`; set once. Never on a multiline input,
     ///        and the mount tells the widget only a value other than `Start`.
     Align align = Align::Start;

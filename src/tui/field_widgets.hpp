@@ -111,6 +111,8 @@ public:
     void setPrefix(std::string_view prefix) override;
     /// Every face of a terminal is monospace, so a mono field draws nothing new.
     void setMono(bool mono) override { static_cast<void>(mono); }
+    /// A terminal field shows each line as written, so there is no wrapping to turn off.
+    void setWrap(bool wrap) override { static_cast<void>(wrap); }
     /// An end-aligned field draws its text against the field's right edge while the text fits.
     void setAlign(ui::Align align) override;
     void setDecimals(int decimals) override;

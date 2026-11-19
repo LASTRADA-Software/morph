@@ -222,9 +222,9 @@ expression of one),
   size, mono, weight}`: an absent `style` writes no key, and `selected`, a condition, is written as given: an item's current
   entry, a push button pressed in. `shape` (`ControlShape::Round`), `size` (`ButtonSize::Small`) and `mono` are
   written only when not the default; `weight` is a DTCG weight name (`"semi-bold"`), written only when not empty.
-- **`textInput`** takes `TextInputOptions{value, label, placeholder, mode, icon, unit, emphasis, prefix, mono, align,
-  commitOn, onChange, onCommit, onSubmit}`; `prefix` is an expression, and `mono` and `align` (`Align::Start`,
-  `Center`, `End`; absent writes no key) are written only when given.
+- **`textInput`** takes `TextInputOptions{value, label, placeholder, mode, icon, unit, emphasis, prefix, mono, wrap, align,
+  commitOn, onChange, onCommit, onSubmit}`; `prefix` is an expression, and `mono`, `wrap` (`false` writes `wrap: false`)
+  and `align` (`Align::Start`, `Center`, `End`; absent writes no key) are written only when given.
 - **`column`, `row` and `grid`** take their children and `ContainerOptions{gap, padding (a column or row; a step, or `padding(vertical, horizontal)`), pageEdge (a column or row), selected (a column or row: a condition), columns, tracks, minColumnWidth (a grid: a literal number of units, the least width of a column), align, justify, wrap, divided}`; an
   absent `align` or `justify` is left out, and a present one is written by name (`"center"`). `columns` and `tracks`
   (`GridTrack{width, align}`, each key written only when given) are the grid's, and

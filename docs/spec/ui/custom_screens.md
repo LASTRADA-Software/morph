@@ -369,7 +369,7 @@ go. No call names a person.
 |---|---|---|
 | The draft bar | `draft_bar_<id>` | Shown while the tab holds a draft: "Draft — not saved", that forms on a draft change real data, the last refusal of a save (`draft_message_<id>`), **Save** (`draft_save_<id>`, for a draft of the person's own custom screen), **Save as…**, **Source**, **Discard** |
 | The tools row | `screen_tools_<id>` | Shown while the tab holds none: **Open as** (`open_as_<id>`) and **Source** (`source_button_<id>`) |
-| The source view | `source_dialog` | A sheet, so the editor has the window: the document's JSON pretty-printed (`prettyJson`: indent 2, a container that fits in about 100 columns on one line, members in their order, scalars as written) in a monospace editor (`source_text`), the refusal (`source_refusal`), a status line ("Checking…", "Saving…"), **Preview**, **Save as…**, **Check and save** (`source_save`, a stored screen of the person's own), **Close** |
+| The source view | `source_dialog` | A sheet, so the editor has the window: the document's JSON pretty-printed (`prettyJson`: indent 2, a container that fits in about 100 columns on one line, members in their order, scalars as written) in a monospace editor (`source_text`, `wrap: false`: its lines stay whole and it scrolls sideways), the refusal (`source_refusal`), a status line ("Checking…", "Saving…"), **Preview**, **Save as…**, **Check and save** (`source_save`, a stored screen of the person's own), **Close** |
 | The save dialog | `save_as_dialog` | The name (`save_as_title`), the refusal, **Save**, **Cancel** |
 
 - **Source** shows the open draft's text, a custom screen's stored text (fetched again when the cache dropped it), or

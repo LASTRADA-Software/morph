@@ -58,6 +58,7 @@ public:
     void setUnit(std::string_view unit) override;
     void setPrefix(std::string_view prefix) override;
     void setMono(bool mono) override;
+    void setWrap(bool wrap) override;
     void setAlign(ui::Align align) override;
     void setDecimals(int decimals) override;
     void setIcon(std::string_view icon) override;

@@ -1065,6 +1065,26 @@ TEST_CASE("qt_quick widgets: a filled badge is a tag in the small strong step", 
     CHECK(item.height() <= label->implicitHeight() + 2);
 }
 
+// Mutations: leave `wrap` unwritten (the area keeps `TextEdit::Wrap`); write it to the single-line field's QML.
+TEST_CASE("qt_quick widgets: a multiline input wraps its lines unless told not to", "[qt_quick]") {
+    // QML's `TextEdit.NoWrap` and `TextEdit.Wrap`, as `wrapMode` reads them.
+    constexpr int kTextEditNoWrap = 0;
+    constexpr int kTextEditWrap = 4;
+    Scene scene;
+    auto const column = scene.backend().createStack(nullptr, ui::Axis::Vertical);
+    auto const wrapped = scene.backend().createTextInput(column.get(), ui::TextInputMode::Multiline);
+    auto const code = scene.backend().createTextInput(column.get(), ui::TextInputMode::Multiline);
+    code->setWrap(false);
+    scene.settle();
+    auto const areaOf = [](ui::Widget const& widget) -> QQuickItem& {
+        QList<QQuickItem*> const areas = Scene::itemsOf(Scene::itemOf(widget), "QQuickTextArea");
+        REQUIRE_FALSE(areas.isEmpty());
+        return *areas.front();
+    };
+    CHECK(areaOf(*wrapped).property("wrapMode").toInt() == kTextEditWrap);
+    CHECK(areaOf(*code).property("wrapMode").toInt() == kTextEditNoWrap);
+}
+
 // Mutations: leave `textAlign` unwritten (the text starts at the leading edge); draw the prominent field at
 // `Font.DemiBold` (its weight reads 600); ignore `mono` (the family is the body's); lay the text out from the
 // field's own padding alone (it starts under the prefix).

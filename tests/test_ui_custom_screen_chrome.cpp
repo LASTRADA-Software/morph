@@ -46,6 +46,10 @@ TEST_CASE(
     auto const dialog = rig.find("Dialog", "source_dialog");
     REQUIRE(dialog.has_value());
     CHECK(rig.harness.backend.prop(*dialog, "sheet") == "true");
+    // Monospace source is read across, so the editor scrolls sideways instead of wrapping.
+    auto const editor = rig.find("TextInput", "source_text");
+    REQUIRE(editor.has_value());
+    CHECK(rig.harness.backend.prop(*editor, "wrap") == "false");
     rig.type("source_text", screens_test::replaced(shown, "\"Edit note\"", "\"Edited by hand\""));
     rig.click("source_preview");
     REQUIRE(rig.pump([&rig] { return rig.text("heading") == "Edited by hand"; }));

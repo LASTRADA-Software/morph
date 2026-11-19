@@ -1125,6 +1125,7 @@ public:
     void setUnit(std::string_view unit) override { set("unit", formatText(unit)); }
     void setPrefix(std::string_view prefix) override { set("prefix", formatText(prefix)); }
     void setMono(bool mono) override { set("mono", formatBool(mono)); }
+    void setWrap(bool wrap) override { set("wrap", formatBool(wrap)); }
     void setAlign(Align align) override {
         if (align == Align::End) {
             set("align", "end");

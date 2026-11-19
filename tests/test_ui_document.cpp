@@ -526,6 +526,18 @@ TEST_CASE("ui document: a multiline text input refuses a unit and an icon", "[ui
     CHECK(icon.error().path == "/view/icon");
 }
 
+// Mutation: accept `wrap` on a single-line input, or refuse it on a multiline one.
+TEST_CASE("ui document: a multiline text input may turn wrapping off, a single-line one has none to turn off",
+          "[ui][document]") {
+    CHECK(loadDocumentText(R"({"vocab": "ui/1", "id": "w", "view": {"kind": "textInput", "label": "T",
+        "mode": "multiline", "wrap": false}})")
+              .has_value());
+    auto const single = loadDocumentText(R"({"vocab": "ui/1", "id": "w", "view": {"kind": "textInput", "label": "T",
+        "wrap": false}})");
+    REQUIRE_FALSE(single.has_value());
+    CHECK(single.error().path == "/view/wrap");
+}
+
 // Mutation: leave `dangerOutline` out of a button's emphases (the first document is refused).
 TEST_CASE("ui document: dangerOutline, an outline badge and a segmented select load; other names are refused",
           "[ui][document]") {

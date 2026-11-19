@@ -1027,6 +1027,19 @@ TEST_CASE("interpreter control: an input's prefix, mono and align reach the back
     CHECK_FALSE(h.backend.hasProp(area, "align"));
 }
 
+// Mutation: skip `setWrap` in the mount (the property is not recorded), or tell it to an input that wraps.
+TEST_CASE("interpreter control: a multiline input's `wrap: false` reaches the backend only when given",
+          "[ui][interpreter]") {
+    Harness h;
+    auto const screen = h.mount(R"({"vocab": "ui/1", "id": "wrapping", "view": {"kind": "column", "children": [
+        {"kind": "textInput", "testId": "code", "label": "Code", "mode": "multiline", "mono": true, "wrap": false},
+        {"kind": "textInput", "testId": "prose", "label": "Prose", "mode": "multiline"},
+        {"kind": "textInput", "testId": "line", "label": "Line"}]}})");
+    CHECK(h.backend.prop(h.byTestId("TextInput", "code"), "wrap") == "false");
+    CHECK_FALSE(h.backend.hasProp(h.byTestId("TextInput", "prose"), "wrap"));
+    CHECK_FALSE(h.backend.hasProp(h.byTestId("TextInput", "line"), "wrap"));
+}
+
 // Mutation: take a computed style of no known name as radio (the select records `style=Radio`).
 TEST_CASE("interpreter control: a computed select style naming none is reported once and drawn as a dropdown",
           "[ui][interpreter]") {
