@@ -781,6 +781,7 @@ target_sources(morph
         include/morph/table/view_cache.hpp
         include/morph/table/selection.hpp
         include/morph/table/edits.hpp
+        include/morph/table/state_store.hpp
 )
 
 # The detail/ headers that public headers include. They are not public surface
