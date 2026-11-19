@@ -51,7 +51,7 @@ morph::wire::EventBody changesOf(std::string_view record) {
 TEST_CASE("custom screen sync: a server without the model is off, and nothing is logged",
           "[ui][custom-screens][sync]") {
     Warnings warnings;
-    custom_client::BareServer server;
+    custom_client::BareServer const server;
     SyncClient client{*server.server, "ann", "lims"};
     CHECK_FALSE(client.probe());
     CHECK(client.sync.offer() == CustomScreensOffer::Off);
@@ -68,7 +68,7 @@ TEST_CASE("custom screen sync: a server without the model is off, and nothing is
 TEST_CASE("custom screen sync: any other refusal of list is off too, and is logged at warn",
           "[ui][custom-screens][sync]") {
     Warnings warnings;
-    screens_test::Server server;
+    screens_test::Server const server;
     SyncClient client{*server.server, "ann", "elsewhere"};
     CHECK_FALSE(client.probe());
     CHECK(client.sync.offer() == CustomScreensOffer::Off);
@@ -114,7 +114,7 @@ TEST_CASE("custom screen sync: list, open into the cache, and a screen changed o
 
 // Mutation: answer every check as passing (the refusal is absent).
 TEST_CASE("custom screen sync: check answers the server's refusal with its pointer", "[ui][custom-screens][sync]") {
-    screens_test::Server server;
+    screens_test::Server const server;
     SyncClient client{*server.server, "ann", "lims"};
     REQUIRE(client.probe());
     std::string const erasing =
@@ -139,7 +139,7 @@ TEST_CASE("custom screen sync: check answers the server's refusal with its point
 TEST_CASE("custom screen sync: a store's refusal of save reaches the caller as the store gave it",
           "[ui][custom-screens][sync]") {
     morph::exec::ThreadPoolExecutor storePool{1};
-    screens_test::Server server{std::make_shared<custom_client::RefusingStore>(storePool)};
+    screens_test::Server const server{std::make_shared<custom_client::RefusingStore>(storePool)};
     SyncClient client{*server.server, "ann", "lims"};
     REQUIRE(client.probe());
     std::optional<std::expected<std::string, std::string>> saved;
@@ -196,7 +196,7 @@ TEST_CASE("custom screen sync: a changes event naming the record relists, and on
 // Mutation: the session's watch set leaves the extra watch out (the `replace` watch lacks the record).
 TEST_CASE("custom screen sync: the record is watched once offered, and a reconnect or resync keeps it watched",
           "[ui][custom-screens][sync]") {
-    screens_test::Server server;
+    screens_test::Server const server;
     SyncClient client{*server.server, "ann", "lims", true};
     REQUIRE(client.probe());
     REQUIRE(client.watches.size() == 1);
@@ -227,7 +227,7 @@ TEST_CASE("custom screen sync: the record is watched once offered, and a reconne
 // Mutation: `removeExtraWatch` sends nothing (no `unwatch` follows the reset); `addExtraWatch` sends every time.
 TEST_CASE("custom screen sync: reset stops the watch, and watching a record twice sends one watch",
           "[ui][custom-screens][sync]") {
-    screens_test::Server server;
+    screens_test::Server const server;
     SyncClient client{*server.server, "ann", "lims", true};
     REQUIRE(client.probe());
     client.session.addExtraWatch(std::string{morph::ui::kCustomScreenRecord});
@@ -241,7 +241,7 @@ TEST_CASE("custom screen sync: reset stops the watch, and watching a record twic
 // Mutation: the sync asks the session to watch before it knows the server offers custom screens.
 TEST_CASE("custom screen sync: a server that does not offer custom screens is not watched",
           "[ui][custom-screens][sync]") {
-    custom_client::BareServer server;
+    custom_client::BareServer const server;
     SyncClient client{*server.server, "ann", "lims", true};
     CHECK_FALSE(client.probe());
     CHECK(client.watches.empty());
@@ -259,7 +259,7 @@ void awaitQueued(morph::testing::StepExecutor& owner) {
 
 // Mutation: drop the scope from `.then` in `call` (the reply lands after the reset and the offer reads Offered).
 TEST_CASE("custom screen sync: a reply that arrives after reset is dropped", "[ui][custom-screens][sync]") {
-    screens_test::Server server;
+    screens_test::Server const server;
     // The owner runs one task at a time until the probe answers, which counts the tasks the answer takes.
     std::size_t steps = 0;
     {
@@ -313,7 +313,7 @@ struct DestroyableSync {
 // is called).
 TEST_CASE("custom screen sync: a reply that arrives after the sync is destroyed is dropped",
           "[ui][custom-screens][sync]") {
-    screens_test::Server server;
+    screens_test::Server const server;
     // The owner runs one task at a time until the probe answers, which counts the tasks up to and including the one
     // that delivers the `list` reply (the bind's reply comes earlier).
     std::size_t steps = 0;
@@ -346,7 +346,7 @@ TEST_CASE("custom screen sync: a reply that arrives after the sync is destroyed 
 // Mutation: the session reads no watch reply (no warning names the record).
 TEST_CASE("custom screen sync: a refused watch on the record is logged at warn", "[ui][custom-screens][sync]") {
     Warnings warnings;
-    screens_test::Server server;
+    screens_test::Server const server;
     SyncClient client{*server.server, "ann", "lims", true};
     client.refuseWatches = true;
     REQUIRE(client.probe());
@@ -387,7 +387,7 @@ TEST_CASE("custom screen sync: a broken screen is refused with its reason and ne
 TEST_CASE("custom screen sync: a reconnect asks again when the offer is off for a reason other than an absent model",
           "[ui][custom-screens][sync]") {
     Warnings warnings;
-    screens_test::Server server;
+    screens_test::Server const server;
     // `list` is refused for the application: a refusal, not an absence.
     SyncClient client{*server.server, "ann", "elsewhere"};
     REQUIRE_FALSE(client.probe());
@@ -400,7 +400,7 @@ TEST_CASE("custom screen sync: a reconnect asks again when the offer is off for 
 // Mutation: a reconnect probes whatever the cause (the owner then has a reply queued).
 TEST_CASE("custom screen sync: a reconnect does not ask a server that lacks the model again",
           "[ui][custom-screens][sync]") {
-    custom_client::BareServer server;
+    custom_client::BareServer const server;
     SyncClient client{*server.server, "ann", "lims"};
     REQUIRE_FALSE(client.probe());
     client.sync.reconnected();

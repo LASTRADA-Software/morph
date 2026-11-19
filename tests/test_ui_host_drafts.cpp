@@ -208,7 +208,7 @@ TEST_CASE("Ending a draft keeps what is mounted and is no longer dirty", "[ui][h
     Harness harness;
     Opened opened{harness};
     REQUIRE(opened.shell.mountDraft(*opened.handle, load(kNoteDraft)).has_value());
-    opened.shell.endDraft(*opened.handle);
+    DocumentScreenHost::endDraft(*opened.handle);
     harness.settle();
     CHECK(harness.text("heading") == "Drafted");
     CHECK_FALSE(DocumentScreenHost::drafted(*opened.handle));

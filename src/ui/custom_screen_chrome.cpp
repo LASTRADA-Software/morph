@@ -675,7 +675,7 @@ void CustomScreenChrome::openSaved(WorkspaceTabId tab, std::uint64_t generation,
                 notify(saved + ", but it could not be opened: " + loaded.error(), Tone::Warn);
                 return;
             }
-            _options.host->endDraft(*handle);
+            DocumentScreenHost::endDraft(*handle);
             ++state->generation;
             state->draftText.clear();
             ParamMap const params = DocumentScreenHost::paramsOf(*handle).value_or(ParamMap{});
@@ -732,7 +732,7 @@ void CustomScreenChrome::save(WorkspaceTabId tab) {
                         saveOutcome(tab, generation, "Saved " + title);
                         return;
                     }
-                    _options.host->endDraft(*handleOf(tab));
+                    DocumentScreenHost::endDraft(*handleOf(tab));
                     std::shared_ptr<TabState> const shown = stateOf(tab);
                     ++shown->generation;
                     shown->draftText.clear();

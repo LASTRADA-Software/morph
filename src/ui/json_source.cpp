@@ -50,7 +50,8 @@ std::optional<unsigned> hex4(std::string_view text, std::size_t pos) {
     }
     unsigned code = 0;
     std::string_view const digits = text.substr(pos, 4);
-    auto const [end, error] = std::from_chars(digits.data(), std::to_address(digits.end()), code, 16);
+    auto const [end, error] =
+        std::from_chars(std::to_address(digits.begin()), std::to_address(digits.end()), code, 16);
     if (error != std::errc{} || end != std::to_address(digits.end())) {
         return std::nullopt;
     }
@@ -251,8 +252,8 @@ std::string prettyJson(std::string_view text) {
     return out;
 }
 
-// NOLINTNEXTLINE(readability-function-cognitive-complexity,bugprone-easily-swappable-parameters): one walk over the
-// document per pointer token, and the text and the pointer are two strings the caller names by role.
+// One walk over the document per pointer token, and the text and the pointer are two strings the caller names by role.
+// NOLINTNEXTLINE(readability-function-cognitive-complexity,bugprone-easily-swappable-parameters)
 std::optional<std::size_t> pointerOffset(std::string_view text, std::string_view pointer) {
     std::optional<std::vector<std::string>> const tokens = tokensOf(pointer);
     if (!tokens) {
