@@ -1832,4 +1832,192 @@ inline std::string refusalOf(std::string_view text) {
     return loaded ? std::string{} : loaded.error().reason;
 }
 
+// ── Stores for saved views ──────────────────────────────────────────────────
+
+/// @brief One call a `RecordingTableStateStore` saw: what it was, and what the store answered.
+struct StoreCall {
+    /// @brief `"load"`, `"save"` or `"publish"`.
+    std::string op;
+    /// @brief The key's part.
+    std::string part;
+    /// @brief The `expected` revision of a save or publish; empty for a load.
+    std::string expected;
+    /// @brief A save's or publish's outcome; `Saved` for a load.
+    table::SaveOutcome outcome = table::SaveOutcome::Saved;
+    /// @brief The revision the answer named: a save's, or the loaded document's; empty for none.
+    std::string revision;
+};
+
+/// @brief A map store under `ITableStateStore`'s `expected` rule, `kNoDocument` included, that records each call and
+///        its answer in the order the calls were made. Revisions are `"1"`, `"2"`, … per store; completions are
+///        delivered on the executor it was given. Built with `Sharing::Shared`, `publish` applies operations to the
+///        `shared` part.
+class RecordingTableStateStore final : public table::ITableStateStore {
+public:
+    /// @brief A store delivering on @p executor.
+    /// @param executor Where completions are delivered. Borrowed.
+    /// @param sharing  Whether it keeps the `shared` part for everyone.
+    explicit RecordingTableStateStore(exec::IExecutor& executor, table::Sharing sharing = table::Sharing::Private)
+        : _executor{&executor}, _sharing{sharing} {}
+
+    [[nodiscard]] async::Completion<std::optional<table::StoredTableState>> load(
+        table::TableStateKey const& key) override {
+        auto [completion, promise] =
+            async::Completion<std::optional<table::StoredTableState>>::makeSettleable(_executor);
+        std::optional<table::StoredTableState> const stored = storedOf(key.part);
+        calls.push_back(StoreCall{.op = "load", .part = key.part, .expected = {}, .outcome = {},
+                                  .revision = stored ? stored->revision : std::string{}});
+        promise.resolve(stored);
+        return std::move(completion);
+    }
+
+    [[nodiscard]] async::Completion<table::SaveResult> save(table::TableStateKey const& key, std::string json,
+                                                            std::string expected = {}) override {
+        return answer("save", key.part, expected, store(key.part, std::move(json), expected));
+    }
+
+    [[nodiscard]] async::Completion<bool> remove(table::TableStateKey const& key) override {
+        auto [completion, promise] = async::Completion<bool>::makeSettleable(_executor);
+        promise.resolve(_stored.erase(key.part) != 0);
+        return std::move(completion);
+    }
+
+    [[nodiscard]] bool shares() const override { return _sharing == table::Sharing::Shared; }
+
+    [[nodiscard]] async::Completion<table::SaveResult> publish(table::TableStateKey const& key,
+                                                               table::ViewOperation const& operation,
+                                                               std::string expected) override {
+        if (!shares()) {
+            return refusePublish(*_executor);
+        }
+        table::SaveResult result;
+        if (auto conflict = conflictOf(key.part, expected)) {
+            result = *conflict;
+        } else {
+            table::ViewsDocument document;
+            if (auto const stored = storedOf(key.part)) {
+                document = table::readViews(stored->json).value_or(table::ViewsDocument{});
+            }
+            auto applied = table::applyViewOperation(std::move(document), operation, table::ViewsPart::Shared);
+            result = applied ? store(key.part, table::writeViews(*applied, table::ViewsPart::Shared), expected)
+                             : table::SaveResult{.outcome = table::SaveOutcome::Refused, .revision = {},
+                                                 .reason = table::viewErrorText(applied.error(), operation)};
+        }
+        return answer("publish", key.part, expected, std::move(result));
+    }
+
+    /// @brief The calls, in the order they were made.
+    std::vector<StoreCall> calls;
+
+private:
+    [[nodiscard]] std::optional<table::StoredTableState> storedOf(std::string const& part) const {
+        auto const found = _stored.find(part);
+        return found == _stored.end() ? std::nullopt : std::optional{found->second};
+    }
+
+    [[nodiscard]] std::optional<table::SaveResult> conflictOf(std::string const& part, std::string const& expected) const {
+        auto const stored = storedOf(part);
+        bool const holds = expected.empty() || (expected == table::kNoDocument ? !stored
+                                                                               : stored && stored->revision == expected);
+        if (holds) {
+            return std::nullopt;
+        }
+        return table::SaveResult{.outcome = table::SaveOutcome::Conflict,
+                                 .revision = stored ? stored->revision : std::string{}, .reason = {}};
+    }
+
+    table::SaveResult store(std::string const& part, std::string json, std::string const& expected) {
+        if (auto conflict = conflictOf(part, expected)) {
+            return *conflict;
+        }
+        std::string revision = std::to_string(++_revisions);
+        _stored.insert_or_assign(part, table::StoredTableState{.json = std::move(json), .revision = revision});
+        return table::SaveResult{.outcome = table::SaveOutcome::Saved, .revision = std::move(revision), .reason = {}};
+    }
+
+    async::Completion<table::SaveResult> answer(std::string op, std::string part, std::string expected,
+                                                table::SaveResult result) {
+        calls.push_back(StoreCall{.op = std::move(op), .part = std::move(part), .expected = std::move(expected),
+                                  .outcome = result.outcome, .revision = result.revision});
+        auto [completion, promise] = async::Completion<table::SaveResult>::makeSettleable(_executor);
+        promise.resolve(std::move(result));
+        return std::move(completion);
+    }
+
+    exec::IExecutor* _executor;
+    table::Sharing _sharing;
+    std::map<std::string, table::StoredTableState, std::less<>> _stored;
+    std::uint64_t _revisions = 0;
+};
+
+/// @brief A map store that knows no sentinel: `expected` is compared with the stored revision as text, nothing stored
+///        counting as revision `""`, so `kNoDocument` over nothing is a `Conflict` with revision `""`; an empty
+///        `expected` replaces. Revisions are `"r1"`, `"r2"`, … per store.
+class LiteralTableStateStore final : public table::ITableStateStore {
+public:
+    /// @brief A store delivering on @p executor.
+    /// @param executor Where completions are delivered. Borrowed.
+    explicit LiteralTableStateStore(exec::IExecutor& executor) : _executor{&executor} {}
+
+    [[nodiscard]] async::Completion<std::optional<table::StoredTableState>> load(
+        table::TableStateKey const& key) override {
+        auto [completion, promise] =
+            async::Completion<std::optional<table::StoredTableState>>::makeSettleable(_executor);
+        calls.push_back(StoreCall{.op = "load", .part = key.part, .expected = {}, .outcome = {}, .revision = {}});
+        auto const found = _stored.find(key.part);
+        std::optional<table::StoredTableState> const stored =
+            found == _stored.end() ? std::nullopt : std::optional{found->second};
+        calls.back().revision = stored ? stored->revision : std::string{};
+        promise.resolve(stored);
+        return std::move(completion);
+    }
+
+    [[nodiscard]] async::Completion<table::SaveResult> save(table::TableStateKey const& key, std::string json,
+                                                            std::string expected = {}) override {
+        auto [completion, promise] = async::Completion<table::SaveResult>::makeSettleable(_executor);
+        auto const found = _stored.find(key.part);
+        std::string const current = found == _stored.end() ? std::string{} : found->second.revision;
+        table::SaveResult result;
+        if (!expected.empty() && expected != current) {
+            result = table::SaveResult{.outcome = table::SaveOutcome::Conflict, .revision = current, .reason = {}};
+        } else {
+            std::string revision = "r" + std::to_string(++_revisions);
+            _stored.insert_or_assign(key.part, table::StoredTableState{.json = std::move(json), .revision = revision});
+            result = table::SaveResult{.outcome = table::SaveOutcome::Saved, .revision = std::move(revision), .reason = {}};
+        }
+        calls.push_back(StoreCall{.op = "save", .part = key.part, .expected = std::move(expected),
+                                  .outcome = result.outcome, .revision = result.revision});
+        promise.resolve(std::move(result));
+        return std::move(completion);
+    }
+
+    [[nodiscard]] async::Completion<bool> remove(table::TableStateKey const& key) override {
+        auto [completion, promise] = async::Completion<bool>::makeSettleable(_executor);
+        promise.resolve(_stored.erase(key.part) != 0);
+        return std::move(completion);
+    }
+
+    [[nodiscard]] async::Completion<table::SaveResult> publish(table::TableStateKey const& /*key*/,
+                                                               table::ViewOperation const& /*operation*/,
+                                                               std::string /*expected*/) override {
+        return refusePublish(*_executor);
+    }
+
+    /// @brief The document stored under a part.
+    /// @param part The part.
+    /// @return It, or nothing.
+    [[nodiscard]] std::optional<table::StoredTableState> stored(std::string const& part) const {
+        auto const found = _stored.find(part);
+        return found == _stored.end() ? std::nullopt : std::optional{found->second};
+    }
+
+    /// @brief The calls, in order.
+    std::vector<StoreCall> calls;
+
+private:
+    exec::IExecutor* _executor;
+    std::map<std::string, table::StoredTableState, std::less<>> _stored;
+    std::uint64_t _revisions = 0;
+};
+
 }  // namespace morph::ui::testing

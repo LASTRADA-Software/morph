@@ -1181,6 +1181,15 @@ enum class MenuCommand : std::uint8_t {
     ResetColumns,     ///< "Reset columns".
     Copy,             ///< "Copy".
     CopyWithHeaders,  ///< "Copy with headers".
+    ApplyView,        ///< One of the user's views in "Views": the argument is the view's name.
+    SaveView,         ///< "Save view…": the name dialog; a name the user already has replaces that view.
+    RenameView,       ///< "Rename view…": the name dialog, for the view applied.
+    RemoveView,       ///< "Remove view": the view applied.
+    SetDefaultView,   ///< "Set as default": the view applied becomes the default.
+    DefaultOnMount,   ///< "Start from the default view", checkable.
+    ApplySharedView,  ///< One of the shared views: the argument is the view's name.
+    PublishView,      ///< "Publish view…": the arrangement published to the shared views.
+    SaveAsMyView,     ///< A shared view saved among the user's own: the argument is the view's name.
 };
 
 /// @brief One entry of a table's menu: what it shows and what it does.

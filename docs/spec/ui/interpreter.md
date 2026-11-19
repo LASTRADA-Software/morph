@@ -494,6 +494,16 @@ keeps its operands' 0 places and still fills 0.29 of a bar.
   state. Its status line shows its counts and the latest message (`ScreenCore::tableMessage`), and takes space only
   while it has a message; `status: true` shows it always, and `status: false` never, its messages going to the
   host's notifications.
+  **Saved views.** A table that keeps a state, model-backed or over `rows`, also holds a `TableViews` over the
+  same key: its `views` part, and its `shared` part when the store shares, loaded in the turn its `state` loads, so
+  a store that batches reads every part of a screen in one call, and a second mount reads them from the session's
+  kept copies. A change applies a views operation to the document loaded and saves it with the revision loaded, or
+  `kNoDocument` when nothing was; a `Conflict` reads the document again from the store, applies the operation to it
+  and saves once more, with its revision, or with an empty `expected` when nothing is stored; a second `Conflict`
+  is "Views could not be saved: another window changed them at the same time", and an operation that does not
+  apply to the document read again ("A view named … exists", "No view named …") saves nothing. A mounted table does
+  not follow saves made elsewhere. The table menu's `Views` submenu and its name dialog are not lowered yet: the
+  table menu itself is not on a screen.
   **Groups.** With `group`, the source splits its rows into runs by `by` (read per row, untracked: what `by` reads
   besides the row regroups the rows when it changes; adjacent rows are one run while their `by` is the same element
   as the run's first row's, by the rule of `runs`, quantities compared through the screen's unit table), holds each
