@@ -32,6 +32,7 @@
 #include <format>
 #include <functional>
 #include <glaze/glaze.hpp>
+#include <limits>
 #include <map>
 #include <memory>
 #include <morph/core/callback_scope.hpp>
@@ -118,6 +119,7 @@ struct TableCountsView {
 /// Every member is called on the runtime's owner.
 class TableRows {
 public:
+    /// @brief A model with no rows of its own yet.
     TableRows() = default;
     TableRows(TableRows const&) = delete;
     TableRows& operator=(TableRows const&) = delete;
@@ -339,6 +341,9 @@ namespace detail {
 /// `visible` does nothing and `keysOf` completes at once; a change is the engine's `ViewChange`. A row's record is
 /// built by `RecordOf` once per source row of the engine's `viewSnapshot()` and kept: dropped for the rows an
 /// `Updated` change names, and whole after any other change of the source, when the engine's view first shows it.
+/// The view's snapshot is matched to the change that made it by pointer, so a source's `snapshot()` must return the
+/// same pointer until its rows change, as `VectorSource` does; with a source that returns a new one on every call,
+/// every logged change is applied whenever the view's snapshot moves.
 class EngineRows final : public TableRows, private table::ChangeListener {
 public:
     /// @brief Rows over a new engine.
@@ -433,7 +438,7 @@ public:
             promise.resolve(Result{std::unexpected(table::TableError{
                 .code = table::TableErrorCode::InvalidSpec,
                 .column = {},
-                .message = std::format("rows {} to {} are not in a view of {}", first, first + count, rows)})});
+                .message = std::format("{} rows from view row {} are not in a view of {}", count, first, rows)})});
             return std::move(completion);
         }
         std::vector<table::RowId> keys;
@@ -613,8 +618,12 @@ struct WindowRowsStats {
 /// one: the first after a quiet spell goes at once, and the events between two refetches are one.
 ///
 /// A row's record holds one field per column of the latest `visible` call that the window holds for the row,
-/// converted by `cellValue` when the row is first read and kept by key until the row's page is fetched again. A
-/// change is reported as `Changed` over a fetched page whose keys are the ones it held, and as `Reset` otherwise.
+/// converted by `cellValue` when the row is first read and kept by key until the row's page is fetched again.
+///
+/// A change is the diff, by key, of the rows held before a reply against the rows held after it: a new total moves
+/// the view's end (`Inserted` or `Removed` there), a row that moved within its page is `Moved`, a row that came or
+/// went is `Inserted` or `Removed`, and a place whose cells arrived, were replaced or were evicted is `Changed`.
+/// Only a new query (a sort, a filter or a description revision) is a `Reset`.
 ///
 /// Neither copied nor moved: its watch handler and its replies hold it.
 class WindowRows final : public TableRows {
@@ -652,6 +661,9 @@ public:
     ///        a new query when it is another revision than the one held.
     /// @param description The description, its revision set.
     void setDescription(table::TableDescription description) {
+        if (_descriptionError) {
+            _error.reset();
+        }
         _descriptionError = false;
         bool const another = !_description || _description->revision != description.revision;
         bool const replacing = _description.has_value() && another;
@@ -725,12 +737,12 @@ public:
     }
 
     /// @brief Fetches the visible pages again with `TableQuery::retry`, so failed level loads are tried at once.
+    ///        Every fetch of that refetch carries the flag, one the timing rules hold back included.
     void retry() {
         _error.reset();
         _retry = true;
         _window.invalidate();
         pump();
-        _retry = false;
     }
 
     /// @brief The last error: a fetch that failed, a reply or a description that did not read. Cleared by the next
@@ -819,13 +831,21 @@ public:
     /// @brief The keys of a range of view rows, when every one of them is held.
     /// @param first The first view row.
     /// @param count The rows.
-    /// @return The keys at once; `Unavailable` when a row of the range is not held.
+    /// @return The keys at once; `InvalidSpec` for a negative range, `Unavailable` when a row of the range is not
+    ///         held.
     async::Completion<std::expected<std::vector<table::RowId>, table::TableError>> keysOf(
         std::int64_t first, std::int64_t count) override {
         using Result = std::expected<std::vector<table::RowId>, table::TableError>;
         auto [completion, promise] = async::Completion<Result>::makeSettleable(&_session->runtime().owner());
+        if (first < 0 || count < 0 || count > std::numeric_limits<std::int64_t>::max() - first) {
+            promise.resolve(Result{std::unexpected(table::TableError{
+                .code = table::TableErrorCode::InvalidSpec,
+                .column = {},
+                .message = std::format("{} rows from view row {} are not a range", count, first)})});
+            return std::move(completion);
+        }
         std::vector<table::RowId> keys;
-        for (std::int64_t at = std::max<std::int64_t>(first, 0); at < first + count; ++at) {
+        for (std::int64_t at = first; at < first + count; ++at) {
             auto const* const key = _window.key(at);
             if (key == nullptr) {
                 promise.resolve(Result{std::unexpected(
@@ -905,6 +925,9 @@ private:
         std::uint64_t stamp = 0;
     };
 
+    // More operations than this in one page's diff are one `Reset`, as for the engine's default.
+    static constexpr std::size_t kResetThreshold = 5000;
+
     struct PageFlight {
         table::PageFetch fetch;
         std::stop_source stop;
@@ -960,6 +983,8 @@ private:
         stopAll();
         _window.reset();
         _memo.clear();
+        _heldPages.clear();
+        _retry = false;
         _awaitedLast.reset();
         _awaitedTimer = {};
         emit(table::ViewChange{
@@ -1040,6 +1065,10 @@ private:
         }
         if (refetched && !_window.awaiting().empty()) {
             _awaitedLast = at;
+        }
+        // A retry's fetches carry the flag until the last of them, held back or not, has gone.
+        if (!settling && !spacing) {
+            _retry = false;
         }
         auto* const scheduler = _session->options().scheduler;
         if (settling) {
@@ -1124,7 +1153,7 @@ private:
         query.keys = fetch.keys;
         auto body = bodyOf(query);
         if (!body) {
-            _error = std::move(body.error());
+            keyedFailed(std::move(body.error()));
             return;
         }
         std::stop_source stop;
@@ -1157,18 +1186,130 @@ private:
         }
     }
 
-    // The keys of the rows a page holds now.
-    [[nodiscard]] std::vector<table::RowId> keysOfPage(std::int64_t page) const {
-        std::vector<table::RowId> out;
+    // The key held at each place of a page, or nothing at a place not held.
+    [[nodiscard]] std::vector<std::optional<table::RowId>> slotsOfPage(std::int64_t page) const {
         auto const size = std::max<std::int64_t>(_options.pageSize, 1);
+        std::vector<std::optional<table::RowId>> out;
+        out.reserve(static_cast<std::size_t>(size));
         for (std::int64_t at = page * size; at < (page + 1) * size; ++at) {
             auto const* const key = _window.key(at);
-            if (key == nullptr) {
-                break;
-            }
-            out.push_back(*key);
+            out.push_back(key == nullptr ? std::nullopt : std::optional{*key});
         }
         return out;
+    }
+
+    // The view's length as the mount holds it: the total, or nothing while none is known.
+    [[nodiscard]] std::int64_t shownRows() const { return _window.total().value_or(0); }
+
+    // The change a page reply made, by key. The view's length moves at its end first; then the page's places are
+    // diffed by key, so a row that moved keeps its identity, and a place that gained or lost its row's cells is a
+    // change of that place; last, the pages the reply evicted are changed places. Rows of other pages do not move,
+    // since a page's places are fixed by its index.
+    [[nodiscard]] table::ViewChange pageChange(std::int64_t page, std::int64_t rowsBefore,
+                                               std::vector<std::optional<table::RowId>> const& before,
+                                               std::set<std::int64_t> const& heldBefore) const {
+        using table::ViewOp;
+        auto const size = std::max<std::int64_t>(_options.pageSize, 1);
+        auto const rowsAfter = shownRows();
+        auto const start = page * size;
+        auto const after = slotsOfPage(page);
+        table::ViewChange change;
+        if (rowsAfter > rowsBefore) {
+            change.ops.push_back(ViewOp{.kind = ViewOp::Kind::Inserted,
+                                        .first = static_cast<std::size_t>(rowsBefore),
+                                        .count = static_cast<std::size_t>(rowsAfter - rowsBefore),
+                                        .to = 0});
+        }
+        // The page's places inside the view while it is diffed, which is the longer of the two views.
+        auto const places = static_cast<std::size_t>(
+            std::clamp<std::int64_t>(std::max(rowsBefore, rowsAfter) - start, 0, size));
+        std::unordered_map<table::RowId, std::size_t> wasAt;
+        std::unordered_map<table::RowId, std::size_t> nowAt;
+        for (std::size_t at = 0; at < places; ++at) {
+            bool const unique = (!before[at] || wasAt.emplace(*before[at], at).second) &&
+                                (!after[at] || nowAt.emplace(*after[at], at).second);
+            if (!unique) {
+                return table::ViewChange{
+                    .ops = {ViewOp{.kind = ViewOp::Kind::Reset, .first = 0, .count = 0, .to = 0}}};
+            }
+        }
+        // Identities: each key one number; each place's own empty slot one number after every key's.
+        std::unordered_map<table::RowId, std::uint32_t> ids;
+        auto const idOf = [&ids](table::RowId const& key) {
+            return ids.try_emplace(key, static_cast<std::uint32_t>(ids.size())).first->second;
+        };
+        std::vector<std::uint32_t> changed;
+        for (std::size_t at = 0; at < places; ++at) {
+            if (before[at]) {
+                idOf(*before[at]);
+            }
+            if (after[at]) {
+                changed.push_back(idOf(*after[at]));
+            }
+        }
+        auto const emptyBase = static_cast<std::uint32_t>(ids.size());
+        auto const emptyAt = [emptyBase](std::size_t at) { return emptyBase + static_cast<std::uint32_t>(at); };
+        // A place held on one side only is the same row on both when that row is nowhere else on the other side:
+        // its cells arrived or left there.
+        std::vector<std::uint32_t> was(places);
+        std::vector<std::uint32_t> now(places);
+        for (std::size_t at = 0; at < places; ++at) {
+            std::int64_t const place = start + static_cast<std::int64_t>(at);
+            if (place >= rowsBefore) {
+                // Already inserted at the end, as the new view holds it, unless its row moved here from a place
+                // the old view held.
+                was[at] = after[at] && !wasAt.contains(*after[at]) ? ids.at(*after[at]) : emptyAt(at);
+            } else if (before[at]) {
+                was[at] = ids.at(*before[at]);
+            } else if (after[at] && !wasAt.contains(*after[at])) {
+                was[at] = ids.at(*after[at]);
+            } else {
+                was[at] = emptyAt(at);
+            }
+            if (place >= rowsAfter) {
+                // Removed at the end afterwards, whatever it holds, unless its row moved to a place the new view
+                // holds.
+                now[at] = before[at] && nowAt.contains(*before[at]) ? emptyAt(at) : was[at];
+            } else if (after[at]) {
+                now[at] = ids.at(*after[at]);
+            } else if (before[at] && !nowAt.contains(*before[at])) {
+                now[at] = ids.at(*before[at]);
+            } else {
+                now[at] = emptyAt(at);
+            }
+        }
+        auto const inPage =
+            table::diffViews(was, now, changed, static_cast<std::size_t>(emptyBase) + places, kResetThreshold);
+        if (inPage.isReset()) {
+            return inPage;
+        }
+        for (auto op : inPage.ops) {
+            op.first += static_cast<std::size_t>(start);
+            if (op.kind == ViewOp::Kind::Moved) {
+                op.to += static_cast<std::size_t>(start);
+            }
+            change.ops.push_back(op);
+        }
+        if (rowsAfter < rowsBefore) {
+            change.ops.push_back(ViewOp{.kind = ViewOp::Kind::Removed,
+                                        .first = static_cast<std::size_t>(rowsAfter),
+                                        .count = static_cast<std::size_t>(rowsBefore - rowsAfter),
+                                        .to = 0});
+        }
+        for (auto const held : heldBefore) {
+            if (held == page || heldPage(held)) {
+                continue;
+            }
+            auto const first = held * size;
+            auto const last = std::min(first + size, rowsAfter);
+            if (first < last) {
+                change.ops.push_back(ViewOp{.kind = ViewOp::Kind::Changed,
+                                            .first = static_cast<std::size_t>(first),
+                                            .count = static_cast<std::size_t>(last - first),
+                                            .to = 0});
+            }
+        }
+        return change;
     }
 
     void pageArrived(table::PageFetch const& fetch, std::string const& text) {
@@ -1185,31 +1326,26 @@ private:
         heardRevision(page->revision);
         auto const size = std::max<std::int64_t>(_options.pageSize, 1);
         auto const index = fetch.request.offset / size;
-        auto const keysBefore = keysOfPage(index);
-        auto const totalBefore = total();
+        auto const before = slotsOfPage(index);
+        auto const rowsBefore = shownRows();
         if (_window.accept(fetch, std::move(*page))) {
             _error.reset();
-            auto const keysAfter = keysOfPage(index);
-            for (auto const& key : keysBefore) {
-                _memo.erase(key);
+            auto const change = pageChange(index, rowsBefore, before, _heldPages);
+            for (auto const& slot : before) {
+                if (slot) {
+                    _memo.erase(*slot);
+                }
             }
-            for (auto const& key : keysAfter) {
-                _memo.erase(key);
+            for (auto const& slot : slotsOfPage(index)) {
+                if (slot) {
+                    _memo.erase(*slot);
+                }
             }
-            // Rows that arrived or left at the page's end are new content at their places; a key at another place
-            // is a reorder, and a new total moves every row after it.
-            auto const rows = std::max(keysBefore.size(), keysAfter.size());
-            auto const common = std::min(keysBefore.size(), keysAfter.size());
-            if (total() != totalBefore || !std::ranges::equal(std::span{keysBefore}.first(common),
-                                                              std::span{keysAfter}.first(common))) {
-                emit(table::ViewChange{
-                    .ops = {table::ViewOp{.kind = table::ViewOp::Kind::Reset, .first = 0, .count = 0, .to = 0}}});
-            } else if (rows > 0) {
-                emit(table::ViewChange{.ops = {table::ViewOp{.kind = table::ViewOp::Kind::Changed,
-                                                             .first = static_cast<std::size_t>(index * size),
-                                                             .count = rows,
-                                                             .to = 0}}});
+            std::erase_if(_heldPages, [this](std::int64_t held) { return !heldPage(held); });
+            if (heldPage(index)) {
+                _heldPages.insert(index);
             }
+            emit(change);
         }
         planned(_window.owed());
         pump();
@@ -1232,7 +1368,7 @@ private:
         }
         auto page = table::readGenericPage(text, *_description, _units.get());
         if (!page) {
-            _error = std::move(page.error());
+            keyedFailed(std::move(page.error()));
             return;
         }
         heardRevision(page->revision);
@@ -1261,8 +1397,13 @@ private:
         if (wasCancelled(error)) {
             return;
         }
-        // The rows stay as they were and may be out of date: the pages are fetched again.
-        _error = failureOf(error);
+        keyedFailed(failureOf(error));
+    }
+
+    // A keyed fetch that brought nothing: the rows stay as they were and may be out of date, so the pages are
+    // fetched again.
+    void keyedFailed(table::TableError error) {
+        _error = std::move(error);
         _window.invalidate();
         pump();
     }
@@ -1335,6 +1476,8 @@ private:
     std::optional<std::chrono::milliseconds> _awaitedLast;
     reactive::TimerHandle _awaitedTimer;
     std::vector<PageFlight> _pageFlights;
+    // The pages the mount has been told of, so one the window evicts is reported as changed places.
+    std::set<std::int64_t> _heldPages;
     std::vector<RowsFlight> _rowsFlights;
     std::set<std::string, std::less<>> _staleRevisions;
     std::function<void()> _onStale;

@@ -7,6 +7,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <expected>
+#include <format>
 #include <functional>
 #include <glaze/glaze.hpp>
 #include <memory>
@@ -26,6 +27,7 @@
 #include <string>
 #include <string_view>
 #include <utility>
+#include <variant>
 #include <vector>
 
 #include "ui_interpreter_support.hpp"
@@ -155,6 +157,50 @@ inline std::string pageJson(std::int64_t offset, std::int64_t count, std::int64_
                             std::int64_t undecided = 0, std::vector<std::string> awaiting = {}) {
     return pageJsonAt(samplesDescription(3).revision, offset, count, total, columns, kind, undecided,
                       std::move(awaiting));
+}
+
+/// @brief A page of `samples` holding the given keys in order, against `samplesDescription(3)`'s revision; each
+///        row as `pageJson` writes it.
+/// @param offset  The first row's view index.
+/// @param keys    The rows' keys, in view order.
+/// @param total   The view's total.
+/// @param columns The columns the page holds.
+/// @return The page's JSON.
+inline std::string pageJsonOfKeys(std::int64_t offset, std::vector<std::int64_t> const& keys, std::int64_t total,
+                                  std::vector<std::string> const& columns) {
+    table::GenericPage page;
+    page.revision = samplesDescription(3).revision;
+    page.columns = columns;
+    page.total = total;
+    page.offset = offset;
+    for (auto const key : keys) {
+        page.keys.emplace_back(key);
+        table::GenericRow row;
+        for (auto const& column : columns) {
+            if (column == "name") {
+                row.emplace_back(std::string{"row-"} + std::to_string(key));
+            } else {
+                row.emplace_back(key);
+            }
+        }
+        page.rows.push_back(std::move(row));
+    }
+    return glz::write_json(page).value_or("");
+}
+
+/// @brief The view as a mount holds it: one entry per view row up to the total, the row's key as text, or empty for
+///        a row not held.
+/// @param rows The rows.
+/// @return The entries.
+inline std::vector<std::string> shownKeys(TableRows const& rows) {
+    std::vector<std::string> out;
+    auto const total = rows.total();
+    for (std::int64_t at = 0; at < total.rows; ++at) {
+        auto const row = rows.row(at);
+        out.push_back(row ? std::visit([](auto const& key) { return std::format("{}", key); }, row->key)
+                          : std::string{});
+    }
+    return out;
 }
 
 /// @brief A keyed reply of `samples`: each row's key and view row, its `name` `"renamed-<key>"`.
