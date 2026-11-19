@@ -687,6 +687,7 @@ target_sources(morph
         include/morph/ui/chat/provider.hpp
         include/morph/ui/chat/screen_tools.hpp
         include/morph/ui/chat/service.hpp
+        include/morph/ui/chat/transcriber.hpp
         include/morph/ui/preferences.hpp
         include/morph/ui/preference_sync.hpp
         include/morph/ui/host_vocabulary.hpp
@@ -696,6 +697,7 @@ target_sources(morph
         include/morph/ui/testing/memory_history.hpp
         include/morph/ui/testing/recording_backend.hpp
         include/morph/ui/testing/fake_chat_provider.hpp
+        include/morph/ui/testing/fake_transcriber.hpp
         include/morph/ui/testing/backend_conformance.hpp
         include/morph/render/i18n.hpp
         include/morph/render/locale_format.hpp

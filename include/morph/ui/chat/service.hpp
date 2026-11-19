@@ -7,6 +7,7 @@
 #include <functional>
 #include <memory>
 #include <morph/export.hpp>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -19,6 +20,7 @@
 #include "conversations.hpp"
 #include "extra_tool.hpp"
 #include "provider.hpp"
+#include "transcriber.hpp"
 
 /// @file
 /// @brief The server's side of a chat. Specified in `docs/spec/ui/chat.md`.
@@ -52,6 +54,12 @@ inline constexpr std::string_view kDefaultSystemPrompt =
 struct MORPH_API ChatOptions {
     /// @brief The model behind the chat. Null: the service serves no kind, so a client shows no chat.
     std::shared_ptr<IProvider> provider;
+    /// @brief Turns a dictated clip into text. Null: the service serves neither transcription kind and its probe
+    /// offers
+    ///        no dictation. Needs a provider, since the text goes into the chat's input.
+    std::shared_ptr<ITranscriber> transcriber;
+    /// @brief The language a clip is transcribed in when its request names none; nothing leaves it to the transcriber.
+    std::optional<std::string> transcriptionLanguage;
     /// @brief Where turns run. Borrowed: it outlives the service and every turn. Required with a provider.
     exec::IExecutor* worker = nullptr;
     /// @brief The bundle screens are looked up in. Required with a provider.
@@ -88,8 +96,9 @@ class MORPH_API ChatService final : public backend::IEnvelopeService {
 public:
     /// @brief A service over @p options.
     /// @param options What it is built with.
-    /// @throws std::invalid_argument with a provider but no worker or bundle, or with an extra tool whose name is
-    ///         invalid or taken by another, or which has no handler.
+    /// @throws std::invalid_argument with a provider but no worker or bundle, with a transcriber but no provider, a
+    ///         dictation limit of 0 or a `maxDictationBytes` above `kMaxDictationBytes`, or with an extra tool whose
+    ///         name is invalid or taken by another, or which has no handler.
     explicit ChatService(ChatOptions options);
 
     /// @brief Stops every running turn. A provider call answering later reaches nothing.
@@ -130,6 +139,7 @@ public:
 private:
     struct Turn;
     struct Shared;
+    struct Transcription;
     using TurnPtr = std::shared_ptr<Turn>;
     using EnvelopeReply = std::function<void(wire::Envelope const&)>;
 

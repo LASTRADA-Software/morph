@@ -14,6 +14,7 @@ the push path every other change uses. The design is in
 - [Configuration](#configuration)
 - [The turn loop](#the-turn-loop)
 - [Conversations](#conversations)
+- [Dictation](#dictation)
 - [The client](#the-client)
 - [The panel](#the-panel)
 
@@ -239,6 +240,30 @@ principal only from the connection's next envelope. So a client signing out send
 principal's turn on that connection and ends their conversations. A turn on another connection of theirs keeps running.
 The idle limit covers a client that never sent it. A token that stays valid after sign-out is not something a chat can
 revoke.
+
+## Dictation
+
+A person can speak a message instead of typing it. The words land in the chat's input, where the person reads,
+corrects and sends them as typed text. Speech becomes text on the server, through a configured speech-to-text
+provider; morph embeds no recognition engine and no model.
+
+**The seam.** `transcriber.hpp`. `ITranscriber::transcribe` takes a `TranscriptionInput` (the clip, its media type and
+one language or none) and a `TranscriberSink`, and returns an `ITranscriberCall` to cancel it. It is callable from any
+thread, and `done` runs exactly once unless the call was cancelled, possibly before `transcribe` returns. Nothing
+outside an implementation names a provider. `testing::FakeTranscriber` scripts answers and counts cancels.
+
+**Accepting.** `ChatOptions::transcriber` turns dictation on; with none the service serves neither transcription kind
+and its probe offers none, and a transcriber without a provider is refused when the service is built.
+`ui-chat-transcribe` passes the chat's gate and is answered at once, as a turn is: refused with a reason naming the
+bound when it arrives with no connection, when its base64 text is longer than `ceil(maxDictationBytes / 3) * 4`
+(checked before decoding), when it decodes to more than `maxDictationBytes`, when it is not base64, when its media type
+is not `audio/wav`, when the connection already has a transcription running (`busy`), or when the principal has
+`maxTranscriptionsPerPrincipal` running across connections. Otherwise it is recorded, answered with
+`TranscribeAccepted{id}`, and transcribed on the worker. The request's `language` wins over the configured
+`transcription.language`; the service applies the default, so a transcriber sees one value.
+
+**Reading.** `ui-chat-transcription` answers the state. A query for another principal's id, for one forgotten and for
+one that never was gets the same `failed` answer, "no such transcription", so ids reveal nothing.
 
 ## The client
 
