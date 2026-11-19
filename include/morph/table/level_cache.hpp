@@ -23,6 +23,7 @@
 #include <exception>
 #include <expected>
 #include <functional>
+#include <limits>
 #include <map>
 #include <memory>
 #include <morph/core/change_types.hpp>
@@ -286,6 +287,18 @@ struct LevelCacheAccess {
         return slot != nullptr ? slot->leaseUntil.load() : 0;
     }
 
+    /// @brief Whether a held key is kept from eviction by an order use: its own lease, or an accepted set.
+    /// @tparam Value The cache's value type.
+    /// @param cache The cache.
+    /// @param key   The key.
+    /// @return Whether the key is held and kept.
+    template <typename Value>
+    [[nodiscard]] static bool kept(LevelCache<Value> const& cache, RowId const& key) {
+        auto const slot = LevelCache<Value>::findIn(*cache._core->publishedTable(), key);
+        auto const nowTicks = cache._core->now().time_since_epoch().count();
+        return slot != nullptr && LevelCache<Value>::Core::kept(*slot, nowTicks);
+    }
+
     /// @brief Whether a key not held yet has an order lease waiting for its store.
     /// @tparam Value The cache's value type.
     /// @param cache The cache.
@@ -391,13 +404,15 @@ public:
     /// @param retry Load the failed keys among @p keys now.
     /// @return Nothing, or `Unavailable` for an order use that does not fit.
     std::expected<void, TableError> want(std::span<RowId const> keys, LevelUse use, bool retry = false) override {
-        return Core::want(_core, keys, use, retry, true);
+        return Core::want(_core, keys, use, retry, Core::Pass::Lease);
     }
 
-    /// @brief Says a kept set of keys is needed. An order use of a set accepted before, unretried, while the lease
-    ///        that acceptance gave still runs, is not fitted again: each key is leased again, one more holder, and
-    ///        a key not held is queued, as `want` does. An order use of a set whose fitting `want` another call is
-    ///        running waits for that call first. Anything else is `want`.
+    /// @brief Says a kept set of keys is needed. An order use of a set, unretried, is held by the set: the first is
+    ///        fitted and protects every key of the set from eviction in one pass; a repeat while the set's lease
+    ///        runs is one more holder of the set and extends its lease, without touching a key, unless a protected
+    ///        key was removed or a protected failure's delay has passed, when it also queues what the set misses.
+    ///        An order use of a set whose fitting `want` another call is running waits for that call first.
+    ///        Anything else is `want`.
     /// @param keys  The keys; not null.
     /// @param use   Display or order.
     /// @param retry Load the failed keys among @p keys now.
@@ -407,7 +422,9 @@ public:
         return Core::wantSet(_core, keys, use, retry);
     }
 
-    /// @brief Ends one holder's order lease of each of @p keys; a lease ends with its last holder.
+    /// @brief Takes back an order use's want of @p keys. Of a kept set, it is one holder fewer, and the set's
+    ///        protection of its keys ends with its last holder; of other keys, it ends one holder's lease of each,
+    ///        and a lease ends with its last holder.
     /// @param keys The keys.
     void unwant(std::span<RowId const> keys) override { _core->release(keys); }
 
@@ -457,6 +474,7 @@ private:
         mutable std::atomic<std::int64_t> lastUse{0};
         mutable std::atomic<std::int64_t> leaseUntil{0};    // clock ticks; 0: no lease
         mutable std::atomic<std::int32_t> leaseHolders{0};  // the order uses holding the lease
+        mutable std::atomic<std::int32_t> setHolds{0};      // the accepted sets protecting the key
     };
     using SlotPtr = std::shared_ptr<Slot const>;
     using Entry = std::pair<RowId, SlotPtr>;
@@ -756,12 +774,16 @@ private:
 
         // ── want ──
 
-        // An order set a `wantSet` was accepted for: the set, held so that its address names it, and the end of the
-        // lease its last want gave. A repeat of it while that lease runs is not fitted again.
-        struct Fitted {
+        // An order set the cache accepted, by address: the set, held so that its address names it, the order uses
+        // holding it, and its lease's end. While the lease runs and a use holds it, its keys are protected.
+        struct AcceptedSet {
             std::shared_ptr<std::vector<RowId> const> keys;
+            std::int32_t holders = 0;
             std::int64_t until = 0;
         };
+
+        // How a want's pass treats an order key: a lease of its own, or protection by an accepted set.
+        enum class Pass : std::uint8_t { Lease, Protect };
 
         // Ends a set's single flight: wakes the repeats that wait for it.
         class Settling {
@@ -784,64 +806,76 @@ private:
             std::vector<RowId> const* _set;
         };
 
+        // An order use of a kept set. The first, fitted, protects every key of the set in one chunked pass; a
+        // repeat while the set's lease runs is one more holder and a longer lease, under the lock, and touches no
+        // key unless a protected key was removed or a protected failure's delay has passed since, when it queues
+        // the keys the set misses.
         static std::expected<void, TableError> wantSet(std::shared_ptr<Core> const& core,
                                                        std::shared_ptr<std::vector<RowId> const> const& keys,
                                                        LevelUse use, bool retry) {
             if (use != LevelUse::Order || retry) {
-                return want(core, *keys, use, retry, true);
+                return want(core, *keys, use, retry, Pass::Lease);
             }
             auto const* const set = keys.get();
-            auto const nowTicks = ticks(core->now());
-            bool repeat = false;
+            auto const at = core->now();
+            auto const nowTicks = ticks(at);
+            auto const until = ticks(at + core->options.orderLease);
+            core->endExpiredSets(nowTicks);
+            std::optional<AcceptedSet> lapsed;
             {
                 std::unique_lock lock{core->writer};
-                // A want of this same set runs: wait for it, so that a repeat learns whether it was accepted rather
-                // than fit the same keys again beside it.
+                // A fitting want of this same set runs: wait for it, so that a repeat learns whether it was
+                // accepted rather than fit the same keys again beside it.
                 core->setSettled.wait(lock, [&] { return !core->settling.contains(set); });
-                auto const found = core->fitted.find(set);
-                repeat = found != core->fitted.end() && found->second.until > nowTicks;
-                if (!repeat) {
-                    core->settling.insert(set);
+                if (auto const found = core->sets.find(set); found != core->sets.end()) {
+                    if (found->second.until > nowTicks) {
+                        ++found->second.holders;
+                        found->second.until = std::max(found->second.until, until);
+                        core->hits.fetch_add(keys->size());
+                        if (!core->setsDirty && nowTicks < core->setsRecheckAt) {
+                            return {};
+                        }
+                        core->setsDirty = false;
+                        core->setsRecheckAt = std::numeric_limits<std::int64_t>::max();
+                        lock.unlock();
+                        core->requeue(core, *keys, at);
+                        return {};
+                    }
+                    lapsed = std::move(found->second);
+                    core->sets.erase(found);
                 }
-            }
-            if (repeat) {
-                // Every key is still leased, held or not: each is leased again, one more holder, in the same chunk
-                // that finds it, and a key not held is queued as by any want.
-                auto wanted = want(core, *keys, use, retry, false);
-                std::scoped_lock const lock{core->writer};
-                if (auto const found = core->fitted.find(set); found != core->fitted.end()) {
-                    found->second.until = ticks(core->now() + core->options.orderLease);
-                }
-                return wanted;
+                core->settling.insert(set);
             }
             Settling const settling{*core, set};
-            auto wanted = want(core, *keys, use, retry, true);
+            if (lapsed) {
+                core->unprotect(*lapsed->keys);
+            }
+            auto wanted = want(core, *keys, use, retry, Pass::Protect);
             if (wanted) {
-                auto const until = ticks(core->now() + core->options.orderLease);
                 std::scoped_lock const lock{core->writer};
-                std::erase_if(core->fitted, [nowTicks](auto const& entry) { return entry.second.until <= nowTicks; });
-                core->fitted.insert_or_assign(set, Fitted{.keys = keys, .until = until});
+                core->sets.insert_or_assign(set, AcceptedSet{.keys = keys, .holders = 1, .until = until});
             }
             return wanted;
         }
 
-        // An order use is fitted first, unless `fit` is false, against the published state with no lock held: the
-        // fit is an estimate. The keys are then taken a chunk of `detail::kWantChunk` at a time under the writer
-        // mutex, which is released between chunks, so an invalidation or a store waits for one chunk at most.
-        // Inside a chunk a key is classified, leased and queued at once: a held key's slot is leased where an
-        // eviction's publish check sees it, and a key not held gets a pending lease that its store moves onto its
-        // slot.
+        // An order use is fitted first against the published state with no lock held: the fit is an estimate.
+        // The keys are then taken a chunk of `detail::kWantChunk` at a time under the writer mutex, which is
+        // released between chunks, so an invalidation or a store waits for one chunk at most. Inside a chunk a
+        // key is classified, leased or protected, and queued at once: a held key's slot is marked where an
+        // eviction's publish check sees it, and a key not held gets a pending lease, or a protection count, that
+        // its store moves onto its slot.
         static std::expected<void, TableError> want(std::shared_ptr<Core> const& core, std::span<RowId const> keys,
-                                                    LevelUse use, bool retry, bool fit) {
+                                                    LevelUse use, bool retry, Pass pass) {
             auto const at = core->now();
             auto const nowTicks = ticks(at);
             auto const until = ticks(at + core->options.orderLease);
-            if (use == LevelUse::Order && fit) {
+            if (use == LevelUse::Order) {
                 core->fits.fetch_add(1);
                 if (auto fitted = core->fitOrder(keys, nowTicks); !fitted) {
                     return fitted;
                 }
             }
+            auto const protect = use == LevelUse::Order && pass == Pass::Protect;
             std::uint64_t want = 0;
             std::size_t hit = 0;
             std::vector<Loading> batch;
@@ -858,18 +892,27 @@ private:
                 for (auto index = first; index < last; ++index) {
                     auto const& key = keys[index];
                     auto const slot = findIn(table, key);
+                    if (protect) {
+                        auto const count = ++core->protectedKeys[key];
+                        if (slot != nullptr) {
+                            slot->setHolds.store(count);
+                        }
+                    }
                     if (slot != nullptr && slot->value) {
                         ++hit;
                         slot->lastUse.store(core->useCounter.fetch_add(1) + 1);
-                        if (use == LevelUse::Order) {
+                        if (use == LevelUse::Order && !protect) {
                             lease(*slot, until, nowTicks);
                         }
                         continue;
                     }
                     if (slot != nullptr && !retry && at < slot->failedAt + core->retryDelay(slot->failures)) {
+                        if (protect) {
+                            core->recheckAt(slot->failedAt + core->retryDelay(slot->failures));
+                        }
                         continue;
                     }
-                    if (use == LevelUse::Order) {
+                    if (use == LevelUse::Order && !protect) {
                         auto& pending = core->pendingLeases[key];
                         pending.holders = pending.until > nowTicks ? pending.holders + 1 : 1;
                         pending.until = std::max(pending.until, until);
@@ -894,8 +937,92 @@ private:
             return {};
         }
 
-        // Whether an order use of `keys` fits: the keys times the mean value size, plus the bytes leased to keys
-        // other than these, against `maxBytes`. Read from the published state with no lock held.
+        // Under the writer mutex: a repeat of an accepted set must look at its keys again once `at` has passed.
+        void recheckAt(Clock::time_point at) { setsRecheckAt = std::min(setsRecheckAt, ticks(at)); }
+
+        // Queues the keys of an accepted set that are neither held, in flight, nor failed inside their delay, a
+        // chunk at a time under the writer mutex. Their protection is kept by key, so it needs no change.
+        static void requeue(std::shared_ptr<Core> const& core, std::span<RowId const> keys, Clock::time_point at) {
+            std::uint64_t want = 0;
+            std::vector<Loading> batch;
+            for (std::size_t first = 0;; first += detail::kWantChunk) {
+                std::scoped_lock const lock{core->writer};
+                if (first == 0) {
+                    want = ++core->wants;
+                }
+                auto const& table = *core->current;
+                auto const last = std::min(keys.size(), first + detail::kWantChunk);
+                for (auto index = first; index < last; ++index) {
+                    auto const& key = keys[index];
+                    auto const slot = findIn(table, key);
+                    if (slot != nullptr && slot->value) {
+                        continue;
+                    }
+                    if (slot != nullptr && at < slot->failedAt + core->retryDelay(slot->failures)) {
+                        core->recheckAt(slot->failedAt + core->retryDelay(slot->failures));
+                        continue;
+                    }
+                    if (!core->inFlightNow(key)) {
+                        core->enqueue(key, LevelUse::Order, core->priorityOf(want, index));
+                    }
+                }
+                if (last == keys.size()) {
+                    if (!core->running) {
+                        batch = core->takeBatch();
+                    }
+                    break;
+                }
+            }
+            dispatch(core, std::move(batch));
+        }
+
+        // Takes one protection of each key away, a chunk at a time under the writer mutex; a held key's slot keeps
+        // the count its key has.
+        void unprotect(std::span<RowId const> keys) {
+            for (std::size_t first = 0; first < keys.size(); first += detail::kWantChunk) {
+                if (releaseHook) {
+                    releaseHook(first / detail::kWantChunk);
+                }
+                std::scoped_lock const lock{writer};
+                auto const last = std::min(keys.size(), first + detail::kWantChunk);
+                for (auto index = first; index < last; ++index) {
+                    auto const& key = keys[index];
+                    auto const found = protectedKeys.find(key);
+                    if (found == protectedKeys.end()) {
+                        continue;
+                    }
+                    auto const count = --found->second;
+                    if (count <= 0) {
+                        protectedKeys.erase(found);
+                    }
+                    if (auto const slot = findIn(*current, key); slot != nullptr) {
+                        slot->setHolds.store(std::max(count, 0));
+                    }
+                }
+            }
+        }
+
+        // Ends the accepted sets whose lease has run out, and their protection.
+        void endExpiredSets(std::int64_t nowTicks) {
+            std::vector<AcceptedSet> expired;
+            {
+                std::scoped_lock const lock{writer};
+                for (auto entry = sets.begin(); entry != sets.end();) {
+                    if (entry->second.until <= nowTicks) {
+                        expired.push_back(std::move(entry->second));
+                        entry = sets.erase(entry);
+                    } else {
+                        ++entry;
+                    }
+                }
+            }
+            for (auto const& set : expired) {
+                unprotect(*set.keys);
+            }
+        }
+
+        // Whether an order use of `keys` fits: the keys times the mean value size, plus the bytes leased or
+        // protected for keys other than these, against `maxBytes`. Read from the published state with no lock held.
         [[nodiscard]] std::expected<void, TableError> fitOrder(std::span<RowId const> keys, std::int64_t nowTicks) {
             std::shared_ptr<Table const> base;
             std::size_t mean = 0;
@@ -907,7 +1034,7 @@ private:
             std::size_t ownLeased = 0;
             for (auto const& key : keys) {
                 if (auto const slot = findIn(*base, key);
-                    slot != nullptr && slot->value && slot->leaseUntil.load() > nowTicks) {
+                    slot != nullptr && slot->value && kept(*slot, nowTicks)) {
                     ownLeased += slot->bytes;
                 }
             }
@@ -923,6 +1050,11 @@ private:
                                                          " cannot hold every row this order needs"});
         }
 
+        // Whether an order use keeps a slot from eviction: its own lease runs, or an accepted set protects it.
+        [[nodiscard]] static bool kept(Slot const& slot, std::int64_t nowTicks) noexcept {
+            return slot.leaseUntil.load() > nowTicks || slot.setHolds.load() > 0;
+        }
+
         // Gives a held value an order lease until `until`, one more holder while its lease runs.
         static void lease(Slot const& slot, std::int64_t until, std::int64_t nowTicks) {
             if (slot.leaseUntil.load() > nowTicks) {
@@ -935,12 +1067,12 @@ private:
             }
         }
 
-        // The bytes the unexpired leases hold in `table`. Run with no lock held.
+        // The bytes the order uses keep from eviction in `table`. Run with no lock held.
         [[nodiscard]] static std::size_t leasedBytes(Table const& table, std::int64_t nowTicks) {
             std::size_t out = 0;
             for (auto const& shard : table.shards) {
                 for (auto const& [key, slot] : *shard) {
-                    if (slot->leaseUntil.load() > nowTicks) {
+                    if (kept(*slot, nowTicks)) {
                         out += slot->bytes;
                     }
                 }
@@ -948,9 +1080,29 @@ private:
             return out;
         }
 
-        // Ends one holder's lease of each key, a chunk at a time under the writer mutex: on a held value's slot
-        // while its lease runs, otherwise on the key's pending lease. A lease left with no holder ends.
+        // Takes back an order use's want. Of an accepted set, found by its keys' address, it is one holder fewer;
+        // the set's protection ends with its last holder. Of anything else, it ends one holder's lease of each key,
+        // a chunk at a time under the writer mutex: on a held value's slot while its lease runs, otherwise on the
+        // key's pending lease.
         void release(std::span<RowId const> keys) {
+            bool ofSet = false;
+            {
+                std::scoped_lock const lock{writer};
+                auto const found = std::ranges::find_if(sets, [&keys](auto const& entry) {
+                    return entry.first->data() == keys.data() && entry.first->size() == keys.size();
+                });
+                if (found != sets.end()) {
+                    if (--found->second.holders > 0) {
+                        return;
+                    }
+                    sets.erase(found);
+                    ofSet = true;
+                }
+            }
+            if (ofSet) {
+                unprotect(keys);
+                return;
+            }
             auto const nowTicks = ticks(now());
             for (std::size_t first = 0; first < keys.size(); first += detail::kWantChunk) {
                 if (releaseHook) {
@@ -1111,9 +1263,18 @@ private:
                             pendingLeases.erase(lease);
                             leasedStored = true;
                         }
+                        if (auto const kept = protectedKeys.find(key); kept != protectedKeys.end()) {
+                            slot->setHolds.store(kept->second);
+                            leasedStored = true;
+                        }
                     }
                     for (auto const& key : failed) {
                         pendingLeases.erase(key);
+                        if (auto const kept = protectedKeys.find(key); kept != protectedKeys.end()) {
+                            auto const slot = findIn(*next, key);
+                            slot->setHolds.store(kept->second);
+                            recheckAt(slot->failedAt + retryDelay(slot->failures));
+                        }
                     }
                     if (edit.changed()) {
                         publish(std::move(next), edit);
@@ -1159,9 +1320,11 @@ private:
             bytes.store(valueBytes + failureBytes);
         }
 
-        // When the leased values exceed the bound, stops loading for order and drops every lease. The leases are
-        // summed and cleared over the published state with no lock held; only the queue is changed under it.
+        // When the leased and protected values exceed the bound, stops loading for order, drops every lease and
+        // ends every accepted set. The bytes are summed and the slots cleared over the published state with no lock
+        // held; the queue, the pending leases and the sets are changed under it.
         bool dropLeasesOverBound(Clock::time_point at) {
+            endExpiredSets(ticks(at));
             auto const table = publishedTable();
             if (leasedBytes(*table, ticks(at)) <= options.maxBytes) {
                 return false;
@@ -1171,11 +1334,12 @@ private:
                 queues[static_cast<std::size_t>(LevelUse::Order)].clear();
                 std::erase_if(queued, [](auto const& entry) { return entry.second.use == LevelUse::Order; });
                 pendingLeases.clear();
-                fitted.clear();  // its keys lose their leases: a repeat of a set must be fitted again
+                endAllSets();  // their keys lose their protection: a repeat of a set must be fitted again
             }
             for (auto const& shard : table->shards) {
                 for (auto const& [key, slot] : *shard) {
                     slot->leaseUntil.store(0);
+                    slot->setHolds.store(0);
                 }
             }
             return true;
@@ -1188,6 +1352,7 @@ private:
         // go first.
         void evict(std::vector<RowId> const& stored, std::vector<RowId> const& failed, Clock::time_point at) {
             auto const nowTicks = ticks(at);
+            endExpiredSets(nowTicks);
             std::unordered_set<RowId> fresh(stored.begin(), stored.end());
             fresh.insert(failed.begin(), failed.end());
             for (int attempt = 0;; ++attempt) {
@@ -1216,7 +1381,7 @@ private:
                 std::vector<std::tuple<std::int64_t, RowId, std::size_t>> candidates;
                 for (auto const& shard : base->shards) {
                     for (auto const& [key, slot] : *shard) {
-                        if (slot->leaseUntil.load() > nowTicks || fresh.contains(key)) {
+                        if (kept(*slot, nowTicks) || fresh.contains(key)) {
                             continue;
                         }
                         if (!slot->value && at < slot->failedAt + retryDelay(slot->failures)) {
@@ -1247,7 +1412,7 @@ private:
                     // A lease given since the scan protects its value: scan again.
                     bool leased = false;
                     for (auto const& [old, slot] : edit.changes) {
-                        leased = leased || old->leaseUntil.load() > nowTicks;
+                        leased = leased || kept(*old, nowTicks);
                     }
                     if (leased) {
                         continue;
@@ -1342,6 +1507,8 @@ private:
                         recorded = true;
                     }
                     pendingLeases.erase(key);
+                    // A protected key removed: the next repeat of an accepted set queues what its set misses.
+                    setsDirty = setsDirty || protectedKeys.contains(key);
                 }
                 if (next != nullptr) {
                     invalidatedKeys.fetch_add(edit.changes.size());
@@ -1352,6 +1519,15 @@ private:
                 }
                 return;
             }
+        }
+
+        // Under the writer mutex: ends every accepted set and every key's protection; the caller clears the slots
+        // it does not drop.
+        void endAllSets() {
+            sets.clear();
+            protectedKeys.clear();
+            setsDirty = false;
+            setsRecheckAt = std::numeric_limits<std::int64_t>::max();
         }
 
         void invalidateAll() {
@@ -1367,7 +1543,7 @@ private:
             ++version;
             invalidatedAt.clear();
             pendingLeases.clear();
-            fitted.clear();
+            endAllSets();
             valueBytes = 0;
             failureBytes = 0;
             values = 0;
@@ -1453,8 +1629,13 @@ private:
         std::function<void()> storeHook;
         std::function<void(std::size_t)> wantHook;
         std::function<void(std::size_t)> releaseHook;
-        // The order sets accepted, by address, whose lease may still run; under `writer`.
-        std::unordered_map<std::vector<RowId> const*, Fitted> fitted;
+        // The order sets accepted, by address; the protection count of each of their keys, held or not; whether a
+        // protected key was removed since a repeat last looked; when a protected failure's delay ends. Under
+        // `writer`.
+        std::unordered_map<std::vector<RowId> const*, AcceptedSet> sets;
+        std::unordered_map<RowId, std::int32_t> protectedKeys;
+        bool setsDirty = false;
+        std::int64_t setsRecheckAt = std::numeric_limits<std::int64_t>::max();
         // The sets a `wantSet` is fitting, and what wakes the repeats of them that wait; under `writer`.
         std::unordered_set<std::vector<RowId> const*> settling;
         std::condition_variable setSettled;
