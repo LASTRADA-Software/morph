@@ -258,8 +258,6 @@ namespace detail {
 namespace site {
 /// @brief An exception escaped a widget callback; the mount caught it, so it never reaches the backend.
 inline constexpr char const* kCallbackThrew = "morph::ui: an exception escaped a widget callback";
-/// @brief A ForEach or Table snapshot repeated a key; the later row is refused and the first one kept.
-inline constexpr char const* kDuplicateKey = "morph::ui: duplicate ForEach key";
 /// @brief A table row's span names no column, covers no rows, is a heading's, or repeats a column of its row; it is
 ///        refused and its cell stays in its own row.
 inline constexpr char const* kRowSpanInvalid = "morph::ui: a table row's span is not a span of the table";

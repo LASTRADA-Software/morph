@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 
 // The client table model: `EngineRows` over the engine, `WindowRows` over a server's pages, the status line's counts,
-// and the model-backed `table` node on a screen (docs/spec/table/table.md, "The client table model", "The window
-// under changes", "The status line", "The document `table` node on the engine", "Persisted state").
+// `ValueRowsSource`, a document's rows as a source, and the model-backed `table` node on a screen
+// (docs/spec/table/table.md, "The client table model", "The window under changes", "The status line", "A document's
+// rows as a source", "The document `table` node on the engine", "Persisted state").
 //
 // Each case names the mutation it was seen to fail on.
 
@@ -17,9 +18,11 @@
 #include <morph/ui/mount.hpp>
 #include <morph/table/data_source.hpp>
 #include <morph/table/description.hpp>
+#include <morph/table/engine.hpp>
 #include <morph/table/query.hpp>
 #include <morph/table/sort.hpp>
 #include <morph/table/view_change.hpp>
+#include <morph/reactive/signal.hpp>
 #include <morph/ui/author.hpp>
 #include <morph/ui/table_rows.hpp>
 #include <morph/ui/value.hpp>
@@ -1700,4 +1703,280 @@ TEST_CASE("table display: a rows table's quantity keeps its unit unless a label 
         texts.push_back(h.backend.prop(h.backend.children(row).at(1), "text"));
     }
     CHECK(texts == std::vector<std::string>{"three", "2.50 kg"});
+}
+
+// ── A document's rows as a source ────────────────────────────────────────────
+
+namespace reactive = morph::reactive;
+
+namespace {
+
+using morph::ui::Decimal;
+using morph::ui::Key;
+using morph::ui::kGroupRunColumn;
+using morph::ui::Quantity;
+using morph::ui::ValueColumn;
+using morph::ui::ValueList;
+using morph::ui::ValueRecord;
+using morph::ui::ValueRowsCollator;
+using morph::ui::ValueRowsSource;
+
+Value rec(ValueRecord fields) { return Value{std::move(fields)}; }
+
+Value ts(std::int64_t ms) {
+    return Value{morph::time::DateTime{std::chrono::sys_time<std::chrono::milliseconds>{std::chrono::milliseconds{ms}}}};
+}
+
+Value dec(std::string_view text) {
+    auto const parsed = table::parseDecimal(text);
+    REQUIRE(parsed.has_value());
+    return Value{Decimal{*parsed}};
+}
+
+Value qty(std::string_view amount, std::string unit) {
+    auto const parsed = table::parseDecimal(amount);
+    REQUIRE(parsed.has_value());
+    return Value{Quantity{.value = *parsed, .unit = std::move(unit)}};
+}
+
+// kg and g of mass.
+std::shared_ptr<table::UnitRegistry const> testUnits() {
+    table::UnitRegistryBuilder builder;
+    REQUIRE(builder.add(table::UnitInfo{.id = "kg", .symbol = "kg", .dimension = "mass",
+                                        .toBase = morph::math::Rational{1, morph::math::DecimalPlaces{0}},
+                                        .decimals = 3}));
+    REQUIRE(builder.add(table::UnitInfo{.id = "g", .symbol = "g", .dimension = "mass",
+                                        .toBase = *table::parseDecimal("0.001"), .decimals = 0}));
+    return std::move(builder).build();
+}
+
+ValueColumn col(std::string id) { return ValueColumn{.id = std::move(id), .kind = std::nullopt, .sortBy = {}}; }
+
+ValueColumn col(std::string id, table::ColumnKind kind) {
+    return ValueColumn{.id = std::move(id), .kind = kind, .sortBy = {}};
+}
+
+std::shared_ptr<ValueRowsSource> sourceOf(RowsFixture& h, std::vector<ValueColumn> columns,
+                                          std::shared_ptr<table::UnitRegistry const> units = {}) {
+    return std::make_shared<ValueRowsSource>(
+        h.runtime, std::move(columns), [](Value const& row) { return Key{*row.field("id")->asInt()}; },
+        std::move(units));
+}
+
+// Every change a source notifies, kept.
+struct RecordingListener final : table::ChangeListener {
+    explicit RecordingListener(table::DataSource& source) : source{&source} { source.subscribe(*this); }
+    RecordingListener(RecordingListener const&) = delete;
+    RecordingListener& operator=(RecordingListener const&) = delete;
+    RecordingListener(RecordingListener&&) = delete;
+    RecordingListener& operator=(RecordingListener&&) = delete;
+    ~RecordingListener() override { source->unsubscribe(*this); }
+    void rowsChanged(table::RowChange const& change) override { changes.push_back(change); }
+    void clear() { changes.clear(); }
+
+    table::DataSource* source;
+    std::vector<table::RowChange> changes;
+};
+
+// The list written to JSON and read back: no storage shared with @p list.
+ValueList freshDecodeOf(ValueList const& list) {
+    auto const json = morph::ui::parseJson(morph::ui::detail::canonicalJson(Value{list}));
+    REQUIRE(json.has_value());
+    auto const value = morph::ui::valueFromJson(*json);
+    REQUIRE(value.has_value());
+    REQUIRE(value->asList() != nullptr);
+    return *value->asList();
+}
+
+// A copy of @p list with one row's field replaced; the other rows share storage with @p list's.
+ValueList withField(ValueList list, std::size_t row, std::string const& name, Value value) {
+    ValueRecord fields = *list.at(row).asRecord();
+    fields.insert_or_assign(name, std::move(value));
+    list.at(row) = Value{std::move(fields)};
+    return list;
+}
+
+std::size_t columnIndex(table::DataSource const& source, std::string_view column) {
+    auto const columns = source.columns();
+    auto const found = std::ranges::find(columns, column, &table::ColumnInfo::id);
+    REQUIRE(found != columns.end());
+    return static_cast<std::size_t>(found - columns.begin());
+}
+
+table::Cell cellAt(table::DataSource const& source, std::size_t row, std::string_view column) {
+    return source.snapshot()->cell(row, columnIndex(source, column));
+}
+
+table::ColumnKind kindOf(table::DataSource const& source, std::string_view column) {
+    return source.columns()[columnIndex(source, column)].kind;
+}
+
+std::unique_ptr<table::Engine> engineOver(RowsFixture& h, std::shared_ptr<ValueRowsSource> const& source,
+                                          std::shared_ptr<table::TextCollator const> collator = {}) {
+    return std::make_unique<table::Engine>(
+        source, table::EngineOptions{.owner = &h.owner, .services = {.collator = std::move(collator)}});
+}
+
+std::vector<std::int64_t> keysInView(table::Engine const& engine) {
+    std::vector<std::int64_t> keys;
+    for (std::size_t at = 0; at < engine.viewRowCount(); ++at) {
+        keys.push_back(std::get<std::int64_t>(engine.rowIdAt(at)));
+    }
+    return keys;
+}
+
+// `n` rows `{id: i, name: "n<i>", notes: "x", amount: i}`.
+ValueList sampleRows(std::size_t n) {
+    ValueList rows;
+    rows.reserve(n);
+    for (std::size_t at = 0; at < n; ++at) {
+        auto const i = static_cast<std::int64_t>(at);
+        rows.push_back(rec({{"id", i}, {"name", "n" + std::to_string(at)}, {"notes", "x"}, {"amount", i}}));
+    }
+    return rows;
+}
+
+}  // namespace
+
+// Mutation: a diff by row value (the fresh decode notifies, or `cellsDerived` counts every field).
+TEST_CASE("value rows source: a document's rows as a source", "[ui][table]") {
+    RowsFixture h;  auto const src = sourceOf(h, {col("name"), col("notes"), col("amount")});
+    RecordingListener listener{*src};
+    ValueList const rows = sampleRows(100);
+    src->use("name");  src->assign(rows);  h.settle();  listener.clear();
+    std::size_t const derived = src->cellsDerived();
+    src->assign(freshDecodeOf(rows));  h.settle();
+    CHECK(listener.changes.empty());                                          // the same cells: nothing notified
+    CHECK(src->cellsDerived() - derived == 100);                              // one column in use, not three fields
+    src->assign(withField(freshDecodeOf(rows), 7, "name", Value{std::string{"zeta"}}));  h.settle();
+    REQUIRE(listener.changes.size() == 1);
+    CHECK(listener.changes.front().kind == table::ChangeKind::Updated);
+    CHECK(listener.changes.front().rows == std::vector<std::size_t>{7});
+    CHECK(src->cellsHeld() == 100);                                           // "notes" and "amount" hold no cells
+    src->use("amount");  h.settle();  CHECK(src->cellsHeld() == 200);
+    src->unuse("amount");  CHECK(src->cellsHeld() == 100);                    // its last use ended: its cells go
+}
+
+// Mutations: `sortBy` read outside a tracked computation (no change is notified); a per-row change notified as Reset.
+TEST_CASE("value rows source: a change to what one row's sortBy reads updates that row", "[ui][table]") {
+    RowsFixture h;
+    std::vector<std::unique_ptr<reactive::Signal<std::int64_t>>> rank;
+    for (int i = 0; i < 10; ++i) { rank.push_back(std::make_unique<reactive::Signal<std::int64_t>>(h.runtime, i)); }
+    reactive::Signal<std::int64_t> scale{h.runtime, 1};
+    ValueColumn ranked = col("name");
+    ranked.sortBy = [&](Value const& row) { return Value{rank.at(*row.field("id")->asInt())->get() * scale.get()}; };
+    auto const src = sourceOf(h, {ranked});  RecordingListener listener{*src};
+    src->use("name");  src->assign(sampleRows(10));  h.settle();  listener.clear();
+    rank.at(3)->set(99);  h.settle();
+    REQUIRE(listener.changes.size() == 1);
+    CHECK(listener.changes.front().kind == table::ChangeKind::Updated);
+    CHECK(listener.changes.front().rows == std::vector<std::size_t>{3});
+    CHECK(cellAt(*src, 3, "name") == table::Cell{std::int64_t{99}});
+    listener.clear();  scale.set(2);  h.settle();                             // what every row's cell reads
+    REQUIRE(listener.changes.size() == 1);
+    CHECK(listener.changes.front().kind == table::ChangeKind::Reset);
+}
+
+// Review Focus 5. Mutation: keep the last duplicate (the view holds "c" and not "a").
+TEST_CASE("value rows source: a duplicate key keeps its first row", "[ui][table]") {
+    RowsFixture h;  auto const src = sourceOf(h, {col("name")});
+    std::size_t const reports = h.reported(morph::ui::detail::site::kDuplicateKey);
+    src->use("name");
+    src->assign(ValueList{rec({{"id", 1}, {"name", "a"}}), rec({{"id", 2}, {"name", "b"}}), rec({{"id", 1}, {"name", "c"}})});
+    h.settle();
+    CHECK(src->snapshot()->rowCount() == 2);
+    CHECK(h.reported(morph::ui::detail::site::kDuplicateKey) - reports == 1);   // once per duplicate
+    auto engine = engineOver(h, src);
+    REQUIRE(engine->setSort({{.column = "name", .dir = table::SortDirection::Descending}}));  h.settle();
+    CHECK(keysInView(*engine) == std::vector<std::int64_t>{2, 1});            // "b", then the first "a"; never "c"
+    CHECK(cellAt(*src, 0, "name") == table::Cell{std::string{"a"}});
+}
+
+// Mutation: Timestamp cells kept in milliseconds (row 2 reads 1'700'000'000'500 and sorts apart from row 1).
+TEST_CASE("value rows source: a timestamp is a DateTime of whole seconds", "[ui][table]") {
+    RowsFixture h;  auto const src = sourceOf(h, {col("at")});  src->use("at");
+    src->assign(ValueList{rec({{"id", 1}, {"at", ts(1'700'000'000'000)}}), rec({{"id", 2}, {"at", ts(1'700'000'000'500)}}),
+                          rec({{"id", 3}, {"at", ts(-1)}})});
+    h.settle();
+    CHECK(kindOf(*src, "at") == table::ColumnKind::DateTime);
+    CHECK(cellAt(*src, 0, "at") == table::Cell{std::int64_t{1'700'000'000}});
+    CHECK(cellAt(*src, 1, "at") == table::Cell{std::int64_t{1'700'000'000}});   // the same second: they tie
+    CHECK(cellAt(*src, 2, "at") == table::Cell{std::int64_t{-1}});              // floor, not truncation toward 0
+    auto engine = engineOver(h, src);
+    REQUIRE(engine->setSort({{.column = "at", .dir = table::SortDirection::Descending}}));  h.settle();
+    CHECK(keysInView(*engine) == std::vector<std::int64_t>{1, 2, 3});         // the tie keeps source order
+}
+
+// Mutations: a missing case in the inference (a kind differs); an empty column given no kind (the "e" entry);
+// a mixed Int and Decimal column inferred from its first cell (Integer, with one invalid cell).
+TEST_CASE("value rows source: every value kind infers its column kind", "[ui][table]") {
+    using enum table::ColumnKind;
+    RowsFixture h;
+    auto const src = sourceOf(h, {col("b"), col("i"), col("d"), col("s"), col("t"), col("q"), col("l"), col("id_d"),
+                                  col("e"), col("n", Number)}, testUnits());  // testUnits(): kg and g of mass
+    for (auto const* id : {"b", "i", "d", "s", "t", "q", "l", "id_d", "e", "n"}) { src->use(id); }
+    src->assign(ValueList{
+        rec({{"id", 1}, {"b", true}, {"i", 4}, {"d", dec("2.50")}, {"s", "x"}, {"t", ts(1'000)}, {"q", qty("3", "kg")},
+             {"l", 7}, {"id_d", 4}, {"e", Value{}}, {"n", dec("0.5")}}),
+        rec({{"id", 2}, {"b", false}, {"i", 5}, {"d", dec("0.125")}, {"s", "y"}, {"t", ts(2'000)}, {"q", qty("3", "zz")},
+             {"l", ValueList{}}, {"id_d", dec("0.5")}, {"e", Value{}}, {"n", 2}})});
+    h.settle();
+    std::map<std::string, table::ColumnKind> kinds;
+    for (table::ColumnInfo const& column : src->columns()) { kinds.emplace(column.id, column.kind); }
+    CHECK(kinds == std::map<std::string, table::ColumnKind>{{"b", Bool}, {"i", Integer}, {"d", Decimal}, {"s", Text},
+        {"t", DateTime}, {"q", Measure}, {"l", Integer}, {"id_d", Decimal}, {"e", Text}, {"n", Number}});
+    CHECK(src->invalidCells("q") == 1);                                       // the second row's unit "zz" is unknown
+    CHECK(src->invalidCells("l") == 1);                                       // the list cell
+    CHECK(src->invalidCells("id_d") == 0);                                    // an integer is an exact decimal
+    CHECK(cellAt(*src, 0, "n") == table::Cell{0.5});  CHECK(cellAt(*src, 1, "n") == table::Cell{2.0});
+    RecordingListener listener{*src};
+    src->assign(ValueList{rec({{"id", 1}, {"e", 9}})});  h.settle();          // the empty column's first vote
+    CHECK(kindOf(*src, "e") == Integer);
+    CHECK(listener.changes.back().kind == table::ChangeKind::Reset);
+}
+
+// Mutations: every row given run 0, as an index computed after the sort would leave it (groups split: 2, 3, 1);
+// the run column named plain "group" (the source has two columns of that id, and the count CHECK reads 2).
+TEST_CASE("value rows source: a grouped table sorts within its runs", "[ui][table]") {
+    RowsFixture h;  auto const src = sourceOf(h, {col("name"), col("group")});   // a document column named "group"
+    src->setGroup([](Value const& row) { return *row.field("site"); });
+    src->use("name");  src->use("group");
+    src->assign(ValueList{rec({{"id", 1}, {"site", "A"}, {"name", "z"}, {"group", "q"}}),
+                          rec({{"id", 2}, {"site", "A"}, {"name", "a"}, {"group", "r"}}),
+                          rec({{"id", 3}, {"site", "B"}, {"name", "m"}, {"group", "p"}})});
+    h.settle();
+    CHECK(std::ranges::count(src->columns(), std::string{"group"}, &table::ColumnInfo::id) == 1);
+    CHECK(std::ranges::count(src->columns(), std::string{kGroupRunColumn}, &table::ColumnInfo::id) == 1);
+    auto engine = engineOver(h, src);
+    REQUIRE(engine->setSort({{.column = std::string{kGroupRunColumn}}, {.column = "name"}}));  h.settle();
+    CHECK(keysInView(*engine) == std::vector<std::int64_t>{2, 1, 3});
+    REQUIRE(engine->setSort({{.column = std::string{kGroupRunColumn}}, {.column = "group"}}));  h.settle();
+    CHECK(keysInView(*engine) == std::vector<std::int64_t>{1, 2, 3});         // by the document's "group", in runs
+    CHECK(src->runRecords().size() == 2);  CHECK(src->runOf(2) == 1);
+}
+
+// Mutation: fold inside the comparison (about 3.4 million folds).  Gate U3.
+TEST_CASE("value rows source: a sort of 100,000 rows folds each text once", "[ui][table]") {
+    RowsFixture h;  auto const collator = std::make_shared<ValueRowsCollator>();
+    auto const src = sourceOf(h, {col("name")});  src->use("name");  src->assign(sampleRows(100'000));  h.settle();
+    auto engine = engineOver(h, src, collator);
+    REQUIRE(engine->setSort({{.column = "name"}}));  h.settle();
+    CHECK(collator->folds() == 100'000);
+    CHECK(engine->stats().fullSorts == 1);
+}
+
+// Mutations: a fresh decode deriving every column (cellsDerived is 300,000); the changed row sorting the list
+// (fullSorts grows).  Gates U2 and U4, as counts.
+TEST_CASE("value rows source: one changed row derives one column and repairs", "[ui][table]") {
+    RowsFixture h;  auto const src = sourceOf(h, {col("name"), col("notes"), col("amount")});
+    ValueList const rows = sampleRows(10'000);
+    src->use("name");  src->assign(rows);  h.settle();
+    auto engine = engineOver(h, src);  REQUIRE(engine->setSort({{.column = "name"}}));  h.settle();
+    CHECK(src->cellsHeld() == 10'000);                                        // U4: one column's cells
+    table::EngineStats const before = engine->stats();  std::size_t const derived = src->cellsDerived();
+    src->assign(withField(freshDecodeOf(rows), 42, "name", Value{std::string{"zzz"}}));  h.settle();
+    CHECK(src->cellsDerived() - derived == 10'000);                           // U2: the column in use only
+    CHECK(engine->stats().repairs - before.repairs == 1);
+    CHECK(engine->stats().fullSorts == before.fullSorts);
+    CHECK(keysInView(*engine).back() == 42);
 }
