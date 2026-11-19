@@ -126,7 +126,7 @@ TEST_CASE("pointerOffset refuses members and elements that are not separated", "
     CHECK(morph::ui::pointerOffset("[1, 2]", "/1") == std::optional<std::size_t>{4});
 }
 
-// Mutation: count only `\n` as part of the offset arithmetic by bytes (a multi-byte value shifts the offset).
+// Mutation: count `\r` as a line break too (the line becomes 5, not 3).
 TEST_CASE("pointerOffset and lineAt agree on CRLF text and non-ASCII values", "[ui][json-source]") {
     std::string_view const text = "{\r\n  \"name\": \"h\xC3\xA9llo \xE2\x82\xAC\",\r\n  \"target\": 1\r\n}";
     std::optional<std::size_t> const target = morph::ui::pointerOffset(text, "/target");

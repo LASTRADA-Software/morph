@@ -30,9 +30,8 @@ namespace morph::ui {
 /// order mark before the document is not white space, so a non-empty pointer finds nothing after one.
 /// @param text    JSON text.
 /// @param pointer An RFC 6901 pointer; `~0` and `~1` are unescaped.
-/// @return The byte offset, or `std::nullopt` when the pointer names nothing in @p text, @p text is not JSON up to
-/// that
-///         part, the pointer is not one, or it reaches deeper than `kMaxJsonDepth`.
+/// @return The byte offset, or `std::nullopt` when the pointer names nothing in @p text, @p text is not JSON up
+///         to that part, the pointer is not one, or it reaches deeper than `kMaxJsonDepth`.
 [[nodiscard]] MORPH_API std::optional<std::size_t> pointerOffset(std::string_view text, std::string_view pointer);
 
 /// @brief The line @p offset is on.
