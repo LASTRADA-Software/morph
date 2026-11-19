@@ -78,6 +78,9 @@ struct CustomScreenRefusal {
 /// own are 39 bytes). The model calls a store only with a person the server
 /// derived and with a document that passed every check. A store owns the executor its completions are delivered on.
 ///
+/// An entry `list` answers whose id lacks `kCustomScreenIdPrefix` is listed broken, and `get` and `remove` refuse its
+/// id before the store is called: the model cannot reach it, so cleaning it up is the store's.
+///
 /// The model's checks keep a person from saving a document that exceeds their permissions; they do not decide who
 /// may overwrite whose screen. That is the store's: see `put`.
 class ICustomScreenStore {
@@ -367,7 +370,7 @@ private:
 
 /// @brief Runs every check a custom document passes, in order, and answers the first refusal.
 ///
-/// 1. The bounds: `maxDocumentBytes`, and nesting within `kMaxJsonDepth`.
+/// 1. The bounds: `maxDocumentBytes`, and nesting within `kMaxJsonDepth`. Neither needs the document parsed.
 /// 2. The base: a screen document of @p bundle that the person may open (`screenAdmitted`).
 /// 3. The application screen checks: `loadDocumentText` with the bundle's catalog, and its `id` is @p screenId, which
 ///    starts with `kCustomScreenIdPrefix`, so it is a screen and never the app document.
@@ -587,11 +590,17 @@ public:
     [[nodiscard]] ::core::async::Task<std::expected<CustomScreenFound, CustomScreenRefusal>> get(
         ::morph::session::Context const& session, std::string app, std::string screenId) const;
 
-    /// @brief What the base rule lets a custom screen based on @p basedOn use, as `describeAllowance` writes it.
+    /// @brief What the base rule lets a custom screen based on @p basedOn use, as `describeAllowance` writes it, for a
+    ///        person who may open that base. Synchronous.
+    /// @param session The session of the person asking, its principal verified.
+    /// @param app     The application.
     /// @param basedOn The base screen's id.
-    /// @return The summary, or the refusal when @p basedOn names no screen document of the bundle being served or the
-    ///         document does not load.
-    [[nodiscard]] std::expected<std::string, Refusal> allowance(std::string_view basedOn) const;
+    /// @return The summary, or the refusal: a session with no verified principal, an application this server does not
+    ///         serve, a @p basedOn outside its bounds or naming no screen document of the bundle being served, a base
+    ///         this person may not open (`screenAdmitted`, as `check` refuses it), or a document that does not load.
+    [[nodiscard]] std::expected<std::string, Refusal> allowance(::morph::session::Context const& session,
+                                                                std::string const& app,
+                                                                std::string_view basedOn) const;
 
 private:
     friend class CustomScreensModel;

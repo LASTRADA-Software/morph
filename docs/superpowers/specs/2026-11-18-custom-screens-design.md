@@ -212,8 +212,7 @@ the client's registration of the model, and the client offers no custom screens.
   listed, so the person can open its source and fix it, and is never mounted.
 - **Effects.** `save` and `remove` declare `changes` on the record type `morph.customScreens`, the whole type: a save
   can add a screen to lists no key names yet. Effects fan out by record type to every connection watching it, not by
-  person, so every client with a list of custom
-  screens open refetches its own `list` after anyone's save. Saves are a person's deliberate act, so this is rare; the
+  person, so every client with a list of custom screens open refetches its own `list` after anyone's save. Saves are a person's deliberate act, so this is rare; the
   verdict cache below keeps each refetch cheap.
 - **Journal.** The actions are `Loggable::No`. A screen is not application data; the store keeps who saved it and when.
 
@@ -242,11 +241,9 @@ long as a real one, so its verdict is the one `save` would give.
 
 **The verdict cache.** The result of checks 3 to 6 is kept by the model, keyed by the document's content hash, its
 `basedOn`, the id it is stored under, the bundle digest, and a hash of the person's permitted set, in a cache bounded by
-`CustomScreensOptions::verdictCacheSize`
-entries. Check 2 runs before the cache on every call, because what it reads, a catalog entry's availability, is not part
-of the bundle digest. A `list` over unchanged documents reads verdicts; a reload, a permission change or an edit misses
-the cache
-and checks again.
+`CustomScreensOptions::verdictCacheSize` entries. Check 2 runs before the cache on every call, because what it reads,
+a catalog entry's availability, is not part of the bundle digest. A `list` over unchanged documents reads verdicts; a
+reload, a permission change or an edit misses the cache and checks again.
 
 The checks are a guide for the person and a bound on what a document contains. The boundary on what it does is still
 the server's checks on every call a mounted document makes, and the base rule for what the client does without one.

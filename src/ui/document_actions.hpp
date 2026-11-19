@@ -57,8 +57,8 @@ struct ActionUse {
     /// @brief The action and its model type.
     ActionRef action;
     /// @brief The position's kind: `query`, `evaluate`, `mutation`, the kind of a model-bound node (`collection`,
-    /// `wizard`,
-    ///        `table`), or for a form its literal `submit`: `form` when absent, `explicit form`, `auto form`.
+    ///        `wizard`, `table`), or for a form its literal `submit`: `form` when absent, `explicit form`,
+    ///        `auto form`.
     std::string position;
     /// @brief The JSON Pointer of the query, mutation or node.
     std::string path;

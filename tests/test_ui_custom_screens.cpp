@@ -402,6 +402,25 @@ TEST_CASE("custom screens: check and save bound the stored text, which carries t
     CHECK(roomy.save(document, "alice").kind == "ok");
 }
 
+TEST_CASE("custom screens: a document far above the bound is refused without being parsed",
+          "[ui][custom-screens][remote]") {
+    Server s;
+    morph::ui::CustomScreensOptions const bounds;
+    // Not JSON: a parse would refuse it for that, so the size refusal shows the length was checked first.
+    std::string const huge(bounds.maxDocumentBytes + 1024, '{');
+    auto const body = R"({"app":"lims","basedOn":"lims.base","document":)" + quoted(huge) + "}";
+    Envelope const checked = s.call(morph::ui::kCustomScreensCheck, body, "alice");
+    REQUIRE(checked.kind == "ok");
+    morph::ui::CustomScreenChecked verdict;
+    REQUIRE_FALSE(glz::read_json(verdict, checked.body));
+    REQUIRE(verdict.refusal.has_value());
+    CHECK(verdict.refusal->reason ==
+          "a custom screen is longer than " + std::to_string(bounds.maxDocumentBytes) + " bytes");
+    Envelope const saved = s.save(huge, "alice");
+    REQUIRE(saved.kind == "err");
+    CHECK(saved.message.contains("is longer than"));
+}
+
 TEST_CASE("custom screens: a title outside its bound is refused", "[ui][custom-screens][remote]") {
     Server s;
     CHECK(s.save(baseScreen("lims.base"), "alice", "").kind == "err");
@@ -637,7 +656,9 @@ TEST_CASE("custom screens: with no bundle, custom screens are not served", "[ui]
     auto const screens = morph::ui::registerCustomScreens(
         std::make_shared<morph::ui::MemoryCustomScreenStore>(pool),
         []() -> std::shared_ptr<morph::ui::ServedBundle const> { return nullptr; }, authorizer, dispatcher, registry);
-    auto const allowance = screens->allowance("lims.base");
+    morph::session::Context alice;
+    alice.principal = "alice";
+    auto const allowance = screens->allowance(alice, "lims", "lims.base");
     REQUIRE_FALSE(allowance);
     CHECK(allowance.error().reason == "custom screens are not served: no bundle");
 }
@@ -716,7 +737,7 @@ TEST_CASE("custom screens: the handle answers what the actions answer", "[ui][cu
         CHECK(refusal.error().reason.contains("no such custom screen"));
     }
     SECTION("allowance") {
-        auto const text = s.screens->allowance("lims.base");
+        auto const text = s.screens->allowance(alice, "lims", "lims.base");
         REQUIRE(text);
         // One of each thing the base rule compares, as the base uses it.
         CHECK(text->contains("Lims_Sample/Lims_List (query)"));
@@ -728,6 +749,20 @@ TEST_CASE("custom screens: the handle answers what the actions answer", "[ui][cu
         CHECK(text->contains(R"({"host":"print"})"));
         CHECK(text->contains("component `Chart`"));
         CHECK_FALSE(text->contains("signOut"));
-        CHECK_FALSE(s.screens->allowance("lims.nothing"));
+        CHECK_FALSE(s.screens->allowance(alice, "lims", "lims.nothing"));
+    }
+    SECTION("allowance is refused where the checks refuse") {
+        auto const otherApp = s.screens->allowance(alice, "other", "lims.base");
+        REQUIRE_FALSE(otherApp);
+        CHECK(otherApp.error().reason.contains("custom screens belong to `lims`, not `other`"));
+        auto const noPerson = s.screens->allowance(asPerson(""), "lims", "lims.base");
+        REQUIRE_FALSE(noPerson);
+        CHECK(noPerson.error().reason.contains("signed-in person"));
+        // A person who may not run the base's queries is shown nothing of it, as `check` refuses them.
+        s.authorizer->denied["alice"] = {{"Lims_Sample", "Lims_List"}};
+        auto const barred = s.screens->allowance(alice, "lims", "lims.base");
+        REQUIRE_FALSE(barred);
+        CHECK(barred.error().reason == "this person may not open the base screen `lims.base`");
+        CHECK(s.screens->allowance(asPerson("bob"), "lims", "lims.base").has_value());
     }
 }

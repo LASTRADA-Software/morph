@@ -116,23 +116,26 @@ length, so without the caps the reply would have no bound. `mine` is computed fr
 One summary is then at most `kMaxSummaryBytes` (3 KiB) before escaping and at most seven times that after it (see
 `list`).
 A store keeps its ids within `kMaxNameBytes`, since an id shown cut could not be given back to `get` or `remove`; the
-model's own are 39 bytes.
+model's own are 39 bytes. An entry whose id lacks `custom:` is listed broken, and `get` and `remove` refuse its id
+before the store is called, so the model cannot reach it: cleaning it up is the store's.
 
 **Discovery.** A client learns that a server offers custom screens by calling `list`: a server that did not call
 `registerCustomScreens` has no `morph.customScreens` model, and answers the client's registration of it with the
 dispatcher's refusal, `unknown model type: morph.customScreens`. The client offers no custom screens then.
 
 **The handle.** `CustomScreens` holds what the model uses, so anything else on the server shares its checks and its
-cache. Its members are tasks to await from a coroutine, and refuse by value rather than by throwing:
+cache. `check` and `get` are tasks to await from a coroutine, `allowance` is synchronous, and all refuse by value rather than
+by throwing:
 
 - `check(session, app, basedOn, document)` answers what the `check` action answers, a refusal or none. A session with
   no verified principal, an application the server does not serve and a name outside its bounds are refusals.
 - `get(session, app, id)` answers what the `get` action answers, `{summary, document}` or a `CustomScreenRefusal`.
-- `allowance(basedOn)` answers `describeAllowance` of the base screen, for a prompt: the params; each action with the
+- `allowance(session, app, basedOn)` answers `describeAllowance` of the base screen, for a prompt: the params; each action with the
   kind of position it may be named in; each command the base runs without a press, with its trigger; the client-side
   commands; the host names and host commands; the delivered components. It is built from the same walk as
-  `checkBaseRule`, so it lists what the rule compares. A `basedOn` that names no screen document of the bundle, or a
-  base that does not load, is a refusal.
+  `checkBaseRule`, so it lists what the rule compares. It is refused as `check` is: for an application the server does not serve, a name outside its bounds, a session
+  with no verified principal, a `basedOn` that names no screen document of the bundle, a base the person may not open
+  (`screenAdmitted`, with the base check's wording), and a base that does not load.
 
 A `CustomScreenSummary` carries `id`, `title`, `basedOn`, `savedAt`, `savedBy` and:
 
@@ -155,9 +158,11 @@ once; the set is never kept across calls. `save` and `check` run it on the reque
 `list` and `get` run it on every stored document they answer, under the entry's id.
 
 1. **Bounds.** At most `maxDocumentBytes` (256 KiB by default, at most `kMaxFileBytes`), nested within
-   `kMaxJsonDepth`. They are cheap and need no parse of the document, so they come first and an oversized document is
-   refused before
-   it is parsed.
+   `kMaxJsonDepth`. They are cheap and need no parse of the document, so they come first. The id rewrite parses the
+   document, so `save` and `check` first refuse any document longer than `maxDocumentBytes` plus the most the rewrite
+   can add (47 bytes: the `,"id":""` member and the 39-byte custom id), with this check's wording, before the
+   document is parsed. A document within that margin is rewritten, and the bound is checked again on the rewritten
+   text, which is the text that is stored.
 2. **The base.** `basedOn` names a screen of the bundle that has a document (a host screen has none), and
    `screenAdmitted` admits the person to it: it is available and the person may run every top-level query it declares.
 3. **The application screen checks.** `screenId` starts with `custom:`, and `loadDocumentText` with
@@ -173,8 +178,7 @@ once; the set is never kept across calls. `save` and `check` run it on the reque
 does not say whether an entry is available, and the person's admission is not part of it either, so a cached verdict
 cannot vouch for the base. The cache covers checks 3 to 6. `VerdictCache` is keyed by `verdictKey`: the document's
 content hash, `basedOn`, `screenId`, the bundle's digest and a hash of the permitted set. A reload, a permission change
-or an edit
-is a new key and checks again. It holds at most `verdictCacheSize` verdicts (1024 by default, at least one), dropping
+or an edit is a new key and checks again. It holds at most `verdictCacheSize` verdicts (1024 by default, at least one), dropping
 the least recently used, and is safe to share between threads. A passing document's verdict is cached as well, as
 `nullopt` under the key. Passing no cache checks every time.
 
@@ -252,9 +256,7 @@ document that skipped load-time validation can.
 ## Records and effects
 
 `CustomScreenSummary` is the record `morph.customScreens`, keyed by `id`, registered `privateKeys`: its keys must not
-reach other principals: a person learns of a screen's id only through their own list, whatever the store shares. `save`
-and `remove` declare
-`changes<CustomScreenSummary>`, the whole type: a save can add a screen to lists no key names yet. `list` and `get`
+reach other principals: a person learns of a screen's id only through their own list, whatever the store shares. `save` and `remove` declare `changes<CustomScreenSummary>`, the whole type: a save can add a screen to lists no key names yet. `list` and `get`
 hold it, so a client's list refetches after any save or remove, from anyone. Saves are a person's deliberate act, so
 the refetch is rare, and the verdict cache keeps it cheap.
 

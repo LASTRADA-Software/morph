@@ -31,6 +31,12 @@ namespace {
 ///        fits here too.
 [[nodiscard]] std::string placeholderId() { return std::string{kCustomScreenIdPrefix} + std::string(32, '0'); }
 
+/// @brief The most the id rewrite can add to a document: the `,"id":` member with its quotes, the comma and the custom
+///        id's `kCustomScreenIdPrefix` and 32 hexadecimal digits. A document longer than the bound plus this cannot
+///        fit it once rewritten, so it is refused without being parsed.
+inline constexpr std::size_t kCustomScreenIdSlack =
+    std::string_view{",\"id\":\"\""}.size() + kCustomScreenIdPrefix.size() + 32;
+
 /// @brief The session of the action being run, copied: the session is the dispatching thread's, and an action
 ///        resumes elsewhere after its first await.
 [[nodiscard]] ::morph::session::Context callerSession() {
@@ -157,6 +163,14 @@ std::expected<std::string, Refusal> CustomScreens::rewrittenAndChecked(ServedBun
                                                                        std::string_view basedOn,
                                                                        std::string_view document,
                                                                        std::string_view screenId) const {
+    // The rewrite parses the document, so a document no bound could admit is refused before it, with the wording the
+    // bounds check gives.
+    if (document.size() > _options.maxDocumentBytes + kCustomScreenIdSlack) {
+        return std::unexpected(Refusal{
+            .document = {},
+            .path = {},
+            .reason = "a custom screen is longer than " + std::to_string(_options.maxDocumentBytes) + " bytes"});
+    }
     auto text = withScreenId(document, screenId);
     if (!text) {
         // Text that is not a JSON object, or too deep to parse: the checks give the person the reason they give for it
@@ -242,18 +256,28 @@ std::optional<Refusal> CustomScreens::checkedAsNew(ServedBundle const& bundle,
     co_return CustomScreenFound{.summary = std::move(summary), .document = std::move(found->document)};
 }
 
-std::expected<std::string, Refusal> CustomScreens::allowance(std::string_view basedOn) const {
-    std::shared_ptr<ServedBundle const> const bundle = _bundle();
-    if (bundle == nullptr) {
-        return std::unexpected(
-            Refusal{.document = {}, .path = {}, .reason = "custom screens are not served: no bundle"});
+std::expected<std::string, Refusal> CustomScreens::allowance(::morph::session::Context const& session,
+                                                             std::string const& app, std::string_view basedOn) const {
+    auto const refusal = [](std::string reason) {
+        return std::unexpected(Refusal{.document = {}, .path = {}, .reason = std::move(reason)});
+    };
+    auto const served = servedFor(app);
+    if (!served) {
+        return refusal(served.error());
+    }
+    ServedBundle const* const bundle = served->get();
+    if (auto problem = nameProblem(std::string{basedOn}, "basedOn")) {
+        return refusal(std::move(*problem));
+    }
+    if (session.principal.empty()) {
+        return refusal(std::string{kNoPerson});
     }
     ServedScreen const* const base = screenOf(*bundle, basedOn);
     if (base == nullptr) {
-        return std::unexpected(Refusal{
-            .document = {},
-            .path = {},
-            .reason = "`basedOn` names no screen document of the application: `" + std::string{basedOn} + "`"});
+        return refusal("`basedOn` names no screen document of the application: `" + std::string{basedOn} + "`");
+    }
+    if (!screenAdmitted(*base, session, *_authorizer)) {
+        return refusal("this person may not open the base screen `" + std::string{basedOn} + "`");
     }
     std::string const& text = bundle->files.at(base->hash).bytes;
     auto const loaded = loadDocumentText(text, LoadOptions{.catalog = bundle->catalog});
