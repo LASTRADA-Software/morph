@@ -15,6 +15,7 @@
 #include <morph/core/wire.hpp>
 #include <morph/forms/version.hpp>
 #include <morph/table/filter.hpp>
+#include <morph/table/query.hpp>
 #include <morph/ui/control_shape.hpp>
 #include <morph/ui/date_pattern.hpp>
 #include <morph/ui/document.hpp>
@@ -3378,6 +3379,30 @@ private:
             checkTableSortBound(node);
             checkTableGroup(node);
             checkRowsTableKeys(node);
+            checkColumnKinds(node);
+            if (!model.empty() && table.empty()) {
+                checkActionTable(node);
+            }
+        }
+    }
+
+    // A table over a typed list action pages through the one request member marked `x-table`, and builds its
+    // description from its `columns` or the action's view document, since a catalog carries no reply schema.
+    void checkActionTable(DocNode const& node) const {
+        std::string const action{node.name("action")};
+        if (_options->catalog.schema) {
+            std::optional<std::string> const schema = _options->catalog.schema(action);
+            std::vector<std::string> const members = schema ? tableQueryMembers(*schema) : std::vector<std::string>{};
+            if (members.empty()) {
+                refuse(node.path, "a table over an action needs a query member marked x-table");
+            }
+            if (members.size() > 1) {
+                refuse(node.path, "a table over an action needs one query member marked x-table; `" + action +
+                                      "` marks " + std::to_string(members.size()));
+            }
+        }
+        if (_options->catalog.view && node.partList("columns").empty() && !_options->catalog.view(action)) {
+            refuse(node.path, "a table over an action needs its columns, or a view document for the action");
         }
     }
 
@@ -3572,6 +3597,11 @@ private:
                        "a table over `rows` needs an `id` to persist its arrangement");
             }
         }
+    }
+
+    // A column part's literal `kind`, on a table over `rows` or over a typed list action: one of the seven a
+    // document names.
+    static void checkColumnKinds(DocNode const& node) {
         static constexpr std::array<std::string_view, 7> kColumnKinds = {"text", "integer", "decimal", "number",
                                                                    "date", "dateTime", "bool"};
         for (DocNodePtr const& column : node.partList("columns")) {
@@ -5300,6 +5330,34 @@ std::expected<TourDecl, Refusal> loadTourText(std::string_view text) {
     } catch (detail::DocumentRefused const& refused) {
         return std::unexpected(refused.refusal());
     }
+}
+
+std::vector<std::string> tableQueryMembers(std::string_view schemaJson) {
+    std::vector<std::string> members;
+    auto const json = parseJson(schemaJson);
+    auto const* const schema = json ? std::get_if<Json::object_t>(&json->data) : nullptr;
+    auto const properties = schema != nullptr ? schema->find("properties") : Json::object_t::const_iterator{};
+    if (schema == nullptr || properties == schema->end()) {
+        return members;
+    }
+    auto const* const entries = std::get_if<Json::object_t>(&properties->second.data);
+    if (entries == nullptr) {
+        return members;
+    }
+    for (auto const& [name, property] : *entries) {
+        auto const* const fields = std::get_if<Json::object_t>(&property.data);
+        if (fields == nullptr) {
+            continue;
+        }
+        auto const marker = fields->find(table::TableQuery::schemaMarker());
+        if (marker == fields->end()) {
+            continue;
+        }
+        if (bool const* const flag = std::get_if<bool>(&marker->second.data); flag != nullptr && *flag) {
+            members.push_back(name);
+        }
+    }
+    return members;
 }
 
 std::vector<std::string_view> nodeKinds() {

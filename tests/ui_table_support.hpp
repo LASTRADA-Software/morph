@@ -396,7 +396,10 @@ struct RowsFixture {
     [[nodiscard]] WindowRowsOptions options(std::string const& table, bool restoring = false) const {
         return WindowRowsOptions{.channel = channel,
                                  .table = table,
-                                 .record = "Lims_SampleModel." + table,
+                                 .action = {},
+                                 .queryMember = {},
+                                 .inferKinds = {},
+                                 .records = {"Lims_SampleModel." + table},
                                  .body = {},
                                  .pageSize = 200,
                                  .maxPages = 8,
@@ -1833,6 +1836,74 @@ inline bool loads(std::string_view text, Catalog const& catalog) {
 inline std::string refusalOf(std::string_view text) {
     auto const loaded = loadDocumentText(text, LoadOptions{.catalog = tableCatalog()});
     return loaded ? std::string{} : loaded.error().reason;
+}
+
+/// @brief The reason a document is refused against a harness's catalog, the actions it added included.
+/// @param h    The harness.
+/// @param text The document.
+/// @return The reason; empty when it loads.
+inline std::string refusalOf(TableHarness const& h, std::string_view text) {
+    auto const loaded = loadDocumentText(text, LoadOptions{.catalog = h.session.options().catalog});
+    return loaded ? std::string{} : loaded.error().reason;
+}
+
+// ── A typed list action as a table ──────────────────────────────────────────
+
+/// @brief A table `list` over the typed list action `Lims_PageSamples` of the model alias `lab`, keyed by `id`, with
+///        the columns `id`, `name`, `weight`, `ratio` and `day`, the last of the literal kind `date`.
+inline constexpr std::string_view kActionTable =
+    R"({"vocab":"ui/1","id":"samples","models":{"lab":{"type":"Lims_SampleModel"}},"view":{"kind":"table","id":"list","testId":"list","model":"lab","action":"Lims_PageSamples","key":{"row":"id"},"columns":[{"id":"id"},{"id":"name"},{"id":"weight"},{"id":"ratio"},{"id":"day","kind":"date"}]}})";
+
+/// @brief `kActionTable` over `Lims_ListSamples`, whose request schema in the corpus catalog has no member marked
+///        `x-table`.
+inline constexpr std::string_view kActionTableNoQuery =
+    R"({"vocab":"ui/1","id":"samples","models":{"lab":{"type":"Lims_SampleModel"}},"view":{"kind":"table","id":"list","testId":"list","model":"lab","action":"Lims_ListSamples","key":{"row":"id"},"columns":[{"id":"id"},{"id":"name"}]}})";
+
+/// @brief `kActionTable` without `columns`.
+inline constexpr std::string_view kActionTableNoColumns =
+    R"({"vocab":"ui/1","id":"samples","models":{"lab":{"type":"Lims_SampleModel"}},"view":{"kind":"table","id":"list","testId":"list","model":"lab","action":"Lims_PageSamples","key":{"row":"id"}}})";
+
+/// @brief Adds `Lims_PageSamples` to the harness's catalog: a request with the query member `query`, marked
+///        `x-table`, and a `site`; no view document and no record.
+/// @param h The harness.
+inline void addPageSamples(TableHarness& h) {
+    addAction(h, "Lims_PageSamples",
+              R"({"type":"object","properties":{"query":{"type":"object","x-table":true},"site":{"type":"string"}}})",
+              ActionInfo{.modelType = "Lims_SampleModel"});
+}
+
+/// @brief The rows of a model-backed table.
+/// @param screen The screen.
+/// @param id     The table's element id.
+/// @return Its `WindowRows`.
+inline WindowRows& windowOf(Screen& screen, std::string_view id = "list") {
+    auto* const rows = dynamic_cast<WindowRows*>(ScreenProbe::element(screen, id).tableRows.get());
+    REQUIRE(rows != nullptr);
+    return *rows;
+}
+
+/// @brief The kind of a column of a model-backed table's description.
+/// @param screen The screen.
+/// @param column The column's id.
+/// @return Its kind.
+inline table::ColumnKind kindOfColumn(Screen& screen, std::string_view column) {
+    table::TableDescription const* const description = windowOf(screen).description();
+    REQUIRE(description != nullptr);
+    auto const found = std::ranges::find(description->columns, column,
+                                         [](table::TableColumn const& c) -> auto const& { return c.info.id; });
+    REQUIRE(found != description->columns.end());
+    return found->info.kind;
+}
+
+/// @brief A cell a model-backed table's window holds.
+/// @param screen The screen.
+/// @param row    The view row.
+/// @param column The column's id.
+/// @return The cell; the test fails when it is not held.
+inline table::Cell const* cellOf(Screen& screen, std::int64_t row, std::string_view column) {
+    table::Cell const* const cell = WindowRowsProbe::window(windowOf(screen)).cell(row, column);
+    REQUIRE(cell != nullptr);
+    return cell;
 }
 
 // ── Stores for saved views ──────────────────────────────────────────────────
