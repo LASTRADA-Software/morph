@@ -462,14 +462,15 @@ std::expected<void, MountError> DocumentScreenHost::Handle::remount(Interpreter&
     if (!next) {
         return std::unexpected(mountErrorOf(screenId, next.error()));
     }
-    // The old screen goes after the new one has mounted, so its root widget is never missing in between;
-    // destroying it runs its `onUnmount`.
-    std::unique_ptr<Screen> const replaced = std::exchange(state.screen, std::move(*next));
-    // The new screen and the draft mark change together, so no frame shows one without the other. A draft pins the
-    // identity the screen had, which `identity` read before the swap.
+    // A draft pins the identity of the screen it replaces, read from that screen itself before the swap: the handle's
+    // cached `identity` would be recomputed against the screen that is mounted by then.
     if (draft == DraftChange::Begin && !state.drafted.peek()) {
-        state.draftIdentity = state.identity.peek();
+        state.draftIdentity = state.screen->identity();
     }
+    // The old screen goes after the new one has mounted, so its root widget is never missing in between;
+    // destroying it runs its `onUnmount`. The new screen and the draft mark change together in the batch below, so
+    // no frame shows one without the other.
+    std::unique_ptr<Screen> const replaced = std::exchange(state.screen, std::move(*next));
     state.runtime->batch([&state, draft] {
         state.generation.set(state.generation.peek() + 1);
         if (draft != DraftChange::Keep) {
@@ -619,7 +620,7 @@ void DocumentScreenHost::Handle::State::finish(bool answer) {
     if (screen) {
         // The last values a host reads once the screen is gone, whether or not it read them before.
         lastTitle = detail::host::titleText(screen->title());
-        lastIdentity = screen->identity();
+        lastIdentity = drafted.peek() ? draftIdentity : screen->identity();
         lastTitleSpans = screen->titleSpans();
         lastPageEdge = screen->pageEdge();
         lastHeadJoined = screen->headJoined();

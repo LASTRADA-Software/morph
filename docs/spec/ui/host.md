@@ -85,7 +85,8 @@ It is built over the interpreter's `Session` and `Dispatcher`, and `DocumentScre
   - While a draft is up the handle is `dirty`, so a close asks the close guard, as a screen with unsaved edits does.
   - The handle's identity is pinned while a draft is up: it answers the identity the screen had when the draft began,
     whatever the draft's own `identity` says, so tab dedupe, the record and a chat conversation's key stay with the
-    screen. `discardDraft` and `endDraft` hand it back to the mounted document's own expression. The title follows
+    screen. It stays pinned even when the screen's own data would change it. `discardDraft` hands it back to the screen's own
+    expression, and `endDraft` to the expression of the document that is mounted then, the saved one. The title follows
     the draft's.
   - The refusal of a draft whose id differs is a `MountError` whose `pointer` is `/id`, for a source view to put its
     cursor there.

@@ -274,3 +274,40 @@ TEST_CASE("Save and close on a drafted screen keeps it open: the draft is still 
     CHECK(opened.failures == 1);
     CHECK(DocumentScreenHost::rootOf(*opened.handle) != nullptr);
 }
+
+/// A note whose identity reads state a button changes.
+constexpr std::string_view kStatefulIdentity = R"({
+  "vocab": "ui/1", "id": "note", "params": { "noteId": "int" }, "identity": { "ref": "key" }, "title": "Note",
+  "state": { "key": { "type": "string", "init": "a" } },
+  "view": { "kind": "button", "testId": "rekey", "label": "rekey", "onClick": [ { "set": "key", "value": "b" } ] } })";
+
+// Mutation: capture the pin after the swap (the draft's own identity, or a recompute against it, is pinned).
+TEST_CASE("The pin is the identity the screen had at the moment of the draft, read from the screen itself",
+          "[ui][host][drafts]") {
+    Harness harness;
+    DocumentMap documents;
+    std::vector<std::string> asked;
+    CloseChoice choice = CloseChoice::Discard;
+    int failures = 0;
+    Shell shell{harness, documents, asked, choice, failures};
+    documents.emplace("note", load(kStatefulIdentity));
+    auto mounted = shell.mount("note", ParamMap{{"noteId", Value{std::int64_t{7}}}});
+    REQUIRE(mounted.has_value());
+    ScreenHandle& handle = **mounted;
+    harness.backend.click(harness.byTestId("Button", "rekey"));
+    harness.settle();
+    REQUIRE(shell.mountDraft(handle, load(kNoteAnonymous)).has_value());
+    harness.settle();
+    CHECK(handle.identity().peek() == Value{std::string{"b"}});
+}
+
+// Mutation: record the draft's identity in `finish` (the closed handle answers the anonymous draft's).
+TEST_CASE("A drafted handle that closes answers the screen's identity", "[ui][host][drafts]") {
+    Harness harness;
+    Opened opened{harness};
+    REQUIRE(opened.shell.mountDraft(*opened.handle, load(kNoteAnonymous)).has_value());
+    harness.settle();
+    opened.handle->forceClose();
+    harness.settle();
+    CHECK(opened.handle->identity().peek() == Value{std::int64_t{7}});
+}

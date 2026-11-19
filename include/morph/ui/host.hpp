@@ -48,8 +48,7 @@ struct MountError {
     /// @brief Why: an unknown screen, a refused param, a refused mount.
     std::string reason;
     /// @brief The JSON Pointer into the document of the refused part when the refusal is about one part, such as
-    /// `/id`;
-    ///        empty otherwise.
+    ///        `/id`; empty otherwise.
     std::string pointer{};
 };
 
