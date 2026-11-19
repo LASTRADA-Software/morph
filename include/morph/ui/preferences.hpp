@@ -143,6 +143,14 @@ inline constexpr std::size_t kMaxPrefNameBytes = 256;
 /// @brief The most points one `load` may ask for.
 inline constexpr std::size_t kMaxPrefPoints = 256;
 
+/// @brief The type id the table-state model is registered under, and the application of the entry that keeps each
+///        person's table-state quota. The preferences model refuses it as an `app`.
+inline constexpr std::string_view kTableStateModel = "morph.tableState";
+
+/// @brief The start of every scope table state writes under. The preferences model refuses a scope that starts with
+///        it.
+inline constexpr std::string_view kTableStateScopePrefix = "morph.table";
+
 /// @brief `load`: the stored choices of a screen's points. A request carries no person.
 struct PrefLoad {
     /// @brief The application.
@@ -219,6 +227,7 @@ public:
     ::core::async::Task<PrefValues> execute(PrefLoad request) {
         checkName(request.app, "app");
         checkName(request.scope, "scope");
+        checkUnreserved(request.app, request.scope);
         if (request.points.size() > kMaxPrefPoints) {
             throw std::invalid_argument{"a load names more than " + std::to_string(kMaxPrefPoints) + " points"};
         }
@@ -285,6 +294,7 @@ private:
         checkName(app, "app");
         checkName(scope, "scope");
         checkName(point, "point");
+        checkUnreserved(app, scope);
         std::string person = verifiedPerson();
         if (person.empty()) {
             throw std::runtime_error{"preferences are stored for a signed-in person"};
@@ -299,6 +309,19 @@ private:
         if (name.empty() || name.size() > kMaxPrefNameBytes) {
             throw std::invalid_argument{"a preference's `" + std::string{what} + "` is 1 to " +
                                         std::to_string(kMaxPrefNameBytes) + " bytes"};
+        }
+    }
+
+    /// @brief Refuses the names table state writes under in the same store, so no preference can overwrite a table's
+    ///        stored state or a person's table-state quota.
+    /// @param app   The application.
+    /// @param scope The scope.
+    static void checkUnreserved(std::string const& app, std::string const& scope) {
+        if (app == kTableStateModel) {
+            throw std::invalid_argument{"`" + app + "` is kept for table state"};
+        }
+        if (scope.starts_with(kTableStateScopePrefix)) {
+            throw std::invalid_argument{"`" + scope + "` is kept for table state"};
         }
     }
 

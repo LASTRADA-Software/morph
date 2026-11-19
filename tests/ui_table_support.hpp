@@ -2,6 +2,7 @@
 
 #pragma once
 
+#include <algorithm>
 #include <catch2/catch_test_macros.hpp>
 #include <chrono>
 #include <cstddef>
@@ -10,7 +11,9 @@
 #include <format>
 #include <functional>
 #include <glaze/glaze.hpp>
+#include <map>
 #include <memory>
+#include <morph/core/owner_strand.hpp>
 #include <morph/core/wire.hpp>
 #include <morph/reactive/runtime.hpp>
 #include <morph/reactive/testing/manual_scheduler.hpp>
@@ -20,12 +23,18 @@
 #include <morph/testing/step_executor.hpp>
 #include <morph/ui/interpreter.hpp>
 #include <morph/ui/locale_table.hpp>
+#include <morph/ui/preferences.hpp>
 #include <morph/ui/table_rows.hpp>
+#include <morph/ui/table_state.hpp>
 #include <morph/ui/value.hpp>
+#include <mutex>
 #include <optional>
+#include <set>
 #include <span>
+#include <stdexcept>
 #include <string>
 #include <string_view>
+#include <tuple>
 #include <utility>
 #include <variant>
 #include <vector>
@@ -34,8 +43,8 @@
 
 /// @file
 /// @brief What table tests share: the test catalog of `Lims_SampleModel`'s table `samples`, builders of its
-///        description and pages, and `RowsFixture`, a session with a scripted dispatcher and no screen, for tests of
-///        `TableRows`.
+///        description and pages, `RowsFixture`, a session with a scripted dispatcher and no screen, for tests of
+///        `TableRows`, and the stores table-state tests look into.
 
 namespace morph::ui::testing {
 
@@ -507,5 +516,261 @@ struct RowsFixture {
         return **got;
     }
 };
+
+/// @brief A preferences store that keeps its entries in memory and lets a test list, read, erase and fail them, which
+///        the table-state model, reaching the store by exact key alone, cannot.
+///
+/// Each call is a task on its own strand, as `MemoryPreferencesStore`'s are. A failed `set` or `remove` answers
+/// `false` and changes nothing.
+class ProbePreferencesStore final : public IPreferencesStore {
+public:
+    /// @brief A store whose strand runs on @p base.
+    /// @param base Where the strand's tasks run. Borrowed.
+    explicit ProbePreferencesStore(exec::IExecutor& base) : _strand{base} {}
+
+    [[nodiscard]] async::Completion<std::optional<std::string>> get(PrefKey const& key) override {
+        auto [completion, promise] = async::Completion<std::optional<std::string>>::makeSettleable(&_strand);
+        _strand.postTask([this, entry = tie(key), settle = std::move(promise)] mutable {
+            std::scoped_lock const lock{_mutex};
+            auto const found = _entries.find(entry);
+            settle.resolve(found == _entries.end() ? std::nullopt : std::optional<std::string>{found->second});
+        });
+        return std::move(completion);
+    }
+
+    [[nodiscard]] async::Completion<bool> set(PrefKey const& key, std::string json) override {
+        auto [completion, promise] = async::Completion<bool>::makeSettleable(&_strand);
+        _strand.postTask([this, entry = tie(key), text = std::move(json), settle = std::move(promise)] mutable {
+            std::scoped_lock const lock{_mutex};
+            ++_sets;
+            if (_failSetsAfter && _sets > *_failSetsAfter) {
+                settle.resolve(false);
+                return;
+            }
+            _largest = std::max(_largest, text.size());
+            _entries.insert_or_assign(std::move(entry), std::move(text));
+            settle.resolve(true);
+        });
+        return std::move(completion);
+    }
+
+    [[nodiscard]] async::Completion<bool> remove(PrefKey const& key) override {
+        auto [completion, promise] = async::Completion<bool>::makeSettleable(&_strand);
+        _strand.postTask([this, entry = tie(key), settle = std::move(promise)] mutable {
+            std::scoped_lock const lock{_mutex};
+            ++_removes;
+            if (_failRemovesAfter && _removes > *_failRemovesAfter) {
+                settle.resolve(false);
+                return;
+            }
+            settle.resolve(_entries.erase(entry) != 0);
+        });
+        return std::move(completion);
+    }
+
+    /// @brief Whether an entry is stored under @p key.
+    /// @param key The key.
+    /// @return `true` when one is.
+    [[nodiscard]] bool has(PrefKey const& key) const {
+        std::scoped_lock const lock{_mutex};
+        return _entries.contains(tie(key));
+    }
+
+    /// @brief The entry under @p key.
+    /// @param key The key.
+    /// @return Its text; empty when none is stored.
+    [[nodiscard]] std::string value(PrefKey const& key) const {
+        std::scoped_lock const lock{_mutex};
+        auto const found = _entries.find(tie(key));
+        return found == _entries.end() ? std::string{} : found->second;
+    }
+
+    /// @brief Forgets the entry under @p key, as no caller of the store could; not counted as a `remove`.
+    /// @param key The key.
+    void erase(PrefKey const& key) {
+        std::scoped_lock const lock{_mutex};
+        _entries.erase(tie(key));
+    }
+
+    /// @brief The points of every stored entry with @p scope, of any person and application.
+    /// @param scope The scope.
+    /// @return The points.
+    [[nodiscard]] std::set<std::string> pointsUnder(std::string const& scope) const {
+        std::scoped_lock const lock{_mutex};
+        std::set<std::string> out;
+        for (auto const& entry : _entries) {
+            if (std::get<2>(entry.first) == scope) {
+                out.insert(std::get<3>(entry.first));
+            }
+        }
+        return out;
+    }
+
+    /// @brief The longest value any `set` stored.
+    /// @return Its length in bytes.
+    [[nodiscard]] std::size_t largestValue() const {
+        std::scoped_lock const lock{_mutex};
+        return _largest;
+    }
+
+    /// @brief The `set` calls so far, failed ones included.
+    /// @return How many.
+    [[nodiscard]] std::size_t setCount() const {
+        std::scoped_lock const lock{_mutex};
+        return _sets;
+    }
+
+    /// @brief The `remove` calls so far, failed ones included.
+    /// @return How many.
+    [[nodiscard]] std::size_t removeCount() const {
+        std::scoped_lock const lock{_mutex};
+        return _removes;
+    }
+
+    /// @brief Fails every `set` after the @p n-th since the store was made.
+    /// @param n The last `set` that still succeeds.
+    void failSetsAfter(std::size_t n) {
+        std::scoped_lock const lock{_mutex};
+        _failSetsAfter = n;
+    }
+
+    /// @brief Fails every `remove` after the @p n-th since the store was made.
+    /// @param n The last `remove` that still succeeds.
+    void failRemovesAfter(std::size_t n) {
+        std::scoped_lock const lock{_mutex};
+        _failRemovesAfter = n;
+    }
+
+    /// @brief Lets every `set` succeed again.
+    void healSets() {
+        std::scoped_lock const lock{_mutex};
+        _failSetsAfter.reset();
+    }
+
+    /// @brief Lets every `remove` succeed again.
+    void healRemoves() {
+        std::scoped_lock const lock{_mutex};
+        _failRemovesAfter.reset();
+    }
+
+private:
+    using Key = std::tuple<std::string, std::string, std::string, std::string>;
+
+    [[nodiscard]] static Key tie(PrefKey const& key) { return Key{key.person, key.app, key.scope, key.point}; }
+
+    mutable std::mutex _mutex;
+    std::map<Key, std::string> _entries;
+    std::size_t _largest = 0;
+    std::size_t _sets = 0;
+    std::size_t _removes = 0;
+    std::optional<std::size_t> _failSetsAfter;
+    std::optional<std::size_t> _failRemovesAfter;
+    /// After the map, so it is destroyed first: a task running on it reads the map.
+    exec::OwnerStrand _strand;
+};
+
+/// @brief A table-state store holding one document whose loads wait for `release()` or `fail()`; saves are answered
+///        at once, and kept as what later loads read.
+class GatedTableStateStore final : public table::ITableStateStore {
+public:
+    /// @brief A store holding @p json, delivering on @p executor.
+    /// @param executor Where completions are delivered. Borrowed.
+    /// @param json     The stored document; empty for none.
+    GatedTableStateStore(exec::IExecutor& executor, std::string json) : _executor{&executor} {
+        if (!json.empty()) {
+            _stored = table::StoredTableState{.json = std::move(json), .revision = "1"};
+        }
+    }
+
+    [[nodiscard]] async::Completion<std::optional<table::StoredTableState>> load(
+        table::TableStateKey const& key) override {
+        auto [completion, promise] =
+            async::Completion<std::optional<table::StoredTableState>>::makeSettleable(_executor);
+        ++_loads;
+        _lastLoadKey = key;
+        if (_released) {
+            promise.resolve(_stored);
+        } else {
+            _held.push_back(std::move(promise));
+        }
+        return std::move(completion);
+    }
+
+    [[nodiscard]] async::Completion<table::SaveResult> save(table::TableStateKey const& /*key*/, std::string json,
+                                                            std::string /*expected*/ = {}) override {
+        auto [completion, promise] = async::Completion<table::SaveResult>::makeSettleable(_executor);
+        ++_saves;
+        _lastSaved = json;
+        if (_refusal) {
+            promise.resolve(
+                table::SaveResult{.outcome = table::SaveOutcome::Refused, .revision = {}, .reason = *_refusal});
+            return std::move(completion);
+        }
+        _stored = table::StoredTableState{.json = std::move(json), .revision = std::to_string(++_revision)};
+        promise.resolve(
+            table::SaveResult{.outcome = table::SaveOutcome::Saved, .revision = _stored->revision, .reason = {}});
+        return std::move(completion);
+    }
+
+    [[nodiscard]] async::Completion<bool> remove(table::TableStateKey const& /*key*/) override {
+        auto [completion, promise] = async::Completion<bool>::makeSettleable(_executor);
+        promise.resolve(std::exchange(_stored, std::nullopt).has_value());
+        return std::move(completion);
+    }
+
+    /// @brief Answers every held load with the stored document, and every later load at once.
+    void release() {
+        _released = true;
+        for (auto& promise : std::exchange(_held, {})) {
+            promise.resolve(_stored);
+        }
+    }
+
+    /// @brief Fails every held load.
+    void fail() {
+        for (auto& promise : std::exchange(_held, {})) {
+            promise.reject(std::make_exception_ptr(std::runtime_error{"the state store is unavailable"}));
+        }
+    }
+
+    /// @brief Answers every later save `Refused` with @p reason.
+    /// @param reason The reason.
+    void refuseSaves(std::string reason) { _refusal = std::move(reason); }
+
+    /// @brief The loads asked for.
+    /// @return How many.
+    [[nodiscard]] std::size_t loads() const { return _loads; }
+
+    /// @brief The saves asked for.
+    /// @return How many.
+    [[nodiscard]] std::size_t saves() const { return _saves; }
+
+    /// @brief The document the last save carried.
+    /// @return Its text.
+    [[nodiscard]] std::string const& lastSaved() const { return _lastSaved; }
+
+    /// @brief The key of the last load.
+    /// @return It.
+    [[nodiscard]] table::TableStateKey const& lastLoadKey() const { return _lastLoadKey; }
+
+private:
+    exec::IExecutor* _executor;
+    std::optional<table::StoredTableState> _stored;
+    std::vector<async::Completion<std::optional<table::StoredTableState>>::Promise> _held;
+    bool _released = false;
+    std::optional<std::string> _refusal;
+    std::size_t _loads = 0;
+    std::size_t _saves = 0;
+    std::uint64_t _revision = 1;
+    std::string _lastSaved;
+    table::TableStateKey _lastLoadKey;
+};
+
+/// @brief A non-owning `std::shared_ptr` to @p store, for an API that shares its store.
+/// @param store The store, which must outlive every copy.
+/// @return The pointer.
+inline std::shared_ptr<table::ITableStateStore> sharedOf(table::ITableStateStore& store) {
+    return {std::shared_ptr<void>{}, &store};
+}
 
 }  // namespace morph::ui::testing

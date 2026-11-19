@@ -30,7 +30,9 @@
 #include <morph/session/session.hpp>
 #include <morph/table/description.hpp>
 #include <morph/table/level_cache.hpp>
+#include <morph/ui/preferences.hpp>
 #include <morph/ui/service_client.hpp>
+#include <morph/ui/table_state_model.hpp>
 #include <mutex>
 #include <optional>
 #include <print>
@@ -832,4 +834,67 @@ TEST_CASE("table benchmark: C1 C2 C3 many clients over the bridge", "[.benchmark
     auto const stats = server.server->viewStats();
     std::println("| C3 | after fifty sorts: {} bytes held of a {} bound, {} evictions |", stats.bytes,
                  10 * 4 * 100'000, stats.evictions);
+}
+
+namespace {
+
+// One server on a socket offering `morph.tableState` over a memory preferences store, with the tables authorizer.
+struct StateServer {
+    StateServer() {
+        ui::registerTableState(prefs, dispatcher, registry);
+        morph::backend::ServerConfig config;
+        config.services.push_back(std::make_shared<Hello>());
+        server = std::make_shared<morph::backend::RemoteServer>(pool, std::make_shared<TablesAuthorizer>(),
+                                                                std::move(config), dispatcher, registry);
+        socket = std::make_unique<morph::net::SocketServer>(*server, 0);
+        REQUIRE(socket->listen());
+        url = "ws://127.0.0.1:" + std::to_string(static_cast<unsigned>(socket->port()));
+    }
+
+    morph::exec::ThreadPoolExecutor pool{2};
+    morph::model::detail::ActionDispatcher dispatcher;
+    morph::model::detail::ModelRegistryFactory registry;
+    std::shared_ptr<ui::MemoryPreferencesStore> prefs = std::make_shared<ui::MemoryPreferencesStore>(pool);
+    std::shared_ptr<morph::backend::RemoteServer> server;
+    std::unique_ptr<morph::net::SocketServer> socket;
+    std::string url;
+};
+
+}  // namespace
+
+TEST_CASE("table state: the person is the store's", "[net][tables][state]") {
+    StateServer server;
+    Client alice{server.url, "alice"};
+    Client bob{server.url, "bob"};
+    std::string const model{ui::kTableStateModel};
+    auto const aliceState = alice.create(model);
+    auto const bobState = bob.create(model);
+    morph::table::TableStateKey const key{.application = "lims",
+                                          .model = "Lims_SampleModel",
+                                          .table = "samples",
+                                          .qualifier = "samples",
+                                          .part = "state"};
+    auto const save = [&](Client& client, std::uint64_t instance, std::string text) {
+        auto const reply = client.execute(
+            instance, model, "save",
+            morph::model::ActionTraits<ui::TableStateSave>::toJson(ui::TableStateSave{
+                .key = key, .expected = {}, .upload = {}, .offset = 0, .text = std::move(text), .last = true}));
+        REQUIRE(reply.kind == "ok");
+    };
+    auto const loadedText = [&](Client& client, std::uint64_t instance, std::string const& body) {
+        auto const reply = client.execute(instance, model, "load", body);
+        REQUIRE(reply.kind == "ok");
+        auto const loaded = morph::model::ActionTraits<ui::TableStateLoad>::resultFromJson(reply.body);
+        REQUIRE(loaded.entries.size() == 1);
+        return loaded.entries.front().text;
+    };
+    save(alice, aliceState, R"({"version":1,"view":"alice's"})");
+    save(bob, bobState, R"({"version":1,"view":"bob's"})");
+    std::string const keys = morph::model::ActionTraits<ui::TableStateLoad>::toJson(ui::TableStateLoad{.keys = {key}});
+    CHECK(loadedText(alice, aliceState, keys) == R"({"version":1,"view":"alice's"})");
+    CHECK(loadedText(bob, bobState, keys) == R"({"version":1,"view":"bob's"})");
+    // A body naming another person is read with that member ignored.
+    std::string const naming = keys.substr(0, keys.size() - 1) + R"(,"person":"bob"})";
+    CHECK(loadedText(alice, aliceState, naming) == R"({"version":1,"view":"alice's"})");
+    // Mutation: the model keying by a body member (alice's load naming bob reads bob's state).
 }
