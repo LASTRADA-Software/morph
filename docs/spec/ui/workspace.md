@@ -307,6 +307,15 @@ A name with no factory refuses the mount with `no host screen `<name>` is regist
   before; an id the navigator does not list, or empty, leaves none marked, and a pin is never marked. `current()`
   answers the marked one. The client shell calls it whenever the active tab changes.
 - **Unavailable entries** are disabled, with their reason as the tooltip, and neither open nor prefetch.
+- **Custom screens.** `setCustom(entries)` lists the person's custom screens in a section of their own,
+  `navigator_custom_section`, after the application's groups, under the heading `navigator_custom`
+  (`NavigatorOptions::customHeading`, "Custom"). Each `NavigatorCustomEntry` is a row as a catalog entry's is
+  (`nav_row_<id>`, `nav_<id>`), whose content holds the custom mark (`nav_mark_<id>`, `customMark`), the title, who
+  saved it when it is not the person's own (`nav_author_<id>`, "by <savedBy>"), and for a broken screen a badge
+  (`nav_broken_<id>`) with its reason as the tooltip, so a custom entry never passes for an application entry. The
+  accessible name says the same. Titles and names are text, never markup or a message key. Choosing one calls
+  `onOpen` with its id, a broken one included; the search filters the section, `setCurrent` marks its entries, and
+  `menuEntries` ends with a submenu of it. An empty list hides the section.
 - **Search.** The search (`navigator_search`) shows the entries one of whose titles contains the text, ignoring
   ASCII case, and the headings of the groups that still show an entry.
   - `NavigatorOptions::titles` gives an entry's titles, one per locale (spec 6 §19), and the first one is shown;

@@ -32,6 +32,7 @@ Navigator::Navigator(IViewBackend& backend MORPH_LIFETIMEBOUND, ContainerWidget*
     _pinRow->setTestId("navigator_pins");
     listEntries();
     arrange();
+    makeCustomSection();
     std::vector<std::string> stored = std::move(_options.pins);
     _options.pins.clear();
     for (std::string& screenId : stored) {
@@ -66,6 +67,9 @@ void Navigator::setCurrent(std::string_view screenId) {
     if (Item const* const previous = itemOf(_current)) {
         previous->button->setSelected(false);
     }
+    if (CustomItem const* const previous = customItemOf(_current)) {
+        previous->button->setSelected(false);
+    }
     _current = std::string{screenId};
     if (Item const* const next = itemOf(_current)) {
         next->button->setSelected(true);
@@ -73,6 +77,8 @@ void Navigator::setCurrent(std::string_view screenId) {
             _openModule = entry->module;
             refreshVisibility();
         }
+    } else if (CustomItem const* const shown = customItemOf(_current)) {
+        shown->button->setSelected(true);
     } else {
         _current.clear();
     }
@@ -120,9 +126,11 @@ bool Navigator::choose(std::vector<std::size_t> const& path) {
     if (slot == nullptr || slot->screenId.empty() || !slot->items.empty()) {
         return false;
     }
-    CatalogEntry const* const entry = entryOf(slot->screenId);
-    if (entry == nullptr || !entry->available) {
-        return false;
+    if (customItemOf(slot->screenId) == nullptr) {
+        CatalogEntry const* const entry = entryOf(slot->screenId);
+        if (entry == nullptr || !entry->available) {
+            return false;
+        }
     }
     if (_options.onOpen) {
         _options.onOpen(slot->screenId);
@@ -250,9 +258,8 @@ Navigator::Menu Navigator::menu() const {
     }
     if (_moduleGroups) {
         moduleMenu(out);
-        return out;
     }
-    for (Group const* const listed : catalogOrder()) {
+    for (Group const* const listed : _moduleGroups ? std::vector<Group const*>{} : catalogOrder()) {
         Group const& group = *listed;
         std::string const heading = headingOf(group);
         MenuEntry submenu;
@@ -266,6 +273,28 @@ Navigator::Menu Navigator::menu() const {
             out.entries.push_back(std::move(submenu));
             out.targets.push_back(std::move(slot));
         }
+    }
+    if (!_customItems.empty()) {
+        MenuEntry submenu;
+        submenu.label = _options.customHeading;
+        MenuSlot slot;
+        for (CustomItem const& item : _customItems) {
+            MenuEntry made;
+            made.label = item.entry.title;
+            if (!item.entry.mine) {
+                made.label += " · " + item.entry.savedBy;
+            }
+            if (!item.entry.broken.empty()) {
+                made.label += " · !";
+            }
+            if (item.entry.id == _current) {
+                made.checked = true;
+            }
+            submenu.items.push_back(std::move(made));
+            slot.items.push_back(MenuSlot{.screenId = item.entry.id, .items = {}});
+        }
+        out.entries.push_back(std::move(submenu));
+        out.targets.push_back(std::move(slot));
     }
     return out;
 }
@@ -595,6 +624,15 @@ void Navigator::refreshVisibility() {
         // its entry's row alone.
         group.heading->setVisible(!_moduleGroups || !wanted.empty() ? true : !(firstOfModule || single));
     }
+    bool anyCustom = false;
+    for (CustomItem const& item : _customItems) {
+        bool const matches = wanted.empty() || lower(item.entry.title).contains(wanted);
+        item.row->setVisible(matches);
+        anyCustom = anyCustom || matches;
+    }
+    if (_customSection) {
+        _customSection->setVisible(anyCustom);
+    }
 }
 
 void Navigator::showPins() {
@@ -613,6 +651,95 @@ void Navigator::pinsChanged() {
     if (_options.onPins) {
         _options.onPins(_pins);
     }
+    changed();
+}
+
+Navigator::CustomItem const* Navigator::customItemOf(std::string_view screenId) const {
+    auto const found = std::ranges::find_if(
+        _customItems, [screenId](CustomItem const& item) { return !screenId.empty() && item.entry.id == screenId; });
+    return found == _customItems.end() ? nullptr : &*found;
+}
+
+void Navigator::makeCustomSection() {
+    _customSection = _backend->createStack(_root.get(), Axis::Vertical);
+    _customSection->setGap(1);
+    _customSection->setTestId("navigator_custom_section");
+    _customSection->setVisible(false);
+    _customHeading = _backend->createText(_customSection.get());
+    _customHeading->setRole(TextRole::Overline);
+    _customHeading->setTestId("navigator_custom");
+    _customHeading->setText(_options.customHeading);
+}
+
+void Navigator::setCustom(std::vector<NavigatorCustomEntry> entries) {
+    if (entries == _custom) {
+        return;
+    }
+    _customItems.clear();
+    _custom = std::move(entries);
+    for (NavigatorCustomEntry const& entry : _custom) {
+        CustomItem item{.entry = entry,
+                        .row = _backend->createStack(_customSection.get(), Axis::Horizontal),
+                        .button = {},
+                        .content = {},
+                        .mark = {},
+                        .label = {},
+                        .author = {},
+                        .broken = {}};
+        item.row->setTestId("nav_row_" + entry.id);
+        item.row->setLayout({.width = Sizing::stretch(), .height = {}});
+        item.row->setAlign(Align::Center);
+        item.button = _backend->createButton(item.row.get());
+        item.button->setTestId("nav_" + entry.id);
+        item.button->setStyle(ButtonStyle::Item);
+        item.button->setLayout({.width = Sizing::stretch(), .height = {}});
+        item.button->setLabel(entry.title);
+        item.button->setAccessibleName(_options.customMark + ", " + entry.title +
+                                       (entry.mine ? std::string{} : ", by " + entry.savedBy) +
+                                       (entry.broken.empty() ? std::string{} : ", broken"));
+        if (!entry.broken.empty()) {
+            item.button->setTooltip(entry.broken);
+        }
+        std::string const screenId = entry.id;
+        item.button->setOnClick([this, screenId] {
+            if (_options.onOpen) {
+                _options.onOpen(screenId);
+            }
+        });
+        // The mark, the title, the author and the badge are the button's content, so its selection spans them all.
+        ContainerWidget& content = item.button->content();
+        item.content = _backend->createStack(&content, Axis::Horizontal);
+        item.content->setTestId("nav_content_" + entry.id);
+        item.content->setGap(1);
+        item.content->setAlign(Align::Center);
+        item.content->setLayout({.width = Sizing::stretch(), .height = {}});
+        item.mark = _backend->createBadge(item.content.get());
+        item.mark->setTestId("nav_mark_" + entry.id);
+        item.mark->setText(_options.customMark);
+        item.mark->setTone(Tone::Info);
+        item.label = _backend->createText(item.content.get());
+        item.label->setTestId("nav_title_" + entry.id);
+        item.label->setText(entry.title);
+        item.label->setLayout({.width = Sizing::stretch(), .height = {}});
+        item.author = _backend->createText(item.content.get());
+        item.author->setTestId("nav_author_" + entry.id);
+        item.author->setRole(TextRole::Muted);
+        item.author->setText("by " + entry.savedBy);
+        item.author->setVisible(!entry.mine);
+        item.broken = _backend->createBadge(item.content.get());
+        item.broken->setTestId("nav_broken_" + entry.id);
+        item.broken->setText("Broken");
+        item.broken->setTone(Tone::Err);
+        item.broken->setVisible(!entry.broken.empty());
+        if (entry.id == _current) {
+            item.button->setSelected(true);
+        }
+        _customItems.push_back(std::move(item));
+    }
+    if (!_current.empty() && itemOf(_current) == nullptr && customItemOf(_current) == nullptr) {
+        _current.clear();
+    }
+    refreshVisibility();
     changed();
 }
 }  // namespace morph::ui

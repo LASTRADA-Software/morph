@@ -38,6 +38,23 @@ struct NavigatorBadge {
     bool operator==(NavigatorBadge const&) const = default;
 };
 
+/// @brief A person's custom screen as the navigator lists it, in its Custom section.
+struct NavigatorCustomEntry {
+    /// @brief The screen's id, `custom:` and its digits.
+    std::string id;
+    /// @brief The name its store gave it.
+    std::string title;
+    /// @brief Who saved it.
+    std::string savedBy;
+    /// @brief Whether the person saved it; an entry they did not save names who did.
+    bool mine = true;
+    /// @brief Why it may not be mounted today; empty when it may.
+    std::string broken;
+    /// @brief Memberwise equality.
+    /// @return Whether every member matches.
+    bool operator==(NavigatorCustomEntry const&) const = default;
+};
+
 /// @brief How a `Navigator` lists the catalog and what it reports.
 struct NavigatorOptions {
     /// @brief The catalog's entries, in the order the navigator lists them within a group.
@@ -59,6 +76,10 @@ struct NavigatorOptions {
     std::function<void(std::string const&)> onPrefetch;
     /// @brief Called with the whole new list each time the pins change, for the application to store.
     std::function<void(std::vector<std::string> const&)> onPins;
+    /// @brief The heading of the Custom section, and the label of its submenu in `menuEntries`.
+    std::string customHeading = "Custom";
+    /// @brief The mark every custom entry carries, so none passes for an application screen's entry.
+    std::string customMark = "Custom";
 };
 
 /// @brief The catalog as a list a person opens screens from, with a title search and pinned shortcuts.
@@ -194,6 +215,23 @@ public:
     /// @param onChanged The handler; empty calls nothing.
     void setOnChanged(std::function<void()> onChanged) { _onChanged = std::move(onChanged); }
 
+    /// @brief Lists the person's custom screens in the Custom section, after the application's groups, replacing what
+    ///        it listed before.
+    ///
+    /// Each entry is a row as the catalog's are (`nav_row_<id>`, `nav_<id>`), whose content holds the custom mark
+    /// (`nav_mark_<id>`), the title (`nav_title_<id>`), who saved it when it is not the person's own
+    /// (`nav_author_<id>`, "by <savedBy>") and, for a broken screen, a badge (`nav_broken_<id>`) with the reason as
+    /// the entry's tooltip. Choosing an entry calls `onOpen` with its id, a broken one included: what opening it does
+    /// is the application's. Titles and names are shown as text, never read as markup or as a message key. The search
+    /// filters the section as it filters the groups, `setCurrent` marks its entries, and `menuEntries` ends with it as
+    /// a submenu. An empty list hides the section.
+    /// @param entries The screens, in order.
+    void setCustom(std::vector<NavigatorCustomEntry> entries);
+
+    /// @brief The custom screens the Custom section lists.
+    /// @return They, in order.
+    [[nodiscard]] std::vector<NavigatorCustomEntry> const& custom() const noexcept { return _custom; }
+
 private:
     struct Item {
         CatalogEntry const* entry = nullptr;
@@ -230,6 +268,23 @@ private:
         std::optional<NavigatorBadge> shown;
         bool failed = false;
     };
+
+    // A custom screen's row: the button holding the mark, the title, the author and the broken badge.
+    struct CustomItem {
+        NavigatorCustomEntry entry;
+        std::unique_ptr<StackWidget> row;
+        std::unique_ptr<ButtonWidget> button;
+        std::unique_ptr<StackWidget> content;
+        std::unique_ptr<BadgeWidget> mark;
+        std::unique_ptr<TextWidget> label;
+        std::unique_ptr<TextWidget> author;
+        std::unique_ptr<BadgeWidget> broken;
+    };
+
+    [[nodiscard]] CustomItem const* customItemOf(std::string_view screenId) const;
+
+    // The Custom section, made empty and hidden at construction, after every group.
+    void makeCustomSection();
 
     // What one entry of `menuEntries()` opens: a screen, or a submenu's entries; neither for a separator.
     struct MenuSlot {
@@ -334,6 +389,11 @@ private:
     std::vector<std::unique_ptr<ButtonWidget>> _pinButtons;
     std::vector<Group> _groups;
     std::vector<Module> _modules;
+    std::unique_ptr<StackWidget> _customSection;
+    std::unique_ptr<TextWidget> _customHeading;
+    // After the section, so the rows go before the column that holds them.
+    std::vector<CustomItem> _customItems;
+    std::vector<NavigatorCustomEntry> _custom;
     bool _moduleGroups = false;
     // Whether the sections are placed module by module, which is how they are made.
     bool _moduleMajor = true;
