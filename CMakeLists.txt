@@ -482,6 +482,7 @@ add_library(morph ${_morph_library_type}
     src/ui/service.cpp
     src/ui/custom_screen_checks.cpp
     src/ui/custom_screens.cpp
+    src/ui/json_source.cpp
     src/ui/host.cpp
     src/ui/backend.cpp
     src/ui/explorer.cpp
@@ -649,6 +650,7 @@ target_sources(morph
         include/morph/ui/button_style.hpp
         include/morph/ui/service.hpp
         include/morph/ui/custom_screens.hpp
+        include/morph/ui/json_source.hpp
         include/morph/ui/file_store.hpp
         include/morph/ui/host.hpp
         include/morph/ui/dev_reload.hpp
