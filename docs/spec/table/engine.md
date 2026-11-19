@@ -473,7 +473,9 @@ against `wire::decode` both ways.
 
 - With no worker, a recompute's diff is one owner step (about 30 ms for an
   insert into 100,000 rows), and applying a `Deferred` repair lays out and
-  diffs on the owner (10 to 55 ms at 100,000 rows).
+  diffs on the owner (10 to 55 ms at 100,000 rows). A document's `rows`
+  table runs its engine this way, in owner steps of 4 ms, so these single
+  steps are where it can miss a frame.
 - `RowsSource` cannot name a date column's text format.
 - There is no `QueryRowsSource` (a source over a `morph::reactive` query's
   rows, diffing a refetch by key). It is the one header of this module that

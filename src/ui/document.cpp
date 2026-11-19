@@ -324,7 +324,8 @@ constexpr std::array<KeySpec, 32> kTableKeys = {{{"rows", Shape::Expr},
                                                  {"valign", Shape::Text},
                                                  {"empty", Shape::Nodes}}};
 /// @brief The keys of a `table` column part; `tone` and `tooltip` are read in the row's scope.
-constexpr std::array<KeySpec, 21> kColumnKeys = {{{"id", Shape::Name},
+constexpr std::array<KeySpec, 22> kColumnKeys = {{{"id", Shape::Name},
+                                                  {"kind", Shape::Text},
                                                   {"label", Shape::Expr},
                                                   {"width", Shape::Expr},
                                                   {"role", Shape::Expr},
@@ -3390,6 +3391,24 @@ private:
         }
         if (node.prop("highlightKey") != nullptr) {
             refuse(pointerAppend(node.path, "highlightKey"), "`highlightKey` links a model-backed table to a chart");
+        }
+        // Its arrangement is kept under the table's id, so a table with none persists nothing, and says so when it
+        // asks to.
+        if (ExprPtr const persist = node.prop("persist"); persist != nullptr && node.id.empty()) {
+            bool const* const flag = persist->kind == ExprKind::Literal ? persist->literal.asBool() : nullptr;
+            if (flag == nullptr || *flag) {
+                refuse(pointerAppend(node.path, "persist"),
+                       "a table over `rows` needs an `id` to persist its arrangement");
+            }
+        }
+        static constexpr std::array<std::string_view, 7> kColumnKinds = {"text", "integer", "decimal", "number",
+                                                                   "date", "dateTime", "bool"};
+        for (DocNodePtr const& column : node.partList("columns")) {
+            std::string_view const kind = column->name("kind");
+            if (!kind.empty() && !listed(kColumnKinds, kind)) {
+                refuse(pointerAppend(column->path, "kind"),
+                       "`kind` is one of text, integer, decimal, number, date, dateTime, bool");
+            }
         }
     }
 

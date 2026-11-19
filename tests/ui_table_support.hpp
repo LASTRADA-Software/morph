@@ -1561,4 +1561,275 @@ inline std::shared_ptr<table::ITableStateStore> sharedOf(table::ITableStateStore
     return {std::shared_ptr<void>{}, &store};
 }
 
+// ── A screen with a table over `rows` ───────────────────────────────────────
+
+/// @brief A document's rows with the row of id `"b"` named `"zz"`, or the first row when no row has that id: what
+///        `rowsDoc`'s button `rename` sets, so the list always changes.
+/// @param itemsLiteral The rows, a JSON list.
+/// @return The renamed list's JSON text.
+inline std::string renamedB(std::string_view itemsLiteral) {
+    auto json = parseJson(itemsLiteral);
+    REQUIRE(json.has_value());
+    auto& items = std::get<Json::array_t>(json->data);
+    auto const isB = [](Json const& item) {
+        auto const* const fields = std::get_if<Json::object_t>(&item.data);
+        auto const id = fields == nullptr ? Json::object_t::const_iterator{} : fields->find("id");
+        return fields != nullptr && id != fields->end() && std::get_if<std::string>(&id->second.data) != nullptr &&
+               std::get<std::string>(id->second.data) == "b";
+    };
+    auto const found = std::ranges::find_if(items, isB);
+    auto const renamed = found != items.end() ? found : items.begin();
+    if (renamed != items.end()) {
+        if (auto* const fields = std::get_if<Json::object_t>(&renamed->data)) {
+            fields->insert_or_assign("name", Json{std::string{"zz"}});
+        }
+    }
+    return glz::write_json(*json).value_or("");
+}
+
+/// @brief A `ui/1` document `samples` whose state `items` starts as @p itemsLiteral, showing a table (test id `list`)
+///        over `items` keyed by the row's `id`, with the sortable columns `id`, `name` and `weight`, and a button
+///        `rename` that sets `items` to `renamedB` of the list.
+/// @param itemsLiteral The rows, a JSON list.
+/// @param tableExtra   Members appended to the table node, each written `,"key":value`.
+/// @param withId       Whether the table has the id `list`.
+/// @return The document.
+inline std::string rowsDocWith(std::string_view itemsLiteral, std::string_view tableExtra, bool withId) {
+    return R"({"vocab":"ui/1","id":"samples","state":{"items":{"init":{"lit":)" + std::string{itemsLiteral} +
+           R"(}}},"view":{"kind":"column","children":[{"kind":"table",)" + (withId ? R"("id":"list",)" : "") +
+           R"("testId":"list","rows":{"ref":"items"},"key":{"row":"id"},"columns":[)"
+           R"({"id":"id","label":"Id","sortable":true},{"id":"name","label":"Name","sortable":true},)"
+           R"({"id":"weight","label":"Weight","sortable":true}])" +
+           std::string{tableExtra} +
+           R"(},{"kind":"button","testId":"rename","label":"Rename","onClick":[{"set":"items","value":{"lit":)" +
+           renamedB(itemsLiteral) + R"(}}]}]}})";
+}
+
+/// @brief `rowsDocWith` with the table's `id`.
+/// @param itemsLiteral The rows, a JSON list.
+/// @param tableExtra   Members appended to the table node.
+/// @return The document.
+inline std::string rowsDoc(std::string_view itemsLiteral, std::string_view tableExtra = "") {
+    return rowsDocWith(itemsLiteral, tableExtra, true);
+}
+
+/// @brief `rowsDoc` with no `id` on the table.
+/// @param itemsLiteral The rows, a JSON list.
+/// @param tableExtra   Members appended to the table node.
+/// @return The document.
+inline std::string rowsDocNoId(std::string_view itemsLiteral, std::string_view tableExtra = "") {
+    return rowsDocWith(itemsLiteral, tableExtra, false);
+}
+
+/// @brief Three rows, `a`, `b` and `c`, each named as its id.
+inline constexpr std::string_view kThree = R"([{"id":"a","name":"a"},{"id":"b","name":"b"},{"id":"c","name":"c"}])";
+
+/// @brief The model-backed table a rows table is compared with.
+inline constexpr std::string_view kRowsSamples = kModelTable;
+
+/// @brief @p n rows `{"id": i, "name": "n<i>"}` as a JSON list.
+/// @param n Rows.
+/// @return The list's text.
+inline std::string idRows(std::size_t n) {
+    std::string out = "[";
+    for (std::size_t at = 0; at < n; ++at) {
+        out += (at == 0 ? "" : ",") + std::format(R"({{"id":{},"name":"n{}"}})", at, at);
+    }
+    return out + "]";
+}
+
+/// @brief 200 rows `{"id", "name", "weight"}` whose names mix accents and case and whose weights are decimals of two
+///        places; every tenth name and weight is `null`.
+/// @return The list's text.
+inline std::string mixedRows() {
+    static constexpr std::array<std::string_view, 14> kNames = {
+        "Émile", "emil", "Zoë", "zoe", "Anna", "anna", "Ödön", "oscar", "Ärger", "apple", "éclair", "Eclair", "zebra",
+        "Zebra"};
+    std::string out = "[";
+    for (std::size_t at = 0; at < 200; ++at) {
+        bool const missing = at % 10 == 9;
+        std::string const name = missing ? "null" : "\"" + std::string{kNames.at((at * 5) % kNames.size())} + "\"";
+        std::string const weight =
+            missing ? "null"
+                    : std::format(R"({{"num":{},"den":100,"dp":2}})",
+                                  static_cast<std::int64_t>((at * 389) % 2000) - 700);
+        out += (at == 0 ? "" : ",") + std::format(R"({{"id":{},"name":{},"weight":{}}})", at, name, weight);
+    }
+    return out + "]";
+}
+
+/// @brief The cells of @p rows, a JSON list of `{id, name, weight}`, as a model's table holds them: `id` the key,
+///        `name` text, `weight` an exact decimal, `null` empty.
+/// @param rows The list's text.
+/// @return The source.
+inline std::unique_ptr<table::VectorSource> rowsAsSource(std::string_view rows) {
+    auto source = std::make_unique<table::VectorSource>(
+        std::vector<table::ColumnInfo>{table::ColumnInfo{.id = "id", .kind = table::ColumnKind::Integer},
+                                       table::ColumnInfo{.id = "name", .kind = table::ColumnKind::Text},
+                                       table::ColumnInfo{.id = "weight", .kind = table::ColumnKind::Decimal}});
+    auto const list = parseJson(rows);
+    REQUIRE(list.has_value());
+    std::vector<table::RowId> ids;
+    std::vector<std::vector<table::Cell>> cells;
+    auto const integer = [](Json const& json) {
+        return std::visit(
+            []<typename Number>(Number const& number) -> std::int64_t {
+                if constexpr (std::is_arithmetic_v<Number>) {
+                    return static_cast<std::int64_t>(number);
+                } else {
+                    FAIL("not a number");
+                    return 0;
+                }
+            },
+            json.data);
+    };
+    for (Json const& item : std::get<Json::array_t>(list->data)) {
+        auto const& fields = std::get<Json::object_t>(item.data);
+        std::int64_t const id = integer(fields.at("id"));
+        table::Cell name;
+        if (auto const* const text = std::get_if<std::string>(&fields.at("name").data)) {
+            name = *text;
+        }
+        table::Cell weight;
+        if (auto const* const parts = std::get_if<Json::object_t>(&fields.at("weight").data)) {
+            weight = math::Rational{math::Numerator{integer(parts->at("num"))},
+                                    math::Denominator{integer(parts->at("den"))}, math::DecimalPlaces{2}};
+        }
+        ids.emplace_back(id);
+        cells.push_back({table::Cell{id}, std::move(name), std::move(weight)});
+    }
+    source->setRows(std::move(ids), std::move(cells));
+    return source;
+}
+
+/// @brief The description of a model's table over @p rows: `id` (the key), `name` and `weight`, sortable, of the
+///        kinds a `ValueRowsSource` infers from those rows.
+/// @param rows The list's text.
+/// @return The description, its revision set.
+inline table::TableDescription describedFrom(std::string_view rows) {
+    auto const json = parseJson(rows);
+    REQUIRE(json.has_value());
+    auto const list = valueFromJson(*json);
+    REQUIRE(list.has_value());
+    table::TableDescription description;
+    description.id = "samples";
+    description.label = "Samples";
+    description.key = "id";
+    for (std::string_view const id : {"id", "name", "weight"}) {
+        std::array<std::size_t, morph::ui::detail::kValueVotes> counts{};
+        std::vector<morph::ui::detail::ValueVote> votes;
+        for (Value const& row : *list->asList()) {
+            Value const* const field = row.field(id);
+            votes.push_back(field == nullptr ? morph::ui::detail::ValueVote::None : morph::ui::detail::voteOf(*field));
+            ++counts.at(static_cast<std::size_t>(votes.back()));
+        }
+        table::TableColumn column;
+        column.info = table::ColumnInfo{.id = std::string{id}, .kind = morph::ui::detail::inferredKind(counts, votes)};
+        column.label = forms::detail::inferTitle(std::string{id});
+        column.sortable = true;
+        description.columns.push_back(std::move(column));
+    }
+    return table::describe(std::move(description));
+}
+
+/// @brief A model's answer to @p query over @p rows, ordered by `table::apply` with `ValueRowsCollator` as the
+///        served collator, against `describedFrom(rows)`'s revision.
+/// @param rows  The list's text.
+/// @param query The query.
+/// @return The generic page's JSON.
+inline std::string pagesOf(std::string_view rows, table::TableQuery const& query) {
+    auto const source = rowsAsSource(rows);
+    table::ApplyOptions options;
+    options.services.collator = std::make_shared<ValueRowsCollator>();
+    auto const answered = table::apply(*source, query, options);
+    REQUIRE(answered.has_value());
+    auto const snapshot = source->snapshot();
+    table::GenericPage page;
+    page.revision = describedFrom(rows).revision;
+    page.columns = query.columns.value_or(std::vector<std::string>{"id", "name", "weight"});
+    page.total = answered->total;
+    page.offset = answered->offset;
+    for (std::size_t const row : answered->rows) {
+        page.keys.push_back(snapshot->rowId(row));
+        table::GenericRow cells;
+        for (std::string const& column : page.columns) {
+            auto const at = static_cast<std::size_t>(
+                std::ranges::find(source->columns(), column, &table::ColumnInfo::id) - source->columns().begin());
+            cells.push_back(snapshot->cell(row, at));
+        }
+        page.rows.push_back(std::move(cells));
+    }
+    return glz::write_json(page).value_or("");
+}
+
+/// @brief The keys of the realized data rows of the harness's first table, in child order, joined by spaces; a
+///        text key is written without its quotes.
+/// @param h The harness.
+/// @return The keys.
+inline std::string rowOrder(TableHarness const& h) {
+    std::string out;
+    for (int const row : h.backend.children(h.backend.all("Table").front())) {
+        if (h.backend.prop(row, "heading") == "true") {
+            continue;
+        }
+        std::string key = h.backend.prop(row, "rowKey");
+        if (key.size() >= 2 && key.front() == '"' && key.back() == '"') {
+            key = key.substr(1, key.size() - 2);
+        }
+        out += (out.empty() ? "" : " ") + key;
+    }
+    return out;
+}
+
+/// @brief The engine that orders a table over `rows`.
+/// @param screen The screen.
+/// @param id     The table's element id.
+/// @return The engine.
+inline table::Engine& engineOf(Screen& screen, std::string_view id) {
+    auto* const rows = dynamic_cast<EngineRows*>(ScreenProbe::element(screen, id).tableRows.get());
+    REQUIRE(rows != nullptr);
+    return rows->engine();
+}
+
+/// @brief A `rowsDoc` text with the column part @p column given the member @p member, written `"key":value`.
+/// @param text   The document.
+/// @param column The column's id.
+/// @param member The member.
+/// @return The document.
+inline std::string withColumnKey(std::string_view text, std::string_view column, std::string_view member) {
+    auto json = parseJson(text);
+    REQUIRE(json.has_value());
+    auto field = parseJson("{" + std::string{member} + "}");
+    REQUIRE(field.has_value());
+    auto& view = std::get<Json::object_t>(std::get<Json::object_t>(json->data).at("view").data);
+    auto& children = std::get<Json::array_t>(view.at("children").data);
+    auto& tableNode = std::get<Json::object_t>(children.front().data);
+    for (auto& part : std::get<Json::array_t>(tableNode.at("columns").data)) {
+        auto& fields = std::get<Json::object_t>(part.data);
+        if (std::get<std::string>(fields.at("id").data) != column) {
+            continue;
+        }
+        for (auto& [key, value] : std::get<Json::object_t>(field->data)) {
+            fields.insert_or_assign(key, value);
+        }
+    }
+    return glz::write_json(*json).value_or("");
+}
+
+/// @brief Whether a document loads against @p catalog.
+/// @param text    The document.
+/// @param catalog The catalog.
+/// @return `true` when it loads.
+inline bool loads(std::string_view text, Catalog const& catalog) {
+    return loadDocumentText(text, LoadOptions{.catalog = catalog}).has_value();
+}
+
+/// @brief The reason a document is refused against the table catalog.
+/// @param text The document.
+/// @return The reason; empty when it loads.
+inline std::string refusalOf(std::string_view text) {
+    auto const loaded = loadDocumentText(text, LoadOptions{.catalog = tableCatalog()});
+    return loaded ? std::string{} : loaded.error().reason;
+}
+
 }  // namespace morph::ui::testing

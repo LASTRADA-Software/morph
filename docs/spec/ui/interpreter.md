@@ -454,39 +454,61 @@ keeps its operands' 0 places and still fills 0.29 of a bar.
   The mount re-asserts the slot after the handler, so a bound selection the document does not write back
   snaps back, and a literal one never changes. The element values `selection` and `selectedCount` read the
   bound value when there is one and the table's own otherwise.
-  **The rows' pipeline.** The table's element holds a computed made when the element is wired, beside its
-  `rows`, so every reader of its element values (a pager drawn before the table included) and the table's own
-  lowering see one order, and `rows` is evaluated once per change. It evaluates `rows`, then sorts the list by
-  the table's sort: the bound `sort`, or the table's own (starting at `[]`) when no key binds one. Each key
-  names a sortable column; the column's `sortBy`, or the row's field of the column's `id`, is read once per row
-  with the row bound, in the table's scope, and the rows are ordered by those values as `sort` orders
-  (`expressions.md`, Sorting), key by key. A sort of `null` or `[]` keeps the source order; one that is not a
-  list of `{column, direction}` records naming sortable columns, or whose values cannot be ordered, keeps the
-  source order and is reported once at the table's `sort` path, so a data error does not blank the screen.
-  `sortBy` runs before any row's scope exists, as `key` does, so a row-scope name in it reads `null`. Then it
-  pages the sorted list, so page 2 holds the second page of the whole sorted list: `pageSize` and `page` are read
-  in the table's scope; a `pageSize` of `null` does not page, and one that is no positive integer is reported once
-  at its path and does not page either; a `page` of `null` is the first, one that is negative or no integer is
-  reported once and shows the first, and one past the last shows the last, unreported, since a filter that shrinks
-  the rows under the user is normal. The backend holds the page's rows alone, as it would a short table. On a
-  user's change of the selection, an `Extend` report keeps the selected keys of the rows on other pages, in their
-  order, before the reported keys; a `Replace` report is the whole new selection, so a plain click or a range
-  clears the other pages' keys as it clears the rest of its own, and every `Single` change is one. A key whose row
-  `rows` no longer has drops on any user change. `empty` shows while `rows` is empty, not while a page is.
-  **Groups.** With `group`, the pipeline splits the source rows into runs by `by` (read per row as `sortBy` is,
-  adjacent rows with equal values, `null` equal to `null`), gives each row its run's index, and sorts by that index
-  first and the sort's keys second, so every group keeps its place and its rows are ordered inside it. It pages the
-  data rows, and puts a heading entry before the first row of each run the page holds: the run record of the whole
-  group, computed before paging, so a group split across pages reads the same `count`, `first` and `last` on both,
-  with its key in a reserved field. The row view lowers `heading` for that entry as one cell, in a row scope of its
-  own whose row is the record, and the table makes it a heading row (`TableRowView::heading`). A heading's key is
-  `"\u001Fgroup:"`, the canonical JSON of the run's key, `":"` and its ordinal among runs with an equal key, so
-  groups A, B, A get three headings; a data key equal to one is reported as a duplicate by the mount. Heading keys
-  never reach `onSelectionChange`: the lowering drops them from a report, since a virtualized backend's Ctrl+A or
-  range can name a row it has not realized. `viewCount`, `selectedCount` and the page positions count data rows. A table
-  lowered where names are bound (a component's `props`) sorts its own copy with those names, which its element
-  values cannot see. The mount's keyed reconciliation moves the sorted rows, so each keeps its widget, its
-  native state and its selection. The header marks the sort's first key (`Table::sort`); a header click on a
+  **The rows' pipeline.** The interpreter does not sort or page a table: its element holds, from when it is
+  wired, the table's rows on the engine, so every reader of its element values (a pager drawn before the table
+  included) and the table's own lowering see one order, and `rows` is evaluated once per change. The evaluated list
+  goes to a `ValueRowsSource`, matched by `key`, under a `table::Engine` whose owner is the runtime's, with no worker,
+  owner steps of 4 ms and `ValueRowsCollator` for text, read through an `EngineRows`; a changed row is repaired in
+  place, not sorted again, and a row whose fields changed is drawn again even when no sort reads them. The table's
+  sort, the bound `sort` or the table's own (starting at `[]`), is the engine's sort chain. A key names a sortable
+  column, whose cells the source holds while a key reads it: the column's `sortBy`, read per row in a tracked
+  computation with the row bound in the table's scope, or the row's field of the column's `id`, converted to the
+  column's kind, its literal `kind` or else the kind its cells infer. Values of one kind order as `sort` orders
+  them (`expressions.md`, Sorting). A cell not of its column's kind is invalid, sorts last in either direction,
+  and is reported once for the table at its `sort` path. A sort that is not a list of `{column, direction}` records
+  naming sortable columns keeps the source order and is reported at the table's `sort` path, so a data error does
+  not blank the screen. `sortBy` runs before any row's scope exists, as `key` does, so a row-scope name in it reads
+  `null`. A list of more than 20,000 rows, or of more than 1,000,000 cells (rows times the column parts), is still
+  ordered, and reported once for the table: `table <id> holds <n> rows; a table over rows is ordered on the client
+  up to 20,000 rows or 1,000,000 cells — serve it as a model's table`. The page is a slice of the engine's view, so
+  page 2 holds the second page of the whole sorted list: `pageSize` and `page` are read in the table's scope; a
+  `pageSize` of `null` does not page, and one that is no positive integer is reported once at its path and does not
+  page either; a `page` of `null` is the first, one that is negative or no integer is reported once and shows the
+  first, and one past the last shows the last, unreported, since a filter that shrinks the rows under the user is
+  normal. The mount reads the page through a `TableSource` whose `alwaysWindowed` is `false`, the path a
+  model-backed table's mount takes: below the virtualization threshold it realizes every row of the page, as a
+  short table does, and above it the rows in view. Its `rowScopedCells` is `true`: a row's cells are lowered in
+  the row's one scope, found by its key, so a realized row the mount gives to another key has its cells built
+  again rather than rebound. On a user's change of the selection, an `Extend` report keeps
+  the selected keys of the rows on other pages, in their order, before the reported keys; a `Replace` report is the
+  whole new selection, so a plain click or a range clears the other pages' keys as it clears the rest of its own,
+  and every `Single` change is one. A key whose row `rows` no longer has drops on any user change. `empty` shows
+  while `rows` is empty, not while a page is.
+  **Its state and its status line.** A table over `rows` with an `id`, while the session has a table-state store and
+  its `persist` is not `false`, keeps its sort under the key `{application, model "", table <id>, qualifier <the
+  persist name or the screen's id>, part "state"}`. Its rows are held back (`EngineRows::setRestoring`) until the
+  stored state has been applied and the engine has ordered by it, or until `tableStateTimeout` passes, so the first
+  rows drawn are in the stored order; a state that arrives later is applied unless the user changed the table
+  meanwhile. The stored state is fitted to the node's column parts, of the kinds their cells infer. A header click
+  is saved as a model-backed table's is, debounced, and an unmount saves at once. A table with no `id` keeps no
+  state. Its status line shows its counts and the latest message (`ScreenCore::tableMessage`), and takes space only
+  while it has a message; `status: true` shows it always, and `status: false` never, its messages going to the
+  host's notifications.
+  **Groups.** With `group`, the source splits its rows into runs by `by` (read per row, untracked: what `by` reads
+  besides the row regroups the rows when it changes; adjacent rows are one run while their `by` is the same element
+  as the run's first row's, by the rule of `runs`, quantities compared through the screen's unit table), holds each
+  row's run index as a hidden leading sort key, and the engine sorts by it first and the sort's keys second, so
+  every group keeps its place and its rows are ordered inside it. The lowering pages the data rows, and puts a
+  heading entry before the first row of each run the page holds: the run record of the whole group, so a group
+  split across pages reads the same `count`, `first` and `last` on both, with its key in a reserved field. The row
+  view lowers `heading` for that entry as one cell, in a row scope of its own whose row is the record, and the table
+  makes it a heading row (`TableRowLook::heading`). A heading's key is `"\u001Fgroup:"`, the canonical JSON of the
+  run's key, `":"` and its ordinal among runs with an equal key, so groups A, B, A get three headings; a data key
+  equal to one is reported as a duplicate. Heading keys never reach `onSelectionChange`: the lowering drops them
+  from a report, since a virtualized backend's Ctrl+A or range can name a row it has not realized. `viewCount`,
+  `selectedCount` and the page positions count data rows. A table lowered where names are bound (a component's
+  `props`) has a source and an engine of its own, read with those names, which its element values cannot see, and
+  keeps no state. A row keeps its widget, its native state and its selection while its key stays on the page. The header marks the sort's first key (`Table::sort`); a header click on a
   sortable column (`Table::onSort`) makes that column the single key, `desc` when it already is the first key
   and `asc`, `asc` otherwise, sets the table's own sort when no key binds one, and runs `onSortChange` with
   `event` the new sort, as a user event, in one batch. The element value `sort` reads the bound sort or the

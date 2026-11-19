@@ -620,3 +620,47 @@ TEST_CASE("interpreter bench: U4 memory of a rows table on the engine", "[.bench
                  kRows * fixture.columns().size(), allBytes, static_cast<double>(allBytes) / (1024.0 * 1024.0));
     static_cast<void>(std::fflush(stdout));
 }
+
+// B1 as a `rows` table runs it: the engine with no worker, in owner steps of 4 ms, over `ValueRowsSource`, with the
+// collator a rows table orders by. A timing: the bounds are table.md's, read off the printed rows.
+TEST_CASE("interpreter bench: B1 a rows table's sort and filter in owner steps", "[.benchmark][interpreter]") {
+    std::println("\nB1: a three-key sort then a text filter on a rows table's engine, no worker, 4 ms steps\n\n"
+                 "| scenario | rows | median ms | p10-p90 ms |\n|---|---:|---:|---:|");
+    for (std::size_t const rows : {std::size_t{10'000}, std::size_t{20'000}, std::size_t{100'000}}) {
+        bench::WideTableSource const fixture{{.rows = static_cast<std::int64_t>(rows), .columns = 300, .seed = 1}};
+        ui::ValueList const items = listOf(fixtureItems(fixture));
+        std::vector<double> results;
+        std::vector<double> steps;
+        for (int run = 0; run < 7; ++run) {
+            morph::testing::StepExecutor owner;
+            morph::reactive::Runtime runtime{owner};
+            auto source = std::make_shared<ui::ValueRowsSource>(
+                runtime, plainColumns({"id", "name", "qty"}),
+                [](ui::Value const& row) { return ui::Key{*row.field("id")->asInt()}; });
+            morph::table::EngineOptions options;
+            options.owner = &owner;
+            options.frameBudget = std::chrono::milliseconds{4};
+            options.services.collator = std::make_shared<ui::ValueRowsCollator const>();
+            morph::table::Engine engine{source, std::move(options)};
+            source->assign(items);
+            for (auto const* const column : {"name", "qty", "id"}) {
+                source->use(column);
+            }
+            owner.runAll();
+            morph::table::EngineStats const before = engine.stats();
+            auto const began = Clock::now();
+            REQUIRE(engine.setSort({{.column = "name", .dir = morph::table::SortDirection::Ascending},
+                                    {.column = "qty", .dir = morph::table::SortDirection::Descending},
+                                    {.column = "id", .dir = morph::table::SortDirection::Ascending}}));
+            morph::table::FilterSpec filter;
+            filter.columns["name"].include.push_back(morph::table::FilterEntry{.contains = "a"});
+            REQUIRE(engine.setFilter(std::move(filter)));
+            owner.runAll();
+            results.push_back(millisSince(began));
+            REQUIRE(engine.stats().ownerSteps - before.ownerSteps > 1);  // the work ran in steps, not in one call
+            steps.push_back(static_cast<double>(engine.stats().maxOwnerStepMicros) / 1000.0);
+        }
+        printRow("B1: request to result", rows, spreadOf(results));
+        printRow("B1: the longest owner step", rows, spreadOf(steps));
+    }
+}
