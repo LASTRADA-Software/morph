@@ -20,6 +20,7 @@
 #include <morph/table/data_source.hpp>
 #include <morph/table/description.hpp>
 #include <morph/table/query.hpp>
+#include <morph/testing/owner_probe_recorder.hpp>
 #include <morph/testing/step_executor.hpp>
 #include <morph/ui/interpreter.hpp>
 #include <morph/ui/locale_table.hpp>
@@ -587,6 +588,20 @@ public:
         }
         return **got;
     }
+
+    /// @brief How often the runtime reported a misuse at @p site since the first call, which installs the recorder
+    ///        that counts them in place of a debug build's assertion.
+    /// @param site One of the `site::` constants.
+    /// @return The count; 0 on the first call.
+    std::size_t reported(std::string_view site) {
+        if (!probe) {
+            probe.emplace(owner.coreExecutor());
+        }
+        return probe->count(site);
+    }
+
+    /// @brief The recorder `reported` installs; last, so it is uninstalled first.
+    std::optional<morph::testing::OwnerProbeRecorder> probe;
 };
 
 /// @brief A preferences store that keeps its entries in memory and lets a test list, read, erase and fail them, which

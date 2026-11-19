@@ -14,11 +14,16 @@
 #include <cstdint>
 #include <cstdio>
 #include <format>
+#include <initializer_list>
+#include <memory>
 #include <glaze/glaze.hpp>
 #include <morph/core/wire.hpp>
 #include <morph/forms/engine/collection.hpp>
 #include <morph/table/data_source.hpp>
 #include <morph/table/engine.hpp>
+#include <morph/testing/step_executor.hpp>
+#include <morph/ui/table_rows.hpp>
+#include <morph/ui/value.hpp>
 #include <optional>
 #include <print>
 #include <string>
@@ -493,5 +498,125 @@ TEST_CASE("interpreter bench: K4 the query cache under an event and a wide page"
     std::println("| K4 | storing a decoded 200 x 300 page of fractional numbers in an opaque entry | {:.3f} ms median "
                  "({:.3f}-{:.3f}) |",
                  stores[stores.size() / 2], stores.front(), stores.back());
+    static_cast<void>(std::fflush(stdout));
+}
+
+// U1, U2 and U4 on the engine: a document's rows through `ValueRowsSource`. Timings only; their count gates are the
+// "value rows source" cases of test_ui_table_model.cpp.
+
+namespace {
+
+// A runtime of its own, a source over @p columns keyed by `id`, and an engine over it.
+struct RowsOnEngine {
+    explicit RowsOnEngine(std::vector<ui::ValueColumn> columns)
+        : source{std::make_shared<ui::ValueRowsSource>(
+              runtime, std::move(columns), [](ui::Value const& row) { return ui::Key{*row.field("id")->asInt()}; })},
+          engine{source, morph::table::EngineOptions{.owner = &owner}} {}
+
+    morph::testing::StepExecutor owner;
+    morph::reactive::Runtime runtime{owner};
+    std::shared_ptr<ui::ValueRowsSource> source;
+    morph::table::Engine engine;
+};
+
+ui::ValueList listOf(std::string const& items) {
+    auto const json = ui::parseJson("[" + items + "]");
+    REQUIRE(json.has_value());
+    auto const value = ui::valueFromJson(*json);
+    REQUIRE(value.has_value());
+    REQUIRE(value->asList() != nullptr);
+    return *value->asList();
+}
+
+// A copy of @p rows whose row @p at has the name "ÿÿÿ", which sorts last; the other rows share storage with @p rows.
+ui::ValueList renamed(ui::ValueList rows, std::size_t at) {
+    ui::ValueRecord fields = *rows.at(at).asRecord();
+    fields.insert_or_assign("name", ui::Value{std::string{"ÿÿÿ"}});
+    rows.at(at) = ui::Value{std::move(fields)};
+    return rows;
+}
+
+std::vector<ui::ValueColumn> plainColumns(std::initializer_list<std::string_view> ids) {
+    std::vector<ui::ValueColumn> columns;
+    for (auto const id : ids) {
+        columns.push_back(ui::ValueColumn{.id = std::string{id}, .kind = std::nullopt, .sortBy = {}});
+    }
+    return columns;
+}
+
+}  // namespace
+
+TEST_CASE("interpreter bench: U1 U2 a rows table of 100,000 on the engine", "[.benchmark][interpreter]") {
+    constexpr std::size_t kRows = 100'000;
+    bench::WideTableSource const fixture{{.rows = kRows, .columns = 300, .seed = 1}};
+    std::string const items = fixtureItems(fixture);
+    ui::ValueList const rows = listOf(items);
+    std::println("\nU1, U2: a document's rows of 100,000 through ValueRowsSource and the engine, call to settled\n\n"
+                 "| scenario | rows | median ms | p10-p90 ms |\n|---|---:|---:|---:|");
+    std::vector<double> sorts;
+    std::vector<double> shared;
+    std::vector<double> fresh;
+    for (int run = 0; run < 7; ++run) {
+        RowsOnEngine h{plainColumns({"id", "name", "qty"})};
+        h.source->assign(rows);
+        h.owner.runAll();
+        auto began = Clock::now();
+        h.source->use("name");
+        REQUIRE(h.engine.setSort({{.column = "name", .dir = morph::table::SortDirection::Ascending}}));
+        h.owner.runAll();
+        sorts.push_back(millisSince(began));
+        auto const first = std::get<std::int64_t>(h.engine.rowIdAt(0));
+        auto const firstRow = static_cast<std::size_t>(first - 1);
+        began = Clock::now();
+        h.source->assign(renamed(rows, firstRow));
+        h.owner.runAll();
+        shared.push_back(millisSince(began));
+        REQUIRE(std::get<std::int64_t>(h.engine.rowIdAt(kRows - 1)) == first);  // the renamed row moved to the end
+        // The held rows with one more renamed, written to JSON and read back: no row shares storage.
+        std::string const held = ui::detail::canonicalJson(ui::Value{renamed(renamed(rows, firstRow), firstRow + 1)});
+        ui::ValueList const decoded = listOf(held.substr(1, held.size() - 2));
+        began = Clock::now();
+        h.source->assign(decoded);
+        h.owner.runAll();
+        fresh.push_back(millisSince(began));
+        REQUIRE(std::get<std::int64_t>(h.engine.rowIdAt(kRows - 1)) == first + 1);
+    }
+    printRow("U1: use and sort on name, call to settled", kRows, spreadOf(sorts));
+    printRow("U2: one row renamed, other rows shared", kRows, spreadOf(shared));
+    printRow("U2: one row renamed, a fresh decode of every row", kRows, spreadOf(fresh));
+}
+
+TEST_CASE("interpreter bench: U4 memory of a rows table on the engine", "[.benchmark][interpreter]") {
+    constexpr std::size_t kRows = 10'000;
+    bench::WideTableSource const fixture{{.rows = kRows, .columns = 300, .seed = 1}};
+    std::vector<ui::ValueColumn> columns;
+    for (auto const& column : fixture.columns()) {
+        columns.push_back(ui::ValueColumn{.id = column.id, .kind = std::nullopt, .sortBy = {}});
+    }
+    RowsOnEngine h{std::move(columns)};
+    h.source->assign(listOf(bench::wideRowsJson(fixture)));
+    h.source->use("t001");
+    REQUIRE(h.engine.setSort({{.column = "t001", .dir = morph::table::SortDirection::Ascending}}));
+    h.owner.runAll();
+    REQUIRE(h.engine.viewRowCount() == kRows);
+    auto const snapshot = h.source->snapshot();
+    auto const sorted = static_cast<std::size_t>(
+        std::ranges::find(h.source->columns(), std::string{"t001"}, &morph::table::ColumnInfo::id) -
+        h.source->columns().begin());
+    std::size_t heldBytes = 0;
+    std::size_t allBytes = 0;
+    for (std::size_t row = 0; row < kRows; ++row) {
+        for (std::size_t column = 0; column < fixture.columns().size(); ++column) {
+            std::size_t const bytes = bench::approximateCellBytes(fixture.snapshot()->cell(row, column));
+            allBytes += bytes;
+        }
+        heldBytes += bench::approximateCellBytes(snapshot->cell(row, sorted));
+    }
+    std::println("\nU4: a rows table of 10,000 x 300 through ValueRowsSource, sorted on one column\n\n"
+                 "| held as | cells | bytes | MiB |\n|---|---:|---:|---:|\n"
+                 "| the source's cells (one column in use) | {} | {} | {:.2f} |\n"
+                 "| every column as cells (approximateCellBytes) | {} | {} | {:.1f} |",
+                 h.source->cellsHeld(), heldBytes, static_cast<double>(heldBytes) / (1024.0 * 1024.0),
+                 kRows * fixture.columns().size(), allBytes, static_cast<double>(allBytes) / (1024.0 * 1024.0));
     static_cast<void>(std::fflush(stdout));
 }

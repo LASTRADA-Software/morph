@@ -4,7 +4,7 @@
 
 /// @file ui/table_rows.hpp
 /// @brief What a table's mount reads, whoever serves its rows: `TableRows`, over the engine (`EngineRows`) or over
-///        a server's pages (`WindowRows`).
+///        a server's pages (`WindowRows`); and `ValueRowsSource`, a document's rows as the engine's source.
 ///
 /// `EngineRows` holds every row: `visible` does nothing and `keysOf` completes at once. `WindowRows` holds the
 /// pages around the visible rows in a `table::PageWindow`, sends the fetches the window asks for through the
@@ -19,6 +19,7 @@
 
 #include <algorithm>
 #include <array>
+#include <atomic>
 #include <charconv>
 #include <chrono>
 #include <cmath>
@@ -38,6 +39,8 @@
 #include <morph/core/callback_scope.hpp>
 #include <morph/core/change_types.hpp>
 #include <morph/core/completion.hpp>
+#include <morph/reactive/runtime.hpp>
+#include <morph/reactive/signal.hpp>
 #include <morph/render/locale_format.hpp>
 #include <morph/table/data_source.hpp>
 #include <morph/table/description.hpp>
@@ -201,6 +204,13 @@ struct RowRecord {
 using RecordOf = std::function<RowRecord(table::RowSnapshot const& snapshot, std::size_t sourceRow)>;
 
 namespace detail {
+
+/// @brief The site names a misuse of a table's rows is reported under, through the runtime's owner probe.
+namespace site {
+/// @brief A ForEach, Table or rows-source snapshot repeated a key; the later row is refused and the first one kept.
+///        Declared here, and not beside the mount's other sites, because `mount.hpp` includes this header.
+inline constexpr char const* kDuplicateKey = "morph::ui: duplicate ForEach key";
+}  // namespace site
 
 /// @brief A `double` as the record holds it: the decimal its shortest fixed-notation text spells, or that text's
 ///        shortest form when it spells no decimal `parseDecimal` reads, so the value is never lost to `null`.
@@ -582,6 +592,984 @@ private:
     mutable std::shared_ptr<table::RowSnapshot const> _memoSnapshot;
     mutable std::deque<Logged> _log;
     mutable std::size_t _built = 0;
+};
+
+// ── A document's rows as a source ───────────────────────────────────────────
+
+/// @brief The expression language's text order: the default collator's fold, then the text itself.
+///
+/// Texts that fold alike order by their own bytes, so the order is total and is the one the expression language's
+/// `sort` gives text. Safe to call concurrently: `cloneForTask` returns null.
+class ValueRowsCollator final : public table::TextCollator {
+public:
+    /// @brief The fold of @p text, a NUL, then @p text: case-folded order first, then the text's own bytes.
+    /// @param text UTF-8 text.
+    /// @return The collation key.
+    [[nodiscard]] std::string sortKey(std::string_view text) const override {
+        _folds.fetch_add(1, std::memory_order_relaxed);
+        std::string key = table::CodePointCollator{}.fold(text);
+        key.push_back('\0');
+        key.append(text);
+        return key;
+    }
+
+    /// @brief @p text folded as the default collator folds it, which filters match against.
+    /// @param text UTF-8 text.
+    /// @return The folded text.
+    [[nodiscard]] std::string fold(std::string_view text) const override {
+        return table::CodePointCollator{}.fold(text);
+    }
+
+    /// @brief Sort keys built so far, each of which folds its text once: what an order costs in folds.
+    /// @return The count.
+    [[nodiscard]] std::size_t folds() const noexcept { return _folds.load(std::memory_order_relaxed); }
+
+private:
+    mutable std::atomic<std::size_t> _folds{0};
+};
+
+/// @brief One column of a `rows` table, as its source reads it.
+struct ValueColumn {
+    /// @brief The column's id: the row field it reads when it has no `sortBy`.
+    std::string id;
+    /// @brief The column part's literal `kind`; empty to infer the kind from the cells.
+    std::optional<table::ColumnKind> kind;
+    /// @brief The column's `sortBy` evaluated in the row's scope, read tracked; empty reads the field `id`.
+    std::function<Value(Value const& row)> sortBy;
+};
+
+/// @brief The hidden leading sort key of a grouped rows table: an `Integer` column of each row's run index.
+///
+/// It begins with U+001F, a character no document name holds, so no column a document declares can share its id.
+inline constexpr std::string_view kGroupRunColumn = "\x1F"
+                                                    "group";
+
+namespace detail {
+
+/// @brief What one non-null value says a column's kind is.
+enum class ValueVote : std::uint8_t {
+    None,      ///< Nothing: a `null`, a list or a record that is not a measure.
+    Bool,      ///< A `Bool` column.
+    Integer,   ///< An `Integer` column.
+    Decimal,   ///< A `Decimal` column.
+    Text,      ///< A `Text` column.
+    DateTime,  ///< A `DateTime` column.
+    Measure,   ///< A `Measure` column.
+};
+
+/// @brief How many `ValueVote`s there are.
+inline constexpr std::size_t kValueVotes = 7;
+
+/// @brief An amount and its unit's id, as a quantity or a `{num, den, unit}` record holds them.
+struct MeasureParts {
+    /// @brief The amount.
+    math::Rational amount;
+    /// @brief The unit's id; points into the value read.
+    std::string const* unit = nullptr;
+};
+
+/// @brief The places a fraction with denominator @p den is written to exactly, or the most a decimal holds.
+/// @param den The denominator, positive.
+/// @return The places.
+[[nodiscard]] inline std::uint32_t exactPlacesOf(std::int64_t den) {
+    std::int64_t power = 1;
+    for (std::uint32_t places = 0; places < math::kMaxDecimalPlaces; ++places) {
+        if (power % den == 0) {
+            return places;
+        }
+        if (power > std::numeric_limits<std::int64_t>::max() / 10) {
+            break;
+        }
+        power *= 10;
+    }
+    return math::kMaxDecimalPlaces;
+}
+
+/// @brief A quantity, or a record of exactly `num`, `den` and `unit` (integers and a text), read as a measure.
+/// @param value The value.
+/// @return Its amount and unit, or nothing for any other value.
+[[nodiscard]] inline std::optional<MeasureParts> measureOf(Value const& value) {
+    if (auto const* const quantity = value.asQuantity()) {
+        return MeasureParts{.amount = quantity->value, .unit = &quantity->unit};
+    }
+    auto const* const record = value.asRecord();
+    constexpr std::size_t kFields = 3;
+    if (record == nullptr || record->size() != kFields) {
+        return std::nullopt;
+    }
+    auto const* const num = value.field("num");
+    auto const* const den = value.field("den");
+    auto const* const unit = value.field("unit");
+    if (num == nullptr || den == nullptr || unit == nullptr || num->asInt() == nullptr || den->asInt() == nullptr ||
+        unit->asString() == nullptr || *den->asInt() == 0) {
+        return std::nullopt;
+    }
+    math::Rational const amount{math::Numerator{*num->asInt()}, math::Denominator{*den->asInt()},
+                                math::DecimalPlaces{0}};
+    return MeasureParts{
+        .amount = math::Rational{math::Numerator{amount.numerator}, math::Denominator{amount.denominator},
+                                 math::DecimalPlaces{exactPlacesOf(amount.denominator)}},
+        .unit = unit->asString()};
+}
+
+/// @brief The kind a value votes its column.
+/// @param value The value.
+/// @return The vote; `None` for `null`, a list and a record that is not a measure.
+[[nodiscard]] inline ValueVote voteOf(Value const& value) {
+    switch (value.kind()) {
+        case ValueKind::Bool:
+            return ValueVote::Bool;
+        case ValueKind::Int:
+            return ValueVote::Integer;
+        case ValueKind::Decimal:
+            return ValueVote::Decimal;
+        case ValueKind::String:
+            return ValueVote::Text;
+        case ValueKind::Timestamp:
+            return ValueVote::DateTime;
+        case ValueKind::Quantity:
+            return ValueVote::Measure;
+        case ValueKind::Record:
+            return measureOf(value) ? ValueVote::Measure : ValueVote::None;
+        case ValueKind::Null:
+        case ValueKind::List:
+        default:
+            return ValueVote::None;
+    }
+}
+
+/// @brief The column kind a vote names.
+/// @param vote A vote other than `None`.
+/// @return The kind.
+[[nodiscard]] constexpr table::ColumnKind kindOfVote(ValueVote vote) noexcept {
+    switch (vote) {
+        case ValueVote::Bool:
+            return table::ColumnKind::Bool;
+        case ValueVote::Integer:
+            return table::ColumnKind::Integer;
+        case ValueVote::Decimal:
+            return table::ColumnKind::Decimal;
+        case ValueVote::DateTime:
+            return table::ColumnKind::DateTime;
+        case ValueVote::Measure:
+            return table::ColumnKind::Measure;
+        case ValueVote::Text:
+        case ValueVote::None:
+        default:
+            return table::ColumnKind::Text;
+    }
+}
+
+/// @brief A column's kind from its cells' votes.
+///
+/// No vote is `Text`; votes all alike are their kind; integers and decimals together are `Decimal`, an integer being
+/// an exact decimal. Any other mix takes the first non-null cell's kind, `Decimal` when that is an integer and a
+/// decimal voted too.
+/// @param counts The votes of each kind.
+/// @param votes  Each row's vote, in source order.
+/// @return The kind.
+[[nodiscard]] inline table::ColumnKind inferredKind(std::array<std::size_t, kValueVotes> const& counts,
+                                                    std::span<ValueVote const> votes) {
+    auto const count = [&counts](ValueVote vote) { return counts.at(static_cast<std::size_t>(vote)); };
+    std::size_t kinds = 0;
+    ValueVote only = ValueVote::None;
+    for (std::size_t at = 1; at < kValueVotes; ++at) {
+        if (counts.at(at) > 0) {
+            ++kinds;
+            only = static_cast<ValueVote>(at);
+        }
+    }
+    if (kinds == 0) {
+        return table::ColumnKind::Text;
+    }
+    if (kinds == 1) {
+        return kindOfVote(only);
+    }
+    bool const decimals = count(ValueVote::Decimal) > 0;
+    if (kinds == 2 && decimals && count(ValueVote::Integer) > 0) {
+        return table::ColumnKind::Decimal;
+    }
+    auto const first = std::ranges::find_if(votes, [](ValueVote vote) { return vote != ValueVote::None; });
+    auto const kind = first == votes.end() ? table::ColumnKind::Text : kindOfVote(*first);
+    return kind == table::ColumnKind::Integer && decimals ? table::ColumnKind::Decimal : kind;
+}
+
+/// @brief A cell of a column and whether it is not of the column's kind.
+struct ConvertedCell {
+    /// @brief The cell.
+    table::Cell cell;
+    /// @brief The value is not of the column's kind: the cell sorts last.
+    bool invalid = false;
+};
+
+/// @brief @p value as a cell of a column of @p kind.
+///
+/// `null` is an empty cell. A value not of the kind is invalid: an empty cell in a `Text` column, which reads any
+/// other cell as text, and elsewhere a measure in no unit, which every other kind reads as invalid. A timestamp is
+/// UTC seconds rounded down (a `Date`'s days, rounded down); an integer in a `Decimal` column is a decimal of 0
+/// places; under `Number` an integer or a decimal is the nearest `double`; a measure is its amount in its unit's
+/// number in @p units, invalid when @p units is null or lacks the unit.
+/// @param value The value.
+/// @param kind  The column's kind.
+/// @param units The registry a measure's unit is found in; null for none.
+/// @return The cell.
+[[nodiscard]] inline ConvertedCell convertedCell(Value const& value, table::ColumnKind kind,
+                                                 table::UnitRegistry const* units) {
+    using table::ColumnKind;
+    if (value.isNull()) {
+        return {};
+    }
+    auto const invalid = [kind] {
+        return kind == ColumnKind::Text
+                   ? ConvertedCell{.cell = table::Cell{}, .invalid = true}
+                   : ConvertedCell{.cell = table::Cell{table::Measure{.amount = {}, .unit = table::kUnknownUnit}},
+                                   .invalid = true};
+    };
+    auto const floorDiv = [](std::int64_t count, std::int64_t per) {
+        std::int64_t const quotient = count / per;
+        return (count % per) < 0 ? quotient - 1 : quotient;
+    };
+    constexpr std::int64_t kMillisPerSecond = 1000;
+    constexpr std::int64_t kMillisPerDay = 86'400'000;
+    switch (kind) {
+        case ColumnKind::Text:
+        case ColumnKind::Custom:
+            if (auto const* const text = value.asString()) {
+                return {.cell = table::Cell{*text}, .invalid = false};
+            }
+            return invalid();
+        case ColumnKind::Integer:
+        case ColumnKind::Key:
+            if (auto const* const integer = value.asInt()) {
+                return {.cell = table::Cell{*integer}, .invalid = false};
+            }
+            return invalid();
+        case ColumnKind::Decimal:
+        case ColumnKind::Quantity:
+            if (auto const* const integer = value.asInt()) {
+                return {.cell = table::Cell{math::Rational{*integer, math::DecimalPlaces{0}}}, .invalid = false};
+            }
+            if (auto const* const decimal = value.asDecimal()) {
+                return {.cell = table::Cell{decimal->value}, .invalid = false};
+            }
+            return invalid();
+        case ColumnKind::Number:
+            if (auto const* const integer = value.asInt()) {
+                return {.cell = table::Cell{static_cast<double>(*integer)}, .invalid = false};
+            }
+            if (auto const* const decimal = value.asDecimal()) {
+                return {.cell = table::Cell{decimal->value.toDouble(math::kMaxDecimalPlaces + 1)}, .invalid = false};
+            }
+            return invalid();
+        case ColumnKind::DateTime:
+            if (auto const* const instant = value.asTimestamp()) {
+                return {.cell = table::Cell{floorDiv(instant->value.time_since_epoch().count(), kMillisPerSecond)},
+                        .invalid = false};
+            }
+            return invalid();
+        case ColumnKind::Date:
+            if (auto const* const instant = value.asTimestamp()) {
+                return {.cell = table::Cell{floorDiv(instant->value.time_since_epoch().count(), kMillisPerDay)},
+                        .invalid = false};
+            }
+            if (auto const* const text = value.asString()) {
+                if (auto const days = table::IsoDateParser{}.parseDate(*text, {})) {
+                    return {.cell = table::Cell{*days}, .invalid = false};
+                }
+            }
+            return invalid();
+        case ColumnKind::Bool:
+            if (auto const* const flag = value.asBool()) {
+                return {.cell = table::Cell{*flag}, .invalid = false};
+            }
+            return invalid();
+        case ColumnKind::Measure:
+            if (auto const parts = measureOf(value)) {
+                if (auto const unit = units == nullptr ? std::nullopt : units->find(*parts->unit)) {
+                    return {.cell = table::Cell{table::Measure{.amount = parts->amount, .unit = *unit}},
+                            .invalid = false};
+                }
+            }
+            return invalid();
+        default:
+            return invalid();
+    }
+}
+
+/// @brief Whether two cells are the same, a decimal's places included.
+/// @param left  A cell.
+/// @param right Another.
+/// @return `true` when they hold the same value with the same places.
+[[nodiscard]] inline bool sameCell(table::Cell const& left, table::Cell const& right) {
+    auto const samePlaces = [](math::Rational const& a, math::Rational const& b) {
+        return a.decimalPlaces.value == b.decimalPlaces.value;
+    };
+    if (left != right) {
+        return false;
+    }
+    if (auto const* const exact = std::get_if<math::Rational>(&left)) {
+        return samePlaces(*exact, std::get<math::Rational>(right));
+    }
+    if (auto const* const measure = std::get_if<table::Measure>(&left)) {
+        return samePlaces(measure->amount, std::get<table::Measure>(right).amount);
+    }
+    return true;
+}
+
+/// @brief Whether two row values are one object: a record or a list by its storage, any other value by equality.
+/// @param left  A value.
+/// @param right Another.
+/// @return `true` when nothing in @p right can differ from @p left.
+[[nodiscard]] inline bool sameObject(Value const& left, Value const& right) {
+    if (left.kind() != right.kind()) {
+        return false;
+    }
+    if (auto const* const record = left.asRecord()) {
+        return record == right.asRecord();
+    }
+    if (auto const* const list = left.asList()) {
+        return list == right.asList();
+    }
+    return left == right;
+}
+
+/// @brief The rows of a `ValueRowsSource` at one moment: each row's value and key, and the cells of the columns in
+///        use, shared with the source until it changes them.
+class ValueRowsSnapshot final : public table::RowSnapshot {
+public:
+    /// @brief A snapshot over shared storage.
+    /// @param rows    Each row's value.
+    /// @param keys    Each row's key.
+    /// @param columns Each column's cells; null for a column not in use, whose cells are empty.
+    ValueRowsSnapshot(std::shared_ptr<std::vector<Value> const> rows, std::shared_ptr<std::vector<Key> const> keys,
+                      std::vector<std::shared_ptr<std::vector<table::Cell> const>> columns)
+        : _rows{std::move(rows)}, _keys{std::move(keys)}, _columns{std::move(columns)} {}
+
+    /// @brief The rows.
+    /// @return Their count.
+    [[nodiscard]] std::size_t rowCount() const override { return _keys->size(); }
+
+    /// @brief A row's key.
+    /// @param row Row index.
+    /// @return The key.
+    [[nodiscard]] table::RowId rowId(std::size_t row) const override { return _keys->at(row); }
+
+    /// @brief One cell.
+    /// @param row    Row index.
+    /// @param column Column index.
+    /// @return The cell; empty for a column not in use.
+    [[nodiscard]] table::Cell cell(std::size_t row, std::size_t column) const override {
+        if (column >= _columns.size() || _columns[column] == nullptr) {
+            return table::Cell{};
+        }
+        return _columns[column]->at(row);
+    }
+
+    /// @brief Hands rows `[first, last)` of @p column to @p sink in one run.
+    /// @param column Column index.
+    /// @param sink   Receives the cells.
+    /// @param first  First row.
+    /// @param last   One past the last row.
+    void readColumn(std::size_t column, table::ColumnSink& sink, std::size_t first, std::size_t last) const override {
+        if (column >= _columns.size() || _columns[column] == nullptr || first >= last) {
+            RowSnapshot::readColumn(column, sink, first, last);
+            return;
+        }
+        sink.cells(first, std::span<table::Cell const>{*_columns[column]}.subspan(first, last - first));
+    }
+
+    /// @brief A row's value.
+    /// @param row Row index.
+    /// @return The value the row was given.
+    [[nodiscard]] Value const& row(std::size_t row) const { return _rows->at(row); }
+
+private:
+    std::shared_ptr<std::vector<Value> const> _rows;
+    std::shared_ptr<std::vector<Key> const> _keys;
+    std::vector<std::shared_ptr<std::vector<table::Cell> const>> _columns;
+};
+
+}  // namespace detail
+
+/// @brief A `table::DataSource` over a document's list of values: what a `rows` table sorts and filters through the
+///        engine.
+///
+/// A column holds cells only while it is in use (`use`, `unuse`); one no sort, filter or values list reads holds
+/// none. A cell is the column's `sortBy` of the row, or the row's field of the column's id, converted to the
+/// column's kind: a literal `kind`, or the kind its cells vote for (see `detail::inferredKind`). A `sortBy` is read in
+/// a tracked computation per row: a change to what one row's reads notifies `Updated` for that row, and a change that
+/// every row's reads is a `Reset`.
+///
+/// `assign` matches the new list to the held one by key: a row whose value is the held object is kept unread, any
+/// other has its in-use cells derived and compared with the held ones and is `Updated` only when one differs; new
+/// keys are `Inserted`, missing keys `Removed`, and a list that both adds and drops rows, or reorders them, is a
+/// `Reset`. So is a change of a column's kind, and of a grouped table's runs. A later row with a key already seen is
+/// dropped and reported (`detail::site::kDuplicateKey`), once per duplicate.
+///
+/// `snapshot()` returns one pointer until the rows or cells change. Every member is called on the runtime's owner.
+class ValueRowsSource final : public table::DataSource {
+public:
+    /// @brief A source of no rows over @p columns.
+    /// @param runtime The runtime each `sortBy` is tracked on and duplicates are reported to; must outlive the source.
+    /// @param columns The document's columns, each id once.
+    /// @param keyOf   Reads a row's key.
+    /// @param units   The registry `Quantity` cells' units are found in; null: none, and every quantity is invalid.
+    ValueRowsSource(reactive::Runtime& runtime, std::vector<ValueColumn> columns, std::function<Key(Value const& row)> keyOf,
+                    std::shared_ptr<table::UnitRegistry const> units = {})
+        : _runtime{&runtime},
+          _columns{std::move(columns)},
+          _keyOf{std::move(keyOf)},
+          _units{std::move(units)},
+          _held(_columns.size()) {
+        _infos.reserve(_columns.size() + 1);
+        for (auto const& column : _columns) {
+            _infos.push_back(table::ColumnInfo{
+                .id = column.id, .kind = column.kind.value_or(table::ColumnKind::Text), .comparator = {},
+                .format = {}, .level = {}, .dimensions = {}});
+        }
+    }
+
+    ValueRowsSource(ValueRowsSource const&) = delete;
+    ValueRowsSource& operator=(ValueRowsSource const&) = delete;
+    ValueRowsSource(ValueRowsSource&&) = delete;
+    ValueRowsSource& operator=(ValueRowsSource&&) = delete;
+    /// @brief Ends every tracked `sortBy`.
+    ~ValueRowsSource() override = default;
+
+    /// @brief The document's columns, then `kGroupRunColumn` while the table is grouped.
+    /// @return The columns.
+    [[nodiscard]] std::span<table::ColumnInfo const> columns() const override { return _infos; }
+
+    /// @brief The rows and the cells of the columns in use.
+    /// @return The same pointer until they change.
+    [[nodiscard]] std::shared_ptr<table::RowSnapshot const> snapshot() const override {
+        if (_snapshot == nullptr) {
+            std::vector<std::shared_ptr<std::vector<table::Cell> const>> cells;
+            cells.reserve(_infos.size());
+            for (auto const& held : _held) {
+                cells.push_back(held.uses > 0 ? held.cells : nullptr);
+            }
+            if (_group) {
+                cells.push_back(_runCells);
+            }
+            _snapshot = std::make_shared<detail::ValueRowsSnapshot const>(_rows, _keys, std::move(cells));
+        }
+        return _snapshot;
+    }
+
+    /// @brief Registers @p listener.
+    /// @param listener The listener.
+    void subscribe(table::ChangeListener& listener) override { _listeners.add(listener); }
+
+    /// @brief Removes @p listener; safe from inside a notification.
+    /// @param listener The listener.
+    void unsubscribe(table::ChangeListener& listener) override { _listeners.remove(listener); }
+
+    /// @brief Takes a new list: matched to the held rows by key, then by the cells of the columns in use.
+    /// @param rows The rows, in source order.
+    void assign(ValueList rows) {
+        auto keys = std::make_shared<std::vector<Key>>();
+        auto kept = std::make_shared<std::vector<Value>>();
+        std::unordered_map<Key, std::size_t> index;
+        keys->reserve(rows.size());
+        kept->reserve(rows.size());
+        for (auto& row : rows) {
+            Key key = _keyOf(row);
+            if (!index.try_emplace(key, kept->size()).second) {
+                _runtime->core()->report(detail::site::kDuplicateKey);
+                continue;
+            }
+            keys->push_back(std::move(key));
+            kept->push_back(std::move(row));
+        }
+        std::size_t const count = kept->size();
+        // Held, not referred to: the previous rows go when the new ones are taken, before the removed are counted.
+        auto const previousRows = _rows;
+        std::vector<Value> const& old = *previousRows;
+        constexpr std::size_t kNone = std::numeric_limits<std::size_t>::max();
+        std::vector<std::size_t> was(count, kNone);
+        std::vector<bool> same(count, false);
+        std::size_t matched = 0;
+        bool inOrder = true;
+        std::size_t previous = 0;
+        for (std::size_t at = 0; at < count; ++at) {
+            auto const found = _index.find((*keys)[at]);
+            if (found == _index.end()) {
+                continue;
+            }
+            was[at] = found->second;
+            same[at] = detail::sameObject(old[found->second], (*kept)[at]);
+            inOrder = inOrder && (matched == 0 || found->second > previous);
+            previous = found->second;
+            ++matched;
+        }
+        bool const added = matched < count;
+        bool const dropped = matched < old.size();
+        bool reset = std::exchange(_pending, Pending{}).any();
+        std::vector<bool> updated(count, false);
+        for (std::size_t column = 0; column < _columns.size(); ++column) {
+            if (_held[column].uses == 0) {
+                continue;
+            }
+            reset = reassign(column, *kept, was, same, updated) || reset;
+        }
+        bool runsMoved = false;
+        if (_group) {
+            std::vector<Value> by(count);
+            for (std::size_t at = 0; at < count; ++at) {
+                by[at] = same[at] ? _byValues[was[at]] : readBy((*kept)[at]);
+            }
+            auto const before = _runs;
+            _byValues = std::move(by);
+            buildRuns(*kept);
+            runsMoved = _runs != before;
+        }
+        _rows = std::move(kept);
+        _keys = std::move(keys);
+        _index = std::move(index);
+        _snapshot.reset();
+        bool const structural = added || dropped;
+        if (reset || (structural && (!inOrder || (added && dropped) || runsMoved)) || (!structural && runsMoved)) {
+            notify(table::RowChange{.kind = table::ChangeKind::Reset, .rows = {}});
+            return;
+        }
+        if (dropped) {
+            std::vector<bool> stays(old.size(), false);
+            for (auto const at : was) {
+                if (at != kNone) {
+                    stays[at] = true;
+                }
+            }
+            std::vector<std::size_t> removed;
+            for (std::size_t at = 0; at < old.size(); ++at) {
+                if (!stays[at]) {
+                    removed.push_back(at);
+                }
+            }
+            notify(table::RowChange{.kind = table::ChangeKind::Removed, .rows = std::move(removed)});
+        }
+        if (added) {
+            std::vector<std::size_t> inserted;
+            for (std::size_t at = 0; at < count; ++at) {
+                if (was[at] == kNone) {
+                    inserted.push_back(at);
+                }
+            }
+            notify(table::RowChange{.kind = table::ChangeKind::Inserted, .rows = std::move(inserted)});
+        }
+        std::vector<std::size_t> changed;
+        for (std::size_t at = 0; at < count; ++at) {
+            if (updated[at]) {
+                changed.push_back(at);
+            }
+        }
+        if (!changed.empty()) {
+            notify(table::RowChange{.kind = table::ChangeKind::Updated, .rows = std::move(changed)});
+        }
+    }
+
+    /// @brief Groups the rows by the `group` part's `by`, read per row, and adds the hidden column
+    ///        `kGroupRunColumn`; notifies `Reset`.
+    /// @param by The `by`; empty: no groups, and the hidden column goes.
+    void setGroup(std::function<Value(Value const& row)> by) {
+        _group = std::move(by);
+        bool const listed = _infos.size() > _columns.size();
+        if (_group && !listed) {
+            _infos.push_back(table::ColumnInfo{.id = std::string{kGroupRunColumn}, .kind = table::ColumnKind::Integer,
+                                               .comparator = {}, .format = {}, .level = {}, .dimensions = {}});
+        } else if (!_group && listed) {
+            _infos.pop_back();
+        }
+        _byValues.clear();
+        if (_group) {
+            _byValues.reserve(_rows->size());
+            for (auto const& row : *_rows) {
+                _byValues.push_back(readBy(row));
+            }
+        }
+        buildRuns(*_rows);
+        _snapshot.reset();
+        notify(table::RowChange{.kind = table::ChangeKind::Reset, .rows = {}});
+    }
+
+    /// @brief The run a source row belongs to: its index among the runs of adjacent rows with equal `by`, in
+    ///        source order.
+    /// @param sourceRow The row.
+    /// @return The run's index; 0 when the table is not grouped or the row is past the rows.
+    [[nodiscard]] std::size_t runOf(std::size_t sourceRow) const {
+        return sourceRow < _runs.size() ? _runs[sourceRow] : 0;
+    }
+
+    /// @brief Each run's heading record `{key, count, first, last, items}`, with its heading key in
+    ///        `detail::kGroupHeadingField`, by run index, as `TableView::runs` holds them.
+    /// @return The records; none when the table is not grouped.
+    [[nodiscard]] std::span<Value const> runRecords() const noexcept { return _runRecords; }
+
+    /// @brief A sort, a filter or a values list began to read @p column: its cells are derived when this is its
+    ///        first use, and a `Reset` is notified so the engine reads them.
+    /// @param column The column's id; one the source does not have is ignored.
+    void use(std::string_view column) {
+        auto const at = columnOf(column);
+        if (!at) {
+            return;
+        }
+        if (_held[*at].uses++ > 0) {
+            return;
+        }
+        rebuild(*at);
+        _snapshot.reset();
+        notify(table::RowChange{.kind = table::ChangeKind::Reset, .rows = {}});
+    }
+
+    /// @brief A use of @p column ended; at its last, its cells and tracked `sortBy`s go. Nothing is notified.
+    /// @param column The column's id; one not in use is ignored.
+    void unuse(std::string_view column) {
+        auto const at = columnOf(column);
+        if (!at || _held[*at].uses == 0 || --_held[*at].uses > 0) {
+            return;
+        }
+        _held[*at] = Held{};
+        _snapshot.reset();
+    }
+
+    /// @brief What `EngineRows` reads a row's key and record through: the snapshot's key and the row's value.
+    /// @return The reader; it holds nothing of the source.
+    [[nodiscard]] RecordOf recordOf() const {
+        return [](table::RowSnapshot const& snapshot, std::size_t sourceRow) {
+            auto const* const rows = dynamic_cast<detail::ValueRowsSnapshot const*>(&snapshot);
+            return RowRecord{.key = snapshot.rowId(sourceRow), .row = rows == nullptr ? Value{} : rows->row(sourceRow)};
+        };
+    }
+
+    /// @brief Cells held: one per row of each column in use, and of the run column while grouped.
+    /// @return The count.
+    [[nodiscard]] std::size_t cellsHeld() const noexcept {
+        std::size_t cells = 0;
+        for (auto const& held : _held) {
+            cells += held.cells == nullptr ? 0 : held.cells->size();
+        }
+        return cells + (_runCells == nullptr ? 0 : _runCells->size());
+    }
+
+    /// @brief Cells derived so far: a row's field read, or its `sortBy` run, for a column in use.
+    /// @return The count.
+    [[nodiscard]] std::size_t cellsDerived() const noexcept { return _derived; }
+
+    /// @brief Cells of @p column, a column in use, that are not of its kind.
+    /// @param column The column's id.
+    /// @return The count; 0 for a column not in use.
+    [[nodiscard]] std::size_t invalidCells(std::string_view column) const {
+        auto const at = columnOf(column);
+        if (!at) {
+            return 0;
+        }
+        return static_cast<std::size_t>(std::ranges::count(_held[*at].invalid, std::uint8_t{1}));
+    }
+
+private:
+    // A `sortBy` cell: the row it reads, the value it read last and the tracked computation that reads it.
+    struct Tracker {
+        std::size_t column = 0;
+        std::size_t row = 0;
+        Value input;
+        Value value;
+        bool live = false;
+        std::unique_ptr<reactive::Effect> effect;
+    };
+
+    // A column's cells while it is in use, each row's vote and whether its cell is invalid.
+    struct Held {
+        std::size_t uses = 0;
+        std::shared_ptr<std::vector<table::Cell>> cells;
+        std::vector<detail::ValueVote> votes;
+        std::vector<std::uint8_t> invalid;
+        std::array<std::size_t, detail::kValueVotes> counts{};
+        std::vector<std::unique_ptr<Tracker>> trackers;
+    };
+
+    // What tracked `sortBy`s changed since the last notification.
+    struct Pending {
+        std::vector<std::size_t> rows;
+        std::set<std::size_t> rerun;
+        bool reset = false;
+        [[nodiscard]] bool any() const noexcept { return reset || !rows.empty(); }
+    };
+
+    [[nodiscard]] std::optional<std::size_t> columnOf(std::string_view id) const {
+        auto const found = std::ranges::find(_columns, id, &ValueColumn::id);
+        if (found == _columns.end()) {
+            return std::nullopt;
+        }
+        return static_cast<std::size_t>(found - _columns.begin());
+    }
+
+    void notify(table::RowChange const& change) { _listeners.notify(change); }
+
+    // The `group`'s `by` of a row, read untracked: a change of the list is what regroups it.
+    [[nodiscard]] Value readBy(Value const& row) const {
+        return _runtime->untracked([&] { return _group(row); });
+    }
+
+    // A field column's value for a row.
+    [[nodiscard]] Value fieldOf(std::size_t column, Value const& row) const {
+        auto const* const field = row.field(_columns[column].id);
+        return field == nullptr ? Value{} : *field;
+    }
+
+    // The value a column's cell of a row converts: the tracked `sortBy`'s last, or the row's field.
+    [[nodiscard]] Value valueOf(std::size_t column, std::size_t row, Value const& input) const {
+        auto const& trackers = _held[column].trackers;
+        if (row < trackers.size() && trackers[row] != nullptr) {
+            return trackers[row]->value;
+        }
+        return fieldOf(column, input);
+    }
+
+    // A new tracked `sortBy` for a row: its first run derives the value.
+    std::unique_ptr<Tracker> track(std::size_t column, std::size_t row, Value const& input) {
+        auto tracker = std::make_unique<Tracker>();
+        tracker->column = column;
+        tracker->row = row;
+        tracker->input = input;
+        Tracker* const self = tracker.get();
+        tracker->effect = std::make_unique<reactive::Effect>(*_runtime, [this, self] { rerun(*self); });
+        self->live = true;
+        return tracker;
+    }
+
+    // A tracked `sortBy`'s run: the first stores the value, a later one updates the row's cell.
+    void rerun(Tracker& tracker) {
+        Value value;
+        try {
+            value = _columns[tracker.column].sortBy(tracker.input);
+        } catch (...) {
+            value = Value{};
+        }
+        ++_derived;
+        tracker.value = std::move(value);
+        if (!tracker.live) {
+            return;
+        }
+        auto& held = _held[tracker.column];
+        std::size_t const row = tracker.row;
+        auto const kind = vote(held, tracker.column, row, detail::voteOf(tracker.value));
+        _pending.rerun.insert(row);
+        if (kind != _infos[tracker.column].kind) {
+            _infos[tracker.column].kind = kind;
+            reconvert(tracker.column);
+            _pending.reset = true;
+        } else {
+            auto converted = detail::convertedCell(tracker.value, kind, _units.get());
+            held.invalid[row] = converted.invalid ? 1 : 0;
+            if (!detail::sameCell(converted.cell, (*held.cells)[row])) {
+                _snapshot.reset();
+                writable(held)[row] = std::move(converted.cell);
+                _pending.rows.push_back(row);
+            }
+        }
+        if (!_posted) {
+            _posted = true;
+            _runtime->owner().post(_alive.guard([this] { flushTracked(); }));
+        }
+    }
+
+    // One notification for the tracked `sortBy`s that ran: `Reset` when every row's ran or a kind changed.
+    void flushTracked() {
+        _posted = false;
+        auto pending = std::exchange(_pending, Pending{});
+        if (!pending.any()) {
+            return;
+        }
+        if (pending.reset || pending.rerun.size() == _rows->size()) {
+            notify(table::RowChange{.kind = table::ChangeKind::Reset, .rows = {}});
+            return;
+        }
+        std::ranges::sort(pending.rows);
+        auto const [first, last] = std::ranges::unique(pending.rows);
+        pending.rows.erase(first, last);
+        notify(table::RowChange{.kind = table::ChangeKind::Updated, .rows = std::move(pending.rows)});
+    }
+
+    // Changes one row's vote and returns the column's kind after it.
+    table::ColumnKind vote(Held& held, std::size_t column, std::size_t row, detail::ValueVote next) {
+        auto& current = held.votes[row];
+        --held.counts.at(static_cast<std::size_t>(current));
+        ++held.counts.at(static_cast<std::size_t>(next));
+        current = next;
+        return kindOf(column, held);
+    }
+
+    [[nodiscard]] table::ColumnKind kindOf(std::size_t column, Held const& held) const {
+        if (_columns[column].kind) {
+            return *_columns[column].kind;
+        }
+        return detail::inferredKind(held.counts, held.votes);
+    }
+
+    // The column's cells, copied first when a snapshot still shares them.
+    std::vector<table::Cell>& writable(Held& held) {
+        if (held.cells.use_count() > 1) {
+            held.cells = std::make_shared<std::vector<table::Cell>>(*held.cells);
+        }
+        return *held.cells;
+    }
+
+    // Every cell of a column converted again for its kind, from the values held.
+    void reconvert(std::size_t column) {
+        auto& held = _held[column];
+        auto const kind = _infos[column].kind;
+        auto cells = std::make_shared<std::vector<table::Cell>>(_rows->size());
+        for (std::size_t row = 0; row < _rows->size(); ++row) {
+            auto converted = detail::convertedCell(valueOf(column, row, (*_rows)[row]), kind, _units.get());
+            (*cells)[row] = std::move(converted.cell);
+            held.invalid[row] = converted.invalid ? 1 : 0;
+        }
+        held.cells = std::move(cells);
+        _snapshot.reset();
+    }
+
+    // A column's first use: every row's cell derived.
+    void rebuild(std::size_t column) {
+        auto& held = _held[column];
+        std::size_t const count = _rows->size();
+        held.votes.assign(count, detail::ValueVote::None);
+        held.invalid.assign(count, 0);
+        held.counts = {};
+        held.counts[0] = count;
+        held.trackers.clear();
+        if (_columns[column].sortBy) {
+            held.trackers.resize(count);
+        }
+        for (std::size_t row = 0; row < count; ++row) {
+            Value const& input = (*_rows)[row];
+            if (_columns[column].sortBy) {
+                held.trackers[row] = track(column, row, input);
+                static_cast<void>(vote(held, column, row, detail::voteOf(held.trackers[row]->value)));
+            } else {
+                ++_derived;
+                static_cast<void>(vote(held, column, row, detail::voteOf(fieldOf(column, input))));
+            }
+        }
+        _infos[column].kind = kindOf(column, held);
+        reconvert(column);
+    }
+
+    // A held column over a new list: kept rows keep their cells, others are derived and compared. Marks the rows
+    // whose cell changed in @p updated; returns whether the column's kind changed.
+    bool reassign(std::size_t column, std::vector<Value> const& rows, std::vector<std::size_t> const& was,
+                  std::vector<bool> const& same, std::vector<bool>& updated) {
+        auto& held = _held[column];
+        bool const tracked = static_cast<bool>(_columns[column].sortBy);
+        std::size_t const count = rows.size();
+        Held next;
+        next.uses = held.uses;
+        next.votes.assign(count, detail::ValueVote::None);
+        next.invalid.assign(count, 0);
+        if (tracked) {
+            next.trackers.resize(count);
+        }
+        auto cells = std::make_shared<std::vector<table::Cell>>(count);
+        std::vector<Value> fresh(count);
+        for (std::size_t row = 0; row < count; ++row) {
+            if (same[row]) {
+                next.votes[row] = held.votes[was[row]];
+                next.invalid[row] = held.invalid[was[row]];
+                (*cells)[row] = (*held.cells)[was[row]];
+                if (tracked) {
+                    next.trackers[row] = std::move(held.trackers[was[row]]);
+                    next.trackers[row]->row = row;
+                }
+            } else if (tracked) {
+                next.trackers[row] = track(column, row, rows[row]);
+                fresh[row] = next.trackers[row]->value;
+                next.votes[row] = detail::voteOf(fresh[row]);
+            } else {
+                ++_derived;
+                fresh[row] = fieldOf(column, rows[row]);
+                next.votes[row] = detail::voteOf(fresh[row]);
+            }
+            ++next.counts.at(static_cast<std::size_t>(next.votes[row]));
+        }
+        auto const kind = kindOf(column, next);
+        bool const changedKind = kind != _infos[column].kind;
+        for (std::size_t row = 0; row < count; ++row) {
+            if (same[row] && !changedKind) {
+                continue;
+            }
+            Value const value = same[row] ? (tracked ? next.trackers[row]->value : fieldOf(column, rows[row]))
+                                          : std::move(fresh[row]);
+            auto converted = detail::convertedCell(value, kind, _units.get());
+            next.invalid[row] = converted.invalid ? 1 : 0;
+            if (!changedKind && was[row] != std::numeric_limits<std::size_t>::max() &&
+                !detail::sameCell(converted.cell, (*held.cells)[was[row]])) {
+                updated[row] = true;
+            }
+            (*cells)[row] = std::move(converted.cell);
+        }
+        next.cells = std::move(cells);
+        _infos[column].kind = kind;
+        held = std::move(next);
+        return changedKind;
+    }
+
+    // Each row's run and each run's heading record, from the `by` values held.
+    void buildRuns(std::vector<Value> const& rows) {
+        _runs.clear();
+        _runRecords.clear();
+        if (!_group) {
+            _runCells.reset();
+            return;
+        }
+        auto cells = std::make_shared<std::vector<table::Cell>>();
+        cells->reserve(rows.size());
+        _runs.reserve(rows.size());
+        // A heading's key is its run's key and its ordinal among the runs with an equal key, as the interpreter
+        // keys it: adjacent grouping can give two runs one key.
+        std::map<std::string, std::size_t, std::less<>> ordinals;
+        ValueList run;
+        auto const close = [&](Value const& key) {
+            std::string const json = ui::detail::canonicalJson(key);
+            Value const record = runRecord(key, std::exchange(run, {}));
+            ValueRecord entry = *record.asRecord();
+            entry.insert_or_assign(std::string{detail::kGroupHeadingField},
+                                   Value{"\x1Fgroup:" + json + ":" + std::to_string(ordinals[json]++)});
+            _runRecords.emplace_back(std::move(entry));
+        };
+        for (std::size_t row = 0; row < rows.size(); ++row) {
+            if (row > 0 && !(_byValues[row] == _byValues[row - 1])) {
+                close(_byValues[row - 1]);
+            }
+            run.push_back(rows[row]);
+            _runs.push_back(_runRecords.size());
+            cells->emplace_back(static_cast<std::int64_t>(_runRecords.size()));
+        }
+        if (!run.empty()) {
+            close(_byValues.back());
+        }
+        _runCells = std::move(cells);
+    }
+
+    reactive::Runtime* _runtime;
+    std::vector<ValueColumn> _columns;
+    std::function<Key(Value const& row)> _keyOf;
+    std::shared_ptr<table::UnitRegistry const> _units;
+    std::vector<table::ColumnInfo> _infos;
+    std::vector<Held> _held;
+    std::shared_ptr<std::vector<Value> const> _rows = std::make_shared<std::vector<Value> const>();
+    std::shared_ptr<std::vector<Key> const> _keys = std::make_shared<std::vector<Key> const>();
+    std::unordered_map<Key, std::size_t> _index;
+    std::function<Value(Value const& row)> _group;
+    std::vector<Value> _byValues;
+    std::vector<std::size_t> _runs;
+    std::vector<Value> _runRecords;
+    std::shared_ptr<std::vector<table::Cell>> _runCells;
+    Pending _pending;
+    bool _posted = false;
+    std::size_t _derived = 0;
+    mutable std::shared_ptr<table::RowSnapshot const> _snapshot;
+    table::detail::Listeners _listeners;
+    // Last, so it is the first to go: no posted notification reaches a half-destroyed source.
+    async::CallbackScope _alive;
 };
 
 // ── Over a server's pages ───────────────────────────────────────────────────
