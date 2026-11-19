@@ -59,6 +59,7 @@
 #include <optional>
 #include <span>
 #include <string>
+#include <string_view>
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
@@ -374,19 +375,21 @@ private:
     // The fitting rule: every part of `value` filtered to the declared columns, each declared column it lacks placed
     // after its nearest declared predecessor that is placed, one column kept visible, and the pin count clamped.
     void fit(ColumnLayoutValue const& value) {
-        auto const declared = [this](std::string const& columnId) {
-            return std::ranges::find(_defaults, columnId) != _defaults.end();
-        };
+        // Sets, not scans: a stored layout of a few hundred columns is fitted in one pass over each of its parts.
+        std::unordered_set<std::string_view> const declaredIds{_defaults.begin(), _defaults.end()};
+        auto const declared = [&declaredIds](std::string const& columnId) { return declaredIds.contains(columnId); };
         std::vector<std::string> order;
+        std::unordered_set<std::string_view> placed;
+        order.reserve(_defaults.size());
         for (auto const& columnId : value.order) {
-            if (declared(columnId) && std::ranges::find(order, columnId) == order.end()) {
+            if (declared(columnId) && placed.insert(columnId).second) {
                 order.push_back(columnId);
             }
         }
         std::vector<std::string> unmentioned;
         for (std::size_t at = 0; at < _defaults.size(); ++at) {
             auto const& columnId = _defaults[at];
-            if (std::ranges::find(order, columnId) != order.end()) {
+            if (placed.contains(columnId)) {
                 continue;
             }
             auto place = order.begin();

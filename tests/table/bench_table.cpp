@@ -35,6 +35,7 @@
 #include <morph/table/engine.hpp>
 #include <morph/table/level_cache.hpp>
 #include <morph/table/query.hpp>
+#include <morph/table/state_store.hpp>
 #include <optional>
 #include <print>
 #include <random>
@@ -1694,4 +1695,63 @@ TEST_CASE("table benchmark: column groups", "[.benchmark][table][groups]") {
             }
         }
     }
+}
+
+// T1: a stored state for 300 columns with 8 sort keys and 32 filters, read, fitted and applied to a layout; no store
+// is involved. Bound 2 ms. Mutation: fitState dropping every filter (the survival REQUIREs fail).
+TEST_CASE("table state benchmark: parse, fit and apply 300 columns, 8 keys, 32 filters", "[.benchmark][table][state]") {
+    constexpr std::size_t kColumns = 300;
+    TableDescription description{.id = "wide", .label = "Wide", .columns = {}, .key = "c000"};
+    std::vector<std::string> ids;
+    for (std::size_t at = 0; at < kColumns; ++at) {
+        auto id = std::format("c{:03}", at);
+        auto const kind = at % 3 == 0 ? ColumnKind::Integer : at % 3 == 1 ? ColumnKind::Text : ColumnKind::Decimal;
+        description.columns.push_back(TableColumn{
+            .info = {.id = id, .kind = kind, .comparator = {}, .format = {}, .level = {}}, .label = id, .group = {}});
+        ids.push_back(std::move(id));
+    }
+    description = describe(std::move(description));
+    StateDocument stored;
+    ColumnLayoutValue layout;
+    layout.order.assign(ids.rbegin(), ids.rend());
+    for (std::size_t at = 0; at < kColumns; at += 10) {
+        layout.hidden.push_back(ids[at]);
+        layout.widths.emplace(ids[at], 12);
+    }
+    layout.pinned = 2;
+    stored.layout = std::move(layout);
+    SortChain sort;
+    for (std::size_t at = 0; at < 8; ++at) {
+        sort.push_back(SortKey{.column = ids[at * 7], .dir = at % 2 == 0 ? kAsc : kDesc});
+    }
+    stored.sort = std::move(sort);
+    FilterSpec filters;
+    for (std::size_t at = 0; at < 32; ++at) {
+        auto const& id = ids[at * 9];
+        FilterEntry entry = description.columns[at * 9].info.kind == ColumnKind::Text ? FilterEntry{.contains = "a"}
+                                                                                      : FilterEntry{.gt = "5"};
+        filters.columns.emplace(id, ColumnFilter{.combine = Combine::Any, .include = {std::move(entry)}, .exclude = {}});
+    }
+    stored.filters = std::move(filters);
+    std::string const json = writeState(stored);
+
+    FitReport check;
+    StateDocument const survived = fitState(readState(json).value(), description, check);
+    REQUIRE(survived.sort->size() == 8);
+    REQUIRE(survived.filters->columns.size() == 32);
+    REQUIRE(check.dropped.empty());
+
+    constexpr int kRuns = 31;
+    std::vector<double> samples;
+    for (int run = 0; run < kRuns; ++run) {
+        auto const began = Clock::now();
+        FitReport report;
+        StateDocument const fitted = fitState(readState(json).value(), description, report);
+        ColumnLayout applied{ids};
+        applied.apply(*fitted.layout);
+        samples.push_back(std::chrono::duration<double, std::milli>(Clock::now() - began).count());
+        REQUIRE(applied.order().size() == kColumns);
+    }
+    printHeader("T1: parse, fit and apply a stored state (bound 2 ms)");
+    printRow("300 columns, 8 keys, 32 filters", kColumns, spreadOf(samples));
 }
