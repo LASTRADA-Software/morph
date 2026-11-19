@@ -1,5 +1,10 @@
 var NAVTREEINDEX15 =
 {
+"d6/d2a/structmorph_1_1ui_1_1ShellPartsHandlers.html#a426db5f7b323605f1c5be22e9d2dc348":[3,0,0,28,261,5],
+"d6/d2a/structmorph_1_1ui_1_1ShellPartsHandlers.html#a5ea1517bf205d965e5e351b91346078a":[1,0,0,1,259,2],
+"d6/d2a/structmorph_1_1ui_1_1ShellPartsHandlers.html#a5ea1517bf205d965e5e351b91346078a":[3,0,0,28,261,2],
+"d6/d2a/structmorph_1_1ui_1_1ShellPartsHandlers.html#a6c02a6935f7d065b4c96c1235072c834":[1,0,0,1,259,6],
+"d6/d2a/structmorph_1_1ui_1_1ShellPartsHandlers.html#a6c02a6935f7d065b4c96c1235072c834":[3,0,0,28,261,6],
 "d6/d2a/structmorph_1_1ui_1_1ShellPartsHandlers.html#a6de21308922c4fd294fc79526d2d9790":[1,0,0,1,259,0],
 "d6/d2a/structmorph_1_1ui_1_1ShellPartsHandlers.html#a6de21308922c4fd294fc79526d2d9790":[3,0,0,28,261,0],
 "d6/d2a/structmorph_1_1ui_1_1ShellPartsHandlers.html#a76bfc7da5e10d66f075904dacd43aaaf":[1,0,0,1,259,1],
@@ -244,10 +249,5 @@ var NAVTREEINDEX15 =
 "d6/d77/classmorph_1_1ui_1_1Workspace.html#aa573ab184c041849706ff9b28260a0ad":[1,0,0,1,316,6],
 "d6/d77/classmorph_1_1ui_1_1Workspace.html#aa573ab184c041849706ff9b28260a0ad":[3,0,0,28,318,6],
 "d6/d77/classmorph_1_1ui_1_1Workspace.html#aa5e83f98b4979fe0d18c96c854a95098":[1,0,0,1,316,18],
-"d6/d77/classmorph_1_1ui_1_1Workspace.html#aa5e83f98b4979fe0d18c96c854a95098":[3,0,0,28,318,18],
-"d6/d77/classmorph_1_1ui_1_1Workspace.html#ab99b069a9f7529bf38938eb9041ee057":[1,0,0,1,316,35],
-"d6/d77/classmorph_1_1ui_1_1Workspace.html#ab99b069a9f7529bf38938eb9041ee057":[3,0,0,28,318,35],
-"d6/d77/classmorph_1_1ui_1_1Workspace.html#ac38b96b3172d2c11ccab5df5fa3df267":[1,0,0,1,316,10],
-"d6/d77/classmorph_1_1ui_1_1Workspace.html#ac38b96b3172d2c11ccab5df5fa3df267":[3,0,0,28,318,10],
-"d6/d77/classmorph_1_1ui_1_1Workspace.html#acc36d8987a3fc36960efa4ff4eca1dda":[1,0,0,1,316,9]
+"d6/d77/classmorph_1_1ui_1_1Workspace.html#aa5e83f98b4979fe0d18c96c854a95098":[3,0,0,28,318,18]
 };

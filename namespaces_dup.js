@@ -991,6 +991,7 @@ var namespaces_dup =
           [ "External", "dc/de1/workspace_8hpp.html#ac588613cfacc29776a836250b58694ecab206a1b4ea1097761f78e8876f6da779", null ]
         ] ],
         [ "serveStdio", "dd/d2d/agent_8hpp.html#a8bba10fd599fe31365300f6f91bf3983", null ],
+        [ "serveStdioOnOwner", "dd/d2d/agent_8hpp.html#ab6b6b7fdf749b09583d4c9bbfae18154", null ],
         [ "widthClassOf", "d0/dc2/ui_2backend_8hpp.html#a89aa196c5dae970e88e32ce861f11346", null ],
         [ "bannerActionStyleNamed", "df/dcb/banner__action__style_8hpp.html#ab79d875040a797b3800fe539db31554f", null ],
         [ "bannerActionStyleName", "df/dcb/banner__action__style_8hpp.html#a8f15da4d915398833431e23c6434910f", null ],

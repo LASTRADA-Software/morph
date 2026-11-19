@@ -143,6 +143,8 @@ Functions</h2></td></tr>
 <tr class="memdesc:a727590f54e0a85d4be4f71df9b271d4e"><td class="mdescLeft">&#160;</td><td class="mdescRight">Connects to <code class="param">url</code> with the transport the frontend calls for: a <span class="tt">SocketBackend</span> on the context's I/O loop when it has one (the terminal frontend), a <span class="tt">QtWebSocketBackend</span> otherwise (Qt Quick).  <br /></td></tr>
 <tr class="memitem:a4aeb00bb194bcc3e6285ad9abb55f5b5" id="r_a4aeb00bb194bcc3e6285ad9abb55f5b5"><td class="memItemLeft">std::expected&lt; <a class="el" href="../../d5/db6/structmorph_1_1client_1_1RemoteTransport.html">RemoteTransport</a>, std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a4aeb00bb194bcc3e6285ad9abb55f5b5">morph::client::detail::socketTransport</a> (<a class="el" href="../../dd/db8/classmorph_1_1ui_1_1AppContext.html">ui::AppContext</a> &amp;context, std::string const &amp;url)</td></tr>
 <tr class="memdesc:a4aeb00bb194bcc3e6285ad9abb55f5b5"><td class="mdescLeft">&#160;</td><td class="mdescRight">A <span class="tt">SocketBackend</span> on <code class="param">context's</code> loop; defined only where <span class="tt">morph::net</span> is built.  <br /></td></tr>
+<tr class="memitem:acf48aac192c41deffc29a387a9f990ec" id="r_acf48aac192c41deffc29a387a9f990ec"><td class="memItemLeft">std::expected&lt; <a class="el" href="../../d5/db6/structmorph_1_1client_1_1RemoteTransport.html">RemoteTransport</a>, std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="#acf48aac192c41deffc29a387a9f990ec">morph::client::detail::socketTransport</a> (std::string const &amp;url, bool retryFirstConnect)</td></tr>
+<tr class="memdesc:acf48aac192c41deffc29a387a9f990ec"><td class="mdescLeft">&#160;</td><td class="mdescRight">A <span class="tt">SocketBackend</span> on a loop of its own, for a process with no frontend (an MCP server); defined only where <span class="tt">morph::net</span> is built.  <br /></td></tr>
 <tr class="memitem:a8ed6f8551ae8f8c1b9f401c5a21d76f0" id="r_a8ed6f8551ae8f8c1b9f401c5a21d76f0"><td class="memItemLeft">std::expected&lt; <a class="el" href="../../d5/db6/structmorph_1_1client_1_1RemoteTransport.html">RemoteTransport</a>, std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a8ed6f8551ae8f8c1b9f401c5a21d76f0">morph::client::detail::qtTransport</a> (std::string const &amp;url)</td></tr>
 <tr class="memdesc:a8ed6f8551ae8f8c1b9f401c5a21d76f0"><td class="mdescLeft">&#160;</td><td class="mdescRight">A <span class="tt">QtWebSocketBackend</span>; defined only where <span class="tt">morph::qt</span> is built.  <br /></td></tr>
 </table>
@@ -192,7 +194,7 @@ Functions</h2></td></tr>
 </div>
 </div>
 <a id="a4aeb00bb194bcc3e6285ad9abb55f5b5" name="a4aeb00bb194bcc3e6285ad9abb55f5b5"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a4aeb00bb194bcc3e6285ad9abb55f5b5">&#9670;&#160;</a></span>socketTransport()</h2>
+<h2 class="memtitle"><span class="permalink"><a href="#a4aeb00bb194bcc3e6285ad9abb55f5b5">&#9670;&#160;</a></span>socketTransport() <span class="overload">[1/2]</span></h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -223,6 +225,45 @@ Functions</h2></td></tr>
   <table class="params">
     <tr><td class="paramname">context</td><td>The context; its loop must not be null. </td></tr>
     <tr><td class="paramname">url</td><td>The server. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>The transport, or why the URL is refused. </dd></dl>
+
+</div>
+</div>
+<a id="acf48aac192c41deffc29a387a9f990ec" name="acf48aac192c41deffc29a387a9f990ec"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#acf48aac192c41deffc29a387a9f990ec">&#9670;&#160;</a></span>socketTransport() <span class="overload">[2/2]</span></h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::expected&lt; RemoteTransport, std::string &gt; morph::client::detail::socketTransport </td>
+          <td>(</td>
+          <td class="paramtype">std::string const &amp;</td>          <td class="paramname"><span class="paramname"><em>url</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">bool</td>          <td class="paramname"><span class="paramname"><em>retryFirstConnect</em></span>&#160;)</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>A <span class="tt">SocketBackend</span> on a loop of its own, for a process with no frontend (an MCP server); defined only where <span class="tt">morph::net</span> is built. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">url</td><td><span class="tt">ws://host:port</span>. </td></tr>
+    <tr><td class="paramname">retryFirstConnect</td><td>Whether to keep retrying when the first connect is refused, so the process may start before its server. </td></tr>
   </table>
   </dd>
 </dl>

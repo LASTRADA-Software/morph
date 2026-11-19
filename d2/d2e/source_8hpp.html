@@ -166,6 +166,8 @@ Classes</h2></td></tr>
 </table><table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 id="header-func-members" class="groupheader"><a id="func-members" name="func-members"></a>
 Functions</h2></td></tr>
+<tr class="memitem:aab4ad8bbba554d610ec265aeabf40dbe" id="r_aab4ad8bbba554d610ec265aeabf40dbe"><td class="memItemLeft">std::expected&lt; std::shared_ptr&lt; <a class="el" href="../../d4/dc1/classmorph_1_1backend_1_1RemoteServer.html">backend::RemoteServer</a> &gt;, std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="#aab4ad8bbba554d610ec265aeabf40dbe">morph::client::makeLocalServer</a> (<a class="el" href="../../dd/dd4/structmorph_1_1client_1_1LocalApp.html">LocalApp</a> const &amp;app, <a class="el" href="../../d4/d49/structmorph_1_1exec_1_1IExecutor.html">exec::IExecutor</a> &amp;workers, <a class="el" href="../../dd/d0c/structmorph_1_1backend_1_1ServerConfig.html">backend::ServerConfig</a> config={})</td></tr>
+<tr class="memdesc:aab4ad8bbba554d610ec265aeabf40dbe"><td class="mdescLeft">&#160;</td><td class="mdescRight">The in-process server for <code class="param">app:</code> a <span class="tt">RemoteServer</span> whose services hold a <span class="tt"><a class="el" href="../../d1/d38/classmorph_1_1ui_1_1UiService.html" title="The UI service: answers ui-hello, ui-catalog and ui-fetch from one ServedBundle, and ui-evaluate thro...">ui::UiService</a></span> over the application's bundle, checked by the application's <span class="tt">serverAuthorizer</span> when it has one and by allow-all otherwise. What a local MCP server and a simulated test source run the application on. It does not run <span class="tt">setUp</span>, which stays the caller's.  <br /></td></tr>
 <tr class="memitem:a6cd9010ceefcd670e731b5faa376a966" id="r_a6cd9010ceefcd670e731b5faa376a966"><td class="memItemLeft">std::vector&lt; std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a6cd9010ceefcd670e731b5faa376a966">morph::client::clientVocabularies</a> ()</td></tr>
 <tr class="memdesc:a6cd9010ceefcd670e731b5faa376a966"><td class="mdescLeft">&#160;</td><td class="mdescRight">The vocabularies the generic client speaks.  <br /></td></tr>
 <tr class="memitem:a0b21c9709259d8da6b8498531c148ccf" id="r_a0b21c9709259d8da6b8498531c148ccf"><td class="memItemLeft"><a class="el" href="../../db/dbe/structmorph_1_1ui_1_1HelloRequest.html">ui::HelloRequest</a>&#160;</td><td class="memItemRight"><a class="el" href="#a0b21c9709259d8da6b8498531c148ccf">morph::client::clientHello</a> ()</td></tr>
@@ -179,6 +181,51 @@ Functions</h2></td></tr>
 
 <p class="definition">Definition in file <a class="el" href="../../d2/d2e/source_8hpp_source.html">source.hpp</a>.</p>
 </div><a name="doc-func-members" id="doc-func-members"></a><h2 id="header-doc-func-members" class="groupheader">Function Documentation</h2>
+<a id="aab4ad8bbba554d610ec265aeabf40dbe" name="aab4ad8bbba554d610ec265aeabf40dbe"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#aab4ad8bbba554d610ec265aeabf40dbe">&#9670;&#160;</a></span>makeLocalServer()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::expected&lt; std::shared_ptr&lt; backend::RemoteServer &gt;, std::string &gt; morph::client::makeLocalServer </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="../../dd/dd4/structmorph_1_1client_1_1LocalApp.html">LocalApp</a> const &amp;</td>          <td class="paramname"><span class="paramname"><em>app</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype"><a class="el" href="../../d4/d49/structmorph_1_1exec_1_1IExecutor.html">exec::IExecutor</a> &amp;</td>          <td class="paramname"><span class="paramname"><em>workers</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype"><a class="el" href="../../dd/d0c/structmorph_1_1backend_1_1ServerConfig.html">backend::ServerConfig</a></td>          <td class="paramname"><span class="paramname"><em>config</em></span><span class="paramdefsep"> = </span><span class="paramdefval">{}</span>&#160;)</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>The in-process server for <code class="param">app:</code> a <span class="tt">RemoteServer</span> whose services hold a <span class="tt">ui::UiService</span> over the application's bundle, checked by the application's <span class="tt">serverAuthorizer</span> when it has one and by allow-all otherwise. What a local MCP server and a simulated test source run the application on. It does not run <span class="tt">setUp</span>, which stays the caller's. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">app</td><td>The application. </td></tr>
+    <tr><td class="paramname">workers</td><td>The pool the server's strands run on. Borrowed: it must outlive the server. </td></tr>
+    <tr><td class="paramname">config</td><td>The server's other settings; the UI service is appended to its services. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>The server, or why the bundle did not build. </dd></dl>
+
+</div>
+</div>
 <a id="a6cd9010ceefcd670e731b5faa376a966" name="a6cd9010ceefcd670e731b5faa376a966"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a6cd9010ceefcd670e731b5faa376a966">&#9670;&#160;</a></span>clientVocabularies()</h2>
 

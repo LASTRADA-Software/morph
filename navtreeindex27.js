@@ -1,5 +1,14 @@
 var NAVTREEINDEX27 =
 {
+"da/d6d/structmorph_1_1ui_1_1TableRowView.html#a3852cf2d0d2ee4dbfa7e86501b75cd84":[1,0,0,1,287,1],
+"da/d6d/structmorph_1_1ui_1_1TableRowView.html#a3852cf2d0d2ee4dbfa7e86501b75cd84":[3,0,0,28,289,1],
+"da/d6d/structmorph_1_1ui_1_1TableRowView.html#a5e452ad3042e1b2d3be14ed879e09b2d":[1,0,0,1,287,0],
+"da/d6d/structmorph_1_1ui_1_1TableRowView.html#a5e452ad3042e1b2d3be14ed879e09b2d":[3,0,0,28,289,0],
+"da/d6d/structmorph_1_1ui_1_1TableRowView.html#aa51a717c35f445ac03cd693ed9ec85ae":[1,0,0,1,287,2],
+"da/d6d/structmorph_1_1ui_1_1TableRowView.html#aa51a717c35f445ac03cd693ed9ec85ae":[3,0,0,28,289,2],
+"da/d6d/structmorph_1_1ui_1_1TableRowView.html#aa9f4b5f178669ecc1dcb9bb51ca591b8":[1,0,0,1,287,4],
+"da/d6d/structmorph_1_1ui_1_1TableRowView.html#aa9f4b5f178669ecc1dcb9bb51ca591b8":[3,0,0,28,289,4],
+"da/d6d/structmorph_1_1ui_1_1TableRowView.html#aefdf3c6021f034a2f2d1edd6e711b49c":[1,0,0,1,287,3],
 "da/d6d/structmorph_1_1ui_1_1TableRowView.html#aefdf3c6021f034a2f2d1edd6e711b49c":[3,0,0,28,289,3],
 "da/d6d/structmorph_1_1ui_1_1detail_1_1TransferState.html":[1,0,0,1,0,47],
 "da/d6d/structmorph_1_1ui_1_1detail_1_1TransferState.html":[3,0,0,28,2,48],
@@ -240,14 +249,5 @@ var NAVTREEINDEX27 =
 "da/da9/structmorph_1_1ui_1_1HelpEntry.html#a766362ffd957a185b7048fb116e0ba0e":[1,0,0,1,119,3],
 "da/da9/structmorph_1_1ui_1_1HelpEntry.html#a766362ffd957a185b7048fb116e0ba0e":[3,0,0,28,121,3],
 "da/da9/structmorph_1_1ui_1_1HelpEntry.html#a82a1924790d9163444fae8acd99b3af8":[1,0,0,1,119,4],
-"da/da9/structmorph_1_1ui_1_1HelpEntry.html#a82a1924790d9163444fae8acd99b3af8":[3,0,0,28,121,4],
-"da/daa/structmorph_1_1ui_1_1ChartTicks.html":[1,0,0,1,45],
-"da/daa/structmorph_1_1ui_1_1ChartTicks.html":[3,0,0,28,47],
-"da/daa/structmorph_1_1ui_1_1ChartTicks.html#acdc23fcac38b5ae21069719381c693fa":[1,0,0,1,45,0],
-"da/daa/structmorph_1_1ui_1_1ChartTicks.html#acdc23fcac38b5ae21069719381c693fa":[3,0,0,28,47,0],
-"da/daa/structmorph_1_1ui_1_1ChartTicks.html#ae19c9a4471b0385e6f4cfe0c1ce8524a":[1,0,0,1,45,1],
-"da/daa/structmorph_1_1ui_1_1ChartTicks.html#ae19c9a4471b0385e6f4cfe0c1ce8524a":[3,0,0,28,47,1],
-"da/dae/structmorph_1_1effects_1_1Effect.html":[3,0,0,7,6],
-"da/dae/structmorph_1_1effects_1_1Effect.html#a08c6e4eae254ab30fd8ad9b0aac89d87":[3,0,0,7,6,1],
-"da/dae/structmorph_1_1effects_1_1Effect.html#a66936e59388e7f3636c058777d002bfc":[3,0,0,7,6,2]
+"da/da9/structmorph_1_1ui_1_1HelpEntry.html#a82a1924790d9163444fae8acd99b3af8":[3,0,0,28,121,4]
 };

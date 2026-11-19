@@ -135,13 +135,15 @@ Public Attributes</h2></td></tr>
 <tr class="memitem:a8169e7daa0df269bf07018bae91f20f0" id="r_a8169e7daa0df269bf07018bae91f20f0"><td class="memItemLeft">std::string&#160;</td><td class="memItemRight"><a class="el" href="#a8169e7daa0df269bf07018bae91f20f0">db</a></td></tr>
 <tr class="memdesc:a8169e7daa0df269bf07018bae91f20f0"><td class="mdescLeft">&#160;</td><td class="mdescRight"><span class="tt">--<a class="el" href="#a8169e7daa0df269bf07018bae91f20f0" title="--db PATH: the database a local application opens.">db</a> PATH</span>: the database a local application opens.  <br /></td></tr>
 <tr class="memitem:a7cf778a40437b661df160b957284071e" id="r_a7cf778a40437b661df160b957284071e"><td class="memItemLeft">std::string&#160;</td><td class="memItemRight"><a class="el" href="#a7cf778a40437b661df160b957284071e">user</a></td></tr>
-<tr class="memdesc:a7cf778a40437b661df160b957284071e"><td class="mdescLeft">&#160;</td><td class="mdescRight"><span class="tt">--<a class="el" href="#a7cf778a40437b661df160b957284071e" title="--user NAME: the development principal a local application signs in.">user</a> NAME</span>: the development principal a local application signs in.  <br /></td></tr>
+<tr class="memdesc:a7cf778a40437b661df160b957284071e"><td class="mdescLeft">&#160;</td><td class="mdescRight"><span class="tt">--<a class="el" href="#a7cf778a40437b661df160b957284071e" title="--user NAME: the development principal a local application signs in, and the principal an MCP server&#39;...">user</a> NAME</span>: the development principal a local application signs in, and the principal an MCP server's session carries.  <br /></td></tr>
 <tr class="memitem:a383bf8c03ed7e47ae899dad3c7a2f90f" id="r_a383bf8c03ed7e47ae899dad3c7a2f90f"><td class="memItemLeft">std::string&#160;</td><td class="memItemRight"><a class="el" href="#a383bf8c03ed7e47ae899dad3c7a2f90f">screen</a></td></tr>
 <tr class="memdesc:a383bf8c03ed7e47ae899dad3c7a2f90f"><td class="mdescLeft">&#160;</td><td class="mdescRight"><span class="tt">--<a class="el" href="#a383bf8c03ed7e47ae899dad3c7a2f90f" title="--screen ID: the screen mounted first; empty for the catalog&#39;s first.">screen</a> ID</span>: the screen mounted first; empty for the catalog's first.  <br /></td></tr>
 <tr class="memitem:a4264c4f5277246518cccc8ed0515a2d5" id="r_a4264c4f5277246518cccc8ed0515a2d5"><td class="memItemLeft">bool&#160;</td><td class="memItemRight"><a class="el" href="#a4264c4f5277246518cccc8ed0515a2d5">exitAfterMount</a> = false</td></tr>
 <tr class="memdesc:a4264c4f5277246518cccc8ed0515a2d5"><td class="mdescLeft">&#160;</td><td class="mdescRight"><span class="tt">--exit-after-mount</span>: quit once the first screen mounted, with 0 when it mounted cleanly.  <br /></td></tr>
 <tr class="memitem:afe56c1f92729f66d44bf51a7873f9c51" id="r_afe56c1f92729f66d44bf51a7873f9c51"><td class="memItemLeft">bool&#160;</td><td class="memItemRight"><a class="el" href="#afe56c1f92729f66d44bf51a7873f9c51">dev</a> = false</td></tr>
 <tr class="memdesc:afe56c1f92729f66d44bf51a7873f9c51"><td class="mdescLeft">&#160;</td><td class="mdescRight"><span class="tt">--<a class="el" href="#afe56c1f92729f66d44bf51a7873f9c51" title="--dev, or MORPH_UI_DEV=1: development mode, which reloads the screens when the server&#39;s documents cha...">dev</a></span>, or <span class="tt">MORPH_UI_DEV=1</span>: development mode, which reloads the screens when the server's documents change (spec 5 §12). A client built without the development tools ignores it.  <br /></td></tr>
+<tr class="memitem:a87bf53196d3e56cfd0f67cd2beaa8499" id="r_a87bf53196d3e56cfd0f67cd2beaa8499"><td class="memItemLeft">bool&#160;</td><td class="memItemRight"><a class="el" href="#a87bf53196d3e56cfd0f67cd2beaa8499">mcpStdio</a> = false</td></tr>
+<tr class="memdesc:a87bf53196d3e56cfd0f67cd2beaa8499"><td class="mdescLeft">&#160;</td><td class="mdescRight"><span class="tt">--mcp-stdio</span>: serve MCP on stdin and stdout instead of mounting a frontend (<span class="tt"><a class="el" href="../../d0/d48/mcp_8hpp.html#a2008134557351c6794d979890cd1703a" title="Serves MCP on input and output until input ends.">client::serveMcp</a></span>).  <br /></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>What the generic client reads from its command line. </p>
@@ -214,9 +216,9 @@ Public Attributes</h2></td></tr>
       </table>
 </div><div class="memdoc">
 
-<p><span class="tt">--<a class="el" href="#a7cf778a40437b661df160b957284071e" title="--user NAME: the development principal a local application signs in.">user</a> NAME</span>: the development principal a local application signs in. </p>
+<p><span class="tt">--<a class="el" href="#a7cf778a40437b661df160b957284071e" title="--user NAME: the development principal a local application signs in, and the principal an MCP server&#39;...">user</a> NAME</span>: the development principal a local application signs in, and the principal an MCP server's session carries. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d7/dfe/args_8hpp_source.html#l00025">25</a> of file <a class="el" href="../../d7/dfe/args_8hpp_source.html">args.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d7/dfe/args_8hpp_source.html#l00026">26</a> of file <a class="el" href="../../d7/dfe/args_8hpp_source.html">args.hpp</a>.</p>
 
 </div>
 </div>
@@ -234,7 +236,7 @@ Public Attributes</h2></td></tr>
 
 <p><span class="tt">--<a class="el" href="#a383bf8c03ed7e47ae899dad3c7a2f90f" title="--screen ID: the screen mounted first; empty for the catalog&#39;s first.">screen</a> ID</span>: the screen mounted first; empty for the catalog's first. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d7/dfe/args_8hpp_source.html#l00027">27</a> of file <a class="el" href="../../d7/dfe/args_8hpp_source.html">args.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d7/dfe/args_8hpp_source.html#l00028">28</a> of file <a class="el" href="../../d7/dfe/args_8hpp_source.html">args.hpp</a>.</p>
 
 </div>
 </div>
@@ -252,7 +254,7 @@ Public Attributes</h2></td></tr>
 
 <p><span class="tt">--exit-after-mount</span>: quit once the first screen mounted, with 0 when it mounted cleanly. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d7/dfe/args_8hpp_source.html#l00029">29</a> of file <a class="el" href="../../d7/dfe/args_8hpp_source.html">args.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d7/dfe/args_8hpp_source.html#l00030">30</a> of file <a class="el" href="../../d7/dfe/args_8hpp_source.html">args.hpp</a>.</p>
 
 </div>
 </div>
@@ -270,7 +272,25 @@ Public Attributes</h2></td></tr>
 
 <p><span class="tt">--<a class="el" href="#afe56c1f92729f66d44bf51a7873f9c51" title="--dev, or MORPH_UI_DEV=1: development mode, which reloads the screens when the server&#39;s documents cha...">dev</a></span>, or <span class="tt">MORPH_UI_DEV=1</span>: development mode, which reloads the screens when the server's documents change (spec 5 §12). A client built without the development tools ignores it. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d7/dfe/args_8hpp_source.html#l00032">32</a> of file <a class="el" href="../../d7/dfe/args_8hpp_source.html">args.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d7/dfe/args_8hpp_source.html#l00033">33</a> of file <a class="el" href="../../d7/dfe/args_8hpp_source.html">args.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a87bf53196d3e56cfd0f67cd2beaa8499" name="a87bf53196d3e56cfd0f67cd2beaa8499"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a87bf53196d3e56cfd0f67cd2beaa8499">&#9670;&#160;</a></span>mcpStdio</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">bool morph::client::Args::mcpStdio = false</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p><span class="tt">--mcp-stdio</span>: serve MCP on stdin and stdout instead of mounting a frontend (<span class="tt"><a class="el" href="../../d0/d48/mcp_8hpp.html#a2008134557351c6794d979890cd1703a" title="Serves MCP on input and output until input ends.">client::serveMcp</a></span>). </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d7/dfe/args_8hpp_source.html#l00035">35</a> of file <a class="el" href="../../d7/dfe/args_8hpp_source.html">args.hpp</a>.</p>
 
 </div>
 </div>

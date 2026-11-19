@@ -135,7 +135,7 @@ Public Attributes</h2></td></tr>
 <tr class="memitem:ad4e82d805ed8809830dd44bba266f6cd" id="r_ad4e82d805ed8809830dd44bba266f6cd"><td class="memItemLeft">std::function&lt; void(<a class="el" href="../../d8/d04/structmorph_1_1client_1_1LocalSetup.html">LocalSetup</a> const  &amp;)&gt;&#160;</td><td class="memItemRight"><a class="el" href="#ad4e82d805ed8809830dd44bba266f6cd">setUp</a></td></tr>
 <tr class="memdesc:ad4e82d805ed8809830dd44bba266f6cd"><td class="mdescLeft">&#160;</td><td class="mdescRight">Run once before the first model call, with the client's options; empty for none.  <br /></td></tr>
 <tr class="memitem:aca5c815126f6c61bc6e75e3e91ee711e" id="r_aca5c815126f6c61bc6e75e3e91ee711e"><td class="memItemLeft">std::function&lt; std::shared_ptr&lt; <a class="el" href="../../d5/d07/structmorph_1_1session_1_1IAuthorizer.html">session::IAuthorizer</a> &gt;()&gt;&#160;</td><td class="memItemRight"><a class="el" href="#aca5c815126f6c61bc6e75e3e91ee711e">serverAuthorizer</a></td></tr>
-<tr class="memdesc:aca5c815126f6c61bc6e75e3e91ee711e"><td class="mdescLeft">&#160;</td><td class="mdescRight">The authorizer the application's own server checks requests with, for an in-process server to check them the same way; empty for one that lets every request through. Only a test's simulated server calls it.  <br /></td></tr>
+<tr class="memdesc:aca5c815126f6c61bc6e75e3e91ee711e"><td class="mdescLeft">&#160;</td><td class="mdescRight">The authorizer the application's own server checks requests with, for an in-process server to check them the same way; empty for one that lets every request through. <span class="tt"><a class="el" href="../../d2/d2e/source_8hpp.html#aab4ad8bbba554d610ec265aeabf40dbe" title="The in-process server for app: a RemoteServer whose services hold a ui::UiService over the applicatio...">makeLocalServer</a></span> calls it, which a local MCP server and a test's simulated source run the application on.  <br /></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>An application the client links and runs in-process. </p>
@@ -208,7 +208,7 @@ Public Attributes</h2></td></tr>
       </table>
 </div><div class="memdoc">
 
-<p>The authorizer the application's own server checks requests with, for an in-process server to check them the same way; empty for one that lets every request through. Only a test's simulated server calls it. </p>
+<p>The authorizer the application's own server checks requests with, for an in-process server to check them the same way; empty for one that lets every request through. <span class="tt"><a class="el" href="../../d2/d2e/source_8hpp.html#aab4ad8bbba554d610ec265aeabf40dbe" title="The in-process server for app: a RemoteServer whose services hold a ui::UiService over the applicatio...">makeLocalServer</a></span> calls it, which a local MCP server and a test's simulated source run the application on. </p>
 
 <p class="definition">Definition at line <a class="el" href="../../d2/d2e/source_8hpp_source.html#l00056">56</a> of file <a class="el" href="../../d2/d2e/source_8hpp_source.html">source.hpp</a>.</p>
 

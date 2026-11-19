@@ -1,5 +1,8 @@
 var NAVTREEINDEX11 =
 {
+"d4/d7f/classmorph_1_1ui_1_1DialogWidget.html#ad5cd7b0fb92a431bb2597b85c9269eff":[1,0,0,1,72,10],
+"d4/d7f/classmorph_1_1ui_1_1DialogWidget.html#ad5cd7b0fb92a431bb2597b85c9269eff":[3,0,0,28,74,10],
+"d4/d7f/classmorph_1_1ui_1_1DialogWidget.html#adc5239ed2ce7773436790f4b92f91602":[1,0,0,1,72,2],
 "d4/d7f/classmorph_1_1ui_1_1DialogWidget.html#adc5239ed2ce7773436790f4b92f91602":[3,0,0,28,74,2],
 "d4/d85/classmorph_1_1ui_1_1author_1_1FieldOverlay.html":[3,0,0,28,0,80],
 "d4/d85/classmorph_1_1ui_1_1author_1_1FieldOverlay.html#a6c17166d2aa88e95a94bf9e8253c748d":[3,0,0,28,0,80,1],
@@ -246,8 +249,5 @@ var NAVTREEINDEX11 =
 "d5/d07/structmorph_1_1session_1_1IAuthorizer.html#a8e866ec952e0075389623c0d48fcb901":[3,0,0,23,3,1],
 "d5/d09/structmorph_1_1model_1_1ActionTraits.html":[3,0,0,14,4],
 "d5/d0d/classmorph_1_1ui_1_1detail_1_1QueryRuntime.html":[1,0,0,1,0,36],
-"d5/d0d/classmorph_1_1ui_1_1detail_1_1QueryRuntime.html":[3,0,0,28,2,37],
-"d5/d0d/classmorph_1_1ui_1_1detail_1_1QueryRuntime.html#a00d9ae4c4c1deebebea0cdbefb4d7b30":[1,0,0,1,0,36,15],
-"d5/d0d/classmorph_1_1ui_1_1detail_1_1QueryRuntime.html#a00d9ae4c4c1deebebea0cdbefb4d7b30":[3,0,0,28,2,37,15],
-"d5/d0d/classmorph_1_1ui_1_1detail_1_1QueryRuntime.html#a20e050f70b656b5f4c85d92bd6e205ed":[1,0,0,1,0,36,7]
+"d5/d0d/classmorph_1_1ui_1_1detail_1_1QueryRuntime.html":[3,0,0,28,2,37]
 };

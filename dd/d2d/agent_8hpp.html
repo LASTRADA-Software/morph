@@ -122,6 +122,7 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('dd/d2d/agent_8
 <div class="contents">
 <div class="textblock"><code>#include &lt;atomic&gt;</code><br />
 <code>#include &lt;chrono&gt;</code><br />
+<code>#include &lt;condition_variable&gt;</code><br />
 <code>#include &lt;cstdint&gt;</code><br />
 <code>#include &lt;exception&gt;</code><br />
 <code>#include &lt;expected&gt;</code><br />
@@ -139,8 +140,10 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('dd/d2d/agent_8
 <code>#include &lt;utility&gt;</code><br />
 <code>#include &lt;vector&gt;</code><br />
 <code>#include &quot;../core/completion.hpp&quot;</code><br />
+<code>#include &quot;<a class="el" href="../../d8/d53/envelope__transport_8hpp_source.html">../core/envelope_transport.hpp</a>&quot;</code><br />
 <code>#include &quot;../core/executor.hpp&quot;</code><br />
 <code>#include &quot;../core/remote.hpp&quot;</code><br />
+<code>#include &quot;<a class="el" href="../../db/ddb/timeout__scheduler_8hpp_source.html">../core/timeout_scheduler.hpp</a>&quot;</code><br />
 <code>#include &quot;../core/wire.hpp&quot;</code><br />
 <code>#include &quot;<a class="el" href="../../d4/d11/forms_8hpp_source.html">../forms/forms.hpp</a>&quot;</code><br />
 <code>#include &quot;../session/session.hpp&quot;</code><br />
@@ -160,6 +163,8 @@ Classes</h2></td></tr>
 Functions</h2></td></tr>
 <tr class="memitem:a8bba10fd599fe31365300f6f91bf3983" id="r_a8bba10fd599fe31365300f6f91bf3983"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a8bba10fd599fe31365300f6f91bf3983">morph::ui::serveStdio</a> (<a class="el" href="../../d7/d79/classmorph_1_1ui_1_1McpAdapter.html">McpAdapter</a> &amp;adapter, <a class="el" href="../../d1/db0/classmorph_1_1exec_1_1MainThreadExecutor.html">exec::MainThreadExecutor</a> &amp;owner, std::istream &amp;input, std::ostream &amp;output)</td></tr>
 <tr class="memdesc:a8bba10fd599fe31365300f6f91bf3983"><td class="mdescLeft">&#160;</td><td class="mdescRight">Serves an adapter over MCP's stdio transport: one JSON-RPC message per line of <code class="param">input</code>, each reply on a line of <code class="param">output</code>, in order, until <code class="param">input</code> ends. An empty line is skipped.  <br /></td></tr>
+<tr class="memitem:ab6b6b7fdf749b09583d4c9bbfae18154" id="r_ab6b6b7fdf749b09583d4c9bbfae18154"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#ab6b6b7fdf749b09583d4c9bbfae18154">morph::ui::serveStdioOnOwner</a> (<a class="el" href="../../d7/d79/classmorph_1_1ui_1_1McpAdapter.html">McpAdapter</a> &amp;adapter, <a class="el" href="../../d4/d49/structmorph_1_1exec_1_1IExecutor.html">exec::IExecutor</a> &amp;owner, std::istream &amp;input, std::ostream &amp;output)</td></tr>
+<tr class="memdesc:ab6b6b7fdf749b09583d4c9bbfae18154"><td class="mdescLeft">&#160;</td><td class="mdescRight">Serves an adapter over MCP's stdio transport when its owner is turned by another thread, such as a Qt event loop: each message's <span class="tt">handle</span> is posted to <code class="param">owner</code>, and the calling thread waits for its reply. One JSON-RPC message per line of <code class="param">input</code>, each reply on a line of <code class="param">output</code>, in order, until <code class="param">input</code> ends. An empty line is skipped.  <br /></td></tr>
 </table><table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 id="header-var-members" class="groupheader"><a id="var-members" name="var-members"></a>
 Variables</h2></td></tr>
@@ -173,7 +178,7 @@ Variables</h2></td></tr>
 <tr class="memdesc:ab9e6e190744c9e45a2728e41da758b70"><td class="mdescLeft">&#160;</td><td class="mdescRight">The JSON-RPC error code of a call whose arguments the adapter cannot use.  <br /></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
-<div class="textblock"><p>The MCP adapter (spec 8 §11): an agent's tool calls run through the server as ordinary envelopes on a connection of their own, so every check a GUI gets applies to them, and every GUI watching what they change is told. The adapter speaks MCP's JSON-RPC 2.0 and knows no transport; <span class="tt">serveStdio</span> drives it over MCP's stdio transport. </p>
+<div class="textblock"><p>The MCP adapter (spec 8 §11): an agent's tool calls run through the server as ordinary envelopes on a connection of their own, so every check a GUI gets applies to them, and every GUI watching what they change is told. The server is in the same process, or on the far side of a <span class="tt">backend::IEnvelopeTransport</span>. The adapter speaks MCP's JSON-RPC 2.0 and knows no agent transport; <span class="tt">serveStdio</span> and <span class="tt">serveStdioOnOwner</span> drive it over MCP's stdio transport. </p>
 
 <p class="definition">Definition in file <a class="el" href="../../dd/d2d/agent_8hpp_source.html">agent.hpp</a>.</p>
 </div><a name="doc-func-members" id="doc-func-members"></a><h2 id="header-doc-func-members" class="groupheader">Function Documentation</h2>
@@ -225,7 +230,59 @@ Variables</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d2d/agent_8hpp_source.html#l00524">524</a> of file <a class="el" href="../../dd/d2d/agent_8hpp_source.html">agent.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d2d/agent_8hpp_source.html#l00684">684</a> of file <a class="el" href="../../dd/d2d/agent_8hpp_source.html">agent.hpp</a>.</p>
+
+</div>
+</div>
+<a id="ab6b6b7fdf749b09583d4c9bbfae18154" name="ab6b6b7fdf749b09583d4c9bbfae18154"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ab6b6b7fdf749b09583d4c9bbfae18154">&#9670;&#160;</a></span>serveStdioOnOwner()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">void morph::ui::serveStdioOnOwner </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="../../d7/d79/classmorph_1_1ui_1_1McpAdapter.html">McpAdapter</a> &amp;</td>          <td class="paramname"><span class="paramname"><em>adapter</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype"><a class="el" href="../../d4/d49/structmorph_1_1exec_1_1IExecutor.html">exec::IExecutor</a> &amp;</td>          <td class="paramname"><span class="paramname"><em>owner</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">std::istream &amp;</td>          <td class="paramname"><span class="paramname"><em>input</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">std::ostream &amp;</td>          <td class="paramname"><span class="paramname"><em>output</em></span>&#160;)</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Serves an adapter over MCP's stdio transport when its owner is turned by another thread, such as a Qt event loop: each message's <span class="tt">handle</span> is posted to <code class="param">owner</code>, and the calling thread waits for its reply. One JSON-RPC message per line of <code class="param">input</code>, each reply on a line of <code class="param">output</code>, in order, until <code class="param">input</code> ends. An empty line is skipped. </p>
+<p>The owner must keep running until <code class="param">input</code> ends: a reply is delivered on it, and this call waits for each one. </p><dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">adapter</td><td>The adapter; its <span class="tt">McpOptions::callbacks</span> is <code class="param">owner</code>. </td></tr>
+    <tr><td class="paramname">owner</td><td>The adapter's owner, a serial executor another thread runs. </td></tr>
+    <tr><td class="paramname">input</td><td>Where messages arrive. </td></tr>
+    <tr><td class="paramname">output</td><td>Where replies go; flushed after each. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+<p class="definition">Definition at line <a class="el" href="../../dd/d2d/agent_8hpp_source.html#l00712">712</a> of file <a class="el" href="../../dd/d2d/agent_8hpp_source.html">agent.hpp</a>.</p>
 
 </div>
 </div>
@@ -252,7 +309,7 @@ Variables</h2></td></tr>
 
 <p>The JSON-RPC error code of a method the adapter does not answer. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d2d/agent_8hpp_source.html#l00056">56</a> of file <a class="el" href="../../dd/d2d/agent_8hpp_source.html">agent.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d2d/agent_8hpp_source.html#l00067">67</a> of file <a class="el" href="../../dd/d2d/agent_8hpp_source.html">agent.hpp</a>.</p>
 
 </div>
 </div>
@@ -278,7 +335,7 @@ Variables</h2></td></tr>
 
 <p>The JSON-RPC error code of a message that is not JSON. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d2d/agent_8hpp_source.html#l00058">58</a> of file <a class="el" href="../../dd/d2d/agent_8hpp_source.html">agent.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d2d/agent_8hpp_source.html#l00069">69</a> of file <a class="el" href="../../dd/d2d/agent_8hpp_source.html">agent.hpp</a>.</p>
 
 </div>
 </div>
@@ -304,7 +361,7 @@ Variables</h2></td></tr>
 
 <p>The JSON-RPC error code of a message that is not a request. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d2d/agent_8hpp_source.html#l00060">60</a> of file <a class="el" href="../../dd/d2d/agent_8hpp_source.html">agent.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d2d/agent_8hpp_source.html#l00071">71</a> of file <a class="el" href="../../dd/d2d/agent_8hpp_source.html">agent.hpp</a>.</p>
 
 </div>
 </div>
@@ -330,7 +387,7 @@ Variables</h2></td></tr>
 
 <p>The JSON-RPC error code of a call whose arguments the adapter cannot use. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d2d/agent_8hpp_source.html#l00062">62</a> of file <a class="el" href="../../dd/d2d/agent_8hpp_source.html">agent.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d2d/agent_8hpp_source.html#l00073">73</a> of file <a class="el" href="../../dd/d2d/agent_8hpp_source.html">agent.hpp</a>.</p>
 
 </div>
 </div>

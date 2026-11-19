@@ -1,5 +1,8 @@
 var NAVTREEINDEX4 =
 {
+"d1/dc0/author_8hpp.html#a09f4371b2225fd190938f0d48a377ebba98402eecfbcefc336954458a01752131":[4,0,0,15,4,121,3],
+"d1/dc0/author_8hpp.html#a09f4371b2225fd190938f0d48a377ebbacd118d21c3b0b4762c6e0063661e6e45":[4,0,0,15,4,121,2],
+"d1/dc0/author_8hpp.html#a17a09465aa4891153386ad0b550f6a30a02bce93bff905887ad2233110bf9c49e":[4,0,0,15,4,128,1],
 "d1/dc0/author_8hpp.html#a17a09465aa4891153386ad0b550f6a30adc30bc0c7914db5918da4263fce93ad2":[4,0,0,15,4,128,0],
 "d1/dc0/author_8hpp.html#a2ac4e466cceaf8b9536e8513cd8567c0a226bea4d132b81f15f1bda87c76c6706":[4,0,0,15,4,131,1],
 "d1/dc0/author_8hpp.html#a2ac4e466cceaf8b9536e8513cd8567c0a4803e6b9e63dabf04de980788d6a13c4":[4,0,0,15,4,131,0],
@@ -185,8 +188,8 @@ var NAVTREEINDEX4 =
 "d2/d26/structmorph_1_1table_1_1QueryPlan.html#abea1c9e5a5b1d49ee601d615328e65ea":[3,0,0,24,38,3],
 "d2/d27/manual__scheduler_8hpp.html":[4,0,0,9,1,0],
 "d2/d27/manual__scheduler_8hpp_source.html":[4,0,0,9,1,0],
-"d2/d2e/source_8hpp.html":[4,0,0,0,2],
-"d2/d2e/source_8hpp_source.html":[4,0,0,0,2],
+"d2/d2e/source_8hpp.html":[4,0,0,0,3],
+"d2/d2e/source_8hpp_source.html":[4,0,0,0,3],
 "d2/d33/structmorph_1_1ui_1_1Tab.html":[1,0,0,1,283],
 "d2/d33/structmorph_1_1ui_1_1Tab.html":[3,0,0,28,285],
 "d2/d33/structmorph_1_1ui_1_1Tab.html#a52d22633c406135bc8e8356af0702b11":[1,0,0,1,283,0],
@@ -246,8 +249,5 @@ var NAVTREEINDEX4 =
 "d2/d47/structmorph_1_1ui_1_1Button.html#a611569ffa0415b72497fe3e2c77401fe":[1,0,0,1,27,0],
 "d2/d47/structmorph_1_1ui_1_1Button.html#a611569ffa0415b72497fe3e2c77401fe":[3,0,0,28,29,0],
 "d2/d47/structmorph_1_1ui_1_1Button.html#a70e1264a56284ab6e395ef0fe56c0361":[1,0,0,1,27,10],
-"d2/d47/structmorph_1_1ui_1_1Button.html#a70e1264a56284ab6e395ef0fe56c0361":[3,0,0,28,29,10],
-"d2/d47/structmorph_1_1ui_1_1Button.html#a9ea8d1d03190a7fc42f2ae4c175ec873":[1,0,0,1,27,9],
-"d2/d47/structmorph_1_1ui_1_1Button.html#a9ea8d1d03190a7fc42f2ae4c175ec873":[3,0,0,28,29,9],
-"d2/d47/structmorph_1_1ui_1_1Button.html#ab6fcf5e864b9b4f8ae4833349a531b90":[1,0,0,1,27,11]
+"d2/d47/structmorph_1_1ui_1_1Button.html#a70e1264a56284ab6e395ef0fe56c0361":[3,0,0,28,29,10]
 };

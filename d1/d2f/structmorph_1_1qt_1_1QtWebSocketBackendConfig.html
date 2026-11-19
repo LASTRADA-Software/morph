@@ -130,6 +130,8 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d1/d2f/structm
 Public Attributes</h2></td></tr>
 <tr class="memitem:ac3c821f0b4d2405c5b1b5f70640a212a" id="r_ac3c821f0b4d2405c5b1b5f70640a212a"><td class="memItemLeft">bool&#160;</td><td class="memItemRight"><a class="el" href="#ac3c821f0b4d2405c5b1b5f70640a212a">reconnectEnabled</a> = true</td></tr>
 <tr class="memdesc:ac3c821f0b4d2405c5b1b5f70640a212a"><td class="mdescLeft">&#160;</td><td class="mdescRight">Whether to attempt automatic reconnect after an unsolicited disconnect.  <br /></td></tr>
+<tr class="memitem:a332895628d6b2374673325e575da6efc" id="r_a332895628d6b2374673325e575da6efc"><td class="memItemLeft">bool&#160;</td><td class="memItemRight"><a class="el" href="#a332895628d6b2374673325e575da6efc">retryFirstConnect</a> = false</td></tr>
+<tr class="memdesc:a332895628d6b2374673325e575da6efc"><td class="mdescLeft">&#160;</td><td class="mdescRight">Whether to keep retrying when the first connect never reaches the server, on the same backoff as a reconnect. Off by default: a client that starts before its server is usually misconfigured, and failing fast says so. A process that may start before its server, such as an agent's MCP server, turns it on. While it retries, requests and private binds are held across every failed attempt and sent once one succeeds (during a reconnect, by contrast, they are rejected at the next failed attempt). The blocking structural verbs (<span class="tt">registerModel</span>, <span class="tt">registerModelWithContext</span>) are refused on this backend whatever the setting, so they neither wait for the connect nor throw because of it. Needs <span class="tt"><a class="el" href="#ac3c821f0b4d2405c5b1b5f70640a212a" title="Whether to attempt automatic reconnect after an unsolicited disconnect.">reconnectEnabled</a></span>: with that off, the first failed connect is final either way.  <br /></td></tr>
 <tr class="memitem:a23e1bd7102b2c1093814de5be2b97bfe" id="r_a23e1bd7102b2c1093814de5be2b97bfe"><td class="memItemLeft">std::chrono::milliseconds&#160;</td><td class="memItemRight"><a class="el" href="#a23e1bd7102b2c1093814de5be2b97bfe">initialReconnectDelay</a> = std::chrono::milliseconds{500}</td></tr>
 <tr class="memdesc:a23e1bd7102b2c1093814de5be2b97bfe"><td class="mdescLeft">&#160;</td><td class="mdescRight">Delay before the first reconnect attempt after a disconnect.  <br /></td></tr>
 <tr class="memitem:a007b9a995ecc5d90b17e7a3dd42a246b" id="r_a007b9a995ecc5d90b17e7a3dd42a246b"><td class="memItemLeft">std::chrono::milliseconds&#160;</td><td class="memItemRight"><a class="el" href="#a007b9a995ecc5d90b17e7a3dd42a246b">maxReconnectDelay</a> = std::chrono::seconds{30}</td></tr>
@@ -161,6 +163,24 @@ Public Attributes</h2></td></tr>
 
 </div>
 </div>
+<a id="a332895628d6b2374673325e575da6efc" name="a332895628d6b2374673325e575da6efc"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a332895628d6b2374673325e575da6efc">&#9670;&#160;</a></span>retryFirstConnect</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">bool morph::qt::QtWebSocketBackendConfig::retryFirstConnect = false</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>Whether to keep retrying when the first connect never reaches the server, on the same backoff as a reconnect. Off by default: a client that starts before its server is usually misconfigured, and failing fast says so. A process that may start before its server, such as an agent's MCP server, turns it on. While it retries, requests and private binds are held across every failed attempt and sent once one succeeds (during a reconnect, by contrast, they are rejected at the next failed attempt). The blocking structural verbs (<span class="tt">registerModel</span>, <span class="tt">registerModelWithContext</span>) are refused on this backend whatever the setting, so they neither wait for the connect nor throw because of it. Needs <span class="tt"><a class="el" href="#ac3c821f0b4d2405c5b1b5f70640a212a" title="Whether to attempt automatic reconnect after an unsolicited disconnect.">reconnectEnabled</a></span>: with that off, the first failed connect is final either way. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d8/dc3/qt__websocket__backend_8hpp_source.html#l00046">46</a> of file <a class="el" href="../../d8/dc3/qt__websocket__backend_8hpp_source.html">qt_websocket_backend.hpp</a>.</p>
+
+</div>
+</div>
 <a id="a23e1bd7102b2c1093814de5be2b97bfe" name="a23e1bd7102b2c1093814de5be2b97bfe"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a23e1bd7102b2c1093814de5be2b97bfe">&#9670;&#160;</a></span>initialReconnectDelay</h2>
 
@@ -175,7 +195,7 @@ Public Attributes</h2></td></tr>
 
 <p>Delay before the first reconnect attempt after a disconnect. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/dc3/qt__websocket__backend_8hpp_source.html#l00039">39</a> of file <a class="el" href="../../d8/dc3/qt__websocket__backend_8hpp_source.html">qt_websocket_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/dc3/qt__websocket__backend_8hpp_source.html#l00049">49</a> of file <a class="el" href="../../d8/dc3/qt__websocket__backend_8hpp_source.html">qt_websocket_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -193,7 +213,7 @@ Public Attributes</h2></td></tr>
 
 <p>Upper bound on the exponential backoff between reconnect attempts. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/dc3/qt__websocket__backend_8hpp_source.html#l00042">42</a> of file <a class="el" href="../../d8/dc3/qt__websocket__backend_8hpp_source.html">qt_websocket_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/dc3/qt__websocket__backend_8hpp_source.html#l00052">52</a> of file <a class="el" href="../../d8/dc3/qt__websocket__backend_8hpp_source.html">qt_websocket_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -211,7 +231,7 @@ Public Attributes</h2></td></tr>
 
 <p>Multiplier applied to the delay after each failed attempt. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/dc3/qt__websocket__backend_8hpp_source.html#l00045">45</a> of file <a class="el" href="../../d8/dc3/qt__websocket__backend_8hpp_source.html">qt_websocket_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/dc3/qt__websocket__backend_8hpp_source.html#l00055">55</a> of file <a class="el" href="../../d8/dc3/qt__websocket__backend_8hpp_source.html">qt_websocket_backend.hpp</a>.</p>
 
 </div>
 </div>

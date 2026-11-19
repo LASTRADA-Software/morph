@@ -1,5 +1,8 @@
 var NAVTREEINDEX8 =
 {
+"d3/d86/structmorph_1_1ui_1_1HeadAction.html#ae8cbe7a6c8ed7c41f9e45417bb5926fd":[3,0,0,28,114,3],
+"d3/d89/date__pattern_8hpp.html":[4,0,0,15,15],
+"d3/d89/date__pattern_8hpp.html#a2ef946a43d5a988fd701e98130632c83a03727ac48595a24daed975559c944a44":[4,0,0,15,15,2,3],
 "d3/d89/date__pattern_8hpp.html#a2ef946a43d5a988fd701e98130632c83a367c6aa80b88ab50250da7d75e8ffd5a":[4,0,0,15,15,2,2],
 "d3/d89/date__pattern_8hpp.html#a2ef946a43d5a988fd701e98130632c83a537c66b24ef5c83b7382cdc3f34885f2":[4,0,0,15,15,2,0],
 "d3/d89/date__pattern_8hpp.html#a2ef946a43d5a988fd701e98130632c83a62902641c38f3a4a8eb3212454360e24":[4,0,0,15,15,2,5],
@@ -8,9 +11,9 @@ var NAVTREEINDEX8 =
 "d3/d89/date__pattern_8hpp.html#a2ef946a43d5a988fd701e98130632c83ac22cf8376b1893dcfcef0649fe1a7d87":[4,0,0,15,15,2,6],
 "d3/d89/date__pattern_8hpp.html#a2ef946a43d5a988fd701e98130632c83ad7da1b76e5799f53a399b7a96ba67437":[4,0,0,15,15,2,8],
 "d3/d89/date__pattern_8hpp.html#a2ef946a43d5a988fd701e98130632c83adfd0a82c4bf37b1e90b690a22a20692e":[4,0,0,15,15,2,7],
-"d3/d89/date__pattern_8hpp.html#a89c061e04e31b770e72f93ac6e97b730":[1,0,0,1,448],
-"d3/d89/date__pattern_8hpp.html#ab82034f230a13157c9e260a7db1f6aac":[1,0,0,1,449],
-"d3/d89/date__pattern_8hpp.html#ac0aea9c5e9cc796b7d6fd4ff7c72ff4c":[1,0,0,1,450],
+"d3/d89/date__pattern_8hpp.html#a89c061e04e31b770e72f93ac6e97b730":[1,0,0,1,449],
+"d3/d89/date__pattern_8hpp.html#ab82034f230a13157c9e260a7db1f6aac":[1,0,0,1,450],
+"d3/d89/date__pattern_8hpp.html#ac0aea9c5e9cc796b7d6fd4ff7c72ff4c":[1,0,0,1,451],
 "d3/d89/date__pattern_8hpp_source.html":[4,0,0,15,15],
 "d3/d8b/structmorph_1_1forms_1_1RuleList.html":[3,0,0,10,52],
 "d3/d8b/structmorph_1_1forms_1_1RuleList.html#a04b00f8f7ca42ec629c0b1a26d54d32f":[3,0,0,10,52,0],
@@ -246,8 +249,5 @@ var NAVTREEINDEX8 =
 "d3/dfe/structmorph_1_1forms_1_1WizardViewOptions.html#a0539a4fd591a5fd1eeced34ce13445a3":[3,0,0,10,68,0],
 "d3/dfe/structmorph_1_1forms_1_1WizardViewOptions.html#a344bcb7777464532114edfb4d9994a82":[3,0,0,10,68,2],
 "d3/dfe/structmorph_1_1forms_1_1WizardViewOptions.html#a4dd0f597261b776c4de805a8b117f5fb":[3,0,0,10,68,3],
-"d3/dfe/structmorph_1_1forms_1_1WizardViewOptions.html#a4fa81fe82e699e10f39524f3d024006c":[3,0,0,10,68,1],
-"d3/dfe/structmorph_1_1forms_1_1WizardViewOptions.html#ac60b11017d4213459323e5206a6c11c7":[3,0,0,10,68,5],
-"d3/dfe/structmorph_1_1forms_1_1WizardViewOptions.html#af207b73f31cc7208d3e0b4cc6443b3c9":[3,0,0,10,68,4],
-"d4/d02/structmorph_1_1ui_1_1Document.html":[1,0,0,1,75]
+"d3/dfe/structmorph_1_1forms_1_1WizardViewOptions.html#a4fa81fe82e699e10f39524f3d024006c":[3,0,0,10,68,1]
 };

@@ -6,5 +6,6 @@ var structmorph_1_1client_1_1Args =
     [ "user", "dd/dc3/structmorph_1_1client_1_1Args.html#a7cf778a40437b661df160b957284071e", null ],
     [ "screen", "dd/dc3/structmorph_1_1client_1_1Args.html#a383bf8c03ed7e47ae899dad3c7a2f90f", null ],
     [ "exitAfterMount", "dd/dc3/structmorph_1_1client_1_1Args.html#a4264c4f5277246518cccc8ed0515a2d5", null ],
-    [ "dev", "dd/dc3/structmorph_1_1client_1_1Args.html#afe56c1f92729f66d44bf51a7873f9c51", null ]
+    [ "dev", "dd/dc3/structmorph_1_1client_1_1Args.html#afe56c1f92729f66d44bf51a7873f9c51", null ],
+    [ "mcpStdio", "dd/dc3/structmorph_1_1client_1_1Args.html#a87bf53196d3e56cfd0f67cd2beaa8499", null ]
 ];

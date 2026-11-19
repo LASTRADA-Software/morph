@@ -136,11 +136,13 @@ Public Attributes</h2></td></tr>
 <tr class="memdesc:a859fd5aad83c2ed98515977efc40e682"><td class="mdescLeft">&#160;</td><td class="mdescRight">The version <span class="tt">initialize</span> answers in <span class="tt">serverInfo</span>.  <br /></td></tr>
 <tr class="memitem:a488b2bff2f46ad0ac8931ea1933a8108" id="r_a488b2bff2f46ad0ac8931ea1933a8108"><td class="memItemLeft"><a class="el" href="../../d4/d49/structmorph_1_1exec_1_1IExecutor.html">exec::IExecutor</a> *&#160;</td><td class="memItemRight"><a class="el" href="#a488b2bff2f46ad0ac8931ea1933a8108">callbacks</a> = nullptr</td></tr>
 <tr class="memdesc:a488b2bff2f46ad0ac8931ea1933a8108"><td class="mdescLeft">&#160;</td><td class="mdescRight">The owner <span class="tt">handle</span>'s completions are delivered on: a serial executor that outlives the adapter and every call still in flight, such as the <span class="tt"><a class="el" href="../../d1/db0/classmorph_1_1exec_1_1MainThreadExecutor.html" title="Single-thread executor intended for use on the calling (main) thread.">exec::MainThreadExecutor</a></span> <span class="tt"><a class="el" href="../../dd/d2d/agent_8hpp.html#a8bba10fd599fe31365300f6f91bf3983" title="Serves an adapter over MCP&#39;s stdio transport: one JSON-RPC message per line of input,...">serveStdio</a></span> pumps. Borrowed; required.  <br /></td></tr>
+<tr class="memitem:a31f1c4724aeb8458d4427bb5b4b87906" id="r_a31f1c4724aeb8458d4427bb5b4b87906"><td class="memItemLeft">std::chrono::milliseconds&#160;</td><td class="memItemRight"><a class="el" href="#a31f1c4724aeb8458d4427bb5b4b87906">callTimeout</a> = std::chrono::seconds{30}</td></tr>
+<tr class="memdesc:a31f1c4724aeb8458d4427bb5b4b87906"><td class="mdescLeft">&#160;</td><td class="mdescRight">How long an envelope sent over a transport waits for its reply before it is answered as a failure. <span class="tt"><a class="el" href="../../dd/d2d/agent_8hpp.html#a8bba10fd599fe31365300f6f91bf3983" title="Serves an adapter over MCP&#39;s stdio transport: one JSON-RPC message per line of input,...">serveStdio</a></span> handles one message at a time, so without this bound a request a transport holds before its first connect (with <span class="tt">retryFirstConnect</span>; requests during an outage are rejected instead) would block every later message. The timeout does not cancel the request: the call may still complete on the server, and a reply that arrives later is dropped. Zero waits forever. The in-process constructor ignores it, since a <span class="tt">RemoteServer</span> always replies. A negative value is refused by the transport constructor.  <br /></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>What an <span class="tt"><a class="el" href="../../d7/d79/classmorph_1_1ui_1_1McpAdapter.html" title="Serves MCP&#39;s tools over one server connection (spec 8 §11).">McpAdapter</a></span> is built with. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d2d/agent_8hpp_source.html#l00041">41</a> of file <a class="el" href="../../dd/d2d/agent_8hpp_source.html">agent.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d2d/agent_8hpp_source.html#l00045">45</a> of file <a class="el" href="../../dd/d2d/agent_8hpp_source.html">agent.hpp</a>.</p>
 </div><a name="doc-variable-members" id="doc-variable-members"></a><h2 id="header-doc-variable-members" class="groupheader">Member Data Documentation</h2>
 <a id="ac389742a253dd7baa53fd462d65c2d16" name="ac389742a253dd7baa53fd462d65c2d16"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#ac389742a253dd7baa53fd462d65c2d16">&#9670;&#160;</a></span>session</h2>
@@ -156,7 +158,7 @@ Public Attributes</h2></td></tr>
 
 <p>The session every envelope carries: the agent's identity, which the server authenticates on each one, as it does a GUI's. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d2d/agent_8hpp_source.html#l00044">44</a> of file <a class="el" href="../../dd/d2d/agent_8hpp_source.html">agent.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d2d/agent_8hpp_source.html#l00048">48</a> of file <a class="el" href="../../dd/d2d/agent_8hpp_source.html">agent.hpp</a>.</p>
 
 </div>
 </div>
@@ -174,7 +176,7 @@ Public Attributes</h2></td></tr>
 
 <p>The name <span class="tt">initialize</span> answers in <span class="tt">serverInfo</span>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d2d/agent_8hpp_source.html#l00046">46</a> of file <a class="el" href="../../dd/d2d/agent_8hpp_source.html">agent.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d2d/agent_8hpp_source.html#l00050">50</a> of file <a class="el" href="../../dd/d2d/agent_8hpp_source.html">agent.hpp</a>.</p>
 
 </div>
 </div>
@@ -192,7 +194,7 @@ Public Attributes</h2></td></tr>
 
 <p>The version <span class="tt">initialize</span> answers in <span class="tt">serverInfo</span>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d2d/agent_8hpp_source.html#l00048">48</a> of file <a class="el" href="../../dd/d2d/agent_8hpp_source.html">agent.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d2d/agent_8hpp_source.html#l00052">52</a> of file <a class="el" href="../../dd/d2d/agent_8hpp_source.html">agent.hpp</a>.</p>
 
 </div>
 </div>
@@ -210,7 +212,25 @@ Public Attributes</h2></td></tr>
 
 <p>The owner <span class="tt">handle</span>'s completions are delivered on: a serial executor that outlives the adapter and every call still in flight, such as the <span class="tt"><a class="el" href="../../d1/db0/classmorph_1_1exec_1_1MainThreadExecutor.html" title="Single-thread executor intended for use on the calling (main) thread.">exec::MainThreadExecutor</a></span> <span class="tt"><a class="el" href="../../dd/d2d/agent_8hpp.html#a8bba10fd599fe31365300f6f91bf3983" title="Serves an adapter over MCP&#39;s stdio transport: one JSON-RPC message per line of input,...">serveStdio</a></span> pumps. Borrowed; required. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d2d/agent_8hpp_source.html#l00052">52</a> of file <a class="el" href="../../dd/d2d/agent_8hpp_source.html">agent.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d2d/agent_8hpp_source.html#l00056">56</a> of file <a class="el" href="../../dd/d2d/agent_8hpp_source.html">agent.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a31f1c4724aeb8458d4427bb5b4b87906" name="a31f1c4724aeb8458d4427bb5b4b87906"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a31f1c4724aeb8458d4427bb5b4b87906">&#9670;&#160;</a></span>callTimeout</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::chrono::milliseconds morph::ui::McpOptions::callTimeout = std::chrono::seconds{30}</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>How long an envelope sent over a transport waits for its reply before it is answered as a failure. <span class="tt"><a class="el" href="../../dd/d2d/agent_8hpp.html#a8bba10fd599fe31365300f6f91bf3983" title="Serves an adapter over MCP&#39;s stdio transport: one JSON-RPC message per line of input,...">serveStdio</a></span> handles one message at a time, so without this bound a request a transport holds before its first connect (with <span class="tt">retryFirstConnect</span>; requests during an outage are rejected instead) would block every later message. The timeout does not cancel the request: the call may still complete on the server, and a reply that arrives later is dropped. Zero waits forever. The in-process constructor ignores it, since a <span class="tt">RemoteServer</span> always replies. A negative value is refused by the transport constructor. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../dd/d2d/agent_8hpp_source.html#l00063">63</a> of file <a class="el" href="../../dd/d2d/agent_8hpp_source.html">agent.hpp</a>.</p>
 
 </div>
 </div>

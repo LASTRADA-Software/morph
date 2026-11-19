@@ -130,8 +130,12 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d7/d79/classmo
 Public Member Functions</h2></td></tr>
 <tr class="memitem:a567945cf0d534f8d9c2698717c091035" id="r_a567945cf0d534f8d9c2698717c091035"><td class="memItemLeft">&#160;</td><td class="memItemRight"><a class="el" href="#a567945cf0d534f8d9c2698717c091035">McpAdapter</a> (std::shared_ptr&lt; <a class="el" href="../../d4/dc1/classmorph_1_1backend_1_1RemoteServer.html">backend::RemoteServer</a> &gt; server, <a class="el" href="../../d5/de3/structmorph_1_1ui_1_1McpOptions.html">McpOptions</a> options)</td></tr>
 <tr class="memdesc:a567945cf0d534f8d9c2698717c091035"><td class="mdescLeft">&#160;</td><td class="mdescRight">An adapter on a new connection of <code class="param">server</code>.  <br /></td></tr>
+<tr class="memitem:a6585a0a578c9ce07d4af63add9614286" id="r_a6585a0a578c9ce07d4af63add9614286"><td class="memItemLeft">&#160;</td><td class="memItemRight"><a class="el" href="#a6585a0a578c9ce07d4af63add9614286">McpAdapter</a> (<a class="el" href="../../d8/df0/classmorph_1_1backend_1_1IEnvelopeTransport.html">backend::IEnvelopeTransport</a> &amp;transport, <a class="el" href="../../d5/de3/structmorph_1_1ui_1_1McpOptions.html">McpOptions</a> options)</td></tr>
+<tr class="memdesc:a6585a0a578c9ce07d4af63add9614286"><td class="mdescLeft">&#160;</td><td class="mdescRight">An adapter whose envelopes travel over <code class="param">transport:</code> a connection to a server in another process.  <br /></td></tr>
 <tr class="memitem:a40a6709d67c2ebc022ff1f78b5f364a7" id="r_a40a6709d67c2ebc022ff1f78b5f364a7"><td class="memItemLeft">&#160;</td><td class="memItemRight"><a class="el" href="#a40a6709d67c2ebc022ff1f78b5f364a7">~McpAdapter</a> ()</td></tr>
-<tr class="memdesc:a40a6709d67c2ebc022ff1f78b5f364a7"><td class="mdescLeft">&#160;</td><td class="mdescRight">Closes the adapter's connection, releasing its private instances.  <br /></td></tr>
+<tr class="memdesc:a40a6709d67c2ebc022ff1f78b5f364a7"><td class="mdescLeft">&#160;</td><td class="mdescRight">Closes the adapter's connection, if it opened one, and drops the timeouts still pending.  <br /></td></tr>
+<tr class="memitem:a5e201cd374e8333caf9a9d457b660d89" id="r_a5e201cd374e8333caf9a9d457b660d89"><td class="memItemLeft">std::function&lt; void()&gt;&#160;</td><td class="memItemRight"><a class="el" href="#a5e201cd374e8333caf9a9d457b660d89">resetter</a> () const</td></tr>
+<tr class="memdesc:a5e201cd374e8333caf9a9d457b660d89"><td class="mdescLeft">&#160;</td><td class="mdescRight">A callable that forgets the cached catalog and every cached model id, so the next call fetches the catalog and registers its instance again: what a transport's disconnect handler runs.  <br /></td></tr>
 <tr class="memitem:a42e8e6d2ccc4e07cae71f951f8f8c84c" id="r_a42e8e6d2ccc4e07cae71f951f8f8c84c"><td class="memItemLeft"><a id="a42e8e6d2ccc4e07cae71f951f8f8c84c" name="a42e8e6d2ccc4e07cae71f951f8f8c84c"></a>
 &#160;</td><td class="memItemRight"><b>McpAdapter</b> (McpAdapter const &amp;)=delete</td></tr>
 <tr class="memitem:abe2c1059a2e272b25284b7d4ddbcf7e0" id="r_abe2c1059a2e272b25284b7d4ddbcf7e0"><td class="memItemLeft"><a id="abe2c1059a2e272b25284b7d4ddbcf7e0" name="abe2c1059a2e272b25284b7d4ddbcf7e0"></a>
@@ -149,14 +153,14 @@ Public Member Functions</h2></td></tr>
 <ul>
 <li><b>Tools.</b> One per action the catalog lists as permitted for the session, named by the action id, whose <span class="tt">inputSchema</span> is the action's schema from <span class="tt">schemas</span>. A keyed model's tool also takes the instance key as the argument <span class="tt">instance</span>, and runs on the shared instance with that key. Any other model's tool runs on one private instance per model type, registered on the adapter's connection at its first call. A tool <span class="tt"><a class="el" href="../../d8/d0e/expression_8hpp.html#a44b6b7bce3881e4c19594de28faba604" title="Evaluates an expression.">evaluate</a></span>, taking <span class="tt">{action, body}</span>, is a dry run through <span class="tt">ui-evaluate</span>.</li>
 <li><b>A call's result</b> is the action's result JSON as text content, or the server's <span class="tt">err</span> message with <span class="tt">isError</span>.</li>
-<li><b>The connection</b> is opened when the adapter is made and closed when it is destroyed, which releases its private instances. The server treats it like any other connection, so its changes reach every watching GUI.</li>
+<li><b>The connection</b> of an adapter made over a server is opened when the adapter is made and closed when it is destroyed, which releases its private instances. The server treats it like any other connection, so its changes reach every watching GUI. Over a transport, the connection is the transport's.</li>
 </ul>
 <p><span class="tt"><a class="el" href="#a0ab8a05cff6e0932efcfee2d27761211" title="Handles one JSON-RPC message.">handle</a></span> is called on the owner, <span class="tt"><a class="el" href="../../d5/de3/structmorph_1_1ui_1_1McpOptions.html#a488b2bff2f46ad0ac8931ea1933a8108" title="The owner handle&#39;s completions are delivered on: a serial executor that outlives the adapter and ever...">McpOptions::callbacks</a></span>, and its completion is delivered there. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d2d/agent_8hpp_source.html#l00079">79</a> of file <a class="el" href="../../dd/d2d/agent_8hpp_source.html">agent.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d2d/agent_8hpp_source.html#l00091">91</a> of file <a class="el" href="../../dd/d2d/agent_8hpp_source.html">agent.hpp</a>.</p>
 </div><a name="doc-constructors" id="doc-constructors"></a><h2 id="header-doc-constructors" class="groupheader">Constructor &amp; Destructor Documentation</h2>
 <a id="a567945cf0d534f8d9c2698717c091035" name="a567945cf0d534f8d9c2698717c091035"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a567945cf0d534f8d9c2698717c091035">&#9670;&#160;</a></span>McpAdapter()</h2>
+<h2 class="memtitle"><span class="permalink"><a href="#a567945cf0d534f8d9c2698717c091035">&#9670;&#160;</a></span>McpAdapter() <span class="overload">[1/2]</span></h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -197,7 +201,53 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d2d/agent_8hpp_source.html#l00085">85</a> of file <a class="el" href="../../dd/d2d/agent_8hpp_source.html">agent.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d2d/agent_8hpp_source.html#l00097">97</a> of file <a class="el" href="../../dd/d2d/agent_8hpp_source.html">agent.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a6585a0a578c9ce07d4af63add9614286" name="a6585a0a578c9ce07d4af63add9614286"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a6585a0a578c9ce07d4af63add9614286">&#9670;&#160;</a></span>McpAdapter() <span class="overload">[2/2]</span></h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">morph::ui::McpAdapter::McpAdapter </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="../../d8/df0/classmorph_1_1backend_1_1IEnvelopeTransport.html">backend::IEnvelopeTransport</a> &amp;</td>          <td class="paramname"><span class="paramname"><em>transport</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype"><a class="el" href="../../d5/de3/structmorph_1_1ui_1_1McpOptions.html">McpOptions</a></td>          <td class="paramname"><span class="paramname"><em>options</em></span>&#160;)</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>An adapter whose envelopes travel over <code class="param">transport:</code> a connection to a server in another process. </p>
+<p>The transport's connection is the agent's. The adapter opens and closes nothing, and the server releases the adapter's private instances when that connection drops. Install <span class="tt"><a class="el" href="#a5e201cd374e8333caf9a9d457b660d89" title="A callable that forgets the cached catalog and every cached model id, so the next call fetches the ca...">resetter()</a></span> as the transport's disconnect handler, so a reconnect does not reuse released ids. Each envelope waits at most <span class="tt"><a class="el" href="../../d5/de3/structmorph_1_1ui_1_1McpOptions.html#a31f1c4724aeb8458d4427bb5b4b87906" title="How long an envelope sent over a transport waits for its reply before it is answered as a failure....">McpOptions::callTimeout</a></span> for its reply. </p><dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">transport</td><td>The transport. Borrowed: it must outlive the adapter. </td></tr>
+    <tr><td class="paramname">options</td><td>Its options; <span class="tt">callbacks</span> must be the executor the transport may deliver replies on. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="exception"><dt>Exceptions</dt><dd>
+  <table class="exception">
+    <tr><td class="paramname">std::invalid_argument</td><td>without a callbacks executor, or with a negative <span class="tt">callTimeout</span>. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+<p class="definition">Definition at line <a class="el" href="../../dd/d2d/agent_8hpp_source.html#l00117">117</a> of file <a class="el" href="../../dd/d2d/agent_8hpp_source.html">agent.hpp</a>.</p>
 
 </div>
 </div>
@@ -224,13 +274,43 @@ Public Member Functions</h2></td></tr>
 </table>
 </div><div class="memdoc">
 
-<p>Closes the adapter's connection, releasing its private instances. </p>
+<p>Closes the adapter's connection, if it opened one, and drops the timeouts still pending. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d2d/agent_8hpp_source.html#l00094">94</a> of file <a class="el" href="../../dd/d2d/agent_8hpp_source.html">agent.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d2d/agent_8hpp_source.html#l00135">135</a> of file <a class="el" href="../../dd/d2d/agent_8hpp_source.html">agent.hpp</a>.</p>
 
 </div>
 </div>
 <a name="doc-func-members" id="doc-func-members"></a><h2 id="header-doc-func-members" class="groupheader">Member Function Documentation</h2>
+<a id="a5e201cd374e8333caf9a9d457b660d89" name="a5e201cd374e8333caf9a9d457b660d89"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a5e201cd374e8333caf9a9d457b660d89">&#9670;&#160;</a></span>resetter()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::function&lt; void()&gt; morph::ui::McpAdapter::resetter </td>
+          <td>(</td>
+          <td class="paramname"><span class="paramname"><em></em></span></td><td>)</td>
+          <td> const</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>A callable that forgets the cached catalog and every cached model id, so the next call fetches the catalog and registers its instance again: what a transport's disconnect handler runs. </p>
+<p>It holds the adapter's state weakly, so calling it after the adapter is gone does nothing; a transport's handler outlives the adapter that borrows the transport. Callable from any thread. A reply to a request sent before the reset is not cached. </p><dl class="section return"><dt>Returns</dt><dd>The callable. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../dd/d2d/agent_8hpp_source.html#l00157">157</a> of file <a class="el" href="../../dd/d2d/agent_8hpp_source.html">agent.hpp</a>.</p>
+
+</div>
+</div>
 <a id="a0ab8a05cff6e0932efcfee2d27761211" name="a0ab8a05cff6e0932efcfee2d27761211"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a0ab8a05cff6e0932efcfee2d27761211">&#9670;&#160;</a></span>handle()</h2>
 
@@ -263,7 +343,7 @@ Public Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Completes with the reply's JSON text, or with nothing for a notification. It never fails: a fault is answered as a JSON-RPC error. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d2d/agent_8hpp_source.html#l00111">111</a> of file <a class="el" href="../../dd/d2d/agent_8hpp_source.html">agent.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d2d/agent_8hpp_source.html#l00174">174</a> of file <a class="el" href="../../dd/d2d/agent_8hpp_source.html">agent.hpp</a>.</p>
 
 </div>
 </div>

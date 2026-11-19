@@ -127,6 +127,8 @@ var NAVTREEINDEX0 =
 "d0/d45/classmorph_1_1ui_1_1chat_1_1testing_1_1FakeChatProvider.html#a90f9b31ada47c74ad8462f0e05eb1d61":[3,0,0,28,1,0,0,4],
 "d0/d45/classmorph_1_1ui_1_1chat_1_1testing_1_1FakeChatProvider.html#a98e4cdd3df3d14203cef037bd37133eb":[3,0,0,28,1,0,0,6],
 "d0/d45/classmorph_1_1ui_1_1chat_1_1testing_1_1FakeChatProvider.html#af184a781de78f3301f3ef98ea45328bd":[3,0,0,28,1,0,0,7],
+"d0/d48/mcp_8hpp.html":[4,0,0,0,1],
+"d0/d48/mcp_8hpp_source.html":[4,0,0,0,1],
 "d0/d49/structmorph_1_1ui_1_1Tabs.html":[1,0,0,1,290],
 "d0/d49/structmorph_1_1ui_1_1Tabs.html":[3,0,0,28,292],
 "d0/d49/structmorph_1_1ui_1_1Tabs.html#a33ac79026bd69fd9aa14d8fcab1b9b4c":[1,0,0,1,290,7],
@@ -247,7 +249,5 @@ var NAVTREEINDEX0 =
 "d0/d8f/classmorph_1_1ui_1_1author_1_1DeclScope.html#ae88c8b9ec1aaa4e64657913cf9ae6cae":[3,0,0,28,0,27,3],
 "d0/d95/structmorph_1_1render_1_1detail_1_1SignMatch.html":[3,0,0,22,0,2],
 "d0/d95/structmorph_1_1render_1_1detail_1_1SignMatch.html#a3163d7577d277e1505c2c687149f242f":[3,0,0,22,0,2,1],
-"d0/d95/structmorph_1_1render_1_1detail_1_1SignMatch.html#ad9c50113518e9d1b050fb983f1a61bd9":[3,0,0,22,0,2,0],
-"d0/d96/completion__awaiter_8hpp.html":[4,0,0,1,0,2],
-"d0/d96/completion__awaiter_8hpp_source.html":[4,0,0,1,0,2]
+"d0/d95/structmorph_1_1render_1_1detail_1_1SignMatch.html#ad9c50113518e9d1b050fb983f1a61bd9":[3,0,0,22,0,2,0]
 };
