@@ -533,6 +533,10 @@ public:
         auto [completion, promise] = async::Completion<std::optional<std::string>>::makeSettleable(&_strand);
         _strand.postTask([this, entry = tie(key), settle = std::move(promise)] mutable {
             std::scoped_lock const lock{_mutex};
+            if (++_gets == _holdGet) {
+                _heldGet.emplace(HeldGet{.entry = std::move(entry), .settle = std::move(settle)});
+                return;
+            }
             auto const found = _entries.find(entry);
             settle.resolve(found == _entries.end() ? std::nullopt : std::optional<std::string>{found->second});
         });
@@ -673,6 +677,38 @@ public:
         _holdSet = 0;
     }
 
+    /// @brief The `get` calls answered or held so far.
+    /// @return How many.
+    [[nodiscard]] std::size_t getCount() const {
+        std::scoped_lock const lock{_mutex};
+        return _gets;
+    }
+
+    /// @brief Holds the @p n-th `get` since the store was made until `releaseHeldGet`, which reads the entry then.
+    /// @param n The `get` to hold.
+    void holdGet(std::size_t n) {
+        std::scoped_lock const lock{_mutex};
+        _holdGet = n;
+    }
+
+    /// @brief Whether a `get` is held.
+    /// @return `true` while one is.
+    [[nodiscard]] bool holdingGet() const {
+        std::scoped_lock const lock{_mutex};
+        return _heldGet.has_value();
+    }
+
+    /// @brief Answers the held `get` with what is stored now.
+    void releaseHeldGet() {
+        std::scoped_lock const lock{_mutex};
+        REQUIRE(_heldGet.has_value());
+        auto const found = _entries.find(_heldGet->entry);
+        _heldGet->settle.resolve(found == _entries.end() ? std::nullopt
+                                                         : std::optional<std::string>{found->second});
+        _heldGet.reset();
+        _holdGet = 0;
+    }
+
     /// @brief Lets every `set` succeed again.
     void healSets() {
         std::scoped_lock const lock{_mutex};
@@ -718,6 +754,14 @@ private:
     };
     std::size_t _holdSet = 0;
     std::optional<Held> _held;
+    /// @brief A held `get`.
+    struct HeldGet {
+        Key entry;
+        async::Completion<std::optional<std::string>>::Promise settle;
+    };
+    std::size_t _gets = 0;
+    std::size_t _holdGet = 0;
+    std::optional<HeldGet> _heldGet;
     /// After the map, so it is destroyed first: a task running on it reads the map.
     exec::OwnerStrand _strand;
 };

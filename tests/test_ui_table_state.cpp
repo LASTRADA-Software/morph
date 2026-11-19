@@ -9,6 +9,8 @@
 #include <algorithm>
 #include <catch2/catch_test_macros.hpp>
 #include <chrono>
+#include <core/async/ExecutorContext.hpp>
+#include <coroutine>
 #include <cstddef>
 #include <cstdint>
 #include <exception>
@@ -966,24 +968,31 @@ TEST_CASE("table state: the quota counts a small document by the text its save r
     CHECK(h.prefs.value(usageKey(kPerson)) == R"({"bytes":2})");
 }
 
-// Mutation: no cap on a person's open uploads (the first of five still continues).
-TEST_CASE("table state: a person's open uploads are capped, the oldest dropped", "[ui][state]") {
+// Mutation: no cap on a person's open uploads (a fifth starts, and the server holds five).
+TEST_CASE("table state: a person's open uploads are capped, a fifth refused until one ends", "[ui][state]") {
     StoreFixture h;
     auto const instance = h.server.bind();
     std::string const head = R"({"version":1,)";
-    for (int at = 1; at <= 5; ++at) {
-        CHECK(
-            h.server.call(instance, "save", saveBody(kKey, head, "u" + std::to_string(at), 0, false), kPerson).kind ==
-            "ok");
-    }
+    auto const start = [&](int at) {
+        return savedOf(
+            h.server.call(instance, "save", saveBody(kKey, head, "u" + std::to_string(at), 0, false), kPerson));
+    };
     auto const finish = [&](int at) {
         return h.server.call(instance, "save",
                              saveBody(kKey, R"("view":"x"})", "u" + std::to_string(at), head.size(), true), kPerson);
     };
-    CHECK(finish(1).kind != "ok");  // dropped when the fifth started: no client holds more than four
-    for (int at = 2; at <= 5; ++at) {
+    for (int at = 1; at <= 4; ++at) {
+        CHECK(start(at).outcome == table::SaveOutcome::Saved);
+    }
+    auto const fifth = start(5);  // no client holds more than four open
+    CHECK(fifth.outcome == table::SaveOutcome::Refused);
+    CHECK(fifth.reason == ui::kTableStateUploadsBusy);
+    CHECK(finish(5).kind != "ok");
+    for (int at = 1; at <= 4; ++at) {
         CHECK(finish(at).kind == "ok");
     }
+    CHECK(start(5).outcome == table::SaveOutcome::Saved);  // one ended: the fifth starts now
+    CHECK(finish(5).kind == "ok");
     CHECK(load(h, kKey)->json == R"({"version":1,"view":"x"})");
 }
 
@@ -1179,4 +1188,144 @@ TEST_CASE("shared views: a publish over the operator's quota is refused as a sav
     CHECK(over.reason == "over the table-state quota");
     CHECK(viewNames(load(h, shared)) == std::vector<std::string>{"Open"});
     CHECK(save(h, kKey, docOf(300)).outcome == table::SaveOutcome::Saved);  // alice's own account is apart
+}
+
+// --- Reads overtaken by a save, a lock handed to a waiter that is gone, and five large saves at once ----------------
+
+namespace {
+
+// A coroutine that starts at once and is destroyed by its owner, for driving the per-key locks by hand.
+struct Started {
+    struct promise_type {
+        Started get_return_object() { return Started{std::coroutine_handle<promise_type>::from_promise(*this)}; }
+        std::suspend_never initial_suspend() noexcept { return {}; }
+        std::suspend_always final_suspend() noexcept { return {}; }
+        void return_void() noexcept {}
+        void unhandled_exception() noexcept { std::terminate(); }
+    };
+    std::coroutine_handle<promise_type> handle;
+};
+
+// Takes the lock of @p name, sets @p held, and waits until destroyed.
+Started holdLock(ui::detail::TableStateLocks& locks, std::string name, bool& held) {
+    auto const lease = co_await locks.lock(std::move(name));
+    held = true;
+    co_await std::suspend_always{};
+}
+
+std::string readBody(table::TableStateKey const& key, std::string revision) {
+    return morph::model::ActionTraits<ui::TableStateRead>::toJson(
+        ui::TableStateRead{.key = key, .revision = std::move(revision), .offset = 0});
+}
+
+}  // namespace
+
+// Mutation: no second read of the head on a missing segment (the load answers the key's error).
+TEST_CASE("table state: a load overtaken by a save answers the new document", "[ui][state]") {
+    SteppedServer s;
+    auto const writer = s.bind();
+    auto const reader = s.bind();
+    std::string const first = stateWithOneOfValues(400, "a");
+    std::string const next = stateWithOneOfValues(400, "b");
+    REQUIRE(savedOf(s.sendNow(s.request(writer, "save", saveBody(kKey, first)))).outcome == table::SaveOutcome::Saved);
+    s.prefs->holdGet(s.prefs->getCount() + 2);  // the load has read the head; its first segment read is held
+    std::optional<morph::wire::Envelope> reply;
+    s.post(s.request(reader, "load", loadBody({kKey})), reply);
+    s.pool.runAll();
+    REQUIRE(s.prefs->holdingGet());
+    REQUIRE(savedOf(s.sendNow(s.request(writer, "save", saveBody(kKey, next)))).outcome ==
+            table::SaveOutcome::Saved);  // removes the segments the load's head named
+    s.prefs->releaseHeldGet();
+    s.pool.runAll();
+    REQUIRE(reply.has_value());
+    auto const loaded = loadedOf(*reply);
+    REQUIRE(loaded.entries.size() == 1);
+    CHECK(loaded.entries.front().error.empty());
+    CHECK(loaded.entries.front().found);
+    CHECK(loaded.entries.front().text == next);
+}
+
+// Mutation: no second read of the head on a missing segment in `read` (the read fails instead of answering rB).
+TEST_CASE("table state: a read overtaken by a save answers the new revision, to start again", "[ui][state]") {
+    SteppedServer s;
+    auto const writer = s.bind();
+    auto const reader = s.bind();
+    REQUIRE(savedOf(s.sendNow(s.request(writer, "save", saveBody(kKey, stateWithOneOfValues(400, "a"))))).outcome ==
+            table::SaveOutcome::Saved);
+    std::string const before = headOf(*s.prefs, kKey).revision;
+    s.prefs->holdGet(s.prefs->getCount() + 2);  // the read has checked the head; its first segment read is held
+    std::optional<morph::wire::Envelope> reply;
+    s.post(s.request(reader, "read", readBody(kKey, before)), reply);
+    s.pool.runAll();
+    REQUIRE(s.prefs->holdingGet());
+    REQUIRE(savedOf(s.sendNow(s.request(writer, "save", saveBody(kKey, stateWithOneOfValues(400, "b"))))).outcome ==
+            table::SaveOutcome::Saved);
+    s.prefs->releaseHeldGet();
+    s.pool.runAll();
+    REQUIRE(reply.has_value());
+    REQUIRE(reply->kind == "ok");
+    auto const chunk = morph::model::ActionTraits<ui::TableStateRead>::resultFromJson(reply->body);
+    CHECK(chunk.revision == headOf(*s.prefs, kKey).revision);
+    CHECK(chunk.revision != before);
+    CHECK(chunk.text.empty());
+}
+
+// Mutation: a waiter handed the lock and destroyed before it runs keeps the lock (the third never takes it).
+TEST_CASE("table state: a lock handed to a waiter destroyed before it runs passes on", "[ui][state]") {
+    ui::detail::TableStateLocks locks;
+    morph::testing::StepExecutor resumer;
+    bool first = false;
+    bool second = false;
+    bool third = false;
+    Started holder = holdLock(locks, "k", first);
+    REQUIRE(first);
+    Started waiter = [&] {
+        // Queued while running for the step executor, so its turn is posted there rather than run inline.
+        ::core::async::ExecutorScope const scope{resumer.coreExecutor()};
+        return holdLock(locks, "k", second);
+    }();
+    CHECK_FALSE(second);
+    holder.handle.destroy();  // the lease is released: the lock is handed to the waiter, whose turn is queued
+    REQUIRE(resumer.pending() > 0);
+    waiter.handle.destroy();  // destroyed before its turn ran
+    Started late = holdLock(locks, "k", third);
+    CHECK(third);
+    late.handle.destroy();
+}
+
+// Mutation: no upper bound on `partBytes` (a model with 2 MiB parts is built).
+TEST_CASE("table state: a part size over 1 MiB is refused", "[ui][state]") {
+    morph::exec::ThreadPoolExecutor pool{1};
+    auto const store = std::make_shared<ui::MemoryPreferencesStore>(pool);
+    TableStateOptions options;
+    options.partBytes = ui::kTableStatePartBytes * 2;
+    CHECK_THROWS(ui::TableStateModel{store, options});
+    options.partBytes = ui::kTableStatePartBytes;
+    CHECK_NOTHROW(ui::TableStateModel{store, options});
+}
+
+// Mutation: a save refused for the open uploads delivered as its result (the fifth answers Refused).
+TEST_CASE("table state: five large saves at once are all stored", "[ui][state]") {
+    StoreFixture h;
+    ui::PreferencesTableStateStore store{h.client, h.owner, &h.scheduler, 300ms};
+    std::vector<std::string> docs;
+    std::vector<std::optional<table::SaveResult>> results(5);
+    for (int at = 0; at < 5; ++at) {
+        docs.push_back(stateWithOneOfValues(16'000, std::to_string(at)));
+        REQUIRE(docs.back().size() > ui::kTableStatePartBytes);  // two parts each
+    }
+    for (std::size_t at = 0; at < 5; ++at) {
+        store.save(keyOf("t" + std::to_string(at)), docs[at])
+            .then([&results, at](table::SaveResult const& result) { results[at] = result; })
+            .onError([](std::exception_ptr const&) {});
+    }
+    h.settle();
+    CHECK(std::ranges::count_if(results, [](auto const& result) { return result.has_value(); }) == 4);
+    h.advance(300ms);  // the refused one is sent again
+    for (std::size_t at = 0; at < 5; ++at) {
+        CAPTURE(at);
+        REQUIRE(results[at].has_value());
+        CHECK(results[at]->outcome == table::SaveOutcome::Saved);
+        CHECK(load(h, keyOf("t" + std::to_string(at)))->json == docs[at]);
+    }
 }

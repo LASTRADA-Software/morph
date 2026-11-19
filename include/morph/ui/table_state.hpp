@@ -43,15 +43,25 @@ namespace morph::ui {
 /// as one `load` call per `kMaxTableStateKeys` keys, and a key a full reply defers is asked for in the next call, so
 /// one table's state never fails another's load; a document longer than the head the server answers is completed with
 /// `read` calls by offset, started again when its revision changes meanwhile. A document over a part's size is saved
-/// as parts under one upload id.
+/// as parts under one upload id; one the server refuses because its person has `kMaxTableStateUploads` uploads open
+/// is sent again after a short wait, so a screen of many large states unmounting at once saves them all.
 class PreferencesTableStateStore final : public table::ITableStateStore {
 public:
     /// @brief A store calling through @p dispatcher.
     /// @param dispatcher Where model calls go; bound to `morph.tableState` once, at the first call. Borrowed: it must
     ///                   outlive the store.
     /// @param owner      The runtime's owner, where calls are made and completions delivered. Borrowed.
-    PreferencesTableStateStore(Dispatcher& dispatcher MORPH_LIFETIMEBOUND, exec::IExecutor& owner MORPH_LIFETIMEBOUND)
-        : _dispatcher{&dispatcher}, _owner{&owner}, _random{std::random_device{}()} {}
+    /// @param scheduler  The timers a save the server refused for its open uploads waits on before it is sent again;
+    ///                   without one it is sent again on the owner's next turn. Borrowed.
+    /// @param retryDelay How long such a save waits: a session's `tableStateTimeout`.
+    PreferencesTableStateStore(Dispatcher& dispatcher MORPH_LIFETIMEBOUND, exec::IExecutor& owner MORPH_LIFETIMEBOUND,
+                               reactive::Scheduler* scheduler = nullptr,
+                               std::chrono::milliseconds retryDelay = std::chrono::milliseconds{300})
+        : _dispatcher{&dispatcher},
+          _owner{&owner},
+          _scheduler{scheduler},
+          _retryDelay{retryDelay},
+          _random{std::random_device{}()} {}
 
     /// @brief Reads a stored document, in the owner's turn's one `load` call.
     /// @param key Which table's state, and which part.
@@ -76,7 +86,8 @@ public:
                                                       .id = {},
                                                       .text = std::move(json),
                                                       .offset = 0,
-                                                      .promise = std::move(promise)});
+                                                      .promise = std::move(promise),
+                                                      .retries = 0});
         if (upload->text.size() > kPartBytes) {
             upload->id = std::format("{:016x}", _random());
         }
@@ -141,6 +152,9 @@ private:
     static constexpr std::size_t kPartBytes = kTableStatePartBytes;
     /// How often one load starts again because the document changed while it was read.
     static constexpr int kMaxRestarts = 8;
+    /// How often a save is sent again while the server refuses it for its open uploads: a hundred tries, about as
+    /// long as the server keeps an abandoned upload.
+    static constexpr int kMaxUploadRetries = 100;
 
     struct Reading {
         table::TableStateKey key;
@@ -158,6 +172,7 @@ private:
         std::string text;
         std::size_t offset = 0;
         async::Completion<table::SaveResult>::Promise promise;
+        int retries = 0;
     };
 
     [[nodiscard]] std::shared_ptr<ModelChannel> const& channel() {
@@ -279,6 +294,20 @@ private:
             .onError(_scope, [reading](std::exception_ptr const& error) { reading->promise.reject(error); });
     }
 
+    /// Sends a save the server refused for its open uploads again, after `retryDelay`.
+    void retryLater(std::shared_ptr<Upload> const& upload) {
+        auto send = _scope.token().guard([this, upload] { sendPart(upload); });
+        if (_scheduler == nullptr) {
+            _owner->post(std::move(send));
+            return;
+        }
+        std::uint64_t const id = ++_lastRetry;
+        _retries.insert_or_assign(id, _scheduler->after(_retryDelay, _scope.token().guard([this, id, send] mutable {
+            _retries.erase(id);
+            send();
+        })));
+    }
+
     void sendPart(std::shared_ptr<Upload> upload) {
         std::string_view const rest = std::string_view{upload->text}.substr(upload->offset);
         std::size_t const length = upload->id.empty() ? rest.size() : detail::utf8Prefix(rest, kPartBytes);
@@ -299,6 +328,12 @@ private:
                           upload->promise.reject(std::current_exception());
                           return;
                       }
+                      if (upload->offset == 0 && result.outcome == table::SaveOutcome::Refused &&
+                          result.reason == kTableStateUploadsBusy && upload->retries < kMaxUploadRetries) {
+                          ++upload->retries;
+                          retryLater(upload);
+                          return;
+                      }
                       if (last) {
                           upload->promise.resolve(std::move(result));
                           return;
@@ -311,7 +346,12 @@ private:
 
     Dispatcher* _dispatcher;
     exec::IExecutor* _owner;
+    reactive::Scheduler* _scheduler;
+    std::chrono::milliseconds _retryDelay;
     std::mt19937_64 _random;
+    /// Saves waiting to be sent again, by a counter.
+    std::map<std::uint64_t, reactive::TimerHandle> _retries;
+    std::uint64_t _lastRetry = 0;
     std::shared_ptr<ModelChannel> _channel;
     /// Loads asked for in this turn of the owner.
     std::vector<std::shared_ptr<Reading>> _batch;
