@@ -313,11 +313,11 @@ Needs Task 8c (`fitState` reads `TableDescription::units` directly) and Task 8b 
 
 **Files:**
 - Create: `include/morph/table/state_store.hpp`, `tests/table/test_table_state.cpp`
-- Modify: `tests/CMakeLists.txt` (`table/test_table_state.cpp` in `morph_table_tests`), `tests/table/bench_table.cpp` (T1)
+- Modify: `CMakeLists.txt` (`include/morph/table/state_store.hpp` in the `morph` target's `FILE_SET HEADERS`; configure refuses a public header no file set lists), `tests/CMakeLists.txt` (`table/test_table_state.cpp` in `morph_table_tests`), `tests/table/bench_table.cpp` (T1)
 
 **Interfaces:**
 - Consumes: `table::ColumnLayoutValue` and `ColumnLayout::apply` (8d), `table::TableDescription`, `table::FilterSpec`, `table::compileFilter` (existing compile path in `filter.hpp`).
-- Produces (namespace `morph::table`): `TableStateKey`, `StoredTableState`, `SaveOutcome`, `SaveResult`, `ITableStateStore` exactly as table.md "Persisted state" declares them (`shares()` included, default `false`), with one addition: `TableStateKey` declares `[[nodiscard]] bool operator==(TableStateKey const&) const = default;` (tests and the session's kept states compare keys; cross-part decision 38), and:
+- Produces (namespace `morph::table`): `TableStateKey`, `StoredTableState`, `SaveOutcome`, `SaveResult`, `ITableStateStore` exactly as table.md "Persisted state" declares them (`shares()` included, default `false`), except `publish` and `kNoDocument`, which Part E's Task 14a adds with `ViewOperation`, with one addition: `TableStateKey` declares `[[nodiscard]] bool operator==(TableStateKey const&) const = default;` (tests and the session's kept states compare keys; cross-part decision 38), and:
 
 ```cpp
 class MemoryTableStateStore final : public ITableStateStore {
@@ -418,8 +418,10 @@ TEST_CASE("table state: stale state is fitted", "[table][state]") {
     FitReport second;                                                     // reading it again carries the same
     CHECK(fitState(again, d, second).carried == fitted.carried);
 }
-// Mutation: fitState looking up a user group's filter by `group` id (an empty id finds nothing: u1's filter stays
-// in `filters`, so its size is 2 and `carried.groupFilters` is empty).
+// Mutation: fitState looking up a user group's filter by `group` id (an empty id finds nothing: u3's filter, whose
+// group is dropped for having one column, stays in `filters`). u1's filter cannot show that mutation: a filter over
+// listed columns that matches no user group is still fitted by its columns, and one naming the absent `gone` is
+// carried either way.
 TEST_CASE("table state: a user group and its filter are fitted together", "[table][state]") {
     FitReport report;  StateDocument const fitted = fitState(userGroups(), describedSamples(), report);
     REQUIRE(fitted.layout->groups.size() == 1);  CHECK(fitted.layout->groups.front().id == "u2");
@@ -429,6 +431,11 @@ TEST_CASE("table state: a user group and its filter are fitted together", "[tabl
     REQUIRE(fitted.carried.groupFilters.size() == 1);                     // u1's, carried with its group
     CHECK(fitted.carried.groupFilters.front().group.empty());
     CHECK(fitted.carried.groupFilters.front().columns == std::vector<std::string>{"name", "gone"});
+    // A user group left with one column, every column present, is gone, and its filter with it.
+    StateDocument const single = readState(R"({"version":1,"layout":{"groups":[{"id":"u3","label":"Three","columns":["weight"]}]},
+        "filters":{"groups":[{"columns":["weight"],"include":[{"isEmpty":true}]}]}})").value();
+    FitReport dropped;  StateDocument const alone = fitState(single, describedSamples(), dropped);
+    CHECK(alone.layout->groups.empty());  CHECK(alone.filters->groups.empty());  CHECK(alone.carried.groupFilters.empty());
 }
 // Review Focus 3 (the parser's half; the table's half is 9d's). Mutation: readState accepting an unknown version.
 TEST_CASE("table state: a document that is not JSON or of an unknown version is refused", "[table][state]") {
