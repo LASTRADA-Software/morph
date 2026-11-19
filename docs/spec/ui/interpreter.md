@@ -572,7 +572,9 @@ keeps its operands' 0 places and still fills 0.29 of a bar.
   `columns` none, the table's sort and filters; `WindowRows::locate`), which stops the one an earlier key still
   has in flight; the reply's `indices[0]` is the row's view index, and `Table::highlight` becomes
   `TableHighlight{key, index}`, which the mount scrolls to and marks. A reply with no row, and a `null` key, set it
-  to nothing. It never changes the selection or the keyboard focus.
+  to nothing. A reset of the rows (a new sort or filter) clears it and locates the key again. It never changes
+  the selection or the keyboard focus. An element in a column's `cell` is focused by the row the cell shows now
+  (`RtScope::rowKeyNow`), since the mount rebinds a pooled cell to other rows.
 - **`boundary`** is a `Switch` over loading, error and children. It owns the queries its children read
   (found statically, through `let`s, not inside a nested boundary): loading while one has neither a
   value nor a failure, error when one failed with no value to keep, children otherwise. Inside `error`,

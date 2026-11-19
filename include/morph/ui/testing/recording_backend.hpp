@@ -2578,6 +2578,14 @@ public:
     /// @param row     One of this table's rows.
     /// @param viewRow The row's view index.
     /// @throws std::logic_error when @p row is not this table's child.
+    /// @brief The measure the backend was given, `TableMeasure{}` unless `RecordingBackend::setTableMeasure` set one.
+    /// @return It.
+    [[nodiscard]] TableMeasure tableMeasure() const override { return _measure ? *_measure : TableMeasure{}; }
+
+    /// @brief Shares the backend's measure, which `tableMeasure` answers.
+    /// @param measure The measure; null for the default.
+    void measureBy(std::shared_ptr<TableMeasure const> measure) { _measure = std::move(measure); }
+
     void setRowIndex(Widget& row, std::size_t viewRow) override {
         int const rowId = store().idOf(row);
         if (store().at(rowId).parent != id()) {
@@ -2807,6 +2815,7 @@ private:
     std::function<void(std::size_t, std::size_t, SelectionChange)> _onSelectRange;
     std::function<void(std::size_t, int)> _onMeasured;
     std::function<void(FocusMove)> _onFocusMove;
+    std::shared_ptr<TableMeasure const> _measure;
 
     [[nodiscard]] static std::string formatCellLoad(CellLoad load) {
         switch (load) {
@@ -2904,7 +2913,9 @@ public:
         return std::make_unique<detail::FakeBusy>(_store, "Busy", parent);
     }
     [[nodiscard]] std::unique_ptr<TableWidget> createTable(ContainerWidget* parent) override {
-        return std::make_unique<detail::FakeTable>(_store, "Table", parent);
+        auto table = std::make_unique<detail::FakeTable>(_store, "Table", parent);
+        table->measureBy(_tableMeasure);
+        return table;
     }
     [[nodiscard]] std::unique_ptr<DateTimeInputWidget> createDateTimeInput(ContainerWidget* parent, DateMode mode,
                                                                            int offsetMinutes) override {
@@ -3586,7 +3597,9 @@ public:
     /// @param scrollX  The offset.
     /// @param viewport The viewport's width.
     /// @throws std::logic_error when the widget is not a table.
-    void scrollTableColumns(int widgetId, int scrollX, int viewport) { fakeTable(widgetId, "scrollTableColumns").scrollColumns(scrollX, viewport); }
+    void scrollTableColumns(int widgetId, int scrollX, int viewport) {
+        fakeTable(widgetId, "scrollTableColumns").scrollColumns(scrollX, viewport);
+    }
 
     /// @brief Moves a table's focused cell as a key would.
     /// @param widgetId The table.
@@ -3609,13 +3622,17 @@ public:
     /// @param column   The column: an index into the table's columns.
     /// @param width    The width.
     /// @throws std::logic_error when the widget is not a table.
-    void measureColumn(int widgetId, std::size_t column, int width) { fakeTable(widgetId, "measureColumn").measure(column, width); }
+    void measureColumn(int widgetId, std::size_t column, int width) {
+        fakeTable(widgetId, "measureColumn").measure(column, width);
+    }
 
     /// @brief A table's column window, as the mount last set it.
     /// @param widgetId The table.
     /// @return Its columns, pinned first; empty before any.
     /// @throws std::logic_error when the widget is not a table.
-    [[nodiscard]] std::vector<std::size_t> windowColumns(int widgetId) { return fakeTable(widgetId, "windowColumns").windowColumns(); }
+    [[nodiscard]] std::vector<std::size_t> windowColumns(int widgetId) {
+        return fakeTable(widgetId, "windowColumns").windowColumns();
+    }
 
     /// @brief A table's total width, as the mount last set it.
     /// @param widgetId The table.
@@ -3635,17 +3652,25 @@ public:
     /// @throws std::logic_error when the widget is not a table.
     [[nodiscard]] std::size_t headerCells(int widgetId) { return fakeTable(widgetId, "headerCells").headerCells(); }
 
+    /// @brief Sets the measure every table of this backend answers `TableWidget::tableMeasure` with, before a mount.
+    /// @param measure The measure.
+    void setTableMeasure(TableMeasure const& measure) { *_tableMeasure = measure; }
+
     /// @brief A table's horizontal offset, as the mount last moved it.
     /// @param widgetId The table.
     /// @return The offset, or nothing when the mount never moved it.
     /// @throws std::logic_error when the widget is not a table.
-    [[nodiscard]] std::optional<int> horizontalOffset(int widgetId) { return fakeTable(widgetId, "horizontalOffset").horizontalOffset(); }
+    [[nodiscard]] std::optional<int> horizontalOffset(int widgetId) {
+        return fakeTable(widgetId, "horizontalOffset").horizontalOffset();
+    }
 
     /// @brief A table's focused cell, as the mount last set it.
     /// @param widgetId The table.
     /// @return Its view row and column.
     /// @throws std::logic_error when the widget is not a table.
-    [[nodiscard]] std::pair<std::size_t, std::size_t> focusCell(int widgetId) { return fakeTable(widgetId, "focusCell").focusCell(); }
+    [[nodiscard]] std::pair<std::size_t, std::size_t> focusCell(int widgetId) {
+        return fakeTable(widgetId, "focusCell").focusCell();
+    }
 
     /// @brief A table's counts, as the mount last set them.
     /// @param widgetId The table.
@@ -3950,6 +3975,7 @@ private:
     }
 
     std::shared_ptr<detail::RecordStore> _store = std::make_shared<detail::RecordStore>();
+    std::shared_ptr<TableMeasure> _tableMeasure = std::make_shared<TableMeasure>();
     std::optional<Mm> _pageWidth;
     std::shared_ptr<std::vector<detail::FakePage*>> _pages = std::make_shared<std::vector<detail::FakePage*>>();
     std::unordered_set<std::string> _components;

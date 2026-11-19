@@ -3,6 +3,7 @@
 #pragma once
 #include <algorithm>
 #include <bit>
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <exception>
@@ -967,8 +968,14 @@ private:
         if (common.autofocus && _autofocus == nullptr) {
             _autofocus = &widget;
         }
-        if (!common.focusId.empty()) {
-            scope.make<Focusable>(_focusable, _focusable.emplace(common.focusId, &widget));
+        if (common.focusId.isBound()) {
+            // Registered under the name it has now, and again under each new one.
+            auto& focusable = scope.make<Focusable>(_focusable, std::nullopt);
+            bind(scope, common.focusId, [this, &focusable, &widget](std::string const& name) {
+                focusable.reset(name.empty() ? std::nullopt : std::optional{_focusable.emplace(name, &widget)});
+            });
+        } else if (!common.focusId.constant().empty()) {
+            scope.make<Focusable>(_focusable, _focusable.emplace(common.focusId.constant(), &widget));
         }
     }
 
@@ -993,15 +1000,23 @@ private:
     // A widget's entry in the focus map, owned by the widget's scope after the widget, so it leaves the map before
     // the widget is destroyed.
     struct Focusable {
-        Focusable(FocusMap& owner, FocusMap::iterator added) noexcept : map{&owner}, entry{added} {}
+        Focusable(FocusMap& owner, std::optional<FocusMap::iterator> added) noexcept : map{&owner}, entry{added} {}
         Focusable(Focusable const&) = delete;
         Focusable& operator=(Focusable const&) = delete;
         Focusable(Focusable&&) = delete;
         Focusable& operator=(Focusable&&) = delete;
-        ~Focusable() { map->erase(entry); }
+        ~Focusable() { reset(std::nullopt); }
+
+        // Forgets the entry held and holds @p next instead.
+        void reset(std::optional<FocusMap::iterator> next) noexcept {
+            if (entry) {
+                map->erase(*entry);
+            }
+            entry = next;
+        }
 
         FocusMap* map;
-        FocusMap::iterator entry;
+        std::optional<FocusMap::iterator> entry;
     };
 
     // No predicate accepts every key; a predicate that throws refuses the drop.
@@ -2055,9 +2070,6 @@ private:
         }
     }
 
-    // The width a column starts from when it declares none; a content column grows from it as its cells measure.
-    static constexpr int kEstimatedColumnWidth = 100;
-
     // A table over a `TableSource`: the rows in and near view, each built from the source's view index, and in each
     // row the cells of the columns in or near view.
     struct SourceTable {
@@ -2142,6 +2154,8 @@ private:
         bool focused = false;
         std::optional<Key> focusKey;
         std::int64_t focusIndex = 0;
+        // The focused row left the view: focus goes to the row now at its index.
+        bool focusLeft = false;
         std::size_t focusColumn = 0;
         std::function<void(std::optional<CellRef>)> onFocusCell;
         // The highlighted row, followed by key.
@@ -2202,16 +2216,24 @@ private:
                 add(column);
             }
         }
+        // Widths in the backend's measure: a fixed column's units and a user's width scaled by it, a content column
+        // from the backend's estimate.
+        TableMeasure const measure = table.widget->tableMeasure();
+        auto const scaled = [&measure, &table](std::size_t column, int units) {
+            double const unit = table.columns.at(column).role == TextRole::Mono ? measure.monoUnit : measure.unit;
+            return static_cast<int>(std::lround(units * unit));
+        };
         std::vector<int> widths;
         widths.reserve(table.visible.size());
         for (std::size_t const column : table.visible) {
             Sizing const& width = table.columns.at(column).width;
-            widths.push_back(width.kind == Sizing::Kind::Fixed ? width.amount : kEstimatedColumnWidth);
+            widths.push_back(width.kind == Sizing::Kind::Fixed ? scaled(column, width.amount)
+                                                                : measure.contentEstimate);
         }
         table.extents->assign(widths);
         for (auto const& [column, width] : table.arrangement.widths) {
             if (column < table.placeOf.size() && table.placeOf.at(column)) {
-                table.extents->set(*table.placeOf.at(column), width);
+                table.extents->set(*table.placeOf.at(column), scaled(column, width));
             }
         }
         table.windowDirty = true;
@@ -2612,7 +2634,8 @@ private:
             }
         }
         realizeCells(table, shown);
-        table.widget->setRealizedWindow(lo, table.realized.size(), count);
+        // The contiguous range only: a focused row kept beyond it is placed by its own `setRowIndex`.
+        table.widget->setRealizedWindow(lo, hi > lo ? hi - lo : 0, count);
         afterPass(table, total);
         if (failure) {
             std::rethrow_exception(failure);
@@ -2658,12 +2681,15 @@ private:
         std::ranges::stable_sort(work, {}, &CellWork::distance);
         std::size_t const budget = table.virtualize.realizePerFrame;
         std::exception_ptr failure;
+        std::size_t done = 0;
+        std::unordered_set<std::size_t> waiting;
         for (std::size_t at = 0; at < work.size(); ++at) {
             SourceTable::Realized& slot = table.realized.at(work.at(at).slot);
             std::size_t const column = work.at(at).column;
             if (at >= budget) {
                 // Past the budget: a stale cell leaves its column blank rather than show another row.
                 park(table, slot, column);
+                waiting.insert(work.at(at).slot);
                 ++_stats.placeholders;
                 continue;
             }
@@ -2673,22 +2699,39 @@ private:
             }
             try {
                 realizeCell(table, slot, column, ref->row);
+                ++done;
             } catch (...) {
                 if (!failure) {
                     failure = std::current_exception();
                 }
             }
         }
-        for (SourceTable::Realized& slot : table.realized) {
+        for (std::size_t at = 0; at < table.realized.size(); ++at) {
+            SourceTable::Realized& slot = table.realized.at(at);
+            // A row with nothing left to realize keeps no pooled cell: the widgets alive are the cells in the window.
+            if (!waiting.contains(at)) {
+                dropPools(slot);
+            }
             tellLoads(table, slot);
             orderCells(table, slot);
         }
-        if (work.size() > budget) {
+        // A pass that realized nothing (every build it tried threw) posts no other: it would fail the same way.
+        if (work.size() > budget && done > 0) {
             continueLater(table);
         }
         if (failure) {
             std::rethrow_exception(failure);
         }
+    }
+
+    // Destroys a row's pooled cells, and forgets their widgets among its children.
+    static void dropPools(SourceTable::Realized& slot) {
+        for (auto& [key, cells] : slot.pool) {
+            for (SourceTable::Cell const& cell : cells) {
+                std::erase(slot.children, cell.widget);
+            }
+        }
+        slot.pool.clear();
     }
 
     // A row's children in the window's order, then its pooled cells, for a backend that places cells by their order
@@ -2745,11 +2788,13 @@ private:
         }
         if (table.focused) {
             std::optional<TableRowRef> const ref = table.source.rows->row(table.focusIndex);
-            if (ref && table.focusKey != ref->key) {
-                // The row at the focused index arrived, or took the place of the focused row that left the view.
+            // The row at the focused index arrived, or took the place of the focused row that left the view; a row
+            // that is there for any other reason (a reset that moved the focused key away) does not take focus.
+            if (ref && table.focusKey != ref->key && (!table.focusKey || table.focusLeft)) {
                 table.focusKey = ref->key;
                 reportFocus(table);
             }
+            table.focusLeft = table.focusLeft && !ref;
         }
     }
 
@@ -2914,10 +2959,36 @@ private:
         table.widget->setHighlightedRow(highlight->row);
     }
 
-    // Follows the focused and the highlighted rows through a change of the rows.
+    // Where a key is among the realized rows' places in the view the rows now hold, or nothing.
+    [[nodiscard]] static std::optional<std::int64_t> placeOfKey(SourceTable const& table, Key const& key,
+                                                               std::int64_t also) {
+        TableRows const& rows = *table.source.rows;
+        auto const holds = [&rows, &key](std::int64_t index) {
+            std::optional<TableRowRef> const ref = rows.row(index);
+            return ref && ref->key == key;
+        };
+        if (holds(also)) {
+            return also;
+        }
+        for (SourceTable::Realized const& row : table.realized) {
+            if (holds(row.index)) {
+                return row.index;
+            }
+        }
+        return std::nullopt;
+    }
+
+    // Follows the focused and the highlighted rows through a change of the rows. A reset (a new sort, filter or
+    // description) gives no places, so they are found by key among the places the window realizes; a highlight not
+    // found there is cleared until the lowering locates it again, and focus not found stays on its key.
     static void follow(SourceTable& table, table::ViewChange const& change) {
+        bool const reset = std::ranges::any_of(
+            change.ops, [](table::ViewOp const& op) { return op.kind == table::ViewOp::Kind::Reset; });
         if (table.highlightKey) {
-            if (std::optional<std::int64_t> const now = followIndex(change, table.highlightIndex)) {
+            std::optional<std::int64_t> const now = reset
+                                                        ? placeOfKey(table, *table.highlightKey, table.highlightIndex)
+                                                        : followIndex(change, table.highlightIndex);
+            if (now) {
                 if (*now != table.highlightIndex) {
                     table.highlightIndex = *now;
                     table.widget->setHighlightedRow(static_cast<std::size_t>(*now));
@@ -2928,9 +2999,20 @@ private:
             }
         }
         if (table.focused) {
-            // A focused row the change removed leaves focus at its view index, on the row now there, or the last.
             std::int64_t const last = std::max<std::int64_t>(table.source.rows->total().rows - 1, 0);
-            table.focusIndex = std::min(followIndex(change, table.focusIndex).value_or(table.focusIndex), last);
+            if (reset && table.focusKey) {
+                if (std::optional<std::int64_t> const now = placeOfKey(table, *table.focusKey, table.focusIndex)) {
+                    if (*now != table.focusIndex) {
+                        table.focusIndex = *now;
+                        table.widget->setFocusCell(static_cast<std::size_t>(*now), table.focusColumn);
+                    }
+                }
+                return;
+            }
+            // A focused row the change removed leaves focus at its view index, on the row now there, or the last.
+            std::optional<std::int64_t> const now = followIndex(change, table.focusIndex);
+            table.focusLeft = table.focusLeft || !now.has_value();
+            table.focusIndex = std::min(now.value_or(table.focusIndex), last);
         }
     }
 

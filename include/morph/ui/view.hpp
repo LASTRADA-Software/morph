@@ -487,8 +487,9 @@ struct Common {
     /// @brief The stable identifier an automated test finds the widget by; empty means none. Set once.
     std::string testId;
     /// @brief The name a focus request after mount finds the widget by (`Mounted::focus`), such as a document
-    ///        element's id; empty means none. Set once.
-    std::string focusId;
+    ///        element's id; empty means none. Bound, the widget is found by the name it has now: an element in a
+    ///        table cell a pooled cell shows for another row takes that row's name.
+    Prop<std::string> focusId;
     /// @brief Text shown while the pointer rests on the widget; empty shows none.
     Prop<std::string> tooltip;
     /// @brief The named token set of the theme that styles this node and everything inside it; empty is the
@@ -1218,7 +1219,8 @@ struct TableArrangement {
     std::vector<std::size_t> visible;
     /// @brief How many of the leading visible columns stay in view whatever the horizontal scroll.
     std::size_t pinned = 0;
-    /// @brief Widths the user set, by index into `Table::columns`; measurement does not change such a width.
+    /// @brief Widths the user set, in `Sizing` units, by index into `Table::columns`; measurement does not change such
+    ///        a width.
     std::map<std::size_t, int> widths;
 
     /// @brief Member-wise equality.
