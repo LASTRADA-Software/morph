@@ -63,6 +63,15 @@ public:
           _retryDelay{retryDelay},
           _random{std::random_device{}()} {}
 
+    /// @brief Sets the timers a save the server refused for its open uploads waits on, and how long it waits. A
+    ///        `Session` calls it with its own scheduler and `tableStateTimeout` when its `tableState` is this store.
+    /// @param scheduler  The timers. Borrowed: it must outlive the store.
+    /// @param retryDelay How long such a save waits before it is sent again.
+    void retryOn(reactive::Scheduler& scheduler, std::chrono::milliseconds retryDelay) {
+        _scheduler = &scheduler;
+        _retryDelay = retryDelay;
+    }
+
     /// @brief Reads a stored document, in the owner's turn's one `load` call.
     /// @param key Which table's state, and which part.
     /// @return The stored document, or nothing when none is stored.

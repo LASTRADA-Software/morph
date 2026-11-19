@@ -195,6 +195,12 @@ std::shared_ptr<TableStates> detail::makeTableStates(reactive::Runtime& runtime,
     if (options.tableState == nullptr) {
         return nullptr;
     }
+    // A save the server refuses for its open uploads is sent again after the session's `tableStateTimeout`, on the
+    // session's timers; a store with none would send it again on the owner's next turn, a burst of retries.
+    if (auto* const preferences = dynamic_cast<PreferencesTableStateStore*>(options.tableState.get());
+        preferences != nullptr && options.scheduler != nullptr) {
+        preferences->retryOn(*options.scheduler, options.tableStateTimeout);
+    }
     return std::make_shared<TableStates>(options.tableState, runtime.owner(), options.scheduler,
                                          options.tableStateDebounce);
 }
