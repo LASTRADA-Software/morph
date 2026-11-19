@@ -17,7 +17,7 @@
 
 #include "../../core/wire.hpp"
 #include "../../session/session.hpp"
-#include "../interpreter.hpp"
+#include "../base64.hpp"
 #include "../service_client.hpp"
 #include "dictation.hpp"
 #include "protocol.hpp"

@@ -21,6 +21,7 @@
 #include <morph/reactive/scope.hpp>
 #include <morph/reactive/signal.hpp>
 #include <morph/ui/backend.hpp>
+#include <morph/ui/base64.hpp>
 #include <morph/ui/dev_tools.hpp>
 #include <morph/ui/document.hpp>
 #include <morph/ui/expression.hpp>
@@ -742,6 +743,9 @@ public:
     ///        is false and a command is missing, exactly as for a name nobody registered.
     /// @param scopes The names and their documents.
     void setHostScopes(HostScopes scopes) {
+        if (scopes == _hostScopes) {
+            return;
+        }
         _hostScopes = std::move(scopes);
         _hostScopesRevision.set(_hostScopesRevision.peek() + 1);
     }
@@ -2802,22 +2806,6 @@ namespace detail {
 /// @param text The JSON text.
 /// @return The value.
 [[nodiscard]] MORPH_API Value jsonTextValue(std::string_view text);
-
-/// @brief Bytes as base64 (RFC 4648, with padding): how a document carries an inline file, and how a dictated clip
-///        travels.
-/// @param bytes The bytes.
-/// @return The text.
-[[nodiscard]] MORPH_API std::string base64Encode(std::string_view bytes);
-
-/// @brief Base64 text as bytes (RFC 4648, with or without padding).
-/// @param text The text.
-/// @return The bytes, or `std::nullopt` for text that is not base64.
-[[nodiscard]] MORPH_API std::optional<std::string> base64Decode(std::string_view text);
-
-/// @brief How many bytes base64 text decodes to, read from its length alone.
-/// @param text The text.
-/// @return The byte count.
-[[nodiscard]] MORPH_API std::size_t base64Size(std::string_view text);
 
 /// @brief A byte count as a person reads it: `512 bytes`, `2.4 KiB`, `1 MiB`.
 /// @param bytes The count.

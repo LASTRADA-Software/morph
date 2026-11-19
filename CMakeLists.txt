@@ -642,6 +642,7 @@ target_sources(morph
         include/morph/ui/author.hpp
         include/morph/ui/author_forms.hpp
         include/morph/ui/bundle.hpp
+        include/morph/ui/base64.hpp
         include/morph/ui/alignment.hpp
         include/morph/ui/date_pattern.hpp
         include/morph/ui/input_emphasis.hpp
@@ -1222,7 +1223,7 @@ if(MORPH_BUILD_QT)
     # about dictation does not.
     find_package(Qt6 COMPONENTS Multimedia QUIET)
     set(_morph_dictation_default OFF)
-    if(TARGET Qt6::Multimedia AND Qt6Multimedia_VERSION VERSION_GREATER_EQUAL 6.2)
+    if(NOT EMSCRIPTEN AND TARGET Qt6::Multimedia AND Qt6Multimedia_VERSION VERSION_GREATER_EQUAL 6.2)
         set(_morph_dictation_default ON)
     endif()
     option(MORPH_ENABLE_DICTATION "Build the chat's dictation recorder (needs Qt6::Multimedia 6.2 or later)"
