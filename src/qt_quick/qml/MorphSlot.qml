@@ -65,20 +65,27 @@ MorphWidget {
 
     // Scrolls so that `item`, somewhere inside the content, is in view.
     function reveal(item: Item) {
+        if (item)
+            root.revealRect(item, 0, 0, item.width, item.height)
+    }
+
+    // Scrolls so that the rectangle at (`x`, `y`) of size `width` by `height`, in `item`'s own coordinates and with
+    // `item` somewhere inside the content, is in view.
+    function revealRect(item: Item, x: real, y: real, width: real, height: real) {
         if (!item || !root.scrolls)
             return
         for (let up = item; up; up = up.parent) {
             if (up === column) {
-                const at = item.mapToItem(column, 0, 0)
+                const at = item.mapToItem(column, x, y)
                 if (at.y < flick.contentY)
                     flick.contentY = at.y
-                else if (at.y + item.height > flick.contentY + flick.height)
-                    flick.contentY = at.y + item.height - flick.height
+                else if (at.y + height > flick.contentY + flick.height)
+                    flick.contentY = at.y + height - flick.height
                 if (root.overX) {
                     if (at.x < flick.contentX)
                         flick.contentX = at.x
-                    else if (at.x + item.width > flick.contentX + flick.width)
-                        flick.contentX = at.x + item.width - flick.width
+                    else if (at.x + width > flick.contentX + flick.width)
+                        flick.contentX = at.x + width - flick.width
                 }
                 return
             }

@@ -18,7 +18,10 @@
 #include <morph/reactive/signal.hpp>
 #include <morph/ui/catalogue.hpp>
 #include <morph/ui/chat/client.hpp>
+#include <morph/ui/chat/conversations.hpp>
 #include <morph/ui/chat/panel.hpp>
+#include <morph/ui/custom_screen_chrome.hpp>
+#include <morph/ui/custom_screen_sync.hpp>
 #include <morph/ui/dev_reload.hpp>
 #include <morph/ui/document.hpp>
 #include <morph/ui/explorer.hpp>
@@ -164,6 +167,9 @@ public:
         resetHead();
         resetParts();
         _badges.reset();
+        if (_customChrome) {
+            _customChrome->attach(nullptr);
+        }
         _workspace.reset();
         _appRoot.reset();
         _frame.reset();
@@ -187,6 +193,9 @@ public:
             if (auto const live = alive.lock(); live != nullptr && *live && _chat) {
                 _chat->reconnected();
             }
+            if (auto const live = alive.lock(); live != nullptr && *live && _customSync) {
+                _customSync->reconnected();
+            }
         });
         source.onEvent([this, alive = std::weak_ptr<bool>{_alive}](wire::EventBody const& event) {
             if (auto const live = alive.lock(); live != nullptr && *live && _session) {
@@ -195,10 +204,14 @@ public:
             if (auto const live = alive.lock(); live != nullptr && *live && _chat) {
                 _chat->deliverEvent(event);
             }
+            if (auto const live = alive.lock(); live != nullptr && *live && _customSync) {
+                _customSync->deliverEvent(event);
+            }
         });
     }
 
     /// Loads the bundle's screens and mounts the start screen.
+    // NOLINTNEXTLINE(readability-function-cognitive-complexity): one step per part of the session the shell wires.
     void start(ui::Bundle const& bundle, Source& source) {
         _source = &source;
         loadDocuments(bundle);
@@ -220,8 +233,16 @@ public:
         followConnection(source);
         listen(source);
         showPermitted();
+        // Through the screens' own dispatcher, so its calls carry their session and go where their models go; the
+        // session carries its watch.
+        _customSync = std::make_unique<ui::CustomScreenSync>(
+            source.dispatcher(), source.bundle() != nullptr ? source.bundle()->applicationId : std::string{},
+            [this] { return _source->catalog(); }, _session.get());
         ui::DocumentScreenHostOptions hostOptions;
         hostOptions.documents = [this](std::string_view screenId) -> std::shared_ptr<ui::Document const> {
+            if (ui::isCustomScreenId(screenId)) {
+                return _customSync->documents().find(screenId);
+            }
             auto const found = _documents.find(screenId);
             if (found != _documents.end()) {
                 return found->second;
@@ -231,6 +252,17 @@ public:
             return generated == _generated.end() ? nullptr : generated->second;
         };
         hostOptions.backend = _backend;
+        // A draft asks before its tab closes, as unsaved edits do; every other dirty screen keeps this client's rule
+        // of staying open.
+        hostOptions.guard = [this](ui::ScreenHandle& screen, std::function<void(ui::CloseChoice)> const& choose) {
+            if (!ui::DocumentScreenHost::drafted(screen) || _frame == nullptr) {
+                choose(ui::CloseChoice::Cancel);
+                return;
+            }
+            _frame->confirm(
+                "Discard the draft of " + screen.title().peek() + "?", "Discard", "Keep",
+                [choose](bool discard) { choose(discard ? ui::CloseChoice::Discard : ui::CloseChoice::Cancel); });
+        };
         _application = std::make_unique<ApplicationHost>(
             source, _options.signIn, _options.downloads,
             [this](SignedIn signedIn) {
@@ -259,6 +291,11 @@ public:
                 if (_workspace) {
                     _workspace->screenClosed(screen);
                 }
+            });
+        _customChrome = std::make_unique<ui::CustomScreenChrome>(customChromeOptions());
+        _customSync->setOnListed(
+            [this](ui::CustomScreensListed const& listed, std::vector<std::string> const& /*dropped*/) {
+                _customChrome->listed(listed);
             });
         _hosts.add(std::string{kExplorer}, [this](ui::ParamMap const& params, ui::ContainerWidget& page) {
             static_cast<void>(params);
@@ -479,7 +516,16 @@ private:
 
     // The frame and its workspace for the catalog the source holds now: the navigator lists its entries, so a new
     // session's catalog gets a new frame. Every tab of the old one is closed.
+    // NOLINTNEXTLINE(readability-function-cognitive-complexity): one step per part of the frame the shell builds.
     void buildFrame() {
+        // A new frame is a new session's: what the old one learnt about custom screens is forgotten.
+        if (_customChrome) {
+            _customChrome->attach(nullptr);
+            (*_customSync).reset();
+            // The fetch of a route the old session asked for is dropped with the sync's replies.
+            _fetchingRoute = false;
+            _customChrome->setOffered(false);
+        }
         resetHead();
         resetParts();
         _badges.reset();
@@ -519,7 +565,11 @@ private:
             // Posted: the navigator's button is a widget of the frame, which a mount may rebuild.
             _context->executor().post([this, alive = std::weak_ptr<bool>{_alive}, screenId] {
                 if (auto const live = alive.lock(); live != nullptr && *live) {
-                    mount(screenId, {});
+                    if (ui::isCustomScreenId(screenId) && _customChrome) {
+                        _customChrome->openCustom(screenId, {});
+                    } else {
+                        mount(screenId, {});
+                    }
                 }
             });
         };
@@ -563,16 +613,87 @@ private:
         // The shell mounts the head row itself, in its top bar: an in-page head would show it a second time. An
         // application that declares the search, the inbox or the person's menu has the top bar for them, and its
         // screens keep their heads in the page.
+        tabs.chrome = [this](ui::WorkspaceTabId tab, std::string_view screenId) -> ui::Node {
+            return _customChrome ? _customChrome->chromeFor(tab, screenId) : nullptr;
+        };
         _headInPage = _appDocument && _appDocument->shell &&
                       (!_appDocument->shell->search.empty() || _appDocument->shell->inbox ||
                        _appDocument->shell->principal || _appDocument->shell->help);
+        ++_workspaceNumber;
         _workspace =
             std::make_unique<ui::Workspace>(_context->runtime(), *_backend, *_host, std::move(tabs), &_frame->page(),
                                             _headInPage ? ui::HeadPlacement::InPage : ui::HeadPlacement::External);
+        if (_customChrome) {
+            _customChrome->attach(&_workspace->model());
+            probeCustomScreens();
+        }
         mountApp();
         followBadges();
         followParts();
         buildChat();
+    }
+
+    // Asks the server whether it offers custom screens, for the session the frame was built for.
+    void probeCustomScreens() {
+        _customSync->probe([this, alive = std::weak_ptr<bool>{_alive}](bool offered) {
+            if (auto const live = alive.lock(); live != nullptr && *live && _customChrome) {
+                _customChrome->setOffered(offered);
+            }
+        });
+    }
+
+    // What the custom screens chrome works with: the host, the bundle's documents and catalog, the navigator's
+    // titles, this shell's way of opening a tab, and its toast.
+    ui::CustomScreenChromeOptions customChromeOptions() {
+        ui::CustomScreenChromeOptions options;
+        options.runtime = &_context->runtime();
+        options.backend = _backend;
+        options.host = _host.get();
+        options.sync = _customSync.get();
+        options.documents = [this](std::string_view screenId) -> std::shared_ptr<ui::Document const> {
+            auto const found = _documents.find(screenId);
+            return found == _documents.end() ? nullptr : found->second;
+        };
+        options.sourceOf = [this](std::string_view screenId) -> std::string {
+            ui::Bundle const* const bundle = _source->bundle();
+            if (bundle == nullptr) {
+                return {};
+            }
+            auto const found = bundle->documents.find(screenId);
+            return found == bundle->documents.end() ? std::string{} : found->second;
+        };
+        options.catalog = [this] { return _source->catalog(); };
+        options.titleOf = [this](std::string_view screenId) -> std::string {
+            if (ui::CatalogReply const* const catalog = _source->catalogReply()) {
+                auto const entry = std::ranges::find(catalog->entries, screenId, &ui::CatalogEntry::id);
+                if (entry != catalog->entries.end()) {
+                    std::vector<std::string> const titles = ui::catalogTitlesIn(*entry, &_catalogues, currentLocale());
+                    if (!titles.empty()) {
+                        return titles.front();
+                    }
+                }
+            }
+            return std::string{screenId};
+        };
+        options.openTab = [this](std::string const& screenId,
+                                 ui::ParamMap const& params) -> std::expected<void, std::string> {
+            auto const mounted = tryMount(screenId, params);
+            if (!mounted) {
+                return std::unexpected(mounted.error());
+            }
+            return {};
+        };
+        options.notify = [this](std::string const& text, ui::Tone tone) {
+            if (_frame != nullptr) {
+                _frame->showToast(text, tone);
+            }
+        };
+        options.onListChanged = [this] {
+            if (_frame != nullptr && _customChrome != nullptr) {
+                _frame->navigator().setCustom(_customChrome->navigatorEntries());
+            }
+        };
+        return options;
     }
 
     // The chat's panel in the new frame, shown once the server says it offers one. A document, mounted as any screen
@@ -581,8 +702,11 @@ private:
         if (!_chat) {
             _chat = std::make_unique<ui::chat::ChatClient>(
                 _source->exchange(), [this] { return _source->currentSession(); }, [this] { chatChanged(); });
-            _chatBinding =
-                std::make_unique<ui::chat::ChatPanelBinding>(_chatHost, *_chat, [this] { return chatContext(); });
+            _chat->onDraft(
+                [this](ui::chat::ChatClient::DraftProposal const& proposal) { mountProposedDraft(proposal); });
+            _chatBinding = std::make_unique<ui::chat::ChatPanelBinding>(
+                _chatHost, *_chat, [this] { return chatContext(); }, [this] { return chatOrigin(); },
+                [this] { return chatDraft(); });
         }
         auto document = ui::chat::chatPanelDocument();
         if (!document) {
@@ -604,6 +728,41 @@ private:
     [[nodiscard]] std::optional<ui::chat::TurnRequest> chatContext() const {
         ui::ScreenHandle* const shown = _workspace ? _workspace->activeHandle() : nullptr;
         return shown == nullptr ? std::nullopt : ui::DocumentScreenHost::chatContext(*shown);
+    }
+
+    // Names the active tab for a turn: the workspace it belongs to in the high half, since tab ids restart with each
+    // workspace, and the tab in the low half. 0 is no tab.
+    [[nodiscard]] std::uint64_t chatOrigin() const {
+        std::optional<ui::WorkspaceTabId> const tab = _workspace ? _workspace->model().active().peek() : std::nullopt;
+        return tab ? (_workspaceNumber << 32U) | (tab->value & 0xFFFFFFFFU) : std::uint64_t{0};
+    }
+
+    // The draft the active tab holds, for a turn's context; nothing for no draft, or one the server would refuse as
+    // over its bound.
+    [[nodiscard]] std::optional<std::string> chatDraft() const {
+        std::optional<ui::WorkspaceTabId> const tab = _workspace ? _workspace->model().active().peek() : std::nullopt;
+        std::optional<std::string> draft = tab && _customChrome ? _customChrome->draftOf(*tab) : std::nullopt;
+        if (draft && draft->size() > ui::chat::ChatLimits{}.maxProposalBytes) {
+            return std::nullopt;
+        }
+        return draft;
+    }
+
+    // A draft the assistant proposed goes to the chrome, which mounts it as the draft of the tab the turn started in,
+    // and only while that tab is still open and shows the screen the turn was about. A turn started before the
+    // workspace was rebuilt (a sign-in) names a tab that no longer exists, whatever its number.
+    void mountProposedDraft(ui::chat::ChatClient::DraftProposal const& proposal) {
+        if (!_customChrome || !_workspace || proposal.origin == 0 || (proposal.origin >> 32U) != _workspaceNumber) {
+            return;
+        }
+        ui::WorkspaceTabId const tab{proposal.origin & 0xFFFFFFFFU};
+        ui::ScreenHandle* const handle = _workspace->model().handleOf(tab);
+        std::optional<ui::chat::TurnRequest> const context =
+            handle == nullptr ? std::nullopt : ui::DocumentScreenHost::chatContext(*handle);
+        if (!context || context->screenId != proposal.screenId || context->identity != proposal.identity) {
+            return;
+        }
+        static_cast<void>(_customChrome->proposeDraft(tab, proposal.screenId, proposal.document));
     }
 
     // The panel shows the active tab's conversation.
@@ -969,6 +1128,7 @@ private:
     // current; then mounts the navigation that waited, or keeps a screen that signed in in place, or mounts the start
     // screen for the new session: after a sign-in the first screen that is not public, after a sign-out the first that
     // is.
+    // NOLINTNEXTLINE(readability-function-cognitive-complexity): the steps of one session change, in order.
     void reloadThen(bool signingIn, std::function<void(std::function<void(bool)>)> const& change) {
         _reloading = true;
         if (std::optional<ui::NavigateRequest> const dropped = std::exchange(_pending, std::nullopt)) {
@@ -1002,6 +1162,10 @@ private:
                 bool const opened = openWanted();
                 if (signingIn) {
                     _wanted.clear();
+                }
+                // A custom screen's fetch still in flight keeps the navigation that waited: its answer decides.
+                if (opened && _fetchingRoute) {
+                    return;
                 }
                 auto const pending = std::exchange(_pending, std::nullopt);
                 if (opened) {
@@ -1088,8 +1252,19 @@ private:
         return entry != catalog->entries.end() && entry->host.has_value() && !entry->host->empty();
     }
 
-    // Opens a screen as a tab, or focuses the tab that already shows it; answers whether a screen was mounted.
+    // Opens a screen as a tab, or focuses the tab that already shows it; answers whether a screen was mounted, and
+    // tells the person why when it was refused.
     bool mount(std::string const& screenId, ui::ParamMap const& params) {
+        auto const opened = tryMount(screenId, params);
+        if (!opened) {
+            show("Cannot open " + screenId + ": " + opened.error());
+            return false;
+        }
+        return *opened;
+    }
+
+    // As `mount`, but the refusal is answered, not shown.
+    std::expected<bool, std::string> tryMount(std::string const& screenId, ui::ParamMap const& params) {
         _message.reset();
         if (!_workspace) {
             buildFrame();
@@ -1113,8 +1288,7 @@ private:
         }
         auto const opened = _workspace->openTab(screenId, params);
         if (!opened) {
-            show("Cannot open " + opened.error().screenId + ": " + opened.error().reason);
-            return false;
+            return std::unexpected(opened.error().reason);
         }
         if (_routes) {
             auto const route = _host->routeOf(screenId, params);
@@ -1126,18 +1300,84 @@ private:
         return opened->mounted;
     }
 
+    // A route to a custom screen whose document is not fetched yet: fetched, then opened; or the person is told it was
+    // not restored and the start screen opens. A refusal while signed out is a screen the catalog does not list yet:
+    // the route is kept and tried again after the sign-in. Answers whether the route was one.
+    bool openCustomRoute(std::string const& route) {
+        std::string const screenId{ui::routeScreen(route)};
+        if (!ui::isCustomScreenId(screenId) || _customSync == nullptr) {
+            return false;
+        }
+        if (_customSync->documents().find(screenId) != nullptr) {
+            // A broken screen is never mounted, cached or not: its source view opens.
+            if (_customChrome != nullptr && _customChrome->isBroken(screenId)) {
+                _customChrome->openCustom(screenId, {});
+                return true;
+            }
+            return false;
+        }
+        _fetchingRoute = true;
+        _customSync->open(
+            screenId, [this, alive = std::weak_ptr<bool>{_alive}, route,
+                       screenId](std::expected<std::shared_ptr<ui::Document const>, std::string> const& loaded) {
+                auto const live = alive.lock();
+                if (live == nullptr || !*live || _host == nullptr) {
+                    return;
+                }
+                _fetchingRoute = false;
+                // A navigation that waited for the fetch: opened when the route did not open, cancelled when it did.
+                std::optional<ui::NavigateRequest> const pending = std::exchange(_pending, std::nullopt);
+                std::expected<ui::Route, std::string> const parsed =
+                    loaded ? _host->parseRoute(route)
+                           : std::expected<ui::Route, std::string>{std::unexpected(loaded.error())};
+                if (parsed) {
+                    mount(parsed->screen, parsed->params);
+                    if (pending) {
+                        settle(*pending);
+                    }
+                    return;
+                }
+                if (!_signedIn) {
+                    _wanted = route;
+                } else if (_frame != nullptr) {
+                    _frame->showToast("The custom screen " + screenId + " was not restored: " + parsed.error(),
+                                      ui::Tone::Warn);
+                }
+                if (pending) {
+                    open(*pending);
+                } else {
+                    mountStart();
+                }
+            });
+        return true;
+    }
+
     // Opens the route the history held at start, once the catalog lists its screen.
     bool openWanted() {
         if (_wanted.empty()) {
             return false;
         }
-        auto const route = _host->parseRoute(_wanted);
-        if (!route || !_documents.contains(route->screen)) {
+        std::string const wanted = std::exchange(_wanted, std::string{});
+        if (openCustomRoute(wanted)) {
+            return true;
+        }
+        auto const route = _host->parseRoute(wanted);
+        if (!route || (!_documents.contains(route->screen) && !ui::isCustomScreenId(route->screen))) {
+            _wanted = wanted;
             return false;
         }
-        _wanted.clear();
         mount(route->screen, route->params);
         return true;
+    }
+
+    // Mounts the start screen: the one asked for at start, until a session change; then the new session's.
+    void mountStart() {
+        if (!_changed) {
+            mount(_options.startScreen.empty() ? firstScreen(false) : _options.startScreen,
+                  _options.startScreen.empty() ? ui::ParamMap{} : _options.startParams);
+        } else {
+            mount(firstScreen(_signedIn), {});
+        }
     }
 
     // Opens the route of the history entry the user moved to, or the start screen for a route this session cannot
@@ -1150,18 +1390,15 @@ private:
             _wanted = route;  // opened once the catalog is current
             return;
         }
+        if (openCustomRoute(route)) {
+            return;
+        }
         auto const parsed = _host->parseRoute(route);
-        if (parsed && _documents.contains(parsed->screen)) {
+        if (parsed && (_documents.contains(parsed->screen) || ui::isCustomScreenId(parsed->screen))) {
             mount(parsed->screen, parsed->params);
             return;
         }
-        // The start screen: the one asked for at start, until a session change; then the new session's.
-        if (!_changed) {
-            mount(_options.startScreen.empty() ? firstScreen(false) : _options.startScreen,
-                  _options.startScreen.empty() ? ui::ParamMap{} : _options.startParams);
-        } else {
-            mount(firstScreen(_signedIn), {});
-        }
+        mountStart();
     }
 
     // Loads the documents a development poll found changed and remounts the shown screen when its own changed; a
@@ -1264,6 +1501,12 @@ private:
     bool _listening = false;
     std::unique_ptr<ApplicationHost> _application;
     std::unique_ptr<Host> _host;
+    // The client of the server's custom screens, and their chrome over each frame's workspace. After the host, which
+    // the chrome mounts drafts through, so they go before it; the frame and the workspace go before them.
+    std::unique_ptr<ui::CustomScreenSync> _customSync;
+    std::unique_ptr<ui::CustomScreenChrome> _customChrome;
+    // Counts the workspaces built, so a turn's tab is told from a tab of a later workspace with the same number.
+    std::uint64_t _workspaceNumber = 0;
     std::unique_ptr<ui::chat::ChatClient> _chat;
     std::unique_ptr<ui::chat::ChatPanelBinding> _chatBinding;
     std::unique_ptr<ui::ShellFrame> _frame;
@@ -1310,6 +1553,7 @@ private:
     bool _changed = false;
     bool _signedIn = false;
     std::string _wanted;
+    bool _fetchingRoute = false;
     // The development poll's timer.
     std::optional<reactive::TimerHandle> _poll;
     // Last, so it stops following the history before anything it opens screens with is gone.

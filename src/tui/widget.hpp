@@ -296,6 +296,9 @@ public:
     /// The columns of padding a bleeding child, or a holder's, reaches past: the padding this container's content is
     /// inset by. A container whose children are not inset returns 0.
     [[nodiscard]] virtual int bleedColumns() const { return 0; }
+    /// Scrolls this container, when it scrolls, so that row @p row of the focused widget inside it is in view; the
+    /// row counts from the top of that widget. A container that does not scroll does nothing.
+    virtual void revealFocusedRow(int /*row*/) {}
     /// The columns (width) and rows (height) of padding each page slot among this container's children pads its own
     /// content by; none for a container whose children are not pages.
     [[nodiscard]] virtual ::core::tui::Size pageInsets() const { return {}; }

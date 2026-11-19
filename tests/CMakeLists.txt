@@ -37,6 +37,7 @@ add_executable(morph_tests
     test_chat_protocol.cpp
     test_chat_screen_tools.cpp
     test_chat_service.cpp
+    test_chat_propose_screen.cpp
     test_chat_config.cpp
     test_chat_conversations.cpp
     test_chat_context.cpp
@@ -272,6 +273,15 @@ add_executable(morph_tests
     test_ui_route_history.cpp
     test_ui_preferences.cpp
     test_ui_preference_sync.cpp
+    test_ui_custom_screen_rules.cpp
+    test_ui_custom_screen_checks.cpp
+    test_ui_custom_screens.cpp
+    test_ui_json_source.cpp
+    test_ui_host_drafts.cpp
+    test_ui_workspace_in_place.cpp
+    test_ui_navigator_custom.cpp
+    test_ui_custom_screen_sync.cpp
+    test_ui_custom_screen_chrome.cpp
     test_ui_host_vocabulary.cpp
     test_ui_catalogue.cpp
     test_ui_locale_table.cpp

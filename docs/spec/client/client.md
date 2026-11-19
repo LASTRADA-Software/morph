@@ -17,6 +17,7 @@ application host.
 - [MCP on stdio](#mcp-on-stdio)
 - [Tests](#tests)
 - [Chat](#chat)
+- [Custom screens](#custom-screens)
 
 ## Packaging
 
@@ -308,3 +309,43 @@ without it reports both as not supported.
 When the server offers a chat, the shell mounts its panel in the frame's chat slot and follows the active tab. See
 [`../ui/chat.md`](../ui/chat.md#the-panel). A server with no chat answers the probe with an error, and the shell shows
 nothing and reports nothing.
+
+**Drafts from the assistant.** A turn is started from a tab, and the client names that tab with the turn
+(`ChatClient::send`'s `origin`: the workspace's number in the high half, the tab in the low half, since tab ids restart
+with each workspace). When the server accepts a draft in that turn, the `draft` event or the turn's state hands it back
+once per distinct document (`ChatClient::onDraft`), and the shell passes it to `CustomScreenChrome::proposeDraft` for
+that tab, as **Preview** would mount an edit: the same client load, the same draft bar and "Draft — not saved" text,
+the same generation rules, so a second proposal replaces the first and **Discard** restores the screen. The server has
+checked the document, so the chrome does not ask again. The draft is dropped without a word when the tab is closed, is
+no longer the turn's tab (another workspace, another screen or identity), or the client does not offer custom screens;
+a document the client cannot load is reported with a warning toast and the tab stays as it was. The draft goes to the
+turn's tab even when the person has moved to another. The next turn's `TurnRequest::draft` is the text of the draft the
+active tab holds (`CustomScreenChrome::draftOf`), or none, and none when it is over `ChatLimits::maxProposalBytes`
+(64 KiB), which the server would refuse.
+
+## Custom screens
+
+The shell offers a person's custom screens when the server does ([`../ui/custom_screens.md`](../ui/custom_screens.md#the-client)).
+
+- **Discovery.** Each frame (the first, and each one a sign-in or sign-out builds) resets a `CustomScreenSync` over
+  the source's dispatcher and asks `list`. A server without the model refuses its registration with `unknown model
+  type: morph.customScreens`, and the shell offers no custom screens; any other refusal is the same for the person and
+  is logged at warn. The sync adds the record `morph.customScreens` to the session's watch, which the session sends
+  through the source's watcher and sends again after each reconnect and resync, and relists on a `changes` event
+  naming it. An in-process source has no events and no watcher, so its lists refresh at a frame, a reconnect and this
+  client's own saves.
+- **The chrome.** Every document screen's tab carries the `CustomScreenChrome` at the top of its page
+  (`WorkspaceOptions::chrome`): **Source**, **Open as** for a screen with params, and the draft bar. A host screen,
+  such as the explorer, has none.
+- **Opening.** The host's documents lookup answers a `custom:` id from the sync's cache. A navigator entry, **Open as**
+  and a route to a custom screen fetch its document first; a route whose screen `get` does not answer is not restored,
+  a toast says so, and the start screen opens (the one asked for at start until a session change, then the new
+  session's). A route opened while signed out whose fetch is refused is kept, not reported, and tried again after the
+  sign-in. A broken screen is never mounted, from the cache or not: its source view opens. A tab that holds a draft
+  does not offer **Open as**; the person saves or discards first.
+- **Closing a draft.** The shell's close guard asks before a tab with a draft closes (`ShellFrame::confirm`:
+  "Discard the draft of …?", Discard or Keep), before the document's `onClose` runs, so Discard then closes as any
+  close does. Every other dirty screen without `onClose` stays open.
+- **Signing in or out.** The frame is rebuilt for the new session, so every open tab closes without asking and a
+  draft is discarded with it, as an unsaved form is.
+- **The navigator.** The chrome's `navigatorEntries` fill the navigator's Custom section after each list.

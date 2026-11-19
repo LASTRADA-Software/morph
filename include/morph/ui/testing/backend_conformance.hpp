@@ -830,6 +830,38 @@ struct Entry {
     return checks.result();
 }
 
+/// @brief Case: `setCursor` moves a field's cursor to a byte offset, clamps it to the text's end, and moves an
+///        offset inside a UTF-8 sequence back to the start of its code point.
+/// @param probe The backend under test.
+/// @return `nullopt`, or what went wrong.
+[[nodiscard]] inline std::optional<std::string> setCursorMovesTheCursor(ConformanceProbe& probe) {
+    std::unique_ptr<TextInputWidget> const field = probe.backend().createTextInput(nullptr, TextInputMode::Multiline);
+    field->setText("ab\ncd");
+    probe.settle();
+    Checks checks;
+    field->setCursor(3);
+    probe.settle();
+    checks.that(probe.cursorOf(*field) == 3,
+                "setCursor(3) left the cursor at " + std::to_string(probe.cursorOf(*field)));
+    field->setCursor(99);
+    probe.settle();
+    checks.that(probe.cursorOf(*field) == 5,
+                "setCursor past the end left the cursor at " + std::to_string(probe.cursorOf(*field)));
+    // A character before the target that takes several bytes: a backend counting in another unit must convert.
+    field->setText("\xC3\xA9\ncd");
+    probe.settle();
+    field->setCursor(3);
+    probe.settle();
+    checks.that(probe.cursorOf(*field) == 3, "setCursor(3) after a two-byte character left the cursor at " +
+                                                 std::to_string(probe.cursorOf(*field)));
+    // An offset inside the two-byte character moves back to its start.
+    field->setCursor(1);
+    probe.settle();
+    checks.that(probe.cursorOf(*field) == 0, "setCursor(1) inside a two-byte character left the cursor at " +
+                                                 std::to_string(probe.cursorOf(*field)));
+    return checks.result();
+}
+
 /// @brief Case: an edit the document refuses snaps back, and one it transforms shows the transform.
 /// @param probe The backend under test.
 /// @return `nullopt`, or what went wrong.
@@ -919,7 +951,8 @@ struct Entry {
             {.children = {
                  ui::textInput({.value = [&phase] { return "v" + std::to_string(phase.get()); },
                                 .onChange = note("TextInput onChange"),
-                                .onSubmit = note("TextInput onSubmit")}),
+                                .onSubmit = note("TextInput onSubmit"),
+                                .onCommit = note("TextInput onCommit")}),
                  ui::checkbox({.label = "c", .checked = odd, .onToggle = note("Checkbox onToggle")}),
                  // The requested key is 2, then 1; the options hold 2 in odd phases only, so setOptions
                  // re-resolves the request, which is not a user's choice either.
@@ -977,8 +1010,16 @@ struct Entry {
                              .onActivate = note("Table onActivate")},
                             true),
              }})};
+    // A field the cursor setters act on directly, with every handler a field has.
+    std::unique_ptr<TextInputWidget> const area = probe.backend().createTextInput(nullptr, TextInputMode::Multiline);
+    area->setOnChange(note("TextInput onChange"));
+    area->setOnSubmit(note("TextInput onSubmit"));
+    area->setOnCommit(note("TextInput onCommit"));
+    area->setText("ab\ncd");
     probe.settle();
     for (int next = 1; next <= 3; ++next) {
+        area->setCursor(static_cast<std::size_t>(next));
+        area->revealCursor();
         phase.set(next);
         // Rows arriving with a requested key, and rows going away, re-mark the table without a user's doing.
         rows.set(next % 2 == 1 ? std::vector<Entry>{{.id = 2, .label = "b"}, {.id = 3, .label = "c"}}
@@ -4331,7 +4372,7 @@ struct MinColumnGridSpec {
 /// loops over these with its own `ConformanceProbe`.
 /// @return The cases.
 [[nodiscard]] inline std::span<ConformanceCase const> conformanceCases() {
-    static std::array<ConformanceCase, 56> const cases{{
+    static std::array<ConformanceCase, 57> const cases{{
         {.name = "a Text shows its constant text", .run = detail::textShowsItsText},
         {.name = "a bound Text updates once per batch and not for an equal write",
          .run = detail::boundTextUpdatesOncePerChange},
@@ -4351,6 +4392,8 @@ struct MinColumnGridSpec {
         {.name = "a widget inside a hidden, disabled or collapsed container takes no input",
          .run = detail::unreachableWidgetsTakeNoInput},
         {.name = "a setter given the text a field shows keeps the cursor", .run = detail::unchangedTextKeepsCursor},
+        {.name = "setCursor moves a field's cursor, clamps it and keeps it at a code point's start",
+         .run = detail::setCursorMovesTheCursor},
         {.name = "a text field shows what the document makes of an edit", .run = detail::textInputIsControlled},
         {.name = "a dismissal the document refuses leaves the dialog open",
          .run = detail::refusedDismissalKeepsDialogOpen},

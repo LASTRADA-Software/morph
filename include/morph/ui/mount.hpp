@@ -377,6 +377,35 @@ public:
         return true;
     }
 
+    /// @brief Moves the text cursor of the mounted text input whose `focusId` is @p focusId to @p offset, focuses it
+    ///        and asks it to reveal the cursor's line.
+    ///
+    /// Of several such widgets, the one mounted first is taken. An offset inside a UTF-8 sequence moves back to the
+    /// start of that code point.
+    /// @param focusId The name.
+    /// @param offset  A byte offset into the text it shows.
+    /// @return Whether a mounted text input has that name.
+    bool placeCursor(std::string_view focusId, std::size_t offset) {
+        auto const found = _focusable.lower_bound(focusId);
+        if (found == _focusable.end() || found->first != focusId) {
+            return false;
+        }
+        auto* const field = dynamic_cast<TextInputWidget*>(found->second);
+        if (field == nullptr) {
+            return false;
+        }
+        field->setCursor(offset);
+        try {
+            field->focus();
+        } catch (...) {  // NOLINT(bugprone-empty-catch)
+            // Focus is a request: a backend that cannot move it leaves it where it was.
+        }
+        // After the focus: a scroll that follows focus has moved to the field as a whole by now, and the cursor's
+        // line is what is then brought into view.
+        field->revealCursor();
+        return true;
+    }
+
 private:
     // Runs @p body with @p overlay as the overlay an ActionBar mounts into the footer of, and puts the previous one
     // back after it.
@@ -2510,6 +2539,17 @@ public:
     /// @param focusId The name.
     /// @return Whether a mounted widget has that name.
     bool focus(std::string_view focusId) { return _mounter.focus(focusId); }
+
+    /// @brief Moves the text cursor of the mounted text input whose `Common::focusId` is @p focusId, at any depth, to
+    ///        @p offset, focuses it and asks it to reveal the cursor's line: how a source view puts the cursor where a
+    ///        refusal points.
+    ///
+    /// Of several such widgets, the one mounted first is taken. An offset inside a UTF-8 sequence moves back to the
+    /// start of that code point.
+    /// @param focusId The name.
+    /// @param offset  A byte offset into the text it shows.
+    /// @return Whether a mounted text input has that name.
+    bool placeCursor(std::string_view focusId, std::size_t offset) { return _mounter.placeCursor(focusId, offset); }
 
 private:
     [[nodiscard]] static Node nonNull(Node root) {

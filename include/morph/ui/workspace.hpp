@@ -299,6 +299,8 @@ private:
         std::unique_ptr<SlotWidget> slot;
         // The head row reads the handle through the model, which answers null once the handle is gone.
         std::optional<Mounted> head;
+        // The shell's chrome for the tab, at the top of the page; it reads the handle through the model too.
+        std::optional<Mounted> chrome;
 
         Page() = default;
         Page(Page const&) = delete;
@@ -475,6 +477,7 @@ private:
     std::function<WorkspaceScreen(std::string_view)> _screens;
     std::function<void()> _onChanged;
     std::function<void(Refusal const&)> _diagnostics;
+    std::function<Node(WorkspaceTabId, std::string_view)> _chrome;
     HeadPlacement _headPlacement = HeadPlacement::InPage;
     std::shared_ptr<bool> _alive = std::make_shared<bool>(true);
     std::map<std::uint64_t, std::unique_ptr<Page>> _pages;

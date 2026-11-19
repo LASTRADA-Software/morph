@@ -137,6 +137,15 @@ For each registered entry, in registration order:
   `Catalog::wizard`.
 - A query's model type is its alias's, resolved through the enclosing scopes. Load-time validation has already
   resolved every alias and requires each to name a type, so the walk cannot miss.
+- **`permitted` and admission as functions.** `permittedActions(bundle, session, authorizer)` is the `permitted` list,
+  from `allActions`, and `screenAdmitted(screen, session, authorizer)` is whether a screen admits the principal.
+  `ui-catalog` and the custom screens model ([`custom_screens.md`](custom_screens.md)) both use them, so they answer
+  the same set.
+- **Component fallbacks are walked.** The actions a document names, and so `ServedScreen::actions`,
+  `ServedScreen::modelTypes`, `allActions` and `permitted`, include those a delivered component's fallback view names,
+  with its aliases resolved in a scope of its own: a fallback sees nothing of the screen around it, at load and at
+  runtime. A screen whose only use of an action is in a fallback therefore lists that action as permitted when the
+  principal may run it.
 - **The app shell.** The app document is one file for every user, cached and verified by one hash (§12b); the
   catalog carries no shell of its own, and the client's shell omits from its menu what the catalog omits.
 
@@ -192,6 +201,10 @@ server, never a surprise on a client.
   index whose icon set names a file that is not an `icon` file of the bundle ([`theme.md`](theme.md#icons)), and a
   bundle over the bounds. `addFile` refuses an `icon` that is not SVG text or is larger than `kMaxIconBytes`. It returns a `std::shared_ptr<ServedBundle const>`: the manifest, the digest, every file
   by hash, the screens with their top-level queries and named actions, and the facts.
+- **`custom:` is reserved.** An entry id that starts with `custom:` (`kCustomScreenIdPrefix`) is refused, by
+  `addScreen` and `addEntry` alike, because that prefix names a person's custom screen.
+- **The bundle keeps its catalog.** `ServedBundle::catalog` is the catalog every document was loaded with, so a
+  document checked after the build is loaded against the same facts.
 
 `UiService(bundle)` serves one built bundle and never changes it, so it needs no lock on the server strand.
 
@@ -339,6 +352,8 @@ switch are the client's.
      map on the old document too.
    - Every refusal is returned as a `Refusal` naming the document, for the client to report.
    - The app document is not remounted: no `DocumentScreenHost` mounts it.
+   - A screen showing a draft is left as it is; the draft is checked against the new bundle at its next preview or
+     save.
 4. **What a remount keeps.** `DocumentScreenHost::remount(handle, document)` mounts the new document with the
    params and the container of the old screen, then destroys the old screen (its `onUnmount` runs, and the new
    screen's `onMount`).

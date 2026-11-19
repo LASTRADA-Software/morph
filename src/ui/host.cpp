@@ -246,6 +246,76 @@ std::expected<void, MountError> DocumentScreenHost::remount(ScreenHandle& handle
     return own->remount(_interpreter, std::move(document), *_options.backend);
 }
 
+std::expected<void, MountError> DocumentScreenHost::mountDraft(ScreenHandle& handle,
+                                                               std::shared_ptr<Document const> draft) {
+    auto* const own = dynamic_cast<Handle*>(&handle);
+    Screen const* const screen = own == nullptr ? nullptr : own->screen();
+    if (screen == nullptr || !draft) {
+        return std::unexpected(MountError{
+            .screenId = draft ? draft->id : std::string{},
+            .reason = "not an open document screen of this host",
+        });
+    }
+    if (draft->id != screen->id()) {
+        return std::unexpected(MountError{
+            .screenId = draft->id,
+            .reason = "a draft keeps the screen's id, `" + std::string{screen->id()} + "`",
+            .pointer = "/id",
+        });
+    }
+    return own->remount(_interpreter, std::move(draft), *_options.backend, Handle::DraftChange::Begin);
+}
+
+std::expected<void, MountError> DocumentScreenHost::discardDraft(ScreenHandle& handle) {
+    auto* const own = dynamic_cast<Handle*>(&handle);
+    Screen const* const screen = own == nullptr ? nullptr : own->screen();
+    if (screen == nullptr || !own->draftedNow()) {
+        return std::unexpected(MountError{
+            .screenId = screen == nullptr ? std::string{} : std::string{screen->id()},
+            .reason = "no draft is mounted",
+        });
+    }
+    std::string const screenId{screen->id()};
+    std::shared_ptr<Document const> document = _options.documents(screenId);
+    if (!document) {
+        return std::unexpected(MountError{.screenId = screenId, .reason = "unknown screen"});
+    }
+    return own->remount(_interpreter, std::move(document), *_options.backend, Handle::DraftChange::End);
+}
+
+void DocumentScreenHost::endDraft(ScreenHandle& handle) {
+    if (auto* const own = dynamic_cast<Handle*>(&handle); own != nullptr) {
+        own->endDraft();
+    }
+}
+
+void DocumentScreenHost::resumeDraft(ScreenHandle& handle) {
+    if (auto* const own = dynamic_cast<Handle*>(&handle); own != nullptr && own->screen() != nullptr) {
+        own->resumeDraft();
+    }
+}
+
+bool DocumentScreenHost::drafted(ScreenHandle const& handle) {
+    auto const* const own = dynamic_cast<Handle const*>(&handle);
+    return own != nullptr && own->screen() != nullptr && own->drafted();
+}
+
+bool DocumentScreenHost::draftedNow(ScreenHandle const& handle) {
+    auto const* const own = dynamic_cast<Handle const*>(&handle);
+    return own != nullptr && own->screen() != nullptr && own->draftedNow();
+}
+
+std::optional<std::string> DocumentScreenHost::screenIdOf(ScreenHandle const& handle) {
+    auto const* const own = dynamic_cast<Handle const*>(&handle);
+    Screen const* const screen = own == nullptr ? nullptr : own->screen();
+    return screen == nullptr ? std::nullopt : std::optional<std::string>{std::string{screen->id()}};
+}
+
+std::optional<ParamMap> DocumentScreenHost::paramsOf(ScreenHandle const& handle) {
+    auto const* const own = dynamic_cast<Handle const*>(&handle);
+    return own == nullptr ? std::nullopt : std::optional<ParamMap>{own->params()};
+}
+
 std::optional<chat::TurnRequest> DocumentScreenHost::chatContext(ScreenHandle& handle) {
     auto const* const own = dynamic_cast<Handle const*>(&handle);
     Screen const* const screen = own == nullptr ? nullptr : own->screen();
@@ -352,7 +422,7 @@ MountError DocumentScreenHost::mountErrorOf(std::string_view screenId, Refusal c
     if (!refusal.path.empty()) {
         reason = refusal.path + ": " + reason;
     }
-    return MountError{.screenId = std::string{screenId}, .reason = std::move(reason)};
+    return MountError{.screenId = std::string{screenId}, .reason = std::move(reason), .pointer = {}};
 }
 
 void DocumentScreenHost::Call::answer(std::optional<Value> result) {
@@ -384,7 +454,7 @@ void DocumentScreenHost::Handle::placed(ParamMap params, ContainerWidget* parent
 
 std::expected<void, MountError> DocumentScreenHost::Handle::remount(Interpreter& interpreter,
                                                                     std::shared_ptr<Document const> document,
-                                                                    IViewBackend& backend) {
+                                                                    IViewBackend& backend, DraftChange draft) {
     State& state = *_state;
     std::string const screenId = document->id;
     if (!state.screen) {
@@ -398,10 +468,21 @@ std::expected<void, MountError> DocumentScreenHost::Handle::remount(Interpreter&
     if (!next) {
         return std::unexpected(mountErrorOf(screenId, next.error()));
     }
+    // A draft pins the identity of the screen it replaces, read from that screen itself before the swap: the handle's
+    // cached `identity` would be recomputed against the screen that is mounted by then.
+    if (draft == DraftChange::Begin && !state.drafted.peek()) {
+        state.draftIdentity = state.screen->identity();
+    }
     // The old screen goes after the new one has mounted, so its root widget is never missing in between;
-    // destroying it runs its `onUnmount`.
+    // destroying it runs its `onUnmount`. The new screen and the draft mark change together in the batch below, so
+    // no frame shows one without the other.
     std::unique_ptr<Screen> const replaced = std::exchange(state.screen, std::move(*next));
-    state.runtime->batch([&state] { state.generation.set(state.generation.peek() + 1); });
+    state.runtime->batch([&state, draft] {
+        state.generation.set(state.generation.peek() + 1);
+        if (draft != DraftChange::Keep) {
+            state.drafted.set(draft == DraftChange::Begin);
+        }
+    });
     return {};
 }
 
@@ -429,10 +510,32 @@ void DocumentScreenHost::Handle::State::request(std::shared_ptr<State> const& st
         return;
     }
     state->closing = true;
+    // A draft is unsaved work whatever `onClose` would do: the guard is asked before `onClose` runs, and its answer
+    // decides. Discard then closes the way a close without a draft does.
+    if (state->drafted.peek() && state->guard && state->self != nullptr) {
+        std::weak_ptr<State> const weak = state;
+        state->guard(*state->self, [weak](CloseChoice choice) {
+            auto const held = weak.lock();
+            if (!held || !held->closing) {
+                return;
+            }
+            if (choice == CloseChoice::Discard) {
+                proceed(held, true);
+            } else {
+                choose(held, choice);
+            }
+        });
+        return;
+    }
+    proceed(state, false);
+}
+
+void DocumentScreenHost::Handle::State::proceed(std::shared_ptr<State> const& state, bool guarded) {
     std::shared_ptr<bool const> const cancelled = state->screen->beginClose();
     if (cancelled == nullptr) {
-        bool const isDirty = state->screen->dirty();
-        if (!isDirty) {
+        // The handle's `dirty`: a mounted draft is unsaved work however clean the screen's own state is.
+        bool const isDirty = state->dirty.peek();
+        if (guarded || !isDirty) {
             state->finish(true);
         } else if (state->guard && state->self != nullptr) {
             std::weak_ptr<State> const weak = state;
@@ -488,7 +591,7 @@ void DocumentScreenHost::Handle::State::save(std::shared_ptr<State> const& state
     // Answered in the settled task itself rather than posted again, so an answer never reaches a handle
     // that closed in between; an answer that closes the screen ends the answering.
     whenSettled(state, &State::saved, [](State& savedState) {
-        bool const clean = !savedState.screen->dirty();
+        bool const clean = !savedState.dirty.peek();
         for (auto const& answer : std::exchange(savedState.saving, {})) {
             if (!savedState.screen) {
                 return;
@@ -544,7 +647,7 @@ void DocumentScreenHost::Handle::State::finish(bool answer) {
     if (screen) {
         // The last values a host reads once the screen is gone, whether or not it read them before.
         lastTitle = detail::host::titleText(screen->title());
-        lastIdentity = screen->identity();
+        lastIdentity = drafted.peek() ? draftIdentity : screen->identity();
         lastTitleSpans = screen->titleSpans();
         lastPageEdge = screen->pageEdge();
         lastHeadJoined = screen->headJoined();

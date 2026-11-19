@@ -42,6 +42,14 @@ API surface).
 
 ### Added
 
+- **Custom screens in the generic client.** A server that registers `morph.customScreens` gets, in the generic client:
+  **Source** on each document screen (its `ui/1` JSON, pretty-printed), **Preview** through the client's load and the
+  server's check into a draft mounted in place, a draft bar with Save, Save as…, Source and Discard, the navigator's
+  Custom section, **Open as** on screens with params, and custom screens in routes. A server without the model shows
+  the source read only. New framework pieces: `CustomScreenSync`, `CustomScreenChrome`,
+  `DocumentScreenHost::mountDraft`, `WorkspaceModel::openInPlace`, `WorkspaceOptions::chrome`,
+  `Navigator::setCustom`, and `TextInputWidget::setCursor` on every backend.
+
 - **The generic client serves MCP (`--mcp-stdio`).** An agent such as Claude Code can install the client as an MCP
   server, in one of two modes. `morph_remote_client --mcp-stdio --server ws://…|wss://…` reaches any running morph
   server, with its tools read from that server's catalog. `morph_examples_client --mcp-stdio --app NAME --db PATH

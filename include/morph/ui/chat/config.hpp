@@ -73,7 +73,10 @@ struct LimitsFile {
     std::optional<std::size_t> maxTextBytes;
     std::optional<std::size_t> maxToolResultBytes;
     std::optional<std::size_t> maxConversationBytes;
+    std::optional<std::size_t> maxProposalBytes;
+    std::optional<std::size_t> maxProposalsPerTurn;
     std::optional<std::int64_t> idleRetentionMinutes;
+    std::optional<std::int64_t> toolCallTimeoutSeconds;
 };
 
 struct ConfigFile {
@@ -155,8 +158,16 @@ struct ConfigFile {
     apply(limits.maxTextBytes, config.limits.maxTextBytes, "maxTextBytes", problem);
     apply(limits.maxToolResultBytes, config.limits.maxToolResultBytes, "maxToolResultBytes", problem);
     apply(limits.maxConversationBytes, config.limits.maxConversationBytes, "maxConversationBytes", problem);
+    apply(limits.maxProposalBytes, config.limits.maxProposalBytes, "maxProposalBytes", problem);
+    apply(limits.maxProposalsPerTurn, config.limits.maxProposalsPerTurn, "maxProposalsPerTurn", problem);
     if (!problem.empty()) {
         return std::unexpected(std::move(problem));
+    }
+    if (limits.toolCallTimeoutSeconds) {
+        if (*limits.toolCallTimeoutSeconds <= 0) {
+            return std::unexpected(std::string{"the chat configuration's `toolCallTimeoutSeconds` must be above 0"});
+        }
+        config.limits.toolCallTimeout = std::chrono::seconds{*limits.toolCallTimeoutSeconds};
     }
     if (limits.idleRetentionMinutes) {
         if (*limits.idleRetentionMinutes <= 0) {

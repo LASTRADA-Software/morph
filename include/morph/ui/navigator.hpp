@@ -38,6 +38,23 @@ struct NavigatorBadge {
     bool operator==(NavigatorBadge const&) const = default;
 };
 
+/// @brief A person's custom screen as the navigator lists it, in its Custom section.
+struct NavigatorCustomEntry {
+    /// @brief The screen's id, `custom:` and its digits.
+    std::string id;
+    /// @brief The name its store gave it.
+    std::string title;
+    /// @brief Who saved it.
+    std::string savedBy;
+    /// @brief Whether the person saved it; an entry they did not save names who did.
+    bool mine = true;
+    /// @brief Why it may not be mounted today; empty when it may.
+    std::string broken;
+    /// @brief Memberwise equality.
+    /// @return Whether every member matches.
+    bool operator==(NavigatorCustomEntry const&) const = default;
+};
+
 /// @brief How a `Navigator` lists the catalog and what it reports.
 struct NavigatorOptions {
     /// @brief The catalog's entries, in the order the navigator lists them within a group.
@@ -59,6 +76,16 @@ struct NavigatorOptions {
     std::function<void(std::string const&)> onPrefetch;
     /// @brief Called with the whole new list each time the pins change, for the application to store.
     std::function<void(std::vector<std::string> const&)> onPins;
+    /// @brief The heading of the Custom section, and the label of its submenu in `menuEntries`.
+    std::string customHeading = "Custom";
+    /// @brief The mark every custom entry carries, so none passes for an application screen's entry.
+    std::string customMark = "Custom";
+    /// @brief What precedes the name of who saved a custom screen that is not the person's own: "by ann".
+    std::string customAuthor = "by ";
+    /// @brief The text of the badge on a custom entry that may not be mounted.
+    std::string customBrokenMark = "Broken";
+    /// @brief What the accessible name of a broken custom entry says.
+    std::string customBrokenName = "broken";
 };
 
 /// @brief The catalog as a list a person opens screens from, with a title search and pinned shortcuts.
@@ -112,7 +139,9 @@ public:
 
     /// @brief Marks the entry of the screen that is open, and clears the mark of the one marked before. A pin is not
     ///        marked.
-    /// @param screenId The open screen's id; one the navigator does not list, or empty, leaves no entry marked.
+    /// @param screenId The open screen's id; one the navigator does not list, or empty, leaves no entry marked. A
+    ///                 custom screen's id the navigator does not list yet is remembered, and its entry is marked when
+    ///                 `setCustom` lists it.
     void setCurrent(std::string_view screenId);
 
     /// @brief The screen whose entry is marked.
@@ -135,6 +164,8 @@ public:
     ///        submenu labelled by its heading (the entries of a group with no heading at the top level instead).
     ///        An entry's label is its title with its count after it ("Review · 4"), the current screen's entry is
     ///        checked, and an unavailable one is disabled.
+    ///        A Custom submenu follows the groups: each entry's label starts with the custom mark ("Custom: Home"),
+    ///        and its description names who saved it when that was someone else and why it is broken.
     /// @return The entries; `choose` takes a path into them.
     [[nodiscard]] std::vector<MenuEntry> menuEntries() const { return menu().entries; }
 
@@ -194,6 +225,24 @@ public:
     /// @param onChanged The handler; empty calls nothing.
     void setOnChanged(std::function<void()> onChanged) { _onChanged = std::move(onChanged); }
 
+    /// @brief Lists the person's custom screens in the Custom section, after the application's groups, replacing what
+    ///        it listed before.
+    ///
+    /// Each entry is a row as the catalog's are (`nav_row_<id>`, `nav_<id>`), whose content holds the custom mark
+    /// (`nav_mark_<id>`), the title (`nav_title_<id>`), who saved it when it is not the person's own
+    /// (`nav_author_<id>`, "by <savedBy>") and, for a broken screen, a badge (`nav_broken_<id>`) with the reason as
+    /// the entry's tooltip. Choosing an entry calls `onOpen` with its id, a broken one included: what opening it does
+    /// is the application's. Titles and names are shown as written, never translated or read as a message key. An
+    /// entry whose id does not start with `kCustomScreenIdPrefix`, or repeats an earlier entry's id, is skipped and
+    /// logged. The search filters the section as it filters the groups, `setCurrent` marks its entries, and
+    /// `menuEntries` ends with it as a submenu. An empty list hides the section.
+    /// @param entries The screens, in order.
+    void setCustom(std::vector<NavigatorCustomEntry> entries);
+
+    /// @brief The custom screens the Custom section lists.
+    /// @return They, in order.
+    [[nodiscard]] std::vector<NavigatorCustomEntry> const& custom() const noexcept { return _custom; }
+
 private:
     struct Item {
         CatalogEntry const* entry = nullptr;
@@ -231,6 +280,23 @@ private:
         bool failed = false;
     };
 
+    // A custom screen's row: the button holding the mark, the title, the author and the broken badge.
+    struct CustomItem {
+        NavigatorCustomEntry entry;
+        std::unique_ptr<StackWidget> row;
+        std::unique_ptr<ButtonWidget> button;
+        std::unique_ptr<StackWidget> content;
+        std::unique_ptr<BadgeWidget> mark;
+        std::unique_ptr<TextWidget> label;
+        std::unique_ptr<TextWidget> author;
+        std::unique_ptr<BadgeWidget> broken;
+    };
+
+    [[nodiscard]] CustomItem const* customItemOf(std::string_view screenId) const;
+
+    // The Custom section, made empty and hidden at construction, after every group.
+    void makeCustomSection();
+
     // What one entry of `menuEntries()` opens: a screen, or a submenu's entries; neither for a separator.
     struct MenuSlot {
         std::string screenId;
@@ -246,6 +312,9 @@ private:
     [[nodiscard]] MenuEntry menuEntry(CatalogEntry const& entry) const;
 
     [[nodiscard]] Menu menu() const;
+
+    // The groups as menu entries, in catalog order, while modules are not collapsed.
+    void groupMenu(Menu& out) const;
 
     // The collapsed form as a menu: one submenu per module, its count after the label, the module's later groups as
     // heading entries inside it; a module with one entry is that entry at the top level.
@@ -334,6 +403,13 @@ private:
     std::vector<std::unique_ptr<ButtonWidget>> _pinButtons;
     std::vector<Group> _groups;
     std::vector<Module> _modules;
+    std::unique_ptr<StackWidget> _customSection;
+    std::unique_ptr<TextWidget> _customHeading;
+    // After the section, so the rows go before the column that holds them.
+    std::vector<CustomItem> _customItems;
+    std::vector<NavigatorCustomEntry> _custom;
+    // A custom screen `setCurrent` named before `setCustom` listed it.
+    std::string _pendingCustom;
     bool _moduleGroups = false;
     // Whether the sections are placed module by module, which is how they are made.
     bool _moduleMajor = true;

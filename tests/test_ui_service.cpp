@@ -142,6 +142,25 @@ TEST_CASE("UiRegistry names every action and model type a document names, at any
     REQUIRE(bundle->actions->at("Auth_Login").credential);
 }
 
+TEST_CASE("UiRegistry names the actions and model types a component's fallback names", "[ui-service][registry]") {
+    UiRegistry registry = uiservice::registry();
+    std::string const screen =
+        R"({"vocab":"ui/1","id":"lims.fallback","components":{"Chart":{"qml":")" +
+        morph::ui::contentHash(uiservice::kChart) +
+        R"(","props":{},"fallback":{"kind":"column","children":[{"kind":"forEach","rows":{"lit":[]},)"
+        R"("key":{"row":"id"},"scope":{"models":{"audit":{"type":"Lims_Audit","instance":"private"}},)"
+        R"("queries":{"trail":{"model":"audit","action":"Lims_Trail"}}},)"
+        R"("children":[{"kind":"text","text":"r"}]}]}}},"view":{"kind":"text","text":"x"}})";
+    REQUIRE(registry.addScreen(uiservice::entry("lims.fallback"), screen));
+    auto const built = registry.build();
+    REQUIRE(built);
+    auto const served = std::ranges::find((*built)->screens, std::string{"lims.fallback"},
+                                          [](morph::ui::ServedScreen const& one) { return one.entry.id; });
+    REQUIRE(served != (*built)->screens.end());
+    CHECK(served->actions == std::vector<morph::ui::ActionRef>{{.modelType = "Lims_Audit", .action = "Lims_Trail"}});
+    CHECK(served->modelTypes == std::vector<std::string>{"Lims_Audit"});
+}
+
 TEST_CASE("UiRegistry without catalog lookups serves no facts", "[ui-service][registry]") {
     auto const built = uiservice::registry(morph::ui::Catalog{}).build();
     REQUIRE(built);
@@ -576,4 +595,51 @@ TEST_CASE("UiRegistry: a theme token nothing reads is logged once at build and d
     });
     CHECK(warnings == 1);
     CHECK(lines.size() == 1);
+}
+
+TEST_CASE("permittedActions answers ui-catalog's permitted, and screenAdmitted its admission",
+          "[ui-service][catalog]") {
+    auto const bundle = uiservice::bundle();
+    auto const authorizer = uiservice::authorizer();
+    morph::session::Context tech;
+    tech.principal = "tech";
+
+    std::vector<std::string> const permitted = morph::ui::permittedActions(*bundle, tech, *authorizer);
+    CHECK(std::ranges::find(permitted, std::string{"Lims_List"}) != permitted.end());
+    CHECK(std::ranges::find(permitted, std::string{"Lims_Pending"}) == permitted.end());
+    CHECK(std::ranges::find(permitted, std::string{"Lims_Verify"}) == permitted.end());
+
+    auto const screen = [&bundle](std::string_view id) -> morph::ui::ServedScreen const& {
+        auto const found = std::ranges::find(bundle->screens, id, [](auto const& s) { return s.entry.id; });
+        REQUIRE(found != bundle->screens.end());
+        return *found;
+    };
+    CHECK(morph::ui::screenAdmitted(screen("lims.results"), tech, *authorizer));
+    CHECK_FALSE(morph::ui::screenAdmitted(screen("lims.verify"), tech, *authorizer));
+    CHECK_FALSE(morph::ui::screenAdmitted(screen("lims.billing"), tech, *authorizer));
+}
+
+TEST_CASE("UiRegistry refuses an application screen id in the custom screens' namespace", "[ui-service][registry]") {
+    UiRegistry registry{morph::ui::ApplicationInfo{.id = "lims", .version = "1.0.0"}, uiservice::facts()};
+    std::string text{uiservice::kResults};
+    text.replace(text.find("lims.results"), std::string_view{"lims.results"}.size(), "custom:results");
+    auto const screen = registry.addScreen(entry("custom:results"), text);
+    REQUIRE_FALSE(screen);
+    CHECK(screen.error().reason.contains("`custom:`"));
+
+    CatalogEntry host = entry("custom:scanner");
+    host.host = "Scanner";
+    auto const listed = registry.addEntry(host);
+    REQUIRE_FALSE(listed);
+    CHECK(listed.error().reason.contains("`custom:`"));
+}
+
+TEST_CASE("ServedBundle keeps the catalog its documents were loaded with", "[ui-service][registry]") {
+    auto const bundle = uiservice::bundle();
+    REQUIRE(bundle->catalog.action);
+    auto const info = bundle->catalog.action("Lims_List");
+    REQUIRE(info);
+    CHECK(info->modelType == "Lims_Sample");
+    REQUIRE(bundle->catalog.model);
+    CHECK(bundle->catalog.model("Lims_Sample").has_value());
 }

@@ -1170,6 +1170,48 @@ TEST_CASE("qt_quick containers: a scroll area brings the focused child into view
     CHECK(shown.y() + last.height() <= area.height() + 1);
 }
 
+// Mutations: drop the `revealRect` call in MorphTextArea's `revealCursor` (contentY stays where focus left it); make
+// `setCursor` skip the snap to a code point's start.
+TEST_CASE(
+    "qt_quick containers: revealCursor scrolls a tall text area to the cursor's line, and focusing after "
+    "setCursor keeps the cursor",
+    "[qt_quick]") {
+    Scene scene;
+    auto scroll = scene.backend().createScroll(nullptr, ui::Axis::Vertical);
+    scroll->setLayout({.width = ui::Sizing::stretch(), .height = ui::Sizing::fixed(5)});
+    auto area = scene.backend().createTextInput(scroll.get(), ui::TextInputMode::Multiline);
+    std::string text;
+    for (int line = 0; line < 60; ++line) {
+        text += (line == 0 ? "" : "\n") + std::string{"\xC3\xA9"} + std::to_string(line);
+    }
+    area->setText(text);
+    scene.settle();
+    QQuickItem const& host = Scene::itemOf(*scroll);
+    auto* const flick = host.findChild<QQuickItem*>(QStringLiteral("flick"));
+    REQUIRE(flick != nullptr);
+    CHECK(flick->property("contentY").toReal() == 0);
+    // The start of line 30, below the part of the area that focusing it brings into view; each "é" before it takes two
+    // bytes.
+    std::size_t target = 0;
+    for (int line = 0; line < 30; ++line) {
+        target = text.find('\n', target) + 1;
+    }
+    area->setCursor(target);
+    area->focus();
+    scene.settle();
+    auto& impl = dynamic_cast<detail::TextInputImpl&>(*area);
+    CHECK(impl.cursor() == target);
+    area->revealCursor();
+    scene.settle();
+    QQuickItem const& control = Scene::controlOf(*area);
+    QRectF const cursor = control.property("cursorRectangle").toRectF();
+    QPointF const shown = control.mapToItem(&host, cursor.topLeft());
+    CHECK(flick->property("contentY").toReal() > 0);
+    CHECK(shown.y() >= 0);
+    CHECK(shown.y() + cursor.height() <= host.height() + 1);
+    CHECK(impl.cursor() == target);
+}
+
 // Mutation: make `content` in MorphScroll.qml the column on every axis.
 TEST_CASE("qt_quick containers: a horizontal scroll lays its children along its axis", "[qt_quick]") {
     Scene scene;

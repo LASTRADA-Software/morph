@@ -480,11 +480,17 @@ add_library(morph ${_morph_library_type}
     src/ui/interpreter.cpp
     src/ui/library.cpp
     src/ui/service.cpp
+    src/ui/custom_screen_checks.cpp
+    src/ui/custom_screens.cpp
+    src/ui/json_source.cpp
+    src/ui/custom_screen_sync.cpp
+    src/ui/custom_screen_chrome.cpp
     src/ui/host.cpp
     src/ui/backend.cpp
     src/ui/explorer.cpp
     src/ui/navigator.cpp
     src/ui/chat_service.cpp
+    src/ui/chat_propose_screen.cpp
     src/ui/service_client.cpp
     src/ui/theme.cpp
     src/ui/shell_frame.cpp
@@ -640,12 +646,17 @@ target_sources(morph
         include/morph/ui/date_pattern.hpp
         include/morph/ui/input_emphasis.hpp
         include/morph/ui/text_align.hpp
+        include/morph/ui/text_cursor.hpp
         include/morph/ui/button_emphasis.hpp
         include/morph/ui/control_shape.hpp
         include/morph/ui/banner_action_style.hpp
         include/morph/ui/badge_style.hpp
         include/morph/ui/button_style.hpp
         include/morph/ui/service.hpp
+        include/morph/ui/custom_screens.hpp
+        include/morph/ui/json_source.hpp
+        include/morph/ui/custom_screen_sync.hpp
+        include/morph/ui/custom_screen_chrome.hpp
         include/morph/ui/file_store.hpp
         include/morph/ui/host.hpp
         include/morph/ui/dev_reload.hpp
@@ -667,8 +678,10 @@ target_sources(morph
         include/morph/ui/chat/client.hpp
         include/morph/ui/chat/config.hpp
         include/morph/ui/chat/conversations.hpp
+        include/morph/ui/chat/extra_tool.hpp
         include/morph/ui/chat/panel.hpp
         include/morph/ui/chat/protocol.hpp
+        include/morph/ui/chat/propose_screen.hpp
         include/morph/ui/chat/provider.hpp
         include/morph/ui/chat/screen_tools.hpp
         include/morph/ui/chat/service.hpp

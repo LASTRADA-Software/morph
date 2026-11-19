@@ -67,9 +67,9 @@ It is built over the interpreter's `Session` and `Dispatcher`, and `DocumentScre
   commands reach the same hosts as the screens' (its `navigate` is this host's) and its diagnostics the same
   `diagnostics` callback. A missing document, one whose id is not `app`, and a second root on the session are
   `MountError`. The `AppRoot` is destroyed after the screens that read `app.*` and before the host.
-- **`remount(handle, document)`** mounts a changed document of a screen it mounted, with the same params in the
-  same place, and replaces the screen behind the same handle (spec 5 §12, development reload;
-  [`service.md`](service.md#development-reload)).
+- **`remount(handle, document)`** mounts another document of a screen it mounted, with the same params in the same
+  place, and replaces the screen behind the same handle. Two things use it: a development reload (spec 5 §12;
+  [`service.md`](service.md#development-reload)) and a draft (below).
   - Each state of the new screen's own scope declared under the same name and type starts from the old screen's
     value; every other state starts from its init.
   - The old screen is destroyed after the new one mounted, so its `onUnmount` runs and the root widget is never
@@ -77,6 +77,30 @@ It is built over the interpreter's `Session` and `Dispatcher`, and `DocumentScre
     to it.
   - A foreign or closed handle, a close or save in progress, and the interpreter's refusal of the new document are
     `MountError`, and the old screen stays.
+- **Drafts.** `mountDraft(handle, draft)` remounts a draft in place of the screen and marks the handle as showing
+  one; `drafted(handle)` is a tracked read of the mark.
+  - A draft keeps the screen's id: one whose `id` differs is refused, so the handle's identity, its route and a
+    shell's record of the tab name the screen, never the draft. `screenIdOf(handle)` and `paramsOf(handle)` answer
+    the screen's id and params.
+  - While a draft is up the handle is `dirty`, so a close asks the close guard, as a screen with unsaved edits does.
+  - The handle's identity is pinned while a draft is up: it answers the identity the screen had when the draft began,
+    whatever the draft's own `identity` says, so tab dedupe, the record and a chat conversation's key stay with the
+    screen. It stays pinned even when the screen's own data would change it. `discardDraft` hands it back to the screen's own
+    expression, and `endDraft` to the expression of the document that is mounted then, the saved one. The title follows
+    the draft's.
+  - The refusal of a draft whose id differs is a `MountError` whose `pointer` is `/id`, for a source view to put its
+    cursor there.
+  - A second draft replaces the first and starts from the first draft's state, as any remount does.
+  - A save never answers clean while a draft is up, since the draft is still unsaved: the close guard's *Save* on a
+    drafted screen whose draft declares `onSave` runs it and keeps the window open. `endDraft` is what the shell
+    calls once the draft is stored.
+  - `discardDraft(handle)` remounts the document `documents` answers for the screen's id now, so a reload since the
+    draft began is seen, and clears the mark. `endDraft(handle)` clears the mark and keeps what is mounted: what a
+    shell does once the draft is saved; `resumeDraft(handle)` sets the mark again, for a shell whose replacement of
+    the tab did not happen.
+  - A development reload (`reloadDocuments`) leaves a drafted screen as it is.
+  - Mounting a draft and setting the mark are one batch, so no frame shows one without the other.
+  - The custom screens client is what makes drafts ([`custom_screens.md`](custom_screens.md#the-client)).
 - **`inspector(handle)`** is the `Inspector` over a screen it mounted ([`inspector.md`](inspector.md)), or nothing
   for a closed or foreign handle or for a screen whose session is not in development mode. It is the only way a host hands out its
   screen, and it gives a read-only view and a `refetch` command, not the `Screen`.

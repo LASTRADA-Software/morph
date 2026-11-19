@@ -46,6 +46,18 @@ public:
         bool ok = false;
     };
 
+    /// @brief A draft the server accepted, and where the turn that proposed it was started.
+    struct DraftProposal {
+        /// @brief The screen the turn was started on.
+        std::string screenId;
+        /// @brief That screen's identity, canonically encoded, as the turn's request carried it.
+        std::string identity;
+        /// @brief The `origin` the turn was started with, which a shell uses to name the tab.
+        std::uint64_t origin = 0;
+        /// @brief The accepted document as JSON text.
+        std::string document;
+    };
+
     /// @brief A client over @p exchange.
     /// @param exchange What envelopes go through; it answers on the owner.
     /// @param session  What each envelope carries, read at each send so a sign-in takes effect.
@@ -71,16 +83,23 @@ public:
     /// @return Whether it did.
     [[nodiscard]] bool available() const noexcept { return _available; }
 
+    /// @brief Sets what receives a draft the server accepted. Called on the owner, once per distinct document of a
+    ///        turn, from an event or from the state read; whichever carries it first.
+    /// @param handler The receiver; empty drops drafts.
+    void onDraft(std::function<void(DraftProposal const&)> handler) { _onDraft = std::move(handler); }
+
     /// @brief Starts a turn, and selects its conversation. Refused locally while a turn runs, as the server would.
     /// @param request What the person said, and where they are.
-    void send(TurnRequest const& request) {
+    /// @param origin  An opaque number given back with each draft the turn proposes, so a shell can tell which tab
+    ///                the turn belongs to. The client never reads it.
+    void send(TurnRequest const& request, std::uint64_t origin = 0) {
         if (_active) {
             return;
         }
         _selected = Key{request.screenId, request.identity};
         Conversation& conversation = _conversations[_selected];
         conversation.push_back(Entry{.kind = "user", .text = request.text, .arguments = {}, .ok = false});
-        _active = Active{.key = _selected, .base = conversation.size()};
+        _active = Active{.key = _selected, .base = conversation.size(), .origin = origin};
         notify();
         send(std::string{kTurnKind}, writeMessage(request), [this](ExchangeReply const& reply) { accepted(reply); });
     }
@@ -149,6 +168,9 @@ public:
                 .kind = "tool",
                 .text = {},
                 .step = ToolStep{.name = read->text, .ok = read->ok, .message = {}, .arguments = read->arguments}});
+        } else if (read->kind == "draft") {
+            hand(*_active, read->text);
+            return;
         } else {
             readState();
             return;
@@ -192,7 +214,24 @@ private:
         // What the turn made, in order: one part per round's text and per tool call.
         std::vector<TurnPart> parts;
         std::string error;
+        // What `send` was given; handed back with each draft.
+        std::uint64_t origin = 0;
+        // The last draft handed on, so the event and the state that both carry it deliver it once.
+        std::optional<std::string> handed;
     };
+
+    // Hands a draft on unless this turn already did.
+    void hand(Active& active, std::string const& document) {
+        if (active.handed == document || !_onDraft) {
+            active.handed = document;
+            return;
+        }
+        active.handed = document;
+        _onDraft(DraftProposal{.screenId = active.key.first,
+                               .identity = active.key.second,
+                               .origin = active.origin,
+                               .document = document});
+    }
 
     void notify() const {
         if (_changed) {
@@ -274,7 +313,10 @@ private:
         }
         bool const running = state->status == TurnStatus::Running;
         show(*_active);
-        if (!running) {
+        if (_active && state->draft) {
+            hand(*_active, *state->draft);
+        }
+        if (!running && _active) {
             _active.reset();
             notify();
         }
@@ -301,6 +343,7 @@ private:
     Exchange _exchange;
     std::function<session::Context()> _session;
     std::function<void()> _changed;
+    std::function<void(DraftProposal const&)> _onDraft;
     std::shared_ptr<bool> _alive = std::make_shared<bool>(true);
     std::map<Key, Conversation> _conversations;
     Key _selected;

@@ -80,7 +80,7 @@ scope, lowers the view, mounts it through `Mounted` at `MountOptions::depth + 1`
 own Effects at `depth`, so they run first), wraps the root in a column carrying the document's `keys`
 when it has any, and runs `onMount`.
 
-A mount that replaces a screen, such as a development reload's remount, names it in
+A mount that replaces a screen, a development reload's remount or a draft's (host.md, "Drafts"), names it in
 `MountOptions::keepStateOf`. Each state of the new screen scope then starts from the old screen scope's
 value of the state of the same name, when the two declared types have the same name (`int` and `int?`
 differ; untyped is `any`) and the new type admits the value; any other state is initialised from its init.
@@ -178,6 +178,12 @@ canonical body is the body's JSON with record fields in name order.
       supersedes anything queued, then marks every entry but an `evaluate` one stale. A mounted entry
       refetches, and an entry whose fetch is in flight fetches once more when it settles: that fetch
       may have been filed before the connection came back.
+    - **Extra watches.** `Session::addExtraWatch(record)` watches a record for something other than
+      the cache, such as a list a client keeps beside it (the custom screens list). The `watch` goes out
+      at once, `watchSet()` names the record, so `reconnected()` and every `resync` carry it in their
+      `replace: true` set whatever order the owner and the cache acted in, and the cache dropping its
+      last entry on the record does not unwatch it. `removeExtraWatch(record)` sends the `unwatch`
+      unless an entry still holds the record. Events arrive through `deliverEvent` as any other.
 - **Invalidation** (`refetch`, a backend switch) marks the entry stale and
   refetches it.
 - **A mark during a fetch is kept.** `Session::markStale` marks an entry stale. While the entry's fetch is

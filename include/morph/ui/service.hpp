@@ -87,6 +87,10 @@ struct ServedScreen {
     std::vector<std::string> modelTypes;
 };
 
+/// @brief The prefix of every custom screen's id. An application screen's id never starts with it, so a person's
+///        screen and an application's can never share an id.
+inline constexpr std::string_view kCustomScreenIdPrefix = "custom:";
+
 /// @brief An application's bundle, built and immutable: what `UiService` serves.
 struct ServedBundle {
     /// @brief The application.
@@ -119,7 +123,34 @@ struct ServedBundle {
     /// @brief The wizard documents the registry's catalog gave, by the action of their first step, for every action
     ///        a document names; absent when it has no wizard lookup.
     std::optional<std::map<std::string, std::string, std::less<>>> wizards;
+    /// @brief The catalog the registry loaded every document with, so a document checked after the build, such as
+    ///        a person's custom screen, is loaded against the same facts. Its `std::function` members are called at
+    ///        runtime, on server threads, for as long as the bundle lives, so each must stay valid and be safe to
+    ///        call concurrently.
+    Catalog catalog;
 };
+
+/// @brief The actions of @p bundle that the principal of @p session may run: what `ui-catalog` answers as
+///        `permitted`.
+///
+/// The candidates are `ServedBundle::allActions`, so an action no served document names is never permitted here,
+/// whatever the authoriser would say about it.
+/// @param bundle     The bundle.
+/// @param session    The session, its principal verified.
+/// @param authorizer The authoriser.
+/// @return The permitted action ids, in `allActions` order.
+[[nodiscard]] MORPH_API std::vector<std::string> permittedActions(ServedBundle const& bundle,
+                                                                  ::morph::session::Context const& session,
+                                                                  ::morph::session::IAuthorizer const& authorizer);
+
+/// @brief Whether the principal of @p session may open @p screen: it is available, and the principal may run every
+///        query the screen declares at its top level (spec 5 §12b).
+/// @param screen     The screen.
+/// @param session    The session, its principal verified.
+/// @param authorizer The authoriser.
+/// @return Whether the screen admits the principal.
+[[nodiscard]] MORPH_API bool screenAdmitted(ServedScreen const& screen, ::morph::session::Context const& session,
+                                            ::morph::session::IAuthorizer const& authorizer);
 
 /// @brief A file of the bundle that is not a screen, as `UiRegistry::addFile` takes it.
 struct BundleFile {
@@ -503,11 +534,6 @@ private:
     /// @return The reply and its log fields.
     [[nodiscard]] Answer fetchAnswer(::morph::wire::Envelope const& request,
                                      ::morph::session::IAuthorizer const& authorizer) const;
-
-    /// @brief Whether the principal may fetch @p screen's document: it is available, and the catalog lists it as
-    ///        such (every top-level query permitted).
-    [[nodiscard]] static bool screenAdmits(ServedScreen const& screen, ::morph::session::Context const& session,
-                                           ::morph::session::IAuthorizer const& authorizer);
 
     std::shared_ptr<ServedBundle const> _bundle;
     ::morph::model::detail::ActionDispatcher* _dispatcher;

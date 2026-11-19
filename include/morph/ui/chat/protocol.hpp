@@ -58,6 +58,11 @@ struct TurnRequest {
     std::vector<ModelRef> models;
     /// @brief What the person said.
     std::string text;
+    /// @brief The document of the draft the person has open on this screen, as JSON text; absent with none. It is the
+    ///        screen's document as the assistant should read it, so a conversation of edits builds on the last
+    ///        accepted draft. The server refuses a turn whose draft is over `ChatLimits::maxProposalBytes` or is not a
+    ///        JSON object, and treats the text as data: it grants nothing.
+    std::optional<std::string> draft;
 };
 
 /// @brief The reply to a `TurnRequest`: the turn has been taken and runs on.
@@ -113,6 +118,11 @@ struct TurnState {
     std::vector<TurnPart> parts;
     /// @brief The `TurnEvent::seq` this state covers, so a client does not apply an event it already includes.
     std::uint64_t seq = 0;
+    /// @brief The document of the last draft the server accepted this turn, as JSON text; absent when it accepted
+    /// none.
+    ///        A draft reaches a client only through here and the `draft` event, and only after the server's checks
+    ///        passed it.
+    std::optional<std::string> draft;
 };
 
 /// @brief Asks for a turn's state.
@@ -127,9 +137,9 @@ struct TurnEvent {
     std::uint64_t turnId = 0;
     /// @brief Increases by one per event of a turn.
     std::uint64_t seq = 0;
-    /// @brief `text`, `tool`, `done` or `error`.
+    /// @brief `text`, `tool`, `draft`, `done` or `error`.
     std::string kind;
-    /// @brief The text piece, the tool's name, or the reason.
+    /// @brief The text piece, the tool's name, the reason, or a `draft` event's accepted document.
     std::string text;
     /// @brief A `tool` event's arguments as JSON text.
     std::string arguments;

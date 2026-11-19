@@ -225,6 +225,9 @@ public:
     [[nodiscard]] ::core::tui::EventResult key(ContainerBase const& owner, ::core::tui::KeyEvent const& key);
     /// Moves the view a cell per notch; whether it moved.
     [[nodiscard]] bool wheel(ContainerBase const& owner, int delta);
+    /// Moves a vertical view so that row @p row of the focused widget inside @p owner is in it, and counts the move
+    /// as having followed the focus, so the next frame does not undo it. Nothing when the focus is not inside.
+    void revealRow(ContainerBase const& owner, int row);
 
 private:
     /// Where the children go at scroll position 0, for a viewport of @p viewport.
@@ -268,6 +271,7 @@ public:
     void paint(::core::tui::Canvas& canvas) override;
     [[nodiscard]] ::core::tui::EventResult key(::core::tui::KeyEvent const& key) override;
     [[nodiscard]] bool wheel(int delta) override;
+    void revealFocusedRow(int row) override { _scroller.revealRow(*this, row); }
 
 private:
     ScrollViewport _scroller;
@@ -293,6 +297,7 @@ public:
     void paint(::core::tui::Canvas& canvas) override;
     [[nodiscard]] ::core::tui::EventResult key(::core::tui::KeyEvent const& key) override;
     [[nodiscard]] bool wheel(int delta) override;
+    void revealFocusedRow(int row) override;
 
 private:
     // Whether the slot scrolls when it is @p height tall: scrollable, and its content does not fit: a child that

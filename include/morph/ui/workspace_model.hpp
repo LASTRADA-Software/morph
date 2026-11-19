@@ -25,6 +25,7 @@
 #include "host.hpp"
 #include "route.hpp"
 #include "value.hpp"
+#include "view.hpp"
 
 /// @file
 /// @brief The workspace's tab logic with no widgets (spec 6 §7, §15): what an application's own tab strip binds to,
@@ -33,6 +34,10 @@
 /// Specified in `docs/spec/ui/workspace.md`, "Model".
 
 namespace morph::ui {
+
+/// @brief The reason `WorkspaceModel::openInPlace` answers when the tab's screen stayed open (its close guard kept
+/// it).
+inline constexpr std::string_view kStayedOpenReason = "the open screen stayed open";
 
 /// @brief What the shell needs to know of one screen id: the catalog's `singleton` and `reuseEmpty`.
 struct WorkspaceScreen {
@@ -57,6 +62,16 @@ struct WorkspaceStart {
     std::vector<std::string> recorded;
 };
 
+/// @brief A tab's identity in a `WorkspaceModel`: issued when it opens, never reused.
+struct WorkspaceTabId {
+    /// @brief The id's number; 0 is never issued.
+    std::uint64_t value = 0;
+
+    /// @brief Ordered by issue.
+    /// @return The ordering of the two values.
+    auto operator<=>(WorkspaceTabId const&) const = default;
+};
+
 /// @brief How a workspace treats screens.
 struct WorkspaceOptions {
     /// @brief The catalog facts of a screen id; empty treats every screen as plain.
@@ -76,16 +91,10 @@ struct WorkspaceOptions {
     /// @brief Called with what the workspace reports about what it shows, such as the parts of a screen's head an
     ///        overlay leaves out; empty reports nothing.
     std::function<void(Refusal const&)> diagnostics;
-};
-
-/// @brief A tab's identity in a `WorkspaceModel`: issued when it opens, never reused.
-struct WorkspaceTabId {
-    /// @brief The id's number; 0 is never issued.
-    std::uint64_t value = 0;
-
-    /// @brief Ordered by issue.
-    /// @return The ordering of the two values.
-    auto operator<=>(WorkspaceTabId const&) const = default;
+    /// @brief What a `Workspace` mounts at the top of each tab's page, above the head row: a shell's window chrome for
+    ///        that tab, such as its source view's button. Called once per tab, when its page is made; a null node
+    ///        mounts nothing. Empty mounts none. `WorkspaceModel` does not read it.
+    std::function<Node(WorkspaceTabId tab, std::string_view screenId)> chrome;
 };
 
 /// @brief What an open did: the tab it opened or focused, and whether it mounted a screen for it.
@@ -186,11 +195,9 @@ public:
     std::expected<WorkspaceOpened, MountError> openTab(std::string_view screenId, ParamMap const& params) {
         WorkspaceScreen const facts = factsOf(screenId);
         std::optional<std::string> const identity = _host->identityOf(screenId, params);
-        for (auto const& tab : _tabs) {
-            if (tab->screenId == screenId && (facts.singleton || (identity && identityText(*tab) == *identity))) {
-                activateTab(tab->id, false);
-                return WorkspaceOpened{.tab = tab->id, .mounted = false};
-            }
+        if (Tab const* const shown = showing(screenId, facts, identity, std::nullopt)) {
+            activateTab(shown->id, false);
+            return WorkspaceOpened{.tab = shown->id, .mounted = false};
         }
         std::optional<WorkspaceTabId> replaced;
         if (facts.reuseEmpty && identity) {
@@ -213,6 +220,71 @@ public:
         }
         activateTab(tabId, false);
         return WorkspaceOpened{.tab = tabId, .mounted = true};
+    }
+
+    /// @brief Opens @p screenId with @p params in the place of @p tab: what a shell's **Open as** does.
+    ///
+    /// When another tab already shows that screen with those params (by identity, or a `singleton` screen whatever
+    /// the params), that tab is focused, @p tab is left as it is and nothing is mounted. Otherwise the new screen is
+    /// mounted beside the tab, and a refused mount opens nothing and leaves the tab. The tab's screen is then asked to
+    /// close through its close guard, as any close is, so a tab that shows a draft is asked first (spec 6 §3). When it
+    /// closes, the new screen becomes the active tab and takes the tab's place in the order and in the record; when it
+    /// stays open, the new screen is closed without asking.
+    /// @param tab      The tab.
+    /// @param screenId The screen to open in its place.
+    /// @param params   Its params.
+    /// @param done     Called once with the tab now showing the screen (the new one, or the one that was focused), or
+    ///                 why nothing changed: a refused mount, a screen that stayed open, or a new screen closed
+    ///                 before the old one answered. May be empty.
+    /// @throws std::out_of_range for a tab the model does not hold.
+    void openInPlace(WorkspaceTabId tab, std::string_view screenId, ParamMap const& params,
+                     std::function<void(std::expected<WorkspaceTabId, MountError>)> done) {
+        WorkspaceTabId const old = held(tab);
+        if (Tab const* const shown = showing(screenId, factsOf(screenId), _host->identityOf(screenId, params), old)) {
+            activateTab(shown->id, false);
+            if (done) {
+                done(shown->id);
+            }
+            return;
+        }
+        auto opened = mountTab(screenId, params);
+        if (!opened) {
+            if (done) {
+                done(std::unexpected(std::move(opened.error())));
+            }
+            return;
+        }
+        WorkspaceTabId const fresh = *opened;
+        moveTab(fresh, indexOf(old) + 1);
+        recordChanged();
+        std::weak_ptr<bool> const alive = _alive;
+        _tabs.at(indexOf(old))
+            ->handle->requestClose([this, alive, old, fresh, screen = std::string{screenId},
+                                    done = std::move(done)](bool closed) mutable {
+                if (alive.expired()) {
+                    return;
+                }
+                bool const freshOpen = indexOf(fresh) != kNone;
+                if (!closed) {
+                    removeTab(fresh, true);
+                    if (done) {
+                        done(
+                            std::unexpected(MountError{.screenId = screen, .reason = std::string{kStayedOpenReason}}));
+                    }
+                    return;
+                }
+                // The new screen is active before the old one goes, so no other tab is activated meanwhile.
+                if (freshOpen) {
+                    activateTab(fresh, false);
+                }
+                removeTab(old, false);
+                if (done) {
+                    done(freshOpen ? std::expected<WorkspaceTabId, MountError>{fresh}
+                                   : std::unexpected(
+                                         MountError{.screenId = screen,
+                                                    .reason = "the new screen was closed before it took the place"}));
+                }
+            });
     }
 
     /// @brief Opens the start screens: with `resume`, every recorded route whose screen is known and available, in
@@ -406,6 +478,20 @@ private:
         std::vector<WorkspaceTabId> order;
         std::size_t position = 0;
     };
+
+    // The open tab, other than @p except, that already shows the screen: any tab of a singleton screen, otherwise the
+    // one with the same identity.
+    [[nodiscard]] Tab const* showing(std::string_view screenId, WorkspaceScreen const& facts,
+                                     std::optional<std::string> const& identity,
+                                     std::optional<WorkspaceTabId> except) const {
+        for (auto const& tab : _tabs) {
+            if (tab->id != except && tab->screenId == screenId &&
+                (facts.singleton || (identity && identityText(*tab) == *identity))) {
+                return tab.get();
+            }
+        }
+        return nullptr;
+    }
 
     [[nodiscard]] static std::string identityText(Tab const& tab) {
         return identityKey(tab.handle->identity().peek()).value_or(std::string{});

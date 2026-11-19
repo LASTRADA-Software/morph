@@ -9,6 +9,7 @@ tab logic with no widgets, for an application's own tab strip; `Workspace` is th
 - [Model](#model)
 - [Shape](#shape)
 - [Opening](#opening)
+- [Opening in place](#opening-in-place)
 - [Closing](#closing)
 - [Switching](#switching)
 - [Captions](#captions)
@@ -60,6 +61,9 @@ answers them by index over its order.
   that height and scrolls inside the page, so no screen is cut off at the window's edge. Scrolling every page
   instead would leave a stretching root no height to stretch to. A stretching root is never shorter than its
   `minHeight`: while the page is shorter than that, the page scrolls it at that height. A page whose content cannot be narrower than the page (a row of content-sized children wider than the window, say) scrolls sideways on Qt Quick and shows a horizontal bar; one that fits is laid out at the page's width.
+- `WorkspaceOptions::chrome(tab, screenId)` is a shell's window chrome for one tab, mounted at the top of the tab's
+  page, above the head row, in either head placement; a null node mounts nothing. The generic client's custom screens
+  chrome (the draft bar, **Source**, **Open as**) is one ([`custom_screens.md`](custom_screens.md#the-client)).
 - `WorkspaceOptions::screens` gives a screen id's catalog facts, `WorkspaceScreen{singleton, reuseEmpty, host,
   available}`; empty treats every screen as a plain, available document screen.
 - Tabs keep the order they were opened in, so a page slot's index is its tab's. `tabs()` lists them as
@@ -93,6 +97,28 @@ answers them by index over its order.
 A refused mount answers its `MountError` and opens nothing; its page is destroyed with it. `openTab(screenId,
 params)` opens the same way and answers `WorkspaceOpened{tab, mounted}`: `mounted` is false when step 2 focused an
 open tab, which is when a host settles the navigation's call rather than leave it for a later mount.
+
+## Opening in place
+
+`WorkspaceModel::openInPlace(tab, screenId, params, done)` opens another screen in a tab's place, which is what a
+shell's **Open as** does.
+
+1. When another tab already shows that screen with those params (by identity, or a `singleton` screen whatever the
+   params), that tab is focused, the given tab is left as it is, nothing is mounted, and `done` answers the focused
+   tab, as `openTab` does when it focuses.
+2. Otherwise the new screen is mounted first, beside the tab, and the record is written in that order, so a refused
+   mount opens nothing and the tab stays.
+3. The tab's screen is then asked to close through its close guard, as any close is (spec 6 §3). A tab that shows a
+   draft is asked first like any dirty tab: when the guard keeps it, the draft and the tab stay and the new screen is
+   closed without asking. When it closes, the new screen is made the active tab before the old one is removed, so no
+   other tab is activated meanwhile, and takes the old one's place in the order and in the record.
+
+**Open as** on the screen and params the tab already shows mounts a fresh copy and swaps it in through the guard: a
+reload that asks first when the tab is dirty.
+
+`done` answers the tab now showing the screen, or why nothing changed: a refused mount, a screen that stayed open, or a
+new screen that was closed before the old one answered. Until the close is answered, the new screen is a tab beside the
+old one.
 
 ## Closing
 
@@ -281,6 +307,19 @@ A name with no factory refuses the mount with `no host screen `<name>` is regist
   before; an id the navigator does not list, or empty, leaves none marked, and a pin is never marked. `current()`
   answers the marked one. The client shell calls it whenever the active tab changes.
 - **Unavailable entries** are disabled, with their reason as the tooltip, and neither open nor prefetch.
+- **Custom screens.** `setCustom(entries)` lists the person's custom screens in a section of their own,
+  `navigator_custom_section`, after the application's groups, under the heading `navigator_custom`
+  (`NavigatorOptions::customHeading`, "Custom"). Each `NavigatorCustomEntry` is a row as a catalog entry's is
+  (`nav_row_<id>`, `nav_<id>`), whose content holds the custom mark (`nav_mark_<id>`, `customMark`), the title, who
+  saved it when it is not the person's own (`nav_author_<id>`, "by <savedBy>"), and for a broken screen a badge
+  (`nav_broken_<id>`) with its reason as the tooltip, so a custom entry never passes for an application entry. The
+  accessible name says the same. Titles and names are shown as written, never translated or read as a message key; an
+  entry whose id lacks the `custom:` prefix or repeats an earlier id is skipped and logged at warn. The words "by ",
+  "Broken" and "broken" are `customAuthor`, `customBrokenMark` and `customBrokenName`. A custom id given to
+  `setCurrent` before `setCustom` lists it is remembered and marked on arrival. In the menu each entry's label leads
+  with the mark ("Custom: Home") and its description names the author and the reason. Choosing one calls `onOpen` with
+  its id, a broken one included; the search filters the section, `setCurrent` marks its entries, and `menuEntries`
+  ends with a submenu of it. An empty list hides the section.
 - **Search.** The search (`navigator_search`) shows the entries one of whose titles contains the text, ignoring
   ASCII case, and the headings of the groups that still show an entry.
   - `NavigatorOptions::titles` gives an entry's titles, one per locale (spec 6 §19), and the first one is shown;

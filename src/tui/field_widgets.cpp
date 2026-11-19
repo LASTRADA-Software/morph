@@ -13,6 +13,7 @@
 #include <format>
 #include <memory>
 #include <morph/ui/date_pattern.hpp>
+#include <morph/ui/text_cursor.hpp>
 #include <morph/ui/theme.hpp>
 #include <stdexcept>
 #include <string>
@@ -312,6 +313,25 @@ void TextInputImpl::setText(std::string_view text) {
         refresh();
     }
     _reported = std::string{_field->text()};
+}
+
+void TextInputImpl::setCursor(std::size_t offset) {
+    _field->setCursor(ui::snapToCodePointStart(_field->text(), offset));
+    refresh();
+}
+
+// A field as tall as its lines grows inside the scrolls around it, which follow the focused widget as a whole; this
+// asks each to bring the cursor's own line into view.
+void TextInputImpl::revealCursor() {
+    if (_mode != ui::TextInputMode::Multiline) {
+        return;
+    }
+    auto const before = _field->text().substr(0, _field->cursor());
+    auto const line = static_cast<int>(std::ranges::count(before, '\n'));
+    int const row = controlSize().height - std::max(3, _field->lineCount()) + line;
+    for (ContainerBase* scroll = container(); scroll != nullptr; scroll = scroll->container()) {
+        scroll->revealFocusedRow(row);
+    }
 }
 
 void TextInputImpl::setPlaceholder(std::string_view placeholder) {

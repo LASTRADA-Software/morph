@@ -32,6 +32,7 @@ TEST_CASE("a_whole_file_fills_the_config", "[chat][config]") {
       "limits": { "maxToolCallsPerTurn": 3, "maxTurnsPerPrincipal": 4, "maxTurnsPerConnection": 5,
                   "maxConversationsPerPrincipal": 6, "maxMessagesPerConversation": 7, "maxTextBytes": 8,
                   "maxToolResultBytes": 10, "maxConversationBytes": 11,
+                  "maxProposalBytes": 12, "maxProposalsPerTurn": 2,
                   "idleRetentionMinutes": 9 },
       "systemPrompt": "Be brief." })",
                                               environment);
@@ -49,6 +50,8 @@ TEST_CASE("a_whole_file_fills_the_config", "[chat][config]") {
     CHECK(config->limits.maxTextBytes == 8);
     CHECK(config->limits.maxToolResultBytes == 10);
     CHECK(config->limits.maxConversationBytes == 11);
+    CHECK(config->limits.maxProposalBytes == 12);
+    CHECK(config->limits.maxProposalsPerTurn == 2);
     CHECK(config->limits.idleRetention == std::chrono::minutes{9});
     CHECK(config->systemPrompt == "Be brief.");
 }

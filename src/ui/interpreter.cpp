@@ -10,12 +10,14 @@
 #include <expected>
 #include <format>
 #include <functional>
+#include <iterator>
 #include <limits>
 #include <map>
 #include <memory>
 #include <morph/core/backend.hpp>
 #include <morph/core/bridge.hpp>
 #include <morph/core/completion.hpp>
+#include <morph/core/logger.hpp>
 #include <morph/core/wire.hpp>
 #include <morph/forms/engine/collection.hpp>
 #include <morph/forms/engine/collection_view.hpp>
@@ -1767,8 +1769,29 @@ void Session::countTopics(detail::CacheEntry const& entry, int delta) {
 }
 
 void Session::sendWatch(std::string_view kind, wire::WatchBody const& body) const {
+    // The cache's own topics need no answer: a refused one simply sends no events. An extra watch belongs to a
+    // client that cannot work without it, so a refusal of one is reported.
+    std::vector<std::string> extras;
+    if (kind == wire::kWatchKind) {
+        std::ranges::copy_if(body.records, std::back_inserter(extras),
+                             [this](std::string const& record) { return _extraWatch.contains(record); });
+    }
     auto completion = _options.watcher(std::string{kind}, glz::write_json(body).value_or(std::string{}));
-    completion.then([](std::string const&) {}).onError([](std::exception_ptr const&) {});
+    completion
+        .then([extras](std::string const& reply) {
+            auto const read = wire::readWatchReply(reply);
+            for (std::string const& record : extras) {
+                if (!read || std::ranges::find(read->refusedRecords, record) != read->refusedRecords.end()) {
+                    ::morph::log::logWarn("the server refused the watch on `{}`; events for it will not arrive",
+                                          record);
+                }
+            }
+        })
+        .onError([extras](std::exception_ptr const& error) {
+            for (std::string const& record : extras) {
+                ::morph::log::logWarn("the watch on `{}` failed: {}", record, detail::failureText(error));
+            }
+        });
 }
 
 void Session::flushWatches() {
@@ -1792,17 +1815,35 @@ void Session::flushWatches() {
     if (!_watchRecords.empty() || !_watchInstances.empty()) {
         sendWatch(wire::kWatchKind, take(_watchRecords, _watchInstances));
     }
+    // An extra watch outlives the cache's last entry on the record.
+    std::erase_if(_unwatchRecords, [this](std::string const& record) { return _extraWatch.contains(record); });
     if (!_unwatchRecords.empty() || !_unwatchInstances.empty()) {
         sendWatch(wire::kUnwatchKind, take(_unwatchRecords, _unwatchInstances));
     }
 }
 
+void Session::addExtraWatch(std::string const& record) {
+    if (!_extraWatch.insert(record).second || !_options.watcher) {
+        return;
+    }
+    sendWatch(wire::kWatchKind, wire::WatchBody{.records = {record}, .instances = {}, .replace = false});
+}
+
+void Session::removeExtraWatch(std::string const& record) {
+    if (_extraWatch.erase(record) == 0 || !_options.watcher || _recordRefs.contains(record)) {
+        return;
+    }
+    sendWatch(wire::kUnwatchKind, wire::WatchBody{.records = {record}, .instances = {}, .replace = false});
+}
+
 wire::WatchBody Session::watchSet() const {
     wire::WatchBody body;
+    std::set<std::string, std::less<>> records = _extraWatch;
     for (auto const& [record, refs] : _recordRefs) {
         static_cast<void>(refs);
-        body.records.push_back(record);
+        records.insert(record);
     }
+    body.records.assign(records.begin(), records.end());
     for (auto const& [topic, refs] : _instanceRefs) {
         static_cast<void>(refs);
         body.instances.push_back(

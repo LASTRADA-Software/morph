@@ -86,9 +86,10 @@ struct ReloadOutcome {
 /// Each changed screen document is loaded with @p options. A document that does not load is refused and keeps the old
 /// document, in @p documents and on every screen showing it. A document that loads is mounted, through
 /// `DocumentScreenHost::remount`, on every screen of @p mounted showing it, which keeps each state of the screen's own
-/// scope declared under the same name and type. A remount the interpreter refuses keeps that screen on the old
-/// document, and keeps the old document in @p documents. A changed id the bundle no longer holds, and the app
-/// document, which is the session's root scope and not a screen (`DocumentScreenHost::mountApp`), change nothing here.
+/// scope declared under the same name and type. A screen showing a draft (`DocumentScreenHost::mountDraft`) is left as
+/// it is. A remount the interpreter refuses keeps that screen on the old document, and keeps the old document in @p
+/// documents. A changed id the bundle no longer holds, and the app document, which is the session's root scope and not
+/// a screen (`DocumentScreenHost::mountApp`), change nothing here.
 /// @param changed   The ids of the changed documents (`changedDocuments`).
 /// @param bundle    The new bundle's documents.
 /// @param options   How the documents load: the catalog facts.
@@ -117,7 +118,10 @@ struct ReloadOutcome {
         auto const document = std::make_shared<Document const>(std::move(*loaded));
         bool kept = true;
         for (MountedScreen const& screen : mounted) {
-            if (screen.screenId != screenId || screen.handle == nullptr) {
+            // A draft stays mounted: it is checked against the new bundle when the person previews or saves it, and
+            // discarding it mounts the document the map holds then.
+            if (screen.screenId != screenId || screen.handle == nullptr ||
+                DocumentScreenHost::draftedNow(*screen.handle)) {
                 continue;
             }
             if (auto remounted = host.remount(*screen.handle, document); !remounted) {
