@@ -1010,6 +1010,28 @@ struct ServedTable {
     QueryLimits limits;
 };
 
+/// @brief The most sort keys a table's `limits` may allow.
+inline constexpr std::size_t kMaxSortKeysBound = 32;
+
+/// @brief The description a served table answers with: its sort bound from `limits`, then its revision.
+///
+/// The bound is set before `describe` takes the revision, because `capabilities` is part of what it hashes: a
+/// table whose limits raise the bound has another revision than the same table at the default. Every reply that
+/// names the table's revision, a page included, takes it from here, so a page and the describe reply agree.
+/// @param served The table as its function returned it.
+/// @return The description, its `capabilities.maxSortKeys` the limits' and its revision set; `SourceContract`
+///         when `limits.maxSortKeys` is 0 or above `kMaxSortKeysBound`.
+[[nodiscard]] inline std::expected<TableDescription, TableError> servedDescription(ServedTable const& served) {
+    if (served.limits.maxSortKeys == 0 || served.limits.maxSortKeys > kMaxSortKeysBound) {
+        return std::unexpected(TableError{.code = TableErrorCode::SourceContract,
+                                          .column = {},
+                                          .message = "a table's `limits.maxSortKeys` is 1 to 32"});
+    }
+    TableDescription description = served.description;
+    description.capabilities.maxSortKeys = static_cast<std::uint32_t>(served.limits.maxSortKeys);
+    return describe(std::move(description));
+}
+
 /// @brief One row of a table that an action changed.
 struct ChangedRow {
     /// @brief The row's key.
@@ -1361,7 +1383,8 @@ struct AnswerContext {
 /// @param served  The table, its source pinned (`pinned`).
 /// @param query   The query, as received.
 /// @param context What the reply is built with.
-/// @return The page, its `revision` the description's, or the error the client shows.
+/// @return The page, its `revision` that of `servedDescription(served)`, or the error the client shows:
+///         `SourceContract` when the table's `limits.maxSortKeys` is out of range.
 [[nodiscard]] inline std::expected<GenericPage, TableError> answerQuery(ServedTable const& served,
                                                                         TableQuery const& query,
                                                                         AnswerContext const& context = {}) {
@@ -1372,6 +1395,10 @@ struct AnswerContext {
     if (served.source == nullptr) {
         return std::unexpected(
             TableError{.code = TableErrorCode::Unavailable, .column = {}, .message = "the table serves no source"});
+    }
+    auto const described = servedDescription(served);
+    if (!described) {
+        return std::unexpected(described.error());
     }
     if (query.keys && !served.description.capabilities.keys) {
         return std::unexpected(TableError{
@@ -1453,7 +1480,7 @@ struct AnswerContext {
             leased.push_back(source);
         }
         GenericPage page;
-        page.revision = served.description.revision;
+        page.revision = described->revision;
         page.distinct = std::move(*values);
         return page;
     }
@@ -1597,7 +1624,7 @@ struct AnswerContext {
             static_cast<void>(source->want(page.keys, LevelUse::Display, query.retry));
         }
     }
-    page.revision = served.description.revision;
+    page.revision = described->revision;
     return page;
 }
 
@@ -1923,11 +1950,16 @@ struct DescribeTable {
     /// @tparam Model The model type.
     /// @param model  The model instance.
     /// @param action The action.
-    /// @return The description, its revision set.
+    /// @return `servedDescription` of the served table: its sort bound from `limits`, its revision set.
+    /// @throws model::ActionRefusal when `servedDescription` answers `SourceContract`.
     template <typename Model>
     static TableDescription invoke(Model& model, DescribeTable& action) {
         static_cast<void>(action);
-        return describe(detail::serve<Function>(model, detail::callerContext()).description);
+        auto described = servedDescription(detail::serve<Function>(model, detail::callerContext()));
+        if (!described) {
+            throw detail::refusalOf(described.error());
+        }
+        return std::move(*described);
     }
 };
 

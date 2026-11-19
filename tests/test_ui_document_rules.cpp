@@ -133,6 +133,18 @@ TEST_CASE("ui document rules: a model-backed table's engine sorts, groups, pages
               .starts_with("/view/selection: a model-backed table's engine owns its selection"));
 }
 
+// Mutation: accept any maxSortKeys (33 loads).
+TEST_CASE("ui document rules: table: maxSortKeys is a rows table's literal from 1 to 32", "[ui][document][table]") {
+    CHECK(refusal(rowsTable(R"(, "maxSortKeys": 1)")) == "loads");
+    CHECK(refusal(rowsTable(R"(, "maxSortKeys": 32)")) == "loads");
+    CHECK(refusal(rowsTable(R"(, "maxSortKeys": 33)")) == "/view/maxSortKeys: `maxSortKeys` is 1 to 32");
+    CHECK(refusal(rowsTable(R"(, "maxSortKeys": 0)")) == "/view/maxSortKeys: `maxSortKeys` is 1 to 32");
+    CHECK(refusal(rowsTable(R"(, "maxSortKeys": {"ref": "n"})", R"("state": {"n": {"init": 12}},)")) ==
+          "/view/maxSortKeys: `maxSortKeys` is 1 to 32");
+    CHECK(refusal(modelTable(R"(, "maxSortKeys": 12)")) ==
+          "/view/maxSortKeys: `maxSortKeys` is a `rows` table's; a model's table carries its bound in its description");
+}
+
 // Mutation: accept any literal pageSize (0 loads).
 TEST_CASE("ui document rules: a table's page holds a positive whole number of rows", "[ui][document][table]") {
     CHECK(refusal(rowsTable(R"(, "pageSize": 10, "page": 0)")) == "loads");

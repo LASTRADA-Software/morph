@@ -1091,7 +1091,12 @@ unit. It emits:
 - **Two actions**, registered as an action with an explicit result is:
   `"Table." ID`, the action type `table::QueryTable<KEY>` (its JSON is the
   `TableQuery`'s; result `GenericPage`), and `"Table." ID ".describe"`, the action
-  type `table::DescribeTable<KEY>` (result `TableDescription`). Both run
+  type `table::DescribeTable<KEY>` (result `TableDescription`, built by
+  `table::servedDescription`: the description with `capabilities.maxSortKeys`
+  carried from the served table's `limits.maxSortKeys`, then its revision; a
+  bound of 0 or above `table::kMaxSortKeysBound` (32) refuses the request with
+  `table.sourceContract`, as it refuses every query to the table, and a page's
+  `revision` is that description's). Both run
   themselves through `invoke` (see [`ActionTraits<Action>`](#actiontraitsaction)),
   and both are `Loggable::No`: they read, and a page fetch is not written to an
   action log.

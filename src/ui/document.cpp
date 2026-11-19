@@ -290,7 +290,7 @@ constexpr std::array<KeySpec, 7> kForEachKeys = {{{"rows", Shape::Expr, {}, kReq
                                                   {"divided", Shape::Flag},
                                                   {"children", Shape::Nodes, {}, kInner}}};
 /// @brief The keys of `table`.
-constexpr std::array<KeySpec, 28> kTableKeys = {{{"rows", Shape::Expr},
+constexpr std::array<KeySpec, 29> kTableKeys = {{{"rows", Shape::Expr},
                                                  {"key", Shape::Expr, {}, kInner},
                                                  {"model", Shape::Name},
                                                  {"action", Shape::Text},
@@ -308,6 +308,7 @@ constexpr std::array<KeySpec, 28> kTableKeys = {{{"rows", Shape::Expr},
                                                  {"rowLabel", Shape::Expr, {}, kInner},
                                                  {"sort", Shape::Expr},
                                                  {"onSortChange", Shape::Commands},
+                                                 {"maxSortKeys", Shape::Expr},
                                                  {"pageSize", Shape::Expr},
                                                  {"page", Shape::Expr},
                                                  {"group", Shape::Part, "group"},
@@ -3136,6 +3137,7 @@ private:
             checkSelectColumn(node);
             checkTableSort(node);
             checkTablePaging(node);
+            checkTableSortBound(node);
             checkTableGroup(node);
             checkRowsTableKeys(node);
         }
@@ -3291,6 +3293,23 @@ private:
             if (rows == nullptr || *rows < 1) {
                 refuse(pointerAppend(node.path, "pageSize"), "a page holds a positive whole number of rows");
             }
+        }
+    }
+
+    // A `rows` table's sort bound: a literal 1 to 32. A model's table has its bound from its description.
+    static void checkTableSortBound(DocNode const& node) {
+        ExprPtr const bound = node.prop("maxSortKeys");
+        if (bound == nullptr) {
+            return;
+        }
+        std::string const path = pointerAppend(node.path, "maxSortKeys");
+        if (!node.name("model").empty()) {
+            refuse(path, "`maxSortKeys` is a `rows` table's; a model's table carries its bound in its description");
+            return;
+        }
+        std::int64_t const* const keys = bound->kind == ExprKind::Literal ? bound->literal.asInt() : nullptr;
+        if (keys == nullptr || *keys < 1 || *keys > 32) {
+            refuse(path, "`maxSortKeys` is 1 to 32");
         }
     }
 
