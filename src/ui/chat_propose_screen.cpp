@@ -10,7 +10,6 @@
 #include <expected>
 #include <functional>
 #include <glaze/glaze.hpp>
-#include <glaze/json/patch.hpp>
 #include <memory>
 #include <morph/core/coroutine.hpp>
 #include <morph/core/executor.hpp>
@@ -21,6 +20,7 @@
 #include <morph/ui/chat/propose_screen.hpp>
 #include <morph/ui/chat/service.hpp>
 #include <morph/ui/custom_screens.hpp>
+#include <morph/ui/json_patch.hpp>
 #include <morph/ui/service.hpp>
 #include <morph/ui/value.hpp>
 #include <optional>
@@ -658,68 +658,9 @@ enum class Role : std::uint8_t { Propose, Read };
 
 // ---- The patch. ----
 
-using PatchOpName = std::pair<std::string_view, glz::patch_op_type>;
-
-constexpr std::array<PatchOpName, 6> kPatchOps{{{"add", glz::patch_op_type::add},
-                                                {"remove", glz::patch_op_type::remove},
-                                                {"replace", glz::patch_op_type::replace},
-                                                {"move", glz::patch_op_type::move},
-                                                {"copy", glz::patch_op_type::copy},
-                                                {"test", glz::patch_op_type::test}}};
-
-// The entry of kPatchOps called @p name, or null.
-[[nodiscard]] PatchOpName const* patchOpNamed(std::string_view name) {
-    for (PatchOpName const& entry : kPatchOps) {
-        if (entry.first == name) {
-            return &entry;
-        }
-    }
-    return nullptr;
-}
-
-// The operation @p entry of the call's `patch`, or why it is not one; @p where names it in the message.
-[[nodiscard]] std::expected<glz::patch_op_t<Json>, std::string> operationOf(Json const& entry,
-                                                                            std::string const& where) {
-    auto const* const fields = std::get_if<Object>(&entry.data);
-    if (fields == nullptr) {
-        return std::unexpected(where + " is not a JSON object");
-    }
-    auto const stringField = [&](std::string_view key) -> std::optional<std::string> {
-        Json const* const child = member(*fields, key);
-        auto const* const text = child == nullptr ? nullptr : std::get_if<std::string>(&child->data);
-        return text == nullptr ? std::nullopt : std::optional<std::string>{*text};
-    };
-    auto const name = stringField("op");
-    PatchOpName const* const kind = name ? patchOpNamed(*name) : nullptr;
-    if (kind == nullptr) {
-        return std::unexpected(where + ": `op` must be one of add, remove, replace, move, copy, test");
-    }
-    auto path = stringField("path");
-    if (!path) {
-        return std::unexpected(where + ": `path` must be a string, a JSON Pointer");
-    }
-    glz::patch_op_t<Json> op;
-    op.op = kind->second;
-    op.path = std::move(*path);
-    op.from = stringField("from");
-    bool const needsValue = kind->second == glz::patch_op_type::add || kind->second == glz::patch_op_type::replace ||
-                            kind->second == glz::patch_op_type::test;
-    bool const needsFrom = kind->second == glz::patch_op_type::move || kind->second == glz::patch_op_type::copy;
-    if (Json const* const value = member(*fields, "value"); value != nullptr) {
-        op.value = *value;
-    }
-    if (needsValue && !op.value) {
-        return std::unexpected(where + ": `" + std::string{kind->first} + "` needs a `value`");
-    }
-    if (needsFrom && !op.from) {
-        return std::unexpected(where + ": `" + std::string{kind->first} + "` needs a `from`, a JSON Pointer");
-    }
-    return op;
-}
-
-// The operations of the call's `patch`, or why the arguments do not carry them.
-[[nodiscard]] std::expected<std::vector<glz::patch_op_t<Json>>, std::string> patchOf(Json const& arguments,
-                                                                                     std::size_t maxBytes) {
+// The call's `patch`, or why the arguments do not carry one. Whether its operations are well formed is for
+// applyJsonPatch to say.
+[[nodiscard]] std::expected<Json const*, std::string> patchOf(Json const& arguments, std::size_t maxBytes) {
     auto const* const object = std::get_if<Object>(&arguments.data);
     if (object == nullptr) {
         return std::unexpected(std::string{"the arguments are not a JSON object"});
@@ -740,60 +681,7 @@ constexpr std::array<PatchOpName, 6> kPatchOps{{{"add", glz::patch_op_type::add}
     if (glz::write_json(*found).value_or("").size() > maxBytes) {
         return std::unexpected("the patch is longer than " + std::to_string(maxBytes) + " bytes");
     }
-    std::vector<glz::patch_op_t<Json>> ops;
-    ops.reserve(array->size());
-    std::size_t index = 0;
-    for (Json const& entry : *array) {
-        auto op = operationOf(entry, "op " + std::to_string(index++));
-        if (!op.has_value()) {
-            return std::unexpected(op.error());
-        }
-        ops.push_back(std::move(*op));
-    }
-    return ops;
-}
-
-// The table lists the operations in the enumeration's order, so an operation's number is its place in it.
-static_assert(kPatchOps.at(static_cast<std::size_t>(glz::patch_op_type::add)).second == glz::patch_op_type::add &&
-              kPatchOps.at(static_cast<std::size_t>(glz::patch_op_type::remove)).second ==
-                  glz::patch_op_type::remove &&
-              kPatchOps.at(static_cast<std::size_t>(glz::patch_op_type::replace)).second ==
-                  glz::patch_op_type::replace &&
-              kPatchOps.at(static_cast<std::size_t>(glz::patch_op_type::move)).second == glz::patch_op_type::move &&
-              kPatchOps.at(static_cast<std::size_t>(glz::patch_op_type::copy)).second == glz::patch_op_type::copy &&
-              kPatchOps.at(static_cast<std::size_t>(glz::patch_op_type::test)).second == glz::patch_op_type::test);
-
-[[nodiscard]] std::string_view nameOf(glz::patch_op_type kind) {
-    return kPatchOps.at(static_cast<std::size_t>(kind)).first;
-}
-
-[[nodiscard]] std::string whyFailed(glz::error_ctx const& error) {
-    if (error.ec == glz::error_code::nonexistent_json_ptr) {
-        return "the path does not exist in the document";
-    }
-    if (error.ec == glz::error_code::patch_test_failed) {
-        return "the value at the path is not the one the test expects";
-    }
-    if (error.ec == glz::error_code::invalid_json_pointer) {
-        return "the path is not a valid JSON Pointer";
-    }
-    return "the operation cannot be applied there";
-}
-
-// Applies @p ops to a copy of @p base one at a time, so a refusal can name the operation. Either every operation
-// applies and the new document is returned, or nothing does and the refusal says which one failed.
-[[nodiscard]] std::expected<Json, std::string> applied(Json base, std::vector<glz::patch_op_t<Json>> const& ops) {
-    std::size_t index = 0;
-    for (glz::patch_op_t<Json> const& op : ops) {
-        glz::error_ctx const error = glz::patch(base, std::vector<glz::patch_op_t<Json>>{op},
-                                                glz::patch_opts{.create_intermediate = false, .atomic = false});
-        if (error) {
-            return std::unexpected("op " + std::to_string(index) + " (" + std::string{nameOf(op.op)} + " " + op.path +
-                                   "): " + whyFailed(error));
-        }
-        ++index;
-    }
-    return base;
+    return found;
 }
 
 // Whether the document is one JSON object that names the open screen, or why not.
@@ -833,9 +721,9 @@ static_assert(kPatchOps.at(static_cast<std::size_t>(glz::patch_op_type::add)).se
 
 void propose(std::shared_ptr<CustomScreens> const& screens, std::string const& app, exec::IExecutor& executor,
              ChatToolContext context, Json const& arguments, ChatToolDone const& done) {
-    auto ops = patchOf(arguments, context.limits.maxProposalBytes);
-    if (!ops) {
-        done(refused(context, ops.error()));
+    auto const patch = patchOf(arguments, context.limits.maxProposalBytes);
+    if (!patch) {
+        done(refused(context, patch.error()));
         return;
     }
     if (context.carried == nullptr) {
@@ -847,7 +735,7 @@ void propose(std::shared_ptr<CustomScreens> const& screens, std::string const& a
         done(failed("The screen's document could not be read: " + tree.error()));
         return;
     }
-    auto patched = applied(*tree, *ops);
+    auto patched = applyJsonPatch(*tree, **patch);
     if (!patched) {
         done(refused(context, "The patch was refused, and nothing was applied: " + patched.error()));
         return;

@@ -542,6 +542,25 @@ document loaded without it has none.
 `UiRegistry::addScreen`, `UiRegistry::addFile` for the app document, and `author::ScreenRegistry::add` log each warning at `warn`
 (`morph::log`) when they register a document; the document registers as it would without them.
 
+## JSON Patch and structural diff
+
+`json_patch.hpp` holds two generic helpers over a JSON value (`Json`); neither knows what a screen is.
+
+- **`applyJsonPatch(document, patch)`** applies an RFC 6902 patch, an array of `add`, `remove`, `replace`, `move`, `copy`
+  and `test` operations, to a copy of `document`. The path `""` is the whole document, and a path that does not exist is
+  refused rather than made. The operations are checked for their shape first (`op N is not a JSON object`, `op N: `op`
+  must be one of ...`, `op N: `path` must be a string ...`, `op N: `add` needs a `value``, `op N: `move` needs a
+  `from``) and then applied one at a time, so a refusal names the operation that failed, counted from 0, with its name
+  and path (`op 1 (remove /missing): the path does not exist in the document`). Either every operation applies and the
+  patched document is returned, or none does. `propose_screen` applies the assistant's patch through it.
+- **`diffJson(before, after)`** answers the patch that turns `before` into `after`; it cannot fail. Objects are compared
+  member by member and arrays element by element, so a change is one operation at its own pointer: a member only in
+  `before` is a `remove`, one only in `after` an `add`, and a value that differs and is not a container on both sides a
+  `replace`. An array that grew gets an `add` for each element past the old end, in order; one that shrank gets a
+  `remove` for each element past the new end, last first, so each index is the one the operation finds. A moved
+  element or member is a removal and an addition: no `move` or `copy` is produced. Tokens escape `~` as `~0` and `/` as
+  `~1`. Equal documents give `[]`, and `applyJsonPatch(before, diffJson(before, after))` equals `after`.
+
 ## Design decisions
 
 - **One generic node, one kind table.** A typed struct per kind would double the description of
