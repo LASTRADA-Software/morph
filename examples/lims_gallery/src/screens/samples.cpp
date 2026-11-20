@@ -519,9 +519,11 @@ ui::Node samplesTable(Samples const& list) {
                       .label = "Priority",
                       .width = ui::content(),
                       .cell = layout::priorityTag(ui::row("priority"))},
+                     // A tag never wraps or shrinks, so a column of tags takes its widest tag's width, whatever font
+                     // the client renders with.
                      {.name = "status",
                       .label = "Status",
-                      .width = ui::fixed(11),
+                      .width = ui::content(),
                       .cell = layout::tag(ui::row("status"), ui::row("statusTone"))},
                      {.name = "due",
                       .label = "Due",
@@ -530,7 +532,7 @@ ui::Node samplesTable(Samples const& list) {
                       .sortable = true,
                       .sortBy = ui::row("dueAt"),
                       .wrap = false},
-                     {.name = "spec", .label = "Specification", .width = ui::fixed(12), .cell = specCell()}},
+                     {.name = "spec", .label = "Specification", .width = ui::content(), .cell = specCell()}},
                 // The table draws the selection the cards share: its own boxes, and a header box for the page.
                 .selectionMode = ui::Selection::Multiple,
                 .selection = list.selected,
