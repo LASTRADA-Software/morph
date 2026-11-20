@@ -703,7 +703,12 @@ keeps its operands' 0 places and still fills 0.29 of a bar.
   with `TableRows::fetchRows`: keyed queries naming the copied columns, `maxKeys` keys each, through the read that
   makes no cache entry; a key no reply holds is left out. A cell of a level its row has not loaded is copied empty
   and counted, and no copy waits for a level. The status line then says "Copied {n} rows", with ", {m} cells were
-  not loaded" when there were any; a failed fetch says "The rows could not be copied: {reason}". Each
+  not loaded" when there were any; a failed fetch says "The rows could not be copied: {reason}", and a backend
+  whose `copyText` wrote nothing "The rows could not be copied: there is no clipboard". A copy that finds none of
+  its rows leaves the clipboard and the status line alone, and a copy's rows that arrive after a later copy started
+  are dropped. The slots a mount sets on the table's configuring (its filter targets, display units and copy
+  gathering) are cleared when that mount's handlers go, so a slot may hold the mount's scope without keeping the
+  screen alive. Each
   gesture the lowering receives clears the status line's message before it acts, so the next gesture on the
   table clears a refusal. The element values `layout`, `visibleColumns` and `hiddenCount` read the layout the
   table holds or the document binds, fitted to its columns.

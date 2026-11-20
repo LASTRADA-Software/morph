@@ -2489,6 +2489,20 @@ public:
         return TableRowRef{.key = entry.key, .row = entry.record};
     }
 
+    /// @brief The view rows the window holds, as whole pages: what a reader of every held row walks instead of the
+    ///        view. A page's last rows may lie past the view's end, where `row` answers nothing.
+    /// @return Each held page's first view row and its rows, ascending.
+    [[nodiscard]] std::vector<std::pair<std::int64_t, std::int64_t>> heldRanges() const {
+        auto const size = std::max<std::int64_t>(_options.pageSize, 1);
+        std::vector<std::pair<std::int64_t, std::int64_t>> out;
+        for (std::int64_t const page : _heldPages) {
+            if (heldPage(page)) {
+                out.emplace_back(page * size, size);
+            }
+        }
+        return out;
+    }
+
     /// @brief The held row's unloaded levels.
     /// @param index The view index.
     /// @return The window's view of them.

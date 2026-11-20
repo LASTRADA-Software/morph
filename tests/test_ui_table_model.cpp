@@ -15,6 +15,7 @@
 #include <iterator>
 #include <map>
 #include <optional>
+#include <set>
 #include <memory>
 #include <morph/ui/mount.hpp>
 #include <morph/table/data_source.hpp>
@@ -4511,7 +4512,7 @@ TEST_CASE("copy: unloaded cells copy as empty and are counted", "[ui][table][con
     CHECK(statusOf(h, table).message == "Copied 2 rows, 2 cells were not loaded");
 }
 
-// Review Focus 3. Mutation: the bounds compared with `>=`.
+// Review Focus 3. Mutations: the bounds compared with `>=`; `fetchRows` sending every key in one request.
 TEST_CASE("range and copy at their bounds: 10,000 pass, 10,001 are refused", "[ui][table][config]") {
     TableHarness h;
     auto screen = h.mount(withTableKey(kConfigModelTable, R"("selectionMode":"multiple")"));
@@ -4527,7 +4528,25 @@ TEST_CASE("range and copy at their bounds: 10,000 pass, 10,001 are refused", "[u
     }
     replyConfigPages(h, 100'000);
     REQUIRE(elementValue(*screen, "t", "selectedCount") == "10000");
+    std::size_t const copyFrom = h.dispatcher.calls.size();
     pressCopy(h, table);
+    // The 9,600 rows not held go in requests of at most `maxKeys` keys, which together name each of them once.
+    std::vector<std::size_t> sizes;
+    std::set<std::int64_t> named;
+    for (std::size_t call = copyFrom; call < h.dispatcher.calls.size(); ++call) {
+        table::TableQuery const query = queryOf(h, call);
+        REQUIRE(query.keys.has_value());
+        sizes.push_back(query.keys->size());
+        for (table::RowId const& key : *query.keys) {
+            named.insert(std::get<std::int64_t>(key));
+        }
+    }
+    CHECK(sizes.size() == 10);
+    CHECK(std::ranges::all_of(sizes, [](std::size_t size) { return size <= 1000; }));
+    CHECK(std::accumulate(sizes.begin(), sizes.end(), std::size_t{0}) == 9'600);
+    CHECK(named.size() == 9'600);
+    CHECK(*named.begin() == 400);
+    CHECK(*named.rbegin() == 9'999);
     replyCopyFetches(h, 100'000);
     std::string const copied = clipboardText(h);
     CHECK(std::ranges::count(copied, '\n') == 9'999);
@@ -4563,4 +4582,160 @@ TEST_CASE("copy: writes the shown text and the header with its unit", "[ui][tabl
     h.settle();
     chooseMenu(h, table, std::nullopt, {"Copy with headers"});
     CHECK(clipboardText(h) == "Id\tMass [kg]\tName\n1\t0.13\tA");
+}
+
+namespace {
+
+// One row of a hand-written keyed reply: its key, its view row, and whether it lacks the level `recipe`.
+struct KeyedRow {
+    std::int64_t key = 0;
+    std::int64_t viewRow = 0;
+    bool unloaded = false;
+};
+
+// A keyed reply of `samples` to the query of call @p index: each row named "renamed-<key>", every other cell its key,
+// and a row that lacks `recipe` with its `c4` null and listed in `unloadedRows`.
+std::string keyedReply(TableHarness const& h, std::size_t index, std::vector<KeyedRow> const& rows,
+                       std::int64_t total) {
+    table::GenericPage page;
+    page.revision = h.described.revision;
+    page.columns = queryOf(h, index).columns.value_or(std::vector<std::string>{});
+    page.total = total;
+    for (KeyedRow const& row : rows) {
+        page.keys.emplace_back(row.key);
+        page.indices.push_back(row.viewRow);
+        table::GenericRow cells;
+        for (std::string const& column : page.columns) {
+            if (column == "name") {
+                cells.emplace_back("renamed-" + std::to_string(row.key));
+            } else if (column == "c4" && row.unloaded) {
+                cells.emplace_back();
+            } else {
+                cells.emplace_back(row.key);
+            }
+        }
+        if (row.unloaded) {
+            page.unloadedRows.push_back(table::UnloadedRow{
+                .index = static_cast<std::int64_t>(page.rows.size()), .levels = {"recipe"}, .failed = {}});
+        }
+        page.rows.push_back(std::move(cells));
+    }
+    return glz::write_json(page).value_or("");
+}
+
+// The open keyed `Table.samples` calls, oldest first.
+std::vector<std::size_t> openKeyed(TableHarness const& h) {
+    std::vector<std::size_t> out;
+    for (std::size_t index = 0; index < h.dispatcher.calls.size(); ++index) {
+        auto const& call = h.dispatcher.calls[index];
+        if (call.action == "Table.samples" && !call.answered && !call.options.stop.stop_requested() &&
+            queryOf(h, index).keys.has_value()) {
+            out.push_back(index);
+        }
+    }
+    return out;
+}
+
+// A table over `samples` whose `c4` is of the level `recipe`, its first two pages held of 1,000 rows, rows 500 and
+// then 700 selected.
+std::unique_ptr<morph::ui::Screen> mountSelected(TableHarness& h) {
+    auto screen = h.mount(withTableKey(kConfigModelTable, R"("selectionMode":"multiple")"));
+    replyDescribe(h, withLevel(samplesDescription(5), "c4", "recipe"));
+    replyConfigPages(h, 1000);
+    int const table = h.backend.all("Table").front();
+    h.backend.selectTableRange(table, 500, 500);
+    h.settle();
+    replyConfigPages(h, 1000);
+    h.backend.selectTableRange(table, 700, 700, SelectionChange::Extend);
+    h.settle();
+    replyConfigPages(h, 1000);
+    REQUIRE(elementValue(*screen, "t", "selection") == "[500,700]");
+    return screen;
+}
+
+}  // namespace
+
+// Mutations: no sort by view row (the rows in the reply's order, 500 first); `fetchedOf` not marking a cell of a level
+// its row lacks (the message counts no unloaded cell); no generation check (the earlier copy's late rows overwrite
+// the later copy's); a copy that found no rows still written ("Copied 0 rows"); "Copied" shown though `copyText`
+// wrote nothing.
+TEST_CASE("copy: fetched rows in view order, an unloaded level, a failed fetch, a later copy and no clipboard",
+          "[ui][table][config]") {
+    TableHarness h;
+    auto screen = mountSelected(h);
+    int const table = h.backend.all("Table").front();
+    pressCopy(h, table);
+    std::vector<std::size_t> keyed = openKeyed(h);
+    REQUIRE(keyed.size() == 1);
+    SECTION("the view rows order them, and an unloaded cell is copied empty and counted") {
+        // The view moved under the selection: key 700 is now above key 500, and lacks `recipe`.
+        h.reply(keyed.front(), keyedReply(h, keyed.front(), {{.key = 500, .viewRow = 900, .unloaded = false},
+                                                             {.key = 700, .viewRow = 800, .unloaded = true}},
+                                          1000));
+        CHECK(clipboardText(h) == "700\trenamed-700\t700\t\t700\n500\trenamed-500\t500\t500\t500");
+        CHECK(statusOf(h, table).message == "Copied 2 rows, 1 cell was not loaded");
+    }
+    SECTION("a failed fetch copies nothing and says why") {
+        h.fail(keyed.front());
+        CHECK(clipboardText(h).empty());
+        CHECK(statusOf(h, table).message == "The rows could not be copied: it failed");
+    }
+    SECTION("rows that left the view copy nothing and say nothing") {
+        h.reply(keyed.front(), keyedReply(h, keyed.front(), {}, 1000));
+        CHECK(clipboardText(h).empty());
+        CHECK(statusOf(h, table).message.empty());
+    }
+    SECTION("a later copy wins over an earlier one whose rows arrive after it") {
+        h.backend.selectTableRange(table, 700, 700);
+        h.settle();
+        replyConfigPages(h, 1000);
+        pressCopy(h, table);
+        keyed = openKeyed(h);
+        REQUIRE(keyed.size() == 2);
+        h.reply(keyed.back(), keyedReply(h, keyed.back(), {{.key = 700, .viewRow = 700, .unloaded = false}}, 1000));
+        CHECK(clipboardText(h) == "700\trenamed-700\t700\t700\t700");
+        h.reply(keyed.front(), keyedReply(h, keyed.front(), {{.key = 500, .viewRow = 500, .unloaded = false},
+                                                             {.key = 700, .viewRow = 700, .unloaded = false}},
+                                          1000));
+        CHECK(clipboardText(h) == "700\trenamed-700\t700\t700\t700");
+        CHECK(statusOf(h, table).message == "Copied 1 row");
+    }
+    SECTION("a backend without a clipboard: no claim that anything was copied") {
+        h.backend.setClipboard(false);
+        h.reply(keyed.front(), keyedReply(h, keyed.front(), {{.key = 500, .viewRow = 500, .unloaded = false}}, 1000));
+        CHECK(statusOf(h, table).message == "The rows could not be copied: there is no clipboard");
+    }
+}
+
+// Mutation: `~WindowRows` not stopping the fetches `fetchRows` sent (the keyed call is still open after the unmount).
+TEST_CASE("copy: a table unmounted with its copy's fetch in flight tears down cleanly", "[ui][table][config]") {
+    {
+        TableHarness h;
+        auto screen = mountSelected(h);
+        pressCopy(h, h.backend.all("Table").front());
+        std::vector<std::size_t> const keyed = openKeyed(h);
+        REQUIRE(keyed.size() == 1);
+        screen.reset();
+        h.settle();
+        CHECK(h.dispatcher.calls.at(keyed.front()).options.stop.stop_requested());
+        CHECK(clipboardText(h).empty());
+    }
+    SUCCEED("the screen, the session and the runtime went without an abort");
+}
+
+// Mutation: the slots not cleared (each `gather` holds its mount's scope, which holds the element that holds the
+// configuring: the runtime aborts at teardown, "Runtime destroyed while nodes are alive").
+TEST_CASE("configuring: the slots a mount sets go with the mount, so a handler may hold its scope",
+          "[ui][table][config]") {
+    {
+        TableHarness h;
+        auto screen = h.mount(withTableKey(kConfigModelTable, R"("selectionMode":"multiple")"));
+        replyDescribe(h, samplesDescription(5));
+        replyConfigPages(h, 1000);
+        auto rows = h.mount(kNine);
+        rows.reset();
+        screen.reset();
+        h.settle();
+    }
+    SUCCEED("the screens, the session and the runtime went without an abort");
 }

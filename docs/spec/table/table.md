@@ -2171,6 +2171,11 @@ by each backend from `Table::status`, and it is where every refusal this documen
   that the copy is refused with a message in the status line.
 - **Unloaded cells** are copied as empty, and the message says how many there were. Copying does not wait for
   a level.
+- **What the status line says.** "Copied {n} rows" ("Copied 1 row"), with ", {m} cells were not loaded" ("1 cell
+  was not loaded") when there were any. A fetch that failed says "The rows could not be copied: {reason}", and a
+  backend with no clipboard "The rows could not be copied: there is no clipboard"; neither changes the clipboard.
+  A copy whose rows have all left the view changes nothing and says nothing, and a copy started before another
+  whose rows arrive later writes nothing.
 - The text reaches the clipboard through `IViewBackend::copyText`.
 
 Writing a view to a file (CSV, a spreadsheet) is not part of the table: it is an action of the application
