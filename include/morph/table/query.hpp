@@ -614,7 +614,8 @@ struct SetTally {
 /// sees it that way; an absent list stays absent and an empty one empty.
 /// A keyed query has no page, so `keys` with a non-zero `page.offset` is
 /// `InvalidSpec`; the keys are bounded by `maxKeys`, and a text key by
-/// `maxTextLength`; the retained keys by `maxRetained`, and a text one by `maxTextLength`. A `distinct` request is held to `detail::checkDistinct`,
+/// `maxTextLength`; the retained keys by `maxRetained`, and a text one by
+/// `maxTextLength`. A `distinct` request is held to `detail::checkDistinct`,
 /// and a query setting both `keys` and `distinct` is `InvalidSpec`.
 /// @param query   The query, as received.
 /// @param columns The row schema's columns.
@@ -3410,7 +3411,7 @@ struct glz::meta<morph::table::Page<Row>> {
 };
 
 /// @brief The JSON of `morph::table::TableQuery`: every member by reflection, an empty `retain` left out, so a query
-///        that retains nothing is written as before `retain` existed.
+///        that retains nothing carries no `retain` member.
 template <>
 struct glz::meta<morph::table::TableQuery> {
     /// @brief Whether a member is left out of the JSON written.

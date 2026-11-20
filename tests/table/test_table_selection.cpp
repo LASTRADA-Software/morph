@@ -739,3 +739,34 @@ TEST_CASE("retained rows: a selection of a view with retained rows resolves unde
     CHECK(settledNow(exact).value().keys == keysOf({0, 1, 2, 4, 5, 8}));
 }
 // Mutation: the merged digest left without the retained keys, which refuses with ViewChanged.
+
+TEST_CASE("retained rows: one the filter cannot decide is in the view, not undecided", "[table][retain]") {
+    // Column c is at level "slow"; row 2's cell is not loaded, so `c = x` can neither admit nor reject it.
+    auto const source = tabletest::makeSource({tabletest::levelCol("c", ColumnKind::Text, "slow")},
+                                              {{Cell{std::string{"x"}}}, {Cell{std::string{"y"}}}, {Cell{Unloaded{}}},
+                                               {Cell{std::string{"x"}}}});
+    TableQuery plain;
+    plain.filters.columns["c"].include.push_back(FilterEntry{.eq = "x"});
+    auto const without = apply(*source, plain).value();
+    REQUIRE(pageKeys(*source, without) == keysOf({0, 3}));
+    REQUIRE(without.undecided == 1);
+    TableQuery retaining = plain;
+    retaining.retain = keysOf({2, 1});
+    auto const with = apply(*source, retaining).value();
+    CHECK(pageKeys(*source, with) == keysOf({0, 1, 2, 3}));
+    CHECK(with.undecided == 0);
+    CHECK(with.totalKind == TotalKind::Exact);
+    CHECK(with.unmatched == std::vector<std::int64_t>{1});  // row 1 is rejected; row 2 is undecided, not rejected
+}
+
+TEST_CASE("retained rows: a keyed query sees the merged view", "[table][retain]") {
+    SelectionModel model;
+    TableQuery query{.sort = {{.column = "mass", .dir = SortDirection::Descending}}, .filters = open(),
+                     .retain = keysOf({7})};
+    query.keys = keysOf({7, 2});
+    auto const page = apply(*model.source, query).value();
+    CHECK(pageKeys(*model.source, page) == keysOf({7, 2}));
+    CHECK(page.indices == std::vector<std::int64_t>{0, 4});  // 7, then 5, 4, 3, 2
+    CHECK(page.unmatched == std::vector<std::int64_t>{0});
+    CHECK(page.total == 7);
+}

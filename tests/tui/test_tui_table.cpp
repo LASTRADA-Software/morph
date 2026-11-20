@@ -753,7 +753,8 @@ TEST_CASE("tui table: a row's marks are drawn", "[tui][table]") {
     fruit.table->setRowMarks(*fruit.rows.at(0),
                              ui::RowMarks{.unmatched = true, .tooltip = "This row no longer matches the filter"});
     fruit.table->setRowMarks(*fruit.rows.at(1), ui::RowMarks{.busy = true});
-    fruit.table->setRowMarks(*fruit.rows.at(2), ui::RowMarks{.locked = true, .tooltip = "Being edited by another user"});
+    fruit.table->setRowMarks(*fruit.rows.at(2),
+                             ui::RowMarks{.locked = true, .tooltip = "Being edited by another user"});
     auto const lines = harness.draw();
     auto const& buffer = harness.screen().renderedBuffer();
     // Row 0 is the first data line; its first cell starts after the two-cell gutter.

@@ -522,9 +522,8 @@ struct RetainedOrder {
     out.order.reserve(baseOrder.size() + placed.size());
     auto from = baseOrder.begin();
     for (auto const& [row, decided] : placed) {
-        auto const to = std::upper_bound(from, baseOrder.end(), row, [&before](std::uint32_t left, std::uint32_t right) {
-            return before(left, right);
-        });
+        auto const to = std::upper_bound(
+            from, baseOrder.end(), row, [&before](std::uint32_t left, std::uint32_t right) { return before(left, right); });
         out.order.insert(out.order.end(), from, to);
         from = to;
         if (decided == Match::No) {
