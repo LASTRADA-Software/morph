@@ -241,7 +241,8 @@ std::optional<Refusal> CustomScreens::checkedAsNew(ServedBundle const& bundle,
     if (session.principal.empty()) {
         co_return std::unexpected(CustomScreenRefusal{.reason = std::string{kNoPerson}});
     }
-    auto found = co_await _store->get(CustomScreenKey{.person = session.principal, .app = app, .id = screenId});
+    auto found = co_await _store->get(
+        CustomScreenKey{.person = session.principal, .app = app, .id = screenId, .session = session});
     if (!found) {
         co_return std::unexpected(std::move(found.error()));
     }
@@ -344,7 +345,8 @@ namespace {
     if (session.principal.empty()) {
         co_return reply;
     }
-    std::vector<CustomScreen> const stored = co_await _context->_store->list(session.principal, request.app);
+    std::vector<CustomScreen> const stored = co_await _context->_store->list(
+        CustomScreenScope{.person = session.principal, .app = request.app, .session = session});
     // Computed once for the whole list, and never kept past this call: permissions can change between calls.
     std::vector<std::string> const permitted = permittedActions(*bundle, session, *_context->_authorizer);
     reply.truncated = stored.size() > _context->_options.maxListed;
@@ -384,8 +386,8 @@ namespace {
     std::string const person = requirePerson(session);
     if (request.id) {
         refuseProblem(idProblem(*request.id));
-        auto existing =
-            co_await _context->_store->get(CustomScreenKey{.person = person, .app = request.app, .id = *request.id});
+        auto existing = co_await _context->_store->get(
+            CustomScreenKey{.person = person, .app = request.app, .id = *request.id, .session = session});
         if (!existing) {
             throw std::runtime_error{existing.error().reason};
         }
@@ -396,13 +398,14 @@ namespace {
     if (!text) {
         throw std::invalid_argument{text.error().message()};
     }
-    auto stored = co_await _context->_store->put(CustomScreenKey{.person = person, .app = request.app, .id = screenId},
-                                                 CustomScreen{.id = screenId,
-                                                              .title = std::move(request.title),
-                                                              .basedOn = std::move(request.basedOn),
-                                                              .document = std::move(*text),
-                                                              .savedAt = time::DateTime::now(),
-                                                              .savedBy = person});
+    auto stored = co_await _context->_store->put(
+        CustomScreenKey{.person = person, .app = request.app, .id = screenId, .session = session},
+        CustomScreen{.id = screenId,
+                     .title = std::move(request.title),
+                     .basedOn = std::move(request.basedOn),
+                     .document = std::move(*text),
+                     .savedAt = time::DateTime::now(),
+                     .savedBy = person});
     if (!stored) {
         throw std::runtime_error{stored.error().reason};
     }
@@ -414,8 +417,8 @@ namespace {
     refuseProblem(idProblem(request.id));
     ::morph::session::Context const session = callerSession();
     std::string const person = requirePerson(session);
-    auto removed =
-        co_await _context->_store->remove(CustomScreenKey{.person = person, .app = request.app, .id = request.id});
+    auto removed = co_await _context->_store->remove(
+        CustomScreenKey{.person = person, .app = request.app, .id = request.id, .session = session});
     if (!removed) {
         throw std::runtime_error{removed.error().reason};
     }
