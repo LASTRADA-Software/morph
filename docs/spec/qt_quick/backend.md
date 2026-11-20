@@ -381,9 +381,10 @@ loaded keeps its content bound at opacity 0 under a mark (`loadMarks`): a rounde
 `!` of the same width for `Failed`, whose tooltip and accessible name say "Could not be loaded", each in the
 column's alignment and neither measured into its width. **Cell accents.** `setCellAccent` writes the row's
 `cellAccents` (`{tone, tooltip, invalid}` by column, the tone -1 for none); the row draws each accented cell's slot
-(`accentMarks`, item `cellAccent<column>`): the tone's fill at half strength (`cellTint`, `toneBgOf`) under the row's
-background, so the selection fill, its bar and the focus marks draw over it (a pinned cell's slot lies over the opaque
-pinned backdrop instead); for a tooltip a small accent square at the slot's top end (`moreMark`), a `ToolTip` on
+(`accentMarks`, item `cellAccent<column>`): the tone's fill at half strength (`cellTint`, `toneBgOf`) over the row's
+background and under the cells, so a cell keeps its tone in a toned or selected row and the selection fill and bar
+show through it (a pinned cell's slot is the pinned backdrop's, over its copy of the background and under the pinned
+cells, so it lies between the same layers); for a tooltip a small accent square at the slot's top end (`moreMark`), a `ToolTip` on
 hover after the style's press-and-hold interval and at once while the cell holds the keyboard focus, and an
 accessible `ToolTip` named by the text, ignored while there is none. An `invalid` cell draws the `!` mark of a failed
 load, with the accent's tooltip as its tooltip and accessible name. **Headers with a unit.** A column's `unit` is written after

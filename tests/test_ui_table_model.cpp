@@ -1684,3 +1684,20 @@ TEST_CASE("ui document: a column's display parts are checked when the document l
           R"(`labels` is a literal list of `{"operand": text, "text": text}`)");
     CHECK_FALSE(refusalOf(column(R"("date":"qq")")).empty());
 }
+
+// Mutation: the unit appended whatever the text, which shows "three kg" for the labelled value.
+TEST_CASE("table display: a rows table's quantity keeps its unit unless a label names it", "[ui][table][display]") {
+    TableHarness h;
+    auto screen = h.mount(R"({"vocab":"ui/1","id":"plain",
+        "state":{"items":{"init":{"lit":[{"id":1,"m":{"num":3,"den":1,"dp":0,"unit":"kg"}},
+                                         {"id":2,"m":{"num":5,"den":2,"dp":1,"unit":"kg"}}]}}},
+        "view":{"kind":"table","id":"t","rows":{"ref":"items"},
+                "columns":[{"id":"id","label":"Id"},{"id":"m","label":"Mass","decimals":2,
+                            "labels":{"lit":[{"operand":"3","text":"three"}]}}]}})");
+    int const table = h.backend.all("Table").front();
+    std::vector<std::string> texts;
+    for (int const row : h.backend.children(table)) {
+        texts.push_back(h.backend.prop(h.backend.children(row).at(1), "text"));
+    }
+    CHECK(texts == std::vector<std::string>{"three", "2.50 kg"});
+}

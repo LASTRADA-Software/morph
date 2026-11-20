@@ -2403,7 +2403,8 @@ TEST_CASE("qt_quick table: an unloaded cell is a placeholder and a failed one an
     CHECK(f.call("columnWidth", 1).toInt() == widthBefore);  // a placeholder widens nothing
 }
 
-// Mutations: the tint painted opaque over the row's selection fill (its alpha is 1); `invalid` ignored by
+// Mutations: the tint painted opaque over the row's selection fill (its alpha is 1); the slot under the row's
+// background (z -1), where a toned or selected row hides it; `invalid` ignored by
 // MorphTableRow.qml, which draws no error mark (cellLoadAt is 0 and no failedMark exists).
 TEST_CASE("qt_quick table: a toned cell keeps its selection mark, a tooltip cell is described, a unit header is named "
           "with its unit",
@@ -2432,8 +2433,19 @@ TEST_CASE("qt_quick table: a toned cell keeps its selection mark, a tooltip cell
     QAccessibleInterface const* const described = QAccessible::queryAccessibleInterface(tinted);
     REQUIRE(described != nullptr);
     CHECK(described->text(QAccessible::Description) == QStringLiteral("Above limit"));
-    // Half the tone's fill: the row's selection fill and bar, drawn under the cells, show through it.
+    // Half the tone's fill: the row's selection fill and bar show through it.
     CHECK(tint->property("color").value<QColor>().alphaF() < 1.0);
+    // Over the row's background, whose tone tint and selection fill are opaque: after it among the row's children, at
+    // no lower z, so a toned cell keeps its tone in a toned or selected row.
+    QQuickItem* const row = tinted->parentItem();
+    REQUIRE(row != nullptr);
+    QQuickItem* layer = row->findChild<QQuickItem*>(QStringLiteral("fill"));
+    while (layer != nullptr && layer->parentItem() != row) {
+        layer = layer->parentItem();
+    }
+    REQUIRE(layer != nullptr);
+    CHECK(tinted->z() >= layer->z());
+    CHECK(row->childItems().indexOf(tinted) > row->childItems().indexOf(layer));
     CHECK(f.call("cellLoadAt", 0, 1).toInt() == 0);  // the load is the mount's; the mark is the accent's
     CHECK(f.item()->findChild<QQuickItem*>(QStringLiteral("failedMark")) != nullptr);
     QAccessible::setActive(wasActive);

@@ -8399,9 +8399,17 @@ Node ScreenCore::lowerRows(DocNode const& node, LowerCtx const& ctx, ElementStat
                     if (display) {
                         Value const shown = value == nullptr ? Value{} : *value;
                         table::TableColumn const kind = columnFor(shown, *display);
-                        std::string text = formatCell(cellOfRecord(value, kind, nullptr), kind, scope->formatting());
-                        // A quantity keeps its unit after its formatted amount, as its own text writes it.
-                        if (Quantity const* const quantity = shown.asQuantity(); quantity != nullptr && !text.empty()) {
+                        table::Cell const cell = cellOfRecord(value, kind, nullptr);
+                        std::string text = formatCell(cell, kind, scope->formatting());
+                        // A quantity keeps its unit after its formatted amount, as its own text writes it; a label's
+                        // text stands for the value whole and takes none.
+                        std::optional<std::string> const operand = operandOf(cell, kind);
+                        bool const labelled =
+                            operand && std::ranges::any_of(display->labels, [&](table::ValueLabel const& label) {
+                                return detail::cells::sameOperand(label.operand, *operand, kind.info.kind);
+                            });
+                        if (Quantity const* const quantity = shown.asQuantity();
+                            quantity != nullptr && !text.empty() && !labelled) {
                             auto const unit = scope->formatting().units.find(quantity->unit);
                             bool const named = unit != scope->formatting().units.end() && !unit->second.display.empty();
                             text += " " + (named ? unit->second.display : quantity->unit);
