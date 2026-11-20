@@ -5467,6 +5467,61 @@ TEST_CASE("view selection: its life", "[ui][table][selection]") {
 }
 // Mutation: the selection ended by a sort, which empties it on the first step.
 
+TEST_CASE("view selection: select-all before the new filter's reply is refused", "[ui][table][selection]") {
+    TableHarness h;
+    addAction(h, "Lims_TagRows", std::string{kSelectionSchema}, samplesAction());
+    auto screen = h.mount(
+        R"({"vocab":"ui/1","id":"samples","models":{"sample":{"type":"Lims_SampleModel"}},)"
+        R"("state":{"f":{"init":{"lit":{"columns":{"status":{"include":[{"eq":"open"}]}}}}}},)"
+        R"("view":{"kind":"column","children":[{"kind":"table","id":"t","testId":"t","model":"sample",)"
+        R"("table":"samples","selectionMode":"multiple","filters":{"ref":"f"}},)"
+        R"({"kind":"button","testId":"clear","label":"clear","onClick":[{"set":"f","value":{"lit":{"columns":{}}}}]}]}})");
+    replyDescribe(h, describeJson(selectionDescription()));
+    replyPage(h, selectionPage(openRows(), 6, "v1"));
+    int const table = h.byTestId("Table", "t");
+    h.backend.click(h.byTestId("Button", "clear"));  // a filter change, its reply not in yet
+    h.settle();
+    h.backend.selectAll(table);
+    h.settle();
+    CHECK(elementValue(h, "t", "selectionSet") == value(R"({"keys":[]})"));
+    CHECK(statusOf(h, table).message == "Select all is available once the rows have loaded");
+    replyPage(h, selectionPage({{0}, {1}, {2}, {3}, {4}, {5}, {6, "closed"}}, 7, "v2"));
+    h.backend.selectAll(table);
+    h.settle();
+    CHECK(*elementValue(h, "t", "selectionSet").field("view")->field("revision") == Value{std::string{"v2"}});
+}
+// Mutation: setFilter keeping the old filter's revision, which selects the new filter's view under revision v1.
+
+TEST_CASE("view selection: only the table whose view was refused offers it again", "[ui][table][selection]") {
+    TableHarness h;
+    addAction(h, "Lims_TagRows", std::string{kSelectionSchema}, samplesAction());
+    std::string const other =
+        R"({"kind":"table","id":"u","testId":"u","model":"sample","table":"samples","selectionMode":"multiple",)"
+        R"("filters":{"columns":{"status":{"include":[{"eq":"closed"}]}}}})";
+    auto screen = h.mount(selectionDoc(std::string{kSelectionTable} + "," + other, kSelectionMutations, h));
+    while (openCalls(h, "Table.samples.describe") > 0) {
+        replyDescribe(h, describeJson(selectionDescription()));
+    }
+    while (openCalls(h, "Table.samples") > 0) {
+        std::size_t const call = oldestOpen(h, "Table.samples");
+        bool const closed = queryOf(h, call).filters.columns.at("status").include.front().eq == "closed";
+        h.reply(call, closed ? selectionPage({{6, "closed"}, {7, "closed"}, {8, "closed"}, {9, "closed"}}, 4, "c1")
+                             : selectionPage(openRows(), 6, "v1"));
+    }
+    int const t = h.byTestId("Table", "t");
+    int const u = h.byTestId("Table", "u");
+    h.backend.selectAll(t);
+    h.settle();
+    h.backend.selectAll(u);
+    h.settle();
+    runMutation(h, "tag");  // over t's view
+    refuseMutation(h, "tag", "morph.table.viewChanged");
+    CHECK(statusOf(h, t).entries.size() == 1);
+    CHECK(statusOf(h, u).message.empty());
+    CHECK(statusOf(h, u).entries.empty());
+}
+// Mutation: the rerun offered by every table of the record, which puts "Run on these" on u over its own view.
+
 TEST_CASE("view selection: not while membership is open", "[ui][table][selection]") {
     TableHarness h;
     SECTION("rows are undecided") {
@@ -5580,8 +5635,11 @@ TEST_CASE("view selection: copying it fetches the view's rows in order", "[ui][t
     CHECK_FALSE(query.keys.has_value());
     REQUIRE(query.columns.has_value());
     CHECK(*query.columns == std::vector<std::string>{"id", "status"});  // the visible columns
-    replyPage(h, selectionPage(openRows(), 6, "v1"));
-    CHECK(clipboardText(h) == "0\topen\n2\topen\n3\topen\n5\topen");
+    // The fetched rows say "copied" where the held rows say "open": the copy writes what the page queries brought.
+    replyPage(h, selectionPage({{0, "copied"}, {1, "copied"}, {2, "copied"}, {3, "copied"}, {4, "copied"},
+                                {5, "copied"}},
+                               6, "v1"));
+    CHECK(clipboardText(h) == "0\tcopied\n2\tcopied\n3\tcopied\n5\tcopied");
     SECTION("over maxCopyRows it is refused") {
         std::string const kept = clipboardText(h);
         fireEvent(h, "Lims_SampleModel.samples", {});

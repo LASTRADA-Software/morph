@@ -207,12 +207,16 @@ struct SelectAllRefusal {
 /// @param refusal Why.
 /// @param locale  The formatting facts: the count's group separator.
 /// @return `"Select all is available once <n> rows are decided"`, or with no undecided row `"Select all is available
-///         once <levels joined by " and "> data has loaded"`.
+///         once <levels joined by " and "> data has loaded"`, or with neither `"Select all is available once the
+///         rows have loaded"`: the view has not answered its current query yet.
 [[nodiscard]] inline std::string selectAllRefusalText(SelectAllRefusal const& refusal, FormatContext const& locale) {
     if (refusal.undecided > 0) {
         return "Select all is available once " +
                render::formatCanonicalNumber(std::to_string(refusal.undecided), locale.numeric) +
                (refusal.undecided == 1 ? " row is decided" : " rows are decided");
+    }
+    if (refusal.levels.empty()) {
+        return "Select all is available once the rows have loaded";
     }
     std::string levels;
     for (std::string const& level : refusal.levels) {
@@ -2949,6 +2953,8 @@ public:
             return {};
         }
         _filter = std::move(filter);
+        // The revision held is of the old filter's view: a selection taken before the new one answers would name it.
+        _viewRevision.clear();
         _outOfView.clear();
         restart();
         return {};
@@ -3035,7 +3041,8 @@ public:
     /// @brief The view as a selection takes it: the held filter and the latest reply's revision.
     ///
     /// Refused while the view's membership is open: rows are undecided, or an awaited level is one a filtered
-    /// column needs. A level only the sort needs refuses nothing, since order is not membership.
+    /// column needs. A level only the sort needs refuses nothing, since order is not membership. Refused too, with
+    /// nothing undecided and no level, until a reply to the current filter has named its revision.
     /// @return The view, or the refusal with the undecided rows and the filtered columns' awaited levels.
     [[nodiscard]] std::expected<ViewSelection, SelectAllRefusal> selectView() const override {
         auto const shown = counts();
@@ -3062,7 +3069,7 @@ public:
                 }
             }
         }
-        if (shown.undecided > 0 || !levels.empty()) {
+        if (shown.undecided > 0 || !levels.empty() || _viewRevision.empty()) {
             return std::unexpected(SelectAllRefusal{.undecided = shown.undecided, .levels = std::move(levels)});
         }
         return ViewSelection{.filters = _filter, .retained = {}, .revision = _viewRevision};

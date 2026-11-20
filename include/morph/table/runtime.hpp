@@ -75,6 +75,9 @@ struct TableRuntime {
     /// @brief A serial executor a `resolve`'s completion belongs to: where it settles and its handlers run, so a
     ///        Task handler awaiting it from any strand finds one owner. Null runs `resolve` where it is called.
     exec::IExecutor* settle = nullptr;
+    /// @brief Keeps `settle` alive while a `resolve`'s work is queued on `work`, which may outlive the server; the
+    ///        server closes `settle` when it goes, so a delivery that comes later is dropped. Null when nothing does.
+    std::shared_ptr<void const> settleKeep;
 };
 
 namespace detail {

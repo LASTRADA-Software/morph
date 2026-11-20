@@ -11102,8 +11102,16 @@ public:
                 continue;
             }
             auto const member = body->find(input.member);
-            if (member == body->end() || member->second.field("view") == nullptr ||
-                member->second.field("view")->isNull()) {
+            Value const* const view = member == body->end() ? nullptr : member->second.field("view");
+            if (view == nullptr || view->isNull()) {
+                continue;
+            }
+            // Offered only by a table whose view is the one refused: another table of the record, or this one
+            // under another filter now, would run the action over rows the user did not select for it.
+            table::FilterSpec refused;
+            Value const* const filters = view->field("filters");
+            if (filters == nullptr || glz::read_json(refused, canonicalJson(*filters)) ||
+                refused != _model->window->filter()) {
                 continue;
             }
             auto taken = _model->rows->selectView();
@@ -11134,7 +11142,7 @@ public:
             _core->tableMessage(*_element,
                                 "The rows changed since you selected them: " +
                                     render::formatCanonicalNumber(std::to_string(rows), _core->session.formatting().numeric) +
-                                    " rows now. Run on these?",
+                                    (rows == 1 ? " row now. Run on these?" : " rows now. Run on these?"),
                                 {{StatusEntry{.id = id, .label = "Run on these"}, rerun}});
             return;
         }

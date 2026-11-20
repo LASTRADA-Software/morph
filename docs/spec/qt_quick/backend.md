@@ -372,10 +372,10 @@ writes `focusedRowIndex` and `focusedColumnIndex`, brings them into view (`showF
 or Down moves the focus and fires `selectRange` from the anchor (`anchorRowIndex`: the row last tapped or toggled, or
 the one the focus left) to the focused row; a Shift-tap fires it to the tapped row; Ctrl+A and the select-all box
 fire it over every row of the view, as `Extend`, unless the table has a `setOnSelectAll` handler
-(`selectAllHandled`), when they fire `selectAll` instead, which `TableImpl` passes to the handler.
-`setSelectionView(except)` marks every row but those keys until the next `setSelection`; in that state a Ctrl-tap
-reports `Extend` with the keys now marked among the rows the table holds, the tapped one toggled. `TableImpl` passes them to `setOnSelectRange`, which resolves them over rows not realized and
-refuses one past `maxRangeRows`; each is `multiple` only. `setCounts` writes
+(`selectAllHandled`), when they fire `selectAll` instead, which `TableImpl` passes to the handler. `TableImpl` passes them to `setOnSelectRange`, which resolves them over rows not realized and
+refuses one past `maxRangeRows`; each is `multiple` only. `setSelectionView(except)` marks every row but those keys until the
+next `setSelection`; in that state a Ctrl-tap reports `Extend` with the keys now marked among the rows the table
+holds, the tapped one toggled. `setCounts` writes
 `accessibleRowCount` (-1 for a lower bound) and `accessibleColumnCount`; `Accessible` has no row or column count to
 put them in, so they are properties only. **Load states.** `setCellLoad` writes the row's `cellLoads`; a cell not
 loaded keeps its content bound at opacity 0 under a mark (`loadMarks`): a rounded bar 3 em wide for `Unloaded`, a

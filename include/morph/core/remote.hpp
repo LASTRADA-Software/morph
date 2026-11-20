@@ -521,10 +521,12 @@ public:
           _executeTimeouts{_config.limits.executeTimeout.count() > 0
                                ? std::make_unique<::morph::async::detail::TimeoutScheduler>()
                                : nullptr},
+          _settle{std::make_shared<::morph::exec::OwnerStrand>(workerPool)},
           _views{::morph::table::makeViewCache(_config.views)},
           _tableRuntime{.work = _config.tableWork != nullptr ? _config.tableWork.get() : &workerPool,
                         .views = _views.get(),
-                        .settle = &_strand} {
+                        .settle = _settle.get(),
+                        .settleKeep = _settle} {
         // The first read of the record and effects registries: an invalid
         // declaration fails the server's construction rather than its first
         // successful execute, whose changes are derived from them.
@@ -547,6 +549,8 @@ public:
     ~RemoteServer() {
         _strand.seal();
         _strand.close();
+        // A resolve still queued on an outside `tableWork` delivers to a closed strand, which drops it.
+        _settle->close();
     }
 
     /// @brief Asynchronously processes a JSON `Envelope` and calls @p reply with the response.
@@ -3091,9 +3095,11 @@ private:
     // without a lock.
     std::unique_ptr<::morph::async::detail::TimeoutScheduler> const _executeTimeouts;
     // The server's one view cache, made from `ServerConfig::views`. Its type stays incomplete here.
+    // The owner of a `resolve`'s completion: shared, so the work queued on `tableWork` keeps it alive.
+    std::shared_ptr<::morph::exec::OwnerStrand> const _settle;
     std::shared_ptr<::morph::table::ViewCache> const _views;
-    // What a table's action reads during a dispatch: `tableWork`, or the worker pool, the view cache, and the server
-    // strand as the owner of a `resolve`'s completion. Fixed at construction.
+    // What a table's action reads during a dispatch: `tableWork`, or the worker pool, the view cache, and the owner of
+    // a `resolve`'s completion. Fixed at construction.
     ::morph::table::TableRuntime const _tableRuntime;
 
     // ── Server-strand state: touched only in the server strand's tasks ──────
