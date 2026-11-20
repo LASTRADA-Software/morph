@@ -75,7 +75,8 @@ struct CustomScreenChromeOptions {
 /// shown with the line its pointer names, and choosing it moves the cursor there; the editor is read only while the
 /// check runs, so the draft is exactly the text previewed. **Save as…** asks a name, saves, and opens the saved screen
 /// in the tab's place. A reply to a save acts only on the draft that was saved: a tab that holds a newer draft, or
-/// none, keeps it and the person is told. Everything runs on the runtime's owner. Neither copyable nor movable.
+/// none, keeps it and the person is told. **Remove**, on a screen of the person's own, asks once and removes it; a tab
+/// that showed it opens its base. Everything runs on the runtime's owner. Neither copyable nor movable.
 class MORPH_API CustomScreenChrome {
 public:
     /// @brief The chrome.
@@ -193,6 +194,16 @@ public:
     /// @param screenId The base screen, or a custom screen based on it.
     void openAs(WorkspaceTabId tab, std::string const& screenId);
 
+    /// @brief The tools row's **Remove**: asks the person to confirm removing the tab's custom screen, which is
+    ///        offered only for a listed screen of the person's own while custom screens are offered.
+    /// @param tab The tab; one that shows another screen, or none, does nothing.
+    void askRemove(WorkspaceTabId tab);
+
+    /// @brief The confirmation's **Remove**: removes the screen through the sync, then opens its base in the place of
+    ///        every tab that shows it, with the tab's params. A refusal stays in the confirmation, as the store gave
+    ///        it.
+    void confirmRemove();
+
 private:
     enum class SourceMode : std::uint8_t { Draft, Stored };
 
@@ -239,6 +250,17 @@ private:
         WorkspaceTabId tab;
         bool fromSource = false;
         std::unique_ptr<reactive::Signal<std::string>> title;
+        std::unique_ptr<reactive::Signal<std::string>> message;
+        std::unique_ptr<reactive::Signal<bool>> busy;
+        std::optional<Mounted> view;
+    };
+
+    // The confirmation of a removal.
+    struct RemoveConfirm {
+        std::uint64_t generation = 0;
+        std::string screenId;
+        std::string title;
+        std::string basedOn;
         std::unique_ptr<reactive::Signal<std::string>> message;
         std::unique_ptr<reactive::Signal<bool>> busy;
         std::optional<Mounted> view;
@@ -315,6 +337,9 @@ private:
     void openSaved(WorkspaceTabId tab, std::uint64_t generation, std::string const& screenId,
                    std::string const& title);
     void notify(std::string const& text, Tone tone) const;
+    void closeRemoveLater();
+    // Opens @p basedOn in the place of every tab that shows the removed @p screenId.
+    void fallBack(std::string const& screenId, std::string const& basedOn, std::string const& title);
 
     CustomScreenChromeOptions _options;
     WorkspaceModel* _model = nullptr;
@@ -325,10 +350,12 @@ private:
     CustomScreensListed _listed;
     std::uint64_t _epoch = 0;
     std::uint64_t _lastSource = 0;
+    std::uint64_t _lastRemove = 0;
     std::map<std::uint64_t, std::shared_ptr<TabState>> _tabs;
     // The overlays, last: their bindings read everything above.
     std::unique_ptr<Source> _source;
     std::unique_ptr<SaveAs> _saveAs;
+    std::unique_ptr<RemoveConfirm> _remove;
 };
 
 }  // namespace morph::ui

@@ -867,3 +867,95 @@ TEST_CASE("custom screen chrome: a proposal keeps a source view with unpreviewed
     REQUIRE_FALSE(rig.notices.empty());
     CHECK(rig.notices.back().contains("source view"));
 }
+
+namespace {
+
+/// Saves a custom screen of `ann`'s based on `notes.edit`, fetches it and opens it as a tab with @p params.
+std::string openMine(ChromeRig& rig, std::string const& title, morph::ui::ParamMap const& params) {
+    std::string const id = rig.saveOnServer(title, "notes.edit", std::string{kEdit});
+    std::optional<bool> fetched;
+    rig.sync->open(id, [&fetched](auto loaded) { fetched = loaded.has_value(); });
+    REQUIRE(rig.pump([&fetched] { return fetched.has_value(); }));
+    REQUIRE(*fetched);
+    rig.open(id, params);
+    return id;
+}
+
+}  // namespace
+
+// Mutations: skip fallBack after the removal (the tab stays on the removed screen); remove without the confirmation
+// (the dialog never shows and the screen goes at the first press).
+TEST_CASE("custom screen chrome: Remove asks once, removes my screen, and its tab opens the base",
+          "[ui][custom-screens][chrome]") {
+    ChromeRig rig;
+    std::string const id = openMine(rig, "Mine", note(4));
+    REQUIRE(rig.shown("Button", "remove_" + id));
+    rig.click("remove_" + id);
+    REQUIRE(rig.find("Dialog", "remove_dialog").has_value());
+    CHECK(rig.sync->listed().screens.size() == 1);
+    rig.click("remove_confirm");
+    REQUIRE(rig.pump([&rig] { return rig.screenOf(0) == "notes.edit"; }));
+    CHECK(DocumentScreenHost::paramsOf(*rig.workspace->handleOf(0)) == std::optional<ParamMap>{note(4)});
+    REQUIRE(rig.pump([&rig] { return rig.sync->listed().screens.empty(); }));
+    CHECK(rig.sync->documents().find(id) == nullptr);
+    REQUIRE(rig.pump([&rig] { return !rig.find("Dialog", "remove_dialog").has_value(); }));
+    REQUIRE_FALSE(rig.notices.empty());
+    CHECK(rig.notices.back() == "Removed Mine");
+    CHECK(rig.workspace->tabs().size() == 1);
+}
+
+// Mutation: show Remove whatever the screen (the application screen's tools row has it).
+TEST_CASE("custom screen chrome: Remove is offered only on a listed screen of my own",
+          "[ui][custom-screens][chrome]") {
+    ChromeRig rig;
+    rig.open("notes.edit", note(1));
+    CHECK_FALSE(rig.shown("Button", "remove_notes.edit"));
+    rig.chrome->askRemove(rig.tabAt(0));
+    CHECK_FALSE(rig.find("Dialog", "remove_dialog").has_value());
+
+    std::string const id = openMine(rig, "Mine", note(2));
+    CHECK(rig.shown("Button", "remove_" + id));
+    morph::ui::CustomScreensListed others = rig.sync->listed();
+    others.screens.front().mine = false;
+    rig.chrome->listed(others);
+    rig.harness.settle();
+    CHECK_FALSE(rig.shown("Button", "remove_" + id));
+    rig.chrome->askRemove(rig.tabAt(1));
+    CHECK_FALSE(rig.find("Dialog", "remove_dialog").has_value());
+}
+
+// Mutation: close the confirmation on a refusal (the store's reason is never shown).
+TEST_CASE("custom screen chrome: a store's refusal of Remove stays in the confirmation, and the tab stays",
+          "[ui][custom-screens][chrome]") {
+    ChromeRig rig;
+    std::string const id = openMine(rig, "Mine", note(1));
+    // Gone on the server behind the client's back, so the store refuses the client's removal.
+    REQUIRE(
+        rig.server
+            ->call(morph::ui::kCustomScreensRemove, R"({"app":"notes","id":)" + screens_test::quoted(id) + "}", "ann")
+            .kind == "ok");
+    rig.click("remove_" + id);
+    rig.click("remove_confirm");
+    REQUIRE(rig.pump([&rig] { return rig.shown("Text", "remove_message"); }));
+    CHECK(rig.text("remove_message").contains("no such custom screen"));
+    CHECK(rig.enabled("Button", "remove_confirm"));
+    CHECK(rig.screenOf(0) == id);
+    rig.click("remove_cancel");
+    REQUIRE(rig.pump([&rig] { return !rig.find("Dialog", "remove_dialog").has_value(); }));
+}
+
+// Mutation: replace the tab whatever the close guard says (the drafted tab of the removed screen becomes the base).
+TEST_CASE("custom screen chrome: a removed screen's drafted tab goes to the close guard, and says so when kept",
+          "[ui][custom-screens][chrome]") {
+    ChromeRig rig;
+    std::string const id = openMine(rig, "Mine", note(1));
+    draftHeading(rig, id, "Kept");
+    // The tools row, and Remove with it, is hidden while the tab holds a draft; the chrome's own call still removes.
+    rig.chrome->askRemove(rig.tabAt(0));
+    rig.click("remove_confirm");
+    REQUIRE(rig.pump([&rig] { return rig.guarded > 0; }));
+    REQUIRE(rig.pump([&rig] { return rig.notices.size() >= 2; }));
+    CHECK(rig.screenOf(0) == id);
+    CHECK(rig.text("heading") == "Kept");
+    CHECK(rig.notices.back().contains("stays open in its tab"));
+}

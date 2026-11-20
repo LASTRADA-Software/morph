@@ -280,6 +280,26 @@ void CustomScreenSync::save(CustomScreensSave request,
         [shared](std::string const& reason, std::string const&) { (*shared)(std::unexpected(reason)); });
 }
 
+void CustomScreenSync::remove(std::string const& screenId,
+                              std::function<void(std::expected<void, std::string>)> done) {
+    auto const shared = std::make_shared<std::function<void(std::expected<void, std::string>)>>(std::move(done));
+    call(
+        kCustomScreensRemove,
+        model::ActionTraits<CustomScreensRemove>::toJson(CustomScreensRemove{.app = _application, .id = screenId}),
+        [this, shared, screenId](std::string const& reply) {
+            try {
+                static_cast<void>(model::ActionTraits<CustomScreensRemove>::resultFromJson(reply));
+            } catch (std::exception const& error) {
+                (*shared)(std::unexpected(std::string{"not a removal: "} + error.what()));
+                return;
+            }
+            _documents.forget(screenId);
+            relist();
+            (*shared)(std::expected<void, std::string>{});
+        },
+        [shared](std::string const& reason, std::string const&) { (*shared)(std::unexpected(reason)); });
+}
+
 void CustomScreenSync::prefetchRoutes(std::vector<std::string> const& routes,
                                       std::function<void(std::vector<std::string>)> done) {
     std::vector<std::string> wanted;

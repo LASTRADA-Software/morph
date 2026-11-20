@@ -195,6 +195,11 @@ public:
     /// @param done    Called once with the screen's id, or the refusal as the store or the checks gave it.
     void save(CustomScreensSave request, std::function<void(std::expected<std::string, std::string>)> done);
 
+    /// @brief Removes a custom screen. A removal that is answered forgets the kept document and relists.
+    /// @param screenId The screen's id.
+    /// @param done     Called once with nothing, or the refusal as the store gave it.
+    void remove(std::string const& screenId, std::function<void(std::expected<void, std::string>)> done);
+
     /// @brief Fetches the document of every custom screen @p routes name that is not kept, so a start that reopens
     ///        them can read the routes back.
     /// @param routes The routes, a workspace's record or a history's.
