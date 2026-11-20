@@ -428,6 +428,15 @@ description, and a checkable one is a checkable button whose `checked` follows i
 the column and the path. A closed popup is not shown, so it is neither a Tab stop nor an
 accessible node.
 
+**Cell menus.** With a cell menu (`hasCellMenu`, from `setCellMenu`), a right click or a long press on a row's cell
+(`MorphTableRow.columnAt` names the column under the pointer, a pinned column before the scrolled ones under it) fires
+the row's `cellMenu` with the column, as Shift+F10 or the menu key does on the focused cell of a table over a source.
+`TableImpl::openCellMenu` makes the row the selection alone, reported as `Replace`, when it is not marked, asks for the
+entries, which focuses the cell, and calls `showCellMenu(anchor, entries)` with the cell's item: the same `configMenu`
+opens under the cell, with the column −2, and the choice comes back as `menuChoose` with that column, which C++ routes
+to the cell whose menu is open. Over a source, a key the table leaves is asked of C++ as `cellKey`, which runs the
+focused cell's first enabled entry without a submenu whose chord it is.
+
 **The column chooser and the sort dialog.** "Columns…" and "Sort…" in the table's menu open dialogs the interpreter
 builds from widgets the backend already has (`ui/table_dialogs.hpp`), so the backend adds nothing for them: each is a
 `MorphDialog` (test ids `table_columns` and `table_sort`, titled `Columns` and `Sort`), mounted beside the table in a

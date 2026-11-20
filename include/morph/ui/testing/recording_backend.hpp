@@ -2007,6 +2007,7 @@ public:
         : FakeContainer<TableWidget>{std::move(store), std::move(kind), parent} {
         this->store().at(id()).onChildDestroyed = [this](int childId) {
             _rowKeys.erase(childId);
+            _viewRows.erase(childId);
             _headings.erase(childId);
             std::erase_if(_loads, [childId](auto const& entry) { return entry.first.first == childId; });
             remark();
@@ -2209,6 +2210,16 @@ public:
         _onMenu = std::move(onChoose);
     }
 
+    /// @brief Stores the cell menu `RecordingBackend::rightClickCell` opens and `RecordingBackend::chooseCellMenu`
+    ///        chooses from, and whose entries' chords `RecordingBackend::press` runs on the focused cell.
+    /// @param entries The entries of a cell's menu.
+    /// @param chosen  The handler for a chosen entry.
+    void setCellMenu(std::function<std::vector<MenuEntry>(Key const&, std::size_t)> entries,
+                     std::function<void(Key const&, std::size_t, std::vector<std::size_t> const&)> chosen) override {
+        _cellMenu = std::move(entries);
+        _cellChosen = std::move(chosen);
+    }
+
     /// @brief Stores the visible columns, which the drivers check a column against.
     /// @param visible The visible columns, in layout order.
     void setVisibleColumns(std::vector<std::size_t> const& visible) override { _visible = visible; }
@@ -2324,6 +2335,39 @@ public:
     /// @return The entries; none when the table has no menus.
     [[nodiscard]] std::vector<MenuEntry> menuEntries(std::optional<std::size_t> column) const {
         return _menu ? _menu(column) : std::vector<MenuEntry>{};
+    }
+
+    /// @brief The entries of a cell's menu, as `setCellMenu` gives them.
+    /// @param key    The cell's row.
+    /// @param column The cell's column.
+    /// @return The entries; none when the table has no cell menu.
+    [[nodiscard]] std::vector<MenuEntry> cellMenuEntries(Key const& key, std::size_t column) const {
+        return _cellMenu ? _cellMenu(key, column) : std::vector<MenuEntry>{};
+    }
+
+    /// @brief The handler `setCellMenu` gave for a chosen entry.
+    /// @return It; empty when none.
+    [[nodiscard]] std::function<void(Key const&, std::size_t, std::vector<std::size_t> const&)> const& cellChosen()
+        const {
+        return _cellChosen;
+    }
+
+    /// @brief The focused cell's row and column, as `setFocusCell` last placed it, its row by the view index
+    ///        `setRowIndex` gave a current row.
+    /// @return The cell; none before any `setFocusCell`, or while no current row is at its view row.
+    [[nodiscard]] std::optional<std::pair<Key, std::size_t>> focusedCellKey() const {
+        if (!_focusSet) {
+            return std::nullopt;
+        }
+        for (auto const& [rowId, viewRow] : _viewRows) {
+            if (viewRow != _focusCell.first) {
+                continue;
+            }
+            if (auto const key = _rowKeys.find(rowId); key != _rowKeys.end()) {
+                return std::pair{key->second, _focusCell.second};
+            }
+        }
+        return std::nullopt;
     }
 
     /// @brief The handler `setMenu` gave for a chosen entry.
@@ -2479,6 +2523,7 @@ public:
     /// @param column  The column.
     void setFocusCell(std::size_t viewRow, std::size_t column) override {
         _focusCell = {viewRow, column};
+        _focusSet = true;
         set("focusCell", std::to_string(viewRow) + ":" + std::to_string(column));
     }
 
@@ -2533,6 +2578,7 @@ public:
         if (store().at(rowId).parent != id()) {
             throw std::logic_error{"RecordingBackend: setRowIndex of a widget that is not this table's row"};
         }
+        _viewRows[rowId] = viewRow;
         store().set(rowId, "viewRow", std::to_string(viewRow));
     }
 
@@ -2770,6 +2816,10 @@ private:
     std::vector<TableSort> _chain;
     std::function<std::vector<MenuEntry>(std::optional<std::size_t>)> _menu;
     std::function<void(std::optional<std::size_t>, std::vector<std::size_t>)> _onMenu;
+    std::function<std::vector<MenuEntry>(Key const&, std::size_t)> _cellMenu;
+    std::function<void(Key const&, std::size_t, std::vector<std::size_t> const&)> _cellChosen;
+    std::map<int, std::size_t> _viewRows;  // row id -> view index, as setRowIndex told it
+    bool _focusSet = false;                // whether setFocusCell ran
     std::vector<std::size_t> _visible;
     std::function<void(std::size_t, std::size_t)> _onColumnMove;
     std::function<void(std::size_t, std::optional<int>)> _onColumnResize;
@@ -3561,6 +3611,67 @@ public:
         }
     }
 
+    /// @brief Opens a cell's menu as a right click on the cell would: in a table that selects, a row that is not
+    ///        selected becomes the selection alone, reported as `Replace`; then the entries are asked for, which
+    ///        focuses the cell.
+    /// @param widgetId The table.
+    /// @param key      The cell's row.
+    /// @param column   The cell's column: an index into the table's columns.
+    /// @return The entries; none when the table has no cell menu or a user cannot reach it.
+    /// @throws std::logic_error when the widget is not a table, or no current row has @p key.
+    [[nodiscard]] std::vector<MenuEntry> rightClickCell(int widgetId, Key const& key, std::size_t column) {
+        detail::Record const& record = expectKind(widgetId, "rightClickCell", {"Table"});
+        auto* const table = dynamic_cast<detail::FakeTable*>(record.widget);
+        std::optional<int> const rowId = table == nullptr ? std::nullopt : table->rowOf(key);
+        if (!rowId.has_value()) {
+            throw std::logic_error{"RecordingBackend: rightClickCell of " + detail::formatKey(key) + " of Table#" +
+                                   std::to_string(widgetId) + ", which has no such row"};
+        }
+        if (!reachable(record) || !reachable(_store->at(*rowId))) {
+            return {};
+        }
+        if (table->mode() != SelectionMode::None && !table->headingKey(key) &&
+            !std::ranges::contains(table->markedKeys(), key)) {
+            table->selectByUser({key});
+            invoke(record.callbacks.selection, std::vector<Key>{key}, SelectionChange::Replace);
+        }
+        return exists(widgetId) ? table->cellMenuEntries(key, column) : std::vector<MenuEntry>{};
+    }
+
+    /// @brief Chooses an entry of a cell's menu by its labels from the top, as a user opening it on the cell and each
+    ///        submenu on the way would. Nothing is reported for a disabled entry, an entry inside a disabled one, or
+    ///        an entry with a submenu.
+    /// @param widgetId The table.
+    /// @param key      The cell's row.
+    /// @param column   The cell's column.
+    /// @param labels   The entry's label at each level, from the top; not empty.
+    /// @throws std::logic_error when the widget is not a table, or a label names no entry of its level.
+    void chooseCellMenu(int widgetId, Key const& key, std::size_t column,
+                        std::vector<std::string_view> const& labels) {
+        detail::Record const& record = expectKind(widgetId, "chooseCellMenu", {"Table"});
+        std::vector<MenuEntry> const entries = fakeTable(record).cellMenuEntries(key, column);
+        std::vector<MenuEntry> const* level = &entries;
+        std::vector<std::size_t> path;
+        bool enabled = true;
+        MenuEntry const* entry = nullptr;
+        for (std::string_view const label : labels) {
+            auto const found = std::ranges::find_if(*level, [label](MenuEntry const& candidate) {
+                return !candidate.separator && !candidate.heading && candidate.label == label;
+            });
+            if (found == level->end()) {
+                throw std::logic_error{"RecordingBackend: chooseCellMenu of '" + std::string{label} +
+                                       "', which Table#" + std::to_string(widgetId) + "'s cell menu does not have"};
+            }
+            path.push_back(static_cast<std::size_t>(std::distance(level->begin(), found)));
+            enabled = enabled && found->enabled;
+            entry = &*found;
+            level = &found->items;
+        }
+        if (entry != nullptr && enabled && entry->items.empty() && reachable(record)) {
+            invoke(fakeTable(record).cellChosen(), key, column, path);
+        }
+    }
+
     /// @brief Moves a column as a user dragging its header would: `onColumnMove` gets the column and @p position,
     ///        unless the column is at that place already or the place is past the last visible column.
     /// @param widgetId The table.
@@ -4030,7 +4141,42 @@ private:
             }
             return true;
         }
+        if (record.kind == "Table") {
+            return cellKey(record, chord);
+        }
         return false;
+    }
+
+    // A chord on a table runs the focused cell's menu entry that declares it: the first enabled one without a
+    // submenu, in the order the menu lists them, a submenu's entries after the entry that opens it.
+    bool cellKey(detail::Record const& record, std::string const& chord) {
+        auto const* const table = dynamic_cast<detail::FakeTable const*>(record.widget);
+        std::optional<std::pair<Key, std::size_t>> const cell =
+            table == nullptr ? std::nullopt : table->focusedCellKey();
+        if (!cell || !table->cellChosen()) {
+            return false;
+        }
+        std::vector<MenuEntry> const entries = table->cellMenuEntries(cell->first, cell->second);
+        std::vector<std::size_t> path;
+        std::function<bool(std::vector<MenuEntry> const&)> const find = [&](std::vector<MenuEntry> const& level) {
+            for (std::size_t at = 0; at < level.size(); ++at) {
+                MenuEntry const& entry = level.at(at);
+                if (entry.separator || entry.heading || !entry.enabled) {
+                    continue;
+                }
+                path.push_back(at);
+                if (entry.items.empty() ? entry.keys == chord : find(entry.items)) {
+                    return true;
+                }
+                path.pop_back();
+            }
+            return false;
+        };
+        if (!find(entries)) {
+            return false;
+        }
+        invoke(table->cellChosen(), cell->first, cell->second, path);
+        return true;
     }
 
     // A helper applies to some kinds only; using it on another kind is a mistake in the test, not a user action.

@@ -542,6 +542,82 @@ void TableImpl::openMenu(std::optional<std::size_t> column) {
     }));
 }
 
+void TableImpl::setCellMenu(std::function<std::vector<ui::MenuEntry>(ui::Key const&, std::size_t)> entries,
+                            std::function<void(ui::Key const&, std::size_t, std::vector<std::size_t> const&)> chosen) {
+    _cellMenu = std::move(entries);
+    _cellChosen = std::move(chosen);
+}
+
+void TableImpl::openCellMenu(WidgetBase const& row, std::size_t column) {
+    std::optional<ui::Key> const rowKey = keyOf(&row);
+    if (!_cellMenu || !rowKey || isHeading(&row)) {
+        return;
+    }
+    // A row already selected keeps the selection, so the menu acts on every selected row.
+    if (_mode != ui::SelectionMode::None && !isMarked(&row) &&
+        !change(std::vector<ui::Key>{*rowKey}, ui::SelectionChange::Replace)) {
+        return;
+    }
+    auto const bounds = view().screenBounds();
+    ::core::tui::Rect anchor{.x = bounds.x, .y = bounds.y, .width = 1, .height = 1};
+    for (auto const [child, area] : std::views::zip(children(), childAreas(_size))) {
+        if (child == &row) {
+            anchor.y = bounds.y + area.y;
+        }
+    }
+    for (DrawnColumn const& drawn : drawnColumns(_size.width)) {
+        if (drawn.column == column) {
+            anchor.x = bounds.x + gutter() + drawn.x;
+            anchor.width = std::max(1, drawn.width);
+        }
+    }
+    auto const entries = _cellMenu;
+    auto const chosen = _cellChosen;
+    std::vector<ui::MenuEntry> shown = entries(*rowKey, column);
+    _menuPopup.close();
+    static_cast<void>(_menuPopup.open(std::move(shown), anchor,
+                                      [chosen, key = *rowKey, column](std::vector<std::size_t> const& path) {
+                                          if (chosen) {
+                                              chosen(key, column, path);
+                                          }
+                                      }));
+}
+
+EventResult TableImpl::cellKey(::core::tui::KeyEvent const& key) {
+    WidgetBase* const row = _focusCell ? rowAtView(_focusCell->first) : nullptr;
+    std::optional<ui::Key> const rowKey = row == nullptr ? std::nullopt : keyOf(row);
+    if (!_cellMenu || !rowKey) {
+        return EventResult::Ignored;
+    }
+    std::size_t const column = _focusCell->second;
+    if (matchesChord("Shift+F10", key) || isKey(key, KeyCode::Menu)) {
+        openCellMenu(*row, column);
+        return EventResult::Handled;
+    }
+    auto const entries = _cellMenu;
+    auto const chosen = _cellChosen;
+    std::vector<std::size_t> path;
+    std::function<bool(std::vector<ui::MenuEntry> const&)> const find = [&](std::vector<ui::MenuEntry> const& level) {
+        for (std::size_t at = 0; at < level.size(); ++at) {
+            ui::MenuEntry const& entry = level.at(at);
+            if (entry.separator || entry.heading || !entry.enabled) {
+                continue;
+            }
+            path.push_back(at);
+            if (entry.items.empty() ? !entry.keys.empty() && matchesChord(entry.keys, key) : find(entry.items)) {
+                return true;
+            }
+            path.pop_back();
+        }
+        return false;
+    };
+    if (!chosen || !find(entries(*rowKey, column))) {
+        return EventResult::Ignored;
+    }
+    chosen(*rowKey, column, path);
+    return EventResult::Handled;
+}
+
 // Left and Right walk the visible columns; a move is reported one place over and the table waits for the mount to
 // rearrange it, the focus staying on the moved column.
 EventResult TableImpl::headerKey(::core::tui::KeyEvent const& key) {
@@ -1091,6 +1167,9 @@ EventResult TableImpl::key(::core::tui::KeyEvent const& key) {
     if (_source) {
         if (auto const result = sourceKey(key); result == EventResult::Handled) {
             return result;
+        }
+        if (cellKey(key) == EventResult::Handled) {
+            return EventResult::Handled;
         }
         // A modified key the source path leaves goes on outwards: no range runs over the realized rows alone.
         if (::core::tui::withoutLockKeys(key.modifiers) != ::core::tui::Modifier::None) {
@@ -1739,6 +1818,21 @@ bool TableImpl::headerActs() const {
 
 // A right press on a header opens its menu; on the header line's `⋯`, the table's.
 bool TableImpl::contextPress(::core::tui::Point cell) {
+    // A right press on a row's cell opens the cell's menu.
+    if (_cellMenu && cell.y >= headerLines()) {
+        WidgetBase* const row = rowAtLine(cell.y);
+        if (row == nullptr) {
+            return false;
+        }
+        for (DrawnColumn const& drawn : drawnColumns(_size.width)) {
+            int const left = gutter() + drawn.x;
+            if (cell.x >= left && cell.x < left + drawn.width) {
+                openCellMenu(*row, drawn.column);
+                return true;
+            }
+        }
+        return false;
+    }
     if (!_menu || !_showHeader || cell.y != headerLines() - 1) {
         return false;
     }

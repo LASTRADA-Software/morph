@@ -145,6 +145,41 @@ MorphWidget {
         return false
     }
 
+    // The column of the cell under `x`, in the row's own coordinates: by the window over a source the mount lays out,
+    // a pinned column before the scrolled ones under it, else by the table's widths; -1 for none.
+    function columnAt(x: real): int {
+        const table = root.table
+        if (!table)
+            return -1
+        if (table.arranged) {
+            for (let place = 0; place < table.windowColumns.length; ++place) {
+                const entry = table.windowColumns[place]
+                const left = table.lead + entry.offset + (place < table.pinnedShown ? table.scrollX : 0)
+                if (x >= left && x < left + entry.width)
+                    return entry.column
+            }
+            return -1
+        }
+        for (let i = 0; i < root.widths.length; ++i) {
+            if (x >= root.columnLeft(i) && x < root.columnLeft(i) + root.widths[i])
+                return i
+        }
+        return -1
+    }
+
+    // A right click or a long press at `x`: the menu of the cell there. The table takes the focus over a source, as a
+    // click does.
+    function openCellMenu(x: real) {
+        if (!root.table || !root.table.hasCellMenu || root.heading)
+            return
+        const column = root.columnAt(x)
+        if (column < 0)
+            return
+        if (root.table.sourceRows && !root.holdsFocus(root.Window.activeFocusItem))
+            root.table.forceActiveFocus(Qt.MouseFocusReason)
+        root.fire("cellMenu", {"column": column})
+    }
+
     function holdsFocus(focused: Item): bool {
         for (let at = focused; at; at = at.parent) {
             if (at === root)
@@ -819,5 +854,20 @@ MorphWidget {
         id: tap
         enabled: !root.heading
         onTapped: root.tapped(tap.point.modifiers, tap.tapCount, tap.point.position.x, tap.point.position.y, true)
+    }
+
+    TapHandler {
+        id: contextTap
+        enabled: !root.heading && root.table !== null && root.table.hasCellMenu
+        acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
+        acceptedButtons: Qt.RightButton
+        onTapped: root.openCellMenu(contextTap.point.position.x)
+    }
+
+    TapHandler {
+        id: pressTap
+        enabled: !root.heading && root.table !== null && root.table.hasCellMenu
+        acceptedDevices: PointerDevice.TouchScreen
+        onLongPressed: root.openCellMenu(pressTap.point.position.x)
     }
 }

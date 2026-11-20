@@ -645,6 +645,12 @@ public:
     /// `showMenu`, which shows them in a button-style MorphMenu's popup under the header or the `⋯`.
     void setMenu(std::function<std::vector<ui::MenuEntry>(std::optional<std::size_t>)> entries,
                  std::function<void(std::optional<std::size_t>, std::vector<std::size_t>)> onChoose) override;
+    /// A cell's menu opens through its row's `cellMenu` event (a right click or a long press on the cell, or the menu
+    /// key on the focused cell): its entries are asked for then, and handed to MorphTable's `showCellMenu`, which
+    /// shows them in the header menu's popup under the cell; a choice comes back as `menuChoose` with the column
+    /// `kCellMenuColumn`. A key the table leaves is offered to the focused cell's entries through `cellKey`.
+    void setCellMenu(std::function<std::vector<ui::MenuEntry>(ui::Key const&, std::size_t)> entries,
+                     std::function<void(ui::Key const&, std::size_t, std::vector<std::size_t> const&)> chosen) override;
     void setVisibleColumns(std::vector<std::size_t> const& visible) override;
     void setOnColumnMove(std::function<void(std::size_t, std::size_t)> handler) override;
     /// MorphTable reports the header's width in pixels; its padding is taken off and the rest rounded to units of
@@ -700,6 +706,10 @@ public:
     void anchorAt(TableRowImpl const& row);
     /// Ctrl+A in `Multiple` mode: every row, or none when every row is selected already.
     void selectAll();
+    /// Opens the menu of @p row's cell in @p column, after making the row the selection alone when it is not selected.
+    void openCellMenu(TableRowImpl const& row, std::size_t column);
+    /// The column MorphTable reports a cell menu's choice with: no header has it.
+    static constexpr qlonglong kCellMenuColumn = -2;
     /// A double click on a row, or Enter on it.
     void activated(TableRowImpl const& row) const;
     /// The Flickable reported a scroll; @p first and @p count are what it wants realized next.
@@ -739,6 +749,10 @@ private:
     std::function<void(std::size_t, ui::HeaderClick)> _onSort;
     std::function<std::vector<ui::MenuEntry>(std::optional<std::size_t>)> _menu;
     std::function<void(std::optional<std::size_t>, std::vector<std::size_t>)> _onMenu;
+    std::function<std::vector<ui::MenuEntry>(ui::Key const&, std::size_t)> _cellMenu;
+    std::function<void(ui::Key const&, std::size_t, std::vector<std::size_t> const&)> _cellChosen;
+    /// The cell whose menu is open; none before any.
+    std::optional<std::pair<ui::Key, std::size_t>> _cellMenuAt;
     std::function<void(std::size_t, std::size_t)> _onColumnMove;
     std::function<void(std::size_t, std::optional<int>)> _onColumnResize;
     std::function<void(std::size_t)> _onFilter;

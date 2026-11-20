@@ -103,6 +103,9 @@ enum class Configure : std::uint8_t {
 /// @brief The status line's and the menus' messages, in exact English copy.
 namespace tableText {
 
+/// @brief The refusal of a sort, filter or arrangement gesture while the table's header is disabled.
+inline constexpr std::string_view kHeaderBusy = "Sorting, filtering and arranging are unavailable right now";
+
 /// @brief The refusal of a sort key past the bound.
 /// @param maxSortKeys The table's bound.
 /// @return `A table sorts by at most {n} columns`.

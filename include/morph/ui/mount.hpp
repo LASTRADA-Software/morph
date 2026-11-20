@@ -9,6 +9,7 @@
 #include <exception>
 #include <format>
 #include <functional>
+#include <iterator>
 #include <limits>
 #include <map>
 #include <memory>
@@ -1857,18 +1858,163 @@ private:
         }
     }
 
+    // A caller's menu entry as a menu that is open holds it: what choosing it runs, and its submenu's entries.
+    struct OpenItem {
+        Action onSelect;
+        std::vector<OpenItem> items;
+    };
+
+    // Reads @p items once, as a `Menu` shows them: a hidden entry is left out, and so is a separator it leaves at
+    // either end of its level or next to another. Each entry shown is appended to @p shown, and what it runs to @p kept
+    // at the same place.
+    // NOLINTNEXTLINE(misc-no-recursion): a submenu is a menu one level down.
+    static void readMenuItems(std::vector<MenuItem> const& items, std::vector<MenuEntry>& shown,
+                              std::vector<OpenItem>& kept) {
+        for (MenuItem const& item : items) {
+            if (item.separator) {
+                if (!shown.empty() && !shown.back().separator) {
+                    shown.push_back(MenuEntry{.separator = true});
+                    kept.emplace_back();
+                }
+                continue;
+            }
+            if (!item.visible.evaluate()) {
+                continue;
+            }
+            MenuEntry entry{.label = item.label.evaluate(),
+                            .icon = item.icon,
+                            .keys = item.keys,
+                            .checked = item.checked.evaluate(),
+                            .enabled = item.enabled.evaluate(),
+                            .description = item.description.evaluate()};
+            OpenItem open{.onSelect = item.onSelect, .items = {}};
+            readMenuItems(item.items, entry.items, open.items);
+            shown.push_back(std::move(entry));
+            kept.push_back(std::move(open));
+        }
+        if (!shown.empty() && shown.back().separator) {
+            shown.pop_back();
+            kept.pop_back();
+        }
+    }
+
+    // The entry a path names among @p kept; null when the path leaves them.
+    [[nodiscard]] static OpenItem const* openItemAt(std::vector<OpenItem> const& kept,
+                                                    std::span<std::size_t const> path) {
+        OpenItem const* found = nullptr;
+        std::vector<OpenItem> const* level = &kept;
+        for (std::size_t const index : path) {
+            if (index >= level->size()) {
+                return nullptr;
+            }
+            found = &level->at(index);
+            level = &found->items;
+        }
+        return found;
+    }
+
+    // The menus a table has open, as last read: a header's, with the caller's entries after the built-in ones, and a
+    // cell's. A choice is routed by what the menu held when it opened.
+    struct OpenMenus {
+        std::optional<std::size_t> headerColumn;
+        // Where the caller's entries start in the header's menu, past the built-in entries and their separator.
+        std::size_t headerOffset = 0;
+        std::size_t builtIn = 0;
+        std::vector<OpenItem> header;
+        std::optional<std::pair<Key, std::size_t>> cell;
+        std::vector<OpenItem> cellItems;
+    };
+
     // What a user configures a table with, whatever its rows come from: menus, moves, resizes, filters, groups and
     // copy. A value left at its empty constant is not told, so a table that configures nothing is told nothing.
-    void bindTableConfig(reactive::Scope& scope, Table const& spec, TableWidget& widget) {
-        if (spec.menu) {
-            // The entries are read when a menu opens, as a callback is: untracked, an exception reported.
+    // @p focusCell focuses a cell whose menu opens; empty for a table whose focus the mount does not keep.
+    // NOLINTNEXTLINE(readability-function-cognitive-complexity): one seam per configuring callback.
+    void bindTableConfig(reactive::Scope& scope, Table const& spec, TableWidget& widget,
+                         std::function<void(Key const&, std::size_t)> focusCell = {}) {
+        auto const open = std::make_shared<OpenMenus>();
+        if (spec.menu || spec.headerEntries) {
+            // The entries are read when a menu opens, as a callback is: untracked, an exception reported. While the
+            // header is disabled every built-in entry of a column's menu is, since each sorts, filters or arranges.
             widget.setMenu(
-                [runtime = _rt, entries = spec.menu](std::optional<std::size_t> column) {
+                [runtime = _rt, entries = spec.menu, extra = spec.headerEntries, enabled = spec.headerEnabled,
+                 open](std::optional<std::size_t> column) {
                     std::vector<MenuEntry> shown;
-                    static_cast<void>(runCallback(*runtime, [&] { shown = entries(column); }));
+                    static_cast<void>(runCallback(*runtime, [&] {
+                        if (entries) {
+                            shown = entries(column);
+                        }
+                        if (!column) {
+                            return;
+                        }
+                        if (!enabled.evaluate()) {
+                            for (MenuEntry& entry : shown) {
+                                entry.enabled = false;
+                            }
+                        }
+                        open->headerColumn = column;
+                        open->builtIn = shown.size();
+                        open->header.clear();
+                        if (!extra) {
+                            return;
+                        }
+                        std::vector<MenuEntry> added;
+                        readMenuItems(extra(*column), added, open->header);
+                        if (added.empty()) {
+                            return;
+                        }
+                        if (!shown.empty()) {
+                            shown.push_back(MenuEntry{.separator = true});
+                        }
+                        open->headerOffset = shown.size();
+                        std::ranges::move(added, std::back_inserter(shown));
+                    }));
                     return shown;
                 },
-                event(spec.onMenu));
+                [runtime = _rt, chosen = event(spec.onMenu), open](std::optional<std::size_t> column,
+                                                                     std::vector<std::size_t> path) {
+                    bool const builtIn = !column || open->headerColumn != column || path.empty() ||
+                                         path.front() < open->builtIn || open->header.empty();
+                    if (builtIn) {
+                        if (chosen) {
+                            chosen(column, std::move(path));
+                        }
+                        return;
+                    }
+                    if (path.front() < open->headerOffset) {
+                        return;
+                    }
+                    path.front() -= open->headerOffset;
+                    OpenItem const* const item = openItemAt(open->header, path);
+                    if (item != nullptr && item->onSelect && item->items.empty()) {
+                        Action const run = item->onSelect;
+                        static_cast<void>(runCallback(*runtime, run));
+                    }
+                });
+        }
+        if (spec.cellMenu) {
+            widget.setCellMenu(
+                [runtime = _rt, entries = spec.cellMenu, open, focusCell](Key const& row, std::size_t column) {
+                    std::vector<MenuEntry> shown;
+                    static_cast<void>(runCallback(*runtime, [&] {
+                        if (focusCell) {
+                            focusCell(row, column);
+                        }
+                        open->cell = std::pair{row, column};
+                        open->cellItems.clear();
+                        readMenuItems(entries(row, column), shown, open->cellItems);
+                    }));
+                    return shown;
+                },
+                [runtime = _rt, open](Key const& row, std::size_t column, std::vector<std::size_t> const& path) {
+                    if (open->cell != std::pair{row, column}) {
+                        return;
+                    }
+                    OpenItem const* const item = openItemAt(open->cellItems, path);
+                    if (item != nullptr && item->onSelect && item->items.empty()) {
+                        Action const run = item->onSelect;
+                        static_cast<void>(runCallback(*runtime, run));
+                    }
+                });
         }
         if (spec.onColumnMove) {
             widget.setOnColumnMove(event(spec.onColumnMove));
@@ -3088,6 +3234,28 @@ private:
         table.widget->setFocusCell(static_cast<std::size_t>(table.focusIndex), table.focusColumn);
     }
 
+    // Focuses a realized row's cell, as a cell menu opening on it does, and reports it as a key's move is reported.
+    void focusAt(SourceTable& table, Key const& key, std::size_t column) {
+        if (column >= table.columns.size()) {
+            return;
+        }
+        auto const row = std::ranges::find(table.realized, std::optional<Key>{key}, &SourceTable::Realized::key);
+        if (row == table.realized.end()) {
+            return;
+        }
+        table.focused = true;
+        table.focusSearching = false;
+        table.focusUntold = false;
+        table.focusLocate.request_stop();
+        table.focusKey = key;
+        table.focusIndex = row->index;
+        table.focusColumn = column;
+        table.windowDirty = true;
+        realizeWindow(table, [](std::int64_t) { return false; });
+        table.widget->setFocusCell(static_cast<std::size_t>(table.focusIndex), table.focusColumn);
+        reportFocus(table);
+    }
+
     // Takes a highlight: the rows fetch around it, the view scrolls to it and marks it, and its key is followed.
     void highlightFrom(SourceTable& table, std::optional<TableHighlight> const& highlight) {
         table.highlightSearching = false;
@@ -3252,7 +3420,9 @@ private:
             });
             widget.setOnSort(event(spec.onSort));
         }
-        bindTableConfig(scope, spec, widget);
+        bindTableConfig(scope, spec, widget, [this, &table](Key const& key, std::size_t column) {
+            focusAt(table, key, column);
+        });
         bind(scope, spec.status, [&widget](TableStatus const& status) { widget.setStatus(status); });
         widget.setOnRetry(event(spec.onRetry));
         table.source = *spec.source;

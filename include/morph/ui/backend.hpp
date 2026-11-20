@@ -871,6 +871,22 @@ public:
         static_cast<void>(onChoose);
     }
 
+    /// @brief Gives the cells their menu. A right click, a long press, or `Shift+F10` or the context-menu key on the
+    ///        focused cell opens it on that cell: the backend first makes the cell's row the selection alone, reported
+    ///        as `Replace`, when the row is not selected already (a row already selected keeps the selection as it
+    ///        is), then asks for the entries, which also focuses the cell, and shows them at the cell. While the table
+    ///        has the focus, a key the table does not take itself is matched against the `keys` of the focused cell's
+    ///        entries, at every level: the first enabled entry without a submenu whose chord it is runs, as if chosen
+    ///        from the menu, and the key stops there.
+    /// @param entries The entries of a cell's menu, given its row's key and its column (an index into the columns
+    ///                `setColumns` gave); asked for each time the menu opens or a key is matched.
+    /// @param chosen  Called with the cell's row and column and the chosen entry's path, an index per level from the
+    ///                top; never for a separator, a heading, a disabled entry or one with a submenu.
+    virtual void setCellMenu(std::function<std::vector<MenuEntry>(Key const& row, std::size_t column)> entries,
+                             std::function<void(Key const& row, std::size_t column,
+                                                std::vector<std::size_t> const& path)>
+                                 chosen) = 0;
+
     /// @brief Tells the backend which columns are visible, in their places, so that a move and a group header count
     ///        places as the arrangement does. Called for a table over a `TableSource` once it is built and whenever
     ///        its visible columns change; a table never told this shows every column in its own order.

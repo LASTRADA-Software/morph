@@ -106,10 +106,64 @@ TableImpl::TableImpl(Context& context, ui::ContainerWidget* parent)
             }
             path.push_back(static_cast<std::size_t>(index.toLongLong()));
         }
+        if (column == kCellMenuColumn) {
+            // A copy: the handler may destroy this table.
+            if (auto const handler = _cellChosen; handler && _cellMenuAt) {
+                auto const [key, at] = *_cellMenuAt;
+                handler(key, at, path);
+            }
+            return;
+        }
         if (auto const handler = _onMenu) {
             handler(column >= 0 ? std::optional<std::size_t>{static_cast<std::size_t>(column)} : std::nullopt,
                     std::move(path));
         }
+    });
+    // A key the table leaves, with a cell focused: the focused cell's first enabled entry without a submenu whose chord
+    // it is runs, as if chosen from its menu.
+    relay().answer(QStringLiteral("cellKey"), [this](QVariant const& payload) {
+        QVariantList const pressed = payload.toList();
+        if (pressed.size() != 2 || !_cellMenu || !_cellChosen || item() == nullptr || !reachable()) {
+            return false;
+        }
+        int const key = pressed.at(0).toInt();
+        auto const modifiers = Qt::KeyboardModifiers::fromInt(pressed.at(1).toUInt());
+        qlonglong const viewRow = item()->property("focusedRowIndex").toLongLong();
+        int const column = item()->property("focusedColumnIndex").toInt();
+        std::optional<ui::Key> rowKey;
+        for (ItemBase const* const child : children()) {
+            auto const* const row = dynamic_cast<TableRowImpl const*>(child);
+            if (row != nullptr && row->item() != nullptr && row->key() &&
+                row->item()->property("viewRow").toLongLong() == viewRow) {
+                rowKey = row->key();
+            }
+        }
+        if (!rowKey || column < 0) {
+            return false;
+        }
+        auto const entries = _cellMenu;
+        auto const chosen = _cellChosen;
+        std::vector<std::size_t> path;
+        std::function<bool(std::vector<ui::MenuEntry> const&)> const find = [&](std::vector<ui::MenuEntry> const& level) {
+            for (std::size_t at = 0; at < level.size(); ++at) {
+                ui::MenuEntry const& entry = level.at(at);
+                if (entry.separator || entry.heading || !entry.enabled) {
+                    continue;
+                }
+                path.push_back(at);
+                if (entry.items.empty() ? !entry.keys.empty() && chordMatches(entry.keys, key, modifiers)
+                                        : find(entry.items)) {
+                    return true;
+                }
+                path.pop_back();
+            }
+            return false;
+        };
+        if (!find(entries(*rowKey, static_cast<std::size_t>(column)))) {
+            return false;
+        }
+        chosen(*rowKey, static_cast<std::size_t>(column), path);
+        return true;
     });
     relay().on(QStringLiteral("columnMove"), [this](QVariant const& payload) {
         QVariantMap const map = payload.toMap();
@@ -263,6 +317,42 @@ void TableImpl::setMenu(std::function<std::vector<ui::MenuEntry>(std::optional<s
     _menu = std::move(entries);
     _onMenu = std::move(onChoose);
     write("hasMenu", static_cast<bool>(_menu));
+}
+
+void TableImpl::setCellMenu(std::function<std::vector<ui::MenuEntry>(ui::Key const&, std::size_t)> entries,
+                            std::function<void(ui::Key const&, std::size_t, std::vector<std::size_t> const&)> chosen) {
+    _cellMenu = std::move(entries);
+    _cellChosen = std::move(chosen);
+    write("hasCellMenu", static_cast<bool>(_cellMenu));
+}
+
+void TableImpl::openCellMenu(TableRowImpl const& row, std::size_t column) {
+    if (!_cellMenu || !row.key() || !row.reachable() || heading(row) || item() == nullptr) {
+        return;
+    }
+    ui::Key const key = *row.key();
+    // The menu shows at the cell; a row not drawn as a cell (none in the column) anchors it.
+    QPointer<QQuickItem> anchor{row.item()};
+    for (ItemBase const* const child : row.children()) {
+        QQuickItem* const cell = child->item();
+        if (cell != nullptr && cell->isVisible() && cell->property("measuredIndex").toLongLong() ==
+                                                        static_cast<qlonglong>(column)) {
+            anchor = cell;
+        }
+    }
+    // A row already selected keeps the selection, so the menu acts on every selected row.
+    if (_mode != ui::SelectionMode::None && !marked(row)) {
+        _anchor = key;
+        select({key}, ui::SelectionChange::Replace);
+    }
+    auto const entries = _cellMenu;
+    QVariantList const shown = menuEntries(entries(key, column));
+    if (item() != nullptr && anchor != nullptr && !shown.isEmpty()) {
+        _cellMenuAt = std::pair{key, column};
+        QMetaObject::invokeMethod(item(), "showCellMenu", Qt::DirectConnection,
+                                  Q_ARG(QVariant, QVariant::fromValue<QObject*>(anchor.data())),
+                                  Q_ARG(QVariant, shown));
+    }
 }
 
 void TableImpl::setVisibleColumns(std::vector<std::size_t> const& visible) {
@@ -738,6 +828,13 @@ TableRowImpl::TableRowImpl(Context& context, ui::ContainerWidget* parent, TableI
     relay().on(QStringLiteral("anchor"), [this](QVariant const&) {
         if (auto* const owner = dynamic_cast<TableImpl*>(container())) {
             owner->anchorAt(*this);
+        }
+    });
+    // A right click, a long press or the menu key on one of the row's cells, by its column.
+    relay().on(QStringLiteral("cellMenu"), [this](QVariant const& payload) {
+        qlonglong const column = payload.toMap().value(QStringLiteral("column")).toLongLong();
+        if (auto* const owner = dynamic_cast<TableImpl*>(container()); owner != nullptr && column >= 0) {
+            owner->openCellMenu(*this, static_cast<std::size_t>(column));
         }
     });
     relay().on(QStringLiteral("activate"), [this](QVariant const&) {

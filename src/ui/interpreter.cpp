@@ -395,10 +395,24 @@ struct ViewDialog {
     bool operator==(ViewDialog const&) const = default;
 };
 
+/// A cell of a row the table holds, as a cell menu reads it.
+struct HeldCell {
+    /// The row's record.
+    Value record;
+    /// The cell, as its column reads it.
+    table::Cell cell;
+    /// The column, as it shows its cells.
+    table::TableColumn shown;
+    /// What a `Measure` cell is shown through.
+    DisplayUnits units;
+    /// What `units` points into.
+    std::shared_ptr<void const> keep;
+};
+
 /// What a table keeps of its configuring across every mount of it: the columns its layout arranges, in the order of
 /// `Table::columns`, what the user may change of them, the layout it holds, and what a change does beyond that.
 ///
-/// The slots a mount sets (`filterTarget`, `dimensions`, `gather`) belong to that mount: `beginMount` starts one,
+/// The slots a mount sets (`filterTarget`, `dimensions`, `gather`, `heldCell`) belong to that mount: `beginMount` starts one,
 /// and the token `mountSlots` gives clears them when the mount's handlers go, unless a later mount has set them
 /// since. A slot may then hold the mount's scope: the element keeps the configuring, so a slot that outlived its
 /// mount would keep the scope that keeps the element.
@@ -465,6 +479,9 @@ struct TableConfig {
     /// Gathers the rows of these keys, by the column ids given, each cell as the table shows it; a key the rows do
     /// not have is left out. Set by each mount, with what it shows.
     std::function<void(std::vector<Key>, std::vector<std::string> const&, CopyDone)> gather;
+    /// A held row's cell, by the row's key and the column's id; none while the rows do not hold the row, and empty for
+    /// a table whose cells have no menu. Set by each mount, with what it shows.
+    std::function<std::optional<HeldCell>(Key const&, std::string const&)> heldCell;
     /// The latest copy: a copy whose rows arrive after a later one started writes nothing.
     std::uint64_t copies = 0;
     /// The saved view the arrangement was taken from, the state's `view`, and whether it is a shared one applied from
@@ -506,6 +523,7 @@ struct TableConfig {
                     config->filterTarget = {};
                     config->dimensions = {};
                     config->gather = {};
+                    config->heldCell = {};
                 }
             }
         };
@@ -542,6 +560,23 @@ namespace {
         }
     }
     return {allowed, true};
+}
+
+/// Makes each of a table's menu entries clear the status line's message before it runs, as every gesture on the table
+/// does.
+// NOLINTNEXTLINE(misc-no-recursion): a submenu is a menu one level down.
+void clearsMessageFirst(TableConfig& config, std::vector<MenuItem>& items) {
+    for (MenuItem& item : items) {
+        clearsMessageFirst(config, item.items);
+        if (item.onSelect) {
+            item.onSelect = [&config, run = std::move(item.onSelect)] {
+                if (config.message) {
+                    config.message({});
+                }
+                run();
+            };
+        }
+    }
 }
 
 /// The layout of a table's columns: as declared, fitted to @p value when one is given.
@@ -9372,6 +9407,15 @@ struct RowReads {
 
 // NOLINTNEXTLINE(misc-no-recursion): one level per nested expression.
 void rowReadsOf(Expr const& expr, RowReads& out, bool readFrom = false) {
+    // A cell menu's entries also name their row `row`.
+    if (expr.kind == ExprKind::Ref && expr.name == "row") {
+        if (!expr.fieldPath.empty()) {
+            out.ids.insert(expr.fieldPath.front());
+        } else if (!readFrom) {
+            out.whole = true;
+        }
+        return;
+    }
     if (expr.kind == ExprKind::Row) {
         if (!expr.fieldPath.empty()) {
             out.ids.insert(expr.fieldPath.front());
@@ -11949,6 +11993,169 @@ Node ScreenCore::configureTable(TableConfig& config, LowerCtx const& ctx, TableO
             openGroup(shown.at(index).second);
         }
     };
+    // While `headerEnabled` is false a sort, filter or arrangement gesture changes nothing: it is refused in the
+    // status line. The condition is read at each gesture, so it follows the document's state.
+    ExprPtr const headerEnabledExpr = node.prop("headerEnabled");
+    options.headerEnabled = bindProp<bool>(ctx, headerEnabledExpr, true, boolOf);
+    auto const headerOn = [this, enabled = options.headerEnabled] {
+        return runtime().untracked([&] { return enabled.evaluate(); });
+    };
+    if (headerEnabledExpr) {
+        auto const refused = [&config, headerOn] {
+            if (headerOn()) {
+                return false;
+            }
+            config.touch();
+            config.message(std::string{tableText::kHeaderBusy});
+            return true;
+        };
+        options.onSort = [refused, sort = std::move(options.onSort)](std::size_t index, HeaderClick click) {
+            if (!refused()) {
+                sort(index, click);
+            }
+        };
+        options.onColumnMove = [refused, move = std::move(options.onColumnMove)](std::size_t column,
+                                                                                  std::size_t position) {
+            if (!refused()) {
+                move(column, position);
+            }
+        };
+        if (options.onColumnResize) {
+            options.onColumnResize = [refused, resize = std::move(options.onColumnResize)](
+                                         std::size_t column, std::optional<int> units) {
+                if (!refused()) {
+                    resize(column, units);
+                }
+            };
+        }
+        options.onFilter = [refused, filter = std::move(options.onFilter)](std::size_t column) {
+            if (!refused()) {
+                filter(column);
+            }
+        };
+        options.onGroupFilter = [refused, filter = std::move(options.onGroupFilter)](std::size_t group) {
+            if (!refused()) {
+                filter(group);
+            }
+        };
+    }
+    // A cell's menu: "Copy", "Copy with headers", "Filter by this value", "Exclude this value" and, on a column of a
+    // declared group, "Filter by this value in any <group>"; then the document's `cellMenu` entries, lowered in the
+    // row's scope with `row`, `column` (the column's id) and `value` (the cell) bound. The filter entries take the
+    // cell's operand, or `isEmpty` on an empty cell, and are disabled on a cell not loaded or not readable.
+    if (config.heldCell) {
+        options.cellMenu = [this, ctx, &config, &node, columns, filterable, copy, refilter, filtersNow, keep](
+                               Key const& key, std::size_t column) {
+            static_cast<void>(keep);
+            std::vector<MenuItem> items;
+            std::string const id = column < columns->size() ? columns->at(column).id : std::string{};
+            std::optional<HeldCell> const held =
+                config.heldCell && !id.empty() ? config.heldCell(key, id) : std::optional<HeldCell>{};
+            CellLook const look = held ? cellLook(held->cell, held->shown, held->units) : CellLook::Unloaded;
+            std::optional<std::string> const operand =
+                held ? operandOf(held->cell, held->shown, held->units) : std::nullopt;
+            bool const usable = (look == CellLook::Empty || (look == CellLook::Text && operand.has_value())) &&
+                                column < filterable->size() && filterable->at(column);
+            table::FilterEntry const entry = look == CellLook::Empty
+                                                 ? table::FilterEntry{.isEmpty = true}
+                                                 : table::FilterEntry{.oneOf = std::vector{operand.value_or("")}};
+            auto const command = [&config](std::string label, std::function<void()> run, bool enabled = true) {
+                MenuItem item;
+                item.label = std::move(label);
+                item.enabled = enabled;
+                item.onSelect = [&config, run = std::move(run)] {
+                    config.touch();
+                    run();
+                };
+                return item;
+            };
+            items.push_back(command("Copy", [copy] { copy(false); }));
+            items.push_back(command("Copy with headers", [copy] { copy(true); }));
+            items.push_back(command(
+                "Filter by this value",
+                [this, id, entry, refilter, filtersNow] {
+                    table::FilterSpec spec = runtime().untracked(filtersNow);
+                    spec.columns.insert_or_assign(id, table::ColumnFilter{.include = {entry}});
+                    static_cast<void>(refilter(spec));
+                },
+                usable));
+            items.push_back(command(
+                "Exclude this value",
+                [this, id, entry, refilter, filtersNow] {
+                    table::FilterSpec spec = runtime().untracked(filtersNow);
+                    std::vector<table::FilterEntry>& exclude = spec.columns[id].exclude;
+                    auto const listed = std::ranges::find_if(exclude, [](table::FilterEntry const& excluded) {
+                        return excluded.oneOf.has_value();
+                    });
+                    if (entry.oneOf && listed != exclude.end()) {
+                        if (!std::ranges::contains(*listed->oneOf, entry.oneOf->front())) {
+                            listed->oneOf->push_back(entry.oneOf->front());
+                        }
+                    } else if (!std::ranges::contains(exclude, entry)) {
+                        exclude.push_back(entry);
+                    }
+                    static_cast<void>(refilter(spec));
+                },
+                usable));
+            if (config.declaredGroups) {
+                for (table::ColumnGroupInfo const& group : runtime().untracked([&] { return config.declaredGroups(); })) {
+                    if (!std::ranges::contains(group.columns, id)) {
+                        continue;
+                    }
+                    items.push_back(command(
+                        "Filter by this value in any " + group.label,
+                        [this, groupId = group.id, entry, refilter, filtersNow] {
+                            table::FilterSpec spec = runtime().untracked(filtersNow);
+                            std::erase_if(spec.groups, [&groupId](table::GroupFilter const& filter) {
+                                return filter.group == groupId;
+                            });
+                            spec.groups.push_back(table::GroupFilter{.group = groupId, .include = {entry}});
+                            static_cast<void>(refilter(spec));
+                        },
+                        usable));
+                }
+            }
+            std::span<DocNodePtr const> const parts = node.partList("cellMenu");
+            if (parts.empty()) {
+                return items;
+            }
+            MenuItem separator;
+            separator.separator = true;
+            items.push_back(std::move(separator));
+            // The entries read the row as it was when the menu opened; the scope owns the signal that holds it.
+            Value const record = held ? held->record : Value{};
+            auto const scope =
+                std::make_shared<RtScope>(*this, ctx.scope, nullptr, ctx.scope->nodes.depth() + 2);
+            scope->row = &scope->nodes.make<reactive::Signal<Value>>(runtime(), record);
+            scope->rowKey = canonicalJson(valueOfKey(key));
+            declare(*scope, node.scope ? &*node.scope : nullptr, {}, {});
+            auto bindings = std::make_shared<Bindings>(*ctx.bindings);
+            Value const value = [&] {
+                Value const* const field = record.field(id);
+                return field == nullptr ? Value{} : *field;
+            }();
+            bindings->push_back(Binding{.name = "row", .read = [record] { return record; }});
+            bindings->push_back(Binding{.name = "column", .read = [id] { return Value{id}; }});
+            bindings->push_back(Binding{.name = "value", .read = [value] { return value; }});
+            std::vector<MenuItem> own =
+                menuItems(parts, LowerCtx{.scope = scope, .bindings = std::move(bindings), .boundary = ctx.boundary});
+            clearsMessageFirst(config, own);
+            std::ranges::move(own, std::back_inserter(items));
+            return items;
+        };
+    }
+    // A header's menu ends with the document's `headerMenu` entries, read in a scope with `column`, the column's id.
+    if (std::span<DocNodePtr const> const parts = node.partList("headerMenu"); !parts.empty()) {
+        options.headerEntries = [this, ctx, &config, parts, columns](std::size_t column) {
+            auto bindings = std::make_shared<Bindings>(*ctx.bindings);
+            std::string const id = column < columns->size() ? columns->at(column).id : std::string{};
+            bindings->push_back(Binding{.name = "column", .read = [id] { return Value{id}; }});
+            std::vector<MenuItem> own =
+                menuItems(parts, LowerCtx{.scope = ctx.scope, .bindings = std::move(bindings), .boundary = ctx.boundary});
+            clearsMessageFirst(config, own);
+            return own;
+        };
+    }
     // A table with `configurable: false` has no menus, so neither the column chooser nor the sort dialog; with no
     // column that filters, no dialog can open either, and the table is mounted alone.
     if (!config.menus) {
@@ -12214,8 +12421,16 @@ Node ScreenCore::configureTable(TableConfig& config, LowerCtx const& ctx, TableO
             }));
         });
     };
-    options.menu = [entriesOf](std::optional<std::size_t> column) {
-        std::vector<TableMenuEntry> const entries = entriesOf(column);
+    // While the header is disabled the table's menu offers copy alone; the mount greys a column's menu itself.
+    options.menu = [entriesOf, headerOn](std::optional<std::size_t> column) {
+        std::vector<TableMenuEntry> entries = entriesOf(column);
+        if (!column && !headerOn()) {
+            for (TableMenuEntry& entry : entries) {
+                if (entry.command != MenuCommand::Copy && entry.command != MenuCommand::CopyWithHeaders) {
+                    entry.entry.enabled = false;
+                }
+            }
+        }
         return menuEntries(entries);
     };
     options.onMenu = [&config, &menu, entriesOf, sortBy, arrange, columns, openColumn, openGroup, refilter, copy,
@@ -12631,6 +12846,10 @@ Node ScreenCore::modelTableOf(DocNode const& node, LowerCtx const& ctx, ElementS
     if (Commands const* const activate = node.event("onActivate")) {
         rowReadsOf(*activate, reads);
     }
+    // A cell menu's entries act on any row, so what they read is fetched with every row, as the row's tone is.
+    for (DocNodePtr const& entry : node.partList("cellMenu")) {
+        rowReadsOf(*entry, reads);
+    }
     // A column's own reads are fetched while the column is in the window; one that passes the row on whole makes
     // every column always fetched.
     std::vector<RowReads> partReads(parts.size());
@@ -12983,6 +13202,36 @@ Node ScreenCore::modelTableOf(DocNode const& node, LowerCtx const& ctx, ElementS
             target.listed = listed;
             target.keep = registry;
             return target;
+        };
+        // A cell a menu opens on: unloaded while its row holds no field for it or its level has not loaded.
+        model.config.heldCell = [&model, shown, displayUnits, registry](Key const& key,
+                                                                        std::string const& id) -> std::optional<HeldCell> {
+            auto const found = std::ranges::find_if(*shown, [&id](table::TableColumn const& column) {
+                return column.info.id == id;
+            });
+            if (found == shown->end()) {
+                return std::nullopt;
+            }
+            auto const place = static_cast<std::size_t>(found - shown->begin());
+            for (auto const& [first, count] : model.window->heldRanges()) {
+                for (std::int64_t at = first; at < first + count; ++at) {
+                    std::optional<TableRowRef> const ref = model.rows->row(at);
+                    if (!ref || ref->key != key) {
+                        continue;
+                    }
+                    Value const* const field = ref->row.field(id);
+                    table::UnloadedLevels const levels = model.rows->unloadedLevels(at);
+                    bool const unloaded = field == nullptr || (!found->info.level.empty() &&
+                                                               std::ranges::contains(levels.levels, found->info.level));
+                    return HeldCell{.record = ref->row,
+                                    .cell = unloaded ? table::Cell{table::Unloaded{}}
+                                                     : cellOfRecord(field, *found, registry.get()),
+                                    .shown = *found,
+                                    .units = displayUnits->at(place),
+                                    .keep = registry};
+                }
+            }
+            return std::nullopt;
         };
         model.config.dimensions = [shown, unitsOf](std::string const& id) {
             auto const found = std::ranges::find_if(*shown, [&id](table::TableColumn const& column) {

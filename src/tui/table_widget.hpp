@@ -40,7 +40,10 @@ namespace morph::tui::detail {
 /// for a `⋯` that opens the table's menu, so no column's header or filter button lies under it; a header's menu opens
 /// on a right click on the header, or with Shift+F10 or the context-menu key on the focused header. A menu is a list
 /// below its header, as a button-style menu's is. The terminal draws no drag or resize handle: a move is
-/// Ctrl+Shift+Left and Ctrl+Shift+Right on the focused header, and nothing resizes a column.
+/// Ctrl+Shift+Left and Ctrl+Shift+Right on the focused header, and nothing resizes a column. With a cell menu
+/// (`setCellMenu`), a right click on a row's cell opens it below the cell, after selecting the row alone when it is not
+/// selected; over a source, Shift+F10 or the context-menu key opens it on the focused cell, and a key the table leaves
+/// runs the focused cell's entry whose chord it is.
 ///
 /// While a header can act (a column sorts, or the table has menus or moves columns), it takes the keyboard focus
 /// within the table: Up on the first row (the first view row over a source) focuses the header of the chain's first
@@ -116,6 +119,8 @@ public:
     void setOnSort(std::function<void(std::size_t, ui::HeaderClick)> onSort) override;
     void setMenu(std::function<std::vector<ui::MenuEntry>(std::optional<std::size_t>)> entries,
                  std::function<void(std::optional<std::size_t>, std::vector<std::size_t>)> onChoose) override;
+    void setCellMenu(std::function<std::vector<ui::MenuEntry>(ui::Key const&, std::size_t)> entries,
+                     std::function<void(ui::Key const&, std::size_t, std::vector<std::size_t> const&)> chosen) override;
     void setVisibleColumns(std::vector<std::size_t> const& visible) override;
     void setOnColumnMove(std::function<void(std::size_t, std::size_t)> handler) override;
     void setOnFilter(std::function<void(std::size_t)> handler) override;
@@ -255,6 +260,12 @@ private:
     void focusHeader();
     /// Opens the menu of @p column's header, or the table's menu, below its place on the header line.
     void openMenu(std::optional<std::size_t> column);
+    /// Opens the menu of @p row's cell in @p column below the cell, after making the row the selection alone when it
+    /// is not selected.
+    void openCellMenu(WidgetBase const& row, std::size_t column);
+    /// The menu key on the focused cell of a table over a source, and the chords of the focused cell's entries;
+    /// Ignored for any other key.
+    [[nodiscard]] ::core::tui::EventResult cellKey(::core::tui::KeyEvent const& key);
     /// Draws the header line: the header box, then each column's label at its alignment.
     void paintHeader(::core::tui::Canvas& canvas, std::vector<DrawnColumn> const& columns) const;
     /// Gives each row its column layout.
@@ -387,6 +398,8 @@ private:
     std::function<void(std::size_t, ui::HeaderClick)> _onSort;
     std::function<std::vector<ui::MenuEntry>(std::optional<std::size_t>)> _menu;
     std::function<void(std::optional<std::size_t>, std::vector<std::size_t>)> _onMenu;
+    std::function<std::vector<ui::MenuEntry>(ui::Key const&, std::size_t)> _cellMenu;
+    std::function<void(ui::Key const&, std::size_t, std::vector<std::size_t> const&)> _cellChosen;
     std::vector<std::size_t> _visible;  ///< The visible columns, as `setVisibleColumns` told them; empty: every one.
     std::function<void(std::size_t, std::size_t)> _onColumnMove;
     std::function<void(std::size_t)> _onFilter;
