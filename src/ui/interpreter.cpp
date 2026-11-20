@@ -10081,6 +10081,7 @@ void ScreenCore::storedRowsState(RowsTable& table, std::optional<std::string> co
     if (table.config.bound == nullptr && document.layout) {
         table.config.held = *document.layout;
         table.config.version.set(table.config.version.peek() + 1);
+        tablePoints(element);
     }
     if (!late) {
         // The rows come through once the engine's view is in the stored order: after the work the new sort posted.
@@ -10115,8 +10116,8 @@ namespace {
 inline constexpr std::string_view kCollectionKeyField = "\x1Fkey";
 
 /// @brief Where a collection's rows are, by key, for the records its engine builds: made again from the session's
-///        rows whenever the engine reads another snapshot. The snapshot indexed last is held, so no other snapshot
-///        can take its address while the index is kept for it.
+///        rows whenever the source's current snapshot changes. That snapshot is held, so no later one can take its
+///        address while the index is kept for it.
 struct CollectionRecords {
     std::shared_ptr<table::RowSnapshot const> snapshot;
     std::unordered_map<table::RowId, std::size_t> at;
@@ -10212,10 +10213,11 @@ void ScreenCore::wireCollectionTable(ElementState& element, std::string modelTyp
         record.insert_or_assign(std::string{kCollectionKeyField}, Value{collectionKeyText(key)});
         rt->untracked([&] {
             std::vector<forms::CollectionRow> const& rows = session->rows();
-            if (records->snapshot.get() != &snapshot) {
-                // Held only when it is the source's current snapshot; an older one is indexed for this read alone.
-                std::shared_ptr<table::RowSnapshot const> current = session->source()->snapshot();
-                records->snapshot = current.get() == &snapshot ? std::move(current) : nullptr;
+            // The index is of the session's rows, whichever snapshot the engine reads: it is made again when the
+            // source's current snapshot changes, which the session's rows changing makes it do.
+            if (std::shared_ptr<table::RowSnapshot const> current = session->source()->snapshot();
+                records->snapshot != current) {
+                records->snapshot = std::move(current);
                 records->at.clear();
                 for (std::size_t at = 0; at < rows.size(); ++at) {
                     records->at.emplace(rows.at(at).id, at);
@@ -11324,20 +11326,28 @@ void ScreenCore::tableMessage(ElementState& table, std::string text) {
 
 void ScreenCore::tablePoints(ElementState& table) {
     ModelTable const* const model = table.modelTable.get();
-    if (model == nullptr || table.node == nullptr) {
+    // A table over `rows` that keeps a state shows its layout at a `columns` point; it has no saved view's name yet.
+    RowsTable const* const rows = model == nullptr && table.rowsTable != nullptr && table.rowsTable->stateKey &&
+                                          table.node != nullptr && table.node->kind == "table"
+                                      ? table.rowsTable.get()
+                                      : nullptr;
+    if ((model == nullptr && rows == nullptr) || table.node == nullptr) {
         return;
     }
+    TableConfig const& config = model != nullptr ? model->config : rows->config;
     ValueRecord next = prefs.peek();
     bool changed = false;
     for (auto const& [name, point] : doc().customize) {
-        if (point.of != table.node->id || (point.kind != "columns" && point.kind != "saved")) {
+        // A point without `of` names no table, an id-less one included.
+        if (point.of.empty() || point.of != table.node->id ||
+            (point.kind != "columns" && (point.kind != "saved" || model == nullptr))) {
             continue;
         }
         Value value;
         if (point.kind == "saved") {
             value = model->view ? Value{*model->view} : Value{};
-        } else if (model->config.held) {
-            auto const json = parseJson(glz::write_json(*model->config.held).value_or("null"));
+        } else if (config.held) {
+            auto const json = parseJson(glz::write_json(*config.held).value_or("null"));
             auto read = json ? valueFromJson(*json) : std::expected<Value, std::string>{Value{}};
             value = read ? std::move(*read) : Value{};
         } else {
@@ -11357,15 +11367,35 @@ std::optional<bool> ScreenCore::tablePoint(CustomizePoint const& point, Value co
     if (point.kind != "columns" && point.kind != "saved") {
         return std::nullopt;
     }
-    // Only a model-backed table holds what the point reads; a `saved` point without `of` names no table.
+    // A point without `of` names no table. A model-backed table holds both points' values; a table over `rows` that
+    // keeps a state holds a `columns` point's, and has no saved view's name for a `saved` one.
     if (point.of.empty()) {
         return std::nullopt;
     }
     auto const found = std::ranges::find_if(modelTables, [&point](ElementState const* element) {
-        return element->modelTable != nullptr && element->node != nullptr && element->node->id == point.of;
+        if (element->node == nullptr || element->node->id != point.of) {
+            return false;
+        }
+        return element->modelTable != nullptr ||
+               (point.kind == "columns" && element->rowsTable != nullptr && element->rowsTable->stateKey &&
+                element->node->kind == "table");
     });
     if (found == modelTables.end()) {
         return std::nullopt;
+    }
+    if ((*found)->modelTable == nullptr) {
+        RowsTable& rows = *(*found)->rowsTable;
+        table::ColumnLayoutValue layout;
+        if (glz::read_json(layout, canonicalJson(value))) {
+            return false;
+        }
+        rows.config.held = std::move(layout);
+        rows.config.version.set(rows.config.version.peek() + 1);
+        rows.touched = true;
+        table::StateDocument changed;
+        changed.layout = rows.config.held;
+        rows.states->changed(*rows.stateKey, changed, StateParts::Layout);
+        return true;
     }
     ModelTable& model = *(*found)->modelTable;
     table::StateDocument changed;
