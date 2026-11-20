@@ -2553,12 +2553,14 @@ public:
         }
     }
 
-    /// @brief Calls the handler `setOnSelectRange` stored, as a Shift+click would.
+    /// @brief Calls the handler `setOnSelectRange` stored, as a Shift+click would, or a Ctrl+Shift+click with
+    ///        `Extend`.
     /// @param anchor The anchor's view row.
     /// @param focus  The end's view row.
-    void selectRange(std::size_t anchor, std::size_t focus) {
+    /// @param change Whether the range replaces the selection or is added to it.
+    void selectRange(std::size_t anchor, std::size_t focus, SelectionChange change = SelectionChange::Replace) {
         if (_onSelectRange) {
-            _onSelectRange(anchor, focus, SelectionChange::Replace);
+            _onSelectRange(anchor, focus, change);
         }
     }
 
@@ -3711,13 +3713,16 @@ public:
     void focusMove(int widgetId, FocusMove move) { fakeTable(widgetId, "focusMove").moveFocus(move); }
 
     /// @brief Selects a range of view rows as a Shift+click over rows the backend holds no keys for would: the
-    ///        handler `setOnSelectRange` stored gets the two rows and `Replace`.
+    ///        handler `setOnSelectRange` stored gets the two rows and @p change, `Replace` unless the range is added
+    ///        to the selection as a Ctrl+Shift+click adds it.
     /// @param widgetId The table.
     /// @param anchor   The anchor's view row.
     /// @param focus    The end's view row.
+    /// @param change   Whether the range replaces the selection or is added to it.
     /// @throws std::logic_error when the widget is not a table.
-    void selectTableRange(int widgetId, std::size_t anchor, std::size_t focus) {
-        fakeTable(widgetId, "selectTableRange").selectRange(anchor, focus);
+    void selectTableRange(int widgetId, std::size_t anchor, std::size_t focus,
+                          SelectionChange change = SelectionChange::Replace) {
+        fakeTable(widgetId, "selectTableRange").selectRange(anchor, focus, change);
     }
 
     /// @brief Reports the width a cell of a column measured, as a backend's layout would.

@@ -2191,6 +2191,9 @@ public:
     /// @brief Moves focus to a mounted element by its id; empty until the screen is mounted, and again once it is
     ///        unmounting.
     std::function<bool(std::string_view)> focusElement;
+    /// @brief Puts text on the clipboard through the backend's `IViewBackend::copyText`, returning whether it did;
+    ///        empty until the screen is mounted, and again once it is unmounting.
+    std::function<bool(std::string_view)> clipboard;
     /// @brief The models the opener lends.
     std::map<std::string, BorrowedModel, std::less<>> borrowed;
     /// @brief The screen scope's reactive depth.
@@ -2333,7 +2336,8 @@ private:
     void tableGesture(ElementState& element);
     /// Wires a table's header, menus and arrangement to its configuring: sort gestures held to the table's bound,
     /// layout gestures to what it allows, each refusal shown in its status line and each change run through its
-    /// commands. @p keep is held by every handler, for a table its mount owns. Returns the column chooser and the
+    /// commands; and its copy, of the rows `TableConfig::gather` gives. @p keep is held by every handler, for a table
+    /// its mount owns. Returns the column chooser and the
     /// sort dialog its menu opens, to mount beside the table; null for a table with no menus.
     Node configureTable(TableConfig& config, LowerCtx const& ctx, TableOptions& options,
                         std::shared_ptr<void const> keep);
