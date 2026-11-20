@@ -939,7 +939,8 @@ inline constexpr glz::opts kStateRead{.error_on_unknown_keys = false};
 ///
 /// A carried column goes into `order` right after its `after` id, first when `after` is empty, or at the end when
 /// `after` is not in the written order, with its hidden flag, width and units; a carried sort key goes in at its
-/// stored index, clamped to the chain's length; carried filters, group filters and groups are appended.
+/// stored index, clamped to the chain's length; carried filters, group filters and groups are appended. `hidden` is
+/// written in `order`'s order, then any hidden id `order` does not name, as listed.
 /// @param document The document.
 /// @return The JSON text.
 [[nodiscard]] inline std::string writeState(StateDocument const& document) {
@@ -950,6 +951,9 @@ inline constexpr glz::opts kStateRead{.error_on_unknown_keys = false};
     if (document.layout || !carried.columns.empty() || !carried.groups.empty()) {
         ColumnLayoutValue layout = document.layout.value_or(ColumnLayoutValue{});
         std::unordered_set<std::string> hidden{layout.hidden.begin(), layout.hidden.end()};
+        // A stored `order` may leave columns out (fitting places them), so a hidden column it does not name is kept
+        // too, after those it does, in the order the layout listed it.
+        std::vector<std::string> unordered;
         for (auto const& column : carried.columns) {
             auto place = layout.order.begin();
             if (!column.after.empty()) {
@@ -969,12 +973,19 @@ inline constexpr glz::opts kStateRead{.error_on_unknown_keys = false};
                 layout.units.insert_or_assign(column.id, column.units);
             }
         }
+        for (auto const& id : layout.hidden) {
+            if (std::ranges::find(layout.order, id) == layout.order.end() &&
+                std::ranges::find(unordered, id) == unordered.end()) {
+                unordered.push_back(id);
+            }
+        }
         layout.hidden.clear();
         for (auto const& id : layout.order) {
             if (hidden.contains(id)) {
                 layout.hidden.push_back(id);
             }
         }
+        layout.hidden.insert(layout.hidden.end(), unordered.begin(), unordered.end());
         layout.groups.insert(layout.groups.end(), carried.groups.begin(), carried.groups.end());
         out.layout = std::move(layout);
     }

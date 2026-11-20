@@ -664,7 +664,9 @@ keeps its operands' 0 places and still fills 0.29 of a bar.
 - **Configuring a table**, of either kind (`ScreenCore::configureTable`, over the `ui/table_config.hpp` gestures;
   [`../table/table.md`](../table/table.md), "Configuring a table"). The element keeps the table's columns as its
   layout knows them (id, label, `locked`, kind), its declared hidden columns, the layout it holds and what
-  `configurable` allows, across every mount. `Table::sort` is the whole chain, each key marking its column.
+  `configurable` allows, across every mount. A table over `rows` takes its columns when it is made: a derived
+  `columns` expression is read once there, and a column with no `id` is named `#<n>` by its place, derived columns
+  first, and locked. `Table::sort` is the whole chain, each key marking its column.
   `Table::onSort` maps a plain click to `SortGesture::Click` and `Shift` to `Extend` and applies
   `applySortGesture` with the table's bound; a refusal ("A table sorts by at most {n} columns") goes to the status
   line and keeps the chain; a change sets the table's own sort when no key binds one, saves it, and runs

@@ -3156,6 +3156,7 @@ TEST_CASE("persisted layout: a stored layout applies before the first query, a c
         REQUIRE(saved->layout.has_value());                                    // the stored one, as it was kept
         CHECK(saved->layout->order == std::vector<std::string>{"c2", "c1"});
         CHECK_FALSE(std::ranges::contains(saved->layout->hidden, "c1"));       // the user's hide is not saved
+        CHECK(saved->layout->hidden == std::vector<std::string>{"c3"});        // a sort-only save keeps it whole
     }
 }
 
