@@ -305,6 +305,23 @@ TEST_CASE("the_tool_is_offered_with_the_screen_as_data_the_allowance_and_a_refer
     CHECK(system.contains(*allowance));
 }
 
+// Mutation: drop the sentence about `fields`, `omit` or `hidden` from the reference. The base screen has none of these
+// words, so the system text can only carry them from the reference.
+TEST_CASE("the_reference_says_a_forms_fields_only_overlay_its_schema", "[chat][propose]") {
+    Rig rig;
+    rig.fake->script(said("ok"));
+    auto const state = rig.finished(rig.start("lims.base"));
+    REQUIRE(state.status == chat::TurnStatus::Done);
+    auto const original = screens_test::baseScreen("lims.base");
+    REQUIRE_FALSE(original.contains("omit"));
+    REQUIRE_FALSE(original.contains("hidden"));
+    auto const system = rig.asked().at(0).system;
+    CHECK(system.contains("`fields`"));
+    CHECK(system.contains("\"omit\": true"));
+    CHECK(system.contains("\"hidden\": true"));
+    CHECK(system.contains("deleting an entry removes nothing"));
+}
+
 // Mutation: set the draft before the check, or never.
 TEST_CASE("an_accepted_proposal_becomes_the_turns_draft_and_a_draft_event", "[chat][propose]") {
     Rig rig;
