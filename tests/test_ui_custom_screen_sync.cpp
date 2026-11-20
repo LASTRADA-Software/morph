@@ -525,3 +525,36 @@ TEST_CASE("custom documents: put refuses a document that names another id and ke
     CHECK(documents.find("custom:a") == nullptr);
     CHECK(documents.find("custom:other") == nullptr);
 }
+
+// Mutation: keep the document after a removal (`find` still answers it).
+TEST_CASE("custom screen sync: remove forgets the kept document and relists", "[ui][custom-screens][sync]") {
+    screens_test::Server server;
+    std::string const id = custom_client::savedIdOf(server.save(screens_test::baseScreen("lims.base"), "ann"));
+    SyncClient client{*server.server, "ann", "lims"};
+    REQUIRE(client.probe());
+    std::optional<bool> opened;
+    client.sync.open(id, [&opened](auto loaded) { opened = loaded.has_value(); });
+    REQUIRE(client.pump([&opened] { return opened.has_value(); }));
+    REQUIRE(client.sync.documents().find(id) != nullptr);
+
+    std::optional<std::expected<void, std::string>> removed;
+    client.sync.remove(id, [&removed](std::expected<void, std::string> answer) { removed = std::move(answer); });
+    REQUIRE(client.pump([&removed] { return removed.has_value(); }));
+    CHECK(removed->has_value());
+    CHECK(client.sync.documents().find(id) == nullptr);
+    REQUIRE(client.pump([&client] { return client.sync.listed().screens.empty(); }));
+}
+
+// Mutation: report a refused removal as done (`done` gets nothing).
+TEST_CASE("custom screen sync: a store's refusal of remove reaches the caller as the store gave it",
+          "[ui][custom-screens][sync]") {
+    screens_test::Server const server;
+    SyncClient client{*server.server, "ann", "lims"};
+    REQUIRE(client.probe());
+    std::optional<std::expected<void, std::string>> removed;
+    client.sync.remove(custom_client::customId('1'),
+                       [&removed](std::expected<void, std::string> answer) { removed = std::move(answer); });
+    REQUIRE(client.pump([&removed] { return removed.has_value(); }));
+    REQUIRE_FALSE(removed->has_value());
+    CHECK(removed->error().contains("no such custom screen"));
+}

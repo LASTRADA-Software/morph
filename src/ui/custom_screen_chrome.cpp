@@ -64,11 +64,13 @@ CustomScreenChrome::CustomScreenChrome(CustomScreenChromeOptions options) : _opt
 
 CustomScreenChrome::~CustomScreenChrome() {
     *_alive = false;
+    _remove.reset();
     _saveAs.reset();
     _source.reset();
 }
 
 void CustomScreenChrome::attach(WorkspaceModel* model) {
+    _remove.reset();
     _saveAs.reset();
     _source.reset();
     // Tab ids are issued per workspace: a reply asked under the old one must not find a tab of the new one by id.
@@ -167,6 +169,9 @@ Node CustomScreenChrome::toolsRow(WorkspaceTabId tab, std::string const& screenI
     row.children.push_back(openAsMenu(tab, screenId));
     row.children.push_back(chromeButton("source_button_" + screenId, "Source", ButtonEmphasis::Ghost,
                                         guarded([this, tab] { showSource(tab); })));
+    row.children.push_back(chromeButton("remove_" + screenId, "Remove", ButtonEmphasis::Ghost,
+                                        guarded([this, tab] { askRemove(tab); }),
+                                        Prop<bool>{[this, screenId] { return canSave(screenId); }}));
     return ui::row(std::move(row));
 }
 
@@ -1090,6 +1095,124 @@ void CustomScreenChrome::saveFromSource() {
                     notify("Saved " + title, Tone::Ok);
                 }));
         }));
+}
+
+void CustomScreenChrome::askRemove(WorkspaceTabId tab) {
+    ScreenHandle const* const handle = handleOf(tab);
+    std::optional<std::string> const screenId =
+        handle == nullptr ? std::nullopt : DocumentScreenHost::screenIdOf(*handle);
+    // One removal at a time: a confirmation already removing is the one whose reply is awaited.
+    if (!screenId || !canSave(*screenId) || (_remove != nullptr && _remove->busy->peek())) {
+        return;
+    }
+    // `canSave` held, so the screen is listed and the default is never read.
+    CustomScreenSummary const summary = summaryOf(*screenId).value_or(CustomScreenSummary{});
+    _remove.reset();
+    auto made = std::make_unique<RemoveConfirm>();
+    RemoveConfirm* const confirm = made.get();
+    confirm->generation = ++_lastRemove;
+    confirm->screenId = *screenId;
+    confirm->title = summary.title;
+    confirm->basedOn = summary.basedOn;
+    confirm->message = std::make_unique<reactive::Signal<std::string>>(*_options.runtime, std::string{});
+    confirm->busy = std::make_unique<reactive::Signal<bool>>(*_options.runtime, false);
+
+    Dialog node;
+    node.open = Prop<bool>{true};
+    node.title = Prop<std::string>{"Remove " + summary.title + "?"};
+    node.description = Prop<std::string>{"It is removed for good. A tab that shows it opens " +
+                                         titleOf(summary.basedOn) + " instead."};
+    node.onDismiss = guarded([this] { closeRemoveLater(); });
+    node.common.testId = "remove_dialog";
+    Column body;
+    body.gap = 2;
+    Text message;
+    message.text = Prop<std::string>{[confirm] { return confirm->message->get(); }};
+    message.role = Prop<TextRole>{TextRole::Error};
+    message.common.testId = "remove_message";
+    message.common.visible = Prop<bool>{[confirm] { return !confirm->message->get().empty(); }};
+    body.children.push_back(ui::text(std::move(message)));
+    ActionBar actions;
+    actions.children.push_back(chromeButton("remove_confirm", "Remove", ButtonEmphasis::Danger,
+                                            guarded([this] { confirmRemove(); }), Prop<bool>{true},
+                                            Prop<bool>{[confirm] { return !confirm->busy->get(); }}));
+    actions.children.push_back(
+        chromeButton("remove_cancel", "Cancel", ButtonEmphasis::Normal, guarded([this] { closeRemoveLater(); })));
+    body.children.push_back(ui::actionBar(std::move(actions)));
+    node.child = ui::column(std::move(body));
+
+    _remove = std::move(made);
+    confirm->view.emplace(*_options.runtime, *_options.backend, ui::dialog(std::move(node)), _options.overlayParent);
+}
+
+void CustomScreenChrome::confirmRemove() {
+    RemoveConfirm* const confirm = _remove.get();
+    if (confirm == nullptr || confirm->busy->peek()) {
+        return;
+    }
+    _options.runtime->batch([confirm] {
+        confirm->busy->set(true);
+        confirm->message->set(std::string{});
+    });
+    _options.sync->remove(
+        confirm->screenId,
+        guarded([this, generation = confirm->generation, screenId = confirm->screenId, basedOn = confirm->basedOn,
+                 title = confirm->title](std::expected<void, std::string> const& removed) {
+            // The confirmation the removal was asked from, and not one opened since, takes the answer.
+            RemoveConfirm* const open =
+                _remove != nullptr && _remove->generation == generation ? _remove.get() : nullptr;
+            if (!removed) {
+                if (open != nullptr) {
+                    _options.runtime->batch([open, &removed] {
+                        open->busy->set(false);
+                        open->message->set(removed.error());
+                    });
+                } else {
+                    notify("Not removed: " + removed.error(), Tone::Err);
+                }
+                return;
+            }
+            if (open != nullptr) {
+                closeRemoveLater();
+            }
+            notify("Removed " + title, Tone::Ok);
+            fallBack(screenId, basedOn, title);
+        }));
+}
+
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): the removed screen, its base, then its title.
+void CustomScreenChrome::fallBack(std::string const& screenId, std::string const& basedOn, std::string const& title) {
+    if (_model == nullptr) {
+        return;
+    }
+    for (WorkspaceTabId const tab : _model->order()) {
+        ScreenHandle const* const handle = _model->handleOf(tab);
+        if (handle == nullptr || DocumentScreenHost::screenIdOf(*handle) != screenId) {
+            continue;
+        }
+        ParamMap const params = DocumentScreenHost::paramsOf(*handle).value_or(ParamMap{});
+        _model->openInPlace(tab, basedOn, params,
+                            guarded([this, title](std::expected<WorkspaceTabId, MountError> const& opened) {
+                                if (opened) {
+                                    return;
+                                }
+                                std::string text = title;
+                                text += " is removed, but stays open in its tab until it can close";
+                                if (opened.error().reason != kStayedOpenReason) {
+                                    text += ": " + opened.error().reason;
+                                }
+                                notify(text, Tone::Warn);
+                            }));
+    }
+}
+
+void CustomScreenChrome::closeRemoveLater() {
+    RemoveConfirm const* const shown = _remove.get();
+    _options.runtime->owner().post(guarded([this, shown] {
+        if (_remove.get() == shown) {
+            _remove.reset();
+        }
+    }));
 }
 
 void CustomScreenChrome::notify(std::string const& text, Tone tone) const {

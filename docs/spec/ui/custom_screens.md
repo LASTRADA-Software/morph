@@ -357,6 +357,8 @@ go. No call names a person.
   count; a refusal's JSON Pointer is the same for either text, a byte offset in it is into the compact one. `check` answers
   the server's first refusal with its pointer; `save` passes a store's refusal through as
   the store worded it, and relists after an answer; `get` answers without keeping, for a broken screen's source.
+- **Remove.** `remove(id, done)` calls `remove`; a store's refusal reaches `done` as the store worded it. An answer
+  forgets the kept document and relists, so no list or `documents` lookup keeps a screen that is gone.
 - **Restore.** `prefetchRoutes(routes, done)` fetches every custom screen a record or a history names that is not
   kept, and answers the ids no document came for, so a start can tell the person which were not restored.
 - **Sessions.** `reset` forgets the offer, the list, the cache and the binding, and drops replies in flight: what a
@@ -368,9 +370,10 @@ go. No call names a person.
 | Part | Test id | What it does |
 |---|---|---|
 | The draft bar | `draft_bar_<id>` | Shown while the tab holds a draft: "Draft — not saved", that forms on a draft change real data, the last refusal of a save (`draft_message_<id>`), **Save** (`draft_save_<id>`, for a draft of the person's own custom screen), **Save as…**, **Source**, **Discard** |
-| The tools row | `screen_tools_<id>` | Shown while the tab holds none: **Open as** (`open_as_<id>`) and **Source** (`source_button_<id>`) |
+| The tools row | `screen_tools_<id>` | Shown while the tab holds none: **Open as** (`open_as_<id>`), **Source** (`source_button_<id>`) and **Remove** (`remove_<id>`, for a screen of the person's own) |
 | The source view | `source_dialog` | A sheet, so the editor has the window: the document's JSON pretty-printed (`prettyJson`: indent 2, a container that fits in about 100 columns on one line, members in their order, scalars as written) in a monospace editor (`source_text`, `wrap: false`: its lines stay whole and it scrolls sideways), the refusal (`source_refusal`), a status line ("Checking…", "Saving…"), **Preview**, **Save as…**, **Check and save** (`source_save`, a stored screen of the person's own), **Close** |
 | The save dialog | `save_as_dialog` | The name (`save_as_title`), the refusal, **Save**, **Cancel** |
+| The removal | `remove_dialog` | Asks "Remove <title>?" once: the refusal (`remove_message`), **Remove** (`remove_confirm`), **Cancel** (`remove_cancel`) |
 
 - **Source** shows the open draft's text, a custom screen's stored text (fetched again when the cache dropped it), or
   an application screen's as the bundle has it, through `prettyJson`. While custom screens are not offered it is read only, with no **Preview** and no
@@ -393,6 +396,12 @@ go. No call names a person.
   only on the draft that was saved: if the tab holds a newer draft, none, or is closed by then, the tab is left as it
   is and the person is told the save completed. Tab ids are issued per workspace, so a chrome attached to another
   workspace ignores every answer asked under the old one.
+- **Remove** is offered on a listed custom screen of the person's own (`mine`) while custom screens are offered, the
+  screens **Save** may overwrite; whether the removal is allowed is still the store's. One confirmation asks first.
+  On the answer the confirmation closes and every tab that shows the screen opens its base in its place, with the
+  tab's params (`WorkspaceModel::openInPlace`), so a tab never shows a screen that is gone. A tab that is dirty goes to
+  its close guard; one the person keeps open stays on the removed screen and the person is told. A refusal stays in
+  the confirmation, as the store worded it, and nothing changes.
 - **Discard** mounts the screen's own document again (`discardDraft`), fetching a custom screen's first when the cache
   no longer holds it.
 - **The assistant's draft.** `proposeDraft(tab, screenId, text)` mounts a document the assistant proposed as the
@@ -423,7 +432,6 @@ go. No call names a person.
 
 - **The chrome's words** ("Draft", "Save as…", "Source", "Open as", the refusal's "Line N") are English; resolving
   them through the bundle's message catalogues, as the shell frame's `morph.shell.*` labels are, is still to come.
-- **Removing a custom screen.** The model's `remove` has no control in the client yet.
 - **The terminal's source view** is the same dialog; it is best effort, as the spec says.
 
 ## Design decisions
