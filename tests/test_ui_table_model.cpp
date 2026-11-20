@@ -3913,6 +3913,7 @@ TEST_CASE("filter menu: a Measure column's values are grouped under a heading pe
             distinctReply(h.described.revision,
                           R"({"values":[{"text":"0.3 kg","operand":"0.3 kg","count":2,"dimension":"mass","unit":"kg"},)"
                           R"({"text":"0.5 %","operand":"0.5 %","count":1,"dimension":"ratio","unit":"%"}],"distinct":2})"));
+    CHECK(propOf(h, "Checkbox", "table_filter_value_0", "label").ends_with("(2)"));   // 300 g counted with 0.3 kg
     std::string const dump = h.backend.dump();
     std::size_t const mass = dump.find("testId=table_filter_heading_mass");
     std::size_t const first = dump.find("testId=table_filter_value_0");
@@ -3962,6 +3963,7 @@ TEST_CASE("filter menu: a group's values are pooled and the match line builds th
           R"([{"combine":"any","exclude":[],"group":"company","include":[{"eq":"F"},{"eq":"S"}],"match":"any",)"
           R"("mode":"together"}])");
     CHECK(elementValue(*screen, "t", "viewCount") == "2");
+    CHECK(morph::ui::testing::rowOrder(h) == "1 3");
     chooseMenu(h, table, 0, {"Filter Company, 3 columns…"});
     chooseOption(h, "table_filter_match", "in at least N columns");
     typeInto(h, "table_filter_count", "2");
@@ -3970,9 +3972,11 @@ TEST_CASE("filter menu: a group's values are pooled and the match line builds th
           R"([{"combine":"any","exclude":[],"group":"company","include":[{"oneOf":["F","S"]}],)"
           R"("match":{"atLeast":2},"mode":"columns"}])");
     CHECK(elementValue(*screen, "t", "viewCount") == "3");
+    CHECK(morph::ui::testing::rowOrder(h) == "1 2 3");
 }
 
-// Index decision 26. Mutation: removing the group leaving its filter held (the last CHECK: the groups still hold it).
+// A user-formed group has no values list, and its filter names its columns. Mutation: removing the group leaving its
+// filter held (the last CHECK: the groups still hold it).
 TEST_CASE("filter menu: a user-formed group offers conditions and the match line, no values list", "[ui][table][config]") {
     TableHarness h;
     auto screen = h.mount(kKinds);
@@ -4062,6 +4066,26 @@ TEST_CASE("filter menu: a date column lists years, then a year's months, then a 
         CHECK(propOf(h, "Checkbox", "table_filter_value_1", "checked") == "false");    // 2026
         CHECK(propOf(h, "Checkbox", "table_filter_value_3", "checked") == "true");     // March
     }
+    // Mutation: a bucket a merged range covers shown disabled (the range is no listed bucket's own tick).
+    SECTION("buckets Apply merged come back ticked and can be unticked") {
+        openTree();
+        toggleBox(h, "table_filter_value_3");                                          // March
+        toggleBox(h, "table_filter_value_35");                                         // April, after March's days
+        pressButton(h, "table_filter_apply");
+        REQUIRE(readJson(*screen, R"({"ref":"t.filters.columns.c3.include"})") ==
+                R"([{"between":["2026-03-01","2026-04-30"]}])");
+        clickFilter(h, table, 2);
+        answer(years);
+        pressButton(h, "table_filter_open_1");
+        answer(months);
+        CHECK(propOf(h, "Checkbox", "table_filter_value_3", "checked") == "true");
+        CHECK(propOf(h, "Checkbox", "table_filter_value_4", "checked") == "true");
+        CHECK(propOf(h, "Checkbox", "table_filter_value_4", "enabled") != "false");
+        toggleBox(h, "table_filter_value_4");                                          // untick April
+        pressButton(h, "table_filter_apply");
+        CHECK(readJson(*screen, R"({"ref":"t.filters.columns.c3.include"})") ==
+              R"([{"between":["2026-03-01","2026-03-31"]}])");
+    }
     SECTION("touching days are one entry") {
         openTree();
         pressButton(h, "table_filter_open_35");                                        // April, after March's days
@@ -4124,4 +4148,169 @@ TEST_CASE("filter menu: the values list labels by the column's display", "[ui][t
     CHECK(propOf(h, "Checkbox", "table_filter_value_0", "label") == "0.124 (1)");
     CHECK(propOf(h, "Checkbox", "table_filter_value_1", "label") == "0.123 (2)");
     CHECK(propOf(h, "Checkbox", "table_filter_value_2", "label") == "0.50 (1)");
+}
+
+// Mutation: filter buttons offered only by a table that has menus (`configurable: false` returning before them).
+TEST_CASE("filter menu: a table with configurable false keeps its filter buttons", "[ui][table][config]") {
+    TableHarness h;
+    auto screen = h.mount(withTableKey(kStatusRows, R"("configurable":false)"));
+    int const table = h.backend.all("Table").front();
+    CHECK(menuOf(h, table, 0).empty());
+    CHECK(h.backend.prop(table, "columns").contains("filterable=true"));
+    clickFilter(h, table, 0);
+    CHECK(propOf(h, "Dialog", "table_filter", "open") == "true");
+    toggleBox(h, "table_filter_value_2");
+    pressButton(h, "table_filter_apply");
+    CHECK(readJson(*screen, R"({"ref":"t.filters.columns.status.exclude"})") == R"([{"oneOf":["Open"]}])");
+}
+
+// Mutation: the counts grouped with "," whatever the session's locale.
+TEST_CASE("filter menu: counts are grouped with the session's separator", "[ui][table][config]") {
+    TableHarness h;
+    auto screen = mountDescribed(
+        h, samplesDescription(5),
+        R"({"vocab":"ui/1","id":"samples","models":{"sample":{"type":"Lims_SampleModel"}},)"
+        R"("view":{"kind":"localeScope","locale":"de","children":[)"
+        R"({"kind":"table","id":"t","model":"sample","table":"samples"}]}})");
+    int const table = h.backend.all("Table").front();
+    clickFilter(h, table, 1);
+    h.reply(lastDistinct(h), distinctReply(h.described.revision,
+                                           R"({"values":[{"text":"x","operand":"x","count":1234}],"distinct":1,)"
+                                           R"("invalid":1234})"));
+    CHECK(propOf(h, "Checkbox", "table_filter_value_0", "label") == "x (1.234)");
+    CHECK(h.text("table_filter_note") == "1.234 cells could not be read");
+}
+
+// Mutation: a reply asked for before the record changed kept as fresh (the reopened menu sends nothing).
+TEST_CASE("filter menu: a values list asked for before a change is not kept", "[ui][table][config]") {
+    TableHarness h;
+    auto screen = mountDescribed(h, samplesDescription(5));
+    int const table = h.backend.all("Table").front();
+    std::string const values = R"({"values":[{"text":"a","operand":"a","count":1}],"distinct":1})";
+    clickFilter(h, table, 1);
+    std::size_t const asked = lastDistinct(h);
+    morph::ui::testing::change(h, {});
+    h.reply(asked, distinctReply(h.described.revision, values));
+    dismissMenu(h);
+    std::size_t const calls = h.dispatcher.count("Table.samples");
+    clickFilter(h, table, 1);
+    REQUIRE(h.dispatcher.count("Table.samples") > calls);
+    std::size_t const again = lastDistinct(h);
+    CHECK(again > asked);
+    h.reply(again, distinctReply(h.described.revision, values));
+    dismissMenu(h);
+    std::size_t const kept = h.dispatcher.count("Table.samples");
+    clickFilter(h, table, 1);
+    CHECK(h.dispatcher.count("Table.samples") == kept);                              // a reply after the change is kept
+}
+
+// Mutation: a user-formed group's menu asking for its values (a distinct request with the group's layout id).
+TEST_CASE("filter menu: a user-formed group of a model's table sends no values request and its filter names its columns",
+          "[ui][table][config]") {
+    table::TableDescription pair;
+    pair.id = "samples";
+    pair.label = "Samples";
+    pair.key = "id";
+    pair.columns = {table::TableColumn{.info = {.id = "id", .kind = table::ColumnKind::Integer}},
+                    table::TableColumn{.info = {.id = "a", .kind = table::ColumnKind::Text}},
+                    table::TableColumn{.info = {.id = "b", .kind = table::ColumnKind::Text}}};
+    pair = table::describe(std::move(pair));
+    REQUIRE(pair.capabilities.distinct);
+    TableHarness h;
+    auto screen = mountDescribed(h, pair);
+    int const table = h.backend.all("Table").front();
+    chooseMenu(h, table, std::nullopt, {"Columns…"});
+    press(h, "table_columns_group");
+    toggleBox(h, "table_group_column_a");
+    toggleBox(h, "table_group_column_b");
+    typeInto(h, "table_group_label", "Pair");
+    press(h, "table_group_create");
+    press(h, "table_columns_done");
+    std::size_t const calls = h.dispatcher.count("Table.samples");
+    chooseMenu(h, table, 1, {"Filter Pair, 2 columns…"});
+    CHECK(h.dispatcher.count("Table.samples") == calls);                             // no values request
+    chooseOption(h, "table_filter_op_1", "equals");
+    typeInto(h, "table_filter_operand_1", "F");
+    chooseOption(h, "table_filter_match", "in every column");
+    h.advance(250ms);
+    REQUIRE(h.dispatcher.count("Table.samples") > calls);
+    table::TableQuery const sent = lastQuery(h);
+    REQUIRE(sent.filters.groups.size() == 1);
+    table::GroupFilter const& group = sent.filters.groups.front();
+    CHECK(group.group.empty());
+    CHECK(group.columns == std::vector<std::string>{"a", "b"});
+    CHECK(group.match.kind == table::ColumnCount::Kind::All);
+    REQUIRE(group.include.size() == 1);
+    CHECK(group.include.front().eq == "F");
+    dismissMenu(h);
+    // A column's "(Select all)" under a search names its values by pages of `maxLimit`.
+    clickFilter(h, table, 1);
+    h.reply(lastDistinct(h), distinctReply(pair.revision, R"({"values":[{"text":"x","operand":"x","count":1}],"distinct":1})"));
+    selectAll(h, false);
+    typeInto(h, "table_filter_search", "x");
+    h.advance(250ms);
+    h.reply(lastDistinct(h), distinctReply(pair.revision, R"({"values":[{"text":"x","operand":"x","count":1}],"distinct":1})"));
+    selectAll(h, true);
+    pressButton(h, "table_filter_apply");
+    REQUIRE(lastQuery(h).distinct.has_value());
+    CHECK(lastQuery(h).distinct->limit == 1000);
+    CHECK(lastQuery(h).distinct->search == "x");
+}
+
+// Mutation: the one-kind refusal dropped (a group of a text and an integer column loads).
+TEST_CASE("ui document: a rows table's groups are 2 to 16 of its column parts, of one kind, each in one group",
+          "[ui][document]") {
+    auto const with = [](std::string_view groups) { return withTableKey(kKinds, R"("groups":)" + std::string{groups}); };
+    CHECK(loads(with(R"([{"id":"g","label":"G","columns":{"lit":["a","b"]}}])"), morph::ui::testing::tableCatalog()));
+    CHECK(refusalOf(withTableKey(morph::ui::testing::kConfigModelTable,
+                                 R"("groups":[{"id":"g","columns":{"lit":["a","b"]}}])")) ==
+          "a model's table declares its column groups in its description; `groups` is for a table over `rows`");
+    CHECK(refusalOf(with(R"([{"id":"g","columns":{"lit":["a","b"]}},{"id":"g","columns":{"lit":["c","n"]}}])")) ==
+          "the group `g` is declared twice");
+    CHECK(refusalOf(with(R"([{"id":"g","columns":{"ref":"items"}}])")) ==
+          "a group's `columns` is a literal list of its columns' ids");
+    CHECK(refusalOf(with(R"([{"id":"g","columns":{"lit":["a"]}}])")) == "a group has 2 to 16 columns");
+    CHECK(refusalOf(with(R"([{"id":"g","columns":{"lit":["a","zz"]}}])")) ==
+          "a group's columns are the ids of the table's column parts");
+    CHECK(refusalOf(with(R"([{"id":"g","columns":{"lit":["a","b"]}},{"id":"h","columns":{"lit":["b","c"]}}])")) ==
+          "the column `b` is in another group");
+    CHECK(refusalOf(with(R"([{"id":"g","columns":{"lit":["a","n"]}}])")) == "a group's columns hold one kind of value");
+}
+
+// Mutation: WindowRows compiling a filter without the description's units (the measure operand is refused).
+TEST_CASE("window rows: a filter on a measure reads its operand with the description's units", "[ui][table]") {
+    RowsFixture h;
+    table::TableDescription d = samplesDescription(2);
+    d.columns[1].info = table::ColumnInfo{.id = "weight", .kind = table::ColumnKind::Measure};
+    d.units = {table::UnitInfo{
+                   .id = "kg", .symbol = "kg", .dimension = "mass", .toBase = *table::parseDecimal("1"), .decimals = 3},
+               table::UnitInfo{.id = "g",
+                               .symbol = "g",
+                               .dimension = "mass",
+                               .toBase = *table::parseDecimal("0.001"),
+                               .decimals = 0}};
+    auto const rows = h.windowRows("samples", table::describe(d));
+    table::FilterEntry above;
+    above.gt = "0.3 kg";
+    table::FilterSpec filter;
+    filter.columns.insert_or_assign("weight", table::ColumnFilter{.combine = table::Combine::Any, .include = {above}, .exclude = {}});
+    auto const set = rows->setFilter(filter);
+    INFO((set ? std::string{} : set.error().message));
+    CHECK(set.has_value());
+}
+
+// Mutation: the filter menu holding the mount's filter path strongly (the menu, kept by the element, keeps the
+// mount's scope alive, and the runtime aborts at teardown: "Runtime destroyed while nodes are alive").
+TEST_CASE("filter menu: a table whose menu set a filter tears down cleanly", "[ui][table][config]") {
+    {
+        TableHarness h;
+        auto screen = h.mount(kStatusRows);
+        int const table = h.backend.all("Table").front();
+        clickFilter(h, table, 0);
+        toggleBox(h, "table_filter_value_2");
+        pressButton(h, "table_filter_apply");
+        clickFilter(h, table, 1);
+        REQUIRE(elementValue(*screen, "t", "filters").contains("Open"));
+    }
+    SUCCEED("the screen, the session and the runtime went without an abort");
 }

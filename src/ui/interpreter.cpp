@@ -637,7 +637,7 @@ namespace {
     return ui::column(std::move(wrapper));
 }
 
-/// Draws a filter button on each column a filter menu edits, while the table offers its filters at all.
+/// Draws a filter button on each column a filter menu edits.
 /// @param config  The table's configuring, whose `filterTarget` says which columns filter.
 /// @param columns The mount's columns, in the order of `config.columns`.
 /// @param options The table's options; without `onFilter` no column draws a button.
@@ -10932,10 +10932,8 @@ Node ScreenCore::configureTable(TableConfig& config, LowerCtx const& ctx, TableO
             arrange(ResizeColumn{.id = columns->at(column).id, .units = units});
         };
     }
-    if (!config.menus) {
-        return nullptr;
-    }
-    // Filters from the header. A user's filters go to the rows, and are held and saved, unless the document binds
+    // Filters from the header, on every table: a column filters unless it says `filterable: false`, whatever
+    // `configurable` lets the user change about the columns. A user's filters go to the rows, and are held and saved, unless the document binds
     // them; then `onFiltersChange` runs with `event` the new filters.
     FilterMenu& menu = *config.filterMenu;
     auto const refilter = [this, ctx, &config, keep, commands = node.event("onFiltersChange")](
@@ -11116,6 +11114,10 @@ Node ScreenCore::configureTable(TableConfig& config, LowerCtx const& ctx, TableO
             openGroup(shown.at(index).second);
         }
     };
+    // A table with `configurable: false` has no menus, so neither the column chooser nor the sort dialog.
+    if (!config.menus) {
+        return filterMenuDialog(menu);
+    }
     // A menu is built when it opens, and again when an entry is chosen, from the chain and the layout of the moment,
     // so the path the backend reports names the entry it showed.
     auto const entriesOf = [this, &config, &element, columns, sortable, filterable, layoutHeld, groupsNow, groupArgument,

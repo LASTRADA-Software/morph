@@ -1990,10 +1990,11 @@ distinctValues(DataSource const& source, TableQuery const& query, DistinctReques
   `offset` at most `maxOffset`. A query that sets both `keys` and `distinct` is `InvalidSpec`. In the filter, a
   group's `exclude` entries count toward `maxEntries` with its `include` and are bounded by `maxTextLength` as
   they are, and so is every member of a `oneOf`.
-- **Caching.** A distinct reply is an entry of the query cache, keyed by its body like any query, so reopening a
-  menu costs nothing. `Page` declares `distinct` as an open member beside `awaiting`: any change of the table's
-  record
-  marks the entry, because any row may change a count.
+- **Caching.** A distinct reply is kept by the table's rows (`WindowRows`), keyed by the query's body, so reopening a
+  menu costs nothing; each table keeps its own, and they are not shared between tables. At most 64 replies are kept,
+  the oldest going first. `Page` declares `distinct` as an open member beside `awaiting`: any change of the table's
+  record drops them, because any row may change a count, and so do a reconnect and a new revision; a reply asked for
+  before such a change answers its menu and is not kept.
 
 Top-N filters are not included: "the ten largest" is a property of the view's order, not of a cell, and belongs
 with a ranking function over the view.
