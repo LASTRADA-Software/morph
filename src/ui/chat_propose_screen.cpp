@@ -768,7 +768,8 @@ void propose(std::shared_ptr<CustomScreens> const& screens, std::string const& a
         return;
     }
     // A document that cannot be written is empty, which the checks refuse.
-    std::string document = glz::write_json(*patched).value_or(std::string{});
+    // Control bytes escaped inside the writer, as the wire does: glaze's default leaves them raw, which is not JSON.
+    std::string document = glz::write<::morph::wire::detail::EscapingWriteOpts{}>(*patched).value_or(std::string{});
     if (document.size() > context.limits.maxDraftBytes) {
         done(refused(context, "The patched document would be longer than " +
                                   std::to_string(context.limits.maxDraftBytes) + " bytes"));

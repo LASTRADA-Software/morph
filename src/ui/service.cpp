@@ -417,7 +417,7 @@ std::expected<BundleFile, Refusal> UiRegistry::withShellParts(BundleFile file, b
     auto document = parseJson(file.bytes);
     auto* const object = document ? std::get_if<Json::object_t>(&document->data) : nullptr;
     // NOLINTNEXTLINE(bugprone-unchecked-optional-access): every caller holds `_shellParts`.
-    auto shell = parseJson(glz::write_json(*_shellParts).value_or("{}"));
+    auto shell = parseJson(glz::write<::morph::wire::detail::EscapingWriteOpts{}>(*_shellParts).value_or("{}"));
     if (object == nullptr || !shell) {
         return refuse(file.id, "the app document is a JSON object");
     }
@@ -425,7 +425,7 @@ std::expected<BundleFile, Refusal> UiRegistry::withShellParts(BundleFile file, b
         return refuse(file.id, "the app document declares its own `shell`, and the registry was given parts too");
     }
     object->insert_or_assign("shell", std::move(*shell));
-    file.bytes = glz::write_json(*document).value_or(file.bytes);
+    file.bytes = glz::write<::morph::wire::detail::EscapingWriteOpts{}>(*document).value_or(file.bytes);
     return file;
 }
 

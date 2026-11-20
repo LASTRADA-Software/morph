@@ -11,6 +11,7 @@
 #include <cstddef>
 #include <glaze/glaze.hpp>
 #include <memory>
+#include <morph/core/wire.hpp>
 #include <morph/ui/bundle.hpp>
 #include <morph/ui/document.hpp>
 #include <morph/ui/interpreter.hpp>
@@ -155,8 +156,8 @@ struct Rig {
     explicit Rig(ui::ShellParts declared, ui::ShellModelOptions facts = {},
                  std::vector<ui::CatalogEntry> navigated = entries())
         : parts{std::move(declared)} {
-        std::string const text =
-            std::string{R"({"vocab":"ui/1","id":"app","shell":)"} + glz::write_json(parts).value_or("{}") + "}";
+        std::string const text = std::string{R"({"vocab":"ui/1","id":"app","shell":)"} +
+                                 glz::write<morph::wire::detail::EscapingWriteOpts{}>(parts).value_or("{}") + "}";
         document = ui::testing::loadOrFail(text, ui::testing::corpusCatalog());
         auto mounted = h.interpreter.mountApp(document);
         REQUIRE(mounted.has_value());
@@ -1345,8 +1346,8 @@ TEST_CASE("shell parts: the loader refuses a help button without one destination
     auto const refusalOf = [](auto const& change) -> std::optional<ui::Refusal> {
         ui::ShellParts parts = chromeParts();
         change(parts);
-        std::string const text =
-            std::string{R"({"vocab":"ui/1","id":"app","shell":)"} + glz::write_json(parts).value_or("{}") + "}";
+        std::string const text = std::string{R"({"vocab":"ui/1","id":"app","shell":)"} +
+                                 glz::write<morph::wire::detail::EscapingWriteOpts{}>(parts).value_or("{}") + "}";
         auto loaded = ui::loadDocumentText(text, ui::LoadOptions{.catalog = ui::testing::corpusCatalog()});
         if (loaded) {
             return std::nullopt;
@@ -1418,4 +1419,37 @@ TEST_CASE("shell parts: the registry refuses a help button that names a screen o
     REQUIRE_FALSE(missing.has_value());
     CAPTURE(missing.error().reason);
     CHECK(missing.error().reason.contains("is not in the catalog"));
+}
+
+// Mutation: write the parts back with glaze's default writer in the loader or the model (the control byte is written
+// raw, the document does not load, or the help params read back empty).
+TEST_CASE("shell parts: a control byte in a part survives the loader and the help params", "[ui][shell][parts]") {
+    ui::ShellParts parts = chromeParts();
+    parts.help->params = {{"tab", std::string{"lic\x01nse"}}};
+    Rig r{parts};
+    r.h.backend.click(r.id("Button", "shell_help"));
+    r.h.settle();
+    REQUIRE(r.opened.size() == 1);
+    CHECK(r.opened.front().params.at("tab") == ui::Value{"lic\x01nse"});
+}
+
+// Mutation: write the app document back with glaze's default writer (the bundle's app document is not JSON).
+TEST_CASE("shell parts: a control byte in a part leaves the bundle's app document JSON", "[ui][shell][parts]") {
+    ui::UiRegistry served{ui::ApplicationInfo{.id = "probe", .version = "1"}};
+    addScreens(served);
+    ui::ShellParts parts = fullParts();
+    parts.brand = ui::BrandMark{.title = "Li\x01ms", .icon = {}, .version = {}};
+    REQUIRE(served.setShellParts(parts).has_value());
+    auto const built = served.build();
+    REQUIRE(built.has_value());
+    bool checked = false;
+    for (auto const& [hash, file] : (*built)->files) {
+        static_cast<void>(hash);
+        if (std::ranges::any_of(file.holders, [](auto const& holder) { return holder.kind == "app"; })) {
+            CHECK(ui::parseJson(file.bytes).has_value());
+            CHECK(ui::loadDocumentText(file.bytes, ui::LoadOptions{}).has_value());
+            checked = true;
+        }
+    }
+    CHECK(checked);
 }

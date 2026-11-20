@@ -1135,3 +1135,20 @@ TEST_CASE("a_patch_that_changes_the_known_version_is_refused", "[chat][propose][
     REQUIRE(kept.draft.has_value());
     CHECK(kept.draft->contains(R"("knownVersion":"1.0")"));
 }
+
+// Mutation: write the patched document with glaze's default writer (the control byte is written raw, and the check
+// refuses the draft as text that is not JSON).
+TEST_CASE("a_control_byte_in_a_patch_reaches_the_draft_as_json", "[chat][propose][direct]") {
+    Direct const direct;
+    auto const outcome = Direct::called(direct.propose, direct.proposing(),
+                                        R"({"patch":[{"op":"replace","path":"/view/children/0/text",)"
+                                        R"("value":"Re\u0001sults"}]})");
+    INFO(outcome.text);
+    CHECK_FALSE(outcome.isError);
+    REQUIRE(outcome.draft.has_value());
+    auto const draft = morph::ui::parseJson(*outcome.draft);
+    REQUIRE(draft.has_value());
+    CHECK(morph::ui::loadDocumentText(*outcome.draft, morph::ui::LoadOptions{}).has_value());
+    auto const& text = draft->get_object().at("view").get_object().at("children").get_array().at(0);
+    CHECK(text.get_object().at("text").get_string() == "Re\x01sults");
+}
