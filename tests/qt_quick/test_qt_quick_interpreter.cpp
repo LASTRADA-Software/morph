@@ -7,9 +7,12 @@
 
 #include <QCoreApplication>
 #include <QFile>
+#include <QList>
+#include <QPointF>
 #include <QQmlEngine>
 #include <QQuickItem>
 #include <QQuickWindow>
+#include <QString>
 #include <QTemporaryDir>
 #include <QTest>
 #include <QUrl>
@@ -1064,5 +1067,38 @@ TEST_CASE("qt_quick interpreter: a screen's head trail spaces its tools and acti
         CHECK(left("head_tool_lab") - right("head_tool_q") == Catch::Approx(expected).margin(1.0));
         CHECK(left("head_action_save") - right("head_tool_lab") == Catch::Approx(expected).margin(1.0));
         CHECK(left("head_action_print") - right("head_action_save") == Catch::Approx(expected).margin(1.0));
+    }
+}
+
+// Mutation: tell a source table that realizes every row no window in `realizeWindow` (`totalRows` stays -1, the rows
+// plane has no height, and the rows fall outside the table). Not built on this host: Qt Quick does not configure here.
+TEST_CASE("qt_quick interpreter: a rows table below its threshold draws its rows", "[qt_quick][interpreter]") {
+    QtHarness h;
+    auto screen = h.mount(R"({
+      "vocab": "ui/1", "id": "few", "state": { "rows": { "init": { "lit": [
+        { "id": 1, "n": "one" }, { "id": 2, "n": "two" }, { "id": 3, "n": "three" } ] } } },
+      "view": { "kind": "table", "testId": "list", "id": "t", "rows": { "ref": "rows" }, "key": { "row": "id" },
+                "columns": [ { "id": "n", "label": "Name" } ] } })");
+    h.scene.settle();
+    QQuickItem* const table = QtHarness::widget("list").item();
+    REQUIRE(table != nullptr);
+    CHECK(table->property("totalRows").toLongLong() == 3);
+    CHECK(table->property("sourceContentHeight").toReal() > 0);
+    for (QString const name : {QStringLiteral("one"), QStringLiteral("two"), QStringLiteral("three")}) {
+        INFO(name.toStdString());
+        QQuickItem const* shown = nullptr;
+        QList<QQuickItem*> pending{table};
+        while (!pending.isEmpty() && shown == nullptr) {
+            QQuickItem* const item = pending.takeLast();
+            if (item->isVisible() && item->property("text").toString() == name) {
+                shown = item;
+            }
+            pending.append(item->childItems());
+        }
+        REQUIRE(shown != nullptr);
+        QPointF const at = shown->mapToItem(table, QPointF{0, 0});
+        CHECK(shown->height() > 0);
+        CHECK(at.y() >= 0);
+        CHECK(at.y() + shown->height() <= table->height() + 0.5);
     }
 }

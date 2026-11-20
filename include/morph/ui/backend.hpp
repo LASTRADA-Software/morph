@@ -936,9 +936,10 @@ public:
 
     /// @brief Tells the backend which contiguous range of view rows is realized and how many rows exist in total, so
     ///        it can size a scrollbar and place leading/trailing space for the rows that are not realized. Called
-    ///        after each pass for a table over a `TableSource`, and for a table over `rows` at or above its
-    ///        `Virtualization::threshold`, whether or not the backend reports a range. The focused row a source table
-    ///        keeps realized beyond the range is not counted: `setRowIndex` places it.
+    ///        after each pass for every table over a `TableSource` (one that realizes every row with the whole view,
+    ///        `(0, count, count)`), and for a table over `rows` at or above its `Virtualization::threshold`, whether or
+    ///        not the backend reports a range. The focused row a source table keeps realized beyond the range is not
+    ///        counted: `setRowIndex` places it.
     /// @param first The view index of the first row of the range.
     /// @param count How many rows the range holds, from `first`.
     /// @param total How many rows the table's data has, realized or not.
