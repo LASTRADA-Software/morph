@@ -4794,7 +4794,7 @@ TEST_CASE("collection: a master-detail selection and its open row hold through a
     h.settle();
     REQUIRE(h.backend.prop(h.byTestId("Column", "detailForm"), "visible") == "true");
     std::string const selected = h.backend.prop(collection, "selection");
-    REQUIRE(selected.find('3') != std::string::npos);
+    REQUIRE(selected == "[3]");
     h.backend.clickHeader(collection, 1, HeaderClick::Plain);    // Name
     h.settle();
     REQUIRE(rowKeys(h, collection) != std::vector<std::string>{"1", "2", "3", "4"});
@@ -4827,4 +4827,74 @@ TEST_CASE("collection: header and table menus are present and its arrangement pe
     REQUIRE(stored->has_value());
     CHECK((*stored)->revision == "1");                                      // one save
     CHECK((*stored)->json.find(R"("hidden":["name"])") != std::string::npos);
+}
+
+namespace {
+
+using morph::ui::testing::readJson;
+using morph::ui::testing::RecordingTableStateStore;
+
+}  // namespace
+
+// Mutation: a point matched to any listed table by id (the rows table's model-backed state is null: the run
+// aborts).
+TEST_CASE("rows table: a columns point naming it holds a preference and edits no state", "[ui][table][state]") {
+    auto store = std::make_shared<GatedTableStateStore>(storeExecutor(), R"({"version":1})");
+    TableHarness h{store};
+    std::string text = rowsDoc(kThree);
+    text.insert(text.find(R"("state":)"), R"("customize":{"cols":{"kind":"columns","of":"list"}},)");
+    auto screen = h.mount(text);
+    store->release();
+    h.settle();
+    auto const layout = morph::ui::parseJson(R"({"order":["name","id","weight"],"hidden":[],"pinned":0})");
+    REQUIRE(layout.has_value());
+    CHECK(screen->setPreference("cols", *morph::ui::valueFromJson(*layout)));
+    h.advance(500ms);
+    CHECK(store->saves() == 0);
+    CHECK(readJson(*screen, R"({"pref":"cols.pinned"})") == "0");
+}
+
+// Mutation: a point matched to any listed table by id (an empty `of` names the id-less collection, whose
+// model-backed state is null: the run aborts).
+TEST_CASE("collection: a saved point without of beside an id-less collection is a preference", "[ui][table]") {
+    auto store = std::make_shared<table::MemoryTableStateStore>(morph::ui::testing::storeExecutor());
+    TableHarness h{store};
+    std::string text{kSamplesCollection};
+    text.insert(text.find(R"("models":)"), R"("customize":{"v":{"kind":"saved"}},)");
+    auto screen = h.mount(text);
+    h.reply(h.dispatcher.last("Lims_ListSamples"), std::string{kFourSamples});
+    CHECK(screen->setPreference("v", morph::ui::Value{std::string{"Mine"}}));
+    CHECK(readJson(*screen, R"({"pref":"v"})") == R"("Mine")");
+}
+
+// Mutation: an empty `of` matching an id-less model table (its view is rewritten and saved).
+TEST_CASE("model table: a saved point without of leaves an id-less model table's state alone", "[ui][table][state]") {
+    auto store = std::make_shared<GatedTableStateStore>(storeExecutor(), R"({"version":1})");
+    TableHarness h{store};
+    std::string text{kModelTable};
+    text.erase(text.find(R"("id":"list",)"), std::string_view{R"("id":"list",)"}.size());
+    text.insert(text.find(R"("models":)"), R"("customize":{"v":{"kind":"saved"}},)");
+    auto screen = h.mount(text);
+    replyDescribe(h);
+    store->release();
+    h.settle();
+    CHECK(screen->setPreference("v", morph::ui::Value{std::string{"Mine"}}));
+    h.advance(500ms);
+    CHECK(store->saves() == 0);
+    CHECK(readJson(*screen, R"({"pref":"v"})") == R"("Mine")");
+}
+
+// Mutation: a collection's table building no `TableViews` (no `views` load goes out).
+TEST_CASE("collection: its saved views load beside its state", "[ui][table][state]") {
+    auto store = std::make_shared<RecordingTableStateStore>(morph::ui::testing::storeExecutor());
+    TableHarness h{store};
+    auto screen = h.mount(kSamplesCollection);
+    std::vector<std::string> parts;
+    for (auto const& call : store->calls) {
+        if (call.op == "load") {
+            parts.push_back(call.part);
+        }
+    }
+    std::ranges::sort(parts);
+    CHECK(parts == std::vector<std::string>{"state", "views"});
 }

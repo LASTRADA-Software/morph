@@ -967,6 +967,16 @@ writing `table::displayText`, which writes `0.125`.
 
 ## Task 13: Collections through the same lowering (table.md step 8)
 
+**As landed (093110af and its fix round).** No `TableSurface` or `lowerTableSurface`: factoring the `rows` table's
+node-reading lowering would have rewritten most of it while Task 17a changed the same file. A collection keeps a
+`RowsTable` in its element (no source, no page) made by `ScreenCore::wireCollectionTable`, and
+`ScreenCore::lowerCollectionRows` mounts it; it shares `configureTable` (gestures, menus, chooser, sort dialog, filter
+menu, copy), the status line's message and gesture routing, the stored state's key and debounced saves, and the
+saved views' `TableViews` with every other table, and has its own columns, cells, key translation and status line.
+A per-table rule a later task adds to the lowering is therefore wired in three places: `makeRowsTable`/`lowerRows`,
+`wireModelTable`/`modelTableOf`, and `wireCollectionTable`/`lowerCollectionRows`. The interface text below is the
+design as planned.
+
 **Spec:** "Collections and master-detail"; "Every surface on the pipeline" (the collection row); gate U5 (recorded); the collection half of the Tests row "One order on every surface".
 
 **Files:**
@@ -1262,6 +1272,10 @@ Needs the table menu on a screen (Tasks 12b to 12e: the menu's lowering, `menuOf
 arrangement). 14b landed `TableViews`, the `MenuCommand` entries and the views load at mount, and no menu; what a
 user touches of the saved views is this task's, below, with the shared views.
 
+A collection's table is a third wiring site (Task 13 as landed): `wireCollectionTable` builds its `TableViews` and
+`lowerCollectionRows` mounts its menu, so the `Views` submenu, applying a view and the default view at mount are
+wired there too, beside the `rows` table's and the model table's, with a collection case.
+
 **Files:**
 - Modify: `include/morph/ui/table_views.hpp`, `include/morph/ui/table_config.hpp` (the `Views` submenu's entries, built from the `MenuCommand` entries 14b declared), `src/ui/interpreter.cpp` (the `Views` submenu, the name dialog `table_view_dialog`, applying a view, the status messages, the default view and `defaultOnMount` at mount)
 - Test: `tests/test_ui_table_state.cpp`, `tests/net/test_push_tables.cpp`
@@ -1318,6 +1332,9 @@ In `tests/net/test_push_tables.cpp`: the publish-then-read flow over a real sock
 ## Task 16: A raised sort bound (table.md step 9c)
 
 **Spec:** "Sort chains" (the bound); Failure modes "A table whose `limits` set `maxSortKeys` above 32" and "A sort key past the table's `maxSortKeys`"; the Tests row "A raised sort bound". Depends only on Task 12.
+
+A collection's bound is `config.maxSortKeys` in `wireCollectionTable` (8; a collection has no `maxSortKeys` key):
+a rule that changes the bound reaches it there too.
 
 **Files:**
 - Modify: `include/morph/table/description.hpp` (`servedDescription`; `table::detail::answerQuery` takes its description from it and answers its `SourceContract`), `table::DescribeTable::invoke` in the same header (the `Table.<id>.describe` handler `BRIDGE_REGISTER_TABLE` registers obtains the description through it; `registry.hpp` only names the action type), `src/ui/document.cpp` (`maxSortKeys` on `table`), `src/ui/interpreter.cpp` (the bound the lowering passes to `applySortGesture`: the description's on a model-backed table, the literal on a `rows` table, else 8)
