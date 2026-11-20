@@ -603,6 +603,14 @@ TEST_CASE("a text input's prefix, mono and align are written only when given", "
     CHECK(text(ui::textInput({.label = "Window"}).json()) == R"({"kind":"textInput","label":"Window"})");
 }
 
+// Mutation: leave `wrap` out of textInput() (a multiline input that scrolls sideways is written as one that wraps).
+TEST_CASE("a multiline input's wrap is written only when it is off", "[ui][author]") {
+    CHECK(text(ui::textInput({.label = "Source", .mode = "multiline", .wrap = false}).json()) ==
+          R"({"kind":"textInput","label":"Source","mode":"multiline","wrap":false})");
+    CHECK(text(ui::textInput({.label = "Source", .mode = "multiline"}).json()) ==
+          R"({"kind":"textInput","label":"Source","mode":"multiline"})");
+}
+
 // Mutation: leave `style` out of button() (the item is written as a push button).
 TEST_CASE("a button's style and selection are written, and the loader takes them", "[ui][author]") {
     auto const current = ui::ref<std::string>("current");

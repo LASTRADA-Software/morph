@@ -293,7 +293,7 @@ private:
         _out.push_back(first);
         std::size_t cursor = skipSpace(_text, pos + 1);
         bool firstMember = true;
-        while (cursor < _text.size() && _text.at(cursor) != close) {
+        while (_text.at(cursor) != close) {
             _out += firstMember ? "\n" : ",\n";
             firstMember = false;
             std::size_t const inner = indent + kSourceIndent;
@@ -307,7 +307,7 @@ private:
                 cursor = skipSpace(_text, skipSpace(_text, nameEnd) + 1);
             }
             cursor = skipSpace(_text, write(cursor, {.indent = inner, .column = shown, .depth = depth + 1}));
-            if (cursor < _text.size() && _text.at(cursor) == ',') {
+            if (_text.at(cursor) == ',') {
                 cursor = skipSpace(_text, cursor + 1);
             }
         }
@@ -332,7 +332,7 @@ private:
         line.push_back(first);
         std::size_t cursor = skipSpace(_text, pos + 1);
         bool firstMember = true;
-        while (cursor < _text.size() && _text.at(cursor) != close) {
+        while (_text.at(cursor) != close) {
             if (!firstMember) {
                 line += ", ";
             }
@@ -344,11 +344,11 @@ private:
                 cursor = skipSpace(_text, skipSpace(_text, nameEnd) + 1);
             }
             std::optional<std::size_t> const end = oneLine(cursor, line, room, depth + 1);
-            if (!end || line.size() > room) {
+            if (!end) {
                 return std::nullopt;
             }
             cursor = skipSpace(_text, *end);
-            if (cursor < _text.size() && _text.at(cursor) == ',') {
+            if (_text.at(cursor) == ',') {
                 cursor = skipSpace(_text, cursor + 1);
             }
         }

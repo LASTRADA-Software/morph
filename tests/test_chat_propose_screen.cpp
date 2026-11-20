@@ -25,6 +25,7 @@
 #include <morph/ui/custom_screens.hpp>
 #include <morph/ui/service.hpp>
 #include <morph/ui/testing/fake_chat_provider.hpp>
+#include <morph/ui/value.hpp>
 #include <mutex>
 #include <optional>
 #include <string>
@@ -777,4 +778,304 @@ TEST_CASE("a_read_tools_answer_is_capped_and_a_bad_pointer_is_an_error", "[chat]
     CHECK(lastResult(requests.at(3)).contains("more not shown"));
     CHECK(requests.at(4).messages.back().results.at(0).isError);
     CHECK(lastResult(requests.at(4)).contains("no member `nope`"));
+}
+
+namespace {
+
+// The tools called as the chat service would call them, but with a context the service would not build: a document
+// of any text, a screen that is not in the bundle, an offer that was never made.
+struct Direct {
+    explicit Direct(chat::ChatLimits chosen = {}) : limits{chosen}, rig{chosen} {}
+
+    chat::ChatLimits limits;
+    Rig rig;
+    std::vector<chat::ChatTool> reads = chat::customScreensReadTools(rig.screens, "lims", rig.worker);
+    chat::ChatTool propose = chat::customScreensChatTool(rig.screens, "lims", rig.worker);
+
+    [[nodiscard]] chat::ChatTool const& outline() const { return reads.at(0); }
+    [[nodiscard]] chat::ChatTool const& find() const { return reads.at(1); }
+    [[nodiscard]] chat::ChatTool const& node() const { return reads.at(2); }
+
+    [[nodiscard]] chat::ChatToolContext context(std::optional<std::string> document = std::nullopt,
+                                                std::string screenId = "lims.base") const {
+        chat::ChatToolContext made;
+        made.session = alicesSession();
+        made.request.screenId = std::move(screenId);
+        made.document = std::move(document);
+        made.bundle = rig.bundle;
+        made.limits = limits;
+        return made;
+    }
+
+    [[nodiscard]] static chat::ChatToolOffer offered(chat::ChatTool const& tool, chat::ChatToolContext context) {
+        std::promise<chat::ChatToolOffer> answered;
+        auto answer = answered.get_future();
+        tool.offer(std::move(context),
+                   [&answered](chat::ChatToolOffer offer) { answered.set_value(std::move(offer)); });
+        REQUIRE(answer.wait_for(5s) == std::future_status::ready);
+        return answer.get();
+    }
+
+    [[nodiscard]] static chat::ChatToolOutcome called(chat::ChatTool const& tool, chat::ChatToolContext context,
+                                                      std::string const& arguments) {
+        auto const parsed = ui::parseJson(arguments);
+        REQUIRE(parsed.has_value());
+        std::promise<chat::ChatToolOutcome> answered;
+        auto answer = answered.get_future();
+        tool.handler(std::move(context), *parsed,
+                     [&answered](chat::ChatToolOutcome outcome) { answered.set_value(std::move(outcome)); });
+        REQUIRE(answer.wait_for(5s) == std::future_status::ready);
+        return answer.get();
+    }
+
+    // A context for the propose tool, carrying what the tool's own offer handed over for the base screen.
+    [[nodiscard]] chat::ChatToolContext proposing(std::optional<std::string> document = std::nullopt) const {
+        auto made = context(std::move(document));
+        auto const offer = offered(propose, made);
+        REQUIRE(offer.offered);
+        made.carried = offer.carried;
+        return made;
+    }
+};
+
+// The base screen with its first text node changed to carry a label of multi-byte characters, a member of the wrong
+// type, and a long value.
+std::string oddDocument() {
+    std::string const wide = "a" + [] {
+        std::string text;
+        for (int index = 0; index < 40; ++index) {
+            text += "\xC3\xA9";
+        }
+        return text;
+    }();
+    return screens_test::replaced(screens_test::baseScreen("lims.base"), R"({"kind":"text","text":"Results"})",
+                                  R"({"kind":"text","id":7,"testId":")" + wide + R"(","text":"Results"})");
+}
+
+}  // namespace
+
+// Mutation: offer a tool for a screen that has no document.
+TEST_CASE("a_screen_with_no_document_is_not_offered_the_tools_and_the_read_tools_say_so", "[chat][propose][direct]") {
+    Direct direct;
+    auto const nowhere = direct.context(std::nullopt, "lims.nowhere");
+    CHECK_FALSE(Direct::offered(direct.propose, nowhere).offered);
+    CHECK_FALSE(Direct::offered(direct.outline(), nowhere).offered);
+    CHECK(Direct::offered(direct.outline(), direct.context()).offered);
+    for (chat::ChatTool const& tool : direct.reads) {
+        auto const outcome = Direct::called(tool, nowhere, R"({"text":"x"})");
+        INFO(tool.spec.name);
+        CHECK(outcome.isError);
+        CHECK(outcome.text.contains("no document"));
+    }
+    // A custom screen the chat never read has no document either.
+    auto const unread = direct.context(std::nullopt, std::string{ui::kCustomScreenIdPrefix} + std::string(32, 'a'));
+    CHECK_FALSE(Direct::offered(direct.propose, unread).offered);
+    CHECK(Direct::called(direct.node(), unread, "{}").isError);
+}
+
+// Mutation: read a document that is not JSON as if it were an empty one.
+TEST_CASE("a_document_that_is_not_json_is_an_error_for_every_tool_and_declines_the_outline",
+          "[chat][propose][direct]") {
+    chat::ChatLimits limits;
+    limits.maxInlineDocumentBytes = 4;
+    Direct direct{limits};
+    auto const broken = direct.context("{not json");
+    for (chat::ChatTool const& tool : direct.reads) {
+        auto const outcome = Direct::called(tool, broken, R"({"text":"x"})");
+        INFO(tool.spec.name);
+        CHECK(outcome.isError);
+        CHECK_FALSE(outcome.text.empty());
+    }
+    // Over the inline bound the screen is shown as an outline, which a document that is not JSON cannot give.
+    CHECK_FALSE(Direct::offered(direct.propose, broken).offered);
+
+    Direct whole;
+    auto context = whole.proposing();
+    context.document = "{not json";
+    auto const outcome =
+        Direct::called(whole.propose, context, R"({"patch":[{"op":"replace","path":"/id","value":"lims.base"}]})");
+    CHECK(outcome.isError);
+    CHECK_FALSE(outcome.draft.has_value());
+    CHECK(outcome.text.contains("could not be read"));
+}
+
+// Mutation: patch a screen the tool was never offered for.
+TEST_CASE("the_propose_tool_changes_nothing_without_its_offer", "[chat][propose][direct]") {
+    Direct direct;
+    auto const outcome = Direct::called(direct.propose, direct.context(),
+                                        R"({"patch":[{"op":"replace","path":"/view/children/0/text","value":"X"}]})");
+    CHECK(outcome.isError);
+    CHECK_FALSE(outcome.draft.has_value());
+    CHECK(outcome.text.contains("cannot be changed"));
+}
+
+// Mutation: keep a call whose arguments are not JSON as written, or keep a long one whole.
+TEST_CASE("the_conversation_keeps_only_a_valid_small_patch_as_written", "[chat][propose][direct]") {
+    Direct direct;
+    REQUIRE(direct.propose.record != nullptr);
+    std::string const small = R"({"patch":[]})";
+    CHECK(direct.propose.record(small) == small);
+    auto const unparsable = direct.propose.record("{not json");
+    CHECK(unparsable.contains("a patch of 9 bytes"));
+    CHECK_FALSE(unparsable.contains("not json"));
+    CHECK(ui::parseJson(unparsable).has_value());
+}
+
+// Mutation: let a read tool take arguments it cannot read, or a depth outside 0 to 32.
+TEST_CASE("the_read_tools_refuse_arguments_they_cannot_read_and_say_which", "[chat][propose][direct]") {
+    Direct direct;
+    struct Case {
+        std::size_t tool;
+        std::string arguments;
+        std::string expected;
+    };
+    std::vector<Case> const cases = {{0, "[]", "not a JSON object"},
+                                     {1, "[]", "not a JSON object"},
+                                     {2, "[]", "not a JSON object"},
+                                     {0, R"({"pointer":5})", "`pointer` must be a string"},
+                                     {0, R"({"depth":"deep"})", "`depth` must be a whole number from 0 to 32"},
+                                     {0, R"({"depth":-1})", "`depth` must be a whole number from 0 to 32"},
+                                     {0, R"({"depth":33})", "`depth` must be a whole number from 0 to 32"},
+                                     {0, R"({"depth":1.5})", "`depth` must be a whole number from 0 to 32"},
+                                     {0, R"({"pointer":"view"})", "must be empty or start with /"},
+                                     {0, R"({"pointer":"/nope"})", "no member `nope`"},
+                                     {1, "{}", "need `text`"},
+                                     {1, R"({"text":5})", "`text` must be a string"},
+                                     {1, R"({"text":""})", "must not be empty"},
+                                     {2, R"({"pointer":5})", "`pointer` must be a string"},
+                                     {2, R"({"depth":-1})", "`depth` must be a whole number from 0 to 32"},
+                                     {2, R"({"pointer":"/view/children/"})", "the array has 4 items"},
+                                     {2, R"({"pointer":"/view/children/first"})", "the array has 4 items"},
+                                     {2, R"({"pointer":"/view/children/99"})", "the array has 4 items"},
+                                     {2, R"({"pointer":"/view/children/12345678901"})", "the array has 4 items"},
+                                     {2, R"({"pointer":"/id/more"})", "holds no members"},
+                                     {2, R"({"pointer":"/a~1b"})", "no member `a/b`"},
+                                     {2, R"({"pointer":"/a~0b"})", "no member `a~b`"},
+                                     {2, R"({"pointer":"/a~2"})", "no member `a~2`"},
+                                     {2, R"({"pointer":"/a~"})", "no member `a~`"}};
+    for (Case const& item : cases) {
+        INFO(item.arguments);
+        auto const outcome = Direct::called(direct.reads.at(item.tool), direct.context(), item.arguments);
+        CHECK(outcome.isError);
+        CHECK(outcome.text.contains(item.expected));
+    }
+}
+
+// Mutation: show a string value whole, or cut it in the middle of a character, or list a member that is not text.
+TEST_CASE("the_outline_cuts_long_labels_at_a_character_and_names_only_text_members", "[chat][propose][direct]") {
+    Direct direct;
+    auto const context = direct.context(oddDocument());
+    auto const outline = Direct::called(direct.outline(), context, R"({"pointer":"/view/children","depth":1})");
+    REQUIRE_FALSE(outline.isError);
+    CHECK_FALSE(outline.text.contains("id=7"));
+    // The cut falls inside the 30th character's two bytes, so it is made before that character and keeps 29.
+    std::string kept = "a";
+    for (int index = 0; index < 29; ++index) {
+        kept += "\xC3\xA9";
+    }
+    CHECK(outline.text.contains("testId=\"" + kept + "...\""));
+    // A scalar is outlined as itself, cut when it is long, and a node with no containers below it has nothing deeper.
+    auto const scalar = Direct::called(direct.outline(), direct.context(), R"({"pointer":"/id"})");
+    CHECK(scalar.text == "/id \"lims.base\"\n");
+    auto const hash = Direct::called(direct.outline(), direct.context(), R"({"pointer":"/components/Chart/qml"})");
+    CHECK(hash.text.contains("..."));
+    auto const leaf =
+        Direct::called(direct.outline(), direct.context(), R"({"pointer":"/view/children/0","depth":5})");
+    CHECK_FALSE(leaf.text.contains("deeper nodes"));
+    CHECK_FALSE(leaf.text.contains("cut at"));
+    auto const shallow = Direct::called(direct.outline(), direct.context(), R"({"depth":0})");
+    CHECK(shallow.text.contains("deeper nodes are not shown"));
+}
+
+// Mutation: let an outline run past its byte cap.
+TEST_CASE("an_outline_that_does_not_fit_even_its_first_line_says_it_is_cut", "[chat][propose][direct]") {
+    chat::ChatLimits limits;
+    limits.maxToolResultBytes = 20;
+    Direct direct{limits};
+    auto const outcome = Direct::called(direct.outline(), direct.context(), "{}");
+    CHECK_FALSE(outcome.isError);
+    CHECK(outcome.text.contains("the outline is cut at 20 bytes"));
+    CHECK_FALSE(outcome.text.contains("(root)"));
+}
+
+// Mutation: list every match however long the answer gets.
+TEST_CASE("a_find_that_outgrows_its_cap_stops_and_counts_what_it_left_out", "[chat][propose][direct]") {
+    chat::ChatLimits limits;
+    limits.maxToolResultBytes = 300;
+    Direct direct{limits};
+    auto const outcome =
+        Direct::called(direct.find(), direct.context(largeScreen("lims.base", 40)), R"({"text":"filler"})");
+    CHECK_FALSE(outcome.isError);
+    CHECK(outcome.text.contains("40 nodes match"));
+    CHECK(outcome.text.contains("more not shown"));
+    CHECK(outcome.text.size() <= 300 + 80);
+}
+
+// Mutation: read the node past the cap, or fail to say the depth was lowered.
+TEST_CASE("a_node_is_shown_as_deep_as_the_cap_allows_and_the_root_needs_no_pointer", "[chat][propose][direct]") {
+    Direct direct;
+    auto const root = Direct::called(direct.node(), direct.context(), R"({"depth":0})");
+    CHECK(root.text.starts_with("(root) to depth 0"));
+    CHECK(root.text.contains("[object, "));
+
+    chat::ChatLimits limits;
+    limits.maxToolResultBytes = 200;
+    Direct capped{limits};
+    auto const lowered = Direct::called(capped.node(), capped.context(), R"({"depth":6})");
+    CHECK_FALSE(lowered.isError);
+    CHECK(lowered.text.contains("the answer is capped at 200 bytes"));
+    CHECK_FALSE(lowered.text.contains("[cut at the byte cap]"));
+
+    limits.maxToolResultBytes = 10;
+    Direct tiny{limits};
+    auto const cut = Direct::called(tiny.node(), tiny.context(), R"({"depth":3})");
+    CHECK_FALSE(cut.isError);
+    CHECK(cut.text.contains("[cut at the byte cap]"));
+    CHECK(cut.text.contains("to depth 0"));
+}
+
+// Mutation: skip an operation kind, or read `from` for an operation that has none.
+TEST_CASE("every_operation_kind_applies_and_a_refusal_names_the_kind_that_broke", "[chat][propose][direct]") {
+    Direct direct;
+    struct Applies {
+        std::string patch;
+        std::string contains;
+    };
+    std::vector<Applies> const applies = {
+        {R"([{"op":"add","path":"/view/children/0/testId","value":"first"}])", "\"testId\":\"first\""},
+        {R"([{"op":"test","path":"/view/children/0/text","value":"Results"},)"
+         R"({"op":"replace","path":"/view/children/0/text","value":"Tested"}])",
+         "Tested"},
+        {R"([{"op":"move","from":"/view/children/0","path":"/view/children/1"}])", "Results"},
+        {R"([{"op":"copy","from":"/view/children/0","path":"/view/children/1"}])", "Results"}};
+    for (Applies const& item : applies) {
+        INFO(item.patch);
+        auto const outcome = Direct::called(direct.propose, direct.proposing(), R"({"patch":)" + item.patch + "}");
+        CHECK_FALSE(outcome.isError);
+        REQUIRE(outcome.draft.has_value());
+        CHECK(outcome.draft->contains(item.contains));
+    }
+    struct Refused {
+        std::string patch;
+        std::string kind;
+        std::string why;
+    };
+    std::vector<Refused> const refused = {
+        {R"([{"op":"add","path":"/nope/x","value":1}])", "add /nope/x", "does not exist"},
+        {R"([{"op":"remove","path":"/nope"}])", "remove /nope", "does not exist"},
+        {R"([{"op":"move","from":"/nope","path":"/view/x"}])", "move /view/x", "does not exist"},
+        {R"([{"op":"copy","from":"/nope","path":"/view/x"}])", "copy /view/x", "does not exist"},
+        {R"([{"op":"test","path":"/id","value":"another"}])", "test /id", "not the one the test expects"},
+        {R"([{"op":"add","path":"id","value":"x"}])", "add id", "not a valid JSON Pointer"},
+        {R"([{"op":"remove","path":"/view/x~"}])", "remove /view/x~", "not a valid JSON Pointer"},
+        {R"([{"op":"move","from":"/view","path":"/view/children/0/z"}])", "move /view/children/0/z",
+         "cannot be applied there"}};
+    for (Refused const& item : refused) {
+        INFO(item.patch);
+        auto const outcome = Direct::called(direct.propose, direct.proposing(), R"({"patch":)" + item.patch + "}");
+        CHECK(outcome.isError);
+        CHECK_FALSE(outcome.draft.has_value());
+        CHECK(outcome.text.contains("op 0 (" + item.kind + ")"));
+        CHECK(outcome.text.contains(item.why));
+    }
 }
