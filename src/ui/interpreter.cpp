@@ -539,17 +539,38 @@ namespace {
     return Value{std::move(ids)};
 }
 
-/// A table with the dialogs its menu opens mounted beside it, in a column placed as the table is: the column takes
-/// the table's visibility and layout as well, and every other common property stays on the table alone, so its test
-/// id and the element id `focus` finds name the table. A dialog takes no room in the column. Without dialogs, the
-/// table alone.
-[[nodiscard]] Node besideDialogs(Common const& placed, Node dialogs, std::function<Node()> const& table) {
+/// The layout of a table inside the column that takes its place, which holds the table's own layout. The table fills
+/// the column across, and along it unless its height is fixed or a stretch: a share of a row is the column's to take
+/// (a column's child takes none), and a row offers to fill its height to the column, not to the table inside it, so a
+/// content height stretches within the column, which is as tall as the table is or as its row makes it. Placement in
+/// the parent (`alignSelf`, `bleed`) is the column's alone.
+[[nodiscard]] LayoutHints wrappedTableLayout(LayoutHints placed) {
+    if (placed.width.kind == Sizing::Kind::Percent) {
+        placed.width = Sizing::stretch(1);
+    }
+    if (placed.height.kind == Sizing::Kind::Content) {
+        placed.height = Sizing::stretch(1);
+    }
+    placed.alignSelf.reset();
+    placed.bleed = false;
+    return placed;
+}
+
+/// A table with the dialogs its menu opens mounted beside it, in a column that takes the table's place: the column
+/// takes the table's visibility and layout, the table `wrappedTableLayout` within it, and every other common property
+/// stays on the table alone, so its test id and the element id `focus` finds name the table. The column has no gap,
+/// so a dialog's placeholder adds no space. Without dialogs, the table alone.
+/// @param placed  The table's common properties; its layout becomes the one inside the column.
+/// @param dialogs The dialogs; null for none.
+/// @param table   Makes the table, after @p placed is changed.
+[[nodiscard]] Node besideDialogs(Common& placed, Node dialogs, std::function<Node()> const& table) {
     if (dialogs == nullptr) {
         return table();
     }
     Column wrapper;
     wrapper.common.visible = placed.visible;
     wrapper.common.layout = placed.layout;
+    placed.layout = wrappedTableLayout(placed.layout);
     wrapper.children.push_back(table());
     wrapper.children.push_back(std::move(dialogs));
     return ui::column(std::move(wrapper));
@@ -8965,6 +8986,7 @@ Node ScreenCore::lowerRows(DocNode const& node, LowerCtx const& ctx, ElementStat
     Column wrapper;
     wrapper.common.visible = std::move(options.common.visible);
     wrapper.common.layout = options.common.layout;
+    options.common.layout = wrappedTableLayout(options.common.layout);
     options.common.visible = slotProp<bool>(listed);
     Column content{.children = {lowerAll(empty, ctx)}};
     content.common.visible = slotProp<bool>([listed] { return !listed(); });

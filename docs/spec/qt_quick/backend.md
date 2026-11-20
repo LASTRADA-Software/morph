@@ -431,7 +431,9 @@ accessible node.
 **The column chooser and the sort dialog.** "Columns…" and "Sort…" in the table's menu open dialogs the interpreter
 builds from widgets the backend already has (`ui/table_dialogs.hpp`), so the backend adds nothing for them: each is a
 `MorphDialog` (test ids `table_columns` and `table_sort`, titled `Columns` and `Sort`), mounted beside the table in a
-column that takes the table's place and visibility, its zero-sized placeholder taking no room there. The chooser holds,
+column that takes the table's place, layout and visibility. The column has no gap, so the dialogs' zero-sized
+placeholders add no space. Inside it the table fills the column across, and along it unless its height is fixed or a
+stretch: a row offers to fill its height to the column, and a share of the row is the column's to take. The chooser holds,
 per column in the layout's order, a `MorphCheckbox` and two `MorphButton`s (`Move up`, `Move down`), then `Reset
 columns`, `Group columns…` with its form (a `MorphTextInput`, a check box per column, `Create group`), a line and a
 `Remove group` button per user-formed group, and `Done`; the sort dialog, per key, two `MorphSelect`s (the column, and
