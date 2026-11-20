@@ -4314,3 +4314,25 @@ TEST_CASE("filter menu: a table whose menu set a filter tears down cleanly", "[u
     }
     SUCCEED("the screen, the session and the runtime went without an abort");
 }
+
+// Mutation: the values lists kept without a bound (the first list, past 64 others, is still served from the cache).
+TEST_CASE("filter menu: a table keeps at most 64 values lists, the oldest going first", "[ui][table][config]") {
+    TableHarness h;
+    auto screen = mountDescribed(h, samplesDescription(5));
+    int const table = h.backend.all("Table").front();
+    std::string const values = R"({"values":[{"text":"a","operand":"a","count":1}],"distinct":1})";
+    clickFilter(h, table, 1);
+    h.reply(lastDistinct(h), distinctReply(h.described.revision, values));
+    for (int at = 0; at < 64; ++at) {
+        typeInto(h, "table_filter_search", "s" + std::to_string(at));
+        h.advance(250ms);
+        h.reply(lastDistinct(h), distinctReply(h.described.revision, values));
+    }
+    std::size_t const calls = h.dispatcher.count("Table.samples");
+    typeInto(h, "table_filter_search", "s0");                                          // the oldest but one: kept
+    h.advance(250ms);
+    CHECK(h.dispatcher.count("Table.samples") == calls);
+    typeInto(h, "table_filter_search", "");                                            // the oldest: gone
+    h.advance(250ms);
+    CHECK(h.dispatcher.count("Table.samples") == calls + 1);
+}

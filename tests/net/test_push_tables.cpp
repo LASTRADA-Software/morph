@@ -20,6 +20,7 @@
 #include <memory>
 #include <morph/core/backend.hpp>
 #include <morph/core/bridge.hpp>
+#include <morph/core/completion.hpp>
 #include <morph/core/effects.hpp>
 #include <morph/core/executor.hpp>
 #include <morph/core/registry.hpp>
@@ -27,11 +28,14 @@
 #include <morph/core/wire.hpp>
 #include <morph/net/socket_backend.hpp>
 #include <morph/net/socket_server.hpp>
+#include <morph/reactive/runtime.hpp>
 #include <morph/session/session.hpp>
 #include <morph/table/description.hpp>
 #include <morph/table/level_cache.hpp>
+#include <morph/ui/interpreter.hpp>
 #include <morph/ui/preferences.hpp>
 #include <morph/ui/service_client.hpp>
+#include <morph/ui/table_rows.hpp>
 #include <morph/ui/table_state_model.hpp>
 #include <mutex>
 #include <optional>
@@ -838,86 +842,216 @@ TEST_CASE("table benchmark: C1 C2 C3 many clients over the bridge", "[.benchmark
 
 namespace {
 
-// One exchange over a link with @p latency each way: the request leaves after it, and the reply is taken after it,
-// as a client behind a slow link sees the server. The delays are slept on the client's thread, so the server's work
-// in between is measured as it is.
-morph::wire::Envelope overLink(Client& client, morph::wire::Envelope request, std::chrono::milliseconds latency) {
-    std::this_thread::sleep_for(latency);
-    std::optional<ui::ExchangeReply> reply;
-    client.exchange(std::move(request), [&reply](ui::ExchangeReply answer) { reply = std::move(answer); });
-    REQUIRE(client.pumpUntil([&] { return reply.has_value(); }, 60s));
-    REQUIRE(reply->has_value());
-    std::this_thread::sleep_for(latency);
-    return **reply;
-}
-
-// The wide fixture's 100,000 x 300 table, every level loaded, served to one client.
-struct WideLink {
-    WideLink() {
+// The wide fixture's 100,000 x 300 table, every level loaded: configured before a server attaches its recipe cache,
+// as every case of this file does.
+struct WideFixture {
+    WideFixture() {
         bench::WideTableModel::recipeGate().release();
         bench::WideTableModel::configure(
             {.rows = 100'000, .columns = 300, .seed = 7, .loadDelay = {}, .recipePreloaded = 1.0},
             {.rows = 1'000, .columns = 30, .seed = 7, .loadDelay = {}, .recipePreloaded = 1.0});
-        instance = client.create(std::string{bench::kWideModelType});
+    }
+};
+
+// A link with @p latency each way in front of a model's channel: a call leaves after the latency and its reply is
+// handed on the latency after it lands, both slept on the client's owner, so the server's work in between is
+// measured as it is. It counts the first-page fetches it carries: the round trips a change of the query costs.
+class SlowLink final : public ui::ModelChannel {
+public:
+    SlowLink(std::shared_ptr<ui::ModelChannel> inner, morph::exec::IExecutor& owner, std::chrono::milliseconds latency)
+        : _inner{std::move(inner)}, _owner{&owner}, _latency{latency} {}
+
+    [[nodiscard]] morph::async::Completion<std::string> execute(std::string const& actionId,
+                                                                std::string const& bodyJson,
+                                                                ui::CallOptions options) override {
+        bool const page = !actionId.ends_with(".describe") && !bodyJson.contains(R"("keys")") &&
+                          !bodyJson.contains(R"("distinct")") && bodyJson.contains(R"("offset":0)");
+        if (page) {
+            ++firstPages;
+        }
+        std::this_thread::sleep_for(_latency);
+        auto [completion, promise] = morph::async::Completion<std::string>::makeSettleable(_owner);
+        auto const settle = std::make_shared<morph::async::Completion<std::string>::Promise>(std::move(promise));
+        auto const latency = _latency;
+        auto sent = _inner->execute(actionId, bodyJson, std::move(options));
+        sent.then([this, settle, latency, page](std::string const& reply) {
+            std::this_thread::sleep_for(latency);
+            if (page) {
+                ++answeredPages;
+            }
+            settle->resolve(reply);
+        });
+        sent.onError([settle](std::exception_ptr const& error) { settle->reject(error); });
+        return std::move(completion);
     }
 
-    morph::wire::Envelope ask(std::string body) const {
-        morph::wire::Envelope env;
-        env.kind = "execute";
-        env.modelId = instance;
-        env.modelType = std::string{bench::kWideModelType};
-        env.actionType = "Table.wide";
-        env.body = std::move(body);
-        env.session.principal = "alice";
-        return env;
+    [[nodiscard]] ui::ChannelFacts facts() const override { return _inner->facts(); }
+
+    int firstPages = 0;
+    int answeredPages = 0;
+
+private:
+    std::shared_ptr<ui::ModelChannel> _inner;
+    morph::exec::IExecutor* _owner;
+    std::chrono::milliseconds _latency;
+};
+
+// One client as a UI session over the bridge, its model's calls through a `SlowLink`: what a model-backed table's
+// `WindowRows` reads through.
+struct SessionOverLink {
+    SessionOverLink(std::string const& url, std::chrono::milliseconds latency) {
+        auto made = std::make_unique<morph::net::SocketBackend>(url);
+        socket = made.get();
+        REQUIRE(socket->waitForConnected());
+        exchange = ui::exchangeOver(*socket, owner);
+        bridge = std::make_unique<morph::bridge::Bridge>(std::move(made), owner);
+        dispatcher = std::make_unique<ui::BridgeDispatcher>(*bridge, &owner);
+        ui::SessionOptions options;
+        options.watcher = ui::watcherOver(exchange, [] { return morph::session::Context{}; }, &owner);
+        session = std::make_unique<ui::Session>(runtime, std::move(options));
+        socket->setEventHandler([this](morph::wire::EventBody const& event) { session->deliverEvent(event); }, &owner);
+        bool negotiated = false;
+        morph::wire::Envelope hello;
+        hello.kind = std::string{kHello};
+        exchange(std::move(hello), [&negotiated](ui::ExchangeReply const& reply) {
+            negotiated = reply.has_value() && reply->kind == "ok";
+        });
+        REQUIRE(pumpUntil([&] { return negotiated; }));
+        link = std::make_shared<SlowLink>(
+            dispatcher->bind(std::string{bench::kWideModelType}, morph::bridge::BindSharing::Private, std::string{}),
+            owner, latency);
     }
 
-    ViewServer server{};
-    Client client{server.url, "alice"};
-    std::uint64_t instance = 0;
+    template <typename Done>
+    bool pumpUntil(Done done, std::chrono::milliseconds budget = 10s) {
+        auto const deadline = std::chrono::steady_clock::now() + budget;
+        while (!done()) {
+            if (std::chrono::steady_clock::now() > deadline) {
+                return false;
+            }
+            if (!owner.runOnce()) {
+                std::this_thread::sleep_for(1ms);
+            }
+        }
+        return true;
+    }
+
+    // The table's description, read as `Table.<table>.describe` through the session.
+    morph::table::TableDescription describe(std::string const& table) {
+        std::optional<std::string> text;
+        bool failed = false;
+        auto completion = session->read(link, "Table." + table + ".describe", ui::Value{ui::ValueRecord{}});
+        completion.then([&text](std::string const& reply) { text = reply; })
+            .onError([&failed](std::exception_ptr const&) { failed = true; });
+        REQUIRE(pumpUntil([&] { return text.has_value() || failed; }));
+        REQUIRE(text.has_value());
+        morph::table::TableDescription description;
+        REQUIRE_FALSE(glz::read<glz::opts{.error_on_unknown_keys = false}>(description, *text));
+        return description;
+    }
+
+    morph::exec::MainThreadExecutor owner;
+    morph::reactive::Runtime runtime{owner};
+    morph::net::SocketBackend* socket = nullptr;
+    ui::Exchange exchange;
+    std::unique_ptr<morph::bridge::Bridge> bridge;
+    std::unique_ptr<ui::BridgeDispatcher> dispatcher;
+    std::unique_ptr<ui::Session> session;
+    std::shared_ptr<SlowLink> link;
+};
+
+// A table's rows over `wide` through the link, showing rows 0 to 30 of the columns @p columns names, and whether
+// the rows took a first page that came after `expect` was called.
+struct WideWindow {
+    WideWindow(SessionOverLink& client, std::vector<std::string> columns)
+        : link{client.link},
+          rows{std::make_shared<ui::WindowRows>(*client.session, ui::WindowRowsOptions{.channel = client.link,
+                                                                                      .table = "wide",
+                                                                                      .records = {},
+                                                                                      .pageSize = 200,
+                                                                                      .maxPages = 8})},
+          shown{std::move(columns)} {
+        rows->onChange([this](morph::table::ViewChange const& /*change*/) {
+            if (link->answeredPages > mark && rows->row(0).has_value()) {
+                accepted = true;
+            }
+        });
+        rows->setDescription(client.describe("wide"));
+        rows->visible(0, 30, shown);
+    }
+
+    // From now on, a first page answered after this call is the one awaited.
+    void expect() {
+        mark = link->answeredPages;
+        accepted = false;
+    }
+
+    std::shared_ptr<SlowLink> link;
+    std::shared_ptr<ui::WindowRows> rows;
+    std::vector<std::string> shown;
+    int mark = 0;
+    bool accepted = false;
 };
 
 }  // namespace
 
-// B3, recorded and not a gate. 50 ms each way: a header sort to the accepted page (bound 150 ms), and the last key of
-// a text filter to the accepted page, the filter's 250 ms debounce waited first (bound 250 ms + 150 ms).
+// B3, recorded and not a gate. 50 ms each way, through the rows a model-backed table reads: a header sort's new
+// chain to the accepted page (bound 150 ms), and the filter the last key of a text condition sends to the accepted
+// page (bound 150 ms after the filter menu's 250 ms debounce, which "a condition applies once after typing pauses"
+// gates in morph_tests). Each change costs one round trip: one first-page fetch. Unbuilt on the host that wrote it,
+// and its mutation not run: WindowRows sending a query change twice (restart called a second time in `setSort` or
+// `setFilter`) makes `firstPages` grow by two.
 TEST_CASE("table benchmark: a sort change and a text filter over a socket with 50 ms each way", "[.benchmark][table]") {
-    WideLink link;
-    constexpr auto kLatency = 50ms;
-    static_cast<void>(pageOf(overLink(link.client, link.ask(R"({"columns":["id","d000"],"page":{"offset":0,"limit":50}})"),
-                                      kLatency)));
+    WideFixture const fixture;
+    ViewServer server{};
+    SessionOverLink client{server.url, 50ms};
+    WideWindow window{client, {"id", "d000", "t011"}};
+    REQUIRE(client.pumpUntil([&] { return window.accepted; }, 60s));
+
+    int const beforeSort = client.link->firstPages;
+    window.expect();
     auto const sortBegan = std::chrono::steady_clock::now();
-    auto const sorted = pageOf(overLink(
-        link.client,
-        link.ask(R"({"sort":[{"column":"d000","dir":"asc"}],"columns":["id","d000"],"page":{"offset":0,"limit":50}})"),
-        kLatency));
+    REQUIRE(window.rows->setSort({morph::table::SortKey{.column = "d000", .dir = morph::table::SortDirection::Ascending}})
+                .has_value());
+    REQUIRE(client.pumpUntil([&] { return window.accepted; }, 10s));
     auto const sortMs = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - sortBegan).count();
-    CHECK_FALSE(sorted.rows.empty());
+    CHECK(client.link->firstPages - beforeSort == 1);
+
+    int const beforeFilter = client.link->firstPages;
+    window.expect();
+    morph::table::FilterEntry contains;
+    contains.contains = "a";
+    morph::table::FilterSpec filter;
+    filter.columns.insert_or_assign(
+        "t011", morph::table::ColumnFilter{.combine = morph::table::Combine::Any, .include = {contains}, .exclude = {}});
     auto const keyBegan = std::chrono::steady_clock::now();
-    std::this_thread::sleep_for(250ms);
-    auto const filtered = pageOf(overLink(
-        link.client,
-        link.ask(R"({"filters":{"columns":{"t011":{"include":[{"contains":"a"}]}}},"columns":["id","t011"],)"
-                 R"("page":{"offset":0,"limit":50}})"),
-        kLatency));
+    REQUIRE(window.rows->setFilter(filter).has_value());
+    REQUIRE(client.pumpUntil([&] { return window.accepted; }, 10s));
     auto const keyMs = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - keyBegan).count();
-    static_cast<void>(filtered);
-    std::println("| B3 | sort on d000, 100,000 x 300, 50 ms each way: {:.1f} ms (bound 150) |", sortMs);
-    std::println("| B3 | last key of a text filter to the page, 50 ms each way: {:.1f} ms (bound 400) |", keyMs);
+    CHECK(client.link->firstPages - beforeFilter == 1);
+
+    std::println("| B3 | sort on d000, 100,000 x 300, 50 ms each way, to the accepted page: {:.1f} ms (bound 150) |", sortMs);
+    std::println("| B3 | a text filter's query to the accepted page, 50 ms each way: {:.1f} ms (bound 150 after the "
+                 "250 ms debounce) |",
+                 keyMs);
 }
 
-// D9, recorded and not a gate: a server-mode values list from the menu's opening to its reply (bound 150 ms).
+// D9, recorded and not a gate: the server side of a values list, a `distinct` query on `t011` to its reply (bound
+// 150 ms from the menu's opening to the list shown, which this figure does not include the client's drawing in).
 TEST_CASE("table benchmark: a server-mode values list from open to shown", "[.benchmark][table]") {
-    WideLink link;
+    WideFixture const fixture;
+    ViewServer server{};
+    Client client{server.url, "alice"};
+    auto const instance = client.create(std::string{bench::kWideModelType});
     auto const began = std::chrono::steady_clock::now();
-    auto const listed = pageOf(link.client.execute(
-        link.instance, std::string{bench::kWideModelType}, "Table.wide",
+    auto const listed = pageOf(client.execute(
+        instance, std::string{bench::kWideModelType}, "Table.wide",
         R"({"distinct":{"column":"t011","search":"","bucket":"value","offset":0,"limit":200}})"));
     auto const ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - began).count();
     REQUIRE(listed.distinct.has_value());
     CHECK_FALSE(listed.distinct->values.empty());
-    std::println("| D9 | values list of t011, 100,000 rows: {:.1f} ms, {} values of {} (bound 150) |", ms,
-                 listed.distinct->values.size(), listed.distinct->distinct);
+    std::println("| D9 | values list of t011, 100,000 rows, the server's reply: {:.1f} ms, {} values of {} (bound 150) |",
+                 ms, listed.distinct->values.size(), listed.distinct->distinct);
 }
 
 namespace {
