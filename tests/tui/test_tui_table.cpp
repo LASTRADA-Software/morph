@@ -745,6 +745,33 @@ TEST_CASE("tui table: a toned row's cells draw in the tone's style", "[tui][tabl
     CHECK_THROWS_AS(fruit.table->setRowTone(*fruit.cells.at(0), ui::Tone::Ok), std::logic_error);
 }
 
+// Mutation: setRowMarks doing nothing (no row is dim, and every line starts with the selection's gutter).
+TEST_CASE("tui table: a row's marks are drawn", "[tui][table]") {
+    Harness harness{30, 5};
+    Fruit fruit{harness, ui::SelectionMode::Single};
+    fruit.addRow(harness, key(3), "plum", "1");
+    fruit.table->setRowMarks(*fruit.rows.at(0),
+                             ui::RowMarks{.unmatched = true, .tooltip = "This row no longer matches the filter"});
+    fruit.table->setRowMarks(*fruit.rows.at(1), ui::RowMarks{.busy = true});
+    fruit.table->setRowMarks(*fruit.rows.at(2), ui::RowMarks{.locked = true, .tooltip = "Being edited by another user"});
+    auto const lines = harness.draw();
+    auto const& buffer = harness.screen().renderedBuffer();
+    // Row 0 is the first data line; its first cell starts after the two-cell gutter.
+    CHECK(buffer.cellAt({.x = 2, .y = 1})->style.dim);
+    CHECK_FALSE(buffer.cellAt({.x = 2, .y = 2})->style.dim);
+    CHECK(lines.at(2).starts_with("…"));
+    CHECK(lines.at(3).starts_with("#"));
+    CHECK_FALSE(lines.at(1).starts_with("…"));
+    for (auto const& row : fruit.rows) {
+        fruit.table->setRowMarks(*row, ui::RowMarks{});
+    }
+    auto const plain = harness.draw();
+    CHECK_FALSE(harness.screen().renderedBuffer().cellAt({.x = 2, .y = 1})->style.dim);
+    CHECK(plain.at(2).starts_with(" "));
+    CHECK(plain.at(3).starts_with(" "));
+    CHECK_THROWS_AS(fruit.table->setRowMarks(*fruit.cells.at(0), ui::RowMarks{}), std::logic_error);
+}
+
 namespace {
 
 /// A table of two fixed columns @p fixed wide and a stretch column headed `Analyte`, with one row.

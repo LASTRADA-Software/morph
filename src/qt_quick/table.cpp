@@ -260,6 +260,17 @@ void TableImpl::setRowTone(ui::Widget& row, std::optional<ui::Tone> tone) {
     tableRow->write("tone", tone ? static_cast<int>(*tone) : -1);
 }
 
+void TableImpl::setRowMarks(ui::Widget& row, ui::RowMarks const& marks) {
+    auto const* const tableRow = dynamic_cast<TableRowImpl const*>(&row);
+    if (tableRow == nullptr || tableRow->container() != this) {
+        throw std::logic_error{"morph::qt_quick: setRowMarks of a widget that is not this table's row"};
+    }
+    tableRow->write("busy", marks.busy);
+    tableRow->write("locked", marks.locked);
+    tableRow->write("unmatched", marks.unmatched);
+    tableRow->write("marksTooltip", toQString(marks.tooltip));
+}
+
 void TableImpl::setRowHeading(ui::Widget& row) {
     auto const* const tableRow = dynamic_cast<TableRowImpl const*>(&row);
     if (tableRow == nullptr || tableRow->container() != this) {

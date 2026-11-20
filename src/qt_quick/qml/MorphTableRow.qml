@@ -96,6 +96,14 @@ MorphWidget {
     property int tone: -1
     // Whether the row is a group heading; C++ sets it once, right after the row's key.
     property bool heading: false
+    // The row's marks (`setRowMarks`): an action is working on it, another user holds it, it no longer matches the
+    // filter, and what its tooltip says of them. An unmatched row draws at the theme's muted opacity.
+    property bool busy: false
+    property bool locked: false
+    property bool unmatched: false
+    property string marksTooltip: ""
+    opacity: unmatched ? Theme.mutedOpacity : 1.0
+    tooltipText: marksTooltip !== "" ? marksTooltip : tooltip
     readonly property Item backgroundItem: backgroundLoader.item as Item
     // The cells that span, C++'s resolve of the row's spans: [{column, rows}], and the columns of this row that a
     // span above covers: [column]. The table gives each spanning column the block it covers: [{column, height}], and
@@ -601,6 +609,31 @@ MorphWidget {
 
     HoverHandler {
         id: rowHover
+    }
+
+    // A busy row's mark: a bar at its leading edge in the info colour. A locked row's: a hatch over its cells.
+    Rectangle {
+        objectName: "busyMark"
+        visible: root.busy
+        x: 0
+        z: 3
+        width: 3
+        height: root.height
+        color: root.scheme.info
+    }
+    Rectangle {
+        objectName: "lockedHatch"
+        visible: root.locked
+        anchors.fill: parent
+        z: 3
+        color: "transparent"
+        border.width: 0
+        gradient: Gradient {
+            orientation: Gradient.Horizontal
+            GradientStop { position: 0.0; color: Qt.alpha(root.scheme.muted, 0.18) }
+            GradientStop { position: 0.5; color: Qt.alpha(root.scheme.muted, 0.06) }
+            GradientStop { position: 1.0; color: Qt.alpha(root.scheme.muted, 0.18) }
+        }
     }
 
     // Hover is delivered only to an item whose bounds hold the pointer, so the part of a spanning cell below the row

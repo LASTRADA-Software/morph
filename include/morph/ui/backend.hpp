@@ -992,6 +992,17 @@ public:
         static_cast<void>(onStatusEntry);
     }
 
+    /// @brief Sets a row's marks; called after `setRowKey` for a row whose look carries marks, and on every change.
+    ///        An `unmatched` row draws muted, a `busy` one with the busy mark, a `locked` one with the locked mark,
+    ///        and `tooltip` is the row's tooltip; `RowMarks{}` draws an unmarked row. A backend that marks no row
+    ///        ignores it.
+    /// @param row   One of this table's rows.
+    /// @param marks The marks.
+    virtual void setRowMarks(Widget& row, RowMarks const& marks) {
+        static_cast<void>(row);
+        static_cast<void>(marks);
+    }
+
     /// @brief Shows the table's status line: its counts, the state of a failed fetch or level with "Retry" when it
     ///        offers it, and the latest message; a status that is not `shown` takes no space. Called once the table
     ///        is built and on every change. A backend without a status line ignores it.

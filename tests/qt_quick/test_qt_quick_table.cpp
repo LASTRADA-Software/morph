@@ -611,6 +611,45 @@ TEST_CASE(
     CHECK_FALSE(partOf(*table.rows.at(1), "tint").isVisible());
 }
 
+// Mutation: MorphTable.qml ignoring `busy` (MorphTableRow's busy mark never shown), under which row 1 shows no busy
+// mark.
+TEST_CASE("qt_quick table: a row's marks are drawn", "[qt_quick]") {
+    Scene scene;
+    Rows table = makeTable(scene, {ui::Key{std::string{"a"}}, ui::Key{std::string{"b"}}, ui::Key{std::string{"c"}}},
+                           ui::SelectionMode::Single);
+    table.table->setRowMarks(*table.rows.at(0),
+                             ui::RowMarks{.unmatched = true, .tooltip = "This row no longer matches the filter"});
+    table.table->setRowMarks(*table.rows.at(1), ui::RowMarks{.busy = true});
+    table.table->setRowMarks(*table.rows.at(2),
+                             ui::RowMarks{.locked = true, .tooltip = "Being edited by another user"});
+    scene.settle();
+    auto* const theme = scene.engine().singletonInstance<QObject*>(QStringLiteral("MorphUi"), QStringLiteral("Theme"));
+    REQUIRE(theme != nullptr);
+    auto const markOf = [](ui::StackWidget const& row, char const* name) -> QQuickItem& {
+        auto* const found = Scene::itemOf(row).findChild<QQuickItem*>(QString::fromLatin1(name));
+        REQUIRE(found != nullptr);
+        return *found;
+    };
+    QQuickItem const& muted = Scene::itemOf(*table.rows.at(0));
+    CHECK(muted.opacity() == theme->property("mutedOpacity").toReal());
+    CHECK(muted.property("tooltipText").toString() == QStringLiteral("This row no longer matches the filter"));
+    CHECK(markOf(*table.rows.at(1), "busyMark").isVisible());
+    CHECK_FALSE(markOf(*table.rows.at(0), "busyMark").isVisible());
+    CHECK(markOf(*table.rows.at(2), "lockedHatch").isVisible());
+    CHECK(Scene::itemOf(*table.rows.at(2)).property("tooltipText").toString() ==
+          QStringLiteral("Being edited by another user"));
+    for (auto const& row : table.rows) {
+        table.table->setRowMarks(*row, ui::RowMarks{});
+    }
+    scene.settle();
+    for (auto const& row : table.rows) {
+        CHECK(Scene::itemOf(*row).opacity() == 1.0);
+        CHECK_FALSE(markOf(*row, "busyMark").isVisible());
+        CHECK_FALSE(markOf(*row, "lockedHatch").isVisible());
+        CHECK(Scene::itemOf(*row).property("tooltipText").toString().isEmpty());
+    }
+}
+
 namespace {
 
 struct VirtualRow {

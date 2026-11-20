@@ -471,6 +471,71 @@ private:
 
 namespace detail {
 
+/// @brief A view with retained rows merged in, as `mergeRetainedOrder` returns it.
+struct RetainedOrder {
+    /// @brief Source rows, in view order: the base order with the admitted rows at their sorted places.
+    std::vector<std::uint32_t> order;
+    /// @brief The view rows of the admitted rows whose match is `No`, ascending.
+    std::vector<std::int64_t> unmatched;
+    /// @brief The retained rows the base order lacked, which the merge admitted, ascending by source row.
+    std::vector<std::uint32_t> admitted;
+    /// @brief How many of `admitted` the filter could not decide (`Match::Unknown`).
+    std::int64_t undecided = 0;
+};
+
+/// @brief Merges the retained rows a base order lacks into it, each at the place the sort gives it.
+///
+/// The base order must be sorted by @p before, which is a strict total order (ties to the lower source row, as
+/// `RowOrder` breaks them), so the result is the order the sort gives the base rows and the admitted rows together.
+/// Every admitted row is in the result whatever its match. Costs the scan of @p baseOrder for the retained rows it
+/// holds, and a binary search of it for each admitted row.
+/// @param baseOrder    The view without retained rows: source rows, sorted by @p before.
+/// @param retainedRows The retained rows, as source rows; a row named twice is admitted once.
+/// @param before       Whether one source row orders before another.
+/// @param match        What the filter says of a source row.
+/// @return The merged order, the unmatched view rows, the admitted rows and how many of those were undecided.
+[[nodiscard]] inline RetainedOrder mergeRetainedOrder(std::span<std::uint32_t const> baseOrder,
+                                                      std::span<std::uint32_t const> retainedRows,
+                                                      std::function<bool(std::uint32_t, std::uint32_t)> const& before,
+                                                      std::function<Match(std::uint32_t)> const& match) {
+    RetainedOrder out;
+    std::unordered_set<std::uint32_t> lacking(retainedRows.begin(), retainedRows.end());
+    for (auto const row : baseOrder) {
+        if (lacking.empty()) {
+            break;
+        }
+        lacking.erase(row);
+    }
+    out.admitted.assign(lacking.begin(), lacking.end());
+    std::ranges::sort(out.admitted);
+    std::vector<std::pair<std::uint32_t, Match>> placed;
+    placed.reserve(out.admitted.size());
+    for (auto const row : out.admitted) {
+        auto const decided = match(row);
+        if (decided == Match::Unknown) {
+            ++out.undecided;
+        }
+        placed.emplace_back(row, decided);
+    }
+    std::ranges::sort(placed,
+                      [&before](auto const& left, auto const& right) { return before(left.first, right.first); });
+    out.order.reserve(baseOrder.size() + placed.size());
+    auto from = baseOrder.begin();
+    for (auto const& [row, decided] : placed) {
+        auto const to = std::upper_bound(from, baseOrder.end(), row, [&before](std::uint32_t left, std::uint32_t right) {
+            return before(left, right);
+        });
+        out.order.insert(out.order.end(), from, to);
+        from = to;
+        if (decided == Match::No) {
+            out.unmatched.push_back(static_cast<std::int64_t>(out.order.size()));
+        }
+        out.order.push_back(row);
+    }
+    out.order.insert(out.order.end(), from, baseOrder.end());
+    return out;
+}
+
 /// @brief Everything one view job reads. Immutable once the job starts.
 struct JobInput {
     /// @brief The rows.
@@ -510,6 +575,8 @@ struct JobInput {
     bool allChanged = false;
     /// @brief More operations than this make the change a reset.
     std::size_t resetThreshold = 5000;
+    /// @brief Keys of rows the view keeps whatever the filter says of them; a key the snapshot lacks is ignored.
+    std::vector<RowId> retained;
 };
 
 /// @brief What a finished job hands back to the owner.
@@ -534,6 +601,8 @@ struct JobResult {
     bool filtered = false;
     /// @brief Key columns built from scratch.
     std::size_t keyBuilds = 0;
+    /// @brief The retained rows in `view` the filter rejects, source rows ascending.
+    std::vector<std::uint32_t> unmatched;
 };
 
 /// @brief The error of an unloaded cell in a base-level column: no level names that cell, so no load would
@@ -861,6 +930,7 @@ private:
     bool order(Deadline deadline, ::core::async::StopToken const& stop) {
         if (_in.repair) {
             repair();
+            admitRetained();
             return true;
         }
         if (!_started) {
@@ -896,7 +966,39 @@ private:
             }
         }
         _result.view = std::move(_base);
+        admitRetained();
         return true;
+    }
+
+    // Merges the retained rows the filter left out into the view at their sorted places; those it could not decide
+    // leave the undecided rows, and those it rejects are listed in `unmatched`.
+    void admitRetained() {
+        if (_in.retained.empty()) {
+            return;
+        }
+        std::unordered_set<RowId> const wanted(_in.retained.begin(), _in.retained.end());
+        std::vector<std::uint32_t> rows;
+        for (std::size_t row = 0; row < _in.snapshot->rowCount() && rows.size() < wanted.size(); ++row) {
+            if (wanted.contains(_in.snapshot->rowId(row))) {
+                rows.push_back(static_cast<std::uint32_t>(row));
+            }
+        }
+        auto const orderBy = rowOrder();
+        auto const keys = keyPointers();
+        auto merged = mergeRetainedOrder(
+            _result.view, rows, [&orderBy](std::uint32_t left, std::uint32_t right) { return orderBy(left, right); },
+            [this, &keys](std::uint32_t row) {
+                return _in.filter == nullptr ? Match::Yes : _in.filter->evaluateRow(keys, row);
+            });
+        _result.view = std::move(merged.order);
+        std::vector<std::uint32_t> undecided;
+        std::ranges::set_difference(_result.undecided, merged.admitted, std::back_inserter(undecided));
+        _result.undecided = std::move(undecided);
+        _result.unmatched.clear();
+        for (auto const at : merged.unmatched) {
+            _result.unmatched.push_back(_result.view[static_cast<std::size_t>(at)]);
+        }
+        std::ranges::sort(_result.unmatched);
     }
 
     void diff() {
@@ -1034,7 +1136,38 @@ public:
         }
         _filterSpec = std::move(spec);
         _filter = std::make_shared<CompiledFilter const>(std::move(*compiled));
+        // The retained rows are of the filter they no longer matched.
+        if (!_retained.empty()) {
+            _retained.clear();
+            ++_retainedVersion;
+        }
         return schedule();
+    }
+
+    /// @brief Replaces the retained rows: rows the view keeps, at their sorted places, whatever the filter says of
+    ///        them. `setFilter` clears them.
+    /// @param keys The rows' keys; a key the source lacks is ignored.
+    /// @return `ServiceFailed` or `SourceContract`, as for `setSort`, when the view was computed inside the call; the
+    ///         retained rows are then those of the view shown.
+    std::expected<void, TableError> retain(std::vector<RowId> keys) {
+        if (keys == _retained) {
+            return {};
+        }
+        _retained = std::move(keys);
+        ++_retainedVersion;
+        return schedule();
+    }
+
+    /// @brief The retained rows asked for.
+    /// @return Their keys, as `retain` last set them.
+    [[nodiscard]] std::span<RowId const> retained() const noexcept { return _retained; }
+
+    /// @brief Whether the row at a view row is retained and rejected by the filter.
+    /// @param viewRow View row index.
+    /// @return `true` for such a row; `false` past the end.
+    [[nodiscard]] bool isUnmatched(std::size_t viewRow) const {
+        auto const row = sourceRowOf(viewRow);
+        return row && std::ranges::binary_search(_unmatched, static_cast<std::uint32_t>(*row));
     }
 
     /// @brief The current sort chain.
@@ -1216,6 +1349,7 @@ private:
         std::uint64_t epoch = 0;           // structural changes absorbed
         std::uint64_t changeSeq = 0;       // notifications absorbed
         std::uint64_t columnsVersion = 0;  // column sets adopted
+        std::uint64_t retainedVersion = 0;  // retained sets asked for
     };
 
     // What applying a result calls out with.
@@ -1349,22 +1483,24 @@ private:
     // Whether the shown view is out of date with the requested state.
     [[nodiscard]] bool hasWork() const {
         return !_dirty.empty() || _epoch != _viewEpoch || _sort != _appliedSort || _filter != _appliedFilter ||
-               _columnsVersion != _viewColumnsVersion;
+               _columnsVersion != _viewColumnsVersion || _retainedVersion != _appliedRetainedVersion;
     }
 
     // A repair merges the dirty rows into the shown order: only the rows'
     // contents changed since that order was computed. (A structural change
     // advances the epoch; every row is owed a `Changed` exactly while the
-    // epoch is ahead of the view's.)
+    // epoch is ahead of the view's.) A view with retained rows is computed whole: a repair merges into an order the
+    // filter made, which retained rows are not part of.
     [[nodiscard]] bool canRepair() const {
         return !_dirty.empty() && _epoch == _viewEpoch && _sort == _appliedSort && _filter == _appliedFilter &&
-               _columnsVersion == _viewColumnsVersion;
+               _columnsVersion == _viewColumnsVersion && _retained.empty() &&
+               _retainedVersion == _appliedRetainedVersion;
     }
 
     // Whether a change since @p input was taken makes its result useless.
     [[nodiscard]] bool supersedes(detail::JobInput const& input, Ticket const& ticket) const {
         return _sort != input.sort || _filter != input.filter || _epoch != ticket.epoch ||
-               _columnsVersion != ticket.columnsVersion;
+               _columnsVersion != ticket.columnsVersion || _retainedVersion != ticket.retainedVersion;
     }
 
     // Starts the work the requested state needs. While a job runs, a request
@@ -1430,7 +1566,11 @@ private:
         input.allChanged = _obligeAll;
         _obligeAll = false;
         input.resetThreshold = _options.resetThreshold;
-        ticket = Ticket{.epoch = _epoch, .changeSeq = _absorbedSeq, .columnsVersion = _columnsVersion};
+        input.retained = _retained;
+        ticket = Ticket{.epoch = _epoch,
+                        .changeSeq = _absorbedSeq,
+                        .columnsVersion = _columnsVersion,
+                        .retainedVersion = _retainedVersion};
         return input;
     }
 
@@ -1447,6 +1587,10 @@ private:
         _sort = _appliedSort;
         _filterSpec = _appliedFilterSpec;
         _filter = _appliedFilter;
+        if (_retainedVersion != _appliedRetainedVersion) {
+            _retained = _appliedRetained;
+            _retainedVersion = _appliedRetainedVersion;
+        }
         if (_columnsVersion != _viewColumnsVersion) {
             fitToColumns();
         }
@@ -1607,6 +1751,9 @@ private:
         _appliedSort = input.sort;
         _appliedFilter = input.filter;
         _appliedFilterSpec = _filterSpec;
+        _appliedRetained = input.retained;
+        _appliedRetainedVersion = ticket.retainedVersion;
+        _unmatched = std::move(result.unmatched);
         _trueView = std::move(result.view);
         auto const undecidedBefore = _undecided.size();
         _undecided = std::move(result.undecided);
@@ -1804,6 +1951,8 @@ private:
     std::shared_ptr<CompiledFilter const> _filter;
     std::uint64_t _columnsVersion = 0;
     std::uint64_t _epoch = 0;
+    std::vector<RowId> _retained;
+    std::uint64_t _retainedVersion = 0;
     // applied state: what the shown view was computed from
     std::vector<ColumnInfo> _viewColumns;
     std::shared_ptr<RowSnapshot const> _viewSnapshot;
@@ -1816,6 +1965,9 @@ private:
     std::vector<std::uint32_t> _view;      // displayed
     std::vector<std::uint32_t> _trueView;  // sorted and filtered, without holds
     std::vector<std::uint32_t> _undecided;  // neither admitted nor rejected, source rows ascending
+    std::vector<RowId> _appliedRetained;
+    std::uint64_t _appliedRetainedVersion = 0;
+    std::vector<std::uint32_t> _unmatched;  // retained rows of the view the filter rejects, source rows ascending
     // caches, valid for `_keysSnapshot`
     std::shared_ptr<RowSnapshot const> _keysSnapshot;
     std::vector<std::shared_ptr<KeyColumn const>> _keys;

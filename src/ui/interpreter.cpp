@@ -321,6 +321,11 @@ public:
         return _inner->selectedCount(selection);
     }
     [[nodiscard]] bool leftView(table::RowId const& key) const override { return _inner->leftView(key); }
+    [[nodiscard]] RetainResult retain(std::span<table::RowId const> keys) override { return _inner->retain(keys); }
+    void clearRetained() override { _inner->clearRetained(); }
+    [[nodiscard]] bool unmatched(table::RowId const& key) const override { return _inner->unmatched(key); }
+    void holdRefetches(std::uint64_t run) override { _inner->holdRefetches(run); }
+    void releaseRefetches(std::uint64_t run) override { _inner->releaseRefetches(run); }
     async::Completion<std::expected<std::vector<FetchedRow>, table::TableError>> rowsOf(
         std::int64_t first, std::int64_t count, std::span<std::string const> columns) override {
         return _inner->rowsOf(first, count, columns);
@@ -874,6 +879,7 @@ struct ModelTable {
           message{runtime, std::string{}},
           entries{runtime, std::vector<StatusEntry>{}},
           viewSelection{runtime, std::nullopt},
+          marksRevision{runtime, 0},
           config{runtime} {}
 
     ModelTable(ModelTable const&) = delete;
@@ -934,6 +940,11 @@ struct ModelTable {
     reactive::TimerHandle messageTimer;
     /// The selection while it is of the view (`view` engaged): the element's `selection` is then empty.
     reactive::Signal<std::optional<TableSelection>> viewSelection;
+    /// Read first by every row's marks: the rows' retained and unmatched state is not reactive, so this is bumped
+    /// after every change of it, and a row that becomes unmatched is drawn again.
+    reactive::Signal<std::uint64_t> marksRevision;
+    /// The node's `retainChanged`: the rows an action of this session changed stay in view.
+    bool retainChanged = false;
     /// Hears the session's runs while the table lives, to offer a refused selection of the view again.
     std::unique_ptr<RunObserver> runs;
     /// Whether the status line takes space; `status: false` sends messages to the host instead.
@@ -11044,6 +11055,9 @@ ActionTable actionTableOf(DocNode const& node, Catalog const& catalog) {
     return out;
 }
 
+/// @brief The id of the status line's "Show only matching rows", which drops the retained rows.
+constexpr std::string_view kShowMatching = "retained.showMatching";
+
 /// @brief Keeps a model table's selection of the view true to its rows after they changed: a selection of another
 ///        filter than the rows hold ends, the description's new revision having dropped a filter included, and a
 ///        key of `except` a reply left out of the view is dropped from it.
@@ -11084,9 +11098,32 @@ public:
     TableRuns(ScreenCore& core, ElementState& element, ModelTable& model)
         : _core{&core}, _element{&element}, _model{&model} {}
 
-    void started(RunStarted const& run) override { static_cast<void>(run); }
+    // On a table with `retainChanged`, a run of an action that declares an effect on the table's record holds the
+    // refetches its change events cause until it settles.
+    void started(RunStarted const& run) override {
+        if (!_model->retainChanged || _model->rows == nullptr) {
+            return;
+        }
+        auto const& catalog = _core->session.options().catalog;
+        std::optional<ActionInfo> const info = catalog.action ? catalog.action(run.action) : std::nullopt;
+        if (!info || !info->effects) {
+            return;
+        }
+        std::string const record = _model->modelType + "." + _model->id;
+        if (std::ranges::any_of(*info->effects, [&record](ActionEffect const& effect) {
+                return effect.record && *effect.record == record;
+            })) {
+            _held.insert(run.run);
+            _model->rows->holdRefetches(run.run);
+        }
+    }
 
     void settled(RunSettled const& run) override {
+        if (_held.erase(run.run) > 0 && _model->rows != nullptr) {
+            keepChanged(run);
+            _model->marksRevision.set(_model->marksRevision.peek() + 1);
+            _model->rows->releaseRefetches(run.run);
+        }
         if (run.refusalCode != "morph.table.viewChanged" || _model->rows == nullptr) {
             return;
         }
@@ -11149,9 +11186,36 @@ public:
     }
 
 private:
+    // Retains the rows the run's reply says it changed, all or none: past the bound none is, and the status line
+    // says so.
+    void keepChanged(RunSettled const& run) {
+        if (!run.succeeded) {
+            return;
+        }
+        auto const& catalog = _core->session.options().catalog;
+        std::optional<ActionInfo> const info = catalog.action ? catalog.action(run.action) : std::nullopt;
+        if (!info) {
+            return;
+        }
+        ChangedRowsValue const changed = changedRowsOf(run.reply, *info, _model->modelType + "." + _model->id);
+        std::vector<table::RowId> keys;
+        keys.reserve(changed.rows.size());
+        for (table::ChangedRow const& row : changed.rows) {
+            keys.push_back(row.key);
+        }
+        if (keys.empty() || _model->rows->retain(keys) != RetainResult::OverBound) {
+            return;
+        }
+        _core->tableMessage(*_element, "The changed rows are not kept in view: a table keeps at most " +
+                                           render::formatCanonicalNumber(std::to_string(table::QueryLimits{}.maxRetained),
+                                                                         _core->session.formatting().numeric));
+    }
+
     ScreenCore* _core;
     ElementState* _element;
     ModelTable* _model;
+    // The runs holding the rows' refetches.
+    std::set<std::uint64_t> _held;
 };
 
 }  // namespace
@@ -11175,6 +11239,7 @@ void ScreenCore::wireModelTable(ElementState& element) {
     model.id = action.empty() ? std::string{node.name("table")} : action;
     model.modelType = alias->decl->type;
     model.statusShown = node.flag("status", true);
+    model.retainChanged = node.flag("retainChanged");
     TableConfig& config = model.config;
     config.element = &element;
     auto const [allowed, menus] = configurableOf(node);
@@ -11298,6 +11363,7 @@ void ScreenCore::wireModelTable(ElementState& element) {
     model.rows = std::make_shared<ObservedRows>(
         model.window, model.scope.token().guard([this, &model, &element] {
             model.bump();
+            model.marksRevision.set(model.marksRevision.peek() + 1);
             fitViewSelection(*this, element, model);
         }),
         model.scope.token().guard([this, &element] { tableGesture(element); }),
@@ -13054,9 +13120,33 @@ Node ScreenCore::modelTableOf(DocNode const& node, LowerCtx const& ctx, ElementS
             status.message = model.message.get();
             status.entries = model.entries.get();
         }
+        if (counts.retained > 0) {
+            status.standing =
+                render::formatCanonicalNumber(std::to_string(counts.retained), scope->formatting().numeric) +
+                (counts.retained == 1 ? " row shown that no longer matches" : " rows shown that no longer match");
+            status.standingEntries = {StatusEntry{.id = std::string{kShowMatching}, .label = "Show only matching rows"}};
+        }
         return status;
     });
     options.onStatusEntry = [this, &element, &model](std::string const& id) {
+        // "Show only matching rows": the retained rows go, and with them a selection of the view, which named them.
+        if (id == kShowMatching) {
+            tableGesture(element);
+            runtime().batch([&] {
+                model.rows->clearRetained();
+                model.marksRevision.set(model.marksRevision.peek() + 1);
+                if (model.viewSelection.peek()) {
+                    model.viewSelection.set(std::nullopt);
+                    if (element.bound == nullptr) {
+                        session.asUser([&] {
+                            session.noteWrite();
+                            element.selection.set(Value{ValueList{}});
+                        });
+                    }
+                }
+            });
+            return;
+        }
         auto const found = model.entryHandlers.find(id);
         if (found == model.entryHandlers.end()) {
             return;
@@ -13373,7 +13463,7 @@ Node ScreenCore::modelTableOf(DocNode const& node, LowerCtx const& ctx, ElementS
     ExprPtr const toneExpr = node.prop("rowTone");
     ExprPtr const labelExpr = node.prop("rowLabel");
     Commands const* const activateCommands = node.event("onActivate");
-    if (toneExpr || labelExpr || activateCommands != nullptr) {
+    if (toneExpr || labelExpr || activateCommands != nullptr || model.retainChanged) {
         auto const toneReported = std::make_shared<bool>(false);
         source.rowView = [this, ctx, &node, &model, toneExpr, labelExpr, toneReported](
                              reactive::Signal<Value> const& row) {
@@ -13392,6 +13482,21 @@ Node ScreenCore::modelTableOf(DocNode const& node, LowerCtx const& ctx, ElementS
             look.keep = scope;
             if (labelExpr) {
                 look.label = bindProp<std::string>(rowCtx, labelExpr, std::string{}, stringOf);
+            }
+            if (model.retainChanged) {
+                std::optional<Key> const rowKey = runtime().untracked([&]() -> std::optional<Key> {
+                    Value const* const id = row.peek().field(model.keyColumn);
+                    return id == nullptr ? std::nullopt : std::optional{keyOf(*id)};
+                });
+                look.marks = slotProp<RowMarks>([&model, rowKey] {
+                    static_cast<void>(model.marksRevision.get());
+                    RowMarks marks;
+                    marks.unmatched = rowKey && model.rows->unmatched(*rowKey);
+                    if (marks.unmatched) {
+                        marks.tooltip = "This row no longer matches the filter";
+                    }
+                    return marks;
+                });
             }
             if (toneExpr) {
                 look.tone = slotProp<std::optional<Tone>>(

@@ -116,6 +116,10 @@ public:
     void setOnSelectAll(std::function<void()> onSelectAll) override;
     void setSelectionView(std::vector<ui::Key> const& except) override;
     void setOnStatusEntry(std::function<void(std::string id)> onStatusEntry) override;
+    /// An unmatched row's cells draw dim; a busy row's gutter starts with the busy glyph and a locked row's with the
+    /// lock glyph; the tooltip is the row's hover text. Throws std::logic_error when @p row is not one of this
+    /// table's rows.
+    void setRowMarks(ui::Widget& row, ui::RowMarks const& marks) override;
     void setOnActivate(std::function<void(ui::Key)> onActivate) override;
     void setSort(std::vector<ui::TableSort> const& chain) override;
     void setOnSort(std::function<void(std::size_t, ui::HeaderClick)> onSort) override;
@@ -373,6 +377,8 @@ private:
     ui::SelectionMode _mode = ui::SelectionMode::None;
     std::unordered_map<WidgetBase const*, ui::Key> _keys;
     std::unordered_set<WidgetBase const*> _headings;
+    // The marks of each row that has any.
+    std::unordered_map<WidgetBase const*, ui::RowMarks> _marks;
     std::unordered_map<WidgetBase const*, std::vector<ui::RowSpan>> _spans;  ///< Each row's effective spans.
     std::vector<SpanPlace> _plan;                                            ///< The spanning cells, as last planned.
     std::unordered_map<WidgetBase const*, int> _extraLines;  ///< The lines a spanning cell adds to its last row.

@@ -22,6 +22,7 @@
 #include <functional>
 #include <glaze/glaze.hpp>
 #include <initializer_list>
+#include <iterator>
 #include <morph/core/bridge.hpp>
 #include <morph/core/executor.hpp>
 #include <morph/session/session.hpp>
@@ -30,6 +31,8 @@
 #include <morph/table/row_selection.hpp>
 #include <morph/table/selection.hpp>
 #include <optional>
+#include <random>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -520,3 +523,219 @@ TEST_CASE("view selection: its JSON", "[table][selection]") {
     CHECK(glz::write_json(SelectionPolicy::Current).value_or("") == R"("current")");
 }
 // Mutation: `SelectionPolicy` without glaze meta, which writes 0 and 1.
+
+// ── Rows kept in view ─────────────────────────────────────────────────────────────────────────────────────────
+
+namespace {
+
+// The keys of an `apply` page, in its order.
+std::vector<RowId> pageKeys(VectorSource const& source, PageRows const& page) {
+    std::vector<RowId> out;
+    for (auto const row : page.rows) {
+        out.push_back(source.snapshot()->rowId(row));
+    }
+    return out;
+}
+
+// The model's rows with a description of its two columns, pinned: what `answerQuery` reads.
+ServedTable describedRows(SelectionModel& model) {
+    auto served = model.rows(caller());
+    TableDescription description;
+    description.id = "rows";
+    description.columns = {TableColumn{.info = tabletest::col("status", ColumnKind::Text), .label = "Status"},
+                           TableColumn{.info = tabletest::col("mass", ColumnKind::Decimal), .label = "Mass"}};
+    served.description = describe(std::move(description));
+    return detail::pinned(std::move(served));
+}
+
+}  // namespace
+
+TEST_CASE("retained rows: they stay in the view, listed in unmatched", "[table][retain]") {
+    SelectionModel model;
+    TableQuery query{.sort = {{.column = "mass", .dir = SortDirection::Descending}}, .filters = open(),
+                     .retain = {RowId{std::int64_t{1}}, RowId{std::int64_t{7}}, RowId{std::int64_t{8}}}};
+    for (std::int64_t key : {1, 7, 8}) {  // the action closed row 1; rows 7 and 8 were closed already
+        model.source->patchRow(RowId{key},
+                               {Cell{std::string{"closed"}}, Cell{tabletest::dec(std::to_string(key) + ".0")}});
+    }
+    auto const page = apply(*model.source, query).value();
+    std::vector<RowId> keys;
+    for (std::size_t i = 0; i < page.rows.size(); ++i) {
+        keys.push_back(model.source->snapshot()->rowId(page.rows[i]));
+    }
+    CHECK(keys == std::vector<RowId>{std::int64_t{8}, std::int64_t{7}, std::int64_t{5}, std::int64_t{4},
+                                     std::int64_t{3}, std::int64_t{2}, std::int64_t{1}, std::int64_t{0}});
+    CHECK(page.unmatched == std::vector<std::int64_t>{0, 1, 6});
+    CHECK(page.total == 8);
+    TableQuery const plain{.sort = query.sort, .filters = open()};
+    CHECK(page.viewRevision != apply(*model.source, plain).value().viewRevision);
+}
+// Mutation: retained rows appended after the base view instead of merged by the sort's keys.
+
+TEST_CASE("retained rows: the shared view entry is not changed by one request's rows", "[table][retain]") {
+    SelectionModel model;
+    auto const served = describedRows(model);
+    ViewCache views;
+    detail::AnswerContext const context{.views = &views, .record = "seltest::SelectionModel.rows", .rowScoped = false};
+    TableQuery const retaining{.sort = {{.column = "mass", .dir = SortDirection::Ascending}}, .filters = open(),
+                               .retain = keysOf({7})};
+    auto const first = detail::answerQuery(served, retaining, context);
+    REQUIRE(first.has_value());
+    CHECK(first->keys == keysOf({0, 1, 2, 3, 4, 5, 7}));
+    CHECK(first->unmatched == std::vector<std::int64_t>{6});
+    TableQuery const plain{.sort = retaining.sort, .filters = open()};
+    auto const second = detail::answerQuery(served, plain, context);
+    REQUIRE(second.has_value());
+    CHECK(second->keys == keysOf({0, 1, 2, 3, 4, 5}));
+    CHECK(second->total == 6);
+    CHECK(second->unmatched.empty());
+    CHECK(views.stats().computations == 1);
+    // A keyed query of the plain view does not find 7 either.
+    TableQuery keyed = plain;
+    keyed.keys = keysOf({7, 2});
+    auto const third = detail::answerQuery(served, keyed, context);
+    REQUIRE(third.has_value());
+    CHECK(third->keys == keysOf({2}));
+}
+// Mutation: the merged view written into the shared view cache entry, which serves one session's retained rows to
+// another.
+
+TEST_CASE("retained rows: retaining adds, never removes", "[table][retain][property]") {
+    std::mt19937 random{20261120};
+    for (int table = 0; table < 200; ++table) {
+        std::uniform_int_distribution<int> rowsOf{0, 40};
+        std::uniform_int_distribution<int> valueOf{0, 9};
+        int const count = rowsOf(random);
+        std::vector<std::vector<Cell>> rows;
+        for (int row = 0; row < count; ++row) {
+            rows.push_back({Cell{std::int64_t{valueOf(random)}}, Cell{std::string{valueOf(random) < 5 ? "x" : "y"}}});
+        }
+        auto const source = tabletest::makeSource(
+            {tabletest::col("a", ColumnKind::Integer), tabletest::col("b", ColumnKind::Text)}, std::move(rows));
+        TableQuery plain;
+        bool const ascending = valueOf(random) < 5;
+        plain.sort = {{.column = "a", .dir = ascending ? SortDirection::Ascending : SortDirection::Descending}};
+        plain.page.limit = 1000;
+        if (valueOf(random) < 7) {
+            plain.filters.columns["a"].include.push_back(FilterEntry{.ge = std::to_string(valueOf(random))});
+        }
+        if (valueOf(random) < 5) {
+            plain.filters.columns["b"].include.push_back(FilterEntry{.eq = "x"});
+        }
+        TableQuery retaining = plain;
+        std::uniform_int_distribution<int> retainedOf{0, 20};
+        std::uniform_int_distribution<std::int64_t> keyOf{0, count + 5};
+        for (int at = retainedOf(random); at > 0; --at) {
+            retaining.retain.emplace_back(keyOf(random));
+        }
+        auto const without = apply(*source, plain).value();
+        auto const with = apply(*source, retaining).value();
+        auto const before = pageKeys(*source, without);
+        auto const after = pageKeys(*source, with);
+        std::set<RowId> const beforeSet(before.begin(), before.end());
+        std::set<RowId> const afterSet(after.begin(), after.end());
+        // The view with R holds every row of the view without it.
+        CHECK(std::ranges::includes(afterSet, beforeSet));
+        // What it adds is R's rows the source has and the view without R lacks.
+        std::set<RowId> added;
+        std::ranges::set_difference(afterSet, beforeSet, std::inserter(added, added.end()));
+        std::set<RowId> expected;
+        for (auto const& key : retaining.retain) {
+            if (std::get<std::int64_t>(key) < count && !beforeSet.contains(key)) {
+                expected.insert(key);
+            }
+        }
+        CHECK(added == expected);
+        CHECK(after.size() == afterSet.size());  // no row twice
+        CHECK(with.total == static_cast<std::int64_t>(after.size()));
+        // `unmatched` names exactly the rows of R the filter rejects: with no unloaded cell, those it left out.
+        std::set<RowId> unmatched;
+        for (auto const at : with.unmatched) {
+            unmatched.insert(after.at(static_cast<std::size_t>(at)));
+        }
+        CHECK(unmatched == expected);
+        // The order is the sort's over every row of the view, ties to the lower source row.
+        auto const snapshot = source->snapshot();
+        auto const aOf = [&snapshot](std::size_t row) { return std::get<std::int64_t>(snapshot->cell(row, 0)); };
+        for (std::size_t at = 1; at < with.rows.size(); ++at) {
+            auto const left = aOf(with.rows[at - 1]);
+            auto const right = aOf(with.rows[at]);
+            CHECK((left == right ? with.rows[at - 1] < with.rows[at] : (ascending ? left < right : left > right)));
+        }
+    }
+}
+// Mutation: a retained row counted twice when the filter passes it too, which breaks the second equation.
+
+TEST_CASE("retained rows: the bound and the wire", "[table][retain]") {
+    CHECK(QueryLimits{}.maxRetained == 10'000);
+    auto const source = SelectionModel{}.source;
+    TableQuery over;
+    for (std::int64_t key = 0; key < 10'001; ++key) {
+        over.retain.emplace_back(key);
+    }
+    auto const refused = validate(over, source->columns());
+    REQUIRE_FALSE(refused.has_value());
+    CHECK(refused.error().code == TableErrorCode::LimitExceeded);
+    over.retain.pop_back();
+    CHECK(validate(over, source->columns()).has_value());
+
+    GenericPage page;
+    page.keys = keysOf({1, 2});
+    page.unmatched = {0, 6};
+    auto const text = glz::write_json(page).value_or("");
+    CHECK(text.find(R"("unmatched":[0,6])") != std::string::npos);
+    GenericPage read;
+    REQUIRE_FALSE(glz::read_json(read, text));
+    CHECK(read.unmatched == std::vector<std::int64_t>{0, 6});
+    GenericPage plain;
+    REQUIRE_FALSE(glz::read_json(plain, std::string_view{R"({"revision":"r","columns":[],"keys":[],"rows":[]})"}));
+    CHECK(plain.unmatched.empty());
+    // A query that retains nothing is written without `retain`; one that does carries it.
+    CHECK(glz::write_json(TableQuery{}).value_or("").find("retain") == std::string::npos);
+    TableQuery retaining;
+    retaining.retain = keysOf({3});
+    auto const query = glz::write_json(retaining).value_or("");
+    CHECK(query.find(R"("retain":[3])") != std::string::npos);
+    TableQuery back;
+    REQUIRE_FALSE(glz::read_json(back, query));
+    CHECK(back.retain == keysOf({3}));
+}
+// Mutation: no bound, which accepts 10'001.
+
+TEST_CASE("retained rows: a client-mode engine does the same", "[table][retain]") {
+    SelectionModel model;
+    Engine engine{model.source};
+    REQUIRE(engine.setFilter(open()).has_value());
+    REQUIRE(engine.setSort({{.column = "mass", .dir = SortDirection::Descending}}).has_value());
+    for (std::int64_t key : {1, 7, 8}) {
+        model.source->patchRow(RowId{key},
+                               {Cell{std::string{"closed"}}, Cell{tabletest::dec(std::to_string(key) + ".0")}});
+    }
+    REQUIRE(engine.retain(keysOf({1, 7, 8})).has_value());
+    CHECK(viewKeys(engine) == keysOf({8, 7, 5, 4, 3, 2, 1, 0}));
+    std::vector<bool> unmatched;
+    for (std::size_t row = 0; row < engine.viewRowCount(); ++row) {
+        unmatched.push_back(engine.isUnmatched(row));
+    }
+    CHECK(unmatched == std::vector<bool>{true, true, false, false, false, false, true, false});
+    REQUIRE(engine.setFilter(open()).has_value());
+    CHECK(engine.retained().empty());
+    CHECK(viewKeys(engine) == keysOf({5, 4, 3, 2, 0}));
+}
+// Mutation: Engine::retain ignored by the filter run, which leaves 1, 7 and 8 out.
+
+TEST_CASE("retained rows: a selection of a view with retained rows resolves under Exact", "[table][retain][resolve]") {
+    // The revision a page with `retain` carries is the one `resolve` computes for the same retained rows, so the
+    // client's selection of such a view, which names them, is not refused as changed.
+    SelectionModel model;
+    model.source->patchRow(RowId{std::int64_t{1}}, {Cell{std::string{"closed"}}, Cell{tabletest::dec("1.0")}});
+    TableQuery const query{.sort = {{.column = "mass", .dir = SortDirection::Descending}}, .filters = open(),
+                           .retain = keysOf({1, 8})};
+    auto const page = apply(*model.source, query).value();
+    RowSelection<&SelectionModel::rows> selection{
+        .keys = {}, .view = {{.filters = open(), .retained = keysOf({1, 8}), .revision = page.viewRevision}},
+        .except = keysOf({3})};
+    auto exact = resolve(model, selection, caller(), SelectionPolicy::Exact);
+    CHECK(settledNow(exact).value().keys == keysOf({0, 1, 2, 4, 5, 8}));
+}
+// Mutation: the merged digest left without the retained keys, which refuses with ViewChanged.

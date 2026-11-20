@@ -469,6 +469,9 @@ struct GenericPage {
     std::vector<std::int64_t> indices;
     /// @brief A distinct-values reply only: the values; the page then has no rows.
     std::optional<DistinctValues> distinct;
+    /// @brief The indices, into `rows`, of the retained rows (`TableQuery::retain`) the filter rejects, ascending.
+    ///        Left out of the JSON when empty.
+    std::vector<std::int64_t> unmatched;
     /// @brief The view's membership (`MembershipDigest::text`): two pages with the same one are of views of the same
     ///        rows, whatever their sort. Empty on a distinct-values reply, and then left out of the JSON.
     std::string viewRevision;
@@ -965,7 +968,7 @@ struct glz::meta<morph::table::GenericPage> {
     /// @param member  The member.
     /// @param key     Its JSON name.
     /// @param context Unused.
-    /// @return `true` for an empty `failed`, `indices` or `viewRevision`.
+    /// @return `true` for an empty `failed`, `indices`, `unmatched` or `viewRevision`.
     template <typename V>
     static constexpr bool skip_if(V const& member, std::string_view key, glz::meta_context const& context) {
         static_cast<void>(context);
@@ -980,7 +983,8 @@ struct glz::meta<morph::table::GenericPage> {
                                 [](T const& page) { return morph::table::detail::writePageRows(page); }>,
                     "total", &T::total, "totalKind", &T::totalKind, "offset", &T::offset, "unloadedRows",
                     &T::unloadedRows, "undecided", &T::undecided, "awaiting", &T::awaiting, "failed", &T::failed,
-                    "indices", &T::indices, "distinct", &T::distinct, "viewRevision", &T::viewRevision);
+                    "indices", &T::indices, "distinct", &T::distinct, "unmatched", &T::unmatched, "viewRevision",
+                    &T::viewRevision);
 };
 
 namespace morph::table {
@@ -1051,6 +1055,7 @@ namespace morph::table {
     out.failed = page.failed;
     out.indices = page.indices;
     out.viewRevision = page.viewRevision;
+    out.unmatched = page.unmatched;
     return out;
 }
 
@@ -1463,6 +1468,19 @@ struct ChangedRow {
     /// @param other The row to compare with.
     /// @return `true` when the keys match.
     [[nodiscard]] bool operator==(ChangedRow const& other) const = default;
+};
+
+/// @brief One row of a table an action could not change, and why.
+struct FailedRow {
+    /// @brief The row's key.
+    RowId key;
+    /// @brief What the action says went wrong, for the person who ran it.
+    std::string message;
+
+    /// @brief Member-wise equality.
+    /// @param other The row to compare with.
+    /// @return `true` when key and message match.
+    [[nodiscard]] bool operator==(FailedRow const& other) const = default;
 };
 
 /// @brief What `BRIDGE_REGISTER_TABLE` declares about a table, by its function.
@@ -2039,9 +2057,16 @@ struct AnswerContext {
     }
     auto const* const view = &entry->view;
     // A cached entry keeps the keyed lookups for the requests after this one; a request's own view is scanned once.
-    auto rows = checked->keys && viewQuery ? pageRows(*view, *snapshot, *checked, served.limits, entry->viewRowOf(),
-                                                      [&entry](RowId const& key) { return entry->sourceRowOf(key); })
-                                           : pageRows(*view, *snapshot, *checked, served.limits);
+    // The retained rows are merged into a copy for this request alone: the entry is every session's.
+    bool const lookups = viewQuery && (checked->keys || !checked->retain.empty());
+    auto paged = lookups ? viewPage(*view, leveled, *snapshot, *checked, options,
+                                    checked->retain.empty() ? entry->viewRowOf() : std::span<std::uint32_t const>{},
+                                    [&entry](RowId const& key) { return entry->sourceRowOf(key); })
+                         : viewPage(*view, leveled, *snapshot, *checked, options);
+    if (!paged) {
+        return std::unexpected(std::move(paged.error()));
+    }
+    auto rows = std::move(*paged);
     rows.awaiting = entry->awaiting;
     rows.failed = entry->failed;
     auto page = writeGenericPage(rows, leveled, columns, served.services.units.get());
