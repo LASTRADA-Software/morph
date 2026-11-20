@@ -1525,6 +1525,14 @@ TEST_CASE("table display: companion columns are not arranged", "[ui][table][disp
                 }
             }
         }
+        // Mutation: the chooser listing every column of the description.
+        chooseMenu(h, table, std::nullopt, {"Columns…"});
+        for (std::string_view const column : {"id", "mass", "name", "count"}) {
+            CHECK(h.backend.find("Checkbox", "testId", "table_columns_show_" + std::string{column}).has_value());
+        }
+        for (std::string_view const companion : {"massTone", "massTip", "lockedBy"}) {
+            CHECK_FALSE(h.backend.find("Checkbox", "testId", "table_columns_show_" + std::string{companion}).has_value());
+        }
     }
     TableHarness h;  // a companion the document names is reported and not shown
     auto screen = h.mount(doc(R"({"kind":"table","id":"t","testId":"t","model":"sample","table":"samples",
@@ -3209,4 +3217,133 @@ TEST_CASE("sort chains: at the bound a key in the chain still flips, with no mes
     REQUIRE(sort.asList()->size() == 8);
     CHECK(*sort.asList()->at(3).field("direction") == Value{std::string{"desc"}});
     CHECK(statusOf(h, table).message.empty());
+}
+
+// ── The column chooser and the sort dialog ──────────────────────────────────
+
+namespace {
+
+// The column chooser's show boxes, in the order they were listed when it opened.
+std::vector<std::string> chooserColumns(morph::ui::testing::TableHarness const& h) {
+    std::vector<std::string> out;
+    for (int const box : h.backend.all("Checkbox")) {
+        if (std::string const id = h.backend.prop(box, "testId"); id.starts_with("table_columns_show_")) {
+            out.push_back(id.substr(std::string_view{"table_columns_show_"}.size()));
+        }
+    }
+    return out;
+}
+
+// Presses a dialog's button by its test id, then settles.
+void press(morph::ui::testing::TableHarness& h, std::string_view testId) {
+    h.backend.click(h.byTestId("Button", testId));
+    h.settle();
+}
+
+// Whether a widget, found by its kind and test id, is enabled.
+bool enabled(morph::ui::testing::TableHarness const& h, std::string_view kind, std::string_view testId) {
+    return h.backend.prop(h.byTestId(kind, testId), "enabled") != "false";
+}
+
+// A rows table `t` of the Text columns a and b and the Integer column n.
+constexpr std::string_view kKinds = R"({
+  "vocab": "ui/1", "id": "kinds",
+  "state": { "items": { "init": { "lit": [ { "id": 1, "a": "x", "b": "y", "n": 1 } ] } } },
+  "view": { "kind": "table", "id": "t", "rows": { "ref": "items" },
+            "columns": [ { "id": "a", "label": "A" }, { "id": "b", "label": "B" },
+                         { "id": "n", "label": "N", "kind": "integer" } ] } })";
+
+}  // namespace
+
+// Mutation: the chooser listing only the visible columns.
+TEST_CASE("column chooser: every column in order, with show, move and reset", "[ui][table][config]") {
+    morph::ui::testing::TableHarness h;
+    auto screen = h.mount(kNine);
+    int const table = h.backend.all("Table").front();
+    chooseMenu(h, table, 2, {"Hide column"});
+    REQUIRE(elementValue(*screen, "t", "hiddenCount") == "1");
+    chooseMenu(h, table, std::nullopt, {"Columns…"});
+    CHECK(h.backend.prop(h.byTestId("Dialog", "table_columns"), "open") == "true");
+    CHECK(chooserColumns(h) == std::vector<std::string>{"c1", "c2", "c3", "c4", "c5", "c6", "c7", "c8", "c9"});
+    int const c3 = h.byTestId("Checkbox", "table_columns_show_c3");
+    CHECK(h.backend.prop(c3, "checked") == "false");
+    CHECK(h.backend.prop(h.byTestId("Checkbox", "table_columns_show_c1"), "checked") == "true");
+    h.backend.toggle(c3);
+    h.settle();
+    CHECK(elementValue(*screen, "t", "hiddenCount") == "0");
+    CHECK(h.backend.prop(c3, "checked") == "true");
+    CHECK_FALSE(enabled(h, "Button", "table_columns_up_c1"));
+    press(h, "table_columns_down_c1");
+    CHECK(elementValue(*screen, "t", "visibleColumns").starts_with(R"(["c2","c1",)"));
+    press(h, "table_columns_reset");
+    CHECK(elementValue(*screen, "t", "visibleColumns") == R"(["c1","c2","c3","c4","c5","c6","c7","c8","c9"])");
+    press(h, "table_columns_done");
+    CHECK(h.backend.prop(h.byTestId("Dialog", "table_columns"), "open") == "false");
+}
+
+// Mutations: group creation accepting columns of two kinds (n stays enabled once a is ticked); the Remove group
+// button closing the line without applying RemoveGroup (the layout keeps g1).
+TEST_CASE("column chooser: Group columns forms a group of one kind, which the layout keeps", "[ui][table][config]") {
+    morph::ui::testing::TableHarness h;
+    auto screen = h.mount(countingNine("onLayoutChange", kKinds));
+    int const table = h.backend.all("Table").front();
+    chooseMenu(h, table, std::nullopt, {"Columns…"});
+    press(h, "table_columns_group");
+    h.backend.toggle(h.byTestId("Checkbox", "table_group_column_a"));
+    h.settle();
+    CHECK_FALSE(enabled(h, "Checkbox", "table_group_column_n"));
+    CHECK(enabled(h, "Checkbox", "table_group_column_b"));
+    CHECK_FALSE(enabled(h, "Button", "table_group_create"));
+    h.backend.toggle(h.byTestId("Checkbox", "table_group_column_b"));
+    h.backend.edit(h.byTestId("TextInput", "table_group_label"), "Pair");
+    h.settle();
+    REQUIRE(enabled(h, "Button", "table_group_create"));
+    press(h, "table_group_create");
+    CHECK(readJson(*screen, R"({"ref":"t.layout.groups"})") == R"([{"columns":["a","b"],"id":"g1","label":"Pair"}])");
+    CHECK(std::ranges::contains(labelsOf(menuOf(h, table, 0)), "Filter Pair, 2 columns…"));
+    CHECK(h.text("table_group_g1") == "Pair, 2 columns");
+    CHECK(readJson(*screen, R"({"ref":"n"})") == "1");
+    press(h, "table_group_remove_g1");
+    CHECK(readJson(*screen, R"({"ref":"t.layout.groups"})") == "null");
+    CHECK_FALSE(std::ranges::contains(labelsOf(menuOf(h, table, 0)), "Filter Pair, 2 columns…"));
+    CHECK(readJson(*screen, R"({"ref":"n"})") == "2");
+}
+
+// Mutation: the sort dialog's move applying to the wrong neighbour.
+TEST_CASE("sort dialog: keys in order with direction, move and remove; Add key refuses at the bound",
+          "[ui][table][config]") {
+    morph::ui::testing::TableHarness h;
+    auto screen = h.mount(kNine);
+    int const table = h.backend.all("Table").front();
+    h.backend.clickHeader(table, 0, HeaderClick::Plain);
+    h.backend.clickHeader(table, 1, HeaderClick::Shift);
+    h.backend.clickHeader(table, 1, HeaderClick::Shift);
+    h.settle();
+    REQUIRE(elementValue(*screen, "t", "sort") ==
+            R"([{"column":"c1","direction":"asc"},{"column":"c2","direction":"desc"}])");
+    chooseMenu(h, table, std::nullopt, {"Sort…"});
+    CHECK(h.backend.prop(h.byTestId("Dialog", "table_sort"), "open") == "true");
+    press(h, "table_sort_up_1");
+    CHECK(elementValue(*screen, "t", "sort") ==
+          R"([{"column":"c2","direction":"desc"},{"column":"c1","direction":"asc"}])");
+    h.backend.choose(h.byTestId("Select", "table_sort_direction_0"), morph::ui::Key{std::string{"ascending"}});
+    h.settle();
+    CHECK(elementValue(*screen, "t", "sort") ==
+          R"([{"column":"c2","direction":"asc"},{"column":"c1","direction":"asc"}])");
+    press(h, "table_sort_remove_1");
+    CHECK(elementValue(*screen, "t", "sort") == R"([{"column":"c2","direction":"asc"}])");
+    for (int key = 1; key < 8; ++key) {
+        press(h, "table_sort_add");
+    }
+    Value sort = screen->read(*morph::ui::parseJson(R"({"ref":"t.sort"})"));
+    REQUIRE(sort.asList() != nullptr);
+    REQUIRE(sort.asList()->size() == 8);
+    CHECK(statusOf(h, table).message.empty());
+    press(h, "table_sort_add");
+    sort = screen->read(*morph::ui::parseJson(R"({"ref":"t.sort"})"));
+    REQUIRE(sort.asList() != nullptr);
+    CHECK(sort.asList()->size() == 8);
+    CHECK(statusOf(h, table).message == "A table sorts by at most 8 columns");
+    press(h, "table_sort_done");
+    CHECK(h.backend.prop(h.byTestId("Dialog", "table_sort"), "open") == "false");
 }

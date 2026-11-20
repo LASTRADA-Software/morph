@@ -2329,8 +2329,9 @@ private:
     void tableGesture(ElementState& element);
     /// Wires a table's header, menus and arrangement to its configuring: sort gestures held to the table's bound,
     /// layout gestures to what it allows, each refusal shown in its status line and each change run through its
-    /// commands. @p keep is held by every handler, for a table its mount owns.
-    void configureTable(TableConfig& config, LowerCtx const& ctx, TableOptions& options,
+    /// commands. @p keep is held by every handler, for a table its mount owns. Returns the column chooser and the
+    /// sort dialog its menu opens, to mount beside the table; null for a table with no menus.
+    Node configureTable(TableConfig& config, LowerCtx const& ctx, TableOptions& options,
                         std::shared_ptr<void const> keep);
     /// Takes the columns a model-backed table's layout arranges from the description its rows hold now.
     void modelLayoutColumns(ElementState& element);

@@ -47,6 +47,7 @@
 #include <morph/ui/message.hpp>
 #include <morph/ui/mount.hpp>
 #include <morph/ui/table_config.hpp>
+#include <morph/ui/table_dialogs.hpp>
 #include <morph/ui/table_rows.hpp>
 #include <morph/ui/table_views.hpp>
 #include <morph/ui/table_state.hpp>
@@ -357,7 +358,8 @@ private:
 /// What a table keeps of its configuring across every mount of it: the columns its layout arranges, in the order of
 /// `Table::columns`, what the user may change of them, the layout it holds, and what a change does beyond that.
 struct TableConfig {
-    explicit TableConfig(reactive::Runtime& runtime) : version{runtime, 0} {}
+    explicit TableConfig(reactive::Runtime& runtime)
+        : version{runtime, 0}, chooserOpen{runtime, false}, sortOpen{runtime, false}, groupDraft{runtime, GroupDraft{}} {}
 
     /// The table's element, whose sort, status line and commands the gestures reach.
     ElementState* element = nullptr;
@@ -383,6 +385,11 @@ struct TableConfig {
     std::function<void()> touch;
     /// Saves parts of the arrangement; empty for a table that persists nothing.
     std::function<void(table::StateDocument const&, StateParts)> save;
+    /// Whether the column chooser and the sort dialog are open, and the group "Group columns…" is forming: kept
+    /// here, so a new mount of the table (a model's new revision) keeps them.
+    reactive::Signal<bool> chooserOpen;
+    reactive::Signal<bool> sortOpen;
+    reactive::Signal<GroupDraft> groupDraft;
 };
 
 namespace {
@@ -532,10 +539,32 @@ namespace {
     return Value{std::move(ids)};
 }
 
-/// The entries of a menu whose commands the lowering carries out: the sort and arranging entries and "Reset
-/// columns". The filter menu, the column chooser, the sort dialog, display units and copy are not lowered, so
-/// their entries are not offered; a separator left at either end or beside another goes with them.
+/// A table with the dialogs its menu opens mounted beside it, in a column placed as the table is: the column takes
+/// the table's visibility and layout as well, and every other common property stays on the table alone, so its test
+/// id and the element id `focus` finds name the table. A dialog takes no room in the column. Without dialogs, the
+/// table alone.
+[[nodiscard]] Node besideDialogs(Common const& placed, Node dialogs, std::function<Node()> const& table) {
+    if (dialogs == nullptr) {
+        return table();
+    }
+    Column wrapper;
+    wrapper.common.visible = placed.visible;
+    wrapper.common.layout = placed.layout;
+    wrapper.children.push_back(table());
+    wrapper.children.push_back(std::move(dialogs));
+    return ui::column(std::move(wrapper));
+}
+
+/// The entries of a menu whose commands the lowering carries out: the sort and arranging entries, "Reset columns",
+/// "Columns…" and "Sort…". A group's filter entry is shown disabled, so the group a user formed is named where its
+/// filter will be, while the filter menu is not lowered. The column's filter menu, display units and copy are not
+/// lowered, so their entries are not offered; a separator left at either end or beside another goes with them.
 [[nodiscard]] std::vector<TableMenuEntry> offeredEntries(std::vector<TableMenuEntry> entries) {
+    for (TableMenuEntry& entry : entries) {
+        if (!entry.entry.separator && entry.command == MenuCommand::FilterGroup) {
+            entry.entry.enabled = false;
+        }
+    }
     auto const offered = [](TableMenuEntry const& entry) {
         if (entry.entry.separator) {
             return true;
@@ -551,6 +580,9 @@ namespace {
             case MenuCommand::UnpinColumn:
             case MenuCommand::HideColumn:
             case MenuCommand::ResetColumns:
+            case MenuCommand::Columns:
+            case MenuCommand::SortDialog:
+            case MenuCommand::FilterGroup:
                 return true;
             default:
                 return false;
@@ -8902,8 +8934,8 @@ Node ScreenCore::lowerRows(DocNode const& node, LowerCtx const& ctx, ElementStat
             });
         };
     }
-    // The header's sort chain and menus, and the columns' arrangement.
-    configureTable(table->config, ctx, options, own);
+    // The header's sort chain and menus, and the columns' arrangement; the column chooser and the sort dialog.
+    Node dialogs = configureTable(table->config, ctx, options, own);
     options.onActivate = [this, ctx, element, registry, commands = node.event("onActivate")](Key const& key) {
         Value const activated = valueOfKey(key);
         session.asUser([&] {
@@ -8918,7 +8950,9 @@ Node ScreenCore::lowerRows(DocNode const& node, LowerCtx const& ctx, ElementStat
     commonOf(node, ctx, element, options.common);
     std::span<DocNodePtr const> const empty = node.nodes("empty");
     if (empty.empty()) {
-        return ui::table(std::move(columns), std::move(source), std::move(options));
+        return besideDialogs(options.common, std::move(dialogs), [&] {
+            return ui::table(std::move(columns), std::move(source), std::move(options));
+        });
     }
     // With `empty`, a column holds the table and the content shown in its place while `rows` is an empty list; a
     // `null` (a query not answered yet) shows the table. The column is placed as the table would be: it takes the
@@ -8936,6 +8970,7 @@ Node ScreenCore::lowerRows(DocNode const& node, LowerCtx const& ctx, ElementStat
     content.common.visible = slotProp<bool>([listed] { return !listed(); });
     wrapper.children.push_back(ui::table(std::move(columns), std::move(source), std::move(options)));
     wrapper.children.push_back(ui::column(std::move(content)));
+    wrapper.children.push_back(std::move(dialogs));
     return ui::column(std::move(wrapper));
 }
 
@@ -10519,7 +10554,7 @@ void ScreenCore::modelLayoutColumns(ElementState& element) {
 }
 
 // NOLINTNEXTLINE(readability-function-cognitive-complexity): the sort, the layout, then the menus that reach both.
-void ScreenCore::configureTable(TableConfig& config, LowerCtx const& ctx, TableOptions& options,
+Node ScreenCore::configureTable(TableConfig& config, LowerCtx const& ctx, TableOptions& options,
                                 std::shared_ptr<void const> keep) {
     ElementState& element = *config.element;
     DocNode const& node = *element.node;
@@ -10564,15 +10599,11 @@ void ScreenCore::configureTable(TableConfig& config, LowerCtx const& ctx, TableO
     // A sort gesture: held to the table's bound, a key past it refused in the status line and the chain kept. The
     // table's own sort takes the new chain when no key binds one, and is saved; then `onSortChange` runs with
     // `event` the new sort.
-    auto const sortBy = [this, ctx, &config, &element, columns, sortable, keep,
-                         commands = node.event("onSortChange")](std::size_t index, SortGesture gesture) {
+    auto const resort = [this, ctx, &config, &element, keep, commands = node.event("onSortChange")](
+                            std::function<SortChange(SortChain const&)> const& gesture) {
         static_cast<void>(keep);
-        config.touch();
-        if (index >= columns->size() || !sortable->at(index)) {
-            return;
-        }
         SortChain const current = runtime().untracked([&] { return sortChainOf(tableSort(element)); });
-        SortChange const change = applySortGesture(current, columns->at(index).id, gesture, config.maxSortKeys());
+        SortChange const change = gesture(current);
         if (change.refusal) {
             config.message(*change.refusal);
             return;
@@ -10594,6 +10625,15 @@ void ScreenCore::configureTable(TableConfig& config, LowerCtx const& ctx, TableO
                 }
             }
             runEvent(commands, ctx, next);
+        });
+    };
+    auto const sortBy = [&config, columns, sortable, resort](std::size_t index, SortGesture gesture) {
+        config.touch();
+        if (index >= columns->size() || !sortable->at(index)) {
+            return;
+        }
+        resort([&](SortChain const& current) {
+            return applySortGesture(current, columns->at(index).id, gesture, config.maxSortKeys());
         });
     };
     // A layout gesture: refused in the status line when its column is locked or the table does not allow it. The
@@ -10652,20 +10692,31 @@ void ScreenCore::configureTable(TableConfig& config, LowerCtx const& ctx, TableO
         };
     }
     if (!config.menus) {
-        return;
+        return nullptr;
     }
     // A menu is built when it opens, and again when an entry is chosen, from the chain and the layout of the moment,
     // so the path the backend reports names the entry it showed.
     auto const entriesOf = [this, &config, &element, columns, sortable, layoutHeld](
                                std::optional<std::size_t> column) -> std::vector<TableMenuEntry> {
         return runtime().untracked([&]() -> std::vector<TableMenuEntry> {
+            table::ColumnLayout const layout = layoutHeld();
+            // The groups the user formed, each named in its members' menus and in the table's.
+            auto const groupsOf = [&layout](std::string_view id) {
+                std::vector<MenuGroup> out;
+                for (table::ColumnGroupInfo const& group : layout.groups()) {
+                    if (id.empty() || std::ranges::contains(group.columns, id)) {
+                        out.push_back(MenuGroup{.id = group.id, .label = group.label, .columns = group.columns.size()});
+                    }
+                }
+                return out;
+            };
             if (!column) {
-                return offeredEntries(tableMenu(TableMenuInput{.anyFilter = false, .groups = {}, .allowed = config.allowed}));
+                return offeredEntries(
+                    tableMenu(TableMenuInput{.anyFilter = false, .groups = groupsOf({}), .allowed = config.allowed}));
             }
             if (*column >= columns->size()) {
                 return {};
             }
-            table::ColumnLayout const layout = layoutHeld();
             std::vector<std::string> const visible = layout.visible();
             LayoutColumn const& at = columns->at(*column);
             SortChain const chain = sortChainOf(tableSort(element));
@@ -10682,7 +10733,7 @@ void ScreenCore::configureTable(TableConfig& config, LowerCtx const& ctx, TableO
                 .visibleCount = visible.size(),
                 .pinned = layout.pinned(),
                 .dimensions = {},
-                .groups = {},
+                .groups = groupsOf(at.id),
                 .allowed = config.allowed,
             }));
         });
@@ -10732,11 +10783,80 @@ void ScreenCore::configureTable(TableConfig& config, LowerCtx const& ctx, TableO
             case MenuCommand::ResetColumns:
                 arrange(ResetColumns{});
                 break;
+            case MenuCommand::Columns:
+                config.chooserOpen.set(true);
+                break;
+            case MenuCommand::SortDialog:
+                config.sortOpen.set(true);
+                break;
             default:
-                // `offeredEntries` offers no other entry.
+                // `offeredEntries` offers no other entry, and a group's filter entry is disabled.
                 break;
         }
     };
+    // The column chooser and the sort dialog apply each change as it is made, through the gestures the header and
+    // the menus use; each change clears the status line's message first, as every gesture on the table does.
+    Node chooser = columnChooser(ColumnChooserView{
+        .open = [&config] { return config.chooserOpen.get(); },
+        .state =
+            [&config, columns, layoutHeld] {
+                static_cast<void>(config.version.get());
+                return chooserState(layoutHeld(), *columns, config.allowed);
+            },
+        .draft = [&config] { return config.groupDraft.get(); },
+        .setDraft = [&config](GroupDraft draft) { config.groupDraft.set(std::move(draft)); },
+        .onShow =
+            [arrange](std::string const& id, bool shown) {
+                if (shown) {
+                    arrange(ShowColumn{.id = id});
+                } else {
+                    arrange(HideColumn{.id = id});
+                }
+            },
+        .onMove = [arrange](std::string const& id, int by) { arrange(MoveColumn{.id = id, .by = by}); },
+        .onReset = [arrange] { arrange(ResetColumns{}); },
+        .onFormGroup =
+            [this, arrange, layoutHeld](std::string label, std::vector<std::string> members) {
+                std::size_t const before = runtime().untracked([&] { return layoutHeld().groups().size(); });
+                arrange(FormGroup{.label = std::move(label), .columns = std::move(members)});
+                return runtime().untracked([&] { return layoutHeld().groups().size(); }) > before;
+            },
+        .onRemoveGroup = [arrange](std::string const& id) { arrange(RemoveGroup{.id = id}); },
+        .onClose =
+            [&config] {
+                config.chooserOpen.set(false);
+                config.groupDraft.set(GroupDraft{});
+            },
+    });
+    Node sorter = sortDialog(SortDialogView{
+        .open = [&config] { return config.sortOpen.get(); },
+        .chain = [&element] { return sortChainOf(tableSort(element)); },
+        .sortable =
+            [columns, sortable] {
+                std::vector<SortColumnOption> out;
+                for (std::size_t at = 0; at < columns->size(); ++at) {
+                    if (sortable->at(at)) {
+                        out.push_back(SortColumnOption{.id = columns->at(at).id, .label = columns->at(at).label});
+                    }
+                }
+                return out;
+            },
+        .onEdit =
+            [&config, columns, sortable, resort](SortEdit const& edit) {
+                config.touch();
+                std::vector<std::string> ids;
+                for (std::size_t at = 0; at < columns->size(); ++at) {
+                    if (sortable->at(at)) {
+                        ids.push_back(columns->at(at).id);
+                    }
+                }
+                resort([&](SortChain const& current) {
+                    return applySortEdit(current, ids, edit, config.maxSortKeys());
+                });
+            },
+        .onClose = [&config] { config.sortOpen.set(false); },
+    });
+    return ui::column(Column{.children = {std::move(chooser), std::move(sorter)}});
 }
 
 Node ScreenCore::lowerModelTable(DocNode const& node, LowerCtx const& ctx, ElementState* element) {
@@ -11231,8 +11351,8 @@ Node ScreenCore::modelTableOf(DocNode const& node, LowerCtx const& ctx, ElementS
                   });
     };
     options.highlight = slotProp<std::optional<TableHighlight>>([&model] { return model.highlight.get(); });
-    // The header's sort chain and menus, and the columns' arrangement.
-    configureTable(model.config, ctx, options, nullptr);
+    // The header's sort chain and menus, and the columns' arrangement; the column chooser and the sort dialog.
+    Node dialogs = configureTable(model.config, ctx, options, nullptr);
     // The columns with a filter, whose headers say so: the filters the rows hold, which a new query brings.
     options.filtered = slotProp<std::vector<std::size_t>>([&model, ids] {
         static_cast<void>(model.version.get());
@@ -11256,7 +11376,9 @@ Node ScreenCore::modelTableOf(DocNode const& node, LowerCtx const& ctx, ElementS
         runEvent(commands, rowCtx, activated);
     };
     model.rows->mounting();
-    return ui::table(std::move(columns), std::move(source), std::move(options));
+    return besideDialogs(options.common, std::move(dialogs), [&] {
+        return ui::table(std::move(columns), std::move(source), std::move(options));
+    });
 }
 
 TableRowLook ScreenCore::headingRow(DocNode const& node, LowerCtx const& ctx, reactive::Signal<Value> const& row,
