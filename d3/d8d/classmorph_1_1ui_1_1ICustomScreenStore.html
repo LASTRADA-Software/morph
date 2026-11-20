@@ -145,8 +145,8 @@ ICustomScreenStore &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (IC
 &#160;</td><td class="memItemRight"><b>ICustomScreenStore</b> (ICustomScreenStore &amp;&amp;)=delete</td></tr>
 <tr class="memitem:a009cdb61d6fd11439d8fad98c952f255" id="r_a009cdb61d6fd11439d8fad98c952f255"><td class="memItemLeft"><a id="a009cdb61d6fd11439d8fad98c952f255" name="a009cdb61d6fd11439d8fad98c952f255"></a>
 ICustomScreenStore &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (ICustomScreenStore &amp;&amp;)=delete</td></tr>
-<tr class="memitem:a937cb1c844d9a65580accb0667eae83d" id="r_a937cb1c844d9a65580accb0667eae83d"><td class="memItemLeft">virtual <a class="el" href="../../dd/de7/classmorph_1_1async_1_1Completion.html">async::Completion</a>&lt; std::vector&lt; <a class="el" href="../../df/d18/structmorph_1_1ui_1_1CustomScreen.html">CustomScreen</a> &gt; &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a937cb1c844d9a65580accb0667eae83d">list</a> (std::string person, std::string app)=0</td></tr>
-<tr class="memdesc:a937cb1c844d9a65580accb0667eae83d"><td class="mdescLeft">&#160;</td><td class="mdescRight">The custom screens <code class="param">person</code> may open in <code class="param">app</code>.  <br /></td></tr>
+<tr class="memitem:adaa77163a1e630955bf69ffcbabfcd0a" id="r_adaa77163a1e630955bf69ffcbabfcd0a"><td class="memItemLeft">virtual <a class="el" href="../../dd/de7/classmorph_1_1async_1_1Completion.html">async::Completion</a>&lt; std::vector&lt; <a class="el" href="../../df/d18/structmorph_1_1ui_1_1CustomScreen.html">CustomScreen</a> &gt; &gt;&#160;</td><td class="memItemRight"><a class="el" href="#adaa77163a1e630955bf69ffcbabfcd0a">list</a> (<a class="el" href="../../da/d55/structmorph_1_1ui_1_1CustomScreenScope.html">CustomScreenScope</a> scope)=0</td></tr>
+<tr class="memdesc:adaa77163a1e630955bf69ffcbabfcd0a"><td class="mdescLeft">&#160;</td><td class="mdescRight">The custom screens a person may open in an application.  <br /></td></tr>
 <tr class="memitem:adab15de85c3406dc6573ad70d6cd1316" id="r_adab15de85c3406dc6573ad70d6cd1316"><td class="memItemLeft">virtual <a class="el" href="../../dd/de7/classmorph_1_1async_1_1Completion.html">async::Completion</a>&lt; std::expected&lt; <a class="el" href="../../df/d18/structmorph_1_1ui_1_1CustomScreen.html">CustomScreen</a>, <a class="el" href="../../db/d87/structmorph_1_1ui_1_1CustomScreenRefusal.html">CustomScreenRefusal</a> &gt; &gt;&#160;</td><td class="memItemRight"><a class="el" href="#adab15de85c3406dc6573ad70d6cd1316">get</a> (<a class="el" href="../../de/d24/structmorph_1_1ui_1_1CustomScreenKey.html">CustomScreenKey</a> key)=0</td></tr>
 <tr class="memdesc:adab15de85c3406dc6573ad70d6cd1316"><td class="mdescLeft">&#160;</td><td class="mdescRight">One custom screen the person may open.  <br /></td></tr>
 <tr class="memitem:a515b023422bea87d55128cb9f921393a" id="r_a515b023422bea87d55128cb9f921393a"><td class="memItemLeft">virtual <a class="el" href="../../dd/de7/classmorph_1_1async_1_1Completion.html">async::Completion</a>&lt; std::expected&lt; void, <a class="el" href="../../db/d87/structmorph_1_1ui_1_1CustomScreenRefusal.html">CustomScreenRefusal</a> &gt; &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a515b023422bea87d55128cb9f921393a">put</a> (<a class="el" href="../../de/d24/structmorph_1_1ui_1_1CustomScreenKey.html">CustomScreenKey</a> key, <a class="el" href="../../df/d18/structmorph_1_1ui_1_1CustomScreen.html">CustomScreen</a> screen)=0</td></tr>
@@ -156,14 +156,14 @@ ICustomScreenStore &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (IC
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>Stores custom screens. The application's implementation is where every policy over them lives. </p>
-<p><span class="tt"><a class="el" href="#a937cb1c844d9a65580accb0667eae83d" title="The custom screens person may open in app.">list</a></span> answers the screens a person may open, which may include screens others saved. <span class="tt"><a class="el" href="#a515b023422bea87d55128cb9f921393a" title="Stores a custom screen, replacing one of the same key.">put</a></span> and <span class="tt"><a class="el" href="#ad6f43bb6cda1d42fc32ff4bc658d4d4d" title="Forgets a custom screen.">remove</a></span> refuse what the person may not do, with a reason for the person. An id longer than <span class="tt"><a class="el" href="../../d0/dab/bundle_8hpp.html#afb8fd4d49b556176e90b375abafb4fec" title="The longest name: an id, a kind, a vocabulary, a host name, an application id or version.">kMaxNameBytes</a></span> is shown to the person cut, so <span class="tt"><a class="el" href="#adab15de85c3406dc6573ad70d6cd1316" title="One custom screen the person may open.">get</a></span> and <span class="tt"><a class="el" href="#ad6f43bb6cda1d42fc32ff4bc658d4d4d" title="Forgets a custom screen.">remove</a></span> could not be given it back: a store keeps its ids within <span class="tt"><a class="el" href="../../d0/dab/bundle_8hpp.html#afb8fd4d49b556176e90b375abafb4fec" title="The longest name: an id, a kind, a vocabulary, a host name, an application id or version.">kMaxNameBytes</a></span> (the model's own are 39 bytes). The model calls a store only with a person the server derived and with a document that passed every check. A store owns the executor its completions are delivered on.</p>
-<p>An entry <span class="tt"><a class="el" href="#a937cb1c844d9a65580accb0667eae83d" title="The custom screens person may open in app.">list</a></span> answers whose id lacks <span class="tt"><a class="el" href="../../d3/d31/service_8hpp.html#a1b0c94b6052ff625b097ffe9e1855a0e" title="The prefix of every custom screen&#39;s id. An application screen&#39;s id never starts with it,...">kCustomScreenIdPrefix</a></span> is listed broken, and <span class="tt"><a class="el" href="#adab15de85c3406dc6573ad70d6cd1316" title="One custom screen the person may open.">get</a></span> and <span class="tt"><a class="el" href="#ad6f43bb6cda1d42fc32ff4bc658d4d4d" title="Forgets a custom screen.">remove</a></span> refuse its id before the store is called: the model cannot reach it, so cleaning it up is the store's.</p>
+<p><span class="tt"><a class="el" href="#adaa77163a1e630955bf69ffcbabfcd0a" title="The custom screens a person may open in an application.">list</a></span> answers the screens a person may open, which may include screens others saved. <span class="tt"><a class="el" href="#a515b023422bea87d55128cb9f921393a" title="Stores a custom screen, replacing one of the same key.">put</a></span> and <span class="tt"><a class="el" href="#ad6f43bb6cda1d42fc32ff4bc658d4d4d" title="Forgets a custom screen.">remove</a></span> refuse what the person may not do, with a reason for the person. An id longer than <span class="tt"><a class="el" href="../../d0/dab/bundle_8hpp.html#afb8fd4d49b556176e90b375abafb4fec" title="The longest name: an id, a kind, a vocabulary, a host name, an application id or version.">kMaxNameBytes</a></span> is shown to the person cut, so <span class="tt"><a class="el" href="#adab15de85c3406dc6573ad70d6cd1316" title="One custom screen the person may open.">get</a></span> and <span class="tt"><a class="el" href="#ad6f43bb6cda1d42fc32ff4bc658d4d4d" title="Forgets a custom screen.">remove</a></span> could not be given it back: a store keeps its ids within <span class="tt"><a class="el" href="../../d0/dab/bundle_8hpp.html#afb8fd4d49b556176e90b375abafb4fec" title="The longest name: an id, a kind, a vocabulary, a host name, an application id or version.">kMaxNameBytes</a></span> (the model's own are 39 bytes). The model calls a store only with a person the server derived and with a document that passed every check. Every call carries the verified session too (<span class="tt"><a class="el" href="../../de/d24/structmorph_1_1ui_1_1CustomScreenKey.html#a283361d47346a3891acba726b37acd41" title="The verified session of the call, for a store whose policy depends on more than the person: its princ...">CustomScreenKey::session</a></span>, <span class="tt"><a class="el" href="../../da/d55/structmorph_1_1ui_1_1CustomScreenScope.html#af58d284853190326cd82ebdf35da0032" title="The verified session of the call, as CustomScreenKey::session carries it.">CustomScreenScope::session</a></span>), so a policy may depend on more than the person, such as a role the session's token grants. A store owns the executor its completions are delivered on.</p>
+<p>An entry <span class="tt"><a class="el" href="#adaa77163a1e630955bf69ffcbabfcd0a" title="The custom screens a person may open in an application.">list</a></span> answers whose id lacks <span class="tt"><a class="el" href="../../d3/d31/service_8hpp.html#a1b0c94b6052ff625b097ffe9e1855a0e" title="The prefix of every custom screen&#39;s id. An application screen&#39;s id never starts with it,...">kCustomScreenIdPrefix</a></span> is listed broken, and <span class="tt"><a class="el" href="#adab15de85c3406dc6573ad70d6cd1316" title="One custom screen the person may open.">get</a></span> and <span class="tt"><a class="el" href="#ad6f43bb6cda1d42fc32ff4bc658d4d4d" title="Forgets a custom screen.">remove</a></span> refuse its id before the store is called: the model cannot reach it, so cleaning it up is the store's.</p>
 <p>The model's checks keep a person from saving a document that exceeds their permissions; they do not decide who may overwrite whose screen. That is the store's: see <span class="tt"><a class="el" href="#a515b023422bea87d55128cb9f921393a" title="Stores a custom screen, replacing one of the same key.">put</a></span>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html#l00086">86</a> of file <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html">custom_screens.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html#l00106">106</a> of file <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html">custom_screens.hpp</a>.</p>
 </div><a name="doc-func-members" id="doc-func-members"></a><h2 id="header-doc-func-members" class="groupheader">Member Function Documentation</h2>
-<a id="a937cb1c844d9a65580accb0667eae83d" name="a937cb1c844d9a65580accb0667eae83d"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a937cb1c844d9a65580accb0667eae83d">&#9670;&#160;</a></span>list()</h2>
+<a id="adaa77163a1e630955bf69ffcbabfcd0a" name="adaa77163a1e630955bf69ffcbabfcd0a"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#adaa77163a1e630955bf69ffcbabfcd0a">&#9670;&#160;</a></span>list()</h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -174,12 +174,8 @@ ICustomScreenStore &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (IC
         <tr>
           <td class="memname">virtual <a class="el" href="../../dd/de7/classmorph_1_1async_1_1Completion.html">async::Completion</a>&lt; std::vector&lt; <a class="el" href="../../df/d18/structmorph_1_1ui_1_1CustomScreen.html">CustomScreen</a> &gt; &gt; morph::ui::ICustomScreenStore::list </td>
           <td>(</td>
-          <td class="paramtype">std::string</td>          <td class="paramname"><span class="paramname"><em>person</em></span>, </td>
-        </tr>
-        <tr>
-          <td class="paramkey"></td>
+          <td class="paramtype"><a class="el" href="../../da/d55/structmorph_1_1ui_1_1CustomScreenScope.html">CustomScreenScope</a></td>          <td class="paramname"><span class="paramname"><em>scope</em></span></td><td>)</td>
           <td></td>
-          <td class="paramtype">std::string</td>          <td class="paramname"><span class="paramname"><em>app</em></span>&#160;)</td>
         </tr>
       </table>
   </td>
@@ -189,17 +185,16 @@ ICustomScreenStore &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (IC
 </table>
 </div><div class="memdoc">
 
-<p>The custom screens <code class="param">person</code> may open in <code class="param">app</code>. </p>
+<p>The custom screens a person may open in an application. </p>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
-    <tr><td class="paramname">person</td><td>The person. </td></tr>
-    <tr><td class="paramname">app</td><td>The application. </td></tr>
+    <tr><td class="paramname">scope</td><td>The person, the application and the verified session. </td></tr>
   </table>
   </dd>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The screens, in the store's order. </dd></dl>
 
-<p>Implemented in <a class="el" href="../../d6/ddd/classmorph_1_1ui_1_1MemoryCustomScreenStore.html#ac57924edb3af8dd7c5bdeff22ede07e0">morph::ui::MemoryCustomScreenStore</a>.</p>
+<p>Implemented in <a class="el" href="../../d6/ddd/classmorph_1_1ui_1_1MemoryCustomScreenStore.html#a76f089244d5e46cbf7b6a5bd8a38c383">morph::ui::MemoryCustomScreenStore</a>.</p>
 
 </div>
 </div>

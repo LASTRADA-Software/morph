@@ -18,5 +18,8 @@ var classmorph_1_1ui_1_1CustomScreenChrome =
     [ "openCustom", "dc/dbb/classmorph_1_1ui_1_1CustomScreenChrome.html#a60bdfd6629826ea81b0269e6a16331c7", null ],
     [ "isBroken", "dc/dbb/classmorph_1_1ui_1_1CustomScreenChrome.html#aed6af4fd17e692f8c7727e2f8fbe662d", null ],
     [ "showStoredSource", "dc/dbb/classmorph_1_1ui_1_1CustomScreenChrome.html#a66dd5363dba49d642e92e12c28b5ceb5", null ],
-    [ "openAs", "dc/dbb/classmorph_1_1ui_1_1CustomScreenChrome.html#ac0f1a1bead66fe5a38f4baea0b9cf246", null ]
+    [ "openAs", "dc/dbb/classmorph_1_1ui_1_1CustomScreenChrome.html#ac0f1a1bead66fe5a38f4baea0b9cf246", null ],
+    [ "askRemove", "dc/dbb/classmorph_1_1ui_1_1CustomScreenChrome.html#af519868333c251956b9b11ede54c919c", null ],
+    [ "confirmRemove", "dc/dbb/classmorph_1_1ui_1_1CustomScreenChrome.html#a033348fc4cdbb64f2e343ea28144f9de", null ],
+    [ "controller", "dc/dbb/classmorph_1_1ui_1_1CustomScreenChrome.html#a1441a7f2859e2bb2727362a2c95eb666", null ]
 ];

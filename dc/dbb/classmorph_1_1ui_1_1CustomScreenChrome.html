@@ -176,12 +176,25 @@ void&#160;</td><td class="memItemRight"><b>confirmSaveAs</b> ()</td></tr>
 <tr class="memdesc:a66dd5363dba49d642e92e12c28b5ceb5"><td class="mdescLeft">&#160;</td><td class="mdescRight">Opens the source view of a stored custom screen, as <span class="tt">get</span> answers it, with its breakage shown as the refusal: editable while custom screens are offered and the screen is the person's own, when <b>Check and save</b> checks the text on the server and saves it over the screen.  <br /></td></tr>
 <tr class="memitem:ac0f1a1bead66fe5a38f4baea0b9cf246" id="r_ac0f1a1bead66fe5a38f4baea0b9cf246"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#ac0f1a1bead66fe5a38f4baea0b9cf246">openAs</a> (<a class="el" href="../../d5/d5c/structmorph_1_1ui_1_1WorkspaceTabId.html">WorkspaceTabId</a> tab, std::string const &amp;screenId)</td></tr>
 <tr class="memdesc:ac0f1a1bead66fe5a38f4baea0b9cf246"><td class="mdescLeft">&#160;</td><td class="mdescRight"><b>Open as</b>: opens <code class="param">screenId</code> in <code class="param">tab's</code> place with the tab's params, fetching a custom screen's document first; a broken one opens its source view instead.  <br /></td></tr>
+<tr class="memitem:af519868333c251956b9b11ede54c919c" id="r_af519868333c251956b9b11ede54c919c"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#af519868333c251956b9b11ede54c919c">askRemove</a> (<a class="el" href="../../d5/d5c/structmorph_1_1ui_1_1WorkspaceTabId.html">WorkspaceTabId</a> tab)</td></tr>
+<tr class="memdesc:af519868333c251956b9b11ede54c919c"><td class="mdescLeft">&#160;</td><td class="mdescRight">The tools row's <b>Remove</b>: asks the person to confirm removing the tab's custom screen, which is offered only for a listed screen of the person's own while custom screens are offered.  <br /></td></tr>
+<tr class="memitem:a033348fc4cdbb64f2e343ea28144f9de" id="r_a033348fc4cdbb64f2e343ea28144f9de"><td class="memItemLeft"><a id="a033348fc4cdbb64f2e343ea28144f9de" name="a033348fc4cdbb64f2e343ea28144f9de"></a>
+void&#160;</td><td class="memItemRight"><b>confirmRemove</b> ()</td></tr>
+<tr class="memdesc:a033348fc4cdbb64f2e343ea28144f9de"><td class="mdescLeft">&#160;</td><td class="mdescRight">The confirmation's <b>Remove</b>: removes the screen through the sync, then opens its base in the place of every tab that shows it, with the tab's params. A refusal stays in the confirmation, as the store gave it. <br /></td></tr>
+<tr class="memitem:a1441a7f2859e2bb2727362a2c95eb666" id="r_a1441a7f2859e2bb2727362a2c95eb666"><td class="memItemLeft"><a class="el" href="../../d5/d95/classmorph_1_1ui_1_1CustomScreenController.html">CustomScreenController</a> &amp;&#160;</td><td class="memItemRight"><a class="el" href="#a1441a7f2859e2bb2727362a2c95eb666">controller</a> () noexcept</td></tr>
+<tr class="memdesc:a1441a7f2859e2bb2727362a2c95eb666"><td class="mdescLeft">&#160;</td><td class="mdescRight">The controller the chrome draws.  <br /></td></tr>
+</table><table class="memberdecls">
+<tr class="heading"><td colspan="2"><h2 id="header-pub-static-methods" class="groupheader"><a id="pub-static-methods" name="pub-static-methods"></a>
+Static Public Member Functions</h2></td></tr>
+<tr class="memitem:a01ac37c48c55baec23e4f4a5a81ac5f8" id="r_a01ac37c48c55baec23e4f4a5a81ac5f8"><td class="memItemLeft">static std::string&#160;</td><td class="memItemRight"><a class="el" href="#a01ac37c48c55baec23e4f4a5a81ac5f8">describe</a> (<a class="el" href="../../d1/d97/structmorph_1_1ui_1_1CustomScreenOutcome.html">CustomScreenOutcome</a> const &amp;outcome)</td></tr>
+<tr class="memdesc:a01ac37c48c55baec23e4f4a5a81ac5f8"><td class="mdescLeft">&#160;</td><td class="mdescRight">An outcome in the chrome's words, as <span class="tt">notify</span> is told it.  <br /></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>The window chrome of custom screens over one workspace, built from backend nodes so every frontend shows it. </p>
-<p>For each document screen's tab, <span class="tt"><a class="el" href="#ab7fee6e32e73c3b32ee0588c817182a9" title="The chrome of one tab, for WorkspaceOptions::chrome.">chromeFor</a></span> gives a draft bar, shown while the tab holds a draft (Save for a draft of the person's own custom screen, Save as…, Source and Discard, and the last refusal of a save), and a row with the <b>Source</b> button, shown while it does not. <b>Source</b> opens the source view, an overlay with the document's JSON pretty-printed: read only while custom screens are not offered. <b>Preview</b> loads the text in the client, asks the server's <span class="tt">check</span>, and mounts what passes as the tab's draft (<span class="tt"><a class="el" href="../../d9/d53/classmorph_1_1ui_1_1DocumentScreenHost.html#ac7fa61e45d35ae05cc50519af4e8c3c7" title="Mounts draft in place of a screen this host mounted, as remount does, and marks the handle as showing...">DocumentScreenHost::mountDraft</a></span>); a refusal is shown with the line its pointer names, and choosing it moves the cursor there; the editor is read only while the check runs, so the draft is exactly the text previewed. <b>Save as…</b> asks a name, saves, and opens the saved screen in the tab's place. A reply to a save acts only on the draft that was saved: a tab that holds a newer draft, or none, keeps it and the person is told. Everything runs on the runtime's owner. Neither copyable nor movable. </p>
+<p>For each document screen's tab, <span class="tt"><a class="el" href="#ab7fee6e32e73c3b32ee0588c817182a9" title="The chrome of one tab, for WorkspaceOptions::chrome.">chromeFor</a></span> gives a draft bar, shown while the tab holds a draft (Save for a draft of the person's own custom screen, Save as…, Source and Discard, and the last refusal of a save), and a row with the <b>Source</b> button, shown while it does not. <b>Source</b> opens the source view, an overlay with the document's JSON pretty-printed: read only while custom screens are not offered. <b>Preview</b> loads the text in the client, asks the server's <span class="tt">check</span>, and mounts what passes as the tab's draft (<span class="tt"><a class="el" href="../../d9/d53/classmorph_1_1ui_1_1DocumentScreenHost.html#ac7fa61e45d35ae05cc50519af4e8c3c7" title="Mounts draft in place of a screen this host mounted, as remount does, and marks the handle as showing...">DocumentScreenHost::mountDraft</a></span>); a refusal is shown with the line its pointer names, and choosing it moves the cursor there; the editor is read only while the check runs, so the draft is exactly the text previewed. <b>Save as…</b> asks a name, saves, and opens the saved screen in the tab's place. A reply to a save acts only on the draft that was saved: a tab that holds a newer draft, or none, keeps it and the person is told. <b>Remove</b>, on a screen of the person's own, asks once and removes it; a tab that showed it opens its base.</p>
+<p>It is a view over a <span class="tt"><a class="el" href="../../d5/d95/classmorph_1_1ui_1_1CustomScreenController.html" title="The headless controller of custom screens over one workspace: what each tab holds and the commands ov...">CustomScreenController</a></span>, which holds every tab's draft and runs every command: the chrome draws the controller's state, and words its outcomes and refusals. Its fixed words are English; they are the view's, so localising them is the view's too. An application with controls of its own draws them over a controller of its own instead. Everything runs on the runtime's owner. Neither copyable nor movable. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dc/def/custom__screen__chrome_8hpp_source.html#l00079">79</a> of file <a class="el" href="../../dc/def/custom__screen__chrome_8hpp_source.html">custom_screen_chrome.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dc/def/custom__screen__chrome_8hpp_source.html#l00086">86</a> of file <a class="el" href="../../dc/def/custom__screen__chrome_8hpp_source.html">custom_screen_chrome.hpp</a>.</p>
 </div><a name="doc-constructors" id="doc-constructors"></a><h2 id="header-doc-constructors" class="groupheader">Constructor &amp; Destructor Documentation</h2>
 <a id="ad0135001c44dcc68b262d75dd1090872" name="ad0135001c44dcc68b262d75dd1090872"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#ad0135001c44dcc68b262d75dd1090872">&#9670;&#160;</a></span>CustomScreenChrome()</h2>
@@ -688,6 +701,95 @@ void&#160;</td><td class="memItemRight"><b>confirmSaveAs</b> ()</td></tr>
   </table>
   </dd>
 </dl>
+
+</div>
+</div>
+<a id="af519868333c251956b9b11ede54c919c" name="af519868333c251956b9b11ede54c919c"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#af519868333c251956b9b11ede54c919c">&#9670;&#160;</a></span>askRemove()</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">void morph::ui::CustomScreenChrome::askRemove </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="../../d5/d5c/structmorph_1_1ui_1_1WorkspaceTabId.html">WorkspaceTabId</a></td>          <td class="paramname"><span class="paramname"><em>tab</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>The tools row's <b>Remove</b>: asks the person to confirm removing the tab's custom screen, which is offered only for a listed screen of the person's own while custom screens are offered. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">tab</td><td>The tab; one that shows another screen, or none, does nothing. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+</div>
+</div>
+<a id="a1441a7f2859e2bb2727362a2c95eb666" name="a1441a7f2859e2bb2727362a2c95eb666"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a1441a7f2859e2bb2727362a2c95eb666">&#9670;&#160;</a></span>controller()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="../../d5/d95/classmorph_1_1ui_1_1CustomScreenController.html">CustomScreenController</a> &amp; morph::ui::CustomScreenChrome::controller </td>
+          <td>(</td>
+          <td class="paramname"><span class="paramname"><em></em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span><span class="mlabel noexcept">noexcept</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>The controller the chrome draws. </p>
+<dl class="section return"><dt>Returns</dt><dd>It, owned by the chrome. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../dc/def/custom__screen__chrome_8hpp_source.html#l00215">215</a> of file <a class="el" href="../../dc/def/custom__screen__chrome_8hpp_source.html">custom_screen_chrome.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a01ac37c48c55baec23e4f4a5a81ac5f8" name="a01ac37c48c55baec23e4f4a5a81ac5f8"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a01ac37c48c55baec23e4f4a5a81ac5f8">&#9670;&#160;</a></span>describe()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::string morph::ui::CustomScreenChrome::describe </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="../../d1/d97/structmorph_1_1ui_1_1CustomScreenOutcome.html">CustomScreenOutcome</a> const &amp;</td>          <td class="paramname"><span class="paramname"><em>outcome</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel static">static</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>An outcome in the chrome's words, as <span class="tt">notify</span> is told it. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">outcome</td><td>The outcome. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>The sentence. </dd></dl>
 
 </div>
 </div>

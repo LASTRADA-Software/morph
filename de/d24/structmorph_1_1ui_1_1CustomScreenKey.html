@@ -134,6 +134,8 @@ Public Attributes</h2></td></tr>
 <tr class="memdesc:ac4c76bbe8a20d7478ff6907c48e2668e"><td class="mdescLeft">&#160;</td><td class="mdescRight">The application.  <br /></td></tr>
 <tr class="memitem:a86fa3dd99007c640cccd79fccfa1190b" id="r_a86fa3dd99007c640cccd79fccfa1190b"><td class="memItemLeft">std::string&#160;</td><td class="memItemRight"><a class="el" href="#a86fa3dd99007c640cccd79fccfa1190b">id</a></td></tr>
 <tr class="memdesc:a86fa3dd99007c640cccd79fccfa1190b"><td class="mdescLeft">&#160;</td><td class="mdescRight">The screen's id, <span class="tt"><a class="el" href="../../d8/d11/view_8hpp.html#a38e1fcd2ff70b109ff5556ac786c3df7" title="A component loaded by name, mounted by Mounted as its fallback.">custom</a>:</span> and 32 hexadecimal digits.  <br /></td></tr>
+<tr class="memitem:a283361d47346a3891acba726b37acd41" id="r_a283361d47346a3891acba726b37acd41"><td class="memItemLeft"><a class="el" href="../../dd/d85/structmorph_1_1session_1_1Context.html">::morph::session::Context</a>&#160;</td><td class="memItemRight"><a class="el" href="#a283361d47346a3891acba726b37acd41">session</a></td></tr>
+<tr class="memdesc:a283361d47346a3891acba726b37acd41"><td class="mdescLeft">&#160;</td><td class="mdescRight">The verified session of the call, for a store whose policy depends on more than the person: its <span class="tt">principal</span> is <a class="el" href="#a7a4dfa860d3f51225e59971fea4662e0" title="person">person</a>, and its <span class="tt">token</span> the credential the server verified, whose claims (roles among them) a store may read. The model copies it from the action's session; never from a request body.  <br /></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>Where one custom screen is stored. </p>
@@ -191,6 +193,24 @@ Public Attributes</h2></td></tr>
 <p>The screen's id, <span class="tt"><a class="el" href="../../d8/d11/view_8hpp.html#a38e1fcd2ff70b109ff5556ac786c3df7" title="A component loaded by name, mounted by Mounted as its fallback.">custom</a>:</span> and 32 hexadecimal digits. </p>
 
 <p class="definition">Definition at line <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html#l00048">48</a> of file <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html">custom_screens.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a283361d47346a3891acba726b37acd41" name="a283361d47346a3891acba726b37acd41"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a283361d47346a3891acba726b37acd41">&#9670;&#160;</a></span>session</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="../../dd/d85/structmorph_1_1session_1_1Context.html">::morph::session::Context</a> morph::ui::CustomScreenKey::session</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>The verified session of the call, for a store whose policy depends on more than the person: its <span class="tt">principal</span> is <a class="el" href="#a7a4dfa860d3f51225e59971fea4662e0" title="person">person</a>, and its <span class="tt">token</span> the credential the server verified, whose claims (roles among them) a store may read. The model copies it from the action's session; never from a request body. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html#l00052">52</a> of file <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html">custom_screens.hpp</a>.</p>
 
 </div>
 </div>

@@ -8,5 +8,6 @@ var structmorph_1_1ui_1_1CustomScreenSummary =
     [ "mine", "d6/d6c/structmorph_1_1ui_1_1CustomScreenSummary.html#a92a1aaed7a57eb450f7143bb569f3b42", null ],
     [ "hash", "d6/d6c/structmorph_1_1ui_1_1CustomScreenSummary.html#a285977ea0ba439a72b252263e9f8e0e6", null ],
     [ "opensWithoutParams", "d6/d6c/structmorph_1_1ui_1_1CustomScreenSummary.html#a1e34834f3d16395e3642645a1793b7a9", null ],
-    [ "broken", "d6/d6c/structmorph_1_1ui_1_1CustomScreenSummary.html#a95805c088b971a1cb9eba083ef1a459e", null ]
+    [ "broken", "d6/d6c/structmorph_1_1ui_1_1CustomScreenSummary.html#a95805c088b971a1cb9eba083ef1a459e", null ],
+    [ "attributes", "d6/d6c/structmorph_1_1ui_1_1CustomScreenSummary.html#af123a2034c09dff926143e9d26f0022d", null ]
 ];

@@ -160,6 +160,8 @@ Public Member Functions</h2></td></tr>
 <tr class="memdesc:aab0ce624f51e0d1c7404f7be65cc5866"><td class="mdescLeft">&#160;</td><td class="mdescRight">Asks the server whether <code class="param">document</code> would be saved as a custom screen based on <code class="param">basedOn</code>.  <br /></td></tr>
 <tr class="memitem:a4e9be62a8c8f2f78459116cc54adc35e" id="r_a4e9be62a8c8f2f78459116cc54adc35e"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a4e9be62a8c8f2f78459116cc54adc35e">save</a> (<a class="el" href="../../d1/d70/structmorph_1_1ui_1_1CustomScreensSave.html">CustomScreensSave</a> request, std::function&lt; void(std::expected&lt; std::string, std::string &gt;)&gt; done)</td></tr>
 <tr class="memdesc:a4e9be62a8c8f2f78459116cc54adc35e"><td class="mdescLeft">&#160;</td><td class="mdescRight">Saves a custom screen; its <span class="tt">app</span> is set to the sync's. A save that is answered relists.  <br /></td></tr>
+<tr class="memitem:ac14a90a3044597a9ba4bcf3314a66a10" id="r_ac14a90a3044597a9ba4bcf3314a66a10"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#ac14a90a3044597a9ba4bcf3314a66a10">remove</a> (std::string const &amp;screenId, std::function&lt; void(std::expected&lt; void, std::string &gt;)&gt; done)</td></tr>
+<tr class="memdesc:ac14a90a3044597a9ba4bcf3314a66a10"><td class="mdescLeft">&#160;</td><td class="mdescRight">Removes a custom screen. A removal that is answered forgets the kept document and relists.  <br /></td></tr>
 <tr class="memitem:a2cb6e93c550588a974e31bad6de699a0" id="r_a2cb6e93c550588a974e31bad6de699a0"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a2cb6e93c550588a974e31bad6de699a0">prefetchRoutes</a> (std::vector&lt; std::string &gt; const &amp;routes, std::function&lt; void(std::vector&lt; std::string &gt;)&gt; done)</td></tr>
 <tr class="memdesc:a2cb6e93c550588a974e31bad6de699a0"><td class="mdescLeft">&#160;</td><td class="mdescRight">Fetches the document of every custom screen <code class="param">routes</code> name that is not kept, so a start that reopens them can read the routes back.  <br /></td></tr>
 <tr class="memitem:a69c778a2107bbad78e4ed87ba1e5a1f3" id="r_a69c778a2107bbad78e4ed87ba1e5a1f3"><td class="memItemLeft"><a id="a69c778a2107bbad78e4ed87ba1e5a1f3" name="a69c778a2107bbad78e4ed87ba1e5a1f3"></a>
@@ -550,6 +552,36 @@ void&#160;</td><td class="memItemRight"><b>reset</b> ()</td></tr>
 
 </div>
 </div>
+<a id="ac14a90a3044597a9ba4bcf3314a66a10" name="ac14a90a3044597a9ba4bcf3314a66a10"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ac14a90a3044597a9ba4bcf3314a66a10">&#9670;&#160;</a></span>remove()</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">void morph::ui::CustomScreenSync::remove </td>
+          <td>(</td>
+          <td class="paramtype">std::string const &amp;</td>          <td class="paramname"><span class="paramname"><em>screenId</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">std::function&lt; void(std::expected&lt; void, std::string &gt;)&gt;</td>          <td class="paramname"><span class="paramname"><em>done</em></span>&#160;)</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>Removes a custom screen. A removal that is answered forgets the kept document and relists. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">screenId</td><td>The screen's id. </td></tr>
+    <tr><td class="paramname">done</td><td>Called once with nothing, or the refusal as the store gave it. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+</div>
+</div>
 <a id="a2cb6e93c550588a974e31bad6de699a0" name="a2cb6e93c550588a974e31bad6de699a0"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a2cb6e93c550588a974e31bad6de699a0">&#9670;&#160;</a></span>prefetchRoutes()</h2>
 
@@ -631,7 +663,7 @@ void&#160;</td><td class="memItemRight"><b>reset</b> ()</td></tr>
 <p>The fetched documents. </p>
 <dl class="section return"><dt>Returns</dt><dd>The cache. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/d6e/custom__screen__sync_8hpp_source.html#l00221">221</a> of file <a class="el" href="../../d9/d6e/custom__screen__sync_8hpp_source.html">custom_screen_sync.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/d6e/custom__screen__sync_8hpp_source.html#l00226">226</a> of file <a class="el" href="../../d9/d6e/custom__screen__sync_8hpp_source.html">custom_screen_sync.hpp</a>.</p>
 
 </div>
 </div>
@@ -661,7 +693,7 @@ void&#160;</td><td class="memItemRight"><b>reset</b> ()</td></tr>
 <p>The fetched documents. </p>
 <dl class="section return"><dt>Returns</dt><dd>The cache. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/d6e/custom__screen__sync_8hpp_source.html#l00225">225</a> of file <a class="el" href="../../d9/d6e/custom__screen__sync_8hpp_source.html">custom_screen_sync.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/d6e/custom__screen__sync_8hpp_source.html#l00230">230</a> of file <a class="el" href="../../d9/d6e/custom__screen__sync_8hpp_source.html">custom_screen_sync.hpp</a>.</p>
 
 </div>
 </div>

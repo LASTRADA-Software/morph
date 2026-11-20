@@ -121,7 +121,7 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d6/ddd/classmo
 </div><!--header-->
 <div class="contents">
 
-<p>The framework's store: a map held in memory, on its own strand, each person seeing and changing only their own screens.  
+<p>The framework's store: a map held in memory, on its own strand, each person seeing and changing only their own screens. It keys every entry by the person and reads nothing else of the session.  
  <a href="#details">More...</a></p>
 
 <p><code>#include &lt;<a class="el" href="../../d5/d92/custom__screens_8hpp_source.html">custom_screens.hpp</a>&gt;</code></p>
@@ -139,8 +139,8 @@ Inheritance diagram for morph::ui::MemoryCustomScreenStore:</div>
 Public Member Functions</h2></td></tr>
 <tr class="memitem:a384db260adb828dd215257cf0b1a8331" id="r_a384db260adb828dd215257cf0b1a8331"><td class="memItemLeft">&#160;</td><td class="memItemRight"><a class="el" href="#a384db260adb828dd215257cf0b1a8331">MemoryCustomScreenStore</a> (<a class="el" href="../../d4/d49/structmorph_1_1exec_1_1IExecutor.html">exec::IExecutor</a> &amp;base)</td></tr>
 <tr class="memdesc:a384db260adb828dd215257cf0b1a8331"><td class="mdescLeft">&#160;</td><td class="mdescRight">A store whose strand runs on <code class="param">base</code>.  <br /></td></tr>
-<tr class="memitem:ac57924edb3af8dd7c5bdeff22ede07e0" id="r_ac57924edb3af8dd7c5bdeff22ede07e0"><td class="memItemLeft"><a class="el" href="../../dd/de7/classmorph_1_1async_1_1Completion.html">async::Completion</a>&lt; std::vector&lt; <a class="el" href="../../df/d18/structmorph_1_1ui_1_1CustomScreen.html">CustomScreen</a> &gt; &gt;&#160;</td><td class="memItemRight"><a class="el" href="#ac57924edb3af8dd7c5bdeff22ede07e0">list</a> (std::string person, std::string app) override</td></tr>
-<tr class="memdesc:ac57924edb3af8dd7c5bdeff22ede07e0"><td class="mdescLeft">&#160;</td><td class="mdescRight">The custom screens <code class="param">person</code> saved in <code class="param">app</code>.  <br /></td></tr>
+<tr class="memitem:a76f089244d5e46cbf7b6a5bd8a38c383" id="r_a76f089244d5e46cbf7b6a5bd8a38c383"><td class="memItemLeft"><a class="el" href="../../dd/de7/classmorph_1_1async_1_1Completion.html">async::Completion</a>&lt; std::vector&lt; <a class="el" href="../../df/d18/structmorph_1_1ui_1_1CustomScreen.html">CustomScreen</a> &gt; &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a76f089244d5e46cbf7b6a5bd8a38c383">list</a> (<a class="el" href="../../da/d55/structmorph_1_1ui_1_1CustomScreenScope.html">CustomScreenScope</a> scope) override</td></tr>
+<tr class="memdesc:a76f089244d5e46cbf7b6a5bd8a38c383"><td class="mdescLeft">&#160;</td><td class="mdescRight">The custom screens the person saved in the application; the session is not read.  <br /></td></tr>
 <tr class="memitem:ac7783790161cad1296a57a4c4703c77f" id="r_ac7783790161cad1296a57a4c4703c77f"><td class="memItemLeft"><a class="el" href="../../dd/de7/classmorph_1_1async_1_1Completion.html">async::Completion</a>&lt; std::expected&lt; <a class="el" href="../../df/d18/structmorph_1_1ui_1_1CustomScreen.html">CustomScreen</a>, <a class="el" href="../../db/d87/structmorph_1_1ui_1_1CustomScreenRefusal.html">CustomScreenRefusal</a> &gt; &gt;&#160;</td><td class="memItemRight"><a class="el" href="#ac7783790161cad1296a57a4c4703c77f">get</a> (<a class="el" href="../../de/d24/structmorph_1_1ui_1_1CustomScreenKey.html">CustomScreenKey</a> key) override</td></tr>
 <tr class="memdesc:ac7783790161cad1296a57a4c4703c77f"><td class="mdescLeft">&#160;</td><td class="mdescRight">One of the person's own screens.  <br /></td></tr>
 <tr class="memitem:a9e988ffcabb5214ed0861f446fa235d7" id="r_a9e988ffcabb5214ed0861f446fa235d7"><td class="memItemLeft"><a class="el" href="../../dd/de7/classmorph_1_1async_1_1Completion.html">async::Completion</a>&lt; std::expected&lt; void, <a class="el" href="../../db/d87/structmorph_1_1ui_1_1CustomScreenRefusal.html">CustomScreenRefusal</a> &gt; &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a9e988ffcabb5214ed0861f446fa235d7">put</a> (<a class="el" href="../../de/d24/structmorph_1_1ui_1_1CustomScreenKey.html">CustomScreenKey</a> key, <a class="el" href="../../df/d18/structmorph_1_1ui_1_1CustomScreen.html">CustomScreen</a> screen) override</td></tr>
@@ -158,10 +158,10 @@ ICustomScreenStore &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (IC
 ICustomScreenStore &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (ICustomScreenStore &amp;&amp;)=delete</td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
-<div class="textblock"><p>The framework's store: a map held in memory, on its own strand, each person seeing and changing only their own screens. </p>
+<div class="textblock"><p>The framework's store: a map held in memory, on its own strand, each person seeing and changing only their own screens. It keys every entry by the person and reads nothing else of the session. </p>
 <p>Its entries last as long as it does. Each call is a task on the strand, and its completion is delivered there. It bounds neither the number of entries nor their total size, so it serves tests and examples, not a deployment. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html#l00129">129</a> of file <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html">custom_screens.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html#l00148">148</a> of file <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html">custom_screens.hpp</a>.</p>
 </div><a name="doc-constructors" id="doc-constructors"></a><h2 id="header-doc-constructors" class="groupheader">Constructor &amp; Destructor Documentation</h2>
 <a id="a384db260adb828dd215257cf0b1a8331" name="a384db260adb828dd215257cf0b1a8331"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a384db260adb828dd215257cf0b1a8331">&#9670;&#160;</a></span>MemoryCustomScreenStore()</h2>
@@ -194,13 +194,13 @@ ICustomScreenStore &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (IC
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html#l00133">133</a> of file <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html">custom_screens.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html#l00152">152</a> of file <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html">custom_screens.hpp</a>.</p>
 
 </div>
 </div>
 <a name="doc-func-members" id="doc-func-members"></a><h2 id="header-doc-func-members" class="groupheader">Member Function Documentation</h2>
-<a id="ac57924edb3af8dd7c5bdeff22ede07e0" name="ac57924edb3af8dd7c5bdeff22ede07e0"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#ac57924edb3af8dd7c5bdeff22ede07e0">&#9670;&#160;</a></span>list()</h2>
+<a id="a76f089244d5e46cbf7b6a5bd8a38c383" name="a76f089244d5e46cbf7b6a5bd8a38c383"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a76f089244d5e46cbf7b6a5bd8a38c383">&#9670;&#160;</a></span>list()</h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -211,12 +211,8 @@ ICustomScreenStore &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (IC
         <tr>
           <td class="memname"><a class="el" href="../../dd/de7/classmorph_1_1async_1_1Completion.html">async::Completion</a>&lt; std::vector&lt; <a class="el" href="../../df/d18/structmorph_1_1ui_1_1CustomScreen.html">CustomScreen</a> &gt; &gt; morph::ui::MemoryCustomScreenStore::list </td>
           <td>(</td>
-          <td class="paramtype">std::string</td>          <td class="paramname"><span class="paramname"><em>person</em></span>, </td>
-        </tr>
-        <tr>
-          <td class="paramkey"></td>
+          <td class="paramtype"><a class="el" href="../../da/d55/structmorph_1_1ui_1_1CustomScreenScope.html">CustomScreenScope</a></td>          <td class="paramname"><span class="paramname"><em>scope</em></span></td><td>)</td>
           <td></td>
-          <td class="paramtype">std::string</td>          <td class="paramname"><span class="paramname"><em>app</em></span>&#160;)</td>
         </tr>
       </table>
   </td>
@@ -226,19 +222,18 @@ ICustomScreenStore &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (IC
 </table>
 </div><div class="memdoc">
 
-<p>The custom screens <code class="param">person</code> saved in <code class="param">app</code>. </p>
+<p>The custom screens the person saved in the application; the session is not read. </p>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
-    <tr><td class="paramname">person</td><td>The person. </td></tr>
-    <tr><td class="paramname">app</td><td>The application. </td></tr>
+    <tr><td class="paramname">scope</td><td>The person, the application and the verified session. </td></tr>
   </table>
   </dd>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The screens, ordered by id. </dd></dl>
 
-<p>Implements <a class="el" href="../../d3/d8d/classmorph_1_1ui_1_1ICustomScreenStore.html#a937cb1c844d9a65580accb0667eae83d">morph::ui::ICustomScreenStore</a>.</p>
+<p>Implements <a class="el" href="../../d3/d8d/classmorph_1_1ui_1_1ICustomScreenStore.html#adaa77163a1e630955bf69ffcbabfcd0a">morph::ui::ICustomScreenStore</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html#l00139">139</a> of file <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html">custom_screens.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html#l00157">157</a> of file <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html">custom_screens.hpp</a>.</p>
 
 </div>
 </div>
@@ -276,7 +271,7 @@ ICustomScreenStore &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (IC
 
 <p>Implements <a class="el" href="../../d3/d8d/classmorph_1_1ui_1_1ICustomScreenStore.html#adab15de85c3406dc6573ad70d6cd1316">morph::ui::ICustomScreenStore</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html#l00156">156</a> of file <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html">custom_screens.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html#l00175">175</a> of file <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html">custom_screens.hpp</a>.</p>
 
 </div>
 </div>
@@ -319,7 +314,7 @@ ICustomScreenStore &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (IC
 
 <p>Implements <a class="el" href="../../d3/d8d/classmorph_1_1ui_1_1ICustomScreenStore.html#a515b023422bea87d55128cb9f921393a">morph::ui::ICustomScreenStore</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html#l00175">175</a> of file <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html">custom_screens.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html#l00194">194</a> of file <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html">custom_screens.hpp</a>.</p>
 
 </div>
 </div>
@@ -357,7 +352,7 @@ ICustomScreenStore &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (IC
 
 <p>Implements <a class="el" href="../../d3/d8d/classmorph_1_1ui_1_1ICustomScreenStore.html#ad6f43bb6cda1d42fc32ff4bc658d4d4d">morph::ui::ICustomScreenStore</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html#l00189">189</a> of file <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html">custom_screens.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html#l00208">208</a> of file <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html">custom_screens.hpp</a>.</p>
 
 </div>
 </div>

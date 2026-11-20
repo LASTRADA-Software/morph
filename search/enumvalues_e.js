@@ -12,11 +12,13 @@ var searchData=
   ['one_9',['One',['../d5/d8c/message_8hpp.html#a13effbe53b25638b5db8f533b97947a7a06c2cea18679d64399783748fa367bdd',1,'morph::ui']]],
   ['only_10',['Only',['../d0/dc2/ui_2backend_8hpp.html#a42ee56ec5cb1813818e8b2acefe407f2a8392461cf759088854e16710b9b75d1a',1,'morph::ui']]],
   ['open_11',['Open',['../dd/d39/document_8hpp.html#ac0d7e4d139a4fa323e9fb63d9428cf0eac3bf447eabe632720a3aa1a7ce401274',1,'Openmorph::ui'],['../d8/d11/view_8hpp.html#a9d01587a3c42b6527cd565009f5e618bac3bf447eabe632720a3aa1a7ce401274',1,'Openmorph::ui']]],
-  ['or_12',['Or',['../d8/d29/classmorph_1_1forms_1_1RuleExpr.html#a587e8884bfb601bb0fce194508197f79a3a2d5fe857d8f9541136a124c2edec6c',1,'morph::forms::RuleExpr']]],
-  ['other_13',['Other',['../d5/d8c/message_8hpp.html#a13effbe53b25638b5db8f533b97947a7a6311ae17c1ee52b36e68aaf4ad066387',1,'morph::ui']]],
-  ['outline_14',['Outline',['../d4/d51/badge__style_8hpp.html#a1913d7e07652dc18c38e4eb27f028230a606b51cc1c9d0b4af394419a22f2ff1f',1,'morph::ui']]],
-  ['overflow_15',['Overflow',['../d1/de8/rational_8hpp.html#aaab92e6347c545ba2cda8c030bd7bb9ea129e8109f319870e328cc7a1d5b5cae3',1,'morph::math']]],
-  ['overline_16',['Overline',['../d8/d11/view_8hpp.html#a14948061dae38a78ef544a3b4d9873e5aa7d7d34d28ecacfa945c78f1ae7ec675',1,'morph::ui']]],
-  ['overquota_17',['OverQuota',['../dd/dc1/file__store_8hpp.html#ac80a275fac52b207267aa3440664b793a4121488bf0ad871d8b26921ad51825b5',1,'morph::ui']]],
-  ['ownthread_18',['OwnThread',['../d2/d85/io__loop_8hpp.html#a3d06d20eacf04e68aca35ec8931b46ffa9931420c734ac191e1aa16582b98f263',1,'morph::exec']]]
+  ['openascancelled_12',['OpenAsCancelled',['../de/d2e/custom__screen__controller_8hpp.html#a8ebbf06de43ea1fbd2adfbb4325afa99a4b8ca370eea46bd91eacc9cb2b3c8c98',1,'morph::ui']]],
+  ['openfailed_13',['OpenFailed',['../de/d2e/custom__screen__controller_8hpp.html#a8ebbf06de43ea1fbd2adfbb4325afa99ac60b10c14b43d15f91424c6addfc31ac',1,'morph::ui']]],
+  ['or_14',['Or',['../d8/d29/classmorph_1_1forms_1_1RuleExpr.html#a587e8884bfb601bb0fce194508197f79a3a2d5fe857d8f9541136a124c2edec6c',1,'morph::forms::RuleExpr']]],
+  ['other_15',['Other',['../d5/d8c/message_8hpp.html#a13effbe53b25638b5db8f533b97947a7a6311ae17c1ee52b36e68aaf4ad066387',1,'morph::ui']]],
+  ['outline_16',['Outline',['../d4/d51/badge__style_8hpp.html#a1913d7e07652dc18c38e4eb27f028230a606b51cc1c9d0b4af394419a22f2ff1f',1,'morph::ui']]],
+  ['overflow_17',['Overflow',['../d1/de8/rational_8hpp.html#aaab92e6347c545ba2cda8c030bd7bb9ea129e8109f319870e328cc7a1d5b5cae3',1,'morph::math']]],
+  ['overline_18',['Overline',['../d8/d11/view_8hpp.html#a14948061dae38a78ef544a3b4d9873e5aa7d7d34d28ecacfa945c78f1ae7ec675',1,'morph::ui']]],
+  ['overquota_19',['OverQuota',['../dd/dc1/file__store_8hpp.html#ac80a275fac52b207267aa3440664b793a4121488bf0ad871d8b26921ad51825b5',1,'morph::ui']]],
+  ['ownthread_20',['OwnThread',['../d2/d85/io__loop_8hpp.html#a3d06d20eacf04e68aca35ec8931b46ffa9931420c734ac191e1aa16582b98f263',1,'morph::exec']]]
 ];

@@ -1,6 +1,7 @@
 var custom__screens_8hpp =
 [
     [ "morph::ui::CustomScreenKey", "de/d24/structmorph_1_1ui_1_1CustomScreenKey.html", "de/d24/structmorph_1_1ui_1_1CustomScreenKey" ],
+    [ "morph::ui::CustomScreenScope", "da/d55/structmorph_1_1ui_1_1CustomScreenScope.html", "da/d55/structmorph_1_1ui_1_1CustomScreenScope" ],
     [ "morph::ui::CustomScreen", "df/d18/structmorph_1_1ui_1_1CustomScreen.html", "df/d18/structmorph_1_1ui_1_1CustomScreen" ],
     [ "morph::ui::CustomScreenRefusal", "db/d87/structmorph_1_1ui_1_1CustomScreenRefusal.html", "db/d87/structmorph_1_1ui_1_1CustomScreenRefusal" ],
     [ "morph::ui::ICustomScreenStore", "d3/d8d/classmorph_1_1ui_1_1ICustomScreenStore.html", "d3/d8d/classmorph_1_1ui_1_1ICustomScreenStore" ],
@@ -37,6 +38,7 @@ var custom__screens_8hpp =
     [ "morph::ui::withScreenId", "d5/d92/custom__screens_8hpp.html#ac0e027adc15ebe517a5b841c25d26bf3", null ],
     [ "morph::ui::registerCustomScreens", "d5/d92/custom__screens_8hpp.html#a14c823c1805894c239f5f86a35b09266", null ],
     [ "morph::ui::kMaxBrokenReasonBytes", "d5/d92/custom__screens_8hpp.html#a6deecdab8c98b0c8bfbef7260a67d058", null ],
+    [ "morph::ui::kMaxAttributesBytes", "d5/d92/custom__screens_8hpp.html#a85edfd1f6b28ae4d95eeb7999fe65d7a", null ],
     [ "morph::ui::kMaxSummaryBytes", "d5/d92/custom__screens_8hpp.html#ac45aedb8ac6070c9933b0c53e6de4587", null ],
     [ "morph::ui::kMaxEscapedGrowth", "d5/d92/custom__screens_8hpp.html#ace662c40aebdcf642573fff59c576c78", null ],
     [ "morph::ui::kCustomScreenReplyOverhead", "d5/d92/custom__screens_8hpp.html#ab701556c495f1f0c32c7c2262368fd01", null ],

@@ -143,7 +143,7 @@ cancelled first" — as timers on an <span class="tt">exec::IoLoop</span>.</p>
 <dl class="section user"><dt>What a caller can rely on</dt><dd><ul>
 <li><span class="tt">cancel()</span> stops a callback that has not started. The callback, and everything it captured, is released on the loop, shortly after <span class="tt">cancel()</span> returns — not before.</li>
 <li><span class="tt">cancel()</span> does not wait for a callback that has already started.</li>
-<li>The destructor drops every pending callback without firing it, and returns only once no callback of this scheduler is running.</li>
+<li>The destructor drops every pending callback without firing it, including one already due and queued behind a running callback, and returns only once no callback of this scheduler is running.</li>
 <li>A callback that throws is logged through <span class="tt">morph::log</span> and swallowed. </li>
 </ul>
 </dd></dl>

@@ -157,6 +157,8 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d5/d92/custom_
 Classes</h2></td></tr>
 <tr class="memitem:morph_3A_3Aui_3A_3ACustomScreenKey" id="r_morph_3A_3Aui_3A_3ACustomScreenKey"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../de/d24/structmorph_1_1ui_1_1CustomScreenKey.html">morph::ui::CustomScreenKey</a></td></tr>
 <tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">Where one custom screen is stored.  <a href="../../de/d24/structmorph_1_1ui_1_1CustomScreenKey.html#details">More...</a><br /></td></tr>
+<tr class="memitem:morph_3A_3Aui_3A_3ACustomScreenScope" id="r_morph_3A_3Aui_3A_3ACustomScreenScope"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../da/d55/structmorph_1_1ui_1_1CustomScreenScope.html">morph::ui::CustomScreenScope</a></td></tr>
+<tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">Whose custom screens a <span class="tt">list</span> asks for.  <a href="../../da/d55/structmorph_1_1ui_1_1CustomScreenScope.html#details">More...</a><br /></td></tr>
 <tr class="memitem:morph_3A_3Aui_3A_3ACustomScreen" id="r_morph_3A_3Aui_3A_3ACustomScreen"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../df/d18/structmorph_1_1ui_1_1CustomScreen.html">morph::ui::CustomScreen</a></td></tr>
 <tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">A stored custom screen.  <a href="../../df/d18/structmorph_1_1ui_1_1CustomScreen.html#details">More...</a><br /></td></tr>
 <tr class="memitem:morph_3A_3Aui_3A_3ACustomScreenRefusal" id="r_morph_3A_3Aui_3A_3ACustomScreenRefusal"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../db/d87/structmorph_1_1ui_1_1CustomScreenRefusal.html">morph::ui::CustomScreenRefusal</a></td></tr>
@@ -164,7 +166,7 @@ Classes</h2></td></tr>
 <tr class="memitem:morph_3A_3Aui_3A_3AICustomScreenStore" id="r_morph_3A_3Aui_3A_3AICustomScreenStore"><td class="memItemLeft">class &#160;</td><td class="memItemRight"><a class="el" href="../../d3/d8d/classmorph_1_1ui_1_1ICustomScreenStore.html">morph::ui::ICustomScreenStore</a></td></tr>
 <tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">Stores custom screens. The application's implementation is where every policy over them lives.  <a href="../../d3/d8d/classmorph_1_1ui_1_1ICustomScreenStore.html#details">More...</a><br /></td></tr>
 <tr class="memitem:morph_3A_3Aui_3A_3AMemoryCustomScreenStore" id="r_morph_3A_3Aui_3A_3AMemoryCustomScreenStore"><td class="memItemLeft">class &#160;</td><td class="memItemRight"><a class="el" href="../../d6/ddd/classmorph_1_1ui_1_1MemoryCustomScreenStore.html">morph::ui::MemoryCustomScreenStore</a></td></tr>
-<tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">The framework's store: a map held in memory, on its own strand, each person seeing and changing only their own screens.  <a href="../../d6/ddd/classmorph_1_1ui_1_1MemoryCustomScreenStore.html#details">More...</a><br /></td></tr>
+<tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">The framework's store: a map held in memory, on its own strand, each person seeing and changing only their own screens. It keys every entry by the person and reads nothing else of the session.  <a href="../../d6/ddd/classmorph_1_1ui_1_1MemoryCustomScreenStore.html#details">More...</a><br /></td></tr>
 <tr class="memitem:morph_3A_3Aui_3A_3Adetail_3A_3AEventKey" id="r_morph_3A_3Aui_3A_3Adetail_3A_3AEventKey"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../d7/de9/structmorph_1_1ui_1_1detail_1_1EventKey.html">morph::ui::detail::EventKey</a></td></tr>
 <tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">One command-list key of one node or part kind, and what runs its commands.  <a href="../../d7/de9/structmorph_1_1ui_1_1detail_1_1EventKey.html#details">More...</a><br /></td></tr>
 <tr class="memitem:morph_3A_3Aui_3A_3ACustomScreensOptions" id="r_morph_3A_3Aui_3A_3ACustomScreensOptions"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../da/dba/structmorph_1_1ui_1_1CustomScreensOptions.html">morph::ui::CustomScreensOptions</a></td></tr>
@@ -232,12 +234,14 @@ Functions</h2></td></tr>
 Variables</h2></td></tr>
 <tr class="memitem:a6deecdab8c98b0c8bfbef7260a67d058" id="r_a6deecdab8c98b0c8bfbef7260a67d058"><td class="memItemLeft">constexpr std::size_t&#160;</td><td class="memItemRight"><a class="el" href="#a6deecdab8c98b0c8bfbef7260a67d058">morph::ui::kMaxBrokenReasonBytes</a> = 1024</td></tr>
 <tr class="memdesc:a6deecdab8c98b0c8bfbef7260a67d058"><td class="mdescLeft">&#160;</td><td class="mdescRight">The longest <span class="tt">broken.reason</span> of a summary, in bytes; a longer one is cut and ends with an ellipsis.  <br /></td></tr>
-<tr class="memitem:ac45aedb8ac6070c9933b0c53e6de4587" id="r_ac45aedb8ac6070c9933b0c53e6de4587"><td class="memItemLeft">constexpr std::size_t&#160;</td><td class="memItemRight"><a class="el" href="#ac45aedb8ac6070c9933b0c53e6de4587">morph::ui::kMaxSummaryBytes</a> = std::size_t{3} * 1024</td></tr>
-<tr class="memdesc:ac45aedb8ac6070c9933b0c53e6de4587"><td class="mdescLeft">&#160;</td><td class="mdescRight">The most bytes one summary takes before escaping. Every field is capped when the summary is built: <span class="tt">id</span>, <span class="tt">title</span>, <span class="tt">basedOn</span>, <span class="tt">savedBy</span> and <span class="tt">broken.pointer</span> at <span class="tt"><a class="el" href="../../d0/dab/bundle_8hpp.html#afb8fd4d49b556176e90b375abafb4fec" title="The longest name: an id, a kind, a vocabulary, a host name, an application id or version.">kMaxNameBytes</a></span> and <span class="tt">broken.reason</span> at <span class="tt"><a class="el" href="#a6deecdab8c98b0c8bfbef7260a67d058" title="The longest broken.reason of a summary, in bytes; a longer one is cut and ends with an ellipsis.">kMaxBrokenReasonBytes</a></span>, a cut one ending with an ellipsis; <span class="tt">hash</span> is 71 bytes (<span class="tt">sha256:</span> and 64 digits). That is 5 * 256 + 1024 + 71 = 2375 bytes of text; the keys, the punctuation and <span class="tt">savedAt</span> take under 300 more, and 3 KiB leaves a margin.  <br /></td></tr>
+<tr class="memitem:a85edfd1f6b28ae4d95eeb7999fe65d7a" id="r_a85edfd1f6b28ae4d95eeb7999fe65d7a"><td class="memItemLeft">constexpr std::size_t&#160;</td><td class="memItemRight"><a class="el" href="#a85edfd1f6b28ae4d95eeb7999fe65d7a">morph::ui::kMaxAttributesBytes</a> = 1024</td></tr>
+<tr class="memdesc:a85edfd1f6b28ae4d95eeb7999fe65d7a"><td class="mdescLeft">&#160;</td><td class="mdescRight">The longest <span class="tt">attributes</span> record, in bytes, as JSON. A <span class="tt">save</span> with a longer one is refused, and a stored screen whose record is longer is listed broken without it.  <br /></td></tr>
+<tr class="memitem:ac45aedb8ac6070c9933b0c53e6de4587" id="r_ac45aedb8ac6070c9933b0c53e6de4587"><td class="memItemLeft">constexpr std::size_t&#160;</td><td class="memItemRight"><a class="el" href="#ac45aedb8ac6070c9933b0c53e6de4587">morph::ui::kMaxSummaryBytes</a> = std::size_t{4} * 1024</td></tr>
+<tr class="memdesc:ac45aedb8ac6070c9933b0c53e6de4587"><td class="mdescLeft">&#160;</td><td class="mdescRight">The most bytes one summary takes before escaping. Every field is capped when the summary is built: <span class="tt">id</span>, <span class="tt">title</span>, <span class="tt">basedOn</span>, <span class="tt">savedBy</span> and <span class="tt">broken.pointer</span> at <span class="tt"><a class="el" href="../../d0/dab/bundle_8hpp.html#afb8fd4d49b556176e90b375abafb4fec" title="The longest name: an id, a kind, a vocabulary, a host name, an application id or version.">kMaxNameBytes</a></span>, <span class="tt">broken.reason</span> at <span class="tt"><a class="el" href="#a6deecdab8c98b0c8bfbef7260a67d058" title="The longest broken.reason of a summary, in bytes; a longer one is cut and ends with an ellipsis.">kMaxBrokenReasonBytes</a></span>, a cut one ending with an ellipsis, and <span class="tt">attributes</span> at <span class="tt"><a class="el" href="#a85edfd1f6b28ae4d95eeb7999fe65d7a" title="The longest attributes record, in bytes, as JSON. A save with a longer one is refused,...">kMaxAttributesBytes</a></span>; <span class="tt">hash</span> is 71 bytes (<span class="tt">sha256:</span> and 64 digits). That is 5 * 256 + 1024 + 1024 + 71 = 3399 bytes of text; the keys, the punctuation and <span class="tt">savedAt</span> take under 300 more, and 4 KiB leaves a margin.  <br /></td></tr>
 <tr class="memitem:ace662c40aebdcf642573fff59c576c78" id="r_ace662c40aebdcf642573fff59c576c78"><td class="memItemLeft">constexpr std::size_t&#160;</td><td class="memItemRight"><a class="el" href="#ace662c40aebdcf642573fff59c576c78">morph::ui::kMaxEscapedGrowth</a> = 7</td></tr>
 <tr class="memdesc:ace662c40aebdcf642573fff59c576c78"><td class="mdescLeft">&#160;</td><td class="mdescRight">The most a byte of a summary grows to in an envelope: the reply is written with control bytes escaped, so one becomes a six-byte escape sequence, and the envelope then doubles each backslash of the reply, making seven.  <br /></td></tr>
 <tr class="memitem:ab701556c495f1f0c32c7c2262368fd01" id="r_ab701556c495f1f0c32c7c2262368fd01"><td class="memItemLeft">constexpr std::size_t&#160;</td><td class="memItemRight"><a class="el" href="#ab701556c495f1f0c32c7c2262368fd01">morph::ui::kCustomScreenReplyOverhead</a> = std::size_t{64} * 1024</td></tr>
-<tr class="memdesc:ab701556c495f1f0c32c7c2262368fd01"><td class="mdescLeft">&#160;</td><td class="mdescRight">The bytes of a <span class="tt">get</span> reply that are not its document: one capped summary, at most <span class="tt"><a class="el" href="#ace662c40aebdcf642573fff59c576c78" title="The most a byte of a summary grows to in an envelope: the reply is written with control bytes escaped...">kMaxEscapedGrowth</a> * <a class="el" href="#ac45aedb8ac6070c9933b0c53e6de4587" title="The most bytes one summary takes before escaping. Every field is capped when the summary is built: id...">kMaxSummaryBytes</a></span> = 21 KiB once escaped, with a margin to 64 KiB.  <br /></td></tr>
+<tr class="memdesc:ab701556c495f1f0c32c7c2262368fd01"><td class="mdescLeft">&#160;</td><td class="mdescRight">The bytes of a <span class="tt">get</span> reply that are not its document: one capped summary, at most <span class="tt"><a class="el" href="#ace662c40aebdcf642573fff59c576c78" title="The most a byte of a summary grows to in an envelope: the reply is written with control bytes escaped...">kMaxEscapedGrowth</a> * <a class="el" href="#ac45aedb8ac6070c9933b0c53e6de4587" title="The most bytes one summary takes before escaping. Every field is capped when the summary is built: id...">kMaxSummaryBytes</a></span> = 28 KiB once escaped, with a margin to 64 KiB.  <br /></td></tr>
 <tr class="memitem:a5f4d53064ec65bb4aa3677f2ce432d8e" id="r_a5f4d53064ec65bb4aa3677f2ce432d8e"><td class="memItemLeft">constexpr std::string_view&#160;</td><td class="memItemRight"><a class="el" href="#a5f4d53064ec65bb4aa3677f2ce432d8e">morph::ui::kCustomScreensModel</a> = &quot;morph.customScreens&quot;</td></tr>
 <tr class="memdesc:a5f4d53064ec65bb4aa3677f2ce432d8e"><td class="mdescLeft">&#160;</td><td class="mdescRight">The type id the custom screens model is registered under.  <br /></td></tr>
 <tr class="memitem:ab34e444727e133776d7bbd2c7a92259f" id="r_ab34e444727e133776d7bbd2c7a92259f"><td class="memItemLeft">constexpr std::string_view&#160;</td><td class="memItemRight"><a class="el" href="#ab34e444727e133776d7bbd2c7a92259f">morph::ui::kCustomScreenRecord</a> = &quot;morph.customScreens&quot;</td></tr>
@@ -291,7 +295,7 @@ Variables</h2></td></tr>
 </td></tr>
 </table>
 
-<p class="definition">Definition at line <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html#l00242">242</a> of file <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html">custom_screens.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html#l00261">261</a> of file <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html">custom_screens.hpp</a>.</p>
 
 </div>
 </div>
@@ -765,7 +769,33 @@ Variables</h2></td></tr>
 
 <p>The longest <span class="tt">broken.reason</span> of a summary, in bytes; a longer one is cut and ends with an ellipsis. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html#l00282">282</a> of file <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html">custom_screens.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html#l00301">301</a> of file <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html">custom_screens.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a85edfd1f6b28ae4d95eeb7999fe65d7a" name="a85edfd1f6b28ae4d95eeb7999fe65d7a"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a85edfd1f6b28ae4d95eeb7999fe65d7a">&#9670;&#160;</a></span>kMaxAttributesBytes</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::size_t morph::ui::kMaxAttributesBytes = 1024</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel constexpr">constexpr</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>The longest <span class="tt">attributes</span> record, in bytes, as JSON. A <span class="tt">save</span> with a longer one is refused, and a stored screen whose record is longer is listed broken without it. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html#l00305">305</a> of file <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html">custom_screens.hpp</a>.</p>
 
 </div>
 </div>
@@ -779,7 +809,7 @@ Variables</h2></td></tr>
   <td class="mlabels-left">
       <table class="memname">
         <tr>
-          <td class="memname">std::size_t morph::ui::kMaxSummaryBytes = std::size_t{3} * 1024</td>
+          <td class="memname">std::size_t morph::ui::kMaxSummaryBytes = std::size_t{4} * 1024</td>
         </tr>
       </table>
   </td>
@@ -789,9 +819,9 @@ Variables</h2></td></tr>
 </table>
 </div><div class="memdoc">
 
-<p>The most bytes one summary takes before escaping. Every field is capped when the summary is built: <span class="tt">id</span>, <span class="tt">title</span>, <span class="tt">basedOn</span>, <span class="tt">savedBy</span> and <span class="tt">broken.pointer</span> at <span class="tt">kMaxNameBytes</span> and <span class="tt">broken.reason</span> at <span class="tt">kMaxBrokenReasonBytes</span>, a cut one ending with an ellipsis; <span class="tt">hash</span> is 71 bytes (<span class="tt">sha256:</span> and 64 digits). That is 5 * 256 + 1024 + 71 = 2375 bytes of text; the keys, the punctuation and <span class="tt">savedAt</span> take under 300 more, and 3 KiB leaves a margin. </p>
+<p>The most bytes one summary takes before escaping. Every field is capped when the summary is built: <span class="tt">id</span>, <span class="tt">title</span>, <span class="tt">basedOn</span>, <span class="tt">savedBy</span> and <span class="tt">broken.pointer</span> at <span class="tt">kMaxNameBytes</span>, <span class="tt">broken.reason</span> at <span class="tt">kMaxBrokenReasonBytes</span>, a cut one ending with an ellipsis, and <span class="tt">attributes</span> at <span class="tt">kMaxAttributesBytes</span>; <span class="tt">hash</span> is 71 bytes (<span class="tt">sha256:</span> and 64 digits). That is 5 * 256 + 1024 + 1024 + 71 = 3399 bytes of text; the keys, the punctuation and <span class="tt">savedAt</span> take under 300 more, and 4 KiB leaves a margin. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html#l00289">289</a> of file <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html">custom_screens.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html#l00312">312</a> of file <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html">custom_screens.hpp</a>.</p>
 
 </div>
 </div>
@@ -817,7 +847,7 @@ Variables</h2></td></tr>
 
 <p>The most a byte of a summary grows to in an envelope: the reply is written with control bytes escaped, so one becomes a six-byte escape sequence, and the envelope then doubles each backslash of the reply, making seven. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html#l00294">294</a> of file <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html">custom_screens.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html#l00317">317</a> of file <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html">custom_screens.hpp</a>.</p>
 
 </div>
 </div>
@@ -841,9 +871,9 @@ Variables</h2></td></tr>
 </table>
 </div><div class="memdoc">
 
-<p>The bytes of a <span class="tt">get</span> reply that are not its document: one capped summary, at most <span class="tt">kMaxEscapedGrowth * kMaxSummaryBytes</span> = 21 KiB once escaped, with a margin to 64 KiB. </p>
+<p>The bytes of a <span class="tt">get</span> reply that are not its document: one capped summary, at most <span class="tt">kMaxEscapedGrowth * kMaxSummaryBytes</span> = 28 KiB once escaped, with a margin to 64 KiB. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html#l00298">298</a> of file <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html">custom_screens.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html#l00321">321</a> of file <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html">custom_screens.hpp</a>.</p>
 
 </div>
 </div>
@@ -869,7 +899,7 @@ Variables</h2></td></tr>
 
 <p>The type id the custom screens model is registered under. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html#l00428">428</a> of file <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html">custom_screens.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html#l00451">451</a> of file <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html">custom_screens.hpp</a>.</p>
 
 </div>
 </div>
@@ -895,7 +925,7 @@ Variables</h2></td></tr>
 
 <p>The record type a custom screen's summary is, which <span class="tt">save</span> and <span class="tt">remove</span> change. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html#l00430">430</a> of file <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html">custom_screens.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html#l00453">453</a> of file <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html">custom_screens.hpp</a>.</p>
 
 </div>
 </div>
@@ -921,7 +951,7 @@ Variables</h2></td></tr>
 
 <p>The <span class="tt">list</span> action's id. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html#l00432">432</a> of file <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html">custom_screens.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html#l00455">455</a> of file <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html">custom_screens.hpp</a>.</p>
 
 </div>
 </div>
@@ -947,7 +977,7 @@ Variables</h2></td></tr>
 
 <p>The <span class="tt">get</span> action's id. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html#l00434">434</a> of file <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html">custom_screens.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html#l00457">457</a> of file <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html">custom_screens.hpp</a>.</p>
 
 </div>
 </div>
@@ -973,7 +1003,7 @@ Variables</h2></td></tr>
 
 <p>The <span class="tt">check</span> action's id. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html#l00436">436</a> of file <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html">custom_screens.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html#l00459">459</a> of file <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html">custom_screens.hpp</a>.</p>
 
 </div>
 </div>
@@ -999,7 +1029,7 @@ Variables</h2></td></tr>
 
 <p>The <span class="tt">save</span> action's id. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html#l00438">438</a> of file <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html">custom_screens.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html#l00461">461</a> of file <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html">custom_screens.hpp</a>.</p>
 
 </div>
 </div>
@@ -1025,7 +1055,7 @@ Variables</h2></td></tr>
 
 <p>The <span class="tt">remove</span> action's id. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html#l00440">440</a> of file <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html">custom_screens.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html#l00463">463</a> of file <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html">custom_screens.hpp</a>.</p>
 
 </div>
 </div>

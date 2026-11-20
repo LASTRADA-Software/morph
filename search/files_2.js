@@ -18,6 +18,7 @@ var searchData=
   ['conversations_2ehpp_15',['conversations.hpp',['../dc/dc9/conversations_8hpp.html',1,'']]],
   ['coroutine_2ehpp_16',['coroutine.hpp',['../de/de0/coroutine_8hpp.html',1,'']]],
   ['custom_5fscreen_5fchrome_2ehpp_17',['custom_screen_chrome.hpp',['../dc/def/custom__screen__chrome_8hpp.html',1,'']]],
-  ['custom_5fscreen_5fsync_2ehpp_18',['custom_screen_sync.hpp',['../d9/d6e/custom__screen__sync_8hpp.html',1,'']]],
-  ['custom_5fscreens_2ehpp_19',['custom_screens.hpp',['../d5/d92/custom__screens_8hpp.html',1,'']]]
+  ['custom_5fscreen_5fcontroller_2ehpp_18',['custom_screen_controller.hpp',['../de/d2e/custom__screen__controller_8hpp.html',1,'']]],
+  ['custom_5fscreen_5fsync_2ehpp_19',['custom_screen_sync.hpp',['../d9/d6e/custom__screen__sync_8hpp.html',1,'']]],
+  ['custom_5fscreens_2ehpp_20',['custom_screens.hpp',['../d5/d92/custom__screens_8hpp.html',1,'']]]
 ];

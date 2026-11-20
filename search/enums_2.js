@@ -19,5 +19,8 @@ var searchData=
   ['connectionstate_16',['ConnectionState',['../d1/da3/shell__parts__view_8hpp.html#a080e0e0758b25e537386491ddfbd4602',1,'morph::ui']]],
   ['constraintviolationkind_17',['ConstraintViolationKind',['../da/d45/instance__constraints_8hpp.html#aac28b5b09b5e30a5d4e4217d5f5089c7',1,'morph::forms']]],
   ['controlshape_18',['ControlShape',['../d9/d6d/control__shape_8hpp.html#acb63d4890b58b811a6eab08f80b4c212',1,'morph::ui']]],
-  ['customscreensoffer_19',['CustomScreensOffer',['../d9/d6e/custom__screen__sync_8hpp.html#abc28690b320382c78c4151a10cac2740',1,'morph::ui']]]
+  ['customscreencheckstatus_19',['CustomScreenCheckStatus',['../de/d2e/custom__screen__controller_8hpp.html#a8b009aa7b23ed3fad013d7af66ce936e',1,'morph::ui']]],
+  ['customscreenevent_20',['CustomScreenEvent',['../de/d2e/custom__screen__controller_8hpp.html#a8ebbf06de43ea1fbd2adfbb4325afa99',1,'morph::ui']]],
+  ['customscreensavekind_21',['CustomScreenSaveKind',['../de/d2e/custom__screen__controller_8hpp.html#ae4d6c6d4ae7d090d29f086e39a3fa0c3',1,'morph::ui']]],
+  ['customscreensoffer_22',['CustomScreensOffer',['../d9/d6e/custom__screen__sync_8hpp.html#abc28690b320382c78c4151a10cac2740',1,'morph::ui']]]
 ];

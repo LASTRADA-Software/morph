@@ -15,5 +15,6 @@ var searchData=
   ['primary_12',['Primary',['../d5/dae/button__emphasis_8hpp.html#a53f8810441ac7ca91cdf227b4bd5b314a074de7e7c226d5c60f8af14c20725352',1,'morph::ui']]],
   ['private_13',['Private',['../d1/dc0/author_8hpp.html#a88b3efad6e1294a60e835161e694bcb1a47f9082fc380ca62d531096aa1d110f1',1,'Privatemorph::ui::author'],['../dd/d39/document_8hpp.html#a23700dbe8ba8520b456d7d5c809069eaa47f9082fc380ca62d531096aa1d110f1',1,'Privatemorph::ui']]],
   ['prominent_14',['Prominent',['../dd/d2f/input__emphasis_8hpp.html#a0013e8ab0619ac4e61147cfd117f6852a84c3df1942c5b43329408d38c4711b12',1,'morph::ui']]],
-  ['push_15',['Push',['../dd/d96/button__style_8hpp.html#a611665881c188e8252014fdf9c91d2e5a9c6a9d9f033001a9b3104984d319563b',1,'morph::ui']]]
+  ['proposalnotshown_15',['ProposalNotShown',['../de/d2e/custom__screen__controller_8hpp.html#a8ebbf06de43ea1fbd2adfbb4325afa99a23d4db026b87e27145dcde68ffe75061',1,'morph::ui']]],
+  ['push_16',['Push',['../dd/d96/button__style_8hpp.html#a611665881c188e8252014fdf9c91d2e5a9c6a9d9f033001a9b3104984d319563b',1,'morph::ui']]]
 ];

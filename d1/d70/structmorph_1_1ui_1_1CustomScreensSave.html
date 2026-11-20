@@ -138,11 +138,13 @@ Public Attributes</h2></td></tr>
 <tr class="memdesc:affcada0219a2682ff6ff99e177d41f90"><td class="mdescLeft">&#160;</td><td class="mdescRight">The base screen's id.  <br /></td></tr>
 <tr class="memitem:aee7d3ba8a0cb05c99f81e0a1353165b7" id="r_aee7d3ba8a0cb05c99f81e0a1353165b7"><td class="memItemLeft">std::string&#160;</td><td class="memItemRight"><a class="el" href="#aee7d3ba8a0cb05c99f81e0a1353165b7">document</a></td></tr>
 <tr class="memdesc:aee7d3ba8a0cb05c99f81e0a1353165b7"><td class="mdescLeft">&#160;</td><td class="mdescRight">The document's JSON text.  <br /></td></tr>
+<tr class="memitem:ae1c93a5de1275ac42a302a7e71035317" id="r_ae1c93a5de1275ac42a302a7e71035317"><td class="memItemLeft">std::optional&lt; Json::object_t &gt;&#160;</td><td class="memItemRight"><a class="el" href="#ae1c93a5de1275ac42a302a7e71035317">attributes</a></td></tr>
+<tr class="memdesc:ae1c93a5de1275ac42a302a7e71035317"><td class="mdescLeft">&#160;</td><td class="mdescRight">What the store is asked to record about the screen, at most <span class="tt"><a class="el" href="../../d5/d92/custom__screens_8hpp.html#a85edfd1f6b28ae4d95eeb7999fe65d7a" title="The longest attributes record, in bytes, as JSON. A save with a longer one is refused,...">kMaxAttributesBytes</a></span> as JSON. The store validates it and may refuse; absent asks for nothing.  <br /></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p><span class="tt">save</span>: stores a custom screen. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html#l00521">521</a> of file <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html">custom_screens.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html#l00548">548</a> of file <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html">custom_screens.hpp</a>.</p>
 </div><a name="doc-variable-members" id="doc-variable-members"></a><h2 id="header-doc-variable-members" class="groupheader">Member Data Documentation</h2>
 <a id="aa28b370f2dcfa9c572cf5c7221a6fa67" name="aa28b370f2dcfa9c572cf5c7221a6fa67"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#aa28b370f2dcfa9c572cf5c7221a6fa67">&#9670;&#160;</a></span>app</h2>
@@ -158,7 +160,7 @@ Public Attributes</h2></td></tr>
 
 <p>The application. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html#l00523">523</a> of file <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html">custom_screens.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html#l00550">550</a> of file <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html">custom_screens.hpp</a>.</p>
 
 </div>
 </div>
@@ -176,7 +178,7 @@ Public Attributes</h2></td></tr>
 
 <p>The screen to overwrite, one <span class="tt">get</span> answers for the caller; absent saves a new screen. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html#l00525">525</a> of file <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html">custom_screens.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html#l00552">552</a> of file <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html">custom_screens.hpp</a>.</p>
 
 </div>
 </div>
@@ -194,7 +196,7 @@ Public Attributes</h2></td></tr>
 
 <p>The person's name for it. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html#l00527">527</a> of file <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html">custom_screens.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html#l00554">554</a> of file <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html">custom_screens.hpp</a>.</p>
 
 </div>
 </div>
@@ -212,7 +214,7 @@ Public Attributes</h2></td></tr>
 
 <p>The base screen's id. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html#l00529">529</a> of file <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html">custom_screens.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html#l00556">556</a> of file <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html">custom_screens.hpp</a>.</p>
 
 </div>
 </div>
@@ -230,7 +232,25 @@ Public Attributes</h2></td></tr>
 
 <p>The document's JSON text. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html#l00531">531</a> of file <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html">custom_screens.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html#l00558">558</a> of file <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html">custom_screens.hpp</a>.</p>
+
+</div>
+</div>
+<a id="ae1c93a5de1275ac42a302a7e71035317" name="ae1c93a5de1275ac42a302a7e71035317"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ae1c93a5de1275ac42a302a7e71035317">&#9670;&#160;</a></span>attributes</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::optional&lt;Json::object_t&gt; morph::ui::CustomScreensSave::attributes</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>What the store is asked to record about the screen, at most <span class="tt"><a class="el" href="../../d5/d92/custom__screens_8hpp.html#a85edfd1f6b28ae4d95eeb7999fe65d7a" title="The longest attributes record, in bytes, as JSON. A save with a longer one is refused,...">kMaxAttributesBytes</a></span> as JSON. The store validates it and may refuse; absent asks for nothing. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html#l00561">561</a> of file <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html">custom_screens.hpp</a>.</p>
 
 </div>
 </div>

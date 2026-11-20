@@ -145,12 +145,14 @@ Public Attributes</h2></td></tr>
 <tr class="memitem:a1e34834f3d16395e3642645a1793b7a9" id="r_a1e34834f3d16395e3642645a1793b7a9"><td class="memItemLeft">bool&#160;</td><td class="memItemRight"><a class="el" href="#a1e34834f3d16395e3642645a1793b7a9">opensWithoutParams</a> = false</td></tr>
 <tr class="memdesc:a1e34834f3d16395e3642645a1793b7a9"><td class="mdescLeft">&#160;</td><td class="mdescRight">Whether it opens from the navigator: it is not broken, and its base declares no params (a custom screen declares exactly its base's).  <br /></td></tr>
 <tr class="memitem:a95805c088b971a1cb9eba083ef1a459e" id="r_a95805c088b971a1cb9eba083ef1a459e"><td class="memItemLeft">std::optional&lt; <a class="el" href="../../d7/d68/structmorph_1_1ui_1_1CheckRefusal.html">CheckRefusal</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a95805c088b971a1cb9eba083ef1a459e">broken</a></td></tr>
-<tr class="memdesc:a95805c088b971a1cb9eba083ef1a459e"><td class="mdescLeft">&#160;</td><td class="mdescRight">The refusal the checks give it today; absent when it may be mounted.  <br /></td></tr>
+<tr class="memdesc:a95805c088b971a1cb9eba083ef1a459e"><td class="mdescLeft">&#160;</td><td class="mdescRight">The refusal the checks give it today, or that its stored <span class="tt"><a class="el" href="#af123a2034c09dff926143e9d26f0022d" title="What the store records about it, as the store answered it (CustomScreen::attributes); absent when the...">attributes</a></span> are longer than <span class="tt"><a class="el" href="../../d5/d92/custom__screens_8hpp.html#a85edfd1f6b28ae4d95eeb7999fe65d7a" title="The longest attributes record, in bytes, as JSON. A save with a longer one is refused,...">kMaxAttributesBytes</a></span>; absent when it may be mounted.  <br /></td></tr>
+<tr class="memitem:af123a2034c09dff926143e9d26f0022d" id="r_af123a2034c09dff926143e9d26f0022d"><td class="memItemLeft">std::optional&lt; Json::object_t &gt;&#160;</td><td class="memItemRight"><a class="el" href="#af123a2034c09dff926143e9d26f0022d">attributes</a></td></tr>
+<tr class="memdesc:af123a2034c09dff926143e9d26f0022d"><td class="mdescLeft">&#160;</td><td class="mdescRight">What the store records about it, as the store answered it (<span class="tt"><a class="el" href="../../df/d18/structmorph_1_1ui_1_1CustomScreen.html#a0345d3aeb9ef72e3e9571a28d665cb03" title="What the store records about it, such as whether it is shared or someone&#39;s default: the store&#39;s own r...">CustomScreen::attributes</a></span>); absent when the store records nothing, or its record is too long to send.  <br /></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>One custom screen as a list shows it: the record <span class="tt">save</span> and <span class="tt">remove</span> change. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html#l00451">451</a> of file <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html">custom_screens.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html#l00474">474</a> of file <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html">custom_screens.hpp</a>.</p>
 </div><a name="doc-variable-members" id="doc-variable-members"></a><h2 id="header-doc-variable-members" class="groupheader">Member Data Documentation</h2>
 <a id="a2c0a6982286aeb49caa7c4b56a70a76a" name="a2c0a6982286aeb49caa7c4b56a70a76a"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a2c0a6982286aeb49caa7c4b56a70a76a">&#9670;&#160;</a></span>id</h2>
@@ -166,7 +168,7 @@ Public Attributes</h2></td></tr>
 
 <p>The id. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html#l00453">453</a> of file <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html">custom_screens.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html#l00476">476</a> of file <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html">custom_screens.hpp</a>.</p>
 
 </div>
 </div>
@@ -184,7 +186,7 @@ Public Attributes</h2></td></tr>
 
 <p>The person's name for it. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html#l00455">455</a> of file <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html">custom_screens.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html#l00478">478</a> of file <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html">custom_screens.hpp</a>.</p>
 
 </div>
 </div>
@@ -202,7 +204,7 @@ Public Attributes</h2></td></tr>
 
 <p>The application screen it was made from. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html#l00457">457</a> of file <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html">custom_screens.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html#l00480">480</a> of file <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html">custom_screens.hpp</a>.</p>
 
 </div>
 </div>
@@ -220,7 +222,7 @@ Public Attributes</h2></td></tr>
 
 <p>When it was saved. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html#l00459">459</a> of file <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html">custom_screens.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html#l00482">482</a> of file <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html">custom_screens.hpp</a>.</p>
 
 </div>
 </div>
@@ -238,7 +240,7 @@ Public Attributes</h2></td></tr>
 
 <p>Who saved it. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html#l00461">461</a> of file <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html">custom_screens.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html#l00484">484</a> of file <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html">custom_screens.hpp</a>.</p>
 
 </div>
 </div>
@@ -256,7 +258,7 @@ Public Attributes</h2></td></tr>
 
 <p>Whether the caller saved it. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html#l00463">463</a> of file <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html">custom_screens.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html#l00486">486</a> of file <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html">custom_screens.hpp</a>.</p>
 
 </div>
 </div>
@@ -274,7 +276,7 @@ Public Attributes</h2></td></tr>
 
 <p>The content hash of the stored document, which changes whenever the document does: a client holding a copy of the document compares it to tell whether its copy is current. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html#l00466">466</a> of file <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html">custom_screens.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html#l00489">489</a> of file <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html">custom_screens.hpp</a>.</p>
 
 </div>
 </div>
@@ -292,7 +294,7 @@ Public Attributes</h2></td></tr>
 
 <p>Whether it opens from the navigator: it is not broken, and its base declares no params (a custom screen declares exactly its base's). </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html#l00469">469</a> of file <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html">custom_screens.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html#l00492">492</a> of file <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html">custom_screens.hpp</a>.</p>
 
 </div>
 </div>
@@ -308,9 +310,27 @@ Public Attributes</h2></td></tr>
       </table>
 </div><div class="memdoc">
 
-<p>The refusal the checks give it today; absent when it may be mounted. </p>
+<p>The refusal the checks give it today, or that its stored <span class="tt"><a class="el" href="#af123a2034c09dff926143e9d26f0022d" title="What the store records about it, as the store answered it (CustomScreen::attributes); absent when the...">attributes</a></span> are longer than <span class="tt"><a class="el" href="../../d5/d92/custom__screens_8hpp.html#a85edfd1f6b28ae4d95eeb7999fe65d7a" title="The longest attributes record, in bytes, as JSON. A save with a longer one is refused,...">kMaxAttributesBytes</a></span>; absent when it may be mounted. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html#l00471">471</a> of file <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html">custom_screens.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html#l00495">495</a> of file <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html">custom_screens.hpp</a>.</p>
+
+</div>
+</div>
+<a id="af123a2034c09dff926143e9d26f0022d" name="af123a2034c09dff926143e9d26f0022d"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#af123a2034c09dff926143e9d26f0022d">&#9670;&#160;</a></span>attributes</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::optional&lt;Json::object_t&gt; morph::ui::CustomScreenSummary::attributes</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>What the store records about it, as the store answered it (<span class="tt"><a class="el" href="../../df/d18/structmorph_1_1ui_1_1CustomScreen.html#a0345d3aeb9ef72e3e9571a28d665cb03" title="What the store records about it, such as whether it is shared or someone&#39;s default: the store&#39;s own r...">CustomScreen::attributes</a></span>); absent when the store records nothing, or its record is too long to send. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html#l00498">498</a> of file <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html">custom_screens.hpp</a>.</p>
 
 </div>
 </div>

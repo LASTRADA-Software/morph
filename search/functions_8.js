@@ -50,7 +50,7 @@ var searchData=
   ['ioloop_47',['ioLoop',['../dd/db8/classmorph_1_1ui_1_1AppContext.html#a3ada433c56b9c02de00ff312e9eabf06',1,'morph::ui::AppContext']]],
   ['isany_48',['isAny',['../df/d58/structmorph_1_1ui_1_1Type.html#af12cfe0c139a9bbe837bc731730ba94d',1,'morph::ui::Type']]],
   ['isbound_49',['isBound',['../d0/ddc/classmorph_1_1bridge_1_1Bridge.html#aa13d46f5383cf39280ce85eae7c6a0c3',1,'morph::bridge::Bridge::isBound()'],['../d4/d7b/classmorph_1_1bridge_1_1BridgeHandler.html#a585623f5455bba799db2e7ca0c22a947',1,'morph::bridge::BridgeHandler::isBound()'],['../d8/d3a/classmorph_1_1bridge_1_1RawHandler.html#ade1e304e548317da6c9470fac0b152a9',1,'morph::bridge::RawHandler::isBound()'],['../db/d73/classmorph_1_1ui_1_1Prop.html#a72cd29b3ac74be290295405174c11930',1,'morph::ui::Prop::isBound()']]],
-  ['isbroken_50',['isBroken',['../dc/dbb/classmorph_1_1ui_1_1CustomScreenChrome.html#aed6af4fd17e692f8c7727e2f8fbe662d',1,'morph::ui::CustomScreenChrome']]],
+  ['isbroken_50',['isBroken',['../dc/dbb/classmorph_1_1ui_1_1CustomScreenChrome.html#aed6af4fd17e692f8c7727e2f8fbe662d',1,'morph::ui::CustomScreenChrome::isBroken()'],['../d5/d95/classmorph_1_1ui_1_1CustomScreenController.html#a4af1ba5a386263bbcd5fde85dd995382',1,'morph::ui::CustomScreenController::isBroken()']]],
   ['iscomputing_51',['isComputing',['../d7/d3a/classmorph_1_1reactive_1_1detail_1_1RuntimeCore.html#aa2503f046d2a21fc4723b5c077948d2e',1,'morph::reactive::detail::RuntimeCore']]],
   ['iscontenthash_52',['isContentHash',['../d0/dab/bundle_8hpp.html#a0cc5b9e555c3d996f74102fa3c926e7a',1,'morph::ui']]],
   ['iscustomscreenid_53',['isCustomScreenId',['../d9/d6e/custom__screen__sync_8hpp.html#ac7f069b11ca2617e365738fc1e397d29',1,'morph::ui']]],

@@ -12,6 +12,7 @@ var classmorph_1_1ui_1_1CustomScreenSync =
     [ "get", "da/d5d/classmorph_1_1ui_1_1CustomScreenSync.html#a460436dd2142e8eb102270310d338f78", null ],
     [ "check", "da/d5d/classmorph_1_1ui_1_1CustomScreenSync.html#aab0ce624f51e0d1c7404f7be65cc5866", null ],
     [ "save", "da/d5d/classmorph_1_1ui_1_1CustomScreenSync.html#a4e9be62a8c8f2f78459116cc54adc35e", null ],
+    [ "remove", "da/d5d/classmorph_1_1ui_1_1CustomScreenSync.html#ac14a90a3044597a9ba4bcf3314a66a10", null ],
     [ "prefetchRoutes", "da/d5d/classmorph_1_1ui_1_1CustomScreenSync.html#a2cb6e93c550588a974e31bad6de699a0", null ],
     [ "reconnected", "da/d5d/classmorph_1_1ui_1_1CustomScreenSync.html#a69c778a2107bbad78e4ed87ba1e5a1f3", null ],
     [ "deliverEvent", "da/d5d/classmorph_1_1ui_1_1CustomScreenSync.html#ab3ef86faaa76c7f4cf7ca5d219be487a", null ],
