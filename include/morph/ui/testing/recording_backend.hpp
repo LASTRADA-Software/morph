@@ -3931,13 +3931,22 @@ public:
         return fakeTable(expectKind(widgetId, "headerName", {"Table"})).headerName(column);
     }
 
-    /// @brief Records the text as the clipboard's, which `clipboardText` reads.
+    /// @brief Records the text as the clipboard's, which `clipboardText` reads, unless `setClipboard(false)` took
+    ///        the clipboard away.
     /// @param text The text.
-    /// @return True: the recording backend has a clipboard.
+    /// @return Whether the backend has a clipboard: true unless `setClipboard(false)`.
     bool copyText(std::string_view text) override {
+        if (!_hasClipboard) {
+            return false;
+        }
         _clipboard = std::string{text};
         return true;
     }
+
+    /// @brief Gives the backend a clipboard, as it has from the start, or takes it away, as a platform without
+    ///        one would: `copyText` then writes nothing and returns false.
+    /// @param available Whether there is a clipboard.
+    void setClipboard(bool available) { _hasClipboard = available; }
 
     /// @brief The last text `copyText` was given.
     /// @return It; empty before any.
@@ -4423,6 +4432,7 @@ private:
 
     std::shared_ptr<detail::RecordStore> _store = std::make_shared<detail::RecordStore>();
     std::string _clipboard;
+    bool _hasClipboard = true;
     std::shared_ptr<TableMeasure> _tableMeasure = std::make_shared<TableMeasure>();
     std::optional<Mm> _pageWidth;
     std::shared_ptr<std::vector<detail::FakePage*>> _pages = std::make_shared<std::vector<detail::FakePage*>>();

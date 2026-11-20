@@ -366,8 +366,6 @@ private:
     bool _mounting = false;
 };
 
-/// What a table keeps of its configuring across every mount of it: the columns its layout arranges, in the order of
-/// `Table::columns`, what the user may change of them, the layout it holds, and what a change does beyond that.
 /// One row a copy writes: its view index, and its cells' texts by the columns copied, none for an unloaded cell.
 struct CopyRow {
     std::int64_t viewRow = 0;
@@ -383,6 +381,13 @@ struct CopyGathered {
 /// Called once with what a copy gathered, or with the message that says why it could not.
 using CopyDone = std::function<void(std::expected<CopyGathered, std::string>)>;
 
+/// What a table keeps of its configuring across every mount of it: the columns its layout arranges, in the order of
+/// `Table::columns`, what the user may change of them, the layout it holds, and what a change does beyond that.
+///
+/// The slots a mount sets (`filterTarget`, `dimensions`, `gather`) belong to that mount: `beginMount` starts one,
+/// and the token `mountSlots` gives clears them when the mount's handlers go, unless a later mount has set them
+/// since. A slot may then hold the mount's scope: the element keeps the configuring, so a slot that outlived its
+/// mount would keep the scope that keeps the element.
 struct TableConfig {
     explicit TableConfig(reactive::Runtime& runtime)
         : version{runtime, 0},
@@ -445,6 +450,40 @@ struct TableConfig {
     /// Gathers the rows of these keys, by the column ids given, each cell as the table shows it; a key the rows do
     /// not have is left out. Set by each mount, with what it shows.
     std::function<void(std::vector<Key>, std::vector<std::string> const&, CopyDone)> gather;
+    /// The latest copy: a copy whose rows arrive after a later one started writes nothing.
+    std::uint64_t copies = 0;
+
+    /// Starts a mount: the slots it sets are its own until a later mount starts.
+    void beginMount() { ++_mount; }
+
+    /// A token for the mount begun last: when the last copy of it goes, the slots that mount set are cleared, unless a
+    /// later mount has begun or the configuring is gone.
+    /// @return The token, for the mount's handlers to hold.
+    [[nodiscard]] std::shared_ptr<void const> mountSlots() {
+        struct Slots {
+            TableConfig* config;
+            std::weak_ptr<void const> alive;
+            std::uint64_t mount;
+            Slots(TableConfig* config, std::weak_ptr<void const> alive, std::uint64_t mount)
+                : config{config}, alive{std::move(alive)}, mount{mount} {}
+            Slots(Slots const&) = delete;
+            Slots& operator=(Slots const&) = delete;
+            Slots(Slots&&) = delete;
+            Slots& operator=(Slots&&) = delete;
+            ~Slots() {
+                if (alive.lock() != nullptr && config->_mount == mount) {
+                    config->filterTarget = {};
+                    config->dimensions = {};
+                    config->gather = {};
+                }
+            }
+        };
+        return std::make_shared<Slots const>(this, _alive, _mount);
+    }
+
+private:
+    std::uint64_t _mount = 0;
+    std::shared_ptr<void const> _alive = std::make_shared<int const>(0);
 };
 
 namespace {
@@ -8914,6 +8953,7 @@ Node ScreenCore::lowerRows(DocNode const& node, LowerCtx const& ctx, ElementStat
     }
     // A column's filter menu: a column part's values, of the kind its cells infer, shown by its display parts. A
     // derived column and one whose part says `filterable: false` have none.
+    table->config.beginMount();
     table->config.filterTarget = [table, cells, displays](std::string const& id) -> std::optional<FilterTarget> {
         std::vector<LayoutColumn> const& arranged = table->config.columns;
         auto const found = std::ranges::find(arranged, id, &LayoutColumn::id);
@@ -9188,9 +9228,8 @@ Node ScreenCore::lowerRows(DocNode const& node, LowerCtx const& ctx, ElementStat
     for (TableColumn const& column : columns) {
         headers->push_back(headerText(column.label, column.unit));
     }
-    // The engine's view holds every row, its record the row as `rows` gave it. The handler holds nothing of the
-    // screen's scopes: the table's configuring, which keeps it, lives in the element.
-    table->config.gather = [table, fields, displays, plainText, headers](
+    // The engine's view holds every row, its record the row as `rows` gave it.
+    table->config.gather = [table, fields, displays, plainText, headers, scope = ctx.scope](
                                std::vector<Key> keys, std::vector<std::string> const& ids, CopyDone done) {
         std::vector<std::size_t> places;
         CopyGathered gathered;
@@ -9203,7 +9242,7 @@ Node ScreenCore::lowerRows(DocNode const& node, LowerCtx const& ctx, ElementStat
                 gathered.headers.push_back(headers->at(place));
             }
         }
-        FormatContext const& format = table->element->scope->formatting();
+        FormatContext const& format = scope->formatting();
         std::unordered_set<Key> wanted{keys.begin(), keys.end()};
         EngineRows const& rows = *table->engine;
         std::int64_t const total = rows.total().rows;
@@ -10994,8 +11033,10 @@ Node ScreenCore::configureTable(TableConfig& config, LowerCtx const& ctx, TableO
     // A copy: the selected rows in view order by the visible columns in layout order, or with no row selected the
     // focused cell alone; over `maxCopyRows` keys it is refused and nothing is copied. The rows say how each cell
     // shows; an unloaded cell is copied as empty and counted in the message.
-    auto const copy = [this, &config, &element, layoutHeld, keep, scope = ctx.scope](bool headers) {
+    auto const copy = [this, &config, &element, layoutHeld, keep, slots = config.mountSlots(),
+                       scope = ctx.scope](bool headers) {
         static_cast<void>(keep);
+        static_cast<void>(slots);
         if (!config.gather) {
             return;
         }
@@ -11021,11 +11062,20 @@ Node ScreenCore::configureTable(TableConfig& config, LowerCtx const& ctx, TableO
             keys.push_back(config.focused->key);
             columns = {config.focused->column};
         }
+        // A copy started after this one wins: this one's rows, arriving late, write nothing.
+        std::uint64_t const started = ++config.copies;
         config.gather(std::move(keys), columns,
-                      [this, &element, headers, separator = std::move(separator)](
+                      [this, &config, &element, headers, started, separator = std::move(separator)](
                           std::expected<CopyGathered, std::string> gathered) {
+                          if (started != config.copies) {
+                              return;
+                          }
                           if (!gathered) {
                               tableMessage(element, std::move(gathered.error()));
+                              return;
+                          }
+                          // None of the rows is in the view any more: the clipboard keeps what it had.
+                          if (gathered->rows.empty()) {
                               return;
                           }
                           std::ranges::stable_sort(gathered->rows, {}, &CopyRow::viewRow);
@@ -11036,8 +11086,9 @@ Node ScreenCore::configureTable(TableConfig& config, LowerCtx const& ctx, TableO
                           }
                           CopiedText const text =
                               ui::copyText(headers ? gathered->headers : std::vector<std::string>{}, rows);
-                          if (clipboard) {
-                              static_cast<void>(clipboard(text.text));
+                          if (!clipboard || !clipboard(text.text)) {
+                              tableMessage(element, "The rows could not be copied: there is no clipboard");
+                              return;
                           }
                           tableMessage(element, tableText::copied(rows.size(), text.unloaded, separator));
                       });
@@ -12088,6 +12139,7 @@ Node ScreenCore::modelTableOf(DocNode const& node, LowerCtx const& ctx, ElementS
             return out;
         };
         bool const listed = described->capabilities.distinct && node.name("action").empty();
+        model.config.beginMount();
         model.config.filterTarget = [shown, displayUnits, registry, described, labels, refused, unitsOf,
                                      listed](std::string const& id) -> std::optional<FilterTarget> {
             auto const found = std::ranges::find_if(*shown, [&id](table::TableColumn const& column) {
@@ -12130,9 +12182,7 @@ Node ScreenCore::modelTableOf(DocNode const& node, LowerCtx const& ctx, ElementS
     for (TableColumn const& column : columns) {
         headers->push_back(headerText(column.label, column.unit));
     }
-    // The handler holds nothing of the screen's scopes: the table's configuring, which keeps it, lives in the
-    // element.
-    model.config.gather = [&model, shown, displayUnits, registry, headers, textOfCell](
+    model.config.gather = [&model, shown, displayUnits, registry, headers, textOfCell, scope = ctx.scope](
                               std::vector<Key> keys, std::vector<std::string> const& ids, CopyDone done) {
         std::vector<std::size_t> places;
         std::vector<std::string> named;
@@ -12147,12 +12197,20 @@ Node ScreenCore::modelTableOf(DocNode const& node, LowerCtx const& ctx, ElementS
                 gathered.headers.push_back(headers->at(places.back()));
             }
         }
-        FormatContext const format = model.element->scope->formatting();
+        FormatContext const format = scope->formatting();
         std::unordered_set<Key> wanted{keys.begin(), keys.end()};
         // The rows held with every column copied; a row held without one of them is fetched with the rest.
         TableRows& rows = *model.rows;
-        std::int64_t const total = rows.total().rows;
-        for (std::int64_t at = 0; at < total && !wanted.empty(); ++at) {
+        std::vector<std::int64_t> held;
+        for (auto const& [first, count] : model.window->heldRanges()) {
+            for (std::int64_t at = first; at < first + count; ++at) {
+                held.push_back(at);
+            }
+        }
+        for (std::int64_t const at : held) {
+            if (wanted.empty()) {
+                break;
+            }
             std::optional<TableRowRef> const ref = rows.row(at);
             if (!ref || !wanted.contains(ref->key) ||
                 !std::ranges::all_of(named, [&](std::string const& id) { return ref->row.field(id) != nullptr; })) {
