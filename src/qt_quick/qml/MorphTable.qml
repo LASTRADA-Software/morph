@@ -193,7 +193,8 @@ MorphWidget {
         for (let i = 0; i < root.columns.length; ++i) {
             const column = root.columns[i]
             const mark = column.sortable ? headerMetrics.advanceWidth(root.ascendingMark) : 0
-            const header = Math.max(headerMetrics.advanceWidth(column.label) + mark + pad,
+            // The header draws its unit after its label: the column is never narrower than both.
+            const header = Math.max(headerMetrics.advanceWidth(root.headerTextOf(column)) + mark + pad,
                                     8 * Theme.unitWidth)
             let natural = header
             let least = header

@@ -45,7 +45,7 @@ namespace morph::ui {
 
 /// @brief How a cell draws, beside its text.
 enum class CellLook : std::uint8_t {
-    Text,      ///< The cell's text, which may be a label or the column's `empty` text.
+    Text,      ///< The cell's text: its value's, or a label's.
     Empty,     ///< An empty cell: the column's `empty` text.
     Unloaded,  ///< A value that has not arrived: the backend draws its placeholder, and the text is empty.
     Invalid,   ///< A value that cannot be read as the column's kind: an error mark, and the text is empty.
@@ -240,11 +240,23 @@ struct Digits {
         }
         case ColumnKind::Decimal:
         case ColumnKind::Quantity:
-        case ColumnKind::Number:
             if (auto parsed = table::parseDecimal(text)) {
                 return table::Cell{*parsed};
             }
             return std::nullopt;
+        case ColumnKind::Number: {
+            if (auto parsed = table::parseDecimal(text)) {
+                return table::Cell{*parsed};
+            }
+            // A double no exact decimal holds (1e+21, 1e-20, 9.3e+18) is its own text in a record; it is still a
+            // number, shown from its shortest fixed-notation text.
+            double number = 0;
+            auto const read = std::from_chars(text.data(), text.data() + text.size(), number);
+            if (read.ec == std::errc{} && read.ptr == text.data() + text.size() && !text.empty()) {
+                return table::Cell{number};
+            }
+            return std::nullopt;
+        }
         case ColumnKind::Bool:
             if (text == "true" || text == "false") {
                 return table::Cell{text == "true"};
@@ -357,18 +369,26 @@ struct Digits {
 [[nodiscard]] inline std::string dateText(std::int64_t value, table::TableColumn const& column,
                                           FormatContext const& locale) {
     bool const withTime = column.info.kind == table::ColumnKind::DateTime;
-    // Seconds of 0000-01-01 and of 9999-12-31 23:59:59 from the epoch: the range a four-digit year spells.
+    // Days of 0000-01-01 and of 9999-12-31 from the epoch: the range a four-digit year spells.
     constexpr std::int64_t kFirstDay = -719'528;
     constexpr std::int64_t kLastDay = 2'932'896;
     constexpr std::int64_t kDaySeconds = 86'400;
-    std::int64_t seconds = withTime ? value + std::int64_t{locale.utcOffsetMinutes} * 60 : 0;
+    std::int64_t seconds = 0;
     if (!withTime) {
         if (value < kFirstDay || value > kLastDay) {
             return std::to_string(value);
         }
         seconds = value * kDaySeconds;
-    } else if (value < kFirstDay * kDaySeconds || value > (kLastDay + 1) * kDaySeconds) {
-        return std::to_string(value);
+    } else {
+        // A zone is less than a day from UTC: a value a day past either end is out of range in every zone, and the
+        // shift below cannot overflow.
+        if (value < (kFirstDay - 1) * kDaySeconds || value >= (kLastDay + 2) * kDaySeconds) {
+            return std::to_string(value);
+        }
+        seconds = value + std::int64_t{locale.utcOffsetMinutes} * 60;
+        if (seconds < kFirstDay * kDaySeconds || seconds >= (kLastDay + 1) * kDaySeconds) {
+            return std::to_string(value);
+        }
     }
     time::DateTime const local{std::chrono::sys_time<std::chrono::milliseconds>{std::chrono::seconds{seconds}}};
     std::string const& sessions = withTime ? locale.dateTimePattern : locale.datePattern;
@@ -581,8 +601,9 @@ struct Digits {
 
 /// @brief The values list's entries as the column shows them.
 ///
-/// Each operand is read with `cellOfOperand` and formatted. Entries whose texts are equal are formatted again at
-/// their own places (`decimals` cleared), so two values that show alike stay two entries a user can tell apart.
+/// Each operand is read with `cellOfOperand` and formatted; a date bucket's range operand (`a..b`) keeps the server's
+/// text. Entries whose texts are equal are formatted again at their own places (`decimals` cleared), so two values
+/// that show alike stay two entries a user can tell apart.
 /// @param values The distinct values, in the reply's order.
 /// @param column Their column.
 /// @param locale The session's formatting.
@@ -595,13 +616,18 @@ struct Digits {
     std::vector<std::string> out;
     out.reserve(values.size());
     for (table::DistinctValue const& value : values) {
+        // A date bucket's operand is a range (`a..b`), which no cell holds: the server's text names it.
+        if (value.operand.contains("..")) {
+            out.push_back(value.text);
+            continue;
+        }
         out.push_back(formatCell(cellOfOperand(value.operand, column, units), column, locale, units));
     }
     table::TableColumn ownPlaces = column;
     ownPlaces.display.decimals.reset();
     std::vector<std::string> const first = out;
     for (std::size_t at = 0; at < out.size(); ++at) {
-        if (std::ranges::count(first, first.at(at)) > 1) {
+        if (std::ranges::count(first, first.at(at)) > 1 && !values[at].operand.contains("..")) {
             out.at(at) = formatCell(cellOfOperand(values[at].operand, column, units), ownPlaces, locale, units);
         }
     }

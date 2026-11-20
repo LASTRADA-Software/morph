@@ -161,6 +161,41 @@ struct TableColumn {
     [[nodiscard]] bool operator==(TableColumn const& other) const = default;
 };
 
+}  // namespace morph::table
+
+/// @brief The JSON of `morph::table::TableColumn`: every member by its name, `display`, `tone` and `tooltip` left out
+///        while they hold their defaults, so a column that shows its cells plainly costs nothing for them. A reader
+///        restores a member left out to its default.
+template <>
+struct glz::meta<morph::table::TableColumn> {
+    /// @brief The column type.
+    using T = morph::table::TableColumn;
+    /// @brief Whether a member is left out.
+    /// @tparam V The member's type.
+    /// @param member  The member.
+    /// @param key     Its JSON name.
+    /// @param context Unused.
+    /// @return `true` for a default `display` and an empty `tone` or `tooltip`.
+    template <typename V>
+    static constexpr bool skip_if(V const& member, std::string_view key, glz::meta_context const& context) {
+        static_cast<void>(context);
+        if constexpr (std::is_same_v<V, morph::table::ColumnDisplay>) {
+            return key == "display" && member == morph::table::ColumnDisplay{};
+        } else if constexpr (std::is_same_v<V, std::string>) {
+            return (key == "tone" || key == "tooltip") && member.empty();
+        } else {
+            return false;
+        }
+    }
+    /// @brief Each member after its JSON name.
+    static constexpr auto value =
+        glz::object("info", &T::info, "label", &T::label, "group", &T::group, "sortable", &T::sortable, "filterable",
+                    &T::filterable, "shown", &T::shown, "display", &T::display, "tone", &T::tone, "tooltip",
+                    &T::tooltip);
+};
+
+namespace morph::table {
+
 /// @brief What the server offers on a table beyond paging, sorting and filtering.
 struct TableCapabilities {
     /// @brief Keyed queries.

@@ -669,6 +669,14 @@ TEST_CASE("interpreter bench: a third sort key on 100,000 rows", "[.benchmark][i
 // view (D7, budget ≤ 50 ms).
 ```
 
+**From Task 15 (Part F), which landed first.** The header menus never list a companion column: the columns of
+`table::companionColumns(description)` (a `tone`, `tooltip`, `rowTone` or `rowLock` companion) are left out of the
+table's columns by the lowering already, and a header menu offers none of them, whether as a column to sort by, to
+hide or to move. Add to Step 1 the menu half of Task 15's case "table display: companion columns are not arranged"
+(`companionDescription()`, `doc(kTable)` and `replyDescribe(h, json)` are in `tests/test_ui_table_model.cpp`): no
+header menu entry names `massTone`, `massTip` or `lockedBy`. Mutation: the menu built from every column of the
+description.
+
 - [ ] **Step 2: Run them to see them fail**
 
 Run: `cmake --build --preset cl-debug --target morph_tests && ctest --test-dir build/cl-debug -R "sort chains|column layout|status line|persisted layout|hiding a sorted|configurable, locked" --output-on-failure`
@@ -826,6 +834,13 @@ TEST_CASE("table benchmark: a sort change and a text filter over a socket with 5
 TEST_CASE("table benchmark: a server-mode values list from open to shown", "[.benchmark][table]")   // D9, ≤ 150 ms
 ```
 
+**From Task 15 (Part F), which landed first.** The values list labels each entry with the column's display, not the
+reply's `text`: `table_filter_value_<i>` is `ui::distinctTexts(values, column, locale, units)[i] + " (" + count + ")"`
+(`include/morph/ui/cell_format.hpp`; `column` the shown column's `table::TableColumn` with the document's display
+parts over the description's, `units` the table's `DisplayUnits`). Two values that show alike keep their own places
+there. Add to Step 1: over `companionDescription()`'s `mass` (2 places, half up), distinct values `0.124`, `0.123` and
+`0.5` label `0.124 (1)`, `0.123 (2)` and `0.50 (1)`. Mutation: the entry labelled with the reply's `text`.
+
 - [ ] **Step 2: Run them to see them fail.** Run: `cmake --build --preset cl-debug --target morph_tests && ctest --test-dir build/cl-debug -R "filter menu|display unit" --output-on-failure`. Expected: FAIL — no `table_filter` dialog is mounted.
 
 - [ ] **Step 3: Implement** `TableRows::distinctValues` in both implementations, `tableFilterDebounce`, the `groups` key, the menu and the `Display unit` submenu per the rules above.
@@ -870,6 +885,13 @@ TEST_CASE("sort dialog: keys in order with direction, move and remove; Add key r
 // sort c1 asc, c2 desc: table_sort_up_1 → [c2 desc, c1 asc]; table_sort_direction_0 "ascending" → c2 asc;
 // table_sort_remove_1 → [c2 asc]; with eight keys table_sort_add leaves eight and shows "A table sorts by at most 8 columns".
 ```
+
+**From Task 15 (Part F), which landed first.** The column chooser lists no companion column (the columns of
+`table::companionColumns(description)`), even one the description marks `shown`. Add to Step 1 the chooser half of
+Task 15's case "table display: companion columns are not arranged": over `companionDescription()` the chooser
+(`Columns…`, dialog `table_columns`) has `table_columns_show_id`, `_mass`, `_name` and `_count`, and no
+`table_columns_show_massTone`, `_massTip` or `_lockedBy`; `elementValue(h, "t", "visibleColumns")` is
+`["id","mass","name","count"]` and `hiddenCount` is 0. Mutation: the chooser listing every column of the description.
 
 - [ ] **Step 2: Run to see them fail.** `ctest --test-dir build/cl-debug -R "column chooser|sort dialog" --output-on-failure` after building `morph_tests`. Expected: FAIL — no `table_columns` dialog.
 - [ ] **Step 3: Implement** the dialogs and their openers.
@@ -918,6 +940,14 @@ TEST_CASE("range and copy at their bounds: 10,000 pass, 10,001 are refused", "[u
 ```
 
 (`selectTableRange` is the `RecordingBackend` driver Part D's Task 10a adds for its range report. Replies the helpers of `tests/ui_table_support.hpp` do not build (distinct values, keyed replies, `unloadedRows`) are written as JSON in the test.)
+
+**From Task 15 (Part F), which landed first.** Copy writes each cell as the table shows it, with
+`ui::formatCell(cell, column, scope->formatting(), displayUnits)`, and each header with `ui::headerText(label, unit)`
+(`include/morph/ui/cell_format.hpp`), before `ui::copyText(labels, rows)` and `IViewBackend::copyText`. Add to Step 1
+Task 15's case "table display: copy writes the shown text and the header with its unit": over
+`companionDescription()` with `"selectionMode":"multiple"` and `"columns":[{"id":"id"},{"id":"mass"},{"id":"name"}]`,
+select row 1 and choose "Copy with headers": `clipboardText()` is `"Id\tMass [kg]\tName\n1\t0.13\tA"`. Mutation: copy
+writing `table::displayText`, which writes `0.125`.
 
 - [ ] **Step 2: Run to see them fail.** `ctest --test-dir build/cl-debug -R "copy:|range and copy" --output-on-failure` after building `morph_tests`. Expected: FAIL — `fetchRows` does not exist; the clipboard stays empty (the range half of the bounds case passes already: it holds Part D's rule at its edge, and is here so the two bounds are tested side by side).
 - [ ] **Step 3: Implement** `fetchRows` in both `TableRows` and the copy rule above.
