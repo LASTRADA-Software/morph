@@ -838,6 +838,90 @@ TEST_CASE("table benchmark: C1 C2 C3 many clients over the bridge", "[.benchmark
 
 namespace {
 
+// One exchange over a link with @p latency each way: the request leaves after it, and the reply is taken after it,
+// as a client behind a slow link sees the server. The delays are slept on the client's thread, so the server's work
+// in between is measured as it is.
+morph::wire::Envelope overLink(Client& client, morph::wire::Envelope request, std::chrono::milliseconds latency) {
+    std::this_thread::sleep_for(latency);
+    std::optional<ui::ExchangeReply> reply;
+    client.exchange(std::move(request), [&reply](ui::ExchangeReply answer) { reply = std::move(answer); });
+    REQUIRE(client.pumpUntil([&] { return reply.has_value(); }, 60s));
+    REQUIRE(reply->has_value());
+    std::this_thread::sleep_for(latency);
+    return **reply;
+}
+
+// The wide fixture's 100,000 x 300 table, every level loaded, served to one client.
+struct WideLink {
+    WideLink() {
+        bench::WideTableModel::recipeGate().release();
+        bench::WideTableModel::configure(
+            {.rows = 100'000, .columns = 300, .seed = 7, .loadDelay = {}, .recipePreloaded = 1.0},
+            {.rows = 1'000, .columns = 30, .seed = 7, .loadDelay = {}, .recipePreloaded = 1.0});
+        instance = client.create(std::string{bench::kWideModelType});
+    }
+
+    morph::wire::Envelope ask(std::string body) const {
+        morph::wire::Envelope env;
+        env.kind = "execute";
+        env.modelId = instance;
+        env.modelType = std::string{bench::kWideModelType};
+        env.actionType = "Table.wide";
+        env.body = std::move(body);
+        env.session.principal = "alice";
+        return env;
+    }
+
+    ViewServer server{};
+    Client client{server.url, "alice"};
+    std::uint64_t instance = 0;
+};
+
+}  // namespace
+
+// B3, recorded and not a gate. 50 ms each way: a header sort to the accepted page (bound 150 ms), and the last key of
+// a text filter to the accepted page, the filter's 250 ms debounce waited first (bound 250 ms + 150 ms).
+TEST_CASE("table benchmark: a sort change and a text filter over a socket with 50 ms each way", "[.benchmark][table]") {
+    WideLink link;
+    constexpr auto kLatency = 50ms;
+    static_cast<void>(pageOf(overLink(link.client, link.ask(R"({"columns":["id","d000"],"page":{"offset":0,"limit":50}})"),
+                                      kLatency)));
+    auto const sortBegan = std::chrono::steady_clock::now();
+    auto const sorted = pageOf(overLink(
+        link.client,
+        link.ask(R"({"sort":[{"column":"d000","dir":"asc"}],"columns":["id","d000"],"page":{"offset":0,"limit":50}})"),
+        kLatency));
+    auto const sortMs = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - sortBegan).count();
+    CHECK_FALSE(sorted.rows.empty());
+    auto const keyBegan = std::chrono::steady_clock::now();
+    std::this_thread::sleep_for(250ms);
+    auto const filtered = pageOf(overLink(
+        link.client,
+        link.ask(R"({"filters":{"columns":{"t011":{"include":[{"contains":"a"}]}}},"columns":["id","t011"],)"
+                 R"("page":{"offset":0,"limit":50}})"),
+        kLatency));
+    auto const keyMs = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - keyBegan).count();
+    static_cast<void>(filtered);
+    std::println("| B3 | sort on d000, 100,000 x 300, 50 ms each way: {:.1f} ms (bound 150) |", sortMs);
+    std::println("| B3 | last key of a text filter to the page, 50 ms each way: {:.1f} ms (bound 400) |", keyMs);
+}
+
+// D9, recorded and not a gate: a server-mode values list from the menu's opening to its reply (bound 150 ms).
+TEST_CASE("table benchmark: a server-mode values list from open to shown", "[.benchmark][table]") {
+    WideLink link;
+    auto const began = std::chrono::steady_clock::now();
+    auto const listed = pageOf(link.client.execute(
+        link.instance, std::string{bench::kWideModelType}, "Table.wide",
+        R"({"distinct":{"column":"t011","search":"","bucket":"value","offset":0,"limit":200}})"));
+    auto const ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - began).count();
+    REQUIRE(listed.distinct.has_value());
+    CHECK_FALSE(listed.distinct->values.empty());
+    std::println("| D9 | values list of t011, 100,000 rows: {:.1f} ms, {} values of {} (bound 150) |", ms,
+                 listed.distinct->values.size(), listed.distinct->distinct);
+}
+
+namespace {
+
 // One server on a socket offering `morph.tableState` over a memory preferences store, with the tables authorizer.
 struct StateServer {
     StateServer() {

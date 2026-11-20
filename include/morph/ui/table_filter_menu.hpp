@@ -140,13 +140,13 @@ struct FilterMenuState {
     std::int64_t distinct = 0;
     /// @brief Every value of the column, the search aside; -1 until a reply without a search counted them.
     std::int64_t total = -1;
-    /// @brief Rows with an empty cell, invalid cells, and whether rows were left out while cells load.
+    /// @brief Rows with an empty cell, as the last reply counted them.
     std::int64_t blanks = 0;
     /// @brief Invalid cells, which no box ticks.
     std::int64_t invalid = 0;
     /// @brief Whether rows were left out because a cell was not loaded.
     bool partial = false;
-    /// @brief Whether a reply came; and whether the rows said they list no values, so the conditions alone show.
+    /// @brief Whether a reply to the values list came.
     bool listedOnce = false;
     /// @brief The ticks of a flat list, as operations.
     ValueTicks ticks;
@@ -237,6 +237,16 @@ namespace detail::filtermenu {
         return std::nullopt;
     }
     return std::pair{*first, *last};
+}
+
+/// @brief A range of days as a date bucket's operand.
+/// @param first    Its first day.
+/// @param last     Its last day.
+/// @param dateTime Whether the column holds date-times: its ends are `YYYY-MM-DDT00:00:00Z` and `…T23:59:59Z`.
+/// @return `a..b`.
+[[nodiscard]] inline std::string rangeText(std::int64_t first, std::int64_t last, bool dateTime) {
+    return dateTime ? table::detail::isoDate(first) + "T00:00:00Z.." + table::detail::isoDate(last) + "T23:59:59Z"
+                    : table::detail::isoDate(first) + ".." + table::detail::isoDate(last);
 }
 
 /// @brief Whether a ticked range covers a bucket.
@@ -332,8 +342,7 @@ namespace detail::filtermenu {
     std::vector<std::string> out;
     out.reserve(merged.size());
     for (auto const& [first, last] : merged) {
-        out.push_back(dateTime ? table::detail::isoDate(first) + "T00:00:00Z.." + table::detail::isoDate(last) + "T23:59:59Z"
-                               : table::detail::isoDate(first) + ".." + table::detail::isoDate(last));
+        out.push_back(detail::filtermenu::rangeText(first, last, dateTime));
     }
     return out;
 }
@@ -542,11 +551,11 @@ public:
                 });
             }
         }
+        // A date tree is include-only: no bucket starts ticked, and neither does "(Blanks)" unless the stored
+        // filter ticks it.
         if (dates(next)) {
             next.ticks.ticked = false;
-            if (!next.ticks.blanks) {
-                next.ticks.blanks = false;
-            }
+            next.ticks.blanks = next.ticks.blanks.value_or(false);
         }
         for (ConditionDraft& draft : next.conditions) {
             if (draft.unit.empty() && !on.unitChoices.empty()) {
@@ -602,6 +611,27 @@ public:
             FilterListEntry const& entry = state.list[index];
             if (dates(state)) {
                 std::erase(state.dates, entry.value.operand);
+                if (!checked) {
+                    // A range that holds the bucket and more, as Apply merged it, keeps the rest: its days before
+                    // and after the bucket.
+                    auto const bucket = detail::filtermenu::rangeOf(entry.value.operand);
+                    bool const dateTime = state.target.shown.info.kind == table::ColumnKind::DateTime;
+                    std::vector<std::string> kept;
+                    for (std::string const& held : state.dates) {
+                        auto const range = detail::filtermenu::rangeOf(held);
+                        if (!bucket || !range || range->first > bucket->first || bucket->second > range->second) {
+                            kept.push_back(held);
+                            continue;
+                        }
+                        if (range->first < bucket->first) {
+                            kept.push_back(detail::filtermenu::rangeText(range->first, bucket->first - 1, dateTime));
+                        }
+                        if (bucket->second < range->second) {
+                            kept.push_back(detail::filtermenu::rangeText(bucket->second + 1, range->second, dateTime));
+                        }
+                    }
+                    state.dates = std::move(kept);
+                }
                 if (checked) {
                     // A ticked bucket covers those under it: their own ticks go.
                     auto const range = detail::filtermenu::rangeOf(entry.value.operand);
@@ -614,6 +644,14 @@ public:
                 return;
             }
             state.ticks.ops.push_back(TickOp{.search = {}, .operand = entry.value.operand, .ticked = checked});
+            // "all of them, each in a column" is offered while 2 or more values are ticked: below that the line
+            // falls back to its default.
+            if (state.match == GroupMatch::Together &&
+                std::ranges::count_if(state.list, [&](FilterListEntry const& listed) {
+                    return tickedNow(state, listed.value);
+                }) < 2) {
+                state.match = GroupMatch::AnyColumn;
+            }
         });
     }
 
@@ -842,16 +880,19 @@ public:
             FilterListRow row{.kind = FilterListRow::Kind::Value,
                               .key = "value:" + std::to_string(at) + ":" + entry.value.operand,
                               .id = std::to_string(at),
-                              .label = texts.at(at) + " (" + groupedCount(entry.value.count) + ")",
+                              .label = texts.at(at) + " (" +
+                                       groupedCount(entry.value.count, _host.format.numeric.groupSeparator) + ")",
                               .checked = false,
                               .enabled = true,
                               .opens = tree && entry.bucket != table::DateBucket::Day,
                               .index = at,
                               .depth = entry.depth};
             if (tree) {
+                // A bucket under a ticked bucket of the tree is ticked with it and cannot be toggled alone; one a
+                // range covers that no listed bucket is (a stored or merged range) is ticked and can be unticked.
                 auto const [covered, own] = detail::filtermenu::coverOf(state.dates, entry.value.operand);
                 row.checked = covered;
-                row.enabled = !covered || own;
+                row.enabled = !covered || own || !underTicked(state, at);
             } else {
                 row.checked = tickedNow(state, entry.value);
             }
@@ -880,8 +921,15 @@ public:
         if (state.target.formed) {
             return false;
         }
-        return state.ticks.ticked || state.ticks.blanks == true ||
-               std::ranges::any_of(state.ticks.ops, [](TickOp const& op) { return op.ticked; });
+        if (state.ticks.blanks == true) {
+            return true;
+        }
+        // Every value's state after the last operation that set them all, then any operation since that ticks.
+        auto const last = std::ranges::find_if(state.ticks.ops.rbegin(), state.ticks.ops.rend(), [](TickOp const& op) {
+            return !op.operand && op.search.empty();
+        });
+        bool const base = last == state.ticks.ops.rend() ? state.ticks.ticked : last->ticked;
+        return base || std::any_of(state.ticks.ops.rbegin(), last, [](TickOp const& op) { return op.ticked; });
     }
 
     /// @brief The note under the list: that it may grow, how many cells could not be read, and why the last Apply
@@ -894,7 +942,8 @@ public:
             lines.push_back(tableText::mayGrow());
         }
         if (state.invalid > 0) {
-            lines.push_back(tableText::unreadable(static_cast<std::size_t>(state.invalid)));
+            lines.push_back(
+                tableText::unreadable(static_cast<std::size_t>(state.invalid), _host.format.numeric.groupSeparator));
         }
         if (!state.refusal.empty()) {
             lines.push_back(state.refusal);
@@ -940,6 +989,23 @@ private:
 
     [[nodiscard]] static std::vector<std::string> columnsOf(FilterTarget const& target) {
         return target.column.empty() ? target.columns : std::vector<std::string>{target.column};
+    }
+
+    // Whether a date bucket lies under a listed bucket that is ticked itself.
+    [[nodiscard]] static bool underTicked(FilterMenuState const& state, std::size_t index) {
+        auto const inner = detail::filtermenu::rangeOf(state.list.at(index).value.operand);
+        for (std::size_t at = 0; at < state.list.size(); ++at) {
+            FilterListEntry const& above = state.list.at(at);
+            auto const outer = detail::filtermenu::rangeOf(above.value.operand);
+            if (at == index || above.depth >= state.list.at(index).depth || !outer || !inner ||
+                outer->first > inner->first || inner->second > outer->second) {
+                continue;
+            }
+            if (std::ranges::contains(state.dates, above.value.operand)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     // Whether a value's box shows ticked: the ticks' first state, then each operation that reaches it in order. A

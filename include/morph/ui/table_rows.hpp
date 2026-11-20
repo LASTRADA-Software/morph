@@ -2188,7 +2188,9 @@ struct WindowRowsStats {
 ///
 /// A values list (`distinctValues`) is a query carrying `distinct` under the held filter. The window keeps each reply
 /// by the query's body until the table's record changes, the session reconnects or a new revision is described, so
-/// a filter menu opened again sends nothing.
+/// a filter menu opened again sends nothing; it keeps at most 64, the oldest going first, and a reply asked for
+/// before such a change answers its menu without being kept. The replies are this table's rows' own, not shared with
+/// another table.
 ///
 /// Neither copied nor moved: its watch handler and its replies hold it.
 class WindowRows final : public TableRows {
@@ -2207,7 +2209,7 @@ public:
         // A record watch hears a reconnect as a change of every row; a window that watches none hears it here.
         if (_options.records.empty()) {
             _reconnect = _session->onReconnected(_scope.token().guard([this] {
-                _distinct.clear();
+                forgetDistinct();
                 _window.invalidate();
                 pump();
             }));
@@ -2231,7 +2233,8 @@ public:
     /// @brief Cancels every fetch in flight.
     ~WindowRows() override {
         stopAll();
-        for (auto& stop : _distinctStops) {
+        for (auto& [id, stop] : _distinctFlights) {
+            static_cast<void>(id);
             stop.request_stop();
         }
         for (auto const& held : _keyRequests) {
@@ -2263,7 +2266,7 @@ public:
         _descriptionError = false;
         bool const another = !_description || _description->revision != description.revision;
         if (another) {
-            _distinct.clear();
+            forgetDistinct();
         }
         bool const replacing = _description.has_value() && another;
         table::FitReport report;
@@ -2664,9 +2667,16 @@ public:
         std::stop_source stop;
         ++_stats.distinctFetches;
         auto reply = _session->read(_options.channel, actionName(), *body, stop.get_token());
-        _distinctStops.push_back(std::move(stop));
+        // The oldest values list still in flight is stopped past the bound: its menu has asked for others since.
+        std::uint64_t const flight = ++_distinctFlight;
+        _distinctFlights.emplace(flight, std::move(stop));
+        if (_distinctFlights.size() > kMaxDistinctFlights) {
+            _distinctFlights.begin()->second.request_stop();
+            _distinctFlights.erase(_distinctFlights.begin());
+        }
         auto const settle = std::make_shared<async::Completion<Result>::Promise>(std::move(promise));
-        reply.then(_scope, [this, settle, key = std::move(key)](std::string const& text) {
+        reply.then(_scope, [this, settle, flight, epoch = _distinctEpoch, key = std::move(key)](std::string const& text) {
+            _distinctFlights.erase(flight);
             auto read = table::readGenericPage(text, *_description, _units.get());
             if (!read) {
                 settle->resolve(Result{std::unexpected(std::move(read.error()))});
@@ -2677,10 +2687,15 @@ public:
                     .code = table::TableErrorCode::InvalidValue, .column = {}, .message = "the reply holds no values"})});
                 return;
             }
-            _distinct.insert_or_assign(key, *read->distinct);
+            // A reply asked for before the record changed, the session reconnected or the revision moved answers
+            // its menu, and is not kept: it may count rows as they were.
+            if (epoch == _distinctEpoch) {
+                keepDistinct(key, *read->distinct);
+            }
             settle->resolve(Result{std::move(*read->distinct)});
         });
-        reply.onError(_scope, [settle](std::exception_ptr const& error) {
+        reply.onError(_scope, [this, settle, flight](std::exception_ptr const& error) {
+            _distinctFlights.erase(flight);
             settle->resolve(Result{std::unexpected(failureOf(error))});
         });
         return std::move(completion);
@@ -3343,11 +3358,36 @@ private:
         }
     }
 
+    // The values lists kept and in flight are bounded: a menu's pages and searches and an Apply's paging of every
+    // value (up to `QueryLimits::maxLimit` values a reply) are what fill them, and the oldest is the least likely to
+    // be asked for again.
+    static constexpr std::size_t kMaxDistinctReplies = 64;
+    static constexpr std::size_t kMaxDistinctFlights = 64;
+
+    // Keeps a values list's reply by its query's body, the oldest going past the bound.
+    void keepDistinct(std::string const& key, table::DistinctValues const& values) {
+        if (!_distinct.contains(key)) {
+            _distinctOrder.push_back(key);
+        }
+        _distinct.insert_or_assign(key, values);
+        while (_distinctOrder.size() > kMaxDistinctReplies) {
+            _distinct.erase(_distinctOrder.front());
+            _distinctOrder.pop_front();
+        }
+    }
+
+    // Drops every values list kept, and marks the replies in flight as asked for before the change.
+    void forgetDistinct() {
+        _distinct.clear();
+        _distinctOrder.clear();
+        ++_distinctEpoch;
+    }
+
     // A change of the table's record. While the order awaits a level every event invalidates; `pump` spaces the
     // refetches.
     void heard(effects::RecordChange const& change) {
         // Any row may change a count: the values lists are asked again.
-        _distinct.clear();
+        forgetDistinct();
         if (!change.keys) {
             _window.invalidate();
             pump();
@@ -3428,7 +3468,10 @@ private:
     // The stops of the key pages a range selection fetched, and of the fetch that locates a highlighted row.
     std::vector<std::weak_ptr<KeysRequest>> _keyRequests;
     std::map<std::string, table::DistinctValues, std::less<>> _distinct;
-    std::vector<std::stop_source> _distinctStops;
+    std::deque<std::string> _distinctOrder;
+    std::uint64_t _distinctEpoch = 0;
+    std::map<std::uint64_t, std::stop_source> _distinctFlights;
+    std::uint64_t _distinctFlight = 0;
     std::stop_source _locateStop;
     // Last, so it is the first to go: no reply or timer reaches a half-destroyed object.
     async::CallbackScope _scope;
