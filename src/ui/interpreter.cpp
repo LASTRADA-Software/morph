@@ -9332,8 +9332,10 @@ Node ScreenCore::modelTableOf(DocNode const& node, LowerCtx const& ctx, ElementS
          overrides](std::span<std::string const> named) {
             return table::columnsWithCompanions(*described, named, overrides);
         });
-    // A cell's text, by its column's display.
-    auto const textOfCell = [shown, displayUnits](std::size_t column, Value const& record, FormatContext const& format) {
+    // A cell's text, by its column's display. Each column's `DisplayUnits` points into `registry`, so the formatters
+    // hold it: it lives as long as the cells do.
+    auto const textOfCell = [shown, displayUnits, registry](std::size_t column, Value const& record,
+                                                            FormatContext const& format) {
         table::TableColumn const& display = shown->at(column);
         DisplayUnits const& units = displayUnits->at(column);
         return formatCell(cellOfRecord(record.field(display.info.id), display, units.units), display, format, units);
@@ -9341,7 +9343,7 @@ Node ScreenCore::modelTableOf(DocNode const& node, LowerCtx const& ctx, ElementS
     // A cell's accent: the document's tone and tooltip, else its companions'; an unreadable value is invalid. An
     // unknown tone is reported once per column.
     auto const cellToneReported = std::make_shared<std::set<std::size_t>>();
-    auto const accentOf = [this, shown, displayUnits, cellExprs, cellToneReported, bindings = ctx.bindings](
+    auto const accentOf = [this, shown, displayUnits, registry, cellExprs, cellToneReported, bindings = ctx.bindings](
                               std::size_t column, Value const& record, RtScope const* scope) {
         table::TableColumn const& display = shown->at(column);
         CellExprs const& exprs = cellExprs->at(column);
