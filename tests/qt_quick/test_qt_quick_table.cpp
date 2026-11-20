@@ -2464,3 +2464,62 @@ TEST_CASE("qt_quick table: a header menu opened from the keyboard takes the arro
     CHECK_FALSE(menu->property("opened").toBool());
     CHECK(chosen.size() == 1);
 }
+
+// Control: draw a menu entry's label alone (the checked entry reads `Wrap`, and assistive technology hears no check).
+TEST_CASE("qt_quick table: a header menu shows a checked entry's mark, its chord and its description, and states it",
+          "[qt_quick][table]") {
+    Scene scene;
+    Rows table = makeTable(scene, {ui::Key{std::int64_t{1}}}, ui::SelectionMode::None);
+    table.table->setColumns({{.label = "Name", .width = ui::Sizing::fixed(12)}, {.label = "Mass"}});
+    table.table->setMenu(
+        [](std::optional<std::size_t>) {
+            return std::vector<ui::MenuEntry>{
+                {.label = "Wrap", .keys = "Ctrl+W", .checked = true, .description = "Long text wraps"},
+                {.separator = true},
+                {.label = "Pin", .checked = false}};
+        },
+        [](std::optional<std::size_t>, std::vector<std::size_t>) {});
+    scene.settle();
+    QQuickItem const& name = headerOf(*table.table, 0);
+    QTest::mouseClick(&scene.window(), Qt::RightButton, {}, Scene::centreOf(name));
+    scene.settle();
+    QObject* const menu = Scene::itemOf(*table.table).findChild<QObject*>(QStringLiteral("configMenu"));
+    REQUIRE(menu != nullptr);
+    REQUIRE(menu->property("opened").toBool());
+    auto* const entries = menu->property("contentItem").value<QQuickItem*>();
+    REQUIRE(entries != nullptr);
+    QQuickItem* wrap = nullptr;
+    QQuickItem* pin = nullptr;
+    QStringList texts;
+    QList<QQuickItem*> pending{entries};
+    while (!pending.isEmpty()) {
+        QQuickItem* const item = pending.takeLast();
+        if (item->objectName() == QStringLiteral("menuEntry0")) {
+            wrap = item;
+        } else if (item->objectName() == QStringLiteral("menuEntry2")) {
+            pin = item;
+        }
+        if (item->isVisible() && !item->property("text").toString().isEmpty()) {
+            texts.append(item->property("text").toString());
+        }
+        pending.append(item->childItems());
+    }
+    REQUIRE(wrap != nullptr);
+    REQUIRE(pin != nullptr);
+    CHECK(wrap->property("text").toString() == QStringLiteral("\u2713 Wrap    Ctrl+W"));
+    CHECK(pin->property("text").toString() == QStringLiteral("  Pin"));
+    CHECK(texts.contains(QStringLiteral("Long text wraps")));
+    bool const wasActive = QAccessible::isActive();
+    QAccessible::setActive(true);
+    QAccessibleInterface* const wrapNode = QAccessible::queryAccessibleInterface(wrap);
+    QAccessibleInterface* const pinNode = QAccessible::queryAccessibleInterface(pin);
+    REQUIRE(wrapNode != nullptr);
+    REQUIRE(pinNode != nullptr);
+    CHECK(wrapNode->role() == QAccessible::MenuItem);
+    CHECK(wrapNode->state().checkable);
+    CHECK(wrapNode->state().checked);
+    CHECK(pinNode->state().checkable);
+    CHECK_FALSE(pinNode->state().checked);
+    QAccessible::setActive(wasActive);
+    scene.key(Qt::Key_Escape);
+}

@@ -419,7 +419,11 @@ columns leave free, so it covers no header or filter button. C++ reads the entri
 `showMenu(column, entries)`, which opens `configMenu`, a `Popup` placed under that header (or the `⋯`), at its start
 where it fits. The popup takes the focus: Up and Down move among the entries that can be chosen, passing over
 separators and headings, Right or Enter opens a submenu and Left or Backspace goes back up, Enter or Space chooses, and
-Escape or a press outside closes it and gives the focus back to the header. A choice comes back as `menuChoose` with
+Escape or a press outside closes it and gives the focus back to the header. An entry is drawn as a button-style
+`MorphMenu` draws it (`menuEntryText`): a checkable entry's `✓` (or room for one), an icon the theme names drawn as its
+icon (one it does not, written as its name), the label, `›` for a submenu, the chord after it, and the description as
+a muted line under it; a separator is a `MenuSeparator` line. Each entry is an `Accessible.MenuItem` with its
+description, and a checkable one is `Accessible.checkable` with `Accessible.checked` following its mark. A choice comes back as `menuChoose` with
 the column and the path. A closed popup is not shown, so it is neither a Tab stop nor an
 accessible node.
 
