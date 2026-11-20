@@ -782,7 +782,8 @@ keeps its operands' 0 places and still fills 0.29 of a bar.
   row's activation are translated between the two, so the open row stays selected through a sort.
   The arrangement, sort and filters persist under
   `{application, the model alias's type, the collection's action, the screen's id, "state"}`, and
-  the rows are held back while that state loads, as a table over `rows`'s are. They have no
+  the rows are held back while that state loads, as a `rows` table's are; its saved views load
+  beside that state, as every persisted table's do. They have no
   element values and no events. A document the catalog lacks, one for another action, one that does not build, or
   a wizard step without a schema is reported and shown as a muted text naming the action.
 

@@ -109,7 +109,9 @@ preference of their own. A `columns` point reads the table's column layout as a 
 from, or `null`; both read what the table's stored state loaded, and the document's default until it has. A
 choice for either (`Screen::setPreference`) is written into the table's state and saved as any change of its
 arrangement is, debounced; a choice that does not read as a layout, or as a name or `null`, is refused. A
-`saved` point names its table with `of`, as a `columns` point does.
+`saved` point names its table with `of`, as a `columns` point does. A `columns` or `saved` point that names a table
+over `rows`, and a `saved` point without `of`, edit no table's state: each holds its choice as any other preference
+does.
 
 ## The client
 
