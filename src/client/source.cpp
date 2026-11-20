@@ -37,6 +37,12 @@ namespace {
 // How often the offline queue is retried while it holds a call.
 constexpr std::chrono::seconds kReplayEvery{2};
 
+// The locale a session starts in (`FormatContext::locale`), which the texts are asked in while the session names none.
+constexpr std::string_view kStartLocale = "en";
+
+// The refusal of a server that has no UI service for `ui-texts`: an older one, which serves no texts and is not wrong.
+constexpr std::string_view kUnknownTextsKind = "unknown envelope kind: ui-texts";
+
 }  // namespace
 
 std::expected<std::shared_ptr<backend::RemoteServer>, std::string> makeLocalServer(LocalApp const& app,
@@ -364,12 +370,17 @@ void Source::reload(std::shared_ptr<bool> const& alive,
             return;
         }
         _loaded = std::move(*opened);
-        loadSchemas(alive, [this, alive, done = std::move(done)] {
-            if (*alive) {
-                *_current = CurrentCatalog{.facts = _loaded->catalog.facts(), .schemas = _schemas};
-                ++_catalogLoads;
-                done({});
+        loadSchemas(alive, [this, alive, done = std::move(done)]() mutable {
+            if (!*alive) {
+                return;
             }
+            loadTexts(alive, [this, alive, done = std::move(done)] {
+                if (*alive) {
+                    *_current = CurrentCatalog{.facts = _loaded->catalog.facts(), .schemas = _schemas};
+                    ++_catalogLoads;
+                    done({});
+                }
+            });
         });
     });
 }
@@ -379,6 +390,55 @@ ui::MessageCatalogues Source::catalogues() const {
         return {};
     }
     return ui::loadCatalogues(_loaded->manifest, _loaded->files);
+}
+
+std::string Source::textsLocale() const {
+    return _session.locale.empty() ? std::string{kStartLocale} : _session.locale;
+}
+
+void Source::loadTexts(std::shared_ptr<bool> const& alive, std::function<void()> done) {
+    // Called only while the source is open, so the exchange is set.
+    _textsLocale = textsLocale();
+    wire::Envelope request;
+    request.kind = std::string{ui::kTextsKind};
+    request.session = _session;
+    request.session.locale = _textsLocale;
+    _exchange(std::move(request),
+              [this, alive, locale = _textsLocale, done = std::move(done)](ui::ExchangeReply const& reply) {
+                  if (!*alive) {
+                      return;
+                  }
+                  // Only the latest answer is kept: a locale whose texts the server no longer has shows the bundle's.
+                  _texts = ui::MessageCatalogues{};
+                  if (!reply) {
+                      _texts.note("the texts for `" + locale + "` did not arrive: " + reply.error());
+                  } else if (reply->kind != "ok") {
+                      if (reply->message != ui::kNoTextsReason && reply->message != kUnknownTextsKind) {
+                          _texts.note("the server refused the texts for `" + locale + "`: " + reply->message);
+                      }
+                  } else if (auto parsed = ui::parseTextsReply(reply->body); !parsed) {
+                      _texts.note("the texts for `" + locale + "` were refused: " + parsed.error());
+                  } else {
+                      _texts.add(std::move(parsed->locale),
+                                 ui::Catalogue{.messages = std::move(parsed->messages), .dropped = {}});
+                  }
+                  done();
+              });
+}
+
+void Source::setLocale(std::string locale, std::function<void()> loaded) {
+    _session.locale = std::move(locale);
+    if (_bridge) {
+        _bridge->setDefaultSession(_session);
+    }
+    if (!_exchange || !_alive || !_loaded || textsLocale() == _textsLocale) {
+        return;
+    }
+    loadTexts(_alive, [alive = _alive, loaded = std::move(loaded)] {
+        if (*alive) {
+            loaded();
+        }
+    });
 }
 
 void Source::poll(std::function<void(std::vector<std::string> changed)> changed) {
@@ -400,12 +460,17 @@ void Source::poll(std::function<void(std::vector<std::string> changed)> changed)
                     }
                     std::vector<std::string> ids = ui::changedDocuments(_loaded->manifest, (*polled)->manifest);
                     _loaded = std::move(**polled);
-                    loadSchemas(alive, [this, alive, ids = std::move(ids), changed = std::move(changed)] {
-                        if (*alive) {
-                            *_current = CurrentCatalog{.facts = _loaded->catalog.facts(), .schemas = _schemas};
-                            ++_catalogLoads;
-                            changed(ids);
+                    loadSchemas(alive, [this, alive, ids = std::move(ids), changed = std::move(changed)]() mutable {
+                        if (!*alive) {
+                            return;
                         }
+                        loadTexts(alive, [this, alive, ids = std::move(ids), changed = std::move(changed)] {
+                            if (*alive) {
+                                *_current = CurrentCatalog{.facts = _loaded->catalog.facts(), .schemas = _schemas};
+                                ++_catalogLoads;
+                                changed(ids);
+                            }
+                        });
                     });
                 });
 }
@@ -498,6 +563,8 @@ void Source::close() {
     _dispatcher.reset();
     _bridge.reset();
     _loaded.reset();
+    _texts = ui::MessageCatalogues{};
+    _textsLocale.clear();
     disconnect();
 }
 

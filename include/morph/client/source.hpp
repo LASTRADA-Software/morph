@@ -144,6 +144,26 @@ public:
     /// @return They; empty before a bundle was delivered. Their `problems()` list each catalogue that did not load.
     [[nodiscard]] ui::MessageCatalogues catalogues() const;
 
+    /// @brief The texts the server sent (`ui-texts`) for the locale `textsLocale` names, as one catalogue, which a
+    ///        shell reads before the bundle's own (`layeredProvider`).
+    /// @return They; empty before any arrived, or when the server serves none. Their `problems()` hold why the last
+    ///         request was refused, when it was refused for any reason but `kNoTextsReason` or a server that does not
+    ///         know the kind.
+    [[nodiscard]] ui::MessageCatalogues const& texts() const noexcept { return _texts; }
+
+    /// @brief The locale the source asks the server's texts in: the session's, or `en`, the locale a session starts
+    ///        in, while the session names none.
+    /// @return The tag.
+    [[nodiscard]] std::string textsLocale() const;
+
+    /// @brief Makes @p locale the session's (`session::Context::locale`), so every later model call and UI-service
+    ///        request carries it, the chat's turns included; and, when the source is open and its texts are for
+    ///        another locale, asks the server for the texts in @p locale.
+    /// @param locale The BCP 47 tag.
+    /// @param loaded Called once, on the owner, after a request for texts was answered and `texts()` reflects it;
+    ///               not called when no request was needed, nor after `close`.
+    void setLocale(std::string locale, std::function<void()> loaded);
+
     /// @brief The catalog for the current principal: its entries, what the principal may run, and the facts.
     /// @return It; null before a bundle was delivered.
     [[nodiscard]] ui::CatalogReply const* catalogReply() const noexcept {
@@ -282,6 +302,12 @@ private:
     void loadSchemas(std::shared_ptr<bool> const& alive, std::function<void()> done);
     // The model types the loaded catalog names: its models, and the model of each action it has facts for.
     [[nodiscard]] std::vector<std::string> modelTypes() const;
+    // Asks the server for the texts in `textsLocale()`, keeps the answer in `_texts`, then calls @p done; nothing
+    // after `close`.
+    void loadTexts(std::shared_ptr<bool> const& alive, std::function<void()> done);
+    // The server's texts for `_textsLocale`, and the locale the last request asked for.
+    ui::MessageCatalogues _texts;
+    std::string _textsLocale;
     // Records each action's schema of one `{actionType: schema}` document; a document that does not parse adds none.
     void recordSchemas(std::string const& document);
     // The schema of each action, by action id, fetched for every model type the catalog names.

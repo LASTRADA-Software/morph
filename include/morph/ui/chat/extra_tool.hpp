@@ -3,6 +3,7 @@
 
 #include <cstddef>
 #include <functional>
+#include <map>
 #include <memory>
 #include <optional>
 #include <string>
@@ -57,6 +58,10 @@ struct ChatToolContext {
     std::size_t failedCalls = 0;
     /// @brief Whatever the tool's `offer` handed to `ChatToolOffer::carried`; null without one.
     std::shared_ptr<void const> carried;
+    /// @brief The schema of each action of the model types the turn bound, by action id, as the server's `schemas`
+    ///        answered them under the turn's session: what a `form` node of the document builds its fields from. Null
+    ///        when the service read none.
+    std::shared_ptr<std::map<std::string, Json, std::less<>> const> schemas;
 };
 
 /// @brief What a tool answers when it is asked whether this turn may call it.

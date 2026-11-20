@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <compare>
 #include <cstddef>
+#include <exception>
 #include <expected>
 #include <format>
 #include <functional>
@@ -98,6 +99,41 @@ std::vector<std::string> permittedActions(ServedBundle const& bundle, ::morph::s
         }
     }
     return permitted;
+}
+
+std::expected<TextsReply, std::string> fieldTextsFor(ServedBundle const& bundle, std::string_view locale) {
+    if (locale.empty()) {
+        return std::unexpected(std::string{"the session names no locale"});
+    }
+    if (!isLocaleTag(locale)) {
+        return std::unexpected("the session's locale is not a locale tag of at most " +
+                               std::to_string(kMaxLocaleBytes) + " bytes");
+    }
+    if (!bundle.fieldTexts) {
+        return std::unexpected(std::string{kNoTextsReason});
+    }
+    TextsReply reply{.locale = std::string{locale}, .messages = {}};
+    try {
+        reply.messages = bundle.fieldTexts(locale);
+    } catch (std::exception const& error) {
+        ::morph::log::logWarn("[ui-texts] the text source failed for `{}`: {}", locale, error.what());
+        return std::unexpected("the texts for `" + reply.locale + "` could not be read");
+    }
+    if (reply.messages.size() > kMaxTextEntries) {
+        return std::unexpected("the texts for `" + reply.locale + "` are more than " +
+                               std::to_string(kMaxTextEntries));
+    }
+    bool const badKey = std::ranges::any_of(
+        reply.messages, [](auto const& entry) { return entry.first.empty() || entry.first.size() > kMaxNameBytes; });
+    if (badKey) {
+        return std::unexpected("a text's key for `" + reply.locale + "` is not 1 to " + std::to_string(kMaxNameBytes) +
+                               " bytes");
+    }
+    if (detail::writeMessage(reply).size() > kMaxTextsBytes) {
+        return std::unexpected("the texts for `" + reply.locale + "` are larger than " +
+                               std::to_string(kMaxTextsBytes) + " bytes");
+    }
+    return reply;
 }
 
 bool screenAdmitted(ServedScreen const& screen, ::morph::session::Context const& session,
@@ -295,6 +331,7 @@ std::expected<std::shared_ptr<ServedBundle const>, Refusal> UiRegistry::buildImp
     bundle->appModelTypes = _appModelTypes;
     serveFiles(*bundle);
     addFacts(*bundle);
+    bundle->fieldTexts = _fieldTexts;
     return bundle;
 }
 
@@ -655,7 +692,7 @@ UiService::UiService(std::shared_ptr<ServedBundle const> bundle,
 
 bool UiService::serves(std::string_view kind) const {
     return kind == kHelloKind || kind == kCatalogKind || kind == kFetchKind || kind == kEvaluateKind ||
-           (kind == kFileKind && _files != nullptr);
+           kind == kTextsKind || (kind == kFileKind && _files != nullptr);
 }
 
 std::string UiService::handle(::morph::wire::Envelope const& request,
@@ -677,6 +714,9 @@ std::string UiService::handle(::morph::wire::Envelope const& request, ::morph::s
     }
     if (request.kind == kFileKind) {
         return file(request, authorizer);
+    }
+    if (request.kind == kTextsKind) {
+        return texts(request, authorizer);
     }
     return fetch(request, authorizer);
 }
@@ -882,6 +922,22 @@ UiService::Fetchable UiService::listEntries(CatalogReply& reply, ::morph::sessio
         reply.entries.push_back(std::move(entry));
     }
     return fetchable;
+}
+
+std::string UiService::texts(::morph::wire::Envelope const& request,
+                             ::morph::session::IAuthorizer const& authorizer) const {
+    std::string const& locale = request.session.locale;
+    if (!gate(authorizer, request, kTextsAction)) {
+        ::morph::log::logDebug("[ui-texts] refused: unauthorized");
+        return err(request, std::string{::morph::wire::kUnauthorizedMessage});
+    }
+    auto reply = fieldTextsFor(*_bundle, locale);
+    if (!reply) {
+        ::morph::log::logDebug("[ui-texts] refused: {}", reply.error());
+        return err(request, std::move(reply.error()));
+    }
+    ::morph::log::logDebug("[ui-texts] `{}`: {} texts", reply->locale, reply->messages.size());
+    return ok(request, detail::writeMessage(*reply));
 }
 
 std::string UiService::fetch(::morph::wire::Envelope const& request,

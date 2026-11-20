@@ -11,6 +11,7 @@
 #include <cstdint>
 #include <expected>
 #include <future>
+#include <map>
 #include <memory>
 #include <morph/core/completion.hpp>
 #include <morph/core/coroutine.hpp>
@@ -1107,4 +1108,114 @@ TEST_CASE("every_operation_kind_applies_and_a_refusal_names_the_kind_that_broke"
         CHECK(outcome.text.contains("op 0 (" + item.kind + ")"));
         CHECK(outcome.text.contains(item.why));
     }
+}
+
+namespace {
+
+// A screen whose view is a form of `Lims_Save`, and the schema the turn read for that action: one field described,
+// one described with a key of its own, one without a description.
+constexpr std::string_view kFormScreen =
+    R"({"vocab":"ui/1","id":"lims.base","models":{"sample":{"type":"Lims_Sample"}},)"
+    R"("view":{"kind":"column","children":[{"kind":"text","text":"Results"},)"
+    R"({"kind":"form","model":"sample","action":"Lims_Save"}]}})";
+
+std::shared_ptr<std::map<std::string, ui::Json, std::less<>> const> formSchemas() {
+    auto schema = ui::parseJson(R"({"type":"object","properties":{)"
+                                R"("note":{"title":"Note","description":"What the analyst saw"},)"
+                                R"("code":{"title":"Code","description":"The lab's code","x-i18nKey":"lims.code"},)"
+                                R"("count":{"title":"Count"}}})");
+    REQUIRE(schema.has_value());
+    return std::make_shared<std::map<std::string, ui::Json, std::less<>> const>(
+        std::map<std::string, ui::Json, std::less<>>{{"Lims_Save", std::move(*schema)}});
+}
+
+// The rig's bundle with a German text source.
+std::shared_ptr<ui::ServedBundle const> germanBundle(std::shared_ptr<ui::ServedBundle const> const& base) {
+    auto copy = std::make_shared<ui::ServedBundle>(*base);
+    copy->fieldTexts = [](std::string_view locale) -> ui::FieldTexts {
+        if (locale != "de") {
+            return {};
+        }
+        return {{"Lims_Save.note.help", "Was der Analyst gesehen hat"}, {"lims.code.help", "Der Laborcode"}};
+    };
+    return copy;
+}
+
+}  // namespace
+
+// Mutation: leave the fields out of the outline, or show the schema's text where the conversation's locale has one.
+TEST_CASE("the_outline_shows_each_form_fields_description_translated_for_the_conversation",
+          "[chat][propose][direct][texts]") {
+    Direct const direct;
+    auto context = direct.context(std::string{kFormScreen});
+    context.schemas = formSchemas();
+    auto const plain = Direct::called(direct.outline(), context, "{}");
+    REQUIRE_FALSE(plain.isError);
+    CHECK(plain.text.contains("/view/children/1 {kind=\"form\""));
+    CHECK(plain.text.contains("field note: \"What the analyst saw\"\n"));
+    CHECK(plain.text.contains("field code: \"The lab's code\"\n"));
+    CHECK_FALSE(plain.text.contains("field count"));
+
+    context.bundle = germanBundle(context.bundle);
+    context.session.locale = "de";
+    auto const german = Direct::called(direct.outline(), context, "{}");
+    CHECK(german.text.contains("field note: \"Was der Analyst gesehen hat\"\n"));
+    // The field's own key wins over the derived one.
+    CHECK(german.text.contains("field code: \"Der Laborcode\"\n"));
+
+    // A locale the source has no texts for, and one the session does not name, keep the schema's text.
+    context.session.locale = "fr";
+    CHECK(Direct::called(direct.outline(), context, "{}").text.contains("field note: \"What the analyst saw\""));
+    context.session.locale.clear();
+    CHECK(Direct::called(direct.outline(), context, "{}").text.contains("field note: \"What the analyst saw\""));
+
+    // Without the turn's schemas there is nothing to describe.
+    context.schemas = nullptr;
+    CHECK_FALSE(Direct::called(direct.outline(), context, "{}").text.contains("field "));
+}
+
+// Mutation: leave the descriptions out of a node, list a form the view does not expand, or run past the byte cap.
+TEST_CASE("a_node_shows_its_forms_field_descriptions_within_the_cap", "[chat][propose][direct][texts]") {
+    Direct const direct;
+    auto context = direct.context(std::string{kFormScreen});
+    context.schemas = formSchemas();
+    context.bundle = germanBundle(context.bundle);
+    context.session.locale = "de";
+    auto const form = Direct::called(direct.node(), context, R"({"pointer":"/view/children/1"})");
+    REQUIRE_FALSE(form.isError);
+    CHECK(form.text.contains("not part of the document"));
+    CHECK(form.text.contains("/view/children/1 field note: \"Was der Analyst gesehen hat\"\n"));
+    CHECK(form.text.contains("/view/children/1 field code: \"Der Laborcode\"\n"));
+
+    // At depth 2 from the view, the form is the third level and shown only as "[object, N keys]".
+    auto const shallow = Direct::called(direct.node(), context, R"({"pointer":"/view","depth":2})");
+    CHECK(shallow.text.contains("[object, "));
+    CHECK_FALSE(shallow.text.contains("field note"));
+    auto const deep = Direct::called(direct.node(), context, R"({"pointer":"/view","depth":3})");
+    CHECK(deep.text.contains("/view/children/1 field note"));
+
+    // A cap one byte short of the whole answer keeps the first of the two descriptions and says the rest are left out,
+    // within the cap.
+    auto const whole = Direct::called(direct.node(), context, R"({"pointer":"/view/children/1"})").text;
+    std::size_t const header = whole.find(":\n") + 2;
+    chat::ChatLimits limits;
+    limits.maxToolResultBytes = whole.size() - header - 1;
+    Direct const capped{limits};
+    auto narrow = capped.context(std::string{kFormScreen});
+    narrow.schemas = context.schemas;
+    narrow.bundle = context.bundle;
+    narrow.session.locale = "de";
+    auto const cut = Direct::called(capped.node(), narrow, R"({"pointer":"/view/children/1"})");
+    INFO(cut.text);
+    CHECK(cut.text.contains("field code: \"Der Laborcode\"") != cut.text.contains("field note"));
+    CHECK(cut.text.contains("[more field descriptions are not shown]"));
+    CHECK(cut.text.size() - header <= limits.maxToolResultBytes);
+    // A cap with room for the node alone shows no descriptions at all.
+    limits.maxToolResultBytes = whole.find("\nWhat the fields") - header;
+    Direct const bare{limits};
+    auto alone = bare.context(std::string{kFormScreen});
+    alone.schemas = context.schemas;
+    auto const nodeOnly = Direct::called(bare.node(), alone, R"({"pointer":"/view/children/1"})");
+    CHECK_FALSE(nodeOnly.text.contains("What the fields"));
+    CHECK(nodeOnly.text.contains("\"action\":\"Lims_Save\""));
 }

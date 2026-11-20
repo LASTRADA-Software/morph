@@ -10,10 +10,13 @@
 #include <expected>
 #include <functional>
 #include <glaze/glaze.hpp>
+#include <map>
 #include <memory>
 #include <morph/core/coroutine.hpp>
 #include <morph/core/executor.hpp>
 #include <morph/core/logger.hpp>
+#include <morph/forms/i18n.hpp>
+#include <morph/render/i18n.hpp>
 #include <morph/session/session.hpp>
 #include <morph/ui/bundle.hpp>
 #include <morph/ui/chat/extra_tool.hpp>
@@ -44,6 +47,8 @@ constexpr std::size_t kRecordedPatchBytes = std::size_t{4} * 1024;
 // How much of a string an outline line or a match shows, and how many matches `screen_find` lists.
 constexpr std::size_t kLabelBytes = 60;
 constexpr std::size_t kMaxMatches = 50;
+// How much of a field's description a read tool shows.
+constexpr std::size_t kDescriptionBytes = 200;
 // The deepest outline or node the read tools show.
 constexpr std::uint64_t kMaxReadDepth = 32;
 constexpr std::uint64_t kDefaultNodeDepth = 2;
@@ -260,6 +265,65 @@ constexpr std::array<std::string_view, 7> kFindKeys{"kind", "id", "testId", "cap
     return cut(written, kLabelBytes);
 }
 
+// ---- What a form's fields mean: each field's description in its action's schema, translated. ----
+
+// What the read tools describe a form's fields from: the schemas the turn read, by action id, and the application's
+// texts in the conversation's locale (empty when it has none, which leaves each schema's own description).
+struct FieldNotes {
+    std::shared_ptr<std::map<std::string, Json, std::less<>> const> schemas;
+    render::TranslationProvider texts;
+};
+
+[[nodiscard]] FieldNotes fieldNotesOf(ChatToolContext const& context) {
+    FieldNotes notes{.schemas = context.schemas, .texts = {}};
+    // A refusal (no source, no locale on the session, a source that failed) leaves the schema's own descriptions.
+    if (auto texts = fieldTextsFor(*context.bundle, context.session.locale)) {
+        notes.texts = [held = std::make_shared<FieldTexts const>(std::move(texts->messages))](
+                          std::string_view key, std::string_view /*locale*/) -> std::optional<std::string> {
+            auto const found = held->find(key);
+            return found == held->end() ? std::nullopt : std::optional<std::string>{found->second};
+        };
+    }
+    return notes;
+}
+
+// The string member @p key of @p node, or empty when @p node is not an object or the member is not a string.
+[[nodiscard]] std::string textMember(Json const& node, std::string_view key) {
+    auto const* const object = std::get_if<Object>(&node.data);
+    Json const* const found = object == nullptr ? nullptr : member(*object, key);
+    auto const* const text = found == nullptr ? nullptr : std::get_if<std::string>(&found->data);
+    return text == nullptr ? std::string{} : *text;
+}
+
+// The fields of @p node when it is a `form` whose action's schema the turn read: one line per field whose description
+// is not empty, `name: "description"`, the description translated as the form shows it (the field's `x-i18nKey` key,
+// then the derived `<action>.<field>.help`, then the schema's text).
+[[nodiscard]] std::vector<std::string> fieldLines(Json const& node, FieldNotes const& notes) {
+    std::vector<std::string> lines;
+    std::string const action = textMember(node, "action");
+    if (notes.schemas == nullptr || textMember(node, "kind") != "form" || action.empty()) {
+        return lines;
+    }
+    auto const schema = notes.schemas->find(action);
+    auto const* const schemaObject =
+        schema == notes.schemas->end() ? nullptr : std::get_if<Object>(&schema->second.data);
+    Json const* const properties = schemaObject == nullptr ? nullptr : member(*schemaObject, "properties");
+    auto const* const fields = properties == nullptr ? nullptr : std::get_if<Object>(&properties->data);
+    if (fields == nullptr) {
+        return lines;
+    }
+    for (auto const& [name, property] : *fields) {
+        std::string const described = render::resolveText(
+            notes.texts, {},
+            forms::i18n::explicitFieldKey(textMember(property, "x-i18nKey"), forms::i18n::FieldSlot::Help),
+            forms::i18n::fieldKey(action, name, forms::i18n::FieldSlot::Help), textMember(property, "description"));
+        if (!described.empty()) {
+            lines.push_back(name + ": " + glz::write_json(cut(described, kDescriptionBytes)).value_or("\"\""));
+        }
+    }
+    return lines;
+}
+
 struct Rendered {
     std::string text;
     std::size_t lines = 0;
@@ -273,12 +337,17 @@ struct Rendered {
 // `trimmed` counts it. The recursion is bounded by @p depth, which is at most kMaxReadDepth.
 // NOLINTNEXTLINE(misc-no-recursion)
 void outlineInto(Rendered& out, Json const& node, std::string const& pointer, std::uint64_t level, std::uint64_t depth,
-                 std::size_t indent, std::size_t limit) {
+                 std::size_t indent, std::size_t limit, FieldNotes const* notes) {
     if (out.overflowed) {
         return;
     }
     std::string line(indent * 2, ' ');
     line += (pointer.empty() ? std::string{"(root)"} : pointer) + " " + describe(node) + "\n";
+    if (notes != nullptr) {
+        for (std::string const& field : fieldLines(node, *notes)) {
+            line += std::string((indent * 2) + 2, ' ') + "field " + field + "\n";
+        }
+    }
     if (out.text.size() + line.size() > limit) {
         out.overflowed = true;
         return;
@@ -305,7 +374,7 @@ void outlineInto(Rendered& out, Json const& node, std::string const& pointer, st
     // NOLINTNEXTLINE(misc-no-recursion): bounded by the depth, as outlineInto is.
     each([&](Json const& child, std::string const& path) {
         if (isContainer(child)) {
-            outlineInto(out, child, path, level + 1, depth, indent + 1, limit);
+            outlineInto(out, child, path, level + 1, depth, indent + 1, limit, notes);
         }
     });
 }
@@ -316,14 +385,16 @@ struct OutlineBounds {
 };
 
 // The deepest outline of @p node, at most @p bounds.maxDepth deep, that fits @p bounds.limit bytes; the first levels
-// cut at the limit when even they do not fit.
-[[nodiscard]] std::string outlineOf(Json const& node, std::string const& pointer, OutlineBounds const& bounds) {
+// cut at the limit when even they do not fit. With @p notes, each `form` node's line is followed by its fields'
+// descriptions.
+[[nodiscard]] std::string outlineOf(Json const& node, std::string const& pointer, OutlineBounds const& bounds,
+                                    FieldNotes const* notes = nullptr) {
     auto const [maxDepth, limit] = bounds;
     Rendered best;
-    outlineInto(best, node, pointer, 0, 0, 0, limit);
+    outlineInto(best, node, pointer, 0, 0, 0, limit, notes);
     for (std::uint64_t depth = 1; depth <= maxDepth && !best.overflowed; ++depth) {
         Rendered next;
-        outlineInto(next, node, pointer, 0, depth, 0, limit);
+        outlineInto(next, node, pointer, 0, depth, 0, limit, notes);
         if (next.overflowed) {
             break;
         }
@@ -399,6 +470,29 @@ void findInto(std::vector<std::string>& matches, std::size_t& total, Json const&
         copy.push_back(trimmed(child, depth - 1));
     }
     return {std::move(copy)};
+}
+
+// The field lines of each `form` among the containers of @p node that a view @p levels deep shows expanded, as
+// `trimmed` expands them, by pointer. The recursion is bounded by @p levels, which is at most kMaxReadDepth.
+// NOLINTNEXTLINE(misc-no-recursion)
+void formsInto(std::string& out, Json const& node, std::string const& pointer, std::uint64_t levels,
+               FieldNotes const& notes) {
+    if (levels == 0) {
+        return;
+    }
+    for (std::string const& field : fieldLines(node, notes)) {
+        out += (pointer.empty() ? std::string{"(root)"} : pointer) + " field " + field + "\n";
+    }
+    if (auto const* const object = std::get_if<Object>(&node.data)) {
+        for (auto const& [key, child] : *object) {
+            formsInto(out, child, pointerAppend(pointer, key), levels - 1, notes);
+        }
+    } else if (auto const* const array = std::get_if<Array>(&node.data)) {
+        std::size_t index = 0;
+        for (Json const& child : *array) {
+            formsInto(out, child, pointerAppend(pointer, index++), levels - 1, notes);
+        }
+    }
 }
 
 // The call's arguments as an object, or why they are not one.
@@ -584,7 +678,8 @@ enum class Role : std::uint8_t { Propose, Read };
     if (!node) {
         return failed(node.error());
     }
-    return answered(outlineOf(**node, *pointer, {.maxDepth = *depth, .limit = answerLimit(context)}));
+    FieldNotes const notes = fieldNotesOf(context);
+    return answered(outlineOf(**node, *pointer, {.maxDepth = *depth, .limit = answerLimit(context)}, &notes));
 }
 
 [[nodiscard]] ChatToolOutcome findTool(ChatToolContext const& context, Json const& arguments) {
@@ -621,6 +716,34 @@ enum class Role : std::uint8_t { Propose, Read };
     return answered(std::move(out));
 }
 
+// What the fields of each form a `screen_node` view shows mean, within @p room bytes; empty when it shows no form with
+// a described field. The lines are cut at a line's end when they do not all fit.
+[[nodiscard]] std::string fieldSection(ChatToolContext const& context, Json const& node, std::uint64_t shown,
+                                       std::string const& pointer, std::size_t room) {
+    std::string lines;
+    formsInto(lines, node, pointer, shown, fieldNotesOf(context));
+    if (lines.empty()) {
+        return {};
+    }
+    constexpr std::string_view kMore = "[more field descriptions are not shown]\n";
+    std::string section =
+        "\nWhat the fields of each form shown mean, from its action's schema; this is not part of the document:\n";
+    if (section.size() + kMore.size() > room) {
+        return {};
+    }
+    std::string_view rest = lines;
+    while (!rest.empty()) {
+        std::size_t const end = rest.find('\n') + 1;
+        if (section.size() + end + kMore.size() > room) {
+            section += kMore;
+            break;
+        }
+        section += rest.substr(0, end);
+        rest.remove_prefix(end);
+    }
+    return section;
+}
+
 [[nodiscard]] ChatToolOutcome nodeTool(ChatToolContext const& context, Json const& arguments) {
     auto const object = argumentsOf(arguments);
     if (!object) {
@@ -651,7 +774,10 @@ enum class Role : std::uint8_t { Propose, Read };
                         " bytes)";
             }
             text += "; a container below it is shown as \"[object, N keys]\" or \"[array, N items]\":\n";
-            return answered(text + (json.size() <= limit ? json : cut(json, limit) + "\n[cut at the byte cap]"));
+            if (json.size() > limit) {
+                return answered(text + cut(json, limit) + "\n[cut at the byte cap]");
+            }
+            return answered(text + json + fieldSection(context, **node, shown, *pointer, limit - json.size()));
         }
     }
 }

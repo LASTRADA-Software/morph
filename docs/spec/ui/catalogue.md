@@ -8,10 +8,10 @@ loading rule of spec 5 §4.
 
 | Header | What it holds |
 |---|---|
-| `include/morph/ui/catalogue.hpp` | `catalogueLocale`, `parseCatalogue`, `Catalogue`, `MessageCatalogues`, `loadCatalogues`, `textInEveryLocale`, `matchesInAnyLocale`, `catalogTitle`, `catalogTitles`, `catalogTitlesIn`, `catalogLabel` |
+| `include/morph/ui/catalogue.hpp` | `catalogueLocale`, `parseCatalogue`, `Catalogue`, `MessageCatalogues`, `layeredProvider`, `loadCatalogues`, `textInEveryLocale`, `matchesInAnyLocale`, `catalogTitle`, `catalogTitles`, `catalogTitlesIn`, `catalogLabel` |
 | `include/morph/ui/service.hpp` | `UiRegistry::addFile` checks a catalogue at registration |
 | `include/morph/ui/interpreter.hpp` | `Session::setTranslations` |
-| `include/morph/client/source.hpp` | `Source::catalogues()`: the bundle's verified catalogues |
+| `include/morph/client/source.hpp` | `Source::catalogues()`: the bundle's verified catalogues; `Source::texts()`: the server's texts |
 
 ## Contents
 
@@ -19,6 +19,7 @@ loading rule of spec 5 §4.
 - [At registration](#at-registration)
 - [At load](#at-load)
 - [Resolution](#resolution)
+- [Texts from the server](#texts-from-the-server)
 - [Switching locale](#switching-locale)
 - [Keys known at run time](#keys-known-at-run-time)
 - [Search](#search)
@@ -65,6 +66,23 @@ stays valid after the `MessageCatalogues` is gone. A lookup tries the exact loca
 tag (`de-AT`, then `de`); a miss is `std::nullopt`, and `t` formats the `fallback`. A missing catalogue is a miss for
 every key.
 
+## Texts from the server
+
+A server can also send the application's texts itself, in the person's locale (`ui-texts`,
+[service.md](service.md#texts)), so a client with no bundled catalogue still shows a form's labels, help and
+placeholders translated. The client keeps them as one more `MessageCatalogues` (`Source::texts()`), and the shell
+installs `layeredProvider(texts, catalogues)`:
+
+1. the server's texts, for the exact locale and then each shorter tag;
+2. where they have no text for the key, the bundle's catalogues, the same way;
+3. a miss at both is a miss, and the caller shows its fallback: `resolveText`'s schema literal, `t`'s `fallback`.
+
+**The server's texts win over a bundled catalogue for the same key**, since the server owns the actions and their
+texts, and a bundled catalogue is a copy that can lag behind it. The server's side wins whole: its `de` text is used
+before a bundled `de-AT` one. A client with no server texts reads its catalogues exactly as before. The server's
+texts are taken as they come: a `t` that names one of their keys formats it as a pattern, as it does a catalogue's,
+and one outside the subset shows the `fallback`; the forms engine shows a field's text as written.
+
 ## Switching locale
 
 `Session::setTranslations(provider)` installs the provider and keeps the other formatting facts. `{"setLocale": "pl"}`
@@ -75,8 +93,11 @@ choice as a preference.
 The client shell is what installs the provider, each time it loads a bundle: at start, after the reload a sign-in or
 sign-out makes, and after a development poll that delivered a new bundle, including one whose only change is a
 catalogue. It reads `Source::catalogues()` (the bundle's verified catalogues, `loadCatalogues`), reports each of
-`problems()`, and calls `setTranslations(catalogues.provider())`; every `t` re-evaluates even when no document changed. It also calls `Session::setLocale` with the locale it
-starts in, which installs the locale's number, money and date facts ([`locale_table.md`](locale_table.md)). The
+`problems()`, with those of `Source::texts()`, and calls `setTranslations(layeredProvider(texts, catalogues))`; every `t`
+re-evaluates even when no document changed. It also calls `Session::setLocale` with the locale it
+starts in, which installs the locale's number, money and date facts ([`locale_table.md`](locale_table.md)), and hands
+that locale, and each later one, to `Source::setLocale`, which asks the server for its texts in it and installs them
+when they arrive. The
 navigator's titles and headings are read in the active locale and relabelled on every `setLocale`
 ([`workspace.md`](workspace.md#navigator-and-pins)).
 
@@ -128,3 +149,4 @@ Two functions give the navigator what it shows:
 | Strict at registration, lenient at load | Both | An author sees the error; a user still sees a working screen. |
 | Locale fallback | Exact tag, then shorter tags | A region usually shares its language's messages. |
 | Case-insensitive search | ASCII only | Full Unicode case folding needs tables the client does not carry. |
+| Server texts and a bundled catalogue | The server's first, the bundle's where it has none | The server owns the texts; a bundled catalogue keeps working for a server that sends none. |
