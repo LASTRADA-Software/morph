@@ -269,20 +269,30 @@ public:
         }
     }
 
-    /// @brief The wizard's title, resolved through the translations (`<id>.title`).
+    /// @brief Replaces the translations and the locale every step resolves its texts in
+    ///        (`FormSession::setTranslations`), so the titles and the steps' fields follow them.
+    /// @param translations The catalog; empty shows every schema literal.
+    /// @param bcp47        The locale.
+    void setTranslations(render::TranslationProvider const& translations, std::string const& bcp47) {
+        for (auto const& step : _steps) {
+            step->setTranslations(translations, bcp47);
+        }
+    }
+
+    /// @brief The wizard's title, resolved through the translations (`<id>.title`). Tracked.
     /// @return The title.
     [[nodiscard]] std::string title() const {
-        FormSessionOptions const& options = _steps.front()->options();
+        FormSessionOptions const& options = _steps.front()->trackedOptions();
         return render::resolveText(options.translations, options.bcp47, std::nullopt,
                                    i18n::wizardTitleKey(_model.id()), _model.title());
     }
 
-    /// @brief A step's title, resolved through the translations (`<id>.step.<index>.title`).
+    /// @brief A step's title, resolved through the translations (`<id>.step.<index>.title`). Tracked.
     /// @param index The step.
     /// @return The title.
     /// @throws std::out_of_range for an index past the steps.
     [[nodiscard]] std::string stepTitle(std::size_t index) const {
-        FormSessionOptions const& options = _steps.at(index)->options();
+        FormSessionOptions const& options = _steps.at(index)->trackedOptions();
         return render::resolveText(options.translations, options.bcp47, std::nullopt,
                                    i18n::wizardStepTitleKey(_model.id(), index),
                                    detail::engine::elementAt(_model.steps(), index).title);

@@ -502,6 +502,16 @@ public:
         }
     }
 
+    /// @brief Replaces the translations and the locale the editor resolves its texts in
+    ///        (`FormSession::setTranslations`); nothing when the collection has no editor.
+    /// @param translations The catalog; empty shows every schema literal.
+    /// @param bcp47        The locale.
+    void setTranslations(render::TranslationProvider translations, std::string bcp47) {
+        if (_editor) {
+            _editor->setTranslations(std::move(translations), std::move(bcp47));
+        }
+    }
+
     /// @brief Whether an action is in flight. Tracked.
     /// @return `true` while one is.
     [[nodiscard]] bool actionPending() const { return _actions.pending(); }

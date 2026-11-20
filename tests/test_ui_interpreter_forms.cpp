@@ -56,6 +56,33 @@ TEST_CASE("form node: the form is drawn from the action's schema, with the docum
     CHECK(h.text("ready") == "not ready");
 }
 
+// Mutations: build the engine's options once and never pass the session's translations on (the label keeps "Sample");
+// bind the control's description to the text read at mount (it stays empty).
+TEST_CASE("form node: a mounted form follows setTranslations and a locale switch without a remount",
+          "[ui][interpreter][forms]") {
+    Harness h;
+    auto const screen = h.mount(kCapture);
+    int const input = h.byTestId("TextInput", "field_sampleId");
+    CHECK(h.text("label_sampleId") == "Sample");
+    h.session.setTranslations([](std::string_view key, std::string_view locale) -> std::optional<std::string> {
+        if (key == "Lims_CaptureConcentration.sampleId.label") {
+            return locale == "de" ? "Probe" : "Sample number";
+        }
+        if (key == "Lims_CaptureConcentration.sampleId.help" && locale == "de") {
+            return "Die Nummer auf dem Etikett";
+        }
+        return std::nullopt;
+    });
+    h.settle();
+    CHECK(h.text("label_sampleId") == "Sample number");
+    h.session.setLocale("de");
+    h.settle();
+    CHECK(h.text("label_sampleId") == "Probe");
+    // The same control, not a new one: the form was not mounted again.
+    CHECK(h.byTestId("TextInput", "field_sampleId") == input);
+    CHECK(h.backend.prop(input, "description") == "Die Nummer auf dem Etikett");
+}
+
 TEST_CASE("form node: typing submits through the model alias, and the form's values are elements",
           "[ui][interpreter][forms]") {
     Harness h;
