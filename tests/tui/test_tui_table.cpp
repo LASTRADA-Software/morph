@@ -1686,3 +1686,29 @@ TEST_CASE("tui table: a right click on a header opens its menu, and Shift+F10 on
     static_cast<void>(harness.key(KeyCode::Enter));
     CHECK(configured.reported == std::vector<std::string>{"menu 0/0", "menu 1/0"});
 }
+
+// Mutation: leave an open menu open in `TableImpl::openMenu` (the second right click opens nothing, and the first
+// header's menu stays).
+TEST_CASE("tui table: a right click on another header while a menu is open closes it and opens that header's menu",
+          "[tui][table]") {
+    Harness harness{30, 5};
+    Configured configured{harness};
+    static_cast<void>(harness.draw());
+    using Type = core::tui::MouseEvent::Type;
+    auto const rightClick = [&harness](int x, int y) {
+        static_cast<void>(harness.send(core::tui::MouseEvent{.type = Type::Press, .button = 2, .x = x, .y = y}));
+        static_cast<void>(harness.send(core::tui::MouseEvent{.type = Type::Release, .button = 2, .x = x, .y = y}));
+        static_cast<void>(harness.draw());
+    };
+    // Name's header, then Qty's, on the line under the group line (1-based cells).
+    rightClick(3, 2);
+    REQUIRE(configured.table->openMenuEntries().size() == 1);
+    CHECK(configured.table->openMenuEntries().front().label == "Hide 0");
+    auto const qty = lastCellOf(harness.draw().at(1), U'Q');
+    REQUIRE(qty);
+    rightClick(*qty + 1, 2);
+    REQUIRE(configured.table->openMenuEntries().size() == 1);
+    CHECK(configured.table->openMenuEntries().front().label == "Hide 1");
+    clickFirstEntry(harness, *configured.table);
+    CHECK(configured.reported == std::vector<std::string>{"menu 1/0"});
+}

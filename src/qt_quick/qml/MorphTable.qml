@@ -160,6 +160,15 @@ MorphWidget {
             configMenu.open()
     }
 
+    // An entry's text as a button-style MorphMenu writes it: a checkable entry's mark (a check, or room for one), an
+    // icon the theme does not draw as its name, the label, and a marker for a submenu.
+    function menuEntryText(entry: var): string {
+        const mark = entry.checked === true ? "✓ " : entry.checked === false ? "  " : ""
+        const more = entry.items && entry.items.length > 0 ? " ›" : ""
+        const named = entry.icon && Theme.iconSource(entry.icon) === "" ? entry.icon + " " : ""
+        return mark + named + (entry.label ?? "") + more
+    }
+
     function placeMenu() {
         if (configMenu.anchorItem)
             menuPlacement.place(configMenu, configMenu.anchorItem)
@@ -1723,23 +1732,59 @@ MorphWidget {
             Repeater {
                 model: configMenu.level
 
-                ItemDelegate {
+                // As a button-style MorphMenu draws an entry: a separator is a line, a checkable entry shows its mark,
+                // an icon the theme names is drawn as the entry's icon, its chord follows the label, and its
+                // description is a muted line under it.
+                ColumnLayout {
+                    id: menuEntry
                     required property int index
                     required property var modelData
-                    objectName: "menuEntry" + index
+                    readonly property bool checkable: modelData.checked === true || modelData.checked === false
+                    spacing: 0
                     Layout.fillWidth: true
-                    Layout.preferredHeight: modelData.separator === true ? Theme.spaceOf(1) : implicitHeight
-                    font: modelData.heading === true ? Theme.overlineFont : Theme.bodyFont
-                    text: modelData.separator === true ? ""
-                          : modelData.label + (modelData.items && modelData.items.length > 0 ? " ›" : "")
-                    enabled: configMenu.choosable(modelData)
-                    highlighted: index === configMenu.current
-                    focusPolicy: Qt.NoFocus
-                    Accessible.role: modelData.separator === true ? Accessible.Separator
-                                     : modelData.heading === true ? Accessible.StaticText : Accessible.MenuItem
-                    Accessible.name: modelData.label ?? ""
-                    Accessible.description: modelData.description ?? ""
-                    onClicked: configMenu.activate(index)
+
+                    MenuSeparator {
+                        visible: menuEntry.modelData.separator === true
+                        Layout.fillWidth: true
+                    }
+                    ItemDelegate {
+                        id: entryButton
+                        objectName: "menuEntry" + menuEntry.index
+                        visible: menuEntry.modelData.separator !== true
+                        Layout.fillWidth: true
+                        font: menuEntry.modelData.heading === true ? Theme.overlineFont : Theme.bodyFont
+                        text: root.menuEntryText(menuEntry.modelData)
+                              + (menuEntry.modelData.keys ? "    " + menuEntry.modelData.keys : "")
+                        icon.source: Theme.iconSourceIn(menuEntry.modelData.icon ? menuEntry.modelData.icon : "",
+                                                        entryButton.palette.text)
+                        icon.color: "transparent"
+                        contentItem: MorphPlainContent {
+                            control: entryButton
+                            color: entryButton.palette.text
+                            alignment: Qt.AlignLeft
+                        }
+                        enabled: configMenu.choosable(menuEntry.modelData)
+                        highlighted: menuEntry.index === configMenu.current
+                        focusPolicy: Qt.NoFocus
+                        Accessible.role: menuEntry.modelData.heading === true ? Accessible.StaticText
+                                                                              : Accessible.MenuItem
+                        Accessible.name: menuEntry.modelData.label ?? ""
+                        Accessible.description: menuEntry.modelData.description ?? ""
+                        Accessible.checkable: menuEntry.checkable
+                        Accessible.checked: menuEntry.modelData.checked === true
+                        onClicked: configMenu.activate(menuEntry.index)
+                    }
+                    Label {
+                        textFormat: Text.PlainText
+                        visible: menuEntry.modelData.separator !== true && !!menuEntry.modelData.description
+                        text: menuEntry.modelData.description ? menuEntry.modelData.description : ""
+                        font: Theme.bodyFont
+                        color: root.scheme.muted
+                        leftPadding: Theme.spaceOf(3)
+                        bottomPadding: Theme.spaceOf(1)
+                        Layout.fillWidth: true
+                        Accessible.ignored: true
+                    }
                 }
             }
         }

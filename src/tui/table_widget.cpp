@@ -533,6 +533,8 @@ void TableImpl::openMenu(std::optional<std::size_t> column) {
     }
     auto const entries = _menu;
     auto const onChoose = _onMenu;
+    // A menu asked for while another is open replaces it: a right click on another header moves the menu there.
+    _menuPopup.close();
     static_cast<void>(_menuPopup.open(entries(column), anchor, [onChoose, column](std::vector<std::size_t> path) {
         if (onChoose) {
             onChoose(column, std::move(path));
