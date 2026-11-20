@@ -402,12 +402,36 @@ background gets `heading` only when the part declares it, so a `tableRow` restyl
 the stock `MorphTableRowBackground` fills a heading with `scheme.tableHeader`, as the header row is filled, which is
 clear until a theme sets `color.table.header`, so in the stock theme a heading stands out by its content alone.
 
-A sortable column's header label (`header<index>`) is a Tab stop, and a tap, Enter or Space on it fires `sort` with
-the column's index, which reaches `setOnSort`; another header takes neither. The table never sorts: `setSort` writes
-`sortColumn` (−1 for none) and `sortDescending`, and the sorted column's label shows ` ▲` or ` ▼` after its text.
-Every sortable header keeps room for the mark in its column's floor, so the columns do not move when the sort does.
-Qt's accessibility has no sort state, so the header (a `ColumnHeader` named by its label) states the order in its
-`Accessible.description`, "Sorted ascending" or "Sorted descending".
+A column's header label (`header<index>`) is a Tab stop while it is sortable, or the table has menus or moves its
+columns. A tap, Enter or Space on a sortable one fires `sort` with `{column, shift}`, `shift` while Shift is held
+(`HeaderClick::Shift`), which reaches `setOnSort`; another header takes neither. The table never sorts: `setSort` writes
+`sortMarks` and `sortDescriptions`, each by column, from `ui::sortMarkText` and `ui::sortDescription`, and a header in the
+chain shows its mark after its text (` ▲`, or ` ▲2` with two or more keys). Every sortable header keeps room for a
+one-key mark in its column's floor, so the columns do not move when such a sort does. Qt's accessibility has no sort
+state, so the header (a `ColumnHeader` named by its label, and `{label}, filtered` while `filteredColumns` names it)
+states the order in its `Accessible.description`, `sorted ascending` or `sorted ascending, key 2 of 3`, and nothing out
+of the chain.
+
+**Header menus.** With menus (`hasMenu`), a right click on a header, or Shift+F10 or the menu key on a focused one, fires
+`menu` with its column, and the `⋯` (`tableMenuButton`, named `Table options`) at the header's trailing end, held in view
+over the sideways scroll, fires it with −1. C++ reads the entries then and calls `showMenu(column, entries)`, which
+places `configMenu`, a button-style `MorphMenu` whose trigger is never drawn, under that header and opens its popup;
+its choice comes back as `menuChoose` with the column and the path, through a host object of the table's own.
+
+**Moving and resizing.** While the table moves its columns (`movable`), dragging a header and releasing it over
+another fires `columnMove` with the dragged column and the other's visible place (`visibleColumns`, or the column's own
+index when every column shows), and Ctrl+Shift+Left and Ctrl+Shift+Right on a focused header fire it with the place one
+over. While it resizes them (`resizable`), each header ends in a `MorphTableHeaderEdge` (`edge<index>`, six pixels, a
+split cursor): dragging it fires `columnResize` with the header's new width in pixels, which C++ rounds to units of
+`Theme.unitWidth`, and a double click on it fires the column with no width.
+
+**Filters and groups.** A filterable column's header ends in a filter `ToolButton` (`filter<index>`), `▿`, or `▾` while
+`filteredColumns` names the column, which fires `filter`. With `columnGroups`, a row `groupRowHeight` tall sits above
+the headers: each group's label spans the drawn headers at the visible places it names and ends in its own filter
+button (`groupFilter<index>`), filled while the group is `filtered`, which fires `groupFilter`. Ctrl+C on the table,
+while it copies (`copies`), fires `copy`.
+
+The clipboard is `QGuiApplication::clipboard()`: `copyText` sets its text.
 
 A row draws its background part (`background`, the `tableRow` part restyle) under its cells and hands it its state:
 `selected`, `hovered` (the pointer over the row), `current` (keyboard focus within the row), `alternate` (an odd

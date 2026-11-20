@@ -484,3 +484,11 @@ TEST_CASE("status copy: counts are grouped and messages are exact", "[ui][table]
 }
 
 }  // namespace
+
+// Mutation: sortDescription capitalised ("Sorted ascending, …"), or the count written as the place.
+TEST_CASE("sort marks: the header's mark and accessible description", "[ui][table][config]") {
+    CHECK(ui::sortDescription(ui::SortDirection::Ascending, 2, 3) == "sorted ascending, key 2 of 3");
+    CHECK(ui::sortDescription(ui::SortDirection::Descending, 1, 1) == "sorted descending");
+    CHECK(ui::sortMarkText(ui::SortDirection::Ascending, 2, 3) == " \u25B22");
+    CHECK(ui::sortMarkText(ui::SortDirection::Descending, 1, 1) == " \u25BC");
+}

@@ -20,6 +20,7 @@
 #include <vector>
 
 #include "tui/context.hpp"
+#include "tui/list_widgets.hpp"
 #include "tui/widget.hpp"
 
 namespace morph::tui::detail {
@@ -30,8 +31,22 @@ namespace morph::tui::detail {
 /// focus, the cursor row `>`. With a select column the gutter is five cells: a `[x]` or `[ ]` box per row in place of
 /// the `*`, under a header box that reads `[x]`, `[-]` or `[ ]`; a click on a row's box toggles the row as Ctrl+click
 /// does, and a click on the header box is Ctrl+A. A click on a sortable column's header asks to sort by it
-/// (`setOnSort`), and the sorted column's label is followed by ` ▲` or ` ▼`; a sortable column's header keeps room
-/// for the mark, so the columns do not move when the sort does. The header takes no keyboard focus. A heading row
+/// (`setOnSort`), `Plain`, or `Shift` with Shift held; each header of the sort chain is followed by its mark
+/// (`ui::sortMarkText`: ` ▲` or ` ▼`, with its place from 1 when the chain has two or more keys), and a sortable
+/// column's header keeps room for the mark, so the columns do not move when a one-key sort does. A filterable column's
+/// header ends in its filter button, `▿`, drawn `▾` while `setFiltered` names the column, which a click presses
+/// (`setOnFilter`). Groups (`setColumnGroups`) draw a line above the headers: each group's label over the visible
+/// columns it names, ending in its own filter button. With menus (`setMenu`), the header line ends in a `⋯` that opens
+/// the table's menu; a header's menu opens with Shift+F10 or the context-menu key on the focused header. A menu is a
+/// list below its header, as a button-style menu's is. The terminal draws no drag or resize handle: a move is
+/// Ctrl+Shift+Left and Ctrl+Shift+Right on the focused header, and nothing resizes a column.
+///
+/// The header takes the keyboard focus within the table: Up on the first row (the first view row over a source)
+/// focuses the header of the chain's first key, or the first visible column, drawn highlighted while the table has
+/// the focus. Left and Right move along the visible columns, Enter and Space sort (`Plain`), Shift+Enter and
+/// Shift+Space extend (`Shift`), Ctrl+Shift+Left and Ctrl+Shift+Right report a move one place over, Shift+F10 opens
+/// its menu, and Down returns to the rows. Ctrl+C on the table asks to copy (`setOnCopy`) wherever its focus is. A
+/// heading row
 /// (`setRowHeading`) is one cell across every column; it draws no mark or box, the cursor passes over it, a click on
 /// it does nothing, and Ctrl+A, a range and the header box leave it out.
 ///
@@ -95,8 +110,35 @@ public:
         std::function<void(std::vector<ui::Key>, ui::SelectionChange)> onSelectionChange) override;
     void setOnSelectAll(std::function<void()> onSelectAll) override;
     void setOnActivate(std::function<void(ui::Key)> onActivate) override;
-    void setSort(std::optional<ui::TableSort> sort) override;
-    void setOnSort(std::function<void(std::size_t)> onSort) override;
+    void setSort(std::vector<ui::TableSort> const& chain) override;
+    void setOnSort(std::function<void(std::size_t, ui::HeaderClick)> onSort) override;
+    void setMenu(std::function<std::vector<ui::MenuEntry>(std::optional<std::size_t>)> entries,
+                 std::function<void(std::optional<std::size_t>, std::vector<std::size_t>)> onChoose) override;
+    void setVisibleColumns(std::vector<std::size_t> const& visible) override;
+    void setOnColumnMove(std::function<void(std::size_t, std::size_t)> handler) override;
+    void setOnFilter(std::function<void(std::size_t)> handler) override;
+    void setFiltered(std::vector<std::size_t> const& columns) override;
+    void setColumnGroups(std::vector<ui::TableColumnGroup> const& groups) override;
+    void setOnGroupFilter(std::function<void(std::size_t)> handler) override;
+    void setOnCopy(std::function<void()> onCopy) override;
+    void closePopup() override { _menuPopup.close(); }
+    [[nodiscard]] ::core::tui::Component const* openPopup() const override { return _menuPopup.list(); }
+    /// The column whose header has the focus within the table, or none while the rows have it.
+    [[nodiscard]] std::optional<std::size_t> focusedHeader() const noexcept { return _headerFocus; }
+    /// The visible columns in layout order: as `setVisibleColumns` told them, or every column.
+    [[nodiscard]] std::vector<std::size_t> visibleOrder() const;
+    /// The entries of the open header or table menu; empty while none is open.
+    [[nodiscard]] std::vector<ui::MenuEntry> openMenuEntries() const {
+        return _menuPopup.isOpen() ? _menuPopup.entries() : std::vector<ui::MenuEntry>{};
+    }
+    /// The header text of the column at @p index: its label with its unit (`Mass [kg]`), then its sort key's mark
+    /// when it is in the chain.
+    [[nodiscard]] std::string headerText(std::size_t index) const;
+    /// The accessible name of a column's header: its label with its unit (`ui::headerAccessibleName`), followed by
+    /// `, filtered` while it has a filter.
+    [[nodiscard]] std::string headerName(std::size_t index) const;
+    /// The accessible description of a column's header: its sort key's (`ui::sortDescription`), or empty.
+    [[nodiscard]] std::string headerDescription(std::size_t index) const;
     void setRealizedWindow(std::size_t first, std::size_t count, std::size_t total) override;
     void setOnVisibleRangeChanged(std::function<void(std::size_t, std::size_t)> onVisibleRangeChanged) override;
     /// Throws std::logic_error when @p row is not one of this table's rows.
@@ -181,13 +223,26 @@ private:
     [[nodiscard]] int gutter() const noexcept;
     /// The header's box: `[x]` while every shown row is selected, `[-]` while some are, `[ ]` while none are.
     [[nodiscard]] std::string headerBox() const;
-    /// The header text of the column at @p index: its label with its unit (`Mass [kg]`), then the sort mark when it
-    /// is the sorted column.
-    [[nodiscard]] std::string headerText(std::size_t index) const;
-    /// The cells a column's header needs: its label with its unit, and room for the sort mark when it is sortable.
-    [[nodiscard]] static int headerWidth(ui::TableColumn const& column);
-    /// Calls onSort when the header click at column @p x lands on a sortable column.
-    void clickHeader(int x);
+    /// The cells a column's header needs: its label with its unit, room for the sort mark when it is sortable, and
+    /// its filter button when it is filterable.
+    [[nodiscard]] int headerWidth(ui::TableColumn const& column) const;
+    /// The lines above the rows: none without a header, else the header line, under the group line when there are
+    /// groups.
+    [[nodiscard]] int headerLines() const noexcept;
+    /// The sort chain's place of @p index, from 0, or none.
+    [[nodiscard]] std::optional<std::size_t> chainPlace(std::size_t index) const;
+    /// Acts on a click on the header line at column @p x: the `⋯`, a filter button, or a sortable column's header.
+    void clickHeader(int x, ::core::tui::Modifier modifiers);
+    /// Acts on a click on the group line at column @p x: a group's filter button.
+    void clickGroups(int x);
+    /// Draws the group line above the headers.
+    void paintGroups(::core::tui::Canvas& canvas, std::vector<DrawnColumn> const& columns) const;
+    /// The keys of a focused header; Ignored for any other key, which then goes on outwards.
+    [[nodiscard]] ::core::tui::EventResult headerKey(::core::tui::KeyEvent const& key);
+    /// Focuses the header of the chain's first key, or the first visible column.
+    void focusHeader();
+    /// Opens the menu of @p column's header, or the table's menu, below its place on the header line.
+    void openMenu(std::optional<std::size_t> column);
     /// Draws the header line: the header box, then each column's label at its alignment.
     void paintHeader(::core::tui::Canvas& canvas, std::vector<DrawnColumn> const& columns) const;
     /// Gives each row its column layout.
@@ -316,8 +371,19 @@ private:
     /// Ctrl+A's and the header box's handler in place of selecting the rows held; empty for none.
     std::function<void()> _onSelectAll;
     std::function<void(ui::Key)> _onActivate;
-    std::optional<ui::TableSort> _sort;
-    std::function<void(std::size_t)> _onSort;
+    std::vector<ui::TableSort> _chain;
+    std::function<void(std::size_t, ui::HeaderClick)> _onSort;
+    std::function<std::vector<ui::MenuEntry>(std::optional<std::size_t>)> _menu;
+    std::function<void(std::optional<std::size_t>, std::vector<std::size_t>)> _onMenu;
+    std::vector<std::size_t> _visible;  ///< The visible columns, as `setVisibleColumns` told them; empty: every one.
+    std::function<void(std::size_t, std::size_t)> _onColumnMove;
+    std::function<void(std::size_t)> _onFilter;
+    std::vector<std::size_t> _filtered;
+    std::vector<ui::TableColumnGroup> _groups;
+    std::function<void(std::size_t)> _onGroupFilter;
+    std::function<void()> _onCopy;
+    std::optional<std::size_t> _headerFocus;  ///< The focused header's column; none while the rows have the focus.
+    MenuPopup _menuPopup{*this};
 
     /// Whether the rows come from a `TableSource`: the mount places each row by its view index and each cell by its
     /// column.

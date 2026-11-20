@@ -28,6 +28,15 @@ std::function<void(QVariant const&)> actionHandler(ui::Action action) {
     };
 }
 
+// A list entry's content: a slot that never scrolls, since the entry grows with what it holds.
+class EntryContent final : public ContainerItemWidget<ui::SlotWidget> {
+public:
+    using ContainerItemWidget<ui::SlotWidget>::ContainerItemWidget;
+    void setScrollable(bool scrollable) override { static_cast<void>(scrollable); }
+};
+
+}  // namespace
+
 // NOLINTBEGIN(misc-no-recursion): a menu is a tree of entries.
 QVariantList menuEntries(std::vector<ui::MenuEntry> const& entries) {
     QVariantList list;
@@ -53,15 +62,6 @@ QVariantList menuEntries(std::vector<ui::MenuEntry> const& entries) {
     return list;
 }
 // NOLINTEND(misc-no-recursion)
-
-// A list entry's content: a slot that never scrolls, since the entry grows with what it holds.
-class EntryContent final : public ContainerItemWidget<ui::SlotWidget> {
-public:
-    using ContainerItemWidget<ui::SlotWidget>::ContainerItemWidget;
-    void setScrollable(bool scrollable) override { static_cast<void>(scrollable); }
-};
-
-}  // namespace
 
 // ── Button ────────────────────────────────────────────────────────────────
 

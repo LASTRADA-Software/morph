@@ -81,6 +81,11 @@ public:
     /// @copydoc ui::IViewBackend::setOnWidthClass
     void setOnWidthClass(std::function<void(std::string const&)> onWidthClass) override;
 
+    /// @brief Puts text on the system clipboard, `QGuiApplication::clipboard()`.
+    /// @param text The text, UTF-8.
+    /// @return True when the application has a clipboard.
+    bool copyText(std::string_view text) override;
+
     /// @copydoc ui::IViewBackend::createText
     [[nodiscard]] std::unique_ptr<ui::TextWidget> createText(ui::ContainerWidget* parent) override;
     /// @copydoc ui::IViewBackend::createButton

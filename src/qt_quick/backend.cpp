@@ -1,9 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 
+#include <QClipboard>
+#include <QGuiApplication>
 #include <QQmlEngine>
 #include <QQuickItem>
 #include <morph/qt_quick/backend.hpp>
 #include <morph/qt_quick/components.hpp>
+#include <string_view>
 #include <utility>
 
 #include "qt_quick/context.hpp"
@@ -19,6 +22,15 @@ std::string Backend::widthClass() const { return _context->widthClass(); }
 
 void Backend::setOnWidthClass(std::function<void(std::string const&)> onWidthClass) {
     _context->setOnWidthClass(std::move(onWidthClass));
+}
+
+bool Backend::copyText(std::string_view text) {
+    QClipboard* const clipboard = QGuiApplication::clipboard();
+    if (clipboard == nullptr) {
+        return false;
+    }
+    clipboard->setText(detail::toQString(text));
+    return true;
 }
 
 Backend::~Backend() = default;

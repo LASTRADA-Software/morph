@@ -355,33 +355,6 @@ public:
     virtual void setCaption(std::string_view label, bool shown) = 0;
 };
 
-/// @brief One entry of a menu as a `MenuWidget` shows it.
-struct MenuEntry {
-    /// @brief The caption.
-    std::string label;
-    /// @brief The icon's name in the theme's icon map; empty shows none.
-    std::string icon;
-    /// @brief The chord shown beside the label; empty shows none.
-    std::string keys;
-    /// @brief Engaged: a checkable entry with this mark; `nullopt`: not checkable.
-    std::optional<bool> checked;
-    /// @brief Whether the entry can be chosen, or its submenu opened.
-    bool enabled = true;
-    /// @brief The submenu; empty for an entry that is chosen.
-    std::vector<MenuEntry> items;
-    /// @brief Whether the entry is a line between entries: never chosen, never opened, and its other fields empty.
-    bool separator = false;
-    /// @brief A muted line of help shown with the entry; empty shows none.
-    std::string description;
-    /// @brief Whether the entry is a label that is not a command: drawn as muted text, exposed as static text, never
-    ///        chosen or opened. Its other fields are empty.
-    bool heading = false;
-
-    /// @brief Memberwise equality, submenus included.
-    /// @return Whether every field matches.
-    bool operator==(MenuEntry const&) const = default;
-};
-
 /// @brief The marker a button-style menu's trigger draws after its text, to say that it opens.
 enum class MenuCaret : std::uint8_t {
     None,    ///< No marker.
@@ -868,18 +841,80 @@ public:
     /// @param onActivate The handler; empty does nothing.
     virtual void setOnActivate(std::function<void(Key)> onActivate) = 0;
 
-    /// @brief Marks a column's header with the direction the rows are sorted by it, or marks none. The table never
-    ///        reorders its rows: they arrive sorted. Never calls the `onSort` handler; the mount calls it only for a
-    ///        table with a sortable column.
-    /// @param sort The column and direction, or none.
-    virtual void setSort(std::optional<TableSort> sort) = 0;
+    /// @brief Marks the headers of the sort chain's columns. Each draws its key's mark after its label
+    ///        (`sortMarkText`: the direction, and with two or more keys its place from 1) and carries its accessible
+    ///        description (`sortDescription`); a header not in the chain draws no mark and has no description. The
+    ///        table never reorders its rows: they arrive sorted. Never calls the `onSort` handler; the mount calls it
+    ///        only for a table with a sortable column.
+    /// @param chain The keys, most significant first; empty marks no header.
+    virtual void setSort(std::vector<TableSort> const& chain) = 0;
 
     /// @brief Sets what a user's request to sort calls: a click on a sortable column's header (or Enter or Space on
     ///        it, where the header takes focus) calls it with the column's index among the columns `setColumns` gave,
-    ///        which the select column is not one of. A header that is not sortable reports nothing. What the request
+    ///        which the select column is not one of, and `HeaderClick::Plain`; a `Shift`+click, `Shift+Enter` or
+    ///        `Shift+Space` with `HeaderClick::Shift`. A header that is not sortable reports nothing. What the request
     ///        means is the caller's to decide; the backend only shows `setSort`.
     /// @param onSort The handler; empty does nothing.
-    virtual void setOnSort(std::function<void(std::size_t)> onSort) = 0;
+    virtual void setOnSort(std::function<void(std::size_t, HeaderClick)> onSort) = 0;
+
+    /// @brief Gives the headers and the table their menus. A header's menu opens on a right click on it, or on
+    ///        `Shift+F10` or the context-menu key with it focused; the table's menu from a `⋯` button at the header
+    ///        row's trailing end, whose accessible name is `Table options`. The entries are asked for each time a menu
+    ///        opens. Called only for a table that has menus; a table never told this draws no `⋯` and opens none.
+    /// @param entries  The entries of a column's menu (an index into the columns `setColumns` gave), or of the
+    ///                 table's menu (none).
+    /// @param onChoose Called with the menu's column, or none, and the chosen entry's path, an index per level from
+    ///                 the top; never for a separator, a heading, a disabled entry or one with a submenu.
+    virtual void setMenu(std::function<std::vector<MenuEntry>(std::optional<std::size_t>)> entries,
+                         std::function<void(std::optional<std::size_t>, std::vector<std::size_t>)> onChoose) {
+        static_cast<void>(entries);
+        static_cast<void>(onChoose);
+    }
+
+    /// @brief Tells the backend which columns are visible, in their places, so that a move and a group header count
+    ///        places as the arrangement does. Called for a table over a `TableSource` once it is built and whenever
+    ///        its visible columns change; a table never told this shows every column in its own order.
+    /// @param visible Indices into the columns `setColumns` gave, in layout order.
+    virtual void setVisibleColumns(std::vector<std::size_t> const& visible) { static_cast<void>(visible); }
+
+    /// @brief Sets what moving a column calls: dragging a header onto another, or `Ctrl+Shift+Left` and
+    ///        `Ctrl+Shift+Right` on a focused header, with the column and its new place among the visible columns
+    ///        (one less, or one more, for the keys). A move to the place the column holds, or past either end,
+    ///        reports nothing.
+    /// @param handler The handler; empty does nothing.
+    virtual void setOnColumnMove(std::function<void(std::size_t column, std::size_t position)> handler) {
+        static_cast<void>(handler);
+    }
+
+    /// @brief Sets what dragging a header's trailing edge calls, with the column and its new width in `Sizing` units
+    ///        (`tableMeasure`'s unit), or none for a double click on the edge. Called only for a table whose columns
+    ///        can be resized; a backend that draws no edge to drag ignores it.
+    /// @param handler The handler; empty does nothing.
+    virtual void setOnColumnResize(std::function<void(std::size_t column, std::optional<int> units)> handler) {
+        static_cast<void>(handler);
+    }
+
+    /// @brief Sets what a filterable column's filter button calls, with the column.
+    /// @param handler The handler; empty does nothing.
+    virtual void setOnFilter(std::function<void(std::size_t column)> handler) { static_cast<void>(handler); }
+
+    /// @brief Fills the filter buttons of the columns that have a filter, and names their headers "{label},
+    ///        filtered" for assistive technology; every other filterable column's button is drawn empty.
+    /// @param columns Indices into the columns `setColumns` gave.
+    virtual void setFiltered(std::vector<std::size_t> const& columns) { static_cast<void>(columns); }
+
+    /// @brief Draws a group header row over the groups' columns, each group's caption over the visible places it
+    ///        names, with its own filter button, filled while it is `filtered`; an empty list draws no group row.
+    /// @param groups The groups, in order.
+    virtual void setColumnGroups(std::vector<TableColumnGroup> const& groups) { static_cast<void>(groups); }
+
+    /// @brief Sets what a group's filter button calls, with the group's index among those `setColumnGroups` gave.
+    /// @param handler The handler; empty does nothing.
+    virtual void setOnGroupFilter(std::function<void(std::size_t group)> handler) { static_cast<void>(handler); }
+
+    /// @brief Sets what `Ctrl+C` on the focused table calls.
+    /// @param onCopy The handler; empty lets the key go on.
+    virtual void setOnCopy(std::function<void()> onCopy) { static_cast<void>(onCopy); }
 
     /// @brief Tells the backend which contiguous range of view rows is realized and how many rows exist in total, so
     ///        it can size a scrollbar and place leading/trailing space for the rows that are not realized. Called
@@ -1695,6 +1730,15 @@ public:
     ///        `widthClass()` for the current class.
     /// @param onWidthClass The listener, given the new class; empty clears it.
     virtual void setOnWidthClass(std::function<void(std::string const&)> onWidthClass) = 0;
+
+    /// @brief Puts text on the system clipboard: Qt Quick's clipboard, the terminal's through an OSC 52 sequence.
+    ///        A backend without a clipboard keeps this default.
+    /// @param text The text, UTF-8.
+    /// @return Whether the text was handed to the clipboard.
+    virtual bool copyText(std::string_view text) {
+        static_cast<void>(text);
+        return false;
+    }
 };
 
 /// @brief The width, in units, from which a surface is `expanded`: the compact bound, 80, plus the shell's sidebar

@@ -1185,6 +1185,250 @@ bool MenuButtonImpl::triggerDrawn() const { return view().screen() != nullptr &&
 
 bool MenuButtonImpl::listUsable() const { return actionable() && triggerDrawn() && _popupRows > 0; }
 
+/// A `MenuPopup`'s list, shown as an overlay. It has no parent, so the keys it leaves go no further.
+class MenuPopup::Popup final : public ::core::tui::List {
+public:
+    explicit Popup(MenuPopup& owner) : _owner{&owner} {}
+
+    void render(::core::tui::Canvas& canvas) override {
+        _owner->_top = scrolledTop(*this, {.top = _owner->_top, .rows = canvas.height()});
+        paintRows(*this, _owner->_top, {.reachable = true, .focused = true}, canvas);
+    }
+
+    [[nodiscard]] ::core::tui::Size preferredSize() const override { return _owner->size(); }
+
+    [[nodiscard]] bool visible() const noexcept override { return List::visible() && _owner->usable(); }
+
+    /// Choosing may end in a handler that destroys the owner and this list with it, so nothing is touched after it.
+    [[nodiscard]] EventResult onEvent(::core::tui::InputEvent const& event) override {
+        auto* const owner = _owner;
+        if (escapeEndsDrag(owner->_owner->context(), event)) {
+            return EventResult::Handled;
+        }
+        if (!owner->usable()) {
+            owner->close();
+            return EventResult::Ignored;
+        }
+        if (auto const* mouse = std::get_if<::core::tui::MouseEvent>(&event)) {
+            return pointer(*mouse);
+        }
+        if (auto const* key = std::get_if<::core::tui::KeyEvent>(&event)) {
+            if (auto const handled = levelKey(*key)) {
+                return *handled;
+            }
+        }
+        return List::onEvent(event);
+    }
+
+    void onBlur() override { _owner->close(); }
+
+private:
+    [[nodiscard]] std::optional<EventResult> levelKey(::core::tui::KeyEvent const& key) {
+        auto* const owner = _owner;
+        if (isActivation(key)) {
+            owner->pick(selectedIndex());
+            return EventResult::Handled;
+        }
+        if (isKey(key, KeyCode::Escape)) {
+            owner->close();
+            return EventResult::Handled;
+        }
+        if (isKey(key, KeyCode::Tab)) {
+            owner->close();
+            return EventResult::Ignored;
+        }
+        if (!isPlain(key)) {
+            return std::nullopt;
+        }
+        auto const& level = menuLevel(owner->_entries, owner->_path);
+        if (isKey(key, KeyCode::Right) && selectedIndex() < level.size() && !level.at(selectedIndex()).items.empty()) {
+            owner->enter(selectedIndex());
+            return EventResult::Handled;
+        }
+        if ((isKey(key, KeyCode::Left) || isKey(key, KeyCode::Backspace)) && !owner->_path.empty()) {
+            owner->leave();
+            return EventResult::Handled;
+        }
+        return std::nullopt;
+    }
+
+    [[nodiscard]] EventResult pointer(::core::tui::MouseEvent const& mouse) {
+        using Type = ::core::tui::MouseEvent::Type;
+        if (mouse.type == Type::ScrollUp || mouse.type == Type::ScrollDown) {
+            if (mouse.type == Type::ScrollUp) {
+                selectPrevious();
+            } else {
+                selectNext();
+            }
+            invalidate();
+            return EventResult::Handled;
+        }
+        if (mouse.type == Type::Press) {
+            _owner->_owner->context().endPress();
+            _pressed = mouse.button == 0;
+            return EventResult::Handled;
+        }
+        if (mouse.type != Type::Release || !std::exchange(_pressed, false)) {
+            return EventResult::Handled;
+        }
+        auto const bounds = screenBounds();
+        ::core::tui::Point const cell{.x = mouse.x - 1, .y = mouse.y - 1};
+        if (cell.x >= 0 && cell.y >= 0 && cell.x < bounds.width && cell.y < bounds.height) {
+            _owner->pick(_owner->_top + static_cast<std::size_t>(cell.y));
+        }
+        return EventResult::Handled;
+    }
+
+    MenuPopup* _owner;
+    bool _pressed = false;
+};
+
+MenuPopup::MenuPopup(WidgetBase& owner) : _owner{&owner}, _list{std::make_unique<Popup>(*this)} {}
+
+MenuPopup::~MenuPopup() {
+    if (!_open) {
+        return;
+    }
+    _open = false;
+    auto& context = _owner->context();
+    std::erase(context.popups, _owner);
+    if (context.screen->focusedComponent() == _list.get()) {
+        static_cast<void>(focusWidget(context, nullptr));
+    }
+    context.screen->hideOverlay(*_list);
+}
+
+::core::tui::Component const* MenuPopup::list() const noexcept { return _open ? _list.get() : nullptr; }
+
+// The list takes the focus last: the focus leaving its old place may run a handler, which may destroy the owner.
+bool MenuPopup::open(std::vector<ui::MenuEntry> entries, ::core::tui::Rect anchor,
+                     std::function<void(std::vector<std::size_t>)> onChoose) {
+    if (_open || !_owner->actionable() || entries.empty()) {
+        return false;
+    }
+    _entries = std::move(entries);
+    _onChoose = std::move(onChoose);
+    _anchor = anchor;
+    _path.clear();
+    _top = 0;
+    auto const where = placement();
+    if (where.rows == 0) {
+        return false;
+    }
+    fill(0);
+    _rows = where.rows;
+    _at = where.origin;
+    _open = true;
+    auto& context = _owner->context();
+    context.popups.push_back(_owner);
+    context.screen->showOverlay(*_list, where.origin);
+    _owner->refresh();
+    return focusPopup(context, *_owner, *_list);
+}
+
+// Nothing here runs a handler: the focus going back to the owner leaves only the list, whose blur ends here at once.
+void MenuPopup::close() {
+    if (!_open) {
+        return;
+    }
+    _open = false;
+    _path.clear();
+    auto& context = _owner->context();
+    std::erase(context.popups, _owner);
+    auto& screen = *context.screen;
+    bool const hadFocus = screen.focusedComponent() == _list.get();
+    screen.hideOverlay(*_list);
+    _owner->refresh();
+    if (hadFocus) {
+        static_cast<void>(focusWidget(context, _owner->view().screen() != nullptr ? _owner : nullptr));
+    }
+}
+
+void MenuPopup::pick(std::size_t index) {
+    auto const& level = menuLevel(_entries, _path);
+    if (index >= level.size() || !_owner->actionable()) {
+        return;
+    }
+    if (!level.at(index).items.empty()) {
+        if (level.at(index).enabled) {
+            enter(index);
+        }
+        return;
+    }
+    auto choice = menuChoice(_entries, _path, index);
+    if (!choice) {
+        return;
+    }
+    // A copy: the handler may destroy the owner, and this popup with it.
+    auto const handler = _onChoose;
+    close();
+    if (handler) {
+        handler(std::move(*choice));
+    }
+}
+
+void MenuPopup::enter(std::size_t index) {
+    _path.push_back(index);
+    _top = 0;
+    fill(0);
+    place();
+}
+
+void MenuPopup::leave() {
+    if (_path.empty()) {
+        return;
+    }
+    auto const from = _path.back();
+    _path.pop_back();
+    _top = 0;
+    fill(from);
+    place();
+}
+
+// The highlight starts on @p highlighted, or the first entry after it the cursor can rest on.
+void MenuPopup::fill(std::size_t highlighted) {
+    auto rows = menuRows(menuLevel(_entries, _path), menuPathEnabled(_entries, _path));
+    auto const count = rows.size();
+    _list->setItems(std::move(rows));
+    if (count > 0) {
+        _list->setSelectedIndex(std::min(highlighted, count - 1));
+        if (!_list->items().at(_list->selectedIndex()).enabled) {
+            _list->selectNext();
+        }
+    }
+    _owner->refresh();
+}
+
+MenuPopup::Placement MenuPopup::placement() const {
+    auto const viewport = _owner->context().screen->viewportArea();
+    int const count = static_cast<int>(menuLevel(_entries, _path).size());
+    int const below = std::max(0, viewport.y + viewport.height - (_anchor.y + _anchor.height));
+    int const above = std::max(0, _anchor.y - viewport.y);
+    int const width = size().width;
+    Placement where{.origin = {.x = popupColumn(_anchor, viewport, width), .y = _anchor.y + _anchor.height},
+                    .rows = std::min(count, below)};
+    if (below < count && above > below) {
+        where.rows = std::min(count, above);
+        where.origin.y = _anchor.y - where.rows;
+    }
+    return where;
+}
+
+void MenuPopup::place() {
+    auto& screen = *_owner->context().screen;
+    auto const where = placement();
+    _rows = where.rows;
+    if (where.origin != _at || !screen.isOverlayVisible(*_list)) {
+        _at = where.origin;
+        screen.showOverlay(*_list, where.origin);
+    }
+}
+
+// As wide as the widest entry of any level and the marker before it.
+::core::tui::Size MenuPopup::size() const { return {.width = widestMenuRow(_entries) + 2, .height = _rows}; }
+
+bool MenuPopup::usable() const { return _owner->actionable() && _owner->view().screen() != nullptr && _rows > 0; }
+
 void TabsImpl::setTabs(std::vector<std::string> const& tabs) {
     _labels = tabs;
     refresh();

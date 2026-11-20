@@ -1141,7 +1141,7 @@ TEST_CASE("qt_quick table: the sorted column's header shows and states its direc
     Rows table = makeTable(scene, {ui::Key{std::int64_t{1}}}, ui::SelectionMode::None);
     table.table->setColumns({{.label = "Name", .width = ui::Sizing::fixed(12), .sortable = true}, {.label = "Mass"}});
     std::vector<std::size_t> asked;
-    table.table->setOnSort([&asked](std::size_t column) { asked.push_back(column); });
+    table.table->setOnSort([&asked](std::size_t column, ui::HeaderClick) { asked.push_back(column); });
     scene.settle();
     QQuickItem& name = headerOf(*table.table, 0);
     QQuickItem const& mass = headerOf(*table.table, 1);
@@ -1149,7 +1149,7 @@ TEST_CASE("qt_quick table: the sorted column's header shows and states its direc
     CHECK(name.property("activeFocusOnTab").toBool());
     CHECK_FALSE(mass.property("activeFocusOnTab").toBool());
 
-    table.table->setSort(ui::TableSort{.column = 0, .direction = ui::SortDirection::Descending});
+    table.table->setSort({ui::TableSort{.column = 0, .direction = ui::SortDirection::Descending}});
     scene.settle();
     CHECK(name.property("text").toString() == QStringLiteral("Name ▼"));
     CHECK(asked.empty());
@@ -1157,16 +1157,75 @@ TEST_CASE("qt_quick table: the sorted column's header shows and states its direc
     QAccessible::setActive(true);
     QAccessibleInterface const* const header = QAccessible::queryAccessibleInterface(&name);
     REQUIRE(header != nullptr);
-    CHECK(header->text(QAccessible::Description) == QStringLiteral("Sorted descending"));
+    CHECK(header->text(QAccessible::Description) == QStringLiteral("sorted descending"));
     CHECK(header->text(QAccessible::Name) == QStringLiteral("Name"));
     QAccessible::setActive(wasActive);
 
     scene.click(name);
     scene.click(mass);
     CHECK(asked == std::vector<std::size_t>{0});
-    table.table->setSort(std::nullopt);
+    table.table->setSort({});
     scene.settle();
     CHECK(name.property("text").toString() == QStringLiteral("Name"));
+}
+
+// Control: report the edge drag's width in pixels instead of units.
+TEST_CASE("qt_quick table: dragging a header's trailing edge reports units, a double click on it none", "[qt_quick][table]") {
+    Scene scene;
+    Rows table = makeTable(scene, {ui::Key{std::int64_t{1}}}, ui::SelectionMode::None);
+    table.table->setColumns({{.label = "Name", .width = ui::Sizing::fixed(12)}, {.label = "Mass"}});
+    std::vector<std::pair<std::size_t, std::optional<int>>> resized;
+    table.table->setOnColumnResize(
+        [&resized](std::size_t column, std::optional<int> units) { resized.emplace_back(column, units); });
+    scene.settle();
+    QQuickItem& name = headerOf(*table.table, 0);
+    QQuickItem* edge = nullptr;
+    for (QQuickItem* const child : name.childItems()) {
+        if (child->objectName() == QStringLiteral("edge0")) {
+            edge = child;
+        }
+    }
+    REQUIRE(edge != nullptr);
+    // The header is the column's 12 units and its padding; four units more to the right make 16 units of content.
+    qreal const unit = units(scene).width();
+    QPoint const start = Scene::centreOf(*edge);
+    QPoint const end = start + QPoint{static_cast<int>(std::lround(4 * unit)), 0};
+    QTest::mousePress(&scene.window(), Qt::LeftButton, {}, start);
+    constexpr int steps = 10;
+    for (int step = 1; step <= steps; ++step) {
+        QTest::mouseMove(&scene.window(), start + ((end - start) * step / steps));
+    }
+    QTest::mouseRelease(&scene.window(), Qt::LeftButton, {}, end);
+    scene.settle();
+    REQUIRE(resized.size() == 1);
+    CHECK(resized.front().first == 0);
+    CHECK(resized.front().second == std::optional<int>{16});
+    scene.doubleClick(*edge);
+    REQUIRE_FALSE(resized.empty());
+    CHECK(resized.back() == std::pair<std::size_t, std::optional<int>>{0, std::nullopt});
+}
+
+// Control: ignore a drag that ends on another header.
+TEST_CASE("qt_quick table: dragging a header onto another reports the move", "[qt_quick][table]") {
+    Scene scene;
+    Rows table = makeTable(scene, {ui::Key{std::int64_t{1}}}, ui::SelectionMode::None);
+    table.table->setColumns({{.label = "Name", .width = ui::Sizing::fixed(10)},
+                             {.label = "Mass", .width = ui::Sizing::fixed(10)},
+                             {.label = "Site", .width = ui::Sizing::fixed(10)}});
+    std::vector<std::pair<std::size_t, std::size_t>> moves;
+    table.table->setOnColumnMove(
+        [&moves](std::size_t column, std::size_t position) { moves.emplace_back(column, position); });
+    scene.settle();
+    QPoint const start = Scene::centreOf(headerOf(*table.table, 0));
+    QPoint const end = Scene::centreOf(headerOf(*table.table, 2));
+    QTest::mousePress(&scene.window(), Qt::LeftButton, {}, start);
+    constexpr int steps = 10;
+    for (int step = 1; step <= steps; ++step) {
+        QTest::mouseMove(&scene.window(), start + ((end - start) * step / steps));
+    }
+    QTest::mouseRelease(&scene.window(), Qt::LeftButton, {}, end);
+    scene.settle();
+    CHECK(moves == std::vector<std::pair<std::size_t, std::size_t>>{{0, 2}});
 }
 
 // Control: ignore the token in MorphTableRow's `place` (the cell's top is the row's top, 0).

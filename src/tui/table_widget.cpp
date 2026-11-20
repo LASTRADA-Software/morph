@@ -38,6 +38,13 @@ constexpr int kBoxWidth = 3;
 constexpr int kColumnGap = 1;
 /// The cells of a sort mark after a header label: a space and an arrow.
 constexpr int kSortMark = 2;
+/// The cells of a filter button at a header's end: a space and the button.
+constexpr int kFilterMark = 2;
+/// A filter button, empty and filled.
+constexpr std::string_view kFilterEmpty = "\u25BF";
+constexpr std::string_view kFilterFilled = "\u25BE";
+/// The button at the header line's end that opens the table's menu.
+constexpr std::string_view kTableMenu = "\u22EF";
 /// The width a column that may shrink gives up to: room for a few characters and an ellipsis.
 constexpr int kShrunkColumn = 4;
 /// How soon a second click on a row must follow the first to make a double click.
@@ -239,7 +246,7 @@ std::vector<::core::tui::Rect> TableImpl::spanAreas(::core::tui::Size size,
     block.assign(_plan.size(), {});
     auto const rows = shownChildren();
     auto const widths = columnWidths(size.width);
-    int const header = _showHeader ? 1 : 0;
+    int const header = headerLines();
     // The line of each row as if every row were drawn: the first one drawn starts under the header, the ones above it
     // before that.
     std::vector<int> start(rows.size(), 0);
@@ -343,36 +350,233 @@ void TableImpl::setOnSelectAll(std::function<void()> onSelectAll) { _onSelectAll
 
 void TableImpl::setOnActivate(std::function<void(ui::Key)> onActivate) { _onActivate = std::move(onActivate); }
 
-void TableImpl::setSort(std::optional<ui::TableSort> sort) {
-    _sort = sort;
+void TableImpl::setSort(std::vector<ui::TableSort> const& chain) {
+    _chain = chain;
     refresh();
 }
 
-void TableImpl::setOnSort(std::function<void(std::size_t)> onSort) { _onSort = std::move(onSort); }
+void TableImpl::setOnSort(std::function<void(std::size_t, ui::HeaderClick)> onSort) { _onSort = std::move(onSort); }
+
+void TableImpl::setMenu(std::function<std::vector<ui::MenuEntry>(std::optional<std::size_t>)> entries,
+                        std::function<void(std::optional<std::size_t>, std::vector<std::size_t>)> onChoose) {
+    _menu = std::move(entries);
+    _onMenu = std::move(onChoose);
+    refresh();
+}
+
+void TableImpl::setVisibleColumns(std::vector<std::size_t> const& visible) {
+    _visible = visible;
+    auto const order = visibleOrder();
+    if (_headerFocus && std::ranges::find(order, *_headerFocus) == order.end()) {
+        _headerFocus.reset();
+    }
+    refresh();
+}
+
+void TableImpl::setOnColumnMove(std::function<void(std::size_t, std::size_t)> handler) {
+    _onColumnMove = std::move(handler);
+}
+
+void TableImpl::setOnFilter(std::function<void(std::size_t)> handler) { _onFilter = std::move(handler); }
+
+void TableImpl::setFiltered(std::vector<std::size_t> const& columns) {
+    _filtered = columns;
+    refresh();
+}
+
+void TableImpl::setColumnGroups(std::vector<ui::TableColumnGroup> const& groups) {
+    _groups = groups;
+    refresh();
+}
+
+void TableImpl::setOnGroupFilter(std::function<void(std::size_t)> handler) { _onGroupFilter = std::move(handler); }
+
+void TableImpl::setOnCopy(std::function<void()> onCopy) { _onCopy = std::move(onCopy); }
+
+std::optional<std::size_t> TableImpl::chainPlace(std::size_t index) const {
+    auto const found = std::ranges::find(_chain, index, &ui::TableSort::column);
+    if (found == _chain.end()) {
+        return std::nullopt;
+    }
+    return static_cast<std::size_t>(std::distance(_chain.begin(), found));
+}
 
 std::string TableImpl::headerText(std::size_t index) const {
     std::string text = ui::headerText(_columns.at(index).label, _columns.at(index).unit);
-    if (_sort && _sort->column == index) {
-        text += _sort->direction == ui::SortDirection::Ascending ? " ▲" : " ▼";
+    if (auto const place = chainPlace(index)) {
+        text += ui::sortMarkText(_chain.at(*place).direction, *place + 1, _chain.size());
     }
     return text;
 }
 
-int TableImpl::headerWidth(ui::TableColumn const& column) {
-    return displayWidth(ui::headerText(column.label, column.unit)) + (column.sortable ? kSortMark : 0);
+std::string TableImpl::headerName(std::size_t index) const {
+    std::string name = ui::headerAccessibleName(_columns.at(index).label, _columns.at(index).unit);
+    if (_columns.at(index).filterable && std::ranges::find(_filtered, index) != _filtered.end()) {
+        name += ", filtered";
+    }
+    return name;
 }
 
-void TableImpl::clickHeader(int x) {
+std::string TableImpl::headerDescription(std::size_t index) const {
+    auto const place = chainPlace(index);
+    return place ? ui::sortDescription(_chain.at(*place).direction, *place + 1, _chain.size()) : std::string{};
+}
+
+// A one-key mark fits the room a sortable header keeps; a longer chain's places widen the headers it marks.
+int TableImpl::headerWidth(ui::TableColumn const& column) const {
+    int mark = column.sortable ? kSortMark : 0;
+    if (column.sortable && _chain.size() > 1) {
+        mark = displayWidth(ui::sortMarkText(ui::SortDirection::Ascending, _chain.size(), _chain.size()));
+    }
+    return displayWidth(ui::headerText(column.label, column.unit)) + mark + (column.filterable ? kFilterMark : 0);
+}
+
+int TableImpl::headerLines() const noexcept {
+    if (!_showHeader) {
+        return 0;
+    }
+    return _groups.empty() ? 1 : 2;
+}
+
+std::vector<std::size_t> TableImpl::visibleOrder() const {
+    if (!_visible.empty()) {
+        return _visible;
+    }
+    std::vector<std::size_t> order(_columns.size());
+    std::iota(order.begin(), order.end(), std::size_t{0});
+    return order;
+}
+
+void TableImpl::clickHeader(int x, ::core::tui::Modifier modifiers) {
+    if (_menu && x == _size.width - 1) {
+        openMenu(std::nullopt);
+        return;
+    }
     for (DrawnColumn const& drawn : drawnColumns(_size.width)) {
         int const left = gutter() + drawn.x;
-        if (x >= left && x < left + drawn.width) {
-            auto const handler = _onSort;
-            if (_columns.at(drawn.column).sortable && handler) {
+        if (x < left || x >= left + drawn.width) {
+            continue;
+        }
+        ui::TableColumn const& column = _columns.at(drawn.column);
+        if (column.filterable && x == left + drawn.width - 1) {
+            if (auto const handler = _onFilter) {
                 handler(drawn.column);
             }
             return;
         }
+        auto const handler = _onSort;
+        if (column.sortable && handler) {
+            bool const shift =
+                ::core::tui::hasModifier(::core::tui::withoutLockKeys(modifiers), ::core::tui::Modifier::Shift);
+            handler(drawn.column, shift ? ui::HeaderClick::Shift : ui::HeaderClick::Plain);
+        }
+        return;
     }
+}
+
+// A group's span is the drawn columns at the visible places it names; its filter button is the span's last cell.
+void TableImpl::clickGroups(int x) {
+    auto const order = visibleOrder();
+    auto const drawn = drawnColumns(_size.width);
+    for (std::size_t group = 0; group < _groups.size(); ++group) {
+        ui::TableColumnGroup const& shown = _groups.at(group);
+        int right = -1;
+        for (DrawnColumn const& column : drawn) {
+            auto const place = std::ranges::find(order, column.column);
+            auto const at = static_cast<std::size_t>(std::distance(order.begin(), place));
+            if (place != order.end() && at >= shown.first && at < shown.first + shown.count) {
+                right = std::max(right, gutter() + column.x + column.width - 1);
+            }
+        }
+        if (right >= 0 && x == right) {
+            if (auto const handler = _onGroupFilter) {
+                handler(group);
+            }
+            return;
+        }
+    }
+}
+
+void TableImpl::focusHeader() {
+    auto const order = visibleOrder();
+    if (order.empty()) {
+        return;
+    }
+    _headerFocus = order.front();
+    if (!_chain.empty() && std::ranges::find(order, _chain.front().column) != order.end()) {
+        _headerFocus = _chain.front().column;
+    }
+    refresh();
+}
+
+void TableImpl::openMenu(std::optional<std::size_t> column) {
+    if (!_menu) {
+        return;
+    }
+    auto const bounds = view().screenBounds();
+    int const line = bounds.y + headerLines() - 1;
+    ::core::tui::Rect anchor{.x = bounds.x + bounds.width - 1, .y = line, .width = 1, .height = 1};
+    if (column) {
+        for (DrawnColumn const& drawn : drawnColumns(_size.width)) {
+            if (drawn.column == *column) {
+                anchor = {.x = bounds.x + gutter() + drawn.x, .y = line, .width = drawn.width, .height = 1};
+            }
+        }
+    }
+    auto const entries = _menu;
+    auto const onChoose = _onMenu;
+    static_cast<void>(_menuPopup.open(entries(column), anchor, [onChoose, column](std::vector<std::size_t> path) {
+        if (onChoose) {
+            onChoose(column, std::move(path));
+        }
+    }));
+}
+
+// Left and Right walk the visible columns; a move is reported one place over and the table waits for the mount to
+// rearrange it, the focus staying on the moved column.
+EventResult TableImpl::headerKey(::core::tui::KeyEvent const& key) {
+    auto const order = visibleOrder();
+    auto const found = std::ranges::find(order, *_headerFocus);
+    if (found == order.end()) {
+        _headerFocus.reset();
+        return EventResult::Ignored;
+    }
+    auto const place = static_cast<std::size_t>(std::distance(order.begin(), found));
+    std::size_t const column = *_headerFocus;
+    if (isKey(key, KeyCode::Down) && ::core::tui::withoutLockKeys(key.modifiers) == ::core::tui::Modifier::None) {
+        _headerFocus.reset();
+        refresh();
+        return EventResult::Handled;
+    }
+    if (matchesChord("Left", key) || matchesChord("Right", key)) {
+        bool const right = matchesChord("Right", key);
+        if (right && place + 1 < order.size()) {
+            _headerFocus = order.at(place + 1);
+        } else if (!right && place > 0) {
+            _headerFocus = order.at(place - 1);
+        }
+        refresh();
+        return EventResult::Handled;
+    }
+    bool const shifted = matchesChord("Shift+Enter", key) || matchesChord("Shift+Space", key);
+    if (shifted || matchesChord("Enter", key) || key.codepoint == U' ') {
+        if (auto const handler = _onSort; handler && _columns.at(column).sortable) {
+            handler(column, shifted ? ui::HeaderClick::Shift : ui::HeaderClick::Plain);
+        }
+        return EventResult::Handled;
+    }
+    bool const later = matchesChord("Ctrl+Shift+Right", key);
+    if (later || matchesChord("Ctrl+Shift+Left", key)) {
+        if (auto const handler = _onColumnMove; handler && (later ? place + 1 < order.size() : place > 0)) {
+            handler(column, later ? place + 1 : place - 1);
+        }
+        return EventResult::Handled;
+    }
+    if (matchesChord("Shift+F10", key) || isKey(key, KeyCode::Menu)) {
+        openMenu(column);
+        return EventResult::Handled;
+    }
+    return EventResult::Ignored;
 }
 
 // The cursor goes to the row that took the removed one's place, or to the last row.
@@ -493,7 +697,7 @@ std::vector<int> TableImpl::columnWidths(int width) const {
         width = gutter() + std::accumulate(widths.begin(), widths.end(), 0) +
                 (kColumnGap * std::max(0, static_cast<int>(widths.size()) - 1));
     }
-    std::int64_t height = (_showHeader ? 1 : 0) + (_status.shown ? 1 : 0);
+    std::int64_t height = headerLines() + (_status.shown ? 1 : 0);
     if (_source) {
         height += static_cast<std::int64_t>(_total);  // a line for each row of the view, realized or not
     } else {
@@ -614,7 +818,7 @@ void TableImpl::showCursor(std::span<WidgetBase* const> rows) {
 
 std::vector<::core::tui::Rect> TableImpl::childAreas(::core::tui::Size size) const {
     std::vector<::core::tui::Rect> areas(children().size());
-    int line = _showHeader ? 1 : 0;
+    int line = headerLines();
     if (_source) {
         // Each realized row on the line of its view index; the line below the rows is the status line's.
         int const room = rowRoomOf(size.height);
@@ -651,15 +855,56 @@ std::vector<::core::tui::Rect> TableImpl::childAreas(::core::tui::Size size) con
 
 void TableImpl::paintHeader(::core::tui::Canvas& canvas, std::vector<DrawnColumn> const& columns) const {
     auto const& theme = canvas.theme();
-    if (_selectColumn) {
-        canvas.putString(0, 0, headerBox(), theme.textNormal);
+    int const line = headerLines() - 1;
+    if (!_groups.empty()) {
+        paintGroups(canvas, columns);
     }
+    if (_selectColumn) {
+        canvas.putString(line, 0, headerBox(), theme.textNormal);
+    }
+    bool const focused = hasFocus();
     for (DrawnColumn const& drawn : columns) {
-        auto label = canvas.subcanvas({.x = gutter() + drawn.x, .y = 0, .width = drawn.width, .height = 1});
+        ui::TableColumn const& column = _columns.at(drawn.column);
+        // The filter button takes the column's last cell; the label is aligned in the cells before it.
+        int const button = column.filterable ? kFilterMark : 0;
+        auto label =
+            canvas.subcanvas({.x = gutter() + drawn.x, .y = line, .width = std::max(0, drawn.width - button), .height = 1});
         // Over its cells: a number column's header ends where its digits do.
         std::string const text = headerText(drawn.column);
-        label.putString(0, alignedOffset(_columns.at(drawn.column).align, displayWidth(text), drawn.width), text,
-                        theme.textBold);
+        bool const current = focused && _headerFocus == drawn.column;
+        label.putString(0, alignedOffset(column.align, displayWidth(text), std::max(0, drawn.width - button)), text,
+                        current ? theme.listItemSelected : theme.textBold);
+        if (column.filterable && drawn.width > 0) {
+            bool const filtered = std::ranges::find(_filtered, drawn.column) != _filtered.end();
+            canvas.putString(line, gutter() + drawn.x + drawn.width - 1, filtered ? kFilterFilled : kFilterEmpty,
+                             theme.textNormal);
+        }
+    }
+    if (_menu && canvas.width() > 0) {
+        canvas.putString(line, canvas.width() - 1, kTableMenu, theme.textNormal);
+    }
+}
+
+void TableImpl::paintGroups(::core::tui::Canvas& canvas, std::vector<DrawnColumn> const& columns) const {
+    auto const& theme = canvas.theme();
+    auto const order = visibleOrder();
+    for (ui::TableColumnGroup const& group : _groups) {
+        int left = -1;
+        int right = -1;
+        for (DrawnColumn const& drawn : columns) {
+            auto const place = std::ranges::find(order, drawn.column);
+            auto const at = static_cast<std::size_t>(std::distance(order.begin(), place));
+            if (place != order.end() && at >= group.first && at < group.first + group.count) {
+                left = left < 0 ? gutter() + drawn.x : std::min(left, gutter() + drawn.x);
+                right = std::max(right, gutter() + drawn.x + drawn.width);
+            }
+        }
+        if (left < 0 || right <= left) {
+            continue;
+        }
+        auto span = canvas.subcanvas({.x = left, .y = 0, .width = std::max(0, right - left - kFilterMark), .height = 1});
+        span.putString(0, 0, group.label, theme.textBold);
+        canvas.putString(0, right - 1, group.filtered ? kFilterFilled : kFilterEmpty, theme.textNormal);
     }
 }
 
@@ -814,6 +1059,24 @@ EventResult TableImpl::modifiedKey(::core::tui::KeyEvent const& key) {
 // Any key ends a double click: the click after it is a first click.
 EventResult TableImpl::key(::core::tui::KeyEvent const& key) {
     _lastClick = {};
+    if (matchesChord("Ctrl+C", key) && _onCopy) {
+        // A copy: the handler may destroy this table.
+        auto const handler = _onCopy;
+        handler();
+        return EventResult::Handled;
+    }
+    if (_headerFocus) {
+        return headerKey(key);
+    }
+    // Up on the first row goes to the header.
+    if (_showHeader && isKey(key, KeyCode::Up) &&
+        ::core::tui::withoutLockKeys(key.modifiers) == ::core::tui::Modifier::None) {
+        bool const first = _source ? (!_focusCell || _focusCell->first == 0) : cursorPlace(shownChildren()) == 0;
+        if (first) {
+            focusHeader();
+            return EventResult::Handled;
+        }
+    }
     if (_source) {
         if (auto const result = sourceKey(key); result == EventResult::Handled) {
             return result;
@@ -881,7 +1144,12 @@ void TableImpl::clickWith(::core::tui::Point cell, ::core::tui::Modifier modifie
     }
     bool const onBox = _selectColumn && cell.x < kBoxWidth;
     // The header box is Ctrl+A; it does nothing while the table shows no rows. Over a source it selects the view.
-    if (onBox && _showHeader && cell.y == 0) {
+    int const headerLine = headerLines() - 1;
+    if (_showHeader && !_groups.empty() && cell.y == 0) {
+        clickGroups(cell.x);
+        return;
+    }
+    if (onBox && _showHeader && cell.y == headerLine) {
         if (_source) {
             if (_mode == ui::SelectionMode::Multiple && _onSelectAll) {
                 auto const handler = _onSelectAll;
@@ -901,8 +1169,8 @@ void TableImpl::clickWith(::core::tui::Point cell, ::core::tui::Modifier modifie
         }
         return;
     }
-    if (_showHeader && cell.y == 0) {
-        clickHeader(cell.x);
+    if (_showHeader && cell.y == headerLine) {
+        clickHeader(cell.x, modifiers);
         return;
     }
     // A spanning cell drawn over a covered row's line is its origin row's.
@@ -1430,7 +1698,7 @@ void TableImpl::slotCells(std::vector<DrawnColumn> const& drawn) {
 }
 
 int TableImpl::rowRoomOf(int height) const noexcept {
-    return std::max(0, height - (_showHeader ? 1 : 0) - (_status.shown ? 1 : 0));
+    return std::max(0, height - headerLines() - (_status.shown ? 1 : 0));
 }
 
 int TableImpl::viewport() const noexcept { return std::max(0, _size.width - gutter()); }

@@ -218,6 +218,10 @@ private:
 /// entries.
 [[nodiscard]] bool choosable(std::vector<ui::MenuEntry> const& entries, std::vector<std::size_t> const& path);
 
+/// A menu's entries as MorphMenu reads them: `[{label, icon, keys, checked, enabled, items, separator, description,
+/// heading}]`, each submenu's entries in its `items`.
+[[nodiscard]] QVariantList menuEntries(std::vector<ui::MenuEntry> const& entries);
+
 class SpacerImpl final : public ItemWidget<ui::SpacerWidget> {
 public:
     SpacerImpl(Context& context, ui::ContainerWidget* parent);
@@ -633,8 +637,23 @@ public:
     void setOnSelectionChange(
         std::function<void(std::vector<ui::Key>, ui::SelectionChange)> onSelectionChange) override;
     void setOnActivate(std::function<void(ui::Key)> onActivate) override;
-    void setSort(std::optional<ui::TableSort> sort) override;
-    void setOnSort(std::function<void(std::size_t)> onSort) override;
+    /// Each header of the chain carries its mark (`ui::sortMarkText`) and its accessible description
+    /// (`ui::sortDescription`), which MorphTable reads as `sortMarks` and `sortDescriptions`, by column.
+    void setSort(std::vector<ui::TableSort> const& chain) override;
+    void setOnSort(std::function<void(std::size_t, ui::HeaderClick)> onSort) override;
+    /// A menu opens through MorphTable's `menu` event: its entries are asked for then, and handed to MorphTable's
+    /// `showMenu`, which shows them in a button-style MorphMenu's popup under the header or the `⋯`.
+    void setMenu(std::function<std::vector<ui::MenuEntry>(std::optional<std::size_t>)> entries,
+                 std::function<void(std::optional<std::size_t>, std::vector<std::size_t>)> onChoose) override;
+    void setVisibleColumns(std::vector<std::size_t> const& visible) override;
+    void setOnColumnMove(std::function<void(std::size_t, std::size_t)> handler) override;
+    /// The width MorphTable reports is pixels; it is rounded to units of `Theme.unitWidth` here.
+    void setOnColumnResize(std::function<void(std::size_t, std::optional<int>)> handler) override;
+    void setOnFilter(std::function<void(std::size_t)> handler) override;
+    void setFiltered(std::vector<std::size_t> const& columns) override;
+    void setColumnGroups(std::vector<ui::TableColumnGroup> const& groups) override;
+    void setOnGroupFilter(std::function<void(std::size_t)> handler) override;
+    void setOnCopy(std::function<void()> onCopy) override;
     void setExistingKeys(std::vector<ui::Key> const& keys) override;
     void setOnSelectAll(std::function<void()> onSelectAll) override;
     void setRealizedWindow(std::size_t first, std::size_t count, std::size_t total) override;
@@ -716,7 +735,16 @@ private:
     // Where a range starts: the row last clicked or toggled.
     std::optional<ui::Key> _anchor;
     std::function<void(ui::Key)> _onActivate;
-    std::function<void(std::size_t)> _onSort;
+    std::function<void(std::size_t, ui::HeaderClick)> _onSort;
+    std::function<std::vector<ui::MenuEntry>(std::optional<std::size_t>)> _menu;
+    std::function<void(std::optional<std::size_t>, std::vector<std::size_t>)> _onMenu;
+    std::function<void(std::size_t, std::size_t)> _onColumnMove;
+    std::function<void(std::size_t, std::optional<int>)> _onColumnResize;
+    std::function<void(std::size_t)> _onFilter;
+    std::function<void(std::size_t)> _onGroupFilter;
+    std::function<void()> _onCopy;
+    // The columns as `setColumns` gave them, for the sort marks' and the filtered names' labels.
+    std::vector<ui::TableColumn> _columns;
     // Every key the table's data has, realized or dewindowed; set only above a virtualized table's threshold
     // (mount.hpp never calls setExistingKeys below it). Empty below threshold, where existingSelection() falls
     // back to realized children alone, which is already exactly every key that exists at that size.

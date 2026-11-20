@@ -287,14 +287,20 @@ template <typename T, typename F>
     return caret == MenuCaret::Down ? "Down" : caret == MenuCaret::UpDown ? "UpDown" : "None";
 }
 
-/// @brief A table's sort as the dump shows it: the column's index and the direction, or `none`.
-/// @param sort The sort.
-/// @return `<index>:Ascending`, `<index>:Descending` or `none`.
-[[nodiscard]] inline std::string formatSort(std::optional<TableSort> const& sort) {
-    if (!sort) {
+/// @brief A table's sort chain as the dump shows it: each key's column index and direction, most significant first,
+///        or `none`.
+/// @param chain The keys.
+/// @return Such as `0:Ascending,2:Descending`, or `none` for an empty chain.
+[[nodiscard]] inline std::string formatSort(std::vector<TableSort> const& chain) {
+    if (chain.empty()) {
         return "none";
     }
-    return std::to_string(sort->column) + (sort->direction == SortDirection::Ascending ? ":Ascending" : ":Descending");
+    std::string text;
+    for (TableSort const& key : chain) {
+        text += (text.empty() ? "" : ",") + std::to_string(key.column) +
+                (key.direction == SortDirection::Ascending ? ":Ascending" : ":Descending");
+    }
+    return text;
 }
 
 /// @brief A text role's name.
@@ -581,7 +587,7 @@ struct Callbacks {
     /// @brief From `TableWidget::setOnActivate`.
     std::function<void(Key)> activate;
     /// @brief From `TableWidget::setOnSort`.
-    std::function<void(std::size_t)> sort;
+    std::function<void(std::size_t, HeaderClick)> sort;
     /// @brief From `TableWidget::setOnRetry`.
     Action retry;
     /// @brief The drop handler's predicate, from `Widget::setDropHandler`.
@@ -2177,13 +2183,166 @@ public:
     /// @param onActivate The handler.
     void setOnActivate(std::function<void(Key)> onActivate) override { callbacks().activate = std::move(onActivate); }
 
-    /// @brief Records property `sort`: the column's index and direction, or `none`.
-    /// @param sort The sort shown.
-    void setSort(std::optional<TableSort> sort) override { set("sort", formatSort(sort)); }
+    /// @brief Records property `sort`: each key's column index and direction, or `none`.
+    /// @param chain The sort chain shown.
+    void setSort(std::vector<TableSort> const& chain) override {
+        _chain = chain;
+        set("sort", formatSort(chain));
+    }
 
     /// @brief Stores the handler `RecordingBackend::clickHeader` calls.
     /// @param onSort The handler.
-    void setOnSort(std::function<void(std::size_t)> onSort) override { callbacks().sort = std::move(onSort); }
+    void setOnSort(std::function<void(std::size_t, HeaderClick)> onSort) override {
+        callbacks().sort = std::move(onSort);
+    }
+
+    /// @brief Stores the menus `RecordingBackend::menuOf` reads and `RecordingBackend::chooseMenu` chooses from.
+    /// @param entries  The entries of a column's menu, or the table's.
+    /// @param onChoose The handler for a chosen entry.
+    void setMenu(std::function<std::vector<MenuEntry>(std::optional<std::size_t>)> entries,
+                 std::function<void(std::optional<std::size_t>, std::vector<std::size_t>)> onChoose) override {
+        _menu = std::move(entries);
+        _onMenu = std::move(onChoose);
+    }
+
+    /// @brief Stores the visible columns, which the drivers check a column against.
+    /// @param visible The visible columns, in layout order.
+    void setVisibleColumns(std::vector<std::size_t> const& visible) override { _visible = visible; }
+
+    /// @brief Stores the handler `RecordingBackend::moveColumn` calls.
+    /// @param handler The handler.
+    void setOnColumnMove(std::function<void(std::size_t, std::size_t)> handler) override {
+        _onColumnMove = std::move(handler);
+    }
+
+    /// @brief Stores the handler `RecordingBackend::resizeColumn` calls.
+    /// @param handler The handler.
+    void setOnColumnResize(std::function<void(std::size_t, std::optional<int>)> handler) override {
+        _onColumnResize = std::move(handler);
+    }
+
+    /// @brief Stores the handler `RecordingBackend::clickFilter` calls.
+    /// @param handler The handler.
+    void setOnFilter(std::function<void(std::size_t)> handler) override { _onFilter = std::move(handler); }
+
+    /// @brief Records property `filtered`, the columns as a list such as `[0,2]`.
+    /// @param columns The filtered columns.
+    void setFiltered(std::vector<std::size_t> const& columns) override {
+        _filtered = columns;
+        set("filtered", formatList(columns, [](std::size_t column) { return std::to_string(column); }));
+    }
+
+    /// @brief Records property `columnGroups`, each group as `label:first+count`, such as `[Company:0+3]`, with
+    ///        `;filtered=true` for a filtered group.
+    /// @param groups The groups.
+    void setColumnGroups(std::vector<TableColumnGroup> const& groups) override {
+        _groups = groups;
+        set("columnGroups", formatList(groups, [](TableColumnGroup const& group) {
+                return formatItem(group.label) + ":" + std::to_string(group.first) + "+" +
+                       std::to_string(group.count) + (group.filtered ? ";filtered=true" : "");
+            }));
+    }
+
+    /// @brief Stores the handler `RecordingBackend::clickGroupFilter` calls.
+    /// @param handler The handler.
+    void setOnGroupFilter(std::function<void(std::size_t)> handler) override { _onGroupFilter = std::move(handler); }
+
+    /// @brief Stores the handler `RecordingBackend::pressCopy` and `Ctrl+C` call.
+    /// @param onCopy The handler.
+    void setOnCopy(std::function<void()> onCopy) override { _onCopy = std::move(onCopy); }
+
+    /// @brief Whether a user can reach @p column's header: it is one of the columns and, once the visible columns
+    ///        were told, one of them.
+    /// @param column The column.
+    /// @return True when its header is drawn.
+    [[nodiscard]] bool headerShown(std::size_t column) const {
+        return column < _columns.size() && (_visible.empty() || std::ranges::find(_visible, column) != _visible.end());
+    }
+
+    /// @brief The visible place of @p column: its place among the visible columns, or its index before any were told.
+    /// @param column The column.
+    /// @return The place.
+    [[nodiscard]] std::size_t placeOf(std::size_t column) const {
+        if (_visible.empty()) {
+            return column;
+        }
+        return static_cast<std::size_t>(std::distance(_visible.begin(), std::ranges::find(_visible, column)));
+    }
+
+    /// @brief The text a column's header draws: its label, then its sort key's mark (`sortMarkText`).
+    /// @param column The column.
+    /// @return The text.
+    [[nodiscard]] std::string headerText(std::size_t column) const {
+        std::string text = column < _columns.size() ? _columns.at(column).label : std::string{};
+        for (std::size_t place = 0; place < _chain.size(); ++place) {
+            if (_chain.at(place).column == column) {
+                text += sortMarkText(_chain.at(place).direction, place + 1, _chain.size());
+            }
+        }
+        return text;
+    }
+
+    /// @brief A column header's accessible description: its sort key's (`sortDescription`), or empty.
+    /// @param column The column.
+    /// @return The description.
+    [[nodiscard]] std::string headerDescription(std::size_t column) const {
+        for (std::size_t place = 0; place < _chain.size(); ++place) {
+            if (_chain.at(place).column == column) {
+                return sortDescription(_chain.at(place).direction, place + 1, _chain.size());
+            }
+        }
+        return {};
+    }
+
+    /// @brief A column header's accessible name: its label, followed by `, filtered` while it has a filter.
+    /// @param column The column.
+    /// @return The name.
+    [[nodiscard]] std::string headerName(std::size_t column) const {
+        std::string name = column < _columns.size() ? _columns.at(column).label : std::string{};
+        if (column < _columns.size() && _columns.at(column).filterable && std::ranges::find(_filtered, column) != _filtered.end()) {
+            name += ", filtered";
+        }
+        return name;
+    }
+
+    /// @brief The entries of a menu, as `setMenu` gives them.
+    /// @param column The column, or none for the table's menu.
+    /// @return The entries; none when the table has no menus.
+    [[nodiscard]] std::vector<MenuEntry> menuEntries(std::optional<std::size_t> column) const {
+        return _menu ? _menu(column) : std::vector<MenuEntry>{};
+    }
+
+    /// @brief The handler `setMenu` gave for a chosen entry.
+    /// @return It; empty when none.
+    [[nodiscard]] std::function<void(std::optional<std::size_t>, std::vector<std::size_t>)> const& onMenu() const {
+        return _onMenu;
+    }
+
+    /// @brief The handler `setOnColumnMove` stored.
+    /// @return It; empty when none.
+    [[nodiscard]] std::function<void(std::size_t, std::size_t)> const& onColumnMove() const { return _onColumnMove; }
+
+    /// @brief The handler `setOnColumnResize` stored.
+    /// @return It; empty when none.
+    [[nodiscard]] std::function<void(std::size_t, std::optional<int>)> const& onColumnResize() const {
+        return _onColumnResize;
+    }
+
+    /// @brief The handler `setOnFilter` stored.
+    /// @return It; empty when none.
+    [[nodiscard]] std::function<void(std::size_t)> const& onFilter() const { return _onFilter; }
+
+    /// @brief The handler `setOnGroupFilter` stored.
+    /// @return It; empty when none.
+    [[nodiscard]] std::function<void(std::size_t)> const& onGroupFilter() const { return _onGroupFilter; }
+
+    /// @brief How many groups `setColumnGroups` gave.
+    /// @return The count.
+    [[nodiscard]] std::size_t groupCount() const noexcept { return _groups.size(); }
+
+    /// @brief The handler `setOnCopy` stored.
+    /// @return It; empty when none.
+    [[nodiscard]] std::function<void()> const& onCopy() const { return _onCopy; }
 
     /// @brief Whether the column at @p column is sortable, as `setColumns` gave it.
     /// @param column The column's index.
@@ -2592,6 +2751,17 @@ private:
     std::optional<Key> _anchor;
     std::function<void(std::size_t, std::size_t)> _onVisibleRangeChanged;
     std::function<void()> _onSelectAll;
+    std::vector<TableSort> _chain;
+    std::function<std::vector<MenuEntry>(std::optional<std::size_t>)> _menu;
+    std::function<void(std::optional<std::size_t>, std::vector<std::size_t>)> _onMenu;
+    std::vector<std::size_t> _visible;
+    std::function<void(std::size_t, std::size_t)> _onColumnMove;
+    std::function<void(std::size_t, std::optional<int>)> _onColumnResize;
+    std::function<void(std::size_t)> _onFilter;
+    std::vector<std::size_t> _filtered;
+    std::vector<TableColumnGroup> _groups;
+    std::function<void(std::size_t)> _onGroupFilter;
+    std::function<void()> _onCopy;
     TableStatus _status;
     std::vector<TableColumn> _columns;
     std::map<std::pair<int, std::size_t>, CellLoad> _loads;  // (row id, column) -> state, as setCellLoad told it
@@ -3316,19 +3486,169 @@ public:
         invoke(record.callbacks.selection, std::move(keys), change);
     }
 
-    /// @brief Clicks a column's header as the user would: a sortable column's reaches `onSort` with its index; any
-    ///        other header does nothing, since a user can click it.
+    /// @brief Clicks a column's header as the user would: a sortable column's reaches `onSort` with its index and
+    ///        @p click; any other header does nothing, since a user can click it.
     /// @param widgetId The table.
     /// @param column The column's index among the columns `setColumns` gave.
-    /// @throws std::logic_error when the widget is not a table.
+    /// @param click  Whether `Shift` is held.
+    /// @throws std::logic_error when the widget is not a table, or the column's header is not drawn.
     // NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
-    void clickHeader(int widgetId, std::size_t column) {
+    void clickHeader(int widgetId, std::size_t column, HeaderClick click = HeaderClick::Plain) {
         detail::Record const& record = expectKind(widgetId, "clickHeader", {"Table"});
-        auto const* const table = dynamic_cast<detail::FakeTable const*>(record.widget);
-        if (table != nullptr && table->sortable(column) && reachable(record)) {
-            invoke(record.callbacks.sort, column);
+        auto const& table = shownHeader(record, widgetId, column, "clickHeader");
+        if (table.sortable(column) && reachable(record)) {
+            invoke(record.callbacks.sort, column, click);
         }
     }
+
+    /// @brief The entries of a header's menu, or of the table's menu, as a user opening it would see them.
+    /// @param widgetId The table.
+    /// @param column   The column, or none for the table's menu.
+    /// @return The entries; none when the table has no menus or a user cannot reach it.
+    /// @throws std::logic_error when the widget is not a table, or the column's header is not drawn.
+    [[nodiscard]] std::vector<MenuEntry> menuOf(int widgetId, std::optional<std::size_t> column) {
+        detail::Record const& record = expectKind(widgetId, "menuOf", {"Table"});
+        detail::FakeTable const& table = column ? shownHeader(record, widgetId, *column, "menuOf") : fakeTable(record);
+        return reachable(record) ? table.menuEntries(column) : std::vector<MenuEntry>{};
+    }
+
+    /// @brief Chooses an entry of a header's menu, or of the table's menu, by its labels from the top, as a user
+    ///        opening each submenu on the way would. Nothing is reported for a disabled entry, an entry inside a
+    ///        disabled one, or an entry with a submenu.
+    /// @param widgetId The table.
+    /// @param column   The column, or none for the table's menu.
+    /// @param labels   The entry's label at each level, from the top; not empty.
+    /// @throws std::logic_error when the widget is not a table, the column's header is not drawn, or a label names
+    ///         no entry of its level.
+    void chooseMenu(int widgetId, std::optional<std::size_t> column, std::vector<std::string_view> const& labels) {
+        std::vector<MenuEntry> const entries = menuOf(widgetId, column);
+        detail::Record const& record = _store->at(widgetId);
+        std::vector<MenuEntry> const* level = &entries;
+        std::vector<std::size_t> path;
+        bool enabled = true;
+        MenuEntry const* entry = nullptr;
+        for (std::string_view const label : labels) {
+            auto const found = std::ranges::find_if(*level, [label](MenuEntry const& candidate) {
+                return !candidate.separator && !candidate.heading && candidate.label == label;
+            });
+            if (found == level->end()) {
+                throw std::logic_error{"RecordingBackend: chooseMenu of '" + std::string{label} + "', which Table#" +
+                                       std::to_string(widgetId) + "'s menu does not have"};
+            }
+            path.push_back(static_cast<std::size_t>(std::distance(level->begin(), found)));
+            enabled = enabled && found->enabled;
+            entry = &*found;
+            level = &found->items;
+        }
+        if (entry != nullptr && enabled && entry->items.empty() && reachable(record)) {
+            invoke(fakeTable(record).onMenu(), column, std::move(path));
+        }
+    }
+
+    /// @brief Moves a column as a user dragging its header would: `onColumnMove` gets the column and @p position,
+    ///        unless the column is at that place already.
+    /// @param widgetId The table.
+    /// @param column   The column.
+    /// @param position Its new place among the visible columns.
+    /// @throws std::logic_error when the widget is not a table, or the column's header is not drawn.
+    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
+    void moveColumn(int widgetId, std::size_t column, std::size_t position) {
+        detail::Record const& record = expectKind(widgetId, "moveColumn", {"Table"});
+        detail::FakeTable const& table = shownHeader(record, widgetId, column, "moveColumn");
+        if (reachable(record) && table.placeOf(column) != position) {
+            invoke(table.onColumnMove(), column, position);
+        }
+    }
+
+    /// @brief Resizes a column as a user dragging its header's trailing edge would, or double-clicking it.
+    /// @param widgetId The table.
+    /// @param column   The column.
+    /// @param units    The width in `Sizing` units, or none for the double click.
+    /// @throws std::logic_error when the widget is not a table, or the column's header is not drawn.
+    void resizeColumn(int widgetId, std::size_t column, std::optional<int> units) {
+        detail::Record const& record = expectKind(widgetId, "resizeColumn", {"Table"});
+        detail::FakeTable const& table = shownHeader(record, widgetId, column, "resizeColumn");
+        if (reachable(record)) {
+            invoke(table.onColumnResize(), column, units);
+        }
+    }
+
+    /// @brief Presses a filterable column's filter button; another column's header has none, so nothing happens.
+    /// @param widgetId The table.
+    /// @param column   The column.
+    /// @throws std::logic_error when the widget is not a table, or the column's header is not drawn.
+    void clickFilter(int widgetId, std::size_t column) {
+        detail::Record const& record = expectKind(widgetId, "clickFilter", {"Table"});
+        detail::FakeTable const& table = shownHeader(record, widgetId, column, "clickFilter");
+        if (reachable(record) && table.columns().at(column).filterable) {
+            invoke(table.onFilter(), column);
+        }
+    }
+
+    /// @brief Presses a column group's filter button in the group header row.
+    /// @param widgetId The table.
+    /// @param group    The group's index among those `setColumnGroups` gave.
+    /// @throws std::logic_error when the widget is not a table, or it draws no such group.
+    void clickGroupFilter(int widgetId, std::size_t group) {
+        detail::Record const& record = expectKind(widgetId, "clickGroupFilter", {"Table"});
+        detail::FakeTable const& table = fakeTable(record);
+        if (group >= table.groupCount()) {
+            throw std::logic_error{"RecordingBackend: clickGroupFilter of group " + std::to_string(group) +
+                                   ", which Table#" + std::to_string(widgetId) + " does not draw"};
+        }
+        if (reachable(record)) {
+            invoke(table.onGroupFilter(), group);
+        }
+    }
+
+    /// @brief Asks to copy as `Ctrl+C` on the focused table does.
+    /// @param widgetId The table.
+    /// @throws std::logic_error when the widget is not a table.
+    void pressCopy(int widgetId) {
+        detail::Record const& record = expectKind(widgetId, "pressCopy", {"Table"});
+        if (reachable(record)) {
+            invoke(fakeTable(record).onCopy());
+        }
+    }
+
+    /// @brief The text a column's header draws: its label, then its sort key's mark.
+    /// @param widgetId The table.
+    /// @param column   The column.
+    /// @return The text.
+    /// @throws std::logic_error when the widget is not a table.
+    [[nodiscard]] std::string headerText(int widgetId, std::size_t column) {
+        return fakeTable(expectKind(widgetId, "headerText", {"Table"})).headerText(column);
+    }
+
+    /// @brief A column header's accessible description: its sort key's, or empty.
+    /// @param widgetId The table.
+    /// @param column   The column.
+    /// @return The description.
+    /// @throws std::logic_error when the widget is not a table.
+    [[nodiscard]] std::string headerDescription(int widgetId, std::size_t column) {
+        return fakeTable(expectKind(widgetId, "headerDescription", {"Table"})).headerDescription(column);
+    }
+
+    /// @brief A column header's accessible name: its label, and `, filtered` while it has a filter.
+    /// @param widgetId The table.
+    /// @param column   The column.
+    /// @return The name.
+    /// @throws std::logic_error when the widget is not a table.
+    [[nodiscard]] std::string headerName(int widgetId, std::size_t column) {
+        return fakeTable(expectKind(widgetId, "headerName", {"Table"})).headerName(column);
+    }
+
+    /// @brief Records the text as the clipboard's, which `clipboardText` reads.
+    /// @param text The text.
+    /// @return True: the recording backend has a clipboard.
+    bool copyText(std::string_view text) override {
+        _clipboard = std::string{text};
+        return true;
+    }
+
+    /// @brief The last text `copyText` was given.
+    /// @return It; empty before any.
+    [[nodiscard]] std::string clipboardText() const { return _clipboard; }
 
     /// @brief Chooses "Retry" on a table's status line.
     /// @param widgetId The table.
@@ -3651,6 +3971,14 @@ private:
             commit(widgetId);
             return false;
         }
+        if (record.kind == "Table" && chord == "Ctrl+C") {
+            auto const* const table = dynamic_cast<detail::FakeTable const*>(record.widget);
+            if (table == nullptr || !table->onCopy()) {
+                return false;
+            }
+            invoke(table->onCopy());
+            return true;
+        }
         if (record.kind == "Table" && chord == "Ctrl+A") {
             auto* const table = dynamic_cast<detail::FakeTable*>(record.widget);
             if (table == nullptr || table->mode() != SelectionMode::Multiple) {
@@ -3749,7 +4077,28 @@ private:
         }
     }
 
+    // The fake table behind a table's record.
+    static detail::FakeTable const& fakeTable(detail::Record const& record) {
+        auto const* const table = dynamic_cast<detail::FakeTable const*>(record.widget);
+        if (table == nullptr) {
+            throw std::logic_error{"RecordingBackend: Table#" + std::to_string(record.id) + " is not a table"};
+        }
+        return *table;
+    }
+
+    // The fake table, once a user could reach the column's header: a hidden column's is not drawn.
+    static detail::FakeTable const& shownHeader(detail::Record const& record, int widgetId, std::size_t column,
+                                                std::string_view helper) {
+        detail::FakeTable const& table = fakeTable(record);
+        if (!table.headerShown(column)) {
+            throw std::logic_error{"RecordingBackend: " + std::string{helper} + " of column " + std::to_string(column) +
+                                   ", whose header Table#" + std::to_string(widgetId) + " does not draw"};
+        }
+        return table;
+    }
+
     std::shared_ptr<detail::RecordStore> _store = std::make_shared<detail::RecordStore>();
+    std::string _clipboard;
     std::shared_ptr<TableMeasure> _tableMeasure = std::make_shared<TableMeasure>();
     std::optional<Mm> _pageWidth;
     std::shared_ptr<std::vector<detail::FakePage*>> _pages = std::make_shared<std::vector<detail::FakePage*>>();

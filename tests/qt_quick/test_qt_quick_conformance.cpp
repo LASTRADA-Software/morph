@@ -5,11 +5,18 @@
 // presses, moves and releases sent to the window at a widget's place, and keys sent to the item with focus. A menu
 // entry and a file drop go through the component's own entry point, which the menu's items and the drop area call.
 
+#include <QAccessible>
+#include <QAccessibleInterface>
+#include <QClipboard>
+#include <QGuiApplication>
+#include <QMetaObject>
 #include <QPointF>
 #include <QQmlContext>
 #include <QQmlProperty>
 #include <QQuickItem>
 #include <QTest>
+#include <QVariantList>
+#include <QVariantMap>
 #include <catch2/catch_test_macros.hpp>
 #include <cstddef>
 #include <cstdint>
@@ -182,22 +189,76 @@ public:
     }
 
     // A mouse click on the column's header label.
-    void clickHeader(ui::Widget& table, std::size_t column) override {
+    void clickHeader(ui::Widget& table, std::size_t column, ui::HeaderClick click) override {
         settle();
-        // The labels are a Repeater's delegates: items under the table's item, not QObject children of it.
-        QString const name = QStringLiteral("header%1").arg(column);
-        QList<QQuickItem const*> pending{Backend::itemOf(table)};
-        while (!pending.isEmpty()) {
-            QQuickItem const* const item = pending.takeLast();
-            if (item->objectName() == name) {
-                mouseClick(item, Qt::NoModifier);
-                return;
-            }
-            for (QQuickItem const* const child : item->childItems()) {
-                pending.append(child);
-            }
-        }
+        mouseClick(named(table, QStringLiteral("header%1").arg(column)),
+                   click == ui::HeaderClick::Shift ? Qt::ShiftModifier : Qt::NoModifier);
     }
+
+    // A right click on the header, or a click on the `⋯`, opens the menu; its entries are read back from the popup's
+    // model, and Esc closes it.
+    std::vector<ui::MenuEntry> headerMenu(ui::Widget& table, std::optional<std::size_t> column) override {
+        QQuickItem const* const menu = openMenu(table, column);
+        std::vector<ui::MenuEntry> entries;
+        if (menu == nullptr) {
+            return entries;
+        }
+        for (QVariant const& entry : menu->property("entries").toList()) {
+            QVariantMap const map = entry.toMap();
+            entries.push_back(ui::MenuEntry{.label = detail::toUtf8(map.value(QStringLiteral("label")).toString()),
+                                            .enabled = map.value(QStringLiteral("enabled")).toBool(),
+                                            .separator = map.value(QStringLiteral("separator")).toBool()});
+        }
+        _scene.key(Qt::Key_Escape);
+        return entries;
+    }
+    // The menu opened as `headerMenu` opens it, then each level's entry chosen through the popup's own `choose`.
+    void chooseHeaderMenuEntry(ui::Widget& table, std::optional<std::size_t> column,
+                               std::vector<std::size_t> const& path) override {
+        QQuickItem* const menu = openMenu(table, column);
+        if (menu == nullptr) {
+            return;
+        }
+        QVariantList indices;
+        for (std::size_t const index : path) {
+            indices.append(static_cast<int>(index));
+        }
+        QMetaObject::invokeMethod(menu, "choose", Qt::DirectConnection, Q_ARG(QVariant, indices));
+        settle();
+    }
+    // A drag of the header onto the header at the place asked for.
+    void moveColumn(ui::Widget& table, std::size_t column, std::size_t position) override {
+        settle();
+        QQuickItem const* const from = named(table, QStringLiteral("header%1").arg(column));
+        QQuickItem const* const to = named(table, QStringLiteral("header%1").arg(position));
+        if (from == nullptr || to == nullptr || !from->isVisible() || _fault == Fault::DeadInput) {
+            return;
+        }
+        QPoint const start = Scene::centreOf(*from);
+        QPoint const end = Scene::centreOf(*to);
+        QTest::mousePress(&_scene.window(), Qt::LeftButton, {}, start);
+        constexpr int steps = 10;
+        for (int step = 1; step <= steps; ++step) {
+            QTest::mouseMove(&_scene.window(), start + ((end - start) * step / steps));
+        }
+        QTest::mouseRelease(&_scene.window(), Qt::LeftButton, {}, end);
+        settle();
+    }
+    std::string headerText(ui::Widget const& table, std::size_t column) override {
+        settle();
+        QQuickItem const* const header = named(table, QStringLiteral("header%1").arg(column));
+        if (header == nullptr || _fault == Fault::WrongText) {
+            return _fault == Fault::WrongText ? "?" : "";
+        }
+        return detail::toUtf8(header->property("text").toString());
+    }
+    std::string headerName(ui::Widget const& table, std::size_t column) override {
+        return accessibleText(named(table, QStringLiteral("header%1").arg(column)), QAccessible::Name);
+    }
+    std::string headerDescription(ui::Widget const& table, std::size_t column) override {
+        return accessibleText(named(table, QStringLiteral("header%1").arg(column)), QAccessible::Description);
+    }
+    std::string clipboardText() override { return detail::toUtf8(QGuiApplication::clipboard()->text()); }
 
     std::vector<std::size_t> selectedRows(ui::Widget const& table) override {
         settle();
@@ -341,6 +402,60 @@ public:
 
 private:
     using Backend = morph::qt_quick::Backend;
+
+    // The item named @p name under the table's item: the headers are a Repeater's delegates, items under the table's
+    // item and not QObject children of it.
+    QQuickItem* named(ui::Widget const& table, QString const& name) {
+        QList<QQuickItem*> pending{Backend::itemOf(table)};
+        while (!pending.isEmpty()) {
+            QQuickItem* const item = pending.takeLast();
+            if (item == nullptr) {
+                continue;
+            }
+            if (item->objectName() == name) {
+                return item;
+            }
+            for (QQuickItem* const child : item->childItems()) {
+                pending.append(child);
+            }
+        }
+        return nullptr;
+    }
+
+    // What assistive technology reads of an item.
+    std::string accessibleText(QQuickItem* item, QAccessible::Text text) {
+        settle();
+        if (item == nullptr) {
+            return {};
+        }
+        bool const wasActive = QAccessible::isActive();
+        QAccessible::setActive(true);
+        QAccessibleInterface const* const found = QAccessible::queryAccessibleInterface(item);
+        std::string const read = found == nullptr ? std::string{} : detail::toUtf8(found->text(text));
+        QAccessible::setActive(wasActive);
+        return read;
+    }
+
+    // The column's menu by a right click on its header, or the table's by a click on the `⋯`; the menu whose popup
+    // shows the entries, or null when none opened.
+    QQuickItem* openMenu(ui::Widget& table, std::optional<std::size_t> column) {
+        settle();
+        if (_fault == Fault::DeadInput) {
+            return nullptr;
+        }
+        if (column) {
+            QQuickItem const* const header = named(table, QStringLiteral("header%1").arg(*column));
+            if (header == nullptr || !header->isVisible()) {
+                return nullptr;
+            }
+            QTest::mouseClick(&_scene.window(), Qt::RightButton, {}, Scene::centreOf(*header));
+            settle();
+        } else {
+            mouseClick(named(table, QStringLiteral("tableMenuButton")));
+        }
+        QQuickItem* const menu = named(table, QStringLiteral("configMenu"));
+        return menu != nullptr && !menu->property("entries").toList().isEmpty() ? menu : nullptr;
+    }
 
     static detail::ItemBase const& base(ui::Widget const& widget) {
         detail::ItemBase const* const found = detail::baseOf(widget);
