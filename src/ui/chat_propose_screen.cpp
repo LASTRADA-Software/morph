@@ -58,7 +58,11 @@ constexpr std::string_view kVocabularyReference =
     "`kind`. Keep `vocab` and `id` exactly as they are in the screen being edited, and change only what the person "
     "asked for. Use the models, queries, mutations and components the screen already declares and nothing it does "
     "not, within what is listed below. The tool refuses a patch that breaks a rule and says which operation, and "
-    "which part of the document as a JSON Pointer, so read the refusal and propose again.";
+    "which part of the document as a JSON Pointer, so read the refusal and propose again. A `form` node shows every "
+    "field of its action's schema, and its `fields` only adjusts them: an entry there changes how one field looks or "
+    "behaves and adds nothing the schema lacks. To take a field off the form, set `\"omit\": true` on its entry (the "
+    "value then leaves the submitted body) or `\"hidden\": true` (the value stays in the body but is not shown); "
+    "deleting an entry removes nothing, it only restores the field's default.";
 
 struct Carried {
     // The base screen a proposal is checked against.
