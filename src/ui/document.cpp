@@ -12,6 +12,7 @@
 #include <limits>
 #include <map>
 #include <memory>
+#include <morph/core/wire.hpp>
 #include <morph/forms/version.hpp>
 #include <morph/ui/control_shape.hpp>
 #include <morph/ui/date_pattern.hpp>
@@ -965,7 +966,7 @@ private:
             refuse("/shell", "`shell` is the app document's; a screen has none");
         }
         ShellParts parts;
-        auto const text = glz::write_json(*declared);
+        auto const text = glz::write<::morph::wire::detail::EscapingWriteOpts{}>(*declared);
         if (!text || glz::read_json(parts, *text)) {
             refuse("/shell",
                    "`shell` holds the parts: context, modules, search, inbox, principal, brand, help, searchHint");
