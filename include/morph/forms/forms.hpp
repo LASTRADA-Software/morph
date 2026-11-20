@@ -191,6 +191,7 @@
 #include "blank_as.hpp"
 #include "choice.hpp"
 #include "layout.hpp"
+#include "version.hpp"
 
 namespace morph::forms {
 
@@ -338,6 +339,15 @@ struct FieldMeta {
     // NOLINTNEXTLINE(readability-redundant-member-init) -- as `unit` above
     std::string_view labelField{};
 
+    /// @brief The version this field first ships in, a dotted numeric version such as `"6.11.0"` (`FieldVersion`);
+    ///        emitted as `x-since`. Empty means the first version.
+    ///
+    /// An application that keeps user-saved layouts compares it with the version a layout knows, to tell which
+    /// fields came later. A text that is not a version is a programming error, refused with `InvalidSinceError` when
+    /// the action registers.
+    // NOLINTNEXTLINE(readability-redundant-member-init) -- as `unit` above
+    std::string_view since{};
+
     /// @brief Returns a copy with `placeholder` set to @p text.
     /// @param text The placeholder hint.
     /// @return The updated descriptor.
@@ -415,6 +425,15 @@ struct FieldMeta {
     [[nodiscard]] constexpr FieldMeta withBlankAs(BlankAs mode) const noexcept {
         FieldMeta copy = *this;
         copy.blankAs = mode;
+        return copy;
+    }
+
+    /// @brief Returns a copy with `since` set to @p version.
+    /// @param version The version the field first ships in, e.g. `"6.11.0"`.
+    /// @return The updated descriptor.
+    [[nodiscard]] constexpr FieldMeta withSince(std::string_view version) const noexcept {
+        FieldMeta copy = *this;
+        copy.since = version;
         return copy;
     }
 };
@@ -2056,6 +2075,21 @@ struct IncompleteOptionsError : std::logic_error {
                            "; set optionsAction, valueField and labelField together.") {}
 };
 
+/// @brief Thrown by schema generation, `schemaVersion` and `fieldInventory` when a `FieldMeta::since` is not a
+///        version (`FieldVersion::parse`).
+///
+/// A programming error in the action's declaration, so a `std::logic_error`, thrown when the action registers.
+struct InvalidSinceError : std::logic_error {
+    /// @brief Constructs the error naming the action type, the member and why its `since` is refused.
+    /// @param actionName The type declaring the member (`glz::name_v<Owner>`).
+    /// @param field      The member's wire name.
+    /// @param reason     Why the text is not a version, as `FieldVersion::parse` gives it.
+    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): the type, its member and the reason, in that order.
+    InvalidSinceError(std::string_view actionName, std::string_view field, std::string_view reason)
+        : std::logic_error("morph::forms: '" + std::string{actionName} + "." + std::string{field} +
+                           "' declares a since that is not a version: " + std::string{reason}) {}
+};
+
 namespace detail {
 
 /// @brief One computed-field declaration: binds a destination member to the
@@ -2387,6 +2421,39 @@ void annotateDisplayUnit(glz::generic_u64& property, const FieldMeta& meta) {
     return true;
 }
 
+/// @brief The version a `FieldMeta` declares, refusing a `since` that is not one.
+/// @tparam Owner The type declaring @p name.
+/// @param name The member's wire name.
+/// @param meta Its `FieldMeta`, or `nullptr` when it has none.
+/// @return The declared version; the first version when @p meta is null or declares none.
+/// @throws InvalidSinceError when `since` is not a version.
+template <typename Owner>
+[[nodiscard]] FieldVersion declaredSince(std::string_view name, FieldMeta const* meta) {
+    if (meta == nullptr) {
+        return FieldVersion{};
+    }
+    auto version = parseSince(meta->since);
+    if (!version.has_value()) {
+        throw InvalidSinceError{glz::name_v<Owner>, name, version.error()};
+    }
+    return std::move(*version);
+}
+
+/// @brief Emits `x-since` for a member whose `FieldMeta` declares a version, refusing one that is not a version.
+/// @tparam Owner The type declaring @p name.
+/// @param property The member's schema property.
+/// @param name     The member's wire name.
+/// @param meta     Its `FieldMeta`.
+/// @throws InvalidSinceError when `since` is not a version.
+template <typename Owner>
+void annotateSince(glz::generic_u64& property, std::string_view name, FieldMeta const& meta) {
+    if (meta.since.empty()) {
+        return;
+    }
+    // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access) -- glaze DOM requires operator[]
+    property["x-since"] = declaredSince<Owner>(name, &meta).text();
+}
+
 /// @brief Emits the options annotations a `FieldMeta` declares for a member that is not a `Choice<…>`, refusing a
 ///        declaration that cannot hold.
 /// @tparam Owner  The type declaring @p name.
@@ -2426,6 +2493,66 @@ void annotateMetaOptions(glz::generic_u64& property, std::string_view name, Fiel
     // NOLINTEND(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access)
 }
 
+// NOLINTBEGIN(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access) -- glaze DOM requires operator[]
+/// @brief Applies the annotations a member's `FieldMeta` declares: help, placeholder, flags, bounds, display unit,
+///        options, `since` and `blankAs`.
+/// @tparam Owner  The type declaring @p name.
+/// @tparam Member The static type of the member.
+/// @param property DOM node for this one property.
+/// @param name     Wire (JSON) name of the member.
+/// @param meta     The member's `FieldMeta`.
+template <typename Owner, typename Member>
+void annotateFieldMeta(glz::generic_u64& property, std::string_view name, FieldMeta const& meta) {
+    if (!meta.help.empty()) {
+        property["description"] = std::string{meta.help};
+    }
+    if (!meta.placeholder.empty()) {
+        property["x-placeholder"] = std::string{meta.placeholder};
+    }
+    if (meta.readOnly) {
+        property["x-readonly"] = true;
+    }
+    if (meta.hidden) {
+        property["x-hidden"] = true;
+    }
+    if (!meta.i18nKey.empty()) {
+        property["x-i18nKey"] = std::string{meta.i18nKey};
+    }
+    annotateDeclaredBounds(property, meta);
+    annotateDisplayUnit<Member>(property, meta);
+    annotateMetaOptions<Owner, Member>(property, name, meta);
+    annotateSince<Owner>(property, name, meta);
+    if constexpr (std::is_same_v<Member, std::string> || std::is_same_v<Member, std::optional<std::string>>) {
+        if (meta.blankAs == BlankAs::Empty) {
+            property["x-blankAs"] = std::string{"empty"};
+        }
+    }
+}
+
+/// @brief Applies a `Quantity` member's decimal places and unit alternatives.
+/// @tparam Member The `Quantity` type of the member.
+/// @param property DOM node for this one property.
+template <typename Member>
+void annotateQuantity(glz::generic_u64& property) {
+    property["x-decimalPlaces"] = std::uint64_t{Member::declaredDecimals};
+    auto const alternatives = Member::unitAlternatives();
+    if (!alternatives.empty()) {
+        glz::generic_u64::array_t list{};
+        for (auto const& alternative : alternatives) {
+            auto const meta = units::UnitTraits<std::remove_const_t<decltype(Member::unit)>>::meta(alternative.unit);
+            glz::generic_u64 entry{};
+            entry["id"] = std::string{meta.id};
+            entry["display"] = std::string{meta.display};
+            entry["decimals"] = std::uint64_t{meta.defaultDecimals};
+            entry["num"] = alternative.num;
+            entry["den"] = alternative.den;
+            list.emplace_back(std::move(entry));
+        }
+        property["x-unitAlternatives"] = list;
+    }
+}
+// NOLINTEND(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access)
+
 /// @brief Applies the title/`FieldMeta`/`Quantity`/`Choice`/widget/
 ///        ranged-bounds annotations to one property node. Shared by
 ///        `mergeSchemaExtras`'s top-level pass and `annotateNestedAggregate`
@@ -2464,49 +2591,10 @@ void annotateBasicMemberProperty(glz::generic_u64& property, std::string_view na
     std::string_view const declaredLabel = fieldMeta != nullptr ? fieldMeta->label : std::string_view{};
     property["title"] = declaredLabel.empty() ? inferTitle(name) : std::string{declaredLabel};
     if (fieldMeta != nullptr) {
-        if (!fieldMeta->help.empty()) {
-            property["description"] = std::string{fieldMeta->help};
-        }
-        if (!fieldMeta->placeholder.empty()) {
-            property["x-placeholder"] = std::string{fieldMeta->placeholder};
-        }
-        if (fieldMeta->readOnly) {
-            property["x-readonly"] = true;
-        }
-        if (fieldMeta->hidden) {
-            property["x-hidden"] = true;
-        }
-        if (!fieldMeta->i18nKey.empty()) {
-            property["x-i18nKey"] = std::string{fieldMeta->i18nKey};
-        }
-        annotateDeclaredBounds(property, *fieldMeta);
-        annotateDisplayUnit<Member>(property, *fieldMeta);
-        annotateMetaOptions<Owner, Member>(property, name, *fieldMeta);
-        if constexpr (std::is_same_v<Member, std::string> || std::is_same_v<Member, std::optional<std::string>>) {
-            if (fieldMeta->blankAs == BlankAs::Empty) {
-                property["x-blankAs"] = std::string{"empty"};
-            }
-        }
+        annotateFieldMeta<Owner, Member>(property, name, *fieldMeta);
     }
-
     if constexpr (units::isQuantity<Member>) {
-        property["x-decimalPlaces"] = std::uint64_t{Member::declaredDecimals};
-        auto const alternatives = Member::unitAlternatives();
-        if (!alternatives.empty()) {
-            glz::generic_u64::array_t list{};
-            for (auto const& alternative : alternatives) {
-                auto const meta =
-                    units::UnitTraits<std::remove_const_t<decltype(Member::unit)>>::meta(alternative.unit);
-                glz::generic_u64 entry{};
-                entry["id"] = std::string{meta.id};
-                entry["display"] = std::string{meta.display};
-                entry["decimals"] = std::uint64_t{meta.defaultDecimals};
-                entry["num"] = alternative.num;
-                entry["den"] = alternative.den;
-                list.emplace_back(std::move(entry));
-            }
-            property["x-unitAlternatives"] = list;
-        }
+        annotateQuantity<Member>(property);
     }
     if constexpr (isChoice<Member>) {
         property["x-optionsAction"] = std::string{Member::optionsAction()};
@@ -3661,6 +3749,47 @@ template <typename A>
         });
         return satisfied;
     }
+}
+
+/// @brief Lists every field of @p A with the version it first ships in, for `checkFieldInventory`.
+///
+/// One entry per reflected top-level member, in declaration order, with `since` as `FieldMeta::since` declares it
+/// (empty for the first version). A nested aggregate's own fields are emitted with their `x-since` but are not part of
+/// the inventory: a layout places an action's top-level fields.
+/// @tparam A Action type (a reflectable aggregate).
+/// @return The inventory; never marks an entry removed.
+/// @throws InvalidSinceError when a `since` is not a version.
+template <typename A>
+[[nodiscard]] std::vector<FieldInventoryEntry> fieldInventory() {
+    std::vector<FieldInventoryEntry> inventory;
+    A const probe{};
+    detail::forEachNamedMember(probe, [&]<std::size_t I>(std::string_view name, const auto& member) {
+        static_cast<void>(member);
+        FieldMeta const* const meta = detail::findFieldMeta<A>(name);
+        static_cast<void>(detail::declaredSince<A>(name, meta));
+        inventory.push_back({.field = std::string{name},
+                             .since = meta == nullptr ? std::string{} : std::string{meta->since},
+                             .removed = false});
+    });
+    return inventory;
+}
+
+/// @brief The version of @p A's schema: the highest `FieldMeta::since` among its top-level fields.
+/// @tparam A Action type (a reflectable aggregate).
+/// @return The highest declared version; the first version when no field declares one.
+/// @throws InvalidSinceError when a `since` is not a version.
+template <typename A>
+[[nodiscard]] FieldVersion schemaVersion() {
+    FieldVersion highest;
+    A const probe{};
+    detail::forEachNamedMember(probe, [&]<std::size_t I>(std::string_view name, const auto& member) {
+        static_cast<void>(member);
+        FieldVersion version = detail::declaredSince<A>(name, detail::findFieldMeta<A>(name));
+        if (version > highest) {
+            highest = std::move(version);
+        }
+    });
+    return highest;
 }
 
 /// @brief Generates the JSON Schema for action type @p A, ready for a

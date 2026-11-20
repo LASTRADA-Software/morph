@@ -250,6 +250,8 @@ when the action registers:
 - `IncompleteOptionsError` / `ConflictingOptionsError` — a `FieldMeta` that
   sets only some of `optionsAction`/`valueField`/`labelField`, or sets
   `optionsAction` on a `Choice` member; see [Field metadata](#field-metadata--fieldmeta).
+- `InvalidSinceError` — a `FieldMeta::since` that is not a version; see
+  [Field versions](#field-versions--since).
 
 ### Required-ness rule
 
@@ -395,6 +397,7 @@ struct FieldMeta {
     std::string_view optionsAction{};            // "" = no options; see below
     std::string_view valueField{};               // the options row's value field
     std::string_view labelField{};               // the options row's label field
+    std::string_view since{};                    // "" = the first version; see "Field versions"
 };
 
 struct RecordMeasurement {
@@ -652,6 +655,69 @@ A create form in which the user types and then clears a field sends `""` as well
 `tests/test_forms_blank_as.cpp` pins the emission; the body corpus
 ([engine.md](engine.md), "Corpora") pins the bodies the forms engine submits.
 
+### Field versions — `since`
+
+`FieldMeta::since` (or `.withSince("6.11.0")`) is the version a field first ships in, emitted as `x-since` on the
+property node. It is how an application that keeps user-saved layouts (custom screens, see
+[`../ui/custom_screens.md`](../ui/custom_screens.md#versions)) tells which fields came after the version a layout
+knows.
+
+```cpp
+static constexpr std::array fieldMetadata{
+    FieldMeta{.field = "density", .since = "6.11.0"},
+    FieldMeta{.field = "remark"}.withSince("6.9"),
+};
+```
+
+**The version.** `FieldVersion` (`forms/version.hpp`, free of glaze so the ui documents use the same type) is a
+dotted numeric version. Its value means nothing to morph apart from its order:
+
+- **Parsing.** One or more components separated by single dots; each is decimal digits with no leading zero (unless it
+  is `0`) and at most 4294967295; the whole text is at most 64 bytes. Anything else is refused with a sentence that
+  quotes the text: an empty text, an empty component (`6..1`, `.6`, `6.`), a leading zero (`6.01`, which would
+  otherwise equal `6.1`), a component that is not digits (`6.x`, `v6`, `-1`), one too large.
+- **Order.** Component by component from the left, as numbers; a missing trailing component is 0, so `6.11` equals
+  `6.11.0` and is below `6.11.1`. `text()` keeps the version as written.
+- **The first version.** A field without `since` belongs to the first version, `0` (a default-constructed
+  `FieldVersion`), which is below every version with a non-zero component. `parseSince` reads an empty text as it.
+
+A `since` that is not a version is a programming error in the action: schema generation, `schemaVersion` and
+`fieldInventory` throw `InvalidSinceError` (a `std::logic_error`), naming the action, the field and the reason, when
+the action registers.
+
+**`schemaVersion<A>()`** is the highest `since` among `A`'s top-level fields, the first version when none declares
+one. A nested aggregate's fields carry their `x-since` in the schema but are not part of an action's version or
+inventory: a layout places an action's top-level fields.
+
+**Wire field names are permanent.** A field's wire name is what a stored layout, a journal entry and a client's
+payload refer to it by, so a field is never renamed: it is removed, and a new field with a new name and its own
+`since` is added. A removed name is never used again, since a layout that still names it would silently attach to a
+different field.
+
+**The inventory check.** An application runs it in its own tests, against a snapshot it keeps of each action's fields
+at its last release; morph keeps no snapshot.
+
+- `fieldInventory<A>()` lists `{field, since, removed}` for every top-level field in declaration order, `since` as
+  declared (empty for the first version) and `removed` false. `FieldInventoryEntry` is a plain aggregate, so the
+  snapshot is kept as JSON with glaze as it is.
+- `checkFieldInventory(previous, current)` returns the problems, each a `FieldInventoryProblem` with its `kind`, the
+  `field` and a `message` for a test's output:
+
+  | Kind | When |
+  |---|---|
+  | `InvalidSince` | An entry of either list has a `since` that is not a version (a snapshot edited by hand). |
+  | `AddedWithoutNewerSince` | A field absent from the snapshot has no `since` above the highest the snapshot records, removed fields included. An empty snapshot is the first release and checks no addition. |
+  | `SinceChanged` | A field of the snapshot declares another version than it shipped with. Two spellings of one version (`6.11`, `6.11.0`) are the same. |
+  | `Reappeared` | A field the snapshot records as removed is back. |
+
+  Removing a field is not a problem. An entry of `current` marked `removed` is not a field and is skipped.
+- `nextFieldInventory(previous, current)` is the snapshot to keep at a release: the current fields, then every field
+  of the snapshot that is gone, marked `removed`, so a later check catches its name coming back. The snapshot is the
+  last **release**'s: refreshed at each release, not at each change, since every field added during a release
+  cycle shares one `since` above the previous release's highest.
+
+`tests/test_forms_since.cpp` pins the ordering, the refusals, the emission and each problem kind.
+
 ### Field metadata is not a security control
 
 `x-readonly` and `x-hidden` are presentation only. The field still travels in
@@ -677,8 +743,9 @@ member of the action at all.
 | `ExtUnits` | property node (sibling of `$ref`) | object | A plain member's display unit, from `FieldMeta::unit`, as `{"unitAscii": unit, "unitUnicode": unit}` — the shape a `Quantity` carries. Omitted when empty, and never emitted for a `Quantity` member. See [Display unit and decimals](#display-unit-and-decimals-for-a-plain-member--unit--decimals). |
 | `x-displayDecimals` | property node (sibling of `$ref`) | non-negative integer | A plain number's display and entry precision, from `FieldMeta::decimals`. Omitted when disengaged, above `kMaxDecimalPlaces`, or on a `Quantity` member. |
 | `x-blankAs` | property node (sibling of `$ref`) | string | `"empty"`, from `FieldMeta::blankAs = BlankAs::Empty`: once engaged, a blank string field submits `""` instead of being omitted. Emitted only for `Empty` on a `std::string` / `std::optional<std::string>` member. See [Clearing a string in an edit form](#clearing-a-string-in-an-edit-form--blankas). |
+| `x-since` | property node (sibling of `$ref`) | string | The version the field first ships in, as `FieldMeta::since` writes it. Omitted for the first version. See [Field versions](#field-versions--since). |
 
-All thirteen keys are additive and non-breaking, extending the renderer-contract
+All fourteen keys are additive and non-breaking, extending the renderer-contract
 table below without renaming or retyping any existing key, per the versioning
 stance (see "Design principle" above). A renderer that ignores them shows
 the raw wire key as the caption, no helper/placeholder text, every field
@@ -878,6 +945,7 @@ this dual read.
 | `x-maximum` | property node (sibling of `$ref`) | object `{num,den,dp}` | Inclusive upper bound, same source and shape as `x-minimum`. |
 | `x-instanceConstraints` | top-level (object) | array of strings | Wire field names whose keys were written from *instance* data rather than derived from the compiled action type. Present only on a decorated schema. A renderer needing to know whether an `x-decimalPlaces`/`x-minimum`/`x-maximum` is instance-sourced checks membership here rather than guessing. |
 | `format` | `Timestamp` property (or its `$def`) | string, value `"date-time"` | Standard JSON-Schema vocabulary (stamped by glaze, not by morph). The renderer shows a date-time input; the wire value is the ISO-8601 string `Timestamp` serialises to. No `x-*` extension is used for timestamps. |
+| `x-since` | property node (sibling of `$ref`) | string | The version the field first ships in (`FieldMeta::since`), a dotted numeric version; omitted for the first version. A renderer draws nothing from it: a layout compares it with the version it knows ([Field versions](#field-versions--since)). |
 | `x-displayDecimals` | property node (sibling of `$ref`) | non-negative integer | A plain `"number"` member's display and entry precision, from `FieldMeta::decimals`. Read only when the property has no `x-decimalPlaces`; the value keeps its JSON-number encoding, and an entry with more fraction digits is refused. See [Display unit and decimals](#display-unit-and-decimals-for-a-plain-member--unit--decimals). |
 | `ExtUnits` | `$def` of the `Quantity`'s unit type (reached via the property's `$ref`) — or, for a plain member declaring `FieldMeta::unit`, the property node | object | Glaze-stamped block describing the field's **canonical** unit. Two fields: `unitAscii` (the stable ascii id, e.g. `"kg_per_m3"` — sourced from `UnitMeta::id`) and `unitUnicode` (the human display text, e.g. `"kg/m³"` — from `UnitMeta::display`). This is the unit a payload value is always denominated in, and the reference point the `num`/`den` of every `x-unitAlternatives` entry converts *to*. A renderer resolves the property's `$ref` into `$defs` to read `ExtUnits.unitAscii`/`unitUnicode` (it is **not** on the property node next to the `x-*` keys) to label the field and anchor the unit selector. On a plain member it is the `FieldMeta::unit` display text in both subfields, and there is no unit selector. |
 | `x-layout` | top-level (object) | object | The form's group structure: `{ "groups": [ { "title": string, "kind": "section"\|"tab"\|"accordion", "fields": [wire-key,…] }, … ] }`, in `A::formLayout` declaration order. Emitted only when the action declares `formLayout`. The renderer builds the named containers in array order and places each field in its group; fields absent from every group go in a trailing default group. |
@@ -1275,6 +1343,9 @@ against. The vocabulary is therefore treated as a stable framework contract:
 altering how a value is interpreted) is a breaking change and ships only in a
 breaking framework release.** Adding a new, optional `x-*` key that older
 renderers can safely ignore is not breaking.
+
+The schema has no version, but each field does: `x-since` ([Field versions](#field-versions--since)) is the
+application's version of the field, not this vocabulary's, and a field's wire name never changes.
 
 ## Renderers
 
@@ -2435,7 +2506,17 @@ Two boundaries follow the framework's own:
 
 | Signature | Returns |
 |---|---|
-| `template <typename A> const std::string& schemaJson()` | The merged schema JSON. Cached per type and returned **by reference** (the same shape `model::payloadFingerprint<A>()` and `model::payloadShapeString<A>()` use): the cache is built once per type per process, is never mutated afterwards, and lives until the process exits, so the reference stays valid for as long as any caller could hold it. A caller that needs its own mutable copy asks for one (`std::string mine = schemaJson<A>();`); an *explicit specialisation* of this template must likewise return a reference to something that outlives the call, not to a temporary. On internal failure returns the raw glaze schema, or an empty string if glaze's own schema generation failed — it never throws over malformed *input*. Throws `UnsatisfiableFormError` for a self-contradicting *declaration* ([Unsatisfiable declarations](#unsatisfiable-declarations--required-contradicting-x-rules)), and `IncompleteOptionsError`/`ConflictingOptionsError` for a malformed options declaration in `FieldMeta` ([Field metadata](#field-metadata--fieldmeta)). |
+| `template <typename A> const std::string& schemaJson()` | The merged schema JSON. Cached per type and returned **by reference** (the same shape `model::payloadFingerprint<A>()` and `model::payloadShapeString<A>()` use): the cache is built once per type per process, is never mutated afterwards, and lives until the process exits, so the reference stays valid for as long as any caller could hold it. A caller that needs its own mutable copy asks for one (`std::string mine = schemaJson<A>();`); an *explicit specialisation* of this template must likewise return a reference to something that outlives the call, not to a temporary. On internal failure returns the raw glaze schema, or an empty string if glaze's own schema generation failed — it never throws over malformed *input*. Throws `UnsatisfiableFormError` for a self-contradicting *declaration* ([Unsatisfiable declarations](#unsatisfiable-declarations--required-contradicting-x-rules)), `IncompleteOptionsError`/`ConflictingOptionsError` for a malformed options declaration in `FieldMeta` ([Field metadata](#field-metadata--fieldmeta)), and `InvalidSinceError` for a `FieldMeta::since` that is not a version ([Field versions](#field-versions--since)). |
+
+### Field versions
+
+| Signature | Returns |
+|---|---|
+| `template <typename A> FieldVersion schemaVersion()` | The highest `FieldMeta::since` among `A`'s top-level fields; the first version when none declares one. Throws `InvalidSinceError` for a `since` that is not a version. |
+| `template <typename A> std::vector<FieldInventoryEntry> fieldInventory()` | `{field, since, removed = false}` per top-level field, in declaration order. Throws `InvalidSinceError`. |
+| `std::vector<FieldInventoryProblem> checkFieldInventory(previous, current)` | The problems of `current` against the snapshot `previous`; empty when there is none. |
+| `std::vector<FieldInventoryEntry> nextFieldInventory(previous, current)` | The snapshot to keep: `current`, then the snapshot's fields that are gone, marked `removed`. |
+| `static std::expected<FieldVersion, std::string> FieldVersion::parse(std::string_view)` | The version, or why the text is not one. |
 
 ### `allRequiredEngaged<A>()`
 
@@ -2514,6 +2595,7 @@ for the exhaustive tables and design rationale.
 | Wire serialisation | **Glaze `meta` reflects `value` directly** | `Choice<T, ...>` serialises as `T \| null` — the options metadata never travels. |
 | Options action | **A registered action type id** | The same action dispatch mechanism handles queries for picklist data, so no separate protocol or endpoint is needed. |
 | Dependent `Choice` options | **Sibling values as the options-action request body, not a new dispatch mechanism** | `Choice`'s `DependsOn` pack only changes what body a renderer sends; the options action stays an ordinary registered action reached through the same `executeJson`/`ActionDispatcher` seam as every other action, so multi-parent cascades and independent `Choice`s coexist with no new framework surface. |
+| Field versions | **`FieldMeta::since`, a dotted numeric version compared component by component; the inventory snapshot is the application's** | A version per field is what lets a stored layout tell which fields came later; it belongs beside the field's other metadata. Morph orders versions and checks an inventory against a snapshot, and keeps none itself: which release a snapshot stands for is the application's to decide. |
 | `x-order` | **Always emitted, on every property** | JSON object key order is not reliable across DOM implementations; the explicit index gives renderers a deterministic layout. |
 | Cross-field rules | **Closed, typed vocabulary, one declaration → schema + client + server** | Client and server must evaluate cross-field conditions identically; a closed set of framework-owned node types (not application lambdas) is what makes that possible. Arbitrary logic that does not fit stays in `validate()`/`execute`, unreflected into `x-rules`, exactly as `allRequiredEngaged` already draws the line for per-field required-ness. |
 | `x-unitAlternatives` | **Derived from `UnitTraits::relations`** | The same `UnitRelation` entries that drive `convert` also drive the display-unit selector — no separate declaration to keep in sync. |
