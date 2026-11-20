@@ -3245,12 +3245,12 @@ bool enabled(morph::ui::testing::TableHarness const& h, std::string_view kind, s
     return h.backend.prop(h.byTestId(kind, testId), "enabled") != "false";
 }
 
-// A rows table `t` of the Text columns a and b and the Integer column n.
+// A rows table `t` of the Text columns a, b and c and the Integer column n.
 constexpr std::string_view kKinds = R"({
   "vocab": "ui/1", "id": "kinds",
-  "state": { "items": { "init": { "lit": [ { "id": 1, "a": "x", "b": "y", "n": 1 } ] } } },
+  "state": { "items": { "init": { "lit": [ { "id": 1, "a": "x", "b": "y", "c": "z", "n": 1 } ] } } },
   "view": { "kind": "table", "id": "t", "rows": { "ref": "items" },
-            "columns": [ { "id": "a", "label": "A" }, { "id": "b", "label": "B" },
+            "columns": [ { "id": "a", "label": "A" }, { "id": "b", "label": "B" }, { "id": "c", "label": "C" },
                          { "id": "n", "label": "N", "kind": "integer" } ] } })";
 
 }  // namespace
@@ -3294,14 +3294,26 @@ TEST_CASE("column chooser: Group columns forms a group of one kind, which the la
     CHECK_FALSE(enabled(h, "Checkbox", "table_group_column_n"));
     CHECK(enabled(h, "Checkbox", "table_group_column_b"));
     CHECK_FALSE(enabled(h, "Button", "table_group_create"));
-    h.backend.toggle(h.byTestId("Checkbox", "table_group_column_b"));
     h.backend.edit(h.byTestId("TextInput", "table_group_label"), "Pair");
+    h.settle();
+    CHECK_FALSE(enabled(h, "Button", "table_group_create"));                 // a label and one column
+    h.backend.toggle(h.byTestId("Checkbox", "table_group_column_b"));
     h.settle();
     REQUIRE(enabled(h, "Button", "table_group_create"));
     press(h, "table_group_create");
     CHECK(readJson(*screen, R"({"ref":"t.layout.groups"})") == R"([{"columns":["a","b"],"id":"g1","label":"Pair"}])");
     CHECK(std::ranges::contains(labelsOf(menuOf(h, table, 0)), "Filter Pair, 2 columns…"));
     CHECK(h.text("table_group_g1") == "Pair, 2 columns");
+    CHECK(readJson(*screen, R"({"ref":"n"})") == "1");
+    // A column already in a group is refused in the status line, and the form stays as the user left it.
+    press(h, "table_columns_group");
+    h.backend.toggle(h.byTestId("Checkbox", "table_group_column_a"));
+    h.backend.toggle(h.byTestId("Checkbox", "table_group_column_c"));
+    h.backend.edit(h.byTestId("TextInput", "table_group_label"), "More");
+    h.settle();
+    press(h, "table_group_create");
+    CHECK(statusOf(h, table).message == "A is already in Pair");
+    CHECK(h.backend.prop(h.byTestId("Checkbox", "table_group_column_c"), "checked") == "true");
     CHECK(readJson(*screen, R"({"ref":"n"})") == "1");
     press(h, "table_group_remove_g1");
     CHECK(readJson(*screen, R"({"ref":"t.layout.groups"})") == "null");
@@ -3346,4 +3358,96 @@ TEST_CASE("sort dialog: keys in order with direction, move and remove; Add key r
     CHECK(statusOf(h, table).message == "A table sorts by at most 8 columns");
     press(h, "table_sort_done");
     CHECK(h.backend.prop(h.byTestId("Dialog", "table_sort"), "open") == "false");
+}
+
+// Mutations: the move buttons read without the pin boundary (c3, the first unpinned column, can move up); the show
+// box of the only visible column enabled; the chooser's dismissal leaving it open; a key's column select offering a
+// column another key holds.
+TEST_CASE("column chooser and sort dialog: locks, the pin boundary, a key's column and a dismissal", "[ui][table][config]") {
+    {
+        morph::ui::testing::TableHarness h;
+        auto screen = h.mount(withFirstColumnKey(kNine, R"("locked":true)"));
+        int const table = h.backend.all("Table").front();
+        chooseMenu(h, table, 1, {"Pin column"});
+        moveColumn(h, table, 2, 1);
+        REQUIRE(elementValue(*screen, "t", "layout").find(R"("pinned":1)") != std::string::npos);
+        REQUIRE(elementValue(*screen, "t", "visibleColumns").starts_with(R"(["c2","c3","c1",)"));
+        chooseMenu(h, table, std::nullopt, {"Columns…"});
+        CHECK_FALSE(enabled(h, "Checkbox", "table_columns_show_c1"));        // locked
+        CHECK_FALSE(enabled(h, "Button", "table_columns_down_c1"));
+        CHECK_FALSE(enabled(h, "Button", "table_columns_down_c2"));          // the last pinned column
+        CHECK_FALSE(enabled(h, "Button", "table_columns_up_c3"));            // the first unpinned one
+        CHECK(enabled(h, "Button", "table_columns_down_c3"));
+        h.backend.dismiss(h.byTestId("Dialog", "table_columns"));
+        h.settle();
+        CHECK(h.backend.prop(h.byTestId("Dialog", "table_columns"), "open") == "false");
+    }
+    morph::ui::testing::TableHarness h;
+    auto screen = h.mount(kNine);
+    int const table = h.backend.all("Table").front();
+    chooseMenu(h, table, std::nullopt, {"Columns…"});
+    for (std::string_view const column : {"c2", "c3", "c4", "c5", "c6", "c7", "c8", "c9"}) {
+        h.backend.toggle(h.byTestId("Checkbox", "table_columns_show_" + std::string{column}));
+    }
+    h.settle();
+    CHECK(elementValue(*screen, "t", "visibleColumns") == R"(["c1"])");
+    CHECK_FALSE(enabled(h, "Checkbox", "table_columns_show_c1"));            // the only visible column
+    CHECK(enabled(h, "Checkbox", "table_columns_show_c2"));
+    press(h, "table_columns_done");
+
+    h.backend.clickHeader(table, 0, HeaderClick::Plain);
+    h.settle();
+    REQUIRE(elementValue(*screen, "t", "sort") == R"([{"column":"c1","direction":"asc"}])");
+    chooseMenu(h, table, std::nullopt, {"Sort…"});
+    press(h, "table_sort_add");
+    REQUIRE(elementValue(*screen, "t", "sort") ==
+            R"([{"column":"c1","direction":"asc"},{"column":"c2","direction":"asc"}])");
+    int const second = h.byTestId("Select", "table_sort_column_1");
+    CHECK_THROWS(h.backend.choose(second, morph::ui::Key{std::string{"c1"}}));  // c1 is the first key's
+    h.backend.choose(second, morph::ui::Key{std::string{"c5"}});
+    h.settle();
+    CHECK(elementValue(*screen, "t", "sort") ==
+          R"([{"column":"c1","direction":"asc"},{"column":"c5","direction":"asc"}])");
+    h.backend.dismiss(h.byTestId("Dialog", "table_sort"));
+    h.settle();
+    CHECK(h.backend.prop(h.byTestId("Dialog", "table_sort"), "open") == "false");
+}
+
+namespace {
+
+// kNine's table in a row beside a text, the table's node taking the member @p member.
+std::string nineInRow(std::string_view member) {
+    auto json = morph::ui::parseJson(withTableKey(withTableKey(kNine, R"("testId":"t")"), member));
+    REQUIRE(json.has_value());
+    auto& root = std::get<morph::ui::Json::object_t>(json->data);
+    std::string const table = glz::write_json(root.at("view")).value_or("");
+    root.erase("view");
+    std::string text = glz::write_json(*json).value_or("");
+    text.pop_back();
+    return text + R"(,"view":{"kind":"row","children":[)" + table +
+           R"(,{"kind":"text","text":"beside","sizing":{"lit":{"stretch":1}}}]}})";
+}
+
+}  // namespace
+
+// Mutation: the table inside the dialogs' column keeping its percent (the mount throws: a column's child takes no
+// share).
+TEST_CASE("table dialogs: a configurable table with a share of its row mounts, its column taking the share",
+          "[ui][table][config]") {
+    morph::ui::testing::TableHarness h;
+    auto screen = h.mount(nineInRow(R"("sizing":{"lit":{"percent":40}})"));
+    int const table = h.byTestId("Table", "t");
+    CHECK(h.backend.prop(table, "layout") == "stretch(1)/stretch(1)");
+    CHECK(h.backend.dump().contains("Column#2 gap=0 layout=percent(40)/content"));
+    CHECK(h.diagnostics.empty());
+}
+
+// Mutation: the table inside the dialogs' column keeping a content height (the row's offer to fill its height reaches
+// only the column, and the table stops at its own).
+TEST_CASE("table dialogs: a content-height table in a row fills the column the row stretches", "[ui][table][config]") {
+    morph::ui::testing::TableHarness h;
+    auto screen = h.mount(nineInRow(R"("maxWidth":50)"));
+    int const table = h.byTestId("Table", "t");
+    CHECK(h.backend.prop(table, "layout") == "content max=50/stretch(1)");
+    CHECK(h.backend.dump().contains("Column#2 gap=0 layout=content max=50/content"));
 }

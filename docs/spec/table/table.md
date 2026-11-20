@@ -1814,7 +1814,8 @@ and filters go where the mode puts them.
   not used: in a browser it is Back and Forward. The selection column and a group heading are not columns and
   do not move.
 - **Hide and show.** The header's menu has "Hide column"; the table's menu opens a column chooser, a list of every
-  column with a check box, in order, with the same move actions. At least one column stays visible.
+  column with a check box, in order, with the same move actions as "Move up" and "Move down", which stop where
+  "Move left" and "Move right" do. At least one column stays visible.
 - **Pin.** The first `pinned` columns of the layout do not scroll sideways: they stay at the leading edge, and
   are always in the column window. The header's menu has "Pin column", which moves the column to the end of
   the pinned ones, and "Unpin". The selection column is always pinned and is not counted. Pinned columns may
