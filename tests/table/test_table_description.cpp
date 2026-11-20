@@ -2092,10 +2092,12 @@ TEST_CASE("served description: a page carries the served description's revision"
 
 namespace tabledesc {
 
-// A model whose one table's `limits.maxSortKeys` is `bound`.
+// A model whose one table's `limits.maxSortKeys` is `bound`, and whose description names the lock companion `nope`,
+// which it does not have, while `badLock` is set.
 class BoundModel {
 public:
     static inline std::size_t bound = 8;
+    static inline bool badLock = false;
     morph::table::ServedTable rows(morph::table::TableContext const& context);
 };
 
@@ -2109,6 +2111,9 @@ morph::table::ServedTable tabledesc::BoundModel::rows(morph::table::TableContext
     ServedTable served{.description = threeColumns()};
     served.source = std::make_shared<VectorSource>(columnInfos(served.description));
     served.limits.maxSortKeys = bound;
+    if (badLock) {
+        served.description.rowLock = "nope";
+    }
     return served;
 }
 
@@ -2407,4 +2412,54 @@ TEST_CASE("description: a served table with a bad companion is refused", "[table
     REQUIRE_FALSE(refused.has_value());
     CHECK(refused.error().code == TableErrorCode::SourceContract);
     CHECK(refused.error().column == "nope");
+}
+
+// Mutation: the validateDisplay call removed from DescribeTable::invoke, which describes the table.
+TEST_CASE("description: the describe action refuses a bad companion", "[table][description][display]") {
+    morph::exec::ThreadPoolExecutor pool{2};
+    morph::exec::MainThreadExecutor owner;
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool), owner};
+    morph::bridge::BridgeHandler<tabledesc::BoundModel> handler{bridge, &owner};
+    struct Restore {
+        Restore() = default;
+        Restore(Restore const&) = delete;
+        Restore& operator=(Restore const&) = delete;
+        Restore(Restore&&) = delete;
+        Restore& operator=(Restore&&) = delete;
+        ~Restore() { tabledesc::BoundModel::badLock = false; }
+    } const restore;
+    REQUIRE_NOTHROW(
+        morph::testing::awaitValueOn(owner, handler.execute(DescribeTable<&tabledesc::BoundModel::rows>{})));
+    tabledesc::BoundModel::badLock = true;
+    CHECK_THROWS(morph::testing::awaitValueOn(owner, handler.execute(DescribeTable<&tabledesc::BoundModel::rows>{})));
+}
+
+// Mutation: TableColumn written by reflection, every member, which writes "display", "tone" and "tooltip" for `id`.
+TEST_CASE("description: a column that shows its cells plainly writes no display", "[table][description][display]") {
+    TableDescription d;
+    d.id = "samples";
+    d.key = "id";
+    d.columns = {
+        TableColumn{.info = {.id = "id", .kind = ColumnKind::Integer}, .label = "Id"},
+        TableColumn{.info = {.id = "mass", .kind = ColumnKind::Decimal},
+                    .label = "Mass",
+                    .display = {.decimals = 2},
+                    .tone = "massTone"},
+        TableColumn{.info = {.id = "massTone", .kind = ColumnKind::Text}, .shown = false},
+    };
+    auto const described = describe(d);
+    auto const json = glz::write_json(described).value_or(std::string{});
+    auto const count = [&json](std::string_view needle) {
+        std::size_t found = 0;
+        for (auto at = json.find(needle); at != std::string::npos; at = json.find(needle, at + 1)) {
+            ++found;
+        }
+        return found;
+    };
+    CHECK(count(R"("display":)") == 1);
+    CHECK(count(R"("tone":)") == 1);
+    CHECK(count(R"("tooltip":)") == 0);
+    TableDescription back;
+    REQUIRE_FALSE(glz::read_json(back, json));
+    CHECK(back == described);
 }

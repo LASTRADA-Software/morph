@@ -1448,7 +1448,7 @@ std::string companionPage(TableHarness const& h, std::vector<CompanionRow> const
 
 }  // namespace
 
-// Mutation: the default cell's text left on the stand-in formatter, which shows "0.125".
+// Mutation: the default cell's text through `textOf`, which shows "0.125".
 TEST_CASE("table display: a model-backed table draws its description's display", "[ui][table][display]") {
     using namespace morph::ui::testing;
     TableHarness h;
@@ -1584,4 +1584,103 @@ TEST_CASE("table display: text never orders", "[ui][table][display]") {
                 "columns":[{"id":"id","label":"Id"},{"id":"code","label":"Code","sortable":true,
                             "labels":{"lit":[{"operand":"3","text":"alpha"},{"operand":"1","text":"zeta"}]}}]}})");
     CHECK(texts(h, 1) == std::vector<std::string>{"zeta", "alpha"});
+}
+
+namespace {
+
+// `id` (the key) and `v`, a Number column.
+table::TableDescription numberDescription() {
+    table::TableDescription d;
+    d.id = "samples";
+    d.label = "Samples";
+    d.key = "id";
+    d.columns = {
+        table::TableColumn{.info = {.id = "id", .kind = table::ColumnKind::Integer}, .label = "Id"},
+        table::TableColumn{.info = {.id = "v", .kind = table::ColumnKind::Number}, .label = "V"},
+    };
+    return table::describe(std::move(d));
+}
+
+// The page answering the latest query: row `key` holds `v` for each of @p values, keys from 1.
+std::string numberPage(TableHarness const& h, std::vector<double> const& values) {
+    table::GenericPage page;
+    page.revision = numberDescription().revision;
+    page.columns = morph::ui::testing::lastQuery(h).columns.value_or(std::vector<std::string>{});
+    page.total = static_cast<std::int64_t>(values.size());
+    page.totalKind = table::TotalKind::Exact;
+    page.offset = 0;
+    std::int64_t key = 1;
+    for (double const value : values) {
+        page.keys.emplace_back(key);
+        table::GenericRow cells;
+        for (std::string const& column : page.columns) {
+            cells.push_back(column == "id" ? table::Cell{key} : table::Cell{value});
+        }
+        page.rows.push_back(std::move(cells));
+        ++key;
+    }
+    return glz::write_json(page).value_or("");
+}
+
+}  // namespace
+
+// Mutation: a Number column reading only exact decimal text (no `double` fallback), which draws each of these as
+// invalid and empty.
+TEST_CASE("table display: a Number beyond an exact decimal still shows", "[ui][table][display]") {
+    using namespace morph::ui::testing;
+    TableHarness h;
+    auto screen = h.mount(doc(kTable));
+    replyDescribe(h, describeJson(numberDescription()));
+    replyPage(h, numberPage(h, {1e21, 1e-20, 9.3e18}));
+    CHECK(cellText(h, 1, "v") == "1000000000000000000000");
+    CHECK(cellText(h, 2, "v") == "0.00000000000000000001");
+    CHECK(cellText(h, 3, "v") == "9300000000000000000");
+    for (std::int64_t const key : {1, 2, 3}) {
+        CHECK_FALSE(cellAccent(h, key, "v").invalid);
+    }
+}
+
+// Mutation: the decimals of a Number beyond an exact decimal ignored, which shows "0.00000000000000000001".
+TEST_CASE("table display: a Number beyond an exact decimal follows the column's places", "[ui][table][display]") {
+    using namespace morph::ui::testing;
+    TableHarness h;
+    auto screen = h.mount(doc(R"({"kind":"table","id":"t","testId":"t","model":"sample","table":"samples",
+                                  "columns":[{"id":"id"},{"id":"v","decimals":2,"grouping":true}]})"));
+    replyDescribe(h, describeJson(numberDescription()));
+    replyPage(h, numberPage(h, {1e21, 1e-20}));
+    CHECK(cellText(h, 1, "v") == "1,000,000,000,000,000,000,000.00");
+    CHECK(cellText(h, 2, "v") == "0.00");
+}
+
+// Mutation: a rows table's column built without its `unit`, which gives the header none.
+TEST_CASE("table display: a rows table's header shows its column's unit", "[ui][table][display]") {
+    TableHarness h;
+    auto screen = h.mount(R"({"vocab":"ui/1","id":"plain",
+        "state":{"items":{"init":{"lit":[{"id":1,"m":3}]}}},
+        "view":{"kind":"table","id":"t","testId":"t","rows":{"ref":"items"},
+                "columns":[{"id":"id","label":"Id"},{"id":"m","label":"Mass","unit":"kg","decimals":2}]}})");
+    int const table = h.backend.all("Table").front();
+    std::vector<morph::ui::TableColumn> const columns = h.backend.tableColumns(table);
+    REQUIRE(columns.size() == 2);
+    CHECK(columns.at(0).unit.empty());
+    CHECK(columns.at(1).unit == "kg");
+    CHECK(h.backend.prop(table, "columns").contains(";unit=kg"));
+}
+
+// Mutation: the column part's display checks left out of checkColumnPart, which loads each of these.
+TEST_CASE("ui document: a column's display parts are checked when the document loads", "[ui][document]") {
+    auto const column = [](std::string_view part) {
+        return R"({"vocab":"ui/1","id":"plain","state":{"items":{"init":{"lit":[]}}},)"
+               R"("view":{"kind":"table","id":"t","rows":{"ref":"items"},"columns":[{"id":"v",)" +
+               std::string{part} + "}]}}";
+    };
+    REQUIRE(refusalOf(column(R"("decimals":2,"rounding":"halfUp","date":"dd-MMM-yyyy",)"
+                             R"("labels":{"lit":[{"operand":"1","text":"one"}]})"))
+                .empty());
+    CHECK(refusalOf(column(R"("decimals":19)")) == "`decimals` is a literal integer, 0 to 18");
+    CHECK(refusalOf(column(R"("rounding":"up")")) ==
+          "`up` is not one of the values of `rounding`: halfEven or halfUp");
+    CHECK(refusalOf(column(R"("labels":{"lit":[{"operand":1,"text":"one"}]})")) ==
+          R"(`labels` is a literal list of `{"operand": text, "text": text}`)");
+    CHECK_FALSE(refusalOf(column(R"("date":"qq")")).empty());
 }

@@ -8338,9 +8338,18 @@ Node ScreenCore::lowerRows(DocNode const& node, LowerCtx const& ctx, ElementStat
             .align = cellPlaceNamed(part->name("align")).value_or(Align::Start),
             .valign = cellPlaceNamed(part->name("valign")).value_or(tableValign),
             .sortable = part->flag("sortable"),
+            .unit = std::string{part->name("unit")},
             .wrap = part->flag("wrap", true),
             .shrink = shrink && sized.kind == Sizing::Kind::Stretch,
         });
+        // A cell's accent comes from a model's table: a rows table's cells draw no tone or tooltip.
+        for (std::string_view const key : {"tone", "tooltip"}) {
+            if (part->prop(key) != nullptr) {
+                report(pointerAppend(part->path, key),
+                       "`" + std::string{key} + "` is drawn on a model-backed table's cells; a table over `rows` "
+                       "draws none");
+            }
+        }
         cells.push_back(part.get());
         fields.emplace_back(part->id);
         roles.push_back(columnRole);
@@ -8390,7 +8399,14 @@ Node ScreenCore::lowerRows(DocNode const& node, LowerCtx const& ctx, ElementStat
                     if (display) {
                         Value const shown = value == nullptr ? Value{} : *value;
                         table::TableColumn const kind = columnFor(shown, *display);
-                        return formatCell(cellOfRecord(value, kind, nullptr), kind, scope->formatting());
+                        std::string text = formatCell(cellOfRecord(value, kind, nullptr), kind, scope->formatting());
+                        // A quantity keeps its unit after its formatted amount, as its own text writes it.
+                        if (Quantity const* const quantity = shown.asQuantity(); quantity != nullptr && !text.empty()) {
+                            auto const unit = scope->formatting().units.find(quantity->unit);
+                            bool const named = unit != scope->formatting().units.end() && !unit->second.display.empty();
+                            text += " " + (named ? unit->second.display : quantity->unit);
+                        }
+                        return text;
                     }
                     return value == nullptr ? std::string{} : textOf(*value, scope->formatting());
                 }),

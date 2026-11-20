@@ -81,21 +81,6 @@ MorphWidget {
         return root.cellAccents[String(column)] ?? null
     }
     onCellAccentsChanged: root.place()
-    // A tone's fill in the scheme, as the row background draws a toned row.
-    function toneFill(index: int): color {
-        switch (index) {
-        case 1:
-            return root.scheme.infoBg
-        case 2:
-            return root.scheme.successBg
-        case 3:
-            return root.scheme.warnBg
-        case 4:
-            return root.scheme.errorBg
-        default:
-            return Qt.alpha(root.scheme.muted, 0.15)
-        }
-    }
     // Over a source the table holds the focus and names the focused row; otherwise the row holds it.
     readonly property bool current: root.table && root.table.sourceRows
                                     ? root.table.activeFocus && root.viewRow === root.table.focusedRowIndex
@@ -660,7 +645,9 @@ MorphWidget {
         }
     }
 
-    // Each accented cell's slot, under the cells: the tone's tint, the "more here" mark and the tooltip.
+    // Each accented cell's slot: the tone's tint, the "more here" mark and the tooltip. A scrolled cell's slot lies
+    // under the row's background (z -1), so the selection fill, its bar and the focus marks draw over the tint; a
+    // pinned cell's lies over the pinned backdrop, which is opaque, and under the pinned cells.
     Repeater {
         model: root.accentMarks
         delegate: Item {
@@ -670,14 +657,14 @@ MorphWidget {
                                                 && root.table.focusedColumnIndex === modelData.column
             objectName: "cellAccent" + modelData.column
             x: modelData.x
-            z: modelData.pinned ? 0.75 : 0
+            z: modelData.pinned ? 0.75 : -1
             width: modelData.width
             height: root.height
             Rectangle {
                 objectName: "cellTint"
                 anchors.fill: parent
                 visible: accentMark.modelData.tone >= 0
-                color: Qt.alpha(root.toneFill(accentMark.modelData.tone), 0.5)
+                color: Qt.alpha(root.toneBgOf(accentMark.modelData.tone), 0.5)
             }
             Rectangle {
                 objectName: "moreMark"
@@ -694,8 +681,11 @@ MorphWidget {
             ToolTip.visible: accentMark.modelData.tooltip !== "" && (accentHover.hovered || accentMark.focusedCell)
             ToolTip.delay: accentMark.focusedCell ? 0 : Qt.styleHints.mousePressAndHoldInterval
             ToolTip.text: accentMark.modelData.tooltip
-            Accessible.role: Accessible.Cell
+            // The cell names itself; its slot carries only the tooltip, and only when there is one.
+            Accessible.role: Accessible.ToolTip
+            Accessible.name: accentMark.modelData.tooltip
             Accessible.description: accentMark.modelData.tooltip
+            Accessible.ignored: accentMark.modelData.tooltip === ""
         }
     }
 
