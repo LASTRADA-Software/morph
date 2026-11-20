@@ -2299,8 +2299,9 @@ void actionSourceRegistrationRequired() {}
 /// - `morph::table::TableTraits<&M::fn>`, keyed on the member function in both forms, so
 ///   `table::TableOf<&M::fn>`, `table::ChangedRows<&M::fn>`, `effects::updatesTable<&M::fn>` and
 ///   `effects::changesTable<&M::fn>` name the table by its function;
-/// - the actions `"Table." ID` (`table::QueryTable`, a `TableQuery` in, a `GenericPage` out) and
-///   `"Table." ID ".describe"` (`table::DescribeTable`, the `TableDescription`), both `Loggable::No`: they read;
+/// - the actions `"Table." ID` (`table::QueryTable`, a `TableQuery` in, a `GenericPage` out),
+///   `"Table." ID ".describe"` (`table::DescribeTable`, the `TableDescription`) and `"Table." ID ".resolve"`
+///   (`table::ResolveTable`, a `ResolveRequest` in, the `SelectedRows` out), all `Loggable::No`: they read;
 /// - the table's record, `table::TableOf<&M::fn>`, named `<model type id>.` ID and keyed by `key`;
 /// - that `"Table." ID` holds that record opaquely, at no path: a principal who may run it may watch the
 ///   record, and no reader looks for rows in a page.
@@ -2332,6 +2333,9 @@ void actionSourceRegistrationRequired() {}
                                      ::morph::table::GenericPage, "Table." ID, ::morph::model::Loggable::No) \
     BRIDGE_DETAIL_ACTION_TRAITS_BODY(M, ::morph::table::DescribeTable<::morph::table::detail::tableKey(FN)>, \
                                      ::morph::table::TableDescription, "Table." ID ".describe",              \
+                                     ::morph::model::Loggable::No)                                           \
+    BRIDGE_DETAIL_ACTION_TRAITS_BODY(M, ::morph::table::ResolveTable<::morph::table::detail::tableKey(FN)>,  \
+                                     ::morph::table::SelectedRows, "Table." ID ".resolve",                   \
                                      ::morph::model::Loggable::No)                                           \
     MORPH_DETAIL_REGISTER_TABLE_LOCAL(M, ::morph::table::detail::tableKey(FN), ID __VA_OPT__(, ) __VA_ARGS__)
 // clang-format on

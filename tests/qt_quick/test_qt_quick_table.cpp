@@ -2596,3 +2596,70 @@ TEST_CASE("qt_quick table: a right-click opens the cell menu on that cell and se
     CHECK(labels() == expected);
     f.scene.key(Qt::Key_Escape);
 }
+
+// Written by reading: this tree's Qt Quick build was not configured, so these two cases were not compiled or run.
+// Mutation: `setOnSelectAll` ignored, under which Ctrl+A reports the five keys through `onSelectionChange`.
+TEST_CASE("qt_quick table: select-all asks the handler and marks the view", "[qt_quick]") {
+    Scene scene;
+    std::vector<ui::Key> keys;
+    for (std::int64_t id = 1; id <= 5; ++id) {
+        keys.emplace_back(id);
+    }
+    Rows table = makeTable(scene, keys, ui::SelectionMode::Multiple);
+    table.table->setSelectColumn(true);
+    scene.settle();
+    int asked = 0;
+    std::vector<std::pair<std::vector<ui::Key>, ui::SelectionChange>> reported;
+    table.table->setOnSelectAll([&asked] { ++asked; });
+    table.table->setOnSelectionChange([&reported](std::vector<ui::Key> chosen, ui::SelectionChange change) {
+        reported.emplace_back(std::move(chosen), change);
+    });
+    scene.key(Qt::Key_Tab);
+    scene.key(Qt::Key_A, Qt::ControlModifier);
+    CHECK(asked == 1);
+    scene.click(selectAllOf(*table.table));
+    CHECK(asked == 2);
+    CHECK(reported.empty());
+
+    table.table->setSelectionView({ui::Key{std::int64_t{2}}});
+    scene.settle();
+    for (std::size_t at = 0; at < table.rows.size(); ++at) {
+        CHECK(Scene::itemOf(*table.rows.at(at)).property("selected").toBool() == (at != 1));
+    }
+    scene.click(Scene::itemOf(*table.rows.at(0)), Qt::ControlModifier);
+    REQUIRE(reported.size() == 1);
+    CHECK(reported.back().second == ui::SelectionChange::Extend);
+    CHECK(reported.back().first ==
+          std::vector<ui::Key>{ui::Key{std::int64_t{3}}, ui::Key{std::int64_t{4}}, ui::Key{std::int64_t{5}}});
+    table.table->setSelection({});
+    scene.settle();
+    for (auto const& row : table.rows) {
+        CHECK_FALSE(Scene::itemOf(*row).property("selected").toBool());
+    }
+}
+
+// Mutation: the entries drawn as plain text, under which the click reports nothing.
+TEST_CASE("qt_quick table: a status entry reports its id", "[qt_quick]") {
+    Scene scene;
+    Rows table = makeTable(scene, {ui::Key{std::int64_t{1}}}, ui::SelectionMode::Multiple);
+    std::vector<std::string> chosen;
+    table.table->setOnStatusEntry([&chosen](std::string id) { chosen.push_back(std::move(id)); });
+    table.table->setStatus(ui::TableStatus{.message = "m",
+                                           .entries = {{.id = "run", .label = "Run on these"}},
+                                           .standing = "1 row could not be saved",
+                                           .standingEntries = {{.id = "select", .label = "Select them"},
+                                                               {.id = "clear", .label = "Clear marks"}},
+                                           .shown = true});
+    scene.settle();
+    QQuickItem const& item = Scene::itemOf(*table.table);
+    for (auto const& [id, label] : std::vector<std::pair<QString, QString>>{
+             {QStringLiteral("run"), QStringLiteral("Run on these")},
+             {QStringLiteral("select"), QStringLiteral("Select them")},
+             {QStringLiteral("clear"), QStringLiteral("Clear marks")}}) {
+        auto const* const button = item.findChild<QQuickItem*>(QStringLiteral("statusEntry_") + id);
+        REQUIRE(button != nullptr);
+        CHECK(button->property("text").toString() == label);
+    }
+    scene.click(*item.findChild<QQuickItem*>(QStringLiteral("statusEntry_clear")));
+    CHECK(chosen == std::vector<std::string>{"clear"});
+}

@@ -30,6 +30,7 @@
 #include <limits>
 #include <map>
 #include <memory>
+#include <morph/core/payload_schema.hpp>
 #include <morph/detail/reflected_member.hpp>
 #include <morph/table/data_source.hpp>
 #include <morph/table/engine.hpp>
@@ -228,6 +229,9 @@ struct Page {
     std::vector<std::int64_t> indices;
     /// @brief A distinct-values reply only: the values; the page then has no rows.
     std::optional<DistinctValues> distinct;
+    /// @brief The view's membership (`MembershipDigest::text`): two pages with the same one are of views of the same
+    ///        rows, whatever their sort. Empty on a distinct-values reply, and then left out of the JSON.
+    std::string viewRevision;
 
     /// @brief The members that open a query cache entry holding the page: while either is set, a row the page
     ///        does not hold may come to belong to it, so every change of its record marks the entry. A member the
@@ -273,6 +277,60 @@ struct QueryLimits {
     std::size_t maxQuerySetValues = 20'000;
     /// @brief Bytes of the members of every `oneOf` entry of one query together.
     std::size_t maxQuerySetBytes = std::size_t{1} << 20U;
+    /// @brief Rows of a view a selection of the view may resolve to; a larger view is `LimitExceeded`.
+    std::int64_t maxSelectedRows = 1'000'000;
+};
+
+/// @brief A digest of a set of row keys: what names a view's membership.
+///
+/// It does not depend on the order the keys are added in, so a view's revision is the same under every sort, and
+/// a retained row merged into a reply is one more `add`. Each key is hashed (FNV-1a over `"i:"` and the decimal
+/// of an integer key, `"s:"` and the text of a text key) and mixed (splitmix64); the digest keeps the count, the
+/// sum of the hashes and the sum of the mixes, each modulo 2^64. A caller adds each key once.
+class MembershipDigest {
+public:
+    /// @brief Adds one key to the set.
+    /// @param key The key; added once.
+    void add(RowId const& key) noexcept {
+        std::uint64_t hash = 0;
+        if (auto const* const number = std::get_if<std::int64_t>(&key)) {
+            std::array<char, 24> text{'i', ':'};
+            auto const end = std::to_chars(text.data() + 2, text.data() + text.size(), *number).ptr;
+            hash = model::detail::fnv1a64(std::string_view{text.data(), static_cast<std::size_t>(end - text.data())});
+        } else {
+            constexpr std::uint64_t kOffsetBasis = 14695981039346656037ULL;
+            constexpr std::uint64_t kPrime = 1099511628211ULL;
+            // FNV-1a over "s:" and the text, without building the joined string.
+            hash = kOffsetBasis;
+            auto const step = [&hash](char byte) {
+                hash ^= static_cast<std::uint64_t>(static_cast<unsigned char>(byte));
+                hash *= kPrime;
+            };
+            step('s');
+            step(':');
+            for (char const byte : std::get<std::string>(key)) {
+                step(byte);
+            }
+        }
+        std::uint64_t mixed = hash + 0x9E3779B97F4A7C15ULL;
+        mixed = (mixed ^ (mixed >> 30U)) * 0xBF58476D1CE4E5B9ULL;
+        mixed = (mixed ^ (mixed >> 27U)) * 0x94D049BB133111EBULL;
+        mixed ^= mixed >> 31U;
+        ++_count;
+        _sum += hash;
+        _mix += mixed;
+    }
+
+    /// @brief The digest as text.
+    /// @return The count, the sum and the mix, each as 16 lowercase hex digits: 48 digits.
+    [[nodiscard]] std::string text() const {
+        return model::detail::hex64(_count) + model::detail::hex64(_sum) + model::detail::hex64(_mix);
+    }
+
+private:
+    std::uint64_t _count = 0;
+    std::uint64_t _sum = 0;
+    std::uint64_t _mix = 0;
 };
 
 namespace detail {
@@ -748,6 +806,8 @@ struct PageRows {
     std::vector<std::int64_t> indices;
     /// @brief A distinct-values query only: the values; `rows` is then empty.
     std::optional<DistinctValues> distinct;
+    /// @brief The view's membership (`MembershipDigest::text`); empty on a distinct-values reply.
+    std::string viewRevision;
 };
 
 namespace detail {
@@ -758,6 +818,8 @@ struct ComputedView {
     std::vector<std::uint32_t> rows;
     /// @brief The rows the filter could neither admit nor reject, source rows ascending. They are in no view.
     std::vector<std::uint32_t> undecided;
+    /// @brief The keys of `rows`, as a set: the view's membership.
+    MembershipDigest digest;
 };
 
 /// @brief Computes the view of a validated query over @p source in the calling thread.
@@ -805,13 +867,18 @@ struct ComputedView {
     input.sort = validated.sort;
     input.filter = std::make_shared<CompiledFilter const>(std::move(*filter));
     input.previousSnapshot = input.snapshot;
+    auto const snapshot = input.snapshot;
     ViewJob job{std::move(input)};
     static_cast<void>(job.step(kNoDeadline, ::core::async::StopToken{}));
     if (job.failure()) {
         return std::unexpected(*job.failure());
     }
     auto result = job.takeResult();
-    return ComputedView{.rows = std::move(result.view), .undecided = std::move(result.undecided)};
+    ComputedView out{.rows = std::move(result.view), .undecided = std::move(result.undecided), .digest = {}};
+    for (auto const row : out.rows) {
+        out.digest.add(snapshot->rowId(row));
+    }
+    return out;
 }
 
 /// @brief The source row of a key, or nothing when the snapshot has no row with that key.
@@ -896,6 +963,7 @@ inline void keyedRows(ComputedView const& view, RowSnapshot const& snapshot, std
                                        std::span<std::uint32_t const> viewRowOf = {},
                                        SourceRowOf const& sourceRowOf = {}) {
     PageRows out;
+    out.viewRevision = view.digest.text();
     out.undecided = static_cast<std::int64_t>(view.undecided.size());
     out.totalKind = out.undecided > 0 ? TotalKind::AtLeast : TotalKind::Exact;
     auto const count = static_cast<std::int64_t>(view.rows.size());
@@ -2088,6 +2156,7 @@ template <typename Row>
     out.awaiting = std::move(page.awaiting);
     out.failed = std::move(page.failed);
     out.indices = std::move(page.indices);
+    out.viewRevision = std::move(page.viewRevision);
     out.rows.reserve(page.rows.size());
     for (auto const row : page.rows) {
         out.rows.push_back(rows[row]);
@@ -3039,7 +3108,7 @@ private:
 
 namespace morph::table::detail {
 
-/// @brief Whether a page member is left out of its JSON: `failed` and `indices` when empty.
+/// @brief Whether a page member is left out of its JSON: `failed`, `indices` and `viewRevision` when empty.
 ///
 /// The typed page, the generic page and `UnloadedRow` share this rule. An optional member that is unset is left
 /// out by glaze's own rule for null members. A reader takes every member as present or absent.
@@ -3050,7 +3119,7 @@ namespace morph::table::detail {
 template <typename T>
 [[nodiscard]] constexpr bool omittedPageMember(T const& value, std::string_view key) {
     if constexpr (requires { value.empty(); }) {
-        return (key == "failed" || key == "indices") && value.empty();
+        return (key == "failed" || key == "indices" || key == "viewRevision") && value.empty();
     } else {
         return false;
     }

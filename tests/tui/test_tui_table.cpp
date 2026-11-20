@@ -1680,3 +1680,31 @@ TEST_CASE("tui table: a right click on another header while a menu is open close
     clickFirstEntry(harness, *configured.table);
     CHECK(configured.reported == std::vector<std::string>{"menu 1/0"});
 }
+
+// Mutation: `setOnStatusEntry` ignored, under which Alt+1 reports nothing.
+TEST_CASE("tui table: select-all asks the handler; a status entry reports its id", "[tui]") {
+    TuiWindowFixture f{100, 30, {.pinned = 0, .selection = ui::SelectionMode::Multiple}};
+    int asked = 0;
+    std::vector<std::string> chosen;
+    f.table->setOnSelectAll([&asked] { ++asked; });
+    f.table->setOnStatusEntry([&chosen](std::string id) { chosen.push_back(std::move(id)); });
+    f.screen.setFocus(&WidgetBase::of(*f.table).view());
+    static_cast<void>(f.screen.dispatchEvent(core::tui::test::charKey('a', core::tui::Modifier::Ctrl)));
+    f.settle();
+    CHECK(asked == 1);
+    f.table->setStatus(ui::TableStatus{.counts = "100 rows",
+                                       .message = "m",
+                                       .entries = {{.id = "run", .label = "Run on these"}},
+                                       .standing = "1 row could not be saved",
+                                       .standingEntries = {{.id = "select", .label = "Select them"},
+                                                           {.id = "clear", .label = "Clear marks"}},
+                                       .shown = true});
+    f.settle();
+    std::string const line = f.screenLine(31);
+    CHECK(line.find("[Alt+1 Select them]") != std::string::npos);
+    CHECK(line.find("[Alt+2 Clear marks]") != std::string::npos);
+    CHECK(line.find("[Alt+3 Run on these]") != std::string::npos);
+    static_cast<void>(f.screen.dispatchEvent(core::tui::test::charKey('2', core::tui::Modifier::Alt)));
+    f.settle();
+    CHECK(chosen == std::vector<std::string>{"clear"});
+}

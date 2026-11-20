@@ -1,0 +1,587 @@
+// SPDX-License-Identifier: Apache-2.0
+
+#pragma once
+
+/// @file table/row_selection.hpp
+/// @brief What a user selected in a model's table, as an action receives it, and how the server turns it into
+///        keys.
+///
+/// On a model-backed table the client holds a window, not the view, so "every row I see" is a description of the
+/// view: its filter, its retained rows and its revision, less the keys the user took out. `resolve` turns it into
+/// keys on the server, in the table's source order, for the caller: the table's function is called for the caller,
+/// so its row scope and `mayRead` apply.
+///
+/// See `docs/spec/table/table.md`, "A selection of the view".
+
+#include <algorithm>
+#include <cstddef>
+#include <cstdint>
+#include <exception>
+#include <expected>
+#include <functional>
+#include <core/async/ExecutorContext.hpp>
+#include <core/async/Task.hpp>
+#include <glaze/glaze.hpp>
+#include <memory>
+#include <morph/core/action_refusal.hpp>
+#include <morph/core/completion.hpp>
+#include <morph/core/executor.hpp>
+#include <morph/core/records.hpp>
+#include <morph/table/description.hpp>
+#include <morph/table/query.hpp>
+#include <morph/table/runtime.hpp>
+#include <morph/table/view_cache.hpp>
+#include <optional>
+#include <span>
+#include <string>
+#include <string_view>
+#include <typeindex>
+#include <unordered_map>
+#include <unordered_set>
+#include <utility>
+#include <vector>
+
+namespace morph::table {
+
+namespace detail {
+
+/// @brief A record's registered name, by the record's type.
+/// @param type The record type.
+/// @return Its name in `record::detail::recordRegistry()`, or empty when none is registered.
+[[nodiscard]] inline std::string recordNameOf(std::type_index type) {
+    auto const& records = record::detail::recordRegistry();
+    auto const found = std::ranges::find(records, type, &record::RecordInfo::type);
+    return found != records.end() ? found->name : std::string{};
+}
+
+/// @brief A filter's JSON with every member at its default left out: a `combine` of `any`, and empty lists, texts
+///        and nulls. It reads back as the same filter, and is the shape a client writes.
+/// @param filters The filter.
+/// @return The JSON text.
+[[nodiscard]] inline std::string compactFilterJson(FilterSpec const& filters) {
+    glz::generic_u64 json;
+    if (glz::read_json(json, glz::write_json(filters).value_or("{}"))) {
+        return "{}";
+    }
+    std::function<void(glz::generic_u64&)> prune = [&prune](glz::generic_u64& node) {
+        if (node.is_array()) {
+            for (auto& item : node.get_array()) {
+                prune(item);
+            }
+            return;
+        }
+        if (!node.is_object()) {
+            return;
+        }
+        auto& members = node.get_object();
+        for (auto at = members.begin(); at != members.end();) {
+            auto& value = at->second;
+            prune(value);
+            bool const empty = value.is_null() || (value.is_array() && value.get_array().empty()) ||
+                               (value.is_string() && value.get_string().empty()) ||
+                               (at->first == "combine" && value.is_string() && value.get_string() == "any");
+            at = empty && at->first != "columns" ? members.erase(at) : std::next(at);
+        }
+    };
+    prune(json);
+    return glz::write_json(json).value_or("{}");
+}
+
+/// @brief The JSON of a selection: `{"keys": […]}` without a view, `{"view": {…}, "except": […]}` with one.
+/// @param keys     The keys of a key selection.
+/// @param filters  The view's filter; null for a key selection.
+/// @param retained The view's retained rows.
+/// @param revision The view's revision.
+/// @param except   The keys the view selection leaves out.
+/// @return The JSON text.
+[[nodiscard]] inline std::string selectionJson(std::span<RowId const> keys, FilterSpec const* filters,
+                                               std::span<RowId const> retained, std::string_view revision,
+                                               std::span<RowId const> except) {
+    auto const list = [](std::span<RowId const> items) {
+        return glz::write_json(std::vector<RowId>(items.begin(), items.end())).value_or("[]");
+    };
+    if (filters == nullptr) {
+        return R"({"keys":)" + list(keys) + "}";
+    }
+    return R"({"view":{"filters":)" + compactFilterJson(*filters) + R"(,"retained":)" + list(retained) +
+           R"(,"revision":)" + glz::write_json(revision).value_or(R"("")") + R"(},"except":)" + list(except) + "}";
+}
+
+}  // namespace detail
+
+/// @brief What a user selected in one table: exactly some keys, or every row of a view less some keys.
+///
+/// Its JSON is `{"keys": […]}`, or `{"view": {"filters", "retained", "revision"}, "except": […]}`; a filter is
+/// written with its default members left out. Its schema property carries `x-selectionOf` with the table's record,
+/// so a client knows which table an action works on.
+/// @tparam Function The table's function, as `BRIDGE_REGISTER_TABLE` names it.
+template <auto Function>
+struct RowSelection {
+    /// @brief The view a selection of the view is of.
+    struct View {
+        /// @brief The view's filter, as the table queried it.
+        FilterSpec filters;
+        /// @brief The rows the view kept although they no longer match.
+        std::vector<RowId> retained;
+        /// @brief The view's `viewRevision` when the user selected it.
+        std::string revision;
+    };
+
+    /// @brief Without `view`: exactly these rows.
+    std::vector<RowId> keys;
+    /// @brief With it: every row of that view, less `except`.
+    std::optional<View> view;
+    /// @brief The keys a selection of the view leaves out.
+    std::vector<RowId> except;
+
+    /// @brief The schema keyword and its value that name the selection's table.
+    /// @return `{"x-selectionOf", "<Model>.<id>"}`, the record's registered name; the name is empty when no such
+    ///         record is registered.
+    [[nodiscard]] static std::pair<std::string_view, std::string> schemaValue() {
+        return {"x-selectionOf", detail::recordNameOf(std::type_index{typeid(TableOf<Function>)})};
+    }
+};
+
+/// @brief How `resolve` treats a view whose rows changed since the user selected it.
+enum class SelectionPolicy : std::uint8_t {
+    Exact,    ///< Refuse with `ViewChanged` when the view's membership differs from the selection's revision.
+    Current,  ///< Act on the view as it is when the action runs.
+};
+
+/// @brief What `resolve` returns.
+struct SelectedRows {
+    /// @brief The keys, in the table's source order.
+    std::vector<RowId> keys;
+    /// @brief Keys of a key selection the caller may no longer see, left out.
+    std::int64_t dropped = 0;
+};
+
+/// @brief The body of `Table.<id>.resolve`, for an action of another model or a task off the model's strand.
+/// @tparam Function The table's function.
+template <auto Function>
+struct ResolveRequest {
+    /// @brief The selection.
+    RowSelection<Function> selection;
+    /// @brief How a changed view is treated.
+    SelectionPolicy policy = SelectionPolicy::Exact;
+};
+
+/// @brief One row of a table, as an action's input names it. Its JSON is the key itself; its schema property
+///        carries `x-rowOf` with the table's record.
+/// @tparam Function The table's function.
+template <auto Function>
+struct RowRef {
+    /// @brief The row's key.
+    RowId key;
+
+    /// @brief The schema keyword and its value that name the row's table.
+    /// @return `{"x-rowOf", "<Model>.<id>"}`; the name is empty when no such record is registered.
+    [[nodiscard]] static std::pair<std::string_view, std::string> schemaValue() {
+        return {"x-rowOf", detail::recordNameOf(std::type_index{typeid(TableOf<Function>)})};
+    }
+};
+
+namespace detail {
+
+/// @brief A selection of any table: what the work off the strand reads.
+struct PlainSelection {
+    /// @brief `RowSelection::keys`.
+    std::vector<RowId> keys;
+    /// @brief Whether the selection is of a view.
+    bool isView = false;
+    /// @brief `RowSelection::View::filters`.
+    FilterSpec filters;
+    /// @brief `RowSelection::View::retained`.
+    std::vector<RowId> retained;
+    /// @brief `RowSelection::View::revision`.
+    std::string revision;
+    /// @brief `RowSelection::except`.
+    std::vector<RowId> except;
+};
+
+/// @brief A view's membership: its rows and the digest of their keys.
+struct Membership {
+    /// @brief The view's source rows, in source order.
+    std::vector<std::uint32_t> rows;
+    /// @brief The keys of `rows`, as a set.
+    MembershipDigest digest;
+};
+
+/// @brief The membership of the view of @p filters over @p served, with the retained rows merged in.
+///
+/// The view is the filter's rows under an empty sort, whose order is the source's. It is taken from @p views when
+/// one is given and @p record is not empty, under the key a page query of the same filter and no sort uses, unless
+/// the filter reads a level; otherwise it is computed for the call. Each key of @p retained that the source has
+/// and the view lacks is merged in at its source row and added to the digest.
+/// @param served   The table, its source pinned.
+/// @param filters  The view's filter.
+/// @param retained The rows the view kept although they no longer match.
+/// @param views    The server's view cache; null computes the view.
+/// @param record   The table's record name, the first member of a view's key; empty caches nothing.
+/// @return The membership, or the error the filter or the bound gives: `LimitExceeded` for a view of more than
+///         `served.limits.maxSelectedRows` rows.
+[[nodiscard]] inline std::expected<Membership, TableError> membership(ServedTable const& served,
+                                                                      FilterSpec const& filters,
+                                                                      std::span<RowId const> retained,
+                                                                      ViewCache* views, std::string_view record = {}) {
+    if (served.source == nullptr) {
+        return std::unexpected(
+            TableError{.code = TableErrorCode::Unavailable, .column = {}, .message = "the table serves no source"});
+    }
+    // A table built by hand may describe no columns: its source's are then the table's.
+    auto infos = columnInfos(served.description);
+    if (infos.empty()) {
+        auto const own = served.source->columns();
+        infos.assign(own.begin(), own.end());
+    }
+    auto const groups = served.source->groups();
+    if (auto error = checkGroups(served.source->columns(), groups)) {
+        return std::unexpected(std::move(*error));
+    }
+    TableQuery query;
+    query.filters = filters;
+    auto checked = validate(std::move(query), infos, served.limits, served.mayRead, groups);
+    if (!checked) {
+        return std::unexpected(std::move(checked.error()));
+    }
+    auto const needed = levelsNeeded(*checked, infos, served.mayRead, served.services.forTask(), groups);
+    std::vector<LevelInput> inputs;
+    for (auto const& level : needed.order) {
+        for (auto const& source : served.levels) {
+            if (source != nullptr && source->level() == level) {
+                auto levelSnapshot = source->snapshot();
+                inputs.push_back(LevelInput{.source = source, .snapshot = std::move(levelSnapshot)});
+            }
+        }
+    }
+    LeveledSource const leveled{served.source, infos, inputs};
+    ApplyOptions const options{.limits = served.limits, .services = served.services, .mayRead = served.mayRead};
+    auto const compute = [&]() -> std::expected<ViewComputation, TableError> {
+        auto view = computeView(leveled, *checked, options);
+        if (!view) {
+            return std::unexpected(std::move(view.error()));
+        }
+        return ViewComputation{.view = std::move(*view), .awaiting = {}, .failed = {}, .orderKeys = {}};
+    };
+    std::shared_ptr<ViewEntry const> entry;
+    // A filter that reads a level is computed here: a cached entry of it also holds what its levels want, which
+    // only a page query computes.
+    auto const viewQuery = views != nullptr && !record.empty() && needed.order.empty() ? viewQueryOf(*checked)
+                                                                                         : std::nullopt;
+    if (viewQuery) {
+        auto const* const pinnedSource = dynamic_cast<PinnedSource const*>(served.source.get());
+        auto found = views->find(ViewKey{.record = std::string{record}, .scope = served.scope, .query = *viewQuery},
+                                 served.source->snapshot(), {}, compute,
+                                 pinnedSource != nullptr ? pinnedSource->pinnedAt() : 0);
+        if (!found) {
+            return std::unexpected(std::move(found.error()));
+        }
+        entry = std::move(*found);
+    } else {
+        auto computed = compute();
+        if (!computed) {
+            return std::unexpected(std::move(computed.error()));
+        }
+        entry = std::make_shared<ViewEntry const>(
+            served.source->snapshot(), std::vector<std::pair<std::string, std::uint64_t>>{}, std::move(*computed));
+    }
+    Membership out{.rows = entry->view.rows, .digest = entry->view.digest};
+    if (!retained.empty()) {
+        auto const snapshot = leveled.snapshot();
+        std::unordered_set<RowId> const wanted(retained.begin(), retained.end());
+        std::unordered_set<std::uint32_t> const inView(out.rows.begin(), out.rows.end());
+        std::vector<std::uint32_t> merged;
+        for (std::size_t row = 0; row < snapshot->rowCount() && merged.size() < wanted.size(); ++row) {
+            auto const at = static_cast<std::uint32_t>(row);
+            if (wanted.contains(snapshot->rowId(row)) && !inView.contains(at)) {
+                merged.push_back(at);
+                out.digest.add(snapshot->rowId(row));
+            }
+        }
+        auto const middle = static_cast<std::ptrdiff_t>(out.rows.size());
+        out.rows.insert(out.rows.end(), merged.begin(), merged.end());
+        std::inplace_merge(out.rows.begin(), out.rows.begin() + middle, out.rows.end());
+    }
+    if (static_cast<std::int64_t>(out.rows.size()) > served.limits.maxSelectedRows) {
+        return std::unexpected(TableError{
+            .code = TableErrorCode::LimitExceeded,
+            .column = {},
+            .message = "a selection of the view holds at most " + std::to_string(served.limits.maxSelectedRows) +
+                       " rows"});
+    }
+    return out;
+}
+
+/// @brief Resolves @p selection over @p served in the calling thread: `resolve`'s work.
+/// @param served    The table, its source pinned.
+/// @param selection The selection.
+/// @param policy    How a changed view is treated.
+/// @param views     The server's view cache; null computes the view.
+/// @param record    The table's record name; empty caches nothing.
+/// @return The keys in source order, or the error.
+[[nodiscard]] inline std::expected<SelectedRows, TableError> resolveSelection(ServedTable const& served,
+                                                                              PlainSelection const& selection,
+                                                                              SelectionPolicy policy,
+                                                                              ViewCache* views,
+                                                                              std::string_view record) {
+    if (served.source == nullptr) {
+        return std::unexpected(
+            TableError{.code = TableErrorCode::Unavailable, .column = {}, .message = "the table serves no source"});
+    }
+    SelectedRows out;
+    if (!selection.isView) {
+        std::unordered_set<RowId> const wanted(selection.keys.begin(), selection.keys.end());
+        if (static_cast<std::int64_t>(wanted.size()) > served.limits.maxSelectedRows) {
+            return std::unexpected(TableError{.code = TableErrorCode::LimitExceeded,
+                                              .column = {},
+                                              .message = "a selection holds at most " +
+                                                         std::to_string(served.limits.maxSelectedRows) + " rows"});
+        }
+        auto const snapshot = served.source->snapshot();
+        for (std::size_t row = 0; row < snapshot->rowCount() && out.keys.size() < wanted.size(); ++row) {
+            if (auto key = snapshot->rowId(row); wanted.contains(key)) {
+                out.keys.push_back(std::move(key));
+            }
+        }
+        out.dropped = static_cast<std::int64_t>(wanted.size() - out.keys.size());
+        return out;
+    }
+    auto members = membership(served, selection.filters, selection.retained, views, record);
+    if (!members) {
+        return std::unexpected(std::move(members.error()));
+    }
+    if (policy == SelectionPolicy::Exact && members->digest.text() != selection.revision) {
+        return std::unexpected(TableError{.code = TableErrorCode::ViewChanged,
+                                          .column = {},
+                                          .message = "the rows changed since they were selected"});
+    }
+    std::unordered_set<RowId> const except(selection.except.begin(), selection.except.end());
+    auto const snapshot = served.source->snapshot();
+    out.keys.reserve(members->rows.size());
+    for (auto const row : members->rows) {
+        if (auto key = snapshot->rowId(row); !except.contains(key)) {
+            out.keys.push_back(std::move(key));
+        }
+    }
+    return out;
+}
+
+/// @brief The owner of a `resolve` that runs where it is called: runs each task at once, inside a scope that names
+///        it, so the completion's checks find the task on its owner. `resolve` posts to it only from the thread
+///        that called it, so its tasks never overlap, which is what an owner must guarantee.
+class ResolveInline final : public exec::IExecutor {
+public:
+    /// @brief Runs @p task now, on the calling thread.
+    /// @param task The task.
+    void post(std::function<void()> task) override {
+        if (task) {
+            ::core::async::ExecutorScope const scope{coreExecutor()};
+            task();
+        }
+    }
+};
+
+/// @brief The selection as the work off the strand reads it.
+/// @tparam Function The table's function.
+/// @param selection The selection.
+/// @return Its plain copy.
+template <auto Function>
+[[nodiscard]] PlainSelection plainOf(RowSelection<Function> const& selection) {
+    PlainSelection out;
+    out.keys = selection.keys;
+    out.except = selection.except;
+    if (selection.view) {
+        out.isView = true;
+        out.filters = selection.view->filters;
+        out.retained = selection.view->retained;
+        out.revision = selection.view->revision;
+    }
+    return out;
+}
+
+}  // namespace detail
+
+/// @brief Turns a selection into keys, for the caller.
+///
+/// Calls the table's function on @p model on the calling thread, the model's strand, for @p context, so the
+/// caller's row scope and `mayRead` apply and a `typed<Row>` table works as a plain one. A key selection resolves
+/// to the keys the caller can still see, in source order, counting the others in `dropped`. A selection of the view
+/// resolves to the view's membership (the filter's rows under an empty sort, the retained rows merged in) less
+/// `except`, in source order; under `Exact` a membership whose digest differs from the selection's revision is
+/// `ViewChanged`. A view of more than `QueryLimits::maxSelectedRows` rows is `LimitExceeded`.
+///
+/// Inside a server's dispatch the work runs on the runtime's `work` with its view cache, and the completion
+/// belongs to the runtime's `settle`; with no runtime, or one missing either, it runs here with no cache, and the
+/// completion is settled, and a `then` attached afterwards runs, before this returns.
+/// @tparam Function The table's function.
+/// @tparam Model    The model type.
+/// @param model     The model instance; not const, as a table function is not.
+/// @param selection The selection.
+/// @param context   Who asks.
+/// @param policy    How a changed view is treated.
+/// @return The keys, or the error.
+template <auto Function, typename Model>
+[[nodiscard]] async::Completion<std::expected<SelectedRows, TableError>> resolve(
+    Model& model, RowSelection<Function> const& selection, TableContext const& context, SelectionPolicy policy) {
+    using Result = std::expected<SelectedRows, TableError>;
+    auto served = detail::pinned(detail::serve<Function>(model, context));
+    auto plain = detail::plainOf(selection);
+    auto record = detail::recordNameOf(std::type_index{typeid(TableOf<Function>)});
+    auto const* const runtime = currentTableRuntime();
+    if (runtime == nullptr || runtime->work == nullptr || runtime->settle == nullptr) {
+        static detail::ResolveInline owner;
+        auto [completion, promise] = async::Completion<Result>::makeSettleable(&owner);
+        try {
+            promise.resolve(detail::resolveSelection(served, plain, policy, nullptr, record));
+        } catch (...) {
+            promise.reject(std::current_exception());
+        }
+        return std::move(completion);
+    }
+    auto [completion, promise] = async::Completion<Result>::makeSettleable(runtime->settle);
+    // A posted task is a `std::function`, which copies: the promise is shared.
+    auto shared = std::make_shared<typename async::Completion<Result>::Promise>(std::move(promise));
+    runtime->work->post([shared, served = std::move(served), plain = std::move(plain), policy,
+                         views = runtime->views, record = std::move(record)] {
+        try {
+            shared->resolve(detail::resolveSelection(served, plain, policy, views, record));
+        } catch (...) {
+            shared->reject(std::current_exception());
+        }
+    });
+    return std::move(completion);
+}
+
+/// @brief Throws the refusal a Task handler gives for a table's error.
+/// @param error The error `resolve` returned.
+/// @throws model::ActionRefusal `"morph.table.viewChanged"` for `ViewChanged`, `"morph.table." + <the code's wire
+///         name>` for every other code, with the error's message.
+[[noreturn]] inline void refuse(TableError const& error) {
+    throw model::ActionRefusal{"morph.table." + detail::errorCodeName(error.code), {}, error.message};
+}
+
+/// @brief The action `Table.<id>.resolve`: a selection resolved for the caller, as `resolve` does on the model.
+///
+/// Its JSON is the `ResolveRequest`'s. It runs as `Table.<id>` does: the table's function for the caller's session
+/// on the model's strand, then the work on the server's table executor.
+/// @tparam Function The table's function, as `BRIDGE_REGISTER_TABLE` keys it.
+template <auto Function>
+struct ResolveTable {
+    /// @brief The selection and the policy.
+    ResolveRequest<Function> request;
+
+    /// @brief Resolves the selection.
+    /// @tparam Model The model type.
+    /// @param model  The model instance.
+    /// @param action The action.
+    /// @return The keys.
+    /// @throws morph::model::ActionRefusal `table.<code>` with the argument `column`, as `Table.<id>` refuses.
+    template <typename Model>
+    static ::core::async::Task<SelectedRows> invoke(Model& model, ResolveTable& action) {
+        auto const context = detail::callerContext();
+        // Its own statement: MSVC cannot tail-call a call that shares a full-expression with a `co_await`.
+        auto completion = resolve<Function>(model, action.request.selection, context, action.request.policy);
+        auto resolved = co_await std::move(completion);
+        if (!resolved) {
+            throw detail::refusalOf(resolved.error());
+        }
+        co_return std::move(*resolved);
+    }
+};
+
+}  // namespace morph::table
+
+/// @brief JSON names of `morph::table::SelectionPolicy`: `exact` and `current`.
+template <>
+struct glz::meta<morph::table::SelectionPolicy> {
+    using enum morph::table::SelectionPolicy;
+    /// @brief Each enumerator after its JSON name.
+    static constexpr auto value = glz::enumerate("exact", Exact, "current", Current);
+};
+
+namespace morph::table::detail {
+
+/// @brief What a `RowSelection` is read from: every member optional.
+struct SelectionWire {
+    /// @brief The view, when the selection is of one.
+    struct View {
+        /// @brief Its filter.
+        FilterSpec filters;
+        /// @brief Its retained rows.
+        std::vector<RowId> retained;
+        /// @brief Its revision.
+        std::string revision;
+    };
+    /// @brief The keys of a key selection.
+    std::vector<RowId> keys;
+    /// @brief The view.
+    std::optional<View> view;
+    /// @brief The keys a selection of the view leaves out.
+    std::vector<RowId> except;
+};
+
+}  // namespace morph::table::detail
+
+/// @brief The JSON of `morph::table::RowSelection`: `{"keys"}` or `{"view", "except"}`.
+/// @tparam Function The table's function.
+template <auto Function>
+struct glz::meta<morph::table::RowSelection<Function>> {
+    /// @brief The selection type.
+    using T = morph::table::RowSelection<Function>;
+    /// @brief Read from the wire shape, written by `detail::selectionJson`.
+    static constexpr auto value = glz::custom<
+        [](T& selection, morph::table::detail::SelectionWire const& wire) {
+            selection.keys = wire.keys;
+            selection.except = wire.except;
+            selection.view.reset();
+            if (wire.view) {
+                selection.view = typename T::View{
+                    .filters = wire.view->filters, .retained = wire.view->retained, .revision = wire.view->revision};
+            }
+        },
+        [](T const& selection) {
+            return glz::raw_json{morph::table::detail::selectionJson(
+                selection.keys, selection.view ? &selection.view->filters : nullptr,
+                selection.view ? std::span<morph::table::RowId const>{selection.view->retained}
+                               : std::span<morph::table::RowId const>{},
+                selection.view ? std::string_view{selection.view->revision} : std::string_view{}, selection.except)};
+        }>;
+};
+
+/// @brief The JSON of `morph::table::RowRef`: its key.
+/// @tparam Function The table's function.
+template <auto Function>
+struct glz::meta<morph::table::RowRef<Function>> {
+    /// @brief The reference type.
+    using T = morph::table::RowRef<Function>;
+    /// @brief Written as its key.
+    static constexpr auto value = &T::key;
+};
+
+/// @brief The JSON of `morph::table::ResolveTable`: its `ResolveRequest`'s.
+/// @tparam Function The table's function.
+template <auto Function>
+struct glz::meta<morph::table::ResolveTable<Function>> {
+    /// @brief The action type.
+    using T = morph::table::ResolveTable<Function>;
+    /// @brief The action is written as its request.
+    static constexpr auto value = &T::request;
+};
+
+namespace glz::detail {
+
+/// @brief The schema of a `RowSelection`: its wire object.
+/// @tparam Function The table's function.
+template <auto Function>
+struct to_json_schema<morph::table::RowSelection<Function>> {
+    /// @brief Writes the wire shape's schema.
+    /// @tparam Opts The write options.
+    /// @param outSchema The schema written.
+    /// @param defs      The definitions.
+    template <auto Opts>
+    static void op(auto& outSchema, auto& defs) {
+        to_json_schema<morph::table::detail::SelectionWire>::template op<Opts>(outSchema, defs);
+    }
+};
+
+}  // namespace glz::detail

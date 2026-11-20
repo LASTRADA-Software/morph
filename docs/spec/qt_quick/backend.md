@@ -372,7 +372,9 @@ writes `focusedRowIndex` and `focusedColumnIndex`, brings them into view (`showF
 or Down moves the focus and fires `selectRange` from the anchor (`anchorRowIndex`: the row last tapped or toggled, or
 the one the focus left) to the focused row; a Shift-tap fires it to the tapped row; Ctrl+A and the select-all box
 fire it over every row of the view, as `Extend`, unless the table has a `setOnSelectAll` handler
-(`selectAllHandled`), when they fire `selectAll` instead. `TableImpl` passes them to `setOnSelectRange`, which resolves them over rows not realized and
+(`selectAllHandled`), when they fire `selectAll` instead, which `TableImpl` passes to the handler.
+`setSelectionView(except)` marks every row but those keys until the next `setSelection`; in that state a Ctrl-tap
+reports `Extend` with the keys now marked among the rows the table holds, the tapped one toggled. `TableImpl` passes them to `setOnSelectRange`, which resolves them over rows not realized and
 refuses one past `maxRangeRows`; each is `multiple` only. `setCounts` writes
 `accessibleRowCount` (-1 for a lower bound) and `accessibleColumnCount`; `Accessible` has no row or column count to
 put them in, so they are properties only. **Load states.** `setCellLoad` writes the row's `cellLoads`; a cell not
@@ -389,8 +391,10 @@ accessible `ToolTip` named by the text, ignored while there is none. An `invalid
 load, with the accent's tooltip as its tooltip and accessible name. **Headers with a unit.** A column's `unit` is written after
 its label, `Mass [kg]`, the column is measured to that text, and the header's `Accessible.name` is
 `headerAccessibleName`, `Mass, kg`. **The status line** (`setStatus`) is one `Text` under the
-rows and outside the sideways scroll (`statusText`: the counts, the state and the message, two spaces apart), with a
-"Retry" `Button` while the state offers it (`retryShown`), firing `retry`; while not shown it takes no height. It is a
+rows and outside the sideways scroll (`statusText`: the counts, the state, what stands and the message, two spaces
+apart), with a "Retry" `Button` while the state offers it (`retryShown`), firing `retry`, and a `Button` for each of
+its entries (`statusEntries`, `{id, label}`, the standing ones first; `objectName` `statusEntry_<id>`), firing
+`statusEntry` with the id, which `TableImpl` passes to `setOnStatusEntry`; while not shown it takes no height. It is a
 polite live region: once its text has held for half a second it is announced (`Accessible.announce`, from Qt 6.8,
 polite by default), so a message is read out once and a count when it settles; before Qt 6.8 the text is the line's
 accessible name (`StaticText`) and nothing is announced.

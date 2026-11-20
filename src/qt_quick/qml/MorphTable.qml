@@ -318,6 +318,8 @@ MorphWidget {
     property string statusText: ""
     property bool statusShown: false
     property bool retryShown: false
+    // The status line's choices, each `{id, label}`: a button each after the text.
+    property var statusEntries: []
     readonly property real statusHeight: root.statusShown ? statusLine.implicitHeight : 0
     // The sideways scroll's bar, made from the `scrollBar` part (`MorphScrollBar` or its restyle), which C++ passes at
     // creation; null without one.
@@ -1247,6 +1249,16 @@ MorphWidget {
             visible: root.retryShown
             text: "Retry"
             onClicked: root.fire("retry", undefined)
+        }
+        // The status line's choices: each reports its id.
+        Repeater {
+            model: root.statusEntries
+            delegate: Button {
+                required property var modelData
+                objectName: "statusEntry_" + modelData.id
+                text: modelData.label
+                onClicked: root.fire("statusEntry", modelData.id)
+            }
         }
     }
 

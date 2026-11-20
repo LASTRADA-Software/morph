@@ -339,8 +339,18 @@ std::string TableImpl::headerBox() const {
 }
 
 void TableImpl::setSelection(std::vector<ui::Key> const& selection) {
+    _viewExcept.reset();
     _selection = selection;
     refresh();
+}
+
+void TableImpl::setSelectionView(std::vector<ui::Key> const& except) {
+    _viewExcept = except;
+    refresh();
+}
+
+void TableImpl::setOnStatusEntry(std::function<void(std::string id)> onStatusEntry) {
+    _onStatusEntry = std::move(onStatusEntry);
 }
 
 void TableImpl::setOnSelectionChange(
@@ -816,6 +826,9 @@ bool TableImpl::isMarked(WidgetBase const* row) const {
         return false;
     }
     auto const rowKey = keyOf(row);
+    if (_viewExcept) {
+        return rowKey && !std::ranges::contains(*_viewExcept, *rowKey);
+    }
     return rowKey && std::ranges::find(_selection, *rowKey) != _selection.end();
 }
 
@@ -1167,6 +1180,14 @@ EventResult TableImpl::key(::core::tui::KeyEvent const& key) {
             return EventResult::Handled;
         }
     }
+    // The status line's entries, by the key each shows: `Alt+<n>`.
+    for (std::size_t at = 0; at < _entriesDrawn.size() && at < 9; ++at) {
+        if (matchesChord("Alt+" + std::to_string(at + 1), key) && _onStatusEntry) {
+            auto const handler = _onStatusEntry;
+            handler(_entriesDrawn.at(at).id);
+            return EventResult::Handled;
+        }
+    }
     if (_source) {
         if (auto const result = sourceKey(key); result == EventResult::Handled) {
             return result;
@@ -1232,6 +1253,14 @@ void TableImpl::clickWith(::core::tui::Point cell, ::core::tui::Modifier modifie
         if (_retryX >= 0 && cell.x >= _retryX && cell.x < _retryX + displayWidth(kRetry) && _onRetry) {
             auto const handler = _onRetry;
             handler();
+            return;
+        }
+        for (DrawnEntry const& entry : _entriesDrawn) {
+            if (cell.x >= entry.x && cell.x < entry.x + entry.width && _onStatusEntry) {
+                auto const handler = _onStatusEntry;
+                handler(entry.id);
+                return;
+            }
         }
         return;
     }
@@ -1346,6 +1375,25 @@ bool TableImpl::choose(WidgetBase const& row, ui::RowClick click) {
     }
     if (click == ui::RowClick::Range) {
         return change(rangeTo(row), ui::SelectionChange::Replace);
+    }
+    // A selection of the view: the keys now marked among the rows held, the clicked one toggled.
+    if (_viewExcept) {
+        std::vector<ui::Key> next;
+        for (WidgetBase const* const shown : shownChildren()) {
+            auto const key = keyOf(shown);
+            if (key && !isHeading(shown) && !std::ranges::contains(*_viewExcept, *key) && *key != *rowKey) {
+                next.push_back(*key);
+            }
+        }
+        if (std::ranges::contains(*_viewExcept, *rowKey)) {
+            next.push_back(*rowKey);
+        }
+        _anchor = *rowKey;
+        auto const handler = _onSelectionChange;
+        if (handler) {
+            handler(std::move(next), ui::SelectionChange::Extend);
+        }
+        return true;
     }
     // A user's change drops a requested key still waiting for its row.
     std::vector<ui::Key> next;
@@ -1881,6 +1929,7 @@ void TableImpl::reportBeforeNextFrame() {
 
 void TableImpl::paintStatus(::core::tui::Canvas& canvas) {
     _retryX = -1;
+    _entriesDrawn.clear();
     if (!_status.shown || canvas.height() <= 0) {
         return;
     }
@@ -1897,6 +1946,32 @@ void TableImpl::paintStatus(::core::tui::Canvas& canvas) {
         _retryX = x;
         canvas.putString(line, x, std::string{kRetry}, theme.textAccent);
         x += displayWidth(kRetry);
+    }
+    // What stays while its cause lasts, then each choice as `[Alt+<n> label]`, the key that chooses it.
+    auto const entries = [&](std::vector<ui::StatusEntry> const& list) {
+        for (ui::StatusEntry const& entry : list) {
+            std::string const drawn =
+                "[Alt+" + std::to_string(_entriesDrawn.size() + 1) + " " + entry.label + "]";
+            x += x == 0 ? 0 : displayWidth(kStatusGap);
+            canvas.putString(line, x, drawn, theme.textAccent);
+            _entriesDrawn.push_back(DrawnEntry{.x = x, .width = displayWidth(drawn), .id = entry.id});
+            x += displayWidth(drawn);
+        }
+    };
+    if (!_status.standing.empty()) {
+        x += x == 0 ? 0 : displayWidth(kStatusGap);
+        canvas.putString(line, x, _status.standing, theme.textNormal);
+        x += displayWidth(_status.standing);
+    }
+    entries(_status.standingEntries);
+    if (!_status.entries.empty()) {
+        if (!_status.message.empty()) {
+            x += x == 0 ? 0 : displayWidth(kStatusGap);
+            canvas.putString(line, x, _status.message, theme.textNormal);
+            x += displayWidth(_status.message);
+        }
+        entries(_status.entries);
+        return;
     }
     // The latest message, else the focused cell's tooltip: a terminal has no hover to show it on.
     std::string const message = _status.message.empty() ? focusedTooltip() : _status.message;

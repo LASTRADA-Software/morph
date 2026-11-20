@@ -114,6 +114,8 @@ public:
     void setOnSelectionChange(
         std::function<void(std::vector<ui::Key>, ui::SelectionChange)> onSelectionChange) override;
     void setOnSelectAll(std::function<void()> onSelectAll) override;
+    void setSelectionView(std::vector<ui::Key> const& except) override;
+    void setOnStatusEntry(std::function<void(std::string id)> onStatusEntry) override;
     void setOnActivate(std::function<void(ui::Key)> onActivate) override;
     void setSort(std::vector<ui::TableSort> const& chain) override;
     void setOnSort(std::function<void(std::size_t, ui::HeaderClick)> onSort) override;
@@ -375,6 +377,8 @@ private:
     std::vector<SpanPlace> _plan;                                            ///< The spanning cells, as last planned.
     std::unordered_map<WidgetBase const*, int> _extraLines;  ///< The lines a spanning cell adds to its last row.
     std::vector<ui::Key> _selection;  ///< The keys requested or selected by the user, in that order.
+    /// Engaged while the selection is of the view: every row but these keys is marked, until the next `setSelection`.
+    std::optional<std::vector<ui::Key>> _viewExcept;
     WidgetBase* _cursor = nullptr;    ///< The cursor row; null for the first shown row.
     std::optional<ui::Key> _anchor;   ///< Where a range starts: the row last clicked or toggled.
     std::size_t _cursorPlace = 0;     ///< The cursor's position among the shown rows, when last known.
@@ -446,6 +450,14 @@ private:
     ui::TableStatus _status;
     std::function<void()> _onRetry;
     int _retryX = -1;  ///< Where `[Retry]` starts on the status line; -1 while it is not drawn.
+    std::function<void(std::string)> _onStatusEntry;
+    /// The status line's entries as drawn: where each starts, its width and its id; the n-th is chosen by `Alt+<n>`.
+    struct DrawnEntry {
+        int x = 0;
+        int width = 0;
+        std::string id;
+    };
+    std::vector<DrawnEntry> _entriesDrawn;
 };
 
 }  // namespace morph::tui::detail

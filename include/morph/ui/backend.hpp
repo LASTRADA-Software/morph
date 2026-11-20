@@ -976,6 +976,21 @@ public:
     /// @param onSelectAll The handler; empty to select as before.
     virtual void setOnSelectAll(std::function<void()> onSelectAll) { static_cast<void>(onSelectAll); }
 
+    /// @brief Marks every row of the table selected but those whose key is in @p except, rows the backend does not
+    ///        hold included, until the next `setSelection`. In that state a `Ctrl`+click reports `Extend` with the
+    ///        keys now selected among the rows the backend holds, so the caller reads each held key absent from the
+    ///        report as left out and each present one as selected again; a plain click reports `Replace` and ends the
+    ///        state. A backend that does not take it draws the selection `setSelection` gave.
+    /// @param except The keys left out of the selection.
+    virtual void setSelectionView(std::vector<Key> const& except) { static_cast<void>(except); }
+
+    /// @brief Sets what choosing one of the status line's entries (`TableStatus::entries` and `standingEntries`, each
+    ///        drawn as a button with its label) calls, with the entry's id.
+    /// @param onStatusEntry The handler; empty does nothing.
+    virtual void setOnStatusEntry(std::function<void(std::string id)> onStatusEntry) {
+        static_cast<void>(onStatusEntry);
+    }
+
     /// @brief Shows the table's status line: its counts, the state of a failed fetch or level with "Retry" when it
     ///        offers it, and the latest message; a status that is not `shown` takes no space. Called once the table
     ///        is built and on every change. A backend without a status line ignores it.

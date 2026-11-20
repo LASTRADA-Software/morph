@@ -523,7 +523,8 @@ public:
                                : nullptr},
           _views{::morph::table::makeViewCache(_config.views)},
           _tableRuntime{.work = _config.tableWork != nullptr ? _config.tableWork.get() : &workerPool,
-                        .views = _views.get()} {
+                        .views = _views.get(),
+                        .settle = &_strand} {
         // The first read of the record and effects registries: an invalid
         // declaration fails the server's construction rather than its first
         // successful execute, whose changes are derived from them.
@@ -3091,8 +3092,8 @@ private:
     std::unique_ptr<::morph::async::detail::TimeoutScheduler> const _executeTimeouts;
     // The server's one view cache, made from `ServerConfig::views`. Its type stays incomplete here.
     std::shared_ptr<::morph::table::ViewCache> const _views;
-    // What a table's action reads during a dispatch: `tableWork`, or the worker pool, and the view cache. Fixed at
-    // construction.
+    // What a table's action reads during a dispatch: `tableWork`, or the worker pool, the view cache, and the server
+    // strand as the owner of a `resolve`'s completion. Fixed at construction.
     ::morph::table::TableRuntime const _tableRuntime;
 
     // ── Server-strand state: touched only in the server strand's tasks ──────
