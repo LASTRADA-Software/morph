@@ -124,6 +124,7 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d0/dcd/dev__re
 <p>Development reload (spec 5 §12): which documents a changed bundle changed, and remounting the mounted screens that show them, keeping their state.  
 <a href="#details">More...</a></p>
 <div class="textblock"><code>#include &lt;algorithm&gt;</code><br />
+<code>#include &lt;expected&gt;</code><br />
 <code>#include &lt;functional&gt;</code><br />
 <code>#include &lt;map&gt;</code><br />
 <code>#include &lt;memory&gt;</code><br />
@@ -158,6 +159,8 @@ Typedefs</h2></td></tr>
 Functions</h2></td></tr>
 <tr class="memitem:ab92fa2e82e296e42a71b9ff4c711a3a2" id="r_ab92fa2e82e296e42a71b9ff4c711a3a2"><td class="memItemLeft">std::vector&lt; std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="#ab92fa2e82e296e42a71b9ff4c711a3a2">morph::ui::changedDocuments</a> (<a class="el" href="../../dd/dd5/structmorph_1_1ui_1_1Manifest.html">Manifest</a> const &amp;before, <a class="el" href="../../dd/dd5/structmorph_1_1ui_1_1Manifest.html">Manifest</a> const &amp;after)</td></tr>
 <tr class="memdesc:ab92fa2e82e296e42a71b9ff4c711a3a2"><td class="mdescLeft">&#160;</td><td class="mdescRight">The ids of the documents (screens and the app document) whose files differ between two manifests: changed, added or removed. Themes, message catalogues and components are not documents; a document that names a changed component names it by its new hash, so it changes too.  <br /></td></tr>
+<tr class="memitem:a04b68dd3121d1a8f0062d68a255bd883" id="r_a04b68dd3121d1a8f0062d68a255bd883"><td class="memItemLeft">std::expected&lt; <a class="el" href="../../d4/d02/structmorph_1_1ui_1_1Document.html">Document</a>, <a class="el" href="../../de/d52/structmorph_1_1ui_1_1Refusal.html">Refusal</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a04b68dd3121d1a8f0062d68a255bd883">morph::ui::detail::loadReloadedScreen</a> (std::string const &amp;screenId, std::string const &amp;text, <a class="el" href="../../d8/dc0/structmorph_1_1ui_1_1LoadOptions.html">LoadOptions</a> const &amp;options)</td></tr>
+<tr class="memdesc:a04b68dd3121d1a8f0062d68a255bd883"><td class="mdescLeft">&#160;</td><td class="mdescRight">Loads a changed screen's new text and checks it as a served screen document: its id may be served, it parses, and the document claims the id it is served under.  <br /></td></tr>
 <tr class="memitem:aa9ee71632caa51d3214e809e1aa9faea" id="r_aa9ee71632caa51d3214e809e1aa9faea"><td class="memItemLeft"><a class="el" href="../../d1/d20/structmorph_1_1ui_1_1ReloadOutcome.html">ReloadOutcome</a>&#160;</td><td class="memItemRight"><a class="el" href="#aa9ee71632caa51d3214e809e1aa9faea">morph::ui::reloadDocuments</a> (std::span&lt; std::string const &gt; changed, <a class="el" href="../../dc/dcf/structmorph_1_1ui_1_1Bundle.html">Bundle</a> const &amp;bundle, <a class="el" href="../../d8/dc0/structmorph_1_1ui_1_1LoadOptions.html">LoadOptions</a> const &amp;options, <a class="el" href="#ac9901f64f51660281f9351fd06edf49d">DocumentMap</a> &amp;documents, <a class="el" href="../../d9/d53/classmorph_1_1ui_1_1DocumentScreenHost.html">DocumentScreenHost</a> &amp;host, std::span&lt; <a class="el" href="../../dd/df1/structmorph_1_1ui_1_1MountedScreen.html">MountedScreen</a> const &gt; mounted)</td></tr>
 <tr class="memdesc:aa9ee71632caa51d3214e809e1aa9faea"><td class="mdescLeft">&#160;</td><td class="mdescRight">Loads the changed documents of a new bundle and remounts the mounted screens that show them.  <br /></td></tr>
 </table>
@@ -181,7 +184,7 @@ Functions</h2></td></tr>
 
 <p>The loaded documents a host mounts from, by screen id. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dcd/dev__reload_8hpp_source.html#l00032">32</a> of file <a class="el" href="../../d0/dcd/dev__reload_8hpp_source.html">dev_reload.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dcd/dev__reload_8hpp_source.html#l00033">33</a> of file <a class="el" href="../../d0/dcd/dev__reload_8hpp_source.html">dev_reload.hpp</a>.</p>
 
 </div>
 </div>
@@ -223,7 +226,54 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The ids, sorted and each once. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dcd/dev__reload_8hpp_source.html#l00040">40</a> of file <a class="el" href="../../d0/dcd/dev__reload_8hpp_source.html">dev_reload.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dcd/dev__reload_8hpp_source.html#l00041">41</a> of file <a class="el" href="../../d0/dcd/dev__reload_8hpp_source.html">dev_reload.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a04b68dd3121d1a8f0062d68a255bd883" name="a04b68dd3121d1a8f0062d68a255bd883"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a04b68dd3121d1a8f0062d68a255bd883">&#9670;&#160;</a></span>loadReloadedScreen()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::expected&lt; Document, Refusal &gt; morph::ui::detail::loadReloadedScreen </td>
+          <td>(</td>
+          <td class="paramtype">std::string const &amp;</td>          <td class="paramname"><span class="paramname"><em>screenId</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">std::string const &amp;</td>          <td class="paramname"><span class="paramname"><em>text</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype"><a class="el" href="../../d8/dc0/structmorph_1_1ui_1_1LoadOptions.html">LoadOptions</a> const &amp;</td>          <td class="paramname"><span class="paramname"><em>options</em></span>&#160;)</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Loads a changed screen's new text and checks it as a served screen document: its id may be served, it parses, and the document claims the id it is served under. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">screenId</td><td>The id the screen is served under. </td></tr>
+    <tr><td class="paramname">text</td><td>The screen's new document text. </td></tr>
+    <tr><td class="paramname">options</td><td>How the document loads: the catalog facts. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>The loaded document, or why it is refused, naming <code class="param">screenId</code> when the loader named no document. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d0/dcd/dev__reload_8hpp_source.html#l00096">96</a> of file <a class="el" href="../../d0/dcd/dev__reload_8hpp_source.html">dev_reload.hpp</a>.</p>
 
 </div>
 </div>
@@ -288,7 +338,7 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The screens remounted, and the refusals. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dcd/dev__reload_8hpp_source.html#l00103">103</a> of file <a class="el" href="../../d0/dcd/dev__reload_8hpp_source.html">dev_reload.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dcd/dev__reload_8hpp_source.html#l00135">135</a> of file <a class="el" href="../../d0/dcd/dev__reload_8hpp_source.html">dev_reload.hpp</a>.</p>
 
 </div>
 </div>

@@ -1,5 +1,6 @@
 var NAVTREEINDEX28 =
 {
+"da/d44/structmorph_1_1ui_1_1ShellFrameOptions.html#ae4ca68158486e5cc2e96030e04f4c75c":[3,0,0,28,277,2],
 "da/d45/instance__constraints_8hpp.html":[4,0,0,3,9],
 "da/d45/instance__constraints_8hpp.html#aac28b5b09b5e30a5d4e4217d5f5089c7a6727659b77f5f60370231f58de2b6dd8":[4,0,0,3,9,3,0],
 "da/d45/instance__constraints_8hpp.html#aac28b5b09b5e30a5d4e4217d5f5089c7a6f0f225b00de32fafd07918b39848dfa":[4,0,0,3,9,3,1],
@@ -248,6 +249,5 @@ var NAVTREEINDEX28 =
 "da/d96/structmorph_1_1ui_1_1ThemeValues.html#a62e693bae97862410517cb4f7327cd73":[3,0,0,28,328,3],
 "da/d96/structmorph_1_1ui_1_1ThemeValues.html#a736560a0425e8c33f963dc30bfebaa48":[1,0,0,1,326,5],
 "da/d96/structmorph_1_1ui_1_1ThemeValues.html#a736560a0425e8c33f963dc30bfebaa48":[3,0,0,28,328,5],
-"da/d96/structmorph_1_1ui_1_1ThemeValues.html#ab029c2bf8df69e8fa4a595a2c090565c":[1,0,0,1,326,6],
-"da/d96/structmorph_1_1ui_1_1ThemeValues.html#ab029c2bf8df69e8fa4a595a2c090565c":[3,0,0,28,328,6]
+"da/d96/structmorph_1_1ui_1_1ThemeValues.html#ab029c2bf8df69e8fa4a595a2c090565c":[1,0,0,1,326,6]
 };

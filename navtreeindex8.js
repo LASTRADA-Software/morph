@@ -1,5 +1,6 @@
 var NAVTREEINDEX8 =
 {
+"d3/d5e/structmorph_1_1ui_1_1detail_1_1dates_1_1Fields.html#a33ba1e67ceef56fd311d0b054faa1ad8":[3,0,0,28,2,1,1,6],
 "d3/d5e/structmorph_1_1ui_1_1detail_1_1dates_1_1Fields.html#a44e43e6c8b7749c0369f5e9d510ba002":[3,0,0,28,2,1,1,2],
 "d3/d5e/structmorph_1_1ui_1_1detail_1_1dates_1_1Fields.html#a4f0a28898712644d141d2effd78222a3":[3,0,0,28,2,1,1,4],
 "d3/d5e/structmorph_1_1ui_1_1detail_1_1dates_1_1Fields.html#a7117c990da81541bdcd782cd874b3903":[3,0,0,28,2,1,1,1],
@@ -248,6 +249,5 @@ var NAVTREEINDEX8 =
 "d3/dbc/structmorph_1_1ui_1_1TextInput.html#af817fd28094dab34c0b68cbcf7add128":[1,0,0,1,318,9],
 "d3/dbc/structmorph_1_1ui_1_1TextInput.html#af817fd28094dab34c0b68cbcf7add128":[3,0,0,28,320,9],
 "d3/dc2/classmorph_1_1ui_1_1ButtonWidget.html":[1,0,0,1,28],
-"d3/dc2/classmorph_1_1ui_1_1ButtonWidget.html":[3,0,0,28,30],
-"d3/dc2/classmorph_1_1ui_1_1ButtonWidget.html#a04d220bf790962e8f69de53763c6fb2f":[1,0,0,1,28,10]
+"d3/dc2/classmorph_1_1ui_1_1ButtonWidget.html":[3,0,0,28,30]
 };

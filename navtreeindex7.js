@@ -1,5 +1,6 @@
 var NAVTREEINDEX7 =
 {
+"d2/df7/classmorph_1_1ui_1_1IBundleStore.html":[1,0,0,1,148],
 "d2/df7/classmorph_1_1ui_1_1IBundleStore.html":[3,0,0,28,150],
 "d2/df7/classmorph_1_1ui_1_1IBundleStore.html#a339f33571a4ce349661fecf135256810":[1,0,0,1,148,0],
 "d2/df7/classmorph_1_1ui_1_1IBundleStore.html#a339f33571a4ce349661fecf135256810":[3,0,0,28,150,0],
@@ -248,6 +249,5 @@ var NAVTREEINDEX7 =
 "d3/d5d/structmorph_1_1ui_1_1author_1_1ActionPart.html":[3,0,0,28,0,66],
 "d3/d5d/structmorph_1_1ui_1_1author_1_1ActionPart.html#ab01058569403e8d2819f3bc7319a9932":[3,0,0,28,0,66,0],
 "d3/d5d/structmorph_1_1ui_1_1author_1_1ActionPart.html#af46dda32930783a2ce0c70c6ce7308c9":[3,0,0,28,0,66,1],
-"d3/d5e/structmorph_1_1ui_1_1detail_1_1dates_1_1Fields.html":[3,0,0,28,2,1,1],
-"d3/d5e/structmorph_1_1ui_1_1detail_1_1dates_1_1Fields.html#a33ba1e67ceef56fd311d0b054faa1ad8":[3,0,0,28,2,1,1,6]
+"d3/d5e/structmorph_1_1ui_1_1detail_1_1dates_1_1Fields.html":[3,0,0,28,2,1,1]
 };

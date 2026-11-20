@@ -1,5 +1,6 @@
 var NAVTREEINDEX11 =
 {
+"d4/d64/structmorph_1_1ui_1_1Panel.html#a8145cb21ac6bb679b95f192de4556cd3":[3,0,0,28,223,4],
 "d4/d64/structmorph_1_1ui_1_1Panel.html#ac07eecdcebc15c730baf4767ba95987a":[1,0,0,1,221,6],
 "d4/d64/structmorph_1_1ui_1_1Panel.html#ac07eecdcebc15c730baf4767ba95987a":[3,0,0,28,223,6],
 "d4/d6b/structmorph_1_1ui_1_1detail_1_1ScreenCore_1_1KeptState.html":[1,0,0,1,0,44,0],
@@ -248,6 +249,5 @@ var NAVTREEINDEX11 =
 "d4/dc1/classmorph_1_1backend_1_1RemoteServer.html#a9c30776adb059a937a151eceeccc5875":[3,0,0,2,12,12],
 "d4/dc1/classmorph_1_1backend_1_1RemoteServer.html#a9ea8ed30f49ff089f677e09210ffc486":[3,0,0,2,12,22],
 "d4/dc1/classmorph_1_1backend_1_1RemoteServer.html#aa1967f685b6df4553d93c5d3efd448b7":[3,0,0,2,12,0],
-"d4/dc1/classmorph_1_1backend_1_1RemoteServer.html#aace35661b1a8a71a839febc1a4eccaff":[3,0,0,2,12,15],
-"d4/dc1/classmorph_1_1backend_1_1RemoteServer.html#aaf7920ac29285053e0b065dceb7fd44e":[3,0,0,2,12,4]
+"d4/dc1/classmorph_1_1backend_1_1RemoteServer.html#aace35661b1a8a71a839febc1a4eccaff":[3,0,0,2,12,15]
 };

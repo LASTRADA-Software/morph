@@ -1,5 +1,6 @@
 var NAVTREEINDEX44 =
 {
+"df/d20/classmorph_1_1ui_1_1Session.html#a97446299853d8c608f0c7d455f0b00de":[3,0,0,28,270,34],
 "df/d20/classmorph_1_1ui_1_1Session.html#a991b82c65d0e85d5c6199ce7eb574363":[1,0,0,1,268,32],
 "df/d20/classmorph_1_1ui_1_1Session.html#a991b82c65d0e85d5c6199ce7eb574363":[3,0,0,28,270,32],
 "df/d20/classmorph_1_1ui_1_1Session.html#a9f7a33567bbb6d52e4865076d20b8838":[1,0,0,1,268,19],
@@ -248,6 +249,5 @@ var NAVTREEINDEX44 =
 "df/dae/classmorph_1_1ui_1_1IViewBackend.html#a277c320382211edad7639e600c070e76":[1,0,0,1,161,0],
 "df/dae/classmorph_1_1ui_1_1IViewBackend.html#a277c320382211edad7639e600c070e76":[3,0,0,28,163,0],
 "df/dae/classmorph_1_1ui_1_1IViewBackend.html#a295d6e607bccd746b6ad061e578f1438":[1,0,0,1,161,4],
-"df/dae/classmorph_1_1ui_1_1IViewBackend.html#a295d6e607bccd746b6ad061e578f1438":[3,0,0,28,163,4],
-"df/dae/classmorph_1_1ui_1_1IViewBackend.html#a2a6d526e4cfa5b49a188efa67830d3f9":[1,0,0,1,161,29]
+"df/dae/classmorph_1_1ui_1_1IViewBackend.html#a295d6e607bccd746b6ad061e578f1438":[3,0,0,28,163,4]
 };

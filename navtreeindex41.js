@@ -1,5 +1,6 @@
 var NAVTREEINDEX41 =
 {
+"de/d5a/structmorph_1_1ui_1_1CustomScreensCheck.html":[1,0,0,1,78],
 "de/d5a/structmorph_1_1ui_1_1CustomScreensCheck.html":[3,0,0,28,80],
 "de/d5a/structmorph_1_1ui_1_1CustomScreensCheck.html#a327826ccacb9e6a85970fea40a67f1cc":[1,0,0,1,78,2],
 "de/d5a/structmorph_1_1ui_1_1CustomScreensCheck.html#a327826ccacb9e6a85970fea40a67f1cc":[3,0,0,28,80,2],
@@ -248,6 +249,5 @@ var NAVTREEINDEX41 =
 "de/dce/structmorph_1_1observe_1_1MetricEvent.html#ac1971434ee76f16975316a9616498949":[3,0,0,16,0,2],
 "de/dce/structmorph_1_1ui_1_1Menu.html":[1,0,0,1,182],
 "de/dce/structmorph_1_1ui_1_1Menu.html":[3,0,0,28,184],
-"de/dce/structmorph_1_1ui_1_1Menu.html#a12b509b7fc5d8faba11faf39eaac9ebb":[1,0,0,1,182,4],
-"de/dce/structmorph_1_1ui_1_1Menu.html#a12b509b7fc5d8faba11faf39eaac9ebb":[3,0,0,28,184,4]
+"de/dce/structmorph_1_1ui_1_1Menu.html#a12b509b7fc5d8faba11faf39eaac9ebb":[1,0,0,1,182,4]
 };

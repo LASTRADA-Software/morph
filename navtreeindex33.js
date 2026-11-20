@@ -1,5 +1,6 @@
 var NAVTREEINDEX33 =
 {
+"db/dee/classmorph_1_1offline_1_1NetworkMonitor.html#ac4251df7c4776d6cd0c68f4751952d45":[3,0,0,17,7,7],
 "db/dee/classmorph_1_1offline_1_1NetworkMonitor.html#adff798ad5c1b3aa6c49d4a2b5e5f3c1b":[3,0,0,17,7,5],
 "db/df0/classmorph_1_1ui_1_1chat_1_1ChatService.html":[3,0,0,28,1,8],
 "db/df0/classmorph_1_1ui_1_1chat_1_1ChatService.html#a0f56ef9fa798b06f2f4bd1bd50eeaea8":[3,0,0,28,1,8,1],
@@ -248,6 +249,5 @@ var NAVTREEINDEX33 =
 "dc/d6d/structmorph_1_1ui_1_1WorkspaceTabState.html#a69ff5b45eb5eb5e5cbd9f54f2525ec68":[3,0,0,28,353,1],
 "dc/d6d/structmorph_1_1ui_1_1WorkspaceTabState.html#a89aaf4c4e6566849d22cec7d6bbd8684":[1,0,0,1,351,2],
 "dc/d6d/structmorph_1_1ui_1_1WorkspaceTabState.html#a89aaf4c4e6566849d22cec7d6bbd8684":[3,0,0,28,353,2],
-"dc/d6d/structmorph_1_1ui_1_1WorkspaceTabState.html#a8e51b95ae792889b886450d2b8fb0c47":[1,0,0,1,351,3],
-"dc/d6d/structmorph_1_1ui_1_1WorkspaceTabState.html#a8e51b95ae792889b886450d2b8fb0c47":[3,0,0,28,353,3]
+"dc/d6d/structmorph_1_1ui_1_1WorkspaceTabState.html#a8e51b95ae792889b886450d2b8fb0c47":[1,0,0,1,351,3]
 };

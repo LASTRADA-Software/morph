@@ -1,5 +1,6 @@
 var NAVTREEINDEX14 =
 {
+"d5/d92/custom__screens_8hpp.html#a3a2f4dafa0baa690bf03371bb3c9c18b":[1,0,0,1,0,59],
 "d5/d92/custom__screens_8hpp.html#a3a2f4dafa0baa690bf03371bb3c9c18ba0610123bdd4ffc191a3ea05a847e1307":[1,0,0,1,0,59,0],
 "d5/d92/custom__screens_8hpp.html#a3a2f4dafa0baa690bf03371bb3c9c18ba0610123bdd4ffc191a3ea05a847e1307":[4,0,0,15,18,22,0],
 "d5/d92/custom__screens_8hpp.html#a3a2f4dafa0baa690bf03371bb3c9c18ba331a4ca1e8a661f17d38df73a8af33a4":[1,0,0,1,0,59,3],
@@ -248,6 +249,5 @@ var NAVTREEINDEX14 =
 "d5/de2/structmorph_1_1ui_1_1chat_1_1ChatClient_1_1Entry.html#af3e307702030b9e89f73eab93ef287c7":[3,0,0,28,1,2,0,1],
 "d5/de2/structmorph_1_1ui_1_1chat_1_1ChatClient_1_1Entry.html#afaf523a11d331c25e193d5f53f8a289c":[3,0,0,28,1,2,0,2],
 "d5/de3/structmorph_1_1ui_1_1McpOptions.html":[1,0,0,1,176],
-"d5/de3/structmorph_1_1ui_1_1McpOptions.html":[3,0,0,28,178],
-"d5/de3/structmorph_1_1ui_1_1McpOptions.html#a31f1c4724aeb8458d4427bb5b4b87906":[1,0,0,1,176,4]
+"d5/de3/structmorph_1_1ui_1_1McpOptions.html":[3,0,0,28,178]
 };

@@ -1,5 +1,6 @@
 var NAVTREEINDEX5 =
 {
+"d2/d1d/structmorph_1_1ui_1_1chat_1_1StateRequest.html#a39b1234fd749a7f3cce768979142fed2":[3,0,0,28,1,30,0],
 "d2/d20/structmorph_1_1ui_1_1ActionField.html":[1,0,0,1,6],
 "d2/d20/structmorph_1_1ui_1_1ActionField.html":[3,0,0,28,8],
 "d2/d20/structmorph_1_1ui_1_1ActionField.html#a0da61f7e44b69996eb3fc96e16742668":[1,0,0,1,6,0],
@@ -248,6 +249,5 @@ var NAVTREEINDEX5 =
 "d2/d81/classmorph_1_1ui_1_1author_1_1Node.html#a482f896189b324b675c104049aae767c":[3,0,0,28,0,26,8],
 "d2/d81/classmorph_1_1ui_1_1author_1_1Node.html#a4ea7f300181586c0bd8747b28e84ebfb":[3,0,0,28,0,26,18],
 "d2/d81/classmorph_1_1ui_1_1author_1_1Node.html#a548e5c654a230539f8fece6c6a81cc51":[3,0,0,28,0,26,11],
-"d2/d81/classmorph_1_1ui_1_1author_1_1Node.html#a59cf3444d7344bbccdd343ed33ed171c":[3,0,0,28,0,26,20],
-"d2/d81/classmorph_1_1ui_1_1author_1_1Node.html#a70064ab786aae09861600894c27f6465":[3,0,0,28,0,26,19]
+"d2/d81/classmorph_1_1ui_1_1author_1_1Node.html#a59cf3444d7344bbccdd343ed33ed171c":[3,0,0,28,0,26,20]
 };

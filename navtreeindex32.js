@@ -1,5 +1,6 @@
 var NAVTREEINDEX32 =
 {
+"db/d8e/structmorph_1_1net_1_1SocketBackendConfig.html#a86d877007461559a660f5e0183a76e75":[3,0,0,15,1,4],
 "db/d8e/structmorph_1_1net_1_1SocketBackendConfig.html#a981e0b8e3f410980b8f22671c7f1f8ec":[3,0,0,15,1,6],
 "db/d8e/structmorph_1_1net_1_1SocketBackendConfig.html#acd8e19b0807613d9c4d494b407115e1e":[3,0,0,15,1,5],
 "db/d8e/structmorph_1_1net_1_1SocketBackendConfig.html#addf284249e4a8f5b93fbb1a76125aabd":[3,0,0,15,1,1],
@@ -248,6 +249,5 @@ var NAVTREEINDEX32 =
 "db/dee/classmorph_1_1offline_1_1NetworkMonitor.html#a4c93dfd54f19a863d724a196b4bfb319":[3,0,0,17,7,6],
 "db/dee/classmorph_1_1offline_1_1NetworkMonitor.html#a8c76a4cf471cef70d76876ac51bb8ff0":[3,0,0,17,7,0],
 "db/dee/classmorph_1_1offline_1_1NetworkMonitor.html#a8d947c7f41ebffae2073c9e3d32dc3bb":[3,0,0,17,7,2],
-"db/dee/classmorph_1_1offline_1_1NetworkMonitor.html#a9379f8ca05ebefa48ce53662a025f3ba":[3,0,0,17,7,3],
-"db/dee/classmorph_1_1offline_1_1NetworkMonitor.html#ac4251df7c4776d6cd0c68f4751952d45":[3,0,0,17,7,7]
+"db/dee/classmorph_1_1offline_1_1NetworkMonitor.html#a9379f8ca05ebefa48ce53662a025f3ba":[3,0,0,17,7,3]
 };

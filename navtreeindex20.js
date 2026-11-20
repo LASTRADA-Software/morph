@@ -1,5 +1,6 @@
 var NAVTREEINDEX20 =
 {
+"d7/d5d/structmorph_1_1ui_1_1DateTimeInput.html#af74c093674b74bb462568732d520109c":[1,0,0,1,89,0],
 "d7/d5d/structmorph_1_1ui_1_1DateTimeInput.html#af74c093674b74bb462568732d520109c":[3,0,0,28,91,0],
 "d7/d62/classmorph_1_1ui_1_1CollapsibleWidget.html":[1,0,0,1,52],
 "d7/d62/classmorph_1_1ui_1_1CollapsibleWidget.html":[3,0,0,28,54],
@@ -248,6 +249,5 @@ var NAVTREEINDEX20 =
 "d7/db7/structmorph_1_1wire_1_1EventBody.html#a92b55c0a021ae985a8d5ae7c5b1686b4":[3,0,0,32,4,0],
 "d7/db7/structmorph_1_1wire_1_1EventBody.html#adfe7c5b653767c5b488b4e375ba26e9e":[3,0,0,32,4,1],
 "d7/dbd/structmorph_1_1ui_1_1detail_1_1CommandCtx.html":[1,0,0,1,0,10],
-"d7/dbd/structmorph_1_1ui_1_1detail_1_1CommandCtx.html":[3,0,0,28,2,11],
-"d7/dbd/structmorph_1_1ui_1_1detail_1_1CommandCtx.html#a3ad17d06ff938a869d7134c284e6142f":[1,0,0,1,0,10,0]
+"d7/dbd/structmorph_1_1ui_1_1detail_1_1CommandCtx.html":[3,0,0,28,2,11]
 };

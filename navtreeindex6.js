@@ -1,5 +1,6 @@
 var NAVTREEINDEX6 =
 {
+"d2/d81/classmorph_1_1ui_1_1author_1_1Node.html#a70064ab786aae09861600894c27f6465":[3,0,0,28,0,26,19],
 "d2/d81/classmorph_1_1ui_1_1author_1_1Node.html#a75d43a453259ec1c0b5fc20f7138e9bc":[3,0,0,28,0,26,6],
 "d2/d81/classmorph_1_1ui_1_1author_1_1Node.html#a77c9fa70fd89e4624e0221e9503c87f5":[3,0,0,28,0,26,23],
 "d2/d81/classmorph_1_1ui_1_1author_1_1Node.html#a7e2270d530d709d48a4a87b2513c4ae1":[3,0,0,28,0,26,29],
@@ -248,6 +249,5 @@ var NAVTREEINDEX6 =
 "d2/df5/qt__quick_2inspector_8hpp.html":[4,0,0,8,4],
 "d2/df5/qt__quick_2inspector_8hpp_source.html":[4,0,0,8,4],
 "d2/df5/structmorph_1_1ui_1_1detail_1_1IsSlotBinding_3_01SlotBinding_3_01F_01_4_01_4.html":[1,0,0,1,0,20],
-"d2/df5/structmorph_1_1ui_1_1detail_1_1IsSlotBinding_3_01SlotBinding_3_01F_01_4_01_4.html":[3,0,0,28,2,21],
-"d2/df7/classmorph_1_1ui_1_1IBundleStore.html":[1,0,0,1,148]
+"d2/df5/structmorph_1_1ui_1_1detail_1_1IsSlotBinding_3_01SlotBinding_3_01F_01_4_01_4.html":[3,0,0,28,2,21]
 };

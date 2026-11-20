@@ -1,5 +1,6 @@
 var NAVTREEINDEX12 =
 {
+"d4/dc1/classmorph_1_1backend_1_1RemoteServer.html#aaf7920ac29285053e0b065dceb7fd44e":[3,0,0,2,12,4],
 "d4/dc1/classmorph_1_1backend_1_1RemoteServer.html#abcdee5e1504ebcbef2415b029eec8818":[3,0,0,2,12,9],
 "d4/dc1/classmorph_1_1backend_1_1RemoteServer.html#ac422a872a1276a141e0354a27ad31618":[3,0,0,2,12,20],
 "d4/dc1/classmorph_1_1backend_1_1RemoteServer.html#ad197c37d0a3bd9bf562b04419021514d":[3,0,0,2,12,19],
@@ -248,6 +249,5 @@ var NAVTREEINDEX12 =
 "d5/d1d/structmorph_1_1reactive_1_1detail_1_1EqualityUsable_3_01std_1_1pair_3_01First_00_01Second_01_4_01_4.html":[3,0,0,20,0,3],
 "d5/d23/structmorph_1_1ui_1_1chat_1_1ToolCall.html":[3,0,0,28,1,31],
 "d5/d23/structmorph_1_1ui_1_1chat_1_1ToolCall.html#a504c2af0296cb62bff2ff0d5e14c09b7":[3,0,0,28,1,31,0],
-"d5/d23/structmorph_1_1ui_1_1chat_1_1ToolCall.html#a86e1fa24d414471a097402e98ba4e12b":[3,0,0,28,1,31,1],
-"d5/d23/structmorph_1_1ui_1_1chat_1_1ToolCall.html#ac158ded35075aa2a06523eb30922f084":[3,0,0,28,1,31,2]
+"d5/d23/structmorph_1_1ui_1_1chat_1_1ToolCall.html#a86e1fa24d414471a097402e98ba4e12b":[3,0,0,28,1,31,1]
 };

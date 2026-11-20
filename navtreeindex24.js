@@ -1,5 +1,6 @@
 var NAVTREEINDEX24 =
 {
+"d8/da5/classmorph_1_1ui_1_1detail_1_1ScreenCore.html#ac0ce4188565fc11f730fe9bd999066be":[1,0,0,1,0,44,48],
 "d8/da5/classmorph_1_1ui_1_1detail_1_1ScreenCore.html#ac0ce4188565fc11f730fe9bd999066be":[3,0,0,28,2,45,48],
 "d8/da5/classmorph_1_1ui_1_1detail_1_1ScreenCore.html#ad210f952c0974f91c563de5224ad8ffa":[1,0,0,1,0,44,3],
 "d8/da5/classmorph_1_1ui_1_1detail_1_1ScreenCore.html#ad210f952c0974f91c563de5224ad8ffa":[3,0,0,28,2,45,3],
@@ -248,6 +249,5 @@ var NAVTREEINDEX24 =
 "d9/d0c/structmorph_1_1ui_1_1ActionEffect.html#a467dfe85db54cb37a1743459806ef03e":[3,0,0,28,7,0],
 "d9/d0c/structmorph_1_1ui_1_1ActionEffect.html#a8918ac51da490991a7c185ede85d2edf":[1,0,0,1,5,1],
 "d9/d0c/structmorph_1_1ui_1_1ActionEffect.html#a8918ac51da490991a7c185ede85d2edf":[3,0,0,28,7,1],
-"d9/d0c/structmorph_1_1ui_1_1ActionEffect.html#af0dced928debec4dc806b622d91aba21":[1,0,0,1,5,2],
-"d9/d0c/structmorph_1_1ui_1_1ActionEffect.html#af0dced928debec4dc806b622d91aba21":[3,0,0,28,7,2]
+"d9/d0c/structmorph_1_1ui_1_1ActionEffect.html#af0dced928debec4dc806b622d91aba21":[1,0,0,1,5,2]
 };

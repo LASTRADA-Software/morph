@@ -1,5 +1,6 @@
 var NAVTREEINDEX9 =
 {
+"d3/dc2/classmorph_1_1ui_1_1ButtonWidget.html#a04d220bf790962e8f69de53763c6fb2f":[1,0,0,1,28,10],
 "d3/dc2/classmorph_1_1ui_1_1ButtonWidget.html#a04d220bf790962e8f69de53763c6fb2f":[3,0,0,28,30,10],
 "d3/dc2/classmorph_1_1ui_1_1ButtonWidget.html#a0bca98c8a37af7979f0de62f717313da":[1,0,0,1,28,0],
 "d3/dc2/classmorph_1_1ui_1_1ButtonWidget.html#a0bca98c8a37af7979f0de62f717313da":[3,0,0,28,30,0],
@@ -248,6 +249,5 @@ var NAVTREEINDEX9 =
 "d4/d07/classmorph_1_1ui_1_1StackWidget.html#ad90466322d76119cabb8eb77f0a538a2":[1,0,0,1,300,7],
 "d4/d07/classmorph_1_1ui_1_1StackWidget.html#ad90466322d76119cabb8eb77f0a538a2":[3,0,0,28,302,7],
 "d4/d07/classmorph_1_1ui_1_1StackWidget.html#adcfeff7a2042c634ddb1c929d77e5e12":[1,0,0,1,300,0],
-"d4/d07/classmorph_1_1ui_1_1StackWidget.html#adcfeff7a2042c634ddb1c929d77e5e12":[3,0,0,28,302,0],
-"d4/d08/typed__form_8hpp.html":[4,0,0,3,1,10]
+"d4/d07/classmorph_1_1ui_1_1StackWidget.html#adcfeff7a2042c634ddb1c929d77e5e12":[3,0,0,28,302,0]
 };

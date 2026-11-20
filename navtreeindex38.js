@@ -1,5 +1,6 @@
 var NAVTREEINDEX38 =
 {
+"dd/d77/classmorph_1_1qt__quick_1_1InspectorWindow.html#a3b2131449357416b55ef849055d9a007":[3,0,0,19,8,6],
 "dd/d77/classmorph_1_1qt__quick_1_1InspectorWindow.html#a699499d6e5bc72ddb7ea2e4feb91d18f":[3,0,0,19,8,4],
 "dd/d77/classmorph_1_1qt__quick_1_1InspectorWindow.html#a832d15873e9f992e2fad2a45993e194e":[3,0,0,19,8,5],
 "dd/d77/classmorph_1_1qt__quick_1_1InspectorWindow.html#a95a47110d6e958ba5a221714129936c9":[3,0,0,19,8,0],
@@ -248,6 +249,5 @@ var NAVTREEINDEX38 =
 "dd/db4/classmorph_1_1ui_1_1testing_1_1RecordingBackend.html#aecbebe0a379ae9566008ee2d8c5002c5":[3,0,0,28,3,4,60],
 "dd/db4/classmorph_1_1ui_1_1testing_1_1RecordingBackend.html#aed5a4b59168ee53f18606d9de8c0bb08":[3,0,0,28,3,4,63],
 "dd/db4/classmorph_1_1ui_1_1testing_1_1RecordingBackend.html#aedbe32905066b90d0c0aa16bfbc6df4a":[3,0,0,28,3,4,51],
-"dd/db4/classmorph_1_1ui_1_1testing_1_1RecordingBackend.html#aef6bdcb262adc944bfbdad5efed4947f":[3,0,0,28,3,4,0],
-"dd/db4/classmorph_1_1ui_1_1testing_1_1RecordingBackend.html#af4e1ae42b91882b8b4f7ba0328786f85":[3,0,0,28,3,4,53]
+"dd/db4/classmorph_1_1ui_1_1testing_1_1RecordingBackend.html#aef6bdcb262adc944bfbdad5efed4947f":[3,0,0,28,3,4,0]
 };
