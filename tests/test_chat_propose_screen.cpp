@@ -856,7 +856,7 @@ std::string oddDocument() {
 
 // Mutation: offer a tool for a screen that has no document.
 TEST_CASE("a_screen_with_no_document_is_not_offered_the_tools_and_the_read_tools_say_so", "[chat][propose][direct]") {
-    Direct direct;
+    Direct const direct;
     auto const nowhere = direct.context(std::nullopt, "lims.nowhere");
     CHECK_FALSE(Direct::offered(direct.propose, nowhere).offered);
     CHECK_FALSE(Direct::offered(direct.outline(), nowhere).offered);
@@ -878,7 +878,7 @@ TEST_CASE("a_document_that_is_not_json_is_an_error_for_every_tool_and_declines_t
           "[chat][propose][direct]") {
     chat::ChatLimits limits;
     limits.maxInlineDocumentBytes = 4;
-    Direct direct{limits};
+    Direct const direct{limits};
     auto const broken = direct.context("{not json");
     for (chat::ChatTool const& tool : direct.reads) {
         auto const outcome = Direct::called(tool, broken, R"({"text":"x"})");
@@ -889,7 +889,7 @@ TEST_CASE("a_document_that_is_not_json_is_an_error_for_every_tool_and_declines_t
     // Over the inline bound the screen is shown as an outline, which a document that is not JSON cannot give.
     CHECK_FALSE(Direct::offered(direct.propose, broken).offered);
 
-    Direct whole;
+    Direct const whole;
     auto context = whole.proposing();
     context.document = "{not json";
     auto const outcome =
@@ -901,7 +901,7 @@ TEST_CASE("a_document_that_is_not_json_is_an_error_for_every_tool_and_declines_t
 
 // Mutation: patch a screen the tool was never offered for.
 TEST_CASE("the_propose_tool_changes_nothing_without_its_offer", "[chat][propose][direct]") {
-    Direct direct;
+    Direct const direct;
     auto const outcome = Direct::called(direct.propose, direct.context(),
                                         R"({"patch":[{"op":"replace","path":"/view/children/0/text","value":"X"}]})");
     CHECK(outcome.isError);
@@ -929,30 +929,31 @@ TEST_CASE("the_read_tools_refuse_arguments_they_cannot_read_and_say_which", "[ch
         std::string arguments;
         std::string expected;
     };
-    std::vector<Case> const cases = {{0, "[]", "not a JSON object"},
-                                     {1, "[]", "not a JSON object"},
-                                     {2, "[]", "not a JSON object"},
-                                     {0, R"({"pointer":5})", "`pointer` must be a string"},
-                                     {0, R"({"depth":"deep"})", "`depth` must be a whole number from 0 to 32"},
-                                     {0, R"({"depth":-1})", "`depth` must be a whole number from 0 to 32"},
-                                     {0, R"({"depth":33})", "`depth` must be a whole number from 0 to 32"},
-                                     {0, R"({"depth":1.5})", "`depth` must be a whole number from 0 to 32"},
-                                     {0, R"({"pointer":"view"})", "must be empty or start with /"},
-                                     {0, R"({"pointer":"/nope"})", "no member `nope`"},
-                                     {1, "{}", "need `text`"},
-                                     {1, R"({"text":5})", "`text` must be a string"},
-                                     {1, R"({"text":""})", "must not be empty"},
-                                     {2, R"({"pointer":5})", "`pointer` must be a string"},
-                                     {2, R"({"depth":-1})", "`depth` must be a whole number from 0 to 32"},
-                                     {2, R"({"pointer":"/view/children/"})", "the array has 4 items"},
-                                     {2, R"({"pointer":"/view/children/first"})", "the array has 4 items"},
-                                     {2, R"({"pointer":"/view/children/99"})", "the array has 4 items"},
-                                     {2, R"({"pointer":"/view/children/12345678901"})", "the array has 4 items"},
-                                     {2, R"({"pointer":"/id/more"})", "holds no members"},
-                                     {2, R"({"pointer":"/a~1b"})", "no member `a/b`"},
-                                     {2, R"({"pointer":"/a~0b"})", "no member `a~b`"},
-                                     {2, R"({"pointer":"/a~2"})", "no member `a~2`"},
-                                     {2, R"({"pointer":"/a~"})", "no member `a~`"}};
+    std::vector<Case> const cases = {
+        {.tool = 0, .arguments = "[]", .expected = "not a JSON object"},
+        {.tool = 1, .arguments = "[]", .expected = "not a JSON object"},
+        {.tool = 2, .arguments = "[]", .expected = "not a JSON object"},
+        {.tool = 0, .arguments = R"({"pointer":5})", .expected = "`pointer` must be a string"},
+        {.tool = 0, .arguments = R"({"depth":"deep"})", .expected = "`depth` must be a whole number from 0 to 32"},
+        {.tool = 0, .arguments = R"({"depth":-1})", .expected = "`depth` must be a whole number from 0 to 32"},
+        {.tool = 0, .arguments = R"({"depth":33})", .expected = "`depth` must be a whole number from 0 to 32"},
+        {.tool = 0, .arguments = R"({"depth":1.5})", .expected = "`depth` must be a whole number from 0 to 32"},
+        {.tool = 0, .arguments = R"({"pointer":"view"})", .expected = "must be empty or start with /"},
+        {.tool = 0, .arguments = R"({"pointer":"/nope"})", .expected = "no member `nope`"},
+        {.tool = 1, .arguments = "{}", .expected = "need `text`"},
+        {.tool = 1, .arguments = R"({"text":5})", .expected = "`text` must be a string"},
+        {.tool = 1, .arguments = R"({"text":""})", .expected = "must not be empty"},
+        {.tool = 2, .arguments = R"({"pointer":5})", .expected = "`pointer` must be a string"},
+        {.tool = 2, .arguments = R"({"depth":-1})", .expected = "`depth` must be a whole number from 0 to 32"},
+        {.tool = 2, .arguments = R"({"pointer":"/view/children/"})", .expected = "the array has 4 items"},
+        {.tool = 2, .arguments = R"({"pointer":"/view/children/first"})", .expected = "the array has 4 items"},
+        {.tool = 2, .arguments = R"({"pointer":"/view/children/99"})", .expected = "the array has 4 items"},
+        {.tool = 2, .arguments = R"({"pointer":"/view/children/12345678901"})", .expected = "the array has 4 items"},
+        {.tool = 2, .arguments = R"({"pointer":"/id/more"})", .expected = "holds no members"},
+        {.tool = 2, .arguments = R"({"pointer":"/a~1b"})", .expected = "no member `a/b`"},
+        {.tool = 2, .arguments = R"({"pointer":"/a~0b"})", .expected = "no member `a~b`"},
+        {.tool = 2, .arguments = R"({"pointer":"/a~2"})", .expected = "no member `a~2`"},
+        {.tool = 2, .arguments = R"({"pointer":"/a~"})", .expected = "no member `a~`"}};
     for (Case const& item : cases) {
         INFO(item.arguments);
         auto const outcome = Direct::called(direct.reads.at(item.tool), direct.context(), item.arguments);
@@ -963,7 +964,7 @@ TEST_CASE("the_read_tools_refuse_arguments_they_cannot_read_and_say_which", "[ch
 
 // Mutation: show a string value whole, or cut it in the middle of a character, or list a member that is not text.
 TEST_CASE("the_outline_cuts_long_labels_at_a_character_and_names_only_text_members", "[chat][propose][direct]") {
-    Direct direct;
+    Direct const direct;
     auto const context = direct.context(oddDocument());
     auto const outline = Direct::called(direct.outline(), context, R"({"pointer":"/view/children","depth":1})");
     REQUIRE_FALSE(outline.isError);
@@ -991,7 +992,7 @@ TEST_CASE("the_outline_cuts_long_labels_at_a_character_and_names_only_text_membe
 TEST_CASE("an_outline_that_does_not_fit_even_its_first_line_says_it_is_cut", "[chat][propose][direct]") {
     chat::ChatLimits limits;
     limits.maxToolResultBytes = 20;
-    Direct direct{limits};
+    Direct const direct{limits};
     auto const outcome = Direct::called(direct.outline(), direct.context(), "{}");
     CHECK_FALSE(outcome.isError);
     CHECK(outcome.text.contains("the outline is cut at 20 bytes"));
@@ -1002,7 +1003,7 @@ TEST_CASE("an_outline_that_does_not_fit_even_its_first_line_says_it_is_cut", "[c
 TEST_CASE("a_find_that_outgrows_its_cap_stops_and_counts_what_it_left_out", "[chat][propose][direct]") {
     chat::ChatLimits limits;
     limits.maxToolResultBytes = 300;
-    Direct direct{limits};
+    Direct const direct{limits};
     auto const outcome =
         Direct::called(direct.find(), direct.context(largeScreen("lims.base", 40)), R"({"text":"filler"})");
     CHECK_FALSE(outcome.isError);
@@ -1013,21 +1014,21 @@ TEST_CASE("a_find_that_outgrows_its_cap_stops_and_counts_what_it_left_out", "[ch
 
 // Mutation: read the node past the cap, or fail to say the depth was lowered.
 TEST_CASE("a_node_is_shown_as_deep_as_the_cap_allows_and_the_root_needs_no_pointer", "[chat][propose][direct]") {
-    Direct direct;
+    Direct const direct;
     auto const root = Direct::called(direct.node(), direct.context(), R"({"depth":0})");
     CHECK(root.text.starts_with("(root) to depth 0"));
     CHECK(root.text.contains("[object, "));
 
     chat::ChatLimits limits;
     limits.maxToolResultBytes = 200;
-    Direct capped{limits};
+    Direct const capped{limits};
     auto const lowered = Direct::called(capped.node(), capped.context(), R"({"depth":6})");
     CHECK_FALSE(lowered.isError);
     CHECK(lowered.text.contains("the answer is capped at 200 bytes"));
     CHECK_FALSE(lowered.text.contains("[cut at the byte cap]"));
 
     limits.maxToolResultBytes = 10;
-    Direct tiny{limits};
+    Direct const tiny{limits};
     auto const cut = Direct::called(tiny.node(), tiny.context(), R"({"depth":3})");
     CHECK_FALSE(cut.isError);
     CHECK(cut.text.contains("[cut at the byte cap]"));
@@ -1036,18 +1037,19 @@ TEST_CASE("a_node_is_shown_as_deep_as_the_cap_allows_and_the_root_needs_no_point
 
 // Mutation: skip an operation kind, or read `from` for an operation that has none.
 TEST_CASE("every_operation_kind_applies_and_a_refusal_names_the_kind_that_broke", "[chat][propose][direct]") {
-    Direct direct;
+    Direct const direct;
     struct Applies {
         std::string patch;
         std::string contains;
     };
     std::vector<Applies> const applies = {
-        {R"([{"op":"add","path":"/view/children/0/testId","value":"first"}])", "\"testId\":\"first\""},
-        {R"([{"op":"test","path":"/view/children/0/text","value":"Results"},)"
-         R"({"op":"replace","path":"/view/children/0/text","value":"Tested"}])",
-         "Tested"},
-        {R"([{"op":"move","from":"/view/children/0","path":"/view/children/1"}])", "Results"},
-        {R"([{"op":"copy","from":"/view/children/0","path":"/view/children/1"}])", "Results"}};
+        {.patch = R"([{"op":"add","path":"/view/children/0/testId","value":"first"}])",
+         .contains = R"("testId":"first")"},
+        {.patch = R"([{"op":"test","path":"/view/children/0/text","value":"Results"},)"
+                  R"({"op":"replace","path":"/view/children/0/text","value":"Tested"}])",
+         .contains = "Tested"},
+        {.patch = R"([{"op":"move","from":"/view/children/0","path":"/view/children/1"}])", .contains = "Results"},
+        {.patch = R"([{"op":"copy","from":"/view/children/0","path":"/view/children/1"}])", .contains = "Results"}};
     for (Applies const& item : applies) {
         INFO(item.patch);
         auto const outcome = Direct::called(direct.propose, direct.proposing(), R"({"patch":)" + item.patch + "}");
@@ -1061,15 +1063,24 @@ TEST_CASE("every_operation_kind_applies_and_a_refusal_names_the_kind_that_broke"
         std::string why;
     };
     std::vector<Refused> const refused = {
-        {R"([{"op":"add","path":"/nope/x","value":1}])", "add /nope/x", "does not exist"},
-        {R"([{"op":"remove","path":"/nope"}])", "remove /nope", "does not exist"},
-        {R"([{"op":"move","from":"/nope","path":"/view/x"}])", "move /view/x", "does not exist"},
-        {R"([{"op":"copy","from":"/nope","path":"/view/x"}])", "copy /view/x", "does not exist"},
-        {R"([{"op":"test","path":"/id","value":"another"}])", "test /id", "not the one the test expects"},
-        {R"([{"op":"add","path":"id","value":"x"}])", "add id", "not a valid JSON Pointer"},
-        {R"([{"op":"remove","path":"/view/x~"}])", "remove /view/x~", "not a valid JSON Pointer"},
-        {R"([{"op":"move","from":"/view","path":"/view/children/0/z"}])", "move /view/children/0/z",
-         "cannot be applied there"}};
+        {.patch = R"([{"op":"add","path":"/nope/x","value":1}])", .kind = "add /nope/x", .why = "does not exist"},
+        {.patch = R"([{"op":"remove","path":"/nope"}])", .kind = "remove /nope", .why = "does not exist"},
+        {.patch = R"([{"op":"move","from":"/nope","path":"/view/x"}])",
+         .kind = "move /view/x",
+         .why = "does not exist"},
+        {.patch = R"([{"op":"copy","from":"/nope","path":"/view/x"}])",
+         .kind = "copy /view/x",
+         .why = "does not exist"},
+        {.patch = R"([{"op":"test","path":"/id","value":"another"}])",
+         .kind = "test /id",
+         .why = "not the one the test expects"},
+        {.patch = R"([{"op":"add","path":"id","value":"x"}])", .kind = "add id", .why = "not a valid JSON Pointer"},
+        {.patch = R"([{"op":"remove","path":"/view/x~"}])",
+         .kind = "remove /view/x~",
+         .why = "not a valid JSON Pointer"},
+        {.patch = R"([{"op":"move","from":"/view","path":"/view/children/0/z"}])",
+         .kind = "move /view/children/0/z",
+         .why = "cannot be applied there"}};
     for (Refused const& item : refused) {
         INFO(item.patch);
         auto const outcome = Direct::called(direct.propose, direct.proposing(), R"({"patch":)" + item.patch + "}");

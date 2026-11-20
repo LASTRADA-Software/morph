@@ -830,7 +830,8 @@ void Session::setHostCommands(HostCommands commands) {
     _hostCommandNames.set(std::move(commands.available));
 }
 
-bool Session::hostNameIn(std::string_view name, std::string_view document) const {
+bool Session::hostNameIn(std::string_view name,  // NOLINT(bugprone-easily-swappable-parameters)
+                         std::string_view document) const {
     static_cast<void>(_hostScopesRevision.get());
     auto const found = _hostScopes.find(name);
     return found == _hostScopes.end() || found->second.contains(document);

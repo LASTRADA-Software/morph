@@ -200,7 +200,7 @@ TEST_CASE("compactJson removes white space between tokens only, in order, and le
 TEST_CASE("prettyJson breaks a container that starts past the line width, and compactJson drops every kind of space",
           "[ui][json-source]") {
     std::string const name(120, 'k');
-    std::string const document = "{\"" + name + "\":{\"a\":1},\"list\":[[1],[2,[3]],\"x\"]}";
+    std::string const document = R"({")" + name + R"(":{"a":1},"list":[[1],[2,[3]],"x"]})";
     std::string const pretty = morph::ui::prettyJson(document);
     CHECK(pretty.contains("\"" + name + "\": {\n    \"a\": 1\n  }"));
     CHECK(pretty.contains("\"list\": [[1], [2, [3]], \"x\"]"));
