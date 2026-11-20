@@ -1373,3 +1373,66 @@ TEST_CASE("ui::Mounted: a tab bar's overflow label reaches the backend when it i
         CHECK(backend.dump().contains("moreLabel=Else"));
     }
 }
+
+namespace {
+
+// A column of ten rows of four widgets each, as the child of a column whose own `visible` is @p visible.
+ui::Node tenRows(ui::Prop<bool> visible, ui::Prop<std::string> label = std::string{"c"}) {
+    std::vector<ui::Node> rows;
+    for (int row = 0; row < 10; ++row) {
+        rows.push_back(ui::row({.children = {ui::text({.text = "a"}), ui::button({.label = "b"}),
+                                             ui::column({.children = {ui::text({.text = label})}})}}));
+    }
+    return ui::column(
+        {.children = {ui::column({.children = std::move(rows), .common = {.visible = std::move(visible)}})}});
+}
+
+std::ptrdiff_t widgetCount(RecordingBackend const& backend) {
+    std::string const dump = backend.dump();
+    return std::count(dump.begin(), dump.end(), '\n');
+}
+
+}  // namespace
+
+// Mutation: mount a hidden stack's children at once (the hidden count equals the shown one).
+TEST_CASE("ui::Mounted: a stack that mounts hidden does not build its children", "[ui]") {
+    auto const count = [](ui::Prop<bool> visible) {
+        Owner owner;
+        Runtime runtime{owner};
+        RecordingBackend backend;
+        ui::Mounted const view{runtime, backend, tenRows(std::move(visible))};
+        return widgetCount(backend);
+    };
+    Owner owner;
+    Runtime runtime{owner};
+    Signal<bool> shown{runtime, false};
+    CHECK(count(true) == 52);
+    CHECK(count(false) == 2);
+    CHECK(count([&] { return shown.get(); }) == 2);
+}
+
+// Mutation: mount the children on every show instead of the first (they double), or never (the count stays 2).
+TEST_CASE("ui::Mounted: a hidden stack mounts its children the first time it is shown, and keeps them", "[ui]") {
+    Owner owner;
+    Runtime runtime{owner};
+    RecordingBackend backend;
+    Signal<bool> shown{runtime, false};
+    Signal<std::string> label{runtime, "one"};
+    ui::Mounted const view{runtime, backend,
+                           tenRows([&] { return shown.get(); }, ui::Prop<std::string>{[&] { return label.get(); }})};
+    REQUIRE(widgetCount(backend) == 2);
+    shown.set(true);
+    owner.runAll();
+    CHECK(widgetCount(backend) == 52);
+    CHECK(backend.dump().find("text=one") != std::string::npos);
+    shown.set(false);
+    owner.runAll();
+    CHECK(widgetCount(backend) == 52);
+    label.set("two");
+    owner.runAll();
+    CHECK(backend.dump().find("text=two") != std::string::npos);
+    CHECK(backend.dump().find("text=one") == std::string::npos);
+    shown.set(true);
+    owner.runAll();
+    CHECK(widgetCount(backend) == 52);
+}
