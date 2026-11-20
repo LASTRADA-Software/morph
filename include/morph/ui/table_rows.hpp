@@ -431,7 +431,7 @@ public:
     virtual void clearRetained() {}
 
     /// @brief Whether a held row is retained and the filter rejects it.
-    /// @param key The row's key; a row row look has its key, not its view index.
+    /// @param key The row's key; a row's look has its key, not its view index.
     /// @return `true` for a held row the latest reply that supplied it listed as unmatched; `false` for a key the
     ///         rows do not hold.
     [[nodiscard]] virtual bool unmatched(table::RowId const& key) const {
@@ -4072,11 +4072,13 @@ private:
         }
         heardRevision(page->revision);
         if (fetch.query == _window.query()) {
-            // A reply to a query of another retained set names that set's view.
-            if (!page->viewRevision.empty() && stamp == _retainStamp) {
-                _viewRevision = page->viewRevision;
+            // A reply to a query of another retained set names that set's view, and its rows' marks are of that set.
+            if (stamp == _retainStamp) {
+                if (!page->viewRevision.empty()) {
+                    _viewRevision = page->viewRevision;
+                }
+                heardUnmatched(*page);
             }
-            heardUnmatched(*page);
             for (table::RowId const& key : page->keys) {
                 _outOfView.erase(key);
             }
@@ -4135,10 +4137,12 @@ private:
         }
         heardRevision(page->revision);
         if (fetch.query == _window.query()) {
-            if (!page->viewRevision.empty() && stamp == _retainStamp) {
-                _viewRevision = page->viewRevision;
+            if (stamp == _retainStamp) {
+                if (!page->viewRevision.empty()) {
+                    _viewRevision = page->viewRevision;
+                }
+                heardUnmatched(*page);
             }
-            heardUnmatched(*page);
             std::unordered_set<table::RowId> const answered(page->keys.begin(), page->keys.end());
             for (table::RowId const& key : fetch.keys) {
                 if (answered.contains(key)) {

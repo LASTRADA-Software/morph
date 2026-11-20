@@ -11285,9 +11285,9 @@ private:
         if (keys.empty() || _model->rows->retain(keys) != RetainResult::OverBound) {
             return;
         }
-        _core->tableMessage(*_element, "The changed rows are not kept in view: a table keeps at most " +
-                                           render::formatCanonicalNumber(std::to_string(table::QueryLimits{}.maxRetained),
-                                                                         _core->session.formatting().numeric));
+        std::string const bound = render::formatCanonicalNumber(std::to_string(table::QueryLimits{}.maxRetained),
+                                                                _core->session.formatting().numeric);
+        _core->tableMessage(*_element, "The changed rows are not kept in view: a table keeps at most " + bound);
     }
 
     ScreenCore* _core;
@@ -13203,7 +13203,8 @@ Node ScreenCore::modelTableOf(DocNode const& node, LowerCtx const& ctx, ElementS
             status.standing =
                 render::formatCanonicalNumber(std::to_string(counts.retained), scope->formatting().numeric) +
                 (counts.retained == 1 ? " row shown that no longer matches" : " rows shown that no longer match");
-            status.standingEntries = {StatusEntry{.id = std::string{kShowMatching}, .label = "Show only matching rows"}};
+            status.standingEntries = {
+                StatusEntry{.id = std::string{kShowMatching}, .label = "Show only matching rows"}};
         }
         return status;
     });

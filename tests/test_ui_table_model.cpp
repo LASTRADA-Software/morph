@@ -5355,7 +5355,7 @@ inline constexpr std::string_view kSelectionSchema =
 inline constexpr std::string_view kRowSchema =
     R"({"type":"object","properties":{"row":{"x-rowOf":"Lims_SampleModel.samples"}}})";
 
-// The table of Tasks 17a to 17c: filtered to open(), with the mutations of the "Catalog actions" table.
+// The table the selection cases mount: filtered to open(), with the mutation `tag`, which takes its selection.
 inline constexpr std::string_view kSelectionTable =
     R"({"kind":"table","id":"t","testId":"t","model":"sample","table":"samples",
     "selectionMode":"multiple","filters":{"columns":{"status":{"include":[{"eq":"open"}]}}}})";
@@ -5711,7 +5711,7 @@ namespace {
 
 using morph::ui::RowMarks;
 
-// The table of Tasks 17a to 17c with `retainChanged`, and the mutation `close` of the "Catalog actions" table.
+// kSelectionTable with `retainChanged`, and the mutation `close`, an action that changes the table's rows.
 inline constexpr std::string_view kRetainTable =
     R"({"kind":"table","id":"t","testId":"t","model":"sample","table":"samples","retainChanged":true,
     "selectionMode":"multiple","filters":{"columns":{"status":{"include":[{"eq":"open"}]}}}})";
@@ -5881,3 +5881,68 @@ TEST_CASE("retained rows: an event before its action's reply is held", "[ui][tab
     }
 }
 // Mutation: no hold, under which row 1 leaves the view and comes back.
+
+TEST_CASE("retained rows: a reply to a query of the old retained set names no revision", "[ui][table][retain]") {
+    TableHarness h;
+    auto screen = mountRetaining(h);
+    int const table = h.byTestId("Table", "t");
+    // A page refetch goes with no retained row, and is still in flight when the action's reply retains row 1.
+    fireEvent(h, "Lims_SampleModel.samples", {});
+    REQUIRE(openCalls(h, "Table.samples") == 1);
+    REQUIRE(lastQuery(h).retain.empty());
+    runMutation(h, "close");
+    settleMutation(h, "close", closedReply({1}));
+    REQUIRE(openCalls(h, "Table.samples") == 2);
+    CHECK(lastQuery(h).retain == idsOf({1}));
+    // The stale page answers: its revision and its marks are of the view without row 1.
+    replyPage(h, selectionPage(openRows(), 6, "old", {1}));
+    CHECK(elementOf(*screen, "t").tableRows->counts().retained == 0);
+    h.backend.selectAll(table);
+    h.settle();
+    CHECK(statusOf(h, table).message == "Select all is available once the rows have loaded");
+    CHECK(elementValue(h, "t", "selectionSet").field("view") == nullptr);
+    // The reply to the query that carried row 1 names the view it is in.
+    while (openCalls(h, "Table.samples") > 0) {
+        replyPage(h, selectionReply({{0}, {1, "closed"}}, 6, "new", {1}, true));
+    }
+    CHECK(rowMarks(h, std::int64_t{1}) ==
+          RowMarks{.unmatched = true, .tooltip = "This row no longer matches the filter"});
+    h.backend.selectAll(table);
+    h.settle();
+    Value const selection = elementValue(h, "t", "selectionSet");
+    REQUIRE(selection.field("view") != nullptr);
+    CHECK(*selection.field("view")->field("revision") == Value{std::string{"new"}});
+    CHECK(*selection.field("view")->field("retained") == value("[1]"));
+}
+// Mutation: the check removed (a reply's revision and marks taken whatever retained set its query carried), which
+// selects the view under the revision "old".
+
+TEST_CASE("retained rows: rows over the engine retain too", "[ui][table][retain]") {
+    RowsFixture h;
+    auto const source = std::make_shared<TestRowsSource>(10);
+    EngineRows rows{source, source->recordOf(), table::EngineOptions{.owner = &h.owner}};
+    table::FilterSpec only1;
+    only1.columns["name"].include.push_back(table::FilterEntry{.eq = "row-1"});
+    REQUIRE(rows.setFilter(only1));
+    h.settle();
+    REQUIRE(rows.total().rows == 1);
+    std::vector<table::RowId> const three{std::int64_t{3}};
+    CHECK(rows.retain(three) == morph::ui::RetainResult::Retained);
+    h.settle();
+    CHECK(rows.total().rows == 2);
+    CHECK(rows.unmatched(table::RowId{std::int64_t{3}}));
+    CHECK_FALSE(rows.unmatched(table::RowId{std::int64_t{1}}));
+    CHECK_FALSE(rows.unmatched(table::RowId{std::int64_t{7}}));  // not in the view
+    CHECK(rows.counts().retained == 1);
+    CHECK(rows.selectView()->retained == three);
+    std::vector<table::RowId> over;
+    for (std::int64_t key = 100; key < 100 + 10'000; ++key) {
+        over.emplace_back(key);
+    }
+    CHECK(rows.retain(over) == morph::ui::RetainResult::OverBound);
+    CHECK(rows.counts().retained == 1);
+    REQUIRE(rows.setFilter(table::FilterSpec{}));
+    h.settle();
+    CHECK(rows.counts().retained == 0);
+    CHECK(rows.engine().retained().empty());
+}
