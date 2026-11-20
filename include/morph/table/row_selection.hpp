@@ -318,12 +318,19 @@ struct Membership {
 /// @param policy    How a changed view is treated.
 /// @param views     The server's view cache; null computes the view.
 /// @param record    The table's record name; empty caches nothing.
-/// @return The keys in source order, or the error.
+/// @param rowScoped The registration's `rowScoped`: the table then needs a `ServedTable::scope`.
+/// @return The keys in source order, or the error: `SourceContract` for a row-scoped table with no scope.
 [[nodiscard]] inline std::expected<SelectedRows, TableError> resolveSelection(ServedTable const& served,
                                                                               PlainSelection const& selection,
                                                                               SelectionPolicy policy,
                                                                               ViewCache* views,
-                                                                              std::string_view record) {
+                                                                              std::string_view record,
+                                                                              bool rowScoped = false) {
+    // A row-scoped table with no scope would let callers share views of different rows.
+    if (rowScoped && served.scope.empty()) {
+        return std::unexpected(TableError{
+            .code = TableErrorCode::SourceContract, .column = {}, .message = "a row-scoped table needs a scope"});
+    }
     if (served.source == nullptr) {
         return std::unexpected(
             TableError{.code = TableErrorCode::Unavailable, .column = {}, .message = "the table serves no source"});
@@ -367,8 +374,12 @@ struct Membership {
 }
 
 /// @brief The owner of a `resolve` that runs where it is called: runs each task at once, inside a scope that names
-///        it, so the completion's checks find the task on its owner. `resolve` posts to it only from the thread
-///        that called it, so its tasks never overlap, which is what an owner must guarantee.
+///        it, so the completion's checks find the task on its owner.
+///
+/// One object serves every thread. It is serial for each completion only: every post it gets for one completion
+/// comes from the thread that called `resolve` (the settle within the call, then a `then` or `co_await` attach on
+/// that thread), and the scope it states is the calling thread's own. Two threads resolving at once run their tasks
+/// side by side, each touching only its own completion.
 class ResolveInline final : public exec::IExecutor {
 public:
     /// @brief Runs @p task now, on the calling thread.
@@ -411,8 +422,11 @@ template <auto Function>
 /// `ViewChanged`. A view of more than `QueryLimits::maxSelectedRows` rows is `LimitExceeded`.
 ///
 /// Inside a server's dispatch the work runs on the runtime's `work` with its view cache, and the completion
-/// belongs to the runtime's `settle`; with no runtime, or one missing either, it runs here with no cache, and the
-/// completion is settled, and a `then` attached afterwards runs, before this returns.
+/// belongs to the runtime's `settle`. With no runtime, or one missing either of the two, it runs here with no cache
+/// (a runtime with `work` and no `settle` included), and the completion is settled before this returns: a `then`
+/// attached afterwards on this thread runs at once, and `co_await` works from any coroutine. A `then` attached from
+/// a task of another executor is off the completion's owner, which a debug build asserts. A row-scoped table whose
+/// function returns no `scope` is `SourceContract`, as a page query of it is.
 /// @tparam Function The table's function.
 /// @tparam Model    The model type.
 /// @param model     The model instance; not const, as a table function is not.
@@ -427,12 +441,13 @@ template <auto Function, typename Model>
     auto served = detail::pinned(detail::serve<Function>(model, context));
     auto plain = detail::plainOf(selection);
     auto record = detail::recordNameOf(std::type_index{typeid(TableOf<Function>)});
+    bool const rowScoped = detail::tableRecordOf<Function>().second;
     auto const* const runtime = currentTableRuntime();
     if (runtime == nullptr || runtime->work == nullptr || runtime->settle == nullptr) {
         static detail::ResolveInline owner;
         auto [completion, promise] = async::Completion<Result>::makeSettleable(&owner);
         try {
-            promise.resolve(detail::resolveSelection(served, plain, policy, nullptr, record));
+            promise.resolve(detail::resolveSelection(served, plain, policy, nullptr, record, rowScoped));
         } catch (...) {
             promise.reject(std::current_exception());
         }
@@ -441,10 +456,11 @@ template <auto Function, typename Model>
     auto [completion, promise] = async::Completion<Result>::makeSettleable(runtime->settle);
     // A posted task is a `std::function`, which copies: the promise is shared.
     auto shared = std::make_shared<typename async::Completion<Result>::Promise>(std::move(promise));
-    runtime->work->post([shared, served = std::move(served), plain = std::move(plain), policy,
-                         views = runtime->views, record = std::move(record)] {
+    runtime->work->post([shared, served = std::move(served), plain = std::move(plain), policy, rowScoped,
+                         views = runtime->views, record = std::move(record), keep = runtime->settleKeep] {
+        static_cast<void>(keep);
         try {
-            shared->resolve(detail::resolveSelection(served, plain, policy, views, record));
+            shared->resolve(detail::resolveSelection(served, plain, policy, views, record, rowScoped));
         } catch (...) {
             shared->reject(std::current_exception());
         }

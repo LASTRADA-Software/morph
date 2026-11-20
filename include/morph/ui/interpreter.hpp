@@ -2193,7 +2193,13 @@ public:
     /// @param table The table's element; one that is neither a model-backed table nor one over `rows` is left alone.
     /// @param text  The message, or empty.
     void tableMessage(ElementState& table, std::string text);
-    /// Shows a message in a table's status line with the choices it offers, each with what choosing it runs.
+    /// @brief Shows @p text as a model-backed table's status-line message, as the overload above does, with the
+    ///        choices it offers after it; choosing one clears the message and runs what it was given with. The
+    ///        choices go with the message: when it is cleared or replaced, or its hold ends. Under `status: false`
+    ///        the text goes to the host and no choice is offered.
+    /// @param table   The table's element; for one that is not a model-backed table the choices are not offered.
+    /// @param text    The message; not empty.
+    /// @param entries Each choice, by its id and label, with what choosing it runs.
     void tableMessage(ElementState& table, std::string text,
                       std::vector<std::pair<StatusEntry, std::function<void()>>> entries);
 

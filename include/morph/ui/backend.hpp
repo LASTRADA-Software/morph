@@ -998,7 +998,8 @@ public:
     ///        hold included, until the next `setSelection`. In that state a `Ctrl`+click reports `Extend` with the
     ///        keys now selected among the rows the backend holds, so the caller reads each held key absent from the
     ///        report as left out and each present one as selected again; a plain click reports `Replace` and ends the
-    ///        state. A backend that does not take it draws the selection `setSelection` gave.
+    ///        state. A backend that takes `setOnSelectAll` must take this too: the caller selects the view through it,
+    ///        and a backend that kept drawing its key selection would report every other shown row as left out.
     /// @param except The keys left out of the selection.
     virtual void setSelectionView(std::vector<Key> const& except) { static_cast<void>(except); }
 

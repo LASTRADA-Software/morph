@@ -64,10 +64,18 @@ struct SelectionModel {
     }
 };
 
+// A row-scoped table whose function names no scope: what the registration says it must.
+struct UnscopedModel {
+    SelectionModel inner;
+    [[nodiscard]] ServedTable rows(TableContext const& context) { return inner.rows(context); }
+};
+
 }  // namespace seltest
 
 BRIDGE_REGISTER_MODEL(seltest::SelectionModel, "seltest::SelectionModel")
 BRIDGE_REGISTER_TABLE(seltest::SelectionModel, "rows", &seltest::SelectionModel::rows)
+BRIDGE_REGISTER_MODEL(seltest::UnscopedModel, "seltest::UnscopedModel")
+BRIDGE_REGISTER_TABLE(seltest::UnscopedModel, "unscopedRows", &seltest::UnscopedModel::rows, morph::table::rowScoped)
 
 namespace {
 
@@ -104,6 +112,14 @@ T settledNow(morph::async::Completion<T>& completion) {
     completion.then([&out](T const& value) { out = value; });
     REQUIRE(out.has_value());
     return std::move(*out);
+}
+
+// The code of the error a settled completion holds; a value fails the case.
+template <typename T>
+TableErrorCode errorOf(morph::async::Completion<T>& completion) {
+    auto const settled = settledNow(completion);
+    REQUIRE_FALSE(settled.has_value());
+    return settled.error().code;
 }
 
 std::string revisionOf(SelectionModel& model, FilterSpec const& filters, std::vector<RowId> retained = {}) {
@@ -384,8 +400,38 @@ TEST_CASE("view selection: the view revision is membership", "[table][selection]
     model.source->patchRow(RowId{std::int64_t{7}}, {Cell{std::string{"open"}}, Cell{tabletest::dec("0.7")}});
     CHECK(revisionOf(model, open()) != before);  // a row came in
     CHECK(revisionOf(model, open(), {RowId{std::int64_t{8}}}) != revisionOf(model, open()));
+    // One row out and another in: as many rows as before, and not the same ones.
+    std::string const seven = revisionOf(model, open());
+    model.source->patchRow(RowId{std::int64_t{2}}, {Cell{std::string{"closed"}}, Cell{tabletest::dec("9.5")}});
+    CHECK(revisionOf(model, open()) != before);  // 0,1,3,4,5,7 against 0..5: six rows each, and different
+    CHECK(revisionOf(model, open()) != seven);
 }
 // Mutation: the revision taken from the snapshot's version, which changes it on the first edit.
+
+TEST_CASE("view selection: the digest of a set of keys", "[table][selection][revision]") {
+    MembershipDigest forward;
+    forward.add(RowId{std::int64_t{0}});
+    forward.add(RowId{std::int64_t{1}});
+    // count, sum of the FNV-1a hashes of "i:0" and "i:1", sum of their splitmix64 mixes; each 16 hex digits.
+    CHECK(forward.text() == "00000000000000025614773256aab02f9ad26e76a98ec3f4");
+    MembershipDigest backward;
+    backward.add(RowId{std::int64_t{1}});
+    backward.add(RowId{std::int64_t{0}});
+    CHECK(backward.text() == forward.text());  // a set: the order keys are added in does not matter
+    MembershipDigest swapped;
+    swapped.add(RowId{std::int64_t{0}});
+    swapped.add(RowId{std::int64_t{2}});
+    CHECK(swapped.text() != forward.text());  // as many keys, other ones
+}
+// Mutation: the digest of the count alone, which passes the pinned value only by its first 16 digits.
+
+TEST_CASE("view selection: a row-scoped table with no scope is refused", "[table][selection][resolve]") {
+    seltest::UnscopedModel model;
+    RowSelection<&seltest::UnscopedModel::rows> selection{.keys = keysOf({1}), .view = {}, .except = {}};
+    auto resolved = resolve(model, selection, caller(), SelectionPolicy::Current);
+    CHECK(errorOf(resolved) == TableErrorCode::SourceContract);
+}
+// Mutation: no scope check in resolve, which resolves one caller's selection against rows no scope names.
 
 TEST_CASE("view selection: resolve under Exact is the view less except, in source order",
           "[table][selection][resolve]") {
@@ -401,7 +447,7 @@ TEST_CASE("view selection: resolve under Exact is the view less except, in sourc
 
     model.source->patchRow(RowId{std::int64_t{7}}, {Cell{std::string{"open"}}, Cell{tabletest::dec("0.7")}});
     auto changed = resolve(model, selection, caller(), SelectionPolicy::Exact);
-    CHECK(settledNow(changed).error().code == TableErrorCode::ViewChanged);
+    CHECK(errorOf(changed) == TableErrorCode::ViewChanged);
     auto current = resolve(model, selection, caller(), SelectionPolicy::Current);
     CHECK(settledNow(current).value().keys ==
           std::vector<RowId>{std::int64_t{0}, std::int64_t{1}, std::int64_t{2}, std::int64_t{4}, std::int64_t{5},
@@ -412,7 +458,7 @@ TEST_CASE("view selection: resolve under Exact is the view less except, in sourc
 
 TEST_CASE("view selection: a key selection resolves to the keys the caller sees", "[table][selection][resolve]") {
     SelectionModel model;
-    // The caller's source is rows 0..4 only, through Task 2's table::scoped.
+    // The caller's source is rows 0..4 only, through table::scoped.
     model.scope = keysOf({0, 1, 2, 3, 4});
     RowSelection<&SelectionModel::rows> selection{.keys = keysOf({3, 1, 8}), .view = {}, .except = {}};
     auto resolved = resolve(model, selection, caller(), SelectionPolicy::Exact);
@@ -430,7 +476,7 @@ TEST_CASE("view selection: a view over maxSelectedRows is LimitExceeded", "[tabl
         .keys = {}, .view = {{.filters = open(), .retained = {}, .revision = {}}}, .except = keysOf({3})};
     auto over = resolve(model, selection, caller(), SelectionPolicy::Current);
     // The bound is on the view, 6 rows, not on what is left of it, 5.
-    CHECK(settledNow(over).error().code == TableErrorCode::LimitExceeded);
+    CHECK(errorOf(over) == TableErrorCode::LimitExceeded);
     model.limits.maxSelectedRows = 6;
     auto within = resolve(model, selection, caller(), SelectionPolicy::Current);
     CHECK(settledNow(within).value().keys == keysOf({0, 1, 2, 4, 5}));
