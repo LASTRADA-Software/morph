@@ -5,5 +5,6 @@ var searchData=
   ['datetime_2ehpp_2',['datetime.hpp',['../d7/d4a/datetime_8hpp.html',1,'']]],
   ['dev_5freload_2ehpp_3',['dev_reload.hpp',['../d0/dcd/dev__reload_8hpp.html',1,'']]],
   ['dev_5ftools_2ehpp_4',['dev_tools.hpp',['../d3/d6d/dev__tools_8hpp.html',1,'']]],
-  ['document_2ehpp_5',['document.hpp',['../dd/d39/document_8hpp.html',1,'']]]
+  ['dictation_2ehpp_5',['dictation.hpp',['../dd/d4a/dictation_8hpp.html',1,'']]],
+  ['document_2ehpp_6',['document.hpp',['../dd/d39/document_8hpp.html',1,'']]]
 ];

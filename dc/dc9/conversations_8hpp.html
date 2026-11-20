@@ -133,6 +133,7 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('dc/dc9/convers
 <code>#include &lt;string_view&gt;</code><br />
 <code>#include &lt;utility&gt;</code><br />
 <code>#include &lt;vector&gt;</code><br />
+<code>#include &quot;../../core/wire.hpp&quot;</code><br />
 <code>#include &quot;<a class="el" href="../../d3/d5b/provider_8hpp_source.html">provider.hpp</a>&quot;</code><br />
 </div>
 <p><a href="../../dc/dc9/conversations_8hpp_source.html">Go to the source code of this file.</a></p>
@@ -145,12 +146,72 @@ Classes</h2></td></tr>
 <tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">Which conversation a turn belongs to.  <a href="../../d6/db8/structmorph_1_1ui_1_1chat_1_1ConversationKey.html#details">More...</a><br /></td></tr>
 <tr class="memitem:morph_3A_3Aui_3A_3Achat_3A_3AConversationStore" id="r_morph_3A_3Aui_3A_3Achat_3A_3AConversationStore"><td class="memItemLeft">class &#160;</td><td class="memItemRight"><a class="el" href="../../dd/daa/classmorph_1_1ui_1_1chat_1_1ConversationStore.html">morph::ui::chat::ConversationStore</a></td></tr>
 <tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">The conversations a server is holding, in memory, bounded by <span class="tt"><a class="el" href="../../d4/d9d/structmorph_1_1ui_1_1chat_1_1ChatLimits.html" title="Bounds on what chats may consume.">ChatLimits</a></span>.  <a href="../../dd/daa/classmorph_1_1ui_1_1chat_1_1ConversationStore.html#details">More...</a><br /></td></tr>
+</table><table class="memberdecls">
+<tr class="heading"><td colspan="2"><h2 id="header-var-members" class="groupheader"><a id="var-members" name="var-members"></a>
+Variables</h2></td></tr>
+<tr class="memitem:a6966d45ec1bd6c5ceec6588873540702" id="r_a6966d45ec1bd6c5ceec6588873540702"><td class="memItemLeft">constexpr std::size_t&#160;</td><td class="memItemRight"><a class="el" href="#a6966d45ec1bd6c5ceec6588873540702">morph::ui::chat::kDictationEnvelopeOverhead</a> = std::size_t{64} * 1024</td></tr>
+<tr class="memdesc:a6966d45ec1bd6c5ceec6588873540702"><td class="mdescLeft">&#160;</td><td class="mdescRight">What a <span class="tt">transcribe</span> request carries beyond the base64 audio, in bytes: the request body's own JSON (<span class="tt">mediaType</span>, the optional <span class="tt">language</span>, the framing) escaped once more inside the envelope, and the envelope's other fields, among them the session context. The session token has no bound in code, so the margin is the one the inline file cap leaves for the same envelope (<span class="tt"><a class="el" href="../../db/d42/interpreter_8hpp.html#ae1e54e8866c65852b7bac732d1f3d9ad" title="The largest inline cap a session takes: base64 grows bytes by 4/3, and 64 KiB of an envelope are left...">kMaxInlineFileBytes</a></span>), far above a signed token's few hundred bytes.  <br /></td></tr>
+<tr class="memitem:a2eb5b7128f37d594e9d036c0bebf1a63" id="r_a2eb5b7128f37d594e9d036c0bebf1a63"><td class="memItemLeft">constexpr std::size_t&#160;</td><td class="memItemRight"><a class="el" href="#a2eb5b7128f37d594e9d036c0bebf1a63">morph::ui::chat::kMaxDictationBytes</a> = (wire::kMaxEnvelopeBytes - <a class="el" href="#a6966d45ec1bd6c5ceec6588873540702">kDictationEnvelopeOverhead</a>) * 3 / 4</td></tr>
+<tr class="memdesc:a2eb5b7128f37d594e9d036c0bebf1a63"><td class="mdescLeft">&#160;</td><td class="mdescRight">The largest dictated clip a server may accept, in bytes before base64: what fits one envelope once grown by 4/3 and wrapped in <span class="tt"><a class="el" href="#a6966d45ec1bd6c5ceec6588873540702" title="What a transcribe request carries beyond the base64 audio, in bytes: the request body&#39;s own JSON (med...">kDictationEnvelopeOverhead</a></span>. Past it the transport, not the chat, would refuse the request, and the person would not learn which bound they crossed.  <br /></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>What a chat remembers between turns. Specified in <span class="tt">docs/spec/ui/chat.md</span>. </p>
 
 <p class="definition">Definition in file <a class="el" href="../../dc/dc9/conversations_8hpp_source.html">conversations.hpp</a>.</p>
-</div></div><!-- contents -->
+</div><a name="doc-var-members" id="doc-var-members"></a><h2 id="header-doc-var-members" class="groupheader">Variable Documentation</h2>
+<a id="a6966d45ec1bd6c5ceec6588873540702" name="a6966d45ec1bd6c5ceec6588873540702"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a6966d45ec1bd6c5ceec6588873540702">&#9670;&#160;</a></span>kDictationEnvelopeOverhead</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::size_t morph::ui::chat::kDictationEnvelopeOverhead = std::size_t{64} * 1024</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel constexpr">constexpr</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>What a <span class="tt">transcribe</span> request carries beyond the base64 audio, in bytes: the request body's own JSON (<span class="tt">mediaType</span>, the optional <span class="tt">language</span>, the framing) escaped once more inside the envelope, and the envelope's other fields, among them the session context. The session token has no bound in code, so the margin is the one the inline file cap leaves for the same envelope (<span class="tt">kMaxInlineFileBytes</span>), far above a signed token's few hundred bytes. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../dc/dc9/conversations_8hpp_source.html#l00028">28</a> of file <a class="el" href="../../dc/dc9/conversations_8hpp_source.html">conversations.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a2eb5b7128f37d594e9d036c0bebf1a63" name="a2eb5b7128f37d594e9d036c0bebf1a63"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a2eb5b7128f37d594e9d036c0bebf1a63">&#9670;&#160;</a></span>kMaxDictationBytes</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::size_t morph::ui::chat::kMaxDictationBytes = (wire::kMaxEnvelopeBytes - kDictationEnvelopeOverhead) * 3 / 4</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel constexpr">constexpr</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>The largest dictated clip a server may accept, in bytes before base64: what fits one envelope once grown by 4/3 and wrapped in <span class="tt">kDictationEnvelopeOverhead</span>. Past it the transport, not the chat, would refuse the request, and the person would not learn which bound they crossed. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../dc/dc9/conversations_8hpp_source.html#l00033">33</a> of file <a class="el" href="../../dc/dc9/conversations_8hpp_source.html">conversations.hpp</a>.</p>
+
+</div>
+</div>
+</div><!-- contents -->
 </div><!-- doc-content -->
 <div id="page-nav" class="page-nav-panel">
 <div id="page-nav-resize-handle"></div>

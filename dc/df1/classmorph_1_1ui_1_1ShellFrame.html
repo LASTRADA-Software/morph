@@ -186,6 +186,8 @@ Public Member Functions</h2></td></tr>
 <tr class="memdesc:a6cef3347aaf5625ae6bc16958fa6de4c"><td class="mdescLeft">&#160;</td><td class="mdescRight">Tells the frame what ends the head's trail. Compact, the line's ends are padded by step 1, which is the whole inset a button that pads itself needs; anything else that ends the line (text, a badge, a select or a button that draws a frame) stands step 4 from the edge, the page's gutter, so the frame adds step 3 after the trail. A trail that ends in a framed button or a tool also takes the larger vertical padding of the bar. The expanded line's own end pad is that gutter already.  <br /></td></tr>
 <tr class="memitem:a7a095f30d08e3ce5c6bce1b1f71c05ab" id="r_a7a095f30d08e3ce5c6bce1b1f71c05ab"><td class="memItemLeft">bool&#160;</td><td class="memItemRight"><a class="el" href="#a7a095f30d08e3ce5c6bce1b1f71c05ab">compact</a> () const noexcept</td></tr>
 <tr class="memdesc:a7a095f30d08e3ce5c6bce1b1f71c05ab"><td class="mdescLeft">&#160;</td><td class="mdescRight">Whether the frame has its compact form.  <br /></td></tr>
+<tr class="memitem:a7588a02f6e0c073b6ff353c7776f9649" id="r_a7588a02f6e0c073b6ff353c7776f9649"><td class="memItemLeft">bool&#160;</td><td class="memItemRight"><a class="el" href="#a7588a02f6e0c073b6ff353c7776f9649">chatVisible</a> () const noexcept</td></tr>
+<tr class="memdesc:a7588a02f6e0c073b6ff353c7776f9649"><td class="mdescLeft">&#160;</td><td class="mdescRight">Whether the chat column is in view: there is a chat, someone is signed in, and the frame is not compact.  <br /></td></tr>
 <tr class="memitem:aef5be164a203e8d67d0219bc442fec20" id="r_aef5be164a203e8d67d0219bc442fec20"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#aef5be164a203e8d67d0219bc442fec20">setParts</a> (<a class="el" href="../../d6/d2a/structmorph_1_1ui_1_1ShellPartsView.html">ShellPartsView</a> view)</td></tr>
 <tr class="memdesc:aef5be164a203e8d67d0219bc442fec20"><td class="mdescLeft">&#160;</td><td class="mdescRight">Installs what the frame draws of the application's declared parts ([<span class="tt"><a class="el" href="../../d6/d2a/structmorph_1_1ui_1_1ShellPartsView.html" title="Everything a frame draws of the declared parts.">ShellPartsView</a></span>]): the scope switcher at the sidebar's top, and in the top bar the search with its results panel, the inbox button and the person's menu. Compact, the switcher, the module rows and the person's menu are entries of the navigation menu, and the search is a button that opens a full-window overlay. A frame with no parts draws none of them.  <br /></td></tr>
 <tr class="memitem:a436d1cb2053cfce52f1080737fa8c513" id="r_a436d1cb2053cfce52f1080737fa8c513"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a436d1cb2053cfce52f1080737fa8c513">setPartsHandlers</a> (<a class="el" href="../../d6/d2a/structmorph_1_1ui_1_1ShellPartsHandlers.html">ShellPartsHandlers</a> handlers)</td></tr>
@@ -905,6 +907,36 @@ void&#160;</td><td class="memItemRight"><b>focusSearch</b> ()</td></tr>
 
 </div>
 </div>
+<a id="a7588a02f6e0c073b6ff353c7776f9649" name="a7588a02f6e0c073b6ff353c7776f9649"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a7588a02f6e0c073b6ff353c7776f9649">&#9670;&#160;</a></span>chatVisible()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">bool morph::ui::ShellFrame::chatVisible </td>
+          <td>(</td>
+          <td class="paramname"><span class="paramname"><em></em></span></td><td>)</td>
+          <td> const</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span><span class="mlabel noexcept">noexcept</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Whether the chat column is in view: there is a chat, someone is signed in, and the frame is not compact. </p>
+<dl class="section return"><dt>Returns</dt><dd>It. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html#l00215">215</a> of file <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html">shell_frame.hpp</a>.</p>
+
+</div>
+</div>
 <a id="aef5be164a203e8d67d0219bc442fec20" name="aef5be164a203e8d67d0219bc442fec20"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#aef5be164a203e8d67d0219bc442fec20">&#9670;&#160;</a></span>setParts()</h2>
 
@@ -961,7 +993,7 @@ void&#160;</td><td class="memItemRight"><b>focusSearch</b> ()</td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html#l00223">223</a> of file <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html">shell_frame.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html#l00227">227</a> of file <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html">shell_frame.hpp</a>.</p>
 
 </div>
 </div>
@@ -1016,7 +1048,7 @@ void&#160;</td><td class="memItemRight"><b>focusSearch</b> ()</td></tr>
 <p>The texts the frame wrote for the navigation menu, so the client can name the module rows with the same words. </p>
 <dl class="section return"><dt>Returns</dt><dd>The current labels. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html#l00236">236</a> of file <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html">shell_frame.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html#l00240">240</a> of file <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html">shell_frame.hpp</a>.</p>
 
 </div>
 </div>

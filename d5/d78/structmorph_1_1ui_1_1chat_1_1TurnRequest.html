@@ -147,7 +147,7 @@ Public Attributes</h2></td></tr>
 <div class="textblock"><p>One thing a person said, and where they were when they said it. </p>
 <p>Everything here but <span class="tt"><a class="el" href="#a12b15395966395c58c402d029d3ee712" title="What the person said.">text</a></span> is a hint about what the person means. It grants nothing: every action it leads to is checked under the session of the envelope that carried it. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/dd1/protocol_8hpp_source.html#l00048">48</a> of file <a class="el" href="../../d8/dd1/protocol_8hpp_source.html">protocol.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/dd1/protocol_8hpp_source.html#l00058">58</a> of file <a class="el" href="../../d8/dd1/protocol_8hpp_source.html">protocol.hpp</a>.</p>
 </div><a name="doc-variable-members" id="doc-variable-members"></a><h2 id="header-doc-variable-members" class="groupheader">Member Data Documentation</h2>
 <a id="ac5bbb8f6c4b02cb37533b9fc4067570c" name="ac5bbb8f6c4b02cb37533b9fc4067570c"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#ac5bbb8f6c4b02cb37533b9fc4067570c">&#9670;&#160;</a></span>screenId</h2>
@@ -163,7 +163,7 @@ Public Attributes</h2></td></tr>
 
 <p>The open screen's id. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/dd1/protocol_8hpp_source.html#l00050">50</a> of file <a class="el" href="../../d8/dd1/protocol_8hpp_source.html">protocol.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/dd1/protocol_8hpp_source.html#l00060">60</a> of file <a class="el" href="../../d8/dd1/protocol_8hpp_source.html">protocol.hpp</a>.</p>
 
 </div>
 </div>
@@ -181,7 +181,7 @@ Public Attributes</h2></td></tr>
 
 <p>The screen's title as the person sees it, which is how they know the record; empty for none. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/dd1/protocol_8hpp_source.html#l00052">52</a> of file <a class="el" href="../../d8/dd1/protocol_8hpp_source.html">protocol.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/dd1/protocol_8hpp_source.html#l00062">62</a> of file <a class="el" href="../../d8/dd1/protocol_8hpp_source.html">protocol.hpp</a>.</p>
 
 </div>
 </div>
@@ -199,7 +199,7 @@ Public Attributes</h2></td></tr>
 
 <p>The screen's identity value, canonically encoded; empty for a screen with no record. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/dd1/protocol_8hpp_source.html#l00054">54</a> of file <a class="el" href="../../d8/dd1/protocol_8hpp_source.html">protocol.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/dd1/protocol_8hpp_source.html#l00064">64</a> of file <a class="el" href="../../d8/dd1/protocol_8hpp_source.html">protocol.hpp</a>.</p>
 
 </div>
 </div>
@@ -217,7 +217,7 @@ Public Attributes</h2></td></tr>
 
 <p>The screen's params as JSON text. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/dd1/protocol_8hpp_source.html#l00056">56</a> of file <a class="el" href="../../d8/dd1/protocol_8hpp_source.html">protocol.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/dd1/protocol_8hpp_source.html#l00066">66</a> of file <a class="el" href="../../d8/dd1/protocol_8hpp_source.html">protocol.hpp</a>.</p>
 
 </div>
 </div>
@@ -235,7 +235,7 @@ Public Attributes</h2></td></tr>
 
 <p>The aliases the screen holds. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/dd1/protocol_8hpp_source.html#l00058">58</a> of file <a class="el" href="../../d8/dd1/protocol_8hpp_source.html">protocol.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/dd1/protocol_8hpp_source.html#l00068">68</a> of file <a class="el" href="../../d8/dd1/protocol_8hpp_source.html">protocol.hpp</a>.</p>
 
 </div>
 </div>
@@ -253,7 +253,7 @@ Public Attributes</h2></td></tr>
 
 <p>What the person said. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/dd1/protocol_8hpp_source.html#l00060">60</a> of file <a class="el" href="../../d8/dd1/protocol_8hpp_source.html">protocol.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/dd1/protocol_8hpp_source.html#l00070">70</a> of file <a class="el" href="../../d8/dd1/protocol_8hpp_source.html">protocol.hpp</a>.</p>
 
 </div>
 </div>
@@ -271,7 +271,7 @@ Public Attributes</h2></td></tr>
 
 <p>The document of the draft the person has open on this screen, as JSON text; absent with none. It is the screen's document as the assistant should read it, so a conversation of edits builds on the last accepted draft. The server refuses a turn whose draft is over <span class="tt"><a class="el" href="../../d4/d9d/structmorph_1_1ui_1_1chat_1_1ChatLimits.html#ac2ad2de9ba65af1506900bdaf2564d75" title="The longest document the assistant is given as a draft or offered to edit, and the longest draft a tu...">ChatLimits::maxDraftBytes</a></span> or is not a JSON object, and treats the text as data: it grants nothing. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/dd1/protocol_8hpp_source.html#l00065">65</a> of file <a class="el" href="../../d8/dd1/protocol_8hpp_source.html">protocol.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/dd1/protocol_8hpp_source.html#l00075">75</a> of file <a class="el" href="../../d8/dd1/protocol_8hpp_source.html">protocol.hpp</a>.</p>
 
 </div>
 </div>

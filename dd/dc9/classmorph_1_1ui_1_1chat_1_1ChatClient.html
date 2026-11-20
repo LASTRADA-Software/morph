@@ -146,9 +146,15 @@ Public Member Functions</h2></td></tr>
 <tr class="memitem:a5199d363d2f3df7cf7298dc0c3a4670a" id="r_a5199d363d2f3df7cf7298dc0c3a4670a"><td class="memItemLeft"><a id="a5199d363d2f3df7cf7298dc0c3a4670a" name="a5199d363d2f3df7cf7298dc0c3a4670a"></a>
 <a class="el" href="#a4c445e46859b942fce2264933c5cf2cd">ChatClient</a> &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (<a class="el" href="#a4c445e46859b942fce2264933c5cf2cd">ChatClient</a> &amp;&amp;)=delete</td></tr>
 <tr class="memitem:a013ef6aaaf9df7d7a7238db1a046100c" id="r_a013ef6aaaf9df7d7a7238db1a046100c"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a013ef6aaaf9df7d7a7238db1a046100c">probe</a> ()</td></tr>
-<tr class="memdesc:a013ef6aaaf9df7d7a7238db1a046100c"><td class="mdescLeft">&#160;</td><td class="mdescRight">Asks whether this server offers this principal a chat, which <span class="tt"><a class="el" href="#a168e9c0ed5215fea89a00af4caef1dc4" title="Whether the last probe found a chat.">available</a></span> then answers.  <br /></td></tr>
+<tr class="memdesc:a013ef6aaaf9df7d7a7238db1a046100c"><td class="mdescLeft">&#160;</td><td class="mdescRight">Asks whether this server offers this principal a chat, and dictation, which <span class="tt"><a class="el" href="#a168e9c0ed5215fea89a00af4caef1dc4" title="Whether the last probe found a chat.">available</a></span> and <span class="tt"><a class="el" href="#a91cdf503dd21b1e84c644c9abb4b221d" title="The dictation the last probe found offered.">dictation</a></span> then answer.  <br /></td></tr>
 <tr class="memitem:a168e9c0ed5215fea89a00af4caef1dc4" id="r_a168e9c0ed5215fea89a00af4caef1dc4"><td class="memItemLeft">bool&#160;</td><td class="memItemRight"><a class="el" href="#a168e9c0ed5215fea89a00af4caef1dc4">available</a> () const noexcept</td></tr>
 <tr class="memdesc:a168e9c0ed5215fea89a00af4caef1dc4"><td class="mdescLeft">&#160;</td><td class="mdescRight">Whether the last probe found a chat.  <br /></td></tr>
+<tr class="memitem:a91cdf503dd21b1e84c644c9abb4b221d" id="r_a91cdf503dd21b1e84c644c9abb4b221d"><td class="memItemLeft">std::optional&lt; <a class="el" href="../../da/db4/structmorph_1_1ui_1_1chat_1_1DictationLimits.html">DictationLimits</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a91cdf503dd21b1e84c644c9abb4b221d">dictation</a> () const noexcept</td></tr>
+<tr class="memdesc:a91cdf503dd21b1e84c644c9abb4b221d"><td class="mdescLeft">&#160;</td><td class="mdescRight">The dictation the last probe found offered.  <br /></td></tr>
+<tr class="memitem:a7defd0ab2bc1402114883df3430f9930" id="r_a7defd0ab2bc1402114883df3430f9930"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a7defd0ab2bc1402114883df3430f9930">transcribe</a> (std::string wav, std::optional&lt; std::string &gt; language, std::function&lt; void(std::expected&lt; std::string, std::string &gt;)&gt; done)</td></tr>
+<tr class="memdesc:a7defd0ab2bc1402114883df3430f9930"><td class="mdescLeft">&#160;</td><td class="mdescRight">Hands a dictated clip to the server, and answers with its text once the server's state says it is done.  <br /></td></tr>
+<tr class="memitem:a1cc1fdf88e17356142b53d17448389af" id="r_a1cc1fdf88e17356142b53d17448389af"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a1cc1fdf88e17356142b53d17448389af">note</a> (std::string text)</td></tr>
+<tr class="memdesc:a1cc1fdf88e17356142b53d17448389af"><td class="mdescLeft">&#160;</td><td class="mdescRight">Adds a line of the client's own to the selected conversation, such as why a dictation failed. It stays when a running turn is redrawn, after the turn's lines, and is never sent.  <br /></td></tr>
 <tr class="memitem:ad2f1e1fdbf13434b379b46130158638a" id="r_ad2f1e1fdbf13434b379b46130158638a"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#ad2f1e1fdbf13434b379b46130158638a">onDraft</a> (std::function&lt; void(<a class="el" href="../../df/d58/structmorph_1_1ui_1_1chat_1_1ChatClient_1_1DraftProposal.html">DraftProposal</a> const &amp;)&gt; handler)</td></tr>
 <tr class="memdesc:ad2f1e1fdbf13434b379b46130158638a"><td class="mdescLeft">&#160;</td><td class="mdescRight">Sets what receives a draft the server accepted. Called on the owner, once per distinct document of a turn, from an event or from the state read; whichever carries it first.  <br /></td></tr>
 <tr class="memitem:ad6e2a1b18275ee4536c2188b8437dfec" id="r_ad6e2a1b18275ee4536c2188b8437dfec"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#ad6e2a1b18275ee4536c2188b8437dfec">send</a> (<a class="el" href="../../d5/d78/structmorph_1_1ui_1_1chat_1_1TurnRequest.html">TurnRequest</a> const &amp;request, std::uint64_t origin=0)</td></tr>
@@ -173,7 +179,7 @@ Public Member Functions</h2></td></tr>
 <p>Events are hints and the server's <span class="tt"><a class="el" href="../../d6/d4e/structmorph_1_1ui_1_1chat_1_1TurnState.html" title="A turn&#39;s state as the server holds it, which outranks any event.">TurnState</a></span> is the record: the client reads it when a turn starts, when an event says one ended, and on <span class="tt">resync</span>, and what it reads replaces what events built. What it shows lasts the session, and only for display. The server keeps the conversation itself.</p>
 <p>Everything runs on the owner: every call, and the exchange's replies. A turn belongs to the conversation it started in, so switching conversations does not move it. Neither copyable nor movable. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d2/dfe/client_8hpp_source.html#l00035">35</a> of file <a class="el" href="../../d2/dfe/client_8hpp_source.html">client.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d2/dfe/client_8hpp_source.html#l00038">38</a> of file <a class="el" href="../../d2/dfe/client_8hpp_source.html">client.hpp</a>.</p>
 </div><a name="doc-constructors" id="doc-constructors"></a><h2 id="header-doc-constructors" class="groupheader">Constructor &amp; Destructor Documentation</h2>
 <a id="a4c445e46859b942fce2264933c5cf2cd" name="a4c445e46859b942fce2264933c5cf2cd"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a4c445e46859b942fce2264933c5cf2cd">&#9670;&#160;</a></span>ChatClient()</h2>
@@ -217,7 +223,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d2/dfe/client_8hpp_source.html#l00065">65</a> of file <a class="el" href="../../d2/dfe/client_8hpp_source.html">client.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d2/dfe/client_8hpp_source.html#l00069">69</a> of file <a class="el" href="../../d2/dfe/client_8hpp_source.html">client.hpp</a>.</p>
 
 </div>
 </div>
@@ -245,9 +251,9 @@ Public Member Functions</h2></td></tr>
 </table>
 </div><div class="memdoc">
 
-<p>Asks whether this server offers this principal a chat, which <span class="tt"><a class="el" href="#a168e9c0ed5215fea89a00af4caef1dc4" title="Whether the last probe found a chat.">available</a></span> then answers. </p>
+<p>Asks whether this server offers this principal a chat, and dictation, which <span class="tt"><a class="el" href="#a168e9c0ed5215fea89a00af4caef1dc4" title="Whether the last probe found a chat.">available</a></span> and <span class="tt"><a class="el" href="#a91cdf503dd21b1e84c644c9abb4b221d" title="The dictation the last probe found offered.">dictation</a></span> then answer. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d2/dfe/client_8hpp_source.html#l00075">75</a> of file <a class="el" href="../../d2/dfe/client_8hpp_source.html">client.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d2/dfe/client_8hpp_source.html#l00080">80</a> of file <a class="el" href="../../d2/dfe/client_8hpp_source.html">client.hpp</a>.</p>
 
 </div>
 </div>
@@ -277,7 +283,118 @@ Public Member Functions</h2></td></tr>
 <p>Whether the last probe found a chat. </p>
 <dl class="section return"><dt>Returns</dt><dd>Whether it did. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d2/dfe/client_8hpp_source.html#l00084">84</a> of file <a class="el" href="../../d2/dfe/client_8hpp_source.html">client.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d2/dfe/client_8hpp_source.html#l00098">98</a> of file <a class="el" href="../../d2/dfe/client_8hpp_source.html">client.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a91cdf503dd21b1e84c644c9abb4b221d" name="a91cdf503dd21b1e84c644c9abb4b221d"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a91cdf503dd21b1e84c644c9abb4b221d">&#9670;&#160;</a></span>dictation()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::optional&lt; <a class="el" href="../../da/db4/structmorph_1_1ui_1_1chat_1_1DictationLimits.html">DictationLimits</a> &gt; morph::ui::chat::ChatClient::dictation </td>
+          <td>(</td>
+          <td class="paramname"><span class="paramname"><em></em></span></td><td>)</td>
+          <td> const</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span><span class="mlabel noexcept">noexcept</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>The dictation the last probe found offered. </p>
+<dl class="section return"><dt>Returns</dt><dd>Its bounds, or nothing when the server offers none. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d2/dfe/client_8hpp_source.html#l00102">102</a> of file <a class="el" href="../../d2/dfe/client_8hpp_source.html">client.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a7defd0ab2bc1402114883df3430f9930" name="a7defd0ab2bc1402114883df3430f9930"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a7defd0ab2bc1402114883df3430f9930">&#9670;&#160;</a></span>transcribe()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">void morph::ui::chat::ChatClient::transcribe </td>
+          <td>(</td>
+          <td class="paramtype">std::string</td>          <td class="paramname"><span class="paramname"><em>wav</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">std::optional&lt; std::string &gt;</td>          <td class="paramname"><span class="paramname"><em>language</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">std::function&lt; void(std::expected&lt; std::string, std::string &gt;)&gt;</td>          <td class="paramname"><span class="paramname"><em>done</em></span>&#160;)</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Hands a dictated clip to the server, and answers with its text once the server's state says it is done. </p>
+<p><code class="param">done</code> runs exactly once: with the text when the state reads <span class="tt">done</span>; with the reason when it reads <span class="tt">failed</span>, when the server refuses the clip, when the exchange fails, on a reconnect (the old connection's close dropped the transcription), when <span class="tt"><a class="el" href="#a5da4f6ce56ca33cafe23491511bb8155" title="Ends the chat: the server stops this connection&#39;s turn and drops the principal&#39;s conversations,...">end</a></span> runs, and at once when another transcription is still waiting. </p><dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">wav</td><td>The clip, WAV bytes. </td></tr>
+    <tr><td class="paramname">language</td><td>The language spoken; nothing leaves it to the server's default. </td></tr>
+    <tr><td class="paramname">done</td><td>What gets the text or the reason. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d2/dfe/client_8hpp_source.html#l00112">112</a> of file <a class="el" href="../../d2/dfe/client_8hpp_source.html">client.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a1cc1fdf88e17356142b53d17448389af" name="a1cc1fdf88e17356142b53d17448389af"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a1cc1fdf88e17356142b53d17448389af">&#9670;&#160;</a></span>note()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">void morph::ui::chat::ChatClient::note </td>
+          <td>(</td>
+          <td class="paramtype">std::string</td>          <td class="paramname"><span class="paramname"><em>text</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Adds a line of the client's own to the selected conversation, such as why a dictation failed. It stays when a running turn is redrawn, after the turn's lines, and is never sent. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">text</td><td>The line. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d2/dfe/client_8hpp_source.html#l00133">133</a> of file <a class="el" href="../../d2/dfe/client_8hpp_source.html">client.hpp</a>.</p>
 
 </div>
 </div>
@@ -312,7 +429,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d2/dfe/client_8hpp_source.html#l00089">89</a> of file <a class="el" href="../../d2/dfe/client_8hpp_source.html">client.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d2/dfe/client_8hpp_source.html#l00142">142</a> of file <a class="el" href="../../d2/dfe/client_8hpp_source.html">client.hpp</a>.</p>
 
 </div>
 </div>
@@ -352,7 +469,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d2/dfe/client_8hpp_source.html#l00095">95</a> of file <a class="el" href="../../d2/dfe/client_8hpp_source.html">client.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d2/dfe/client_8hpp_source.html#l00148">148</a> of file <a class="el" href="../../d2/dfe/client_8hpp_source.html">client.hpp</a>.</p>
 
 </div>
 </div>
@@ -381,7 +498,7 @@ Public Member Functions</h2></td></tr>
 
 <p>Asks the server to stop the running turn. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d2/dfe/client_8hpp_source.html#l00108">108</a> of file <a class="el" href="../../d2/dfe/client_8hpp_source.html">client.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d2/dfe/client_8hpp_source.html#l00161">161</a> of file <a class="el" href="../../d2/dfe/client_8hpp_source.html">client.hpp</a>.</p>
 
 </div>
 </div>
@@ -416,7 +533,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d2/dfe/client_8hpp_source.html#l00120">120</a> of file <a class="el" href="../../d2/dfe/client_8hpp_source.html">client.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d2/dfe/client_8hpp_source.html#l00173">173</a> of file <a class="el" href="../../d2/dfe/client_8hpp_source.html">client.hpp</a>.</p>
 
 </div>
 </div>
@@ -456,7 +573,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d2/dfe/client_8hpp_source.html#l00136">136</a> of file <a class="el" href="../../d2/dfe/client_8hpp_source.html">client.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d2/dfe/client_8hpp_source.html#l00195">195</a> of file <a class="el" href="../../d2/dfe/client_8hpp_source.html">client.hpp</a>.</p>
 
 </div>
 </div>
@@ -491,7 +608,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d2/dfe/client_8hpp_source.html#l00146">146</a> of file <a class="el" href="../../d2/dfe/client_8hpp_source.html">client.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d2/dfe/client_8hpp_source.html#l00205">205</a> of file <a class="el" href="../../d2/dfe/client_8hpp_source.html">client.hpp</a>.</p>
 
 </div>
 </div>
@@ -520,7 +637,7 @@ Public Member Functions</h2></td></tr>
 
 <p>Tells the client its connection was replaced. A running turn ended with the old connection, since a new one has new instance ids; what was shown stays, and the conversation goes on from the next turn. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d2/dfe/client_8hpp_source.html#l00183">183</a> of file <a class="el" href="../../d2/dfe/client_8hpp_source.html">client.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d2/dfe/client_8hpp_source.html#l00253">253</a> of file <a class="el" href="../../d2/dfe/client_8hpp_source.html">client.hpp</a>.</p>
 
 </div>
 </div>
@@ -550,7 +667,7 @@ Public Member Functions</h2></td></tr>
 <p>What the selected conversation shows. </p>
 <dl class="section return"><dt>Returns</dt><dd>Its entries, oldest first. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d2/dfe/client_8hpp_source.html#l00194">194</a> of file <a class="el" href="../../d2/dfe/client_8hpp_source.html">client.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d2/dfe/client_8hpp_source.html#l00267">267</a> of file <a class="el" href="../../d2/dfe/client_8hpp_source.html">client.hpp</a>.</p>
 
 </div>
 </div>
@@ -580,7 +697,7 @@ Public Member Functions</h2></td></tr>
 <p>Whether a turn is running, in any conversation. </p>
 <dl class="section return"><dt>Returns</dt><dd>Whether one is. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d2/dfe/client_8hpp_source.html#l00202">202</a> of file <a class="el" href="../../d2/dfe/client_8hpp_source.html">client.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d2/dfe/client_8hpp_source.html#l00275">275</a> of file <a class="el" href="../../d2/dfe/client_8hpp_source.html">client.hpp</a>.</p>
 
 </div>
 </div>

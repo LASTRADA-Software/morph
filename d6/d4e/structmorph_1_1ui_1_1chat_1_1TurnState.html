@@ -144,11 +144,13 @@ Public Attributes</h2></td></tr>
 <tr class="memdesc:a8dac7799ccf8423670ffabf28d89e143"><td class="mdescLeft">&#160;</td><td class="mdescRight">The <span class="tt"><a class="el" href="../../d1/d31/structmorph_1_1ui_1_1chat_1_1TurnEvent.html#a984af3a2c13cfed4390ad7ccf1726fcc" title="Increases by one per event of a turn.">TurnEvent::seq</a></span> this state covers, so a client does not apply an event it already includes.  <br /></td></tr>
 <tr class="memitem:ae65d19675eaec5ecf834571480ee2cc7" id="r_ae65d19675eaec5ecf834571480ee2cc7"><td class="memItemLeft">std::optional&lt; std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="#ae65d19675eaec5ecf834571480ee2cc7">draft</a></td></tr>
 <tr class="memdesc:ae65d19675eaec5ecf834571480ee2cc7"><td class="mdescLeft">&#160;</td><td class="mdescRight">The document of the last draft the server accepted this turn, as JSON text; absent when it accepted none. A draft reaches a client only through here and the <span class="tt"><a class="el" href="#ae65d19675eaec5ecf834571480ee2cc7" title="The document of the last draft the server accepted this turn, as JSON text; absent when it accepted n...">draft</a></span> event, and only after the server's checks passed it.  <br /></td></tr>
+<tr class="memitem:acf2abed22a125e697d59e80b90a5de7b" id="r_acf2abed22a125e697d59e80b90a5de7b"><td class="memItemLeft">std::optional&lt; <a class="el" href="../../d8/dd0/structmorph_1_1ui_1_1chat_1_1DictationOffer.html">DictationOffer</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#acf2abed22a125e697d59e80b90a5de7b">dictation</a></td></tr>
+<tr class="memdesc:acf2abed22a125e697d59e80b90a5de7b"><td class="mdescLeft">&#160;</td><td class="mdescRight">The dictation this server offers; set only in the answer to a request with no turn (the probe), and absent when the server offers none. An older peer ignores it.  <br /></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>A turn's state as the server holds it, which outranks any event. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/dd1/protocol_8hpp_source.html#l00105">105</a> of file <a class="el" href="../../d8/dd1/protocol_8hpp_source.html">protocol.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/dd1/protocol_8hpp_source.html#l00123">123</a> of file <a class="el" href="../../d8/dd1/protocol_8hpp_source.html">protocol.hpp</a>.</p>
 </div><a name="doc-variable-members" id="doc-variable-members"></a><h2 id="header-doc-variable-members" class="groupheader">Member Data Documentation</h2>
 <a id="aa9559ce1e79b82f556031eddd98de5fb" name="aa9559ce1e79b82f556031eddd98de5fb"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#aa9559ce1e79b82f556031eddd98de5fb">&#9670;&#160;</a></span>turnId</h2>
@@ -164,7 +166,7 @@ Public Attributes</h2></td></tr>
 
 <p>The turn's id; <span class="tt">0</span> when the principal has no such turn. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/dd1/protocol_8hpp_source.html#l00107">107</a> of file <a class="el" href="../../d8/dd1/protocol_8hpp_source.html">protocol.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/dd1/protocol_8hpp_source.html#l00125">125</a> of file <a class="el" href="../../d8/dd1/protocol_8hpp_source.html">protocol.hpp</a>.</p>
 
 </div>
 </div>
@@ -182,7 +184,7 @@ Public Attributes</h2></td></tr>
 
 <p>How far it has got. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/dd1/protocol_8hpp_source.html#l00109">109</a> of file <a class="el" href="../../d8/dd1/protocol_8hpp_source.html">protocol.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/dd1/protocol_8hpp_source.html#l00127">127</a> of file <a class="el" href="../../d8/dd1/protocol_8hpp_source.html">protocol.hpp</a>.</p>
 
 </div>
 </div>
@@ -200,7 +202,7 @@ Public Attributes</h2></td></tr>
 
 <p>The reply so far: the rounds' texts, a blank line between one round and the next. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/dd1/protocol_8hpp_source.html#l00111">111</a> of file <a class="el" href="../../d8/dd1/protocol_8hpp_source.html">protocol.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/dd1/protocol_8hpp_source.html#l00129">129</a> of file <a class="el" href="../../d8/dd1/protocol_8hpp_source.html">protocol.hpp</a>.</p>
 
 </div>
 </div>
@@ -218,7 +220,7 @@ Public Attributes</h2></td></tr>
 
 <p>Why it failed; empty otherwise. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/dd1/protocol_8hpp_source.html#l00113">113</a> of file <a class="el" href="../../d8/dd1/protocol_8hpp_source.html">protocol.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/dd1/protocol_8hpp_source.html#l00131">131</a> of file <a class="el" href="../../d8/dd1/protocol_8hpp_source.html">protocol.hpp</a>.</p>
 
 </div>
 </div>
@@ -236,7 +238,7 @@ Public Attributes</h2></td></tr>
 
 <p>The tool calls it has made, in order. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/dd1/protocol_8hpp_source.html#l00115">115</a> of file <a class="el" href="../../d8/dd1/protocol_8hpp_source.html">protocol.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/dd1/protocol_8hpp_source.html#l00133">133</a> of file <a class="el" href="../../d8/dd1/protocol_8hpp_source.html">protocol.hpp</a>.</p>
 
 </div>
 </div>
@@ -254,7 +256,7 @@ Public Attributes</h2></td></tr>
 
 <p>The rounds' texts and the tool calls, in the order the turn made them. Empty from a server that does not send it, which a client shows as <span class="tt"><a class="el" href="#a24794d5d078ebbd4dba5e095f9acbd99" title="The tool calls it has made, in order.">steps</a></span> and then <span class="tt"><a class="el" href="#ad8ecf77738284676f7b0f2e2e4329922" title="The reply so far: the rounds&#39; texts, a blank line between one round and the next.">text</a></span>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/dd1/protocol_8hpp_source.html#l00118">118</a> of file <a class="el" href="../../d8/dd1/protocol_8hpp_source.html">protocol.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/dd1/protocol_8hpp_source.html#l00136">136</a> of file <a class="el" href="../../d8/dd1/protocol_8hpp_source.html">protocol.hpp</a>.</p>
 
 </div>
 </div>
@@ -272,7 +274,7 @@ Public Attributes</h2></td></tr>
 
 <p>The <span class="tt"><a class="el" href="../../d1/d31/structmorph_1_1ui_1_1chat_1_1TurnEvent.html#a984af3a2c13cfed4390ad7ccf1726fcc" title="Increases by one per event of a turn.">TurnEvent::seq</a></span> this state covers, so a client does not apply an event it already includes. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/dd1/protocol_8hpp_source.html#l00120">120</a> of file <a class="el" href="../../d8/dd1/protocol_8hpp_source.html">protocol.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/dd1/protocol_8hpp_source.html#l00138">138</a> of file <a class="el" href="../../d8/dd1/protocol_8hpp_source.html">protocol.hpp</a>.</p>
 
 </div>
 </div>
@@ -290,7 +292,25 @@ Public Attributes</h2></td></tr>
 
 <p>The document of the last draft the server accepted this turn, as JSON text; absent when it accepted none. A draft reaches a client only through here and the <span class="tt"><a class="el" href="#ae65d19675eaec5ecf834571480ee2cc7" title="The document of the last draft the server accepted this turn, as JSON text; absent when it accepted n...">draft</a></span> event, and only after the server's checks passed it. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/dd1/protocol_8hpp_source.html#l00125">125</a> of file <a class="el" href="../../d8/dd1/protocol_8hpp_source.html">protocol.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/dd1/protocol_8hpp_source.html#l00143">143</a> of file <a class="el" href="../../d8/dd1/protocol_8hpp_source.html">protocol.hpp</a>.</p>
+
+</div>
+</div>
+<a id="acf2abed22a125e697d59e80b90a5de7b" name="acf2abed22a125e697d59e80b90a5de7b"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#acf2abed22a125e697d59e80b90a5de7b">&#9670;&#160;</a></span>dictation</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::optional&lt;<a class="el" href="../../d8/dd0/structmorph_1_1ui_1_1chat_1_1DictationOffer.html">DictationOffer</a>&gt; morph::ui::chat::TurnState::dictation</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>The dictation this server offers; set only in the answer to a request with no turn (the probe), and absent when the server offers none. An older peer ignores it. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d8/dd1/protocol_8hpp_source.html#l00146">146</a> of file <a class="el" href="../../d8/dd1/protocol_8hpp_source.html">protocol.hpp</a>.</p>
 
 </div>
 </div>

@@ -2,6 +2,8 @@ var structmorph_1_1ui_1_1chat_1_1ChatOptions =
 [
     [ "configure", "d3/d4e/structmorph_1_1ui_1_1chat_1_1ChatOptions.html#aca954f2f1bd5f00d40644501e911ead2", null ],
     [ "provider", "d3/d4e/structmorph_1_1ui_1_1chat_1_1ChatOptions.html#a25be0bda41d13078f41c6c77ba1fc8a5", null ],
+    [ "transcriber", "d3/d4e/structmorph_1_1ui_1_1chat_1_1ChatOptions.html#a9903bb100aa6f50579c2f79e41fdf01a", null ],
+    [ "transcriptionLanguage", "d3/d4e/structmorph_1_1ui_1_1chat_1_1ChatOptions.html#a783b1426e7afff54d60e8348d506c3ba", null ],
     [ "worker", "d3/d4e/structmorph_1_1ui_1_1chat_1_1ChatOptions.html#a0523aeb9740cf7e7fbb2944ce968ce14", null ],
     [ "bundle", "d3/d4e/structmorph_1_1ui_1_1chat_1_1ChatOptions.html#a09020f8abe11a6a6a37b466ecf740194", null ],
     [ "limits", "d3/d4e/structmorph_1_1ui_1_1chat_1_1ChatOptions.html#a2f3ba5e07f1550c5b4b9bce88e90dc4b", null ],

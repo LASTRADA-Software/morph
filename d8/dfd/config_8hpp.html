@@ -145,6 +145,8 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d8/dfd/config_
 Classes</h2></td></tr>
 <tr class="memitem:morph_3A_3Aui_3A_3Achat_3A_3AProviderConfig" id="r_morph_3A_3Aui_3A_3Achat_3A_3AProviderConfig"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../d3/d67/structmorph_1_1ui_1_1chat_1_1ProviderConfig.html">morph::ui::chat::ProviderConfig</a></td></tr>
 <tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">Which model provider a chat uses, and how to reach it.  <a href="../../d3/d67/structmorph_1_1ui_1_1chat_1_1ProviderConfig.html#details">More...</a><br /></td></tr>
+<tr class="memitem:morph_3A_3Aui_3A_3Achat_3A_3ATranscriptionConfig" id="r_morph_3A_3Aui_3A_3Achat_3A_3ATranscriptionConfig"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../d1/d91/structmorph_1_1ui_1_1chat_1_1TranscriptionConfig.html">morph::ui::chat::TranscriptionConfig</a></td></tr>
+<tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">Which speech-to-text provider a chat's dictation uses, and how to reach it.  <a href="../../d1/d91/structmorph_1_1ui_1_1chat_1_1TranscriptionConfig.html#details">More...</a><br /></td></tr>
 <tr class="memitem:morph_3A_3Aui_3A_3Achat_3A_3AChatConfig" id="r_morph_3A_3Aui_3A_3Achat_3A_3AChatConfig"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../d6/d12/structmorph_1_1ui_1_1chat_1_1ChatConfig.html">morph::ui::chat::ChatConfig</a></td></tr>
 <tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">Everything a chat is configured with.  <a href="../../d6/d12/structmorph_1_1ui_1_1chat_1_1ChatConfig.html#details">More...</a><br /></td></tr>
 </table><table class="memberdecls">
@@ -157,6 +159,8 @@ Typedefs</h2></td></tr>
 Functions</h2></td></tr>
 <tr class="memitem:ac9cf60505cc81ab3144c64d05cac4289" id="r_ac9cf60505cc81ab3144c64d05cac4289"><td class="memItemLeft">std::optional&lt; std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="#ac9cf60505cc81ab3144c64d05cac4289">morph::ui::chat::detail::processEnvironment</a> (std::string_view name)</td></tr>
 <tr class="memdesc:ac9cf60505cc81ab3144c64d05cac4289"><td class="mdescLeft">&#160;</td><td class="mdescRight">Looks a variable up in the process's environment.  <br /></td></tr>
+<tr class="memitem:a23376cc34b7b70dd52f724419e74675b" id="r_a23376cc34b7b70dd52f724419e74675b"><td class="memItemLeft">std::expected&lt; std::string, std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a23376cc34b7b70dd52f724419e74675b">morph::ui::chat::detail::keyOf</a> (std::optional&lt; std::string &gt; given, std::optional&lt; std::string &gt; const &amp;variable, <a class="el" href="#ad7cc3de7d6f8358ac07351aeccdb33e3">EnvironmentLookup</a> const &amp;environment, std::string_view where)</td></tr>
+<tr class="memdesc:a23376cc34b7b70dd52f724419e74675b"><td class="mdescLeft">&#160;</td><td class="mdescRight">The key a provider block names: inline, from the environment, or none.  <br /></td></tr>
 <tr class="memitem:a8445da2cff7325527a61463c7d348ea9" id="r_a8445da2cff7325527a61463c7d348ea9"><td class="memItemLeft">std::expected&lt; <a class="el" href="../../d6/d12/structmorph_1_1ui_1_1chat_1_1ChatConfig.html">ChatConfig</a>, std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a8445da2cff7325527a61463c7d348ea9">morph::ui::chat::parseChatConfig</a> (std::string_view text, <a class="el" href="#ad7cc3de7d6f8358ac07351aeccdb33e3">EnvironmentLookup</a> const &amp;environment=<a class="el" href="#ac9cf60505cc81ab3144c64d05cac4289">detail::processEnvironment</a>)</td></tr>
 <tr class="memdesc:a8445da2cff7325527a61463c7d348ea9"><td class="mdescLeft">&#160;</td><td class="mdescRight">Reads a chat's configuration from JSON text.  <br /></td></tr>
 <tr class="memitem:aed3be00b7a4a4770b310a3866fb2c2b3" id="r_aed3be00b7a4a4770b310a3866fb2c2b3"><td class="memItemLeft">std::expected&lt; <a class="el" href="../../d6/d12/structmorph_1_1ui_1_1chat_1_1ChatConfig.html">ChatConfig</a>, std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="#aed3be00b7a4a4770b310a3866fb2c2b3">morph::ui::chat::loadChatConfig</a> (std::filesystem::path const &amp;path, <a class="el" href="#ad7cc3de7d6f8358ac07351aeccdb33e3">EnvironmentLookup</a> const &amp;environment=<a class="el" href="#ac9cf60505cc81ab3144c64d05cac4289">detail::processEnvironment</a>)</td></tr>
@@ -181,7 +185,7 @@ Functions</h2></td></tr>
 
 <p>Looks an environment variable up; nothing when it is not set. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/dfd/config_8hpp_source.html#l00052">52</a> of file <a class="el" href="../../d8/dfd/config_8hpp_source.html">config.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/dfd/config_8hpp_source.html#l00068">68</a> of file <a class="el" href="../../d8/dfd/config_8hpp_source.html">config.hpp</a>.</p>
 
 </div>
 </div>
@@ -218,7 +222,60 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Its value; nothing when it is not set. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/dfd/config_8hpp_source.html#l00093">93</a> of file <a class="el" href="../../d8/dfd/config_8hpp_source.html">config.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/dfd/config_8hpp_source.html#l00123">123</a> of file <a class="el" href="../../d8/dfd/config_8hpp_source.html">config.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a23376cc34b7b70dd52f724419e74675b" name="a23376cc34b7b70dd52f724419e74675b"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a23376cc34b7b70dd52f724419e74675b">&#9670;&#160;</a></span>keyOf()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::expected&lt; std::string, std::string &gt; morph::ui::chat::detail::keyOf </td>
+          <td>(</td>
+          <td class="paramtype">std::optional&lt; std::string &gt;</td>          <td class="paramname"><span class="paramname"><em>given</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">std::optional&lt; std::string &gt; const &amp;</td>          <td class="paramname"><span class="paramname"><em>variable</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype"><a class="el" href="#ad7cc3de7d6f8358ac07351aeccdb33e3">EnvironmentLookup</a> const &amp;</td>          <td class="paramname"><span class="paramname"><em>environment</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">std::string_view</td>          <td class="paramname"><span class="paramname"><em>where</em></span>&#160;)</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>The key a provider block names: inline, from the environment, or none. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">given</td><td>The inline <span class="tt">apiKey</span>. </td></tr>
+    <tr><td class="paramname">variable</td><td>The <span class="tt">apiKeyEnv</span>. </td></tr>
+    <tr><td class="paramname">environment</td><td>How the variable is looked up. </td></tr>
+    <tr><td class="paramname">where</td><td>What the block is, for the refusal. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>The key, empty for none, or why not: both named, or a variable that is not set. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d8/dfd/config_8hpp_source.html#l00135">135</a> of file <a class="el" href="../../d8/dfd/config_8hpp_source.html">config.hpp</a>.</p>
 
 </div>
 </div>
@@ -259,7 +316,7 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The configuration, or why not. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/dfd/config_8hpp_source.html#l00110">110</a> of file <a class="el" href="../../d8/dfd/config_8hpp_source.html">config.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/dfd/config_8hpp_source.html#l00166">166</a> of file <a class="el" href="../../d8/dfd/config_8hpp_source.html">config.hpp</a>.</p>
 
 </div>
 </div>
@@ -300,7 +357,7 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The configuration, or why not. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/dfd/config_8hpp_source.html#l00189">189</a> of file <a class="el" href="../../d8/dfd/config_8hpp_source.html">config.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/dfd/config_8hpp_source.html#l00266">266</a> of file <a class="el" href="../../d8/dfd/config_8hpp_source.html">config.hpp</a>.</p>
 
 </div>
 </div>

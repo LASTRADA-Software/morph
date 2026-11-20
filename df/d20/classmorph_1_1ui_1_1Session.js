@@ -26,6 +26,8 @@ var classmorph_1_1ui_1_1Session =
     [ "setSessionValues", "df/d20/classmorph_1_1ui_1_1Session.html#a8805fa8d2258b4ea0824e8d4fb008191", null ],
     [ "setHostValues", "df/d20/classmorph_1_1ui_1_1Session.html#a16accb65d71b6da3f896cbc823cb89f9", null ],
     [ "setHostCommands", "df/d20/classmorph_1_1ui_1_1Session.html#a3763f3c07ffe556fabc45718f439014c", null ],
+    [ "setHostScopes", "df/d20/classmorph_1_1ui_1_1Session.html#a0ab1329025f14862391be86c30ffb186", null ],
+    [ "hostNameIn", "df/d20/classmorph_1_1ui_1_1Session.html#a27cfeeddd2008f8158644a00a704dceb", null ],
     [ "hostCommandRunner", "df/d20/classmorph_1_1ui_1_1Session.html#a00496e47156244dc93749a10466eea84", null ],
     [ "client", "df/d20/classmorph_1_1ui_1_1Session.html#af6699635c8893503ef8e2abeaab6b0de", null ],
     [ "appScope", "df/d20/classmorph_1_1ui_1_1Session.html#a1122c93a6ca2a137b0c5e09af1c672a6", null ],

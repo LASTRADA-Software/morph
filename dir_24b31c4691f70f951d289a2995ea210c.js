@@ -2,8 +2,10 @@ var dir_24b31c4691f70f951d289a2995ea210c =
 [
     [ "detail", "dir_f1feb2bb35468eeade9393d312140839.html", "dir_f1feb2bb35468eeade9393d312140839" ],
     [ "qt_chat_provider.hpp", "db/d99/qt__chat__provider_8hpp.html", "db/d99/qt__chat__provider_8hpp" ],
+    [ "qt_dictation_recorder.hpp", "d8/db0/qt__dictation__recorder_8hpp.html", "d8/db0/qt__dictation__recorder_8hpp" ],
     [ "qt_executor.hpp", "d2/d3b/qt__executor_8hpp_source.html", null ],
     [ "qt_tls.hpp", "dd/d60/qt__tls_8hpp_source.html", null ],
+    [ "qt_transcriber.hpp", "de/d01/qt__transcriber_8hpp.html", "de/d01/qt__transcriber_8hpp" ],
     [ "qt_websocket_backend.hpp", "d8/dc3/qt__websocket__backend_8hpp_source.html", null ],
     [ "qt_websocket_server.hpp", "df/d74/qt__websocket__server_8hpp_source.html", null ]
 ];

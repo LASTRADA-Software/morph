@@ -143,6 +143,7 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('db/d42/interpr
 <code>#include &lt;<a class="el" href="../../de/d99/scope_8hpp_source.html">morph/reactive/scope.hpp</a>&gt;</code><br />
 <code>#include &lt;<a class="el" href="../../dd/d5f/signal_8hpp_source.html">morph/reactive/signal.hpp</a>&gt;</code><br />
 <code>#include &lt;<a class="el" href="../../d0/dc2/ui_2backend_8hpp_source.html">morph/ui/backend.hpp</a>&gt;</code><br />
+<code>#include &lt;<a class="el" href="../../d1/da6/base64_8hpp_source.html">morph/ui/base64.hpp</a>&gt;</code><br />
 <code>#include &lt;<a class="el" href="../../d3/d6d/dev__tools_8hpp_source.html">morph/ui/dev_tools.hpp</a>&gt;</code><br />
 <code>#include &lt;<a class="el" href="../../dd/d39/document_8hpp_source.html">morph/ui/document.hpp</a>&gt;</code><br />
 <code>#include &lt;<a class="el" href="../../d8/d0e/expression_8hpp_source.html">morph/ui/expression.hpp</a>&gt;</code><br />
@@ -284,6 +285,8 @@ Typedefs</h2></td></tr>
 <tr class="memdesc:ab1da6e62f0770d24628900fab76a3b58"><td class="mdescLeft">&#160;</td><td class="mdescRight">Sends a <span class="tt">watch</span> or <span class="tt">unwatch</span> request for a session's cache (spec 8 §7): the kind, and the <span class="tt">WatchBody</span> as JSON. <span class="tt"><a class="el" href="../../dd/d56/service__client_8hpp.html#a4d3b7f4a8c3c2b3542f543860d56f98f" title="A watcher over the server (spec 8 §7): each watch or unwatch is one request of that kind through exch...">ui::watcherOver</a></span> builds one over a remote source's exchange.  <br /></td></tr>
 <tr class="memitem:afcb4d5d0f21900606ab6bd8ee90a3bc7" id="r_afcb4d5d0f21900606ab6bd8ee90a3bc7"><td class="memItemLeft">using&#160;</td><td class="memItemRight"><a class="el" href="#afcb4d5d0f21900606ab6bd8ee90a3bc7">morph::ui::detail::RowsByKey</a> = std::map&lt;std::string, <a class="el" href="../../da/d54/classmorph_1_1ui_1_1Value.html">Value</a> const*, std::less&lt;&gt;&gt;</td></tr>
 <tr class="memdesc:afcb4d5d0f21900606ab6bd8ee90a3bc7"><td class="mdescLeft">&#160;</td><td class="mdescRight">New rows by the canonical text of their key.  <br /></td></tr>
+<tr class="memitem:aa262e4f1b80f69754e8b4fe1f9f2d8c0" id="r_aa262e4f1b80f69754e8b4fe1f9f2d8c0"><td class="memItemLeft">using&#160;</td><td class="memItemRight"><a class="el" href="#aa262e4f1b80f69754e8b4fe1f9f2d8c0">morph::ui::HostScopes</a> = std::map&lt;std::string, std::set&lt;std::string, std::less&lt;&gt;&gt;, std::less&lt;&gt;&gt;</td></tr>
+<tr class="memdesc:aa262e4f1b80f69754e8b4fe1f9f2d8c0"><td class="mdescLeft">&#160;</td><td class="mdescRight">The host names limited to some documents, each with the ids of the documents that may name it. A name not listed is in scope for every document.  <br /></td></tr>
 <tr class="memitem:ac688fc48fbdd94d382ee3860b43d0907" id="r_ac688fc48fbdd94d382ee3860b43d0907"><td class="memItemLeft">using&#160;</td><td class="memItemRight"><a class="el" href="#ac688fc48fbdd94d382ee3860b43d0907">morph::ui::detail::Bindings</a> = std::vector&lt;<a class="el" href="../../dc/d6f/structmorph_1_1ui_1_1detail_1_1Binding.html">Binding</a>&gt;</td></tr>
 <tr class="memdesc:ac688fc48fbdd94d382ee3860b43d0907"><td class="mdescLeft">&#160;</td><td class="mdescRight">The names bound at one place, innermost last.  <br /></td></tr>
 <tr class="memitem:adb1bad3b6835a38393f5c80badce05e4" id="r_adb1bad3b6835a38393f5c80badce05e4"><td class="memItemLeft">using&#160;</td><td class="memItemRight"><a class="el" href="#adb1bad3b6835a38393f5c80badce05e4">morph::ui::detail::RunDone</a> = std::function&lt;void(bool succeeded, <a class="el" href="../../da/d54/classmorph_1_1ui_1_1Value.html">Value</a> const&amp; reply)&gt;</td></tr>
@@ -349,10 +352,6 @@ Functions</h2></td></tr>
 <tr class="memdesc:a32fa88476b8b46e3283ec1e2522be475"><td class="mdescLeft">&#160;</td><td class="mdescRight">The text of an instance key, as the bridge's string-keyed attach takes it.  <br /></td></tr>
 <tr class="memitem:a947da57a07ea4e8b7ce4adac1588dee4" id="r_a947da57a07ea4e8b7ce4adac1588dee4"><td class="memItemLeft">MORPH_API <a class="el" href="../../da/d54/classmorph_1_1ui_1_1Value.html">Value</a>&#160;</td><td class="memItemRight"><a class="el" href="#a947da57a07ea4e8b7ce4adac1588dee4">morph::ui::detail::jsonTextValue</a> (std::string_view text)</td></tr>
 <tr class="memdesc:a947da57a07ea4e8b7ce4adac1588dee4"><td class="mdescLeft">&#160;</td><td class="mdescRight">A JSON text as a document value; <span class="tt">null</span> when it is not JSON or holds what a value cannot (a fraction).  <br /></td></tr>
-<tr class="memitem:af546e71db9c60901f49cb90396e6a932" id="r_af546e71db9c60901f49cb90396e6a932"><td class="memItemLeft">MORPH_API std::optional&lt; std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="#af546e71db9c60901f49cb90396e6a932">morph::ui::detail::base64Decode</a> (std::string_view text)</td></tr>
-<tr class="memdesc:af546e71db9c60901f49cb90396e6a932"><td class="mdescLeft">&#160;</td><td class="mdescRight">Base64 text as bytes (RFC 4648, with or without padding).  <br /></td></tr>
-<tr class="memitem:a9a81cb61364e15d7f5a7aac9ea9bdc0c" id="r_a9a81cb61364e15d7f5a7aac9ea9bdc0c"><td class="memItemLeft">MORPH_API std::size_t&#160;</td><td class="memItemRight"><a class="el" href="#a9a81cb61364e15d7f5a7aac9ea9bdc0c">morph::ui::detail::base64Size</a> (std::string_view text)</td></tr>
-<tr class="memdesc:a9a81cb61364e15d7f5a7aac9ea9bdc0c"><td class="mdescLeft">&#160;</td><td class="mdescRight">How many bytes base64 text decodes to, read from its length alone.  <br /></td></tr>
 <tr class="memitem:afd27f48ad927e955aa50b0253f4e303c" id="r_afd27f48ad927e955aa50b0253f4e303c"><td class="memItemLeft">MORPH_API std::string&#160;</td><td class="memItemRight"><a class="el" href="#afd27f48ad927e955aa50b0253f4e303c">morph::ui::detail::sizeText</a> (std::size_t bytes)</td></tr>
 <tr class="memdesc:afd27f48ad927e955aa50b0253f4e303c"><td class="mdescLeft">&#160;</td><td class="mdescRight">A byte count as a person reads it: <span class="tt">512 bytes</span>, <span class="tt">2.4 KiB</span>, <span class="tt">1 MiB</span>.  <br /></td></tr>
 <tr class="memitem:a5f753954d68f2d37a5e848bf91cecd48" id="r_a5f753954d68f2d37a5e848bf91cecd48"><td class="memItemLeft">MORPH_API std::expected&lt; std::string, std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a5f753954d68f2d37a5e848bf91cecd48">morph::ui::detail::inlineBytes</a> (<a class="el" href="../../da/d54/classmorph_1_1ui_1_1Value.html">Value</a> const &amp;value)</td></tr>
@@ -410,7 +409,7 @@ Variables</h2></td></tr>
 </div><!-- fragment -->
 <p>Evaluates an action body without running it: the model's type id, the action id and the JSON body in, the query's value out (spec 5 §7). <span class="tt">ui::evaluatorOver</span> builds one over the UI service's <span class="tt">ui-evaluate</span>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00148">148</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00149">149</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -428,7 +427,7 @@ Variables</h2></td></tr>
 
 <p>Sends a <span class="tt">watch</span> or <span class="tt">unwatch</span> request for a session's cache (spec 8 §7): the kind, and the <span class="tt">WatchBody</span> as JSON. <span class="tt">ui::watcherOver</span> builds one over a remote source's exchange. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00368">368</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00369">369</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -446,7 +445,25 @@ Variables</h2></td></tr>
 
 <p>New rows by the canonical text of their key. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00528">528</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00529">529</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+
+</div>
+</div>
+<a id="aa262e4f1b80f69754e8b4fe1f9f2d8c0" name="aa262e4f1b80f69754e8b4fe1f9f2d8c0"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#aa262e4f1b80f69754e8b4fe1f9f2d8c0">&#9670;&#160;</a></span>HostScopes</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">using <a class="el" href="#aa262e4f1b80f69754e8b4fe1f9f2d8c0">morph::ui::HostScopes</a> = std::map&lt;std::string, std::set&lt;std::string, std::less&lt;&gt;&gt;, std::less&lt;&gt;&gt;</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>The host names limited to some documents, each with the ids of the documents that may name it. A name not listed is in scope for every document. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00586">586</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -464,7 +481,7 @@ Variables</h2></td></tr>
 
 <p>The names bound at one place, innermost last. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l01091">1091</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l01119">1119</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -482,7 +499,7 @@ Variables</h2></td></tr>
 
 <p>One run of a mutation, as a command sees it: whether it succeeded, and the reply. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l01563">1563</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l01591">1591</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -500,7 +517,7 @@ Variables</h2></td></tr>
 
 <p>Called once when a command finishes: whether it succeeded. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l01681">1681</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l01709">1709</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -518,7 +535,7 @@ Variables</h2></td></tr>
 
 <p>A list of lowered <span class="tt">actionButton</span> parts, in document order. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l01720">1720</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l01748">1748</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -551,7 +568,7 @@ Variables</h2></td></tr>
 </td></tr>
 </table>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00419">419</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00420">420</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -583,7 +600,7 @@ Variables</h2></td></tr>
 </td></tr>
 </table>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00556">556</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00557">557</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -615,7 +632,7 @@ Variables</h2></td></tr>
 </td></tr>
 </table>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l01661">1661</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l01689">1689</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -649,7 +666,7 @@ Variables</h2></td></tr>
 </td></tr>
 </table>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02276">2276</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02304">2304</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -681,7 +698,7 @@ Variables</h2></td></tr>
 </td></tr>
 </table>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02286">2286</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02314">2314</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -1267,74 +1284,6 @@ Variables</h2></td></tr>
 
 </div>
 </div>
-<a id="af546e71db9c60901f49cb90396e6a932" name="af546e71db9c60901f49cb90396e6a932"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#af546e71db9c60901f49cb90396e6a932">&#9670;&#160;</a></span>base64Decode()</h2>
-
-<div class="memitem">
-<div class="memproto">
-<table class="mlabels">
-  <tr>
-  <td class="mlabels-left">
-      <table class="memname">
-        <tr>
-          <td class="memname">MORPH_API std::optional&lt; std::string &gt; morph::ui::detail::base64Decode </td>
-          <td>(</td>
-          <td class="paramtype">std::string_view</td>          <td class="paramname"><span class="paramname"><em>text</em></span></td><td>)</td>
-          <td></td>
-        </tr>
-      </table>
-  </td>
-  <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel nodiscard">nodiscard</span></span>  </td>
-  </tr>
-</table>
-</div><div class="memdoc">
-
-<p>Base64 text as bytes (RFC 4648, with or without padding). </p>
-<dl class="params"><dt>Parameters</dt><dd>
-  <table class="params">
-    <tr><td class="paramname">text</td><td>The text. </td></tr>
-  </table>
-  </dd>
-</dl>
-<dl class="section return"><dt>Returns</dt><dd>The bytes, or <span class="tt">std::nullopt</span> for text that is not base64. </dd></dl>
-
-</div>
-</div>
-<a id="a9a81cb61364e15d7f5a7aac9ea9bdc0c" name="a9a81cb61364e15d7f5a7aac9ea9bdc0c"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a9a81cb61364e15d7f5a7aac9ea9bdc0c">&#9670;&#160;</a></span>base64Size()</h2>
-
-<div class="memitem">
-<div class="memproto">
-<table class="mlabels">
-  <tr>
-  <td class="mlabels-left">
-      <table class="memname">
-        <tr>
-          <td class="memname">MORPH_API std::size_t morph::ui::detail::base64Size </td>
-          <td>(</td>
-          <td class="paramtype">std::string_view</td>          <td class="paramname"><span class="paramname"><em>text</em></span></td><td>)</td>
-          <td></td>
-        </tr>
-      </table>
-  </td>
-  <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel nodiscard">nodiscard</span></span>  </td>
-  </tr>
-</table>
-</div><div class="memdoc">
-
-<p>How many bytes base64 text decodes to, read from its length alone. </p>
-<dl class="params"><dt>Parameters</dt><dd>
-  <table class="params">
-    <tr><td class="paramname">text</td><td>The text. </td></tr>
-  </table>
-  </dd>
-</dl>
-<dl class="section return"><dt>Returns</dt><dd>The byte count. </dd></dl>
-
-</div>
-</div>
 <a id="afd27f48ad927e955aa50b0253f4e303c" name="afd27f48ad927e955aa50b0253f4e303c"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#afd27f48ad927e955aa50b0253f4e303c">&#9670;&#160;</a></span>sizeText()</h2>
 
@@ -1775,7 +1724,7 @@ Variables</h2></td></tr>
 
 <p>The inline cap a session has unless it is given another: 1 MiB. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00227">227</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00228">228</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -1801,7 +1750,7 @@ Variables</h2></td></tr>
 
 <p>The largest inline cap a session takes: base64 grows bytes by 4/3, and 64 KiB of an envelope are left for the rest of the body, so the encoded file still fits <span class="tt">wire::kMaxEnvelopeBytes</span> (8 MiB). </p>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00231">231</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00232">232</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -1827,7 +1776,7 @@ Variables</h2></td></tr>
 
 <p>The field of a table's heading entry that holds the heading row's key; the rest of the entry is the run record its heading reads. A data row with this field would be taken for a heading. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l01141">1141</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l01169">1169</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -1853,7 +1802,7 @@ Variables</h2></td></tr>
 
 <p>How many command lists the inspector's log keeps. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l01778">1778</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l01806">1806</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -1879,7 +1828,7 @@ Variables</h2></td></tr>
 
 <p>How often, in lowered nodes, the inspector's node list drops the nodes whose scope is gone. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l01781">1781</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l01809">1809</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>

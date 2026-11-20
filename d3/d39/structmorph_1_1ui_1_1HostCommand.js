@@ -4,5 +4,6 @@ var structmorph_1_1ui_1_1HostCommand =
     [ "version", "d3/d39/structmorph_1_1ui_1_1HostCommand.html#a48fca7087c3edeb5db4185a2872fb3d0", null ],
     [ "args", "d3/d39/structmorph_1_1ui_1_1HostCommand.html#aa9daa47dd269d45be31265cfde0af60c", null ],
     [ "safeForUntrusted", "d3/d39/structmorph_1_1ui_1_1HostCommand.html#a70c8371b09b2c7b89dd5ea3e5bd6610a", null ],
-    [ "run", "d3/d39/structmorph_1_1ui_1_1HostCommand.html#a674b32f6984e947adfc7559de9002522", null ]
+    [ "run", "d3/d39/structmorph_1_1ui_1_1HostCommand.html#a674b32f6984e947adfc7559de9002522", null ],
+    [ "documents", "d3/d39/structmorph_1_1ui_1_1HostCommand.html#af66c73d35bdca3f119ebf806d9f15d59", null ]
 ];

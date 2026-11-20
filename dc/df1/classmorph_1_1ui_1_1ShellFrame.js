@@ -25,6 +25,7 @@ var classmorph_1_1ui_1_1ShellFrame =
     [ "setCompact", "dc/df1/classmorph_1_1ui_1_1ShellFrame.html#ae28d0f478b89a683b1af07f33b1cd8ef", null ],
     [ "setTrailEnd", "dc/df1/classmorph_1_1ui_1_1ShellFrame.html#a6cef3347aaf5625ae6bc16958fa6de4c", null ],
     [ "compact", "dc/df1/classmorph_1_1ui_1_1ShellFrame.html#a7a095f30d08e3ce5c6bce1b1f71c05ab", null ],
+    [ "chatVisible", "dc/df1/classmorph_1_1ui_1_1ShellFrame.html#a7588a02f6e0c073b6ff353c7776f9649", null ],
     [ "setParts", "dc/df1/classmorph_1_1ui_1_1ShellFrame.html#aef5be164a203e8d67d0219bc442fec20", null ],
     [ "setPartsHandlers", "dc/df1/classmorph_1_1ui_1_1ShellFrame.html#a436d1cb2053cfce52f1080737fa8c513", null ],
     [ "focusSearch", "dc/df1/classmorph_1_1ui_1_1ShellFrame.html#ab98e0c6cd613e0d91678455f1882147a", null ],

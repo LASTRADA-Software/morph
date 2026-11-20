@@ -10,5 +10,6 @@ var structmorph_1_1client_1_1ShellOptions =
     [ "onReloaded", "d6/d9c/structmorph_1_1client_1_1ShellOptions.html#a59cdb13b13b9844bdd5bb4b5e27b39f5", null ],
     [ "locale", "d6/d9c/structmorph_1_1client_1_1ShellOptions.html#a90e8cd16817b0e58f3e157fe7c5dc384", null ],
     [ "onLocale", "d6/d9c/structmorph_1_1client_1_1ShellOptions.html#a0eaf381fa21154ba79f79a40faf28db5", null ],
-    [ "signIn", "d6/d9c/structmorph_1_1client_1_1ShellOptions.html#ae55bc46d076fa4f7f47ac0aac429c220", null ]
+    [ "signIn", "d6/d9c/structmorph_1_1client_1_1ShellOptions.html#ae55bc46d076fa4f7f47ac0aac429c220", null ],
+    [ "dictation", "d6/d9c/structmorph_1_1client_1_1ShellOptions.html#aa70da802adbed21405337c841d0d4467", null ]
 ];

@@ -121,34 +121,36 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('df/d0d/classmo
 </div><!--header-->
 <div class="contents">
 
-<p>Connects the panel document to a client, through a <span class="tt"><a class="el" href="../../d0/db2/classmorph_1_1ui_1_1HostVocabulary.html" title="The client&#39;s host vocabulary: what it registered, and whether its documents came over a verified conn...">HostVocabulary</a></span>: <span class="tt">chat.entries</span>, <span class="tt">chat.running</span>, <span class="tt">chat.onScreen</span> and <span class="tt">chat.canSend</span> to read, and <span class="tt">chat.send</span> and <span class="tt">chat.cancel</span> to run.  
+<p>Connects the panel document to a client, through a <span class="tt"><a class="el" href="../../d0/db2/classmorph_1_1ui_1_1HostVocabulary.html" title="The client&#39;s host vocabulary: what it registered, and whether its documents came over a verified conn...">HostVocabulary</a></span>: <span class="tt">chat.entries</span>, <span class="tt">chat.running</span>, <span class="tt">chat.onScreen</span> and <span class="tt">chat.canSend</span> to read, <span class="tt">chat.send</span> and <span class="tt">chat.cancel</span> to run, and, for the panel document alone, the dictation names.  
  <a href="#details">More...</a></p>
 
 <p><code>#include &lt;<a class="el" href="../../dd/d6e/panel_8hpp_source.html">panel.hpp</a>&gt;</code></p>
 <table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 id="header-pub-methods" class="groupheader"><a id="pub-methods" name="pub-methods"></a>
 Public Member Functions</h2></td></tr>
-<tr class="memitem:a25f8d98abba00d6f0a635ff0c923d34f" id="r_a25f8d98abba00d6f0a635ff0c923d34f"><td class="memItemLeft">&#160;</td><td class="memItemRight"><a class="el" href="#a25f8d98abba00d6f0a635ff0c923d34f">ChatPanelBinding</a> (<a class="el" href="../../d0/db2/classmorph_1_1ui_1_1HostVocabulary.html">HostVocabulary</a> &amp;host, <a class="el" href="../../dd/dc9/classmorph_1_1ui_1_1chat_1_1ChatClient.html">ChatClient</a> &amp;client, std::function&lt; std::optional&lt; <a class="el" href="../../d5/d78/structmorph_1_1ui_1_1chat_1_1TurnRequest.html">TurnRequest</a> &gt;()&gt; context, std::function&lt; std::uint64_t()&gt; origin={}, std::function&lt; std::optional&lt; std::string &gt;()&gt; draft={})</td></tr>
-<tr class="memdesc:a25f8d98abba00d6f0a635ff0c923d34f"><td class="mdescLeft">&#160;</td><td class="mdescRight">Registers the values and the commands.  <br /></td></tr>
+<tr class="memitem:ac8e816c9b4355abe2adec2dbbe00d921" id="r_ac8e816c9b4355abe2adec2dbbe00d921"><td class="memItemLeft">&#160;</td><td class="memItemRight"><a class="el" href="#ac8e816c9b4355abe2adec2dbbe00d921">ChatPanelBinding</a> (<a class="el" href="../../d0/db2/classmorph_1_1ui_1_1HostVocabulary.html">HostVocabulary</a> &amp;host, <a class="el" href="../../dd/dc9/classmorph_1_1ui_1_1chat_1_1ChatClient.html">ChatClient</a> &amp;client, std::function&lt; std::optional&lt; <a class="el" href="../../d5/d78/structmorph_1_1ui_1_1chat_1_1TurnRequest.html">TurnRequest</a> &gt;()&gt; context, std::function&lt; std::uint64_t()&gt; origin={}, std::function&lt; std::optional&lt; std::string &gt;()&gt; draft={}, <a class="el" href="../../db/de0/classmorph_1_1ui_1_1chat_1_1IDictationRecorder.html">IDictationRecorder</a> *recorder=nullptr, std::function&lt; bool()&gt; visible={})</td></tr>
+<tr class="memdesc:ac8e816c9b4355abe2adec2dbbe00d921"><td class="mdescLeft">&#160;</td><td class="mdescRight">Registers the values and the commands.  <br /></td></tr>
 <tr class="memitem:a2caa829b84f9ec595444b75959aadb63" id="r_a2caa829b84f9ec595444b75959aadb63"><td class="memItemLeft"><a id="a2caa829b84f9ec595444b75959aadb63" name="a2caa829b84f9ec595444b75959aadb63"></a>
 &#160;</td><td class="memItemRight"><b>ChatPanelBinding</b> (ChatPanelBinding const &amp;)=delete</td></tr>
 <tr class="memitem:a3614b9cb9175fcc41a93b1bb742e0e1d" id="r_a3614b9cb9175fcc41a93b1bb742e0e1d"><td class="memItemLeft"><a id="a3614b9cb9175fcc41a93b1bb742e0e1d" name="a3614b9cb9175fcc41a93b1bb742e0e1d"></a>
-<a class="el" href="#a25f8d98abba00d6f0a635ff0c923d34f">ChatPanelBinding</a> &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (<a class="el" href="#a25f8d98abba00d6f0a635ff0c923d34f">ChatPanelBinding</a> const &amp;)=delete</td></tr>
+<a class="el" href="#ac8e816c9b4355abe2adec2dbbe00d921">ChatPanelBinding</a> &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (<a class="el" href="#ac8e816c9b4355abe2adec2dbbe00d921">ChatPanelBinding</a> const &amp;)=delete</td></tr>
 <tr class="memitem:a00163b866bf3bb2e3d10c98ad2e6e05c" id="r_a00163b866bf3bb2e3d10c98ad2e6e05c"><td class="memItemLeft"><a id="a00163b866bf3bb2e3d10c98ad2e6e05c" name="a00163b866bf3bb2e3d10c98ad2e6e05c"></a>
 &#160;</td><td class="memItemRight"><b>ChatPanelBinding</b> (ChatPanelBinding &amp;&amp;)=delete</td></tr>
 <tr class="memitem:a84b4a5ac6bd26befd6ed712c123e7486" id="r_a84b4a5ac6bd26befd6ed712c123e7486"><td class="memItemLeft"><a id="a84b4a5ac6bd26befd6ed712c123e7486" name="a84b4a5ac6bd26befd6ed712c123e7486"></a>
-<a class="el" href="#a25f8d98abba00d6f0a635ff0c923d34f">ChatPanelBinding</a> &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (<a class="el" href="#a25f8d98abba00d6f0a635ff0c923d34f">ChatPanelBinding</a> &amp;&amp;)=delete</td></tr>
+<a class="el" href="#ac8e816c9b4355abe2adec2dbbe00d921">ChatPanelBinding</a> &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (<a class="el" href="#ac8e816c9b4355abe2adec2dbbe00d921">ChatPanelBinding</a> &amp;&amp;)=delete</td></tr>
+<tr class="memitem:a2bc800afccbb849780f671b4e71b1366" id="r_a2bc800afccbb849780f671b4e71b1366"><td class="memItemLeft">&#160;</td><td class="memItemRight"><a class="el" href="#a2bc800afccbb849780f671b4e71b1366">~ChatPanelBinding</a> ()</td></tr>
+<tr class="memdesc:a2bc800afccbb849780f671b4e71b1366"><td class="mdescLeft">&#160;</td><td class="mdescRight">Clears the recorder's callbacks, then stops a recording, whose clip then reaches no one.  <br /></td></tr>
 <tr class="memitem:a04e888bd7527fbe293a9538870fc128a" id="r_a04e888bd7527fbe293a9538870fc128a"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a04e888bd7527fbe293a9538870fc128a">refresh</a> ()</td></tr>
-<tr class="memdesc:a04e888bd7527fbe293a9538870fc128a"><td class="mdescLeft">&#160;</td><td class="mdescRight">Publishes what the client shows now, and whether the person is on a screen.  <br /></td></tr>
+<tr class="memdesc:a04e888bd7527fbe293a9538870fc128a"><td class="mdescLeft">&#160;</td><td class="mdescRight">Publishes what the client shows now, whether the person is on a screen, and the dictation's state. Stops a recording and drops its clip when the panel is no longer visible, the dictation offer is gone (as after the client's <span class="tt">end</span> at sign-out) or no document is behind the panel. The microphone never runs without its indicator; the button also stays shown while a clip is being transcribed.  <br /></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
-<div class="textblock"><p>Connects the panel document to a client, through a <span class="tt"><a class="el" href="../../d0/db2/classmorph_1_1ui_1_1HostVocabulary.html" title="The client&#39;s host vocabulary: what it registered, and whether its documents came over a verified conn...">HostVocabulary</a></span>: <span class="tt">chat.entries</span>, <span class="tt">chat.running</span>, <span class="tt">chat.onScreen</span> and <span class="tt">chat.canSend</span> to read, and <span class="tt">chat.send</span> and <span class="tt">chat.cancel</span> to run. </p>
-<p>The commands are safe for an untrusted document: they do only what the person could do by typing, under their own session, and every action they lead to is checked on the server. A shell calls <span class="tt"><a class="el" href="#a04e888bd7527fbe293a9538870fc128a" title="Publishes what the client shows now, and whether the person is on a screen.">refresh</a></span> from the client's change callback, and when the active tab changes. Neither copyable nor movable; on the runtime's owner. </p>
+<div class="textblock"><p>Connects the panel document to a client, through a <span class="tt"><a class="el" href="../../d0/db2/classmorph_1_1ui_1_1HostVocabulary.html" title="The client&#39;s host vocabulary: what it registered, and whether its documents came over a verified conn...">HostVocabulary</a></span>: <span class="tt">chat.entries</span>, <span class="tt">chat.running</span>, <span class="tt">chat.onScreen</span> and <span class="tt">chat.canSend</span> to read, <span class="tt">chat.send</span> and <span class="tt">chat.cancel</span> to run, and, for the panel document alone, the dictation names. </p>
+<p>The commands are safe for an untrusted document: they do only what the person could do by typing, under their own session, and every action they lead to is checked on the server. A shell calls <span class="tt"><a class="el" href="#a04e888bd7527fbe293a9538870fc128a" title="Publishes what the client shows now, whether the person is on a screen, and the dictation&#39;s state....">refresh</a></span> from the client's change callback, and when the active tab changes. Neither copyable nor movable; on the runtime's owner. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d6e/panel_8hpp_source.html#l00077">77</a> of file <a class="el" href="../../dd/d6e/panel_8hpp_source.html">panel.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d6e/panel_8hpp_source.html#l00110">110</a> of file <a class="el" href="../../dd/d6e/panel_8hpp_source.html">panel.hpp</a>.</p>
 </div><a name="doc-constructors" id="doc-constructors"></a><h2 id="header-doc-constructors" class="groupheader">Constructor &amp; Destructor Documentation</h2>
-<a id="a25f8d98abba00d6f0a635ff0c923d34f" name="a25f8d98abba00d6f0a635ff0c923d34f"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a25f8d98abba00d6f0a635ff0c923d34f">&#9670;&#160;</a></span>ChatPanelBinding()</h2>
+<a id="ac8e816c9b4355abe2adec2dbbe00d921" name="ac8e816c9b4355abe2adec2dbbe00d921"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ac8e816c9b4355abe2adec2dbbe00d921">&#9670;&#160;</a></span>ChatPanelBinding()</h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -179,7 +181,17 @@ Public Member Functions</h2></td></tr>
         <tr>
           <td class="paramkey"></td>
           <td></td>
-          <td class="paramtype">std::function&lt; std::optional&lt; std::string &gt;()&gt;</td>          <td class="paramname"><span class="paramname"><em>draft</em></span><span class="paramdefsep"> = </span><span class="paramdefval">{}</span>&#160;)</td>
+          <td class="paramtype">std::function&lt; std::optional&lt; std::string &gt;()&gt;</td>          <td class="paramname"><span class="paramname"><em>draft</em></span><span class="paramdefsep"> = </span><span class="paramdefval">{}</span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype"><a class="el" href="../../db/de0/classmorph_1_1ui_1_1chat_1_1IDictationRecorder.html">IDictationRecorder</a> *</td>          <td class="paramname"><span class="paramname"><em>recorder</em></span><span class="paramdefsep"> = </span><span class="paramdefval">nullptr</span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">std::function&lt; bool()&gt;</td>          <td class="paramname"><span class="paramname"><em>visible</em></span><span class="paramdefsep"> = </span><span class="paramdefval">{}</span>&#160;)</td>
         </tr>
       </table>
   </td>
@@ -197,11 +209,42 @@ Public Member Functions</h2></td></tr>
     <tr><td class="paramname">context</td><td>Where the person is now: the open screen's context, with no text. Read at each send, so a message goes to the screen they are looking at when they send it. Nothing for a screen with no document behind it, such as a host screen, which disables the input. </td></tr>
     <tr><td class="paramname">origin</td><td>What the client hands back with each draft the turn proposes (<span class="tt"><a class="el" href="../../dd/dc9/classmorph_1_1ui_1_1chat_1_1ChatClient.html#ad6e2a1b18275ee4536c2188b8437dfec" title="Starts a turn, and selects its conversation. Refused locally while a turn runs, as the server would.">ChatClient::send</a></span>): read at each send, with the context, so it names the tab the message goes from. May be empty, which is 0. </td></tr>
     <tr><td class="paramname">draft</td><td>The text of the draft the open screen holds, read at each send and carried as the turn's <span class="tt"><a class="el" href="../../d5/d78/structmorph_1_1ui_1_1chat_1_1TurnRequest.html#ae256ea87028b244b7ff5a468e6e144d6" title="The document of the draft the person has open on this screen, as JSON text; absent with none....">TurnRequest::draft</a></span>; nothing for a screen with no draft. May be empty, which is nothing. </td></tr>
+    <tr><td class="paramname">recorder</td><td>What records a dictated clip; null offers no dictation. Borrowed: it outlives this binding, which sets its callbacks and clears them when it goes. </td></tr>
+    <tr><td class="paramname">visible</td><td>Whether the panel is in view, read at each <span class="tt"><a class="el" href="#a04e888bd7527fbe293a9538870fc128a" title="Publishes what the client shows now, whether the person is on a screen, and the dictation&#39;s state....">refresh</a></span>. A microphone never runs without its indicator in view, so empty, like <span class="tt">false</span>, offers no dictation. </td></tr>
   </table>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d6e/panel_8hpp_source.html#l00089">89</a> of file <a class="el" href="../../dd/d6e/panel_8hpp_source.html">panel.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d6e/panel_8hpp_source.html#l00127">127</a> of file <a class="el" href="../../dd/d6e/panel_8hpp_source.html">panel.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a2bc800afccbb849780f671b4e71b1366" name="a2bc800afccbb849780f671b4e71b1366"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a2bc800afccbb849780f671b4e71b1366">&#9670;&#160;</a></span>~ChatPanelBinding()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">morph::ui::chat::ChatPanelBinding::~ChatPanelBinding </td>
+          <td>(</td>
+          <td class="paramname"><span class="paramname"><em></em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Clears the recorder's callbacks, then stops a recording, whose clip then reaches no one. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../dd/d6e/panel_8hpp_source.html#l00163">163</a> of file <a class="el" href="../../dd/d6e/panel_8hpp_source.html">panel.hpp</a>.</p>
 
 </div>
 </div>
@@ -229,9 +272,9 @@ Public Member Functions</h2></td></tr>
 </table>
 </div><div class="memdoc">
 
-<p>Publishes what the client shows now, and whether the person is on a screen. </p>
+<p>Publishes what the client shows now, whether the person is on a screen, and the dictation's state. Stops a recording and drops its clip when the panel is no longer visible, the dictation offer is gone (as after the client's <span class="tt">end</span> at sign-out) or no document is behind the panel. The microphone never runs without its indicator; the button also stays shown while a clip is being transcribed. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d6e/panel_8hpp_source.html#l00122">122</a> of file <a class="el" href="../../dd/d6e/panel_8hpp_source.html">panel.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d6e/panel_8hpp_source.html#l00179">179</a> of file <a class="el" href="../../dd/d6e/panel_8hpp_source.html">panel.hpp</a>.</p>
 
 </div>
 </div>

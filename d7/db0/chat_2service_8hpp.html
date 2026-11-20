@@ -129,6 +129,7 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d7/db0/chat_2s
 <code>#include &lt;functional&gt;</code><br />
 <code>#include &lt;memory&gt;</code><br />
 <code>#include &lt;morph/export.hpp&gt;</code><br />
+<code>#include &lt;optional&gt;</code><br />
 <code>#include &lt;string&gt;</code><br />
 <code>#include &lt;string_view&gt;</code><br />
 <code>#include &lt;vector&gt;</code><br />
@@ -140,6 +141,7 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d7/db0/chat_2s
 <code>#include &quot;<a class="el" href="../../dc/dc9/conversations_8hpp_source.html">conversations.hpp</a>&quot;</code><br />
 <code>#include &quot;<a class="el" href="../../df/d53/extra__tool_8hpp_source.html">extra_tool.hpp</a>&quot;</code><br />
 <code>#include &quot;<a class="el" href="../../d3/d5b/provider_8hpp_source.html">provider.hpp</a>&quot;</code><br />
+<code>#include &quot;<a class="el" href="../../d2/d95/transcriber_8hpp_source.html">transcriber.hpp</a>&quot;</code><br />
 </div>
 <p><a href="../../d7/db0/chat_2service_8hpp_source.html">Go to the source code of this file.</a></p>
 <table class="memberdecls">
@@ -183,7 +185,7 @@ Variables</h2></td></tr>
 <p>Reads the document of a screen the bundle does not hold, such as a person's own custom screen. </p>
 <p>Called on the turn's worker with the turn's session and the screen's id, and answers through the callback, from any thread, exactly once: the document and its base, or why there is none, which fails the turn. It is asked only for an id the bundle has no screen of, once per turn, and it must answer for the session's person alone. One that has not answered within <span class="tt">ChatLimits::toolCallTimeout</span> fails the turn, and a later answer is ignored. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d7/db0/chat_2service_8hpp_source.html#l00040">40</a> of file <a class="el" href="../../d7/db0/chat_2service_8hpp_source.html">service.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d7/db0/chat_2service_8hpp_source.html#l00042">42</a> of file <a class="el" href="../../d7/db0/chat_2service_8hpp_source.html">service.hpp</a>.</p>
 
 </div>
 </div>
@@ -216,7 +218,7 @@ Variables</h2></td></tr>
 </div><!-- fragment -->
 <p>What an assistant is told about how to behave, before the screen's context. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d7/db0/chat_2service_8hpp_source.html#l00044">44</a> of file <a class="el" href="../../d7/db0/chat_2service_8hpp_source.html">service.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d7/db0/chat_2service_8hpp_source.html#l00046">46</a> of file <a class="el" href="../../d7/db0/chat_2service_8hpp_source.html">service.hpp</a>.</p>
 
 </div>
 </div>

@@ -3,11 +3,14 @@ var dir_ad21ecf5ee49c30519e887cac9edaebc =
     [ "client.hpp", "d2/dfe/client_8hpp.html", "d2/dfe/client_8hpp" ],
     [ "config.hpp", "d8/dfd/config_8hpp.html", "d8/dfd/config_8hpp" ],
     [ "conversations.hpp", "dc/dc9/conversations_8hpp.html", "dc/dc9/conversations_8hpp" ],
+    [ "dictation.hpp", "dd/d4a/dictation_8hpp.html", "dd/d4a/dictation_8hpp" ],
     [ "extra_tool.hpp", "df/d53/extra__tool_8hpp.html", "df/d53/extra__tool_8hpp" ],
     [ "panel.hpp", "dd/d6e/panel_8hpp.html", "dd/d6e/panel_8hpp" ],
+    [ "panel_id.hpp", "de/dd1/panel__id_8hpp.html", "de/dd1/panel__id_8hpp" ],
     [ "propose_screen.hpp", "d0/d7b/propose__screen_8hpp.html", "d0/d7b/propose__screen_8hpp" ],
     [ "protocol.hpp", "d8/dd1/protocol_8hpp.html", "d8/dd1/protocol_8hpp" ],
     [ "provider.hpp", "d3/d5b/provider_8hpp.html", "d3/d5b/provider_8hpp" ],
     [ "screen_tools.hpp", "d2/dc2/screen__tools_8hpp.html", "d2/dc2/screen__tools_8hpp" ],
-    [ "service.hpp", "d7/db0/chat_2service_8hpp.html", "d7/db0/chat_2service_8hpp" ]
+    [ "service.hpp", "d7/db0/chat_2service_8hpp.html", "d7/db0/chat_2service_8hpp" ],
+    [ "transcriber.hpp", "d2/d95/transcriber_8hpp.html", "d2/d95/transcriber_8hpp" ]
 ];

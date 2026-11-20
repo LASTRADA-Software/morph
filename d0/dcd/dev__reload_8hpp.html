@@ -127,6 +127,7 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d0/dcd/dev__re
 <code>#include &lt;functional&gt;</code><br />
 <code>#include &lt;map&gt;</code><br />
 <code>#include &lt;memory&gt;</code><br />
+<code>#include &lt;optional&gt;</code><br />
 <code>#include &lt;span&gt;</code><br />
 <code>#include &lt;string&gt;</code><br />
 <code>#include &lt;string_view&gt;</code><br />
@@ -136,6 +137,7 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d0/dcd/dev__re
 <code>#include &quot;<a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>&quot;</code><br />
 <code>#include &quot;<a class="el" href="../../de/df6/ui_2frontend_8hpp_source.html">frontend.hpp</a>&quot;</code><br />
 <code>#include &quot;<a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>&quot;</code><br />
+<code>#include &quot;<a class="el" href="../../d6/d8e/served__document_8hpp_source.html">served_document.hpp</a>&quot;</code><br />
 <code>#include &quot;<a class="el" href="../../d6/dda/value_8hpp_source.html">value.hpp</a>&quot;</code><br />
 </div>
 <p><a href="../../d0/dcd/dev__reload_8hpp_source.html">Go to the source code of this file.</a></p>
@@ -179,7 +181,7 @@ Functions</h2></td></tr>
 
 <p>The loaded documents a host mounts from, by screen id. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dcd/dev__reload_8hpp_source.html#l00030">30</a> of file <a class="el" href="../../d0/dcd/dev__reload_8hpp_source.html">dev_reload.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dcd/dev__reload_8hpp_source.html#l00032">32</a> of file <a class="el" href="../../d0/dcd/dev__reload_8hpp_source.html">dev_reload.hpp</a>.</p>
 
 </div>
 </div>
@@ -221,7 +223,7 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The ids, sorted and each once. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dcd/dev__reload_8hpp_source.html#l00038">38</a> of file <a class="el" href="../../d0/dcd/dev__reload_8hpp_source.html">dev_reload.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dcd/dev__reload_8hpp_source.html#l00040">40</a> of file <a class="el" href="../../d0/dcd/dev__reload_8hpp_source.html">dev_reload.hpp</a>.</p>
 
 </div>
 </div>
@@ -273,7 +275,7 @@ Functions</h2></td></tr>
 </div><div class="memdoc">
 
 <p>Loads the changed documents of a new bundle and remounts the mounted screens that show them. </p>
-<p>Each changed screen document is loaded with <code class="param">options</code>. A document that does not load is refused and keeps the old document, in <code class="param">documents</code> and on every screen showing it. A document that loads is mounted, through <span class="tt">DocumentScreenHost::remount</span>, on every screen of <code class="param">mounted</code> showing it, which keeps each state of the screen's own scope declared under the same name and type. A screen showing a draft (<span class="tt">DocumentScreenHost::mountDraft</span>) is left as it is. A remount the interpreter refuses keeps that screen on the old document, and keeps the old document in <code class="param">documents</code>. A changed id the bundle no longer holds, and the app document, which is the session's root scope and not a screen (<span class="tt">DocumentScreenHost::mountApp</span>), change nothing here. </p><dl class="params"><dt>Parameters</dt><dd>
+<p>Each changed screen document is loaded with <code class="param">options</code>. A document that does not load is refused and keeps the old document, in <code class="param">documents</code> and on every screen showing it. A document that loads is mounted, through <span class="tt">DocumentScreenHost::remount</span>, on every screen of <code class="param">mounted</code> showing it, which keeps each state of the screen's own scope declared under the same name and type. A screen showing a draft (<span class="tt">DocumentScreenHost::mountDraft</span>) is left as it is. A remount the interpreter refuses keeps that screen on the old document, and keeps the old document in <code class="param">documents</code>. A changed id that is the chat panel's, and a document that names another id than its screen's, are refused the same way. A changed id the bundle no longer holds, and the app document, which is the session's root scope and not a screen (<span class="tt">DocumentScreenHost::mountApp</span>), change nothing here. </p><dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
     <tr><td class="paramname">changed</td><td>The ids of the changed documents (<span class="tt">changedDocuments</span>). </td></tr>
     <tr><td class="paramname">bundle</td><td>The new bundle's documents. </td></tr>
@@ -286,7 +288,7 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The screens remounted, and the refusals. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dcd/dev__reload_8hpp_source.html#l00100">100</a> of file <a class="el" href="../../d0/dcd/dev__reload_8hpp_source.html">dev_reload.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dcd/dev__reload_8hpp_source.html#l00103">103</a> of file <a class="el" href="../../d0/dcd/dev__reload_8hpp_source.html">dev_reload.hpp</a>.</p>
 
 </div>
 </div>

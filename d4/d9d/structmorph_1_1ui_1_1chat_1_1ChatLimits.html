@@ -153,14 +153,22 @@ Public Attributes</h2></td></tr>
 <tr class="memitem:a37ab633c837bc39fb2feb327ffadce2b" id="r_a37ab633c837bc39fb2feb327ffadce2b"><td class="memItemLeft">std::size_t&#160;</td><td class="memItemRight"><a class="el" href="#a37ab633c837bc39fb2feb327ffadce2b">maxProposalsPerTurn</a> = 3</td></tr>
 <tr class="memdesc:a37ab633c837bc39fb2feb327ffadce2b"><td class="mdescLeft">&#160;</td><td class="mdescRight">The refused proposals one turn may make. The turn that makes this many ends, with the last refusal told to the person, and leaves the window as it was.  <br /></td></tr>
 <tr class="memitem:a1d0a10eb687b15ce3f12c13f57aaffef" id="r_a1d0a10eb687b15ce3f12c13f57aaffef"><td class="memItemLeft">std::chrono::milliseconds&#160;</td><td class="memItemRight"><a class="el" href="#a1d0a10eb687b15ce3f12c13f57aaffef">toolCallTimeout</a> {std::chrono::seconds{30}}</td></tr>
-<tr class="memdesc:a1d0a10eb687b15ce3f12c13f57aaffef"><td class="mdescLeft">&#160;</td><td class="mdescRight">How long the chat waits for one extra tool's offer or handler, or for the document source, to answer. Past it the call counts as failed (an offer as declined, the source as failing the turn) and a late answer is ignored, so a tool that never answers cannot hold a turn. Zero or less: no deadline.  <br /></td></tr>
+<tr class="memdesc:a1d0a10eb687b15ce3f12c13f57aaffef"><td class="mdescLeft">&#160;</td><td class="mdescRight">How long the chat waits for one extra tool's offer or handler, for the document source, or for the transcriber, to answer. Past it the call counts as failed (an offer as declined, the source as failing the turn, a transcription as failed) and a late answer is ignored, so a tool that never answers cannot hold a turn or a dictation. Zero or less: no deadline, and a transcriber that never answers holds its slots until <span class="tt">ui-chat-end</span> or the connection closing.  <br /></td></tr>
 <tr class="memitem:a025dcc86b4799765d5e0533ef69c3e55" id="r_a025dcc86b4799765d5e0533ef69c3e55"><td class="memItemLeft">std::chrono::minutes&#160;</td><td class="memItemRight"><a class="el" href="#a025dcc86b4799765d5e0533ef69c3e55">idleRetention</a> {std::chrono::hours{8}}</td></tr>
 <tr class="memdesc:a025dcc86b4799765d5e0533ef69c3e55"><td class="mdescLeft">&#160;</td><td class="mdescRight">How long an untouched conversation is kept.  <br /></td></tr>
+<tr class="memitem:a9236728127580638437b80f70d64a217" id="r_a9236728127580638437b80f70d64a217"><td class="memItemLeft">std::size_t&#160;</td><td class="memItemRight"><a class="el" href="#a9236728127580638437b80f70d64a217">maxDictationSeconds</a> = 60</td></tr>
+<tr class="memdesc:a9236728127580638437b80f70d64a217"><td class="mdescLeft">&#160;</td><td class="mdescRight">The longest clip a person may dictate, in seconds; the client stops recording there.  <br /></td></tr>
+<tr class="memitem:afd3d1bd36866a857c182fa4e04efbc92" id="r_afd3d1bd36866a857c182fa4e04efbc92"><td class="memItemLeft">std::size_t&#160;</td><td class="memItemRight"><a class="el" href="#afd3d1bd36866a857c182fa4e04efbc92">maxDictationBytes</a> = std::size_t{4} * 1024 * 1024</td></tr>
+<tr class="memdesc:afd3d1bd36866a857c182fa4e04efbc92"><td class="mdescLeft">&#160;</td><td class="mdescRight">The largest clip the server takes, in bytes after decoding; the client stops recording before a clip would pass it. At most <span class="tt"><a class="el" href="../../dc/dc9/conversations_8hpp.html#a2eb5b7128f37d594e9d036c0bebf1a63" title="The largest dictated clip a server may accept, in bytes before base64: what fits one envelope once gr...">kMaxDictationBytes</a></span>.  <br /></td></tr>
+<tr class="memitem:a249ae731cf9b7c7dea1c377a0211b27e" id="r_a249ae731cf9b7c7dea1c377a0211b27e"><td class="memItemLeft">std::size_t&#160;</td><td class="memItemRight"><a class="el" href="#a249ae731cf9b7c7dea1c377a0211b27e">maxTranscriptionsPerPrincipal</a> = 2</td></tr>
+<tr class="memdesc:a249ae731cf9b7c7dea1c377a0211b27e"><td class="mdescLeft">&#160;</td><td class="mdescRight">Transcriptions one principal may have running across connections. One connection may have one.  <br /></td></tr>
+<tr class="memitem:a487fc20b5f9636c87d9d45c53f41b1b8" id="r_a487fc20b5f9636c87d9d45c53f41b1b8"><td class="memItemLeft">std::chrono::seconds&#160;</td><td class="memItemRight"><a class="el" href="#a487fc20b5f9636c87d9d45c53f41b1b8">transcriptionRetention</a> {60}</td></tr>
+<tr class="memdesc:a487fc20b5f9636c87d9d45c53f41b1b8"><td class="mdescLeft">&#160;</td><td class="mdescRight">How long a finished transcription stays readable before it is forgotten.  <br /></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>Bounds on what chats may consume. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dc/dc9/conversations_8hpp_source.html#l00023">23</a> of file <a class="el" href="../../dc/dc9/conversations_8hpp_source.html">conversations.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dc/dc9/conversations_8hpp_source.html#l00036">36</a> of file <a class="el" href="../../dc/dc9/conversations_8hpp_source.html">conversations.hpp</a>.</p>
 </div><a name="doc-variable-members" id="doc-variable-members"></a><h2 id="header-doc-variable-members" class="groupheader">Member Data Documentation</h2>
 <a id="a5f89dbb74dbd87f59b985b85637d6d65" name="a5f89dbb74dbd87f59b985b85637d6d65"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a5f89dbb74dbd87f59b985b85637d6d65">&#9670;&#160;</a></span>maxToolCallsPerTurn</h2>
@@ -176,7 +184,7 @@ Public Attributes</h2></td></tr>
 
 <p>Tool calls one turn may make, malformed ones included. A record's contents reach the model and could steer it, so this is also what bounds the harm one turn can do. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dc/dc9/conversations_8hpp_source.html#l00026">26</a> of file <a class="el" href="../../dc/dc9/conversations_8hpp_source.html">conversations.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dc/dc9/conversations_8hpp_source.html#l00039">39</a> of file <a class="el" href="../../dc/dc9/conversations_8hpp_source.html">conversations.hpp</a>.</p>
 
 </div>
 </div>
@@ -194,7 +202,7 @@ Public Attributes</h2></td></tr>
 
 <p>Turns one principal may have running. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dc/dc9/conversations_8hpp_source.html#l00028">28</a> of file <a class="el" href="../../dc/dc9/conversations_8hpp_source.html">conversations.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dc/dc9/conversations_8hpp_source.html#l00041">41</a> of file <a class="el" href="../../dc/dc9/conversations_8hpp_source.html">conversations.hpp</a>.</p>
 
 </div>
 </div>
@@ -212,7 +220,7 @@ Public Attributes</h2></td></tr>
 
 <p>Turns one connection may have running. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dc/dc9/conversations_8hpp_source.html#l00030">30</a> of file <a class="el" href="../../dc/dc9/conversations_8hpp_source.html">conversations.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dc/dc9/conversations_8hpp_source.html#l00043">43</a> of file <a class="el" href="../../dc/dc9/conversations_8hpp_source.html">conversations.hpp</a>.</p>
 
 </div>
 </div>
@@ -230,7 +238,7 @@ Public Attributes</h2></td></tr>
 
 <p>Conversations kept per principal; past it the least recently used is dropped. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dc/dc9/conversations_8hpp_source.html#l00032">32</a> of file <a class="el" href="../../dc/dc9/conversations_8hpp_source.html">conversations.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dc/dc9/conversations_8hpp_source.html#l00045">45</a> of file <a class="el" href="../../dc/dc9/conversations_8hpp_source.html">conversations.hpp</a>.</p>
 
 </div>
 </div>
@@ -248,7 +256,7 @@ Public Attributes</h2></td></tr>
 
 <p>Messages kept per conversation; past it the oldest are dropped. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dc/dc9/conversations_8hpp_source.html#l00034">34</a> of file <a class="el" href="../../dc/dc9/conversations_8hpp_source.html">conversations.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dc/dc9/conversations_8hpp_source.html#l00047">47</a> of file <a class="el" href="../../dc/dc9/conversations_8hpp_source.html">conversations.hpp</a>.</p>
 
 </div>
 </div>
@@ -266,7 +274,7 @@ Public Attributes</h2></td></tr>
 
 <p>The longest text one turn may carry. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dc/dc9/conversations_8hpp_source.html#l00036">36</a> of file <a class="el" href="../../dc/dc9/conversations_8hpp_source.html">conversations.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dc/dc9/conversations_8hpp_source.html#l00049">49</a> of file <a class="el" href="../../dc/dc9/conversations_8hpp_source.html">conversations.hpp</a>.</p>
 
 </div>
 </div>
@@ -284,7 +292,7 @@ Public Attributes</h2></td></tr>
 
 <p>The most of one tool's result the model is given; past it the result is cut, and the model told. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dc/dc9/conversations_8hpp_source.html#l00038">38</a> of file <a class="el" href="../../dc/dc9/conversations_8hpp_source.html">conversations.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dc/dc9/conversations_8hpp_source.html#l00051">51</a> of file <a class="el" href="../../dc/dc9/conversations_8hpp_source.html">conversations.hpp</a>.</p>
 
 </div>
 </div>
@@ -302,7 +310,7 @@ Public Attributes</h2></td></tr>
 
 <p>The most one conversation holds; past it the oldest messages are dropped. Without it, one large result kept in a conversation would make every later request on that record too large. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dc/dc9/conversations_8hpp_source.html#l00041">41</a> of file <a class="el" href="../../dc/dc9/conversations_8hpp_source.html">conversations.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dc/dc9/conversations_8hpp_source.html#l00054">54</a> of file <a class="el" href="../../dc/dc9/conversations_8hpp_source.html">conversations.hpp</a>.</p>
 
 </div>
 </div>
@@ -320,7 +328,7 @@ Public Attributes</h2></td></tr>
 
 <p>The longest patch the assistant sends to change a screen. It bounds the proposal only: the document it is applied to and the draft that results are bounded by <span class="tt"><a class="el" href="#ac2ad2de9ba65af1506900bdaf2564d75" title="The longest document the assistant is given as a draft or offered to edit, and the longest draft a tu...">maxDraftBytes</a></span>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dc/dc9/conversations_8hpp_source.html#l00044">44</a> of file <a class="el" href="../../dc/dc9/conversations_8hpp_source.html">conversations.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dc/dc9/conversations_8hpp_source.html#l00057">57</a> of file <a class="el" href="../../dc/dc9/conversations_8hpp_source.html">conversations.hpp</a>.</p>
 
 </div>
 </div>
@@ -338,7 +346,7 @@ Public Attributes</h2></td></tr>
 
 <p>The longest document the assistant is given as a draft or offered to edit, and the longest draft a turn carries or accepts. A turn carrying a larger draft is refused, and a larger screen is not offered for editing. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dc/dc9/conversations_8hpp_source.html#l00048">48</a> of file <a class="el" href="../../dc/dc9/conversations_8hpp_source.html">conversations.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dc/dc9/conversations_8hpp_source.html#l00061">61</a> of file <a class="el" href="../../dc/dc9/conversations_8hpp_source.html">conversations.hpp</a>.</p>
 
 </div>
 </div>
@@ -356,7 +364,7 @@ Public Attributes</h2></td></tr>
 
 <p>The longest document the system text carries whole. A larger one is described by an outline, and the assistant reads the rest through the screen's read tools. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dc/dc9/conversations_8hpp_source.html#l00051">51</a> of file <a class="el" href="../../dc/dc9/conversations_8hpp_source.html">conversations.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dc/dc9/conversations_8hpp_source.html#l00064">64</a> of file <a class="el" href="../../dc/dc9/conversations_8hpp_source.html">conversations.hpp</a>.</p>
 
 </div>
 </div>
@@ -374,7 +382,7 @@ Public Attributes</h2></td></tr>
 
 <p>The refused proposals one turn may make. The turn that makes this many ends, with the last refusal told to the person, and leaves the window as it was. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dc/dc9/conversations_8hpp_source.html#l00054">54</a> of file <a class="el" href="../../dc/dc9/conversations_8hpp_source.html">conversations.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dc/dc9/conversations_8hpp_source.html#l00067">67</a> of file <a class="el" href="../../dc/dc9/conversations_8hpp_source.html">conversations.hpp</a>.</p>
 
 </div>
 </div>
@@ -390,9 +398,9 @@ Public Attributes</h2></td></tr>
       </table>
 </div><div class="memdoc">
 
-<p>How long the chat waits for one extra tool's offer or handler, or for the document source, to answer. Past it the call counts as failed (an offer as declined, the source as failing the turn) and a late answer is ignored, so a tool that never answers cannot hold a turn. Zero or less: no deadline. </p>
+<p>How long the chat waits for one extra tool's offer or handler, for the document source, or for the transcriber, to answer. Past it the call counts as failed (an offer as declined, the source as failing the turn, a transcription as failed) and a late answer is ignored, so a tool that never answers cannot hold a turn or a dictation. Zero or less: no deadline, and a transcriber that never answers holds its slots until <span class="tt">ui-chat-end</span> or the connection closing. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dc/dc9/conversations_8hpp_source.html#l00058">58</a> of file <a class="el" href="../../dc/dc9/conversations_8hpp_source.html">conversations.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dc/dc9/conversations_8hpp_source.html#l00073">73</a> of file <a class="el" href="../../dc/dc9/conversations_8hpp_source.html">conversations.hpp</a>.</p>
 
 </div>
 </div>
@@ -410,7 +418,79 @@ Public Attributes</h2></td></tr>
 
 <p>How long an untouched conversation is kept. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dc/dc9/conversations_8hpp_source.html#l00060">60</a> of file <a class="el" href="../../dc/dc9/conversations_8hpp_source.html">conversations.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dc/dc9/conversations_8hpp_source.html#l00075">75</a> of file <a class="el" href="../../dc/dc9/conversations_8hpp_source.html">conversations.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a9236728127580638437b80f70d64a217" name="a9236728127580638437b80f70d64a217"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a9236728127580638437b80f70d64a217">&#9670;&#160;</a></span>maxDictationSeconds</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::size_t morph::ui::chat::ChatLimits::maxDictationSeconds = 60</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>The longest clip a person may dictate, in seconds; the client stops recording there. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../dc/dc9/conversations_8hpp_source.html#l00077">77</a> of file <a class="el" href="../../dc/dc9/conversations_8hpp_source.html">conversations.hpp</a>.</p>
+
+</div>
+</div>
+<a id="afd3d1bd36866a857c182fa4e04efbc92" name="afd3d1bd36866a857c182fa4e04efbc92"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#afd3d1bd36866a857c182fa4e04efbc92">&#9670;&#160;</a></span>maxDictationBytes</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::size_t morph::ui::chat::ChatLimits::maxDictationBytes = std::size_t{4} * 1024 * 1024</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>The largest clip the server takes, in bytes after decoding; the client stops recording before a clip would pass it. At most <span class="tt"><a class="el" href="../../dc/dc9/conversations_8hpp.html#a2eb5b7128f37d594e9d036c0bebf1a63" title="The largest dictated clip a server may accept, in bytes before base64: what fits one envelope once gr...">kMaxDictationBytes</a></span>. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../dc/dc9/conversations_8hpp_source.html#l00080">80</a> of file <a class="el" href="../../dc/dc9/conversations_8hpp_source.html">conversations.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a249ae731cf9b7c7dea1c377a0211b27e" name="a249ae731cf9b7c7dea1c377a0211b27e"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a249ae731cf9b7c7dea1c377a0211b27e">&#9670;&#160;</a></span>maxTranscriptionsPerPrincipal</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::size_t morph::ui::chat::ChatLimits::maxTranscriptionsPerPrincipal = 2</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>Transcriptions one principal may have running across connections. One connection may have one. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../dc/dc9/conversations_8hpp_source.html#l00082">82</a> of file <a class="el" href="../../dc/dc9/conversations_8hpp_source.html">conversations.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a487fc20b5f9636c87d9d45c53f41b1b8" name="a487fc20b5f9636c87d9d45c53f41b1b8"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a487fc20b5f9636c87d9d45c53f41b1b8">&#9670;&#160;</a></span>transcriptionRetention</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::chrono::seconds morph::ui::chat::ChatLimits::transcriptionRetention {60}</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>How long a finished transcription stays readable before it is forgotten. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../dc/dc9/conversations_8hpp_source.html#l00084">84</a> of file <a class="el" href="../../dc/dc9/conversations_8hpp_source.html">conversations.hpp</a>.</p>
 
 </div>
 </div>

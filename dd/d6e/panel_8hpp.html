@@ -124,6 +124,7 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('dd/d6e/panel_8
 <p>The chat's panel: a document like any screen, and what connects it to a <span class="tt">ChatClient</span>. Specified in <span class="tt">docs/spec/ui/chat.md</span>.  
 <a href="#details">More...</a></p>
 <div class="textblock"><code>#include &lt;algorithm&gt;</code><br />
+<code>#include &lt;array&gt;</code><br />
 <code>#include &lt;cctype&gt;</code><br />
 <code>#include &lt;cstddef&gt;</code><br />
 <code>#include &lt;cstdint&gt;</code><br />
@@ -131,6 +132,7 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('dd/d6e/panel_8
 <code>#include &lt;functional&gt;</code><br />
 <code>#include &lt;memory&gt;</code><br />
 <code>#include &lt;optional&gt;</code><br />
+<code>#include &lt;set&gt;</code><br />
 <code>#include &lt;string&gt;</code><br />
 <code>#include &lt;string_view&gt;</code><br />
 <code>#include &lt;utility&gt;</code><br />
@@ -138,6 +140,8 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('dd/d6e/panel_8
 <code>#include &quot;<a class="el" href="../../d4/d16/host__vocabulary_8hpp_source.html">../host_vocabulary.hpp</a>&quot;</code><br />
 <code>#include &quot;<a class="el" href="../../d6/dda/value_8hpp_source.html">../value.hpp</a>&quot;</code><br />
 <code>#include &quot;<a class="el" href="../../d2/dfe/client_8hpp_source.html">client.hpp</a>&quot;</code><br />
+<code>#include &quot;<a class="el" href="../../dd/d4a/dictation_8hpp_source.html">dictation.hpp</a>&quot;</code><br />
+<code>#include &quot;<a class="el" href="../../de/dd1/panel__id_8hpp_source.html">panel_id.hpp</a>&quot;</code><br />
 <code>#include &quot;<a class="el" href="../../d8/dd1/protocol_8hpp_source.html">protocol.hpp</a>&quot;</code><br />
 </div>
 <p><a href="../../dd/d6e/panel_8hpp_source.html">Go to the source code of this file.</a></p>
@@ -145,7 +149,7 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('dd/d6e/panel_8
 <tr class="heading"><td colspan="2"><h2 id="header-nested-classes" class="groupheader"><a id="nested-classes" name="nested-classes"></a>
 Classes</h2></td></tr>
 <tr class="memitem:morph_3A_3Aui_3A_3Achat_3A_3AChatPanelBinding" id="r_morph_3A_3Aui_3A_3Achat_3A_3AChatPanelBinding"><td class="memItemLeft">class &#160;</td><td class="memItemRight"><a class="el" href="../../df/d0d/classmorph_1_1ui_1_1chat_1_1ChatPanelBinding.html">morph::ui::chat::ChatPanelBinding</a></td></tr>
-<tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">Connects the panel document to a client, through a <span class="tt"><a class="el" href="../../d0/db2/classmorph_1_1ui_1_1HostVocabulary.html" title="The client&#39;s host vocabulary: what it registered, and whether its documents came over a verified conn...">HostVocabulary</a></span>: <span class="tt">chat.entries</span>, <span class="tt">chat.running</span>, <span class="tt">chat.onScreen</span> and <span class="tt">chat.canSend</span> to read, and <span class="tt">chat.send</span> and <span class="tt">chat.cancel</span> to run.  <a href="../../df/d0d/classmorph_1_1ui_1_1chat_1_1ChatPanelBinding.html#details">More...</a><br /></td></tr>
+<tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">Connects the panel document to a client, through a <span class="tt"><a class="el" href="../../d0/db2/classmorph_1_1ui_1_1HostVocabulary.html" title="The client&#39;s host vocabulary: what it registered, and whether its documents came over a verified conn...">HostVocabulary</a></span>: <span class="tt">chat.entries</span>, <span class="tt">chat.running</span>, <span class="tt">chat.onScreen</span> and <span class="tt">chat.canSend</span> to read, <span class="tt">chat.send</span> and <span class="tt">chat.cancel</span> to run, and, for the panel document alone, the dictation names.  <a href="../../df/d0d/classmorph_1_1ui_1_1chat_1_1ChatPanelBinding.html#details">More...</a><br /></td></tr>
 </table><table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 id="header-func-members" class="groupheader"><a id="func-members" name="func-members"></a>
 Functions</h2></td></tr>
@@ -154,8 +158,6 @@ Functions</h2></td></tr>
 </table><table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 id="header-var-members" class="groupheader"><a id="var-members" name="var-members"></a>
 Variables</h2></td></tr>
-<tr class="memitem:a2be1b2f373f75ab1685fe4fb2872673a" id="r_a2be1b2f373f75ab1685fe4fb2872673a"><td class="memItemLeft">constexpr std::string_view&#160;</td><td class="memItemRight"><a class="el" href="#a2be1b2f373f75ab1685fe4fb2872673a">morph::ui::chat::kChatPanelId</a> = &quot;morph.chat&quot;</td></tr>
-<tr class="memdesc:a2be1b2f373f75ab1685fe4fb2872673a"><td class="mdescLeft">&#160;</td><td class="mdescRight">The panel document's id.  <br /></td></tr>
 <tr class="memitem:a90799b04441ade8b6c270d9a1b5e17cd" id="r_a90799b04441ade8b6c270d9a1b5e17cd"><td class="memItemLeft">constexpr std::string_view&#160;</td><td class="memItemRight"><a class="el" href="#a90799b04441ade8b6c270d9a1b5e17cd">morph::ui::chat::kChatPanelDocument</a></td></tr>
 <tr class="memdesc:a90799b04441ade8b6c270d9a1b5e17cd"><td class="mdescLeft">&#160;</td><td class="mdescRight">The panel. What it shows and does comes through the <span class="tt">chat.*</span> host values and commands a <span class="tt"><a class="el" href="../../df/d0d/classmorph_1_1ui_1_1chat_1_1ChatPanelBinding.html" title="Connects the panel document to a client, through a HostVocabulary: chat.entries, chat....">ChatPanelBinding</a></span> registers, so it is written in the same vocabulary as any screen and every frontend draws it.  <br /></td></tr>
 </table>
@@ -190,37 +192,11 @@ Variables</h2></td></tr>
 <p>Loads the panel document. </p>
 <dl class="section return"><dt>Returns</dt><dd>The document, or why it was refused. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d6e/panel_8hpp_source.html#l00063">63</a> of file <a class="el" href="../../dd/d6e/panel_8hpp_source.html">panel.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d6e/panel_8hpp_source.html#l00095">95</a> of file <a class="el" href="../../dd/d6e/panel_8hpp_source.html">panel.hpp</a>.</p>
 
 </div>
 </div>
 <a name="doc-var-members" id="doc-var-members"></a><h2 id="header-doc-var-members" class="groupheader">Variable Documentation</h2>
-<a id="a2be1b2f373f75ab1685fe4fb2872673a" name="a2be1b2f373f75ab1685fe4fb2872673a"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a2be1b2f373f75ab1685fe4fb2872673a">&#9670;&#160;</a></span>kChatPanelId</h2>
-
-<div class="memitem">
-<div class="memproto">
-<table class="mlabels">
-  <tr>
-  <td class="mlabels-left">
-      <table class="memname">
-        <tr>
-          <td class="memname">std::string_view morph::ui::chat::kChatPanelId = &quot;morph.chat&quot;</td>
-        </tr>
-      </table>
-  </td>
-  <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel constexpr">constexpr</span></span>  </td>
-  </tr>
-</table>
-</div><div class="memdoc">
-
-<p>The panel document's id. </p>
-
-<p class="definition">Definition at line <a class="el" href="../../dd/d6e/panel_8hpp_source.html#l00029">29</a> of file <a class="el" href="../../dd/d6e/panel_8hpp_source.html">panel.hpp</a>.</p>
-
-</div>
-</div>
 <a id="a90799b04441ade8b6c270d9a1b5e17cd" name="a90799b04441ade8b6c270d9a1b5e17cd"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a90799b04441ade8b6c270d9a1b5e17cd">&#9670;&#160;</a></span>kChatPanelDocument</h2>
 
@@ -240,37 +216,10 @@ Variables</h2></td></tr>
   </tr>
 </table>
 </div><div class="memdoc">
-<b>Initial value:</b><div class="fragment"><div class="line">                                                   = R<span class="stringliteral">&quot;({</span></div>
-<div class="line"><span class="stringliteral">&quot;vocab&quot;: &quot;ui/1&quot;, &quot;id&quot;: &quot;morph.chat&quot;,</span></div>
-<div class="line"><span class="stringliteral">&quot;state&quot;: { &quot;draft&quot;: { &quot;init&quot;: &quot;&quot; } },</span></div>
-<div class="line"><span class="stringliteral">&quot;view&quot;: { &quot;kind&quot;: &quot;column&quot;, &quot;testId&quot;: &quot;chat_panel&quot;, &quot;gap&quot;: 2,</span></div>
-<div class="line"><span class="stringliteral">  &quot;sizing&quot;: { &quot;lit&quot;: { &quot;width&quot;: { &quot;stretch&quot;: 1 }, &quot;height&quot;: { &quot;stretch&quot;: 1 } } },</span></div>
-<div class="line"><span class="stringliteral">  &quot;children&quot;: [</span></div>
-<div class="line"><span class="stringliteral">    { &quot;kind&quot;: &quot;scroll&quot;, &quot;testId&quot;: &quot;chat_entries&quot;,</span></div>
-<div class="line"><span class="stringliteral">      &quot;sizing&quot;: { &quot;lit&quot;: { &quot;width&quot;: { &quot;stretch&quot;: 1 }, &quot;height&quot;: { &quot;stretch&quot;: 1 } } },</span></div>
-<div class="line"><span class="stringliteral">      &quot;children&quot;: [</span></div>
-<div class="line"><span class="stringliteral">        { &quot;kind&quot;: &quot;forEach&quot;, &quot;gap&quot;: 2, &quot;key&quot;: { &quot;row&quot;: &quot;key&quot; },</span></div>
-<div class="line"><span class="stringliteral">          &quot;rows&quot;: { &quot;fn&quot;: &quot;coalesce&quot;, &quot;args&quot;: [ { &quot;host&quot;: &quot;chat.entries&quot; }, { &quot;lit&quot;: [] } ] },</span></div>
-<div class="line"><span class="stringliteral">          &quot;children&quot;: [</span></div>
-<div class="line"><span class="stringliteral">            { &quot;kind&quot;: &quot;text&quot;, &quot;testId&quot;: &quot;chat_entry&quot;, &quot;text&quot;: { &quot;row&quot;: &quot;text&quot; }, &quot;role&quot;: { &quot;row&quot;: &quot;role&quot; } } ] } ] },</span></div>
-<div class="line"><span class="stringliteral">    { &quot;kind&quot;: &quot;row&quot;, &quot;gap&quot;: 1, &quot;align&quot;: &quot;center&quot;,</span></div>
-<div class="line"><span class="stringliteral">      &quot;sizing&quot;: { &quot;lit&quot;: { &quot;width&quot;: { &quot;stretch&quot;: 1 } } },</span></div>
-<div class="line"><span class="stringliteral">      &quot;children&quot;: [</span></div>
-<div class="line"><span class="stringliteral">        { &quot;kind&quot;: &quot;textInput&quot;, &quot;testId&quot;: &quot;chat_input&quot;, &quot;placeholder&quot;: &quot;Message&quot;,</span></div>
-<div class="line"><span class="stringliteral">          &quot;sizing&quot;: { &quot;lit&quot;: { &quot;width&quot;: { &quot;stretch&quot;: 1 } } },</span></div>
-<div class="line"><span class="stringliteral">          &quot;value&quot;: { &quot;ref&quot;: &quot;draft&quot; }, &quot;enabled&quot;: { &quot;host&quot;: &quot;chat.canSend&quot; },</span></div>
-<div class="line"><span class="stringliteral">          &quot;onChange&quot;: [ { &quot;set&quot;: &quot;draft&quot;, &quot;value&quot;: { &quot;ref&quot;: &quot;event&quot; } } ],</span></div>
-<div class="line"><span class="stringliteral">          &quot;onSubmit&quot;: [ { &quot;host&quot;: &quot;chat.send&quot;, &quot;args&quot;: { &quot;obj&quot;: { &quot;text&quot;: { &quot;ref&quot;: &quot;event&quot; } } } },</span></div>
-<div class="line"><span class="stringliteral">                        { &quot;set&quot;: &quot;draft&quot;, &quot;value&quot;: &quot;&quot; } ] },</span></div>
-<div class="line"><span class="stringliteral">        { &quot;kind&quot;: &quot;button&quot;, &quot;testId&quot;: &quot;chat_send&quot;, &quot;label&quot;: &quot;Send&quot;, &quot;enabled&quot;: { &quot;host&quot;: &quot;chat.canSend&quot; },</span></div>
-<div class="line"><span class="stringliteral">          &quot;onClick&quot;: [ { &quot;host&quot;: &quot;chat.send&quot;, &quot;args&quot;: { &quot;obj&quot;: { &quot;text&quot;: { &quot;ref&quot;: &quot;draft&quot; } } } },</span></div>
-<div class="line"><span class="stringliteral">                       { &quot;set&quot;: &quot;draft&quot;, &quot;value&quot;: &quot;&quot; } ] },</span></div>
-<div class="line"><span class="stringliteral">        { &quot;kind&quot;: &quot;button&quot;, &quot;testId&quot;: &quot;chat_cancel&quot;, &quot;label&quot;: &quot;Stop&quot;, &quot;emphasis&quot;: &quot;ghost&quot;,</span></div>
-<div class="line"><span class="stringliteral">          &quot;visible&quot;: { &quot;host&quot;: &quot;chat.running&quot; }, &quot;onClick&quot;: [ { &quot;host&quot;: &quot;chat.cancel&quot; } ] } ] } ] } })&quot;</span></div>
-</div><!-- fragment -->
+
 <p>The panel. What it shows and does comes through the <span class="tt">chat.*</span> host values and commands a <span class="tt">ChatPanelBinding</span> registers, so it is written in the same vocabulary as any screen and every frontend draws it. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d6e/panel_8hpp_source.html#l00033">33</a> of file <a class="el" href="../../dd/d6e/panel_8hpp_source.html">panel.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d6e/panel_8hpp_source.html#l00035">35</a> of file <a class="el" href="../../dd/d6e/panel_8hpp_source.html">panel.hpp</a>.</p>
 
 </div>
 </div>
