@@ -10,6 +10,7 @@ base rule on the server, and the client that offers them.
 | `include/morph/ui/custom_screens.hpp` | `ICustomScreenStore` and `MemoryCustomScreenStore`, `checkBaseRule`, `describeAllowance`, `checkCustomScreen`, `withScreenId`, `VerdictCache`, `verdictKey`, the wire types, `CustomScreens`, `CustomScreensModel`, `registerCustomScreens` |
 | `include/morph/ui/service.hpp` | `permittedActions`, `screenAdmitted`, `kCustomScreenIdPrefix`, `ServedBundle::catalog` |
 | `include/morph/ui/custom_screen_sync.hpp` | `isCustomScreenId`, `routeScreen`, `CustomDocuments`, `CustomScreensOffer`, `CustomScreenSync` |
+| `include/morph/ui/custom_screen_controller.hpp` | `CustomScreenControllerOptions`, `CustomScreenController`, its outcomes and results as data |
 | `include/morph/ui/custom_screen_chrome.hpp` | `CustomScreenChromeOptions`, `CustomScreenChrome` |
 | `include/morph/ui/json_source.hpp` | `prettyJson`, `pointerOffset`, `lineAt` |
 | `include/morph/ui/chat/propose_screen.hpp` | `customScreensChatTool` (`propose_screen`), `customScreensDocumentSource`, `enableCustomScreensChat` |
@@ -345,7 +346,7 @@ turn.
 
 ## The client
 
-The client half is three framework pieces and the generic client's wiring
+The client half is four framework pieces and the generic client's wiring
 ([`../client/client.md`](../client/client.md#custom-screens)). Drafts themselves are the document host's
 ([`host.md`](host.md), "Drafts").
 
@@ -382,8 +383,30 @@ go. No call names a person.
 - **Sessions.** `reset` forgets the offer, the list, the cache and the binding, and drops replies in flight: what a
   sign-in or sign-out does before probing again.
 
+**`CustomScreenController`** is the chrome's logic without a view, for an application that draws its own controls
+over the same drafts. It holds, per tab, the draft's text, a generation that changes with every draft mounted or
+ended, whether a save is in flight and the last refusal of a save (`message`), and runs the commands: `source` and
+`storedSource` (the text a source view opens with), `preview`, `checkAndSave`, `proposeDraft`, `saveAs` (with the
+attributes the store is asked to record), `save`, `discard`, `openAs`, `openCustom` and `remove`. Its state is
+reactive, so a view's bindings follow `drafted`, `saving`, `message`, `offered` and `canChange`. A view calls
+`follow(tab)` when it draws a tab, as the chrome does from `WorkspaceOptions::chrome`.
+
+- **Outcomes and refusals are data.** A check from a source view answers a `CustomScreenCheckResult`: `Done`,
+  `Refused` with the refusal's pointer and reason, or `Dropped`. A save or removal answers the store's refusal as it
+  gave it. What the person should be told that no command's answer carries is a `CustomScreenOutcome` through
+  `onOutcome`: an event (saved, saved but the draft is gone or replaced or the tab closed, saved but it stays a draft,
+  removed, a tab that stayed open on a removed screen, Open as cancelled, a failed open, an unreadable source, a
+  proposal not shown), which save it was about, the screen's title, the reason, and a tone. Wording them is the view's.
+- **Stale answers.** An answer acts only on what it was asked about. A save's answer acts only while the tab still
+  holds the draft of the generation it was asked under, and tells how it ended otherwise. A check's answer is
+  `Dropped`, and mounts nothing, when the tab's draft changed meanwhile (an assistant's proposal, a discard) or the
+  view dropped its answers with `dropSourceAnswers`, as the chrome does when its source view closes or is replaced.
+  Answers asked under a workspace that `attach` has since replaced, or after the controller is gone, do nothing.
+
 **`CustomScreenChrome`** is the window chrome a shell mounts at the top of each document screen's page
-(`WorkspaceOptions::chrome`), built from view nodes so every frontend shows it. A host screen gets none.
+(`WorkspaceOptions::chrome`), built from view nodes so every frontend shows it. A host screen gets none. It is a view
+over a `CustomScreenController` it owns (`controller()`): it draws the controller's state, keeps its own dialogs, and
+words the controller's outcomes (`describe`) for `notify`.
 
 | Part | Test id | What it does |
 |---|---|---|
@@ -450,8 +473,9 @@ go. No call names a person.
 
 ## Not yet
 
-- **The chrome's words** ("Draft", "Save as…", "Source", "Open as", the refusal's "Line N") are English; resolving
-  them through the bundle's message catalogues, as the shell frame's `morph.shell.*` labels are, is still to come.
+- **The chrome's words** ("Draft", "Save as…", "Source", "Open as", the refusal's "Line N", and `describe`'s outcome
+  sentences) are English; resolving them through the bundle's message catalogues, as the shell frame's `morph.shell.*`
+  labels are, is still to come. They belong to the view: the controller carries no words, only outcomes as data.
 - **The terminal's source view** is the same dialog; it is best effort, as the spec says.
 
 ## Design decisions
@@ -466,4 +490,5 @@ go. No call names a person.
 | Effects | `changes`, record-wide | A list refetches after any save; the verdict cache keeps the refetch cheap. |
 | Base admission | Every call, outside the verdict cache | Availability is not part of the bundle digest. |
 | The session | Copied before the first await | The session is the dispatching thread's; an action resumes elsewhere. |
+| The client's draft logic | A headless `CustomScreenController`, with `CustomScreenChrome` a view over it | An application with its own controls reuses the drafts, the saves and the stale-answer checks instead of rebuilding them; the words stay in the view, the one place that localises them. |
 | Servability | A bound on `maxDocumentBytes` that fits a file and the escaped `get` reply, rechecked on the rewritten text | Any stored document is then served within the envelope, so no per-document check is needed at serve time. |
