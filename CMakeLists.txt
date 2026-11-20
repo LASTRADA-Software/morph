@@ -487,6 +487,7 @@ add_library(morph ${_morph_library_type}
     src/ui/custom_screen_sync.cpp
     src/ui/custom_screen_chrome.cpp
     src/ui/custom_screen_controller.cpp
+    src/ui/custom_screen_versions.cpp
     src/ui/host.cpp
     src/ui/backend.cpp
     src/ui/explorer.cpp
@@ -663,6 +664,7 @@ target_sources(morph
         include/morph/ui/custom_screen_sync.hpp
         include/morph/ui/custom_screen_chrome.hpp
         include/morph/ui/custom_screen_controller.hpp
+        include/morph/ui/custom_screen_versions.hpp
         include/morph/ui/file_store.hpp
         include/morph/ui/host.hpp
         include/morph/ui/dev_reload.hpp

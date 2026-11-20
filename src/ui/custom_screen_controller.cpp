@@ -800,6 +800,83 @@ void CustomScreenController::fallBack(std::string const& screenId, std::string c
     }
 }
 
+void CustomScreenController::layoutChangesOf(std::string const& screenId,
+                                             std::function<void(std::expected<LayoutChanges, std::string>)> done) {
+    _options.sync->get(
+        screenId, guarded([this, done = std::move(done)](std::expected<CustomScreenFound, std::string> found) {
+            if (!found) {
+                done(std::unexpected(std::move(found.error())));
+                return;
+            }
+            auto changes =
+                layoutChanges(_options.sourceOf(found->summary.basedOn), _options.catalog().schema, found->document);
+            if (!changes) {
+                done(std::unexpected(changes.error().message()));
+                return;
+            }
+            done(std::move(*changes));
+        }));
+}
+
+void CustomScreenController::applyLayoutChoices(std::string const& screenId, LayoutChoices choices,
+                                                std::function<void(CustomScreenCheckResult)> done) {
+    if (!canChange(screenId)) {
+        finish(done, refusedAt("", "the custom screen is not the person's own"));
+        return;
+    }
+    _options.sync->get(screenId, guarded([this, screenId, choices = std::move(choices), done = std::move(done)](
+                                             std::expected<CustomScreenFound, std::string> found) mutable {
+                           if (!found) {
+                               finish(done, refusedAt("", found.error()));
+                               return;
+                           }
+                           CustomScreenSummary const& listed = found->summary;
+                           auto updated = morph::ui::applyLayoutChoices(
+                               _options.sourceOf(listed.basedOn), _options.catalog().schema, found->document, choices);
+                           if (!updated) {
+                               finish(done, refusedAt(updated.error().path, updated.error().reason));
+                               return;
+                           }
+                           saveUpdate(screenId, listed, *updated, std::move(done));
+                       }));
+}
+
+void CustomScreenController::saveUpdate(std::string const& screenId, CustomScreenSummary const& listed,
+                                        std::string const& text, std::function<void(CustomScreenCheckResult)> done) {
+    _options.sync->check(
+        listed.basedOn, text,
+        guarded([this, screenId, listed, text,
+                 done = std::move(done)](std::expected<std::optional<CheckRefusal>, std::string> answered) {
+            if (!answered) {
+                finish(done, refusedAt("", answered.error()));
+                return;
+            }
+            if (*answered) {
+                finish(done, refusedAt((*answered)->pointer, (*answered)->reason));
+                return;
+            }
+            _options.sync->save(
+                CustomScreensSave{.app = {},
+                                  .id = screenId,
+                                  .title = listed.title,
+                                  .basedOn = listed.basedOn,
+                                  .document = text,
+                                  .attributes = listed.attributes},
+                guarded([this, title = listed.title, done](std::expected<std::string, std::string> saved) {
+                    if (!saved) {
+                        finish(done, refusedAt("", saved.error()));
+                        return;
+                    }
+                    finish(done, succeeded());
+                    tellOutcome(CustomScreenOutcome{.event = CustomScreenEvent::Saved,
+                                                    .save = CustomScreenSaveKind::Save,
+                                                    .title = title,
+                                                    .detail = {},
+                                                    .tone = Tone::Ok});
+                }));
+        }));
+}
+
 std::vector<CustomScreenChoice> CustomScreenController::openAsChoices(std::string const& screenId) const {
     static_cast<void>(_listVersion->get());
     std::vector<CustomScreenChoice> choices;

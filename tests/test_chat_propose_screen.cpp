@@ -1108,3 +1108,30 @@ TEST_CASE("every_operation_kind_applies_and_a_refusal_names_the_kind_that_broke"
         CHECK(outcome.text.contains(item.why));
     }
 }
+
+// Mutation: drop the knownVersion comparison (each refused patch is accepted as a draft).
+TEST_CASE("a_patch_that_changes_the_known_version_is_refused", "[chat][propose][direct]") {
+    Direct const direct;
+    auto const added = Direct::called(direct.propose, direct.proposing(),
+                                      R"({"patch":[{"op":"add","path":"/knownVersion","value":"9.0"}]})");
+    CHECK(added.isError);
+    CHECK_FALSE(added.draft.has_value());
+    CHECK(added.text.contains("/knownVersion"));
+
+    std::string const versioned = screens_test::replaced(screens_test::baseScreen("lims.base"), R"("vocab":"ui/1",)",
+                                                         R"("vocab":"ui/1","knownVersion":"1.0",)");
+    for (std::string const patch : {R"([{"op":"replace","path":"/knownVersion","value":"2.0"}])",
+                                    R"([{"op":"remove","path":"/knownVersion"}])"}) {
+        INFO(patch);
+        auto const outcome = Direct::called(direct.propose, direct.proposing(versioned), R"({"patch":)" + patch + "}");
+        CHECK(outcome.isError);
+        CHECK(outcome.text.contains("/knownVersion"));
+    }
+    // A patch that leaves it as it is, or only tests it, is not about it.
+    auto const kept = Direct::called(direct.propose, direct.proposing(versioned),
+                                     R"({"patch":[{"op":"test","path":"/knownVersion","value":"1.0"},)"
+                                     R"({"op":"replace","path":"/view/children/0/text","value":"Kept"}]})");
+    CHECK_FALSE(kept.isError);
+    REQUIRE(kept.draft.has_value());
+    CHECK(kept.draft->contains(R"("knownVersion":"1.0")"));
+}

@@ -469,3 +469,72 @@ TEST_CASE("custom screen controller: refuses options it cannot work with", "[ui]
     options.openTab = {};
     CHECK_THROWS_AS(morph::ui::CustomScreenController{options}, std::invalid_argument);
 }
+
+namespace {
+
+/// The edit document with an element of an earlier base, `legacy`, which the base no longer has.
+std::string withLegacy() {
+    return screens_test::replaced(std::string{kEdit}, R"({"kind":"text","testId":"heading","text":"Edit note"})",
+                                  R"({"kind":"text","testId":"heading","text":"Edit note"},)"
+                                  R"({"kind":"text","id":"legacy","since":"1.0","text":"Old"})");
+}
+
+}  // namespace
+
+// Mutation: skip the save in applyLayoutChoices (the stored document keeps `legacy` and the list still marks it).
+TEST_CASE("custom screen controller: the base's changes are read and taken over as data",
+          "[ui][custom-screens][controller][versions]") {
+    ControllerRig rig;
+    std::string const id = rig.saveOnServer("Mine", "notes.edit", withLegacy());
+    REQUIRE(rig.controller->summaryOf(id)->needsAttention);
+
+    std::optional<std::expected<morph::ui::LayoutChanges, std::string>> changes;
+    rig.controller->layoutChangesOf(id, [&changes](auto answer) { changes = std::move(answer); });
+    REQUIRE(rig.pump([&changes] { return changes.has_value(); }));
+    REQUIRE(changes->has_value());
+    REQUIRE((*changes)->removed.size() == 1);
+    CHECK((*changes)->removed.front().key == "legacy");
+    CHECK_FALSE((*changes)->needsUpdate());
+
+    std::optional<morph::ui::CustomScreenCheckResult> applied;
+    rig.controller->applyLayoutChoices(
+        id, morph::ui::LayoutChoices{.added = {}, .removed = {{"legacy", morph::ui::RemovedChoice::Drop}}},
+        [&applied](morph::ui::CustomScreenCheckResult answer) { applied = std::move(answer); });
+    REQUIRE(rig.pump([&applied] { return applied.has_value(); }));
+    CHECK(applied->status == CustomScreenCheckStatus::Done);
+    REQUIRE_FALSE(rig.outcomes.empty());
+    CHECK(rig.outcomes.back().event == CustomScreenEvent::Saved);
+    REQUIRE(rig.pump([&rig, &id] {
+        auto const summary = rig.controller->summaryOf(id);
+        return summary.has_value() && !summary->needsAttention;
+    }));
+}
+
+// Mutation: answer a refused update as Done (the refusal's reason is empty).
+TEST_CASE("custom screen controller: an update that cannot be made is refused as data",
+          "[ui][custom-screens][controller][versions]") {
+    ControllerRig rig;
+    std::string const id = rig.saveOnServer("Mine", "notes.edit", withLegacy());
+    auto const applying = [&rig](std::string const& screenId, morph::ui::LayoutChoices choices) {
+        std::optional<morph::ui::CustomScreenCheckResult> result;
+        rig.controller->applyLayoutChoices(
+            screenId, std::move(choices),
+            [&result](morph::ui::CustomScreenCheckResult answer) { result = std::move(answer); });
+        REQUIRE(rig.pump([&result] { return result.has_value(); }));
+        return *result;
+    };
+    auto const unknown = applying(
+        id, morph::ui::LayoutChoices{.added = {{"nothing", morph::ui::AddedChoice::TakeOver}}, .removed = {}});
+    CHECK(unknown.status == CustomScreenCheckStatus::Refused);
+    CHECK(unknown.refusal.reason.contains("nothing"));
+
+    auto const notMine = applying("custom:00000000000000000000000000000000", {});
+    CHECK(notMine.status == CustomScreenCheckStatus::Refused);
+    CHECK(notMine.refusal.reason.contains("not the person's own"));
+
+    std::optional<std::expected<morph::ui::LayoutChanges, std::string>> missing;
+    rig.controller->layoutChangesOf("custom:00000000000000000000000000000000",
+                                    [&missing](auto answer) { missing = std::move(answer); });
+    REQUIRE(rig.pump([&missing] { return missing.has_value(); }));
+    CHECK_FALSE(missing->has_value());
+}

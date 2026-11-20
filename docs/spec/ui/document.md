@@ -77,6 +77,7 @@ refused: a lab writes dates one way everywhere, so the pattern is the applicatio
 | `components` | `components` | Name to `Component` |
 | `customize` | `customize` | Name to `CustomizePoint` |
 | `view` | `view` | The root `DocNode`; required on a screen |
+| — | `knownVersion` | A custom screen's: the base version it was last saved or updated against ([Element versions](#element-versions)); a version, or the document is refused at `/knownVersion` |
 | `warnings` | — | What validation found that does not refuse the document ([Warnings](#warnings)) |
 
 A key a client does not know is ignored, so additions within a vocabulary are compatible; a key whose
@@ -351,6 +352,19 @@ policy its message shows as soon as the user has acted inside it.
 
 A node list is an array of nodes or one node. `nodeKinds()` lists the kinds.
 
+### Element versions
+
+An element (a node or a part with an `id`) may carry `since`, the version it first ships in: a dotted numeric version
+such as `"6.11.0"`, ordered as a field's `FieldMeta::since` is ([`../forms/forms.md`](../forms/forms.md#field-versions--since)),
+and kept as `DocNode::since`. An element without one belongs to the first version. The loader refuses, at the
+`since`'s pointer, a `since` that is not a string, one that is not a version (with the version's own reason), and one
+on an object with no `id`. A form's `fields` record is a map of field names, so a field named `since` is a field there.
+
+**Element ids are permanent**, as wire field names are: an element is removed and a new one added with a new id, never
+renamed, and a removed id is not used again. A person's copy of a screen finds the base's elements by their ids, so a
+renamed element would read as one removed and another added. How a copy is compared with its base is in
+[`custom_screens.md`](custom_screens.md#versions).
+
 ### Charts
 
 A `chart` plots points against a numeric axis, joined or as bars, with horizontal reference lines: a control
@@ -409,6 +423,8 @@ evaluated.
 `loadDocument` returns the first refusal; each rule has a case in
 `tests/ui/corpus/documents.json`.
 
+- **Versions.** An element's `since` and a document's `knownVersion` are versions ([Element versions](#element-versions)); an
+  element's `since` sits next to its `id`.
 - **Vocabulary.** `vocab` is `ui/1`; node kinds, commands, expression forms and functions are those of `ui/1`;
   no unknown `!` key. A mutation declares no `invalidates` or `patch` and a query no `refreshOn`; the refusal
   points at the key and says that effects replace it.
