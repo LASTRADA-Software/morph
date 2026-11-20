@@ -1190,6 +1190,7 @@ enum class MenuCommand : std::uint8_t {
     ApplySharedView,  ///< One of the shared views: the argument is the view's name.
     PublishView,      ///< "Publish view…": the arrangement published to the shared views.
     SaveAsMyView,     ///< A shared view saved among the user's own: the argument is the view's name.
+    None,             ///< Nothing: an entry that opens a submenu, or a heading.
 };
 
 /// @brief One entry of a table's menu: what it shows and what it does.
@@ -1336,7 +1337,7 @@ namespace detail {
     entry.label = std::move(label);
     entry.heading = true;
     entry.enabled = false;
-    return {.entry = std::move(entry), .command = MenuCommand::ApplyView, .argument = {}, .items = {}};
+    return {.entry = std::move(entry), .command = MenuCommand::None, .argument = {}, .items = {}};
 }
 
 /// @brief A view's entry in "Views": checked while it is the view the arrangement was taken from, and labelled
@@ -1399,7 +1400,7 @@ namespace detail {
     if (input.shares) {
         sharing.push_back(command("Publish view…", MenuCommand::PublishView));
     }
-    TableMenuEntry views = command("Views", MenuCommand::ApplyView);
+    TableMenuEntry views = command("Views", MenuCommand::None);
     views.items = detail::joinSections({std::move(own), std::move(manage), std::move(shared), std::move(sharing)});
     return views;
 }

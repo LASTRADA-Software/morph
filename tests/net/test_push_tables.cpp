@@ -1177,11 +1177,9 @@ TEST_CASE("shared views: a view published over a socket is read by a second clie
     CHECK(again.revision == first.revision);
 }
 
-// The menu's "Publish view…" over a socket: a view published under a new name is an `AddView`, under a name the shared
-// views already have a `ReplaceView`, and a second client reads one view of that name, replaced. Mutation: the second
-// publish sent as `AddView` (refused, "A view named Team exists", and bob reads the first sort). Not run: this case
-// is in morph_net_tests, which builds only on POSIX; its in-process twin in tests/test_ui_table_state.cpp drives
-// the menu itself.
+// A view published under a new name and then replaced under that name over a socket is one view, which a second
+// client reads with the replacing sort. Mutation: `applyViewOperation` answering a `ReplaceView` as `NameTaken` (the
+// second publish is Refused).
 TEST_CASE("shared views: a view published twice under one name over a socket is replaced", "[net][tables][state]") {
     StateServer server;
     Client alice{server.url, "alice"};

@@ -97,6 +97,21 @@ public:
         return start(table::ViewsPart::Shared, std::move(operation));
     }
 
+    /// @brief Saves @p view among the user's views: an `AddView`, or a `ReplaceView` when a view of its name is in
+    ///        the document the operation is applied to, which after a `Conflict` is the one stored now.
+    /// @param view The view.
+    /// @return Nothing once saved; the words a status line shows otherwise.
+    [[nodiscard]] async::Completion<Result> saveView(table::SavedView view) {
+        return start(table::ViewsPart::Own, table::AddView{view}, view);
+    }
+
+    /// @brief Publishes @p view among the shared views, as `saveView` saves one among the user's.
+    /// @param view The view.
+    /// @return Nothing once published; otherwise "This view could not be published:" and the reason.
+    [[nodiscard]] async::Completion<Result> publishView(table::SavedView view) {
+        return start(table::ViewsPart::Shared, table::AddView{view}, view);
+    }
+
     /// @brief One of the user's own views.
     /// @param name The view's name.
     /// @return It, as last loaded or saved; null when there is none of that name.
@@ -162,6 +177,8 @@ private:
         table::ViewOperation operation;
         async::Completion<Result>::Promise promise;
         bool retried = false;
+        /// A view added or replaced, decided at each attempt against the document it is applied to.
+        std::optional<table::SavedView> upsert;
     };
 
     [[nodiscard]] static table::TableStateKey partOf(table::TableStateKey key, std::string part) {
@@ -219,10 +236,15 @@ private:
             });
     }
 
-    [[nodiscard]] async::Completion<Result> start(table::ViewsPart part, table::ViewOperation operation) {
+    [[nodiscard]] async::Completion<Result> start(table::ViewsPart part, table::ViewOperation operation,
+                                                  std::optional<table::SavedView> upsert = std::nullopt) {
         auto [completion, promise] = async::Completion<Result>::makeSettleable(_held->owner);
-        auto saving = std::make_shared<Saving>(Saving{
-            .held = _held, .part = part, .operation = std::move(operation), .promise = std::move(promise), .retried = false});
+        auto saving = std::make_shared<Saving>(Saving{.held = _held,
+                                                      .part = part,
+                                                      .operation = std::move(operation),
+                                                      .promise = std::move(promise),
+                                                      .retried = false,
+                                                      .upsert = std::move(upsert)});
         Part const& held = partIn(*_held, part);
         attempt(saving, held.revision.value_or(std::string{table::kNoDocument}));
         return std::move(completion);
@@ -231,6 +253,13 @@ private:
     // Applies the operation to the part as held and sends it, expecting @p expected.
     static void attempt(std::shared_ptr<Saving> const& saving, std::string expected) {
         Part& part = partIn(*saving->held, saving->part);
+        // The document held is the one stored now after a reload, so a name another window took meanwhile is replaced
+        // rather than refused; a store that applies the operation itself does so under the same revision.
+        if (saving->upsert) {
+            saving->operation = find(part.document, saving->upsert->name) != nullptr
+                                    ? table::ViewOperation{table::ReplaceView{*saving->upsert}}
+                                    : table::ViewOperation{table::AddView{*saving->upsert}};
+        }
         auto applied = table::applyViewOperation(part.document, saving->operation, saving->part);
         if (!applied) {
             std::string text = table::viewErrorText(applied.error(), saving->operation);
