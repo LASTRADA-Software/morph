@@ -39,7 +39,15 @@ its `token` is the credential the server verified, whose claims (roles among the
 rest on more than the person, such as "an administrator may remove anyone's screen"; the authoriser cannot carry it,
 since it sees only the model and the action, not whose screen a write replaces. `get`, `put` and `remove` answer a
 `CustomScreenRefusal` the person is shown as it is. A `CustomScreen` carries `id`, `title`, `basedOn`, the `document`
-text, `savedAt` and `savedBy`.
+text, `savedAt`, `savedBy` and `attributes`.
+
+**Attributes** are the store's own record about a screen: string keys, JSON values (`Json::object_t`), such as whether
+it is shared, private or someone's default. The model carries them through `save` (the request's, to `put`), `list`
+and `get` (the stored ones, on the summary) and never reads them: the framework adds no sharing or default semantics,
+it only stops dropping what a store decides. The store validates what a `save` asks for and refuses what it does not
+accept, in its own words. A record is at most `kMaxAttributesBytes` (1 KiB) written as JSON: a `save` with a longer
+one is refused before the person is looked at, and a stored record longer than that is not sent; its screen is listed
+broken with the reason, so a store that writes one hears about it rather than its clients silently losing it.
 
 The application's store is where every policy over custom screens lives: what a person may open (which may include
 screens others saved), what they may overwrite or delete, and how many they may keep. The model calls it only with a
@@ -81,7 +89,7 @@ before it serves.
 | `morph.customScreens.list` | query | `{app}` | `{screens: [CustomScreenSummary], truncated}` |
 | `morph.customScreens.get` | query | `{app, id}` | `{summary, document}` |
 | `morph.customScreens.check` | query | `{app, basedOn, document}` | `{refusal?: {pointer, reason}}` |
-| `morph.customScreens.save` | mutation | `{app, id?, title, basedOn, document}` | `{id}` |
+| `morph.customScreens.save` | mutation | `{app, id?, title, basedOn, document, attributes?}` | `{id}` |
 | `morph.customScreens.remove` | mutation | `{app, id}` | `{removed}` |
 
 What every action does, in order:
@@ -92,7 +100,8 @@ What every action does, in order:
 2. **The names** the action takes (`id`, `title`, `basedOn`) are each 1 to `kMaxNameBytes` bytes, or it is refused;
    they are checked before the person is looked at, except `save`'s optional `id`, which is checked after it. An `id`
    of `get`, `save` or `remove` also starts with `custom:` (`kCustomScreenIdPrefix`), so a request never reaches the
-   store with an application screen's id.
+   store with an application screen's id. `save`'s `attributes`, when given, are at most `kMaxAttributesBytes` as
+   JSON, checked with the names.
 3. **The person** is the verified principal of the session, copied at the start of the action, before anything is
    awaited. A body naming a person has the key ignored: no body type has one. With no verified principal, `list`
    answers no screens and the other four are refused with `custom screens are stored for a signed-in person`.
@@ -113,21 +122,22 @@ What every action does, in order:
   pointer included. Only then is `put` called, with `savedAt` the current time and `savedBy` the caller. `check` runs
   the same rewrite under a placeholder id as long as a real one, so its verdict is the one `save` would give.
 - **`list` answers at most `maxListed` summaries** (200 by default) and says `truncated: true` when the store held
-  more. A capped summary is at most `kMaxSummaryBytes` (3 KiB) and grows at most seven-fold in an envelope: the reply
+  more. A capped summary is at most `kMaxSummaryBytes` (4 KiB) and grows at most seven-fold in an envelope: the reply
   is written with control bytes escaped, so one becomes a six-byte sequence, and the envelope doubles each backslash of
   the reply. `registerCustomScreens` refuses a `maxListed` for which
-  `maxListed * 7 * kMaxSummaryBytes + kCustomScreenReplyOverhead` exceeds `wire::kMaxEnvelopeBytes`, which is above 387;
-  the default takes at most 4.3 MB.
+  `maxListed * 7 * kMaxSummaryBytes + kCustomScreenReplyOverhead` exceeds `wire::kMaxEnvelopeBytes`, which is above 290;
+  the default takes at most 5.8 MB.
 - **`remove`** calls the store's `remove` under the caller.
 - **A store's refusal is passed through unchanged**, from `get`, `put` and `remove`: the model adds no wording over
   the reason, so the person is told what the store said.
 
 **Bounded replies.** Every field of a summary is capped when the summary is built, so the part of a `get` reply that is
 not the document is bounded whatever the store holds: `id`, `title`, `basedOn`, `savedBy` and `broken.pointer` at
-`kMaxNameBytes`, and `broken.reason` at `kMaxBrokenReasonBytes` (1 KiB). A longer value is cut on a UTF-8 boundary and
+`kMaxNameBytes`, `broken.reason` at `kMaxBrokenReasonBytes` (1 KiB), and `attributes` at `kMaxAttributesBytes` (1 KiB,
+as a whole: a record cannot be cut, so one too long is not sent and the screen is listed broken). A longer value is cut on a UTF-8 boundary and
 ends with an ellipsis (U+2026). A reason can quote a whole host command, and a pointer or a principal can be of any
 length, so without the caps the reply would have no bound. `mine` is computed from the stored `savedBy`, before the cap.
-One summary is then at most `kMaxSummaryBytes` (3 KiB) before escaping and at most seven times that after it (see
+One summary is then at most `kMaxSummaryBytes` (4 KiB) before escaping and at most seven times that after it (see
 `list`).
 A store keeps its ids within `kMaxNameBytes`, since an id shown cut could not be given back to `get` or `remove`; the
 model's own are 39 bytes. An entry whose id lacks `custom:` is listed broken, and `get` and `remove` refuse its id
@@ -158,8 +168,10 @@ A `CustomScreenSummary` carries `id`, `title`, `basedOn`, `savedAt`, `savedBy` a
   tells from a list alone whether its copy is current.
 - `opensWithoutParams`: whether it opens from the navigator: it is not broken, and its base declares no params, since a
   custom screen declares exactly its base's. The base is read once per list, not once per screen.
-- `broken`: the refusal the checks give the stored document today, with its pointer; absent when it may be mounted. A
-  broken screen is listed, so the person can open its source and fix it, and is never mounted.
+- `broken`: the refusal the checks give the stored document today, with its pointer, or that its stored `attributes`
+  are too long to send; absent when it may be mounted. A broken screen is listed, so the person can open its source
+  and fix it, and is never mounted.
+- `attributes`: the store's record, as the store answered it; absent when it records nothing.
 
 The actions are `Loggable::No`: a screen is not application data, and the store keeps who saved it and when.
 
@@ -397,7 +409,9 @@ go. No call names a person.
   draft was all that kept it dirty; otherwise its close guard decides. When the screen stays open the tab stays a
   draft as it was (bar, text, generation) and the person is told the document is saved but stays a draft there until
   the screen can close. **Save** overwrites the person's own custom screen with the draft, fetches the
-  stored document again and ends the draft; both tell the person. A refusal shows in the bar and in the dialog, and
+  stored document again and ends the draft; both tell the person. **Save** and **Check and save** send the screen's
+  listed `attributes` back with it, so an overwrite keeps what the store recorded; the chrome's **Save as…** asks for
+  none. A refusal shows in the bar and in the dialog, and
   the draft stays. While a save is in flight the bar's **Save** and **Save as…** are disabled, and its answer acts
   only on the draft that was saved: if the tab holds a newer draft, none, or is closed by then, the tab is left as it
   is and the person is told the save completed. Tab ids are issued per workspace, so a chrome attached to another

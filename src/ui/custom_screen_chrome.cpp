@@ -701,17 +701,21 @@ void CustomScreenChrome::saveAs(WorkspaceTabId tab, std::string const& title) {
     }
     std::uint64_t const generation = state->generation;
     state->pending->set(true);
-    _options.sync->save(
-        CustomScreensSave{.app = {}, .id = std::nullopt, .title = title, .basedOn = base, .document = text},
-        guarded([this, tab, generation, title](std::expected<std::string, std::string> saved) {
-            if (!saved) {
-                settled(tab);
-                failSaveAs(tab, generation, saved.error());
-                return;
-            }
-            closeSaveAsLater();
-            openSaved(tab, generation, *saved, title);
-        }));
+    _options.sync->save(CustomScreensSave{.app = {},
+                                          .id = std::nullopt,
+                                          .title = title,
+                                          .basedOn = base,
+                                          .document = text,
+                                          .attributes = std::nullopt},
+                        guarded([this, tab, generation, title](std::expected<std::string, std::string> saved) {
+                            if (!saved) {
+                                settled(tab);
+                                failSaveAs(tab, generation, saved.error());
+                                return;
+                            }
+                            closeSaveAsLater();
+                            openSaved(tab, generation, *saved, title);
+                        }));
 }
 
 void CustomScreenChrome::failSaveAs(WorkspaceTabId tab, std::uint64_t generation, std::string const& reason) {
@@ -792,8 +796,12 @@ void CustomScreenChrome::save(WorkspaceTabId tab) {
     std::uint64_t const generation = state->generation;
     state->pending->set(true);
     _options.sync->save(
-        CustomScreensSave{
-            .app = {}, .id = savedId, .title = title, .basedOn = summary.basedOn, .document = state->draftText},
+        CustomScreensSave{.app = {},
+                          .id = savedId,
+                          .title = title,
+                          .basedOn = summary.basedOn,
+                          .document = state->draftText,
+                          .attributes = summary.attributes},
         guarded([this, tab, savedId, title, generation](std::expected<std::string, std::string> saved) {
             if (!saved) {
                 settled(tab);
@@ -1078,8 +1086,12 @@ void CustomScreenChrome::saveFromSource() {
             }
             shown->status->set(std::string{"Saving…"});
             _options.sync->save(
-                CustomScreensSave{
-                    .app = {}, .id = customId, .title = listed.title, .basedOn = listed.basedOn, .document = text},
+                CustomScreensSave{.app = {},
+                                  .id = customId,
+                                  .title = listed.title,
+                                  .basedOn = listed.basedOn,
+                                  .document = text,
+                                  .attributes = listed.attributes},
                 guarded([this, generation, title = listed.title](std::expected<std::string, std::string> saved) {
                     if (!saved) {
                         if (_source != nullptr && _source->generation == generation) {
