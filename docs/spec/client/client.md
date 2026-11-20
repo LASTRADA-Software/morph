@@ -343,8 +343,8 @@ The shell offers a person's custom screens when the server does ([`../ui/custom_
   naming it. An in-process source has no events and no watcher, so its lists refresh at a frame, a reconnect and this
   client's own saves.
 - **The chrome.** Every document screen's tab carries the `CustomScreenChrome` at the top of its page
-  (`WorkspaceOptions::chrome`): **Source**, **Open as** for a screen with params, and the draft bar. A host screen,
-  such as the explorer, has none.
+  (`WorkspaceOptions::chrome`): **Source**, **Open as** for a screen with params, **Remove** for a custom screen of
+  the person's own, and the draft bar. A host screen, such as the explorer, has none.
 - **Opening.** The host's documents lookup answers a `custom:` id from the sync's cache. A navigator entry, **Open as**
   and a route to a custom screen fetch its document first; a route whose screen `get` does not answer is not restored,
   a toast says so, and the start screen opens (the one asked for at start until a session change, then the new
