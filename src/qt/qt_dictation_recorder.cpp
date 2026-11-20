@@ -48,9 +48,11 @@ constexpr char const* kDenied = "the microphone permission was denied";
             return 2;
         case DictationSample::Int32:
         case DictationSample::Float:
+        default:
+            // `default:` only because the project builds with -Wswitch-default; -Wswitch-enum still requires a case
+            // for every enumerator.
             return 4;
     }
-    return 0;
 }
 
 // One sample as a float in [-1, 1]; @p bytes holds `sampleBytes(sample)` bytes.
@@ -71,13 +73,15 @@ constexpr char const* kDenied = "the microphone permission was denied";
             std::memcpy(&value, bytes.constData(), sizeof value);
             return static_cast<float>(static_cast<double>(value) / 2147483648.0);
         }
-        case DictationSample::Float: {
+        case DictationSample::Float:
+        default: {
+            // `default:` only because the project builds with -Wswitch-default; -Wswitch-enum still requires a case
+            // for every enumerator.
             float value = 0.0F;
             std::memcpy(&value, bytes.constData(), sizeof value);
             return value;
         }
     }
-    return 0.0F;
 }
 
 [[nodiscard]] std::expected<DictationInput, std::string> openSystemInput() {
@@ -100,6 +104,8 @@ constexpr char const* kDenied = "the microphone permission was denied";
         case QAudioFormat::Float:
             sample = DictationSample::Float;
             break;
+        case QAudioFormat::Unknown:
+        case QAudioFormat::NSampleFormats:
         default:
             return std::unexpected(std::string{"the microphone's sample format is not supported"});
     }
@@ -134,6 +140,9 @@ void askSystemPermission(std::function<void(bool)> answer) {
             answer(false);
             return;
         case Qt::PermissionStatus::Undetermined:
+        default:
+            // `default:` only because the project builds with -Wswitch-default; -Wswitch-enum still requires a case
+            // for every enumerator.
             qApp->requestPermission(microphone, qApp, [answer = std::move(answer)](QPermission const& result) {
                 answer(result.status() == Qt::PermissionStatus::Granted);
             });

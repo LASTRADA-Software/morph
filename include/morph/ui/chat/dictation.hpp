@@ -137,7 +137,7 @@ public:
             ++_produced;
         }
         // What the next output sample no longer needs.
-        auto const done = std::min(static_cast<std::size_t>(startOf(_produced) - _consumed), _pending.size());
+        auto const done = std::min(indexOf(startOf(_produced) - _consumed), _pending.size());
         _pending.erase(_pending.begin(), _pending.begin() + static_cast<std::ptrdiff_t>(done));
         _consumed += done;
         return out;
@@ -145,6 +145,19 @@ public:
 
 private:
     static constexpr auto kSpeechRate = static_cast<std::uint64_t>(kSpeechSampleRate);
+
+    // An offset into _pending. The cast narrows on 32-bit targets and is an identity elsewhere, where GCC's
+    // -Wuseless-cast would reject it.
+    [[nodiscard]] static std::size_t indexOf(std::uint64_t const offset) {
+#if defined(__GNUC__) && !defined(__clang__)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wuseless-cast"
+#endif
+        return static_cast<std::size_t>(offset);
+#if defined(__GNUC__) && !defined(__clang__)
+#pragma GCC diagnostic pop
+#endif
+    }
 
     // Where output sample @p index starts, counted in input samples from the first one ever pushed.
     [[nodiscard]] std::uint64_t startOf(std::uint64_t const index) const { return index * _rate / kSpeechRate; }
@@ -155,9 +168,9 @@ private:
     }
 
     [[nodiscard]] float next() const {
-        auto const first = static_cast<std::size_t>(startOf(_produced) - _consumed);
+        auto const first = indexOf(startOf(_produced) - _consumed);
         if (_rate >= kSpeechRate) {
-            auto const end = std::max(static_cast<std::size_t>(startOf(_produced + 1) - _consumed), first + 1);
+            auto const end = std::max(indexOf(startOf(_produced + 1) - _consumed), first + 1);
             float sum = 0.0F;
             for (std::size_t index = first; index < end; ++index) {
                 sum += _pending.at(index);

@@ -93,6 +93,7 @@ TEST_CASE("chat_audio_resample_mixes_channels_and_passes_16k_through", "[chat][d
 // Mutation: count output positions from each chunk's start rather than from the first sample.
 TEST_CASE("chat_audio_resample_in_chunks_matches_one_pass", "[chat][dictation]") {
     std::vector<float> input;
+    input.reserve(4410);
     for (int index = 0; index < 4410; ++index) {
         input.push_back(static_cast<float>(std::sin(static_cast<double>(index) / 7.0) * 0.8));
     }

@@ -2,6 +2,7 @@
 #pragma once
 
 #include <algorithm>
+#include <expected>
 #include <functional>
 #include <map>
 #include <memory>
@@ -83,6 +84,37 @@ struct ReloadOutcome {
     std::vector<Refusal> refused;
 };
 
+namespace detail {
+
+/// @brief Loads a changed screen's new text and checks it as a served screen document: its id may be served, it
+/// parses,
+///        and the document claims the id it is served under.
+/// @param screenId The id the screen is served under.
+/// @param text     The screen's new document text.
+/// @param options  How the document loads: the catalog facts.
+/// @return The loaded document, or why it is refused, naming @p screenId when the loader named no document.
+[[nodiscard]] inline std::expected<Document, Refusal> loadReloadedScreen(std::string const& screenId,
+                                                                         std::string const& text,
+                                                                         LoadOptions const& options) {
+    if (auto refusal = servedScreenRefusal(screenId)) {
+        return std::unexpected(std::move(*refusal));
+    }
+    auto loaded = loadDocumentText(text, options);
+    if (!loaded.has_value()) {
+        Refusal refusal = std::move(loaded.error());
+        if (refusal.document.empty()) {
+            refusal.document = screenId;
+        }
+        return std::unexpected(std::move(refusal));
+    }
+    if (auto refusal = servedDocumentRefusal(screenId, loaded->id)) {
+        return std::unexpected(std::move(*refusal));
+    }
+    return std::move(*loaded);
+}
+
+}  // namespace detail
+
 /// @brief Loads the changed documents of a new bundle and remounts the mounted screens that show them.
 ///
 /// Each changed screen document is loaded with @p options. A document that does not load is refused and keeps the old
@@ -109,21 +141,9 @@ struct ReloadOutcome {
         if (screenId == "app" || text == bundle.documents.end()) {
             continue;
         }
-        if (auto refusal = servedScreenRefusal(screenId)) {
-            outcome.refused.push_back(std::move(*refusal));
-            continue;
-        }
-        auto loaded = loadDocumentText(text->second, options);
-        if (!loaded) {
-            Refusal refusal = std::move(loaded.error());
-            if (refusal.document.empty()) {
-                refusal.document = screenId;
-            }
-            outcome.refused.push_back(std::move(refusal));
-            continue;
-        }
-        if (auto refusal = servedDocumentRefusal(screenId, loaded->id)) {
-            outcome.refused.push_back(std::move(*refusal));
+        auto loaded = detail::loadReloadedScreen(screenId, text->second, options);
+        if (!loaded.has_value()) {
+            outcome.refused.push_back(std::move(loaded.error()));
             continue;
         }
         auto const document = std::make_shared<Document const>(std::move(*loaded));

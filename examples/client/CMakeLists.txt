@@ -11,6 +11,11 @@ endif()
 if(TARGET morph_tui)
     set(_morph_client_tui 1)
 endif()
+# Every client built from main.cpp gets the same definition: it tests the macro with #if, under -Wundef.
+set(_morph_client_dictation 0)
+if(_morph_client_qt_quick AND MORPH_ENABLE_DICTATION)
+    set(_morph_client_dictation 1)
+endif()
 
 # In a WebAssembly build only the example client is built, as a Qt executable so it gets its HTML loader, and it opens
 # bank in local mode: a browser has no command line to name an application.
@@ -78,10 +83,6 @@ foreach(_morph_client IN LISTS _morph_clients)
     if(_morph_client_tui)
         target_link_libraries(${_morph_client} PRIVATE morph::tui)
     endif()
-    set(_morph_client_dictation 0)
-    if(_morph_client_qt_quick AND MORPH_ENABLE_DICTATION)
-        set(_morph_client_dictation 1)
-    endif()
     target_compile_definitions(${_morph_client} PRIVATE
         MORPH_CLIENT_HAS_QT_QUICK=${_morph_client_qt_quick}
         MORPH_CLIENT_HAS_DICTATION=${_morph_client_dictation}
@@ -127,6 +128,7 @@ if(TARGET ladder_lims_screens AND NOT EMSCRIPTEN)
     endif()
     target_compile_definitions(morph_lims_client PRIVATE
         MORPH_CLIENT_HAS_QT_QUICK=${_morph_client_qt_quick}
+        MORPH_CLIENT_HAS_DICTATION=${_morph_client_dictation}
         MORPH_CLIENT_HAS_TUI=${_morph_client_tui})
     apply_warnings(morph_lims_client)
     if(DEFINED AF_SANITIZER)

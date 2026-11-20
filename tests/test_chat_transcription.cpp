@@ -158,7 +158,7 @@ struct Rig {
         env.callId = nextCall.fetch_add(1);
         env.session.token = token;
         env.session.principal = token;
-        auto replied = std::make_shared<std::promise<std::string>>();
+        auto const replied = std::make_shared<std::promise<std::string>>();
         auto answer = replied->get_future();
         server->handle(wire::encode(env), [replied](std::string const& text) { replied->set_value(text); }, cid);
         REQUIRE(waitFor([&] { return answer.wait_for(0s) == std::future_status::ready; }));
@@ -171,7 +171,8 @@ struct Rig {
         wire::Envelope hello;
         hello.kind = std::string{ui::kHelloKind};
         hello.body = R"({"vocabularies":["ui/1","expr/1"],"events":true})";
-        REQUIRE(call(std::move(hello), cid, token).kind == "ok");
+        auto const reply = call(std::move(hello), cid, token);
+        REQUIRE(reply.kind == "ok");
         return cid;
     }
 
@@ -467,7 +468,8 @@ TEST_CASE("chat_transcription_is_cancelled_by_ending_the_chat", "[chat][dictatio
     auto const other = rig.transcribe(kClip, elsewhere);
     wire::Envelope end;
     end.kind = std::string{chat::kEndKind};
-    REQUIRE(rig.call(std::move(end), cid).kind == "ok");
+    auto const ended = rig.call(std::move(end), cid);
+    REQUIRE(ended.kind == "ok");
     auto const state = rig.settled(id, cid);
     CHECK(state.status == chat::TranscriptionStatus::Failed);
     CHECK(state.error == "cancelled");
@@ -498,7 +500,7 @@ TEST_CASE("chat_transcription_answer_after_the_end_changes_nothing", "[chat][dic
     Rig rig{limits, manual};
     auto const cid = rig.gui();
     auto const id = rig.transcribe(kClip, cid);
-    auto sink = manual->called();
+    auto const sink = manual->called();
     CHECK(rig.settled(id, cid).error == "the transcription did not answer in time");
     REQUIRE(waitFor([&] { return eventsFor(rig, id) == 1; }));
     sink.done(std::string{"too late"});
@@ -549,7 +551,7 @@ TEST_CASE("chat_transcription_answer_after_the_service_is_gone", "[chat][dictati
     REQUIRE(waitFor([&] { return wire.transcriptions().size() == 1; }));
 
     REQUIRE(start().kind == "ok");
-    auto sink = manual->called();
+    auto const sink = manual->called();
     service.reset();
     CHECK(manual->cancelled->load());
     sink.done(std::string{"nobody listens"});
@@ -600,7 +602,7 @@ namespace {
 struct ThrowingTranscriber final : chat::ITranscriber {
     [[nodiscard]] std::shared_ptr<chat::ITranscriberCall> transcribe(chat::TranscriptionInput /*input*/,
                                                                      chat::TranscriberSink /*sink*/) override {
-        // NOLINTNEXTLINE(hicpp-exception-baseclass,cert-err60-cpp): the point is a type no `std::exception` catch sees.
+        // NOLINTNEXTLINE(hicpp-exception-baseclass,cert-err60-cpp,bugprone-std-exception-baseclass): the point is a type no `std::exception` catch sees.
         throw 42;
     }
 };
