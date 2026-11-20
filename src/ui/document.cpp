@@ -323,8 +323,8 @@ constexpr std::array<KeySpec, 32> kTableKeys = {{{"rows", Shape::Expr},
                                                  {"onActivate", Shape::Commands, {}, kInner},
                                                  {"valign", Shape::Text},
                                                  {"empty", Shape::Nodes}}};
-/// @brief The keys of a `table` column part.
-constexpr std::array<KeySpec, 11> kColumnKeys = {{{"id", Shape::Name},
+/// @brief The keys of a `table` column part; `tone` and `tooltip` are read in the row's scope.
+constexpr std::array<KeySpec, 21> kColumnKeys = {{{"id", Shape::Name},
                                                   {"label", Shape::Expr},
                                                   {"width", Shape::Expr},
                                                   {"role", Shape::Expr},
@@ -334,7 +334,17 @@ constexpr std::array<KeySpec, 11> kColumnKeys = {{{"id", Shape::Name},
                                                   {"wrap", Shape::Flag},
                                                   {"shrink", Shape::Flag},
                                                   {"sortBy", Shape::Expr, {}, kInner},
-                                                  {"cell", Shape::Nodes, {}, kInner}}};
+                                                  {"cell", Shape::Nodes, {}, kInner},
+                                                  {"decimals", Shape::Expr},
+                                                  {"rounding", Shape::Text},
+                                                  {"padPlaces", Shape::Flag},
+                                                  {"grouping", Shape::Flag},
+                                                  {"empty", Shape::Text},
+                                                  {"unit", Shape::Text},
+                                                  {"date", Shape::Text},
+                                                  {"labels", Shape::Expr},
+                                                  {"tone", Shape::Expr, {}, kInner},
+                                                  {"tooltip", Shape::Expr, {}, kInner}}};
 /// @brief The keys of a `table` group part: the value its rows are grouped by, and the heading drawn before each
 ///        group, both read in the row scope.
 constexpr std::array<KeySpec, 2> kTableGroupKeys = {
@@ -4210,11 +4220,43 @@ private:
     // cell.
     static constexpr std::array<std::string_view, 3> kCellPlaces = {"start", "center", "end"};
 
-    // A table column's closed sets: its default cell's text role, and its cells' places.
+    // A table column's closed sets: its default cell's text role, and its cells' places; and its display parts,
+    // which are literals: `decimals` 0 to 18, `rounding` one of two names, `date` a pattern, `labels` a list of
+    // `{operand, text}`.
     static void checkColumnPart(DocNode const& node) {
         checkTextRole(node);
         checkCellPlace(node, "align");
         checkCellPlace(node, "valign");
+        if (ExprPtr const decimals = node.prop("decimals")) {
+            std::int64_t const* const places = decimals->kind == ExprKind::Literal
+                                                   ? decimals->literal.asInt()
+                                                   : static_cast<std::int64_t const*>(nullptr);
+            if (places == nullptr || *places < 0 || *places > 18) {
+                refuse(decimals->path, "`decimals` is a literal integer, 0 to 18");
+            }
+        }
+        if (std::string_view const rounding = node.name("rounding");
+            !rounding.empty() && rounding != "halfEven" && rounding != "halfUp") {
+            refuse(pointerAppend(node.path, "rounding"),
+                   "`" + std::string{rounding} + "` is not one of the values of `rounding`: halfEven or halfUp");
+        }
+        if (std::string_view const date = node.name("date");
+            !date.empty() && !checkDatePattern(date, false) && !checkDatePattern(date, true)) {
+            refuse(pointerAppend(node.path, "date"), checkDatePattern(date, false).error());
+        }
+        if (ExprPtr const labels = node.prop("labels")) {
+            ValueList const* const items =
+                labels->kind == ExprKind::Literal ? labels->literal.asList() : static_cast<ValueList const*>(nullptr);
+            bool const read = items != nullptr && std::ranges::all_of(*items, [](Value const& item) {
+                Value const* const operand = item.field("operand");
+                Value const* const text = item.field("text");
+                return operand != nullptr && operand->asString() != nullptr && text != nullptr &&
+                       text->asString() != nullptr;
+            });
+            if (!read) {
+                refuse(labels->path, "`labels` is a literal list of `{\"operand\": text, \"text\": text}`");
+            }
+        }
     }
 
     // Only a horizontal `forEach` wraps and only a vertical one is divided; a literal `axis` that says otherwise is

@@ -793,7 +793,9 @@ enum class FocusMove : std::uint8_t {
 /// A range runs over the keys in row order, rows the backend has not realized included.
 class MORPH_API TableWidget : public ContainerWidget {
 public:
-    /// @brief Sets the column headers and widths.
+    /// @brief Sets the column headers and widths. A column's `unit` is drawn after its label, as `headerText` writes
+    ///        it ("Mass [kg]") or on a second, muted line, and the header's accessible name is
+    ///        `headerAccessibleName` ("Mass, kg").
     /// @param columns The columns, in order.
     virtual void setColumns(std::vector<TableColumn> const& columns) = 0;
 
@@ -930,6 +932,21 @@ public:
         static_cast<void>(row);
         static_cast<void>(column);
         static_cast<void>(load);
+    }
+
+    /// @brief Sets what a cell shows beside its text; called after the row's key, on every change, and whenever a
+    ///        cell is attached to a row at a column, for a table whose rows come from a `TableSource`. A `tone` tints
+    ///        the cell with the theme's tone surface under its selection and focus marks; a `tooltip` shows on hover
+    ///        after the theme's delay and on keyboard focus at once, is the cell's accessible description, and draws
+    ///        the theme's "more here" mark; `invalid` draws the theme's error mark in place of the cell's text. A
+    ///        cell no call names has no accent.
+    /// @param row    One of this table's rows.
+    /// @param column The cell's column: an index into the columns `setColumns` gave.
+    /// @param accent The accent.
+    virtual void setCellAccent(Widget& row, std::size_t column, CellAccent const& accent) {
+        static_cast<void>(row);
+        static_cast<void>(column);
+        static_cast<void>(accent);
     }
 
     /// @brief Tells the backend which columns the mount realizes, for a table whose rows come from a `TableSource`

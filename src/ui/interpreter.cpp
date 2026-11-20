@@ -36,6 +36,7 @@
 #include <morph/table/state_store.hpp>
 #include <morph/table/view_change.hpp>
 #include <morph/ui/backend.hpp>
+#include <morph/ui/cell_format.hpp>
 #include <morph/ui/chart_scale.hpp>
 #include <morph/ui/dev_tools.hpp>
 #include <morph/ui/document.hpp>
@@ -299,6 +300,11 @@ public:
     /// The next `visible` call is a new mount's first, not a scroll.
     void mounting() { _mounting = true; }
 
+    /// Sets what widens the columns the mount names into those fetched: each with its companions.
+    void companions(std::function<std::vector<std::string>(std::span<std::string const>)> widen) {
+        _companions = std::move(widen);
+    }
+
     /// Names @p id to every later `visible` call, and fetches it now for the rows in view; an id named already is
     /// not added again.
     void fetchAlso(std::span<std::string const> ids) {
@@ -316,7 +322,7 @@ public:
 
 private:
     void send() {
-        std::vector<std::string> named = _columns;
+        std::vector<std::string> named = _companions ? _companions(_columns) : _columns;
         for (std::string const& id : _extra) {
             if (!std::ranges::contains(named, id)) {
                 named.push_back(id);
@@ -334,6 +340,7 @@ private:
     std::int64_t _count = 0;
     std::vector<std::string> _columns;
     std::vector<std::string> _extra;
+    std::function<std::vector<std::string>(std::span<std::string const>)> _companions;
     bool _mounting = false;
 };
 
@@ -7963,6 +7970,140 @@ std::shared_ptr<RtScope> ScreenCore::rowScope(DocNode const& node, LowerCtx cons
 }
 
 // NOLINTNEXTLINE(readability-function-cognitive-complexity): a list of rows and a table.
+namespace {
+
+/// The tooltip of a cell whose value cannot be read as its column's kind.
+constexpr std::string_view kUnreadable = "The value could not be read";
+
+/// Whether a column part gives any of a column's display parts.
+[[nodiscard]] bool givesDisplay(DocNode const& part) {
+    return part.prop("decimals") != nullptr || part.prop("labels") != nullptr || part.names.contains("rounding") ||
+           part.names.contains("empty") || part.names.contains("unit") || part.names.contains("date") ||
+           part.flags.contains("padPlaces") || part.flags.contains("grouping");
+}
+
+/// A column's display with a column part's display parts over it, member by member.
+/// @param part    The column part.
+/// @param display The display the part overrides.
+/// @param read    Reads one of the part's expressions once.
+[[nodiscard]] table::ColumnDisplay displayOf(DocNode const& part, table::ColumnDisplay display,
+                                             std::function<Value(ExprPtr const&)> const& read) {
+    if (ExprPtr const decimals = part.prop("decimals")) {
+        constexpr std::int64_t kMostPlaces = 18;
+        Value const places = read(decimals);
+        if (std::int64_t const* const count = places.asInt(); count != nullptr && *count >= 0 && *count <= kMostPlaces) {
+            display.decimals = static_cast<std::uint32_t>(*count);
+        }
+    }
+    if (auto const rounding = part.names.find("rounding"); rounding != part.names.end()) {
+        display.rounding = rounding->second == "halfUp" ? table::Rounding::HalfUp : table::Rounding::HalfEven;
+    }
+    if (auto const pad = part.flags.find("padPlaces"); pad != part.flags.end()) {
+        display.padPlaces = pad->second;
+    }
+    if (auto const grouping = part.flags.find("grouping"); grouping != part.flags.end()) {
+        display.grouping = grouping->second;
+    }
+    for (auto [key, member] : {std::pair{"empty", &display.empty}, std::pair{"unit", &display.unit},
+                               std::pair{"date", &display.date}}) {
+        if (auto const found = part.names.find(std::string_view{key}); found != part.names.end()) {
+            *member = found->second;
+        }
+    }
+    if (ExprPtr const labels = part.prop("labels")) {
+        display.labels.clear();
+        Value const list = read(labels);
+        for (Value const& item : list.asList() != nullptr ? *list.asList() : ValueList{}) {
+            Value const* const operand = item.field("operand");
+            Value const* const text = item.field("text");
+            if (operand == nullptr || text == nullptr || text->asString() == nullptr) {
+                continue;
+            }
+            display.labels.push_back(table::ValueLabel{
+                .operand = operand->asString() != nullptr ? *operand->asString() : canonicalJson(*operand),
+                .text = *text->asString()});
+        }
+    }
+    return display;
+}
+
+/// A record's field as a cell of its column: what `formatCell` reads. The record holds a `Date` as `YYYY-MM-DD`, a
+/// `DateTime` as a timestamp and a measure as a `Quantity` named by its unit's id, and holds `null` for an empty
+/// cell and for an unloaded one alike: the placeholder of an unloaded cell is the mount's (`setCellLoad`).
+/// @param value  The field; null when the record lacks it.
+/// @param column The column.
+/// @param units  The registry a measure's unit is found in; null for none.
+[[nodiscard]] table::Cell cellOfRecord(Value const* value, table::TableColumn const& column,
+                                       table::UnitRegistry const* units) {
+    using table::ColumnKind;
+    if (value == nullptr || value->isNull()) {
+        return std::monostate{};
+    }
+    bool const measure = column.info.kind == ColumnKind::Measure;
+    if (std::int64_t const* const integer = value->asInt()) {
+        return *integer;
+    }
+    if (Decimal const* const decimal = value->asDecimal()) {
+        if (measure) {
+            return table::Measure{.amount = decimal->value, .unit = table::kUnknownUnit};
+        }
+        return decimal->value;
+    }
+    if (bool const* const flag = value->asBool()) {
+        return *flag;
+    }
+    if (Quantity const* const quantity = value->asQuantity()) {
+        if (measure) {
+            std::optional<table::UnitId> const unit = units != nullptr ? units->find(quantity->unit) : std::nullopt;
+            return table::Measure{.amount = quantity->value, .unit = unit.value_or(table::kUnknownUnit)};
+        }
+        return quantity->value;
+    }
+    if (time::DateTime const* const instant = value->asTimestamp()) {
+        return std::int64_t{
+            std::chrono::duration_cast<std::chrono::seconds>(instant->value.time_since_epoch()).count()};
+    }
+    if (std::string const* const text = value->asString()) {
+        if (column.info.kind == ColumnKind::Date && text->size() == 10 && (*text)[4] == '-' && (*text)[7] == '-') {
+            int year = 0;
+            unsigned month = 0;
+            unsigned day = 0;
+            char const* const at = text->data();
+            bool const read = std::from_chars(at, at + 4, year).ec == std::errc{} &&
+                              std::from_chars(at + 5, at + 7, month).ec == std::errc{} &&
+                              std::from_chars(at + 8, at + 10, day).ec == std::errc{};
+            std::chrono::year_month_day const date{std::chrono::year{year}, std::chrono::month{month},
+                                                   std::chrono::day{day}};
+            if (read && date.ok()) {
+                return std::int64_t{std::chrono::sys_days{date}.time_since_epoch().count()};
+            }
+        }
+        return *text;
+    }
+    return canonicalJson(*value);
+}
+
+/// What a rows table's column shows for a value, by the kind the value has: a rows table declares no kinds.
+[[nodiscard]] table::TableColumn columnFor(Value const& value, table::ColumnDisplay const& display) {
+    using table::ColumnKind;
+    ColumnKind const kind = value.asInt() != nullptr         ? ColumnKind::Integer
+                            : value.asDecimal() != nullptr   ? ColumnKind::Decimal
+                            : value.asQuantity() != nullptr  ? ColumnKind::Decimal
+                            : value.asBool() != nullptr      ? ColumnKind::Bool
+                            : value.asTimestamp() != nullptr ? ColumnKind::DateTime
+                                                             : ColumnKind::Text;
+    return table::TableColumn{.info = {.id = {}, .kind = kind}, .display = display};
+}
+
+/// What a model-backed table's cell reads beside its column: the document's own tone and tooltip expressions.
+struct CellExprs {
+    ExprPtr tone;
+    ExprPtr tooltip;
+    std::string path;
+};
+
+}  // namespace
+
 Node ScreenCore::lowerRows(DocNode const& node, LowerCtx const& ctx, ElementState* element) {
     ExprPtr const rowsExpr = node.prop("rows");
     if (!rowsExpr) {
@@ -8125,13 +8266,20 @@ Node ScreenCore::lowerRows(DocNode const& node, LowerCtx const& ctx, ElementStat
         fields.emplace_back(part->id);
         roles.push_back(columnRole);
     }
+    // A column's display parts, read once; a rows table's columns have no other source of them.
+    std::vector<std::optional<table::ColumnDisplay>> displays;
+    for (DocNode const* const column : cells) {
+        displays.push_back(column != nullptr && givesDisplay(*column)
+                               ? std::optional{displayOf(*column, {}, [&](ExprPtr const& expr) { return once(ctx, expr); })}
+                               : std::nullopt);
+    }
     auto const registry = std::make_shared<std::map<std::string, std::weak_ptr<RtScope>, std::less<>>>();
     // A value that names no tone is reported once for the table, whichever row and value it was.
     auto const toneReported = std::make_shared<bool>(false);
     // Likewise for a `rowSpans` value that is no list of spans.
     auto const spansReported = std::make_shared<bool>(false);
-    auto cellsOf = [this, ctx, &node, cells, fields, roles, registry, keyFn, toneReported,
-                    spansReported](reactive::Signal<Value> const& row) {
+    auto cellsOf = [this, ctx, &node, cells, fields, roles, registry, keyFn, toneReported, spansReported,
+                    displays](reactive::Signal<Value> const& row) {
         if (row.peek().field(kGroupHeadingField) != nullptr) {
             return headingRow(node, ctx, row,
                               runtime().untracked([&] { return canonicalJson(valueOfKey(keyFn(row.peek()))); }));
@@ -8157,8 +8305,14 @@ Node ScreenCore::lowerRows(DocNode const& node, LowerCtx const& ctx, ElementStat
                 continue;
             }
             out.push_back(ui::text(Text{
-                .text = slotProp<std::string>([scope = rowCtx.scope, &row, field = fields.at(index)] {
+                .text = slotProp<std::string>([scope = rowCtx.scope, &row, field = fields.at(index),
+                                               display = displays.at(index)] {
                     Value const* const value = row.get().field(field);
+                    if (display) {
+                        Value const shown = value == nullptr ? Value{} : *value;
+                        table::TableColumn const kind = columnFor(shown, *display);
+                        return formatCell(cellOfRecord(value, kind, nullptr), kind, scope->formatting());
+                    }
                     return value == nullptr ? std::string{} : textOf(*value, scope->formatting());
                 }),
                 .role = roles.at(index),
@@ -9005,11 +9159,54 @@ Node ScreenCore::modelTableOf(DocNode const& node, LowerCtx const& ctx, ElementS
     std::vector<DocNode const*> parts;
     std::vector<TextRole> roles;
     TableSource source;
+    // Each shown column as it shows its cells: the description's display under the part's display parts.
+    auto const shown = std::make_shared<std::vector<table::TableColumn>>();
+    auto const displayUnits = std::make_shared<std::vector<DisplayUnits>>();
+    auto const cellExprs = std::make_shared<std::vector<CellExprs>>();
+    std::shared_ptr<table::UnitRegistry const> registry;
+    if (auto made = table::registryOf(*description)) {
+        registry = std::move(*made);
+    } else {
+        report(node.path, "the units of `" + model.id + "` do not read: " + made.error().message);
+    }
+    std::vector<std::string> const companions = table::companionColumns(*description);
+    table::CompanionOverrides overrides{.tone = {}, .tooltip = {}, .rowTone = node.prop("rowTone") != nullptr};
     auto const add = [&](table::TableColumn const& described, DocNode const* part) {
         TableColumn column{.id = described.info.id,
                            .label = described.label.empty() ? described.info.id : described.label,
                            .valign = tableValign,
                            .sortable = described.sortable};
+        table::TableColumn display = described;
+        CellExprs exprs{.tone = nullptr, .tooltip = nullptr, .path = part != nullptr ? part->path : node.path};
+        if (part != nullptr) {
+            display.display = displayOf(*part, described.display, [&](ExprPtr const& expr) { return once(ctx, expr); });
+            if (described.info.kind == table::ColumnKind::Measure &&
+                (display.display.decimals || !display.display.unit.empty())) {
+                report(part->path, "`" + described.info.id +
+                                       "` is a measure column, which shows each cell in its own unit; `decimals` "
+                                       "and `unit` do not apply");
+                display.display.decimals.reset();
+                display.display.unit.clear();
+            }
+            exprs.tone = part->prop("tone");
+            exprs.tooltip = part->prop("tooltip");
+            if (exprs.tone) {
+                overrides.tone.insert(described.info.id);
+            }
+            if (exprs.tooltip) {
+                overrides.tooltip.insert(described.info.id);
+            }
+        }
+        column.unit = display.display.unit;
+        DisplayUnits units{.units = registry.get(), .byDimension = {}};
+        if (model.layout) {
+            if (auto const chosen = model.layout->units.find(described.info.id); chosen != model.layout->units.end()) {
+                units.byDimension.insert(chosen->second.begin(), chosen->second.end());
+            }
+        }
+        shown->push_back(std::move(display));
+        displayUnits->push_back(std::move(units));
+        cellExprs->push_back(std::move(exprs));
         TextRole role = TextRole::Normal;
         if (part != nullptr) {
             if (ExprPtr const label = part->prop("label")) {
@@ -9032,14 +9229,21 @@ Node ScreenCore::modelTableOf(DocNode const& node, LowerCtx const& ctx, ElementS
             column.wrap = part->flag("wrap", true);
             column.shrink = part->flag("shrink") && column.width.kind == Sizing::Kind::Stretch;
         }
+        // A measure's amounts line up on their digits, as an `end` column's do.
+        if (described.info.kind == table::ColumnKind::Measure && (part == nullptr || part->name("align").empty())) {
+            column.align = Align::End;
+        }
         columns.push_back(std::move(column));
         parts.push_back(part);
         roles.push_back(role);
         source.levels.push_back(described.info.level);
     };
+    // A companion column (a tone, a tooltip, a row's tone or lock) is never shown: it travels with its column.
     if (auto const laidOut = node.partList("columns"); !laidOut.empty()) {
         for (DocNodePtr const& part : laidOut) {
-            if (table::TableColumn const* const described = describedColumn(part->id)) {
+            if (std::ranges::binary_search(companions, part->id)) {
+                report(part->path, "`" + part->id + "` is a companion column of `" + model.id + "`; it is not shown");
+            } else if (table::TableColumn const* const described = describedColumn(part->id)) {
                 add(*described, part.get());
             } else {
                 report(part->path, "the table `" + model.id + "` has no column `" + part->id + "`");
@@ -9047,7 +9251,7 @@ Node ScreenCore::modelTableOf(DocNode const& node, LowerCtx const& ctx, ElementS
         }
     } else {
         for (table::TableColumn const& described : description->columns) {
-            if (described.shown) {
+            if (described.shown && !std::ranges::binary_search(companions, described.info.id)) {
                 add(described, nullptr);
             }
         }
@@ -9098,22 +9302,94 @@ Node ScreenCore::modelTableOf(DocNode const& node, LowerCtx const& ctx, ElementS
         }
         source.ownCell.at(at) = parts.at(at) != nullptr && !parts.at(at)->nodes("cell").empty();
     }
+    // The companions travel with their column: the query names them beside the columns the mount names.
+    model.rows->companions(
+        [described = std::make_shared<table::TableDescription const>(*description),
+         overrides](std::span<std::string const> named) {
+            return table::columnsWithCompanions(*described, named, overrides);
+        });
+    // A cell's text, by its column's display.
+    auto const textOfCell = [shown, displayUnits](std::size_t column, Value const& record, FormatContext const& format) {
+        table::TableColumn const& display = shown->at(column);
+        DisplayUnits const& units = displayUnits->at(column);
+        return formatCell(cellOfRecord(record.field(display.info.id), display, units.units), display, format, units);
+    };
+    // A cell's accent: the document's tone and tooltip, else its companions'; an unreadable value is invalid. An
+    // unknown tone is reported once per column.
+    auto const cellToneReported = std::make_shared<std::set<std::size_t>>();
+    auto const accentOf = [this, shown, displayUnits, cellExprs, cellToneReported, bindings = ctx.bindings](
+                              std::size_t column, Value const& record, RtScope const* scope) {
+        table::TableColumn const& display = shown->at(column);
+        CellExprs const& exprs = cellExprs->at(column);
+        auto const toneOf = [&](Value const& named) -> std::optional<Tone> {
+            if (named.isNull() || (named.asString() != nullptr && named.asString()->empty())) {
+                return std::nullopt;
+            }
+            if (std::optional<Tone> const tone = toneNamed(named)) {
+                return tone;
+            }
+            if (cellToneReported->insert(column).second) {
+                report(exprs.path, "column `" + display.info.id + "`'s tone is " + canonicalJson(named) +
+                                       "; a tone is neutral, info, ok, warn or err");
+            }
+            return std::nullopt;
+        };
+        CellAccent accent;
+        if (exprs.tone && scope != nullptr) {
+            accent.tone = toneOf(evalIn(*scope, bindings.get(), exprs.tone));
+        } else if (Value const* const named = display.tone.empty() ? nullptr : record.field(display.tone)) {
+            accent.tone = toneOf(*named);
+        }
+        if (exprs.tooltip && scope != nullptr) {
+            Value const tip = evalIn(*scope, bindings.get(), exprs.tooltip);
+            accent.tooltip = tip.isNull() ? std::string{} : textOf(tip, scope->formatting());
+        } else if (Value const* const tip = display.tooltip.empty() ? nullptr : record.field(display.tooltip)) {
+            accent.tooltip = tip->asString() != nullptr ? *tip->asString() : std::string{};
+        }
+        DisplayUnits const& units = displayUnits->at(column);
+        if (cellLook(cellOfRecord(record.field(display.info.id), display, units.units), display, units) ==
+            CellLook::Invalid) {
+            accent.invalid = true;
+            accent.tooltip = std::string{kUnreadable};
+        }
+        return accent;
+    };
+    bool const cellExprsGiven = std::ranges::any_of(*cellExprs, [](CellExprs const& exprs) {
+        return exprs.tone != nullptr || exprs.tooltip != nullptr;
+    });
+    // The row scope a cell's own tone and tooltip expressions read; none when no column gives one.
+    auto const exprScope = [this, ctx, &node, &model](reactive::Signal<Value> const& row) {
+        std::string key = runtime().untracked([&] {
+            Value const* const id = row.peek().field(model.keyColumn);
+            return id == nullptr ? std::string{} : canonicalJson(*id);
+        });
+        auto const scope = rowScope(node, ctx, row, {}, std::move(key));
+        scope->onMissingRowField = &model.onMissing;
+        scope->rowKeyNow = [&row, &model] {
+            Value const* const id = row.get().field(model.keyColumn);
+            return id == nullptr ? std::string{} : canonicalJson(*id);
+        };
+        return scope;
+    };
     // The default cell follows the column the mount gives it, so one cell serves every column of its role.
-    auto const idList = std::make_shared<std::vector<std::string> const>(ids);
-    source.defaultCellView = [this, scope = ctx.scope, idList, roles](reactive::Signal<std::size_t> const& column,
-                                                             reactive::Signal<Value> const& row) -> Node {
-        return ui::text(Text{
-            .text = slotProp<std::string>([scope, &row, &column, idList] {
-                Value const* const value = row.get().field(idList->at(column.get()));
-                return value == nullptr ? std::string{} : textOf(*value, scope->formatting());
+    source.defaultCellView = [this, scope = ctx.scope, roles, textOfCell, accentOf, cellExprsGiven, exprScope](
+                                 reactive::Signal<std::size_t> const& column,
+                                 reactive::Signal<Value> const& row) -> Node {
+        std::shared_ptr<RtScope const> const cellScope = cellExprsGiven ? exprScope(row) : nullptr;
+        Node text = ui::text(Text{
+            .text = slotProp<std::string>([scope, &row, &column, textOfCell] {
+                return textOfCell(column.get(), row.get(), scope->formatting());
             }),
             // Read once: the mount pools default cells by role, so a cell only ever moves to a column of its own role.
             .role = roles.at(column.peek()),
         });
+        return accentedCell(std::move(text), slotProp<CellAccent>([&row, &column, accentOf, cellScope] {
+                                return accentOf(column.get(), row.get(), cellScope.get());
+                            }));
     };
     source.rows = model.rows;
-    source.cellView = [this, ctx, &node, &model, parts, ids, roles](std::size_t column,
-                                                                     reactive::Signal<Value> const& row) -> Node {
+    source.cellView = [this, ctx, &node, &model, parts, roles, textOfCell, accentOf, cellExprs, exprScope](
+                          std::size_t column, reactive::Signal<Value> const& row) -> Node {
         DocNode const* const part = column < parts.size() ? parts.at(column) : nullptr;
         std::span<DocNodePtr const> const cell = part != nullptr ? part->nodes("cell") : std::span<DocNodePtr const>{};
         if (!cell.empty()) {
@@ -9137,15 +9413,23 @@ Node ScreenCore::modelTableOf(DocNode const& node, LowerCtx const& ctx, ElementS
             // The cell owns its scope for as long as its node lives.
             auto const owner =
                 std::make_shared<std::pair<Node, std::shared_ptr<RtScope>> const>(lowerAll(cell, rowCtx), scope);
-            return Node{owner, owner->first.get()};
+            return accentedCell(Node{owner, owner->first.get()},
+                                slotProp<CellAccent>([&row, column, accentOf, scope] {
+                                    return accentOf(column, row.get(), scope.get());
+                                }));
         }
-        return ui::text(Text{
-            .text = slotProp<std::string>([scope = ctx.scope, &row, field = ids.at(column)] {
-                Value const* const value = row.get().field(field);
-                return value == nullptr ? std::string{} : textOf(*value, scope->formatting());
+        CellExprs const& exprs = cellExprs->at(column);
+        std::shared_ptr<RtScope const> const cellScope =
+            exprs.tone != nullptr || exprs.tooltip != nullptr ? exprScope(row) : nullptr;
+        Node text = ui::text(Text{
+            .text = slotProp<std::string>([scope = ctx.scope, &row, column, textOfCell] {
+                return textOfCell(column, row.get(), scope->formatting());
             }),
             .role = roles.at(column),
         });
+        return accentedCell(std::move(text), slotProp<CellAccent>([&row, column, accentOf, cellScope] {
+                                return accentOf(column, row.get(), cellScope.get());
+                            }));
     };
     ExprPtr const toneExpr = node.prop("rowTone");
     ExprPtr const labelExpr = node.prop("rowLabel");

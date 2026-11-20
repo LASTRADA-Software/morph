@@ -2025,8 +2025,8 @@ public:
     /// @brief Records property `columns`, each as its escaped caption, a colon and its width, then `;align=` and
     ///        `;valign=` where the column's alignment is not the default (`Start` across, `Center` down), and
     ///        `;sortable=true` for a sortable column, which `RecordingBackend::clickHeader` reports, and
-    ///        `;wrap=false` for a column that keeps its text cells to one line, and `;shrink=true` for a stretch
-    ///        column that may be narrower than its header.
+    ///        `;wrap=false` for a column that keeps its text cells to one line, `;shrink=true` for a stretch
+    ///        column that may be narrower than its header, and `;unit=` with the column's unit when it has one.
     /// @param columns The columns, in order.
     void setColumns(std::vector<TableColumn> const& columns) override {
         _columns = columns;
@@ -2050,6 +2050,9 @@ public:
                 }
                 if (column.shrink) {
                     text += ";shrink=true";
+                }
+                if (!column.unit.empty()) {
+                    text += ";unit=" + formatItem(column.unit);
                 }
                 return text;
             }));
@@ -2230,6 +2233,23 @@ public:
         }
         _loads.insert_or_assign(std::pair{rowId, column}, load);
         store().set(rowId, "load" + std::to_string(column), formatCellLoad(load));
+    }
+
+    /// @brief Records a cell's accent, which `RecordingBackend::cellAccent` reads, and the row's property
+    ///        `accent<column>`: the tone's name or `-`, the tooltip, and `invalid` or `valid`, joined by `|`.
+    /// @param row    One of this table's rows.
+    /// @param column The cell's column.
+    /// @param accent The accent.
+    /// @throws std::logic_error when @p row is not this table's child.
+    void setCellAccent(Widget& row, std::size_t column, CellAccent const& accent) override {
+        int const rowId = store().idOf(row);
+        if (store().at(rowId).parent != id()) {
+            throw std::logic_error{"RecordingBackend: setCellAccent of a widget that is not this table's row"};
+        }
+        _accents.insert_or_assign(std::pair{rowId, column}, accent);
+        std::string const tone = accent.tone ? std::to_string(static_cast<int>(*accent.tone)) : std::string{"-"};
+        store().set(rowId, "accent" + std::to_string(column),
+                    tone + "|" + formatText(accent.tooltip) + "|" + (accent.invalid ? "invalid" : "valid"));
     }
 
     /// @brief Records the column window, which `windowColumns`, `totalWidth` and `pinnedShown` read, and the
@@ -2431,6 +2451,21 @@ public:
         return found == _loads.end() ? CellLoad::Loaded : found->second;
     }
 
+    /// @brief A current row's cell's accent, as `setCellAccent` last set it.
+    /// @param key    The row's key.
+    /// @param column The cell's column.
+    /// @return The accent; `CellAccent{}` when none was set.
+    /// @throws std::logic_error when no current row has @p key.
+    [[nodiscard]] CellAccent cellAccent(Key const& key, std::size_t column) const {
+        std::optional<int> const row = rowOf(key);
+        if (!row) {
+            throw std::logic_error{"RecordingBackend: cellAccent of " + formatKey(key) + ", which Table#" +
+                                   std::to_string(id()) + " has no row for"};
+        }
+        auto const found = _accents.find(std::pair{*row, column});
+        return found == _accents.end() ? CellAccent{} : found->second;
+    }
+
     /// @brief The selection mode last set.
     /// @return The mode; `None` until `setSelectionMode` runs.
     [[nodiscard]] SelectionMode mode() const noexcept { return _mode; }
@@ -2551,6 +2586,7 @@ private:
     TableStatus _status;
     std::vector<TableColumn> _columns;
     std::map<std::pair<int, std::size_t>, CellLoad> _loads;  // (row id, column) -> state, as setCellLoad told it
+    std::map<std::pair<int, std::size_t>, CellAccent> _accents;  // (row id, column) -> accent, as setCellAccent told it
     std::vector<std::size_t> _window;  // the column window, as setColumnWindow last gave it
     bool _windowSet = false;
     int _totalWidth = 0;
@@ -3416,6 +3452,35 @@ public:
             throw std::logic_error{"RecordingBackend: cellLoad of a widget that is not a table"};
         }
         return table->cellLoad(rowKey, column);
+    }
+
+    /// @brief A cell's accent in a table whose rows come from a `TableSource`.
+    /// @param widgetId The table.
+    /// @param rowKey   The row's key.
+    /// @param column   The cell's column: an index into the table's columns.
+    /// @return The accent `setCellAccent` last gave the cell; `CellAccent{}` when none.
+    /// @throws std::logic_error when the widget is not a table, or none of its current rows has @p rowKey.
+    [[nodiscard]] CellAccent cellAccent(int widgetId, Key const& rowKey, std::size_t column) {
+        detail::Record const& record = expectKind(widgetId, "cellAccent", {"Table"});
+        auto const* const table = dynamic_cast<detail::FakeTable const*>(record.widget);
+        if (table == nullptr) {
+            throw std::logic_error{"RecordingBackend: cellAccent of a widget that is not a table"};
+        }
+        return table->cellAccent(rowKey, column);
+    }
+
+    /// @brief The widget of a current row of a table.
+    /// @param widgetId The table.
+    /// @param rowKey   The row's key.
+    /// @return The row's widget id; nothing when no current row has @p rowKey.
+    /// @throws std::logic_error when the widget is not a table.
+    [[nodiscard]] std::optional<int> tableRow(int widgetId, Key const& rowKey) {
+        detail::Record const& record = expectKind(widgetId, "tableRow", {"Table"});
+        auto const* const table = dynamic_cast<detail::FakeTable const*>(record.widget);
+        if (table == nullptr) {
+            throw std::logic_error{"RecordingBackend: tableRow of a widget that is not a table"};
+        }
+        return table->rowOf(rowKey);
     }
 
     /// @brief Activates a row of a table (Enter or a double click).

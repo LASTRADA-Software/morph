@@ -738,11 +738,11 @@ MorphWidget {
                         required property var modelData
                         readonly property bool sorted: root.sortColumn === index
                         width: root.widths[index] !== undefined ? root.widths[index] : 0
-                        text: modelData.label + (sorted ? (root.sortDescending ? root.descendingMark
-                                                                               : root.ascendingMark) : "")
+                        text: root.headerTextOf(modelData) + (sorted ? (root.sortDescending ? root.descendingMark
+                                                                                            : root.ascendingMark) : "")
                         activeFocusOnTab: modelData.sortable === true
                         Accessible.role: Accessible.ColumnHeader
-                        Accessible.name: modelData.label
+                        Accessible.name: modelData.accessibleName ?? modelData.label
                         Accessible.description: !sorted ? "" : root.sortDescending ? "Sorted descending"
                                                                                    : "Sorted ascending"
                         Keys.onPressed: event => {
@@ -791,10 +791,11 @@ MorphWidget {
                     height: headerArea.height
                     textFormat: Text.PlainText
                     font: Theme.tableHeaderFont
-                    text: column.label + (sorted ? (root.sortDescending ? root.descendingMark : root.ascendingMark) : "")
+                    text: root.headerTextOf(column) + (sorted ? (root.sortDescending ? root.descendingMark
+                                                                                     : root.ascendingMark) : "")
                     activeFocusOnTab: column.sortable === true
                     Accessible.role: Accessible.ColumnHeader
-                    Accessible.name: column.label
+                    Accessible.name: column.accessibleName ?? column.label
                     Accessible.description: !sorted ? "" : root.sortDescending ? "Sorted descending" : "Sorted ascending"
                     Keys.onPressed: event => {
                         if (windowLabel.column.sortable === true && (event.key === Qt.Key_Return ||
@@ -1203,6 +1204,15 @@ MorphWidget {
     }
     function rowHeight(viewRow: int): real {
         return root.rowHeights[viewRow] ?? root.meanRowHeight
+    }
+    // A header's text: its label, then its unit in brackets, as "Copy with headers" writes it.
+    function headerTextOf(column: var): string {
+        return column.unit ? column.label + " [" + column.unit + "]" : column.label
+    }
+    // The accent of a realized row's cell: {tone, tooltip, invalid}, or null for none.
+    function cellAccentAt(viewRow: int, column: int): var {
+        const row = root.rowAt(viewRow)
+        return row ? row.accentOf(column) : null
     }
     function cellLoadAt(viewRow: int, column: int): int {
         const row = root.rowAt(viewRow)

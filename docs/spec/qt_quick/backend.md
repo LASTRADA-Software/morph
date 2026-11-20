@@ -377,7 +377,14 @@ refuses one past `maxRangeRows`; each is `multiple` only. `setCounts` writes
 put them in, so they are properties only. **Load states.** `setCellLoad` writes the row's `cellLoads`; a cell not
 loaded keeps its content bound at opacity 0 under a mark (`loadMarks`): a rounded bar 3 em wide for `Unloaded`, a
 `!` of the same width for `Failed`, whose tooltip and accessible name say "Could not be loaded", each in the
-column's alignment and neither measured into its width. **The status line** (`setStatus`) is one `Text` under the
+column's alignment and neither measured into its width. **Cell accents.** `setCellAccent` writes the row's
+`cellAccents` (`{tone, tooltip, invalid}` by column, the tone -1 for none); the row draws each accented cell's slot
+(`accentMarks`, item `cellAccent<column>`) under the cells: the tone's fill at half strength (`cellTint`), over the
+row's background, so its selection fill and bar show through; for a tooltip a small accent square at the slot's top
+end (`moreMark`), a `ToolTip` on hover after the style's press-and-hold interval and at once while the cell holds the
+keyboard focus, and the slot's `Accessible.description`. An `invalid` cell draws the `!` mark of a failed load, with
+the accent's tooltip as its tooltip and accessible name. **Headers with a unit.** A column's `unit` is written after
+its label, `Mass [kg]`, and the header's `Accessible.name` is `headerAccessibleName`, `Mass, kg`. **The status line** (`setStatus`) is one `Text` under the
 rows and outside the sideways scroll (`statusText`: the counts, the state and the message, two spaces apart), with a
 "Retry" `Button` while the state offers it (`retryShown`), firing `retry`; while not shown it takes no height. It is a
 polite live region: once its text has held for half a second it is announced (`Accessible.announce`, from Qt 6.8,

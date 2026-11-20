@@ -109,6 +109,10 @@ public:
     void setOnRetry(std::function<void()> onRetry) override;
     /// Throws std::logic_error when @p row is not one of this table's rows.
     void setCellLoad(ui::Widget& row, std::size_t column, ui::CellLoad load) override;
+    /// A tone tints the cell's text in the tone's style, `invalid` draws the error glyph in place of the text, and a
+    /// tooltip is shown in the status line while the cell has the focus. Throws std::logic_error when @p row is not
+    /// one of this table's rows.
+    void setCellAccent(ui::Widget& row, std::size_t column, ui::CellAccent const& accent) override;
     void setColumnWindow(std::span<std::size_t const> columns, std::span<int const> offsets,
                          std::span<int const> widths, int totalWidth, std::size_t pinned) override;
     void setOnHorizontalRange(std::function<void(int scrollX, int viewport)> handler) override;
@@ -176,9 +180,10 @@ private:
     [[nodiscard]] int gutter() const noexcept;
     /// The header's box: `[x]` while every shown row is selected, `[-]` while some are, `[ ]` while none are.
     [[nodiscard]] std::string headerBox() const;
-    /// The header text of the column at @p index: its label, then the sort mark when it is the sorted column.
+    /// The header text of the column at @p index: its label with its unit (`Mass [kg]`), then the sort mark when it
+    /// is the sorted column.
     [[nodiscard]] std::string headerText(std::size_t index) const;
-    /// The cells a column's header needs: its label, and room for the sort mark when it is sortable.
+    /// The cells a column's header needs: its label with its unit, and room for the sort mark when it is sortable.
     [[nodiscard]] static int headerWidth(ui::TableColumn const& column);
     /// Calls onSort when the header click at column @p x lands on a sortable column.
     void clickHeader(int x);
@@ -248,8 +253,11 @@ private:
     /// The column a cell of @p row is in: by `setCellColumn` in a table over a source, else its @p position.
     [[nodiscard]] std::optional<std::size_t> columnOf(WidgetBase const* row, WidgetBase const* cell,
                                                       std::size_t position) const;
-    /// The load state of @p row's cell in @p column.
+    /// The load state of @p row's cell in @p column; a loaded cell whose value could not be read is `Failed`, so it
+    /// draws the error glyph in place of its text.
     [[nodiscard]] ui::CellLoad loadOf(WidgetBase const* row, std::size_t column) const;
+    /// The tooltip of the focused cell; empty when it has none.
+    [[nodiscard]] std::string focusedTooltip() const;
     /// Gives each row of a table over a source a slot per cell: its column's, or none.
     void slotCells(std::vector<DrawnColumn> const& drawn);
     /// The lines below the header that rows take in a table @p height lines tall: all but the status line.
@@ -318,6 +326,8 @@ private:
         _cellColumns;
     /// Each row's cells that are not loaded, by column.
     std::unordered_map<WidgetBase const*, std::unordered_map<std::size_t, ui::CellLoad>> _loads;
+    /// Each row's cells' accents, by column; a cell with none has no entry.
+    std::unordered_map<WidgetBase const*, std::unordered_map<std::size_t, ui::CellAccent>> _accents;
     /// A column of the mount's window: its index into `_columns`, its offset and its width.
     struct WindowColumn {
         std::size_t column = 0;

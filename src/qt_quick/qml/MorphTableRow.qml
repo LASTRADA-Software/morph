@@ -20,7 +20,11 @@ import QtQuick.Layouts
 // In a table whose columns the mount lays out (`table.arranged`), each cell is placed in the column C++ gave it
 // (`measuredIndex`), at the window's offset and width; a pinned column's cell is held at the leading edge, over the
 // rest. A cell whose column has not loaded (`cellLoads`) keeps its content, bound but invisible, under a mark: a
-// rounded bar 3 em wide for one not loaded, an error mark of the same width for one that failed. The row's
+// rounded bar 3 em wide for one not loaded, an error mark of the same width for one that failed. A cell's accent
+// (`cellAccents`) tints its slot with the tone's fill under the cell, so the row's selection and focus marks still
+// show; a tooltip draws the "more here" mark, shows on hover after the style's delay and at once while the cell has
+// the keyboard focus, and is the accessible description of the cell's slot; a value that could not be read draws the error mark
+// in place of the cell, with the accent's tooltip. The row's
 // `measuredHeight` is its tallest placed cell's, unless every column keeps one line; the table sets its height.
 MorphWidget {
     id: root
@@ -69,6 +73,29 @@ MorphWidget {
         return root.cellLoads[String(column)] ?? 0
     }
     onCellLoadsChanged: root.place()
+    // The columns whose cells have an accent, by column as text: {tone, tooltip, invalid}. C++ writes it.
+    property var cellAccents: ({})
+    // The accents drawn in those cells' slots: [{x, width, column, tone, tooltip, pinned}].
+    property var accentMarks: []
+    function accentOf(column: int): var {
+        return root.cellAccents[String(column)] ?? null
+    }
+    onCellAccentsChanged: root.place()
+    // A tone's fill in the scheme, as the row background draws a toned row.
+    function toneFill(index: int): color {
+        switch (index) {
+        case 1:
+            return root.scheme.infoBg
+        case 2:
+            return root.scheme.successBg
+        case 3:
+            return root.scheme.warnBg
+        case 4:
+            return root.scheme.errorBg
+        default:
+            return Qt.alpha(root.scheme.muted, 0.15)
+        }
+    }
     // Over a source the table holds the focus and names the focused row; otherwise the row holds it.
     readonly property bool current: root.table && root.table.sourceRows
                                     ? root.table.activeFocus && root.viewRow === root.table.focusedRowIndex
@@ -275,6 +302,7 @@ MorphWidget {
         const measure = !table.allOneLine
         const placed = []
         const marks = []
+        const accents = []
         let tallest = 0
         for (let i = 0; i < cells.children.length; ++i) {
             const cell = cells.children[i]
@@ -296,10 +324,17 @@ MorphWidget {
                 cell.x = left + inset
             }
             cell.z = pinned ? 1 : 0
-            const load = root.loadOf(column)
+            const accent = root.accentOf(column)
+            const loaded = root.loadOf(column)
+            // A value that could not be read draws the error mark in place of its text, as a failed load does.
+            const load = loaded !== 0 ? loaded : accent && accent.invalid ? 2 : 0
             cell.opacity = load === 0 ? 1 : 0
             if (load !== 0)
-                marks.push({"x": left + inset, "width": room, "load": load, "align": across, "pinned": pinned})
+                marks.push({"x": left + inset, "width": room, "load": load, "align": across, "pinned": pinned,
+                            "tip": loaded === 0 && accent ? accent.tooltip : ""})
+            if (accent && (accent.tone >= 0 || accent.tooltip !== ""))
+                accents.push({"x": left, "width": slot.width, "column": column, "tone": accent.tone,
+                              "tooltip": accent.tooltip, "pinned": pinned})
             if (cell.textAlign !== undefined && !cell.ownAlign)
                 cell.textAlign = across === 3 ? Qt.AlignRight : across === 2 ? Qt.AlignHCenter : Qt.AlignLeft
             if (cell.singleLine !== undefined)
@@ -327,6 +362,8 @@ MorphWidget {
         }
         if (JSON.stringify(marks) !== JSON.stringify(root.loadMarks))
             root.loadMarks = marks
+        if (JSON.stringify(accents) !== JSON.stringify(root.accentMarks))
+            root.accentMarks = accents
         root.placeBackdrop()
     }
 
@@ -623,6 +660,45 @@ MorphWidget {
         }
     }
 
+    // Each accented cell's slot, under the cells: the tone's tint, the "more here" mark and the tooltip.
+    Repeater {
+        model: root.accentMarks
+        delegate: Item {
+            id: accentMark
+            required property var modelData
+            readonly property bool focusedCell: root.current && root.table !== null
+                                                && root.table.focusedColumnIndex === modelData.column
+            objectName: "cellAccent" + modelData.column
+            x: modelData.x
+            z: modelData.pinned ? 0.75 : 0
+            width: modelData.width
+            height: root.height
+            Rectangle {
+                objectName: "cellTint"
+                anchors.fill: parent
+                visible: accentMark.modelData.tone >= 0
+                color: Qt.alpha(root.toneFill(accentMark.modelData.tone), 0.5)
+            }
+            Rectangle {
+                objectName: "moreMark"
+                visible: accentMark.modelData.tooltip !== ""
+                anchors.top: parent.top
+                anchors.right: parent.right
+                width: Math.round(Theme.bodyFont.pixelSize * 0.4)
+                height: width
+                color: root.scheme.accent
+            }
+            HoverHandler {
+                id: accentHover
+            }
+            ToolTip.visible: accentMark.modelData.tooltip !== "" && (accentHover.hovered || accentMark.focusedCell)
+            ToolTip.delay: accentMark.focusedCell ? 0 : Qt.styleHints.mousePressAndHoldInterval
+            ToolTip.text: accentMark.modelData.tooltip
+            Accessible.role: Accessible.Cell
+            Accessible.description: accentMark.modelData.tooltip
+        }
+    }
+
     Item {
         id: cells
         anchors.fill: parent
@@ -661,12 +737,13 @@ MorphWidget {
                 font: Theme.strongFont
                 color: root.scheme.error
                 Accessible.role: Accessible.StaticText
-                Accessible.name: "Could not be loaded"
+                Accessible.name: mark.modelData.tip ? mark.modelData.tip : "Could not be loaded"
+                Accessible.description: mark.modelData.tip ?? ""
                 HoverHandler {
                     id: failedHover
                 }
                 ToolTip.visible: failedHover.hovered
-                ToolTip.text: "Could not be loaded"
+                ToolTip.text: mark.modelData.tip ? mark.modelData.tip : "Could not be loaded"
             }
         }
     }

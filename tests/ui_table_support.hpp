@@ -1319,6 +1319,93 @@ inline std::vector<std::string> headerLabels(TableHarness& h) {
     return out;
 }
 
+/// @brief Answers the open `Table.samples.describe` call with @p json, then settles.
+/// @param h    The harness.
+/// @param json The description's JSON, its revision set.
+inline void replyDescribe(TableHarness& h, std::string json) {
+    h.reply(oldestOpen(h, "Table.samples.describe"), std::move(json));
+}
+
+/// @brief The reasons of every diagnostic reported, oldest first.
+/// @param h The harness.
+/// @return They.
+inline std::vector<std::string> reportsOf(TableHarness const& h) {
+    std::vector<std::string> out;
+    for (Refusal const& refusal : h.diagnostics) {
+        out.push_back(refusal.reason);
+    }
+    return out;
+}
+
+/// @brief A table widget's header captions.
+/// @param h      The harness.
+/// @param testId The table's test id.
+/// @return They, in column order.
+inline std::vector<std::string> headerLabels(TableHarness& h, std::string_view testId) {
+    std::vector<std::string> out;
+    for (TableColumn const& column : h.backend.tableColumns(h.byTestId("Table", testId))) {
+        out.push_back(column.label);
+    }
+    return out;
+}
+
+/// @brief The column with @p id the table `t` was given (`setColumns`).
+/// @param h  The harness.
+/// @param id The column's id.
+/// @return The column.
+inline TableColumn columnOf(TableHarness& h, std::string_view id) {
+    for (TableColumn const& column : h.backend.tableColumns(h.byTestId("Table", "t"))) {
+        if (column.id == id) {
+            return column;
+        }
+    }
+    FAIL("the table has no column " << id);
+    return {};
+}
+
+/// @brief The index into the table `t`'s columns of the column with @p id.
+/// @param h  The harness.
+/// @param id The column's id.
+/// @return The index.
+inline std::size_t columnIndex(TableHarness& h, std::string_view id) {
+    std::vector<TableColumn> const columns = h.backend.tableColumns(h.byTestId("Table", "t"));
+    auto const found = std::ranges::find(columns, id, &TableColumn::id);
+    if (found == columns.end()) {
+        FAIL("the table has no column " << id);
+    }
+    return static_cast<std::size_t>(found - columns.begin());
+}
+
+/// @brief The text the cell of the row with @p key in @p column shows, in the table `t`.
+/// @param h      The harness.
+/// @param key    The row's key.
+/// @param column The column's id.
+/// @return The cell's text.
+inline std::string cellText(TableHarness& h, std::int64_t key, std::string_view column) {
+    int const table = h.byTestId("Table", "t");
+    std::optional<int> const row = h.backend.tableRow(table, Key{key});
+    if (!row) {
+        FAIL("the table has no row " << key);
+    }
+    std::string const at = std::to_string(columnIndex(h, column));
+    for (int const cell : h.backend.children(*row)) {
+        if (h.backend.prop(cell, "column") == at) {
+            return h.backend.prop(cell, "text");
+        }
+    }
+    FAIL("the row " << key << " has no cell in " << column);
+    return {};
+}
+
+/// @brief The accent the cell of the row with @p key in @p column was last given, in the table `t`.
+/// @param h      The harness.
+/// @param key    The row's key.
+/// @param column The column's id.
+/// @return The accent; `CellAccent{}` when none was given.
+inline CellAccent cellAccent(TableHarness& h, std::int64_t key, std::string_view column) {
+    return h.backend.cellAccent(h.byTestId("Table", "t"), Key{key}, columnIndex(h, column));
+}
+
 /// @brief The diagnostics whose reason contains @p text.
 /// @param h    The harness.
 /// @param text The text.

@@ -202,15 +202,6 @@ using RecordOf = std::function<RowRecord(table::RowSnapshot const& snapshot, std
 
 namespace detail {
 
-/// @brief The text of a cell until the column's formatter shows it.
-/// @param cell   The cell.
-/// @param column The cell's column; not read yet.
-/// @return `table::displayText(cell)`; empty for an empty or an unloaded cell.
-[[nodiscard]] inline std::string standInCellText(table::Cell const& cell, table::TableColumn const& column) {
-    static_cast<void>(column);
-    return table::displayText(cell);
-}
-
 /// @brief A `double` as the record holds it: the decimal its shortest fixed-notation text spells, or that text's
 ///        shortest form when it spells no decimal `parseDecimal` reads, so the value is never lost to `null`.
 /// @param value The number.

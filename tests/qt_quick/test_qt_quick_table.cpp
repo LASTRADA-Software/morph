@@ -26,6 +26,7 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <map>
 #include <memory>
 #include <morph/qt_quick/theme.hpp>
 #include <morph/reactive/signal.hpp>
@@ -1892,6 +1893,8 @@ struct QuickWindowOptions {
     std::vector<Level> levels;
     ui::SelectionMode selection = ui::SelectionMode::None;
     bool selectColumn = false;
+    // Each column's unit, by index; a column past the list has none.
+    std::vector<std::string> units = {};
 };
 
 std::string groupedCount(std::int64_t n) {
@@ -1931,6 +1934,7 @@ struct QuickWindowFixture {
           arrangement{scene.runtime(), TableArrangement{.visible = {}, .pinned = options.pinned, .widths = {}}},
           focus{scene.runtime(), std::nullopt},
           status{scene.runtime(), ui::TableStatus{.counts = groupedCount(rowCount) + " rows", .shown = true}},
+          accents{scene.runtime(), {}},
           wrapped{std::move(options.wrapped)} {
         scene.window().resize(1280, 800);
         std::vector<ui::TableColumn> columns;
@@ -1938,6 +1942,8 @@ struct QuickWindowFixture {
             columns.push_back(ui::TableColumn{.id = "c" + std::to_string(column),
                                               .label = "C" + std::to_string(column),
                                               .width = ui::Sizing::fixed(8),
+                                              .unit = column < options.units.size() ? options.units.at(column)
+                                                                                    : std::string{},
                                               .wrap = options.wrap});
         }
         ui::TableSource source;
@@ -1949,7 +1955,12 @@ struct QuickWindowFixture {
         }
         source.defaultCellView = [this](morph::reactive::Signal<std::size_t> const& column,
                                         morph::reactive::Signal<ui::Value> const& row) {
-            return ui::text({.text = [this, &column, &row] { return textOf(row.get(), column.get()); }});
+            return ui::accentedCell(ui::text({.text = [this, &column, &row] { return textOf(row.get(), column.get()); }}),
+                                    [this, &column, &row] {
+                                        auto const& all = accents.get();
+                                        auto const found = all.find(std::pair{idOf(row.get()), column.get()});
+                                        return found == all.end() ? ui::CellAccent{} : found->second;
+                                    });
         };
         source.cellView = [this](std::size_t column, morph::reactive::Signal<ui::Value> const& row) {
             return ui::text({.text = [this, &row, column] { return textOf(row.get(), column); }});
@@ -2063,6 +2074,8 @@ struct QuickWindowFixture {
     morph::reactive::Signal<TableArrangement> arrangement;
     morph::reactive::Signal<std::optional<CellRef>> focus;
     morph::reactive::Signal<ui::TableStatus> status;
+    // Each cell's accent, by row id and column; a cell not named has none.
+    morph::reactive::Signal<std::map<std::pair<std::int64_t, std::size_t>, ui::CellAccent>> accents;
     std::vector<QuickWindowOptions::Wrapped> wrapped;
     int retries = 0;
     std::vector<std::tuple<std::size_t, std::size_t, ui::SelectionChange>> ranges;
@@ -2163,6 +2176,47 @@ TEST_CASE("qt_quick table: an unloaded cell is a placeholder and a failed one an
     CHECK(f.call("cellLoadAt", 1, 1).toInt() == 2);
     CHECK(f.call("cellLoadAt", 2, 1).toInt() == 0);
     CHECK(f.call("columnWidth", 1).toInt() == widthBefore);  // a placeholder widens nothing
+}
+
+// Mutations: the tint painted opaque over the row's selection fill (its alpha is 1); `invalid` ignored by
+// MorphTableRow.qml, which draws no error mark (cellLoadAt is 0 and no failedMark exists).
+TEST_CASE("qt_quick table: a toned cell keeps its selection mark, a tooltip cell is described, a unit header is named "
+          "with its unit",
+          "[qt_quick]") {
+    QuickWindowFixture f{10, 3, {.units = {"kg"}}};
+    auto* const header = f.item()->findChild<QQuickItem*>(QStringLiteral("header0"));
+    REQUIRE(header != nullptr);
+    CHECK(header->property("text").toString() == QStringLiteral("C0 [kg]"));
+    bool const wasActive = QAccessible::isActive();
+    QAccessible::setActive(true);
+    QAccessibleInterface const* const named = QAccessible::queryAccessibleInterface(header);
+    REQUIRE(named != nullptr);
+    CHECK(named->text(QAccessible::Name) == QStringLiteral("C0, kg"));
+
+    f.accents.set({{{0, 0}, ui::CellAccent{.tone = ui::Tone::Warn, .tooltip = "Above limit", .invalid = false}},
+                   {{0, 1}, ui::CellAccent{.tone = {}, .tooltip = "The value could not be read", .invalid = true}}});
+    f.settle();
+    QVariant const accent = f.call("cellAccentAt", 0, 0);
+    REQUIRE(accent.isValid());
+    auto* const tinted = f.item()->findChild<QQuickItem*>(QStringLiteral("cellAccent0"));
+    REQUIRE(tinted != nullptr);
+    auto* const tint = tinted->findChild<QQuickItem*>(QStringLiteral("cellTint"));
+    REQUIRE(tint != nullptr);
+    CHECK(tint->isVisible());
+    CHECK(tinted->findChild<QQuickItem*>(QStringLiteral("moreMark"))->isVisible());
+    QAccessibleInterface const* const described = QAccessible::queryAccessibleInterface(tinted);
+    REQUIRE(described != nullptr);
+    CHECK(described->text(QAccessible::Description) == QStringLiteral("Above limit"));
+    // Half the tone's fill: the row's selection fill and bar, drawn under the cells, show through it.
+    CHECK(tint->property("color").value<QColor>().alphaF() < 1.0);
+    CHECK(f.call("cellLoadAt", 0, 1).toInt() == 0);  // the load is the mount's; the mark is the accent's
+    CHECK(f.item()->findChild<QQuickItem*>(QStringLiteral("failedMark")) != nullptr);
+    QAccessible::setActive(wasActive);
+
+    f.accents.set({});
+    f.settle();
+    CHECK(f.item()->findChild<QQuickItem*>(QStringLiteral("cellAccent0")) == nullptr);
+    CHECK(f.item()->findChild<QQuickItem*>(QStringLiteral("failedMark")) == nullptr);
 }
 
 // Mutations: a row's height recomputed from its realized cells each pass (it shrinks when the tall cell leaves);

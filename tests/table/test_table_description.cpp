@@ -2297,3 +2297,114 @@ TEST_CASE("typed table: a model's units reach its measures", "[table][registrati
     REQUIRE_FALSE(refusedDescription.has_value());
     CHECK(refusedDescription.error().code == TableErrorCode::SourceContract);
 }
+
+// Mutation: validateDisplay skipping rowLock, which accepts `missingLock`.
+TEST_CASE("description: a column's display is refused where it cannot apply", "[table][description][display]") {
+    auto base = [] {
+        TableDescription d;
+        d.id = "samples";
+        d.key = "id";
+        d.columns = {
+            TableColumn{.info = {.id = "id", .kind = ColumnKind::Integer}, .label = "Id"},
+            TableColumn{.info = {.id = "mass", .kind = ColumnKind::Decimal},
+                        .label = "Mass",
+                        .display = {.decimals = 2, .unit = "kg"},
+                        .tone = "massTone",
+                        .tooltip = "massTip"},
+            TableColumn{.info = {.id = "amount", .kind = ColumnKind::Measure}, .label = "Amount"},
+            TableColumn{.info = {.id = "massTone", .kind = ColumnKind::Text}, .shown = false},
+            TableColumn{.info = {.id = "massTip", .kind = ColumnKind::Text}, .shown = false},
+            TableColumn{.info = {.id = "lockedBy", .kind = ColumnKind::Text}, .shown = false},
+        };
+        d.rowLock = "lockedBy";
+        return d;
+    };
+    REQUIRE(validateDisplay(base()).has_value());
+
+    auto measureDecimals = base();
+    measureDecimals.columns[2].display.decimals = 3;
+    CHECK(validateDisplay(measureDecimals).error().code == TableErrorCode::SourceContract);
+    auto measureUnit = base();
+    measureUnit.columns[2].display.unit = "kg";
+    CHECK(validateDisplay(measureUnit).error().code == TableErrorCode::SourceContract);
+    auto missingTone = base();
+    missingTone.columns[1].tone = "nope";
+    CHECK(validateDisplay(missingTone).error().code == TableErrorCode::SourceContract);
+    auto numericTooltip = base();
+    numericTooltip.columns[1].tooltip = "id";
+    CHECK(validateDisplay(numericTooltip).error().code == TableErrorCode::SourceContract);
+    auto missingLock = base();
+    missingLock.rowLock = "nope";
+    REQUIRE_FALSE(validateDisplay(missingLock).has_value());
+    CHECK(validateDisplay(missingLock).error().code == TableErrorCode::SourceContract);
+    CHECK(validateDisplay(missingLock).error().column == "nope");
+}
+
+// Mutation: companions added for every column of the description, which puts massTone in `name`'s list.
+TEST_CASE("description: companions travel with their column", "[table][description][display]") {
+    TableDescription d;  // id, mass (tone massTone, tooltip massTip), name; rowTone rowState; rowLock lockedBy
+    d.key = "id";
+    d.columns = {
+        TableColumn{.info = {.id = "id", .kind = ColumnKind::Integer}},
+        TableColumn{.info = {.id = "mass", .kind = ColumnKind::Decimal}, .tone = "massTone", .tooltip = "massTip"},
+        TableColumn{.info = {.id = "name", .kind = ColumnKind::Text}},
+        TableColumn{.info = {.id = "massTone", .kind = ColumnKind::Text}, .shown = false},
+        TableColumn{.info = {.id = "massTip", .kind = ColumnKind::Text}, .shown = false},
+        TableColumn{.info = {.id = "rowState", .kind = ColumnKind::Text}, .shown = false},
+        TableColumn{.info = {.id = "lockedBy", .kind = ColumnKind::Text}, .shown = false},
+    };
+    d.rowTone = "rowState";
+    d.rowLock = "lockedBy";
+    std::vector<std::string> const mass{"mass"};
+    std::vector<std::string> const name{"name"};
+    CHECK(columnsWithCompanions(d, mass) ==
+          std::vector<std::string>{"mass", "massTone", "massTip", "rowState", "lockedBy"});
+    CHECK(columnsWithCompanions(d, name) == std::vector<std::string>{"name", "rowState", "lockedBy"});
+    CHECK(columnsWithCompanions(d, mass, {.tone = {"mass"}, .tooltip = {}, .rowTone = true}) ==
+          std::vector<std::string>{"mass", "massTip", "lockedBy"});
+    CHECK(companionColumns(d) == std::vector<std::string>{"lockedBy", "massTip", "massTone", "rowState"});
+}
+
+// Mutation: `Rounding` without glaze meta, which writes 1 for "halfUp".
+TEST_CASE("description: a display travels in the description and changes its revision",
+          "[table][description][display]") {
+    TableDescription d;
+    d.id = "samples";
+    d.key = "id";
+    d.columns = {
+        TableColumn{.info = {.id = "id", .kind = ColumnKind::Integer}, .label = "Id"},
+        TableColumn{.info = {.id = "mass", .kind = ColumnKind::Decimal},
+                    .label = "Mass",
+                    .display = {.decimals = 2,
+                                .rounding = Rounding::HalfUp,
+                                .labels = {ValueLabel{.operand = "3", .text = "three"}}}},
+    };
+    auto const described = describe(d);
+    auto const json = glz::write_json(described).value_or(std::string{});
+    CHECK(json.find(R"("rounding":"halfUp")") != std::string::npos);
+    CHECK(json.find(R"("labels":[{"operand":"3","text":"three"}])") != std::string::npos);
+    TableDescription back;
+    REQUIRE_FALSE(glz::read_json(back, json));
+    CHECK(back == described);
+    auto halfEven = d;
+    halfEven.columns[1].display.rounding = Rounding::HalfEven;
+    CHECK(describe(halfEven).revision != described.revision);
+}
+
+// Mutation: the validateDisplay call removed from answerQuery, which answers the query for `bad`.
+TEST_CASE("description: a served table with a bad companion is refused", "[table][description][display]") {
+    auto const source = tabletest::makeSource({tabletest::col("id", ColumnKind::Integer)}, {{Cell{std::int64_t{1}}}});
+    TableDescription d;
+    d.id = "samples";
+    d.key = "id";
+    d.columns = {TableColumn{.info = {.id = "id", .kind = ColumnKind::Integer}, .label = "Id"}};
+    ServedTable good{.description = d, .source = source, .levels = {}, .mayRead = {}, .scope = {}, .services = {},
+                     .limits = {}};
+    REQUIRE(detail::answerQuery(detail::pinned(good), TableQuery{}).has_value());
+    ServedTable bad = good;
+    bad.description.rowLock = "nope";
+    auto const refused = detail::answerQuery(detail::pinned(bad), TableQuery{});
+    REQUIRE_FALSE(refused.has_value());
+    CHECK(refused.error().code == TableErrorCode::SourceContract);
+    CHECK(refused.error().column == "nope");
+}
