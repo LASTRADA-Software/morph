@@ -158,6 +158,7 @@ add_executable(morph_tests
     test_forms_display_unit.cpp
     test_forms_meta_options.cpp
     test_forms_blank_as.cpp
+    test_forms_since.cpp
     test_forms_instance_constraints.cpp
     test_widget_hints.cpp
     test_datetime.cpp

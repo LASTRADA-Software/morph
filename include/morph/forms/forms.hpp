@@ -191,6 +191,7 @@
 #include "blank_as.hpp"
 #include "choice.hpp"
 #include "layout.hpp"
+#include "version.hpp"
 
 namespace morph::forms {
 
@@ -338,6 +339,15 @@ struct FieldMeta {
     // NOLINTNEXTLINE(readability-redundant-member-init) -- as `unit` above
     std::string_view labelField{};
 
+    /// @brief The version this field first ships in, a dotted numeric version such as `"6.11.0"` (`FieldVersion`);
+    ///        emitted as `x-since`. Empty means the first version.
+    ///
+    /// An application that keeps user-saved layouts compares it with the version a layout knows, to tell which
+    /// fields came later. A text that is not a version is a programming error, refused with `InvalidSinceError` when
+    /// the action registers.
+    // NOLINTNEXTLINE(readability-redundant-member-init) -- as `unit` above
+    std::string_view since{};
+
     /// @brief Returns a copy with `placeholder` set to @p text.
     /// @param text The placeholder hint.
     /// @return The updated descriptor.
@@ -415,6 +425,15 @@ struct FieldMeta {
     [[nodiscard]] constexpr FieldMeta withBlankAs(BlankAs mode) const noexcept {
         FieldMeta copy = *this;
         copy.blankAs = mode;
+        return copy;
+    }
+
+    /// @brief Returns a copy with `since` set to @p version.
+    /// @param version The version the field first ships in, e.g. `"6.11.0"`.
+    /// @return The updated descriptor.
+    [[nodiscard]] constexpr FieldMeta withSince(std::string_view version) const noexcept {
+        FieldMeta copy = *this;
+        copy.since = version;
         return copy;
     }
 };
@@ -2056,6 +2075,21 @@ struct IncompleteOptionsError : std::logic_error {
                            "; set optionsAction, valueField and labelField together.") {}
 };
 
+/// @brief Thrown by schema generation, `schemaVersion` and `fieldInventory` when a `FieldMeta::since` is not a
+///        version (`FieldVersion::parse`).
+///
+/// A programming error in the action's declaration, so a `std::logic_error`, thrown when the action registers.
+struct InvalidSinceError : std::logic_error {
+    /// @brief Constructs the error naming the action type, the member and why its `since` is refused.
+    /// @param actionName The type declaring the member (`glz::name_v<Owner>`).
+    /// @param field      The member's wire name.
+    /// @param reason     Why the text is not a version, as `FieldVersion::parse` gives it.
+    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): the type, its member and the reason, in that order.
+    InvalidSinceError(std::string_view actionName, std::string_view field, std::string_view reason)
+        : std::logic_error("morph::forms: '" + std::string{actionName} + "." + std::string{field} +
+                           "' declares a since that is not a version: " + std::string{reason}) {}
+};
+
 namespace detail {
 
 /// @brief One computed-field declaration: binds a destination member to the
@@ -2387,6 +2421,24 @@ void annotateDisplayUnit(glz::generic_u64& property, const FieldMeta& meta) {
     return true;
 }
 
+/// @brief The version a `FieldMeta` declares, refusing a `since` that is not one.
+/// @tparam Owner The type declaring @p name.
+/// @param name The member's wire name.
+/// @param meta Its `FieldMeta`, or `nullptr` when it has none.
+/// @return The declared version; the first version when @p meta is null or declares none.
+/// @throws InvalidSinceError when `since` is not a version.
+template <typename Owner>
+[[nodiscard]] FieldVersion declaredSince(std::string_view name, FieldMeta const* meta) {
+    if (meta == nullptr) {
+        return FieldVersion{};
+    }
+    auto version = parseSince(meta->since);
+    if (!version.has_value()) {
+        throw InvalidSinceError{glz::name_v<Owner>, name, version.error()};
+    }
+    return std::move(*version);
+}
+
 /// @brief Emits the options annotations a `FieldMeta` declares for a member that is not a `Choice<…>`, refusing a
 ///        declaration that cannot hold.
 /// @tparam Owner  The type declaring @p name.
@@ -2482,6 +2534,10 @@ void annotateBasicMemberProperty(glz::generic_u64& property, std::string_view na
         annotateDeclaredBounds(property, *fieldMeta);
         annotateDisplayUnit<Member>(property, *fieldMeta);
         annotateMetaOptions<Owner, Member>(property, name, *fieldMeta);
+        if (!fieldMeta->since.empty()) {
+            // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access) -- glaze DOM requires operator[]
+            property["x-since"] = declaredSince<Owner>(name, fieldMeta).text();
+        }
         if constexpr (std::is_same_v<Member, std::string> || std::is_same_v<Member, std::optional<std::string>>) {
             if (fieldMeta->blankAs == BlankAs::Empty) {
                 property["x-blankAs"] = std::string{"empty"};
@@ -3661,6 +3717,47 @@ template <typename A>
         });
         return satisfied;
     }
+}
+
+/// @brief Lists every field of @p A with the version it first ships in, for `checkFieldInventory`.
+///
+/// One entry per reflected top-level member, in declaration order, with `since` as `FieldMeta::since` declares it
+/// (empty for the first version). A nested aggregate's own fields are emitted with their `x-since` but are not part of
+/// the inventory: a layout places an action's top-level fields.
+/// @tparam A Action type (a reflectable aggregate).
+/// @return The inventory; never marks an entry removed.
+/// @throws InvalidSinceError when a `since` is not a version.
+template <typename A>
+[[nodiscard]] std::vector<FieldInventoryEntry> fieldInventory() {
+    std::vector<FieldInventoryEntry> inventory;
+    A const probe{};
+    detail::forEachNamedMember(probe, [&]<std::size_t I>(std::string_view name, const auto& member) {
+        static_cast<void>(member);
+        FieldMeta const* const meta = detail::findFieldMeta<A>(name);
+        static_cast<void>(detail::declaredSince<A>(name, meta));
+        inventory.push_back({.field = std::string{name},
+                             .since = meta == nullptr ? std::string{} : std::string{meta->since},
+                             .removed = false});
+    });
+    return inventory;
+}
+
+/// @brief The version of @p A's schema: the highest `FieldMeta::since` among its top-level fields.
+/// @tparam A Action type (a reflectable aggregate).
+/// @return The highest declared version; the first version when no field declares one.
+/// @throws InvalidSinceError when a `since` is not a version.
+template <typename A>
+[[nodiscard]] FieldVersion schemaVersion() {
+    FieldVersion highest;
+    A const probe{};
+    detail::forEachNamedMember(probe, [&]<std::size_t I>(std::string_view name, const auto& member) {
+        static_cast<void>(member);
+        FieldVersion version = detail::declaredSince<A>(name, detail::findFieldMeta<A>(name));
+        if (version > highest) {
+            highest = std::move(version);
+        }
+    });
+    return highest;
 }
 
 /// @brief Generates the JSON Schema for action type @p A, ready for a

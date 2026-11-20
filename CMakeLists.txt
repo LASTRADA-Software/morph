@@ -617,6 +617,7 @@ target_sources(morph
         include/morph/forms/field_errors.hpp
         include/morph/forms/forms.hpp
         include/morph/forms/blank_as.hpp
+        include/morph/forms/version.hpp
         include/morph/forms/choice.hpp
         include/morph/forms/i18n.hpp
         include/morph/util/rational.hpp
