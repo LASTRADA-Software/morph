@@ -97,6 +97,20 @@ struct Rig {
 
 }  // namespace
 
+// The value of request header @p name, found whatever case the client wrote its name in: Qt versions differ, and
+// header names are case-insensitive.
+static std::optional<std::string> headerValue(std::string_view request, std::string_view name) {
+    std::string lowered{request};
+    std::ranges::transform(lowered, lowered.begin(),
+                           [](unsigned char const letter) { return static_cast<char>(std::tolower(letter)); });
+    auto const start = lowered.find("\r\n" + std::string{name} + ": ");
+    if (start == std::string::npos) {
+        return std::nullopt;
+    }
+    auto const value = start + 2 + name.size() + 2;
+    return std::string{request.substr(value, request.find("\r\n", value) - value)};
+}
+
 // Mutation: leave out a part, or send the key in another header.
 TEST_CASE("qt_transcriber_posts_the_clip_model_format_and_key", "[qt][dictation]") {
     Rig rig{jsonAnswer(200, "OK", R"({"text":"hello there"})")};
@@ -106,7 +120,7 @@ TEST_CASE("qt_transcriber_posts_the_clip_model_format_and_key", "[qt][dictation]
     CHECK(**rig.done == "hello there");
     std::string const& sent = rig.server->received;
     CHECK(sent.starts_with("POST /v1/audio/transcriptions "));
-    CHECK(sent.contains("Authorization: Bearer " + std::string{kKey}));
+    CHECK(headerValue(sent, "authorization") == "Bearer " + std::string{kKey});
     CHECK(sent.contains(R"(name="file"; filename="audio.wav")"));
     CHECK(partValue(sent, "file") == "RIFF-clip-bytes");
     CHECK(partValue(sent, "model") == "whisper-1");
