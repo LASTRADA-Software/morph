@@ -2673,11 +2673,10 @@ private:
             resolveSpans(*table.widget, spans);
         }
         realizeCells(table, shown);
-        // The contiguous range only: a focused row kept beyond it is placed by its own `setRowIndex`. A table that
-        // realizes every row is not windowed, and is told no window.
-        if (!everyRow) {
-            table.widget->setRealizedWindow(lo, hi > lo ? hi - lo : 0, count);
-        }
+        // The contiguous range only: a focused row kept beyond it is placed by its own `setRowIndex`. Every source table
+        // is told it, one that realizes every row as the whole view: a backend takes the view's count from it. Whether
+        // spans are drawn is the span table's (`SpanTable::windowed`), not this call's.
+        table.widget->setRealizedWindow(lo, hi > lo ? hi - lo : 0, count);
         afterPass(table, total);
         table.lastCount = count;
         if (failure) {

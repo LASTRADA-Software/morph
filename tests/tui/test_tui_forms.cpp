@@ -294,3 +294,26 @@ TEST_CASE("tui forms: the header box of a paged table selects every row of the v
     INFO(client.drawn());
     CHECK(client.shows("5 picked"));
 }
+
+// The table sits in a column above a text, so it is as tall as it asks to be. Mutation: tell a source table that
+// realizes every row no window in `realizeWindow` (the terminal learns no row count, asks for the header's line only,
+// and the text takes the line its rows would have had).
+TEST_CASE("tui forms: a rows table below its threshold draws its rows before any focus", "[tui][forms][table]") {
+    TuiClient client;
+    auto screen = client.interpreter.mount(ui::testing::loadOrFail(R"({
+      "vocab": "ui/1", "id": "few", "state": { "rows": { "init": { "lit": [
+        { "id": 1, "n": "one" }, { "id": 2, "n": "two" }, { "id": 3, "n": "three" } ] } } },
+      "view": { "kind": "column", "children": [
+        { "kind": "table", "id": "t", "rows": { "ref": "rows" }, "key": { "row": "id" },
+          "columns": [ { "id": "n", "label": "Name" } ] },
+        { "kind": "text", "text": "after" } ] } })",
+                                                                   ui::testing::corpusCatalog()),
+                                           {}, client.backend);
+    REQUIRE(screen.has_value());
+    client.settle();
+    INFO(client.drawn());
+    CHECK(client.shows("one"));
+    CHECK(client.shows("two"));
+    CHECK(client.shows("three"));
+    CHECK(client.drawn().find("three") < client.drawn().find("after"));
+}
