@@ -100,6 +100,13 @@ public:
 
     std::expected<void, table::TableError> setSort(ui::SortChain /*sort*/) override { return {}; }
     std::expected<void, table::TableError> setFilter(table::FilterSpec /*filter*/) override { return {}; }
+    async::Completion<std::expected<table::DistinctValues, table::TableError>> distinctValues(
+        table::DistinctRequest /*request*/) override {
+        using Result = std::expected<table::DistinctValues, table::TableError>;
+        auto [completion, promise] = async::Completion<Result>::makeSettleable(_owner);
+        promise.resolve(Result{table::DistinctValues{}});
+        return std::move(completion);
+    }
     [[nodiscard]] ui::TableCountsView counts() const override { return ui::TableCountsView{.view = total()}; }
     void onChange(std::function<void(table::ViewChange const&)> handler) override { _handler = std::move(handler); }
 

@@ -50,6 +50,7 @@
 #include <morph/ui/mount.hpp>
 #include <morph/ui/table_config.hpp>
 #include <morph/ui/table_dialogs.hpp>
+#include <morph/ui/table_filter_menu.hpp>
 #include <morph/ui/table_rows.hpp>
 #include <morph/ui/table_views.hpp>
 #include <morph/ui/table_state.hpp>
@@ -306,6 +307,10 @@ public:
         }
         return set;
     }
+    async::Completion<std::expected<table::DistinctValues, table::TableError>> distinctValues(
+        table::DistinctRequest request) override {
+        return _inner->distinctValues(std::move(request));
+    }
     [[nodiscard]] TableCountsView counts() const override { return _inner->counts(); }
     void onChange(std::function<void(table::ViewChange const&)> handler) override { _handler = std::move(handler); }
 
@@ -361,7 +366,11 @@ private:
 /// `Table::columns`, what the user may change of them, the layout it holds, and what a change does beyond that.
 struct TableConfig {
     explicit TableConfig(reactive::Runtime& runtime)
-        : version{runtime, 0}, chooserOpen{runtime, false}, sortOpen{runtime, false}, groupDraft{runtime, GroupDraft{}} {}
+        : version{runtime, 0},
+          chooserOpen{runtime, false},
+          sortOpen{runtime, false},
+          groupDraft{runtime, GroupDraft{}},
+          filterMenu{std::make_unique<FilterMenu>(runtime)} {}
 
     /// The table's element, whose sort, status line and commands the gestures reach.
     ElementState* element = nullptr;
@@ -392,6 +401,26 @@ struct TableConfig {
     reactive::Signal<bool> chooserOpen;
     reactive::Signal<bool> sortOpen;
     reactive::Signal<GroupDraft> groupDraft;
+    /// The filters the table holds, tracked; empty for a table that filters nothing.
+    std::function<table::FilterSpec()> filters;
+    /// Gives the rows the user's filters and holds them; returns whether the rows took them, a refusal said in the
+    /// status line. Not called while the document binds the filters.
+    std::function<bool(table::FilterSpec const&)> setFilters;
+    /// Whether the document binds the filters: a user's change runs `onFiltersChange` and is neither held nor saved.
+    bool filtersBound = false;
+    /// The rows a filter menu's values are asked of.
+    std::function<TableRows*()> rows;
+    /// A column as a filter menu edits it, by id: its kind, its display and its units; none for a column that is not
+    /// filterable. Set by each mount, with what it shows.
+    std::function<std::optional<FilterTarget>(std::string const&)> filterTarget;
+    /// The groups the table declares: a `rows` table's `groups`, a model's table's description's.
+    std::function<std::vector<table::ColumnGroupInfo>()> declaredGroups;
+    /// A `Measure` column's dimensions and the units each can show, by id; none for another column.
+    std::function<std::vector<MenuDimension>(std::string const&)> dimensions;
+    /// The columns an open values list reads, which a table over `rows` keeps in use; empty when it closes.
+    std::function<void(std::vector<std::string> const&)> listing;
+    /// The filter menu, kept here so a new mount of the table keeps it open.
+    std::unique_ptr<FilterMenu> filterMenu;
 };
 
 namespace {
@@ -480,6 +509,38 @@ namespace {
             }
         }
     }
+    return Value{std::move(out)};
+}
+
+/// Filters as the `filters` element value and `onFiltersChange`'s event hold them: the filter's JSON, each group
+/// filter naming its declared group or its columns, never an empty one of the two.
+[[nodiscard]] Value filtersValueOf(table::FilterSpec const& filters) {
+    auto const json = parseJson(glz::write_json(filters).value_or("null"));
+    auto read = json ? valueFromJson(*json) : std::expected<Value, std::string>{Value{}};
+    ValueRecord const* const whole = read ? read->asRecord() : nullptr;
+    if (whole == nullptr) {
+        return Value{};
+    }
+    ValueRecord out = *whole;
+    ValueList groups;
+    if (auto const found = whole->find("groups"); found != whole->end() && found->second.asList() != nullptr) {
+        for (Value const& group : *found->second.asList()) {
+            ValueRecord const* const fields = group.asRecord();
+            if (fields == nullptr) {
+                continue;
+            }
+            ValueRecord kept = *fields;
+            if (auto const id = kept.find("group"); id != kept.end() && id->second == Value{std::string{}}) {
+                kept.erase(id);
+            }
+            if (auto const columns = kept.find("columns");
+                columns != kept.end() && columns->second.asList() != nullptr && columns->second.asList()->empty()) {
+                kept.erase(columns);
+            }
+            groups.emplace_back(std::move(kept));
+        }
+    }
+    out.insert_or_assign("groups", Value{std::move(groups)});
     return Value{std::move(out)};
 }
 
@@ -578,16 +639,23 @@ namespace {
     return ui::column(std::move(wrapper));
 }
 
-/// The entries of a menu whose commands the lowering carries out: the sort and arranging entries, "Reset columns",
-/// "Columns…" and "Sort…". A group's filter entry is shown disabled, so the group a user formed is named where its
-/// filter will be, while the filter menu is not lowered. The column's filter menu, display units and copy are not
-/// lowered, so their entries are not offered; a separator left at either end or beside another goes with them.
-[[nodiscard]] std::vector<TableMenuEntry> offeredEntries(std::vector<TableMenuEntry> entries) {
-    for (TableMenuEntry& entry : entries) {
-        if (!entry.entry.separator && entry.command == MenuCommand::FilterGroup) {
-            entry.entry.enabled = false;
-        }
+/// Draws a filter button on each column a filter menu edits, while the table offers its filters at all.
+/// @param config  The table's configuring, whose `filterTarget` says which columns filter.
+/// @param columns The mount's columns, in the order of `config.columns`.
+/// @param options The table's options; without `onFilter` no column draws a button.
+void markFilterable(TableConfig const& config, std::vector<TableColumn>& columns, TableOptions const& options) {
+    if (!options.onFilter || !config.filterTarget) {
+        return;
     }
+    for (std::size_t at = 0; at < columns.size() && at < config.columns.size(); ++at) {
+        columns.at(at).filterable = config.filterTarget(config.columns.at(at).id).has_value();
+    }
+}
+
+/// The entries of a menu whose commands the lowering carries out: the sort, filter and arranging entries, "Display
+/// unit", "Clear all filters", "Reset columns", "Columns…" and "Sort…". Copy is not lowered, so its entries are not
+/// offered; a separator left at either end or beside another goes with them.
+[[nodiscard]] std::vector<TableMenuEntry> offeredEntries(std::vector<TableMenuEntry> entries) {
     auto const offered = [](TableMenuEntry const& entry) {
         if (entry.entry.separator) {
             return true;
@@ -605,7 +673,10 @@ namespace {
             case MenuCommand::ResetColumns:
             case MenuCommand::Columns:
             case MenuCommand::SortDialog:
+            case MenuCommand::Filter:
             case MenuCommand::FilterGroup:
+            case MenuCommand::ClearAllFilters:
+            case MenuCommand::DisplayUnit:
                 return true;
             default:
                 return false;
@@ -831,6 +902,10 @@ public:
     std::expected<void, table::TableError> setFilter(table::FilterSpec filter) override {
         return _engine->setFilter(std::move(filter));
     }
+    async::Completion<std::expected<table::DistinctValues, table::TableError>> distinctValues(
+        table::DistinctRequest request) override {
+        return _engine->distinctValues(std::move(request));
+    }
     /// The engine's counts: the view's rows, not the page's entries, and nothing known while held back.
     [[nodiscard]] TableCountsView counts() const override { return _engine->counts(); }
     void onChange(std::function<void(table::ViewChange const&)> handler) override { _handler = std::move(handler); }
@@ -921,10 +996,15 @@ struct RowsTable {
     reactive::TimerHandle loadTimer;
     /// Whether the user changed the arrangement or the selection: a stored state that arrives later is not applied.
     bool touched = false;
-    /// The sort the engine was given, without the group's key, and the columns in use for it.
+    /// The sort the engine was given, without the group's key; the filters it was given; the columns an open values
+    /// list reads; and the columns in use for all three.
     SortChain sort;
+    table::FilterSpec filter;
+    std::vector<std::string> listedColumns;
     std::vector<std::string> used;
     bool grouped = false;
+    /// The column groups the node declares (`groups`), which the source declares to the engine.
+    std::vector<table::ColumnGroupInfo> groups;
     /// What has been reported once: the list over the client's bound, and an invalid cell of a sort column.
     bool boundReported = false;
     bool invalidReported = false;
@@ -4596,6 +4676,12 @@ Value ScreenCore::elementValue(ElementState const& element, std::string_view nam
                                           : element.modelTable != nullptr ? &element.modelTable->config
                                                                           : nullptr;
         return config == nullptr ? Value{} : layoutElementValue(*config, name);
+    }
+    if (kind == "table" && name == "filters") {
+        TableConfig const* const config = element.rowsTable != nullptr     ? &element.rowsTable->config
+                                          : element.modelTable != nullptr ? &element.modelTable->config
+                                                                          : nullptr;
+        return config == nullptr || !config->filters ? Value{} : filtersValueOf(config->filters());
     }
     if (kind == "table" && element.modelTable != nullptr && element.modelTable->window != nullptr) {
         if (std::optional<Value> value = modelTableValue(*element.modelTable, name)) {
@@ -8794,6 +8880,31 @@ Node ScreenCore::lowerRows(DocNode const& node, LowerCtx const& ctx, ElementStat
                                ? std::optional{displayOf(*column, {}, [&](ExprPtr const& expr) { return once(ctx, expr); })}
                                : std::nullopt);
     }
+    // A column's filter menu: a column part's values, of the kind its cells infer, shown by its display parts. A
+    // derived column and one whose part says `filterable: false` have none.
+    table->config.filterTarget = [table, cells, displays](std::string const& id) -> std::optional<FilterTarget> {
+        std::vector<LayoutColumn> const& arranged = table->config.columns;
+        auto const found = std::ranges::find(arranged, id, &LayoutColumn::id);
+        if (found == arranged.end() || table->source == nullptr) {
+            return std::nullopt;
+        }
+        auto const at = static_cast<std::size_t>(found - arranged.begin());
+        DocNode const* const part = at < cells.size() ? cells.at(at) : nullptr;
+        if (part == nullptr || part->id.empty() || !part->flag("filterable", true)) {
+            return std::nullopt;
+        }
+        std::span<table::ColumnInfo const> const infos = table->source->columns();
+        auto const info = std::ranges::find(infos, id, &table::ColumnInfo::id);
+        if (info == infos.end()) {
+            return std::nullopt;
+        }
+        FilterTarget target;
+        target.column = id;
+        target.label = found->label;
+        target.shown = table::TableColumn{.info = *info, .display = displays.at(at).value_or(table::ColumnDisplay{})};
+        target.listed = true;
+        return target;
+    };
     // The row scopes `onActivate` runs in, by the row's canonical key, and the count kept at the last prune.
     struct Registry {
         std::map<std::string, std::weak_ptr<RtScope>, std::less<>> scopes;
@@ -9036,6 +9147,7 @@ Node ScreenCore::lowerRows(DocNode const& node, LowerCtx const& ctx, ElementStat
     }
     // The header's sort chain and menus, and the columns' arrangement; the column chooser and the sort dialog.
     Node dialogs = configureTable(table->config, ctx, options, own);
+    markFilterable(table->config, columns, options);
     options.onActivate = [this, ctx, element, registry, commands = node.event("onActivate")](Key const& key) {
         Value const activated = valueOfKey(key);
         session.asUser([&] {
@@ -9261,6 +9373,7 @@ namespace {
 void startRowsEngine(RowsTable& table, reactive::Runtime& runtime) {
     auto registry = registryOfUnits(table.units, table.unitsSeen);
     auto source = std::make_shared<ValueRowsSource>(runtime, table.columns, table.keyOfRow, registry);
+    source->setGroups(table.groups);
     // The runs are the leading key of every sort the engine is given, a column the engine knows from its start.
     if (table.byOf) {
         source->setGroup(table.byOf, table.units);
@@ -9307,6 +9420,58 @@ void startRowsEngine(RowsTable& table, reactive::Runtime& runtime) {
     if (!filter.empty()) {
         static_cast<void>(engine->setFilter(filter));
     }
+}
+
+/// @brief The columns a table over `rows` keeps in use: those a sort, filters and an open values list read, each once.
+/// @param table  The table, whose declared groups and open list are read.
+/// @param sort   The sort.
+/// @param filter The filters.
+/// @return The columns' ids.
+[[nodiscard]] std::vector<std::string> usedColumns(RowsTable const& table, SortChain const& sort,
+                                                   table::FilterSpec const& filter) {
+    std::vector<std::string> out;
+    auto const add = [&out](std::string const& id) {
+        if (!std::ranges::contains(out, id)) {
+            out.push_back(id);
+        }
+    };
+    for (table::SortKey const& key : sort) {
+        add(key.column);
+    }
+    for (auto const& [id, column] : filter.columns) {
+        static_cast<void>(column);
+        add(id);
+    }
+    for (table::GroupFilter const& group : filter.groups) {
+        auto const declared = std::ranges::find(table.groups, group.group, &table::ColumnGroupInfo::id);
+        std::vector<std::string> const members = !group.group.empty() && declared != table.groups.end()
+                                                     ? declared->columns
+                                                     : group.columns;
+        for (std::string const& id : members) {
+            add(id);
+        }
+    }
+    for (std::string const& id : table.listedColumns) {
+        add(id);
+    }
+    return out;
+}
+
+/// @brief Puts columns in use and takes the others out: the new ones first, so a column both read keeps its cells.
+/// @param table The table.
+/// @param next  The columns in use from now.
+void useColumns(RowsTable& table, std::vector<std::string> next) {
+    for (std::string const& column : next) {
+        if (!std::ranges::contains(table.used, column)) {
+            table.source->use(column);
+        }
+    }
+    for (std::string const& column : table.used) {
+        if (!std::ranges::contains(next, column)) {
+            table.source->unuse(column);
+        }
+    }
+    table.used = std::move(next);
 }
 
 /// @brief A count of rows with its thousands grouped by commas, as a diagnostic writes it.
@@ -9412,6 +9577,45 @@ std::unique_ptr<RowsTable> ScreenCore::makeRowsTable(ElementState& element, std:
         }
     }
     config.maxSortKeys = [sortBound] { return sortBound; };
+    // The groups the node declares, read once: their ids, labels and columns are literals the loader checked.
+    for (DocNodePtr const& part : node.partList("groups")) {
+        table::ColumnGroupInfo group{.id = part->id, .label = part->id, .columns = {}};
+        if (ExprPtr const label = part->prop("label")) {
+            group.label = runtime().untracked([&] { return textOf(evalIn(scope, bindings.get(), label), scope.formatting()); });
+        }
+        if (ExprPtr const members = part->prop("columns"); members && members->kind == ExprKind::Literal) {
+            if (ValueList const* const ids = members->literal.asList()) {
+                for (Value const& id : *ids) {
+                    if (std::string const* const name = id.asString()) {
+                        group.columns.push_back(*name);
+                    }
+                }
+            }
+        }
+        table.groups.push_back(std::move(group));
+    }
+    // The filters the user set from the header: the engine's, held here, and the columns they read kept in use.
+    config.filters = [&table] {
+        static_cast<void>(table.version.get());
+        return table.filter;
+    };
+    config.setFilters = [this, &table](table::FilterSpec const& filter) {
+        useColumns(table, usedColumns(table, table.sort, filter));
+        if (auto const set = table.engine->setFilter(filter); !set) {
+            useColumns(table, usedColumns(table, table.sort, table.filter));
+            rowsTableMessage(table, "The filter is refused: " + set.error().message);
+            return false;
+        }
+        table.filter = filter;
+        table.bump();
+        return true;
+    };
+    config.rows = [&table]() -> TableRows* { return table.engine.get(); };
+    config.declaredGroups = [&table] { return table.groups; };
+    config.listing = [&table](std::vector<std::string> const& columns) {
+        table.listedColumns = columns;
+        useColumns(table, usedColumns(table, table.sort, table.filter));
+    };
     config.message = [this, &table](std::string text) { rowsTableMessage(table, std::move(text)); };
     config.touch = [this, &table] {
         table.touched = true;
@@ -9610,23 +9814,7 @@ void ScreenCore::sortRowsTable(RowsTable& table, Value const& sort) {
         }
     }
     // The columns the new keys read are in use before the old ones leave, so a column both read keeps its cells.
-    std::vector<std::string> next;
-    for (table::SortKey const& key : chain) {
-        if (!std::ranges::contains(next, key.column)) {
-            next.push_back(key.column);
-        }
-    }
-    for (std::string const& column : next) {
-        if (!std::ranges::contains(table.used, column)) {
-            table.source->use(column);
-        }
-    }
-    for (std::string const& column : table.used) {
-        if (!std::ranges::contains(next, column)) {
-            table.source->unuse(column);
-        }
-    }
-    table.used = std::move(next);
+    useColumns(table, usedColumns(table, chain, table.filter));
     SortChain ordered;
     if (table.grouped) {
         ordered.push_back(table::SortKey{.column = std::string{kGroupRunColumn}, .dir = table::SortDirection::Ascending});
@@ -9695,10 +9883,20 @@ void ScreenCore::storedRowsState(RowsTable& table, std::optional<std::string> co
         column.filterable = true;
         description.columns.push_back(std::move(column));
     }
+    description.groups = table.groups;
     table::FitReport fitted;
     table::StateDocument const document = table::fitState(std::move(*read), description, fitted);
     if (element.sortBound == nullptr && document.sort) {
         element.sort.set(sortValueOf(*document.sort));
+    }
+    if (document.filters && !document.filters->empty()) {
+        useColumns(table, usedColumns(table, table.sort, *document.filters));
+        if (table.engine->setFilter(*document.filters)) {
+            table.filter = *document.filters;
+            table.bump();
+        } else {
+            useColumns(table, usedColumns(table, table.sort, table.filter));
+        }
     }
     // A bound layout is the document's: the stored one is neither applied nor saved over it.
     if (table.config.bound == nullptr && document.layout) {
@@ -10011,6 +10209,26 @@ void ScreenCore::wireModelTable(ElementState& element) {
             model.states->changed(*model.stateKey, document, parts);
         }
     };
+    // The filters the rows hold; the user's go to the rows through `ObservedRows`, which marks them the user's.
+    config.filters = [&model] {
+        static_cast<void>(model.version.get());
+        return model.filter;
+    };
+    config.setFilters = [this, &model, &element](table::FilterSpec const& filter) {
+        if (auto const set = model.rows->setFilter(filter); !set) {
+            tableMessage(element, "The filter is refused: " + set.error().message);
+            return false;
+        }
+        model.filter = filter;
+        model.heldFilter.reset();
+        model.bump();
+        return true;
+    };
+    config.rows = [&model]() -> TableRows* { return model.rows.get(); };
+    config.declaredGroups = [&model] {
+        table::TableDescription const* const description = model.window->description();
+        return description == nullptr ? std::vector<table::ColumnGroupInfo>{} : description->groups;
+    };
     // A bound layout is controlled, as a bound sort is: any expression but a literal `null` binds it.
     if (ExprPtr const layout = node.prop("layout");
         layout && (layout->kind != ExprKind::Literal || !layout->literal.isNull())) {
@@ -10144,6 +10362,7 @@ void ScreenCore::wireModelTable(ElementState& element) {
         }
     } else if (ExprPtr const filters = node.prop("filters")) {
         model.filtersBound = true;
+        config.filtersBound = true;
         scope.nodes.effect([this, &scope, &element, filters] {
             Value const value = evalIn(scope, nullptr, filters);
             runtime().untracked([&] {
@@ -10795,25 +11014,207 @@ Node ScreenCore::configureTable(TableConfig& config, LowerCtx const& ctx, TableO
     if (!config.menus) {
         return nullptr;
     }
+    // Filters from the header. A user's filters go to the rows, and are held and saved, unless the document binds
+    // them; then `onFiltersChange` runs with `event` the new filters.
+    FilterMenu& menu = *config.filterMenu;
+    auto const refilter = [this, ctx, &config, keep, commands = node.event("onFiltersChange")](
+                              table::FilterSpec const& spec) {
+        static_cast<void>(keep);
+        bool applied = true;
+        Value const event = filtersValueOf(spec);
+        runtime().batch([&] {
+            if (!config.filtersBound) {
+                session.asUser([&] {
+                    session.noteWrite();
+                    applied = config.setFilters && config.setFilters(spec);
+                });
+                if (applied && config.save) {
+                    table::StateDocument changed;
+                    changed.filters = spec;
+                    config.save(changed, StateParts::Filters);
+                }
+            }
+            if (applied) {
+                runEvent(commands, ctx, event);
+            }
+        });
+        return applied;
+    };
+    auto const filtersNow = [&config] { return config.filters ? config.filters() : table::FilterSpec{}; };
+    // Every group the table has: those it declares, then those its user formed, each with whether it was formed.
+    auto const groupsNow = [&config, layoutHeld] {
+        std::vector<std::pair<table::ColumnGroupInfo, bool>> out;
+        if (config.declaredGroups) {
+            for (table::ColumnGroupInfo& group : config.declaredGroups()) {
+                out.emplace_back(std::move(group), false);
+            }
+        }
+        for (table::ColumnGroupInfo const& group : layoutHeld().groups()) {
+            out.emplace_back(group, true);
+        }
+        return out;
+    };
+    // A menu names a formed group by its id after U+001F, so it never meets a declared group's id.
+    auto const groupArgument = [](table::ColumnGroupInfo const& group, bool formed) {
+        return formed ? "\x1F" + group.id : group.id;
+    };
+    auto const columnTarget = [&config](std::string const& id) -> std::optional<FilterTarget> {
+        return config.filterTarget ? config.filterTarget(id) : std::nullopt;
+    };
+    auto const groupTarget = [columnTarget](table::ColumnGroupInfo const& group,
+                                            bool formed) -> std::optional<FilterTarget> {
+        if (group.columns.empty()) {
+            return std::nullopt;
+        }
+        std::optional<FilterTarget> target = columnTarget(group.columns.front());
+        if (!target) {
+            return std::nullopt;
+        }
+        target->column.clear();
+        target->group = formed ? std::string{} : group.id;
+        target->columns = group.columns;
+        target->formed = formed;
+        target->label = group.label;
+        return target;
+    };
+    // The columns a list reads are put in use before the menu reads the column's kind: a table over `rows` infers
+    // it from the cells.
+    auto const openColumn = [this, &config, &menu, columnTarget](std::string const& id) {
+        runtime().untracked([&] {
+            if (config.listing) {
+                config.listing({id});
+            }
+            if (std::optional<FilterTarget> target = columnTarget(id)) {
+                menu.open(std::move(*target));
+            } else if (config.listing) {
+                config.listing({});
+            }
+        });
+    };
+    auto const openGroup = [this, &config, &menu, groupsNow, groupArgument, groupTarget](std::string const& argument) {
+        runtime().untracked([&] {
+            for (auto const& [group, formed] : groupsNow()) {
+                if (groupArgument(group, formed) != argument) {
+                    continue;
+                }
+                if (config.listing) {
+                    config.listing(group.columns);
+                }
+                if (std::optional<FilterTarget> target = groupTarget(group, formed)) {
+                    menu.open(std::move(*target));
+                } else if (config.listing) {
+                    config.listing({});
+                }
+                return;
+            }
+        });
+    };
+    // The menu outlives a mount, and `refilter` holds the mount's scope: the menu reaches it weakly, through what the
+    // mount keeps, so the element does not keep its own scope alive.
+    auto const applying = std::make_shared<std::function<bool(table::FilterSpec const&)>>(refilter);
+    menu.setHost(FilterMenuHost{
+        .rows = config.rows,
+        .filters = [this, filtersNow] { return runtime().untracked(filtersNow); },
+        .apply =
+            [weak = std::weak_ptr{applying}](table::FilterSpec const& spec) {
+                auto const live = weak.lock();
+                return live != nullptr && (*live)(spec);
+            },
+        .touch = config.touch,
+        .listing = config.listing,
+        .scheduler = session.options().scheduler,
+        .debounce = session.options().tableFilterDebounce,
+        .format = ctx.scope->formatting(),
+    });
+    // Which columns this mount offers a filter on, read once with its columns.
+    auto const filterable = std::make_shared<std::vector<bool>>();
+    runtime().untracked([&] {
+        for (LayoutColumn const& column : *columns) {
+            filterable->push_back(columnTarget(column.id).has_value());
+        }
+    });
+    options.onFilter = [&config, columns, filterable, openColumn, applying](std::size_t index) {
+        static_cast<void>(applying);
+        config.touch();
+        if (index < columns->size() && filterable->at(index)) {
+            openColumn(columns->at(index).id);
+        }
+    };
+    // The columns with a filter, whose headers say so, hidden ones included: the filter keeps applying while its
+    // column is hidden, and the header says so again once it is shown.
+    options.filtered = slotProp<std::vector<std::size_t>>([columns, filtersNow] {
+        table::FilterSpec const filters = filtersNow();
+        std::vector<std::size_t> out;
+        for (std::size_t at = 0; at < columns->size(); ++at) {
+            if (filters.columns.contains(columns->at(at).id)) {
+                out.push_back(at);
+            }
+        }
+        return out;
+    });
+    // A group's header row stands over its columns while they stand side by side in the layout, in the group's order.
+    auto const sideBySide = [layoutHeld, groupsNow, filtersNow, groupArgument] {
+        std::vector<std::pair<TableColumnGroup, std::string>> out;
+        table::ColumnLayout const layout = layoutHeld();
+        std::vector<std::string> const visible = layout.visible();
+        table::FilterSpec const filters = filtersNow();
+        for (auto const& [group, formed] : groupsNow()) {
+            auto const first = std::ranges::find(visible, group.columns.empty() ? std::string{} : group.columns.front());
+            auto const at = static_cast<std::size_t>(first - visible.begin());
+            bool together = first != visible.end() && at + group.columns.size() <= visible.size();
+            for (std::size_t offset = 0; together && offset < group.columns.size(); ++offset) {
+                together = visible.at(at + offset) == group.columns.at(offset);
+            }
+            if (!together) {
+                continue;
+            }
+            FilterTarget probe;
+            probe.group = formed ? std::string{} : group.id;
+            probe.columns = group.columns;
+            probe.formed = formed;
+            out.emplace_back(TableColumnGroup{.label = group.label,
+                                              .first = at,
+                                              .count = group.columns.size(),
+                                              .filtered = groupFilterIndex(filters, probe).has_value()},
+                             groupArgument(group, formed));
+        }
+        return out;
+    };
+    options.columnGroups = slotProp<std::vector<TableColumnGroup>>([sideBySide] {
+        std::vector<TableColumnGroup> out;
+        for (auto& [group, argument] : sideBySide()) {
+            static_cast<void>(argument);
+            out.push_back(std::move(group));
+        }
+        return out;
+    });
+    options.onGroupFilter = [this, &config, sideBySide, openGroup](std::size_t index) {
+        config.touch();
+        auto const shown = runtime().untracked(sideBySide);
+        if (index < shown.size()) {
+            openGroup(shown.at(index).second);
+        }
+    };
     // A menu is built when it opens, and again when an entry is chosen, from the chain and the layout of the moment,
     // so the path the backend reports names the entry it showed.
-    auto const entriesOf = [this, &config, &element, columns, sortable, layoutHeld](
-                               std::optional<std::size_t> column) -> std::vector<TableMenuEntry> {
+    auto const entriesOf = [this, &config, &element, columns, sortable, filterable, layoutHeld, groupsNow, groupArgument,
+                            filtersNow](std::optional<std::size_t> column) -> std::vector<TableMenuEntry> {
         return runtime().untracked([&]() -> std::vector<TableMenuEntry> {
             table::ColumnLayout const layout = layoutHeld();
-            // The groups the user formed, each named in its members' menus and in the table's.
-            auto const groupsOf = [&layout](std::string_view id) {
+            // The groups, each named in its members' menus and in the table's.
+            auto const groupsOf = [&](std::string_view id) {
                 std::vector<MenuGroup> out;
-                for (table::ColumnGroupInfo const& group : layout.groups()) {
+                for (auto const& [group, formed] : groupsNow()) {
                     if (id.empty() || std::ranges::contains(group.columns, id)) {
-                        out.push_back(MenuGroup{.id = group.id, .label = group.label, .columns = group.columns.size()});
+                        out.push_back(MenuGroup{
+                            .id = groupArgument(group, formed), .label = group.label, .columns = group.columns.size()});
                     }
                 }
                 return out;
             };
             if (!column) {
-                return offeredEntries(
-                    tableMenu(TableMenuInput{.anyFilter = false, .groups = groupsOf({}), .allowed = config.allowed}));
+                return offeredEntries(tableMenu(TableMenuInput{
+                    .anyFilter = !filtersNow().empty(), .groups = groupsOf({}), .allowed = config.allowed}));
             }
             if (*column >= columns->size()) {
                 return {};
@@ -10822,10 +11223,20 @@ Node ScreenCore::configureTable(TableConfig& config, LowerCtx const& ctx, TableO
             LayoutColumn const& at = columns->at(*column);
             SortChain const chain = sortChainOf(tableSort(element));
             auto const held = std::ranges::find(chain, at.id, &table::SortKey::column);
+            std::vector<MenuDimension> dimensions =
+                config.dimensions ? config.dimensions(at.id) : std::vector<MenuDimension>{};
+            table::ColumnLayoutValue const value = layout.value();
+            if (auto const units = value.units.find(at.id); units != value.units.end()) {
+                for (MenuDimension& dimension : dimensions) {
+                    if (auto const chosen = units->second.find(dimension.dimension); chosen != units->second.end()) {
+                        dimension.chosen = chosen->second;
+                    }
+                }
+            }
             return offeredEntries(headerMenu(HeaderMenuInput{
                 .column = at,
                 .sortable = sortable->at(*column),
-                .filterable = false,
+                .filterable = filterable->at(*column),
                 .sortPlace = held == chain.end() ? std::nullopt
                                                  : std::optional{static_cast<std::size_t>(held - chain.begin())},
                 .chainSize = chain.size(),
@@ -10833,7 +11244,7 @@ Node ScreenCore::configureTable(TableConfig& config, LowerCtx const& ctx, TableO
                 .visibleIndex = static_cast<std::size_t>(std::ranges::find(visible, at.id) - visible.begin()),
                 .visibleCount = visible.size(),
                 .pinned = layout.pinned(),
-                .dimensions = {},
+                .dimensions = std::move(dimensions),
                 .groups = groupsOf(at.id),
                 .allowed = config.allowed,
             }));
@@ -10843,8 +11254,8 @@ Node ScreenCore::configureTable(TableConfig& config, LowerCtx const& ctx, TableO
         std::vector<TableMenuEntry> const entries = entriesOf(column);
         return menuEntries(entries);
     };
-    options.onMenu = [&config, entriesOf, sortBy, arrange, columns](std::optional<std::size_t> column,
-                                                                    std::vector<std::size_t> const& path) {
+    options.onMenu = [&config, &menu, entriesOf, sortBy, arrange, columns, openColumn, openGroup, refilter](
+                         std::optional<std::size_t> column, std::vector<std::size_t> const& path) {
         config.touch();
         std::vector<TableMenuEntry> const entries = entriesOf(column);
         TableMenuEntry const* const entry = chosen(entries, path);
@@ -10890,8 +11301,31 @@ Node ScreenCore::configureTable(TableConfig& config, LowerCtx const& ctx, TableO
             case MenuCommand::SortDialog:
                 config.sortOpen.set(true);
                 break;
+            case MenuCommand::Filter:
+                if (!id.empty()) {
+                    openColumn(id);
+                }
+                break;
+            case MenuCommand::FilterGroup:
+                openGroup(entry->argument);
+                break;
+            case MenuCommand::ClearAllFilters:
+                menu.close();
+                static_cast<void>(refilter(table::FilterSpec{}));
+                break;
+            case MenuCommand::DisplayUnit: {
+                // Choosing the checked unit clears it: the cells show their own units again.
+                std::size_t const cut = entry->argument.find('\x1F');
+                if (cut != std::string::npos && !id.empty()) {
+                    std::string const unit = entry->argument.substr(cut + 1);
+                    arrange(SetDisplayUnit{.id = id,
+                                           .dimension = entry->argument.substr(0, cut),
+                                           .unit = entry->entry.checked == true ? std::nullopt : std::optional{unit}});
+                }
+                break;
+            }
             default:
-                // `offeredEntries` offers no other entry, and a group's filter entry is disabled.
+                // `offeredEntries` offers no other entry.
                 break;
         }
     };
@@ -10922,7 +11356,34 @@ Node ScreenCore::configureTable(TableConfig& config, LowerCtx const& ctx, TableO
                 arrange(FormGroup{.label = std::move(label), .columns = std::move(members)});
                 return runtime().untracked([&] { return layoutHeld().groups().size(); }) > before;
             },
-        .onRemoveGroup = [arrange](std::string const& id) { arrange(RemoveGroup{.id = id}); },
+        // A removed group takes its filter with it: the group filter that names the group's columns.
+        .onRemoveGroup =
+            [this, &config, &menu, arrange, layoutHeld, filtersNow, refilter](std::string const& id) {
+                std::vector<std::string> members;
+                std::size_t const before = runtime().untracked([&] {
+                    table::ColumnLayout const layout = layoutHeld();
+                    auto const group = std::ranges::find(layout.groups(), id, &table::ColumnGroupInfo::id);
+                    if (group != layout.groups().end()) {
+                        members = group->columns;
+                    }
+                    return layout.groups().size();
+                });
+                arrange(RemoveGroup{.id = id});
+                if (runtime().untracked([&] { return layoutHeld().groups().size(); }) >= before) {
+                    return;
+                }
+                FilterMenuState const& open = runtime().untracked([&]() -> FilterMenuState const& { return menu.state(); });
+                if (open.open && open.target.formed && open.target.columns == members) {
+                    menu.close();
+                }
+                table::FilterSpec spec = runtime().untracked(filtersNow);
+                auto const dropped = std::erase_if(spec.groups, [&](table::GroupFilter const& group) {
+                    return group.group.empty() && group.columns == members;
+                });
+                if (dropped > 0 && config.setFilters) {
+                    static_cast<void>(refilter(spec));
+                }
+            },
         .onClose =
             [&config] {
                 config.chooserOpen.set(false);
@@ -10957,7 +11418,7 @@ Node ScreenCore::configureTable(TableConfig& config, LowerCtx const& ctx, TableO
             },
         .onClose = [&config] { config.sortOpen.set(false); },
     });
-    return ui::column(Column{.children = {std::move(chooser), std::move(sorter)}});
+    return ui::column(Column{.children = {std::move(chooser), std::move(sorter), filterMenuDialog(menu)}});
 }
 
 Node ScreenCore::lowerModelTable(DocNode const& node, LowerCtx const& ctx, ElementState* element) {
@@ -11453,18 +11914,77 @@ Node ScreenCore::modelTableOf(DocNode const& node, LowerCtx const& ctx, ElementS
     };
     options.highlight = slotProp<std::optional<TableHighlight>>([&model] { return model.highlight.get(); });
     // The header's sort chain and menus, and the columns' arrangement; the column chooser and the sort dialog.
-    Node dialogs = configureTable(model.config, ctx, options, nullptr);
-    // The columns with a filter, whose headers say so: the filters the rows hold, which a new query brings.
-    options.filtered = slotProp<std::vector<std::size_t>>([&model, ids] {
-        static_cast<void>(model.version.get());
-        std::vector<std::size_t> out;
-        for (std::size_t at = 0; at < ids.size(); ++at) {
-            if (model.filter.columns.contains(ids.at(at))) {
-                out.push_back(at);
-            }
+    // A column's filter menu shows its values as the column shows its cells, and reads a measure's operand with the
+    // description's units.
+    {
+        auto const described = std::make_shared<table::TableDescription const>(*description);
+        auto const labels = std::make_shared<std::vector<std::string>>();
+        auto const refused = std::make_shared<std::vector<bool>>();
+        for (std::size_t at = 0; at < columns.size(); ++at) {
+            labels->push_back(columns.at(at).label);
+            refused->push_back(parts.at(at) != nullptr && !parts.at(at)->flag("filterable", true));
         }
-        return out;
-    });
+        auto const unitsOf = [described](table::TableColumn const& column) {
+            std::vector<std::string> dimensions = column.info.dimensions;
+            if (dimensions.empty()) {
+                for (table::UnitInfo const& unit : described->units) {
+                    if (!std::ranges::contains(dimensions, unit.dimension)) {
+                        dimensions.push_back(unit.dimension);
+                    }
+                }
+            }
+            std::vector<MenuDimension> out;
+            for (std::string const& dimension : dimensions) {
+                MenuDimension entry{.dimension = dimension, .units = {}, .chosen = {}};
+                for (table::UnitInfo const& unit : described->units) {
+                    if (unit.dimension == dimension) {
+                        entry.units.push_back(unit.id);
+                    }
+                }
+                if (!entry.units.empty()) {
+                    out.push_back(std::move(entry));
+                }
+            }
+            return out;
+        };
+        bool const listed = described->capabilities.distinct && node.name("action").empty();
+        model.config.filterTarget = [shown, displayUnits, registry, described, labels, refused, unitsOf,
+                                     listed](std::string const& id) -> std::optional<FilterTarget> {
+            auto const found = std::ranges::find_if(*shown, [&id](table::TableColumn const& column) {
+                return column.info.id == id;
+            });
+            if (found == shown->end() || !found->filterable) {
+                return std::nullopt;
+            }
+            auto const at = static_cast<std::size_t>(found - shown->begin());
+            if (refused->at(at)) {
+                return std::nullopt;
+            }
+            FilterTarget target;
+            target.column = id;
+            target.label = labels->at(at);
+            target.shown = *found;
+            target.units = displayUnits->at(at);
+            target.unitList = described->units;
+            if (found->info.kind == table::ColumnKind::Measure) {
+                for (MenuDimension const& dimension : unitsOf(*found)) {
+                    target.unitChoices.insert(target.unitChoices.end(), dimension.units.begin(), dimension.units.end());
+                }
+            }
+            target.listed = listed;
+            target.keep = registry;
+            return target;
+        };
+        model.config.dimensions = [shown, unitsOf](std::string const& id) {
+            auto const found = std::ranges::find_if(*shown, [&id](table::TableColumn const& column) {
+                return column.info.id == id;
+            });
+            return found == shown->end() || found->info.kind != table::ColumnKind::Measure ? std::vector<MenuDimension>{}
+                                                                                           : unitsOf(*found);
+        };
+    }
+    Node dialogs = configureTable(model.config, ctx, options, nullptr);
+    markFilterable(model.config, columns, options);
     options.onActivate = [this, ctx, &element, &model, commands = activateCommands](Key const& key) {
         Value const activated = valueOfKey(key);
         session.asUser([&] {
