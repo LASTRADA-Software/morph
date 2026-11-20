@@ -381,6 +381,22 @@ struct CopyGathered {
 /// Called once with what a copy gathered, or with the message that says why it could not.
 using CopyDone = std::function<void(std::expected<CopyGathered, std::string>)>;
 
+/// What the view name dialog names a view for.
+enum class ViewNaming : std::uint8_t {
+    Save,     ///< "Save view…": a name the user already has replaces that view.
+    Rename,   ///< "Rename view…": the view the arrangement was taken from.
+    Publish,  ///< "Publish view…": a name the shared views already have replaces that one.
+};
+
+/// The view name dialog: whether it is open, what for, and the name typed.
+struct ViewDialog {
+    bool open = false;
+    ViewNaming purpose = ViewNaming::Save;
+    std::string name;
+
+    bool operator==(ViewDialog const&) const = default;
+};
+
 /// What a table keeps of its configuring across every mount of it: the columns its layout arranges, in the order of
 /// `Table::columns`, what the user may change of them, the layout it holds, and what a change does beyond that.
 ///
@@ -394,7 +410,8 @@ struct TableConfig {
           chooserOpen{runtime, false},
           sortOpen{runtime, false},
           groupDraft{runtime, GroupDraft{}},
-          filterMenu{std::make_unique<FilterMenu>(runtime)} {}
+          filterMenu{std::make_unique<FilterMenu>(runtime)},
+          viewDialog{runtime, ViewDialog{}} {}
 
     /// The table's element, whose sort, status line and commands the gestures reach.
     ElementState* element = nullptr;
@@ -452,6 +469,18 @@ struct TableConfig {
     std::function<void(std::vector<Key>, std::vector<std::string> const&, CopyDone)> gather;
     /// The latest copy: a copy whose rows arrive after a later one started writes nothing.
     std::uint64_t copies = 0;
+    /// The saved view the arrangement was taken from, the state's `view`, and whether it is a shared one applied from
+    /// "Shared views"; a stored `view` names one of the user's own.
+    std::optional<std::string> savedView;
+    bool viewShared = false;
+    /// The table's saved views, which the table's element holds beside this; null for a table that keeps no state.
+    TableViews* views = nullptr;
+    /// The description a saved view is fitted to, as a stored state is; none while the table has none.
+    std::function<std::optional<table::TableDescription>()> description;
+    /// The view name dialog, kept here so a new mount of the table keeps it open.
+    reactive::Signal<ViewDialog> viewDialog;
+    /// What a views change answers into: nothing once the configuring is gone.
+    async::CallbackScope viewsScope;
 
     /// Starts a mount: the slots it sets are its own until a later mount starts.
     void beginMount() { ++_mount; }
@@ -716,8 +745,8 @@ void markFilterable(TableConfig const& config, std::vector<TableColumn>& columns
 }
 
 /// The entries of a menu whose commands the lowering carries out: the sort, filter and arranging entries, "Display
-/// unit", "Clear all filters", "Reset columns", "Columns…", "Sort…", "Copy" and "Copy with headers". Any other is
-/// not offered; a separator left at either end or beside another goes with it.
+/// unit", "Clear all filters", "Reset columns", "Columns…", "Sort…", "Views", "Copy" and "Copy with headers". Any
+/// other is not offered; a separator left at either end or beside another goes with it.
 [[nodiscard]] std::vector<TableMenuEntry> offeredEntries(std::vector<TableMenuEntry> entries) {
     auto const offered = [](TableMenuEntry const& entry) {
         if (entry.entry.separator) {
@@ -742,6 +771,7 @@ void markFilterable(TableConfig const& config, std::vector<TableColumn>& columns
             case MenuCommand::DisplayUnit:
             case MenuCommand::Copy:
             case MenuCommand::CopyWithHeaders:
+            case MenuCommand::ApplyView:
                 return true;
             default:
                 return false;
@@ -839,9 +869,8 @@ struct ModelTable {
     SortChain sort;
     table::FilterSpec filter;
     /// The column layout, which the stored state, a `columns` point and the user's gestures set, and the saved
-    /// view's name, as the stored state or a `saved` point gave it.
+    /// view's name, as the stored state, a `saved` point or the "Views" menu gave it.
     TableConfig config;
-    std::optional<std::string> view;
     /// Whether the document binds the filters: they are neither restored nor saved.
     bool filtersBound = false;
     /// A filter set while the kinds of a typed list action's columns wait for its first reply, applied once they
@@ -9670,6 +9699,51 @@ inline constexpr std::size_t kClientCells = 1'000'000;
 
 }  // namespace
 
+namespace {
+
+/// @brief Loads a table's state and its saved views in the same turn, so a store that batches reads them in one call,
+///        and calls @p done once both have answered: the default view decides what a table with no stored state
+///        starts from. Views that cannot be read are left unsaid.
+/// @param states The session's table states.
+/// @param key    The table's state key.
+/// @param views  The table's saved views.
+/// @param scope  The table's scope: nothing is called once it is gone.
+/// @param done   Called with the stored state's text, none when nothing is stored, and the reason its load failed,
+///               empty when it did not.
+void loadStateAndViews(TableStates& states, table::TableStateKey const& key, TableViews& views,
+                       async::CallbackScope const& scope,
+                       std::function<void(std::optional<std::string> const&, std::string const&)> done) {
+    struct Joined {
+        int waiting = 2;
+        std::optional<std::string> json;
+        std::string failure;
+        std::function<void(std::optional<std::string> const&, std::string const&)> done;
+    };
+    auto const joined = std::make_shared<Joined>(Joined{.waiting = 2, .json = {}, .failure = {}, .done = std::move(done)});
+    auto const arrive = [joined] {
+        if (--joined->waiting == 0) {
+            joined->done(joined->json, joined->failure);
+        }
+    };
+    views.load()
+        .then(scope, [arrive](TableViews::Result const&) { arrive(); })
+        .onError(scope, [arrive](std::exception_ptr const&) { arrive(); });
+    states.load(key)
+        .then(scope,
+              [joined, arrive](std::optional<table::StoredTableState> const& stored) {
+                  if (stored) {
+                      joined->json = stored->json;
+                  }
+                  arrive();
+              })
+        .onError(scope, [joined, arrive](std::exception_ptr const& error) {
+            joined->failure = failureText(error);
+            arrive();
+        });
+}
+
+}  // namespace
+
 std::unique_ptr<RowsTable> ScreenCore::makeRowsTable(ElementState& element, std::shared_ptr<Bindings const> bindings,
                                                      bool persisted) {
     DocNode const& node = *element.node;
@@ -9804,6 +9878,24 @@ std::unique_ptr<RowsTable> ScreenCore::makeRowsTable(ElementState& element, std:
         if (table.stateKey) {
             table.states->changed(*table.stateKey, document, parts);
         }
+    };
+    // What a stored state or a saved view is fitted to: the node's column parts, of the kinds their cells infer.
+    config.description = [&table]() -> std::optional<table::TableDescription> {
+        DocNode const& declared = *table.node;
+        table::TableDescription description;
+        description.id = declared.id;
+        std::span<table::ColumnInfo const> const infos = table.source->columns();
+        auto const parts = declared.partList("columns");
+        for (std::size_t at = 0; at < parts.size() && at < infos.size(); ++at) {
+            table::TableColumn column;
+            column.info = infos[at];
+            column.label = parts[at]->id;
+            column.sortable = parts[at]->flag("sortable");
+            column.filterable = true;
+            description.columns.push_back(std::move(column));
+        }
+        description.groups = table.groups;
+        return description;
     };
     // A bound layout is controlled, as a bound sort is: any expression but a literal `null` binds it.
     if (ExprPtr const layout = node.prop("layout");
@@ -9961,18 +10053,12 @@ std::unique_ptr<RowsTable> ScreenCore::makeRowsTable(ElementState& element, std:
         table.loadTimer = scheduler->after(session.options().tableStateTimeout,
                                            table.scope.token().guard([&table] { table.release(); }));
     }
-    // The saved views load in the same turn as the state, so a store that batches reads them with it; views that
-    // cannot be read are left unsaid.
     table.views = std::make_unique<TableViews>(*table.states, *table.stateKey, runtime().owner());
-    static_cast<void>(table.views->load());
-    table.states->load(*table.stateKey)
-        .then(table.scope,
-              [this, &table](std::optional<table::StoredTableState> const& stored) {
-                  storedRowsState(table, stored ? std::optional<std::string>{stored->json} : std::nullopt, {});
-              })
-        .onError(table.scope, [this, &table](std::exception_ptr const& error) {
-            storedRowsState(table, std::nullopt, failureText(error));
-        });
+    table.config.views = table.views.get();
+    loadStateAndViews(*table.states, *table.stateKey, *table.views, table.scope,
+                      [this, &table](std::optional<std::string> const& json, std::string const& failure) {
+                          storedRowsState(table, json, failure);
+                      });
     return made;
 }
 
@@ -10036,13 +10122,21 @@ void ScreenCore::storedRowsState(RowsTable& table, std::optional<std::string> co
         table.release();
         return;
     }
-    if (!json) {
-        table.release();
-        return;
+    std::optional<table::StateDocument> stored;
+    if (json) {
+        auto read = table::readState(*json);
+        if (!read) {
+            report(node.path, "the stored state of table `" + node.id + "` is not used: " + read.error());
+            table.release();
+            return;
+        }
+        stored = std::move(*read);
     }
-    auto read = table::readState(*json);
-    if (!read) {
-        report(node.path, "the stored state of table `" + node.id + "` is not used: " + read.error());
+    // The default view stands in for a state never stored, and its sort and filters for the stored ones when the
+    // user starts from it.
+    std::optional<table::StateDocument> start =
+        table.views != nullptr ? stateAtMount(std::move(stored), table.views->own()) : std::move(stored);
+    if (!start) {
         table.release();
         return;
     }
@@ -10050,21 +10144,9 @@ void ScreenCore::storedRowsState(RowsTable& table, std::optional<std::string> co
         return;
     }
     // Fitted to what the node declares: its column parts, of the kinds their cells infer.
-    table::TableDescription description;
-    description.id = node.id;
-    std::span<table::ColumnInfo const> const infos = table.source->columns();
-    auto const parts = node.partList("columns");
-    for (std::size_t at = 0; at < parts.size() && at < infos.size(); ++at) {
-        table::TableColumn column;
-        column.info = infos[at];
-        column.label = parts[at]->id;
-        column.sortable = parts[at]->flag("sortable");
-        column.filterable = true;
-        description.columns.push_back(std::move(column));
-    }
-    description.groups = table.groups;
     table::FitReport fitted;
-    table::StateDocument const document = table::fitState(std::move(*read), description, fitted);
+    table::StateDocument const document =
+        table::fitState(std::move(*start), table.config.description().value_or(table::TableDescription{}), fitted);
     if (element.sortBound == nullptr && document.sort) {
         element.sort.set(sortValueOf(*document.sort));
     }
@@ -10081,8 +10163,12 @@ void ScreenCore::storedRowsState(RowsTable& table, std::optional<std::string> co
     if (table.config.bound == nullptr && document.layout) {
         table.config.held = *document.layout;
         table.config.version.set(table.config.version.peek() + 1);
-        tablePoints(element);
     }
+    if (document.view) {
+        table.config.savedView = document.view;
+        table.config.viewShared = false;
+    }
+    tablePoints(element);
     if (!late) {
         // The rows come through once the engine's view is in the stored order: after the work the new sort posted.
         bool const timed = session.options().scheduler != nullptr;
@@ -10203,6 +10289,20 @@ void ScreenCore::wireCollectionTable(ElementState& element, std::string modelTyp
             table.states->changed(*table.stateKey, document, parts);
         }
     };
+    // What a stored state or a saved view is fitted to: the view document's columns, each of which sorts and filters.
+    config.description = [&collection]() -> std::optional<table::TableDescription> {
+        table::TableDescription description;
+        description.id = std::string{collection.model().query()};
+        for (table::ColumnInfo const& info : collection.source()->columns()) {
+            table::TableColumn column;
+            column.info = info;
+            column.label = info.id;
+            column.sortable = true;
+            column.filterable = true;
+            description.columns.push_back(std::move(column));
+        }
+        return description;
+    };
     // A row's record is its key text and every column's cell as the session formats it, read from the row of that
     // key: the engine may read a snapshot older than the session's rows, and a row it no longer has reads empty.
     auto const records = std::make_shared<CollectionRecords>();
@@ -10286,18 +10386,12 @@ void ScreenCore::wireCollectionTable(ElementState& element, std::string modelTyp
         table.loadTimer = scheduler->after(session.options().tableStateTimeout,
                                            table.scope.token().guard([&table] { table.release(); }));
     }
-    // The saved views load in the same turn as the state, so a store that batches reads them with it; views that
-    // cannot be read are left unsaid.
     table.views = std::make_unique<TableViews>(*table.states, *table.stateKey, runtime().owner());
-    static_cast<void>(table.views->load());
-    table.states->load(*table.stateKey)
-        .then(table.scope,
-              [this, &table](std::optional<table::StoredTableState> const& stored) {
-                  storedCollectionState(table, stored ? std::optional<std::string>{stored->json} : std::nullopt, {});
-              })
-        .onError(table.scope, [this, &table](std::exception_ptr const& error) {
-            storedCollectionState(table, std::nullopt, failureText(error));
-        });
+    table.config.views = table.views.get();
+    loadStateAndViews(*table.states, *table.stateKey, *table.views, table.scope,
+                      [this, &table](std::optional<std::string> const& json, std::string const& failure) {
+                          storedCollectionState(table, json, failure);
+                      });
 }
 
 void ScreenCore::storedCollectionState(RowsTable& table, std::optional<std::string> const& json,
@@ -10311,13 +10405,21 @@ void ScreenCore::storedCollectionState(RowsTable& table, std::optional<std::stri
         table.release();
         return;
     }
-    if (!json) {
-        table.release();
-        return;
+    std::optional<table::StateDocument> stored;
+    if (json) {
+        auto read = table::readState(*json);
+        if (!read) {
+            report(node.path, "the stored state of collection `" + action + "` is not used: " + read.error());
+            table.release();
+            return;
+        }
+        stored = std::move(*read);
     }
-    auto read = table::readState(*json);
-    if (!read) {
-        report(node.path, "the stored state of collection `" + action + "` is not used: " + read.error());
+    // The default view stands in for a state never stored, and its sort and filters for the stored ones when the
+    // user starts from it.
+    std::optional<table::StateDocument> start =
+        table.views != nullptr ? stateAtMount(std::move(stored), table.views->own()) : std::move(stored);
+    if (!start) {
         table.release();
         return;
     }
@@ -10325,18 +10427,9 @@ void ScreenCore::storedCollectionState(RowsTable& table, std::optional<std::stri
         return;
     }
     // Fitted to the view document's columns, each of which sorts and filters.
-    table::TableDescription description;
-    description.id = action;
-    for (table::ColumnInfo const& info : element.collection->source()->columns()) {
-        table::TableColumn column;
-        column.info = info;
-        column.label = info.id;
-        column.sortable = true;
-        column.filterable = true;
-        description.columns.push_back(std::move(column));
-    }
     table::FitReport fitted;
-    table::StateDocument const document = table::fitState(std::move(*read), description, fitted);
+    table::StateDocument const document =
+        table::fitState(std::move(*start), table.config.description().value_or(table::TableDescription{}), fitted);
     if (element.sortBound == nullptr && document.sort) {
         element.sort.set(sortValueOf(*document.sort));
     }
@@ -10347,6 +10440,10 @@ void ScreenCore::storedCollectionState(RowsTable& table, std::optional<std::stri
     if (document.layout) {
         table.config.held = *document.layout;
         table.config.version.set(table.config.version.peek() + 1);
+    }
+    if (document.view) {
+        table.config.savedView = document.view;
+        table.config.viewShared = false;
     }
     if (late) {
         return;
@@ -10833,6 +10930,10 @@ void ScreenCore::wireModelTable(ElementState& element) {
         table::TableDescription const* const description = model.window->description();
         return description == nullptr ? std::vector<table::ColumnGroupInfo>{} : description->groups;
     };
+    config.description = [&model]() -> std::optional<table::TableDescription> {
+        table::TableDescription const* const description = model.window->description();
+        return description == nullptr ? std::nullopt : std::optional<table::TableDescription>{*description};
+    };
     // A bound layout is controlled, as a bound sort is: any expression but a literal `null` binds it.
     if (ExprPtr const layout = node.prop("layout");
         layout && (layout->kind != ExprKind::Literal || !layout->literal.isNull())) {
@@ -11069,18 +11170,12 @@ void ScreenCore::wireModelTable(ElementState& element) {
         model.loadTimer = scheduler->after(session.options().tableStateTimeout,
                                            model.scope.token().guard([&model] { model.release(); }));
     }
-    // The saved views load in the same turn as the state, so a store that batches reads them with it; views that
-    // cannot be read are left unsaid.
     model.views = std::make_unique<TableViews>(*model.states, *model.stateKey, runtime().owner());
-    static_cast<void>(model.views->load());
-    model.states->load(*model.stateKey)
-        .then(model.scope,
-              [this, &element](std::optional<table::StoredTableState> const& stored) {
-                  storedTableState(element, stored ? std::optional<std::string>{stored->json} : std::nullopt, {});
-              })
-        .onError(model.scope, [this, &element](std::exception_ptr const& error) {
-            storedTableState(element, std::nullopt, failureText(error));
-        });
+    model.config.views = model.views.get();
+    loadStateAndViews(*model.states, *model.stateKey, *model.views, model.scope,
+                      [this, &element](std::optional<std::string> const& json, std::string const& failure) {
+                          storedTableState(element, json, failure);
+                      });
 }
 
 void ScreenCore::storedTableState(ElementState& element, std::optional<std::string> const& json,
@@ -11093,20 +11188,28 @@ void ScreenCore::storedTableState(ElementState& element, std::optional<std::stri
         model.release();
         return;
     }
-    if (!json) {
-        model.release();
-        return;
+    std::optional<table::StateDocument> stored;
+    if (json) {
+        auto read = table::readState(*json);
+        if (!read) {
+            report(node.path, "the stored state of table `" + node.id + "` is not used: " + read.error());
+            model.release();
+            return;
+        }
+        stored = std::move(*read);
     }
-    auto read = table::readState(*json);
-    if (!read) {
-        report(node.path, "the stored state of table `" + node.id + "` is not used: " + read.error());
+    // The default view stands in for a state never stored, and its sort and filters for the stored ones when the
+    // user starts from it.
+    std::optional<table::StateDocument> start =
+        model.views != nullptr ? stateAtMount(std::move(stored), model.views->own()) : std::move(stored);
+    if (!start) {
         model.release();
         return;
     }
     if (late && model.touched) {
         return;
     }
-    table::StateDocument document = std::move(*read);
+    table::StateDocument document = std::move(*start);
     // Kinds still to be inferred are placeholders: the stored filters are fitted to the kinds the first reply gives.
     if (model.window->inferring()) {
         if (!model.filtersBound && document.filters) {
@@ -11142,7 +11245,8 @@ void ScreenCore::storedTableState(ElementState& element, std::optional<std::stri
         model.config.version.set(model.config.version.peek() + 1);
     }
     if (document.view) {
-        model.view = std::move(document.view);
+        model.config.savedView = std::move(document.view);
+        model.config.viewShared = false;
     }
     tablePoints(element);
     if (late || !arranged) {
@@ -11326,7 +11430,8 @@ void ScreenCore::tableMessage(ElementState& table, std::string text) {
 
 void ScreenCore::tablePoints(ElementState& table) {
     ModelTable const* const model = table.modelTable.get();
-    // A table over `rows` that keeps a state shows its layout at a `columns` point; it has no saved view's name yet.
+    // A table over `rows` that keeps a state shows its layout at a `columns` point and its saved view's name at a
+    // `saved` one, as a model-backed table does.
     RowsTable const* const rows = model == nullptr && table.rowsTable != nullptr && table.rowsTable->stateKey &&
                                           table.node != nullptr && table.node->kind == "table"
                                       ? table.rowsTable.get()
@@ -11339,13 +11444,12 @@ void ScreenCore::tablePoints(ElementState& table) {
     bool changed = false;
     for (auto const& [name, point] : doc().customize) {
         // A point without `of` names no table, an id-less one included.
-        if (point.of.empty() || point.of != table.node->id ||
-            (point.kind != "columns" && (point.kind != "saved" || model == nullptr))) {
+        if (point.of.empty() || point.of != table.node->id || (point.kind != "columns" && point.kind != "saved")) {
             continue;
         }
         Value value;
         if (point.kind == "saved") {
-            value = model->view ? Value{*model->view} : Value{};
+            value = config.savedView ? Value{*config.savedView} : Value{};
         } else if (config.held) {
             auto const json = parseJson(glz::write_json(*config.held).value_or("null"));
             auto read = json ? valueFromJson(*json) : std::expected<Value, std::string>{Value{}};
@@ -11367,8 +11471,8 @@ std::optional<bool> ScreenCore::tablePoint(CustomizePoint const& point, Value co
     if (point.kind != "columns" && point.kind != "saved") {
         return std::nullopt;
     }
-    // A point without `of` names no table. A model-backed table holds both points' values; a table over `rows` that
-    // keeps a state holds a `columns` point's, and has no saved view's name for a `saved` one.
+    // A point without `of` names no table. A model-backed table, and a table over `rows` that keeps a state, hold both
+    // points' values in that state.
     if (point.of.empty()) {
         return std::nullopt;
     }
@@ -11377,27 +11481,14 @@ std::optional<bool> ScreenCore::tablePoint(CustomizePoint const& point, Value co
             return false;
         }
         return element->modelTable != nullptr ||
-               (point.kind == "columns" && element->rowsTable != nullptr && element->rowsTable->stateKey &&
-                element->node->kind == "table");
+               (element->rowsTable != nullptr && element->rowsTable->stateKey && element->node->kind == "table");
     });
     if (found == modelTables.end()) {
         return std::nullopt;
     }
-    if ((*found)->modelTable == nullptr) {
-        RowsTable& rows = *(*found)->rowsTable;
-        table::ColumnLayoutValue layout;
-        if (glz::read_json(layout, canonicalJson(value))) {
-            return false;
-        }
-        rows.config.held = std::move(layout);
-        rows.config.version.set(rows.config.version.peek() + 1);
-        rows.touched = true;
-        table::StateDocument changed;
-        changed.layout = rows.config.held;
-        rows.states->changed(*rows.stateKey, changed, StateParts::Layout);
-        return true;
-    }
-    ModelTable& model = *(*found)->modelTable;
+    ModelTable* const model = (*found)->modelTable.get();
+    RowsTable* const rows = model == nullptr ? (*found)->rowsTable.get() : nullptr;
+    TableConfig& config = model != nullptr ? model->config : rows->config;
     table::StateDocument changed;
     StateParts part = StateParts::Layout;
     if (point.kind == "saved") {
@@ -11405,21 +11496,24 @@ std::optional<bool> ScreenCore::tablePoint(CustomizePoint const& point, Value co
         if (name == nullptr && !value.isNull()) {
             return false;
         }
-        model.view = name == nullptr ? std::nullopt : std::optional<std::string>{*name};
-        changed.view = model.view;
+        config.savedView = name == nullptr ? std::nullopt : std::optional<std::string>{*name};
+        config.viewShared = false;
+        changed.view = config.savedView;
         part = StateParts::View;
     } else {
         table::ColumnLayoutValue layout;
         if (glz::read_json(layout, canonicalJson(value))) {
             return false;
         }
-        model.config.held = std::move(layout);
-        model.config.version.set(model.config.version.peek() + 1);
-        changed.layout = model.config.held;
+        config.held = std::move(layout);
+        config.version.set(config.version.peek() + 1);
+        changed.layout = config.held;
     }
-    model.touched = true;
-    if (model.stateKey) {
-        model.states->changed(*model.stateKey, changed, part);
+    std::optional<table::TableStateKey> const& key = model != nullptr ? model->stateKey : rows->stateKey;
+    TableStates* const states = model != nullptr ? model->states : rows->states;
+    (model != nullptr ? model->touched : rows->touched) = true;
+    if (key) {
+        states->changed(*key, changed, part);
     }
     return true;
 }
@@ -11663,20 +11757,9 @@ Node ScreenCore::configureTable(TableConfig& config, LowerCtx const& ctx, TableO
     // A layout gesture: refused in the status line when its column is locked or the table does not allow it. The
     // table's own layout takes the change when no key binds one, and is saved; then `onLayoutChange` runs with
     // `event` the new layout. The arrangement follows the layout, so the mount fetches the columns it shows.
-    auto const arrange = [this, ctx, &config, &element, columns, layoutHeld, keep,
-                          commands = node.event("onLayoutChange")](LayoutGesture const& gesture) {
+    auto const relayout = [this, ctx, &config, &element, keep,
+                           commands = node.event("onLayoutChange")](table::ColumnLayoutValue value) {
         static_cast<void>(keep);
-        config.touch();
-        table::ColumnLayout layout = runtime().untracked(layoutHeld);
-        LayoutResult const result = applyLayoutGesture(layout, *columns, config.allowed, gesture);
-        if (result.refusal) {
-            config.message(*result.refusal);
-            return;
-        }
-        if (!result.changed) {
-            return;
-        }
-        table::ColumnLayoutValue value = layout.value();
         Value const event = layoutValueOf(value);
         runtime().batch([&] {
             if (config.bound == nullptr) {
@@ -11694,6 +11777,18 @@ Node ScreenCore::configureTable(TableConfig& config, LowerCtx const& ctx, TableO
             }
             runEvent(commands, ctx, event);
         });
+    };
+    auto const arrange = [this, &config, columns, layoutHeld, relayout](LayoutGesture const& gesture) {
+        config.touch();
+        table::ColumnLayout layout = runtime().untracked(layoutHeld);
+        LayoutResult const result = applyLayoutGesture(layout, *columns, config.allowed, gesture);
+        if (result.refusal) {
+            config.message(*result.refusal);
+            return;
+        }
+        if (result.changed) {
+            relayout(layout.value());
+        }
     };
     options.onSort = [sortBy](std::size_t index, HeaderClick click) {
         sortBy(index, click == HeaderClick::Shift ? SortGesture::Extend : SortGesture::Click);
@@ -11902,10 +11997,202 @@ Node ScreenCore::configureTable(TableConfig& config, LowerCtx const& ctx, TableO
     if (!config.menus) {
         return std::ranges::contains(*filterable, true) ? filterMenuDialog(menu) : nullptr;
     }
+    // The saved views. A view is fitted to the table as a stored state is, and the arrangement is the view's while its
+    // layout, laid over the table's columns, its sort and its filters are those fitted ones.
+    auto const fittedView = [&config](table::SavedView const& view) {
+        table::StateDocument document;
+        document.layout = view.layout;
+        document.sort = view.sort;
+        document.filters = view.filters;
+        if (std::optional<table::TableDescription> const description =
+                config.description ? config.description() : std::nullopt) {
+            table::FitReport ignored;
+            document = table::fitState(std::move(document), *description, ignored);
+        }
+        return document;
+    };
+    auto const arrangementNow = [this, &element, layoutHeld, filtersNow] {
+        return runtime().untracked([&] {
+            return table::SavedView{.name = {},
+                                    .layout = layoutHeld().value(),
+                                    .sort = sortChainOf(tableSort(element)),
+                                    .filters = filtersNow()};
+        });
+    };
+    auto const viewsInput = [&config, columns, hidden, fittedView, arrangementNow]() -> std::optional<ViewsMenuInput> {
+        TableViews const* const views = config.views;
+        if (views == nullptr) {
+            return std::nullopt;
+        }
+        ViewsMenuInput input;
+        for (table::SavedView const& view : views->own().views) {
+            input.own.push_back(view.name);
+        }
+        for (table::SavedView const& view : views->shared().views) {
+            input.shared.push_back(view.name);
+        }
+        input.current = config.savedView;
+        input.currentShared = config.viewShared;
+        input.defaultOnMount = views->own().defaultOnMount;
+        input.shares = views->shares();
+        table::SavedView const* const current =
+            !config.savedView ? nullptr
+            : config.viewShared ? views->sharedView(*config.savedView)
+                                : views->ownView(*config.savedView);
+        if (current != nullptr) {
+            table::StateDocument const view = fittedView(*current);
+            table::SavedView const now = arrangementNow();
+            input.modified = layoutOver(*columns, *hidden, view.layout).value() != now.layout ||
+                             view.sort.value_or(SortChain{}) != now.sort ||
+                             view.filters.value_or(table::FilterSpec{}) != now.filters;
+        }
+        return input;
+    };
+    // Records the view the arrangement was taken from in the table's state, and shows it at the table's points.
+    auto const recordView = [this, &config, &element](std::optional<std::string> name, bool shared) {
+        config.savedView = std::move(name);
+        config.viewShared = shared && config.savedView.has_value();
+        if (config.save) {
+            table::StateDocument changed;
+            changed.view = config.savedView;
+            config.save(changed, StateParts::View);
+        }
+        tablePoints(element);
+    };
+    // Applying a view sets its layout, sort and filters as the gestures do, through their handlers where they are
+    // bound, and records its name.
+    auto const applyView = [this, &config, fittedView, arrangementNow, relayout, resort, refilter, recordView](
+                               table::SavedView const& saved, bool shared) {
+        table::StateDocument const view = fittedView(saved);
+        table::SavedView const now = arrangementNow();
+        runtime().batch([&] {
+            if (view.layout && *view.layout != now.layout) {
+                relayout(*view.layout);
+            }
+            SortChain const chain = view.sort.value_or(SortChain{});
+            resort([&chain](SortChain const&) { return SortChange{.chain = chain, .refusal = {}}; });
+            if (table::FilterSpec const filters = view.filters.value_or(table::FilterSpec{}); filters != now.filters) {
+                static_cast<void>(refilter(filters));
+            }
+            recordView(saved.name, shared);
+        });
+    };
+    // A views change answers on the owner: its refusal goes to the status line, and what it did once done.
+    auto const changeViews = [&config](async::Completion<TableViews::Result> completion,
+                                       std::function<void()> done) {
+        completion.then(config.viewsScope, [&config, done = std::move(done)](TableViews::Result const& result) {
+            if (!result) {
+                config.message(result.error());
+                return;
+            }
+            done();
+        });
+    };
+    auto const nameView = [&config, arrangementNow, recordView, changeViews] {
+        ViewDialog const dialog = config.viewDialog.peek();
+        std::string name = dialog.name;
+        name.erase(0, name.find_first_not_of(" \t"));
+        name.erase(name.find_last_not_of(" \t") + 1);
+        TableViews* const views = config.views;
+        if (name.empty() || views == nullptr) {
+            return;
+        }
+        config.viewDialog.set(ViewDialog{});
+        config.touch();
+        table::SavedView view = arrangementNow();
+        view.name = name;
+        switch (dialog.purpose) {
+            case ViewNaming::Save: {
+                // A name the user already has replaces that view.
+                table::ViewOperation operation = views->ownView(name) != nullptr
+                                                     ? table::ViewOperation{table::ReplaceView{std::move(view)}}
+                                                     : table::ViewOperation{table::AddView{std::move(view)}};
+                changeViews(views->change(std::move(operation)), [&config, recordView, name] {
+                    recordView(name, false);
+                    config.message("Saved view " + name);
+                });
+                break;
+            }
+            case ViewNaming::Rename: {
+                if (!config.savedView || config.viewShared) {
+                    return;
+                }
+                changeViews(views->change(table::RenameView{.from = *config.savedView, .to = name}),
+                            [recordView, name] { recordView(name, false); });
+                break;
+            }
+            case ViewNaming::Publish: {
+                // A name the shared views already have replaces that view.
+                table::ViewOperation operation = views->sharedView(name) != nullptr
+                                                     ? table::ViewOperation{table::ReplaceView{std::move(view)}}
+                                                     : table::ViewOperation{table::AddView{std::move(view)}};
+                changeViews(views->publish(std::move(operation)),
+                            [&config, name] { config.message("Published view " + name); });
+                break;
+            }
+        }
+    };
+    auto const viewCommand = [&config, applyView, recordView, changeViews](TableMenuEntry const& entry) {
+        TableViews* const views = config.views;
+        if (views == nullptr) {
+            return;
+        }
+        std::optional<std::string> const current = config.viewShared ? std::nullopt : config.savedView;
+        auto const naming = [&config](ViewNaming purpose, std::string name) {
+            config.viewDialog.set(ViewDialog{.open = true, .purpose = purpose, .name = std::move(name)});
+        };
+        switch (entry.command) {
+            case MenuCommand::ApplyView:
+                if (table::SavedView const* const view = views->ownView(entry.argument)) {
+                    applyView(table::SavedView{*view}, false);
+                }
+                break;
+            case MenuCommand::ApplySharedView:
+                if (table::SavedView const* const view = views->sharedView(entry.argument)) {
+                    applyView(table::SavedView{*view}, true);
+                }
+                break;
+            case MenuCommand::SaveView:
+                naming(ViewNaming::Save, current.value_or(std::string{}));
+                break;
+            case MenuCommand::RenameView:
+                if (current) {
+                    naming(ViewNaming::Rename, *current);
+                }
+                break;
+            case MenuCommand::PublishView:
+                naming(ViewNaming::Publish, config.savedView.value_or(std::string{}));
+                break;
+            case MenuCommand::RemoveView:
+                if (current) {
+                    changeViews(views->change(table::RemoveView{*current}), [recordView] { recordView(std::nullopt, false); });
+                }
+                break;
+            case MenuCommand::SetDefaultView:
+                if (current) {
+                    changeViews(views->change(table::SetDefaultView{current}), [] {});
+                }
+                break;
+            case MenuCommand::DefaultOnMount:
+                changeViews(views->change(table::SetDefaultOnMount{!views->own().defaultOnMount}), [] {});
+                break;
+            case MenuCommand::SaveAsMyView:
+                if (table::SavedView const* const view = views->sharedView(entry.argument)) {
+                    std::string const name = view->name;
+                    changeViews(views->change(table::AddView{*view}), [&config, recordView, name] {
+                        recordView(name, false);
+                        config.message("Saved view " + name);
+                    });
+                }
+                break;
+            default:
+                break;
+        }
+    };
     // A menu is built when it opens, and again when an entry is chosen, from the chain and the layout of the moment,
     // so the path the backend reports names the entry it showed.
     auto const entriesOf = [this, &config, &element, columns, sortable, filterable, layoutHeld, groupsNow, groupArgument,
-                            filtersNow](std::optional<std::size_t> column) -> std::vector<TableMenuEntry> {
+                            filtersNow, viewsInput](std::optional<std::size_t> column) -> std::vector<TableMenuEntry> {
         return runtime().untracked([&]() -> std::vector<TableMenuEntry> {
             table::ColumnLayout const layout = layoutHeld();
             // The groups, each named in its members' menus and in the table's.
@@ -11920,8 +12207,10 @@ Node ScreenCore::configureTable(TableConfig& config, LowerCtx const& ctx, TableO
                 return out;
             };
             if (!column) {
-                return offeredEntries(tableMenu(TableMenuInput{
-                    .anyFilter = !filtersNow().empty(), .groups = groupsOf({}), .allowed = config.allowed}));
+                return offeredEntries(tableMenu(TableMenuInput{.anyFilter = !filtersNow().empty(),
+                                                               .groups = groupsOf({}),
+                                                               .allowed = config.allowed,
+                                                               .views = viewsInput()}));
             }
             if (*column >= columns->size()) {
                 return {};
@@ -11961,8 +12250,8 @@ Node ScreenCore::configureTable(TableConfig& config, LowerCtx const& ctx, TableO
         std::vector<TableMenuEntry> const entries = entriesOf(column);
         return menuEntries(entries);
     };
-    options.onMenu = [&config, &menu, entriesOf, sortBy, arrange, columns, openColumn, openGroup, refilter, copy](
-                         std::optional<std::size_t> column, std::vector<std::size_t> const& path) {
+    options.onMenu = [&config, &menu, entriesOf, sortBy, arrange, columns, openColumn, openGroup, refilter, copy,
+                      viewCommand](std::optional<std::size_t> column, std::vector<std::size_t> const& path) {
         config.touch();
         std::vector<TableMenuEntry> const entries = entriesOf(column);
         TableMenuEntry const* const entry = chosen(entries, path);
@@ -12036,6 +12325,17 @@ Node ScreenCore::configureTable(TableConfig& config, LowerCtx const& ctx, TableO
                 break;
             case MenuCommand::CopyWithHeaders:
                 copy(true);
+                break;
+            case MenuCommand::ApplyView:
+            case MenuCommand::SaveView:
+            case MenuCommand::RenameView:
+            case MenuCommand::RemoveView:
+            case MenuCommand::SetDefaultView:
+            case MenuCommand::DefaultOnMount:
+            case MenuCommand::ApplySharedView:
+            case MenuCommand::PublishView:
+            case MenuCommand::SaveAsMyView:
+                viewCommand(*entry);
                 break;
             default:
                 // `offeredEntries` offers no other entry.
@@ -12131,7 +12431,34 @@ Node ScreenCore::configureTable(TableConfig& config, LowerCtx const& ctx, TableO
             },
         .onClose = [&config] { config.sortOpen.set(false); },
     });
-    return ui::column(Column{.children = {std::move(chooser), std::move(sorter), filterMenuDialog(menu)}});
+    std::vector<Node> dialogs{std::move(chooser), std::move(sorter), filterMenuDialog(menu)};
+    if (config.views != nullptr) {
+        dialogs.push_back(viewNameDialog(ViewNameDialogView{
+            .open = [&config] { return config.viewDialog.get().open; },
+            .title =
+                [&config] {
+                    switch (config.viewDialog.get().purpose) {
+                        case ViewNaming::Rename:
+                            return std::string{"Rename view"};
+                        case ViewNaming::Publish:
+                            return std::string{"Publish view"};
+                        case ViewNaming::Save:
+                        default:
+                            return std::string{"Save view"};
+                    }
+                },
+            .name = [&config] { return config.viewDialog.get().name; },
+            .onName =
+                [&config](std::string name) {
+                    ViewDialog dialog = config.viewDialog.peek();
+                    dialog.name = std::move(name);
+                    config.viewDialog.set(std::move(dialog));
+                },
+            .onSave = nameView,
+            .onClose = [&config] { config.viewDialog.set(ViewDialog{}); },
+        }));
+    }
+    return ui::column(Column{.children = std::move(dialogs)});
 }
 
 Node ScreenCore::lowerModelTable(DocNode const& node, LowerCtx const& ctx, ElementState* element) {

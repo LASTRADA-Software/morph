@@ -5,10 +5,13 @@
 /// @brief A table's saved views: the user's own and the shared ones, loaded with the table's state and saved under
 ///        the store's revision rule, so two windows saving at once lose neither's view.
 
+#include <algorithm>
+#include <exception>
 #include <expected>
 #include <memory>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <variant>
 
@@ -88,12 +91,48 @@ public:
 
     /// @brief Applies @p operation to the shared views through the store's `publish`, under the same rule as `change`.
     /// @param operation The operation.
-    /// @return Nothing once published; the words a status line shows otherwise.
+    /// @return Nothing once published; otherwise the words a status line shows, "This view could not be published:"
+    ///         and the reason.
     [[nodiscard]] async::Completion<Result> publish(table::ViewOperation operation) {
         return start(table::ViewsPart::Shared, std::move(operation));
     }
 
+    /// @brief One of the user's own views.
+    /// @param name The view's name.
+    /// @return It, as last loaded or saved; null when there is none of that name.
+    [[nodiscard]] table::SavedView const* ownView(std::string_view name) const { return find(own(), name); }
+
+    /// @brief One of the shared views.
+    /// @param name The view's name.
+    /// @return It, as last loaded or published; null when there is none of that name.
+    [[nodiscard]] table::SavedView const* sharedView(std::string_view name) const { return find(shared(), name); }
+
 private:
+    [[nodiscard]] static table::SavedView const* find(table::ViewsDocument const& document, std::string_view name) {
+        auto const found = std::ranges::find(document.views, name, &table::SavedView::name);
+        return found == document.views.end() ? nullptr : &*found;
+    }
+
+    // What a failure to change @p part says: a publish's failure is said as one, whatever stopped it.
+    [[nodiscard]] static std::string failed(table::ViewsPart part, std::string const& reason) {
+        if (part == table::ViewsPart::Shared) {
+            return reason.empty() ? std::string{"This view could not be published"}
+                                  : "This view could not be published: " + reason;
+        }
+        return reason.empty() ? std::string{"Views could not be saved"} : "Views could not be saved: " + reason;
+    }
+
+    // The words of an exception a store's completion failed with.
+    [[nodiscard]] static std::string reasonOf(std::exception_ptr const& error) {
+        try {
+            std::rethrow_exception(error);
+        } catch (std::exception const& failure) {
+            return failure.what();
+        } catch (...) {
+        }
+        return {};
+    }
+
     // One part's key, the document read or saved last, and its revision; nothing when nothing is stored.
     struct Part {
         table::TableStateKey key;
@@ -194,7 +233,9 @@ private:
         Part& part = partIn(*saving->held, saving->part);
         auto applied = table::applyViewOperation(part.document, saving->operation, saving->part);
         if (!applied) {
-            saving->promise.resolve(Result{std::unexpected(table::viewErrorText(applied.error(), saving->operation))});
+            std::string text = table::viewErrorText(applied.error(), saving->operation);
+            saving->promise.resolve(Result{std::unexpected(
+                saving->part == table::ViewsPart::Own ? std::move(text) : failed(saving->part, text))});
             return;
         }
         table::ITableStateStore& store = saving->held->states->store();
@@ -205,14 +246,7 @@ private:
                 answered(saving, std::move(document), std::move(json), result);
             })
             .onError([saving](std::exception_ptr const& error) {
-                std::string text = "Views could not be saved";
-                try {
-                    std::rethrow_exception(error);
-                } catch (std::exception const& failure) {
-                    text += std::string{": "} + failure.what();
-                } catch (...) {
-                }
-                saving->promise.resolve(Result{std::unexpected(std::move(text))});
+                saving->promise.resolve(Result{std::unexpected(failed(saving->part, reasonOf(error)))});
             });
     }
 
@@ -229,8 +263,8 @@ private:
                 return;
             case table::SaveOutcome::Conflict:
                 if (saving->retried) {
-                    saving->promise.resolve(Result{std::unexpected(
-                        std::string{"Views could not be saved: another window changed them at the same time"})});
+                    saving->promise.resolve(Result{
+                        std::unexpected(failed(saving->part, "another window changed them at the same time"))});
                     return;
                 }
                 saving->retried = true;
@@ -238,9 +272,7 @@ private:
                 return;
             case table::SaveOutcome::Refused:
             default:
-                saving->promise.resolve(Result{std::unexpected(
-                    result.reason.empty() ? std::string{"Views could not be saved"}
-                                          : "Views could not be saved: " + result.reason)});
+                saving->promise.resolve(Result{std::unexpected(failed(saving->part, result.reason))});
                 return;
         }
     }
@@ -254,7 +286,8 @@ private:
             .then([saving](std::optional<table::StoredTableState> const& stored) {
                 Part& reread = partIn(*saving->held, saving->part);
                 if (auto failure = take(reread, stored)) {
-                    saving->promise.resolve(Result{std::unexpected(std::move(*failure))});
+                    saving->promise.resolve(Result{std::unexpected(
+                        saving->part == table::ViewsPart::Own ? std::move(*failure) : failed(saving->part, *failure))});
                     return;
                 }
                 if (stored) {
@@ -263,18 +296,44 @@ private:
                 attempt(saving, stored ? stored->revision : std::string{});
             })
             .onError([saving](std::exception_ptr const& error) {
-                std::string text = "Views could not be saved";
-                try {
-                    std::rethrow_exception(error);
-                } catch (std::exception const& failure) {
-                    text += std::string{": "} + failure.what();
-                } catch (...) {
-                }
-                saving->promise.resolve(Result{std::unexpected(std::move(text))});
+                saving->promise.resolve(Result{std::unexpected(failed(saving->part, reasonOf(error)))});
             });
     }
 
     std::shared_ptr<Held> _held;
 };
+
+/// @brief The state a table starts from at mount, given its user's own views.
+///
+/// With no stored state, the default view's layout, sort and filters, and its name as the state's `view`. With a
+/// stored state and `defaultOnMount`, the stored state with the default view's sort and filters in place of its own;
+/// its layout and `view` stay. Otherwise, and whenever the default names no view, the stored state as it is. The
+/// result is fitted to the table as a stored state is.
+/// @param stored The stored state; none when nothing is stored.
+/// @param own    The user's own views.
+/// @return The state to apply; none when there is nothing to apply.
+[[nodiscard]] inline std::optional<table::StateDocument> stateAtMount(std::optional<table::StateDocument> stored,
+                                                                      table::ViewsDocument const& own) {
+    if (!own.defaultView) {
+        return stored;
+    }
+    auto const view = std::ranges::find(own.views, *own.defaultView, &table::SavedView::name);
+    if (view == own.views.end()) {
+        return stored;
+    }
+    if (!stored) {
+        table::StateDocument document;
+        document.layout = view->layout;
+        document.sort = view->sort;
+        document.filters = view->filters;
+        document.view = view->name;
+        return document;
+    }
+    if (own.defaultOnMount) {
+        stored->sort = view->sort;
+        stored->filters = view->filters;
+    }
+    return stored;
+}
 
 }  // namespace morph::ui

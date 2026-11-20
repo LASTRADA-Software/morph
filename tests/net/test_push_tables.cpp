@@ -1176,3 +1176,53 @@ TEST_CASE("shared views: a view published over a socket is read by a second clie
     CHECK(again.outcome == morph::table::SaveOutcome::Conflict);
     CHECK(again.revision == first.revision);
 }
+
+// The menu's "Publish view…" over a socket: a view published under a new name is an `AddView`, under a name the shared
+// views already have a `ReplaceView`, and a second client reads one view of that name, replaced. Mutation: the second
+// publish sent as `AddView` (refused, "A view named Team exists", and bob reads the first sort). Not run: this case
+// is in morph_net_tests, which builds only on POSIX; its in-process twin in tests/test_ui_table_state.cpp drives
+// the menu itself.
+TEST_CASE("shared views: a view published twice under one name over a socket is replaced", "[net][tables][state]") {
+    StateServer server;
+    Client alice{server.url, "alice"};
+    Client bob{server.url, "bob"};
+    std::string const model{ui::kTableStateModel};
+    auto const aliceState = alice.create(model);
+    auto const bobState = bob.create(model);
+    morph::table::TableStateKey const shared{.application = "lims",
+                                             .model = "Lims_SampleModel",
+                                             .table = "samples",
+                                             .qualifier = "samples",
+                                             .part = "shared"};
+    auto const team = [](morph::table::SortDirection direction) {
+        return morph::table::SavedView{
+            .name = "Team",
+            .layout = {},
+            .sort = {morph::table::SortKey{.column = "name", .dir = direction}},
+            .filters = {}};
+    };
+    auto const publish = [&](morph::table::ViewOperation const& operation, std::string expected) {
+        auto const reply = alice.execute(
+            aliceState, model, "publish",
+            morph::model::ActionTraits<ui::TableStatePublish>::toJson(ui::TableStatePublish{
+                .key = shared, .operation = morph::table::writeViewOperation(operation), .expected = std::move(expected)}));
+        REQUIRE(reply.kind == "ok");
+        return morph::model::ActionTraits<ui::TableStatePublish>::resultFromJson(reply.body).result;
+    };
+    auto const first = publish(morph::table::AddView{team(morph::table::SortDirection::Ascending)},
+                               std::string{morph::table::kNoDocument});
+    REQUIRE(first.outcome == morph::table::SaveOutcome::Saved);
+    auto const second = publish(morph::table::ReplaceView{team(morph::table::SortDirection::Descending)}, first.revision);
+    REQUIRE(second.outcome == morph::table::SaveOutcome::Saved);
+    auto const read = bob.execute(
+        bobState, model, "load",
+        morph::model::ActionTraits<ui::TableStateLoad>::toJson(ui::TableStateLoad{.keys = {shared}}));
+    REQUIRE(read.kind == "ok");
+    auto const loaded = morph::model::ActionTraits<ui::TableStateLoad>::resultFromJson(read.body);
+    REQUIRE(loaded.entries.size() == 1);
+    CHECK(loaded.entries.front().revision == second.revision);
+    auto const views = morph::table::readViews(loaded.entries.front().text);
+    REQUIRE(views.has_value());
+    REQUIRE(views->views.size() == 1);
+    CHECK(views->views.front().sort.front().dir == morph::table::SortDirection::Descending);
+}

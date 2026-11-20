@@ -3,8 +3,8 @@
 #pragma once
 
 /// @file ui/table_dialogs.hpp
-/// @brief The column chooser and the sort dialog a table's menu opens: what each lists, the edits the sort dialog
-///        makes to a chain, and both dialogs' view trees.
+/// @brief The column chooser, the sort dialog and the view name dialog a table's menu opens: what each lists, the
+///        edits the sort dialog makes to a chain, and the dialogs' view trees.
 ///
 /// The view trees hold no state of their own: the lowering of a table node gives them what to read and what to call,
 /// and carries out each change through the same gesture functions the header and the menus use
@@ -23,6 +23,7 @@
 #include <optional>
 #include <span>
 #include <string>
+#include <string_view>
 #include <type_traits>
 #include <utility>
 #include <variant>
@@ -564,6 +565,70 @@ struct SortDialogView {
                   .child = content,
                   .onDismiss = [v] { v->onClose(); }};
     dialog.common.testId = "table_sort";
+    return ui::dialog(std::move(dialog));
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// The view name dialog
+// ---------------------------------------------------------------------------------------------------------------
+
+/// @brief What the view name dialog reads and calls. Every reader is read inside a binding.
+struct ViewNameDialogView {
+    /// @brief Whether the dialog is open.
+    std::function<bool()> open;
+    /// @brief Its title: "Save view", "Rename view" or "Publish view".
+    std::function<std::string()> title;
+    /// @brief The name as typed so far.
+    std::function<std::string()> name;
+    /// @brief The name was edited.
+    std::function<void(std::string)> onName;
+    /// @brief "Save" was pressed, or Enter in the name, with a name that is not blank.
+    Action onSave;
+    /// @brief "Cancel" was pressed, or the dialog dismissed.
+    Action onClose;
+};
+
+/// @brief Whether a view's name is blank: empty, or spaces alone.
+/// @param name The name.
+/// @return Whether it is.
+[[nodiscard]] inline bool blankViewName(std::string_view name) {
+    return name.find_first_not_of(" \t") == std::string_view::npos;
+}
+
+/// @brief The view name dialog: a dialog, test id `table_view_dialog`, that names a view to save, rename or publish.
+///
+/// A text input `table_view_name` (the name), a button `table_view_save` ("Save"), enabled while the name is not
+/// blank, and a button `table_view_cancel` ("Cancel"); a dismissal closes it too.
+/// @param view What it reads and calls; every member must be set.
+/// @return The dialog's node.
+[[nodiscard]] inline Node viewNameDialog(ViewNameDialogView view) {
+    auto const v = std::make_shared<ViewNameDialogView const>(std::move(view));
+    TextInput name{.value = [v] { return v->name(); },
+                   .onChange = [v](std::string text) { v->onName(std::move(text)); },
+                   .onSubmit =
+                       [v](std::string text) {
+                           if (!blankViewName(text)) {
+                               v->onName(std::move(text));
+                               v->onSave();
+                           }
+                       },
+                   .placeholder = std::string{"View name"}};
+    name.label = std::string{"View name"};
+    name.common.testId = "table_view_name";
+    Button save{.label = std::string{"Save"}, .emphasis = ButtonEmphasis::Primary, .onClick = [v] { v->onSave(); }};
+    save.common.testId = "table_view_save";
+    save.common.enabled = [v] { return !blankViewName(v->name()); };
+    Button cancel{.label = std::string{"Cancel"}, .onClick = [v] { v->onClose(); }};
+    cancel.common.testId = "table_view_cancel";
+    Node const content = ui::column(Column{
+        .children = {textInput(std::move(name)), ui::row(Row{.children = {button(std::move(save)), button(std::move(cancel))},
+                                                             .gap = 1})},
+        .gap = 2});
+    Dialog dialog{.open = [v] { return v->open(); },
+                  .title = [v] { return v->title(); },
+                  .child = content,
+                  .onDismiss = [v] { v->onClose(); }};
+    dialog.common.testId = "table_view_dialog";
     return ui::dialog(std::move(dialog));
 }
 
