@@ -44,7 +44,9 @@ namespace ui = morph::ui;
 namespace chat = morph::ui::chat;
 namespace wire = morph::wire;
 
-bool waitFor(auto done, std::chrono::milliseconds limit = 5s) {
+// The deadline is generous because a turn here reads and patches documents of up to 64 KiB, which takes seconds
+// under Valgrind; a passing wait returns as soon as `done` holds, so the limit only bounds a failing one.
+bool waitFor(auto done, std::chrono::milliseconds limit = 60s) {
     auto const deadline = std::chrono::steady_clock::now() + limit;
     while (!done()) {
         if (std::chrono::steady_clock::now() > deadline) {
