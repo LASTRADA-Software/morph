@@ -339,6 +339,16 @@ public:
         return _fault == Fault::FirstSortKeyOnly ? firstKeyOnly(table, column, false)
                                                  : _backend.headerDescription(_backend.idOf(table), column);
     }
+    void pressFilter(ui::Widget& table, std::size_t column) override {
+        if (_fault != Fault::DeadInput) {
+            _backend.clickFilter(_backend.idOf(table), column);
+        }
+    }
+    void pressGroupFilter(ui::Widget& table, std::size_t group) override {
+        if (_fault != Fault::DeadInput) {
+            _backend.clickGroupFilter(_backend.idOf(table), group);
+        }
+    }
     [[nodiscard]] std::string clipboardText() override {
         return _fault == Fault::SilentClipboard ? std::string{} : _backend.clipboardText();
     }
@@ -493,7 +503,7 @@ std::set<std::string_view> failingCases(Fault fault) {
 
 TEST_CASE("ui conformance: RecordingBackend passes every case", "[ui][conformance]") {
     auto const cases = ui::testing::conformanceCases();
-    REQUIRE(cases.size() == 64);
+    REQUIRE(cases.size() == 66);
     std::set<std::string_view> names;
     for (auto const& testCase : cases) {
         CHECK(names.insert(testCase.name).second);
@@ -566,7 +576,9 @@ TEST_CASE("ui conformance: the suite flags a backend that breaks the contract", 
           "a button-style menu reports the entry past a separator, and never the separator",
           "a removable badge reports its removal once",
           "table: the table's menu is the menu with no column",
-          "table: Ctrl+C on a focused table reports a copy"}) {
+          "table: Ctrl+C on a focused table reports a copy",
+          "table: a filterable header's filter button reports its column",
+          "table: a group's filter button reports the group"}) {
         INFO(name);
         CHECK(deadInput.contains(name));
     }

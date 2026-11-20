@@ -647,7 +647,8 @@ public:
                  std::function<void(std::optional<std::size_t>, std::vector<std::size_t>)> onChoose) override;
     void setVisibleColumns(std::vector<std::size_t> const& visible) override;
     void setOnColumnMove(std::function<void(std::size_t, std::size_t)> handler) override;
-    /// The width MorphTable reports is pixels; it is rounded to units of `Theme.unitWidth` here.
+    /// MorphTable reports the header's width in pixels; its padding is taken off and the rest rounded to units of
+    /// `Theme.unitWidth` here.
     void setOnColumnResize(std::function<void(std::size_t, std::optional<int>)> handler) override;
     void setOnFilter(std::function<void(std::size_t)> handler) override;
     void setFiltered(std::vector<std::size_t> const& columns) override;
@@ -743,8 +744,6 @@ private:
     std::function<void(std::size_t)> _onFilter;
     std::function<void(std::size_t)> _onGroupFilter;
     std::function<void()> _onCopy;
-    // The columns as `setColumns` gave them, for the sort marks' and the filtered names' labels.
-    std::vector<ui::TableColumn> _columns;
     // Every key the table's data has, realized or dewindowed; set only above a virtualized table's threshold
     // (mount.hpp never calls setExistingKeys below it). Empty below threshold, where existingSelection() falls
     // back to realized children alone, which is already exactly every key that exists at that size.

@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
+#include <libunicode/convert.h>
+
 #include <algorithm>
 #include <catch2/catch_test_macros.hpp>
 #include <chrono>
@@ -18,6 +20,7 @@
 #include <optional>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -941,7 +944,8 @@ TEST_CASE("tui table: Up on the first row focuses the header; Left, Right, Shift
     std::vector<std::pair<std::size_t, ui::HeaderClick>> sorts;
     table->setOnSort([&sorts](std::size_t column, ui::HeaderClick click) { sorts.emplace_back(column, click); });
     std::vector<std::pair<std::size_t, std::size_t>> moves;
-    table->setOnColumnMove([&moves](std::size_t column, std::size_t position) { moves.emplace_back(column, position); });
+    table->setOnColumnMove(
+        [&moves](std::size_t column, std::size_t position) { moves.emplace_back(column, position); });
     static_cast<void>(harness.draw());
     harness.focus(*table);
     CHECK(harness.key(KeyCode::Up) == EventResult::Handled);
@@ -1531,4 +1535,122 @@ TEST_CASE("tui table: ranges and Ctrl+A over a source go to the mount as view ro
     click(5, core::tui::Modifier::None);
     click(10, core::tui::Modifier::Shift);
     CHECK(f.ranges.back() == Range{.anchor = 4, .focus = 9, .change = ui::SelectionChange::Replace});
+}
+
+namespace {
+
+/// The cell of the last @p glyph on @p line, counting a character a cell; none when the line has none.
+std::optional<int> lastCellOf(std::string const& line, char32_t glyph) {
+    std::u32string const cells = unicode::convert_to<char32_t>(std::string_view{line});
+    std::size_t const found = cells.rfind(glyph);
+    return found == std::u32string::npos ? std::nullopt : std::optional<int>{static_cast<int>(found)};
+}
+
+/// A table of a filterable Name and a stretching filterable Qty, one row, grouped as `Lot`, with menus.
+struct Configured {
+    explicit Configured(Harness& harness) : table{harness.make<TableImpl>(nullptr)} {
+        table->setColumns({{.label = "Name", .filterable = true},
+                           {.label = "Qty", .width = ui::Sizing::stretch(1), .filterable = true}});
+        row = harness.make<StackImpl>(table.get(), ui::Axis::Horizontal);
+        for (std::string const text : {"apple", "3"}) {
+            cells.push_back(harness.make<TextImpl>(row.get()));
+            cells.back()->setText(text);
+        }
+        table->setRowKey(*row, key(1));
+        table->setFiltered({1});
+        table->setColumnGroups({{.label = "Lot", .first = 0, .count = 2}});
+        table->setOnFilter([this](std::size_t column) { reported.push_back("filter " + std::to_string(column)); });
+        table->setOnGroupFilter([this](std::size_t group) { reported.push_back("group " + std::to_string(group)); });
+        table->setMenu(
+            [](std::optional<std::size_t> column) {
+                return std::vector<ui::MenuEntry>{{.label = column ? "Hide " + std::to_string(*column) : "Columns"}};
+            },
+            [this](std::optional<std::size_t> column, std::vector<std::size_t> path) {
+                reported.push_back("menu " + (column ? std::to_string(*column) : std::string{"-"}) + "/" +
+                                   std::to_string(path.front()));
+            });
+    }
+    ~Configured() {
+        cells.clear();
+        row.reset();
+    }
+    Configured(Configured const&) = delete;
+    Configured& operator=(Configured const&) = delete;
+    Configured(Configured&&) = delete;
+    Configured& operator=(Configured&&) = delete;
+
+    std::unique_ptr<TableImpl> table;
+    std::unique_ptr<StackImpl> row;
+    std::vector<std::unique_ptr<TextImpl>> cells;
+    std::vector<std::string> reported;
+};
+
+/// Clicks the first row of the open menu list.
+void clickFirstEntry(Harness& harness, TableImpl const& table) {
+    auto const* const popup = table.openPopup();
+    REQUIRE(popup != nullptr);
+    auto const area = popup->screenBounds();
+    static_cast<void>(harness.click({.x = area.x, .y = area.y}));
+}
+
+}  // namespace
+
+// Mutation: keep no room for the `⋯` (`TableImpl::menuRoom` answers 0): it is drawn over Qty's filled filter button,
+// and a click there opens the table's menu.
+TEST_CASE("tui table: filter buttons, the group line and the table menu's button are drawn apart, and each reports",
+          "[tui][table]") {
+    Harness harness{30, 5};
+    Configured configured{harness};
+    Rows const drawn = harness.draw();
+    REQUIRE(drawn.size() >= 3);
+    // The group line over both columns ends in the group's empty button; the header line ends in Qty's filled button,
+    // a gap, and the `⋯`.
+    CHECK(drawn.at(0).starts_with("  Lot"));
+    CHECK(drawn.at(1).starts_with("  Name ▿"));
+    CHECK(drawn.at(1).ends_with("▾ ⋯"));
+    auto const qtyButton = lastCellOf(drawn.at(1), U'▾');
+    auto const nameButton = lastCellOf(drawn.at(1), U'▿');
+    auto const groupButton = lastCellOf(drawn.at(0), U'▿');
+    auto const menuButton = lastCellOf(drawn.at(1), U'⋯');
+    REQUIRE(qtyButton);
+    REQUIRE(nameButton);
+    REQUIRE(groupButton);
+    REQUIRE(menuButton);
+    CHECK(*menuButton == 29);
+    static_cast<void>(harness.click({.x = *qtyButton, .y = 1}));
+    static_cast<void>(harness.click({.x = *nameButton, .y = 1}));
+    static_cast<void>(harness.click({.x = *groupButton, .y = 0}));
+    static_cast<void>(harness.draw());
+    static_cast<void>(harness.click({.x = *menuButton, .y = 1}));
+    static_cast<void>(harness.draw());
+    CHECK(configured.table->openMenuEntries().size() == 1);
+    clickFirstEntry(harness, *configured.table);
+    CHECK(configured.reported == std::vector<std::string>{"filter 1", "filter 0", "group 0", "menu -/0"});
+}
+
+// Mutation: make `TableImpl::contextPress` take nothing (the right press opens no menu).
+TEST_CASE("tui table: a right click on a header opens its menu, and Shift+F10 on the focused header does too",
+          "[tui][table]") {
+    Harness harness{30, 5};
+    Configured configured{harness};
+    static_cast<void>(harness.draw());
+    using Type = core::tui::MouseEvent::Type;
+    // Name's header, on the line under the group line.
+    static_cast<void>(harness.send(core::tui::MouseEvent{.type = Type::Press, .button = 2, .x = 3, .y = 2}));
+    static_cast<void>(harness.send(core::tui::MouseEvent{.type = Type::Release, .button = 2, .x = 3, .y = 2}));
+    static_cast<void>(harness.draw());
+    REQUIRE(configured.table->openMenuEntries().size() == 1);
+    CHECK(configured.table->openMenuEntries().front().label == "Hide 0");
+    clickFirstEntry(harness, *configured.table);
+    static_cast<void>(harness.draw());
+    harness.focus(*configured.table);
+    CHECK(harness.key(KeyCode::Up) == EventResult::Handled);
+    CHECK(harness.key(KeyCode::Right) == EventResult::Handled);
+    CHECK(harness.key(KeyCode::F10, core::tui::Modifier::Shift) == EventResult::Handled);
+    static_cast<void>(harness.draw());
+    REQUIRE(configured.table->openMenuEntries().size() == 1);
+    CHECK(configured.table->openMenuEntries().front().label == "Hide 1");
+    // The list has the focus: Enter chooses its entry.
+    static_cast<void>(harness.key(KeyCode::Enter));
+    CHECK(configured.reported == std::vector<std::string>{"menu 0/0", "menu 1/0"});
 }

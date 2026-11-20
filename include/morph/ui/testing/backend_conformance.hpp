@@ -287,6 +287,22 @@ public:
         return {};
     }
 
+    /// @brief Presses a filterable column's filter button in its header, as a user would.
+    /// @param table  The table.
+    /// @param column The column's index among the table's columns.
+    virtual void pressFilter(Widget& table, std::size_t column) {
+        static_cast<void>(table);
+        static_cast<void>(column);
+    }
+
+    /// @brief Presses a column group's filter button in the group row, as a user would.
+    /// @param table The table.
+    /// @param group The group's index among the table's column groups.
+    virtual void pressGroupFilter(Widget& table, std::size_t group) {
+        static_cast<void>(table);
+        static_cast<void>(group);
+    }
+
     /// @brief What the backend's `copyText` last put on the clipboard, read back from where it wrote it.
     /// @return The text; empty before any, or when the probe reads none.
     [[nodiscard]] virtual std::string clipboardText() { return {}; }
@@ -4471,6 +4487,46 @@ struct MinColumnGridSpec {
     return checks.result();
 }
 
+/// @brief Case: a filterable column's filter button reports its column once.
+/// @param probe The backend under test.
+/// @return `nullopt`, or what went wrong.
+[[nodiscard]] inline std::optional<std::string> filterButtonReportsColumn(ConformanceProbe& probe) {
+    reactive::Signal<std::vector<Entry>> const rows{probe.runtime(), fourEntries()};
+    std::vector<std::size_t> pressed;
+    Mounted const view{probe.runtime(), probe.backend(),
+                       columnsTable(rows, {{.label = "Name"}, {.label = "Mass", .filterable = true}},
+                                    {.onFilter = [&pressed](std::size_t column) { pressed.push_back(column); }})};
+    probe.settle();
+    probe.pressFilter(view.root(), 1);
+    probe.settle();
+    Checks checks;
+    checks.that(pressed == std::vector<std::size_t>{1}, "pressing Mass's filter button reported " +
+                                                            std::to_string(pressed.size()) +
+                                                            " presses, not column 1 once");
+    return checks.result();
+}
+
+/// @brief Case: a column group's filter button in the group row reports the group once.
+/// @param probe The backend under test.
+/// @return `nullopt`, or what went wrong.
+[[nodiscard]] inline std::optional<std::string> groupFilterButtonReportsGroup(ConformanceProbe& probe) {
+    reactive::Signal<std::vector<Entry>> const rows{probe.runtime(), fourEntries()};
+    std::vector<std::size_t> pressed;
+    Mounted const view{
+        probe.runtime(), probe.backend(),
+        columnsTable(rows, {{.label = "Name"}, {.label = "Mass"}, {.label = "Site"}},
+                     {.columnGroups = std::vector<TableColumnGroup>{{.label = "Place", .first = 1, .count = 2}},
+                      .onGroupFilter = [&pressed](std::size_t group) { pressed.push_back(group); }})};
+    probe.settle();
+    probe.pressGroupFilter(view.root(), 0);
+    probe.settle();
+    Checks checks;
+    checks.that(pressed == std::vector<std::size_t>{0}, "pressing Place's filter button reported " +
+                                                            std::to_string(pressed.size()) +
+                                                            " presses, not group 0 once");
+    return checks.result();
+}
+
 /// @brief Case: `Ctrl+C` on a focused table reports a copy once.
 /// @param probe The backend under test.
 /// @return `nullopt`, or what went wrong.
@@ -4619,7 +4675,7 @@ struct MinColumnGridSpec {
 /// loops over these with its own `ConformanceProbe`.
 /// @return The cases.
 [[nodiscard]] inline std::span<ConformanceCase const> conformanceCases() {
-    static std::array<ConformanceCase, 64> const cases{{
+    static std::array<ConformanceCase, 66> const cases{{
         {.name = "a Text shows its constant text", .run = detail::textShowsItsText},
         {.name = "a bound Text updates once per batch and not for an equal write",
          .run = detail::boundTextUpdatesOncePerChange},
@@ -4713,6 +4769,9 @@ struct MinColumnGridSpec {
         {.name = "table: a filtered column's header is named so", .run = detail::filteredHeaderIsNamed},
         {.name = "table: Ctrl+C on a focused table reports a copy", .run = detail::ctrlCReportsCopy},
         {.name = "backend: copyText puts its text on the clipboard", .run = detail::copyTextReachesClipboard},
+        {.name = "table: a filterable header's filter button reports its column",
+         .run = detail::filterButtonReportsColumn},
+        {.name = "table: a group's filter button reports the group", .run = detail::groupFilterButtonReportsGroup},
     }};
     return cases;
 }

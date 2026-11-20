@@ -292,8 +292,49 @@ public:
             }
         }
     }
+    // The header as the last frame drew it: the cells of the column's label on the header line, trimmed.
     [[nodiscard]] std::string headerText(ui::Widget const& table, std::size_t column) override {
-        return _fault == Fault::WrongText ? "?" : tableOf(table).headerText(column);
+        settle();
+        if (_fault == Fault::WrongText) {
+            return "?";
+        }
+        auto const area = tableOf(table).headerLabelArea(column);
+        auto const bounds = WidgetBase::of(table).view().screenBounds();
+        std::vector<std::string> const rows = morph::tui::testing::rowsOf(_screen);
+        int const line = bounds.y + (area ? area->y : 0);
+        if (!area || line < 0 || std::cmp_greater_equal(line, rows.size())) {
+            return {};
+        }
+        std::u32string const cells =
+            unicode::convert_to<char32_t>(std::string_view{rows.at(static_cast<std::size_t>(line))});
+        auto const from = static_cast<std::size_t>(std::max(0, bounds.x + area->x));
+        std::u32string label = from < cells.size() ? cells.substr(from, static_cast<std::size_t>(area->width))
+                                                   : std::u32string{};
+        while (!label.empty() && label.back() == U' ') {
+            label.pop_back();
+        }
+        while (!label.empty() && label.front() == U' ') {
+            label.erase(0, 1);
+        }
+        return unicode::convert_to<char>(std::u32string_view{label});
+    }
+    // A click on the filter button, the last cell of the column's header.
+    void pressFilter(ui::Widget& table, std::size_t column) override {
+        settle();
+        auto const area = tableOf(table).headerLabelArea(column);
+        auto const bounds = WidgetBase::of(table).view().screenBounds();
+        if (area) {
+            clickCell(bounds.x + area->x + area->width + 1, bounds.y + area->y);
+        }
+    }
+    // A click on the group's filter button, the last cell of its span on the group line.
+    void pressGroupFilter(ui::Widget& table, std::size_t group) override {
+        settle();
+        auto const x = tableOf(table).groupFilterX(group);
+        auto const bounds = WidgetBase::of(table).view().screenBounds();
+        if (x) {
+            clickCell(bounds.x + *x, bounds.y);
+        }
     }
     [[nodiscard]] std::string headerName(ui::Widget const& table, std::size_t column) override {
         return _fault == Fault::WrongText ? "?" : tableOf(table).headerName(column);
@@ -521,6 +562,13 @@ private:
         }
         settle();
         return tableOf(table).openPopup() != nullptr;
+    }
+
+    // A left click on a viewport cell, 0-based.
+    void clickCell(int x, int y) {
+        send(core::tui::MouseEvent{.type = Type::Press, .button = 0, .x = x + 1, .y = y + 1});
+        send(core::tui::MouseEvent{.type = Type::Release, .button = 0, .x = x + 1, .y = y + 1});
+        settle();
     }
 
     void focusByClick(ui::Widget& widget) {

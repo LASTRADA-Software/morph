@@ -468,11 +468,16 @@ EventResult WidgetBase::pointer(::core::tui::MouseEvent const& mouse) {
 }
 
 // Any press ends an earlier gesture whose release never arrived, whether or not this widget takes the new one, and
-// the drag it started. Handling the press makes this view the screen's pointer capture target, so the moves and the
-// release that follow come here wherever the pointer goes. A widget with a drag key arms a drag, and still takes the
-// press as any other (a slider's thumb jumps to it).
+// the drag it started. A right press goes to `contextPress`. Handling a left press makes this view the screen's
+// pointer capture target, so the moves and the release that follow come here wherever the pointer goes. A widget with
+// a drag key arms a drag, and still takes the press as any other (a slider's thumb jumps to it).
 EventResult WidgetBase::press(::core::tui::MouseEvent const& mouse) {
     _context->endPress();
+    // The right button opens a context menu where the widget has one; it starts no gesture, so its release clicks
+    // nothing.
+    if (mouse.button == 2) {
+        return actionable() && contextPress(cellOf(mouse)) ? EventResult::Handled : EventResult::Ignored;
+    }
     if (mouse.button != 0 || !actionable() || !(takesPress() || _dragKey)) {
         return EventResult::Ignored;
     }
