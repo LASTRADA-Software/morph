@@ -16,6 +16,7 @@
 #include "../reactive/runtime.hpp"
 #include "../reactive/signal.hpp"
 #include "backend.hpp"
+#include "custom_screen_controller.hpp"
 #include "custom_screen_sync.hpp"
 #include "custom_screens.hpp"
 #include "document.hpp"
@@ -75,7 +76,13 @@ struct CustomScreenChromeOptions {
 /// shown with the line its pointer names, and choosing it moves the cursor there; the editor is read only while the
 /// check runs, so the draft is exactly the text previewed. **Save as…** asks a name, saves, and opens the saved screen
 /// in the tab's place. A reply to a save acts only on the draft that was saved: a tab that holds a newer draft, or
-/// none, keeps it and the person is told. Everything runs on the runtime's owner. Neither copyable nor movable.
+/// none, keeps it and the person is told. **Remove**, on a screen of the person's own, asks once and removes it; a tab
+/// that showed it opens its base.
+///
+/// It is a view over a `CustomScreenController`, which holds every tab's draft and runs every command: the chrome
+/// draws the controller's state, and words its outcomes and refusals. Its fixed words are English; they are the
+/// view's, so localising them is the view's too. An application with controls of its own draws them over a controller
+/// of its own instead. Everything runs on the runtime's owner. Neither copyable nor movable.
 class MORPH_API CustomScreenChrome {
 public:
     /// @brief The chrome.
@@ -193,9 +200,26 @@ public:
     /// @param screenId The base screen, or a custom screen based on it.
     void openAs(WorkspaceTabId tab, std::string const& screenId);
 
-private:
-    enum class SourceMode : std::uint8_t { Draft, Stored };
+    /// @brief The tools row's **Remove**: asks the person to confirm removing the tab's custom screen, which is
+    ///        offered only for a listed screen of the person's own while custom screens are offered.
+    /// @param tab The tab; one that shows another screen, or none, does nothing.
+    void askRemove(WorkspaceTabId tab);
 
+    /// @brief The confirmation's **Remove**: removes the screen through the sync, then opens its base in the place of
+    ///        every tab that shows it, with the tab's params. A refusal stays in the confirmation, as the store gave
+    ///        it.
+    void confirmRemove();
+
+    /// @brief The controller the chrome draws.
+    /// @return It, owned by the chrome.
+    [[nodiscard]] CustomScreenController& controller() noexcept { return _controller; }
+
+    /// @brief An outcome in the chrome's words, as `notify` is told it.
+    /// @param outcome The outcome.
+    /// @return The sentence.
+    [[nodiscard]] static std::string describe(CustomScreenOutcome const& outcome);
+
+private:
     // A refusal and the text it was made for: its line is read against that text.
     struct ShownRefusal {
         std::string pointer;
@@ -204,24 +228,9 @@ private:
         bool operator==(ShownRefusal const&) const = default;
     };
 
-    // What the chrome keeps per tab: the bar's last refusal, and the draft's text while one is mounted.
-    // @c generation changes with every draft mounted or ended on the tab, so a reply can tell whether the tab still
-    // holds the draft it was asked about. @c pending holds while a save is in flight. @c seen holds once the model
-    // held the tab, so a state made while the tab was opening is not taken for a closed tab's.
-    struct TabState {
-        std::unique_ptr<reactive::Signal<std::string>> message;
-        std::unique_ptr<reactive::Signal<bool>> pending;
-        std::string draftText;
-        std::uint64_t generation = 0;
-        bool seen = false;
-    };
-
     // The source view: its text, its refusal, its status line, and the mount of its dialog, destroyed first.
     struct Source {
-        SourceMode mode = SourceMode::Draft;
-        // Distinguishes this view from any other opened since, so a reply to a check made for one does nothing to the
-        // next.
-        std::uint64_t generation = 0;
+        bool stored = false;
         std::optional<WorkspaceTabId> tab;
         std::string screenId;
         bool readOnly = false;
@@ -244,91 +253,53 @@ private:
         std::optional<Mounted> view;
     };
 
-    // One entry of Open as, and the menu as a whole, keyed so it is drawn again whenever an entry changes.
-    struct OpenAsChoice {
-        std::string id;
-        std::string label;
-        bool current = false;
-        bool operator==(OpenAsChoice const&) const = default;
+    // The confirmation of a removal.
+    struct RemoveConfirm {
+        std::uint64_t generation = 0;
+        std::string screenId;
+        std::unique_ptr<reactive::Signal<std::string>> message;
+        std::unique_ptr<reactive::Signal<bool>> busy;
+        std::optional<Mounted> view;
     };
+
+    // The Open as menu, keyed so it is drawn again whenever an entry changes.
     struct OpenAsShape {
         std::string key;
-        std::vector<OpenAsChoice> choices;
+        std::vector<CustomScreenChoice> choices;
         bool operator==(OpenAsShape const&) const = default;
     };
-    [[nodiscard]] Node openAsMenu(WorkspaceTabId tab, std::string const& screenId);
-    // A tracked read of the list and the offer; no choices while Open as has nothing to offer.
-    [[nodiscard]] OpenAsShape openAsShape(std::string const& screenId) const;
-    void saveFromSource();
-    // Mounts @p document as the tab's draft with @p text as its source: the tab's generation moves on and its bar's
-    // message clears. The one place a draft is mounted, for a previewed edit and for a proposal.
-    [[nodiscard]] std::expected<void, MountError> mountAsDraft(WorkspaceTabId tab,
-                                                               std::shared_ptr<Document const> const& document,
-                                                               std::string const& text);
 
-    // Wraps @p fn so it does nothing once the chrome is gone: replies arrive through the sync, which may outlive it.
+    // Wraps @p fn so it does nothing once the chrome is gone; posted closes and dialog presses can outlive it.
     template <typename F>
     [[nodiscard]] auto guarded(F fn) const {
-        // Tab ids are issued per workspace, so a reply made under a workspace that has been replaced does nothing too.
-        return
-            [this, epoch = _epoch, alive = std::weak_ptr<bool>{_alive}, fn = std::move(fn)](auto&&... args) mutable {
-                if (auto const live = alive.lock(); live != nullptr && *live && _epoch == epoch) {
-                    fn(std::forward<decltype(args)>(args)...);
-                }
-            };
+        return [alive = std::weak_ptr<bool>{_alive}, fn = std::move(fn)](auto&&... args) mutable {
+            if (auto const live = alive.lock(); live != nullptr && *live) {
+                fn(std::forward<decltype(args)>(args)...);
+            }
+        };
     }
 
-    [[nodiscard]] Node draftBar(WorkspaceTabId tab, std::string const& screenId,
-                                std::shared_ptr<TabState> const& state);
+    [[nodiscard]] Node draftBar(WorkspaceTabId tab, std::string const& screenId);
     [[nodiscard]] Node toolsRow(WorkspaceTabId tab, std::string const& screenId);
-    // The tab's state, made with its chrome.
-    std::shared_ptr<TabState> ensureState(WorkspaceTabId tab);
-    [[nodiscard]] std::shared_ptr<TabState> stateOf(WorkspaceTabId tab) const;
-    // Drops the state of tabs that closed and have no save in flight.
-    void prune();
-    // Ends a save in flight on @p tab.
-    void settled(WorkspaceTabId tab);
-    // Whether the tab is open and still holds the draft of @p generation.
-    [[nodiscard]] bool holds(WorkspaceTabId tab, std::uint64_t generation) const;
-    // Shows @p text in the tab's bar, when the tab still has one.
-    void tell(WorkspaceTabId tab, std::string text);
-    // Tells the person a reply found its draft gone or replaced: what was saved, and that the tab was left as it is.
-    void saveOutcome(WorkspaceTabId tab, std::uint64_t generation, std::string const& saved);
-    [[nodiscard]] ScreenHandle* handleOf(WorkspaceTabId tab) const;
-    // A tracked read of the model's tabs first, so a binding made while the tab is opening reads the handle once the
-    // model holds it.
-    [[nodiscard]] ScreenHandle* trackedHandleOf(WorkspaceTabId tab) const;
-    [[nodiscard]] bool draftedTracked(WorkspaceTabId tab) const;
-    [[nodiscard]] bool canSave(std::string const& screenId) const;
-    [[nodiscard]] std::optional<CustomScreenSummary> summaryOf(std::string_view screenId) const;
-    [[nodiscard]] std::string baseOf(std::string const& screenId) const;
-    [[nodiscard]] std::string currentText(std::string const& screenId) const;
-    [[nodiscard]] std::string titleOf(std::string const& screenId) const;
-    void openSource(SourceMode mode, std::optional<WorkspaceTabId> tab, std::string screenId, std::string text,
-                    bool readOnly);
+    [[nodiscard]] Node openAsMenu(WorkspaceTabId tab, std::string const& screenId);
+    void openSource(CustomScreenSource const& shown, std::optional<WorkspaceTabId> tab);
+    void saveFromSource();
     void refuse(std::string pointer, std::string reason);
     void moveToRefusal();
     void closeSourceLater();
     void closeSaveAsLater();
-    void saveAs(WorkspaceTabId tab, std::string const& title);
-    void failSaveAs(WorkspaceTabId tab, std::uint64_t generation, std::string const& reason);
-    void openSaved(WorkspaceTabId tab, std::uint64_t generation, std::string const& screenId,
-                   std::string const& title);
+    void closeRemoveLater();
+    void failSaveAs(WorkspaceTabId tab, std::string const& reason);
     void notify(std::string const& text, Tone tone) const;
 
     CustomScreenChromeOptions _options;
-    WorkspaceModel* _model = nullptr;
     std::shared_ptr<bool> _alive = std::make_shared<bool>(true);
-    std::unique_ptr<reactive::Signal<bool>> _offered;
-    // Bumped on each list, so a binding that reads `_listed` follows it.
-    std::unique_ptr<reactive::Signal<std::uint64_t>> _listVersion;
-    CustomScreensListed _listed;
-    std::uint64_t _epoch = 0;
-    std::uint64_t _lastSource = 0;
-    std::map<std::uint64_t, std::shared_ptr<TabState>> _tabs;
+    CustomScreenController _controller;
+    std::uint64_t _lastRemove = 0;
     // The overlays, last: their bindings read everything above.
     std::unique_ptr<Source> _source;
     std::unique_ptr<SaveAs> _saveAs;
+    std::unique_ptr<RemoveConfirm> _remove;
 };
 
 }  // namespace morph::ui

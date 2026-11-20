@@ -4,6 +4,7 @@
 #include <core/async/Task.hpp>
 #include <expected>
 #include <functional>
+#include <glaze/glaze.hpp>
 #include <memory>
 #include <morph/core/effects.hpp>
 #include <morph/core/records.hpp>
@@ -62,6 +63,20 @@ constexpr std::string_view kNoPerson = "custom screens are stored for a signed-i
     }
     if (!screenId.starts_with(kCustomScreenIdPrefix)) {
         return "a custom screen's `id` starts with `" + std::string{kCustomScreenIdPrefix} + "`";
+    }
+    return std::nullopt;
+}
+
+/// @brief Whether @p attributes, written as JSON, fit `kMaxAttributesBytes`. A record the writer refuses does not.
+[[nodiscard]] bool attributesFit(Json::object_t const& attributes) {
+    auto const written = glz::write_json(attributes);
+    return written.has_value() && written->size() <= kMaxAttributesBytes;
+}
+
+/// @brief The problem with a request's @p attributes, if they are longer than the bound.
+[[nodiscard]] std::optional<std::string> attributesProblem(std::optional<Json::object_t> const& attributes) {
+    if (attributes.has_value() && !attributesFit(*attributes)) {
+        return "a custom screen's `attributes` are at most " + std::to_string(kMaxAttributesBytes) + " bytes as JSON";
     }
     return std::nullopt;
 }
@@ -241,7 +256,8 @@ std::optional<Refusal> CustomScreens::checkedAsNew(ServedBundle const& bundle,
     if (session.principal.empty()) {
         co_return std::unexpected(CustomScreenRefusal{.reason = std::string{kNoPerson}});
     }
-    auto found = co_await _store->get(CustomScreenKey{.person = session.principal, .app = app, .id = screenId});
+    auto found = co_await _store->get(
+        CustomScreenKey{.person = session.principal, .app = app, .id = screenId, .session = session});
     if (!found) {
         co_return std::unexpected(std::move(found.error()));
     }
@@ -292,6 +308,17 @@ CustomScreenSummary CustomScreens::summarize(ServedBundle const& bundle, ::morph
                                              OpensMemo& opens) const {
     std::optional<CheckRefusal> broken = onWire(checkCustomScreen(
         bundle, session, *_authorizer, permitted, screen.basedOn, screen.document, screen.id, _options, &_verdicts));
+    // The store's record is sent as it is, so it is bounded as a whole; one too long to send says so as the screen's
+    // breakage, rather than reaching the client cut, or not at all without a word.
+    std::optional<Json::object_t> attributes = screen.attributes;
+    if (attributes.has_value() && !attributesFit(*attributes)) {
+        attributes.reset();
+        if (!broken) {
+            broken = CheckRefusal{.pointer = {},
+                                  .reason = "the store's attributes for this screen are longer than " +
+                                            std::to_string(kMaxAttributesBytes) + " bytes as JSON"};
+        }
+    }
     // A custom screen declares exactly its base's params, so a screen that is not broken opens from the navigator when
     // its base takes none. The base is read once per list, not once per screen.
     bool opensWithoutParams = false;
@@ -315,6 +342,7 @@ CustomScreenSummary CustomScreens::summarize(ServedBundle const& bundle, ::morph
         .hash = contentHash(screen.document),
         .opensWithoutParams = opensWithoutParams,
         .broken = std::move(broken),
+        .attributes = std::move(attributes),
     };
 }
 
@@ -344,7 +372,8 @@ namespace {
     if (session.principal.empty()) {
         co_return reply;
     }
-    std::vector<CustomScreen> const stored = co_await _context->_store->list(session.principal, request.app);
+    std::vector<CustomScreen> const stored = co_await _context->_store->list(
+        CustomScreenScope{.person = session.principal, .app = request.app, .session = session});
     // Computed once for the whole list, and never kept past this call: permissions can change between calls.
     std::vector<std::string> const permitted = permittedActions(*bundle, session, *_context->_authorizer);
     reply.truncated = stored.size() > _context->_options.maxListed;
@@ -380,12 +409,13 @@ namespace {
     std::shared_ptr<ServedBundle const> const bundle = served(_context->servedFor(request.app));
     refuseProblem(nameProblem(request.title, "title"));
     refuseProblem(nameProblem(request.basedOn, "basedOn"));
+    refuseProblem(attributesProblem(request.attributes));
     ::morph::session::Context const session = callerSession();
     std::string const person = requirePerson(session);
     if (request.id) {
         refuseProblem(idProblem(*request.id));
-        auto existing =
-            co_await _context->_store->get(CustomScreenKey{.person = person, .app = request.app, .id = *request.id});
+        auto existing = co_await _context->_store->get(
+            CustomScreenKey{.person = person, .app = request.app, .id = *request.id, .session = session});
         if (!existing) {
             throw std::runtime_error{existing.error().reason};
         }
@@ -396,13 +426,15 @@ namespace {
     if (!text) {
         throw std::invalid_argument{text.error().message()};
     }
-    auto stored = co_await _context->_store->put(CustomScreenKey{.person = person, .app = request.app, .id = screenId},
-                                                 CustomScreen{.id = screenId,
-                                                              .title = std::move(request.title),
-                                                              .basedOn = std::move(request.basedOn),
-                                                              .document = std::move(*text),
-                                                              .savedAt = time::DateTime::now(),
-                                                              .savedBy = person});
+    auto stored = co_await _context->_store->put(
+        CustomScreenKey{.person = person, .app = request.app, .id = screenId, .session = session},
+        CustomScreen{.id = screenId,
+                     .title = std::move(request.title),
+                     .basedOn = std::move(request.basedOn),
+                     .document = std::move(*text),
+                     .savedAt = time::DateTime::now(),
+                     .savedBy = person,
+                     .attributes = std::move(request.attributes)});
     if (!stored) {
         throw std::runtime_error{stored.error().reason};
     }
@@ -414,8 +446,8 @@ namespace {
     refuseProblem(idProblem(request.id));
     ::morph::session::Context const session = callerSession();
     std::string const person = requirePerson(session);
-    auto removed =
-        co_await _context->_store->remove(CustomScreenKey{.person = person, .app = request.app, .id = request.id});
+    auto removed = co_await _context->_store->remove(
+        CustomScreenKey{.person = person, .app = request.app, .id = request.id, .session = session});
     if (!removed) {
         throw std::runtime_error{removed.error().reason};
     }

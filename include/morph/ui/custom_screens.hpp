@@ -46,6 +46,20 @@ struct CustomScreenKey {
     std::string app;
     /// @brief The screen's id, `custom:` and 32 hexadecimal digits.
     std::string id;
+    /// @brief The verified session of the call, for a store whose policy depends on more than the person: its
+    ///        `principal` is @ref person, and its `token` the credential the server verified, whose claims (roles
+    ///        among them) a store may read. The model copies it from the action's session; never from a request body.
+    ::morph::session::Context session;
+};
+
+/// @brief Whose custom screens a `list` asks for.
+struct CustomScreenScope {
+    /// @brief The person, derived on the server from the verified principal; never taken from a request.
+    std::string person;
+    /// @brief The application.
+    std::string app;
+    /// @brief The verified session of the call, as `CustomScreenKey::session` carries it.
+    ::morph::session::Context session;
 };
 
 /// @brief A stored custom screen.
@@ -62,6 +76,10 @@ struct CustomScreen {
     time::DateTime savedAt;
     /// @brief The principal that saved it.
     std::string savedBy;
+    /// @brief What the store records about it, such as whether it is shared or someone's default: the store's own
+    ///        record, which the model carries through `list`, `get` and `save` without reading it. Absent when the
+    ///        store records nothing.
+    std::optional<Json::object_t> attributes;
 };
 
 /// @brief A store's refusal, shown to the person as it is.
@@ -76,7 +94,9 @@ struct CustomScreenRefusal {
 /// what the person may not do, with a reason for the person. An id longer than `kMaxNameBytes` is shown to the person
 /// cut, so `get` and `remove` could not be given it back: a store keeps its ids within `kMaxNameBytes` (the model's
 /// own are 39 bytes). The model calls a store only with a person the server
-/// derived and with a document that passed every check. A store owns the executor its completions are delivered on.
+/// derived and with a document that passed every check. Every call carries the verified session too
+/// (`CustomScreenKey::session`, `CustomScreenScope::session`), so a policy may depend on more than the person, such as
+/// a role the session's token grants. A store owns the executor its completions are delivered on.
 ///
 /// An entry `list` answers whose id lacks `kCustomScreenIdPrefix` is listed broken, and `get` and `remove` refuse its
 /// id before the store is called: the model cannot reach it, so cleaning it up is the store's.
@@ -92,11 +112,10 @@ public:
     ICustomScreenStore& operator=(ICustomScreenStore&&) = delete;
     virtual ~ICustomScreenStore() = default;
 
-    /// @brief The custom screens @p person may open in @p app.
-    /// @param person The person.
-    /// @param app    The application.
+    /// @brief The custom screens a person may open in an application.
+    /// @param scope The person, the application and the verified session.
     /// @return The screens, in the store's order.
-    [[nodiscard]] virtual async::Completion<std::vector<CustomScreen>> list(std::string person, std::string app) = 0;
+    [[nodiscard]] virtual async::Completion<std::vector<CustomScreen>> list(CustomScreenScope scope) = 0;
 
     /// @brief One custom screen the person may open.
     /// @param key The entry.
@@ -122,7 +141,7 @@ public:
 };
 
 /// @brief The framework's store: a map held in memory, on its own strand, each person seeing and changing only
-///        their own screens.
+///        their own screens. It keys every entry by the person and reads nothing else of the session.
 ///
 /// Its entries last as long as it does. Each call is a task on the strand, and its completion is delivered there. It
 /// bounds neither the number of entries nor their total size, so it serves tests and examples, not a deployment.
@@ -132,21 +151,21 @@ public:
     /// @param base Where the strand's tasks run. Borrowed: it must outlive the store.
     explicit MemoryCustomScreenStore(exec::IExecutor& base MORPH_LIFETIMEBOUND) : _strand{base} {}
 
-    /// @brief The custom screens @p person saved in @p app.
-    /// @param person The person.
-    /// @param app    The application.
+    /// @brief The custom screens the person saved in the application; the session is not read.
+    /// @param scope The person, the application and the verified session.
     /// @return The screens, ordered by id.
-    [[nodiscard]] async::Completion<std::vector<CustomScreen>> list(std::string person, std::string app) override {
+    [[nodiscard]] async::Completion<std::vector<CustomScreen>> list(CustomScreenScope scope) override {
         auto [completion, promise] = async::Completion<std::vector<CustomScreen>>::makeSettleable(&_strand);
-        _strand.postTask([this, who = std::move(person), where = std::move(app), settle = std::move(promise)] mutable {
-            std::vector<CustomScreen> out;
-            for (auto const& [key, screen] : _entries) {
-                if (std::get<0>(key) == who && std::get<1>(key) == where) {
-                    out.push_back(screen);
+        _strand.postTask(
+            [this, who = std::move(scope.person), where = std::move(scope.app), settle = std::move(promise)] mutable {
+                std::vector<CustomScreen> out;
+                for (auto const& [key, screen] : _entries) {
+                    if (std::get<0>(key) == who && std::get<1>(key) == where) {
+                        out.push_back(screen);
+                    }
                 }
-            }
-            settle.resolve(std::move(out));
-        });
+                settle.resolve(std::move(out));
+            });
         return std::move(completion);
     }
 
@@ -281,12 +300,16 @@ struct EventKey {
 /// @brief The longest `broken.reason` of a summary, in bytes; a longer one is cut and ends with an ellipsis.
 inline constexpr std::size_t kMaxBrokenReasonBytes = 1024;
 
+/// @brief The longest `attributes` record, in bytes, as JSON. A `save` with a longer one is refused, and a stored
+///        screen whose record is longer is listed broken without it.
+inline constexpr std::size_t kMaxAttributesBytes = 1024;
+
 /// @brief The most bytes one summary takes before escaping. Every field is capped when the summary is built: `id`,
-///        `title`, `basedOn`, `savedBy` and `broken.pointer` at `kMaxNameBytes` and `broken.reason` at
-///        `kMaxBrokenReasonBytes`, a cut one ending with an ellipsis; `hash` is 71 bytes (`sha256:` and 64 digits).
-///        That is 5 * 256 + 1024 + 71 = 2375 bytes of text; the keys, the punctuation and `savedAt` take under 300
-///        more, and 3 KiB leaves a margin.
-inline constexpr std::size_t kMaxSummaryBytes = std::size_t{3} * 1024;
+///        `title`, `basedOn`, `savedBy` and `broken.pointer` at `kMaxNameBytes`, `broken.reason` at
+///        `kMaxBrokenReasonBytes`, a cut one ending with an ellipsis, and `attributes` at `kMaxAttributesBytes`;
+///        `hash` is 71 bytes (`sha256:` and 64 digits). That is 5 * 256 + 1024 + 1024 + 71 = 3399 bytes of text;
+///        the keys, the punctuation and `savedAt` take under 300 more, and 4 KiB leaves a margin.
+inline constexpr std::size_t kMaxSummaryBytes = std::size_t{4} * 1024;
 
 /// @brief The most a byte of a summary grows to in an envelope: the reply is written with control bytes escaped, so
 ///        one becomes a six-byte escape sequence, and the envelope then doubles each backslash of the reply, making
@@ -294,7 +317,7 @@ inline constexpr std::size_t kMaxSummaryBytes = std::size_t{3} * 1024;
 inline constexpr std::size_t kMaxEscapedGrowth = 7;
 
 /// @brief The bytes of a `get` reply that are not its document: one capped summary, at most
-///        `kMaxEscapedGrowth * kMaxSummaryBytes` = 21 KiB once escaped, with a margin to 64 KiB.
+///        `kMaxEscapedGrowth * kMaxSummaryBytes` = 28 KiB once escaped, with a margin to 64 KiB.
 inline constexpr std::size_t kCustomScreenReplyOverhead = std::size_t{64} * 1024;
 
 /// @brief The custom screens' bounds.
@@ -309,7 +332,7 @@ struct CustomScreensOptions {
     /// @brief The most summaries `list` answers; it says `truncated` when the store held more. A capped summary is at
     ///        most `kMaxSummaryBytes` and grows at most `kMaxEscapedGrowth`-fold in an envelope, so
     ///        `maxListed * kMaxEscapedGrowth * kMaxSummaryBytes + kCustomScreenReplyOverhead` must not exceed
-    ///        `wire::kMaxEnvelopeBytes`: at most 387. The default of 200 takes at most 4.3 MB.
+    ///        `wire::kMaxEnvelopeBytes`: at most 290. The default of 200 takes at most 5.8 MB.
     std::size_t maxListed = 200;
 };
 
@@ -467,8 +490,12 @@ struct CustomScreenSummary {
     /// @brief Whether it opens from the navigator: it is not broken, and its base declares no params (a custom
     ///        screen declares exactly its base's).
     bool opensWithoutParams = false;
-    /// @brief The refusal the checks give it today; absent when it may be mounted.
+    /// @brief The refusal the checks give it today, or that its stored `attributes` are longer than
+    ///        `kMaxAttributesBytes`; absent when it may be mounted.
     std::optional<CheckRefusal> broken;
+    /// @brief What the store records about it, as the store answered it (`CustomScreen::attributes`); absent when the
+    ///        store records nothing, or its record is too long to send.
+    std::optional<Json::object_t> attributes;
 };
 
 /// @brief `list`: the caller's custom screens of an application.
@@ -529,6 +556,9 @@ struct CustomScreensSave {
     std::string basedOn;
     /// @brief The document's JSON text.
     std::string document;
+    /// @brief What the store is asked to record about the screen, at most `kMaxAttributesBytes` as JSON. The store
+    ///        validates it and may refuse; absent asks for nothing.
+    std::optional<Json::object_t> attributes;
 };
 
 /// @brief What `save` answers.

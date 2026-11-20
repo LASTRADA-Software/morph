@@ -44,7 +44,9 @@ namespace ui = morph::ui;
 namespace chat = morph::ui::chat;
 namespace wire = morph::wire;
 
-bool waitFor(auto done, std::chrono::milliseconds limit = 5s) {
+// The deadline is generous because a turn here reads and patches documents of up to 64 KiB, which takes seconds
+// under Valgrind; a passing wait returns as soon as `done` holds, so the limit only bounds a failing one.
+bool waitFor(auto done, std::chrono::milliseconds limit = 60s) {
     auto const deadline = std::chrono::steady_clock::now() + limit;
     while (!done()) {
         if (std::chrono::steady_clock::now() > deadline) {
@@ -140,9 +142,8 @@ chat::Response said(std::string text) { return chat::Response{.text = std::move(
 class CountingStore final : public ui::ICustomScreenStore {
 public:
     explicit CountingStore(std::shared_ptr<ui::ICustomScreenStore> inner) : _inner{std::move(inner)} {}
-    [[nodiscard]] morph::async::Completion<std::vector<ui::CustomScreen>> list(std::string person,
-                                                                               std::string app) override {
-        return _inner->list(std::move(person), std::move(app));
+    [[nodiscard]] morph::async::Completion<std::vector<ui::CustomScreen>> list(ui::CustomScreenScope scope) override {
+        return _inner->list(std::move(scope));
     }
     [[nodiscard]] morph::async::Completion<std::expected<ui::CustomScreen, ui::CustomScreenRefusal>> get(
         ui::CustomScreenKey key) override {
@@ -303,6 +304,23 @@ TEST_CASE("the_tool_is_offered_with_the_screen_as_data_the_allowance_and_a_refer
     auto const allowance = rig.screens->allowance(alicesSession(), "lims", "lims.base");
     REQUIRE(allowance.has_value());
     CHECK(system.contains(*allowance));
+}
+
+// Mutation: drop the sentence about `fields`, `omit` or `hidden` from the reference. The base screen has none of these
+// words, so the system text can only carry them from the reference.
+TEST_CASE("the_reference_says_a_forms_fields_only_overlay_its_schema", "[chat][propose]") {
+    Rig rig;
+    rig.fake->script(said("ok"));
+    auto const state = rig.finished(rig.start("lims.base"));
+    REQUIRE(state.status == chat::TurnStatus::Done);
+    auto const original = screens_test::baseScreen("lims.base");
+    REQUIRE_FALSE(original.contains("omit"));
+    REQUIRE_FALSE(original.contains("hidden"));
+    auto const system = rig.asked().at(0).system;
+    CHECK(system.contains("`fields`"));
+    CHECK(system.contains("\"omit\": true"));
+    CHECK(system.contains("\"hidden\": true"));
+    CHECK(system.contains("deleting an entry removes nothing"));
 }
 
 // Mutation: set the draft before the check, or never.

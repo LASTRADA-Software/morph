@@ -1025,7 +1025,7 @@ TEST_CASE("workspace: a screen without head parts leaves the head row hidden", "
     CHECK(head->subtitle().peek().empty());
     CHECK(head->status().peek().empty());
     CHECK(head->actions().peek().empty());
-    CHECK(harness.backend.prop(harness.byTestId("Row", "head"), "visible") == "false");
+    CHECK(harness.backend.prop(harness.byTestId("Column", "head_block"), "visible") == "false");
 }
 
 // Mutation: answer activeHeadShown() from the first tab rather than the active one (it stays false after the switch

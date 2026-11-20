@@ -7,6 +7,7 @@
 #include <core/async/Task.hpp>
 #include <future>
 #include <initializer_list>
+#include <map>
 #include <morph/core/completion.hpp>
 #include <morph/core/coroutine.hpp>
 #include <morph/core/effects.hpp>
@@ -14,7 +15,9 @@
 #include <morph/core/owner_strand.hpp>
 #include <morph/core/remote.hpp>
 #include <morph/core/wire.hpp>
+#include <morph/session/session.hpp>
 #include <morph/ui/custom_screens.hpp>
+#include <mutex>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -43,6 +46,10 @@ T settled(morph::async::Completion<T> completion) {
     return std::move(*out);
 }
 
+morph::ui::CustomScreenScope scope(std::string person, std::string app) {
+    return morph::ui::CustomScreenScope{.person = std::move(person), .app = std::move(app), .session = {}};
+}
+
 morph::ui::CustomScreen screen(std::string id, std::string person) {
     return morph::ui::CustomScreen{.id = std::move(id),
                                    .title = "Mine",
@@ -59,10 +66,10 @@ TEST_CASE("MemoryCustomScreenStore keeps each person's screens apart", "[ui][cus
     REQUIRE(settled(store.put({.person = "alice", .app = "lims", .id = "custom:1"}, screen("custom:1", "alice"))));
     REQUIRE(settled(store.put({.person = "bob", .app = "lims", .id = "custom:2"}, screen("custom:2", "bob"))));
 
-    std::vector<morph::ui::CustomScreen> const alices = settled(store.list("alice", "lims"));
+    std::vector<morph::ui::CustomScreen> const alices = settled(store.list(scope("alice", "lims")));
     REQUIRE(alices.size() == 1);
     CHECK(alices.front().id == "custom:1");
-    CHECK(settled(store.list("alice", "other")).empty());
+    CHECK(settled(store.list(scope("alice", "other"))).empty());
 
     CHECK(settled(store.get({.person = "alice", .app = "lims", .id = "custom:1"})).has_value());
     auto const notHers = settled(store.get({.person = "alice", .app = "lims", .id = "custom:2"}));
@@ -71,7 +78,7 @@ TEST_CASE("MemoryCustomScreenStore keeps each person's screens apart", "[ui][cus
 
     CHECK_FALSE(settled(store.remove({.person = "alice", .app = "lims", .id = "custom:2"})));
     CHECK(settled(store.remove({.person = "alice", .app = "lims", .id = "custom:1"})));
-    CHECK(settled(store.list("alice", "lims")).empty());
+    CHECK(settled(store.list(scope("alice", "lims"))).empty());
 
     // Alice's writes under an id Bob also uses leave Bob's screen alone.
     REQUIRE(settled(store.put({.person = "bob", .app = "lims", .id = "custom:2"}, screen("custom:2", "bob"))));
@@ -83,18 +90,18 @@ TEST_CASE("MemoryCustomScreenStore keeps each person's screens apart", "[ui][cus
     REQUIRE(bobs);
     CHECK(bobs->title == "Mine");
     CHECK(bobs->savedBy == "bob");
-    CHECK(settled(store.list("bob", "lims")).size() == 1);
+    CHECK(settled(store.list(scope("bob", "lims"))).size() == 1);
 
     CHECK(settled(store.remove({.person = "alice", .app = "lims", .id = "custom:2"})));
     CHECK(settled(store.get({.person = "bob", .app = "lims", .id = "custom:2"})).has_value());
-    CHECK(settled(store.list("bob", "lims")).size() == 1);
+    CHECK(settled(store.list(scope("bob", "lims"))).size() == 1);
 }
 
 TEST_CASE("MemoryCustomScreenStore lists one person's screens ordered by id", "[ui][custom-screens][store]") {
     morph::ui::MemoryCustomScreenStore store{morph::exec::detail::inlineExecutor()};
     REQUIRE(settled(store.put({.person = "alice", .app = "lims", .id = "custom:b"}, screen("custom:b", "alice"))));
     REQUIRE(settled(store.put({.person = "alice", .app = "lims", .id = "custom:a"}, screen("custom:a", "alice"))));
-    std::vector<morph::ui::CustomScreen> const listed = settled(store.list("alice", "lims"));
+    std::vector<morph::ui::CustomScreen> const listed = settled(store.list(scope("alice", "lims")));
     REQUIRE(listed.size() == 2);
     CHECK(listed[0].id == "custom:a");
     CHECK(listed[1].id == "custom:b");
@@ -293,8 +300,9 @@ TEST_CASE("custom screens: check answers the refusal and its pointer; save refus
 TEST_CASE("custom screens: a store's refusal reaches the person", "[ui][custom-screens][remote]") {
     struct Refusing final : morph::ui::ICustomScreenStore {
         explicit Refusing(morph::exec::IExecutor& base) : inner{base}, strand{base} {}
-        morph::async::Completion<std::vector<morph::ui::CustomScreen>> list(std::string p, std::string a) override {
-            return inner.list(std::move(p), std::move(a));
+        morph::async::Completion<std::vector<morph::ui::CustomScreen>> list(
+            morph::ui::CustomScreenScope scope) override {
+            return inner.list(std::move(scope));
         }
         morph::async::Completion<std::expected<morph::ui::CustomScreen, morph::ui::CustomScreenRefusal>> get(
             morph::ui::CustomScreenKey k) override {
@@ -497,13 +505,17 @@ TEST_CASE("custom screens: a full list of adversarial summaries fits one envelop
     std::string const control(5000, '\x0b');
     for (std::size_t i = 0; i < options.maxListed + 5; ++i) {
         std::string const id = "custom:" + std::to_string(1000 + i) + control;
-        REQUIRE(settled(
-            store->put({.person = "alice", .app = "lims", .id = id}, morph::ui::CustomScreen{.id = id,
-                                                                                             .title = control,
-                                                                                             .basedOn = control,
-                                                                                             .document = "{}",
-                                                                                             .savedAt = {},
-                                                                                             .savedBy = control})));
+        // A record at its bound, of control bytes too: each is written as a six-byte escape, which the bound counts.
+        morph::ui::Json::object_t record;
+        record.emplace("pad", std::string((morph::ui::kMaxAttributesBytes - 10) / 6, '\x0b'));
+        REQUIRE(settled(store->put({.person = "alice", .app = "lims", .id = id, .session = {}},
+                                   morph::ui::CustomScreen{.id = id,
+                                                           .title = control,
+                                                           .basedOn = control,
+                                                           .document = "{}",
+                                                           .savedAt = {},
+                                                           .savedBy = control,
+                                                           .attributes = record})));
     }
     Server s{store, options};
     Envelope const reply = s.call(morph::ui::kCustomScreensList, R"({"app":"lims"})", "alice");
@@ -513,6 +525,9 @@ TEST_CASE("custom screens: a full list of adversarial summaries fits one envelop
     REQUIRE_FALSE(glz::read_json(out, reply.body));
     CHECK(out.screens.size() == options.maxListed);
     CHECK(out.truncated);
+    // The records were sent, not dropped as too long.
+    CHECK(std::ranges::all_of(
+        out.screens, [](morph::ui::CustomScreenSummary const& screen) { return screen.attributes.has_value(); }));
 }
 
 TEST_CASE("custom screens: only an id that starts with `custom:` is read, written or removed",
@@ -766,4 +781,217 @@ TEST_CASE("custom screens: the handle answers what the actions answer", "[ui][cu
         CHECK(barred.error().reason == "this person may not open the base screen `lims.base`");
         CHECK(s.screens->allowance(asPerson("bob"), "lims", "lims.base").has_value());
     }
+}
+
+namespace {
+
+/// A store where every screen of an application is shared: anyone lists and opens it, its author overwrites it, and
+/// only its author or a session in the `admin` role removes it. The role is read from the session the model passes,
+/// here its metadata; a deployment reads it from the claims of the verified token the same session carries.
+class SharedStore final : public morph::ui::ICustomScreenStore {
+public:
+    explicit SharedStore(morph::exec::IExecutor& base) : _strand{base} {}
+
+    morph::async::Completion<std::vector<morph::ui::CustomScreen>> list(morph::ui::CustomScreenScope scope) override {
+        std::vector<morph::ui::CustomScreen> out;
+        {
+            std::scoped_lock const lock{_mutex};
+            _seen.push_back(scope.session);
+            for (auto const& [key, screen] : _entries) {
+                if (key.first == scope.app) {
+                    out.push_back(screen);
+                }
+            }
+        }
+        return settledWith(std::move(out));
+    }
+
+    morph::async::Completion<std::expected<morph::ui::CustomScreen, morph::ui::CustomScreenRefusal>> get(
+        morph::ui::CustomScreenKey key) override {
+        std::scoped_lock const lock{_mutex};
+        _seen.push_back(key.session);
+        auto const found = _entries.find({key.app, key.id});
+        if (found == _entries.end()) {
+            return settledWith(std::expected<morph::ui::CustomScreen, morph::ui::CustomScreenRefusal>{
+                std::unexpected(morph::ui::CustomScreenRefusal{.reason = "no such custom screen"})});
+        }
+        return settledWith(std::expected<morph::ui::CustomScreen, morph::ui::CustomScreenRefusal>{found->second});
+    }
+
+    morph::async::Completion<std::expected<void, morph::ui::CustomScreenRefusal>> put(
+        morph::ui::CustomScreenKey key, morph::ui::CustomScreen screen) override {
+        std::scoped_lock const lock{_mutex};
+        _seen.push_back(key.session);
+        _entries.insert_or_assign(std::pair{key.app, key.id}, std::move(screen));
+        return settledWith(std::expected<void, morph::ui::CustomScreenRefusal>{});
+    }
+
+    morph::async::Completion<std::expected<void, morph::ui::CustomScreenRefusal>> remove(
+        morph::ui::CustomScreenKey key) override {
+        std::scoped_lock const lock{_mutex};
+        _seen.push_back(key.session);
+        auto const found = _entries.find({key.app, key.id});
+        if (found == _entries.end()) {
+            return settledWith(std::expected<void, morph::ui::CustomScreenRefusal>{
+                std::unexpected(morph::ui::CustomScreenRefusal{.reason = "no such custom screen"})});
+        }
+        auto const role = key.session.metadata.find("role");
+        bool const admin = role != key.session.metadata.end() && role->second == "admin";
+        if (found->second.savedBy != key.person && !admin) {
+            return settledWith(std::expected<void, morph::ui::CustomScreenRefusal>{std::unexpected(
+                morph::ui::CustomScreenRefusal{.reason = "only its author or an administrator may remove it"})});
+        }
+        _entries.erase(found);
+        return settledWith(std::expected<void, morph::ui::CustomScreenRefusal>{});
+    }
+
+    /// The sessions every call carried, in order; read once the calls have answered.
+    [[nodiscard]] std::vector<morph::session::Context> const& seen() const { return _seen; }
+
+private:
+    template <typename T>
+    morph::async::Completion<T> settledWith(T value) {
+        auto [completion, promise] = morph::async::Completion<T>::makeSettleable(&_strand);
+        promise.resolve(std::move(value));
+        return std::move(completion);
+    }
+
+    std::mutex _mutex;
+    std::vector<morph::session::Context> _seen;
+    std::map<std::pair<std::string, std::string>, morph::ui::CustomScreen> _entries;
+    /// The serial owner the answers are delivered on, declared last so it is destroyed first.
+    morph::exec::OwnerStrand _strand;
+};
+
+/// Runs `remove` of @p screenId as @p token, with @p role in the session's metadata when it is given.
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): the screen, the caller's token, then the role.
+Envelope removeAs(Server& s, std::string const& screenId, std::string token, std::string const& role = {}) {
+    Envelope request;
+    request.kind = "execute";
+    request.callId = ++s.lastCallId;
+    request.modelId = s.instance;
+    request.modelType = std::string{morph::ui::kCustomScreensModel};
+    request.actionType = std::string{morph::ui::kCustomScreensRemove};
+    request.body = R"({"app":"lims","id":)" + quoted(screenId) + "}";
+    request.session.token = std::move(token);
+    if (!role.empty()) {
+        request.session.metadata.emplace("role", role);
+    }
+    return s.send(request);
+}
+
+}  // namespace
+
+// Mutation: build the store's key without the session (the store reads no role, and the administrator is refused).
+TEST_CASE("custom screens: the store is given the verified session, so its policy can rest on a role",
+          "[ui][custom-screens][remote]") {
+    morph::exec::ThreadPoolExecutor storePool{1};
+    auto const store = std::make_shared<SharedStore>(storePool);
+    Server s{store};
+    std::string const id = savedId(s.save(baseScreen("lims.base"), "alice"));
+    REQUIRE(listed(s, "bob").screens.size() == 1);
+
+    Envelope const refused = removeAs(s, id, "bob");
+    REQUIRE(refused.kind == "err");
+    CHECK(refused.message.contains("only its author or an administrator may remove it"));
+    Envelope const removed = removeAs(s, id, "carol", "admin");
+    INFO(removed.message);
+    CHECK(removed.kind == "ok");
+    CHECK(listed(s, "alice").screens.empty());
+
+    // Every call carried the session of the verified person, and the removal the session it was asked under.
+    REQUIRE_FALSE(store->seen().empty());
+    CHECK(std::ranges::none_of(store->seen(),
+                               [](morph::session::Context const& session) { return session.principal.empty(); }));
+    CHECK(std::ranges::any_of(store->seen(), [](morph::session::Context const& session) {
+        return session.principal == "carol" && session.metadata.contains("role");
+    }));
+}
+
+namespace {
+
+/// @p text read as an attributes record; fails the test when it is not one.
+morph::ui::Json::object_t attributesOf(std::string const& text) {
+    morph::ui::Json::object_t out;
+    REQUIRE_FALSE(glz::read_json(out, text));
+    return out;
+}
+
+/// @p attributes written as JSON, for comparing records.
+std::string written(std::optional<morph::ui::Json::object_t> const& attributes) {
+    return attributes.has_value() ? glz::write_json(*attributes).value_or("?") : std::string{"absent"};
+}
+
+}  // namespace
+
+// Mutation: drop the attributes from the stored screen (the list and get answer none).
+TEST_CASE("custom screens: a store's attributes round-trip through save, list and get",
+          "[ui][custom-screens][remote]") {
+    Server s;
+    std::string const record = R"({"default":false,"note":"for the morning shift","shared":["team-a"]})";
+    Envelope const saved = s.call(morph::ui::kCustomScreensSave,
+                                  R"({"app":"lims","title":"Mine","basedOn":"lims.base","document":)" +
+                                      quoted(baseScreen("lims.base")) + R"(,"attributes":)" + record + "}",
+                                  "alice");
+    std::string const id = savedId(saved);
+    auto const mine = listed(s, "alice");
+    REQUIRE(mine.screens.size() == 1);
+    CHECK(written(mine.screens.front().attributes) == written(attributesOf(record)));
+
+    Envelope const got = s.call(morph::ui::kCustomScreensGet, R"({"app":"lims","id":)" + quoted(id) + "}", "alice");
+    REQUIRE(got.kind == "ok");
+    morph::ui::CustomScreenFound found;
+    REQUIRE_FALSE(glz::read_json(found, got.body));
+    CHECK(written(found.summary.attributes) == written(attributesOf(record)));
+
+    // A save that names none stores none: the record is the store's, and the model adds nothing of its own.
+    REQUIRE(s.save(baseScreen("lims.base"), "bob").kind == "ok");
+    auto const bobs = listed(s, "bob");
+    REQUIRE(bobs.screens.size() == 1);
+    CHECK_FALSE(bobs.screens.front().attributes.has_value());
+}
+
+// Mutation: skip the attributes bound on save (the oversized record is stored and listed).
+TEST_CASE("custom screens: a save whose attributes are over the bound is refused", "[ui][custom-screens][remote]") {
+    Server s;
+    std::string const pad(morph::ui::kMaxAttributesBytes, 'x');
+    Envelope const refused = s.call(morph::ui::kCustomScreensSave,
+                                    R"({"app":"lims","title":"Mine","basedOn":"lims.base","document":)" +
+                                        quoted(baseScreen("lims.base")) + R"(,"attributes":{"pad":")" + pad + "\"}}",
+                                    "alice");
+    REQUIRE(refused.kind == "err");
+    CHECK(refused.message.contains("`attributes` are at most 1024 bytes"));
+    CHECK(listed(s, "alice").screens.empty());
+
+    // At the bound exactly, it is stored: `{"pad":"` and `"}` take 10 bytes of it.
+    std::string const fits(morph::ui::kMaxAttributesBytes - 10, 'x');
+    CHECK(s.call(morph::ui::kCustomScreensSave,
+                 R"({"app":"lims","title":"Mine","basedOn":"lims.base","document":)" +
+                     quoted(baseScreen("lims.base")) + R"(,"attributes":{"pad":")" + fits + "\"}}",
+                 "alice")
+              .kind == "ok");
+}
+
+// Mutation: send a stored record whatever its length (the list carries it, and the screen is not broken).
+TEST_CASE("custom screens: a stored record too long to send is listed broken, without it",
+          "[ui][custom-screens][remote]") {
+    auto const store = std::make_shared<morph::ui::MemoryCustomScreenStore>(morph::exec::detail::inlineExecutor());
+    std::string const id = "custom:0123456789abcdef0123456789abcdef";
+    REQUIRE(settled(store->put(
+        {.person = "alice", .app = "lims", .id = id, .session = {}},
+        morph::ui::CustomScreen{
+            .id = id,
+            .title = "Mine",
+            .basedOn = "lims.base",
+            .document = baseScreen(id),
+            .savedAt = {},
+            .savedBy = "alice",
+            .attributes = attributesOf(R"({"pad":")" + std::string(morph::ui::kMaxAttributesBytes, 'x') + "\"}")})));
+    Server s{store};
+    auto const mine = listed(s, "alice");
+    REQUIRE(mine.screens.size() == 1);
+    CHECK_FALSE(mine.screens.front().attributes.has_value());
+    REQUIRE(mine.screens.front().broken.has_value());
+    CHECK(mine.screens.front().broken->reason.contains("attributes"));
+    CHECK_FALSE(mine.screens.front().opensWithoutParams);
 }

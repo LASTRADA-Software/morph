@@ -97,18 +97,18 @@ TEST_CASE("ui::Common: a chord pressed inside a hidden container does nothing", 
     Owner owner;
     Runtime runtime{owner};
     RecordingBackend backend;
-    Signal<bool> shown{runtime, false};
+    Signal<bool> shown{runtime, true};
     int presses = 0;
     ui::Mounted const view{
         runtime, backend,
         ui::column({.children = {ui::button(
                         {.label = "Save", .common = {.keys = {{.chord = "Ctrl+S", .onPress = [&] { ++presses; }}}}})},
                     .common = {.visible = [&] { return shown.get(); }}})};
-    CHECK_FALSE(backend.press(2, "Ctrl+S"));
-    CHECK(presses == 0);
-    shown.set(true);
-    owner.runAll();
     CHECK(backend.press(2, "Ctrl+S"));
+    CHECK(presses == 1);
+    shown.set(false);
+    owner.runAll();
+    CHECK_FALSE(backend.press(2, "Ctrl+S"));
     CHECK(presses == 1);
 }
 

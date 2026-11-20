@@ -340,7 +340,14 @@ Widget callbacks are events, not part of a mount, and may ([below](#callbacks)).
      from the top among the entries last sent, and the dispatcher maps it back through them and
      runs that entry's `onSelect`; a path that names no entry, or a separator, runs nothing. Which entries can be chosen — enabled ones without a submenu,
      inside enabled entries — is the backend's to enforce, as it is for a disabled widget.
-4. Its children, appended in order.
+4. Its children, appended in order. A Column or Row whose `visible` is false as it mounts (not a table's row) mounts
+   no children yet: its own widget exists and is hidden, and its children mount, into a scope one level
+   deeper than the stack's, the first time `visible` reads true. They stay mounted after that;
+   hiding the stack again only hides it. A `visible` that is a constant `false` never mounts them. A hidden
+   stack's content therefore costs nothing until shown, its `testId`s and `focusId`s resolve only after
+   that, and a refusal one of its children would raise (a misplaced `alignSelf`) is raised then. Other
+   containers mount their children whether or not they are visible; content that is optional for another kind
+   of node belongs under a conditional node.
 
 Destroying the scope destroys in reverse creation order: every binding before the widget it
 drives, every child before its parent.

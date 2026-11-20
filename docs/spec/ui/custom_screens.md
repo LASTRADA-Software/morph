@@ -10,6 +10,7 @@ base rule on the server, and the client that offers them.
 | `include/morph/ui/custom_screens.hpp` | `ICustomScreenStore` and `MemoryCustomScreenStore`, `checkBaseRule`, `describeAllowance`, `checkCustomScreen`, `withScreenId`, `VerdictCache`, `verdictKey`, the wire types, `CustomScreens`, `CustomScreensModel`, `registerCustomScreens` |
 | `include/morph/ui/service.hpp` | `permittedActions`, `screenAdmitted`, `kCustomScreenIdPrefix`, `ServedBundle::catalog` |
 | `include/morph/ui/custom_screen_sync.hpp` | `isCustomScreenId`, `routeScreen`, `CustomDocuments`, `CustomScreensOffer`, `CustomScreenSync` |
+| `include/morph/ui/custom_screen_controller.hpp` | `CustomScreenControllerOptions`, `CustomScreenController`, its outcomes and results as data |
 | `include/morph/ui/custom_screen_chrome.hpp` | `CustomScreenChromeOptions`, `CustomScreenChrome` |
 | `include/morph/ui/json_source.hpp` | `prettyJson`, `pointerOffset`, `lineAt` |
 | `include/morph/ui/chat/propose_screen.hpp` | `customScreensChatTool` (`propose_screen`), `customScreensDocumentSource`, `enableCustomScreensChat` |
@@ -32,23 +33,37 @@ base rule on the server, and the client that offers them.
 
 ## The store
 
-`ICustomScreenStore` has `list(person, app)`, `get(key)`, `put(key, screen)` and `remove(key)`, all asynchronous, with
-`key` a `CustomScreenKey{person, app, id}`. `get`, `put` and `remove` answer a `CustomScreenRefusal` the person is
-shown as it is. A `CustomScreen` carries `id`, `title`, `basedOn`, the `document` text, `savedAt` and `savedBy`.
+`ICustomScreenStore` has `list(scope)`, `get(key)`, `put(key, screen)` and `remove(key)`, all asynchronous, with
+`key` a `CustomScreenKey{person, app, id, session}` and `scope` a `CustomScreenScope{person, app, session}`. `session`
+is the action's verified `session::Context`, copied as the model copies it (below): its `principal` is `person`, and
+its `token` is the credential the server verified, whose claims (roles among them) a store may read. So a policy can
+rest on more than the person, such as "an administrator may remove anyone's screen"; the authoriser cannot carry it,
+since it sees only the model and the action, not whose screen a write replaces. `get`, `put` and `remove` answer a
+`CustomScreenRefusal` the person is shown as it is. A `CustomScreen` carries `id`, `title`, `basedOn`, the `document`
+text, `savedAt`, `savedBy` and `attributes`.
+
+**Attributes** are the store's own record about a screen: string keys, JSON values (`Json::object_t`), such as whether
+it is shared, private or someone's default. The model carries them through `save` (the request's, to `put`), `list`
+and `get` (the stored ones, on the summary) and never reads them: the framework adds no sharing or default semantics,
+it only stops dropping what a store decides. The store validates what a `save` asks for and refuses what it does not
+accept, in its own words. A record is at most `kMaxAttributesBytes` (1 KiB) written as JSON: a `save` with a longer
+one is refused before the person is looked at, and a stored record longer than that is not sent; its screen is listed
+broken with the reason, so a store that writes one hears about it rather than its clients silently losing it.
 
 The application's store is where every policy over custom screens lives: what a person may open (which may include
 screens others saved), what they may overwrite or delete, and how many they may keep. The model calls it only with a
-person the server derived and a document that passed every check. A store owns the executor its completions are
-delivered on, and any atomicity its own rules need, such as a count.
+person the server derived, with that person's verified session, and a document that passed every check. A store owns
+the executor its completions are delivered on, and any atomicity its own rules need, such as a count.
 
 `put`'s key may name a screen this person can open but not change, such as one another person shared with them. The
 model checks the document, not the right to replace what is stored, so the store must refuse that write.
 `CustomScreen::savedBy` is the caller, not the screen's first author.
 
 `MemoryCustomScreenStore(base)` is the framework's store: a map on an `OwnerStrand` that runs on `base`, each person
-seeing only their own screens under one application. `list` answers by id. A missing screen is `no such custom
-screen`, from `get` and `remove` alike; `put` refuses nothing. Its entries last as long as it does, and it bounds
-neither their number nor their size: it serves tests and examples, not a deployment.
+seeing only their own screens under one application. It keys every entry by the person and reads nothing else of the
+session. `list` answers by id. A missing screen is `no such custom screen`, from `get` and `remove` alike; `put`
+refuses nothing. Its entries last as long as it does, and it bounds neither their number nor their size: it serves
+tests and examples, not a deployment.
 
 ## The model
 
@@ -75,7 +90,7 @@ before it serves.
 | `morph.customScreens.list` | query | `{app}` | `{screens: [CustomScreenSummary], truncated}` |
 | `morph.customScreens.get` | query | `{app, id}` | `{summary, document}` |
 | `morph.customScreens.check` | query | `{app, basedOn, document}` | `{refusal?: {pointer, reason}}` |
-| `morph.customScreens.save` | mutation | `{app, id?, title, basedOn, document}` | `{id}` |
+| `morph.customScreens.save` | mutation | `{app, id?, title, basedOn, document, attributes?}` | `{id}` |
 | `morph.customScreens.remove` | mutation | `{app, id}` | `{removed}` |
 
 What every action does, in order:
@@ -86,7 +101,8 @@ What every action does, in order:
 2. **The names** the action takes (`id`, `title`, `basedOn`) are each 1 to `kMaxNameBytes` bytes, or it is refused;
    they are checked before the person is looked at, except `save`'s optional `id`, which is checked after it. An `id`
    of `get`, `save` or `remove` also starts with `custom:` (`kCustomScreenIdPrefix`), so a request never reaches the
-   store with an application screen's id.
+   store with an application screen's id. `save`'s `attributes`, when given, are at most `kMaxAttributesBytes` as
+   JSON, checked with the names.
 3. **The person** is the verified principal of the session, copied at the start of the action, before anything is
    awaited. A body naming a person has the key ignored: no body type has one. With no verified principal, `list`
    answers no screens and the other four are refused with `custom screens are stored for a signed-in person`.
@@ -107,21 +123,22 @@ What every action does, in order:
   pointer included. Only then is `put` called, with `savedAt` the current time and `savedBy` the caller. `check` runs
   the same rewrite under a placeholder id as long as a real one, so its verdict is the one `save` would give.
 - **`list` answers at most `maxListed` summaries** (200 by default) and says `truncated: true` when the store held
-  more. A capped summary is at most `kMaxSummaryBytes` (3 KiB) and grows at most seven-fold in an envelope: the reply
+  more. A capped summary is at most `kMaxSummaryBytes` (4 KiB) and grows at most seven-fold in an envelope: the reply
   is written with control bytes escaped, so one becomes a six-byte sequence, and the envelope doubles each backslash of
   the reply. `registerCustomScreens` refuses a `maxListed` for which
-  `maxListed * 7 * kMaxSummaryBytes + kCustomScreenReplyOverhead` exceeds `wire::kMaxEnvelopeBytes`, which is above 387;
-  the default takes at most 4.3 MB.
+  `maxListed * 7 * kMaxSummaryBytes + kCustomScreenReplyOverhead` exceeds `wire::kMaxEnvelopeBytes`, which is above 290;
+  the default takes at most 5.8 MB.
 - **`remove`** calls the store's `remove` under the caller.
 - **A store's refusal is passed through unchanged**, from `get`, `put` and `remove`: the model adds no wording over
   the reason, so the person is told what the store said.
 
 **Bounded replies.** Every field of a summary is capped when the summary is built, so the part of a `get` reply that is
 not the document is bounded whatever the store holds: `id`, `title`, `basedOn`, `savedBy` and `broken.pointer` at
-`kMaxNameBytes`, and `broken.reason` at `kMaxBrokenReasonBytes` (1 KiB). A longer value is cut on a UTF-8 boundary and
+`kMaxNameBytes`, `broken.reason` at `kMaxBrokenReasonBytes` (1 KiB), and `attributes` at `kMaxAttributesBytes` (1 KiB,
+as a whole: a record cannot be cut, so one too long is not sent and the screen is listed broken). A longer value is cut on a UTF-8 boundary and
 ends with an ellipsis (U+2026). A reason can quote a whole host command, and a pointer or a principal can be of any
 length, so without the caps the reply would have no bound. `mine` is computed from the stored `savedBy`, before the cap.
-One summary is then at most `kMaxSummaryBytes` (3 KiB) before escaping and at most seven times that after it (see
+One summary is then at most `kMaxSummaryBytes` (4 KiB) before escaping and at most seven times that after it (see
 `list`).
 A store keeps its ids within `kMaxNameBytes`, since an id shown cut could not be given back to `get` or `remove`; the
 model's own are 39 bytes. An entry whose id lacks `custom:` is listed broken, and `get` and `remove` refuse its id
@@ -152,8 +169,10 @@ A `CustomScreenSummary` carries `id`, `title`, `basedOn`, `savedAt`, `savedBy` a
   tells from a list alone whether its copy is current.
 - `opensWithoutParams`: whether it opens from the navigator: it is not broken, and its base declares no params, since a
   custom screen declares exactly its base's. The base is read once per list, not once per screen.
-- `broken`: the refusal the checks give the stored document today, with its pointer; absent when it may be mounted. A
-  broken screen is listed, so the person can open its source and fix it, and is never mounted.
+- `broken`: the refusal the checks give the stored document today, with its pointer, or that its stored `attributes`
+  are too long to send; absent when it may be mounted. A broken screen is listed, so the person can open its source
+  and fix it, and is never mounted.
+- `attributes`: the store's record, as the store answered it; absent when it records nothing.
 
 The actions are `Loggable::No`: a screen is not application data, and the store keeps who saved it and when.
 
@@ -327,7 +346,7 @@ turn.
 
 ## The client
 
-The client half is three framework pieces and the generic client's wiring
+The client half is four framework pieces and the generic client's wiring
 ([`../client/client.md`](../client/client.md#custom-screens)). Drafts themselves are the document host's
 ([`host.md`](host.md), "Drafts").
 
@@ -357,20 +376,45 @@ go. No call names a person.
   count; a refusal's JSON Pointer is the same for either text, a byte offset in it is into the compact one. `check` answers
   the server's first refusal with its pointer; `save` passes a store's refusal through as
   the store worded it, and relists after an answer; `get` answers without keeping, for a broken screen's source.
+- **Remove.** `remove(id, done)` calls `remove`; a store's refusal reaches `done` as the store worded it. An answer
+  forgets the kept document and relists, so no list or `documents` lookup keeps a screen that is gone.
 - **Restore.** `prefetchRoutes(routes, done)` fetches every custom screen a record or a history names that is not
   kept, and answers the ids no document came for, so a start can tell the person which were not restored.
 - **Sessions.** `reset` forgets the offer, the list, the cache and the binding, and drops replies in flight: what a
   sign-in or sign-out does before probing again.
 
+**`CustomScreenController`** is the chrome's logic without a view, for an application that draws its own controls
+over the same drafts. It holds, per tab, the draft's text, a generation that changes with every draft mounted or
+ended, whether a save is in flight and the last refusal of a save (`message`), and runs the commands: `source` and
+`storedSource` (the text a source view opens with), `preview`, `checkAndSave`, `proposeDraft`, `saveAs` (with the
+attributes the store is asked to record), `save`, `discard`, `openAs`, `openCustom` and `remove`. Its state is
+reactive, so a view's bindings follow `drafted`, `saving`, `message`, `offered` and `canChange`. A view calls
+`follow(tab)` when it draws a tab, as the chrome does from `WorkspaceOptions::chrome`.
+
+- **Outcomes and refusals are data.** A check from a source view answers a `CustomScreenCheckResult`: `Done`,
+  `Refused` with the refusal's pointer and reason, or `Dropped`. A save or removal answers the store's refusal as it
+  gave it. What the person should be told that no command's answer carries is a `CustomScreenOutcome` through
+  `onOutcome`: an event (saved, saved but the draft is gone or replaced or the tab closed, saved but it stays a draft,
+  removed, a tab that stayed open on a removed screen, Open as cancelled, a failed open, an unreadable source, a
+  proposal not shown), which save it was about, the screen's title, the reason, and a tone. Wording them is the view's.
+- **Stale answers.** An answer acts only on what it was asked about. A save's answer acts only while the tab still
+  holds the draft of the generation it was asked under, and tells how it ended otherwise. A check's answer is
+  `Dropped`, and mounts nothing, when the tab's draft changed meanwhile (an assistant's proposal, a discard) or the
+  view dropped its answers with `dropSourceAnswers`, as the chrome does when its source view closes or is replaced.
+  Answers asked under a workspace that `attach` has since replaced, or after the controller is gone, do nothing.
+
 **`CustomScreenChrome`** is the window chrome a shell mounts at the top of each document screen's page
-(`WorkspaceOptions::chrome`), built from view nodes so every frontend shows it. A host screen gets none.
+(`WorkspaceOptions::chrome`), built from view nodes so every frontend shows it. A host screen gets none. It is a view
+over a `CustomScreenController` it owns (`controller()`): it draws the controller's state, keeps its own dialogs, and
+words the controller's outcomes (`describe`) for `notify`.
 
 | Part | Test id | What it does |
 |---|---|---|
 | The draft bar | `draft_bar_<id>` | Shown while the tab holds a draft: "Draft — not saved", that forms on a draft change real data, the last refusal of a save (`draft_message_<id>`), **Save** (`draft_save_<id>`, for a draft of the person's own custom screen), **Save as…**, **Source**, **Discard** |
-| The tools row | `screen_tools_<id>` | Shown while the tab holds none: **Open as** (`open_as_<id>`) and **Source** (`source_button_<id>`) |
+| The tools row | `screen_tools_<id>` | Shown while the tab holds none: **Open as** (`open_as_<id>`), **Source** (`source_button_<id>`) and **Remove** (`remove_<id>`, for a screen of the person's own) |
 | The source view | `source_dialog` | A sheet, so the editor has the window: the document's JSON pretty-printed (`prettyJson`: indent 2, a container that fits in about 100 columns on one line, members in their order, scalars as written) in a monospace editor (`source_text`, `wrap: false`: its lines stay whole and it scrolls sideways), the refusal (`source_refusal`), a status line ("Checking…", "Saving…"), **Preview**, **Save as…**, **Check and save** (`source_save`, a stored screen of the person's own), **Close** |
 | The save dialog | `save_as_dialog` | The name (`save_as_title`), the refusal, **Save**, **Cancel** |
+| The removal | `remove_dialog` | Asks "Remove <title>?" once: the refusal (`remove_message`), **Remove** (`remove_confirm`), **Cancel** (`remove_cancel`) |
 
 - **Source** shows the open draft's text, a custom screen's stored text (fetched again when the cache dropped it), or
   an application screen's as the bundle has it, through `prettyJson`. While custom screens are not offered it is read only, with no **Preview** and no
@@ -388,11 +432,19 @@ go. No call names a person.
   draft was all that kept it dirty; otherwise its close guard decides. When the screen stays open the tab stays a
   draft as it was (bar, text, generation) and the person is told the document is saved but stays a draft there until
   the screen can close. **Save** overwrites the person's own custom screen with the draft, fetches the
-  stored document again and ends the draft; both tell the person. A refusal shows in the bar and in the dialog, and
+  stored document again and ends the draft; both tell the person. **Save** and **Check and save** send the screen's
+  listed `attributes` back with it, so an overwrite keeps what the store recorded; the chrome's **Save as…** asks for
+  none. A refusal shows in the bar and in the dialog, and
   the draft stays. While a save is in flight the bar's **Save** and **Save as…** are disabled, and its answer acts
   only on the draft that was saved: if the tab holds a newer draft, none, or is closed by then, the tab is left as it
   is and the person is told the save completed. Tab ids are issued per workspace, so a chrome attached to another
   workspace ignores every answer asked under the old one.
+- **Remove** is offered on a listed custom screen of the person's own (`mine`) while custom screens are offered, the
+  screens **Save** may overwrite; whether the removal is allowed is still the store's. One confirmation asks first.
+  On the answer the confirmation closes and every tab that shows the screen opens its base in its place, with the
+  tab's params (`WorkspaceModel::openInPlace`), so a tab never shows a screen that is gone. A tab that is dirty goes to
+  its close guard; one the person keeps open stays on the removed screen and the person is told. A refusal stays in
+  the confirmation, as the store worded it, and nothing changes.
 - **Discard** mounts the screen's own document again (`discardDraft`), fetching a custom screen's first when the cache
   no longer holds it.
 - **The assistant's draft.** `proposeDraft(tab, screenId, text)` mounts a document the assistant proposed as the
@@ -421,9 +473,9 @@ go. No call names a person.
 
 ## Not yet
 
-- **The chrome's words** ("Draft", "Save as…", "Source", "Open as", the refusal's "Line N") are English; resolving
-  them through the bundle's message catalogues, as the shell frame's `morph.shell.*` labels are, is still to come.
-- **Removing a custom screen.** The model's `remove` has no control in the client yet.
+- **The chrome's words** ("Draft", "Save as…", "Source", "Open as", the refusal's "Line N", and `describe`'s outcome
+  sentences) are English; resolving them through the bundle's message catalogues, as the shell frame's `morph.shell.*`
+  labels are, is still to come. They belong to the view: the controller carries no words, only outcomes as data.
 - **The terminal's source view** is the same dialog; it is best effort, as the spec says.
 
 ## Design decisions
@@ -438,4 +490,5 @@ go. No call names a person.
 | Effects | `changes`, record-wide | A list refetches after any save; the verdict cache keeps the refetch cheap. |
 | Base admission | Every call, outside the verdict cache | Availability is not part of the bundle digest. |
 | The session | Copied before the first await | The session is the dispatching thread's; an action resumes elsewhere. |
+| The client's draft logic | A headless `CustomScreenController`, with `CustomScreenChrome` a view over it | An application with its own controls reuses the drafts, the saves and the stale-answer checks instead of rebuilding them; the words stay in the view, the one place that localises them. |
 | Servability | A bound on `maxDocumentBytes` that fits a file and the escaped `get` reply, rechecked on the rewritten text | Any stored document is then served within the envelope, so no per-document check is needed at serve time. |

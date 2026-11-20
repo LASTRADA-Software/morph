@@ -440,6 +440,7 @@ TEST_CASE("RecordingBackend: expand, resize and dropFiles leave a hidden widget 
     Runtime runtime{owner};
     RecordingBackend backend;
     Lines ran;
+    Signal<bool> shown{runtime, true};
     ui::Mounted const view{
         runtime, backend,
         ui::column(
@@ -448,10 +449,12 @@ TEST_CASE("RecordingBackend: expand, resize and dropFiles leave a hidden widget 
                                         .onResize = [&](std::vector<int> const&) { ran.emplace_back("resize"); }}),
                           ui::dropZone(
                               {.onDrop = [&](std::vector<std::string> const&) { ran.emplace_back("drop"); }})},
-             .common = {.visible = false}})};
+             .common = {.visible = [&] { return shown.get(); }}})};
     REQUIRE(backend.kindOf(2) == "Collapsible");
     REQUIRE(backend.kindOf(3) == "Splitter");
     REQUIRE(backend.kindOf(5) == "DropZone");
+    shown.set(false);
+    owner.runAll();
     backend.expand(2, false);
     backend.resize(3, {10});
     CHECK_FALSE(backend.dropFiles(5, {"/in/a.csv"}));

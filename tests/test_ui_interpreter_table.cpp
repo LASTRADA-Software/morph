@@ -364,6 +364,22 @@ TEST_CASE("table: values a sort cannot order keep the source order, reported onc
     CHECK(sortReports(h) == 1);
 }
 
+// Mutation: drop the boolean branch of `order` (the rows keep their source order and a sort is reported).
+TEST_CASE("table: a Bool column sorts false before true", "[ui][interpreter]") {
+    Harness h;
+    auto screen = h.mount(R"({
+      "vocab": "ui/1", "id": "flags",
+      "state": {
+                 "items": { "init": { "lit": [ { "id": "a", "on": true }, { "id": "b", "on": false },
+                                               { "id": "c", "on": true }, { "id": "d", "on": false } ] } } },
+      "view": { "kind": "table", "rows": { "ref": "items" },
+                "sort": { "lit": [ { "column": "on", "direction": "asc" } ] },
+                "columns": [ { "id": "on", "label": "On", "sortable": true } ] } })");
+    int const table = h.backend.all("Table").front();
+    CHECK(rowOrder(h, table) == "b d a c");
+    CHECK(sortReports(h) == 0);
+}
+
 // Mutation: sort by the first key alone (rows of one status keep their source order).
 TEST_CASE("table: a sort of two keys orders by each in turn, and a header click makes its column the one key",
           "[ui][interpreter]") {

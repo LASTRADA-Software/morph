@@ -165,3 +165,16 @@ TEST_CASE("ui expression edges: a sort of a string and a number is refused in ei
     CHECK(evaluated(R"({"sort": {"lit": ["a", 1]}, "as": "x", "by": {"ref": "x"}})") ==
           "null | the `by` values of `sort` are not of one comparable kind");
 }
+
+// Mutation: drop the boolean branch of `order` (every check below then answers null).
+TEST_CASE("ui expression edges: lt orders booleans false before true, and a boolean against a number is not ordered",
+          "[ui][expr]") {
+    CHECK(evaluated(R"({"fn": "lt", "args": [{"ref": "a"}, {"ref": "b"}]})", R"({"a": false, "b": true})") == "true");
+    CHECK(evaluated(R"({"fn": "lt", "args": [{"ref": "a"}, {"ref": "b"}]})", R"({"a": true, "b": false})") == "false");
+    CHECK(evaluated(R"({"fn": "le", "args": [{"ref": "a"}, {"ref": "b"}]})", R"({"a": true, "b": true})") == "true");
+    CHECK(evaluated(R"({"fn": "gt", "args": [{"ref": "a"}, {"ref": "b"}]})", R"({"a": true, "b": false})") == "true");
+    CHECK(evaluated(R"({"sort": {"lit": [true, false, true, false]}, "as": "x", "by": {"ref": "x"}})") ==
+          "[false,false,true,true]");
+    CHECK(evaluated(R"({"fn": "lt", "args": [{"ref": "a"}, {"ref": "b"}]})", R"({"a": false, "b": 1})")
+              .starts_with("null"));
+}
