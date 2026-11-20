@@ -480,9 +480,10 @@ keeps its operands' 0 places and still fills 0.29 of a bar.
   first, and one past the last shows the last, unreported, since a filter that shrinks the rows under the user is
   normal. The mount reads the page through a `TableSource` whose `alwaysWindowed` is `false`, the path a
   model-backed table's mount takes: below the virtualization threshold it realizes every row of the page, as a
-  short table does, and above it the rows in view. Its `rowScopedCells` is `true`: a row's cells are lowered in
-  the row's one scope, found by its key, so a realized row the mount gives to another key has its cells built
-  again rather than rebound. A change of the engine's view reaches the mount as the engine's
+  short table does, and above it the rows in view. A column with its own `cell` content is lowered in its row's
+  one scope, found by its key, and is marked in `rowScopedCells`, so a realized row the mount gives to another key
+  has those cells built again rather than rebound; a plain column's text reads the record alone and is rebound. A
+  change of the engine's view reaches the mount as the engine's
   own operations when the page is the whole view and the table is not grouped, and as a reset otherwise; the
   mount rebinds only the rows whose record changed. Each change still costs the lowering a pass over every row: the
   view's records are read again for `TableView`, the page's entries are rebuilt, each evaluation of `rows` reads

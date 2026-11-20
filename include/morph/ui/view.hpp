@@ -1435,10 +1435,12 @@ struct TableSource {
     ///        while the view holds fewer than `Virtualization::threshold`, as a short table over a document's rows
     ///        does, and only then draws `TableRowLook::spans`.
     bool alwaysWindowed = true;
-    /// @brief Whether a cell shows one row only: its view shares state with that row's own parts, so a realized row
-    ///        given to another row has its cells built again rather than rebound by their signal. `false` rebinds a
-    ///        cell to any row.
-    bool rowScopedCells = false;
+    /// @brief Per `Table::columns` index, whether that column's cells each show one row only: their view shares state
+    ///        with the row's own parts, so when a realized row is given to another key they are destroyed and built
+    ///        for it rather than rebound by their signal. Set it for a column whose cell reads state its row declares;
+    ///        each such cell then costs a build where a rebind would do. A missing entry reads as `false`: the
+    ///        column's cells are rebound to any row.
+    std::vector<bool> rowScopedCells;
 };
 
 /// @brief A table's status line: its counts, the state of its fetches and levels, and the latest message.

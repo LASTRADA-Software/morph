@@ -2308,28 +2308,43 @@ TEST_CASE("rows table: a field no sort reads redraws its row, and a heading's co
     CHECK(headingTexts(h) == std::vector<std::string>{"3"});
 }
 
-// Mutation: `TableSource::rowScopedCells` false on a rows table (c's cells, rebound from a's place, show a's draft).
+// Mutations: `TableSource::rowScopedCells` empty on a rows table (c's cells, rebound from a's place, show a's draft);
+// every cell of a row dropped when its place goes to another key (the plain `label` cell is built again: 3 cells).
 TEST_CASE("rows table: a row's cells share its scope, and a row given another's place builds its own", "[ui][table]") {
     constexpr char const* kDrafts = R"({"vocab":"ui/1","id":"drafts",
-      "state":{"items":{"init":{"lit":[{"id":"a","name":"a"},{"id":"b","name":"b"}]}}},
+      "state":{"items":{"init":{"lit":[{"id":"a","name":"a","label":"A"},{"id":"b","name":"b","label":"B"}]}}},
       "view":{"kind":"column","children":[
         {"kind":"table","id":"list","rows":{"ref":"items"},"key":{"row":"id"},
          "scope":{"state":{"draft":{"init":{"row":"name"}}}},
          "columns":[
            {"id":"edit","label":"Edit","cell":{"kind":"textInput","testId":"edit","commitOn":"change",
               "value":{"ref":"draft"},"onChange":[{"set":"draft","value":{"ref":"event"}}]}},
-           {"id":"shown","label":"Shown","cell":{"kind":"text","testId":"shown","text":{"ref":"draft"}}}]},
-        {"kind":"button","testId":"swap","label":"Swap",
-         "onClick":[{"set":"items","value":{"lit":[{"id":"b","name":"b"},{"id":"c","name":"c"}]}}]}]}})";
+           {"id":"shown","label":"Shown","cell":{"kind":"text","testId":"shown","text":{"ref":"draft"}}},
+           {"id":"label","label":"Label"}]},
+        {"kind":"button","testId":"swap","label":"Swap","onClick":[{"set":"items","value":{"lit":[
+          {"id":"b","name":"b","label":"B"},{"id":"c","name":"c","label":"C"}]}}]}]}})";
     TableHarness h;  auto screen = h.mount(kDrafts);
     REQUIRE(shownText(h, "a"));
     h.backend.edit(h.byTestId("TextInput", "edit"), "edited");  h.settle();  // the first row's input: a's
     CHECK(shownText(h, "edited"));                                            // its text cell reads the same draft
     CHECK_FALSE(shownText(h, "a"));
+    MountStats const before = statsOf(*screen);
     h.backend.click(h.byTestId("Button", "swap"));  h.settle();              // c takes the place a left
     CHECK(shownText(h, "b"));
     CHECK(shownText(h, "c"));
     CHECK_FALSE(shownText(h, "edited"));
+    CHECK(shownText(h, "C"));                                                 // the plain cell, rebound to c
+    CHECK_FALSE(shownText(h, "A"));
+    CHECK(statsOf(*screen).cellsCreated - before.cellsCreated == 2);          // only the two scoped cells built
+}
+
+// Mutation: a page of focus taken from the reported range of a document's rows, empty before any report (PageDown
+// moves one row).
+TEST_CASE("rows table: before the backend reports a range, a page of focus is the overscan's rows", "[ui][table]") {
+    TableHarness h;  auto screen = h.mount(rowsDoc(idRows(50)));
+    int const table = tableOf(h);
+    h.backend.focusMove(table, morph::ui::FocusMove::PageDown);  h.settle();
+    CHECK(h.backend.focusCell(table).first == 10);                            // Virtualization::overscan
 }
 
 // Mutation: `setGroup` given an empty unit table (1 kg and 1000 g are two runs).
@@ -2580,6 +2595,60 @@ TEST_CASE("model table over an action: a unit no one lists is its own canonical 
     REQUIRE(measure != nullptr);
     CHECK(measure->unit != table::kUnknownUnit);
     CHECK(unitOf(*screen, "furlong").dimension == "furlong");
+}
+
+// Mutations: the locate read sent to `Table.` and the table's id, as a model's table's (no call of the action); a reply
+// that holds the row without `indices` read as the key's absence (an answer of nothing, not an error).
+TEST_CASE("model table over an action: a row is located through the action, and a row without its index is unknown",
+          "[ui][table]") {
+    TableHarness h;  addPageSamples(h);
+    auto screen = h.mount(kActionTable);
+    h.reply(h.dispatcher.last("Lims_PageSamples"), R"({"rows":[{"id":1,"name":"a"},{"id":2,"name":"b"}],"total":300})");
+    std::vector<morph::ui::RowLocation> answers;
+    auto const locate = [&] {
+        std::size_t const sent = h.dispatcher.count("Lims_PageSamples");
+        windowOf(*screen).locateRow(table::RowId{std::int64_t{2}}, {},
+                                    [&answers](morph::ui::RowLocation const& found) { answers.push_back(found); });
+        h.settle();
+        REQUIRE(h.dispatcher.count("Lims_PageSamples") == sent + 1);
+        INFO(h.dispatcher.calls.back().body);
+        CHECK(lastBodyHas(h, "Lims_PageSamples", R"("keys":[2])"));            // the key in the x-table member
+        CHECK(lastBodyHas(h, "Lims_PageSamples", R"("columns":[])"));
+    };
+    locate();
+    h.reply(h.dispatcher.last("Lims_PageSamples"), R"({"rows":[{"id":2,"name":"b"}],"indices":[41],"total":300})");
+    REQUIRE(answers.size() == 1);
+    REQUIRE(answers.back().has_value());
+    CHECK(*answers.back() == std::optional<std::int64_t>{41});
+    locate();
+    h.reply(h.dispatcher.last("Lims_PageSamples"), R"({"rows":[{"id":2,"name":"b"}],"total":300})");
+    REQUIRE(answers.size() == 2);
+    CHECK_FALSE(answers.back().has_value());                                  // where the row is is not known
+    locate();
+    h.reply(h.dispatcher.last("Lims_PageSamples"), R"({"rows":[],"total":300})");
+    REQUIRE(answers.size() == 3);
+    REQUIRE(answers.back().has_value());
+    CHECK_FALSE(answers.back()->has_value());                                 // no row: the view lacks the key
+}
+
+// Mutation: a typed list action's table taken as not described, its revision being empty (no keyed call is sent).
+TEST_CASE("model table over an action: highlightKey locates its row through the action and marks it", "[ui][table]") {
+    constexpr char const* kTypedHighlight =
+        R"({"vocab":"ui/1","id":"samples","models":{"lab":{"type":"Lims_SampleModel"}},)"
+        R"("state":{"hk":{"init":{"lit":null}}},"view":{"kind":"column","children":[)"
+        R"({"kind":"button","label":"2","testId":"to2","onClick":[{"set":"hk","value":2}]},)"
+        R"({"kind":"table","id":"list","testId":"list","model":"lab","action":"Lims_PageSamples","key":{"row":"id"},)"
+        R"("highlightKey":{"ref":"hk"},"columns":[{"id":"id"},{"id":"name"}]}]}})";
+    TableHarness h;  addPageSamples(h);
+    auto screen = h.mount(kTypedHighlight);
+    h.reply(h.dispatcher.last("Lims_PageSamples"), R"({"rows":[{"id":1,"name":"a"},{"id":2,"name":"b"}],"total":300})");
+    std::size_t const sent = h.dispatcher.count("Lims_PageSamples");
+    click(h, "to2");
+    REQUIRE(h.dispatcher.count("Lims_PageSamples") == sent + 1);
+    CHECK(lastBodyHas(h, "Lims_PageSamples", R"("keys":[2])"));
+    h.reply(h.dispatcher.last("Lims_PageSamples"), R"({"rows":[{"id":2,"name":"b"}],"indices":[41],"total":300})");
+    CHECK(h.backend.prop(tableOf(h), "highlightedRow") == "41");
+    CHECK(h.diagnostics.empty());
 }
 
 

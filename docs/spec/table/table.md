@@ -615,7 +615,8 @@ public:
   table record's change events go to `refresh` and `invalidate`
   ([The window under changes](#the-window-under-changes)). A change is the diff of the rows it held against the
   rows it holds, by key. `locateRow` is a keyed fetch naming no columns, whose reply's `indices` give the row's
-  view index. It owns the two timing rules the window itself has no clock for: when a fetch is sent
+  view index: a reply with no row says the view lacks the key, and one that holds the row without its index is
+  `InvalidValue`, an answer the rows could not give, not an absence. It owns the two timing rules the window itself has no clock for: when a fetch is sent
   while the user scrolls, and how often an awaited order is fetched again.
 
 The mount's windowing, which decides the realized rows and columns of a large table, calls `visible` with both

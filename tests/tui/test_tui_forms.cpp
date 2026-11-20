@@ -266,3 +266,31 @@ TEST_CASE("tui forms: Ctrl+A on a paged table selects every row of the view", "[
     INFO(client.drawn());
     CHECK(client.shows("5 picked"));
 }
+
+// Mutation: the terminal table's header box over a source sending its range through the mount, the select-all handler
+// unused (the page's range selects none of the other page's rows).
+TEST_CASE("tui forms: the header box of a paged table selects every row of the view", "[tui][forms][table]") {
+    TuiClient client;
+    auto screen = client.interpreter.mount(ui::testing::loadOrFail(R"({
+      "vocab": "ui/1", "id": "paged", "state": { "rows": { "init": { "lit": [
+        { "id": 1, "n": "one" }, { "id": 2, "n": "two" }, { "id": 3, "n": "three" }, { "id": 4, "n": "four" },
+        { "id": 5, "n": "five" } ] } } },
+      "view": { "kind": "column", "children": [
+        { "kind": "table", "id": "t", "testId": "list", "rows": { "ref": "rows" }, "key": { "row": "id" },
+          "selectionMode": "multiple", "selectColumn": true, "pageSize": 2,
+          "columns": [ { "id": "n", "label": "Name" } ] },
+        { "kind": "text", "text": { "fn": "format", "args": [ "{0} picked", { "ref": "t.selectedCount" } ] } } ] } })",
+                                                                   ui::testing::corpusCatalog()),
+                                           {}, client.backend);
+    REQUIRE(screen.has_value());
+    client.settle();
+    INFO(client.drawn());
+    REQUIRE(client.drawn().starts_with("[ ]"));                               // the header box, at the first cell
+    using Type = core::tui::MouseEvent::Type;
+    for (Type const type : {Type::Press, Type::Release}) {                    // screen cell (1, 0), 1-based
+        static_cast<void>(client.screen.dispatchEvent(core::tui::MouseEvent{.type = type, .button = 0, .x = 2, .y = 1}));
+    }
+    client.settle();
+    INFO(client.drawn());
+    CHECK(client.shows("5 picked"));
+}
