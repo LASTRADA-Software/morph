@@ -2348,6 +2348,12 @@ private:
                    : VisibleRange{.first = 0, .count = table.virtualize.overscan};
     }
 
+    // The rows focus takes as in view: the reported range, or the first `overscan` rows before any report, whatever
+    // the rows, so a page moves by the rows a view would show and a row past them is scrolled to.
+    [[nodiscard]] static VisibleRange focusRangeOf(SourceTable const& table) {
+        return table.range.count > 0 ? table.range : VisibleRange{.first = 0, .count = table.virtualize.overscan};
+    }
+
     static void tellVisible(SourceTable& table) {
         VisibleRange const shown = shownOf(table);
         table.source.rows->visible(static_cast<std::int64_t>(shown.first), static_cast<std::int64_t>(shown.count),
@@ -2465,10 +2471,11 @@ private:
     }
 
     // Gives a slot the row @p ref: its key, its record, its look. Its cells still show the row they showed, until
-    // each is rebound; a source's row-scoped cells of another row are dropped, to be built for this one.
+    // each is rebound; the cells of a row-scoped column (`TableSource::rowScopedCells`) of another key are dropped,
+    // to be built for this one.
     void assignRow(SourceTable& table, SourceTable::Realized& slot, std::int64_t index, TableRowRef const& ref) {
-        if (table.source.rowScopedCells && slot.key && *slot.key != ref.key) {
-            dropCells(slot);
+        if (slot.key && *slot.key != ref.key) {
+            dropRowScoped(table, slot);
         }
         slot.index = index;
         slot.key = ref.key;
@@ -2887,13 +2894,30 @@ private:
         }
     }
 
-    // Destroys a row's placed and pooled cells, and forgets their widgets among its children.
-    static void dropCells(SourceTable::Realized& slot) {
-        for (auto const& [column, placed] : slot.cells) {
-            std::erase(slot.children, placed.cell.widget);
-        }
-        slot.cells.clear();
-        dropPools(slot);
+    // Whether a column's cells each show one row only.
+    [[nodiscard]] static bool rowScoped(SourceTable const& table, std::size_t column) {
+        return column < table.source.rowScopedCells.size() && table.source.rowScopedCells.at(column);
+    }
+
+    // Destroys a row's placed and pooled cells of the row-scoped columns, and forgets their widgets among its
+    // children. A default cell is never row-scoped: it reads its row's record alone.
+    static void dropRowScoped(SourceTable const& table, SourceTable::Realized& slot) {
+        std::erase_if(slot.cells, [&table, &slot](auto const& entry) {
+            if (!rowScoped(table, entry.first)) {
+                return false;
+            }
+            std::erase(slot.children, entry.second.cell.widget);
+            return true;
+        });
+        std::erase_if(slot.pool, [&table, &slot](auto const& entry) {
+            if (entry.first.first || !rowScoped(table, entry.first.second)) {
+                return false;
+            }
+            for (SourceTable::Cell const& cell : entry.second) {
+                std::erase(slot.children, cell.widget);
+            }
+            return true;
+        });
     }
 
     // Destroys a row's pooled cells, and forgets their widgets among its children.
@@ -3032,7 +3056,7 @@ private:
     // scrolled to, so the window fetches it, as for a move onto a row not fetched; a held row is left where it is.
     void tellLocatedFocus(SourceTable& table) {
         auto const at = static_cast<std::size_t>(table.focusIndex);
-        VisibleRange range = shownOf(table);
+        VisibleRange range = focusRangeOf(table);
         if (!table.source.rows->row(table.focusIndex) && (at < range.first || at >= range.first + range.count)) {
             range.first = at < range.first ? at : at + 1 - range.count;
             table.range = range;
@@ -3093,7 +3117,7 @@ private:
     void moveFocus(SourceTable& table, FocusMove move) {
         TableTotal const total = table.source.rows->total();
         std::int64_t const last = std::max<std::int64_t>(total.rows - 1, 0);
-        std::int64_t const page = std::max<std::int64_t>(static_cast<std::int64_t>(shownOf(table).count), 1);
+        std::int64_t const page = std::max<std::int64_t>(static_cast<std::int64_t>(focusRangeOf(table).count), 1);
         std::int64_t index = table.focused ? table.focusIndex : 0;
         std::size_t place =
             table.focused && table.focusColumn < table.placeOf.size() && table.placeOf.at(table.focusColumn)
@@ -3151,7 +3175,7 @@ private:
         table.focusColumn = table.visible.at(place);
         std::optional<TableRowRef> const ref = table.source.rows->row(index);
         table.focusKey = ref ? std::optional<Key>{ref->key} : std::nullopt;
-        VisibleRange range = shownOf(table);
+        VisibleRange range = focusRangeOf(table);
         auto const at = static_cast<std::size_t>(index);
         if (at < range.first || at >= range.first + range.count) {
             range.first = at < range.first ? at : at + 1 - range.count;
@@ -3314,10 +3338,10 @@ private:
 
     // A table over a `TableSource`. Rows are windowed, except a table over a document's rows below its threshold,
     // which realizes every row: the mount realizes the rows the backend reports in view and `overscan` rows either
-    // side (the first `overscan` rows before any report). Columns are windowed once the
-    // backend reports its horizontal viewport and `windowingOf` says so; until then every visible column is in the
-    // window. The mount tells the rows which rows and columns are in view, and applies each `ViewChange` to the
-    // realized rows by key. Rows first, then the selection, as for a table over `rows`.
+    // side; before any report, the first `overscan` rows of a server's rows, and none of a document's (`shownOf`).
+    // Columns are windowed once the backend reports its horizontal viewport and `windowingOf` says so; until then
+    // every visible column is in the window. The mount tells the rows which rows and columns are in view, and applies
+    // each `ViewChange` to the realized rows by key. Rows first, then the selection, as for a table over `rows`.
     // NOLINTNEXTLINE(readability-function-cognitive-complexity): one handler per table seam.
     Widget& mountSourceTable(reactive::Scope& scope, Table const& spec, ContainerWidget* parent) {
         if (!spec.source->rows || !spec.source->cellView) {

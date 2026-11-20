@@ -2179,6 +2179,8 @@ struct QuickWindowOptions {
     bool selectColumn = false;
     // Each column's unit, by index; a column past the list has none.
     std::vector<std::string> units = {};
+    // Whether the table has a select-all handler, which counts its calls in `selectAlls`.
+    bool selectAllHandler = false;
 };
 
 std::string groupedCount(std::int64_t n) {
@@ -2259,6 +2261,9 @@ struct QuickWindowFixture {
         tableOptions.onSelectRange = [this](std::size_t anchor, std::size_t focus, ui::SelectionChange change) {
             ranges.emplace_back(anchor, focus, change);
         };
+        if (options.selectAllHandler) {
+            tableOptions.onSelectAll = [this] { ++selectAlls; };
+        }
         view.emplace(scene.runtime(), scene.backend(),
                      ui::table(std::move(columns), std::move(source), std::move(tableOptions)));
         settle();
@@ -2362,6 +2367,7 @@ struct QuickWindowFixture {
     morph::reactive::Signal<std::map<std::pair<std::int64_t, std::size_t>, ui::CellAccent>> accents;
     std::vector<QuickWindowOptions::Wrapped> wrapped;
     int retries = 0;
+    int selectAlls = 0;
     std::vector<std::tuple<std::size_t, std::size_t, ui::SelectionChange>> ranges;
     std::size_t firstRow = 0;
     std::size_t maxRebindsPerTurn = 0;
@@ -2614,4 +2620,22 @@ TEST_CASE("qt_quick table window: Shift with an arrow and Ctrl+A select through 
     CHECK(f.ranges.back() == std::tuple{std::size_t{1}, std::size_t{3}, ui::SelectionChange::Replace});
     f.scene.key(Qt::Key_A, Qt::ControlModifier);
     CHECK(f.ranges.back() == std::tuple{std::size_t{0}, std::size_t{99'999}, ui::SelectionChange::Extend});
+}
+
+// Mutation: `TableImpl::setOnSelectAll` not writing `selectAllHandled` (Ctrl+A and the box fire a range, and the
+// handler is never called).
+TEST_CASE("qt_quick table window: a select-all handler takes Ctrl+A and the select-all box over a source",
+          "[qt_quick]") {
+    QuickWindowFixture f{100'000,
+                         30,
+                         {.selection = ui::SelectionMode::Multiple, .selectColumn = true, .selectAllHandler = true}};
+    CHECK(f.prop("selectAllHandled").toBool());
+    f.item()->forceActiveFocus();
+    f.scene.key(Qt::Key_A, Qt::ControlModifier);
+    CHECK(f.selectAlls == 1);
+    auto* const box = f.item()->findChild<QQuickItem*>(QStringLiteral("selectAll"));
+    REQUIRE(box != nullptr);
+    f.scene.click(*box);
+    CHECK(f.selectAlls == 2);
+    CHECK(f.ranges.empty());
 }

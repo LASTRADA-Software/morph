@@ -8540,7 +8540,11 @@ Node ScreenCore::lowerRows(DocNode const& node, LowerCtx const& ctx, ElementStat
     TableSource source;
     source.rows = table->rows;
     source.alwaysWindowed = false;
-    source.rowScopedCells = true;
+    // A column with its own `cell` content is lowered in its row's scope; a plain column reads the record alone.
+    source.rowScopedCells.reserve(cells.size());
+    for (DocNode const* const column : cells) {
+        source.rowScopedCells.push_back(column != nullptr && !column->nodes("cell").empty());
+    }
     source.rowView = [this, ctx, &node, cellContent, registry, keyText, toneReported, spansReported, fields,
                       own](reactive::Signal<Value> const& row) -> TableRowLook {
         std::string key = keyText(row.peek());

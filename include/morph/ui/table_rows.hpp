@@ -2478,7 +2478,8 @@ public:
     /// @param key  The row's key.
     /// @param stop Stops the fetch; once a stop is requested, @p done is not called.
     /// @param done Called on the owner with the row's view index, nothing when the reply has no row, or the error the
-    ///        fetch failed with; `Unavailable` while no description is held.
+    ///        fetch failed with; `Unavailable` while no description is held, and `InvalidValue` when the reply holds
+    ///        the row without its index.
     void locateRow(table::RowId key, std::stop_token stop, std::function<void(RowLocation const&)> done) override {
         table::TableQuery query = queryOf(table::PageRequest{}, {});
         query.columns = std::vector<std::string>{};
@@ -2510,7 +2511,17 @@ public:
                 done(std::unexpected(read.error()));
                 return;
             }
-            done(read->indices.empty() ? std::nullopt : std::optional<std::int64_t>{read->indices.front()});
+            // No row: the view lacks the key. A row without its index leaves where it is unknown, which is not
+            // its absence.
+            if (read->rows.empty()) {
+                done(std::nullopt);
+            } else if (read->indices.empty()) {
+                done(std::unexpected(table::TableError{.code = table::TableErrorCode::InvalidValue,
+                                                       .column = {},
+                                                       .message = "the keyed reply gives its row no index"}));
+            } else {
+                done(std::optional<std::int64_t>{read->indices.front()});
+            }
         });
         reply.onError(_scope, [done, stop](std::exception_ptr const& error) {
             if (!stop.stop_requested() && !wasCancelled(error)) {
