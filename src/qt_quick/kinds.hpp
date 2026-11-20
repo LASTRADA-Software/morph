@@ -706,6 +706,10 @@ public:
     void setOnRetry(std::function<void()> onRetry) override;
     /// Throws std::logic_error when @p row is not one of this table's rows.
     void setCellLoad(ui::Widget& row, std::size_t column, ui::CellLoad load) override;
+    /// The row's cell draws the tone's tint under its selection and focus marks, the theme's error mark in place of
+    /// an invalid value, and the "more here" mark and a tooltip (its accessible description) for a tooltip. Throws
+    /// std::logic_error when @p row is not one of this table's rows.
+    void setCellAccent(ui::Widget& row, std::size_t column, ui::CellAccent const& accent) override;
     /// The window's columns, offsets and widths are pixels: the header and the rows draw these columns only.
     void setColumnWindow(std::span<std::size_t const> columns, std::span<int const> offsets,
                          std::span<int const> widths, int totalWidth, std::size_t pinned) override;
@@ -817,6 +821,9 @@ public:
     /// Writes the load state of the row's cell in @p column to the row's `cellLoads`, which holds the columns not
     /// loaded.
     void setLoad(std::size_t column, ui::CellLoad load);
+    /// Writes the accent of the row's cell in @p column to the row's `cellAccents`, which holds the columns with one:
+    /// `{tone, tooltip, invalid}`, the tone -1 for none.
+    void setAccent(std::size_t column, ui::CellAccent const& accent);
 
 protected:
     /// The table places a row's cells in its columns.
@@ -827,6 +834,8 @@ private:
     std::optional<ui::Key> _key;
     /// The columns not loaded, by column as text: `1` unloaded, `2` failed.
     QVariantMap _loads;
+    /// The columns with an accent, by column as text.
+    QVariantMap _accents;
 };
 
 }  // namespace morph::qt_quick::detail

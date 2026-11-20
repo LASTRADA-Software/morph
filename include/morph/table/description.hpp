@@ -74,6 +74,65 @@ namespace morph::table {
 
 // NOLINTBEGIN(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access) -- cell and column indices are bounded by the page's own counts, checked before they are used
 
+/// @brief How a column rounds a value it shows at fewer places than the value has: the expression language's two
+///        modes, so a value a document rounds and the same value a column shows agree. JSON `"halfEven"`, `"halfUp"`.
+enum class Rounding : std::uint8_t {
+    HalfEven,  ///< A half rounds to the even last kept digit: 0.125 at 2 places is 0.12.
+    HalfUp,    ///< A half rounds away from zero: 0.125 at 2 places is 0.13, -0.125 is -0.13.
+};
+
+}  // namespace morph::table
+
+/// @brief JSON names of `morph::table::Rounding`: `halfEven`, `halfUp`.
+template <>
+struct glz::meta<morph::table::Rounding> {
+    using enum morph::table::Rounding;
+    /// @brief Each enumerator after its JSON name.
+    static constexpr auto value = glz::enumerate("halfEven", HalfEven, "halfUp", HalfUp);
+};
+
+namespace morph::table {
+
+/// @brief A text a column shows for one particular value: a code's word, a flag in words.
+struct ValueLabel {
+    /// @brief The value as a filter entry takes it: `"true"`, `"3"`, `"V"`.
+    std::string operand;
+    /// @brief What the cell shows for it.
+    std::string text;
+
+    /// @brief Member-wise equality.
+    /// @param other The label to compare with.
+    /// @return `true` when both members match.
+    [[nodiscard]] bool operator==(ValueLabel const& other) const = default;
+};
+
+/// @brief How a column turns its cells into text on the client. It changes what a cell shows and nothing a sort, a
+///        filter, a distinct value or a selection uses.
+struct ColumnDisplay {
+    /// @brief Places shown for an `Integer`, `Decimal`, `Quantity` or `Number` cell; absent shows the value's own
+    ///        places (a `Rational`'s declared places, a `double`'s shortest round trip).
+    std::optional<std::uint32_t> decimals;
+    /// @brief How a value with more places than `decimals` is rounded for showing.
+    Rounding rounding = Rounding::HalfEven;
+    /// @brief With `decimals`, whether a value of fewer places is padded with zeros: 2 places shows 1.5 as "1.50".
+    bool padPlaces = true;
+    /// @brief Whether digits are grouped by the locale: 12,500.
+    bool grouping = false;
+    /// @brief What an empty cell shows: "-", "n/a". Empty shows nothing.
+    std::string empty;
+    /// @brief The unit of a plain numeric column, shown in its header; a `Measure` column's units are its cells'.
+    std::string unit;
+    /// @brief A `Date` or `DateTime` column's pattern; empty takes the session's.
+    std::string date;
+    /// @brief Text for particular values; a value no entry names shows as `decimals` says.
+    std::vector<ValueLabel> labels;
+
+    /// @brief Member-wise equality.
+    /// @param other The display to compare with.
+    /// @return `true` when every member matches.
+    [[nodiscard]] bool operator==(ColumnDisplay const& other) const = default;
+};
+
 /// @brief One column of a table's description.
 struct TableColumn {
     /// @brief The column's id and kind, as the engine reads them.
@@ -88,6 +147,13 @@ struct TableColumn {
     bool filterable = true;
     /// @brief Whether the column is shown by default.
     bool shown = true;
+    /// @brief How the column's cells are shown.
+    ColumnDisplay display;
+    /// @brief The id of the `Text` column whose cell names this column's cell's tone (`neutral`, `info`, `ok`,
+    ///        `warn`, `err`); empty for none.
+    std::string tone;
+    /// @brief The id of the `Text` column whose cell is this column's cell's tooltip; empty for none.
+    std::string tooltip;
 
     /// @brief Member-wise equality.
     /// @param other The column to compare with.
@@ -131,6 +197,11 @@ struct TableDescription {
     std::vector<UnitInfo> units;
     /// @brief What the server offers on the table.
     TableCapabilities capabilities;
+    /// @brief The id of the `Text` column whose cell names a row's tone; empty for none.
+    std::string rowTone;
+    /// @brief The id of the `Text` column whose cell, when it holds text, locks the row and is its tooltip; empty
+    ///        for none.
+    std::string rowLock;
     /// @brief A hash of every other member, set by `describe`; a model leaves it empty.
     std::string revision;
 
@@ -185,6 +256,110 @@ struct TableDescription {
         }
     }
     return std::move(builder).build();
+}
+
+/// @brief Refuses a column display or a companion that cannot apply to @p description.
+///
+/// `decimals` or `unit` on a `Measure` column is refused, naming that column: a measure shows in its own unit, to
+/// that unit's decimals. A `tone`, `tooltip`, `rowTone` or `rowLock` that names no column, or a column that is not
+/// `Text`, is refused, naming the id it gives.
+/// @param description The description.
+/// @return Nothing, or `SourceContract` naming the offending column.
+[[nodiscard]] inline std::expected<void, TableError> validateDisplay(TableDescription const& description) {
+    using Refused = std::unexpected<TableError>;
+    auto const refuse = [](std::string column, std::string message) {
+        return Refused{
+            TableError{.code = TableErrorCode::SourceContract, .column = std::move(column), .message = std::move(message)}};
+    };
+    auto const isCompanion = [&description](std::string_view id) {
+        auto const found = std::ranges::find(description.columns, id,
+                                             [](TableColumn const& column) -> auto const& { return column.info.id; });
+        return found != description.columns.end() && found->info.kind == ColumnKind::Text;
+    };
+    for (TableColumn const& column : description.columns) {
+        if (column.info.kind == ColumnKind::Measure && (column.display.decimals || !column.display.unit.empty())) {
+            return refuse(column.info.id,
+                          "a measure column shows each cell in its own unit; it takes no `decimals` or `unit`");
+        }
+        for (std::string const* const named : {&column.tone, &column.tooltip}) {
+            if (!named->empty() && !isCompanion(*named)) {
+                return refuse(*named, "column `" + column.info.id + "` names `" + *named +
+                                          "` as a companion; a companion is a `Text` column of the table");
+            }
+        }
+    }
+    for (std::string const* const named : {&description.rowTone, &description.rowLock}) {
+        if (!named->empty() && !isCompanion(*named)) {
+            return refuse(*named,
+                          "the table names `" + *named + "` as a row's companion; a companion is a `Text` column");
+        }
+    }
+    return {};
+}
+
+/// @brief Which companions a document overrides with its own expressions.
+struct CompanionOverrides {
+    /// @brief The column ids whose document part gives `tone`.
+    std::set<std::string, std::less<>> tone;
+    /// @brief The column ids whose document part gives `tooltip`.
+    std::set<std::string, std::less<>> tooltip;
+    /// @brief Whether the node gives `rowTone`.
+    bool rowTone = false;
+};
+
+/// @brief The columns a query fetches for @p columns: each with its companions, then the row's.
+///
+/// For each id of @p columns in order: the id, then its `tone` companion unless @p overrides gives that column's
+/// tone, then its `tooltip` companion likewise; then `rowTone` unless overridden; then `rowLock`, which travels with
+/// every row since a locked row cannot be drawn without it. Empty names are skipped, and an id already listed is not
+/// listed again.
+/// @param description The description.
+/// @param columns     The column ids, in the order the query names them.
+/// @param overrides   What the document gives itself.
+/// @return The ids.
+[[nodiscard]] inline std::vector<std::string> columnsWithCompanions(TableDescription const& description,
+                                                                    std::span<std::string const> columns,
+                                                                    CompanionOverrides const& overrides = {}) {
+    std::vector<std::string> out;
+    auto const add = [&out](std::string const& id) {
+        if (!id.empty() && !std::ranges::contains(out, id)) {
+            out.push_back(id);
+        }
+    };
+    for (std::string const& id : columns) {
+        add(id);
+        auto const found = std::ranges::find(description.columns, id,
+                                             [](TableColumn const& column) -> auto const& { return column.info.id; });
+        if (found == description.columns.end()) {
+            continue;
+        }
+        if (!overrides.tone.contains(id)) {
+            add(found->tone);
+        }
+        if (!overrides.tooltip.contains(id)) {
+            add(found->tooltip);
+        }
+    }
+    if (!overrides.rowTone) {
+        add(description.rowTone);
+    }
+    add(description.rowLock);
+    return out;
+}
+
+/// @brief Every column @p description names as a companion: columns no user arranges.
+/// @param description The description.
+/// @return Every non-empty `tone`, `tooltip`, `rowTone` and `rowLock` name, sorted, without duplicates.
+[[nodiscard]] inline std::vector<std::string> companionColumns(TableDescription const& description) {
+    std::set<std::string, std::less<>> names;
+    for (TableColumn const& column : description.columns) {
+        names.insert(column.tone);
+        names.insert(column.tooltip);
+    }
+    names.insert(description.rowTone);
+    names.insert(description.rowLock);
+    names.erase(std::string{});
+    return {names.begin(), names.end()};
 }
 
 /// @brief One row of a generic page: one cell per entry of the page's `columns`.
@@ -1566,6 +1741,9 @@ struct AnswerContext {
 [[nodiscard]] inline std::expected<GenericPage, TableError> answerQuery(ServedTable const& served,
                                                                         TableQuery const& query,
                                                                         AnswerContext const& context = {}) {
+    if (auto shown = validateDisplay(served.description); !shown) {
+        return std::unexpected(std::move(shown.error()));
+    }
     if (context.rowScoped && served.scope.empty()) {
         return std::unexpected(TableError{
             .code = TableErrorCode::SourceContract, .column = {}, .message = "a row-scoped table needs a scope"});
@@ -2186,7 +2364,11 @@ struct DescribeTable {
     template <typename Model>
     static TableDescription invoke(Model& model, DescribeTable& action) {
         static_cast<void>(action);
-        auto described = servedDescription(detail::serve<Function>(model, detail::callerContext()));
+        auto const served = detail::serve<Function>(model, detail::callerContext());
+        if (auto shown = validateDisplay(served.description); !shown) {
+            throw detail::refusalOf(shown.error());
+        }
+        auto described = servedDescription(served);
         if (!described) {
             throw detail::refusalOf(described.error());
         }

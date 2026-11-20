@@ -2077,12 +2077,22 @@ private:
         // Which pool a cell goes back to: the default cell's pool of one role, or a column's own pool.
         using PoolKey = std::pair<bool, std::size_t>;
 
+        // Where an accented cell's accent is told: the row widget and the column it is attached at (no row while it is
+        // pooled or being moved), and the accent last evaluated, sent again whenever it is attached.
+        struct Accent {
+            Widget* row = nullptr;
+            std::size_t column = 0;
+            CellAccent last;
+        };
+
         // One cell: its scope owns its view, its bindings and its widget; its signals are the record it shows and,
         // for the default cell, the column it shows.
         struct Cell {
             std::unique_ptr<reactive::Scope> scope;
             reactive::Signal<Value>* row = nullptr;
             reactive::Signal<std::size_t>* column = nullptr;
+            // Engaged for a cell whose view is an `AccentedCell`; owned by `scope`.
+            Accent* accent = nullptr;
             Widget* widget = nullptr;
             PoolKey pool;
         };
@@ -2366,7 +2376,21 @@ private:
         }
         Node const& node = scope.make<Node>(std::move(made));
         auto* const stack = dynamic_cast<ContainerWidget*>(row.widget);
-        Widget* const widget = node ? mount(scope, node, stack) : &scope.adopt(_backend->createSpacer(stack));
+        // An accented cell mounts its content as the cell; its accent is bound in the cell's scope and told once the
+        // cell is attached to a row (`realizeCell`), so a cell built for a pool tells nothing yet.
+        AccentedCell const* const accented = node ? std::get_if<AccentedCell>(&node->kind) : nullptr;
+        Widget* const widget = node ? mount(scope, accented != nullptr ? accented->content : node, stack)
+                                    : &scope.adopt(_backend->createSpacer(stack));
+        if (accented != nullptr) {
+            SourceTable::Accent& accent = scope.make<SourceTable::Accent>();
+            cell.accent = &accent;
+            bind(scope, accented->accent, [&table, &accent](CellAccent const& value) {
+                accent.last = value;
+                if (accent.row != nullptr) {
+                    table.widget->setCellAccent(*accent.row, accent.column, value);
+                }
+            });
+        }
         cell.widget = widget;
         row.children.push_back(widget);
         ++_stats.cellsCreated;
@@ -2450,6 +2474,9 @@ private:
         }
         SourceTable::Cell cell = std::move(found->second.cell);
         slot.cells.erase(found);
+        if (cell.accent != nullptr) {
+            cell.accent->row = nullptr;
+        }
         table.widget->setCellColumn(*slot.widget, *cell.widget, std::nullopt);
         slot.pool[cell.pool].push_back(std::move(cell));
     }
@@ -2475,6 +2502,9 @@ private:
         if (auto pooled = slot.pool.find(key); pooled != slot.pool.end() && !pooled->second.empty()) {
             cell = std::move(pooled->second.back());
             pooled->second.pop_back();
+            if (cell.accent != nullptr) {
+                cell.accent->row = nullptr;
+            }
             if (cell.column != nullptr && cell.column->peek() != column) {
                 cell.column->set(column);
             }
@@ -2484,6 +2514,12 @@ private:
             cell = mountPass([&] { return makeCell(table, slot, column, record); });
         }
         table.widget->setCellColumn(*slot.widget, *cell.widget, column);
+        // Attached to this row at this column: the accent is told here whether or not it changed.
+        if (cell.accent != nullptr) {
+            cell.accent->row = slot.widget;
+            cell.accent->column = column;
+            table.widget->setCellAccent(*slot.widget, column, cell.accent->last);
+        }
         slot.cells.emplace(column, SourceTable::Placed{.cell = std::move(cell), .fresh = true});
     }
 
@@ -3825,6 +3861,11 @@ private:
         PageGuard const guard{*this, &spec.geometry};
         mountChildren(scope, spec.children, widget);
         return widget;
+    }
+
+    // An accented cell anywhere but a source table's cell: its content, with the accent not read.
+    Widget& mountKind(reactive::Scope& scope, AccentedCell const& spec, ContainerWidget* parent) {
+        return *mount(scope, spec.content, parent);
     }
 
     Widget& mountKind(reactive::Scope& scope, PageRegion const& spec, ContainerWidget* parent) {

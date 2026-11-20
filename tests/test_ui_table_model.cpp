@@ -11,6 +11,8 @@
 #include <chrono>
 #include <cstdint>
 #include <iterator>
+#include <map>
+#include <optional>
 #include <memory>
 #include <morph/ui/mount.hpp>
 #include <morph/table/data_source.hpp>
@@ -24,7 +26,9 @@
 #include <numeric>
 #include <span>
 #include <string>
+#include <string_view>
 #include <utility>
+#include <variant>
 #include <vector>
 
 #include "table/wide_table_model.hpp"
@@ -1368,4 +1372,216 @@ TEST_CASE("ui document: a table's `table` needs its `model`", "[ui][document]") 
     CHECK(refusalOf(text) == "`table` names one of a model's tables; give the table its `model`");
     CHECK(refusalOf(R"({"vocab":"ui/1","id":"s","customize":{"v":{"kind":"saved","of":"nosuch"}},)"
                     R"("view":{"kind":"text","text":"x"}})") == "a `saved` point names a table; `nosuch` is not one");
+}
+
+// ── How a column shows its cells ────────────────────────────────────────────
+
+namespace {
+
+using morph::ui::testing::TableHarness;
+
+// A document with the model alias `sample` and @p view.
+std::string doc(std::string_view view, std::string_view mutations = "{}") {
+    return R"({"vocab":"ui/1","id":"samples","models":{"sample":{"type":"Lims_SampleModel"}},"mutations":)" +
+           std::string{mutations} + R"(,"view":)" + std::string{view} + "}";
+}
+
+// `id` (the key), `mass` (two places, half up, in kg, toned by `massTone` and described by `massTip`), `name`,
+// `count`, and the companions `massTone`, `massTip` and `lockedBy`, the row's lock.
+table::TableDescription companionDescription() {
+    table::TableDescription d;
+    d.id = "samples";
+    d.label = "Samples";
+    d.key = "id";
+    d.columns = {
+        table::TableColumn{.info = {.id = "id", .kind = table::ColumnKind::Integer}, .label = "Id"},
+        table::TableColumn{.info = {.id = "mass", .kind = table::ColumnKind::Decimal},
+                           .label = "Mass",
+                           .display = {.decimals = 2, .rounding = table::Rounding::HalfUp, .unit = "kg"},
+                           .tone = "massTone",
+                           .tooltip = "massTip"},
+        table::TableColumn{.info = {.id = "name", .kind = table::ColumnKind::Text}, .label = "Name"},
+        table::TableColumn{.info = {.id = "count", .kind = table::ColumnKind::Integer}, .label = "Count"},
+        table::TableColumn{.info = {.id = "massTone", .kind = table::ColumnKind::Text}, .shown = false},
+        table::TableColumn{.info = {.id = "massTip", .kind = table::ColumnKind::Text}, .shown = false},
+        table::TableColumn{.info = {.id = "lockedBy", .kind = table::ColumnKind::Text}, .shown = false},
+    };
+    d.rowLock = "lockedBy";
+    return table::describe(std::move(d));
+}
+
+constexpr std::string_view kTable = R"({"kind":"table","id":"t","testId":"t","model":"sample","table":"samples"})";
+
+using CompanionRow = std::map<std::string, table::Cell, std::less<>>;
+
+// The row the companion cases show: mass 0.125, toned "warn", described "Above limit"; `count` holds text, which an
+// Integer column cannot read.
+CompanionRow companionRow(std::int64_t key) {
+    return CompanionRow{{"id", table::Cell{key}},
+                        {"mass", table::Cell{table::parseDecimal("0.125").value()}},
+                        {"name", table::Cell{std::string{"A"}}},
+                        {"count", table::Cell{std::string{"abc"}}},
+                        {"massTone", table::Cell{std::string{"warn"}}},
+                        {"massTip", table::Cell{std::string{"Above limit"}}},
+                        {"lockedBy", table::Cell{std::string{}}}};
+}
+
+// The page answering the latest query with @p rows, each holding the columns the query names.
+std::string companionPage(TableHarness const& h, std::vector<CompanionRow> const& rows = {companionRow(1)}) {
+    table::GenericPage page;
+    page.revision = companionDescription().revision;
+    page.columns = morph::ui::testing::lastQuery(h).columns.value_or(std::vector<std::string>{});
+    page.total = static_cast<std::int64_t>(rows.size());
+    page.totalKind = table::TotalKind::Exact;
+    page.offset = 0;
+    for (CompanionRow const& row : rows) {
+        page.keys.emplace_back(std::get<std::int64_t>(row.at("id")));
+        table::GenericRow cells;
+        for (std::string const& column : page.columns) {
+            auto const found = row.find(column);
+            cells.push_back(found == row.end() ? table::Cell{} : found->second);
+        }
+        page.rows.push_back(std::move(cells));
+    }
+    return glz::write_json(page).value_or("");
+}
+
+}  // namespace
+
+// Mutation: the default cell's text left on the stand-in formatter, which shows "0.125".
+TEST_CASE("table display: a model-backed table draws its description's display", "[ui][table][display]") {
+    using namespace morph::ui::testing;
+    TableHarness h;
+    auto screen = h.mount(doc(kTable));
+    replyDescribe(h, describeJson(companionDescription()));
+    replyPage(h, companionPage(h));
+    CHECK(cellText(h, 1, "mass") == "0.13");
+    CHECK(cellAccent(h, 1, "mass") ==
+          morph::ui::CellAccent{.tone = morph::ui::Tone::Warn, .tooltip = "Above limit", .invalid = false});
+    CHECK(cellAccent(h, 1, "name") == morph::ui::CellAccent{});
+    CHECK(columnOf(h, "mass").unit == "kg");
+}
+
+// Mutation: the accent built from the companions only (cellLook not read), which leaves `invalid` false.
+TEST_CASE("table display: an invalid cell draws its mark and no text", "[ui][table][display]") {
+    using namespace morph::ui::testing;
+    TableHarness h;
+    auto screen = h.mount(doc(kTable));
+    replyDescribe(h, describeJson(companionDescription()));
+    replyPage(h, companionPage(h));
+    CHECK(cellText(h, 1, "count").empty());
+    CHECK(cellAccent(h, 1, "count") ==
+          morph::ui::CellAccent{.tone = std::nullopt, .tooltip = "The value could not be read", .invalid = true});
+    CHECK_FALSE(cellAccent(h, 1, "mass").invalid);
+}
+
+// Mutation: companions fetched for every described column, which puts massTone in the first query.
+TEST_CASE("table display: companions are fetched with their column only", "[ui][table][display]") {
+    using namespace morph::ui::testing;
+    {
+        TableHarness h;
+        auto screen =
+            h.mount(doc(R"({"kind":"table","id":"t","testId":"t","model":"sample","table":"samples","columns":[{"id":"name"}]})"));
+        replyDescribe(h, describeJson(companionDescription()));
+        CHECK(lastQuery(h).columns == std::vector<std::string>{"id", "name", "lockedBy"});
+    }
+    {
+        TableHarness h;
+        auto screen = h.mount(doc(R"({"kind":"table","id":"t","testId":"t","model":"sample","table":"samples",
+                                      "columns":[{"id":"mass","tone":{"lit":"ok"}}]})"));
+        replyDescribe(h, describeJson(companionDescription()));
+        CHECK(lastQuery(h).columns == std::vector<std::string>{"id", "mass", "massTip", "lockedBy"});
+        replyPage(h, companionPage(h));
+        CHECK(cellAccent(h, 1, "mass").tone == morph::ui::Tone::Ok);  // the document's, not the companion's "warn"
+    }
+}
+
+// Mutation: companion columns left in the layout (only `shown` read), which gives the table the columns massTone,
+// massTip and lockedBy.
+TEST_CASE("table display: companion columns are not arranged", "[ui][table][display]") {
+    using namespace morph::ui::testing;
+    {
+        // Companions are never shown, even when the description marks them shown.
+        table::TableDescription shownCompanions = companionDescription();
+        for (table::TableColumn& column : shownCompanions.columns) {
+            column.shown = true;
+        }
+        TableHarness h;
+        auto screen = h.mount(doc(kTable));
+        replyDescribe(h, describeJson(table::describe(shownCompanions)));
+        std::vector<std::string> ids;
+        for (morph::ui::TableColumn const& column : h.backend.tableColumns(h.byTestId("Table", "t"))) {
+            ids.push_back(column.id);
+        }
+        CHECK(ids == std::vector<std::string>{"id", "mass", "name", "count"});
+    }
+    TableHarness h;  // a companion the document names is reported and not shown
+    auto screen = h.mount(doc(R"({"kind":"table","id":"t","testId":"t","model":"sample","table":"samples",
+                                  "columns":[{"id":"name"},{"id":"massTip"}]})"));
+    replyDescribe(h, describeJson(companionDescription()));
+    CHECK(headerLabels(h, "t") == std::vector<std::string>{"Name"});
+    CHECK(diagnosticsMentioning(h, "`massTip` is a companion column of `samples`") == 1);
+}
+
+// Mutation: document parts read only on a `rows` table, which keeps "0.13".
+TEST_CASE("table display: a document's parts override the description", "[ui][table][display]") {
+    using namespace morph::ui::testing;
+    TableHarness h;
+    auto screen = h.mount(doc(R"({"kind":"table","id":"t","testId":"t","model":"sample","table":"samples",
+                                  "columns":[{"id":"mass","decimals":1,"rounding":"halfEven","empty":"n/a"}]})"));
+    replyDescribe(h, describeJson(companionDescription()));
+    replyPage(h, companionPage(h));
+    CHECK(cellText(h, 1, "mass") == "0.1");
+    CHECK(columnOf(h, "mass").unit == "kg");  // a part that gives no `unit` keeps the description's
+}
+
+// Mutation: reporting per row, which reports twice ("purple" and "pink").
+TEST_CASE("table display: an unknown tone is reported once for its column", "[ui][table][display]") {
+    using namespace morph::ui::testing;
+    TableHarness h;
+    auto screen = h.mount(doc(kTable));
+    replyDescribe(h, describeJson(companionDescription()));
+    CompanionRow first = companionRow(1);
+    CompanionRow second = companionRow(2);
+    first.insert_or_assign("massTone", table::Cell{std::string{"purple"}});
+    second.insert_or_assign("massTone", table::Cell{std::string{"pink"}});
+    replyPage(h, companionPage(h, {first, second}));
+    CHECK_FALSE(cellAccent(h, 1, "mass").tone.has_value());
+    CHECK_FALSE(cellAccent(h, 2, "mass").tone.has_value());
+    // One report for the column, though the two rows name two unknown tones.
+    std::vector<std::string> const reports = reportsOf(h);
+    REQUIRE(reports.size() == 1);
+    CHECK(reports.front().starts_with("column `mass`'s tone is \"p"));
+    CHECK(reports.front().ends_with("\"; a tone is neutral, info, ok, warn or err"));
+}
+
+// Mutation: a sort over the formatted text, which orders "10.00" before "9.00".
+TEST_CASE("table display: text never orders", "[ui][table][display]") {
+    using namespace morph::ui::testing;
+    auto const texts = [](TableHarness const& h, std::size_t cell) {
+        std::vector<std::string> out;
+        int const table = h.backend.all("Table").front();
+        for (int const row : h.backend.children(table)) {
+            out.push_back(h.backend.prop(h.backend.children(row).at(cell), "text"));
+        }
+        return out;
+    };
+    {
+        TableHarness h;
+        auto screen = h.mount(R"({"vocab":"ui/1","id":"plain",
+            "state":{"items":{"init":{"lit":[{"id":1,"v":10},{"id":2,"v":9}]}},
+                     "order":{"init":{"lit":[{"column":"v","direction":"asc"}]}}},
+            "view":{"kind":"table","id":"t","rows":{"ref":"items"},"sort":{"ref":"order"},
+                    "columns":[{"id":"id","label":"Id"},{"id":"v","label":"V","decimals":2,"sortable":true}]}})");
+        CHECK(texts(h, 1) == std::vector<std::string>{"9.00", "10.00"});
+    }
+    // Labels change the text and not the order: 1 shows "zeta" and 3 "alpha", and 1 still comes first.
+    TableHarness h;
+    auto screen = h.mount(R"({"vocab":"ui/1","id":"plain",
+        "state":{"items":{"init":{"lit":[{"id":1,"code":3},{"id":2,"code":1}]}},
+                 "order":{"init":{"lit":[{"column":"code","direction":"asc"}]}}},
+        "view":{"kind":"table","id":"t","rows":{"ref":"items"},"sort":{"ref":"order"},
+                "columns":[{"id":"id","label":"Id"},{"id":"code","label":"Code","sortable":true,
+                            "labels":{"lit":[{"operand":"3","text":"alpha"},{"operand":"1","text":"zeta"}]}}]}})");
+    CHECK(texts(h, 1) == std::vector<std::string>{"zeta", "alpha"});
 }

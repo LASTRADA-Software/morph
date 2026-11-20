@@ -1283,6 +1283,32 @@ enum class CellLoad : std::uint8_t {
     Failed,    ///< The column's level failed to load for the row: an error mark of the same width.
 };
 
+/// @brief What a table cell shows beside its text: its tone, its tooltip, and whether its value could not be read.
+struct CellAccent {
+    /// @brief The cell's tone: the theme's tone surface under its selection and focus marks; disengaged for none.
+    std::optional<Tone> tone;
+    /// @brief The cell's tooltip, and its accessible description; empty for none.
+    std::string tooltip;
+    /// @brief Whether the value could not be read as the column's kind: the backend draws its error mark in place of
+    ///        the text, and `tooltip` says so.
+    bool invalid = false;
+
+    /// @brief Member-wise equality.
+    /// @param other The accent to compare with.
+    /// @return `true` when every member matches.
+    [[nodiscard]] bool operator==(CellAccent const& other) const = default;
+};
+
+/// @brief A table cell with an accent: a node a `TableSource::cellView` or `defaultCellView` returns. Mounted as a
+///        cell of a source table, its content is the cell and its accent is bound in the cell's own scope and told
+///        to `TableWidget::setCellAccent`; mounted anywhere else, its content is mounted and the accent is not read.
+struct AccentedCell {
+    /// @brief The cell's content. Must not be null.
+    Node content;
+    /// @brief The accent.
+    Prop<CellAccent> accent;
+};
+
 /// @brief A row's own parts beyond its cells, for a table mounted over a `TableSource`: built once per realized row
 ///        key, bound in the row's scope. Nothing per cell is carried here.
 struct TableRowLook {
@@ -1377,6 +1403,9 @@ struct TableColumn {
     Align valign = Align::Center;
     /// @brief Whether a click on the column's header asks to sort by it (`Table::onSort`).
     bool sortable = false;
+    /// @brief The unit the column's values are in, which the header shows after the label (`headerText`) and names
+    ///        in its accessible name (`headerAccessibleName`); empty for none.
+    std::string unit;
     /// @brief Whether the column's text cells may break across lines. With `false` each is drawn on one line and cut
     ///        at the column's width with an ellipsis, such as a value with its unit in a narrow column.
     bool wrap = true;
@@ -1910,7 +1939,7 @@ struct NodeData {
     std::variant<Text, Button, TextInput, Checkbox, Select, Menu, Column, Row, Grid, Spacer, Panel, Scroll, Switch,
                  Tabs, Dialog, Busy, ForEach, Table, DateTimeInput, Slider, FilePicker, Banner, Badge, Progress, Steps,
                  KeyValue, EmptyState, Drawer, Splitter, Collapsible, DropZone, Custom, ActionBar, Chart, Page,
-                 PageRegion>
+                 PageRegion, AccentedCell>
         kind;
 };
 
@@ -1931,6 +1960,18 @@ template <typename Kind>
 /// @param spec The node.
 /// @return The node.
 [[nodiscard]] inline Node text(Text spec) { return detail::makeNode(std::move(spec)); }
+
+/// @brief A table cell with an accent.
+/// @param content The cell's content; must not be null.
+/// @param accent  The accent.
+/// @return The node.
+/// @throws std::invalid_argument when @p content is null.
+[[nodiscard]] inline Node accentedCell(Node content, Prop<CellAccent> accent) {
+    if (content == nullptr) {
+        throw std::invalid_argument{"ui::accentedCell: the content must not be null"};
+    }
+    return detail::makeNode(AccentedCell{.content = std::move(content), .accent = std::move(accent)});
+}
 
 /// @brief A push button.
 /// @param spec The node.

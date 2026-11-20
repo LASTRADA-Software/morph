@@ -10,6 +10,7 @@
 #include <core/tui/Theme.hpp>
 #include <iterator>
 #include <limits>
+#include <morph/ui/cell_format.hpp>
 #include <numeric>
 #include <ranges>
 #include <stdexcept>
@@ -348,7 +349,7 @@ void TableImpl::setSort(std::optional<ui::TableSort> sort) {
 void TableImpl::setOnSort(std::function<void(std::size_t)> onSort) { _onSort = std::move(onSort); }
 
 std::string TableImpl::headerText(std::size_t index) const {
-    std::string text = _columns.at(index).label;
+    std::string text = ui::headerText(_columns.at(index).label, _columns.at(index).unit);
     if (_sort && _sort->column == index) {
         text += _sort->direction == ui::SortDirection::Ascending ? " ▲" : " ▼";
     }
@@ -356,7 +357,7 @@ std::string TableImpl::headerText(std::size_t index) const {
 }
 
 int TableImpl::headerWidth(ui::TableColumn const& column) {
-    return displayWidth(column.label) + (column.sortable ? kSortMark : 0);
+    return displayWidth(ui::headerText(column.label, column.unit)) + (column.sortable ? kSortMark : 0);
 }
 
 void TableImpl::clickHeader(int x) {
@@ -381,6 +382,7 @@ void TableImpl::childForgotten(WidgetBase& child) {
     _viewRows.erase(&child);
     _cellColumns.erase(&child);
     _loads.erase(&child);
+    _accents.erase(&child);
     // The plan points at rows and at the cells lifted out of them, and is rebuilt only by the next fit: until then a
     // click would hit-test a block of a row that is gone, and read its freed cell.
     _plan.clear();
@@ -1092,6 +1094,29 @@ void TableImpl::setCellLoad(ui::Widget& row, std::size_t column, ui::CellLoad lo
     refresh();
 }
 
+void TableImpl::setCellAccent(ui::Widget& row, std::size_t column, ui::CellAccent const& accent) {
+    auto& base = WidgetBase::of(row);
+    if (base.container() != this) {
+        throw std::logic_error{"morph::tui: setCellAccent of a widget that is not this table's row"};
+    }
+    if (accent == ui::CellAccent{}) {
+        if (auto const found = _accents.find(&base); found != _accents.end()) {
+            found->second.erase(column);
+        }
+    } else {
+        _accents[&base].insert_or_assign(column, accent);
+    }
+    // The cell's own tone wins over its row's: the nearest tone is the one drawn.
+    if (auto* const stack = dynamic_cast<StackImpl*>(&base)) {
+        for (auto* const cell : stack->children()) {
+            if (columnOf(&base, cell, 0) == column) {
+                cell->applyRowTone(accent.tone);
+            }
+        }
+    }
+    refresh();
+}
+
 void TableImpl::setColumnWindow(std::span<std::size_t const> columns, std::span<int const> offsets,
                                 std::span<int const> widths, int totalWidth, std::size_t pinned) {
     _arranged = true;
@@ -1303,12 +1328,30 @@ std::optional<std::size_t> TableImpl::columnOf(WidgetBase const* row, WidgetBase
 }
 
 ui::CellLoad TableImpl::loadOf(WidgetBase const* row, std::size_t column) const {
-    auto const cells = _loads.find(row);
-    if (cells == _loads.end()) {
-        return ui::CellLoad::Loaded;
+    if (auto const cells = _loads.find(row); cells != _loads.end()) {
+        if (auto const found = cells->second.find(column); found != cells->second.end()) {
+            return found->second;
+        }
     }
-    auto const found = cells->second.find(column);
-    return found == cells->second.end() ? ui::CellLoad::Loaded : found->second;
+    if (auto const accents = _accents.find(row); accents != _accents.end()) {
+        if (auto const found = accents->second.find(column); found != accents->second.end() && found->second.invalid) {
+            return ui::CellLoad::Failed;
+        }
+    }
+    return ui::CellLoad::Loaded;
+}
+
+std::string TableImpl::focusedTooltip() const {
+    if (!_focusCell) {
+        return {};
+    }
+    WidgetBase const* const row = rowAtView(_focusCell->first);
+    auto const accents = row != nullptr ? _accents.find(row) : _accents.end();
+    if (accents == _accents.end()) {
+        return {};
+    }
+    auto const found = accents->second.find(_focusCell->second);
+    return found == accents->second.end() ? std::string{} : found->second.tooltip;
 }
 
 // A cell takes its column's slot; a pooled cell, one whose column is not drawn and one a mark stands for take none.
@@ -1415,11 +1458,13 @@ void TableImpl::paintStatus(::core::tui::Canvas& canvas) {
         canvas.putString(line, x, std::string{kRetry}, theme.textAccent);
         x += displayWidth(kRetry);
     }
-    if (!_status.message.empty()) {
+    // The latest message, else the focused cell's tooltip: a terminal has no hover to show it on.
+    std::string const message = _status.message.empty() ? focusedTooltip() : _status.message;
+    if (!message.empty()) {
         // At the trailing edge, or after the rest when the line is too short for both.
-        int const width = displayWidth(_status.message);
+        int const width = displayWidth(message);
         int const gap = x == 0 ? 0 : displayWidth(kStatusGap);
-        canvas.putString(line, std::max(x + gap, canvas.width() - width), _status.message, theme.textNormal);
+        canvas.putString(line, std::max(x + gap, canvas.width() - width), message, theme.textNormal);
     }
 }
 
@@ -1427,16 +1472,15 @@ void TableImpl::paintLoads(::core::tui::Canvas& canvas, std::vector<DrawnColumn>
                            std::vector<::core::tui::Rect> const& areas) const {
     auto const& theme = canvas.theme();
     for (auto const [row, area] : std::views::zip(children(), areas)) {
-        auto const loads = _loads.find(row);
-        if (area.empty() || loads == _loads.end() || isHeading(row)) {
+        if (area.empty() || isHeading(row)) {
             continue;
         }
         for (DrawnColumn const& column : drawn) {
-            auto const found = loads->second.find(column.column);
-            if (found == loads->second.end()) {
+            ui::CellLoad const load = loadOf(row, column.column);
+            if (load == ui::CellLoad::Loaded) {
                 continue;
             }
-            bool const failed = found->second == ui::CellLoad::Failed;
+            bool const failed = load == ui::CellLoad::Failed;
             std::string const mark{failed ? kFailedMark : kUnloadedMark};
             auto cell = canvas.subcanvas({.x = gutter() + column.x, .y = area.y, .width = column.width, .height = 1});
             cell.putString(0, alignedOffset(_columns.at(column.column).align, displayWidth(mark), column.width), mark,

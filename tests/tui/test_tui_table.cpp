@@ -1222,6 +1222,8 @@ struct TuiWindowOptions {
     std::size_t pinned = 0;
     std::vector<Level> levels;
     ui::SelectionMode selection = ui::SelectionMode::None;
+    // Each column's unit, by index; a column past the list has none.
+    std::vector<std::string> units = {};
 };
 
 // `n` with its thousands grouped by commas.
@@ -1253,7 +1255,9 @@ struct TuiWindowFixture {
         for (std::size_t column = 0; column < columnCount; ++column) {
             columns.push_back(ui::TableColumn{.id = "c" + std::to_string(column),
                                               .label = "C" + std::to_string(column),
-                                              .width = ui::Sizing::fixed(11)});
+                                              .width = ui::Sizing::fixed(11),
+                                              .unit = column < options.units.size() ? options.units.at(column)
+                                                                                    : std::string{}});
         }
         ui::TableSource source;
         source.rows = rows;
@@ -1403,6 +1407,23 @@ TEST_CASE("tui table: an unloaded cell draws its placeholder and a failed one it
     CHECK(f.screenLine(1).contains("···"));
     CHECK(f.screenLine(2).contains("!"));
     CHECK_FALSE(f.screenLine(3).contains("···"));
+}
+
+// Mutations: `unit` ignored (the header reads `C0` alone); `invalid` ignored (the cell's text is drawn and no mark).
+TEST_CASE("tui table: a header with a unit reads Mass [kg]", "[tui][table]") {
+    TuiWindowFixture f{100, 4, {.pinned = 0, .units = {"kg"}}};
+    CHECK(f.screenLine(0).contains("C0 [kg]"));
+    CHECK_FALSE(f.screenLine(0).contains("C1 ["));
+    REQUIRE(f.screenLine(1).contains("r0c1"));
+    auto& row = dynamic_cast<ui::Widget&>(*f.table->children().front());
+    f.table->setCellAccent(row, 1, ui::CellAccent{.tone = {}, .tooltip = "The value could not be read", .invalid = true});
+    f.settle();
+    CHECK_FALSE(f.screenLine(1).contains("r0c1"));
+    CHECK(f.screenLine(1).contains("!"));
+    CHECK(f.screenLine(1).contains("r0c2"));
+    f.table->setCellAccent(row, 1, ui::CellAccent{});
+    f.settle();
+    CHECK(f.screenLine(1).contains("r0c1"));
 }
 
 // Mutation: the terminal table placing a source table's cells by their order in the row, not by `setCellColumn` (a

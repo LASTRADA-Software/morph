@@ -18,6 +18,8 @@
 #include <utility>
 #include <variant>
 
+#include <morph/ui/cell_format.hpp>
+
 #include "qt_quick/kinds.hpp"
 
 namespace morph::qt_quick::detail {
@@ -84,6 +86,9 @@ void TableImpl::setColumns(std::vector<ui::TableColumn> const& columns) {
     QVariantList list;
     for (ui::TableColumn const& column : columns) {
         list.append(QVariantMap{{QStringLiteral("label"), toQString(column.label)},
+                                {QStringLiteral("unit"), toQString(column.unit)},
+                                {QStringLiteral("accessibleName"),
+                                 toQString(ui::headerAccessibleName(column.label, column.unit))},
                                 {QStringLiteral("kind"), static_cast<int>(column.width.kind)},
                                 {QStringLiteral("amount"), column.width.amount},
                                 {QStringLiteral("role"), static_cast<int>(column.role)},
@@ -219,6 +224,14 @@ void TableImpl::setCellLoad(ui::Widget& row, std::size_t column, ui::CellLoad lo
         throw std::logic_error{"morph::qt_quick: setCellLoad of a widget that is not this table's row"};
     }
     tableRow->setLoad(column, load);
+}
+
+void TableImpl::setCellAccent(ui::Widget& row, std::size_t column, ui::CellAccent const& accent) {
+    auto* const tableRow = dynamic_cast<TableRowImpl*>(&row);
+    if (tableRow == nullptr || tableRow->container() != this) {
+        throw std::logic_error{"morph::qt_quick: setCellAccent of a widget that is not this table's row"};
+    }
+    tableRow->setAccent(column, accent);
 }
 
 void TableImpl::setColumnWindow(std::span<std::size_t const> columns, std::span<int const> offsets,
@@ -651,6 +664,18 @@ void TableRowImpl::setLoad(std::size_t column, ui::CellLoad load) {
         _loads.insert(key, static_cast<int>(load));
     }
     write("cellLoads", _loads);
+}
+
+void TableRowImpl::setAccent(std::size_t column, ui::CellAccent const& accent) {
+    QString const key = QString::number(column);
+    if (accent == ui::CellAccent{}) {
+        _accents.remove(key);
+    } else {
+        _accents.insert(key, QVariantMap{{QStringLiteral("tone"), accent.tone ? static_cast<int>(*accent.tone) : -1},
+                                         {QStringLiteral("tooltip"), toQString(accent.tooltip)},
+                                         {QStringLiteral("invalid"), accent.invalid}});
+    }
+    write("cellAccents", _accents);
 }
 
 void TableRowImpl::setGap(int gap) { static_cast<void>(gap); }
