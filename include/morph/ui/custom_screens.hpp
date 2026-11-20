@@ -46,6 +46,20 @@ struct CustomScreenKey {
     std::string app;
     /// @brief The screen's id, `custom:` and 32 hexadecimal digits.
     std::string id;
+    /// @brief The verified session of the call, for a store whose policy depends on more than the person: its
+    ///        `principal` is @ref person, and its `token` the credential the server verified, whose claims (roles
+    ///        among them) a store may read. The model copies it from the action's session; never from a request body.
+    ::morph::session::Context session;
+};
+
+/// @brief Whose custom screens a `list` asks for.
+struct CustomScreenScope {
+    /// @brief The person, derived on the server from the verified principal; never taken from a request.
+    std::string person;
+    /// @brief The application.
+    std::string app;
+    /// @brief The verified session of the call, as `CustomScreenKey::session` carries it.
+    ::morph::session::Context session;
 };
 
 /// @brief A stored custom screen.
@@ -76,7 +90,9 @@ struct CustomScreenRefusal {
 /// what the person may not do, with a reason for the person. An id longer than `kMaxNameBytes` is shown to the person
 /// cut, so `get` and `remove` could not be given it back: a store keeps its ids within `kMaxNameBytes` (the model's
 /// own are 39 bytes). The model calls a store only with a person the server
-/// derived and with a document that passed every check. A store owns the executor its completions are delivered on.
+/// derived and with a document that passed every check. Every call carries the verified session too
+/// (`CustomScreenKey::session`, `CustomScreenScope::session`), so a policy may depend on more than the person, such as
+/// a role the session's token grants. A store owns the executor its completions are delivered on.
 ///
 /// An entry `list` answers whose id lacks `kCustomScreenIdPrefix` is listed broken, and `get` and `remove` refuse its
 /// id before the store is called: the model cannot reach it, so cleaning it up is the store's.
@@ -92,11 +108,10 @@ public:
     ICustomScreenStore& operator=(ICustomScreenStore&&) = delete;
     virtual ~ICustomScreenStore() = default;
 
-    /// @brief The custom screens @p person may open in @p app.
-    /// @param person The person.
-    /// @param app    The application.
+    /// @brief The custom screens a person may open in an application.
+    /// @param scope The person, the application and the verified session.
     /// @return The screens, in the store's order.
-    [[nodiscard]] virtual async::Completion<std::vector<CustomScreen>> list(std::string person, std::string app) = 0;
+    [[nodiscard]] virtual async::Completion<std::vector<CustomScreen>> list(CustomScreenScope scope) = 0;
 
     /// @brief One custom screen the person may open.
     /// @param key The entry.
@@ -122,7 +137,7 @@ public:
 };
 
 /// @brief The framework's store: a map held in memory, on its own strand, each person seeing and changing only
-///        their own screens.
+///        their own screens. It keys every entry by the person and reads nothing else of the session.
 ///
 /// Its entries last as long as it does. Each call is a task on the strand, and its completion is delivered there. It
 /// bounds neither the number of entries nor their total size, so it serves tests and examples, not a deployment.
@@ -132,21 +147,21 @@ public:
     /// @param base Where the strand's tasks run. Borrowed: it must outlive the store.
     explicit MemoryCustomScreenStore(exec::IExecutor& base MORPH_LIFETIMEBOUND) : _strand{base} {}
 
-    /// @brief The custom screens @p person saved in @p app.
-    /// @param person The person.
-    /// @param app    The application.
+    /// @brief The custom screens the person saved in the application; the session is not read.
+    /// @param scope The person, the application and the verified session.
     /// @return The screens, ordered by id.
-    [[nodiscard]] async::Completion<std::vector<CustomScreen>> list(std::string person, std::string app) override {
+    [[nodiscard]] async::Completion<std::vector<CustomScreen>> list(CustomScreenScope scope) override {
         auto [completion, promise] = async::Completion<std::vector<CustomScreen>>::makeSettleable(&_strand);
-        _strand.postTask([this, who = std::move(person), where = std::move(app), settle = std::move(promise)] mutable {
-            std::vector<CustomScreen> out;
-            for (auto const& [key, screen] : _entries) {
-                if (std::get<0>(key) == who && std::get<1>(key) == where) {
-                    out.push_back(screen);
+        _strand.postTask(
+            [this, who = std::move(scope.person), where = std::move(scope.app), settle = std::move(promise)] mutable {
+                std::vector<CustomScreen> out;
+                for (auto const& [key, screen] : _entries) {
+                    if (std::get<0>(key) == who && std::get<1>(key) == where) {
+                        out.push_back(screen);
+                    }
                 }
-            }
-            settle.resolve(std::move(out));
-        });
+                settle.resolve(std::move(out));
+            });
         return std::move(completion);
     }
 

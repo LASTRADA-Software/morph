@@ -140,9 +140,8 @@ chat::Response said(std::string text) { return chat::Response{.text = std::move(
 class CountingStore final : public ui::ICustomScreenStore {
 public:
     explicit CountingStore(std::shared_ptr<ui::ICustomScreenStore> inner) : _inner{std::move(inner)} {}
-    [[nodiscard]] morph::async::Completion<std::vector<ui::CustomScreen>> list(std::string person,
-                                                                               std::string app) override {
-        return _inner->list(std::move(person), std::move(app));
+    [[nodiscard]] morph::async::Completion<std::vector<ui::CustomScreen>> list(ui::CustomScreenScope scope) override {
+        return _inner->list(std::move(scope));
     }
     [[nodiscard]] morph::async::Completion<std::expected<ui::CustomScreen, ui::CustomScreenRefusal>> get(
         ui::CustomScreenKey key) override {

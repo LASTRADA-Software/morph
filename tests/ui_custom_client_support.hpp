@@ -61,8 +61,8 @@ struct BareServer {
 /// A store that keeps what a memory store keeps but refuses every save, with a reason for the person.
 struct RefusingStore final : morph::ui::ICustomScreenStore {
     explicit RefusingStore(morph::exec::IExecutor& base) : inner{base}, strand{base} {}
-    morph::async::Completion<std::vector<morph::ui::CustomScreen>> list(std::string person, std::string app) override {
-        return inner.list(std::move(person), std::move(app));
+    morph::async::Completion<std::vector<morph::ui::CustomScreen>> list(morph::ui::CustomScreenScope scope) override {
+        return inner.list(std::move(scope));
     }
     morph::async::Completion<std::expected<morph::ui::CustomScreen, morph::ui::CustomScreenRefusal>> get(
         morph::ui::CustomScreenKey key) override {
@@ -95,8 +95,8 @@ struct GatedStore final : morph::ui::ICustomScreenStore {
     GatedStore(GatedStore&&) = delete;
     GatedStore& operator=(GatedStore&&) = delete;
 
-    morph::async::Completion<std::vector<morph::ui::CustomScreen>> list(std::string person, std::string app) override {
-        return inner.list(std::move(person), std::move(app));
+    morph::async::Completion<std::vector<morph::ui::CustomScreen>> list(morph::ui::CustomScreenScope scope) override {
+        return inner.list(std::move(scope));
     }
     morph::async::Completion<std::expected<morph::ui::CustomScreen, morph::ui::CustomScreenRefusal>> get(
         morph::ui::CustomScreenKey key) override {

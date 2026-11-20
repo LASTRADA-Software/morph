@@ -32,23 +32,29 @@ base rule on the server, and the client that offers them.
 
 ## The store
 
-`ICustomScreenStore` has `list(person, app)`, `get(key)`, `put(key, screen)` and `remove(key)`, all asynchronous, with
-`key` a `CustomScreenKey{person, app, id}`. `get`, `put` and `remove` answer a `CustomScreenRefusal` the person is
-shown as it is. A `CustomScreen` carries `id`, `title`, `basedOn`, the `document` text, `savedAt` and `savedBy`.
+`ICustomScreenStore` has `list(scope)`, `get(key)`, `put(key, screen)` and `remove(key)`, all asynchronous, with
+`key` a `CustomScreenKey{person, app, id, session}` and `scope` a `CustomScreenScope{person, app, session}`. `session`
+is the action's verified `session::Context`, copied as the model copies it (below): its `principal` is `person`, and
+its `token` is the credential the server verified, whose claims (roles among them) a store may read. So a policy can
+rest on more than the person, such as "an administrator may remove anyone's screen"; the authoriser cannot carry it,
+since it sees only the model and the action, not whose screen a write replaces. `get`, `put` and `remove` answer a
+`CustomScreenRefusal` the person is shown as it is. A `CustomScreen` carries `id`, `title`, `basedOn`, the `document`
+text, `savedAt` and `savedBy`.
 
 The application's store is where every policy over custom screens lives: what a person may open (which may include
 screens others saved), what they may overwrite or delete, and how many they may keep. The model calls it only with a
-person the server derived and a document that passed every check. A store owns the executor its completions are
-delivered on, and any atomicity its own rules need, such as a count.
+person the server derived, with that person's verified session, and a document that passed every check. A store owns
+the executor its completions are delivered on, and any atomicity its own rules need, such as a count.
 
 `put`'s key may name a screen this person can open but not change, such as one another person shared with them. The
 model checks the document, not the right to replace what is stored, so the store must refuse that write.
 `CustomScreen::savedBy` is the caller, not the screen's first author.
 
 `MemoryCustomScreenStore(base)` is the framework's store: a map on an `OwnerStrand` that runs on `base`, each person
-seeing only their own screens under one application. `list` answers by id. A missing screen is `no such custom
-screen`, from `get` and `remove` alike; `put` refuses nothing. Its entries last as long as it does, and it bounds
-neither their number nor their size: it serves tests and examples, not a deployment.
+seeing only their own screens under one application. It keys every entry by the person and reads nothing else of the
+session. `list` answers by id. A missing screen is `no such custom screen`, from `get` and `remove` alike; `put`
+refuses nothing. Its entries last as long as it does, and it bounds neither their number nor their size: it serves
+tests and examples, not a deployment.
 
 ## The model
 
