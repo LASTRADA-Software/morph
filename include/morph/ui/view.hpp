@@ -375,6 +375,84 @@ struct TableSort {
     [[nodiscard]] bool operator==(TableSort const& other) const = default;
 };
 
+/// @brief How a click on a sortable header, or `Enter` or `Space` on a focused one, was modified.
+enum class HeaderClick : std::uint8_t {
+    Plain,  ///< No modifier: sort by the column alone.
+    Shift,  ///< `Shift` held: add the column to the sort chain, or flip its direction where it is in it.
+};
+
+/// @brief The mark a header draws after its label for one key of the sort chain.
+/// @param direction The key's direction.
+/// @param place     The key's place in the chain, from 1.
+/// @param count     How many keys the chain holds.
+/// @return `" ▲"` or `" ▼"` for a chain of one key, else the arrow followed by @p place, such as `" ▲2"`.
+[[nodiscard]] inline std::string sortMarkText(SortDirection direction, std::size_t place, std::size_t count) {
+    std::string mark = direction == SortDirection::Ascending ? " ▲" : " ▼";
+    if (count != 1) {
+        mark += std::to_string(place);
+    }
+    return mark;
+}
+
+/// @brief A sorted header's accessible description, for one key of the sort chain; both backends set it from this
+///        and nothing else.
+/// @param direction The key's direction.
+/// @param place     The key's place in the chain, from 1.
+/// @param count     How many keys the chain holds.
+/// @return `"sorted ascending"` or `"sorted descending"` for a chain of one key, else, for example,
+///         `"sorted ascending, key 2 of 3"`.
+[[nodiscard]] inline std::string sortDescription(SortDirection direction, std::size_t place, std::size_t count) {
+    std::string text = direction == SortDirection::Ascending ? "sorted ascending" : "sorted descending";
+    if (count != 1) {
+        text += ", key " + std::to_string(place) + " of " + std::to_string(count);
+    }
+    return text;
+}
+
+/// @brief A column group's header, drawn over its columns while they stand side by side in the layout.
+struct TableColumnGroup {
+    /// @brief The group's caption.
+    std::string label;
+    /// @brief The visible place of its first column in the table's arrangement.
+    std::size_t first = 0;
+    /// @brief How many visible columns, from `first`, it stands over.
+    std::size_t count = 0;
+    /// @brief Whether the group has a filter: its filter button is drawn filled.
+    bool filtered = false;
+
+    /// @brief Member-wise equality.
+    /// @param other The group to compare with.
+    /// @return `true` when every member matches.
+    [[nodiscard]] bool operator==(TableColumnGroup const& other) const = default;
+};
+
+/// @brief One entry of a menu as a `MenuWidget` shows it.
+struct MenuEntry {
+    /// @brief The caption.
+    std::string label;
+    /// @brief The icon's name in the theme's icon map; empty shows none.
+    std::string icon;
+    /// @brief The chord shown beside the label; empty shows none.
+    std::string keys;
+    /// @brief Engaged: a checkable entry with this mark; `nullopt`: not checkable.
+    std::optional<bool> checked;
+    /// @brief Whether the entry can be chosen, or its submenu opened.
+    bool enabled = true;
+    /// @brief The submenu; empty for an entry that is chosen.
+    std::vector<MenuEntry> items;
+    /// @brief Whether the entry is a line between entries: never chosen, never opened, and its other fields empty.
+    bool separator = false;
+    /// @brief A muted line of help shown with the entry; empty shows none.
+    std::string description;
+    /// @brief Whether the entry is a label that is not a command: drawn as muted text, exposed as static text, never
+    ///        chosen or opened. Its other fields are empty.
+    bool heading = false;
+
+    /// @brief Memberwise equality, submenus included.
+    /// @return Whether every field matches.
+    bool operator==(MenuEntry const&) const = default;
+};
+
 /// @brief How much space a widget asks for along one dimension, in backend units (a character cell on the TUI).
 struct Sizing {
     /// @brief The sizing rule.
@@ -1414,6 +1492,9 @@ struct TableColumn {
     /// @brief The unit the column's values are in, which the header shows after the label (`headerText`) and names
     ///        in its accessible name (`headerAccessibleName`); empty for none.
     std::string unit;
+    /// @brief Whether the column's header draws a filter button (`Table::onFilter`), filled while `Table::filtered`
+    ///        names the column.
+    bool filterable = false;
     /// @brief Whether the column's text cells may break across lines. With `false` each is drawn on one line and cut
     ///        at the column's width with an ellipsis, such as a value with its unit in a narrow column.
     bool wrap = true;
@@ -1451,11 +1532,36 @@ struct Table {
     bool selectColumn = false;
     /// @brief The accessible name of the select column's header box.
     Prop<std::string> selectAllLabel = std::string{"Select all"};
-    /// @brief The column whose header shows the sort, and its direction; none marks no header. The table never
+    /// @brief The sort chain the headers show, most significant key first; empty marks no header. The table never
     ///        orders its rows itself: they come in the order shown.
-    Prop<std::optional<TableSort>> sort;
-    /// @brief Called with a sortable column's index when the user asks to sort by it (a click on its header).
-    std::function<void(std::size_t)> onSort;
+    Prop<std::vector<TableSort>> sort;
+    /// @brief Called with a sortable column's index when the user asks to sort by it (a click on its header, or
+    ///        `Enter` or `Space` on it), and whether `Shift` was held.
+    std::function<void(std::size_t, HeaderClick)> onSort;
+    /// @brief The entries of a header's menu, given its column (an index into `columns`), or of the table's menu,
+    ///        given none. Empty: no header or table menu.
+    std::function<std::vector<MenuEntry>(std::optional<std::size_t>)> menu;
+    /// @brief Called with the menu's column (none for the table's menu) and the chosen entry's path, an index per
+    ///        level from the top.
+    std::function<void(std::optional<std::size_t>, std::vector<std::size_t>)> onMenu;
+    /// @brief Called when the user moves a column's header (a drag, or `Ctrl+Shift+Left` or `Right`), with the
+    ///        column (an index into `columns`) and its new place among the arrangement's visible columns.
+    std::function<void(std::size_t column, std::size_t position)> onColumnMove;
+    /// @brief Called when the user drags a header's trailing edge, with the column and its new width in `Sizing`
+    ///        units, or none for a double click on the edge, which gives the column its declared width again.
+    ///        Empty: the edges cannot be dragged.
+    std::function<void(std::size_t column, std::optional<int> units)> onColumnResize;
+    /// @brief Called with a filterable column's index when the user presses its header's filter button.
+    std::function<void(std::size_t column)> onFilter;
+    /// @brief The columns that have a filter, by index into `columns`: their filter buttons are drawn filled and
+    ///        their headers named "{label}, filtered".
+    Prop<std::vector<std::size_t>> filtered;
+    /// @brief The column groups whose header row is drawn over their columns; empty draws no group row.
+    Prop<std::vector<TableColumnGroup>> columnGroups;
+    /// @brief Called with a group's index into `columnGroups` when the user presses its filter button.
+    std::function<void(std::size_t group)> onGroupFilter;
+    /// @brief Called when the user asks to copy (`Ctrl+C` on the focused table).
+    std::function<void()> onCopy;
     /// @brief Called with a row's key when the user activates it (Enter or a double click).
     std::function<void(Key)> onActivate;
     /// @brief Visibility, enablement, layout, drag-and-drop.
@@ -2253,10 +2359,28 @@ struct TableOptions {
     bool selectColumn = false;
     /// @brief The accessible name of the select column's header box.
     Prop<std::string> selectAllLabel = std::string{"Select all"};
-    /// @brief The column whose header shows the sort, and its direction.
-    Prop<std::optional<TableSort>> sort;
-    /// @brief Called with a sortable column's index when the user asks to sort by it.
-    std::function<void(std::size_t)> onSort;
+    /// @brief The sort chain the headers show, most significant key first.
+    Prop<std::vector<TableSort>> sort;
+    /// @brief Called with a sortable column's index when the user asks to sort by it, and whether `Shift` was held.
+    std::function<void(std::size_t, HeaderClick)> onSort;
+    /// @brief The entries of a header's menu, given its column, or of the table's menu, given none.
+    std::function<std::vector<MenuEntry>(std::optional<std::size_t>)> menu;
+    /// @brief Called with the menu's column (none for the table's menu) and the chosen entry's path.
+    std::function<void(std::optional<std::size_t>, std::vector<std::size_t>)> onMenu;
+    /// @brief Called with a column the user moved and its new place among the visible columns.
+    std::function<void(std::size_t column, std::size_t position)> onColumnMove;
+    /// @brief Called with a column the user resized and its width in units, or none to restore its declared width.
+    std::function<void(std::size_t column, std::optional<int> units)> onColumnResize;
+    /// @brief Called with a filterable column's index when the user presses its filter button.
+    std::function<void(std::size_t column)> onFilter;
+    /// @brief The columns that have a filter.
+    Prop<std::vector<std::size_t>> filtered;
+    /// @brief The column groups whose header row is drawn over their columns.
+    Prop<std::vector<TableColumnGroup>> columnGroups;
+    /// @brief Called with a group's index when the user presses its filter button.
+    std::function<void(std::size_t group)> onGroupFilter;
+    /// @brief Called when the user asks to copy (`Ctrl+C` on the focused table).
+    std::function<void()> onCopy;
     /// @brief Called with a row's key when the user activates it.
     std::function<void(Key)> onActivate;
     /// @brief Visibility, enablement, layout, drag-and-drop of the table.
@@ -2380,6 +2504,15 @@ template <typename RowT>
     spec.selectAllLabel = std::move(options.selectAllLabel);
     spec.sort = std::move(options.sort);
     spec.onSort = std::move(options.onSort);
+    spec.menu = std::move(options.menu);
+    spec.onMenu = std::move(options.onMenu);
+    spec.onColumnMove = std::move(options.onColumnMove);
+    spec.onColumnResize = std::move(options.onColumnResize);
+    spec.onFilter = std::move(options.onFilter);
+    spec.filtered = std::move(options.filtered);
+    spec.columnGroups = std::move(options.columnGroups);
+    spec.onGroupFilter = std::move(options.onGroupFilter);
+    spec.onCopy = std::move(options.onCopy);
     spec.onActivate = std::move(options.onActivate);
     spec.common = std::move(options.common);
     spec.source = std::move(options.source);
@@ -2418,6 +2551,15 @@ template <typename RowT>
     spec.selectAllLabel = std::move(options.selectAllLabel);
     spec.sort = std::move(options.sort);
     spec.onSort = std::move(options.onSort);
+    spec.menu = std::move(options.menu);
+    spec.onMenu = std::move(options.onMenu);
+    spec.onColumnMove = std::move(options.onColumnMove);
+    spec.onColumnResize = std::move(options.onColumnResize);
+    spec.onFilter = std::move(options.onFilter);
+    spec.filtered = std::move(options.filtered);
+    spec.columnGroups = std::move(options.columnGroups);
+    spec.onGroupFilter = std::move(options.onGroupFilter);
+    spec.onCopy = std::move(options.onCopy);
     spec.onActivate = std::move(options.onActivate);
     spec.common = std::move(options.common);
     spec.source = std::move(source);

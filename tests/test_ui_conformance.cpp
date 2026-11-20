@@ -5,6 +5,7 @@
 #include <charconv>
 #include <cstddef>
 #include <cstdint>
+#include <initializer_list>
 #include <iterator>
 #include <morph/reactive/runtime.hpp>
 #include <morph/ui/backend.hpp>
@@ -122,6 +123,12 @@ enum class Fault : std::uint8_t {
     HollowNarrow,    // a row whose first child is sized by a fixed or percent width reports no children
     HollowNatural,   // a row whose first child is sized by its content reports no children
     NarrowStretch,   // a button sized by a stretch width is laid out narrower than its label
+    PlainHeaderClicks,  // every header click is reported as Plain
+    FirstSortKeyOnly,   // a header's mark and description answer for the chain's first key only
+    MenuColumnOffByOne,  // a header menu's choice is made on the next column's menu
+    MoveTargetIsSource,  // a column move reports the column's own place
+    UnnamedFilter,       // a filtered header is named by its bare label
+    SilentClipboard,     // copyText reports success and the clipboard reads empty
 };
 
 // The reference probe: what a TUI or Qt Quick probe does with a rendered screen or a QQuickItem tree, this one does
@@ -281,10 +288,59 @@ public:
         ui::Key const key = parseKey(_backend.prop(_backend.children(tableId).at(row), "rowKey"));
         _backend.clickRow(tableId, key, _fault == Fault::NoModifiers ? ui::RowClick::Only : click);
     }
-    void clickHeader(ui::Widget& table, std::size_t column) override {
+    void clickHeader(ui::Widget& table, std::size_t column, ui::HeaderClick click) override {
         if (_fault != Fault::DeadInput) {
-            _backend.clickHeader(_backend.idOf(table), column);
+            _backend.clickHeader(_backend.idOf(table), column,
+                                 _fault == Fault::PlainHeaderClicks ? ui::HeaderClick::Plain : click);
         }
+    }
+    [[nodiscard]] std::vector<ui::MenuEntry> headerMenu(ui::Widget& table,
+                                                        std::optional<std::size_t> column) override {
+        return _fault == Fault::DeadInput ? std::vector<ui::MenuEntry>{}
+                                          : _backend.menuOf(_backend.idOf(table), column);
+    }
+    // The path's labels, from the top, as a user reads them on the way to the entry.
+    void chooseHeaderMenuEntry(ui::Widget& table, std::optional<std::size_t> column,
+                               std::vector<std::size_t> const& path) override {
+        if (_fault == Fault::DeadInput) {
+            return;
+        }
+        int const tableId = _backend.idOf(table);
+        std::optional<std::size_t> const chosen =
+            column && _fault == Fault::MenuColumnOffByOne ? std::optional<std::size_t>{*column + 1} : column;
+        std::vector<ui::MenuEntry> const entries = _backend.menuOf(tableId, chosen);
+        std::vector<ui::MenuEntry> const* level = &entries;
+        std::vector<std::string_view> labels;
+        for (std::size_t const index : path) {
+            if (index >= level->size()) {
+                return;
+            }
+            labels.emplace_back(level->at(index).label);
+            level = &level->at(index).items;
+        }
+        _backend.chooseMenu(tableId, chosen, labels);
+    }
+    void moveColumn(ui::Widget& table, std::size_t column, std::size_t position) override {
+        if (_fault != Fault::DeadInput) {
+            _backend.moveColumn(_backend.idOf(table), column, _fault == Fault::MoveTargetIsSource ? column : position);
+        }
+    }
+    [[nodiscard]] std::string headerText(ui::Widget const& table, std::size_t column) override {
+        return _fault == Fault::FirstSortKeyOnly ? firstKeyOnly(table, column, true)
+                                                 : _backend.headerText(_backend.idOf(table), column);
+    }
+    [[nodiscard]] std::string headerName(ui::Widget const& table, std::size_t column) override {
+        if (_fault == Fault::UnnamedFilter) {
+            return _backend.tableColumns(_backend.idOf(table)).at(column).label;
+        }
+        return _backend.headerName(_backend.idOf(table), column);
+    }
+    [[nodiscard]] std::string headerDescription(ui::Widget const& table, std::size_t column) override {
+        return _fault == Fault::FirstSortKeyOnly ? firstKeyOnly(table, column, false)
+                                                 : _backend.headerDescription(_backend.idOf(table), column);
+    }
+    [[nodiscard]] std::string clipboardText() override {
+        return _fault == Fault::SilentClipboard ? std::string{} : _backend.clipboardText();
     }
     [[nodiscard]] std::vector<std::size_t> selectedRows(ui::Widget const& table) override {
         int const tableId = _backend.idOf(table);
@@ -330,6 +386,21 @@ public:
     }
 
 private:
+    // A header's text or description as a backend that draws only the chain's first key shows it: the first key of
+    // the recorded `sort`, as a chain of one.
+    [[nodiscard]] std::string firstKeyOnly(ui::Widget const& table, std::size_t column, bool text) {
+        int const tableId = _backend.idOf(table);
+        std::string const sort = _backend.prop(tableId, "sort");
+        std::string const label = _backend.tableColumns(tableId).at(column).label;
+        std::size_t const colon = sort.find(':');
+        if (sort == "none" || colon == std::string::npos || std::stoul(sort.substr(0, colon)) != column) {
+            return text ? label : std::string{};
+        }
+        auto const direction = sort.compare(colon + 1, 9, "Ascending") == 0 ? ui::SortDirection::Ascending
+                                                                             : ui::SortDirection::Descending;
+        return text ? label + ui::sortMarkText(direction, 1, 1) : ui::sortDescription(direction, 1, 1);
+    }
+
     // The label of the option whose key `selected` shows, from `options`' `key:label` elements.
     [[nodiscard]] std::string markedLabel(int selectId) const {
         std::string const selected = _backend.prop(selectId, "selected");
@@ -397,7 +468,7 @@ public:
     void dismiss(ui::Widget&) override {}
     void selectRows(ui::Widget&, std::vector<std::size_t> const&) override {}
     void clickRow(ui::Widget&, std::size_t, ui::RowClick) override {}
-    void clickHeader(ui::Widget&, std::size_t) override {}
+    void clickHeader(ui::Widget&, std::size_t, ui::HeaderClick) override {}
     [[nodiscard]] std::vector<std::size_t> selectedRows(ui::Widget const&) override { return {}; }
     void moveCursor(ui::Widget&, std::size_t) override {}
     [[nodiscard]] std::size_t cursorOf(ui::Widget const&) override { return 0; }
@@ -429,7 +500,7 @@ std::set<std::string_view> failingCases(Fault fault) {
 
 TEST_CASE("ui conformance: RecordingBackend passes every case", "[ui][conformance]") {
     auto const cases = ui::testing::conformanceCases();
-    REQUIRE(cases.size() == 57);
+    REQUIRE(cases.size() == 65);
     std::set<std::string_view> names;
     for (auto const& testCase : cases) {
         CHECK(names.insert(testCase.name).second);
@@ -500,7 +571,9 @@ TEST_CASE("ui conformance: the suite flags a backend that breaks the contract", 
           "a drop zone takes a drop whole or refuses it whole",
           "a click on a sortable header asks to sort by it, and no other header or setter does",
           "a button-style menu reports the entry past a separator, and never the separator",
-          "a removable badge reports its removal once"}) {
+          "a removable badge reports its removal once",
+          "table: the table's menu is the menu with no column",
+          "table: Ctrl+C on a focused table reports a copy"}) {
         INFO(name);
         CHECK(deadInput.contains(name));
     }
@@ -511,6 +584,20 @@ TEST_CASE("ui conformance: the suite flags a backend that breaks the contract", 
           "a Shift-click selects the rows from the anchor, in place of the rest"}) {
         INFO(name);
         CHECK(noModifiers.contains(name));
+    }
+
+    // Each configuring fault fails the case its control stands beside. Mutation: drop a fault's branch from the
+    // probe (the case then passes under it).
+    for (auto const& [fault, name] : std::initializer_list<std::pair<Fault, std::string_view>>{
+             {Fault::PlainHeaderClicks, "table: a Shift-click on a sortable header reports Shift, a plain click Plain"},
+             {Fault::FirstSortKeyOnly, "table: a chain of three keys marks every header with its place"},
+             {Fault::MenuColumnOffByOne,
+              "table: a header's menu shows its entries and choosing one reports the column and the path"},
+             {Fault::MoveTargetIsSource, "table: a column moved by the user reports its column and new place"},
+             {Fault::UnnamedFilter, "table: a filtered column's header is named so"},
+             {Fault::SilentClipboard, "backend: copyText puts its text on the clipboard"}}) {
+        INFO(name);
+        CHECK(failingCases(fault).contains(name));
     }
 
     // Only the setter case is run against the echoing backend: the probe reads widgets through the recording

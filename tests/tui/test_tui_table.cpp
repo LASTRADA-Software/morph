@@ -910,15 +910,54 @@ TEST_CASE("tui table: the sorted column's header shows its direction, and a clic
     quantity->setText("3");
     table->setRowKey(*row, key(1));
     std::vector<std::size_t> asked;
-    table->setOnSort([&asked](std::size_t column) { asked.push_back(column); });
+    table->setOnSort([&asked](std::size_t column, ui::HeaderClick) { asked.push_back(column); });
     // A sortable header keeps room for its mark, so the columns stay where they are when the sort comes.
     CHECK(harness.draw() == Rows{"  Name   Qty", "  apple  3"});
-    table->setSort(ui::TableSort{.column = 0, .direction = ui::SortDirection::Descending});
+    table->setSort({ui::TableSort{.column = 0, .direction = ui::SortDirection::Descending}});
     CHECK(harness.draw() == Rows{"  Name ▼ Qty", "  apple  3"});
     CHECK(asked.empty());
     CHECK(harness.click({.x = 3, .y = 0}) == EventResult::Handled);
     CHECK(harness.click({.x = 9, .y = 0}) == EventResult::Handled);
     CHECK(asked == std::vector<std::size_t>{0});
+}
+
+// Control: leave the header unfocusable (Up on the first row then leaves the header unfocused).
+TEST_CASE("tui table: Up on the first row focuses the header; Left, Right, Shift+Enter and Ctrl+Shift+Right act on it",
+          "[tui]") {
+    Harness harness{40, 4};
+    auto const table = harness.make<TableImpl>(nullptr);
+    table->setColumns({{.label = "Name", .sortable = true},
+                       {.label = "Qty", .sortable = true},
+                       {.label = "Site", .sortable = true}});
+    auto const row = harness.make<StackImpl>(table.get(), ui::Axis::Horizontal);
+    std::vector<std::unique_ptr<TextImpl>> cells;
+    for (std::string const text : {"apple", "3", "north"}) {
+        cells.push_back(harness.make<TextImpl>(row.get()));
+        cells.back()->setText(text);
+    }
+    table->setRowKey(*row, key(1));
+    table->setSelectionMode(ui::SelectionMode::Single);
+    table->setSort({ui::TableSort{.column = 1, .direction = ui::SortDirection::Ascending}});
+    std::vector<std::pair<std::size_t, ui::HeaderClick>> sorts;
+    table->setOnSort([&sorts](std::size_t column, ui::HeaderClick click) { sorts.emplace_back(column, click); });
+    std::vector<std::pair<std::size_t, std::size_t>> moves;
+    table->setOnColumnMove([&moves](std::size_t column, std::size_t position) { moves.emplace_back(column, position); });
+    static_cast<void>(harness.draw());
+    harness.focus(*table);
+    CHECK(harness.key(KeyCode::Up) == EventResult::Handled);
+    CHECK(table->focusedHeader() == std::optional<std::size_t>{1});
+    CHECK(harness.key(KeyCode::Right) == EventResult::Handled);
+    CHECK(table->focusedHeader() == std::optional<std::size_t>{2});
+    CHECK(harness.key(KeyCode::Enter, core::tui::Modifier::Shift) == EventResult::Handled);
+    CHECK(sorts == std::vector<std::pair<std::size_t, ui::HeaderClick>>{{2, ui::HeaderClick::Shift}});
+    CHECK(harness.key(KeyCode::Left, core::tui::Modifier::Ctrl | core::tui::Modifier::Shift) == EventResult::Handled);
+    CHECK(moves == std::vector<std::pair<std::size_t, std::size_t>>{{2, 1}});
+    CHECK(harness.key(KeyCode::Down) == EventResult::Handled);
+    CHECK(table->focusedHeader() == std::nullopt);
+    // Back on row 0: Space selects it.
+    CHECK(harness.type(" ") == EventResult::Handled);
+    CHECK(table->markedRows() == Positions{0});
+    cells.clear();
 }
 
 namespace {

@@ -22,6 +22,17 @@ import QtQuick.Layouts
 //
 // The status line (`statusShown`) is one line under the rows: the counts, the state and the message, and "Retry"
 // while the state offers it. It takes no space while it is not shown.
+//
+// A header is a Tab stop while it can sort, move or open a menu. A click, Enter or Space on a sortable header asks to
+// sort (`sort`, with `shift` while Shift is held); a right click, Shift+F10 or the menu key asks for its menu
+// (`menu`, with its column), and the `⋯` at the header's trailing end (`Table options`) for the table's (`-1`); C++
+// answers with `showMenu`, which shows the entries in a button-style MorphMenu's popup under the header, and a choice
+// is reported as `menuChoose`. Dragging a header onto another, or Ctrl+Shift+Left and Ctrl+Shift+Right on it, report
+// a move to a visible place (`columnMove`); dragging a header's trailing edge reports its width in pixels and a double
+// click on the edge none (`columnResize`). A filterable header ends in a filter button (`filter`), filled while
+// `filteredColumns` names it, and then named "{label}, filtered". Column groups draw a line above the headers, each
+// group's label over the visible places it names with its own filter button (`groupFilter`). Ctrl+C on the table asks
+// to copy (`copy`).
 MorphWidget {
     id: root
 
@@ -29,13 +40,110 @@ MorphWidget {
     // `Align`: 0 stretch, 1 start, 2 center, 3 end.
     property var columns: []
     property bool showHeader: true
-    // The column whose header marks the sort, -1 for none, and whether it is descending; C++ writes both.
-    property int sortColumn: -1
-    property bool sortDescending: false
-    // What follows a sortable header's label while it sorts, and the room every sortable header keeps for it, so the
-    // columns do not move when the sort does.
-    readonly property string ascendingMark: " ▲"
-    readonly property string descendingMark: " ▼"
+    // Each sorted header's mark and accessible description, by column as text: the sort chain, which C++ writes.
+    property var sortMarks: ({})
+    property var sortDescriptions: ({})
+    // The room every sortable header keeps for a one-key mark, so the columns do not move when such a sort does.
+    readonly property string ascendingMark: " \u25B2"
+    // Whether the headers and the table have menus, columns can be moved and resized, and the table copies.
+    property bool hasMenu: false
+    property bool movable: false
+    property bool resizable: false
+    property bool copies: false
+    // The visible columns in layout order; empty for every column in its own order.
+    property var visibleColumns: []
+    // The columns that have a filter, by column as text.
+    property var filteredColumns: ({})
+    // The column groups: [{label, first, count, filtered}], `first` a visible place.
+    property var columnGroups: []
+    // The column the open menu belongs to, -1 for the table's menu.
+    property int menuColumn: -1
+    readonly property real groupRowHeight: root.columnGroups.length > 0 ? headerMetrics.height +
+                                                                           2 * Theme.tableCellPaddingY : 0
+
+    // A column's visible place: its index among `visibleColumns`, or the column itself when every column shows.
+    function placeOf(column: int): int {
+        return root.visibleColumns.length > 0 ? root.visibleColumns.indexOf(column) : column
+    }
+
+    function sortMarkOf(column: int): string {
+        return root.sortMarks[String(column)] ?? ""
+    }
+
+    function headerName(column: int, label: string): string {
+        return root.filteredColumns[String(column)] === true ? label + ", filtered" : label
+    }
+
+    // The keys of a focused header: Shift with Enter or Space extends the sort, Ctrl+Shift with Left or Right moves
+    // the column a place, Shift+F10 or the menu key opens its menu.
+    function headerKey(event: var, column: int, sortable: bool): bool {
+        const mods = event.modifiers & (Qt.ShiftModifier | Qt.ControlModifier | Qt.AltModifier | Qt.MetaModifier)
+        const activate = event.key === Qt.Key_Return || event.key === Qt.Key_Enter || event.key === Qt.Key_Space
+        if (sortable && activate && (mods === Qt.NoModifier || mods === Qt.ShiftModifier)) {
+            root.fire("sort", {"column": column, "shift": mods === Qt.ShiftModifier})
+            return true
+        }
+        if (root.movable && mods === (Qt.ControlModifier | Qt.ShiftModifier)
+                && (event.key === Qt.Key_Left || event.key === Qt.Key_Right)) {
+            const place = root.placeOf(column)
+            const count = root.visibleColumns.length > 0 ? root.visibleColumns.length : root.columns.length
+            const target = event.key === Qt.Key_Left ? place - 1 : place + 1
+            if (place >= 0 && target >= 0 && target < count)
+                root.fire("columnMove", {"column": column, "position": target})
+            return true
+        }
+        if (root.hasMenu && ((event.key === Qt.Key_F10 && mods === Qt.ShiftModifier) || event.key === Qt.Key_Menu)) {
+            root.fire("menu", column)
+            return true
+        }
+        return false
+    }
+
+    // The header item of a column, or of the table's menu for -1; null when it is not drawn.
+    function headerItem(column: int): Item {
+        if (column < 0)
+            return tableMenuButton
+        const name = "header" + column
+        const pending = [headerArea]
+        while (pending.length > 0) {
+            const item = pending.pop()
+            if (item.objectName === name)
+                return item
+            for (const child of item.children)
+                pending.push(child)
+        }
+        return null
+    }
+
+    // Shows a menu's entries, as C++ read them for `column` (-1 for the table's), under its header or the `⋯`.
+    function showMenu(column: var, entries: var) {
+        const anchor = root.headerItem(Number(column))
+        if (!anchor)
+            return
+        root.menuColumn = Number(column)
+        const at = anchor.mapToItem(root, 0, 0)
+        configMenu.x = at.x
+        configMenu.y = at.y + anchor.height
+        configMenu.width = anchor.width
+        configMenu.entries = entries
+        configMenu.openFromTrigger()
+    }
+
+    // The drop of a header dragged to @p x in the header's own coordinates: a move to the place of the header there.
+    function dropHeader(column: int, sceneX: real) {
+        for (let other = 0; other < root.columns.length; ++other) {
+            const item = root.headerItem(other)
+            if (!item || other === column || !item.visible)
+                continue
+            const at = item.mapFromItem(null, sceneX, 0)
+            if (at.x >= 0 && at.x < item.width) {
+                const place = root.placeOf(other)
+                if (place >= 0)
+                    root.fire("columnMove", {"column": column, "position": place})
+                return
+            }
+        }
+    }
     // Whether the user can select several rows; C++ writes it with the selection mode.
     property bool multiple: false
     // The row keyboard focus is on, or was on last; null before any.
@@ -577,6 +685,11 @@ MorphWidget {
         const focused = root.Window.activeFocusItem
         if (focused !== root && (focused as MorphTableRow)?.table !== root)
             return false
+        const held = event.modifiers & (Qt.ShiftModifier | Qt.ControlModifier | Qt.AltModifier | Qt.MetaModifier)
+        if (root.copies && event.key === Qt.Key_C && held === Qt.ControlModifier) {
+            root.fire("copy", undefined)
+            return true
+        }
         if (root.sourceRows)
             return root.sourceKey(event)
         const rows = root.shownRows()
@@ -681,8 +794,9 @@ MorphWidget {
             visible: root.showHeader
             width: hflick.contentWidth
             implicitWidth: header.implicitWidth
-            height: !root.showHeader ? 0 : root.arranged ? headerMetrics.height + 2 * Theme.tableCellPaddingY
-                                                         : header.implicitHeight
+            height: !root.showHeader ? 0 : root.groupRowHeight + (root.arranged ? headerMetrics.height +
+                                                                                   2 * Theme.tableCellPaddingY
+                                                                                 : header.implicitHeight)
 
             Loader {
                 id: headerBackgroundLoader
@@ -695,8 +809,76 @@ MorphWidget {
                 value: root.scheme
             }
 
+            // The group line: each group's label over the columns at the visible places it names, ending in its
+            // filter button.
+            Repeater {
+                model: root.showHeader ? root.columnGroups : []
+
+                Item {
+                    id: groupCell
+                    required property int index
+                    required property var modelData
+                    readonly property var span: {
+                        let left = -1
+                        let right = -1
+                        for (let column = 0; column < root.columns.length; ++column) {
+                            const place = root.placeOf(column)
+                            const item = root.headerItem(column)
+                            if (!item || place < groupCell.modelData.first
+                                    || place >= groupCell.modelData.first + groupCell.modelData.count)
+                                continue
+                            const at = item.mapToItem(headerArea, 0, 0)
+                            left = left < 0 ? at.x : Math.min(left, at.x)
+                            right = Math.max(right, at.x + item.width)
+                        }
+                        return {"left": left, "right": right}
+                    }
+                    visible: span.left >= 0
+                    x: span.left
+                    width: Math.max(0, span.right - span.left)
+                    height: root.groupRowHeight
+
+                    Label {
+                        anchors.left: parent.left
+                        anchors.right: groupFilter.left
+                        anchors.verticalCenter: parent.verticalCenter
+                        leftPadding: Theme.tableCellPaddingX
+                        textFormat: Text.PlainText
+                        font: Theme.tableHeaderFont
+                        color: root.scheme.muted
+                        text: groupCell.modelData.label
+                        elide: Text.ElideRight
+                    }
+                    ToolButton {
+                        id: groupFilter
+                        objectName: "groupFilter" + groupCell.index
+                        anchors.right: parent.right
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: groupCell.modelData.filtered === true ? "\u25BE" : "\u25BF"
+                        Accessible.name: groupCell.modelData.label + (groupCell.modelData.filtered === true
+                                                                      ? ", filtered" : "")
+                        onClicked: root.fire("groupFilter", groupCell.index)
+                    }
+                }
+            }
+
+            // The table's menu: the `⋯` at the header's trailing end.
+            ToolButton {
+                id: tableMenuButton
+                objectName: "tableMenuButton"
+                visible: root.hasMenu && root.showHeader
+                x: hflick.contentX + hflick.width - width
+                y: root.groupRowHeight
+                z: 2
+                height: headerArea.height - root.groupRowHeight
+                text: "\u22EF"
+                Accessible.name: "Table options"
+                onClicked: root.fire("menu", -1)
+            }
+
             Row {
                 id: header
+                y: root.groupRowHeight
 
                 // The select-all box: checked while every shown row is selected, partly while some are. It shows the
                 // selection and never changes its own state, so a selection the document refuses leaves it as it was.
@@ -757,31 +939,56 @@ MorphWidget {
                         font: Theme.tableHeaderFont
                         required property int index
                         required property var modelData
-                        readonly property bool sorted: root.sortColumn === index
                         width: root.widths[index] !== undefined ? root.widths[index] : 0
-                        text: root.headerTextOf(modelData) + (sorted ? (root.sortDescending ? root.descendingMark
-                                                                                            : root.ascendingMark) : "")
-                        activeFocusOnTab: modelData.sortable === true
+                        text: root.headerTextOf(modelData) + root.sortMarkOf(index)
+                        activeFocusOnTab: modelData.sortable === true || root.hasMenu || root.movable
                         Accessible.role: Accessible.ColumnHeader
-                        Accessible.name: modelData.accessibleName ?? modelData.label
-                        Accessible.description: !sorted ? "" : root.sortDescending ? "Sorted descending"
-                                                                                   : "Sorted ascending"
+                        Accessible.name: root.headerName(index, modelData.accessibleName ?? modelData.label)
+                        Accessible.description: root.sortDescriptions[String(index)] ?? ""
                         Keys.onPressed: event => {
-                            if (modelData.sortable === true && (event.key === Qt.Key_Return || event.key === Qt.Key_Enter
-                                                                || event.key === Qt.Key_Space)) {
-                                root.fire("sort", index)
+                            if (root.headerKey(event, headerLabel.index, headerLabel.modelData.sortable === true))
                                 event.accepted = true
-                            }
                         }
                         TapHandler {
                             enabled: headerLabel.modelData.sortable === true
-                            onTapped: root.fire("sort", headerLabel.index)
+                            onTapped: (point, button) => root.fire("sort", {
+                                "column": headerLabel.index,
+                                "shift": (point.modifiers & Qt.ShiftModifier) !== 0
+                            })
+                        }
+                        TapHandler {
+                            acceptedButtons: Qt.RightButton
+                            enabled: root.hasMenu
+                            onTapped: root.fire("menu", headerLabel.index)
+                        }
+                        DragHandler {
+                            id: headerMove
+                            enabled: root.movable
+                            yAxis.enabled: false
+                            target: null
+                            onActiveChanged: {
+                                if (!active)
+                                    root.dropHeader(headerLabel.index, centroid.scenePosition.x)
+                            }
+                        }
+                        MorphTableHeaderEdge {
+                            column: headerLabel.index
+                            table: root
+                        }
+                        ToolButton {
+                            objectName: "filter" + headerLabel.index
+                            visible: headerLabel.modelData.filterable === true
+                            anchors.right: parent.right
+                            anchors.verticalCenter: parent.verticalCenter
+                            text: root.filteredColumns[String(headerLabel.index)] === true ? "\u25BE" : "\u25BF"
+                            Accessible.name: "Filter " + headerLabel.modelData.label
+                            onClicked: root.fire("filter", headerLabel.index)
                         }
                         color: root.scheme.muted
                         topPadding: Theme.tableCellPaddingY
                         bottomPadding: Theme.tableCellPaddingY
                         leftPadding: Theme.tableCellPaddingX
-                        rightPadding: Theme.tableCellPaddingX
+                        rightPadding: Theme.tableCellPaddingX + (modelData.filterable === true ? Theme.targetHeight : 0)
                         // Over its cells: a number column's header sits over its digits.
                         horizontalAlignment: modelData.align === 3 ? Text.AlignRight
                                                                    : modelData.align === 2 ? Text.AlignHCenter
@@ -804,31 +1011,57 @@ MorphWidget {
                     readonly property var column: root.columns[modelData.column] ?? ({"label": "", "align": 1,
                                                                                        "sortable": false})
                     readonly property bool pinned: index < root.pinnedShown
-                    readonly property bool sorted: root.sortColumn === modelData.column
                     objectName: "header" + modelData.column
                     x: root.lead + modelData.offset + (pinned ? root.scrollX : 0)
+                    y: root.groupRowHeight
                     z: pinned ? 1 : 0
                     width: modelData.width
-                    height: headerArea.height
+                    height: headerArea.height - root.groupRowHeight
                     textFormat: Text.PlainText
                     font: Theme.tableHeaderFont
-                    text: root.headerTextOf(column) + (sorted ? (root.sortDescending ? root.descendingMark
-                                                                                     : root.ascendingMark) : "")
-                    activeFocusOnTab: column.sortable === true
+                    text: root.headerTextOf(column) + root.sortMarkOf(modelData.column)
+                    activeFocusOnTab: column.sortable === true || root.hasMenu || root.movable
                     Accessible.role: Accessible.ColumnHeader
-                    Accessible.name: column.accessibleName ?? column.label
-                    Accessible.description: !sorted ? "" : root.sortDescending ? "Sorted descending" : "Sorted ascending"
+                    Accessible.name: root.headerName(modelData.column, column.accessibleName ?? column.label)
+                    Accessible.description: root.sortDescriptions[String(modelData.column)] ?? ""
                     Keys.onPressed: event => {
-                        if (windowLabel.column.sortable === true && (event.key === Qt.Key_Return ||
-                                                                     event.key === Qt.Key_Enter ||
-                                                                     event.key === Qt.Key_Space)) {
-                            root.fire("sort", windowLabel.modelData.column)
+                        if (root.headerKey(event, windowLabel.modelData.column, windowLabel.column.sortable === true))
                             event.accepted = true
-                        }
                     }
                     TapHandler {
                         enabled: windowLabel.column.sortable === true
-                        onTapped: root.fire("sort", windowLabel.modelData.column)
+                        onTapped: (point, button) => root.fire("sort", {
+                            "column": windowLabel.modelData.column,
+                            "shift": (point.modifiers & Qt.ShiftModifier) !== 0
+                        })
+                    }
+                    TapHandler {
+                        acceptedButtons: Qt.RightButton
+                        enabled: root.hasMenu
+                        onTapped: root.fire("menu", windowLabel.modelData.column)
+                    }
+                    DragHandler {
+                        enabled: root.movable
+                        yAxis.enabled: false
+                        target: null
+                        onActiveChanged: {
+                            if (!active)
+                                root.dropHeader(windowLabel.modelData.column, centroid.scenePosition.x)
+                        }
+                    }
+                    MorphTableHeaderEdge {
+                        column: windowLabel.modelData.column
+                        table: root
+                    }
+                    ToolButton {
+                        objectName: "filter" + windowLabel.modelData.column
+                        visible: windowLabel.column.filterable === true
+                        anchors.right: parent.right
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: root.filteredColumns[String(windowLabel.modelData.column)] === true ? "\u25BE"
+                                                                                                   : "\u25BF"
+                        Accessible.name: "Filter " + windowLabel.column.label
+                        onClicked: root.fire("filter", windowLabel.modelData.column)
                     }
                     color: root.scheme.muted
                     background: Rectangle {
@@ -1339,6 +1572,25 @@ MorphWidget {
             }) as ScrollBar
             vertical.policy = ScrollBar.AlwaysOn
             flick.ScrollBar.vertical = vertical
+        }
+    }
+
+    // The header and table menus' popup: a button-style menu whose trigger is never drawn, placed under the header the
+    // menu belongs to by `showMenu`; its choice goes to C++ with that header's column.
+    MorphMenu {
+        id: configMenu
+        objectName: "configMenu"
+        buttonStyle: true
+        height: 0
+        opacity: 0
+        host: QtObject {
+            function fire(event: string, payload: var) {
+                if (event === "activate")
+                    root.fire("menuChoose", {"column": root.menuColumn, "path": payload})
+            }
+            function ask(question: string, payload: var): bool {
+                return false
+            }
         }
     }
 }

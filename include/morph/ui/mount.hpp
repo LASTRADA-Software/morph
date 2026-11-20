@@ -1922,6 +1922,46 @@ private:
         }
     }
 
+    // What a user configures a table with, whatever its rows come from: menus, moves, resizes, filters, groups and
+    // copy. A value left at its empty constant is not told, so a table that configures nothing is told nothing.
+    void bindTableConfig(reactive::Scope& scope, Table const& spec, TableWidget& widget) {
+        if (spec.menu) {
+            // The entries are read when a menu opens, as a callback is: untracked, an exception reported.
+            widget.setMenu(
+                [runtime = _rt, entries = spec.menu](std::optional<std::size_t> column) {
+                    std::vector<MenuEntry> shown;
+                    static_cast<void>(runCallback(*runtime, [&] { shown = entries(column); }));
+                    return shown;
+                },
+                event(spec.onMenu));
+        }
+        if (spec.onColumnMove) {
+            widget.setOnColumnMove(event(spec.onColumnMove));
+        }
+        if (spec.onColumnResize) {
+            widget.setOnColumnResize(event(spec.onColumnResize));
+        }
+        if (spec.onFilter) {
+            widget.setOnFilter(event(spec.onFilter));
+        }
+        if (spec.filtered.isBound() || !spec.filtered.constant().empty()) {
+            bind(scope, spec.filtered, [&widget](std::vector<std::size_t> const& columns) {
+                widget.setFiltered(columns);
+            });
+        }
+        if (spec.columnGroups.isBound() || !spec.columnGroups.constant().empty()) {
+            bind(scope, spec.columnGroups, [&widget](std::vector<TableColumnGroup> const& groups) {
+                widget.setColumnGroups(groups);
+            });
+        }
+        if (spec.onGroupFilter) {
+            widget.setOnGroupFilter(event(spec.onGroupFilter));
+        }
+        if (spec.onCopy) {
+            widget.setOnCopy(event(spec.onCopy));
+        }
+    }
+
     // Rows first, then the selection. The widget marks a selected key whenever its row arrives, so the order only
     // shapes the log: the first setSelection comes after the rows and already marks them.
     Widget& mountKind(reactive::Scope& scope, Table const& spec, ContainerWidget* parent) {
@@ -1943,19 +1983,20 @@ private:
             widget.setOnSelectAll(event(spec.onSelectAll));
         }
         bool const sortable = std::ranges::any_of(spec.columns, &TableColumn::sortable);
-        reactive::Computed<std::optional<TableSort>>* sortValue = nullptr;
+        reactive::Computed<std::vector<TableSort>>* sortValue = nullptr;
         if (sortable) {
             sortValue =
-                bind(scope, spec.sort, [&widget](std::optional<TableSort> const& sort) { widget.setSort(sort); });
+                bind(scope, spec.sort, [&widget](std::vector<TableSort> const& chain) { widget.setSort(chain); });
             widget.setOnSort(event(spec.onSort));
         }
+        bindTableConfig(scope, spec, widget);
         auto& spans = scope.make<SpanTable>();
         spans.columns = spec.columns.size();
         spans.threshold = spec.virtualize.threshold;
         // The sort counts where it is wired: a table with no sortable column shows no sort. It is read inside the
         // rows Effect, not in an Effect of its own, so that two Effects cannot resolve the spans in either order,
         // one of them against the wrong rows. A sort bound to a server query can still clear before the rows reorder.
-        spans.sorted = sortable && sortValue == nullptr && spec.sort.constant().has_value();
+        spans.sorted = sortable && sortValue == nullptr && !spec.sort.constant().empty();
         mountRows(
             scope, spec.rows, widget,
             [this, &widget, &spans](reactive::Scope& rowScope, Node const& node, Widget& rowWidget, Key const& key) {
@@ -1990,7 +2031,7 @@ private:
                 .track =
                     [&spans, sortValue] {
                         if (sortValue != nullptr) {
-                            spans.sorted = sortValue->get().has_value();
+                            spans.sorted = !sortValue->get().empty();
                         }
                     },
                 .begin = [&spans] { ++spans.reconciling; },
@@ -2156,6 +2197,8 @@ private:
         // The arrangement, the visible columns in layout order, and each column's place among them.
         TableArrangement arrangement;
         std::vector<std::size_t> visible;
+        // Whether the backend was told the visible columns: once at mount, then on every change.
+        bool visibleTold = false;
         std::vector<std::optional<std::size_t>> placeOf;
         std::shared_ptr<ColumnExtents> extents = std::make_shared<ColumnExtents>();
         // The horizontal viewport, once the backend reported one.
@@ -2231,7 +2274,7 @@ private:
     // Takes a new arrangement: the visible columns, their places, and their widths, the declared ones and the user's.
     static void arrange(SourceTable& table, TableArrangement arrangement) {
         table.arrangement = std::move(arrangement);
-        table.visible.clear();
+        std::vector<std::size_t> const before = std::exchange(table.visible, {});
         table.placeOf.assign(table.columns.size(), std::nullopt);
         auto const add = [&table](std::size_t column) {
             if (column < table.columns.size() && !table.placeOf.at(column)) {
@@ -2247,6 +2290,10 @@ private:
             for (std::size_t const column : table.arrangement.visible) {
                 add(column);
             }
+        }
+        if (table.visible != before || !table.visibleTold) {
+            table.visibleTold = true;
+            table.widget->setVisibleColumns(table.visible);
         }
         // Widths in the backend's measure: a fixed column's units and a user's width scaled by it, with the padding a
         // column takes beyond its content, a content column from the backend's estimate. Monospace characters are
@@ -3298,15 +3345,16 @@ private:
             table.spans = &spans;
         }
         if (std::ranges::any_of(spec.columns, &TableColumn::sortable)) {
-            bind(scope, spec.sort, [this, &widget, &table](std::optional<TableSort> const& sort) {
-                widget.setSort(sort);
+            bind(scope, spec.sort, [this, &widget, &table](std::vector<TableSort> const& chain) {
+                widget.setSort(chain);
                 if (table.spans != nullptr) {
-                    table.spans->sorted = sort.has_value();
+                    table.spans->sorted = !chain.empty();
                     resolveSpans(widget, *table.spans);
                 }
             });
             widget.setOnSort(event(spec.onSort));
         }
+        bindTableConfig(scope, spec, widget);
         bind(scope, spec.status, [&widget](TableStatus const& status) { widget.setStatus(status); });
         widget.setOnRetry(event(spec.onRetry));
         table.source = *spec.source;

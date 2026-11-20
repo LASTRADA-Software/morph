@@ -74,15 +74,85 @@ TableImpl::TableImpl(Context& context, ui::ContainerWidget* parent)
         }
     });
     relay().on(QStringLiteral("sort"), [this](QVariant const& payload) {
-        if (_onSort && payload.toLongLong() >= 0) {
-            // A copy: the handler may destroy this table.
-            auto const handler = _onSort;
+        QVariantMap const map = payload.toMap();
+        qlonglong const column = map.value(QStringLiteral("column")).toLongLong();
+        if (auto const handler = _onSort; handler && column >= 0) {
+            handler(static_cast<std::size_t>(column),
+                    map.value(QStringLiteral("shift")).toBool() ? ui::HeaderClick::Shift : ui::HeaderClick::Plain);
+        }
+    });
+    // A menu asked for by its column, -1 for the table's: its entries are read now and shown under its place.
+    relay().on(QStringLiteral("menu"), [this](QVariant const& payload) {
+        qlonglong const column = payload.toLongLong();
+        if (!_menu || item() == nullptr) {
+            return;
+        }
+        auto const entries = _menu;
+        std::optional<std::size_t> const which =
+            column >= 0 ? std::optional<std::size_t>{static_cast<std::size_t>(column)} : std::nullopt;
+        QVariantList const shown = menuEntries(entries(which));
+        if (item() != nullptr && !shown.isEmpty()) {
+            QMetaObject::invokeMethod(item(), "showMenu", Qt::DirectConnection, Q_ARG(QVariant, column),
+                                      Q_ARG(QVariant, shown));
+        }
+    });
+    relay().on(QStringLiteral("menuChoose"), [this](QVariant const& payload) {
+        QVariantMap const map = payload.toMap();
+        qlonglong const column = map.value(QStringLiteral("column")).toLongLong();
+        std::vector<std::size_t> path;
+        for (QVariant const& index : map.value(QStringLiteral("path")).toList()) {
+            if (index.toLongLong() < 0) {
+                return;
+            }
+            path.push_back(static_cast<std::size_t>(index.toLongLong()));
+        }
+        if (auto const handler = _onMenu) {
+            handler(column >= 0 ? std::optional<std::size_t>{static_cast<std::size_t>(column)} : std::nullopt,
+                    std::move(path));
+        }
+    });
+    relay().on(QStringLiteral("columnMove"), [this](QVariant const& payload) {
+        QVariantMap const map = payload.toMap();
+        qlonglong const column = map.value(QStringLiteral("column")).toLongLong();
+        qlonglong const position = map.value(QStringLiteral("position")).toLongLong();
+        if (auto const handler = _onColumnMove; handler && column >= 0 && position >= 0) {
+            handler(static_cast<std::size_t>(column), static_cast<std::size_t>(position));
+        }
+    });
+    // A width in pixels, or none for a double click on the edge.
+    relay().on(QStringLiteral("columnResize"), [this](QVariant const& payload) {
+        QVariantMap const map = payload.toMap();
+        qlonglong const column = map.value(QStringLiteral("column")).toLongLong();
+        auto const handler = _onColumnResize;
+        if (!handler || column < 0) {
+            return;
+        }
+        std::optional<int> units;
+        if (QVariant const width = map.value(QStringLiteral("width")); width.isValid() && !width.isNull()) {
+            double const unit = read("measureUnit").toDouble();
+            units = unit > 0 ? std::max(1, static_cast<int>(std::lround(width.toDouble() / unit))) : 1;
+        }
+        handler(static_cast<std::size_t>(column), units);
+    });
+    relay().on(QStringLiteral("filter"), [this](QVariant const& payload) {
+        if (auto const handler = _onFilter; handler && payload.toLongLong() >= 0) {
             handler(static_cast<std::size_t>(payload.toLongLong()));
+        }
+    });
+    relay().on(QStringLiteral("groupFilter"), [this](QVariant const& payload) {
+        if (auto const handler = _onGroupFilter; handler && payload.toLongLong() >= 0) {
+            handler(static_cast<std::size_t>(payload.toLongLong()));
+        }
+    });
+    relay().on(QStringLiteral("copy"), [this](QVariant const&) {
+        if (auto const handler = _onCopy) {
+            handler();
         }
     });
 }
 
 void TableImpl::setColumns(std::vector<ui::TableColumn> const& columns) {
+    _columns = columns;
     QVariantList list;
     for (ui::TableColumn const& column : columns) {
         list.append(QVariantMap{{QStringLiteral("label"), toQString(column.label)},
@@ -96,7 +166,8 @@ void TableImpl::setColumns(std::vector<ui::TableColumn> const& columns) {
                                 {QStringLiteral("shrink"), column.shrink},
                                 {QStringLiteral("align"), static_cast<int>(column.align)},
                                 {QStringLiteral("valign"), static_cast<int>(column.valign)},
-                                {QStringLiteral("sortable"), column.sortable}});
+                                {QStringLiteral("sortable"), column.sortable},
+                                {QStringLiteral("filterable"), column.filterable}});
     }
     write("columns", list);
 }
@@ -169,13 +240,74 @@ void TableImpl::setOnSelectionChange(
 
 void TableImpl::setOnActivate(std::function<void(ui::Key)> onActivate) { _onActivate = std::move(onActivate); }
 
-// MorphTable's `sortColumn` is -1 for none.
-void TableImpl::setSort(std::optional<ui::TableSort> sort) {
-    write("sortDescending", sort && sort->direction == ui::SortDirection::Descending);
-    write("sortColumn", sort ? static_cast<int>(sort->column) : -1);
+// By column, as text keys: a header not in the chain has neither a mark nor a description.
+void TableImpl::setSort(std::vector<ui::TableSort> const& chain) {
+    QVariantMap marks;
+    QVariantMap descriptions;
+    for (std::size_t place = 0; place < chain.size(); ++place) {
+        QString const column = QString::number(chain.at(place).column);
+        marks.insert(column, toQString(ui::sortMarkText(chain.at(place).direction, place + 1, chain.size())));
+        descriptions.insert(column,
+                            toQString(ui::sortDescription(chain.at(place).direction, place + 1, chain.size())));
+    }
+    write("sortMarks", marks);
+    write("sortDescriptions", descriptions);
 }
 
-void TableImpl::setOnSort(std::function<void(std::size_t)> onSort) { _onSort = std::move(onSort); }
+void TableImpl::setOnSort(std::function<void(std::size_t, ui::HeaderClick)> onSort) { _onSort = std::move(onSort); }
+
+void TableImpl::setMenu(std::function<std::vector<ui::MenuEntry>(std::optional<std::size_t>)> entries,
+                        std::function<void(std::optional<std::size_t>, std::vector<std::size_t>)> onChoose) {
+    _menu = std::move(entries);
+    _onMenu = std::move(onChoose);
+    write("hasMenu", static_cast<bool>(_menu));
+}
+
+void TableImpl::setVisibleColumns(std::vector<std::size_t> const& visible) {
+    QVariantList list;
+    for (std::size_t const column : visible) {
+        list.append(static_cast<int>(column));
+    }
+    write("visibleColumns", list);
+}
+
+void TableImpl::setOnColumnMove(std::function<void(std::size_t, std::size_t)> handler) {
+    _onColumnMove = std::move(handler);
+    write("movable", static_cast<bool>(_onColumnMove));
+}
+
+void TableImpl::setOnColumnResize(std::function<void(std::size_t, std::optional<int>)> handler) {
+    _onColumnResize = std::move(handler);
+    write("resizable", static_cast<bool>(_onColumnResize));
+}
+
+void TableImpl::setOnFilter(std::function<void(std::size_t)> handler) { _onFilter = std::move(handler); }
+
+void TableImpl::setFiltered(std::vector<std::size_t> const& columns) {
+    QVariantMap filtered;
+    for (std::size_t const column : columns) {
+        filtered.insert(QString::number(column), true);
+    }
+    write("filteredColumns", filtered);
+}
+
+void TableImpl::setColumnGroups(std::vector<ui::TableColumnGroup> const& groups) {
+    QVariantList list;
+    for (ui::TableColumnGroup const& group : groups) {
+        list.append(QVariantMap{{QStringLiteral("label"), toQString(group.label)},
+                                {QStringLiteral("first"), static_cast<int>(group.first)},
+                                {QStringLiteral("count"), static_cast<int>(group.count)},
+                                {QStringLiteral("filtered"), group.filtered}});
+    }
+    write("columnGroups", list);
+}
+
+void TableImpl::setOnGroupFilter(std::function<void(std::size_t)> handler) { _onGroupFilter = std::move(handler); }
+
+void TableImpl::setOnCopy(std::function<void()> onCopy) {
+    _onCopy = std::move(onCopy);
+    write("copies", static_cast<bool>(_onCopy));
+}
 
 void TableImpl::setExistingKeys(std::vector<ui::Key> const& keys) {
     _existingKeys = std::unordered_set<ui::Key>{keys.begin(), keys.end()};

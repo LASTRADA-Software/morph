@@ -49,7 +49,7 @@ struct Fixture {
     Runtime runtime{owner};
     RecordingBackend backend;
     Signal<std::vector<Line>> lines;
-    Signal<std::optional<ui::TableSort>> sort{runtime, std::nullopt};
+    Signal<std::vector<ui::TableSort>> sort{runtime, {}};
 
     explicit Fixture(std::vector<Line> initial) : lines{runtime, std::move(initial)} {}
 
@@ -60,7 +60,7 @@ struct Fixture {
             std::move(columns),
             [this] {
                 std::vector<Line> rows = lines.get();
-                if (sort.get().has_value()) {
+                if (!sort.get().empty()) {
                     std::ranges::reverse(rows);  // a sort reorders the rows in the same batch as it changes
                 }
                 return rows;
@@ -167,11 +167,11 @@ TEST_CASE("row spans: a sorted table draws no spans, silently, and has them back
     Fixture fixture{three()};
     ui::Mounted const mounted{fixture.runtime, fixture.backend, fixture.view(true)};
     CHECK(fixture.spansOf(1) == "0:3");
-    fixture.sort.set(ui::TableSort{.column = 0, .direction = ui::SortDirection::Ascending});
+    fixture.sort.set({ui::TableSort{.column = 0, .direction = ui::SortDirection::Ascending}});
     fixture.owner.runAll();
     CHECK(fixture.spansOf(1) == "none");
     CHECK(fixture.probe.count(site::kRowSpanOverrun) == 0);
-    fixture.sort.set(std::nullopt);
+    fixture.sort.set({});
     fixture.owner.runAll();
     CHECK(fixture.spansOf(1) == "0:3");
 }
@@ -184,18 +184,18 @@ TEST_CASE("row spans: a sort that reorders the rows is never reported as a span 
     ui::Mounted const mounted{fixture.runtime, fixture.backend, fixture.view(true)};
     CHECK(fixture.spansOf(1) == "0:3");
     // Engaged: the spanning row lands last, where a resolve with the sort not yet seen would find it overrunning.
-    fixture.sort.set(ui::TableSort{.column = 0, .direction = ui::SortDirection::Descending});
+    fixture.sort.set({ui::TableSort{.column = 0, .direction = ui::SortDirection::Descending}});
     fixture.owner.runAll();
     CHECK(fixture.spansOf(1) == "none");
     CHECK(fixture.probe.count(site::kRowSpanOverrun) == 0);
     // Cleared: the rows are back in order at once, and the spans with them.
-    fixture.sort.set(std::nullopt);
+    fixture.sort.set({});
     fixture.owner.runAll();
     CHECK(fixture.spansOf(1) == "0:3");
     CHECK(fixture.probe.count(site::kRowSpanOverrun) == 0);
     // Engaged and cleared again in one batch of the owner's turns.
-    fixture.sort.set(ui::TableSort{.column = 0, .direction = ui::SortDirection::Ascending});
-    fixture.sort.set(std::nullopt);
+    fixture.sort.set({ui::TableSort{.column = 0, .direction = ui::SortDirection::Ascending}});
+    fixture.sort.set({});
     fixture.owner.runAll();
     CHECK(fixture.spansOf(1) == "0:3");
     CHECK(fixture.probe.count(site::kRowSpanOverrun) == 0);

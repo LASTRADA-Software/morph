@@ -1,9 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 
+#include <core/tui/Screen.hpp>
+#include <core/tui/ScreenSurface.hpp>
+#include <core/tui/TerminalOutput.hpp>
 #include <functional>
 #include <memory>
 #include <morph/tui/backend.hpp>
 #include <string>
+#include <string_view>
 #include <utility>
 
 #include "tui/container_widgets.hpp"
@@ -202,6 +206,11 @@ void Backend::fit() { detail::fit(_impl->context); }
 bool Backend::spotlightMisplaced() const { return _impl->context.spotlightMisplaced(); }
 
 std::string Backend::widthClass() const { return ui::widthClassOf(_impl->context.screen->viewportArea().width); }
+
+bool Backend::copyText(std::string_view text) {
+    _impl->context.screen->surface().output().copyToClipboard(text);
+    return true;
+}
 
 void Backend::setOnWidthClass(std::function<void(std::string const&)> onWidthClass) {
     _impl->onWidthClass = std::move(onWidthClass);

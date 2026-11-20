@@ -8760,25 +8760,25 @@ Node ScreenCore::lowerRows(DocNode const& node, LowerCtx const& ctx, ElementStat
         }
         return derivedCount + static_cast<std::size_t>(std::distance(parts.begin(), found));
     };
-    options.sort = slotProp<std::optional<TableSort>>([element, &node, columnIndex] -> std::optional<TableSort> {
+    options.sort = slotProp<std::vector<TableSort>>([element, &node, columnIndex] -> std::vector<TableSort> {
         std::optional<std::vector<SortKey>> const keys = sortKeysOf(node, tableSort(*element));
         if (!keys || keys->empty()) {
-            return std::nullopt;
+            return {};
         }
         std::optional<std::size_t> const index = columnIndex(keys->front().column->id);
         if (!index) {
-            return std::nullopt;
+            return {};
         }
-        return TableSort{
+        return {TableSort{
             .column = *index,
             .direction = keys->front().descending ? SortDirection::Descending : SortDirection::Ascending,
-        };
+        }};
     });
     // A header click makes its column the single key: descending when it already is the first key ascending,
     // ascending otherwise. The table's own sort takes it when no key binds one, and is saved with the table's
     // state, then `onSortChange` runs with `event` the new sort.
     options.onSort = [this, ctx, element, table, &node, derivedCount,
-                      commands = node.event("onSortChange")](std::size_t index) {
+                      commands = node.event("onSortChange")](std::size_t index, HeaderClick) {
         auto const parts = node.partList("columns");
         if (index < derivedCount || index - derivedCount >= parts.size() ||
             !parts.subspan(index - derivedCount).front()->flag("sortable")) {
@@ -10750,22 +10750,23 @@ Node ScreenCore::modelTableOf(DocNode const& node, LowerCtx const& ctx, ElementS
                   });
     };
     options.highlight = slotProp<std::optional<TableHighlight>>([&model] { return model.highlight.get(); });
-    options.sort = slotProp<std::optional<TableSort>>([&element, ids] -> std::optional<TableSort> {
+    options.sort = slotProp<std::vector<TableSort>>([&element, ids] -> std::vector<TableSort> {
         SortChain const chain = sortChainOf(tableSort(element));
         if (chain.empty()) {
-            return std::nullopt;
+            return {};
         }
         auto const found = std::ranges::find(ids, chain.front().column);
         if (found == ids.end()) {
-            return std::nullopt;
+            return {};
         }
-        return TableSort{.column = static_cast<std::size_t>(std::distance(ids.begin(), found)),
-                         .direction = chain.front().dir == table::SortDirection::Descending ? SortDirection::Descending
-                                                                                            : SortDirection::Ascending};
+        return {TableSort{.column = static_cast<std::size_t>(std::distance(ids.begin(), found)),
+                          .direction = chain.front().dir == table::SortDirection::Descending
+                                           ? SortDirection::Descending
+                                           : SortDirection::Ascending}};
     });
     // A header click makes its column the single key: descending when it is the first key ascending already,
     // ascending otherwise. A bound sort is the document's: the click changes nothing and is not saved.
-    options.onSort = [this, &element, &model, ids](std::size_t index) {
+    options.onSort = [this, &element, &model, ids](std::size_t index, HeaderClick) {
         if (index >= ids.size()) {
             return;
         }

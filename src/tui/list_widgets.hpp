@@ -294,6 +294,61 @@ private:
     bool _open = false;
 };
 
+/// A menu's entries shown as an overlay list for a widget that is not a menu (a table's header): it opens below an
+/// anchor the owner names (above it when there is more room there), takes the focus, and drills into submenus as a
+/// button-style menu's list does. Choosing an entry, Esc, or the focus leaving closes it and hands the focus back to
+/// the owner; Tab closes it and leaves the key to the frontend. While open, the owner is in `Context::popups`, and
+/// answers `closePopup` and `openPopup` from `close` and `list`.
+class MenuPopup {
+public:
+    explicit MenuPopup(WidgetBase& owner);
+    /// Closes the list, if open, taking the focus off it first.
+    ~MenuPopup();
+    MenuPopup(MenuPopup const&) = delete;
+    MenuPopup& operator=(MenuPopup const&) = delete;
+    MenuPopup(MenuPopup&&) = delete;
+    MenuPopup& operator=(MenuPopup&&) = delete;
+
+    /// Opens @p entries at the top level below @p anchor, in screen cells; @p onChoose gets the chosen entry's path.
+    /// Whether the list is open and has the focus afterwards: none opens without entries, or without room.
+    bool open(std::vector<ui::MenuEntry> entries, ::core::tui::Rect anchor,
+              std::function<void(std::vector<std::size_t>)> onChoose);
+    /// Closes the list, running no handler.
+    void close();
+    [[nodiscard]] bool isOpen() const noexcept { return _open; }
+    /// The open list, or null.
+    [[nodiscard]] ::core::tui::Component const* list() const noexcept;
+    /// The entries the list was opened with.
+    [[nodiscard]] std::vector<ui::MenuEntry> const& entries() const noexcept { return _entries; }
+
+private:
+    class Popup;
+    struct Placement {
+        ::core::tui::Point origin{};
+        int rows = 0;
+    };
+    /// Opens the submenu of, or chooses, the entry at @p index of the level shown. Choosing may destroy the owner.
+    void pick(std::size_t index);
+    void enter(std::size_t index);
+    void leave();
+    void fill(std::size_t highlighted);
+    [[nodiscard]] Placement placement() const;
+    void place();
+    [[nodiscard]] ::core::tui::Size size() const;
+    [[nodiscard]] bool usable() const;
+
+    WidgetBase* _owner;
+    std::vector<ui::MenuEntry> _entries;
+    std::vector<std::size_t> _path;
+    std::function<void(std::vector<std::size_t>)> _onChoose;
+    std::unique_ptr<::core::tui::List> _list;
+    ::core::tui::Rect _anchor{};
+    ::core::tui::Point _at{};
+    int _rows = 0;
+    std::size_t _top = 0;
+    bool _open = false;
+};
+
 /// Tabs: a bar above the body. Left and Right while the tabs hold the focus select the previous and the next tab,
 /// and a click on a tab's label selects it and focuses the tabs; a key a focused page widget leaves, and a press on
 /// the body, leave the tabs alone.
