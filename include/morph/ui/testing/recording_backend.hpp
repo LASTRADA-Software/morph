@@ -2274,9 +2274,10 @@ public:
 
     /// @brief Records property `columns`, each as its escaped caption, a colon and its width, then `;align=` and
     ///        `;valign=` where the column's alignment is not the default (`Start` across, `Center` down), and
-    ///        `;sortable=true` for a sortable column, which `RecordingBackend::clickHeader` reports, and
-    ///        `;wrap=false` for a column that keeps its text cells to one line, `;shrink=true` for a stretch
-    ///        column that may be narrower than its header, and `;unit=` with the column's unit when it has one.
+    ///        `;sortable=true` for a sortable column, which `RecordingBackend::clickHeader` reports,
+    ///        `;filterable=true` for a column with a filter button, which `RecordingBackend::clickFilter` presses,
+    ///        `;wrap=false` for a column that keeps its text cells to one line, `;shrink=true` for a stretch column
+    ///        that may be narrower than its header, and `;unit=` with the column's unit when it has one.
     /// @param columns The columns, in order.
     void setColumns(std::vector<TableColumn> const& columns) override {
         _columns = columns;
@@ -2294,6 +2295,9 @@ public:
                 }
                 if (column.sortable) {
                     text += ";sortable=true";
+                }
+                if (column.filterable) {
+                    text += ";filterable=true";
                 }
                 if (!column.wrap) {
                     text += ";wrap=false";
@@ -2484,12 +2488,15 @@ public:
     }
 
     /// @brief Records property `columnGroups`, each group as `label:first+count`, such as `[Company:0+3]`, with
-    ///        `;filtered=true` for a filtered group.
+    ///        `;filtered=true` for a filtered group; `:`, `+` and `;` in a label are escaped as well as a list item's
+    ///        characters.
     /// @param groups The groups.
     void setColumnGroups(std::vector<TableColumnGroup> const& groups) override {
         _groups = groups;
         set("columnGroups", formatList(groups, [](TableColumnGroup const& group) {
-                return formatItem(group.label) + ":" + std::to_string(group.first) + "+" +
+                std::string const label = escape(
+                    group.label, [](char character) { return std::string_view{"=,[]:+;"}.contains(character); });
+                return label + ":" + std::to_string(group.first) + "+" +
                        std::to_string(group.count) + (group.filtered ? ";filtered=true" : "");
             }));
     }
@@ -2508,6 +2515,12 @@ public:
     /// @return True when its header is drawn.
     [[nodiscard]] bool headerShown(std::size_t column) const {
         return column < _columns.size() && (_visible.empty() || std::ranges::find(_visible, column) != _visible.end());
+    }
+
+    /// @brief How many columns are visible: as many as were told, or every column before any were.
+    /// @return The count.
+    [[nodiscard]] std::size_t visibleCount() const noexcept {
+        return _visible.empty() ? _columns.size() : _visible.size();
     }
 
     /// @brief The visible place of @p column: its place among the visible columns, or its index before any were told.
@@ -2550,7 +2563,8 @@ public:
     /// @return The name.
     [[nodiscard]] std::string headerName(std::size_t column) const {
         std::string name = column < _columns.size() ? _columns.at(column).label : std::string{};
-        if (column < _columns.size() && _columns.at(column).filterable && std::ranges::find(_filtered, column) != _filtered.end()) {
+        if (column < _columns.size() && _columns.at(column).filterable &&
+            std::ranges::find(_filtered, column) != _filtered.end()) {
             name += ", filtered";
         }
         return name;
@@ -3823,7 +3837,7 @@ public:
     }
 
     /// @brief Moves a column as a user dragging its header would: `onColumnMove` gets the column and @p position,
-    ///        unless the column is at that place already.
+    ///        unless the column is at that place already or the place is past the last visible column.
     /// @param widgetId The table.
     /// @param column   The column.
     /// @param position Its new place among the visible columns.
@@ -3832,7 +3846,7 @@ public:
     void moveColumn(int widgetId, std::size_t column, std::size_t position) {
         detail::Record const& record = expectKind(widgetId, "moveColumn", {"Table"});
         detail::FakeTable const& table = shownHeader(record, widgetId, column, "moveColumn");
-        if (reachable(record) && table.placeOf(column) != position) {
+        if (reachable(record) && table.placeOf(column) != position && position < table.visibleCount()) {
             invoke(table.onColumnMove(), column, position);
         }
     }

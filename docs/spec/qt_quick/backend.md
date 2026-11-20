@@ -416,22 +416,32 @@ of the chain.
 
 **Header menus.** With menus (`hasMenu`), a right click on a header, or Shift+F10 or the menu key on a focused one, fires
 `menu` with its column, and the `⋯` (`tableMenuButton`, named `Table options`) at the header's trailing end, held in view
-over the sideways scroll, fires it with −1. C++ reads the entries then and calls `showMenu(column, entries)`, which
-places `configMenu`, a button-style `MorphMenu` whose trigger is never drawn, under that header and opens its popup;
-its choice comes back as `menuChoose` with the column and the path, through a host object of the table's own.
+over the sideways scroll, fires it with −1. The `⋯` has a width of its own (`menuReserve`, a touch target) that the
+columns leave free, so it covers no header or filter button. C++ reads the entries then and calls
+`showMenu(column, entries)`, which opens `configMenu`, a `Popup` placed under that header (or the `⋯`), at its start
+where it fits. The popup takes the focus: Up and Down move among the entries that can be chosen, passing over
+separators and headings, Right or Enter opens a submenu and Left or Backspace goes back up, Enter or Space chooses, and
+Escape or a press outside closes it and gives the focus back to the header. A choice comes back as `menuChoose` with
+the column and the path. A closed popup is not shown, so it is neither a Tab stop nor an
+accessible node.
 
 **Moving and resizing.** While the table moves its columns (`movable`), dragging a header and releasing it over
 another fires `columnMove` with the dragged column and the other's visible place (`visibleColumns`, or the column's own
 index when every column shows), and Ctrl+Shift+Left and Ctrl+Shift+Right on a focused header fire it with the place one
 over. While it resizes them (`resizable`), each header ends in a `MorphTableHeaderEdge` (`edge<index>`, six pixels, a
-split cursor): dragging it fires `columnResize` with the header's new width in pixels, which C++ rounds to units of
-`Theme.unitWidth`, and a double click on it fires the column with no width.
+split cursor): dragging it fires `columnResize` with the header's new width in pixels, from which C++ takes the cell
+padding on both sides (`measurePadding`, which the mount adds back) and rounds the rest to units of `Theme.unitWidth`,
+and a double click on it fires the column with no width. A tap on the edge does not also sort. A sort tap reads Shift
+from its handler's point, which carries the modifiers.
 
 **Filters and groups.** A filterable column's header ends in a filter `ToolButton` (`filter<index>`), `▿`, or `▾` while
 `filteredColumns` names the column, which fires `filter`. With `columnGroups`, a row `groupRowHeight` tall sits above
-the headers: each group's label spans the drawn headers at the visible places it names and ends in its own filter
-button (`groupFilter<index>`), filled while the group is `filtered`, which fires `groupFilter`. Ctrl+C on the table,
-while it copies (`copies`), fires `copy`.
+the headers: each group's label spans the headers at the visible places it names, worked out from the widths and the
+column window the header is laid out by (`columnBox`), so it follows order, hidden and pinned columns, widths and the
+sideways scroll; it ends in its own filter button (`groupFilter<index>`), filled while the group is `filtered`, which
+fires `groupFilter`. A filterable header keeps room for its button in its column's floor, and is named
+`{label}, filtered` only while it is filterable and filtered. Ctrl+C on the table or a focused header, while the table
+copies (`copies`), fires `copy`.
 
 The clipboard is `QGuiApplication::clipboard()`: `copyText` sets its text.
 

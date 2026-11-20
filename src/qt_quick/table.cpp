@@ -119,7 +119,9 @@ TableImpl::TableImpl(Context& context, ui::ContainerWidget* parent)
             handler(static_cast<std::size_t>(column), static_cast<std::size_t>(position));
         }
     });
-    // A width in pixels, or none for a double click on the edge.
+    // A header's width in pixels, or none for a double click on the edge. The header holds the column's content and
+    // its padding on both sides, which a width in units does not count (the mount adds it back), so the padding is
+    // taken off before the pixels become units.
     relay().on(QStringLiteral("columnResize"), [this](QVariant const& payload) {
         QVariantMap const map = payload.toMap();
         qlonglong const column = map.value(QStringLiteral("column")).toLongLong();
@@ -130,7 +132,8 @@ TableImpl::TableImpl(Context& context, ui::ContainerWidget* parent)
         std::optional<int> units;
         if (QVariant const width = map.value(QStringLiteral("width")); width.isValid() && !width.isNull()) {
             double const unit = read("measureUnit").toDouble();
-            units = unit > 0 ? std::max(1, static_cast<int>(std::lround(width.toDouble() / unit))) : 1;
+            double const content = width.toDouble() - read("measurePadding").toDouble();
+            units = unit > 0 ? std::max(1, static_cast<int>(std::lround(content / unit))) : 1;
         }
         handler(static_cast<std::size_t>(column), units);
     });
@@ -152,7 +155,6 @@ TableImpl::TableImpl(Context& context, ui::ContainerWidget* parent)
 }
 
 void TableImpl::setColumns(std::vector<ui::TableColumn> const& columns) {
-    _columns = columns;
     QVariantList list;
     for (ui::TableColumn const& column : columns) {
         list.append(QVariantMap{{QStringLiteral("label"), toQString(column.label)},

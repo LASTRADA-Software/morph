@@ -45,6 +45,8 @@ constexpr std::string_view kFilterEmpty = "\u25BF";
 constexpr std::string_view kFilterFilled = "\u25BE";
 /// The button at the header line's end that opens the table's menu.
 constexpr std::string_view kTableMenu = "\u22EF";
+/// The cells the header line keeps for the table menu: a gap and the button.
+constexpr int kTableMenuRoom = 2;
 /// The width a column that may shrink gives up to: room for a few characters and an ellipsis.
 constexpr int kShrunkColumn = 4;
 /// How soon a second click on a row must follow the first to make a double click.
@@ -245,7 +247,7 @@ std::vector<::core::tui::Rect> TableImpl::spanAreas(::core::tui::Size size,
     std::vector<::core::tui::Rect>& block = blocks != nullptr ? *blocks : unused;
     block.assign(_plan.size(), {});
     auto const rows = shownChildren();
-    auto const widths = columnWidths(size.width);
+    auto const widths = columnWidths(size.width - menuRoom());
     int const header = headerLines();
     // The line of each row as if every row were drawn: the first one drawn starts under the header, the ones above it
     // before that.
@@ -475,20 +477,26 @@ void TableImpl::clickHeader(int x, ::core::tui::Modifier modifiers) {
 }
 
 // A group's span is the drawn columns at the visible places it names; its filter button is the span's last cell.
-void TableImpl::clickGroups(int x) {
+std::optional<int> TableImpl::groupFilterX(std::size_t group) const {
+    if (group >= _groups.size()) {
+        return std::nullopt;
+    }
     auto const order = visibleOrder();
-    auto const drawn = drawnColumns(_size.width);
-    for (std::size_t group = 0; group < _groups.size(); ++group) {
-        ui::TableColumnGroup const& shown = _groups.at(group);
-        int right = -1;
-        for (DrawnColumn const& column : drawn) {
-            auto const place = std::ranges::find(order, column.column);
-            auto const at = static_cast<std::size_t>(std::distance(order.begin(), place));
-            if (place != order.end() && at >= shown.first && at < shown.first + shown.count) {
-                right = std::max(right, gutter() + column.x + column.width - 1);
-            }
+    ui::TableColumnGroup const& shown = _groups.at(group);
+    int right = -1;
+    for (DrawnColumn const& column : drawnColumns(_size.width)) {
+        auto const place = std::ranges::find(order, column.column);
+        auto const at = static_cast<std::size_t>(std::distance(order.begin(), place));
+        if (place != order.end() && at >= shown.first && at < shown.first + shown.count) {
+            right = std::max(right, gutter() + column.x + column.width - 1);
         }
-        if (right >= 0 && x == right) {
+    }
+    return right >= 0 ? std::optional<int>{right} : std::nullopt;
+}
+
+void TableImpl::clickGroups(int x) {
+    for (std::size_t group = 0; group < _groups.size(); ++group) {
+        if (groupFilterX(group) == x) {
             if (auto const handler = _onGroupFilter) {
                 handler(group);
             }
@@ -559,7 +567,7 @@ EventResult TableImpl::headerKey(::core::tui::KeyEvent const& key) {
         return EventResult::Handled;
     }
     bool const shifted = matchesChord("Shift+Enter", key) || matchesChord("Shift+Space", key);
-    if (shifted || matchesChord("Enter", key) || key.codepoint == U' ') {
+    if (shifted || matchesChord("Enter", key) || matchesChord("Space", key)) {
         if (auto const handler = _onSort; handler && _columns.at(column).sortable) {
             handler(column, shifted ? ui::HeaderClick::Shift : ui::HeaderClick::Plain);
         }
@@ -691,11 +699,11 @@ std::vector<int> TableImpl::columnWidths(int width) const {
 }
 
 ::core::tui::Size TableImpl::naturalSize() const {
-    int width = gutter() + _totalWidth;
+    int width = gutter() + _totalWidth + menuRoom();
     if (!_arranged) {
         auto const widths = naturalWidths();
         width = gutter() + std::accumulate(widths.begin(), widths.end(), 0) +
-                (kColumnGap * std::max(0, static_cast<int>(widths.size()) - 1));
+                (kColumnGap * std::max(0, static_cast<int>(widths.size()) - 1)) + menuRoom();
     }
     std::int64_t height = headerLines() + (_status.shown ? 1 : 0);
     if (_source) {
@@ -867,8 +875,8 @@ void TableImpl::paintHeader(::core::tui::Canvas& canvas, std::vector<DrawnColumn
         ui::TableColumn const& column = _columns.at(drawn.column);
         // The filter button takes the column's last cell; the label is aligned in the cells before it.
         int const button = column.filterable ? kFilterMark : 0;
-        auto label =
-            canvas.subcanvas({.x = gutter() + drawn.x, .y = line, .width = std::max(0, drawn.width - button), .height = 1});
+        auto label = canvas.subcanvas(
+            {.x = gutter() + drawn.x, .y = line, .width = std::max(0, drawn.width - button), .height = 1});
         // Over its cells: a number column's header ends where its digits do.
         std::string const text = headerText(drawn.column);
         bool const current = focused && _headerFocus == drawn.column;
@@ -902,7 +910,8 @@ void TableImpl::paintGroups(::core::tui::Canvas& canvas, std::vector<DrawnColumn
         if (left < 0 || right <= left) {
             continue;
         }
-        auto span = canvas.subcanvas({.x = left, .y = 0, .width = std::max(0, right - left - kFilterMark), .height = 1});
+        auto span =
+            canvas.subcanvas({.x = left, .y = 0, .width = std::max(0, right - left - kFilterMark), .height = 1});
         span.putString(0, 0, group.label, theme.textBold);
         canvas.putString(0, right - 1, group.filtered ? kFilterFilled : kFilterEmpty, theme.textNormal);
     }
@@ -1069,7 +1078,7 @@ EventResult TableImpl::key(::core::tui::KeyEvent const& key) {
         return headerKey(key);
     }
     // Up on the first row goes to the header.
-    if (_showHeader && isKey(key, KeyCode::Up) &&
+    if (_showHeader && headerActs() && isKey(key, KeyCode::Up) &&
         ::core::tui::withoutLockKeys(key.modifiers) == ::core::tui::Modifier::None) {
         bool const first = _source ? (!_focusCell || _focusCell->first == 0) : cursorPlace(shownChildren()) == 0;
         if (first) {
@@ -1573,7 +1582,7 @@ std::vector<TableImpl::DrawnColumn> TableImpl::drawnColumns(int width) const {
     if (!_arranged) {
         int x = 0;
         for (auto const [index, columnWidth] :
-             std::views::zip(std::views::iota(std::size_t{0}), columnWidths(width))) {
+             std::views::zip(std::views::iota(std::size_t{0}), columnWidths(width - menuRoom()))) {
             drawn.push_back(DrawnColumn{.column = index, .x = x, .width = columnWidth});
             x += columnWidth + kColumnGap;
         }
@@ -1584,7 +1593,7 @@ std::vector<TableImpl::DrawnColumn> TableImpl::drawnColumns(int width) const {
     for (std::size_t at = 0; at < _pinned; ++at) {
         pinnedEdge = std::max(pinnedEdge, _window.at(at).offset + _window.at(at).width);
     }
-    int const room = std::max(0, width - gutter());
+    int const room = std::max(0, width - gutter() - menuRoom());
     for (std::size_t at = 0; at < _window.size(); ++at) {
         WindowColumn const& shown = _window.at(at);
         int x = shown.offset;
@@ -1701,7 +1710,49 @@ int TableImpl::rowRoomOf(int height) const noexcept {
     return std::max(0, height - headerLines() - (_status.shown ? 1 : 0));
 }
 
-int TableImpl::viewport() const noexcept { return std::max(0, _size.width - gutter()); }
+int TableImpl::viewport() const noexcept { return std::max(0, _size.width - gutter() - menuRoom()); }
+
+std::optional<::core::tui::Rect> TableImpl::headerLabelArea(std::size_t column) const {
+    if (!_showHeader || column >= _columns.size()) {
+        return std::nullopt;
+    }
+    for (DrawnColumn const& drawn : drawnColumns(_size.width)) {
+        if (drawn.column == column) {
+            int const button = _columns.at(column).filterable ? kFilterMark : 0;
+            return ::core::tui::Rect{.x = gutter() + drawn.x,
+                                     .y = headerLines() - 1,
+                                     .width = std::max(0, drawn.width - button),
+                                     .height = 1};
+        }
+    }
+    return std::nullopt;
+}
+
+int TableImpl::menuRoom() const noexcept { return _menu && _showHeader ? kTableMenuRoom : 0; }
+
+bool TableImpl::headerActs() const {
+    return _menu || _onColumnMove ||
+           std::ranges::any_of(_columns, [](ui::TableColumn const& column) { return column.sortable; });
+}
+
+// A right press on a header opens its menu; on the header line's `⋯`, the table's.
+bool TableImpl::contextPress(::core::tui::Point cell) {
+    if (!_menu || !_showHeader || cell.y != headerLines() - 1) {
+        return false;
+    }
+    if (cell.x == _size.width - 1) {
+        openMenu(std::nullopt);
+        return true;
+    }
+    for (DrawnColumn const& drawn : drawnColumns(_size.width)) {
+        int const left = gutter() + drawn.x;
+        if (cell.x >= left && cell.x < left + drawn.width) {
+            openMenu(drawn.column);
+            return true;
+        }
+    }
+    return false;
+}
 
 std::pair<std::size_t, std::size_t> TableImpl::rowsInView() const noexcept {
     return {_top, static_cast<std::size_t>(std::max(_rowRoom, 0))};

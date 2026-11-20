@@ -36,13 +36,15 @@ namespace morph::tui::detail {
 /// column's header keeps room for the mark, so the columns do not move when a one-key sort does. A filterable column's
 /// header ends in its filter button, `▿`, drawn `▾` while `setFiltered` names the column, which a click presses
 /// (`setOnFilter`). Groups (`setColumnGroups`) draw a line above the headers: each group's label over the visible
-/// columns it names, ending in its own filter button. With menus (`setMenu`), the header line ends in a `⋯` that opens
-/// the table's menu; a header's menu opens with Shift+F10 or the context-menu key on the focused header. A menu is a
-/// list below its header, as a button-style menu's is. The terminal draws no drag or resize handle: a move is
+/// columns it names, ending in its own filter button. With menus (`setMenu`), the header line keeps its last two cells
+/// for a `⋯` that opens the table's menu, so no column's header or filter button lies under it; a header's menu opens
+/// on a right click on the header, or with Shift+F10 or the context-menu key on the focused header. A menu is a list
+/// below its header, as a button-style menu's is. The terminal draws no drag or resize handle: a move is
 /// Ctrl+Shift+Left and Ctrl+Shift+Right on the focused header, and nothing resizes a column.
 ///
-/// The header takes the keyboard focus within the table: Up on the first row (the first view row over a source)
-/// focuses the header of the chain's first key, or the first visible column, drawn highlighted while the table has
+/// While a header can act (a column sorts, or the table has menus or moves columns), it takes the keyboard focus
+/// within the table: Up on the first row (the first view row over a source) focuses the header of the chain's first
+/// key, or the first visible column, drawn highlighted while the table has
 /// the focus. Left and Right move along the visible columns, Enter and Space sort (`Plain`), Shift+Enter and
 /// Shift+Space extend (`Shift`), Ctrl+Shift+Left and Ctrl+Shift+Right report a move one place over, Shift+F10 opens
 /// its menu, and Down returns to the rows. Ctrl+C on the table asks to copy (`setOnCopy`) wherever its focus is. A
@@ -125,6 +127,10 @@ public:
     [[nodiscard]] ::core::tui::Component const* openPopup() const override { return _menuPopup.list(); }
     /// The column whose header has the focus within the table, or none while the rows have it.
     [[nodiscard]] std::optional<std::size_t> focusedHeader() const noexcept { return _headerFocus; }
+    /// The cells the header line keeps at its end for the `⋯`: a gap and the button, while the table has menus.
+    [[nodiscard]] int menuRoom() const noexcept;
+    /// Whether a focused header could act: a column sorts, or the table has menus or moves columns.
+    [[nodiscard]] bool headerActs() const;
     /// The visible columns in layout order: as `setVisibleColumns` told them, or every column.
     [[nodiscard]] std::vector<std::size_t> visibleOrder() const;
     /// The entries of the open header or table menu; empty while none is open.
@@ -183,6 +189,12 @@ public:
     void paint(::core::tui::Canvas& canvas) override;
     [[nodiscard]] ::core::tui::EventResult key(::core::tui::KeyEvent const& key) override;
     void clickWith(::core::tui::Point cell, ::core::tui::Modifier modifiers) override;
+    [[nodiscard]] bool contextPress(::core::tui::Point cell) override;
+    /// The cells of the header line a column's label is drawn in, relative to the table, the filter button left out;
+    /// none while the column's header is not drawn.
+    [[nodiscard]] std::optional<::core::tui::Rect> headerLabelArea(std::size_t column) const;
+    /// The cell of a group's filter button on the group line, relative to the table; none while it is not drawn.
+    [[nodiscard]] std::optional<int> groupFilterX(std::size_t group) const;
     [[nodiscard]] bool wheel(int delta) override;
 
     /// Works out which cells span and which are covered from the shown rows' order and their spans, clipping a span

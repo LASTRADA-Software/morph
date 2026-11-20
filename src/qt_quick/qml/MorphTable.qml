@@ -60,6 +60,29 @@ MorphWidget {
     property int menuColumn: -1
     readonly property real groupRowHeight: root.columnGroups.length > 0 ? headerMetrics.height +
                                                                            2 * Theme.tableCellPaddingY : 0
+    // The width kept at the header's trailing end for the `⋯`, which no column's header or filter button lies under.
+    readonly property real menuReserve: root.hasMenu && root.showHeader ? Theme.targetHeight : 0
+
+    // Where a column's header is drawn in the header area: its left edge and width, from the widths and the window
+    // the header is laid out by (so a binding that reads it follows order, hidden and pinned columns, widths and the
+    // sideways scroll); null while the column's header is not drawn.
+    function columnBox(column: int): var {
+        if (root.arranged) {
+            for (let at = 0; at < root.windowColumns.length; ++at) {
+                const entry = root.windowColumns[at]
+                if (entry.column === column)
+                    return {"x": root.lead + entry.offset + (at < root.pinnedShown ? root.scrollX : 0),
+                            "width": entry.width}
+            }
+            return null
+        }
+        if (root.widths[column] === undefined)
+            return null
+        let x = root.lead
+        for (let before = 0; before < column; ++before)
+            x += root.widths[before] ?? 0
+        return {"x": x, "width": root.widths[column]}
+    }
 
     // A column's visible place: its index among `visibleColumns`, or the column itself when every column shows.
     function placeOf(column: int): int {
@@ -71,13 +94,18 @@ MorphWidget {
     }
 
     function headerName(column: int, label: string): string {
-        return root.filteredColumns[String(column)] === true ? label + ", filtered" : label
+        const filterable = root.columns[column]?.filterable === true
+        return filterable && root.filteredColumns[String(column)] === true ? label + ", filtered" : label
     }
 
     // The keys of a focused header: Shift with Enter or Space extends the sort, Ctrl+Shift with Left or Right moves
     // the column a place, Shift+F10 or the menu key opens its menu.
     function headerKey(event: var, column: int, sortable: bool): bool {
         const mods = event.modifiers & (Qt.ShiftModifier | Qt.ControlModifier | Qt.AltModifier | Qt.MetaModifier)
+        if (root.copies && event.key === Qt.Key_C && mods === Qt.ControlModifier) {
+            root.fire("copy", undefined)
+            return true
+        }
         const activate = event.key === Qt.Key_Return || event.key === Qt.Key_Enter || event.key === Qt.Key_Space
         if (sortable && activate && (mods === Qt.NoModifier || mods === Qt.ShiftModifier)) {
             root.fire("sort", {"column": column, "shift": mods === Qt.ShiftModifier})
@@ -121,12 +149,20 @@ MorphWidget {
         if (!anchor)
             return
         root.menuColumn = Number(column)
-        const at = anchor.mapToItem(root, 0, 0)
-        configMenu.x = at.x
-        configMenu.y = at.y + anchor.height
-        configMenu.width = anchor.width
+        configMenu.anchorItem = anchor
         configMenu.entries = entries
-        configMenu.openFromTrigger()
+        configMenu.path = []
+        configMenu.current = configMenu.nextEntry(-1, 1)
+        configMenu.y = anchor.mapToItem(root, 0, anchor.height).y
+        if (configMenu.opened)
+            root.placeMenu()
+        else
+            configMenu.open()
+    }
+
+    function placeMenu() {
+        if (configMenu.anchorItem)
+            menuPlacement.place(configMenu, configMenu.anchorItem)
     }
 
     // The drop of a header dragged to @p x in the header's own coordinates: a move to the place of the header there.
@@ -230,7 +266,7 @@ MorphWidget {
     }
     readonly property real scrollX: hflick.contentX
     // The view's width across the columns, the select column left out.
-    readonly property real columnViewport: Math.max(0, hflick.width - root.lead)
+    readonly property real columnViewport: Math.max(0, hflick.width - root.lead - root.menuReserve)
     // Whether every column keeps one line: the rows then share one height and no cell is measured.
     readonly property bool allOneLine: {
         for (const column of root.columns) {
@@ -287,7 +323,7 @@ MorphWidget {
     // Test-only: how many rows a full column rescan has visited, summed across every rescan. Not a public API.
     property int rowScans: 0
     // Once the mount lays the columns out, no width is worked out here: nothing reads every column per frame.
-    readonly property var widths: root.arranged ? [] : root.columnWidths(width - root.lead)
+    readonly property var widths: root.arranged ? [] : root.columnWidths(width - root.lead - root.menuReserve)
 
     // A column's declared width describes its content, with `table.cellPaddingX` added on both sides, so the padding
     // never takes room from the content: a fixed column is its units plus the padding (a unit is a body character,
@@ -317,8 +353,10 @@ MorphWidget {
         for (let i = 0; i < root.columns.length; ++i) {
             const column = root.columns[i]
             const mark = column.sortable ? headerMetrics.advanceWidth(root.ascendingMark) : 0
-            // The header draws its unit after its label: the column is never narrower than both.
-            const header = Math.max(headerMetrics.advanceWidth(root.headerTextOf(column)) + mark + pad,
+            const button = column.filterable === true ? Theme.targetHeight : 0
+            // The header draws its unit after its label: the column is never narrower than both, its sort mark and
+            // its filter button.
+            const header = Math.max(headerMetrics.advanceWidth(root.headerTextOf(column)) + mark + button + pad,
                                     8 * Theme.unitWidth)
             let natural = header
             let least = header
@@ -740,8 +778,8 @@ MorphWidget {
     // of another table reports this instead.
     widthFreeNatural: {
         if (root.arranged)
-            return Math.ceil(root.lead + root.windowTotalWidth)
-        let sum = root.lead
+            return Math.ceil(root.lead + root.windowTotalWidth + root.menuReserve)
+        let sum = root.lead + root.menuReserve
         for (const m of root.measure())
             sum += m.natural
         // In whole pixels, so a sum that wobbles in its last digits does not read as a change.
@@ -780,7 +818,7 @@ MorphWidget {
         anchors.bottomMargin: root.statusHeight
         onContentXChanged: root.reportColumns()
         onWidthChanged: root.reportColumns()
-        contentWidth: Math.max(root.columnsWidth, width)
+        contentWidth: Math.max(root.columnsWidth + root.menuReserve, width)
         contentHeight: height
         flickableDirection: Flickable.HorizontalFlick
         // Columns wider than the table by less than a pixel are rounding, not content to scroll to.
@@ -823,13 +861,12 @@ MorphWidget {
                         let right = -1
                         for (let column = 0; column < root.columns.length; ++column) {
                             const place = root.placeOf(column)
-                            const item = root.headerItem(column)
-                            if (!item || place < groupCell.modelData.first
+                            const box = root.columnBox(column)
+                            if (!box || place < groupCell.modelData.first
                                     || place >= groupCell.modelData.first + groupCell.modelData.count)
                                 continue
-                            const at = item.mapToItem(headerArea, 0, 0)
-                            left = left < 0 ? at.x : Math.min(left, at.x)
-                            right = Math.max(right, at.x + item.width)
+                            left = left < 0 ? box.x : Math.min(left, box.x)
+                            right = Math.max(right, box.x + box.width)
                         }
                         return {"left": left, "right": right}
                     }
@@ -870,6 +907,7 @@ MorphWidget {
                 x: hflick.contentX + hflick.width - width
                 y: root.groupRowHeight
                 z: 2
+                width: root.menuReserve
                 height: headerArea.height - root.groupRowHeight
                 text: "\u22EF"
                 Accessible.name: "Table options"
@@ -949,12 +987,17 @@ MorphWidget {
                             if (root.headerKey(event, headerLabel.index, headerLabel.modelData.sortable === true))
                                 event.accepted = true
                         }
+                        // The modifiers come from the handler's point, which carries them; a tap on the
+                        // trailing edge resizes and does not sort.
                         TapHandler {
+                            id: headerLabelSort
                             enabled: headerLabel.modelData.sortable === true
-                            onTapped: (point, button) => root.fire("sort", {
-                                "column": headerLabel.index,
-                                "shift": (point.modifiers & Qt.ShiftModifier) !== 0
-                            })
+                            onTapped: {
+                                if (headerEdge.visible && headerLabelSort.point.position.x >= headerEdge.x)
+                                    return
+                                root.fire("sort", {"column": headerLabel.index,
+                                                   "shift": (headerLabelSort.point.modifiers & Qt.ShiftModifier) !== 0})
+                            }
                         }
                         TapHandler {
                             acceptedButtons: Qt.RightButton
@@ -972,6 +1015,7 @@ MorphWidget {
                             }
                         }
                         MorphTableHeaderEdge {
+                            id: headerEdge
                             column: headerLabel.index
                             table: root
                         }
@@ -1028,12 +1072,17 @@ MorphWidget {
                         if (root.headerKey(event, windowLabel.modelData.column, windowLabel.column.sortable === true))
                             event.accepted = true
                     }
+                    // The modifiers come from the handler's point, which carries them; a tap on the
+                    // trailing edge resizes and does not sort.
                     TapHandler {
+                        id: windowLabelSort
                         enabled: windowLabel.column.sortable === true
-                        onTapped: (point, button) => root.fire("sort", {
-                            "column": windowLabel.modelData.column,
-                            "shift": (point.modifiers & Qt.ShiftModifier) !== 0
-                        })
+                        onTapped: {
+                            if (windowEdge.visible && windowLabelSort.point.position.x >= windowEdge.x)
+                                return
+                            root.fire("sort", {"column": windowLabel.modelData.column,
+                                               "shift": (windowLabelSort.point.modifiers & Qt.ShiftModifier) !== 0})
+                        }
                     }
                     TapHandler {
                         acceptedButtons: Qt.RightButton
@@ -1050,6 +1099,7 @@ MorphWidget {
                         }
                     }
                     MorphTableHeaderEdge {
+                        id: windowEdge
                         column: windowLabel.modelData.column
                         table: root
                     }
@@ -1575,21 +1625,122 @@ MorphWidget {
         }
     }
 
-    // The header and table menus' popup: a button-style menu whose trigger is never drawn, placed under the header the
-    // menu belongs to by `showMenu`; its choice goes to C++ with that header's column.
-    MorphMenu {
+    MorphPopupPlacement {
+        id: menuPlacement
+    }
+
+    // The header and table menus: a list under the header the menu belongs to (or the `⋯`), opened by `showMenu`. It
+    // takes the focus: Up and Down move among the entries a user can choose, Right or Enter opens a submenu and Left
+    // or Backspace goes back up, Enter or Space chooses, and Escape or a press outside closes it and gives the focus
+    // back to the header. A choice goes to C++ with that header's column and the entry's path.
+    Popup {
         id: configMenu
         objectName: "configMenu"
-        buttonStyle: true
-        height: 0
-        opacity: 0
-        host: QtObject {
-            function fire(event: string, payload: var) {
-                if (event === "activate")
-                    root.fire("menuChoose", {"column": root.menuColumn, "path": payload})
+        // The entries, as MorphMenu reads them; the path of the submenu shown; the entry the keys are on.
+        property var entries: []
+        property var path: []
+        property int current: -1
+        property Item anchorItem: null
+        readonly property var level: {
+            let shown = configMenu.entries
+            for (const index of configMenu.path)
+                shown = shown?.[index]?.items ?? []
+            return shown ?? []
+        }
+
+        function choosable(entry: var): bool {
+            return !!entry && entry.separator !== true && entry.heading !== true && entry.enabled === true
+        }
+
+        // The next entry from @p from in @p step's direction a user can choose or open; @p from when there is none.
+        function nextEntry(from: int, step: int): int {
+            for (let at = from + step; at >= 0 && at < configMenu.level.length; at += step) {
+                if (configMenu.choosable(configMenu.level[at]))
+                    return at
             }
-            function ask(question: string, payload: var): bool {
-                return false
+            return from
+        }
+
+        // Opens the entry's submenu, or chooses it.
+        function activate(index: int) {
+            const entry = configMenu.level[index]
+            if (!configMenu.choosable(entry))
+                return
+            if (entry.items && entry.items.length > 0) {
+                configMenu.path = configMenu.path.concat([index])
+                configMenu.current = configMenu.nextEntry(-1, 1)
+                return
+            }
+            const chosen = configMenu.path.concat([index])
+            configMenu.close()
+            root.fire("menuChoose", {"column": root.menuColumn, "path": chosen})
+        }
+
+        focus: true
+        padding: Theme.spaceOf(1)
+        closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+        onAboutToShow: root.placeMenu()
+        onWidthChanged: {
+            if (visible)
+                root.placeMenu()
+        }
+        onOpened: entryColumn.forceActiveFocus()
+        onClosed: {
+            if (configMenu.anchorItem && configMenu.anchorItem.visible && configMenu.anchorItem.activeFocusOnTab)
+                configMenu.anchorItem.forceActiveFocus()
+        }
+
+        background: MorphPopupBackground {
+        }
+
+        contentItem: ColumnLayout {
+            id: entryColumn
+            spacing: 0
+            objectName: "configMenuEntries"
+            focus: true
+            Accessible.role: Accessible.PopupMenu
+            Accessible.name: root.menuColumn >= 0 ? (root.columns[root.menuColumn]?.label ?? "") : "Table options"
+            Keys.onPressed: event => {
+                const level = configMenu.level
+                if (event.key === Qt.Key_Down) {
+                    configMenu.current = configMenu.nextEntry(configMenu.current, 1)
+                } else if (event.key === Qt.Key_Up) {
+                    configMenu.current = configMenu.nextEntry(configMenu.current, -1)
+                } else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter || event.key === Qt.Key_Space
+                           || (event.key === Qt.Key_Right && level[configMenu.current]?.items?.length > 0)) {
+                    configMenu.activate(configMenu.current)
+                } else if ((event.key === Qt.Key_Left || event.key === Qt.Key_Backspace)
+                           && configMenu.path.length > 0) {
+                    const back = configMenu.path[configMenu.path.length - 1]
+                    configMenu.path = configMenu.path.slice(0, -1)
+                    configMenu.current = back
+                } else {
+                    return
+                }
+                event.accepted = true
+            }
+
+            Repeater {
+                model: configMenu.level
+
+                ItemDelegate {
+                    required property int index
+                    required property var modelData
+                    objectName: "menuEntry" + index
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: modelData.separator === true ? Theme.spaceOf(1) : implicitHeight
+                    font: modelData.heading === true ? Theme.overlineFont : Theme.bodyFont
+                    text: modelData.separator === true ? ""
+                          : modelData.label + (modelData.items && modelData.items.length > 0 ? " ›" : "")
+                    enabled: configMenu.choosable(modelData)
+                    highlighted: index === configMenu.current
+                    focusPolicy: Qt.NoFocus
+                    Accessible.role: modelData.separator === true ? Accessible.Separator
+                                     : modelData.heading === true ? Accessible.StaticText : Accessible.MenuItem
+                    Accessible.name: modelData.label ?? ""
+                    Accessible.description: modelData.description ?? ""
+                    onClicked: configMenu.activate(index)
+                }
             }
         }
     }

@@ -196,6 +196,12 @@ public:
     /// A left press on @p cell (0-based, relative to this widget) that this widget took, after it took the focus
     /// when it takes it on a press. It may destroy the widget.
     virtual void pressAt(::core::tui::Point cell);
+    /// A right press on @p cell (0-based, relative to this widget), while the widget is actionable: a context menu's
+    /// gesture. Returns whether the widget took it; by default none does, and the press goes on outwards.
+    [[nodiscard]] virtual bool contextPress(::core::tui::Point cell) {
+        static_cast<void>(cell);
+        return false;
+    }
     /// The pointer moved to @p cell (relative to this widget, and possibly outside it) while a press this widget took
     /// lasts and the widget is actionable. It may destroy the widget.
     virtual void dragTo(::core::tui::Point cell);

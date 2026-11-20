@@ -9,6 +9,7 @@
 #include <QAccessibleInterface>
 #include <QClipboard>
 #include <QGuiApplication>
+#include <QJSValue>
 #include <QMetaObject>
 #include <QPointF>
 #include <QQmlContext>
@@ -195,42 +196,52 @@ public:
                    click == ui::HeaderClick::Shift ? Qt::ShiftModifier : Qt::NoModifier);
     }
 
-    // A right click on the header, or a click on the `⋯`, opens the menu; its entries are read back from the popup's
-    // model, and Esc closes it.
+    // A right click on the header, or a click on the `⋯`, opens the menu; its entries are read back from the open
+    // popup, and Esc must close it. A menu that does not open, or does not close on Esc, reads as none.
     std::vector<ui::MenuEntry> headerMenu(ui::Widget& table, std::optional<std::size_t> column) override {
-        QQuickItem const* const menu = openMenu(table, column);
+        QObject* const menu = openMenu(table, column);
         std::vector<ui::MenuEntry> entries;
         if (menu == nullptr) {
             return entries;
         }
-        for (QVariant const& entry : menu->property("entries").toList()) {
+        for (QVariant const& entry : listOf(menu->property("level"))) {
             QVariantMap const map = entry.toMap();
             entries.push_back(ui::MenuEntry{.label = detail::toUtf8(map.value(QStringLiteral("label")).toString()),
                                             .enabled = map.value(QStringLiteral("enabled")).toBool(),
                                             .separator = map.value(QStringLiteral("separator")).toBool()});
         }
         _scene.key(Qt::Key_Escape);
+        if (menu->property("opened").toBool()) {
+            return {};
+        }
         return entries;
     }
-    // The menu opened as `headerMenu` opens it, then each level's entry chosen through the popup's own `choose`.
+    // The menu opened as `headerMenu` opens it, then a click on each level's entry in the open popup.
     void chooseHeaderMenuEntry(ui::Widget& table, std::optional<std::size_t> column,
                                std::vector<std::size_t> const& path) override {
-        QQuickItem* const menu = openMenu(table, column);
+        QObject* const menu = openMenu(table, column);
         if (menu == nullptr) {
             return;
         }
-        QVariantList indices;
         for (std::size_t const index : path) {
-            indices.append(static_cast<int>(index));
+            auto* const entries = menu->property("contentItem").value<QQuickItem*>();
+            QQuickItem* const entry =
+                entries == nullptr ? nullptr : namedUnder(*entries, QStringLiteral("menuEntry%1").arg(index));
+            if (entry == nullptr || !menu->property("opened").toBool()) {
+                return;
+            }
+            mouseClick(entry);
         }
-        QMetaObject::invokeMethod(menu, "choose", Qt::DirectConnection, Q_ARG(QVariant, indices));
-        settle();
     }
-    // A drag of the header onto the header at the place asked for.
+    // A drag of the header onto the header at the place asked for: the column the table shows there.
     void moveColumn(ui::Widget& table, std::size_t column, std::size_t position) override {
         settle();
+        QVariantList const visible = Backend::itemOf(table)->property("visibleColumns").toList();
+        qsizetype const place = static_cast<qsizetype>(position);
+        int const target = visible.isEmpty() ? static_cast<int>(position)
+                                             : (place < visible.size() ? visible.at(place).toInt() : -1);
         QQuickItem const* const from = named(table, QStringLiteral("header%1").arg(column));
-        QQuickItem const* const to = named(table, QStringLiteral("header%1").arg(position));
+        QQuickItem const* const to = target < 0 ? nullptr : named(table, QStringLiteral("header%1").arg(target));
         if (from == nullptr || to == nullptr || !from->isVisible() || _fault == Fault::DeadInput) {
             return;
         }
@@ -243,6 +254,14 @@ public:
         }
         QTest::mouseRelease(&_scene.window(), Qt::LeftButton, {}, end);
         settle();
+    }
+    void pressFilter(ui::Widget& table, std::size_t column) override {
+        settle();
+        mouseClick(named(table, QStringLiteral("filter%1").arg(column)));
+    }
+    void pressGroupFilter(ui::Widget& table, std::size_t group) override {
+        settle();
+        mouseClick(named(table, QStringLiteral("groupFilter%1").arg(group)));
     }
     std::string headerText(ui::Widget const& table, std::size_t column) override {
         settle();
@@ -442,9 +461,29 @@ private:
         return read;
     }
 
-    // The column's menu by a right click on its header, or the table's by a click on the `⋯`; the menu whose popup
-    // shows the entries, or null when none opened.
-    QQuickItem* openMenu(ui::Widget& table, std::optional<std::size_t> column) {
+    // A list a QML `var` property holds, which reaches C++ as a JavaScript value.
+    static QVariantList listOf(QVariant const& value) {
+        QVariant const plain =
+            value.metaType() == QMetaType::fromType<QJSValue>() ? value.value<QJSValue>().toVariant() : value;
+        return plain.toList();
+    }
+
+    // The item named @p name under @p root, depth first; null when none is.
+    static QQuickItem* namedUnder(QQuickItem& root, QString const& name) {
+        QList<QQuickItem*> pending{&root};
+        while (!pending.isEmpty()) {
+            QQuickItem* const item = pending.takeLast();
+            if (item->objectName() == name) {
+                return item;
+            }
+            pending.append(item->childItems());
+        }
+        return nullptr;
+    }
+
+    // The column's menu by a right click on its header, or the table's by a click on the `⋯`; the popup, once it is
+    // open and shows entries, or null.
+    QObject* openMenu(ui::Widget& table, std::optional<std::size_t> column) {
         settle();
         if (_fault == Fault::DeadInput) {
             return nullptr;
@@ -459,8 +498,10 @@ private:
         } else {
             mouseClick(named(table, QStringLiteral("tableMenuButton")));
         }
-        QQuickItem* const menu = named(table, QStringLiteral("configMenu"));
-        return menu != nullptr && !menu->property("entries").toList().isEmpty() ? menu : nullptr;
+        QObject* const menu = Backend::itemOf(table)->findChild<QObject*>(QStringLiteral("configMenu"));
+        bool const open = menu != nullptr && menu->property("opened").toBool() &&
+                          !listOf(menu->property("level")).isEmpty();
+        return open ? menu : nullptr;
     }
 
     static detail::ItemBase const& base(ui::Widget const& widget) {

@@ -1135,14 +1135,19 @@ QQuickItem& headerOf(ui::Widget const& table, int column) {
 
 }  // namespace
 
-// Mutation: leave the label's text without the mark (the sorted header reads `Name`).
+// Mutation: leave the label's text without the mark (the sorted header reads `Name`); read the Shift state from the
+// tapped signal's event point, which has no modifiers (every click reports `Plain`).
 TEST_CASE("qt_quick table: the sorted column's header shows and states its direction, and a click asks to sort",
           "[qt_quick]") {
     Scene scene;
     Rows table = makeTable(scene, {ui::Key{std::int64_t{1}}}, ui::SelectionMode::None);
     table.table->setColumns({{.label = "Name", .width = ui::Sizing::fixed(12), .sortable = true}, {.label = "Mass"}});
     std::vector<std::size_t> asked;
-    table.table->setOnSort([&asked](std::size_t column, ui::HeaderClick) { asked.push_back(column); });
+    std::vector<ui::HeaderClick> clicks;
+    table.table->setOnSort([&asked, &clicks](std::size_t column, ui::HeaderClick click) {
+        asked.push_back(column);
+        clicks.push_back(click);
+    });
     scene.settle();
     QQuickItem& name = headerOf(*table.table, 0);
     QQuickItem const& mass = headerOf(*table.table, 1);
@@ -1165,6 +1170,11 @@ TEST_CASE("qt_quick table: the sorted column's header shows and states its direc
     scene.click(name);
     scene.click(mass);
     CHECK(asked == std::vector<std::size_t>{0});
+    // Shift held reports `Shift`; Ctrl, which the contract gives no meaning on a header, reports `Plain`.
+    scene.click(name, Qt::ShiftModifier);
+    scene.click(name, Qt::ControlModifier);
+    CHECK(clicks ==
+          std::vector<ui::HeaderClick>{ui::HeaderClick::Plain, ui::HeaderClick::Shift, ui::HeaderClick::Plain});
     table.table->setSort({});
     scene.settle();
     CHECK(name.property("text").toString() == QStringLiteral("Name"));
@@ -2638,4 +2648,44 @@ TEST_CASE("qt_quick table window: a select-all handler takes Ctrl+A and the sele
     f.scene.click(*box);
     CHECK(f.selectAlls == 2);
     CHECK(f.ranges.empty());
+}
+
+// Control: leave the menu popup without the focus (the arrows and Enter go to the header, and Escape does not close
+// it).
+TEST_CASE("qt_quick table: a header menu opened from the keyboard takes the arrows, Enter and Escape",
+          "[qt_quick][table]") {
+    Scene scene;
+    Rows table = makeTable(scene, {ui::Key{std::int64_t{1}}}, ui::SelectionMode::None);
+    table.table->setColumns({{.label = "Name", .width = ui::Sizing::fixed(12)}, {.label = "Mass"}});
+    std::vector<std::pair<std::optional<std::size_t>, std::vector<std::size_t>>> chosen;
+    table.table->setMenu(
+        [](std::optional<std::size_t>) {
+            return std::vector<ui::MenuEntry>{
+                {.label = "Sort ascending"}, {.separator = true}, {.label = "Hide column"}};
+        },
+        [&chosen](std::optional<std::size_t> column, std::vector<std::size_t> path) {
+            chosen.emplace_back(column, std::move(path));
+        });
+    scene.settle();
+    QQuickItem& name = headerOf(*table.table, 0);
+    QObject* const menu = Scene::itemOf(*table.table).findChild<QObject*>(QStringLiteral("configMenu"));
+    REQUIRE(menu != nullptr);
+    name.forceActiveFocus();
+    scene.key(Qt::Key_F10, Qt::ShiftModifier);
+    REQUIRE(menu->property("opened").toBool());
+    // Down passes over the separator to Hide column; Enter chooses it.
+    scene.key(Qt::Key_Down);
+    scene.key(Qt::Key_Return);
+    CHECK_FALSE(menu->property("opened").toBool());
+    REQUIRE(chosen.size() == 1);
+    CHECK(chosen.front().first == std::optional<std::size_t>{0});
+    CHECK(chosen.front().second == std::vector<std::size_t>{2});
+    CHECK(name.hasActiveFocus());
+    // Opened with the mouse, Escape closes it and chooses nothing.
+    QTest::mouseClick(&scene.window(), Qt::RightButton, {}, Scene::centreOf(name));
+    scene.settle();
+    REQUIRE(menu->property("opened").toBool());
+    scene.key(Qt::Key_Escape);
+    CHECK_FALSE(menu->property("opened").toBool());
+    CHECK(chosen.size() == 1);
 }
