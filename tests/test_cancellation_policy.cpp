@@ -857,7 +857,8 @@ TEST_CASE("TimeoutScheduler destructor is G4: it returns only once no callback i
         }
         done = true;
     }));
-    static_cast<void>(scheduler->schedule(20ms, [&] { laterFired = true; }));
+    // Far enough out that it is never due during the test: only the destructor can keep it from running.
+    static_cast<void>(scheduler->schedule(10min, [&] { laterFired = true; }));
     REQUIRE(morph::testing::waitUntil([&] { return running.load(); }));
 
     {
@@ -869,7 +870,51 @@ TEST_CASE("TimeoutScheduler destructor is G4: it returns only once no callback i
     }
 
     CHECK(done.load());
-    std::this_thread::sleep_for(40ms);
+    CHECK_FALSE(laterFired.load());
+}
+
+// Mutation: drop the closing check in the timer callback (the later callback, already due and queued behind the
+// running one, then runs once the running one returns).
+TEST_CASE("TimeoutScheduler destructor does not start a callback that came due while it waited", "[cancel-policy]") {
+    morph::exec::IoLoop loop;
+    auto scheduler = std::make_unique<morph::async::detail::TimeoutScheduler>(loop);
+
+    // Hold the loop's thread so both timers are due, and queued together, on the first turn that arms them.
+    std::atomic<bool> held{false};
+    std::atomic<bool> release{false};
+    loop.post([&] {
+        held = true;
+        while (!release.load()) {
+            std::this_thread::sleep_for(1ms);
+        }
+    });
+    REQUIRE(morph::testing::waitUntil([&] { return held.load(); }));
+
+    std::atomic<bool> running{false};
+    std::atomic<bool> letGo{false};
+    std::atomic<bool> laterFired{false};
+    static_cast<void>(scheduler->schedule(1ms, [&] {
+        running = true;
+        while (!letGo.load()) {
+            std::this_thread::sleep_for(1ms);
+        }
+    }));
+    static_cast<void>(scheduler->schedule(5ms, [&] { laterFired = true; }));
+    std::this_thread::sleep_for(30ms);
+    release = true;
+    REQUIRE(morph::testing::waitUntil([&] { return running.load(); }));
+
+    std::atomic<bool> destroying{false};
+    std::jthread destroyer{[&] {
+        destroying = true;
+        scheduler.reset();
+    }};
+    REQUIRE(morph::testing::waitUntil([&] { return destroying.load(); }));
+    // The destructor has set its flag long before this: the thread only has to run a few instructions.
+    std::this_thread::sleep_for(100ms);
+    letGo = true;
+    destroyer.join();
+
     CHECK_FALSE(laterFired.load());
 }
 

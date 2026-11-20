@@ -35,7 +35,8 @@
 ///   everything it captured, is released on the loop, shortly after `cancel()`
 ///   returns — not before.
 /// - `cancel()` does not wait for a callback that has already started.
-/// - The destructor drops every pending callback without firing it, and
+/// - The destructor drops every pending callback without firing it, including one already due and queued behind
+///   a running callback, and
 ///   returns only once no callback of this scheduler is running.
 /// - A callback that throws is logged through `morph::log` and swallowed.
 
@@ -80,6 +81,9 @@ public:
     /// with the scheduler still whole: a capture whose destructor calls
     /// `cancel()` on it finds it usable.
     ~TimeoutScheduler() {
+        // Before the close is posted: the loop may be inside a callback, with other timers already due and queued
+        // behind it, and those must not start once destruction has begun.
+        _state->closing.store(true, std::memory_order_release);
         Pending dropped;
         _loop->runAndWait([state = _state, &dropped] { dropped = state->close(); });
     }
@@ -196,6 +200,10 @@ private:
         static void fire(void* entryPtr) {
             auto const& entry = *static_cast<Entry const*>(entryPtr);
             State& self = *entry.owner;
+            // Left pending, so `close()` hands it back with the rest to be destroyed unrun.
+            if (self.closing.load(std::memory_order_acquire)) {
+                return;
+            }
             // Out of the pending set before it runs, so a `cancel()` from
             // inside the callback, or from anywhere once it has started, finds
             // nothing. Nothing here touches `self` after the call: the
@@ -219,6 +227,9 @@ private:
         ::morph::exec::IoLoop& loop;
         Pending pending;
         bool closed{false};
+        /// Set by the destructor on its own thread, before the close is posted, so a timer already due
+        /// when destruction begins is dropped rather than run. Read by `fire()` on the loop.
+        std::atomic<bool> closing{false};
     };
 
     /// Present only for the owning constructor. First, so it is destroyed
