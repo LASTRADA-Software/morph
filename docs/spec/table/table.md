@@ -2407,7 +2407,9 @@ How it keeps a document of any size in a store built for small values:
   person cannot reset their own quota.
 
 A document's `columns` and `saved` preference points that name a table hold no value of their own: their
-editors read and write the table's state.
+editors read and write the table's state. A table over `rows` has no saved view's name to read, so a `saved` point
+naming one holds its choice as a plain preference, as a `columns` point does on a table over `rows` that keeps no
+state (no store, `persist: false`). A `saved` point without `of` names no table.
 
 **Document vocabulary.** `persist` is a literal on a table: `true` (the default), `false` (nothing is loaded or
 saved), or a string, which becomes the key's qualifier in place of the screen's id, so the same table on two

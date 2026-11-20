@@ -4836,22 +4836,42 @@ using morph::ui::testing::RecordingTableStateStore;
 
 }  // namespace
 
-// Mutation: a point matched to any listed table by id (the rows table's model-backed state is null: the run
-// aborts).
-TEST_CASE("rows table: a columns point naming it holds a preference and edits no state", "[ui][table][state]") {
-    auto store = std::make_shared<GatedTableStateStore>(storeExecutor(), R"({"version":1})");
+// Mutations: a `columns` point on a table over `rows` left a plain preference (no save goes, the columns keep their
+// order); the stored layout not shown at the point (`cols.pinned` reads null).
+TEST_CASE("rows table: a columns point naming it reads and arranges its layout", "[ui][table][state]") {
+    auto store = std::make_shared<GatedTableStateStore>(
+        storeExecutor(), R"({"version":1,"layout":{"order":["id","name","weight"],"hidden":[],"pinned":1}})");
     TableHarness h{store};
     std::string text = rowsDoc(kThree);
     text.insert(text.find(R"("state":)"), R"("customize":{"cols":{"kind":"columns","of":"list"}},)");
     auto screen = h.mount(text);
     store->release();
     h.settle();
+    CHECK(readJson(*screen, R"({"pref":"cols.pinned"})") == "1");
+    auto const layout = morph::ui::parseJson(R"({"order":["name","id","weight"],"hidden":["weight"],"pinned":0})");
+    REQUIRE(layout.has_value());
+    CHECK(screen->setPreference("cols", *morph::ui::valueFromJson(*layout)));
+    CHECK_FALSE(screen->setPreference("cols", morph::ui::Value{std::int64_t{7}}));   // not a layout
+    h.advance(500ms);
+    REQUIRE(store->saves() == 1);
+    auto const saved = table::readState(store->lastSaved());
+    REQUIRE(saved.has_value());
+    REQUIRE(saved->layout.has_value());
+    CHECK(saved->layout->order.front() == "name");
+    CHECK(elementValue(*screen, "list", "visibleColumns") == R"(["name","id"])");
+}
+
+// Mutation: a point that finds no table keeping a state refused (`setPreference` answers false).
+TEST_CASE("rows table: a columns point naming one that keeps no state is a preference", "[ui][table]") {
+    TableHarness h;
+    std::string text = rowsDoc(kThree);
+    text.insert(text.find(R"("state":)"), R"("customize":{"cols":{"kind":"columns","of":"list"}},)");
+    auto screen = h.mount(text);
     auto const layout = morph::ui::parseJson(R"({"order":["name","id","weight"],"hidden":[],"pinned":0})");
     REQUIRE(layout.has_value());
     CHECK(screen->setPreference("cols", *morph::ui::valueFromJson(*layout)));
-    h.advance(500ms);
-    CHECK(store->saves() == 0);
     CHECK(readJson(*screen, R"({"pref":"cols.pinned"})") == "0");
+    CHECK(elementValue(*screen, "list", "visibleColumns") == R"(["id","name","weight"])");
 }
 
 // Mutation: a point matched to any listed table by id (an empty `of` names the id-less collection, whose
@@ -4867,7 +4887,8 @@ TEST_CASE("collection: a saved point without of beside an id-less collection is 
     CHECK(readJson(*screen, R"({"pref":"v"})") == R"("Mine")");
 }
 
-// Mutation: an empty `of` matching an id-less model table (its view is rewritten and saved).
+// Mutations: an empty `of` matching an id-less model table in `tablePoint` (its view is rewritten and saved);
+// in `tablePoints` (a gesture writes the table's view, `null`, over the preference).
 TEST_CASE("model table: a saved point without of leaves an id-less model table's state alone", "[ui][table][state]") {
     auto store = std::make_shared<GatedTableStateStore>(storeExecutor(), R"({"version":1})");
     TableHarness h{store};
@@ -4881,6 +4902,9 @@ TEST_CASE("model table: a saved point without of leaves an id-less model table's
     CHECK(screen->setPreference("v", morph::ui::Value{std::string{"Mine"}}));
     h.advance(500ms);
     CHECK(store->saves() == 0);
+    // A gesture on the table shows its state at the points that name it, and this one names none.
+    chooseMenu(h, tableOf(h), 2, {"Hide column"});
+    h.advance(500ms);
     CHECK(readJson(*screen, R"({"pref":"v"})") == R"("Mine")");
 }
 
