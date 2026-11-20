@@ -117,6 +117,14 @@ struct TableCountsView {
     std::vector<std::string> awaiting;
     /// @brief Levels whose load failed for a row the table shows or orders by.
     std::vector<std::string> failed;
+    /// @brief Held view rows that are retained and no longer match the filter.
+    std::int64_t retained = 0;
+};
+
+/// @brief What `TableRows::retain` did with the keys it was given.
+enum class RetainResult : std::uint8_t {
+    Retained,   ///< The keys are retained, those retained already included.
+    OverBound,  ///< None is: they would take the set past `table::QueryLimits::maxRetained`.
 };
 
 /// @brief Where a key's row is in the view: its view index, nothing when the view has no row with the key, or why
@@ -225,6 +233,88 @@ struct SelectAllRefusal {
     return "Select all is available once " + levels + " data has loaded";
 }
 
+/// @brief The rows of one table an action's reply says it changed, and those it could not.
+struct ChangedRowsValue {
+    /// @brief The rows changed.
+    std::vector<table::ChangedRow> rows;
+    /// @brief The rows the action could not change, each with its message.
+    std::vector<table::FailedRow> failed;
+
+    /// @brief Member-wise equality.
+    /// @param other The value to compare with.
+    /// @return `true` when rows and failures match.
+    [[nodiscard]] bool operator==(ChangedRowsValue const& other) const = default;
+};
+
+/// @brief Reads the `ChangedRows` of one table from an action's reply.
+///
+/// Each path the catalog gives for @p record names a `ChangedRows`' `rows` member: `"<member>.rows"`, or `"rows"`
+/// for the result itself. The value at the path's parent is read as `{"rows": [{"key"}], "failed": [{"key",
+/// "message"}]}`; a number is an integer key and a string a text key, and an entry of neither is skipped.
+/// @param reply  The action's reply.
+/// @param action The action's catalog entry.
+/// @param record The table's record, `<model type>.<table id>`.
+/// @return The rows of every such path, in the reply's order; none when the catalog names no path for @p record.
+[[nodiscard]] inline ChangedRowsValue changedRowsOf(Value const& reply, ActionInfo const& action,
+                                                    std::string_view record) {
+    ChangedRowsValue out;
+    auto const keyOf = [](Value const* key) -> std::optional<table::RowId> {
+        if (key == nullptr) {
+            return std::nullopt;
+        }
+        if (auto const* const number = key->asInt()) {
+            return table::RowId{*number};
+        }
+        if (auto const* const text = key->asString()) {
+            return table::RowId{*text};
+        }
+        return std::nullopt;
+    };
+    for (ActionRecordInfo const& info : action.records) {
+        if (info.record != record) {
+            continue;
+        }
+        for (std::string const& path : info.paths) {
+            std::string_view parent;
+            if (path == "rows") {
+                parent = {};
+            } else if (path.ends_with(".rows")) {
+                parent = std::string_view{path}.substr(0, path.size() - std::string_view{".rows"}.size());
+            } else {
+                continue;
+            }
+            Value const* at = &reply;
+            while (at != nullptr && !parent.empty()) {
+                auto const dot = parent.find('.');
+                at = at->field(parent.substr(0, dot));
+                parent = dot == std::string_view::npos ? std::string_view{} : parent.substr(dot + 1);
+            }
+            if (at == nullptr) {
+                continue;
+            }
+            if (Value const* const rows = at->field("rows"); rows != nullptr && rows->asList() != nullptr) {
+                for (Value const& row : *rows->asList()) {
+                    if (auto key = keyOf(row.field("key"))) {
+                        out.rows.push_back(table::ChangedRow{.key = std::move(*key)});
+                    }
+                }
+            }
+            if (Value const* const failed = at->field("failed"); failed != nullptr && failed->asList() != nullptr) {
+                for (Value const& row : *failed->asList()) {
+                    if (auto key = keyOf(row.field("key"))) {
+                        Value const* const message = row.field("message");
+                        out.failed.push_back(table::FailedRow{
+                            .key = std::move(*key),
+                            .message = message != nullptr && message->asString() != nullptr ? *message->asString()
+                                                                                            : std::string{}});
+                    }
+                }
+            }
+        }
+    }
+    return out;
+}
+
 /// @brief What a table's mount reads, whatever serves the rows.
 ///
 /// Every member is called on the runtime's owner.
@@ -325,6 +415,39 @@ public:
         static_cast<void>(key);
         return false;
     }
+
+    /// @brief Adds rows the view keeps although the filter rejects them: the rows an action of this session changed.
+    ///        All of them are added, or, when they would take the set past `table::QueryLimits::maxRetained`, none.
+    ///        A change of the filter clears them.
+    /// @param keys The rows' keys; a key retained already counts once.
+    /// @return `Retained`, or `OverBound` with the set unchanged. Rows that cannot retain keep nothing and answer
+    ///         `Retained`.
+    [[nodiscard]] virtual RetainResult retain(std::span<table::RowId const> keys) {
+        static_cast<void>(keys);
+        return RetainResult::Retained;
+    }
+
+    /// @brief Drops every retained row: the view holds the rows the filter admits again.
+    virtual void clearRetained() {}
+
+    /// @brief Whether a held row is retained and the filter rejects it.
+    /// @param key The row's key; a row row look has its key, not its view index.
+    /// @return `true` for a held row the latest reply that supplied it listed as unmatched; `false` for a key the
+    ///         rows do not hold.
+    [[nodiscard]] virtual bool unmatched(table::RowId const& key) const {
+        static_cast<void>(key);
+        return false;
+    }
+
+    /// @brief Holds back the refetches the table's change events cause while an action of this session that changes
+    ///        the table runs, so a row it changed is fetched with the retained rows its reply adds, never before.
+    ///        The hold lasts while any run holds, for at most `SessionOptions::retainHold` from the first.
+    /// @param run The run's id.
+    virtual void holdRefetches(std::uint64_t run) { static_cast<void>(run); }
+
+    /// @brief Ends a run's hold: when no run holds any more, what the events marked is fetched, as one refetch.
+    /// @param run The run's id, as `holdRefetches` took it; one that holds nothing is ignored.
+    virtual void releaseRefetches(std::uint64_t run) { static_cast<void>(run); }
 
     /// @brief Fetches a range of view rows with the cells of the columns named, whether or not they are held: what
     ///        a copy of a selection of the view reads. Nothing is held or cached for them.
@@ -693,7 +816,10 @@ public:
         for (std::size_t at = 0; at < _engine->viewRowCount(); ++at) {
             digest.add(_engine->rowIdAt(at));
         }
-        return ViewSelection{.filters = _engine->filter(), .retained = {}, .revision = digest.text()};
+        auto const retained = _engine->retained();
+        return ViewSelection{.filters = _engine->filter(),
+                             .retained = {retained.begin(), retained.end()},
+                             .revision = digest.text()};
     }
 
     /// @brief How many rows a selection holds: every row is here, so the count is exact.
@@ -772,12 +898,55 @@ public:
     /// @brief The engine's counts: its view, its source's rows, its undecided rows and whether it computes.
     /// @return The counts.
     [[nodiscard]] TableCountsView counts() const override {
+        std::int64_t retained = 0;
+        for (table::RowId const& key : _engine->retained()) {
+            if (auto const at = _engine->viewRowOfKey(key); at && _engine->isUnmatched(*at)) {
+                ++retained;
+            }
+        }
         return TableCountsView{.view = total(),
                                .source = static_cast<std::int64_t>(_engine->sourceRowCount()),
                                .undecided = static_cast<std::int64_t>(_engine->undecidedRowCount()),
                                .pending = _engine->pending(),
                                .awaiting = {},
-                               .failed = {}};
+                               .failed = {},
+                               .retained = retained};
+    }
+
+    /// @brief Adds keys to the engine's retained rows, all or none.
+    /// @param keys The rows' keys.
+    /// @return `OverBound` when they would take the set past `table::QueryLimits::maxRetained`.
+    [[nodiscard]] RetainResult retain(std::span<table::RowId const> keys) override {
+        auto const held = _engine->retained();
+        std::vector<table::RowId> next(held.begin(), held.end());
+        std::unordered_set<table::RowId> seen(held.begin(), held.end());
+        for (table::RowId const& key : keys) {
+            if (seen.insert(key).second) {
+                next.push_back(key);
+            }
+        }
+        if (next.size() > table::QueryLimits{}.maxRetained) {
+            return RetainResult::OverBound;
+        }
+        if (next.size() != held.size()) {
+            static_cast<void>(_engine->retain(std::move(next)));
+        }
+        return RetainResult::Retained;
+    }
+
+    /// @brief Drops the engine's retained rows.
+    void clearRetained() override {
+        if (!_engine->retained().empty()) {
+            static_cast<void>(_engine->retain({}));
+        }
+    }
+
+    /// @brief Whether the engine's view row of a key is retained and rejected by the filter.
+    /// @param key The row's key.
+    /// @return `false` for a key not in the view.
+    [[nodiscard]] bool unmatched(table::RowId const& key) const override {
+        auto const at = _engine->viewRowOfKey(key);
+        return at && _engine->isUnmatched(*at);
     }
 
     /// @brief Sets the one receiver of the engine's view changes.
@@ -2956,6 +3125,10 @@ public:
         // The revision held is of the old filter's view: a selection taken before the new one answers would name it.
         _viewRevision.clear();
         _outOfView.clear();
+        // The retained rows are of the filter they no longer matched.
+        _retained.clear();
+        _retainedSet.clear();
+        ++_retainStamp;
         restart();
         return {};
     }
@@ -3035,7 +3208,92 @@ public:
                                .undecided = _window.undecided(),
                                .pending = _window.pending() || !_rowsFlights.empty(),
                                .awaiting = {awaiting.begin(), awaiting.end()},
-                               .failed = {failed.begin(), failed.end()}};
+                               .failed = {failed.begin(), failed.end()},
+                               .retained = static_cast<std::int64_t>(_unmatchedHeld.size())};
+    }
+
+    /// @brief Adds keys to the retained rows, all or none; each query from then on carries the set in `retain`.
+    ///
+    /// The keys added are refetched as a change event's keys are, so the rows that left the filter come back into
+    /// the view; while a run holds the refetches, they are marked with the events'.
+    /// @param keys The rows' keys.
+    /// @return `OverBound` when they would take the set past `table::QueryLimits::maxRetained`; the set is then
+    ///         unchanged.
+    [[nodiscard]] RetainResult retain(std::span<table::RowId const> keys) override {
+        std::vector<table::RowId> added;
+        std::unordered_set<table::RowId> seen;
+        for (table::RowId const& key : keys) {
+            if (!_retainedSet.contains(key) && seen.insert(key).second) {
+                added.push_back(key);
+            }
+        }
+        if (_retained.size() + added.size() > table::QueryLimits{}.maxRetained) {
+            return RetainResult::OverBound;
+        }
+        if (added.empty()) {
+            return RetainResult::Retained;
+        }
+        _retainedSet.insert(added.begin(), added.end());
+        _retained.insert(_retained.end(), added.begin(), added.end());
+        // The revision held is of the view without them: a selection taken before the next reply would name it.
+        ++_retainStamp;
+        _viewRevision.clear();
+        refetch(added);
+        return RetainResult::Retained;
+    }
+
+    /// @brief Drops every retained row, and fetches the held pages again without them.
+    void clearRetained() override {
+        if (_retained.empty()) {
+            return;
+        }
+        _retained.clear();
+        _retainedSet.clear();
+        _unmatched.clear();
+        _unmatchedHeld.clear();
+        ++_retainStamp;
+        _viewRevision.clear();
+        _window.invalidate();
+        pump();
+        status();
+    }
+
+    /// @brief The retained rows, in the order they were added.
+    /// @return Their keys.
+    [[nodiscard]] std::span<table::RowId const> retained() const noexcept { return _retained; }
+
+    /// @brief Whether a held row is retained and the filter rejects it.
+    /// @param key The row's key.
+    /// @return `true` for a held row the latest reply that supplied it listed in `unmatched`.
+    [[nodiscard]] bool unmatched(table::RowId const& key) const override { return _unmatchedHeld.contains(key); }
+
+    /// @brief Holds back the refetches change events cause, while @p run runs, for at most
+    ///        `SessionOptions::retainHold` from the first run held; an event meanwhile only marks what it would fetch.
+    ///        Without a scheduler nothing is held.
+    /// @param run The run's id.
+    void holdRefetches(std::uint64_t run) override {
+        auto* const scheduler = _session->options().scheduler;
+        if (scheduler == nullptr) {
+            return;
+        }
+        if (_holding.empty()) {
+            _holdTimer = scheduler->after(_session->options().retainHold, _scope.token().guard([this] {
+                _holdTimer = {};
+                _holding.clear();
+                flushMarked();
+            }));
+        }
+        _holding.insert(run);
+    }
+
+    /// @brief Ends @p run's hold; when no run holds any more, what the events marked goes as one refetch.
+    /// @param run The run's id.
+    void releaseRefetches(std::uint64_t run) override {
+        if (_holding.erase(run) == 0 || !_holding.empty()) {
+            return;
+        }
+        _holdTimer = {};
+        flushMarked();
     }
 
     /// @brief The view as a selection takes it: the held filter and the latest reply's revision.
@@ -3072,7 +3330,7 @@ public:
         if (shown.undecided > 0 || !levels.empty() || _viewRevision.empty()) {
             return std::unexpected(SelectAllRefusal{.undecided = shown.undecided, .levels = std::move(levels)});
         }
-        return ViewSelection{.filters = _filter, .retained = {}, .revision = _viewRevision};
+        return ViewSelection{.filters = _filter, .retained = _retained, .revision = _viewRevision};
     }
 
     /// @brief How many rows a selection holds, as far as the window knows.
@@ -3205,6 +3463,8 @@ private:
     struct PageFlight {
         table::PageFetch fetch;
         std::stop_source stop;
+        // The retained set the query carried, by `_retainStamp`.
+        std::uint64_t retained = 0;
     };
 
     // A range's keys in the making: the pages fetched for it, by page, and how many it still waits for.
@@ -3335,6 +3595,8 @@ private:
     struct RowsFlight {
         table::RowsFetch fetch;
         std::stop_source stop;
+        // The retained set the query carried, by `_retainStamp`.
+        std::uint64_t retained = 0;
     };
 
     [[nodiscard]] std::chrono::milliseconds now() const {
@@ -3383,6 +3645,8 @@ private:
         _window.reset();
         _memo.clear();
         _heldPages.clear();
+        _unmatched.clear();
+        _unmatchedHeld.clear();
         _retry = false;
         _awaitedLast.reset();
         _awaitedTimer = {};
@@ -3530,6 +3794,7 @@ private:
             query.columns = columns;
         }
         query.retry = _retry;
+        query.retain = _retained;
         return query;
     }
 
@@ -3543,7 +3808,7 @@ private:
         std::stop_source stop;
         ++_stats.pageFetches;
         auto reply = _session->read(_options.channel, actionName(), *body, stop.get_token());
-        _pageFlights.push_back(PageFlight{.fetch = fetch, .stop = std::move(stop)});
+        _pageFlights.push_back(PageFlight{.fetch = fetch, .stop = std::move(stop), .retained = _retainStamp});
         reply.then(_scope, [this, fetch](std::string const& text) { pageArrived(fetch, text); });
         reply.onError(_scope, [this, fetch](std::exception_ptr const& error) { pageFailed(fetch, error); });
         status();
@@ -3560,7 +3825,7 @@ private:
         std::stop_source stop;
         ++_stats.rowsFetches;
         auto reply = _session->read(_options.channel, actionName(), *body, stop.get_token());
-        _rowsFlights.push_back(RowsFlight{.fetch = fetch, .stop = std::move(stop)});
+        _rowsFlights.push_back(RowsFlight{.fetch = fetch, .stop = std::move(stop), .retained = _retainStamp});
         reply.then(_scope, [this, fetch](std::string const& text) { rowsArrived(fetch, text); });
         reply.onError(_scope, [this, fetch](std::exception_ptr const& error) { rowsFailed(fetch, error); });
         status();
@@ -3792,6 +4057,8 @@ private:
     }
 
     void pageArrived(table::PageFetch const& fetch, std::string const& text) {
+        auto const flight = std::ranges::find(_pageFlights, fetch, &PageFlight::fetch);
+        std::uint64_t const stamp = flight == _pageFlights.end() ? 0 : flight->retained;
         std::erase_if(_pageFlights, [&fetch](PageFlight const& flight) { return flight.fetch == fetch; });
         if (!_description) {
             return;
@@ -3805,9 +4072,11 @@ private:
         }
         heardRevision(page->revision);
         if (fetch.query == _window.query()) {
-            if (!page->viewRevision.empty()) {
+            // A reply to a query of another retained set names that set's view.
+            if (!page->viewRevision.empty() && stamp == _retainStamp) {
                 _viewRevision = page->viewRevision;
             }
+            heardUnmatched(*page);
             for (table::RowId const& key : page->keys) {
                 _outOfView.erase(key);
             }
@@ -3833,6 +4102,7 @@ private:
             if (heldPage(index)) {
                 _heldPages.insert(index);
             }
+            heldUnmatched();
             announce(change);
         }
         planned(_window.owed());
@@ -3852,6 +4122,8 @@ private:
     }
 
     void rowsArrived(table::RowsFetch const& fetch, std::string const& text) {
+        auto const flight = std::ranges::find(_rowsFlights, fetch, &RowsFlight::fetch);
+        std::uint64_t const stamp = flight == _rowsFlights.end() ? 0 : flight->retained;
         std::erase_if(_rowsFlights, [&fetch](RowsFlight const& flight) { return flight.fetch == fetch; });
         if (!_description) {
             return;
@@ -3863,9 +4135,10 @@ private:
         }
         heardRevision(page->revision);
         if (fetch.query == _window.query()) {
-            if (!page->viewRevision.empty()) {
+            if (!page->viewRevision.empty() && stamp == _retainStamp) {
                 _viewRevision = page->viewRevision;
             }
+            heardUnmatched(*page);
             std::unordered_set<table::RowId> const answered(page->keys.begin(), page->keys.end());
             for (table::RowId const& key : fetch.keys) {
                 if (answered.contains(key)) {
@@ -3877,6 +4150,7 @@ private:
         }
         auto const revision = _window.revision();
         auto const replaced = _window.patch(fetch, std::move(*page));
+        heldUnmatched();
         table::ViewChange change;
         for (auto const index : replaced) {
             if (auto const* const key = _window.key(index)) {
@@ -3951,23 +4225,92 @@ private:
     void heard(effects::RecordChange const& change) {
         // Any row may change a count: the values lists are asked again.
         forgetDistinct();
-        if (!change.keys) {
+        std::optional<std::vector<table::RowId>> keys;
+        if (change.keys) {
+            keys.emplace();
+            keys->reserve(change.keys->size());
+            for (auto const& raw : *change.keys) {
+                auto key = table::rowIdOf(raw);
+                if (!key) {
+                    keys.reset();
+                    break;
+                }
+                keys->push_back(std::move(*key));
+            }
+        }
+        // While a run holds the refetches, the event only marks what it would fetch.
+        if (!_holding.empty()) {
+            if (keys) {
+                _marked.insert(_marked.end(), keys->begin(), keys->end());
+            } else {
+                _markedAll = true;
+            }
+            return;
+        }
+        if (!keys) {
             _window.invalidate();
             pump();
             return;
         }
-        std::vector<table::RowId> keys;
-        keys.reserve(change.keys->size());
-        for (auto const& raw : *change.keys) {
-            auto key = table::rowIdOf(raw);
-            if (!key) {
-                _window.invalidate();
-                pump();
-                return;
-            }
-            keys.push_back(std::move(*key));
+        planned(_window.refresh(*keys));
+    }
+
+    // Fetches @p keys again, as a change event naming them does; marked instead while a run holds the refetches.
+    void refetch(std::vector<table::RowId> const& keys) {
+        if (!_holding.empty()) {
+            _marked.insert(_marked.end(), keys.begin(), keys.end());
+            return;
         }
-        planned(_window.refresh(keys));
+        auto plan = _window.refresh(keys);
+        // A window that holds no row has no keyed fetch to make: its pages are fetched again.
+        if (plan.kind == table::Refresh::Nothing) {
+            _window.invalidate();
+            pump();
+            return;
+        }
+        planned(std::move(plan));
+    }
+
+    // Sends what the events marked while the refetches were held, as one refetch.
+    void flushMarked() {
+        bool const all = std::exchange(_markedAll, false);
+        auto keys = std::move(_marked);
+        _marked.clear();
+        if (all) {
+            _window.invalidate();
+            pump();
+        } else if (!keys.empty()) {
+            std::ranges::sort(keys);
+            auto const [first, last] = std::ranges::unique(keys);
+            keys.erase(first, last);
+            refetch(keys);
+        }
+    }
+
+    // Takes a reply's word on which of its rows are retained and unmatched.
+    void heardUnmatched(table::GenericPage const& page) {
+        for (std::size_t at = 0; at < page.keys.size(); ++at) {
+            if (std::ranges::binary_search(page.unmatched, static_cast<std::int64_t>(at))) {
+                _unmatched.insert(page.keys[at]);
+            } else {
+                _unmatched.erase(page.keys[at]);
+            }
+        }
+    }
+
+    // The unmatched rows among those held now.
+    void heldUnmatched() {
+        _unmatchedHeld.clear();
+        if (_unmatched.empty()) {
+            return;
+        }
+        for (auto const& [first, count] : heldRanges()) {
+            for (std::int64_t at = first; at < first + count; ++at) {
+                if (auto const* const key = _window.key(at); key != nullptr && _unmatched.contains(*key)) {
+                    _unmatchedHeld.insert(*key);
+                }
+            }
+        }
     }
 
     void status() const {
@@ -4026,6 +4369,19 @@ private:
     std::string _viewRevision;
     // Keys a keyed reply asked for and left out of the view, until a reply holds them again or the filter changes.
     std::unordered_set<table::RowId> _outOfView;
+    // The retained rows, in the order they were added, and as a set; each change advances the stamp, by which a
+    // reply to a query of another set is told apart.
+    std::vector<table::RowId> _retained;
+    std::unordered_set<table::RowId> _retainedSet;
+    std::uint64_t _retainStamp = 0;
+    // Keys the latest reply that supplied them listed as unmatched, and those of them held.
+    std::unordered_set<table::RowId> _unmatched;
+    std::unordered_set<table::RowId> _unmatchedHeld;
+    // The runs holding the refetches, the hold's timer, and what events marked meanwhile.
+    std::set<std::uint64_t> _holding;
+    reactive::TimerHandle _holdTimer;
+    std::vector<table::RowId> _marked;
+    bool _markedAll = false;
     std::set<std::string, std::less<>> _staleRevisions;
     std::function<void()> _onStale;
     std::function<void(table::ViewChange const&)> _onChange;

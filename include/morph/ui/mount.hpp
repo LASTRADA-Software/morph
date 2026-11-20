@@ -2706,6 +2706,11 @@ private:
                 table.widget->setRowLabel(*widget, label);
             });
         }
+        if (look.marks) {
+            bind(lookScope, *look.marks, [&table, widget = slot.widget](RowMarks const& marks) {
+                table.widget->setRowMarks(*widget, marks);
+            });
+        }
         for (auto& [column, placed] : slot.cells) {
             placed.fresh = false;
         }

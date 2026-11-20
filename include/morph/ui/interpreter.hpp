@@ -433,6 +433,10 @@ struct SessionOptions {
     std::size_t maxRangeRows = 10'000;
     /// @brief The most rows a table's copy puts on the clipboard; a larger copy is refused in the table's status line.
     std::size_t maxCopyRows = 10'000;
+    /// @brief The longest a model-backed table with `retainChanged` holds back the refetches its change events cause
+    ///        while an action of this session that changes it runs, waited for on `scheduler`: within it a row the
+    ///        action changed never leaves the view and comes back, past it other users' changes are not held up.
+    std::chrono::milliseconds retainHold{2000};
     /// @brief The application's id: the `application` of every table-state key.
     std::string application;
 };

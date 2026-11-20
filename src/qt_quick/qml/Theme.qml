@@ -203,6 +203,8 @@ QtObject {
     property color chart3: "#00805e"
     property color chart4: "#a8508a"
     property real staleOpacity: 0.55
+    // The opacity of a table row kept in view although it no longer matches the filter.
+    property real mutedOpacity: 0.55
     // The window behind every surface, the corner radii, the height of an input or a button, and the font sizes, in
     // px. A font size of 0 is derived from the platform font: the body is its size, a heading 1.3 times the body.
     property color background: "#f2f3f7"

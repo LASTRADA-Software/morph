@@ -43,6 +43,9 @@ constexpr int kFilterMark = 2;
 /// A filter button, empty and filled.
 constexpr std::string_view kFilterEmpty = "\u25BF";
 constexpr std::string_view kFilterFilled = "\u25BE";
+/// What starts the gutter of a row an action is working on, and of a row another user holds.
+constexpr std::string_view kBusyGlyph = "\u2026";
+constexpr std::string_view kLockGlyph = "#";
 /// The button at the header line's end that opens the table's menu.
 constexpr std::string_view kTableMenu = "\u22EF";
 /// The cells the header line keeps for the table menu: a gap and the button.
@@ -351,6 +354,21 @@ void TableImpl::setSelectionView(std::vector<ui::Key> const& except) {
 
 void TableImpl::setOnStatusEntry(std::function<void(std::string id)> onStatusEntry) {
     _onStatusEntry = std::move(onStatusEntry);
+}
+
+void TableImpl::setRowMarks(ui::Widget& row, ui::RowMarks const& marks) {
+    auto& base = WidgetBase::of(row);
+    if (base.container() != this) {
+        throw std::logic_error{"morph::tui: setRowMarks of a widget that is not this table's row"};
+    }
+    if (marks == ui::RowMarks{}) {
+        _marks.erase(&base);
+    } else {
+        _marks.insert_or_assign(&base, marks);
+    }
+    base.applyRowMuted(marks.unmatched);
+    base.applyTooltip(marks.tooltip);
+    refresh();
 }
 
 void TableImpl::setOnSelectionChange(
@@ -682,6 +700,7 @@ EventResult TableImpl::headerKey(::core::tui::KeyEvent const& key) {
 void TableImpl::childForgotten(WidgetBase& child) {
     _keys.erase(&child);
     _headings.erase(&child);
+    _marks.erase(&child);
     _spans.erase(&child);
     _extraLines.erase(&child);
     _viewRows.erase(&child);
@@ -1024,6 +1043,10 @@ std::string TableImpl::rowMark(WidgetBase const* row, bool cursor) const {
         mark = isMarked(row) ? "*" : " ";
     }
     mark += cursor ? ">" : " ";
+    // A busy or locked row's gutter starts with its glyph, in place of the selection mark's first character.
+    if (auto const found = _marks.find(row); found != _marks.end() && (found->second.busy || found->second.locked)) {
+        mark = std::string{found->second.busy ? kBusyGlyph : kLockGlyph} + mark.substr(1);
+    }
     return mark;
 }
 

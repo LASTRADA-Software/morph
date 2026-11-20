@@ -2171,6 +2171,14 @@ inline std::string clipboardText(TableHarness const& h) { return h.backend.clipb
 /// @return It.
 inline TableStatus statusOf(TableHarness& h, int table) { return h.backend.tableStatus(table); }
 
+/// @brief The last marks the recording backend got for a row of the table `testId` `t`.
+/// @param h   The harness.
+/// @param key The row's key.
+/// @return The marks; none before any `setRowMarks` of that row.
+inline std::optional<RowMarks> rowMarks(TableHarness& h, Key const& key) {
+    return h.backend.rowMarks(h.byTestId("Table", "t"), key);
+}
+
 /// @brief The labels of a menu's entries that can be chosen or open a submenu, separators and headings left out.
 /// @param entries The entries.
 /// @return Their labels.

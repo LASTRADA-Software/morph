@@ -1387,11 +1387,31 @@ struct AccentedCell {
     Prop<CellAccent> accent;
 };
 
+/// @brief What marks a whole row: it is being worked on, it is locked by someone else, or it is kept in view although
+///        it no longer matches the filter. A row's marks do not vary by cell, so its row look carries them.
+struct RowMarks {
+    /// @brief An action of this session is working on the row.
+    bool busy = false;
+    /// @brief Another user holds the row; it cannot be edited here.
+    bool locked = false;
+    /// @brief The row is retained and the filter rejects it: it draws muted.
+    bool unmatched = false;
+    /// @brief What the row's tooltip says of its marks; empty for none.
+    std::string tooltip;
+
+    /// @brief Member-wise equality.
+    /// @param other The marks to compare with.
+    /// @return `true` when every member matches.
+    [[nodiscard]] bool operator==(RowMarks const& other) const = default;
+};
+
 /// @brief A row's own parts beyond its cells, for a table mounted over a `TableSource`: built once per realized row
 ///        key, bound in the row's scope. Nothing per cell is carried here.
 struct TableRowLook {
     /// @brief The row's tone, bound in the row's scope; disengaged for none.
     std::optional<Prop<std::optional<Tone>>> tone;
+    /// @brief The row's marks, bound in the row's scope; disengaged for a table whose rows carry none.
+    std::optional<Prop<RowMarks>> marks;
     /// @brief The row's accessible name, bound in the row's scope; disengaged names the row by its key.
     std::optional<Prop<std::string>> label;
     /// @brief The cells of this row that cover the rows below, bound in the row's scope; disengaged for none.

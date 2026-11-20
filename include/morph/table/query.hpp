@@ -27,6 +27,7 @@
 #include <format>
 #include <functional>
 #include <glaze/glaze.hpp>
+#include <iterator>
 #include <limits>
 #include <map>
 #include <memory>
@@ -121,6 +122,10 @@ struct TableQuery {
     /// @brief When set, the reply holds this request's distinct values and no rows; `page`, `sort` and `columns`
     ///        do not apply. A query may not set both `keys` and `distinct`.
     std::optional<DistinctRequest> distinct;
+    /// @brief Rows the view keeps although the filter rejects them: the rows the session's own actions changed. Each
+    ///        one the caller may see is in the view at the place the sort gives it, and the reply's `unmatched` lists
+    ///        those the filter rejects. Distinct values ignore it. Left out of the JSON when empty.
+    std::vector<RowId> retain;
 
     /// @brief The schema keyword that marks a member of this type.
     /// @return `"x-table"`.
@@ -229,6 +234,9 @@ struct Page {
     std::vector<std::int64_t> indices;
     /// @brief A distinct-values reply only: the values; the page then has no rows.
     std::optional<DistinctValues> distinct;
+    /// @brief The indices, into `rows`, of the retained rows (`TableQuery::retain`) the filter rejects, ascending.
+    ///        Left out of the JSON when empty.
+    std::vector<std::int64_t> unmatched;
     /// @brief The view's membership (`MembershipDigest::text`): two pages with the same one are of views of the same
     ///        rows, whatever their sort. Empty on a distinct-values reply, and then left out of the JSON.
     std::string viewRevision;
@@ -279,6 +287,8 @@ struct QueryLimits {
     std::size_t maxQuerySetBytes = std::size_t{1} << 20U;
     /// @brief Rows of a view a selection of the view may resolve to; a larger view is `LimitExceeded`.
     std::int64_t maxSelectedRows = 1'000'000;
+    /// @brief Entries of `TableQuery::retain`, counted as received, duplicates included.
+    std::size_t maxRetained = 10'000;
 };
 
 /// @brief A digest of a set of row keys: what names a view's membership.
@@ -604,7 +614,7 @@ struct SetTally {
 /// sees it that way; an absent list stays absent and an empty one empty.
 /// A keyed query has no page, so `keys` with a non-zero `page.offset` is
 /// `InvalidSpec`; the keys are bounded by `maxKeys`, and a text key by
-/// `maxTextLength`. A `distinct` request is held to `detail::checkDistinct`,
+/// `maxTextLength`; the retained keys by `maxRetained`, and a text one by `maxTextLength`. A `distinct` request is held to `detail::checkDistinct`,
 /// and a query setting both `keys` and `distinct` is `InvalidSpec`.
 /// @param query   The query, as received.
 /// @param columns The row schema's columns.
@@ -660,6 +670,15 @@ struct SetTally {
         if (std::ranges::any_of(*query.keys, tooLong)) {
             return std::unexpected(detail::limitError({}, "key too long"));
         }
+    }
+    if (query.retain.size() > limits.maxRetained) {
+        return std::unexpected(detail::limitError({}, "too many retained rows"));
+    }
+    if (std::ranges::any_of(query.retain, [&limits](RowId const& key) {
+            auto const* const text = std::get_if<std::string>(&key);
+            return text != nullptr && text->size() > limits.maxTextLength;
+        })) {
+        return std::unexpected(detail::limitError({}, "retained key too long"));
     }
     if (query.distinct) {
         if (query.keys) {
@@ -808,6 +827,8 @@ struct PageRows {
     std::optional<DistinctValues> distinct;
     /// @brief The view's membership (`MembershipDigest::text`); empty on a distinct-values reply.
     std::string viewRevision;
+    /// @brief The indices, into `rows`, of the retained rows the filter rejects, ascending.
+    std::vector<std::int64_t> unmatched;
 };
 
 namespace detail {
@@ -981,6 +1002,244 @@ inline void keyedRows(ComputedView const& view, RowSnapshot const& snapshot, std
     for (auto i = begin; i < end; ++i) {
         out.rows.push_back(view.rows[static_cast<std::size_t>(i)]);
     }
+    return out;
+}
+
+/// @brief A view with retained rows merged in: what `mergeRetained` returns.
+struct MergedView {
+    /// @brief Source rows, in view order.
+    std::vector<std::uint32_t> order;
+    /// @brief View rows of retained rows the filter rejects, ascending.
+    std::vector<std::int64_t> unmatched;
+    /// @brief The rows the filter can neither admit nor reject, less the retained ones, which are in the view.
+    std::int64_t undecided = 0;
+    /// @brief The membership of `order`: the base digest with each admitted row's key added.
+    MembershipDigest digest;
+};
+
+/// @brief Merges retained rows into a base view: the view the sort gives over the base rows and the retained rows
+///        the base lacks, each of those in it whatever the filter says.
+///
+/// A retained row the filter cannot decide is in the view, not undecided; one it rejects is listed in `unmatched`.
+/// Its cost is that of the retained rows: a scan of @p baseOrder and a binary search of it per admitted row.
+/// @param baseOrder     The view of the sort and filter, as source rows sorted by @p before.
+/// @param baseUndecided The base view's undecided rows.
+/// @param baseDigest    The base view's membership.
+/// @param retainedRows  The retained rows the source has, as source rows.
+/// @param before        The query's comparator over the sort's keys, ties to the lower source row.
+/// @param match         What the filter says of a source row.
+/// @param keyOf         A source row's key.
+/// @return The merged view.
+[[nodiscard]] inline MergedView mergeRetained(std::span<std::uint32_t const> baseOrder, std::int64_t baseUndecided,
+                                              MembershipDigest baseDigest,
+                                              std::span<std::uint32_t const> retainedRows,
+                                              std::function<bool(std::uint32_t, std::uint32_t)> const& before,
+                                              std::function<Match(std::uint32_t)> const& match,
+                                              std::function<RowId(std::uint32_t)> const& keyOf) {
+    auto merged = mergeRetainedOrder(baseOrder, retainedRows, before, match);
+    MergedView out{.order = std::move(merged.order),
+                   .unmatched = std::move(merged.unmatched),
+                   .undecided = baseUndecided - merged.undecided,
+                   .digest = baseDigest};
+    for (auto const row : merged.admitted) {
+        out.digest.add(keyOf(row));
+    }
+    return out;
+}
+
+/// @brief The keys of a few rows of a snapshot, built as they are first asked for: what orders and filters retained
+///        rows against a cached view, whose key columns are not kept.
+///
+/// Each row asked for gets a local index into key columns of the needed columns alone, so the cost is that of the
+/// rows read, not of the snapshot.
+class SparseKeys {
+public:
+    /// @brief Keys of @p needed over @p snapshot.
+    /// @param snapshot The rows; outlives this.
+    /// @param columns  The snapshot's columns; outlive this.
+    /// @param services The services the keys are built with; outlive this.
+    /// @param needed   The columns whose keys are read: the sort's and the filter's.
+    SparseKeys(RowSnapshot const& snapshot, std::span<ColumnInfo const> columns, Services const& services,
+               std::vector<std::size_t> needed)
+        : _snapshot{&snapshot}, _columns{columns}, _services{&services}, _needed{std::move(needed)} {
+        grow(16);
+    }
+
+    /// @brief A row's local index, its keys built at the first call.
+    /// @param row The source row.
+    /// @return Its index into the key columns `pointers` gives.
+    [[nodiscard]] std::uint32_t local(std::uint32_t row) {
+        auto const [found, made] = _local.try_emplace(row, static_cast<std::uint32_t>(_rows.size()));
+        if (made) {
+            if (_rows.size() == _capacity) {
+                grow(_capacity * 2);
+            }
+            _rows.push_back(row);
+            fill(found->second);
+        }
+        return found->second;
+    }
+
+    /// @brief The key columns by column index, null for a column not needed; valid until the next `local`.
+    /// @return The pointers.
+    [[nodiscard]] std::span<KeyColumn const* const> pointers() const noexcept { return _pointers; }
+
+private:
+    void fill(std::uint32_t at) {
+        for (auto const column : _needed) {
+            _keys[column]->set(at, _snapshot->cell(_rows[at], column), _columns[column], *_services);
+        }
+    }
+
+    void grow(std::size_t capacity) {
+        _capacity = capacity;
+        _keys.clear();
+        _keys.resize(_columns.size());
+        _pointers.assign(_columns.size(), nullptr);
+        for (auto const column : _needed) {
+            _keys[column] = std::make_unique<KeyColumn>(KeyColumn::forColumn(_columns[column], *_services, capacity));
+            _pointers[column] = _keys[column].get();
+        }
+        for (std::size_t at = 0; at < _rows.size(); ++at) {
+            fill(static_cast<std::uint32_t>(at));
+        }
+    }
+
+    RowSnapshot const* _snapshot;
+    std::span<ColumnInfo const> _columns;
+    Services const* _services;
+    std::vector<std::size_t> _needed;
+    std::size_t _capacity = 0;
+    std::vector<std::unique_ptr<KeyColumn>> _keys;
+    std::vector<KeyColumn const*> _pointers;
+    std::vector<std::uint32_t> _rows;
+    std::unordered_map<std::uint32_t, std::uint32_t> _local;
+};
+
+/// @brief A view with its retained rows merged in, and the view rows of those the filter rejects.
+struct RetainedView {
+    /// @brief The merged view.
+    ComputedView view;
+    /// @brief View rows of retained rows the filter rejects, ascending.
+    std::vector<std::int64_t> unmatched;
+};
+
+/// @brief Merges a validated query's retained rows into the view of its sort and filter, for one request: the
+///        view's own value, which a cache may share, is not changed.
+/// @param base        The view of the sort and filter.
+/// @param source      The rows the view was computed over: their columns and groups.
+/// @param snapshot    The snapshot the view was computed over.
+/// @param validated   The query as `validate` returned it.
+/// @param options     The services; `validate` applied its limits and `mayRead`.
+/// @param sourceRowOf A key's source row; when empty, the snapshot's row ids are scanned once.
+/// @return The merged view, or the filter's compile error.
+[[nodiscard]] inline std::expected<RetainedView, TableError> retainedView(ComputedView const& base,
+                                                                          DataSource const& source,
+                                                                          RowSnapshot const& snapshot,
+                                                                          TableQuery const& validated,
+                                                                          ApplyOptions const& options,
+                                                                          SourceRowOf const& sourceRowOf = {}) {
+    std::vector<std::uint32_t> rows;
+    if (sourceRowOf) {
+        for (auto const& key : validated.retain) {
+            if (auto const row = sourceRowOf(key)) {
+                rows.push_back(*row);
+            }
+        }
+    } else {
+        std::unordered_set<RowId> const wanted(validated.retain.begin(), validated.retain.end());
+        for (std::size_t row = 0; row < snapshot.rowCount() && rows.size() < wanted.size(); ++row) {
+            if (wanted.contains(snapshot.rowId(row))) {
+                rows.push_back(static_cast<std::uint32_t>(row));
+            }
+        }
+    }
+    auto const columns = source.columns();
+    auto const services = options.services.forTask();
+    auto filter = compileFilterGuarded(validated.filters, columns, services, source.groups());
+    if (!filter) {
+        return std::unexpected(std::move(filter.error()));
+    }
+    std::vector<std::pair<std::size_t, SortDirection>> sortKeys;
+    std::vector<std::size_t> needed;
+    for (auto const& key : validated.sort) {
+        if (auto const column = findColumn(columns, key.column)) {
+            sortKeys.emplace_back(*column, key.dir);
+            needed.push_back(*column);
+        }
+    }
+    for (auto const column : filter->columnsUsed()) {
+        needed.push_back(column);
+    }
+    std::ranges::sort(needed);
+    auto const [first, last] = std::ranges::unique(needed);
+    needed.erase(first, last);
+    SparseKeys keys{snapshot, columns, services, std::move(needed)};
+    auto const before = [&keys, &sortKeys](std::uint32_t left, std::uint32_t right) {
+        auto const leftAt = keys.local(left);
+        auto const rightAt = keys.local(right);
+        auto const pointers = keys.pointers();
+        for (auto const& [column, dir] : sortKeys) {
+            if (int const result = compareKeys(*pointers[column], leftAt, rightAt, dir); result != 0) {
+                return result < 0;
+            }
+        }
+        return left < right;
+    };
+    auto const match = [&keys, &filter](std::uint32_t row) {
+        auto const at = keys.local(row);
+        return filter->evaluateRow(keys.pointers(), at);
+    };
+    auto merged = mergeRetained(base.rows, static_cast<std::int64_t>(base.undecided.size()), base.digest, rows,
+                                before, match, [&snapshot](std::uint32_t row) { return snapshot.rowId(row); });
+    std::ranges::sort(rows);
+    RetainedView out;
+    out.view.rows = std::move(merged.order);
+    // The retained rows that were undecided are in the view now.
+    std::ranges::set_difference(base.undecided, rows, std::back_inserter(out.view.undecided));
+    out.view.digest = merged.digest;
+    out.unmatched = std::move(merged.unmatched);
+    return out;
+}
+
+/// @brief Sets a page's `unmatched`: the indices, into its `rows`, of those whose view row is in @p unmatched.
+/// @param page      The page; a keyed page's view rows are its `indices`, a page's its offset onwards.
+/// @param unmatched View rows of retained rows the filter rejects, ascending.
+inline void markUnmatched(PageRows& page, std::span<std::int64_t const> unmatched) {
+    page.unmatched.clear();
+    for (std::size_t at = 0; at < page.rows.size(); ++at) {
+        auto const viewRow = page.indices.empty() ? page.offset + static_cast<std::int64_t>(at) : page.indices[at];
+        if (std::ranges::binary_search(unmatched, viewRow)) {
+            page.unmatched.push_back(static_cast<std::int64_t>(at));
+        }
+    }
+}
+
+/// @brief The page of a view for a validated query: `pageRows` over the view, with the query's retained rows merged
+///        in per request when it retains any.
+/// @param view        The view of the sort and filter, as `computeView` returns it or a cache holds it.
+/// @param source      The rows the view was computed over.
+/// @param snapshot    The snapshot the view was computed over.
+/// @param validated   The query as `validate` returned it.
+/// @param options     The limits and services.
+/// @param viewRowOf   As for `pageRows`; read only when the query retains nothing, since a merged view has its own.
+/// @param sourceRowOf As for `pageRows`.
+/// @return The page, or the filter's compile error.
+[[nodiscard]] inline std::expected<PageRows, TableError> viewPage(ComputedView const& view, DataSource const& source,
+                                                                  RowSnapshot const& snapshot,
+                                                                  TableQuery const& validated,
+                                                                  ApplyOptions const& options,
+                                                                  std::span<std::uint32_t const> viewRowOf = {},
+                                                                  SourceRowOf const& sourceRowOf = {}) {
+    if (validated.retain.empty()) {
+        return pageRows(view, snapshot, validated, options.limits, viewRowOf, sourceRowOf);
+    }
+    auto merged = retainedView(view, source, snapshot, validated, options, sourceRowOf);
+    if (!merged) {
+        return std::unexpected(std::move(merged.error()));
+    }
+    auto out = pageRows(merged->view, snapshot, validated, options.limits, {}, sourceRowOf);
+    markUnmatched(out, merged->unmatched);
     return out;
 }
 
@@ -1540,7 +1799,7 @@ inline std::expected<DistinctValues, TableError> Engine::distinctValues(Distinct
     }
     // A source is read on its owner's thread, which this call is on, so this is the snapshot the view was
     // computed over.
-    return detail::pageRows(*view, *source.snapshot(), *checked, options.limits);
+    return detail::viewPage(*view, source, *source.snapshot(), *checked, options);
 }
 
 // ── Keys on the wire ────────────────────────────────────────────────────────
@@ -2147,7 +2406,11 @@ template <typename Row>
     if (!view) {
         return std::unexpected(view.error());
     }
-    auto page = detail::pageRows(*view, *source.snapshot(), *checked, options.limits);
+    auto viewed = detail::viewPage(*view, source, *source.snapshot(), *checked, options);
+    if (!viewed) {
+        return std::unexpected(std::move(viewed.error()));
+    }
+    auto page = std::move(*viewed);
     Page<Row> out;
     out.total = page.total;
     out.offset = page.offset;
@@ -2157,6 +2420,7 @@ template <typename Row>
     out.failed = std::move(page.failed);
     out.indices = std::move(page.indices);
     out.viewRevision = std::move(page.viewRevision);
+    out.unmatched = std::move(page.unmatched);
     out.rows.reserve(page.rows.size());
     for (auto const row : page.rows) {
         out.rows.push_back(rows[row]);
@@ -3108,7 +3372,8 @@ private:
 
 namespace morph::table::detail {
 
-/// @brief Whether a page member is left out of its JSON: `failed`, `indices` and `viewRevision` when empty.
+/// @brief Whether a page member is left out of its JSON: `failed`, `indices`, `viewRevision` and `unmatched` when
+///        empty.
 ///
 /// The typed page, the generic page and `UnloadedRow` share this rule. An optional member that is unset is left
 /// out by glaze's own rule for null members. A reader takes every member as present or absent.
@@ -3119,7 +3384,7 @@ namespace morph::table::detail {
 template <typename T>
 [[nodiscard]] constexpr bool omittedPageMember(T const& value, std::string_view key) {
     if constexpr (requires { value.empty(); }) {
-        return (key == "failed" || key == "indices" || key == "viewRevision") && value.empty();
+        return (key == "failed" || key == "indices" || key == "viewRevision" || key == "unmatched") && value.empty();
     } else {
         return false;
     }
@@ -3141,6 +3406,27 @@ struct glz::meta<morph::table::Page<Row>> {
     static constexpr bool skip_if(T const& member, std::string_view key, glz::meta_context const& context) {
         static_cast<void>(context);
         return morph::table::detail::omittedPageMember(member, key);
+    }
+};
+
+/// @brief The JSON of `morph::table::TableQuery`: every member by reflection, an empty `retain` left out, so a query
+///        that retains nothing is written as before `retain` existed.
+template <>
+struct glz::meta<morph::table::TableQuery> {
+    /// @brief Whether a member is left out of the JSON written.
+    /// @tparam T The member's type.
+    /// @param member  The member.
+    /// @param key     Its JSON name.
+    /// @param context Unused.
+    /// @return `true` for an empty `retain`.
+    template <typename T>
+    static constexpr bool skip_if(T const& member, std::string_view key, glz::meta_context const& context) {
+        static_cast<void>(context);
+        if constexpr (requires { member.empty(); }) {
+            return key == "retain" && member.empty();
+        } else {
+            return false;
+        }
     }
 };
 

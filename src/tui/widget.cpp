@@ -217,6 +217,15 @@ std::optional<ui::Tone> WidgetBase::effectiveRowTone() const noexcept {
     return std::nullopt;
 }
 
+bool WidgetBase::effectiveRowMuted() const noexcept {
+    for (WidgetBase const* widget = this; widget != nullptr; widget = widget->_container) {
+        if (widget->_rowMuted) {
+            return true;
+        }
+    }
+    return false;
+}
+
 namespace {
 
 /// Whether the terminal draws a surface inverted: the dark navigator column and the top bar of the app shell, joined
@@ -260,6 +269,17 @@ void colour(::core::tui::Buffer& buffer, ::core::tui::Rect area, ::core::tui::Co
     }
 }
 
+/// Marks every cell of @p area dim: what a muted table row does to what its cells painted.
+void dim(::core::tui::Buffer& buffer, ::core::tui::Rect area) {
+    for (int row = area.y; row < area.y + area.height; ++row) {
+        for (int col = area.x; col < area.x + area.width; ++col) {
+            if (auto* const cell = buffer.cellAt({.x = col, .y = row})) {
+                cell->style.dim = true;
+            }
+        }
+    }
+}
+
 }  // namespace
 
 // A view whose drawn bounds are not a part of where it was laid out was not placed by a parent's area (an
@@ -276,6 +296,9 @@ void WidgetBase::render(::core::tui::Canvas& canvas) {
     }
     if (auto const tone = effectiveRowTone()) {
         colour(canvas.buffer(), drawn, toneStyle(canvas.theme(), *tone).fg);
+    }
+    if (effectiveRowMuted()) {
+        dim(canvas.buffer(), drawn);
     }
     if (invertsSurface(effectiveSurface())) {
         invert(canvas.buffer(), drawn);

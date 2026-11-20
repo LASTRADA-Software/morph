@@ -12,6 +12,7 @@
 #include <chrono>
 #include <cstdint>
 #include <format>
+#include <initializer_list>
 #include <iterator>
 #include <map>
 #include <optional>
@@ -5703,3 +5704,180 @@ TEST_CASE("table rows: a new description revision drops a view selection that na
     SECTION("a filter on status only") { run(R"({"columns":{"status":{"include":[{"eq":"open"}]}}})", false); }
 }
 // Mutation: setDescription leaving the view selection as it was, which sends a view whose filter names c.
+
+// ── Rows kept in view ─────────────────────────────────────────────────────────────────────────────────────────
+
+namespace {
+
+using morph::ui::RowMarks;
+
+// The table of Tasks 17a to 17c with `retainChanged`, and the mutation `close` of the "Catalog actions" table.
+inline constexpr std::string_view kRetainTable =
+    R"({"kind":"table","id":"t","testId":"t","model":"sample","table":"samples","retainChanged":true,
+    "selectionMode":"multiple","filters":{"columns":{"status":{"include":[{"eq":"open"}]}}}})";
+inline constexpr std::string_view kCloseMutations = R"({
+    "close":{"model":"sample","action":"Lims_CloseRows","body":{"obj":{"rows":{"ref":"t.selectionSet"}}}}})";
+
+// A reply of `Lims_CloseRows` naming @p keys as changed.
+std::string closedReply(std::vector<std::int64_t> const& keys) {
+    std::string rows;
+    for (auto const key : keys) {
+        rows += (rows.empty() ? "" : ",") + std::string{R"({"key":)"} + std::to_string(key) + "}";
+    }
+    return R"({"rows":{"rows":[)" + rows + R"(],"failed":[]}})";
+}
+
+// The keys of a list.
+std::vector<morph::table::RowId> idsOf(std::initializer_list<std::int64_t> keys) {
+    std::vector<morph::table::RowId> out;
+    for (auto const key : keys) {
+        out.emplace_back(key);
+    }
+    return out;
+}
+
+// The keys @p first to @p first + @p count - 1.
+std::vector<std::int64_t> keyRange(std::int64_t first, std::int64_t count) {
+    std::vector<std::int64_t> out;
+    for (std::int64_t key = first; key < first + count; ++key) {
+        out.push_back(key);
+    }
+    return out;
+}
+
+// Mounts kRetainTable (or @p table) with `close`, answering the describe request and the first page.
+std::unique_ptr<morph::ui::Screen> mountRetaining(TableHarness& h, std::string_view table = kRetainTable) {
+    addAction(h, "Lims_CloseRows", std::string{kSelectionSchema}, samplesAction());
+    return mountSelection(h, table, kCloseMutations);
+}
+
+}  // namespace
+
+TEST_CASE("retained rows: the rows an action changed stay in view", "[ui][table][retain]") {
+    TableHarness h;
+    auto screen = mountRetaining(h);
+    int const table = h.byTestId("Table", "t");
+    runMutation(h, "close");
+    settleMutation(h, "close", closedReply({1, 2, 3}));
+    REQUIRE(openCalls(h, "Table.samples") == 1);
+    CHECK(lastQuery(h).retain == idsOf({1, 2, 3}));
+    // The keyed refetch of 1, 2 and 3 (and the probe of the first held row): they no longer match, and stay.
+    replyPage(h, selectionReply({{0}, {1, "closed"}, {2, "closed"}, {3, "closed"}}, 6, "v2", {1, 2, 3}, true));
+    RowMarks const unmatched{.unmatched = true, .tooltip = "This row no longer matches the filter"};
+    CHECK(rowMarks(h, std::int64_t{1}) == unmatched);
+    CHECK(rowMarks(h, std::int64_t{3}) == unmatched);
+    CHECK(rowMarks(h, std::int64_t{4}) == RowMarks{});
+    CHECK(elementOf(*screen, "t").tableRows->counts().retained == 3);
+    auto const standing = [&h, table] {
+        TableStatus const status = statusOf(h, table);
+        CHECK(status.standing == "3 rows shown that no longer match");
+        REQUIRE(status.standingEntries.size() == 1);
+        CHECK(status.standingEntries.front().label == "Show only matching rows");
+        return status.standingEntries.front().id;
+    };
+    standing();
+    h.advance(std::chrono::milliseconds{7000});
+    h.backend.clickRow(table, std::int64_t{4});
+    h.settle();
+    standing();
+    // A later query still carries them.
+    fireEvent(h, "Lims_SampleModel.samples", {4});
+    CHECK(lastQuery(h).retain == idsOf({1, 2, 3}));
+    // The keyed reply of 4 and the probe 0, at their view rows.
+    replyPage(h, R"({"revision":")" + selectionDescription().revision +
+                     R"(","columns":["id","status","lockedBy"],"keys":[0,4],"rows":[[0,"open",""],[4,"open",""]],)"
+                     R"("total":6,"offset":0,"viewRevision":"v2","indices":[0,4]})");
+    CHECK(rowMarks(h, std::int64_t{2}) == unmatched);
+    // A selection of the view names the retained rows, and the revision of the view they are in.
+    h.backend.selectAll(table);
+    h.settle();
+    REQUIRE(elementValue(h, "t", "selectionSet").field("view") != nullptr);
+    CHECK(*elementValue(h, "t", "selectionSet").field("view")->field("retained") == value("[1,2,3]"));
+    CHECK(*elementValue(h, "t", "selectionSet").field("view")->field("revision") == Value{std::string{"v2"}});
+    SECTION("Show only matching rows") {
+        h.backend.chooseStatusEntry(table, standing());
+        h.settle();
+        CHECK(lastQuery(h).retain.empty());
+        CHECK(elementValue(h, "t", "selectionSet") == value(R"({"keys":[]})"));
+        replyPage(h, selectionPage({{0}, {4}, {5}}, 3, "v3"));
+        CHECK(statusOf(h, table).standing.empty());
+        CHECK(rowMarks(h, std::int64_t{4}) == RowMarks{});
+    }
+    SECTION("a filter change") {
+        REQUIRE(elementOf(*screen, "t").tableRows->setFilter(morph::table::FilterSpec{}));
+        h.settle();
+        CHECK(lastQuery(h).retain.empty());
+        CHECK(elementValue(h, "t", "selectionSet") == value(R"({"keys":[]})"));
+        CHECK(statusOf(h, table).standing.empty());
+    }
+}
+// Mutation: retained keys dropped when the next page arrives, which loses them from the second query.
+
+TEST_CASE("retained rows: an action over the bound retains none", "[ui][table][retain]") {
+    TableHarness h;
+    auto screen = mountRetaining(h);
+    int const table = h.byTestId("Table", "t");
+    auto const retainedNow = [&screen] { return elementOf(*screen, "t").tableWindow->retained().size(); };
+    SECTION("9,999 retained") {
+        runMutation(h, "close");
+        settleMutation(h, "close", closedReply(keyRange(100, 9'999)));
+        REQUIRE(retainedNow() == 9'999);
+        runMutation(h, "close");
+        settleMutation(h, "close", closedReply({1, 2}));
+        CHECK(retainedNow() == 9'999);
+        CHECK(statusOf(h, table).message == "The changed rows are not kept in view: a table keeps at most 10,000");
+    }
+    SECTION("9,998 retained") {
+        runMutation(h, "close");
+        settleMutation(h, "close", closedReply(keyRange(100, 9'998)));
+        REQUIRE(retainedNow() == 9'998);
+        runMutation(h, "close");
+        settleMutation(h, "close", closedReply({1, 2}));
+        CHECK(retainedNow() == 10'000);
+        CHECK(statusOf(h, table).message.empty());
+    }
+}
+// Mutation: a partial add up to the bound, which retains one of the two.
+
+TEST_CASE("retained rows: an event before its action's reply is held", "[ui][table][retain]") {
+    TableHarness h;
+    SECTION("with retainChanged") {
+        auto screen = mountRetaining(h);
+        runMutation(h, "close");
+        std::size_t const sent = h.dispatcher.count("Table.samples");
+        fireEvent(h, "Lims_SampleModel.samples", {1});
+        CHECK(h.dispatcher.count("Table.samples") == sent);  // held: no query
+        settleMutation(h, "close", closedReply({1}));
+        REQUIRE(h.dispatcher.count("Table.samples") == sent + 1);  // the event's and the reply's, as one
+        table::TableQuery const refetch = lastQuery(h);
+        CHECK(refetch.retain == idsOf({1}));
+        REQUIRE(refetch.keys.has_value());
+        CHECK(std::ranges::contains(*refetch.keys, table::RowId{std::int64_t{1}}));
+        replyPage(h, selectionReply({{0}, {1, "closed"}}, 6, "v2", {1}, true));
+
+        // A run whose reply is slower than the hold: the event's query goes when the hold runs out.
+        runMutation(h, "close");
+        fireEvent(h, "Lims_SampleModel.samples", {2});
+        CHECK(h.dispatcher.count("Table.samples") == sent + 1);
+        h.advance(std::chrono::milliseconds{1999});
+        CHECK(h.dispatcher.count("Table.samples") == sent + 1);
+        h.advance(std::chrono::milliseconds{1});
+        CHECK(h.dispatcher.count("Table.samples") == sent + 2);
+        CHECK(lastQuery(h).retain == idsOf({1}));
+        // The reply then sends only its retained rows' refetch.
+        settleMutation(h, "close", closedReply({2}));
+        CHECK(h.dispatcher.count("Table.samples") == sent + 3);
+        CHECK(lastQuery(h).retain == idsOf({1, 2}));
+    }
+    SECTION("without retainChanged the event's query goes at once") {
+        auto screen = mountRetaining(h, kSelectionTable);
+        runMutation(h, "close");
+        std::size_t const sent = h.dispatcher.count("Table.samples");
+        fireEvent(h, "Lims_SampleModel.samples", {1});
+        CHECK(h.dispatcher.count("Table.samples") == sent + 1);
+        settleMutation(h, "close", closedReply({1}));
+        CHECK(h.dispatcher.count("Table.samples") == sent + 1);
+        CHECK(lastQuery(h).retain.empty());
+    }
+}
+// Mutation: no hold, under which row 1 leaves the view and comes back.

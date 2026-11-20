@@ -690,6 +690,8 @@ public:
     void setSelectColumn(bool shown) override;
     void setSelectAllLabel(std::string_view label) override;
     void setRowLabel(ui::Widget& row, std::string_view label) override;
+    /// Throws std::logic_error when @p row is not one of this table's rows.
+    void setRowMarks(ui::Widget& row, ui::RowMarks const& marks) override;
     void setRowHeading(ui::Widget& row) override;
     /// Throws std::logic_error when @p row is not one of this table's rows.
     void setRowSpans(ui::Widget& row, std::vector<ui::RowSpan> const& spans) override;

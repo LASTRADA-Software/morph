@@ -123,6 +123,10 @@ public:
     [[nodiscard]] std::string const& effectiveSurface() const noexcept;
     /// Keeps a table row's tone, which its cells draw in.
     void applyRowTone(std::optional<ui::Tone> tone) noexcept { _rowTone = tone; }
+    /// Keeps whether a table row is muted, which its cells draw dim.
+    void applyRowMuted(bool muted) noexcept { _rowMuted = muted; }
+    /// Whether the widget draws dim: its own row is muted, or its nearest container's.
+    [[nodiscard]] bool effectiveRowMuted() const noexcept;
     /// The tone the widget draws in: its own row tone, or else its nearest container's; none for no toned row.
     [[nodiscard]] std::optional<ui::Tone> effectiveRowTone() const noexcept;
     /// Sets the text core::tui's hover shows; empty shows none.
@@ -271,6 +275,7 @@ private:
     std::uint64_t _sequence;
     std::string _surface;
     std::optional<ui::Tone> _rowTone;
+    bool _rowMuted = false;
     std::string _tooltip;
     std::vector<std::string> _chords;
     std::function<void(std::string)> _onChord;

@@ -2387,6 +2387,28 @@ public:
         store().set(rowId, "tone", tone ? enumName(*tone) : std::string{"none"});
     }
 
+    /// @brief Records the row's marks by the row's key, which `RecordingBackend::rowMarks` reads.
+    /// @param row   One of this table's rows.
+    /// @param marks The marks.
+    /// @throws std::logic_error when @p row is not this table's child.
+    void setRowMarks(Widget& row, RowMarks const& marks) override {
+        int const rowId = store().idOf(row);
+        if (store().at(rowId).parent != id()) {
+            throw std::logic_error{"RecordingBackend: setRowMarks of a widget that is not this table's row"};
+        }
+        if (auto const key = _rowKeys.find(rowId); key != _rowKeys.end()) {
+            _rowMarks.insert_or_assign(key->second, marks);
+        }
+    }
+
+    /// @brief The last marks `setRowMarks` set on the row with a key.
+    /// @param key The row's key.
+    /// @return The marks; none before any.
+    [[nodiscard]] std::optional<RowMarks> rowMarks(Key const& key) const {
+        auto const found = _rowMarks.find(key);
+        return found == _rowMarks.end() ? std::nullopt : std::optional{found->second};
+    }
+
     /// @brief Records property `selectColumn`.
     /// @param shown Whether the select column is drawn.
     void setSelectColumn(bool shown) override { set("selectColumn", formatBool(shown)); }
@@ -3108,6 +3130,8 @@ private:
     std::optional<std::vector<Key>> _requested;
     // Engaged while the selection is of the view: every row but these keys is marked.
     std::optional<std::vector<Key>> _viewExcept;
+    // The last marks of each row, by its key.
+    std::map<Key, RowMarks> _rowMarks;
     std::function<void(std::string)> _onStatusEntry;
     // The row a Shift-click's range starts from: the last row clicked without Shift.
     std::optional<Key> _anchor;
@@ -4174,6 +4198,17 @@ public:
         if (reachable(record)) {
             invoke(record.callbacks.retry);
         }
+    }
+
+    /// @brief The last marks the mount set on a table's row.
+    /// @param widgetId The table.
+    /// @param key      The row's key.
+    /// @return The marks; none before any `setRowMarks` of that row.
+    /// @throws std::logic_error when the widget is not a table.
+    [[nodiscard]] std::optional<RowMarks> rowMarks(int widgetId, Key const& key) {
+        detail::Record const& record = expectKind(widgetId, "rowMarks", {"Table"});
+        auto const* const table = dynamic_cast<detail::FakeTable const*>(record.widget);
+        return table == nullptr ? std::nullopt : table->rowMarks(key);
     }
 
     /// @brief A table's status line, as the mount last set it.
