@@ -107,7 +107,9 @@ MorphWidget {
             return true
         }
         const activate = event.key === Qt.Key_Return || event.key === Qt.Key_Enter || event.key === Qt.Key_Space
-        if (sortable && activate && (mods === Qt.NoModifier || mods === Qt.ShiftModifier)) {
+        // Ctrl, as on a click, has no meaning on a header and sorts as a plain key.
+        if (sortable && activate
+                && (mods === Qt.NoModifier || mods === Qt.ShiftModifier || mods === Qt.ControlModifier)) {
             root.fire("sort", {"column": column, "shift": mods === Qt.ShiftModifier})
             return true
         }
@@ -1770,9 +1772,16 @@ MorphWidget {
                                                                               : Accessible.MenuItem
                         Accessible.name: menuEntry.modelData.label ?? ""
                         Accessible.description: menuEntry.modelData.description ?? ""
-                        Accessible.checkable: menuEntry.checkable
-                        Accessible.checked: menuEntry.modelData.checked === true
-                        onClicked: configMenu.activate(menuEntry.index)
+                        // On the button itself, not the attached `Accessible`: a button writes its own state over
+                        // the attached one once assistive technology is active.
+                        checkable: menuEntry.checkable
+                        checked: menuEntry.modelData.checked === true
+                        // A click on a checkable button toggles `checked` and breaks the binding; the entry's state is
+                        // the document's, so the binding is put back before the click is acted on.
+                        onClicked: {
+                            entryButton.checked = Qt.binding(() => menuEntry.modelData.checked === true)
+                            configMenu.activate(menuEntry.index)
+                        }
                     }
                     Label {
                         textFormat: Text.PlainText
