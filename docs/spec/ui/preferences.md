@@ -109,9 +109,10 @@ layout as a record (`order`, `hidden`, `pinned`, `widths`, `groups`, `units`) an
 saved view the arrangement was taken from, or `null`; both read what the table's stored state loaded, and the
 document's default until it has. A choice for either (`Screen::setPreference`) is written into the table's state and
 saved as any change of its arrangement is, debounced; a choice that does not read as a layout, or as a name or
-`null`, is refused. A `saved` point names its table with `of`, as a `columns` point does. A table over `rows` has no
-saved view's name, so a `saved` point naming one holds its choice as any other preference does; so does a `columns`
-point naming a table over `rows` that keeps no state, and a `saved` point without `of`, which names no table.
+`null`, is refused. A `saved` point names its table with `of`, as a `columns` point does, and reads and writes the
+state's `view` on a table over `rows` as on a model-backed table. A point naming a table over `rows` that keeps no
+state holds its choice as any other preference does, and so does a `saved` point without `of`, which names no
+table.
 
 ## The client
 

@@ -1253,6 +1253,24 @@ struct HeaderMenuInput {
     Configure allowed = Configure::All;
 };
 
+/// @brief What a table's "Views" submenu is built from.
+struct ViewsMenuInput {
+    /// @brief The names of the user's own views, in their document's order.
+    std::vector<std::string> own;
+    /// @brief The names of the shared views, in their document's order; empty when the store does not share.
+    std::vector<std::string> shared;
+    /// @brief The view the arrangement was taken from: the state's `view`; none when it names none.
+    std::optional<std::string> current;
+    /// @brief Whether `current` is a shared view, applied from "Shared views", rather than one of the user's own.
+    bool currentShared = false;
+    /// @brief Whether the arrangement differs from `current` as fitted to the table.
+    bool modified = false;
+    /// @brief Whether the default view's sort and filters apply at every mount.
+    bool defaultOnMount = false;
+    /// @brief Whether the store keeps the shared views for everyone, which offers "Publish view…".
+    bool shares = false;
+};
+
 /// @brief What a table's own menu is built from.
 struct TableMenuInput {
     /// @brief Whether any column or group has a filter.
@@ -1261,6 +1279,8 @@ struct TableMenuInput {
     std::vector<MenuGroup> groups;
     /// @brief What the table lets its user change.
     Configure allowed = Configure::All;
+    /// @brief The saved views; none for a table that keeps no state, which has no "Views".
+    std::optional<ViewsMenuInput> views;
 };
 
 namespace detail {
@@ -1308,7 +1328,81 @@ namespace detail {
     return "Filter " + group.label + ", " + std::to_string(group.columns) + " columns…";
 }
 
+/// @brief A heading line: a label that is not a command.
+/// @param label The caption.
+/// @return The entry, which no backend lets a user choose.
+[[nodiscard]] inline TableMenuEntry heading(std::string label) {
+    MenuEntry entry;
+    entry.label = std::move(label);
+    entry.heading = true;
+    entry.enabled = false;
+    return {.entry = std::move(entry), .command = MenuCommand::ApplyView, .argument = {}, .items = {}};
+}
+
+/// @brief A view's entry in "Views": checked while it is the view the arrangement was taken from, and labelled
+///        `{name} (modified)` while the arrangement differs from it.
+/// @param name     The view's name.
+/// @param command  `ApplyView` or `ApplySharedView`.
+/// @param current  Whether it is the view the arrangement was taken from.
+/// @param modified Whether the arrangement differs from it.
+/// @return The entry; its argument is the name.
+[[nodiscard]] inline TableMenuEntry viewEntry(std::string const& name, MenuCommand command, bool current,
+                                              bool modified) {
+    TableMenuEntry entry =
+        detail::command(current && modified ? name + " (modified)" : name, command, true, {}, name);
+    entry.entry.checked = current;
+    return entry;
+}
+
 }  // namespace detail
+
+/// @brief A table's "Views" submenu.
+///
+/// In order, each part with a separator between: the user's own views, one checkable entry a view, checked while
+/// the arrangement was taken from it and labelled `{name} (modified)` while it differs from it; "Save view…",
+/// "Rename view…", "Remove view" and "Set as default", the last three enabled while the arrangement was taken from
+/// one of the user's own views, then "Start from the default view", checkable; while there are shared views, the
+/// heading "Shared views" and one entry a shared view, marked as an own view is; then "Save as my view" while the
+/// arrangement was taken from a shared view, and "Publish view…" while the store shares.
+/// @param input What the submenu is built from.
+/// @return The "Views" entry, its submenu in `items`.
+[[nodiscard]] inline TableMenuEntry viewsMenu(ViewsMenuInput const& input) {
+    using detail::command;
+    bool const onOwn =
+        input.current.has_value() && !input.currentShared && std::ranges::contains(input.own, *input.current);
+    bool const onShared =
+        input.current.has_value() && input.currentShared && std::ranges::contains(input.shared, *input.current);
+    std::vector<TableMenuEntry> own;
+    for (std::string const& name : input.own) {
+        own.push_back(detail::viewEntry(name, MenuCommand::ApplyView, onOwn && name == *input.current, input.modified));
+    }
+    std::vector<TableMenuEntry> manage;
+    manage.push_back(command("Save view…", MenuCommand::SaveView));
+    manage.push_back(command("Rename view…", MenuCommand::RenameView, onOwn));
+    manage.push_back(command("Remove view", MenuCommand::RemoveView, onOwn));
+    manage.push_back(command("Set as default", MenuCommand::SetDefaultView, onOwn));
+    TableMenuEntry start = command("Start from the default view", MenuCommand::DefaultOnMount);
+    start.entry.checked = input.defaultOnMount;
+    manage.push_back(std::move(start));
+    std::vector<TableMenuEntry> shared;
+    if (!input.shared.empty()) {
+        shared.push_back(detail::heading("Shared views"));
+        for (std::string const& name : input.shared) {
+            shared.push_back(
+                detail::viewEntry(name, MenuCommand::ApplySharedView, onShared && name == *input.current, input.modified));
+        }
+    }
+    std::vector<TableMenuEntry> sharing;
+    if (onShared) {
+        sharing.push_back(command("Save as my view", MenuCommand::SaveAsMyView, true, {}, *input.current));
+    }
+    if (input.shares) {
+        sharing.push_back(command("Publish view…", MenuCommand::PublishView));
+    }
+    TableMenuEntry views = command("Views", MenuCommand::ApplyView);
+    views.items = detail::joinSections({std::move(own), std::move(manage), std::move(shared), std::move(sharing)});
+    return views;
+}
 
 /// @brief A column's header menu.
 ///
@@ -1376,8 +1470,8 @@ namespace detail {
 /// @brief A table's own menu.
 ///
 /// "Columns…" (while the table allows any arranging), "Sort…", one "Filter {group}, {k} columns…" a group,
-/// "Clear all filters" (disabled with no filter), "Reset columns" (while any arranging is allowed); then "Copy"
-/// (`Ctrl+C`) and "Copy with headers".
+/// "Clear all filters" (disabled with no filter), "Reset columns" (while any arranging is allowed); then "Views"
+/// (`viewsMenu`) on a table that keeps a state; then "Copy" (`Ctrl+C`) and "Copy with headers".
 /// @param input What the menu is built from.
 /// @return The entries.
 [[nodiscard]] inline std::vector<TableMenuEntry> tableMenu(TableMenuInput const& input) {
@@ -1395,10 +1489,14 @@ namespace detail {
     if (arranging) {
         configure.push_back(command("Reset columns", MenuCommand::ResetColumns));
     }
+    std::vector<TableMenuEntry> views;
+    if (input.views) {
+        views.push_back(viewsMenu(*input.views));
+    }
     std::vector<TableMenuEntry> copy;
     copy.push_back(command("Copy", MenuCommand::Copy, true, "Ctrl+C"));
     copy.push_back(command("Copy with headers", MenuCommand::CopyWithHeaders));
-    return detail::joinSections({std::move(configure), std::move(copy)});
+    return detail::joinSections({std::move(configure), std::move(views), std::move(copy)});
 }
 
 /// @brief What a backend shows for a table's menu.
@@ -1419,8 +1517,8 @@ namespace detail {
 /// @brief The entry a backend reports chosen.
 /// @param entries The menu.
 /// @param path    The indices, from the top menu down through each submenu.
-/// @return The entry; null when the path leaves the menu or names a separator, a disabled entry or an entry with
-///         a submenu.
+/// @return The entry; null when the path leaves the menu or names a separator, a heading, a disabled entry or an
+///         entry with a submenu.
 [[nodiscard]] inline TableMenuEntry const* chosen(std::span<TableMenuEntry const> entries,
                                                   std::span<std::size_t const> path) {
     TableMenuEntry const* found = nullptr;
@@ -1429,7 +1527,7 @@ namespace detail {
             return nullptr;
         }
         found = &entries[index];
-        if (found->entry.separator || !found->entry.enabled) {
+        if (found->entry.separator || found->entry.heading || !found->entry.enabled) {
             return nullptr;
         }
         entries = found->items;
