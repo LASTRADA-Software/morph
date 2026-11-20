@@ -148,6 +148,8 @@ Public Attributes</h2></td></tr>
 <tr class="memdesc:a5d61bf7f794787808d3fffcadc5d51da"><td class="mdescLeft">&#160;</td><td class="mdescRight"><a class="el" href="../../dd/dfe/structmorph_1_1ui_1_1Text.html" title="Static or bound text.">Text</a> drawn muted at the input's leading edge inside it, and announced before the value, such as <span class="tt">±</span>; refused on a multiline input.  <br /></td></tr>
 <tr class="memitem:adc174648121228f54478f04f296071bb" id="r_adc174648121228f54478f04f296071bb"><td class="memItemLeft">bool&#160;</td><td class="memItemRight"><a class="el" href="#adc174648121228f54478f04f296071bb">mono</a> = false</td></tr>
 <tr class="memdesc:adc174648121228f54478f04f296071bb"><td class="mdescLeft">&#160;</td><td class="mdescRight">Whether the text and the placeholder are drawn in the <span class="tt"><a class="el" href="#adc174648121228f54478f04f296071bb" title="Whether the text and the placeholder are drawn in the mono text role&#39;s face.">mono</a></span> text role's face.  <br /></td></tr>
+<tr class="memitem:aa54830f3b1db5be8fe8aef1fa8b7e88e" id="r_aa54830f3b1db5be8fe8aef1fa8b7e88e"><td class="memItemLeft">bool&#160;</td><td class="memItemRight"><a class="el" href="#aa54830f3b1db5be8fe8aef1fa8b7e88e">wrap</a> = true</td></tr>
+<tr class="memdesc:aa54830f3b1db5be8fe8aef1fa8b7e88e"><td class="mdescLeft">&#160;</td><td class="mdescRight">Whether a multiline input wraps a line longer than the field. <span class="tt">false</span> writes <span class="tt"><a class="el" href="#aa54830f3b1db5be8fe8aef1fa8b7e88e" title="Whether a multiline input wraps a line longer than the field. false writes wrap: false,...">wrap</a>: false</span>, and the field scrolls sideways instead; <span class="tt">true</span> writes no key. Refused on an input that is not multiline.  <br /></td></tr>
 <tr class="memitem:a989b4688062853a458daf757184d7784" id="r_a989b4688062853a458daf757184d7784"><td class="memItemLeft">std::optional&lt; <a class="el" href="../../d9/dd9/alignment_8hpp.html#af998a2ea944ede576a21f85c17bd065a">Align</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a989b4688062853a458daf757184d7784">align</a></td></tr>
 <tr class="memdesc:a989b4688062853a458daf757184d7784"><td class="mdescLeft">&#160;</td><td class="mdescRight">Where the text sits: <span class="tt">Start</span>, <span class="tt">Center</span> or <span class="tt">End</span>; absent writes no key, the start. Refused on a multiline input; <span class="tt">Stretch</span> is refused by the loader.  <br /></td></tr>
 <tr class="memitem:ab52fc02a9ceed331efe8c99c13eb1d9c" id="r_ab52fc02a9ceed331efe8c99c13eb1d9c"><td class="memItemLeft">std::optional&lt; <a class="el" href="../../d1/dc0/author_8hpp.html#af481855c6c30bd6eee085818733d43df">Commit</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#ab52fc02a9ceed331efe8c99c13eb1d9c">commitOn</a></td></tr>
@@ -344,6 +346,24 @@ Public Attributes</h2></td></tr>
 
 </div>
 </div>
+<a id="aa54830f3b1db5be8fe8aef1fa8b7e88e" name="aa54830f3b1db5be8fe8aef1fa8b7e88e"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#aa54830f3b1db5be8fe8aef1fa8b7e88e">&#9670;&#160;</a></span>wrap</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">bool morph::ui::author::TextInputOptions::wrap = true</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>Whether a multiline input wraps a line longer than the field. <span class="tt">false</span> writes <span class="tt"><a class="el" href="#aa54830f3b1db5be8fe8aef1fa8b7e88e" title="Whether a multiline input wraps a line longer than the field. false writes wrap: false,...">wrap</a>: false</span>, and the field scrolls sideways instead; <span class="tt">true</span> writes no key. Refused on an input that is not multiline. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l03788">3788</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+
+</div>
+</div>
 <a id="a989b4688062853a458daf757184d7784" name="a989b4688062853a458daf757184d7784"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a989b4688062853a458daf757184d7784">&#9670;&#160;</a></span>align</h2>
 
@@ -358,7 +378,7 @@ Public Attributes</h2></td></tr>
 
 <p>Where the text sits: <span class="tt">Start</span>, <span class="tt">Center</span> or <span class="tt">End</span>; absent writes no key, the start. Refused on a multiline input; <span class="tt">Stretch</span> is refused by the loader. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l03788">3788</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l03791">3791</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -376,7 +396,7 @@ Public Attributes</h2></td></tr>
 
 <p>When the draft commits. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l03790">3790</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l03793">3793</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -394,7 +414,7 @@ Public Attributes</h2></td></tr>
 
 <p><a class="el" href="../../dd/de0/classmorph_1_1ui_1_1author_1_1Commands.html" title="A command list, run as one batch.">Commands</a> run on every edit. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l03792">3792</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l03795">3795</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -412,7 +432,7 @@ Public Attributes</h2></td></tr>
 
 <p><a class="el" href="../../dd/de0/classmorph_1_1ui_1_1author_1_1Commands.html" title="A command list, run as one batch.">Commands</a> run on a commit. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l03794">3794</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l03797">3797</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -430,7 +450,7 @@ Public Attributes</h2></td></tr>
 
 <p><a class="el" href="../../dd/de0/classmorph_1_1ui_1_1author_1_1Commands.html" title="A command list, run as one batch.">Commands</a> run on Enter in a single-line input. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l03796">3796</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l03799">3799</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>

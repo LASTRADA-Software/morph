@@ -10,6 +10,7 @@ var classmorph_1_1ui_1_1testing_1_1detail_1_1FakeTextInput =
     [ "setUnit", "db/d64/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeTextInput.html#af48362076821ac99777cfbc06a1201f6", null ],
     [ "setPrefix", "db/d64/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeTextInput.html#ad5f29b24a19a236539a16c9b5d051320", null ],
     [ "setMono", "db/d64/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeTextInput.html#abd640658df49ce33be2abb33611d9ae2", null ],
+    [ "setWrap", "db/d64/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeTextInput.html#ae19f1de5da88bb1f5ba50fdb44a39864", null ],
     [ "setAlign", "db/d64/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeTextInput.html#a804297d5f74f4d5756bec814d0b0a1ca", null ],
     [ "setDecimals", "db/d64/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeTextInput.html#a4180a94cc62059010620e1f06c4d8497", null ],
     [ "setIcon", "db/d64/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeTextInput.html#a1095a354e94a1f1a6bac5816919d22c5", null ],

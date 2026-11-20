@@ -1,5 +1,13 @@
 var NAVTREEINDEX28 =
 {
+"da/d56/classmorph_1_1qt__quick_1_1QtScheduler.html#ae5f8575e41dbc22b1a71cfa7586d5c79":[3,0,0,19,9,1],
+"da/d5d/classmorph_1_1ui_1_1CustomScreenSync.html":[1,0,0,1,87],
+"da/d5d/classmorph_1_1ui_1_1CustomScreenSync.html":[3,0,0,28,89],
+"da/d5d/classmorph_1_1ui_1_1CustomScreenSync.html#a06c00adb19f7534aa488e929522a7cfa":[1,0,0,1,87,2],
+"da/d5d/classmorph_1_1ui_1_1CustomScreenSync.html#a06c00adb19f7534aa488e929522a7cfa":[3,0,0,28,89,2],
+"da/d5d/classmorph_1_1ui_1_1CustomScreenSync.html#a157da142f50b9ab80432090298743906":[1,0,0,1,87,6],
+"da/d5d/classmorph_1_1ui_1_1CustomScreenSync.html#a157da142f50b9ab80432090298743906":[3,0,0,28,89,6],
+"da/d5d/classmorph_1_1ui_1_1CustomScreenSync.html#a16e3145b41c8c4c60a51f95a2a089987":[1,0,0,1,87,8],
 "da/d5d/classmorph_1_1ui_1_1CustomScreenSync.html#a16e3145b41c8c4c60a51f95a2a089987":[3,0,0,28,89,8],
 "da/d5d/classmorph_1_1ui_1_1CustomScreenSync.html#a2b96f5e499c8deda27129aaeb41303a2":[1,0,0,1,87,3],
 "da/d5d/classmorph_1_1ui_1_1CustomScreenSync.html#a2b96f5e499c8deda27129aaeb41303a2":[3,0,0,28,89,3],
@@ -241,13 +249,5 @@ var NAVTREEINDEX28 =
 "da/d97/classmorph_1_1ui_1_1Screen.html#ae568672f97dc9bc9f801cd3d42ba16dd":[1,0,0,1,254,33],
 "da/d97/classmorph_1_1ui_1_1Screen.html#ae568672f97dc9bc9f801cd3d42ba16dd":[3,0,0,28,256,33],
 "da/d97/classmorph_1_1ui_1_1Screen.html#ae74b442292a9f4d00fbc1cb90d6159cd":[1,0,0,1,254,23],
-"da/d97/classmorph_1_1ui_1_1Screen.html#ae74b442292a9f4d00fbc1cb90d6159cd":[3,0,0,28,256,23],
-"da/d97/classmorph_1_1ui_1_1Screen.html#af23429d9c1908872f1d90bf979b33eca":[1,0,0,1,254,32],
-"da/d97/classmorph_1_1ui_1_1Screen.html#af23429d9c1908872f1d90bf979b33eca":[3,0,0,28,256,32],
-"da/d97/classmorph_1_1ui_1_1Screen.html#afb39aab651a55d88c879c325b568b8f5":[1,0,0,1,254,12],
-"da/d97/classmorph_1_1ui_1_1Screen.html#afb39aab651a55d88c879c325b568b8f5":[3,0,0,28,256,12],
-"da/d9b/classmorph_1_1reactive_1_1Query.html":[1,0,0,0,6],
-"da/d9b/classmorph_1_1reactive_1_1Query.html":[3,0,0,20,7],
-"da/d9b/classmorph_1_1reactive_1_1Query.html#a1682ae152095ef970860ebf894732563":[1,0,0,0,6,8],
-"da/d9b/classmorph_1_1reactive_1_1Query.html#a1682ae152095ef970860ebf894732563":[3,0,0,20,7,8]
+"da/d97/classmorph_1_1ui_1_1Screen.html#ae74b442292a9f4d00fbc1cb90d6159cd":[3,0,0,28,256,23]
 };

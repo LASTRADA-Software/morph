@@ -10,6 +10,7 @@ var classmorph_1_1ui_1_1TextInputWidget =
     [ "setUnit", "d9/d62/classmorph_1_1ui_1_1TextInputWidget.html#a336c18c4c6de6bd5758868562d2f3f95", null ],
     [ "setPrefix", "d9/d62/classmorph_1_1ui_1_1TextInputWidget.html#ad2d9b6717e87f6deb035bafb6dbec3e9", null ],
     [ "setMono", "d9/d62/classmorph_1_1ui_1_1TextInputWidget.html#a292f436e896c07c3caae37755a765eb5", null ],
+    [ "setWrap", "d9/d62/classmorph_1_1ui_1_1TextInputWidget.html#ab5559a178a735240ad4e7cd8f4a35862", null ],
     [ "setAlign", "d9/d62/classmorph_1_1ui_1_1TextInputWidget.html#a6372c3807299142f86f4fa93df9a25b9", null ],
     [ "setDecimals", "d9/d62/classmorph_1_1ui_1_1TextInputWidget.html#a4ac7ae0308c01088d5c1aef0354bce2b", null ],
     [ "setIcon", "d9/d62/classmorph_1_1ui_1_1TextInputWidget.html#a73b512d9d4b745c52cb3c215764ccd42", null ],

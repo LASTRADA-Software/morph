@@ -1,5 +1,15 @@
 var NAVTREEINDEX44 =
 {
+"df/d58/structmorph_1_1ui_1_1chat_1_1ChatClient_1_1DraftProposal.html#ac9eebb5e78454292cfeeed8d3029dab9":[3,0,0,28,1,2,1,3],
+"df/d58/structmorph_1_1ui_1_1chat_1_1ChatClient_1_1DraftProposal.html#af2a061b36ccd3166a8458fb5033f9f60":[3,0,0,28,1,2,1,2],
+"df/d58/structmorph_1_1ui_1_1chat_1_1ChatClient_1_1DraftProposal.html#af3be0553e666994d76a5c7959d2de387":[3,0,0,28,1,2,1,0],
+"df/d5f/structmorph_1_1forms_1_1CollectionColumn.html":[3,0,0,10,8],
+"df/d5f/structmorph_1_1forms_1_1CollectionColumn.html#a49278112254b8934c2ac9e65bec61b82":[3,0,0,10,8,0],
+"df/d5f/structmorph_1_1forms_1_1CollectionColumn.html#a6955863e56212b73777b5bde848d002c":[3,0,0,10,8,4],
+"df/d5f/structmorph_1_1forms_1_1CollectionColumn.html#a77c438ebc712657b30e65210309cbb2b":[3,0,0,10,8,2],
+"df/d5f/structmorph_1_1forms_1_1CollectionColumn.html#a78eabd23c87892dd0fa8e4e997637b5b":[3,0,0,10,8,3],
+"df/d5f/structmorph_1_1forms_1_1CollectionColumn.html#ab89c00d5beb44deb180a1b057369d8e3":[3,0,0,10,8,1],
+"df/d5f/structmorph_1_1forms_1_1CollectionColumn.html#ae3aa6592553b2134277ee983289be753":[3,0,0,10,8,5],
 "df/d65/structmorph_1_1forms_1_1Choice.html":[3,0,0,10,3],
 "df/d65/structmorph_1_1forms_1_1Choice.html#a05321a797a43374ea683f6ff314a7ed8":[3,0,0,10,3,5],
 "df/d65/structmorph_1_1forms_1_1Choice.html#a13a289f9fadeea894749645063705491":[3,0,0,10,3,3],
@@ -195,7 +205,7 @@ var NAVTREEINDEX44 =
 "df/dca/structmorph_1_1units_1_1QuantityBounds.html#a03b901f9db68c88e0863d17cea4a2f83":[3,0,0,29,3,1],
 "df/dca/structmorph_1_1units_1_1QuantityBounds.html#acf4cfd34714e7f3740da031fd024add6":[3,0,0,29,3,0],
 "df/dcb/banner__action__style_8hpp.html":[4,0,0,15,8],
-"df/dcb/banner__action__style_8hpp.html#a7a3752de94c380e4951bbe77e0f4b78a":[1,0,0,1,621],
+"df/dcb/banner__action__style_8hpp.html#a7a3752de94c380e4951bbe77e0f4b78a":[1,0,0,1,622],
 "df/dcb/banner__action__style_8hpp.html#a8f15da4d915398833431e23c6434910f":[1,0,0,1,442],
 "df/dcb/banner__action__style_8hpp.html#ab79d875040a797b3800fe539db31554f":[1,0,0,1,441],
 "df/dcb/banner__action__style_8hpp.html#abcdbf41d48641704b3f48955e356c69b":[1,0,0,1,387],
@@ -239,15 +249,5 @@ var NAVTREEINDEX44 =
 "df/dd2/structmorph_1_1ui_1_1author_1_1Emitted.html#aa115c9ef27c46b43430f6dfaf22fd5f7":[3,0,0,28,0,84,0],
 "df/dd2/structmorph_1_1ui_1_1author_1_1Emitted.html#af42f9078615866e324a51ddbcd5c9801":[3,0,0,28,0,84,2],
 "df/dd4/structmorph_1_1ui_1_1author_1_1detail_1_1ValueOf.html":[3,0,0,28,0,0,12],
-"df/dd4/structmorph_1_1ui_1_1author_1_1detail_1_1ValueOf.html#afb0e96842a5a10df37c2434c56592d4a":[3,0,0,28,0,0,12,0],
-"df/dd5/structmorph_1_1record_1_1derivedFrom.html":[3,0,0,21,3],
-"df/dd5/structmorph_1_1ui_1_1MenuTrigger.html":[1,0,0,1,185],
-"df/dd5/structmorph_1_1ui_1_1MenuTrigger.html":[3,0,0,28,187],
-"df/dd5/structmorph_1_1ui_1_1MenuTrigger.html#a1d7558251b47ea2df03f78904fac57eb":[1,0,0,1,185,6],
-"df/dd5/structmorph_1_1ui_1_1MenuTrigger.html#a1d7558251b47ea2df03f78904fac57eb":[3,0,0,28,187,6],
-"df/dd5/structmorph_1_1ui_1_1MenuTrigger.html#a5424c2201d76ede51130cb0ea07ce385":[1,0,0,1,185,0],
-"df/dd5/structmorph_1_1ui_1_1MenuTrigger.html#a5424c2201d76ede51130cb0ea07ce385":[3,0,0,28,187,0],
-"df/dd5/structmorph_1_1ui_1_1MenuTrigger.html#a8e258bf92bd084448b13ef1efdc8646a":[1,0,0,1,185,5],
-"df/dd5/structmorph_1_1ui_1_1MenuTrigger.html#a8e258bf92bd084448b13ef1efdc8646a":[3,0,0,28,187,5],
-"df/dd5/structmorph_1_1ui_1_1MenuTrigger.html#aac86bc7b22ee291d9f831bfeaf3cfe8c":[1,0,0,1,185,3]
+"df/dd4/structmorph_1_1ui_1_1author_1_1detail_1_1ValueOf.html#afb0e96842a5a10df37c2434c56592d4a":[3,0,0,28,0,0,12,0]
 };

@@ -10,6 +10,7 @@ var structmorph_1_1ui_1_1author_1_1TextInputOptions =
     [ "emphasis", "d3/d49/structmorph_1_1ui_1_1author_1_1TextInputOptions.html#a56e183412f6932bcc1913ffbee5bb84b", null ],
     [ "prefix", "d3/d49/structmorph_1_1ui_1_1author_1_1TextInputOptions.html#a5d61bf7f794787808d3fffcadc5d51da", null ],
     [ "mono", "d3/d49/structmorph_1_1ui_1_1author_1_1TextInputOptions.html#adc174648121228f54478f04f296071bb", null ],
+    [ "wrap", "d3/d49/structmorph_1_1ui_1_1author_1_1TextInputOptions.html#aa54830f3b1db5be8fe8aef1fa8b7e88e", null ],
     [ "align", "d3/d49/structmorph_1_1ui_1_1author_1_1TextInputOptions.html#a989b4688062853a458daf757184d7784", null ],
     [ "commitOn", "d3/d49/structmorph_1_1ui_1_1author_1_1TextInputOptions.html#ab52fc02a9ceed331efe8c99c13eb1d9c", null ],
     [ "onChange", "d3/d49/structmorph_1_1ui_1_1author_1_1TextInputOptions.html#a4ad323bac1c072cda2c2c62cc8eec111", null ],

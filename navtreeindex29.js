@@ -1,5 +1,13 @@
 var NAVTREEINDEX29 =
 {
+"da/d97/classmorph_1_1ui_1_1Screen.html#af23429d9c1908872f1d90bf979b33eca":[1,0,0,1,254,32],
+"da/d97/classmorph_1_1ui_1_1Screen.html#af23429d9c1908872f1d90bf979b33eca":[3,0,0,28,256,32],
+"da/d97/classmorph_1_1ui_1_1Screen.html#afb39aab651a55d88c879c325b568b8f5":[1,0,0,1,254,12],
+"da/d97/classmorph_1_1ui_1_1Screen.html#afb39aab651a55d88c879c325b568b8f5":[3,0,0,28,256,12],
+"da/d9b/classmorph_1_1reactive_1_1Query.html":[1,0,0,0,6],
+"da/d9b/classmorph_1_1reactive_1_1Query.html":[3,0,0,20,7],
+"da/d9b/classmorph_1_1reactive_1_1Query.html#a1682ae152095ef970860ebf894732563":[1,0,0,0,6,8],
+"da/d9b/classmorph_1_1reactive_1_1Query.html#a1682ae152095ef970860ebf894732563":[3,0,0,20,7,8],
 "da/d9b/classmorph_1_1reactive_1_1Query.html#a1a93b9215c0be3fa409f0f8feb70ef89":[1,0,0,0,6,2],
 "da/d9b/classmorph_1_1reactive_1_1Query.html#a1a93b9215c0be3fa409f0f8feb70ef89":[3,0,0,20,7,2],
 "da/d9b/classmorph_1_1reactive_1_1Query.html#a2f7acadde2c3f8a8787c13bede4305f0":[1,0,0,0,6,3],
@@ -241,13 +249,5 @@ var NAVTREEINDEX29 =
 "db/d11/structmorph_1_1ui_1_1BundleFile.html#a418b3071ff91d05f5f4cde03bdd3ba57":[3,0,0,28,26,0],
 "db/d16/classmorph_1_1ui_1_1StaticEnvironment.html":[1,0,0,1,302],
 "db/d16/classmorph_1_1ui_1_1StaticEnvironment.html":[3,0,0,28,304],
-"db/d16/classmorph_1_1ui_1_1StaticEnvironment.html#a0fedda6ab6a959ccc47d1c3e4054e028":[1,0,0,1,302,1],
-"db/d16/classmorph_1_1ui_1_1StaticEnvironment.html#a0fedda6ab6a959ccc47d1c3e4054e028":[3,0,0,28,304,1],
-"db/d16/classmorph_1_1ui_1_1StaticEnvironment.html#a1ace62f5c9fa5f37d3c4963476b9e2db":[1,0,0,1,302,2],
-"db/d16/classmorph_1_1ui_1_1StaticEnvironment.html#a1ace62f5c9fa5f37d3c4963476b9e2db":[3,0,0,28,304,2],
-"db/d16/classmorph_1_1ui_1_1StaticEnvironment.html#a28e6d31e16f4bf5250bcec8e1e770209":[1,0,0,1,302,14],
-"db/d16/classmorph_1_1ui_1_1StaticEnvironment.html#a28e6d31e16f4bf5250bcec8e1e770209":[3,0,0,28,304,14],
-"db/d16/classmorph_1_1ui_1_1StaticEnvironment.html#a4659bd099000beb56a50eba67fee6666":[1,0,0,1,302,20],
-"db/d16/classmorph_1_1ui_1_1StaticEnvironment.html#a4659bd099000beb56a50eba67fee6666":[3,0,0,28,304,20],
-"db/d16/classmorph_1_1ui_1_1StaticEnvironment.html#a486be7016807435a4562dfb2905020a0":[1,0,0,1,302,18]
+"db/d16/classmorph_1_1ui_1_1StaticEnvironment.html#a0fedda6ab6a959ccc47d1c3e4054e028":[1,0,0,1,302,1]
 };

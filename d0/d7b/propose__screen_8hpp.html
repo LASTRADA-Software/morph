@@ -127,6 +127,7 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d0/d7b/propose
 <code>#include &lt;morph/export.hpp&gt;</code><br />
 <code>#include &lt;string&gt;</code><br />
 <code>#include &lt;string_view&gt;</code><br />
+<code>#include &lt;vector&gt;</code><br />
 <code>#include &quot;../../core/executor.hpp&quot;</code><br />
 <code>#include &quot;<a class="el" href="../../df/d53/extra__tool_8hpp_source.html">extra_tool.hpp</a>&quot;</code><br />
 <code>#include &quot;<a class="el" href="../../d7/db0/chat_2service_8hpp_source.html">service.hpp</a>&quot;</code><br />
@@ -136,16 +137,24 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d0/d7b/propose
 <tr class="heading"><td colspan="2"><h2 id="header-func-members" class="groupheader"><a id="func-members" name="func-members"></a>
 Functions</h2></td></tr>
 <tr class="memitem:a8f2adedfd7e7d791e3e36d3cebd948e0" id="r_a8f2adedfd7e7d791e3e36d3cebd948e0"><td class="memItemLeft">MORPH_API <a class="el" href="../../d2/d2a/structmorph_1_1ui_1_1chat_1_1ChatTool.html">ChatTool</a>&#160;</td><td class="memItemRight"><a class="el" href="#a8f2adedfd7e7d791e3e36d3cebd948e0">morph::ui::chat::customScreensChatTool</a> (std::shared_ptr&lt; <a class="el" href="../../d9/d38/classmorph_1_1ui_1_1CustomScreens.html">CustomScreens</a> &gt; const &amp;screens, std::string const &amp;app, <a class="el" href="../../d4/d49/structmorph_1_1exec_1_1IExecutor.html">exec::IExecutor</a> &amp;executor)</td></tr>
-<tr class="memdesc:a8f2adedfd7e7d791e3e36d3cebd948e0"><td class="mdescLeft">&#160;</td><td class="mdescRight">The <span class="tt">propose_screen</span> tool: the assistant proposes a complete <span class="tt">ui/1</span> document for the open screen, which the server checks as it checks a save and, once accepted, hands to the client as the window's draft.  <br /></td></tr>
+<tr class="memdesc:a8f2adedfd7e7d791e3e36d3cebd948e0"><td class="mdescLeft">&#160;</td><td class="mdescRight">The <span class="tt">propose_screen</span> tool: the assistant proposes an RFC 6902 JSON Patch to the open screen's document, which the server applies, checks as it checks a save and, once accepted, hands to the client as the window's draft.  <br /></td></tr>
+<tr class="memitem:afe998b1432e81c6cb3a7ea422866c5fe" id="r_afe998b1432e81c6cb3a7ea422866c5fe"><td class="memItemLeft">MORPH_API std::vector&lt; <a class="el" href="../../d2/d2a/structmorph_1_1ui_1_1chat_1_1ChatTool.html">ChatTool</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#afe998b1432e81c6cb3a7ea422866c5fe">morph::ui::chat::customScreensReadTools</a> (std::shared_ptr&lt; <a class="el" href="../../d9/d38/classmorph_1_1ui_1_1CustomScreens.html">CustomScreens</a> &gt; const &amp;screens, std::string const &amp;app, <a class="el" href="../../d4/d49/structmorph_1_1exec_1_1IExecutor.html">exec::IExecutor</a> &amp;executor)</td></tr>
+<tr class="memdesc:afe998b1432e81c6cb3a7ea422866c5fe"><td class="mdescLeft">&#160;</td><td class="mdescRight">The read tools that go with <span class="tt">propose_screen</span>: <span class="tt">screen_outline</span>, <span class="tt">screen_find</span> and <span class="tt">screen_node</span>.  <br /></td></tr>
 <tr class="memitem:acd9b3fab85a8a351df9d66488c34b0b9" id="r_acd9b3fab85a8a351df9d66488c34b0b9"><td class="memItemLeft">MORPH_API <a class="el" href="../../d7/db0/chat_2service_8hpp.html#a4e8bbf849cb16afaedab1f0779e4996f">ChatDocumentSource</a>&#160;</td><td class="memItemRight"><a class="el" href="#acd9b3fab85a8a351df9d66488c34b0b9">morph::ui::chat::customScreensDocumentSource</a> (std::shared_ptr&lt; <a class="el" href="../../d9/d38/classmorph_1_1ui_1_1CustomScreens.html">CustomScreens</a> &gt; const &amp;screens, std::string const &amp;app, <a class="el" href="../../d4/d49/structmorph_1_1exec_1_1IExecutor.html">exec::IExecutor</a> &amp;executor)</td></tr>
 <tr class="memdesc:acd9b3fab85a8a351df9d66488c34b0b9"><td class="mdescLeft">&#160;</td><td class="mdescRight">A <span class="tt"><a class="el" href="../../d7/db0/chat_2service_8hpp.html#a4e8bbf849cb16afaedab1f0779e4996f" title="Reads the document of a screen the bundle does not hold, such as a person&#39;s own custom screen.">ChatDocumentSource</a></span> that reads a person's custom screens, so the chat offers their own actions and <span class="tt">propose_screen</span> can edit them.  <br /></td></tr>
 <tr class="memitem:a2249f1d86171927d09001e801e4dd216" id="r_a2249f1d86171927d09001e801e4dd216"><td class="memItemLeft">MORPH_API void&#160;</td><td class="memItemRight"><a class="el" href="#a2249f1d86171927d09001e801e4dd216">morph::ui::chat::enableCustomScreensChat</a> (<a class="el" href="../../d3/d4e/structmorph_1_1ui_1_1chat_1_1ChatOptions.html">ChatOptions</a> &amp;options, std::shared_ptr&lt; <a class="el" href="../../d9/d38/classmorph_1_1ui_1_1CustomScreens.html">CustomScreens</a> &gt; const &amp;screens, std::string const &amp;app, <a class="el" href="../../d4/d49/structmorph_1_1exec_1_1IExecutor.html">exec::IExecutor</a> &amp;executor)</td></tr>
-<tr class="memdesc:a2249f1d86171927d09001e801e4dd216"><td class="mdescLeft">&#160;</td><td class="mdescRight">Offers custom screens in a chat: adds <span class="tt">propose_screen</span> and the custom screen document source to <code class="param">options</code>.  <br /></td></tr>
+<tr class="memdesc:a2249f1d86171927d09001e801e4dd216"><td class="mdescLeft">&#160;</td><td class="mdescRight">Offers custom screens in a chat: adds <span class="tt">propose_screen</span>, the read tools and the custom screen document source to <code class="param">options</code>.  <br /></td></tr>
 </table><table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 id="header-var-members" class="groupheader"><a id="var-members" name="var-members"></a>
 Variables</h2></td></tr>
 <tr class="memitem:a5b0d8a20491b283a41dcac3d51c545c9" id="r_a5b0d8a20491b283a41dcac3d51c545c9"><td class="memItemLeft">constexpr std::string_view&#160;</td><td class="memItemRight"><a class="el" href="#a5b0d8a20491b283a41dcac3d51c545c9">morph::ui::chat::kProposeScreenTool</a> = &quot;propose_screen&quot;</td></tr>
-<tr class="memdesc:a5b0d8a20491b283a41dcac3d51c545c9"><td class="mdescLeft">&#160;</td><td class="mdescRight">The name of the tool <span class="tt"><a class="el" href="#a8f2adedfd7e7d791e3e36d3cebd948e0" title="The propose_screen tool: the assistant proposes a complete ui/1 document for the open screen,...">customScreensChatTool</a></span> makes.  <br /></td></tr>
+<tr class="memdesc:a5b0d8a20491b283a41dcac3d51c545c9"><td class="mdescLeft">&#160;</td><td class="mdescRight">The name of the tool <span class="tt"><a class="el" href="#a8f2adedfd7e7d791e3e36d3cebd948e0" title="The propose_screen tool: the assistant proposes an RFC 6902 JSON Patch to the open screen&#39;s document,...">customScreensChatTool</a></span> makes.  <br /></td></tr>
+<tr class="memitem:a6c6f730e9620bcbe60c7467c735a8f58" id="r_a6c6f730e9620bcbe60c7467c735a8f58"><td class="memItemLeft">constexpr std::string_view&#160;</td><td class="memItemRight"><a class="el" href="#a6c6f730e9620bcbe60c7467c735a8f58">morph::ui::chat::kScreenOutlineTool</a> = &quot;screen_outline&quot;</td></tr>
+<tr class="memdesc:a6c6f730e9620bcbe60c7467c735a8f58"><td class="mdescLeft">&#160;</td><td class="mdescRight">The name of the read tool that outlines the open screen's document.  <br /></td></tr>
+<tr class="memitem:a4df98b1700c3091836b7d27deac86189" id="r_a4df98b1700c3091836b7d27deac86189"><td class="memItemLeft">constexpr std::string_view&#160;</td><td class="memItemRight"><a class="el" href="#a4df98b1700c3091836b7d27deac86189">morph::ui::chat::kScreenFindTool</a> = &quot;screen_find&quot;</td></tr>
+<tr class="memdesc:a4df98b1700c3091836b7d27deac86189"><td class="mdescLeft">&#160;</td><td class="mdescRight">The name of the read tool that finds nodes of the open screen's document.  <br /></td></tr>
+<tr class="memitem:a323455339c7969433930bd58da5f9652" id="r_a323455339c7969433930bd58da5f9652"><td class="memItemLeft">constexpr std::string_view&#160;</td><td class="memItemRight"><a class="el" href="#a323455339c7969433930bd58da5f9652">morph::ui::chat::kScreenNodeTool</a> = &quot;screen_node&quot;</td></tr>
+<tr class="memdesc:a323455339c7969433930bd58da5f9652"><td class="mdescLeft">&#160;</td><td class="mdescRight">The name of the read tool that reads one part of the open screen's document.  <br /></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>The chat tool that proposes a new version of the open screen's document. Specified in <span class="tt">docs/spec/ui/custom_screens.md</span> and <span class="tt">docs/spec/ui/chat.md</span>. </p>
@@ -184,12 +193,12 @@ Variables</h2></td></tr>
 </table>
 </div><div class="memdoc">
 
-<p>The <span class="tt">propose_screen</span> tool: the assistant proposes a complete <span class="tt">ui/1</span> document for the open screen, which the server checks as it checks a save and, once accepted, hands to the client as the window's draft. </p>
+<p>The <span class="tt">propose_screen</span> tool: the assistant proposes an RFC 6902 JSON Patch to the open screen's document, which the server applies, checks as it checks a save and, once accepted, hands to the client as the window's draft. </p>
 <ul>
-<li><b>Offered</b> only on a screen whose document is known and within <span class="tt">ChatLimits::maxProposalBytes</span>: the turn's draft, else the bundle's own text for an application screen, else the person's custom screen as <code class="param">screens</code> answers it. On any other screen it is not offered, and the system text says the assistant cannot edit the screen.</li>
-<li><b>Its context</b> is that document, written as one JSON string literal inside a block named as the screen being edited and as data, never as instructions (a shared custom screen is text someone else may have written), what the base rule allows a screen based on the same base, and a short reference to the vocabulary.</li>
-<li><b>A call</b> carries the whole document. It is refused as a tool error, with the pointer to the refused part, when it is malformed, too large, names another screen id than the open one, or fails the checks of a save under the turn's session. Only an accepted document becomes the turn's draft. The refusal that is the <span class="tt">ChatLimits::maxProposalsPerTurn</span>th of a turn ends the turn, and the screen stays as it was.</li>
-<li><b>The conversation</b> keeps that a draft was proposed and its content hash, not the document.</li>
+<li><b>Offered</b> only on a screen whose document is known and within <span class="tt">ChatLimits::maxDraftBytes</span>: the turn's draft, else the bundle's own text for an application screen, else the person's custom screen as <code class="param">screens</code> answers it. On any other screen it is not offered, and the system text says the assistant cannot edit the screen.</li>
+<li><b>Its context</b> is the document, written as one JSON string literal inside a block named as the screen being edited and as data, never as instructions (a shared custom screen is text someone else may have written), when it is within <span class="tt">ChatLimits::maxInlineDocumentBytes</span>, and an outline of it (about 8 KiB at most) otherwise; what the base rule allows a screen based on the same base; and a short reference to the vocabulary.</li>
+<li><b>A call</b> carries <span class="tt">patch</span>, an array of operations of at most <span class="tt">ChatLimits::maxProposalBytes</span> as JSON. The operations apply one at a time to a copy of the turn's current document, which is the latest draft accepted in this turn and otherwise the document the turn began on; there is no base to name, since the server is the only writer within a turn. A whole new document is one <span class="tt">replace</span> of the path <span class="tt">""</span>. The call is refused as a tool error when the arguments are malformed, an operation does not apply (the error names its index, counted from 0, its kind and path, and nothing is applied), the result is not an object with the open screen's <span class="tt">id</span>, is longer than <span class="tt">ChatLimits::maxDraftBytes</span>, or fails the checks of a save under the turn's session (the error keeps the pointer into the patched document). Only an accepted result becomes the turn's draft. The refusal that is the <span class="tt">ChatLimits::maxProposalsPerTurn</span>th of a turn ends the turn, and the screen stays as it was.</li>
+<li><b>The conversation</b> keeps a patch under about 4 KiB as the model wrote it, and of a larger one only its size and content hash.</li>
 </ul>
 <p>The tool saves nothing, and runs as the turn's session. </p><dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
@@ -200,6 +209,51 @@ Variables</h2></td></tr>
   </dd>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The tool, for <span class="tt">ChatOptions::tools</span>. </dd></dl>
+
+</div>
+</div>
+<a id="afe998b1432e81c6cb3a7ea422866c5fe" name="afe998b1432e81c6cb3a7ea422866c5fe"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#afe998b1432e81c6cb3a7ea422866c5fe">&#9670;&#160;</a></span>customScreensReadTools()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">MORPH_API std::vector&lt; ChatTool &gt; morph::ui::chat::customScreensReadTools </td>
+          <td>(</td>
+          <td class="paramtype">std::shared_ptr&lt; <a class="el" href="../../d9/d38/classmorph_1_1ui_1_1CustomScreens.html">CustomScreens</a> &gt; const &amp;</td>          <td class="paramname"><span class="paramname"><em>screens</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">std::string const &amp;</td>          <td class="paramname"><span class="paramname"><em>app</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype"><a class="el" href="../../d4/d49/structmorph_1_1exec_1_1IExecutor.html">exec::IExecutor</a> &amp;</td>          <td class="paramname"><span class="paramname"><em>executor</em></span>&#160;)</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>The read tools that go with <span class="tt">propose_screen</span>: <span class="tt">screen_outline</span>, <span class="tt">screen_find</span> and <span class="tt">screen_node</span>. </p>
+<p>They read the turn's current document (see <span class="tt">ChatToolContext::document</span>), so an answer includes what an accepted proposal earlier in the turn changed. They are offered under the same conditions as <span class="tt">propose_screen</span>, and an answer is capped in bytes (12 KiB, or <span class="tt">ChatLimits::maxToolResultBytes</span> when that is smaller): <span class="tt">screen_outline</span> shows the deepest levels that fit, <span class="tt">screen_find</span> lists at most 50 matches and says how many more there are, and <span class="tt">screen_node</span> shows a smaller depth than asked when the asked one does not fit. </p><dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">screens</td><td>The handle <span class="tt">registerCustomScreens</span> returned. </td></tr>
+    <tr><td class="paramname">app</td><td>The application's id, as <code class="param">screens</code> serves it. </td></tr>
+    <tr><td class="paramname">executor</td><td>Where the tools' offers run. Borrowed: it outlives every turn. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>The tools, for <span class="tt">ChatOptions::tools</span>. </dd></dl>
 
 </div>
 </div>
@@ -277,7 +331,7 @@ Variables</h2></td></tr>
       </table>
 </div><div class="memdoc">
 
-<p>Offers custom screens in a chat: adds <span class="tt">propose_screen</span> and the custom screen document source to <code class="param">options</code>. </p>
+<p>Offers custom screens in a chat: adds <span class="tt">propose_screen</span>, the read tools and the custom screen document source to <code class="param">options</code>. </p>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
     <tr><td class="paramname">options</td><td>The options being built; its <span class="tt">tools</span> and <span class="tt">documentSource</span> are added to. </td></tr>
@@ -313,7 +367,85 @@ Variables</h2></td></tr>
 
 <p>The name of the tool <span class="tt">customScreensChatTool</span> makes. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/d7b/propose__screen_8hpp_source.html#l00024">24</a> of file <a class="el" href="../../d0/d7b/propose__screen_8hpp_source.html">propose_screen.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/d7b/propose__screen_8hpp_source.html#l00025">25</a> of file <a class="el" href="../../d0/d7b/propose__screen_8hpp_source.html">propose_screen.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a6c6f730e9620bcbe60c7467c735a8f58" name="a6c6f730e9620bcbe60c7467c735a8f58"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a6c6f730e9620bcbe60c7467c735a8f58">&#9670;&#160;</a></span>kScreenOutlineTool</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::string_view morph::ui::chat::kScreenOutlineTool = &quot;screen_outline&quot;</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel constexpr">constexpr</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>The name of the read tool that outlines the open screen's document. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d0/d7b/propose__screen_8hpp_source.html#l00028">28</a> of file <a class="el" href="../../d0/d7b/propose__screen_8hpp_source.html">propose_screen.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a4df98b1700c3091836b7d27deac86189" name="a4df98b1700c3091836b7d27deac86189"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a4df98b1700c3091836b7d27deac86189">&#9670;&#160;</a></span>kScreenFindTool</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::string_view morph::ui::chat::kScreenFindTool = &quot;screen_find&quot;</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel constexpr">constexpr</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>The name of the read tool that finds nodes of the open screen's document. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d0/d7b/propose__screen_8hpp_source.html#l00031">31</a> of file <a class="el" href="../../d0/d7b/propose__screen_8hpp_source.html">propose_screen.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a323455339c7969433930bd58da5f9652" name="a323455339c7969433930bd58da5f9652"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a323455339c7969433930bd58da5f9652">&#9670;&#160;</a></span>kScreenNodeTool</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::string_view morph::ui::chat::kScreenNodeTool = &quot;screen_node&quot;</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel constexpr">constexpr</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>The name of the read tool that reads one part of the open screen's document. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d0/d7b/propose__screen_8hpp_source.html#l00034">34</a> of file <a class="el" href="../../d0/d7b/propose__screen_8hpp_source.html">propose_screen.hpp</a>.</p>
 
 </div>
 </div>

@@ -158,6 +158,8 @@ Public Attributes</h2></td></tr>
 <tr class="memdesc:a03d284bdb5550cea54ef046ca02227d8"><td class="mdescLeft">&#160;</td><td class="mdescRight">How much it stands out; set once, and never on a multiline input. The mount tells the widget only <span class="tt">Prominent</span>.  <br /></td></tr>
 <tr class="memitem:ad96dd02dba5d1598431b6ca791cc6a12" id="r_ad96dd02dba5d1598431b6ca791cc6a12"><td class="memItemLeft">bool&#160;</td><td class="memItemRight"><a class="el" href="#ad96dd02dba5d1598431b6ca791cc6a12">mono</a> = false</td></tr>
 <tr class="memdesc:ad96dd02dba5d1598431b6ca791cc6a12"><td class="mdescLeft">&#160;</td><td class="mdescRight">Whether the text and the placeholder are drawn in the <span class="tt"><a class="el" href="#ad96dd02dba5d1598431b6ca791cc6a12" title="Whether the text and the placeholder are drawn in the mono text role&#39;s face; set once.">mono</a></span> text role's face; set once.  <br /></td></tr>
+<tr class="memitem:a56e195af953f869a87b11c91844a4e33" id="r_a56e195af953f869a87b11c91844a4e33"><td class="memItemLeft">bool&#160;</td><td class="memItemRight"><a class="el" href="#a56e195af953f869a87b11c91844a4e33">wrap</a> = true</td></tr>
+<tr class="memdesc:a56e195af953f869a87b11c91844a4e33"><td class="mdescLeft">&#160;</td><td class="mdescRight">Whether a multiline input wraps a line longer than the field; <span class="tt">false</span> keeps each line whole and the field scrolls sideways. Set once; never <span class="tt">false</span> on a single-line or password input, which has no lines to wrap.  <br /></td></tr>
 <tr class="memitem:a5d06f17a44a5e0e0371d7eca58bb93d6" id="r_a5d06f17a44a5e0e0371d7eca58bb93d6"><td class="memItemLeft"><a class="el" href="../../d9/dd9/alignment_8hpp.html#af998a2ea944ede576a21f85c17bd065a">Align</a>&#160;</td><td class="memItemRight"><a class="el" href="#a5d06f17a44a5e0e0371d7eca58bb93d6">align</a> = <a class="el" href="../../d9/dd9/alignment_8hpp.html#af998a2ea944ede576a21f85c17bd065aaa6122a65eaa676f700ae68d393054a37">Align::Start</a></td></tr>
 <tr class="memdesc:a5d06f17a44a5e0e0371d7eca58bb93d6"><td class="mdescLeft">&#160;</td><td class="mdescRight">Where the text sits in the field: <span class="tt">Start</span>, <span class="tt">Center</span> or <span class="tt">End</span>; set once. Never on a multiline input, and the mount tells the widget only a value other than <span class="tt">Start</span>.  <br /></td></tr>
 <tr class="memitem:a862e38eedb24eb8f363efed4534611be" id="r_a862e38eedb24eb8f363efed4534611be"><td class="memItemLeft"><a class="el" href="../../db/d73/classmorph_1_1ui_1_1Prop.html">Prop</a>&lt; std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a862e38eedb24eb8f363efed4534611be">prefix</a></td></tr>
@@ -438,6 +440,24 @@ Public Attributes</h2></td></tr>
 
 </div>
 </div>
+<a id="a56e195af953f869a87b11c91844a4e33" name="a56e195af953f869a87b11c91844a4e33"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a56e195af953f869a87b11c91844a4e33">&#9670;&#160;</a></span>wrap</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">bool morph::ui::TextInput::wrap = true</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>Whether a multiline input wraps a line longer than the field; <span class="tt">false</span> keeps each line whole and the field scrolls sideways. Set once; never <span class="tt">false</span> on a single-line or password input, which has no lines to wrap. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00656">656</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+
+</div>
+</div>
 <a id="a5d06f17a44a5e0e0371d7eca58bb93d6" name="a5d06f17a44a5e0e0371d7eca58bb93d6"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a5d06f17a44a5e0e0371d7eca58bb93d6">&#9670;&#160;</a></span>align</h2>
 
@@ -452,7 +472,7 @@ Public Attributes</h2></td></tr>
 
 <p>Where the text sits in the field: <span class="tt">Start</span>, <span class="tt">Center</span> or <span class="tt">End</span>; set once. Never on a multiline input, and the mount tells the widget only a value other than <span class="tt">Start</span>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00655">655</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00659">659</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -470,7 +490,7 @@ Public Attributes</h2></td></tr>
 
 <p><a class="el" href="../../dd/dfe/structmorph_1_1ui_1_1Text.html" title="Static or bound text.">Text</a> drawn muted at the field's leading edge, inside it, such as <span class="tt">±</span>; empty shows none. Only a single-line or password input shows one: the mount refuses a multiline input with a prefix. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00658">658</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00662">662</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>

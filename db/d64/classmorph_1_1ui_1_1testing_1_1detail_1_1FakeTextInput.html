@@ -161,6 +161,8 @@ Public Member Functions</h2></td></tr>
 <tr class="memdesc:ad5f29b24a19a236539a16c9b5d051320"><td class="mdescLeft">&#160;</td><td class="mdescRight">Sets the text drawn muted at the field's leading edge, inside it, and announced before the value; empty shows none. Called only on a single-line or password input.  <br /></td></tr>
 <tr class="memitem:abd640658df49ce33be2abb33611d9ae2" id="r_abd640658df49ce33be2abb33611d9ae2"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#abd640658df49ce33be2abb33611d9ae2">setMono</a> (bool mono) override</td></tr>
 <tr class="memdesc:abd640658df49ce33be2abb33611d9ae2"><td class="mdescLeft">&#160;</td><td class="mdescRight">Draws the text and the placeholder in the <span class="tt">mono</span> text role's face. A new field uses the body face; the mount calls it once, only for <span class="tt">true</span>.  <br /></td></tr>
+<tr class="memitem:ae19f1de5da88bb1f5ba50fdb44a39864" id="r_ae19f1de5da88bb1f5ba50fdb44a39864"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#ae19f1de5da88bb1f5ba50fdb44a39864">setWrap</a> (bool wrap) override</td></tr>
+<tr class="memdesc:ae19f1de5da88bb1f5ba50fdb44a39864"><td class="mdescLeft">&#160;</td><td class="mdescRight">Stops a multiline input wrapping a line longer than the field: each line stays whole and the field scrolls sideways. A new multiline field wraps; the mount calls this once, only for <span class="tt">false</span>, and only on a multiline input. A terminal field shows each line as written, so it draws nothing new.  <br /></td></tr>
 <tr class="memitem:a804297d5f74f4d5756bec814d0b0a1ca" id="r_a804297d5f74f4d5756bec814d0b0a1ca"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a804297d5f74f4d5756bec814d0b0a1ca">setAlign</a> (<a class="el" href="../../d9/dd9/alignment_8hpp.html#af998a2ea944ede576a21f85c17bd065a">Align</a> align) override</td></tr>
 <tr class="memdesc:a804297d5f74f4d5756bec814d0b0a1ca"><td class="mdescLeft">&#160;</td><td class="mdescRight">Places the text in the field. A new field's text starts at the leading edge; the mount calls it once, only for <span class="tt">Center</span> or <span class="tt">End</span>, and only on a single-line or password input. An <span class="tt">End</span> field draws its digits at one width each, so a column of values lines up.  <br /></td></tr>
 <tr class="memitem:a4180a94cc62059010620e1f06c4d8497" id="r_a4180a94cc62059010620e1f06c4d8497"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a4180a94cc62059010620e1f06c4d8497">setDecimals</a> (int decimals) override</td></tr>
@@ -615,6 +617,43 @@ Additional Inherited Members</h2></td></tr>
 
 </div>
 </div>
+<a id="ae19f1de5da88bb1f5ba50fdb44a39864" name="ae19f1de5da88bb1f5ba50fdb44a39864"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ae19f1de5da88bb1f5ba50fdb44a39864">&#9670;&#160;</a></span>setWrap()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">void morph::ui::testing::detail::FakeTextInput::setWrap </td>
+          <td>(</td>
+          <td class="paramtype">bool</td>          <td class="paramname"><span class="paramname"><em>wrap</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel override">override</span><span class="mlabel virtual">virtual</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Stops a multiline input wrapping a line longer than the field: each line stays whole and the field scrolls sideways. A new multiline field wraps; the mount calls this once, only for <span class="tt">false</span>, and only on a multiline input. A terminal field shows each line as written, so it draws nothing new. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">wrap</td><td>Always false: an input that wraps is never told. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+<p>Implements <a class="el" href="../../d9/d62/classmorph_1_1ui_1_1TextInputWidget.html#ab5559a178a735240ad4e7cd8f4a35862">morph::ui::TextInputWidget</a>.</p>
+
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01128">1128</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+
+</div>
+</div>
 <a id="a804297d5f74f4d5756bec814d0b0a1ca" name="a804297d5f74f4d5756bec814d0b0a1ca"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a804297d5f74f4d5756bec814d0b0a1ca">&#9670;&#160;</a></span>setAlign()</h2>
 
@@ -648,7 +687,7 @@ Additional Inherited Members</h2></td></tr>
 
 <p>Implements <a class="el" href="../../d9/d62/classmorph_1_1ui_1_1TextInputWidget.html#a6372c3807299142f86f4fa93df9a25b9">morph::ui::TextInputWidget</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01128">1128</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01129">1129</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -685,7 +724,7 @@ Additional Inherited Members</h2></td></tr>
 
 <p>Implements <a class="el" href="../../d9/d62/classmorph_1_1ui_1_1TextInputWidget.html#a4ac7ae0308c01088d5c1aef0354bce2b">morph::ui::TextInputWidget</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01135">1135</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01136">1136</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -722,7 +761,7 @@ Additional Inherited Members</h2></td></tr>
 
 <p>Implements <a class="el" href="../../d9/d62/classmorph_1_1ui_1_1TextInputWidget.html#a73b512d9d4b745c52cb3c215764ccd42">morph::ui::TextInputWidget</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01136">1136</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01137">1137</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -759,7 +798,7 @@ Additional Inherited Members</h2></td></tr>
 
 <p>Implements <a class="el" href="../../d9/d62/classmorph_1_1ui_1_1TextInputWidget.html#a436cce46e9c81c9a1fb04fab44574625">morph::ui::TextInputWidget</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01137">1137</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01138">1138</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -801,7 +840,7 @@ Additional Inherited Members</h2></td></tr>
 
 <p>Implements <a class="el" href="../../d9/d62/classmorph_1_1ui_1_1TextInputWidget.html#a485acba53524dffd9d48ae2cd4fbecb1">morph::ui::TextInputWidget</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01140">1140</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01141">1141</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -838,7 +877,7 @@ Additional Inherited Members</h2></td></tr>
 
 <p>Implements <a class="el" href="../../d9/d62/classmorph_1_1ui_1_1TextInputWidget.html#a0e937b2ee04f7d2b402ac6b64157b13f">morph::ui::TextInputWidget</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01144">1144</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01145">1145</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -875,7 +914,7 @@ Additional Inherited Members</h2></td></tr>
 
 <p>Implements <a class="el" href="../../d9/d62/classmorph_1_1ui_1_1TextInputWidget.html#aae1eb31ad6bb2c3bcad03efbc830cef6">morph::ui::TextInputWidget</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01145">1145</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01146">1146</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -912,7 +951,7 @@ Additional Inherited Members</h2></td></tr>
 
 <p>Implements <a class="el" href="../../d9/d62/classmorph_1_1ui_1_1TextInputWidget.html#af53435cb83156025dc7db2f041870e96">morph::ui::TextInputWidget</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01146">1146</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01147">1147</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>

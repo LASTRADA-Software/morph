@@ -1,5 +1,11 @@
 var NAVTREEINDEX16 =
 {
+"d6/d42/structmorph_1_1ui_1_1UnitInfo.html#ad835350fb49c45d7b76d92174b0ced7a":[1,0,0,1,333,1],
+"d6/d42/structmorph_1_1ui_1_1UnitInfo.html#ad835350fb49c45d7b76d92174b0ced7a":[3,0,0,28,335,1],
+"d6/d42/structmorph_1_1ui_1_1UnitInfo.html#ae0585691b02c5d3bd3b63aea13b7e6e4":[1,0,0,1,333,0],
+"d6/d42/structmorph_1_1ui_1_1UnitInfo.html#ae0585691b02c5d3bd3b63aea13b7e6e4":[3,0,0,28,335,0],
+"d6/d43/classmorph_1_1ui_1_1detail_1_1ForEachSession.html":[1,0,0,1,0,16],
+"d6/d43/classmorph_1_1ui_1_1detail_1_1ForEachSession.html":[3,0,0,28,2,17],
 "d6/d43/classmorph_1_1ui_1_1detail_1_1ForEachSession.html#aac9d27926702c36fb7a220ec412a9ce3":[1,0,0,1,0,16,1],
 "d6/d43/classmorph_1_1ui_1_1detail_1_1ForEachSession.html#aac9d27926702c36fb7a220ec412a9ce3":[3,0,0,28,2,17,1],
 "d6/d43/classmorph_1_1ui_1_1detail_1_1ForEachSession.html#af2d70265bed1e676f7251f8c95faf8bb":[1,0,0,1,0,16,0],
@@ -243,11 +249,5 @@ var NAVTREEINDEX16 =
 "d6/d93/classmorph_1_1ui_1_1PopoverWidget.html#acb5f0ed341af893a1233aff9168b26ab":[3,0,0,28,226,1],
 "d6/d94/structmorph_1_1flows_1_1Wizard.html":[3,0,0,9,1],
 "d6/d94/structmorph_1_1flows_1_1Wizard.html#a0934ffb865cabd73e624f3b77e3a902f":[3,0,0,9,1,0],
-"d6/d95/structmorph_1_1ui_1_1CustomizePoint.html":[1,0,0,1,65],
-"d6/d95/structmorph_1_1ui_1_1CustomizePoint.html":[3,0,0,28,67],
-"d6/d95/structmorph_1_1ui_1_1CustomizePoint.html#a43ee0e37585eeb63631493a77d5a20e4":[1,0,0,1,65,5],
-"d6/d95/structmorph_1_1ui_1_1CustomizePoint.html#a43ee0e37585eeb63631493a77d5a20e4":[3,0,0,28,67,5],
-"d6/d95/structmorph_1_1ui_1_1CustomizePoint.html#a5784754239841cadbe4fad0c1f5de39b":[1,0,0,1,65,4],
-"d6/d95/structmorph_1_1ui_1_1CustomizePoint.html#a5784754239841cadbe4fad0c1f5de39b":[3,0,0,28,67,4],
-"d6/d95/structmorph_1_1ui_1_1CustomizePoint.html#a6fdb90997225de52ff985993eaa61596":[1,0,0,1,65,0]
+"d6/d95/structmorph_1_1ui_1_1CustomizePoint.html":[1,0,0,1,65]
 };

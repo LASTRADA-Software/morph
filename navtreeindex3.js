@@ -169,7 +169,7 @@ var NAVTREEINDEX3 =
 "d1/d86/text__align_8hpp.html#ad7eac90b50f94b262c7675fb2b3f0dd5a87557f11575c0ad78e4e28abedc13b6e":[4,0,0,15,49,0,2],
 "d1/d86/text__align_8hpp.html#ad7eac90b50f94b262c7675fb2b3f0dd5aa6122a65eaa676f700ae68d393054a37":[1,0,0,1,416,0],
 "d1/d86/text__align_8hpp.html#ad7eac90b50f94b262c7675fb2b3f0dd5aa6122a65eaa676f700ae68d393054a37":[4,0,0,15,49,0,0],
-"d1/d86/text__align_8hpp.html#af69f30bba5122d22e2c23e095c41d232":[1,0,0,1,551],
+"d1/d86/text__align_8hpp.html#af69f30bba5122d22e2c23e095c41d232":[1,0,0,1,552],
 "d1/d86/text__align_8hpp_source.html":[4,0,0,15,49],
 "d1/d89/structmorph_1_1ui_1_1Sizing.html":[1,0,0,1,291],
 "d1/d89/structmorph_1_1ui_1_1Sizing.html":[3,0,0,28,293],

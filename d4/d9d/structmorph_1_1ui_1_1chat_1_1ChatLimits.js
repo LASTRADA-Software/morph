@@ -9,6 +9,8 @@ var structmorph_1_1ui_1_1chat_1_1ChatLimits =
     [ "maxToolResultBytes", "d4/d9d/structmorph_1_1ui_1_1chat_1_1ChatLimits.html#a22e87614933657442ae2d2cd10bcd201", null ],
     [ "maxConversationBytes", "d4/d9d/structmorph_1_1ui_1_1chat_1_1ChatLimits.html#ad82cd2c549927ce74835da0a8c75d07e", null ],
     [ "maxProposalBytes", "d4/d9d/structmorph_1_1ui_1_1chat_1_1ChatLimits.html#a4ff5cb7f95113d323d16a26e006f1bbf", null ],
+    [ "maxDraftBytes", "d4/d9d/structmorph_1_1ui_1_1chat_1_1ChatLimits.html#ac2ad2de9ba65af1506900bdaf2564d75", null ],
+    [ "maxInlineDocumentBytes", "d4/d9d/structmorph_1_1ui_1_1chat_1_1ChatLimits.html#a45bb750dccc7232b36bf8d1ae352a663", null ],
     [ "maxProposalsPerTurn", "d4/d9d/structmorph_1_1ui_1_1chat_1_1ChatLimits.html#a37ab633c837bc39fb2feb327ffadce2b", null ],
     [ "toolCallTimeout", "d4/d9d/structmorph_1_1ui_1_1chat_1_1ChatLimits.html#a1d0a10eb687b15ce3f12c13f57aaffef", null ],
     [ "idleRetention", "d4/d9d/structmorph_1_1ui_1_1chat_1_1ChatLimits.html#a025dcc86b4799765d5e0533ef69c3e55", null ]

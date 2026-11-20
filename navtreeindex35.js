@@ -1,5 +1,14 @@
 var NAVTREEINDEX35 =
 {
+"dc/de1/workspace_8hpp.html#ac588613cfacc29776a836250b58694ecab206a1b4ea1097761f78e8876f6da779":[4,0,0,15,54,3,1],
+"dc/de1/workspace_8hpp.html#ac588613cfacc29776a836250b58694ecad2462560e9e13100f0435d16817bdc50":[1,0,0,1,437,0],
+"dc/de1/workspace_8hpp.html#ac588613cfacc29776a836250b58694ecad2462560e9e13100f0435d16817bdc50":[4,0,0,15,54,3,0],
+"dc/de1/workspace_8hpp_source.html":[4,0,0,15,54],
+"dc/de2/structmorph_1_1effects_1_1changesInstance.html":[3,0,0,7,4],
+"dc/de4/wire_8hpp_source.html":[4,0,0,1,30],
+"dc/de7/classmorph_1_1session_1_1TokenIssuer.html":[3,0,0,23,9],
+"dc/de7/classmorph_1_1session_1_1TokenIssuer.html#a481f5554cb6af08565623f293a61e5e8":[3,0,0,23,9,0],
+"dc/de7/classmorph_1_1session_1_1TokenIssuer.html#aa52f9bc64855fcd2963dcb353187da33":[3,0,0,23,9,1],
 "dc/def/custom__screen__chrome_8hpp.html":[4,0,0,15,15],
 "dc/def/custom__screen__chrome_8hpp_source.html":[4,0,0,15,15],
 "dc/df0/structmorph_1_1ui_1_1KeyValue.html":[1,0,0,1,163],
@@ -240,14 +249,5 @@ var NAVTREEINDEX35 =
 "dd/d27/structmorph_1_1ui_1_1HeadTool.html#a2d27d62a8a27ca7d114a2ba43f394a9a":[3,0,0,28,140,0],
 "dd/d27/structmorph_1_1ui_1_1HeadTool.html#aa82e1f9ee26d29e8d5b0c8c3eae7b050":[1,0,0,1,138,6],
 "dd/d27/structmorph_1_1ui_1_1HeadTool.html#aa82e1f9ee26d29e8d5b0c8c3eae7b050":[3,0,0,28,140,6],
-"dd/d27/structmorph_1_1ui_1_1HeadTool.html#abd2a3d30c61d12a933d7c3fbfce8bef5":[1,0,0,1,138,7],
-"dd/d27/structmorph_1_1ui_1_1HeadTool.html#abd2a3d30c61d12a933d7c3fbfce8bef5":[3,0,0,28,140,7],
-"dd/d27/structmorph_1_1ui_1_1HeadTool.html#ac60fe5d12bf0a198203f2281e8ecc21c":[1,0,0,1,138,1],
-"dd/d27/structmorph_1_1ui_1_1HeadTool.html#ac60fe5d12bf0a198203f2281e8ecc21c":[3,0,0,28,140,1],
-"dd/d27/structmorph_1_1ui_1_1HeadTool.html#ad676bd2cb7986ad1e7b9164d825ae8b0":[1,0,0,1,138,8],
-"dd/d27/structmorph_1_1ui_1_1HeadTool.html#ad676bd2cb7986ad1e7b9164d825ae8b0":[3,0,0,28,140,8],
-"dd/d27/structmorph_1_1ui_1_1HeadTool.html#ad7b6e7fd197a605fd5568ba3514594a7":[1,0,0,1,138,9],
-"dd/d27/structmorph_1_1ui_1_1HeadTool.html#ad7b6e7fd197a605fd5568ba3514594a7":[3,0,0,28,140,9],
-"dd/d27/structmorph_1_1ui_1_1HeadTool.html#add2408c63cbc0d50621fc7f1087bf8f0":[1,0,0,1,138,5],
-"dd/d27/structmorph_1_1ui_1_1HeadTool.html#add2408c63cbc0d50621fc7f1087bf8f0":[3,0,0,28,140,5]
+"dd/d27/structmorph_1_1ui_1_1HeadTool.html#abd2a3d30c61d12a933d7c3fbfce8bef5":[1,0,0,1,138,7]
 };

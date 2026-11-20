@@ -145,7 +145,11 @@ Public Attributes</h2></td></tr>
 <tr class="memitem:ad82cd2c549927ce74835da0a8c75d07e" id="r_ad82cd2c549927ce74835da0a8c75d07e"><td class="memItemLeft">std::size_t&#160;</td><td class="memItemRight"><a class="el" href="#ad82cd2c549927ce74835da0a8c75d07e">maxConversationBytes</a> = std::size_t{1024} * 1024</td></tr>
 <tr class="memdesc:ad82cd2c549927ce74835da0a8c75d07e"><td class="mdescLeft">&#160;</td><td class="mdescRight">The most one conversation holds; past it the oldest messages are dropped. Without it, one large result kept in a conversation would make every later request on that record too large.  <br /></td></tr>
 <tr class="memitem:a4ff5cb7f95113d323d16a26e006f1bbf" id="r_a4ff5cb7f95113d323d16a26e006f1bbf"><td class="memItemLeft">std::size_t&#160;</td><td class="memItemRight"><a class="el" href="#a4ff5cb7f95113d323d16a26e006f1bbf">maxProposalBytes</a> = std::size_t{64} * 1024</td></tr>
-<tr class="memdesc:a4ff5cb7f95113d323d16a26e006f1bbf"><td class="mdescLeft">&#160;</td><td class="mdescRight">The longest document the assistant proposes or is given as a draft. It fits one conversation's bound and a provider's answer; a larger screen is not offered for editing, and a turn carrying a larger draft is refused.  <br /></td></tr>
+<tr class="memdesc:a4ff5cb7f95113d323d16a26e006f1bbf"><td class="mdescLeft">&#160;</td><td class="mdescRight">The longest patch the assistant sends to change a screen. It bounds the proposal only: the document it is applied to and the draft that results are bounded by <span class="tt"><a class="el" href="#ac2ad2de9ba65af1506900bdaf2564d75" title="The longest document the assistant is given as a draft or offered to edit, and the longest draft a tu...">maxDraftBytes</a></span>.  <br /></td></tr>
+<tr class="memitem:ac2ad2de9ba65af1506900bdaf2564d75" id="r_ac2ad2de9ba65af1506900bdaf2564d75"><td class="memItemLeft">std::size_t&#160;</td><td class="memItemRight"><a class="el" href="#ac2ad2de9ba65af1506900bdaf2564d75">maxDraftBytes</a> = std::size_t{256} * 1024</td></tr>
+<tr class="memdesc:ac2ad2de9ba65af1506900bdaf2564d75"><td class="mdescLeft">&#160;</td><td class="mdescRight">The longest document the assistant is given as a draft or offered to edit, and the longest draft a turn carries or accepts. A turn carrying a larger draft is refused, and a larger screen is not offered for editing.  <br /></td></tr>
+<tr class="memitem:a45bb750dccc7232b36bf8d1ae352a663" id="r_a45bb750dccc7232b36bf8d1ae352a663"><td class="memItemLeft">std::size_t&#160;</td><td class="memItemRight"><a class="el" href="#a45bb750dccc7232b36bf8d1ae352a663">maxInlineDocumentBytes</a> = std::size_t{16} * 1024</td></tr>
+<tr class="memdesc:a45bb750dccc7232b36bf8d1ae352a663"><td class="mdescLeft">&#160;</td><td class="mdescRight">The longest document the system text carries whole. A larger one is described by an outline, and the assistant reads the rest through the screen's read tools.  <br /></td></tr>
 <tr class="memitem:a37ab633c837bc39fb2feb327ffadce2b" id="r_a37ab633c837bc39fb2feb327ffadce2b"><td class="memItemLeft">std::size_t&#160;</td><td class="memItemRight"><a class="el" href="#a37ab633c837bc39fb2feb327ffadce2b">maxProposalsPerTurn</a> = 3</td></tr>
 <tr class="memdesc:a37ab633c837bc39fb2feb327ffadce2b"><td class="mdescLeft">&#160;</td><td class="mdescRight">The refused proposals one turn may make. The turn that makes this many ends, with the last refusal told to the person, and leaves the window as it was.  <br /></td></tr>
 <tr class="memitem:a1d0a10eb687b15ce3f12c13f57aaffef" id="r_a1d0a10eb687b15ce3f12c13f57aaffef"><td class="memItemLeft">std::chrono::milliseconds&#160;</td><td class="memItemRight"><a class="el" href="#a1d0a10eb687b15ce3f12c13f57aaffef">toolCallTimeout</a> {std::chrono::seconds{30}}</td></tr>
@@ -314,9 +318,45 @@ Public Attributes</h2></td></tr>
       </table>
 </div><div class="memdoc">
 
-<p>The longest document the assistant proposes or is given as a draft. It fits one conversation's bound and a provider's answer; a larger screen is not offered for editing, and a turn carrying a larger draft is refused. </p>
+<p>The longest patch the assistant sends to change a screen. It bounds the proposal only: the document it is applied to and the draft that results are bounded by <span class="tt"><a class="el" href="#ac2ad2de9ba65af1506900bdaf2564d75" title="The longest document the assistant is given as a draft or offered to edit, and the longest draft a tu...">maxDraftBytes</a></span>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dc/dc9/conversations_8hpp_source.html#l00045">45</a> of file <a class="el" href="../../dc/dc9/conversations_8hpp_source.html">conversations.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dc/dc9/conversations_8hpp_source.html#l00044">44</a> of file <a class="el" href="../../dc/dc9/conversations_8hpp_source.html">conversations.hpp</a>.</p>
+
+</div>
+</div>
+<a id="ac2ad2de9ba65af1506900bdaf2564d75" name="ac2ad2de9ba65af1506900bdaf2564d75"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ac2ad2de9ba65af1506900bdaf2564d75">&#9670;&#160;</a></span>maxDraftBytes</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::size_t morph::ui::chat::ChatLimits::maxDraftBytes = std::size_t{256} * 1024</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>The longest document the assistant is given as a draft or offered to edit, and the longest draft a turn carries or accepts. A turn carrying a larger draft is refused, and a larger screen is not offered for editing. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../dc/dc9/conversations_8hpp_source.html#l00048">48</a> of file <a class="el" href="../../dc/dc9/conversations_8hpp_source.html">conversations.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a45bb750dccc7232b36bf8d1ae352a663" name="a45bb750dccc7232b36bf8d1ae352a663"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a45bb750dccc7232b36bf8d1ae352a663">&#9670;&#160;</a></span>maxInlineDocumentBytes</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::size_t morph::ui::chat::ChatLimits::maxInlineDocumentBytes = std::size_t{16} * 1024</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>The longest document the system text carries whole. A larger one is described by an outline, and the assistant reads the rest through the screen's read tools. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../dc/dc9/conversations_8hpp_source.html#l00051">51</a> of file <a class="el" href="../../dc/dc9/conversations_8hpp_source.html">conversations.hpp</a>.</p>
 
 </div>
 </div>
@@ -334,7 +374,7 @@ Public Attributes</h2></td></tr>
 
 <p>The refused proposals one turn may make. The turn that makes this many ends, with the last refusal told to the person, and leaves the window as it was. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dc/dc9/conversations_8hpp_source.html#l00048">48</a> of file <a class="el" href="../../dc/dc9/conversations_8hpp_source.html">conversations.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dc/dc9/conversations_8hpp_source.html#l00054">54</a> of file <a class="el" href="../../dc/dc9/conversations_8hpp_source.html">conversations.hpp</a>.</p>
 
 </div>
 </div>
@@ -352,7 +392,7 @@ Public Attributes</h2></td></tr>
 
 <p>How long the chat waits for one extra tool's offer or handler, or for the document source, to answer. Past it the call counts as failed (an offer as declined, the source as failing the turn) and a late answer is ignored, so a tool that never answers cannot hold a turn. Zero or less: no deadline. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dc/dc9/conversations_8hpp_source.html#l00052">52</a> of file <a class="el" href="../../dc/dc9/conversations_8hpp_source.html">conversations.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dc/dc9/conversations_8hpp_source.html#l00058">58</a> of file <a class="el" href="../../dc/dc9/conversations_8hpp_source.html">conversations.hpp</a>.</p>
 
 </div>
 </div>
@@ -370,7 +410,7 @@ Public Attributes</h2></td></tr>
 
 <p>How long an untouched conversation is kept. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dc/dc9/conversations_8hpp_source.html#l00054">54</a> of file <a class="el" href="../../dc/dc9/conversations_8hpp_source.html">conversations.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dc/dc9/conversations_8hpp_source.html#l00060">60</a> of file <a class="el" href="../../dc/dc9/conversations_8hpp_source.html">conversations.hpp</a>.</p>
 
 </div>
 </div>

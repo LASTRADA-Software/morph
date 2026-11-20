@@ -63,7 +63,7 @@ var NAVTREEINDEX0 =
 "d0/d26/structmorph_1_1session_1_1Principal.html#adceb36274cb7bbe112ab31e8d6e36bf8":[3,0,0,23,4,3],
 "d0/d26/structmorph_1_1session_1_1Principal.html#afaca81a57beb5b33f5e8ae76b4adbc04":[3,0,0,23,4,0],
 "d0/d27/workspace__model_8hpp.html":[4,0,0,15,55],
-"d0/d27/workspace__model_8hpp.html#a8de005310d4ec1a00182c73706aa064b":[1,0,0,1,696],
+"d0/d27/workspace__model_8hpp.html#a8de005310d4ec1a00182c73706aa064b":[1,0,0,1,697],
 "d0/d27/workspace__model_8hpp_source.html":[4,0,0,15,55],
 "d0/d28/structmorph_1_1ui_1_1testing_1_1detail_1_1Record.html":[3,0,0,28,3,0,46],
 "d0/d28/structmorph_1_1ui_1_1testing_1_1detail_1_1Record.html#a07f453b143c74f105f79558be7cc306a":[3,0,0,28,3,0,46,10],

@@ -1,5 +1,11 @@
 var NAVTREEINDEX23 =
 {
+"d8/d5f/structmorph_1_1ui_1_1ShellSearchView.html#a2c99282b1d3bb4d58de076fb7f92087d":[1,0,0,1,289,1],
+"d8/d5f/structmorph_1_1ui_1_1ShellSearchView.html#a2c99282b1d3bb4d58de076fb7f92087d":[3,0,0,28,291,1],
+"d8/d5f/structmorph_1_1ui_1_1ShellSearchView.html#a54a4375dd4ec553db9b58c5920508992":[1,0,0,1,289,2],
+"d8/d5f/structmorph_1_1ui_1_1ShellSearchView.html#a54a4375dd4ec553db9b58c5920508992":[3,0,0,28,291,2],
+"d8/d5f/structmorph_1_1ui_1_1ShellSearchView.html#a65ebf60a36727a819f851f09a9ce7ebf":[1,0,0,1,289,0],
+"d8/d5f/structmorph_1_1ui_1_1ShellSearchView.html#a65ebf60a36727a819f851f09a9ce7ebf":[3,0,0,28,291,0],
 "d8/d5f/structmorph_1_1ui_1_1ShellSearchView.html#a9a73623971c7859a4e8468aaf251e1d8":[1,0,0,1,289,3],
 "d8/d5f/structmorph_1_1ui_1_1ShellSearchView.html#a9a73623971c7859a4e8468aaf251e1d8":[3,0,0,28,291,3],
 "d8/d62/owned__state_8hpp.html":[4,0,0,1,0,4],
@@ -243,11 +249,5 @@ var NAVTREEINDEX23 =
 "d8/db7/classmorph_1_1ui_1_1CustomScreensModel.html#ae8f15a471be8fb9bca271d703ee0f063":[3,0,0,28,84,0],
 "d8/dba/structmorph_1_1model_1_1PayloadShapeTag_3_01morph_1_1units_1_1Quantity_3_01U_00_01Dec_01_4_01_4.html":[3,0,0,14,16],
 "d8/dbb/structmorph_1_1ui_1_1author_1_1FormOptions.html":[3,0,0,28,0,82],
-"d8/dbb/structmorph_1_1ui_1_1author_1_1FormOptions.html#a140dffca1314b9af1f8ed661d5b37f50":[3,0,0,28,0,82,7],
-"d8/dbb/structmorph_1_1ui_1_1author_1_1FormOptions.html#a3d216c3b252401211941310f7cd208e1":[3,0,0,28,0,82,2],
-"d8/dbb/structmorph_1_1ui_1_1author_1_1FormOptions.html#a3fec53e32477c202109b904ae7a819a7":[3,0,0,28,0,82,1],
-"d8/dbb/structmorph_1_1ui_1_1author_1_1FormOptions.html#a6d7703ddae3db9baab92137c174fb228":[3,0,0,28,0,82,0],
-"d8/dbb/structmorph_1_1ui_1_1author_1_1FormOptions.html#abbff45fbaee035c8045f59543f36f606":[3,0,0,28,0,82,8],
-"d8/dbb/structmorph_1_1ui_1_1author_1_1FormOptions.html#ad26feef68e8ba8b3005e352709cb940e":[3,0,0,28,0,82,5],
-"d8/dbb/structmorph_1_1ui_1_1author_1_1FormOptions.html#ad43481e9a50163fdd6b9ee999a869dc0":[3,0,0,28,0,82,4]
+"d8/dbb/structmorph_1_1ui_1_1author_1_1FormOptions.html#a140dffca1314b9af1f8ed661d5b37f50":[3,0,0,28,0,82,7]
 };

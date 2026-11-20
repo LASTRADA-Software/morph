@@ -121,7 +121,7 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('df/d1f/json__s
 </div><!--header-->
 <div class="contents">
 
-<p>A document's JSON text as the source view shows it: pretty-printed, and the place a JSON Pointer names in it, so a refusal moves the cursor to the part it is about.  
+<p>A document's JSON text as the source view shows it: pretty-printed compactly, and the place a JSON Pointer names in it, so a refusal moves the cursor to the part it is about.  
 <a href="#details">More...</a></p>
 <div class="textblock"><code>#include &lt;cstddef&gt;</code><br />
 <code>#include &lt;morph/export.hpp&gt;</code><br />
@@ -134,14 +134,16 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('df/d1f/json__s
 <tr class="heading"><td colspan="2"><h2 id="header-func-members" class="groupheader"><a id="func-members" name="func-members"></a>
 Functions</h2></td></tr>
 <tr class="memitem:a4afed397dcb30da64191cc0f8d9a6c09" id="r_a4afed397dcb30da64191cc0f8d9a6c09"><td class="memItemLeft">MORPH_API std::string&#160;</td><td class="memItemRight"><a class="el" href="#a4afed397dcb30da64191cc0f8d9a6c09">morph::ui::prettyJson</a> (std::string_view text)</td></tr>
-<tr class="memdesc:a4afed397dcb30da64191cc0f8d9a6c09"><td class="mdescLeft">&#160;</td><td class="mdescRight"><code class="param">text</code> pretty-printed: one member or element per line, members in their order.  <br /></td></tr>
+<tr class="memdesc:a4afed397dcb30da64191cc0f8d9a6c09"><td class="mdescLeft">&#160;</td><td class="mdescRight"><code class="param">text</code> pretty-printed for reading: indented by 2, with a container that fits within about 100 columns on one line (<span class="tt">{"kind": "<a class="el" href="../../d8/d11/view_8hpp.html#aad8adfeaad75b31095ad25cdff3b0888" title="Static or bound text.">text</a>", "<a class="el" href="../../d8/d11/view_8hpp.html#aad8adfeaad75b31095ad25cdff3b0888" title="Static or bound text.">text</a>": "x"}</span>) and every other member or element on a line of its own.  <br /></td></tr>
+<tr class="memitem:ae73e16170406d9213f57a8a81c6f959e" id="r_ae73e16170406d9213f57a8a81c6f959e"><td class="memItemLeft">MORPH_API std::string&#160;</td><td class="memItemRight"><a class="el" href="#ae73e16170406d9213f57a8a81c6f959e">morph::ui::compactJson</a> (std::string_view text)</td></tr>
+<tr class="memdesc:ae73e16170406d9213f57a8a81c6f959e"><td class="mdescLeft">&#160;</td><td class="mdescRight"><code class="param">text</code> with the white space between tokens removed, so a document indented for reading is sent as the bytes a bound was meant for.  <br /></td></tr>
 <tr class="memitem:a2ccc146cb51dfe6fe5e10524a781ee44" id="r_a2ccc146cb51dfe6fe5e10524a781ee44"><td class="memItemLeft">MORPH_API std::optional&lt; std::size_t &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a2ccc146cb51dfe6fe5e10524a781ee44">morph::ui::pointerOffset</a> (std::string_view text, std::string_view pointer)</td></tr>
 <tr class="memdesc:a2ccc146cb51dfe6fe5e10524a781ee44"><td class="mdescLeft">&#160;</td><td class="mdescRight">Where the part a JSON Pointer names starts in <code class="param">text</code>.  <br /></td></tr>
 <tr class="memitem:a22f5f7fab7688eb3640fb7233db0357c" id="r_a22f5f7fab7688eb3640fb7233db0357c"><td class="memItemLeft">MORPH_API std::size_t&#160;</td><td class="memItemRight"><a class="el" href="#a22f5f7fab7688eb3640fb7233db0357c">morph::ui::lineAt</a> (std::string_view text, std::size_t offset)</td></tr>
 <tr class="memdesc:a22f5f7fab7688eb3640fb7233db0357c"><td class="mdescLeft">&#160;</td><td class="mdescRight">The line <code class="param">offset</code> is on.  <br /></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
-<div class="textblock"><p>A document's JSON text as the source view shows it: pretty-printed, and the place a JSON Pointer names in it, so a refusal moves the cursor to the part it is about. </p>
+<div class="textblock"><p>A document's JSON text as the source view shows it: pretty-printed compactly, and the place a JSON Pointer names in it, so a refusal moves the cursor to the part it is about. </p>
 <p>Specified in <span class="tt">docs/spec/ui/custom_screens.md</span>, "The client". </p>
 
 <p class="definition">Definition in file <a class="el" href="../../df/d1f/json__source_8hpp_source.html">json_source.hpp</a>.</p>
@@ -169,14 +171,48 @@ Functions</h2></td></tr>
 </table>
 </div><div class="memdoc">
 
-<p><code class="param">text</code> pretty-printed: one member or element per line, members in their order. </p>
-<dl class="params"><dt>Parameters</dt><dd>
+<p><code class="param">text</code> pretty-printed for reading: indented by 2, with a container that fits within about 100 columns on one line (<span class="tt">{"kind": "text", "text": "x"}</span>) and every other member or element on a line of its own. </p>
+<p>Members keep their order and scalars their written form, so the text means what <code class="param">text</code> meant and is several times smaller than one value per line. </p><dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
     <tr><td class="paramname">text</td><td>JSON text. </td></tr>
   </table>
   </dd>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The pretty text; <code class="param">text</code> unchanged when it is not JSON, so a hand-edited draft that does not parse is shown as the person left it. </dd></dl>
+
+</div>
+</div>
+<a id="ae73e16170406d9213f57a8a81c6f959e" name="ae73e16170406d9213f57a8a81c6f959e"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ae73e16170406d9213f57a8a81c6f959e">&#9670;&#160;</a></span>compactJson()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">MORPH_API std::string morph::ui::compactJson </td>
+          <td>(</td>
+          <td class="paramtype">std::string_view</td>          <td class="paramname"><span class="paramname"><em>text</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p><code class="param">text</code> with the white space between tokens removed, so a document indented for reading is sent as the bytes a bound was meant for. </p>
+<p>Strings are untouched and members stay in their order; nothing about the document changes. A JSON Pointer into the result is the one into <code class="param">text</code>, but a byte offset is not. </p><dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">text</td><td>JSON text. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>The compact text; <code class="param">text</code> unchanged when it is not JSON, so the server refuses what the person wrote. </dd></dl>
 
 </div>
 </div>

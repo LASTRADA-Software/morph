@@ -253,8 +253,8 @@ Public Member Functions</h2></td></tr>
   <table class="params">
     <tr><td class="paramname">workerPool</td><td>Pool the server strand and every model strand run on. Borrowed, not owned: it must outlive this server and keep running until teardown completes (see <span class="tt">docs/spec/concurrency_and_lifetimes.md</span>, "Destruction
                   ordering"). </td></tr>
-    <tr><td class="paramname">dispatcher</td><td>Action dispatcher; defaults to the process-level singleton. Borrowed: it must outlive this server. </td></tr>
-    <tr><td class="paramname">registry</td><td>Model factory registry; defaults to the process-level singleton. Borrowed: it must outlive this server. </td></tr>
+    <tr><td class="paramname">dispatcher</td><td>Action dispatcher; defaults to the process-level singleton. Borrowed: destroy it after the worker pool has drained, because in-flight runs keep the server, and through it the dispatcher, alive past the owner's last reference to the server. </td></tr>
+    <tr><td class="paramname">registry</td><td>Model factory registry; defaults to the process-level singleton. Borrowed on the same terms as <code class="param">dispatcher:</code> destroy it after the worker pool has drained. </td></tr>
   </table>
   </dd>
 </dl>
@@ -265,7 +265,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00421">421</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00426">426</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 
 </div>
 </div>
@@ -311,8 +311,8 @@ Public Member Functions</h2></td></tr>
   <table class="params">
     <tr><td class="paramname">workerPool</td><td>Pool the server's strands run on. Borrowed, on the same terms as the constructor above. </td></tr>
     <tr><td class="paramname">authorizer</td><td>Authorizer consulted for every envelope that makes an authorization decision; null means allow-all. </td></tr>
-    <tr><td class="paramname">dispatcher</td><td>Action dispatcher; defaults to the process-level singleton. Borrowed: it must outlive this server. </td></tr>
-    <tr><td class="paramname">registry</td><td>Model factory registry; defaults to the process-level singleton. Borrowed: it must outlive this server. </td></tr>
+    <tr><td class="paramname">dispatcher</td><td>Action dispatcher; defaults to the process-level singleton. Borrowed: destroy it after the worker pool has drained, because in-flight runs keep the server, and through it the dispatcher, alive past the owner's last reference to the server. </td></tr>
+    <tr><td class="paramname">registry</td><td>Model factory registry; defaults to the process-level singleton. Borrowed on the same terms as <code class="param">dispatcher:</code> destroy it after the worker pool has drained. </td></tr>
   </table>
   </dd>
 </dl>
@@ -323,7 +323,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00442">442</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00452">452</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 
 </div>
 </div>
@@ -369,8 +369,8 @@ Public Member Functions</h2></td></tr>
   <table class="params">
     <tr><td class="paramname">workerPool</td><td>Pool the server's strands run on. Borrowed, on the same terms as the first constructor. </td></tr>
     <tr><td class="paramname">config</td><td>Limits, log provider, health handler, protocol range and payload rule, fixed for the server's life. </td></tr>
-    <tr><td class="paramname">dispatcher</td><td>Action dispatcher; defaults to the process-level singleton. Borrowed: it must outlive this server. </td></tr>
-    <tr><td class="paramname">registry</td><td>Model factory registry; defaults to the process-level singleton. Borrowed: it must outlive this server. </td></tr>
+    <tr><td class="paramname">dispatcher</td><td>Action dispatcher; defaults to the process-level singleton. Borrowed: destroy it after the worker pool has drained, because in-flight runs keep the server, and through it the dispatcher, alive past the owner's last reference to the server. </td></tr>
+    <tr><td class="paramname">registry</td><td>Model factory registry; defaults to the process-level singleton. Borrowed on the same terms as <code class="param">dispatcher:</code> destroy it after the worker pool has drained. </td></tr>
   </table>
   </dd>
 </dl>
@@ -382,7 +382,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00466">466</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00481">481</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 
 </div>
 </div>
@@ -435,8 +435,8 @@ Public Member Functions</h2></td></tr>
     <tr><td class="paramname">workerPool</td><td>Pool the server's strands run on. Borrowed, on the same terms as the first constructor. </td></tr>
     <tr><td class="paramname">authorizer</td><td>Authorizer consulted for every envelope that makes an authorization decision; null means allow-all. </td></tr>
     <tr><td class="paramname">config</td><td>Limits, log provider, health handler, protocol range and payload rule, fixed for the server's life. </td></tr>
-    <tr><td class="paramname">dispatcher</td><td>Action dispatcher; defaults to the process-level singleton. Borrowed: it must outlive this server. </td></tr>
-    <tr><td class="paramname">registry</td><td>Model factory registry; defaults to the process-level singleton. Borrowed: it must outlive this server. </td></tr>
+    <tr><td class="paramname">dispatcher</td><td>Action dispatcher; defaults to the process-level singleton. Borrowed: destroy it after the worker pool has drained, because in-flight runs keep the server, and through it the dispatcher, alive past the owner's last reference to the server. </td></tr>
+    <tr><td class="paramname">registry</td><td>Model factory registry; defaults to the process-level singleton. Borrowed on the same terms as <code class="param">dispatcher:</code> destroy it after the worker pool has drained. </td></tr>
   </table>
   </dd>
 </dl>
@@ -448,7 +448,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00494">494</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00514">514</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 
 </div>
 </div>
@@ -478,7 +478,7 @@ Public Member Functions</h2></td></tr>
 <p>Closes the server strand before any other member goes. </p>
 <p>Every task the server posts holds the server, so nothing of it is still queued here; closing waits for a task still running on another thread and returns at once from inside the server's own last task. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00528">528</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00548">548</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 
 </div>
 </div>
@@ -521,7 +521,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00545">545</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00565">565</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 
 </div>
 </div>
@@ -569,7 +569,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00563">563</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00583">583</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 
 </div>
 </div>
@@ -616,7 +616,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00578">578</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00598">598</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 
 </div>
 </div>
@@ -654,7 +654,7 @@ Public Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>JSON-encoded reply envelope. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00610">610</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00630">630</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 
 </div>
 </div>
@@ -696,7 +696,7 @@ Public Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>JSON-encoded reply envelope. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00623">623</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00643">643</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 
 </div>
 </div>
@@ -727,7 +727,7 @@ Public Member Functions</h2></td></tr>
 <p>Call once per accepted transport connection (e.g. from a WebSocket server's "new connection" callback). The returned id is never <span class="tt">0</span>, so it can always be distinguished from the reserved "unscoped" value. Pass it to the scoped <span class="tt">handle(msg, reply, cid)</span> overload for every message received on that connection, and to <span class="tt">closeConnection(cid)</span> once the connection is gone.</p>
 <p>Callable from any thread. The id is drawn at once; the scope is opened on the server strand, before any <span class="tt"><a class="el" href="#ae0a8a4b505069b41f9005705e93d4701" title="Asynchronously processes a JSON Envelope and calls reply with the response.">handle()</a></span> the same thread makes next. </p><dl class="section return"><dt>Returns</dt><dd>A fresh, non-zero <span class="tt"><a class="el" href="../../d6/d12/connection__writer_8hpp.html#a85eb19bfc15378ec6e1719bc0bbd6ad2" title="Opaque id a transport uses to scope model registrations to one connection so RemoteServer::closeConne...">ConnectionId</a></span>. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00663">663</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00683">683</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 
 </div>
 </div>
@@ -765,7 +765,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00697">697</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00717">717</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 
 </div>
 </div>
@@ -806,7 +806,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00717">717</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00737">737</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 
 </div>
 </div>
@@ -848,7 +848,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00756">756</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00776">776</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 
 </div>
 </div>
@@ -884,7 +884,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00781">781</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00801">801</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 
 </div>
 </div>
@@ -920,7 +920,7 @@ Public Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">true</span> once the connection negotiated events; <span class="tt">false</span> for <span class="tt">0</span>, an unknown connection or a closed one. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00797">797</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00817">817</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 
 </div>
 </div>
@@ -950,7 +950,7 @@ Public Member Functions</h2></td></tr>
 <p>The topics each open connection watches. </p>
 <p>Server strand only: call it from a task on <span class="tt"><a class="el" href="#ad197c37d0a3bd9bf562b04419021514d" title="The server strand, as an executor.">strand()</a></span>; a debug build asserts that. Filled by the <span class="tt">watch</span> and <span class="tt">unwatch</span> kinds, and emptied for a connection when it closes or a write to it fails. </p><dl class="section return"><dt>Returns</dt><dd>The watch table, valid for the server's life. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00809">809</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00829">829</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 
 </div>
 </div>
@@ -999,7 +999,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00846">846</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00866">866</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 
 </div>
 </div>
@@ -1029,7 +1029,7 @@ Public Member Functions</h2></td></tr>
 <p>The server strand, as an executor. </p>
 <p>What <span class="tt">runningOn(server.strand())</span> asks about: true inside every task the server runs on its own state, false elsewhere. A task posted to it runs in order with the server's own, never beside one. </p><dl class="section return"><dt>Returns</dt><dd>The strand every envelope, verb and <span class="tt">execute</span> admission runs on. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00882">882</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00902">902</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 
 </div>
 </div>
@@ -1059,7 +1059,7 @@ Public Member Functions</h2></td></tr>
 <p>Returns the configured payload-completeness rule. </p>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt"><a class="el" href="../../dd/d0c/structmorph_1_1backend_1_1ServerConfig.html#a0d1204bec80cf0bc0d0cd96c59c28597" title="Whether an execute body must carry every field the action&#39;s served schema marks required....">ServerConfig::payloadCompleteness</a></span>, as given at construction. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00886">886</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00906">906</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 
 </div>
 </div>
@@ -1095,7 +1095,7 @@ Public Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>A <span class="tt">Completion</span> settled on the server strand with <span class="tt">ready</span>, the live model count and the in-flight execute count; its callbacks run on <code class="param">replyExec</code>. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00899">899</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00919">919</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 
 </div>
 </div>
@@ -1126,7 +1126,7 @@ Public Member Functions</h2></td></tr>
 <p>Posted to the server strand: an envelope this thread hands <span class="tt"><a class="el" href="#ae0a8a4b505069b41f9005705e93d4701" title="Asynchronously processes a JSON Envelope and calls reply with the response.">handle()</a></span> after this call returns is refused. Idempotent. There is no way back: a restarted service constructs a fresh <span class="tt"><a class="el" href="../../d4/dc1/classmorph_1_1backend_1_1RemoteServer.html" title="Server-side message handler that owns model instances and dispatches actions.">RemoteServer</a></span>.</p>
 <p>Also flips <span class="tt"><a class="el" href="#a4e56d64c5c9a9044920337bb9b27a092" title="The server&#39;s health, answered on the server strand.">health()</a></span>'s <span class="tt">ready</span> to <span class="tt">false</span> and calls <span class="tt"><a class="el" href="../../dd/d0c/structmorph_1_1backend_1_1ServerConfig.html#a1ce5548f3f49f5349bdeede99ccb300b" title="Called with the server&#39;s health: once from the constructor, and again, on the server&#39;s strand,...">ServerConfig::healthHandler</a></span>, if set, with the post-shutdown status, on the server strand — what lets an orchestrator stop routing to this server while <span class="tt"><a class="el" href="#ad6574a0055fb8bf539dc525e68bac88e" title="Answers whether every in-flight execute delivers its reply within deadline.">drainedWithin()</a></span>'s drain runs. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00922">922</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00942">942</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 
 </div>
 </div>
@@ -1167,7 +1167,7 @@ Public Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>A <span class="tt">Completion</span> settled on the server strand: <span class="tt">true</span> once the count is zero, <span class="tt">false</span> if <code class="param">deadline</code> elapses first. Its callbacks run on <code class="param">replyExec</code>. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00953">953</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00973">973</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 
 </div>
 </div>

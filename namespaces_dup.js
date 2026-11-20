@@ -1112,6 +1112,7 @@ var namespaces_dup =
         [ "identityKey", "dd/d78/host_8hpp.html#ae039bd1b0db75f60a0c9fda0fc0bd085", null ],
         [ "sameIdentity", "dd/d78/host_8hpp.html#a3c1c3dcf594607d3803ddd9217290f2a", null ],
         [ "prettyJson", "df/d1f/json__source_8hpp.html#a4afed397dcb30da64191cc0f8d9a6c09", null ],
+        [ "compactJson", "df/d1f/json__source_8hpp.html#ae73e16170406d9213f57a8a81c6f959e", null ],
         [ "pointerOffset", "df/d1f/json__source_8hpp.html#a2ccc146cb51dfe6fe5e10524a781ee44", null ],
         [ "lineAt", "df/d1f/json__source_8hpp.html#a22f5f7fab7688eb3640fb7233db0357c", null ],
         [ "categoryName", "d5/d8c/message_8hpp.html#a239fc4da1acc6894a6bda8c803a283a4", null ],

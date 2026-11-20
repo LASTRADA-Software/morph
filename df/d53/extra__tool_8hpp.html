@@ -181,7 +181,7 @@ Typedefs</h2></td></tr>
 
 <p>Where a handler delivers a call's outcome: from any thread, exactly once. A second delivery is ignored. A turn that stopped meanwhile ignores it too. A handler that has not delivered within <span class="tt">ChatLimits::toolCallTimeout</span> is answered with a failed outcome, and a later delivery is ignored. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../df/d53/extra__tool_8hpp_source.html#l00086">86</a> of file <a class="el" href="../../df/d53/extra__tool_8hpp_source.html">extra_tool.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../df/d53/extra__tool_8hpp_source.html#l00091">91</a> of file <a class="el" href="../../df/d53/extra__tool_8hpp_source.html">extra_tool.hpp</a>.</p>
 
 </div>
 </div>
@@ -199,7 +199,7 @@ Typedefs</h2></td></tr>
 
 <p>Where an offer delivers its answer: from any thread, exactly once. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../df/d53/extra__tool_8hpp_source.html#l00089">89</a> of file <a class="el" href="../../df/d53/extra__tool_8hpp_source.html">extra_tool.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../df/d53/extra__tool_8hpp_source.html#l00094">94</a> of file <a class="el" href="../../df/d53/extra__tool_8hpp_source.html">extra_tool.hpp</a>.</p>
 
 </div>
 </div>
@@ -218,7 +218,7 @@ Typedefs</h2></td></tr>
 <p>Runs one call of a tool. </p>
 <p>Invoked on the turn's worker with the context by value, so a handler that finishes later keeps it. The arguments are a JSON object: the service refuses any other call before it gets here. A handler that never delivers is answered as failed after <span class="tt">ChatLimits::toolCallTimeout</span>, and one that throws reports the call as failed. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../df/d53/extra__tool_8hpp_source.html#l00096">96</a> of file <a class="el" href="../../df/d53/extra__tool_8hpp_source.html">extra_tool.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../df/d53/extra__tool_8hpp_source.html#l00101">101</a> of file <a class="el" href="../../df/d53/extra__tool_8hpp_source.html">extra_tool.hpp</a>.</p>
 
 </div>
 </div>
@@ -236,7 +236,7 @@ Typedefs</h2></td></tr>
 
 <p>Answers whether this turn may call a tool, once at its start. Invoked on the turn's worker. An offer that has not answered within <span class="tt">ChatLimits::toolCallTimeout</span> counts as declined. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../df/d53/extra__tool_8hpp_source.html#l00100">100</a> of file <a class="el" href="../../df/d53/extra__tool_8hpp_source.html">extra_tool.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../df/d53/extra__tool_8hpp_source.html#l00105">105</a> of file <a class="el" href="../../df/d53/extra__tool_8hpp_source.html">extra_tool.hpp</a>.</p>
 
 </div>
 </div>
@@ -254,7 +254,7 @@ Typedefs</h2></td></tr>
 
 <p>Rewrites a call's arguments into what the conversation keeps of it; sees the arguments as JSON text and answers JSON text for an object. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../df/d53/extra__tool_8hpp_source.html#l00104">104</a> of file <a class="el" href="../../df/d53/extra__tool_8hpp_source.html">extra_tool.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../df/d53/extra__tool_8hpp_source.html#l00109">109</a> of file <a class="el" href="../../df/d53/extra__tool_8hpp_source.html">extra_tool.hpp</a>.</p>
 
 </div>
 </div>

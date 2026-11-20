@@ -132,6 +132,8 @@ Public Attributes</h2></td></tr>
 <tr class="memdesc:a9d44354b1531f59b68d0a8a19f5aae21"><td class="mdescLeft">&#160;</td><td class="mdescRight">The turn's session, its principal verified.  <br /></td></tr>
 <tr class="memitem:a605623cc0690f83609efaa2978f8ae33" id="r_a605623cc0690f83609efaa2978f8ae33"><td class="memItemLeft"><a class="el" href="../../d5/d78/structmorph_1_1ui_1_1chat_1_1TurnRequest.html">TurnRequest</a>&#160;</td><td class="memItemRight"><a class="el" href="#a605623cc0690f83609efaa2978f8ae33">request</a></td></tr>
 <tr class="memdesc:a605623cc0690f83609efaa2978f8ae33"><td class="mdescLeft">&#160;</td><td class="mdescRight">The screen the person is on: its id, title, identity, params, models and draft, and what they said.  <br /></td></tr>
+<tr class="memitem:aaf42130b2b242b19cf399c75a2c46ab3" id="r_aaf42130b2b242b19cf399c75a2c46ab3"><td class="memItemLeft">std::optional&lt; std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="#aaf42130b2b242b19cf399c75a2c46ab3">document</a></td></tr>
+<tr class="memdesc:aaf42130b2b242b19cf399c75a2c46ab3"><td class="mdescLeft">&#160;</td><td class="mdescRight">The document the turn is working on, as JSON text: the latest draft a tool accepted in this turn, else the draft the request carried; absent when neither exists, in which case the screen's own document is where the turn started (<span class="tt"><a class="el" href="#a589ca4f65438139600b4f1a29489bf23" title="The bundle the chat serves, which is where an application screen&#39;s own document is read.">bundle</a></span>, <span class="tt"><a class="el" href="#a41431eba98fda8bcd385dbb0e60e8e0a" title="What ChatOptions::documentSource read for the open screen, when the bundle does not hold it....">external</a></span>). A tool that reads or patches the screen reads this, so a call sees what the calls before it accepted.  <br /></td></tr>
 <tr class="memitem:a589ca4f65438139600b4f1a29489bf23" id="r_a589ca4f65438139600b4f1a29489bf23"><td class="memItemLeft">std::shared_ptr&lt; <a class="el" href="../../de/d9f/structmorph_1_1ui_1_1ServedBundle.html">ServedBundle</a> const  &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a589ca4f65438139600b4f1a29489bf23">bundle</a></td></tr>
 <tr class="memdesc:a589ca4f65438139600b4f1a29489bf23"><td class="mdescLeft">&#160;</td><td class="mdescRight">The bundle the chat serves, which is where an application screen's own document is read.  <br /></td></tr>
 <tr class="memitem:a1253135a230bc616b4db3cc7a91fe247" id="r_a1253135a230bc616b4db3cc7a91fe247"><td class="memItemLeft"><a class="el" href="../../d4/d9d/structmorph_1_1ui_1_1chat_1_1ChatLimits.html">ChatLimits</a>&#160;</td><td class="memItemRight"><a class="el" href="#a1253135a230bc616b4db3cc7a91fe247">limits</a></td></tr>
@@ -185,6 +187,24 @@ Public Attributes</h2></td></tr>
 
 </div>
 </div>
+<a id="aaf42130b2b242b19cf399c75a2c46ab3" name="aaf42130b2b242b19cf399c75a2c46ab3"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#aaf42130b2b242b19cf399c75a2c46ab3">&#9670;&#160;</a></span>document</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::optional&lt;std::string&gt; morph::ui::chat::ChatToolContext::document</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>The document the turn is working on, as JSON text: the latest draft a tool accepted in this turn, else the draft the request carried; absent when neither exists, in which case the screen's own document is where the turn started (<span class="tt"><a class="el" href="#a589ca4f65438139600b4f1a29489bf23" title="The bundle the chat serves, which is where an application screen&#39;s own document is read.">bundle</a></span>, <span class="tt"><a class="el" href="#a41431eba98fda8bcd385dbb0e60e8e0a" title="What ChatOptions::documentSource read for the open screen, when the bundle does not hold it....">external</a></span>). A tool that reads or patches the screen reads this, so a call sees what the calls before it accepted. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../df/d53/extra__tool_8hpp_source.html#l00048">48</a> of file <a class="el" href="../../df/d53/extra__tool_8hpp_source.html">extra_tool.hpp</a>.</p>
+
+</div>
+</div>
 <a id="a589ca4f65438139600b4f1a29489bf23" name="a589ca4f65438139600b4f1a29489bf23"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a589ca4f65438139600b4f1a29489bf23">&#9670;&#160;</a></span>bundle</h2>
 
@@ -199,7 +219,7 @@ Public Attributes</h2></td></tr>
 
 <p>The bundle the chat serves, which is where an application screen's own document is read. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../df/d53/extra__tool_8hpp_source.html#l00045">45</a> of file <a class="el" href="../../df/d53/extra__tool_8hpp_source.html">extra_tool.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../df/d53/extra__tool_8hpp_source.html#l00050">50</a> of file <a class="el" href="../../df/d53/extra__tool_8hpp_source.html">extra_tool.hpp</a>.</p>
 
 </div>
 </div>
@@ -217,7 +237,7 @@ Public Attributes</h2></td></tr>
 
 <p>The chat's bounds. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../df/d53/extra__tool_8hpp_source.html#l00047">47</a> of file <a class="el" href="../../df/d53/extra__tool_8hpp_source.html">extra_tool.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../df/d53/extra__tool_8hpp_source.html#l00052">52</a> of file <a class="el" href="../../df/d53/extra__tool_8hpp_source.html">extra_tool.hpp</a>.</p>
 
 </div>
 </div>
@@ -235,7 +255,7 @@ Public Attributes</h2></td></tr>
 
 <p>What <span class="tt"><a class="el" href="../../d3/d4e/structmorph_1_1ui_1_1chat_1_1ChatOptions.html#a6bda5475840e39d169fe01d66d9bcd77" title="Where the document of a screen outside the bundle is read, so the chat can offer such a screen&#39;s acti...">ChatOptions::documentSource</a></span> read for the open screen, when the bundle does not hold it. It is read once per turn, so a tool does not read the screen again. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../df/d53/extra__tool_8hpp_source.html#l00050">50</a> of file <a class="el" href="../../df/d53/extra__tool_8hpp_source.html">extra_tool.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../df/d53/extra__tool_8hpp_source.html#l00055">55</a> of file <a class="el" href="../../df/d53/extra__tool_8hpp_source.html">extra_tool.hpp</a>.</p>
 
 </div>
 </div>
@@ -253,7 +273,7 @@ Public Attributes</h2></td></tr>
 
 <p>How many earlier calls of this tool, in this turn, came back as an error. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../df/d53/extra__tool_8hpp_source.html#l00052">52</a> of file <a class="el" href="../../df/d53/extra__tool_8hpp_source.html">extra_tool.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../df/d53/extra__tool_8hpp_source.html#l00057">57</a> of file <a class="el" href="../../df/d53/extra__tool_8hpp_source.html">extra_tool.hpp</a>.</p>
 
 </div>
 </div>
@@ -271,7 +291,7 @@ Public Attributes</h2></td></tr>
 
 <p>Whatever the tool's <span class="tt">offer</span> handed to <span class="tt"><a class="el" href="../../d0/dfb/structmorph_1_1ui_1_1chat_1_1ChatToolOffer.html#ae5eb4e5e64aab2ef853db7f3d3685e23" title="Whatever the tool&#39;s handler needs again from the work this answer took; reaches it as ChatToolContext...">ChatToolOffer::carried</a></span>; null without one. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../df/d53/extra__tool_8hpp_source.html#l00054">54</a> of file <a class="el" href="../../df/d53/extra__tool_8hpp_source.html">extra_tool.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../df/d53/extra__tool_8hpp_source.html#l00059">59</a> of file <a class="el" href="../../df/d53/extra__tool_8hpp_source.html">extra_tool.hpp</a>.</p>
 
 </div>
 </div>

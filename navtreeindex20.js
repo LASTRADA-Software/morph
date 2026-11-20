@@ -1,5 +1,11 @@
 var NAVTREEINDEX20 =
 {
+"d7/d6b/structmorph_1_1tui_1_1FrontendConfig.html#a95fd38c9fffc5367bb0534fe2f64814e":[3,0,0,27,2,0],
+"d7/d6b/structmorph_1_1tui_1_1FrontendConfig.html#accb15841cad287fb45fa324e27fa0485":[3,0,0,27,2,2],
+"d7/d6b/structmorph_1_1tui_1_1FrontendConfig.html#af937b0640b87b72aa0733b46c5f0b73a":[3,0,0,27,2,3],
+"d7/d6d/structmorph_1_1forms_1_1Ranged.html":[3,0,0,10,47],
+"d7/d6d/structmorph_1_1forms_1_1Ranged.html#a607e1d136db6d51bc20fd60259179ada":[3,0,0,10,47,4],
+"d7/d6d/structmorph_1_1forms_1_1Ranged.html#a67fe3e060b0f6774a83d913a16dce50e":[3,0,0,10,47,1],
 "d7/d6d/structmorph_1_1forms_1_1Ranged.html#a85688330d2b644abfe49ca96fd7359c7":[3,0,0,10,47,0],
 "d7/d6d/structmorph_1_1forms_1_1Ranged.html#a89def92af9c65d7552900e2d55cd4e6f":[3,0,0,10,47,6],
 "d7/d6d/structmorph_1_1forms_1_1Ranged.html#a89ef918a90efd8c9d97e5ec1fdbb78e2":[3,0,0,10,47,3],
@@ -243,11 +249,5 @@ var NAVTREEINDEX20 =
 "d7/de9/structmorph_1_1ui_1_1detail_1_1EventKey.html#a7d3c9dece05a47c7af0f3cac641c9cf8":[3,0,0,28,2,15,1],
 "d7/dec/structmorph_1_1ui_1_1author_1_1detail_1_1ValueOf_3_01Handle_3_01T_01_4_01_4.html":[3,0,0,28,0,0,13],
 "d7/dec/structmorph_1_1ui_1_1author_1_1detail_1_1ValueOf_3_01Handle_3_01T_01_4_01_4.html#a71f87b338ef6f74725916df41a725bcc":[3,0,0,28,0,0,13,0],
-"d7/dee/structmorph_1_1ui_1_1author_1_1FormPresentation.html":[3,0,0,28,0,81],
-"d7/dee/structmorph_1_1ui_1_1author_1_1FormPresentation.html#a1937d50b9f1792032251367b8ca58375":[3,0,0,28,0,81,3],
-"d7/dee/structmorph_1_1ui_1_1author_1_1FormPresentation.html#a4cc3760e12bc308fe15e20f63b835f9f":[3,0,0,28,0,81,2],
-"d7/dee/structmorph_1_1ui_1_1author_1_1FormPresentation.html#a5a02a59a18752e67b31a71ebac50f100":[3,0,0,28,0,81,1],
-"d7/dee/structmorph_1_1ui_1_1author_1_1FormPresentation.html#ac128c92ab6cfaf27af488568e40e47d8":[3,0,0,28,0,81,0],
-"d7/dee/structmorph_1_1ui_1_1author_1_1FormPresentation.html#ac4001a7d64cb909469e8259bda2e0d57":[3,0,0,28,0,81,5],
-"d7/dee/structmorph_1_1ui_1_1author_1_1FormPresentation.html#ac50ff7ff0e740f95a85f37952d30738e":[3,0,0,28,0,81,4]
+"d7/dee/structmorph_1_1ui_1_1author_1_1FormPresentation.html":[3,0,0,28,0,81]
 };

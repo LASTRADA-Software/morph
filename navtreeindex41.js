@@ -1,5 +1,14 @@
 var NAVTREEINDEX41 =
 {
+"de/d9a/structmorph_1_1qt_1_1QtWebSocketServerConfig.html#aeb30cc5b19543d22feef392669c98834":[3,0,0,18,4,7],
+"de/d9a/structmorph_1_1qt_1_1QtWebSocketServerConfig.html#af6e06a0286bf9a348a7b62def318b85d":[3,0,0,18,4,0],
+"de/d9e/classmorph_1_1table_1_1ChangeListener.html":[3,0,0,24,3],
+"de/d9e/classmorph_1_1table_1_1ChangeListener.html#a2ce6040710c42d0515e78402a26961c6":[3,0,0,24,3,0],
+"de/d9f/structmorph_1_1ui_1_1ServedBundle.html":[1,0,0,1,265],
+"de/d9f/structmorph_1_1ui_1_1ServedBundle.html":[3,0,0,28,267],
+"de/d9f/structmorph_1_1ui_1_1ServedBundle.html#a01d1842ee9340a83b18d08f307876e4d":[1,0,0,1,265,13],
+"de/d9f/structmorph_1_1ui_1_1ServedBundle.html#a01d1842ee9340a83b18d08f307876e4d":[3,0,0,28,267,13],
+"de/d9f/structmorph_1_1ui_1_1ServedBundle.html#a1745ce0ec4270841b15f8ef403cce42f":[1,0,0,1,265,2],
 "de/d9f/structmorph_1_1ui_1_1ServedBundle.html#a1745ce0ec4270841b15f8ef403cce42f":[3,0,0,28,267,2],
 "de/d9f/structmorph_1_1ui_1_1ServedBundle.html#a194a70b238c8e5cb0348cf6285f78eb3":[1,0,0,1,265,8],
 "de/d9f/structmorph_1_1ui_1_1ServedBundle.html#a194a70b238c8e5cb0348cf6285f78eb3":[3,0,0,28,267,8],
@@ -240,14 +249,5 @@ var NAVTREEINDEX41 =
 "de/de9/browser__history_8hpp.html":[4,0,0,8,1],
 "de/de9/browser__history_8hpp_source.html":[4,0,0,8,1],
 "de/dea/structmorph_1_1ui_1_1PreferencesLoaded.html":[1,0,0,1,225],
-"de/dea/structmorph_1_1ui_1_1PreferencesLoaded.html":[3,0,0,28,227],
-"de/dea/structmorph_1_1ui_1_1PreferencesLoaded.html#a26ac6a64ec1a250ad17f8ef93bcba2e8":[1,0,0,1,225,0],
-"de/dea/structmorph_1_1ui_1_1PreferencesLoaded.html#a26ac6a64ec1a250ad17f8ef93bcba2e8":[3,0,0,28,227,0],
-"de/dea/structmorph_1_1ui_1_1PreferencesLoaded.html#ab75a08bb3486f5f50fc8fb82b7e85ce2":[1,0,0,1,225,1],
-"de/dea/structmorph_1_1ui_1_1PreferencesLoaded.html#ab75a08bb3486f5f50fc8fb82b7e85ce2":[3,0,0,28,227,1],
-"de/df1/classmorph_1_1reactive_1_1Scope.html":[1,0,0,0,13],
-"de/df1/classmorph_1_1reactive_1_1Scope.html":[3,0,0,20,14],
-"de/df1/classmorph_1_1reactive_1_1Scope.html#a0498518b3bc1d3ea7ed7d078f393fa60":[1,0,0,0,13,1],
-"de/df1/classmorph_1_1reactive_1_1Scope.html#a0498518b3bc1d3ea7ed7d078f393fa60":[3,0,0,20,14,1],
-"de/df1/classmorph_1_1reactive_1_1Scope.html#a3e7e45dddb8f8dd26babc581feb42c4e":[1,0,0,0,13,0]
+"de/dea/structmorph_1_1ui_1_1PreferencesLoaded.html":[3,0,0,28,227]
 };

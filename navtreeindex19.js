@@ -1,5 +1,11 @@
 var NAVTREEINDEX19 =
 {
+"d7/d39/structmorph_1_1ui_1_1MutationDecl.html#a3d1ab5d99dd5a98fffd9a5c0e572a3cd":[3,0,0,28,204,9],
+"d7/d39/structmorph_1_1ui_1_1MutationDecl.html#a5b3bfa18cb8a49aa2d048e0f7122ee9d":[1,0,0,1,202,2],
+"d7/d39/structmorph_1_1ui_1_1MutationDecl.html#a5b3bfa18cb8a49aa2d048e0f7122ee9d":[3,0,0,28,204,2],
+"d7/d39/structmorph_1_1ui_1_1MutationDecl.html#a629c0b85b2d111efb07df99cd74ab2b8":[1,0,0,1,202,3],
+"d7/d39/structmorph_1_1ui_1_1MutationDecl.html#a629c0b85b2d111efb07df99cd74ab2b8":[3,0,0,28,204,3],
+"d7/d39/structmorph_1_1ui_1_1MutationDecl.html#a6d4fa29bfd1ba682c1307023eaad845a":[1,0,0,1,202,6],
 "d7/d39/structmorph_1_1ui_1_1MutationDecl.html#a6d4fa29bfd1ba682c1307023eaad845a":[3,0,0,28,204,6],
 "d7/d39/structmorph_1_1ui_1_1MutationDecl.html#a87bed2dad0643f3aae17dcb57377e509":[1,0,0,1,202,8],
 "d7/d39/structmorph_1_1ui_1_1MutationDecl.html#a87bed2dad0643f3aae17dcb57377e509":[3,0,0,28,204,8],
@@ -243,11 +249,5 @@ var NAVTREEINDEX19 =
 "d7/d6b/classmorph_1_1session_1_1detail_1_1ScopedOrigin.html#aea6f301cf2e55f0256fba2ea348555d4":[3,0,0,23,0,2,1],
 "d7/d6b/structmorph_1_1model_1_1PayloadShapeTag_3_01morph_1_1time_1_1DateTime_01_4.html":[3,0,0,14,14],
 "d7/d6b/structmorph_1_1tui_1_1FrontendConfig.html":[3,0,0,27,2],
-"d7/d6b/structmorph_1_1tui_1_1FrontendConfig.html#a82bb350d36691a45ee47a6b57f242a58":[3,0,0,27,2,1],
-"d7/d6b/structmorph_1_1tui_1_1FrontendConfig.html#a95fd38c9fffc5367bb0534fe2f64814e":[3,0,0,27,2,0],
-"d7/d6b/structmorph_1_1tui_1_1FrontendConfig.html#accb15841cad287fb45fa324e27fa0485":[3,0,0,27,2,2],
-"d7/d6b/structmorph_1_1tui_1_1FrontendConfig.html#af937b0640b87b72aa0733b46c5f0b73a":[3,0,0,27,2,3],
-"d7/d6d/structmorph_1_1forms_1_1Ranged.html":[3,0,0,10,47],
-"d7/d6d/structmorph_1_1forms_1_1Ranged.html#a607e1d136db6d51bc20fd60259179ada":[3,0,0,10,47,4],
-"d7/d6d/structmorph_1_1forms_1_1Ranged.html#a67fe3e060b0f6774a83d913a16dce50e":[3,0,0,10,47,1]
+"d7/d6b/structmorph_1_1tui_1_1FrontendConfig.html#a82bb350d36691a45ee47a6b57f242a58":[3,0,0,27,2,1]
 };
