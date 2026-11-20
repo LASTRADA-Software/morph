@@ -389,14 +389,17 @@ to every form they draw, so `Overrides` reach the editor's and every step's fiel
   built-in header (`collection_title`; the wizard's before the step's position); empty shows the schema's. A
   header chrome draws its own.
 - **Chrome.** `CollectionChrome` and `WizardChrome` replace the view's own parts with a host's: the collection's
-  header, each row (the rows are then a list of the chrome's nodes rather than a table), the confirm (mounted only
-  while an action waits) and the editor dialog (handed the editor's form view to place); the wizard's header and
-  navigation. A chrome is handed the session and drives it through the same calls the built-in parts make, so its
+  header, each row (the rows are then a list of the chrome's nodes rather than a table), the rows table whole
+  (`rows`, handed the session and what draws a row's Open and row-action buttons for its key text, empty when the
+  view has neither; unused while `row` is set), the confirm (mounted only while an action waits) and the editor
+  dialog (handed the editor's form view to place); the wizard's header and navigation. A chrome is handed the session and drives it through the same calls the built-in parts make, so its
   gates are the session's: a chrome's Next does nothing until `canNext()`. A master-detail view has no editor
   dialog to replace.
 - **Through a document.** The interpreter lowers a `collection` or `wizard` node to these views over sessions it
   builds from `Catalog::view` or `Catalog::wizard` and its model alias
-  ([../ui/interpreter.md](../ui/interpreter.md#lowering)).
+  ([../ui/interpreter.md](../ui/interpreter.md#lowering)). It sets the collection's `rows` chrome: the rows are a
+  table on the engine over `source()`, sorted, filtered, arranged, copied and persisted as every other table of
+  the screen ([../table/table.md](../table/table.md#collections-and-master-detail)).
 
 ## Corpora
 

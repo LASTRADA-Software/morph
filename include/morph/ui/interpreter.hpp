@@ -1365,7 +1365,8 @@ struct MORPH_API ElementState {
     ///        reader of the table's element values reads; `nullptr` for a table without `rows`.
     reactive::Computed<TableView>* view = nullptr;
     /// @brief The rows a table's mount reads: a table over `rows` its `EngineRows`, a model-backed table the rows
-    ///        over its window that tell the element of each change and gesture; null for any other element.
+    ///        over its window that tell the element of each change and gesture, a collection its engine's rows that
+    ///        tell its table of each change; null for any other element.
     std::shared_ptr<TableRows> tableRows;
     /// @brief A model-backed table's window over the server's pages; null for any other element.
     std::shared_ptr<WindowRows> tableWindow;
@@ -1381,7 +1382,8 @@ struct MORPH_API ElementState {
     ///        wired; null for any other element. It outlives every mount of the table.
     std::unique_ptr<ModelTable> modelTable;
     /// @brief A table over `rows`: its source, engine and page, its persisted state and its status line, made when
-    ///        the element is wired; null for any other element. It outlives every mount of the table.
+    ///        the element is wired; a collection's table: its engine over the session's source, its configuring,
+    ///        persisted state and status line. Null for any other element. It outlives every mount of the table.
     std::unique_ptr<RowsTable> rowsTable;
 };
 
@@ -2411,6 +2413,15 @@ private:
     void followFormatting(ElementState& element, RtScope& scope);
     void wireComposite(ElementState& element);
     Node lowerComposite(DocNode const& node, LowerCtx const& ctx, ElementState* element);
+    /// A collection's table, kept in its element as a table over `rows` is: an engine over the session's source,
+    /// the configuring of every column, and its state persisted under the collection's action.
+    void wireCollectionTable(ElementState& element, std::string modelType);
+    /// The rows of a collection, lowered as a table on the engine: sorted, filtered, arranged and copied as any other
+    /// table, with @p buttons, when set, drawing each row's trailing cell for its key text.
+    Node lowerCollectionRows(ElementState& element, LowerCtx const& ctx,
+                             std::function<Node(std::string const&)> const& buttons);
+    /// Applies a collection's stored state once its load completed, or reports why it could not.
+    void storedCollectionState(RowsTable& table, std::optional<std::string> const& json, std::string const& failure);
     void presentForm(DocNode const& node, LowerCtx const& ctx, forms::FormViewOptions& options);
     Node lowerTabs(DocNode const& node, LowerCtx const& ctx, ElementState* element);
     Prop<std::size_t> controlledTabSelection(DocNode const& node, LowerCtx const& ctx, ExprPtr const& selected,

@@ -2169,6 +2169,8 @@ using morph::ui::testing::diagnosticsMentioning;
 using morph::ui::testing::elementOf;
 using morph::ui::testing::engineOf;
 using morph::ui::testing::idRows;
+using morph::ui::testing::kMixedSamplesView;
+using morph::ui::testing::kSamplesCollection;
 using morph::ui::testing::kRowsSamples;
 using morph::ui::testing::kThree;
 using morph::ui::testing::mixedRows;
@@ -2177,23 +2179,31 @@ using morph::ui::testing::rowOrder;
 using morph::ui::testing::rowsDoc;
 using morph::ui::testing::rowsDocNoId;
 
-// Mutation: the interpreter's pipeline left in place for `rows` tables (the accented names order apart).
-TEST_CASE("one order on every surface: a rows table and a model table order alike", "[ui][table]") {
+// Mutations: the interpreter's pipeline left in place for `rows` tables (the accented names order apart); the
+// collection keeping the reply's order (its rows table not lowered by the interpreter).
+TEST_CASE("one order on every surface: a rows table, a model table and a collection order alike", "[ui][table]") {
     std::string const rows = mixedRows();
     for (std::vector<std::size_t> const& clicks : {std::vector<std::size_t>{1},          // by name
                                                    std::vector<std::size_t>{1, 1},       // by name, descending
                                                    std::vector<std::size_t>{2}}) {       // by weight
         TableHarness asRows;  auto rowsScreen = asRows.mount(rowsDoc(rows));
         TableHarness asModel;  auto modelScreen = asModel.mount(kRowsSamples);
+        TableHarness asCollection;
+        asCollection.extraViews.insert_or_assign("Lims_ListSamples", std::string{kMixedSamplesView});
+        auto collectionScreen = asCollection.mount(kSamplesCollection);
+        asCollection.reply(asCollection.dispatcher.last("Lims_ListSamples"), R"({"rows":)" + rows + "}");
+        int const collection = asCollection.byTestId("Table", "collection_rows");
         replyDescribe(asModel, describedFrom(rows));
         replyPage(asModel, pagesOf(rows, lastQuery(asModel)));
         for (std::size_t column : clicks) {
             asRows.backend.clickHeader(tableOf(asRows), column);  asRows.settle();
             asModel.backend.clickHeader(tableOf(asModel), column);  asModel.settle();
+            asCollection.backend.clickHeader(collection, column);  asCollection.settle();
             replyPage(asModel, pagesOf(rows, lastQuery(asModel)));
         }
         asModel.backend.scrollTable(tableOf(asModel), 0, 200);  asModel.settle();  // a model table is windowed
         CHECK(rowOrder(asRows) == rowOrder(asModel));
+        CHECK(rowOrder(asCollection) == rowOrder(asRows));
         CHECK_FALSE(rowOrder(asRows).empty());
     }
 }
@@ -4738,4 +4748,83 @@ TEST_CASE("configuring: the slots a mount sets go with the mount, so a handler m
         h.settle();
     }
     SUCCEED("the screens, the session and the runtime went without an abort");
+}
+
+// ── Collections ─────────────────────────────────────────────────────────────
+
+namespace {
+
+using morph::ui::testing::kCollectionBesideTable;
+using morph::ui::testing::kMasterDetailSamples;
+using morph::ui::testing::rowKeys;
+
+/// The four rows of `kCollectionBesideTable`, as a `Lims_ListSamples` reply lists them.
+constexpr std::string_view kFourSamples =
+    R"({"rows":[{"id":1,"name":"beta"},{"id":2,"name":"Alpha"},{"id":3,"name":"álpha"},{"id":4,"name":"Gamma"}]})";
+
+}  // namespace
+
+// Mutation: the collection keeping the reply's order (chrome.rows not set by the interpreter).
+TEST_CASE("collection: a collection and a rows table over the same rows show the same order and selection",
+          "[ui][table]") {
+    TableHarness h;
+    auto screen = h.mount(kCollectionBesideTable);
+    h.reply(h.dispatcher.last("Lims_ListSamples"), std::string{kFourSamples});
+    int const collection = h.byTestId("Table", "collection_rows");
+    int const table = h.find("Table", "testId", "t");
+    // A header index counts every column of `Table::columns`, hidden ones included (the surface lays out every
+    // column and hides through `Table::arrangement`): ID is index 0 and hidden, Name is index 1 on both tables.
+    REQUIRE(h.backend.prop(collection, "columns").starts_with("[ID"));
+    h.backend.clickHeader(collection, 1, HeaderClick::Plain);   // Name
+    h.backend.clickHeader(table, 1, HeaderClick::Plain);        // Name
+    h.settle();
+    CHECK(rowKeys(h, collection) == rowKeys(h, table));
+    CHECK(rowKeys(h, collection) != std::vector<std::string>{"1", "2", "3", "4"});
+    CHECK(h.text("cell_name_2") == "Alpha");
+}
+
+// Mutation: the master-detail selection lost when the engine reorders.
+TEST_CASE("collection: a master-detail selection and its open row hold through a sort", "[ui][table]") {
+    TableHarness h;
+    h.extraViews.insert_or_assign("Lims_ListSamples", std::string{kMasterDetailSamples});
+    auto screen = h.mount(kSamplesCollection);
+    h.reply(h.dispatcher.last("Lims_ListSamples"), std::string{kFourSamples});
+    int const collection = h.byTestId("Table", "collection_rows");
+    h.backend.selectRows(collection, {Key{std::int64_t{3}}});
+    h.settle();
+    REQUIRE(h.backend.prop(h.byTestId("Column", "detailForm"), "visible") == "true");
+    std::string const selected = h.backend.prop(collection, "selection");
+    REQUIRE(selected.find('3') != std::string::npos);
+    h.backend.clickHeader(collection, 1, HeaderClick::Plain);    // Name
+    h.settle();
+    REQUIRE(rowKeys(h, collection) != std::vector<std::string>{"1", "2", "3", "4"});
+    CHECK(h.backend.prop(collection, "selection") == selected);
+    CHECK(h.backend.prop(h.byTestId("Column", "detailForm"), "visible") == "true");
+    CHECK(h.backend.prop(h.byTestId("TextInput", "field_sampleId"), "text") == "3");
+}
+
+// Mutation: the collection's state saved under the screen's rows key.
+TEST_CASE("collection: header and table menus are present and its arrangement persists under its action",
+          "[ui][table]") {
+    auto store = std::make_shared<table::MemoryTableStateStore>(morph::ui::testing::storeExecutor());
+    TableHarness h{store};
+    // Every column shown, so hiding Name leaves one.
+    h.extraViews.insert_or_assign("Lims_ListSamples", std::string{kMixedSamplesView});
+    auto screen = h.mount(kSamplesCollection);
+    h.reply(h.dispatcher.last("Lims_ListSamples"), std::string{kFourSamples});
+    int const collection = h.byTestId("Table", "collection_rows");
+    CHECK_FALSE(menuOf(h, collection, std::nullopt).empty());
+    std::vector<std::string> const labels = labelsOf(menuOf(h, collection, 1));   // Name
+    REQUIRE(std::ranges::find(labels, "Hide column") != labels.end());
+    chooseMenu(h, collection, 1, {"Hide column"});
+    h.advance(500ms);
+    std::optional<std::optional<table::StoredTableState>> stored;
+    store->load(table::TableStateKey{.application = "lims", .model = "Lims_SampleModel", .table = "Lims_ListSamples",
+                                     .qualifier = "samples", .part = "state"})
+        .thenDetached([&stored](std::optional<table::StoredTableState> const& state) { stored = state; });
+    h.settle();
+    REQUIRE(stored.has_value());
+    REQUIRE(stored->has_value());
+    CHECK((*stored)->revision == "1");                                      // one save
+    CHECK((*stored)->json.find(R"("hidden":["name"])") != std::string::npos);
 }

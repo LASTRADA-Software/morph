@@ -985,10 +985,67 @@ private:
     std::function<void(table::ViewChange const&)> _handler;
 };
 
+/// The rows a collection's table shows its mounts: its engine's, every change of the view told to the mount and
+/// then to the table, whose status line and release read the engine after it.
+class HeardRows final : public TableRows {
+public:
+    HeardRows(std::shared_ptr<EngineRows> engine, std::function<void()> heard)
+        : _engine{std::move(engine)}, _heard{std::move(heard)} {
+        _engine->onChange([this](table::ViewChange const& change) {
+            if (_handler) {
+                _handler(change);
+            }
+            _heard();
+        });
+    }
+
+    HeardRows(HeardRows const&) = delete;
+    HeardRows& operator=(HeardRows const&) = delete;
+    HeardRows(HeardRows&&) = delete;
+    HeardRows& operator=(HeardRows&&) = delete;
+    ~HeardRows() override { _engine->onChange({}); }
+
+    [[nodiscard]] TableTotal total() const override { return _engine->total(); }
+    [[nodiscard]] std::optional<TableRowRef> row(std::int64_t index) const override { return _engine->row(index); }
+    [[nodiscard]] table::UnloadedLevels unloadedLevels(std::int64_t index) const override {
+        return _engine->unloadedLevels(index);
+    }
+    void visible(std::int64_t first, std::int64_t count, std::span<std::string const> columns) override {
+        _engine->visible(first, count, columns);
+    }
+    async::Completion<std::expected<std::vector<table::RowId>, table::TableError>> keysOf(std::int64_t first,
+                                                                                       std::int64_t count) override {
+        return _engine->keysOf(first, count);
+    }
+    void locateRow(table::RowId key, std::stop_token stop, std::function<void(RowLocation const&)> done) override {
+        _engine->locateRow(std::move(key), std::move(stop), std::move(done));
+    }
+    async::Completion<std::expected<std::vector<FetchedRow>, table::TableError>> fetchRows(
+        std::vector<table::RowId> keys, std::vector<std::string> columns) override {
+        return _engine->fetchRows(std::move(keys), std::move(columns));
+    }
+    std::expected<void, table::TableError> setSort(SortChain sort) override { return _engine->setSort(std::move(sort)); }
+    std::expected<void, table::TableError> setFilter(table::FilterSpec filter) override {
+        return _engine->setFilter(std::move(filter));
+    }
+    async::Completion<std::expected<table::DistinctValues, table::TableError>> distinctValues(
+        table::DistinctRequest request) override {
+        return _engine->distinctValues(std::move(request));
+    }
+    [[nodiscard]] TableCountsView counts() const override { return _engine->counts(); }
+    void onChange(std::function<void(table::ViewChange const&)> handler) override { _handler = std::move(handler); }
+
+private:
+    std::shared_ptr<EngineRows> _engine;
+    std::function<void()> _heard;
+    std::function<void(table::ViewChange const&)> _handler;
+};
+
 /// What a table over `rows` keeps in its element, across every mount of it: its rows on the engine and the page of
 /// them it shows, the arrangement it gave them, its persisted state's key and load, and its status line's message.
 /// A table lowered where names its element cannot see are bound has one of its own, kept by its mount, which
-/// persists nothing.
+/// persists nothing. A collection's table is one too, without a source or a page: its engine is over the session's
+/// source, and its mounts read the engine's rows through the element's `tableRows`.
 struct RowsTable {
     explicit RowsTable(reactive::Runtime& runtime)
         : version{runtime, 0}, message{runtime, std::string{}}, config{runtime} {}
@@ -8215,6 +8272,7 @@ void ScreenCore::wireComposite(ElementState& element) {
                                                                         aliasSubmits(alias->model, std::move(query)),
                                                                         call, engineOptions());
         followFormatting(element, scope);
+        wireCollectionTable(element, alias->model->decl->type);
         return;
     }
     // The wizard's id, the stem of its translation keys, is the action it starts with.
@@ -8273,6 +8331,13 @@ Node ScreenCore::lowerComposite(DocNode const& node, LowerCtx const& ctx, Elemen
         forms::CollectionViewOptions options{};
         options.form = std::move(form);
         options.title = std::move(title);
+        // The rows are a table as every other table of the screen is.
+        if (element->rowsTable != nullptr) {
+            options.chrome.rows = [this, ctx, element](forms::CollectionSession& /*collection*/,
+                                                       std::function<Node(std::string const&)> const& buttons) {
+                return lowerCollectionRows(*element, ctx, buttons);
+            };
+        }
         view = forms::collectionView(*element->collection, std::move(options));
     } else if (element != nullptr && element->wizard != nullptr) {
         forms::WizardViewOptions options{};
@@ -9952,6 +10017,389 @@ void ScreenCore::storedRowsState(RowsTable& table, std::optional<std::string> co
             table.release();
         }));
     }
+}
+
+namespace {
+
+/// @brief The text a collection addresses a row by: an integer key's digits, a text key as it is.
+/// @param key The row's key, as the engine keys it.
+/// @return The text.
+[[nodiscard]] std::string collectionKeyText(table::RowId const& key) {
+    if (std::int64_t const* const whole = std::get_if<std::int64_t>(&key)) {
+        return std::to_string(*whole);
+    }
+    return std::get<std::string>(key);
+}
+
+/// @brief The member of a collection row's record that holds its key text; a view document's field never begins
+///        with U+001F.
+inline constexpr std::string_view kCollectionKeyField = "\x1Fkey";
+
+/// @brief Where a collection's rows are, by key, for the records its engine builds: made again from the session's
+///        rows whenever the engine reads a snapshot it has not read before.
+struct CollectionRecords {
+    void const* snapshot = nullptr;
+    std::unordered_map<table::RowId, std::size_t> at;
+};
+
+}  // namespace
+
+void ScreenCore::wireCollectionTable(ElementState& element, std::string modelType) {
+    forms::CollectionSession& collection = *element.collection;
+    element.rowsTable = std::make_unique<RowsTable>(runtime());
+    RowsTable& table = *element.rowsTable;
+    table.core = this;
+    table.element = &element;
+    table.node = element.node;
+    table.where = &*element.scope;
+    // Every column of the view document is laid out, those it hides hidden, and every one sorts and filters.
+    TableConfig& config = table.config;
+    config.element = &element;
+    for (forms::CollectionColumn const& column : collection.model().columns()) {
+        config.columns.push_back(
+            LayoutColumn{.id = column.field, .label = column.label, .locked = false, .kind = column.kind});
+        config.sortable.push_back(true);
+        if (column.hidden) {
+            config.declaredHidden.push_back(column.field);
+        }
+    }
+    config.maxSortKeys = [] { return std::size_t{8}; };
+    config.filters = [&table] {
+        static_cast<void>(table.version.get());
+        return table.filter;
+    };
+    config.setFilters = [this, &table](table::FilterSpec const& filter) {
+        if (auto const set = table.engine->setFilter(filter); !set) {
+            rowsTableMessage(table, "The filter is refused: " + set.error().message);
+            return false;
+        }
+        table.filter = filter;
+        table.bump();
+        return true;
+    };
+    config.rows = [&table]() -> TableRows* { return table.engine.get(); };
+    // The session's source holds every cell of every column: a values list puts none in use.
+    config.listing = [](std::vector<std::string> const& columns) { static_cast<void>(columns); };
+    config.message = [this, &table](std::string text) { rowsTableMessage(table, std::move(text)); };
+    config.touch = [this, &table] {
+        table.touched = true;
+        rowsTableMessage(table, {});
+    };
+    config.save = [&table](table::StateDocument const& document, StateParts parts) {
+        if (table.stateKey) {
+            table.states->changed(*table.stateKey, document, parts);
+        }
+    };
+    // A row's record is its key text and every column's cell as the session formats it, read from the row of that
+    // key: the engine may read a snapshot older than the session's rows, and a row it no longer has reads empty.
+    auto const records = std::make_shared<CollectionRecords>();
+    RecordOf recordOf = [rt = &runtime(), session = &collection, records](table::RowSnapshot const& snapshot,
+                                                                          std::size_t sourceRow) {
+        table::RowId key = snapshot.rowId(sourceRow);
+        ValueRecord record;
+        record.insert_or_assign(std::string{kCollectionKeyField}, Value{collectionKeyText(key)});
+        rt->untracked([&] {
+            std::vector<forms::CollectionRow> const& rows = session->rows();
+            if (records->snapshot != snapshot.identity()) {
+                records->snapshot = snapshot.identity();
+                records->at.clear();
+                for (std::size_t at = 0; at < rows.size(); ++at) {
+                    records->at.emplace(rows.at(at).id, at);
+                }
+            }
+            auto const found = records->at.find(key);
+            if (found == records->at.end() || found->second >= rows.size() || rows.at(found->second).id != key) {
+                return;
+            }
+            auto const dom = forms::detail::engine::parseJson(rows.at(found->second).json);
+            if (!dom) {
+                return;
+            }
+            for (forms::CollectionColumn const& column : session->model().columns()) {
+                record.insert_or_assign(column.field, Value{forms::detail::engine::cellText(*dom, column)});
+            }
+        });
+        return RowRecord{.key = std::move(key), .row = Value{std::move(record)}};
+    };
+    // Text orders as it does in every other table of the screen.
+    table::EngineOptions options;
+    options.owner = &runtime().owner();
+    options.worker = nullptr;
+    options.frameBudget = std::chrono::milliseconds{4};
+    options.services.collator = std::make_shared<ValueRowsCollator const>();
+    table.engine = std::make_shared<EngineRows>(collection.source(), std::move(recordOf), std::move(options));
+    element.tableRows = std::make_shared<HeardRows>(table.engine, [&table] {
+        table.bump();
+        if (table.releasing && !table.engine->engine().pending()) {
+            table.releasing = false;
+            table.release();
+        }
+    });
+    // The sort the table shows: its own, which a header click and a stored state set.
+    table.effects.push_back(std::make_unique<reactive::Effect>(runtime(), [this, &table, &element] {
+        Value const sort = tableSort(element);
+        runtime().untracked([&] {
+            SortChain chain;
+            for (table::SortKey& key : sortChainOf(sort)) {
+                if (std::ranges::contains(table.config.columns, key.column, &LayoutColumn::id)) {
+                    chain.push_back(std::move(key));
+                }
+            }
+            if (table.engine->setSort(chain)) {
+                table.sort = std::move(chain);
+            }
+        });
+    }));
+    // Kept under the collection's action, on this screen, for the model it lists.
+    table.states = session.tableStates();
+    if (table.states == nullptr) {
+        return;
+    }
+    table.stateKey = table::TableStateKey{.application = session.options().application,
+                                          .model = std::move(modelType),
+                                          .table = std::string{collection.model().query()},
+                                          .qualifier = _doc->id,
+                                          .part = "state"};
+    table.waiting = true;
+    table.listed = true;
+    modelTables.push_back(&element);
+    table.engine->setRestoring(true);
+    // The rows wait for the stored state, at most `tableStateTimeout`; a state that comes later is applied unless
+    // the user changed the table meanwhile.
+    if (reactive::Scheduler* const scheduler = session.options().scheduler) {
+        table.loadTimer = scheduler->after(session.options().tableStateTimeout,
+                                           table.scope.token().guard([&table] { table.release(); }));
+    }
+    table.states->load(*table.stateKey)
+        .then(table.scope,
+              [this, &table](std::optional<table::StoredTableState> const& stored) {
+                  storedCollectionState(table, stored ? std::optional<std::string>{stored->json} : std::nullopt, {});
+              })
+        .onError(table.scope, [this, &table](std::exception_ptr const& error) {
+            storedCollectionState(table, std::nullopt, failureText(error));
+        });
+}
+
+void ScreenCore::storedCollectionState(RowsTable& table, std::optional<std::string> const& json,
+                                       std::string const& failure) {
+    DocNode const& node = *table.node;
+    ElementState& element = *table.element;
+    std::string const action{node.name("action")};
+    bool const late = !table.waiting;
+    if (!failure.empty()) {
+        report(node.path, "the stored state of collection `" + action + "` could not be loaded: " + failure);
+        table.release();
+        return;
+    }
+    if (!json) {
+        table.release();
+        return;
+    }
+    auto read = table::readState(*json);
+    if (!read) {
+        report(node.path, "the stored state of collection `" + action + "` is not used: " + read.error());
+        table.release();
+        return;
+    }
+    if (late && table.touched) {
+        return;
+    }
+    // Fitted to the view document's columns, each of which sorts and filters.
+    table::TableDescription description;
+    description.id = action;
+    for (table::ColumnInfo const& info : element.collection->source()->columns()) {
+        table::TableColumn column;
+        column.info = info;
+        column.label = info.id;
+        column.sortable = true;
+        column.filterable = true;
+        description.columns.push_back(std::move(column));
+    }
+    table::FitReport fitted;
+    table::StateDocument const document = table::fitState(std::move(*read), description, fitted);
+    if (element.sortBound == nullptr && document.sort) {
+        element.sort.set(sortValueOf(*document.sort));
+    }
+    if (document.filters && !document.filters->empty() && table.engine->setFilter(*document.filters)) {
+        table.filter = *document.filters;
+        table.bump();
+    }
+    if (document.layout) {
+        table.config.held = *document.layout;
+        table.config.version.set(table.config.version.peek() + 1);
+    }
+    if (late) {
+        return;
+    }
+    // The rows come through once the engine's view is in the stored order: after the work the new sort posted.
+    bool const timed = session.options().scheduler != nullptr;
+    runtime().owner().post(table.scope.token().guard([&table, timed] {
+        if (!table.waiting) {
+            return;
+        }
+        if (table.engine->engine().pending() && timed) {
+            table.releasing = true;
+            return;
+        }
+        table.release();
+    }));
+}
+
+Node ScreenCore::lowerCollectionRows(ElementState& element, LowerCtx const& ctx,
+                                     std::function<Node(std::string const&)> const& buttons) {
+    RowsTable& table = *element.rowsTable;
+    forms::CollectionSession& collection = *element.collection;
+    TableConfig& config = table.config;
+    // Every column of the layout, then the row's buttons, which are no column of it.
+    std::vector<std::string> fields;
+    std::vector<TableColumn> columns;
+    for (LayoutColumn const& column : config.columns) {
+        fields.push_back(column.id);
+        columns.push_back(TableColumn{.id = column.id, .label = column.label, .sortable = true});
+    }
+    std::size_t const laidOut = columns.size();
+    // A table over a source measures no cell to size a column: the buttons' column is as wide as its buttons, each
+    // its label and four units of frame, two units apart.
+    if (buttons) {
+        forms::CollectionViewOptions const defaults{};
+        int units = 0;
+        auto const add = [&units](std::string_view label) {
+            units += (units == 0 ? 0 : 2) + static_cast<int>(label.size()) + 4;
+        };
+        if (collection.model().rowAction().has_value()) {
+            add(defaults.openLabel);
+        }
+        for (forms::CollectionAction const& action : collection.model().actions()) {
+            if (action.scope == forms::CollectionActionScope::Row) {
+                add(action.label);
+            }
+        }
+        columns.push_back(TableColumn{.label = std::string{}, .width = Sizing::fixed(units)});
+    }
+    config.beginMount();
+    config.filterTarget = [&table, &collection](std::string const& id) -> std::optional<FilterTarget> {
+        std::vector<LayoutColumn> const& arranged = table.config.columns;
+        auto const found = std::ranges::find(arranged, id, &LayoutColumn::id);
+        std::span<table::ColumnInfo const> const infos = collection.source()->columns();
+        auto const info = std::ranges::find(infos, id, &table::ColumnInfo::id);
+        if (found == arranged.end() || info == infos.end()) {
+            return std::nullopt;
+        }
+        FilterTarget target;
+        target.column = id;
+        target.label = found->label;
+        target.shown = table::TableColumn{.info = *info, .display = table::ColumnDisplay{}};
+        target.listed = true;
+        return target;
+    };
+    // A copy reads the engine's view, which holds every row, each cell as the session formats it.
+    config.gather = [&table](std::vector<Key> keys, std::vector<std::string> const& ids, CopyDone done) {
+        CopyGathered gathered;
+        std::vector<std::string> read;
+        for (std::string const& id : ids) {
+            auto const found = std::ranges::find(table.config.columns, id, &LayoutColumn::id);
+            if (found != table.config.columns.end()) {
+                gathered.headers.push_back(found->label);
+                read.push_back(id);
+            }
+        }
+        std::unordered_set<Key> wanted{keys.begin(), keys.end()};
+        EngineRows const& rows = *table.engine;
+        std::int64_t const total = rows.total().rows;
+        for (std::int64_t at = 0; at < total && !wanted.empty(); ++at) {
+            std::optional<TableRowRef> const ref = rows.row(at);
+            if (!ref || wanted.erase(ref->key) == 0) {
+                continue;
+            }
+            CopyRow copied{.viewRow = at, .cells = {}};
+            for (std::string const& id : read) {
+                Value const* const text = ref->row.field(id);
+                copied.cells.emplace_back(text != nullptr && text->asString() != nullptr ? *text->asString()
+                                                                                        : std::string{});
+            }
+            gathered.rows.push_back(std::move(copied));
+        }
+        done(std::move(gathered));
+    };
+    // Each cell shows one row, so its test id names that row's key; the trailing cell holds the row's buttons.
+    TableSource source;
+    source.rows = element.tableRows;
+    source.alwaysWindowed = false;
+    source.rowScopedCells.assign(columns.size(), true);
+    source.cellView = [this, buttons, fields](std::size_t column, reactive::Signal<Value> const& row) -> Node {
+        Value const* const keyed = row.peek().field(kCollectionKeyField);
+        std::string const key = keyed != nullptr && keyed->asString() != nullptr ? *keyed->asString() : std::string{};
+        if (column >= fields.size()) {
+            return buttons ? buttons(key) : ui::text(Text{});
+        }
+        Text cell{.text = slotProp<std::string>([&row, field = fields.at(column)] {
+            Value const* const text = row.get().field(field);
+            return text != nullptr && text->asString() != nullptr ? *text->asString() : std::string{};
+        })};
+        cell.common.testId = "cell_" + fields.at(column) + "_" + key;
+        return ui::text(std::move(cell));
+    };
+    // The engine keys a row by its integer key's value, the session by the key's text: the selection and the
+    // activation the session's options make are translated between the two.
+    TableOptions options = forms::detail::engine::rowsTableOptions(collection);
+    forms::CollectionSession* const view = &collection;
+    if (options.onActivate) {
+        options.onActivate = [inner = std::move(options.onActivate)](Key const& key) {
+            inner(Key{collectionKeyText(key)});
+        };
+    }
+    if (options.onSelectionChange) {
+        options.onSelectionChange = [inner = std::move(options.onSelectionChange)](std::vector<Key> const& keys,
+                                                                                  SelectionChange change) {
+            std::vector<Key> texts;
+            texts.reserve(keys.size());
+            for (Key const& key : keys) {
+                texts.emplace_back(collectionKeyText(key));
+            }
+            inner(texts, change);
+        };
+    }
+    if (options.selection.isBound()) {
+        options.selection = slotProp<std::vector<Key>>([read = options.selection.binding(), view] {
+            std::vector<Key> keys;
+            std::vector<forms::CollectionRow> const& rows = view->rows();
+            for (Key const& key : read()) {
+                std::string const* const text = std::get_if<std::string>(&key);
+                auto const found =
+                    text == nullptr ? rows.end() : std::ranges::find(rows, *text, &forms::CollectionRow::key);
+                if (found != rows.end()) {
+                    keys.push_back(found->id);
+                }
+            }
+            return keys;
+        });
+    }
+    // The status line takes space while it has something to say: a refusal, or what a copy did.
+    options.status = slotProp<TableStatus>([&table, view, scope = ctx.scope] {
+        static_cast<void>(table.version.get());
+        TableStatus status;
+        bool const selected =
+            view->model().kind() == forms::CollectionKind::MasterDetail && view->openRow().has_value();
+        status.counts = countsText(table.engine->counts(), selected ? 1 : 0, scope->formatting());
+        status.message = table.status == false ? std::string{} : table.message.get();
+        status.shown = table.status.value_or(!status.state.empty() || !status.message.empty());
+        return status;
+    });
+    Node dialogs = configureTable(config, ctx, options, nullptr);
+    markFilterable(config, columns, options);
+    // An arrangement that lists the columns it shows lists the buttons last.
+    if (buttons) {
+        options.arrangement = slotProp<TableArrangement>([inner = std::move(options.arrangement), laidOut] {
+            TableArrangement arranged = inner.evaluate();
+            if (!arranged.visible.empty()) {
+                arranged.visible.push_back(laidOut);
+            }
+            return arranged;
+        });
+    }
+    return besideDialogs(options.common, std::move(dialogs), [&] {
+        return ui::table(std::move(columns), std::move(source), std::move(options));
+    });
 }
 
 namespace {
