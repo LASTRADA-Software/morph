@@ -441,6 +441,17 @@ columns`, `Group columns…` with its form (a `MorphTextInput`, a check box per 
 outside dismisses either, which closes it as `Done` does. Each change applies as it is made; a refusal goes to the
 table's status line, under the dialog.
 
+**The filter menu.** A filter button, "Filter…" and a group's "Filter {group}, {k} columns…" open a third dialog the
+interpreter builds from the same widgets (`ui/table_filter_menu.hpp`): a `MorphDialog` (test id `table_filter`, titled
+with the column's or the group's label) beside the other two. A values list is a `MorphTextInput` search, a
+`MorphCheckbox` per value (`{text} ({count})`, `(Select all)`, `(Blanks)`), a muted `MorphText` heading per dimension
+of a `Measure` column, a `▸` `MorphButton` on a date bucket that opens, and `More values`; a muted note says the list
+may grow, how many cells could not be read, or why Apply applied nothing. The conditions are `MorphSelect`s (the
+condition, `and` or `or`, a `Measure` column's unit, a group's match line) and `MorphTextInput`s, a date column's
+operand a `MorphDateTimeInput`; an operand that does not read draws its field's error. `Apply` and `Clear filter`
+end it. Escape or a press outside closes it; a condition waiting for its debounce is dropped with it. The backend adds
+nothing for it.
+
 **Moving and resizing.** While the table moves its columns (`movable`), dragging a header and releasing it over
 another fires `columnMove` with the dragged column and the other's visible place (`visibleColumns`, or the column's own
 index when every column shows), and Ctrl+Shift+Left and Ctrl+Shift+Right on a focused header fire it with the place one

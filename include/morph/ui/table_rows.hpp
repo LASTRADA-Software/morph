@@ -179,6 +179,13 @@ public:
     /// @return The error that left the filter unchanged, or nothing.
     virtual std::expected<void, table::TableError> setFilter(table::FilterSpec filter) = 0;
 
+    /// @brief The distinct values of a column, or of a declared group's columns pooled, over the rows the other
+    ///        filters leave: what a header's filter menu lists.
+    /// @param request The column or group, the search, the date bucket and the page of values.
+    /// @return The values, delivered on the owner; `Unavailable` when the rows cannot list values.
+    virtual async::Completion<std::expected<table::DistinctValues, table::TableError>> distinctValues(
+        table::DistinctRequest request) = 0;
+
     /// @brief What the status line counts.
     /// @return The counts.
     [[nodiscard]] virtual TableCountsView counts() const = 0;
@@ -518,6 +525,21 @@ public:
         return _engine->setFilter(std::move(filter));
     }
 
+    /// @brief The distinct values of a column, from the engine's rows, in a task on the owner: a change of the
+    ///        source made before the call (a column put in use to be listed) is taken in first.
+    /// @param request The request.
+    /// @return The engine's answer, delivered on its owner.
+    async::Completion<std::expected<table::DistinctValues, table::TableError>> distinctValues(
+        table::DistinctRequest request) override {
+        using Result = std::expected<table::DistinctValues, table::TableError>;
+        auto [completion, promise] = async::Completion<Result>::makeSettleable(_owner);
+        auto settle = std::make_shared<async::Completion<Result>::Promise>(std::move(promise));
+        _owner->post(_scope.token().guard([this, settle, request = std::move(request)] {
+            settle->resolve(_engine->distinctValues(request));
+        }));
+        return std::move(completion);
+    }
+
     /// @brief The engine's counts: its view, its source's rows, its undecided rows and whether it computes.
     /// @return The counts.
     [[nodiscard]] TableCountsView counts() const override {
@@ -622,6 +644,8 @@ private:
     mutable std::deque<Logged> _log;
     mutable std::size_t _built = 0;
     bool _restoring = false;
+    /// Last, so it is the first to go: no values list reaches a destroyed engine.
+    async::CallbackScope _scope;
 };
 
 // ── A document's rows as a source ───────────────────────────────────────────
@@ -1092,6 +1116,15 @@ public:
     /// @brief The document's columns, then `kGroupRunColumn` while the table is grouped.
     /// @return The columns.
     [[nodiscard]] std::span<table::ColumnInfo const> columns() const override { return _infos; }
+
+    /// @brief The column groups the document declares (a `rows` table's `groups`).
+    /// @return They, as `setGroups` gave them.
+    [[nodiscard]] std::span<table::ColumnGroupInfo const> groups() const override { return _groups; }
+
+    /// @brief Declares the column groups: a group filter or a values list names them by id. Set before an engine
+    ///        reads the source.
+    /// @param groups The groups, each of 2 to 16 columns of the source.
+    void setGroups(std::vector<table::ColumnGroupInfo> groups) { _groups = std::move(groups); }
 
     /// @brief The rows and the cells of the columns in use.
     /// @return The same pointer until they change.
@@ -1634,6 +1667,7 @@ private:
     std::function<Key(Value const& row)> _keyOf;
     std::shared_ptr<table::UnitRegistry const> _units;
     std::vector<table::ColumnInfo> _infos;
+    std::vector<table::ColumnGroupInfo> _groups;
     std::vector<Held> _held;
     std::shared_ptr<std::vector<Value> const> _rows = std::make_shared<std::vector<Value> const>();
     std::shared_ptr<std::vector<Key> const> _keys = std::make_shared<std::vector<Key> const>();
@@ -2115,6 +2149,8 @@ struct WindowRowsStats {
     std::size_t cancelled = 0;
     /// @brief Cells turned into a row record's fields.
     std::size_t cellsConverted = 0;
+    /// @brief Distinct-values queries sent.
+    std::size_t distinctFetches = 0;
 };
 
 /// @brief A table's rows over a server's pages: a `table::PageWindow` of generic rows, the table's description
@@ -2150,6 +2186,10 @@ struct WindowRowsStats {
 /// which no diff by key can place, or whose page diff would take more than 5,000 operations, the bound of the
 /// `ViewChange` contract.
 ///
+/// A values list (`distinctValues`) is a query carrying `distinct` under the held filter. The window keeps each reply
+/// by the query's body until the table's record changes, the session reconnects or a new revision is described, so
+/// a filter menu opened again sends nothing.
+///
 /// Neither copied nor moved: its watch handler and its replies hold it.
 class WindowRows final : public TableRows {
 public:
@@ -2167,6 +2207,7 @@ public:
         // A record watch hears a reconnect as a change of every row; a window that watches none hears it here.
         if (_options.records.empty()) {
             _reconnect = _session->onReconnected(_scope.token().guard([this] {
+                _distinct.clear();
                 _window.invalidate();
                 pump();
             }));
@@ -2190,6 +2231,9 @@ public:
     /// @brief Cancels every fetch in flight.
     ~WindowRows() override {
         stopAll();
+        for (auto& stop : _distinctStops) {
+            stop.request_stop();
+        }
         for (auto const& held : _keyRequests) {
             if (auto const request = held.lock()) {
                 for (auto& stop : request->stops) {
@@ -2218,6 +2262,9 @@ public:
         }
         _descriptionError = false;
         bool const another = !_description || _description->revision != description.revision;
+        if (another) {
+            _distinct.clear();
+        }
         bool const replacing = _description.has_value() && another;
         table::FitReport report;
         auto fitted = table::fitState(
@@ -2571,7 +2618,10 @@ public:
     std::expected<void, table::TableError> setFilter(table::FilterSpec filter) override {
         if (_description) {
             auto const infos = table::columnInfos(*_description);
-            auto compiled = table::compileFilterGuarded(filter, infos, table::Services{}, _description->groups);
+            // A measure's operand is read with the description's units.
+            table::Services services;
+            services.units = _units;
+            auto compiled = table::compileFilterGuarded(filter, infos, services, _description->groups);
             if (!compiled) {
                 return std::unexpected(std::move(compiled.error()));
             }
@@ -2582,6 +2632,58 @@ public:
         _filter = std::move(filter);
         restart();
         return {};
+    }
+
+    /// @brief The distinct values of a column: a query carrying `distinct` under the held filter. Its reply is kept
+    ///        by the query's body until the table's record changes, so a menu opened again sends nothing.
+    /// @param request The request.
+    /// @return The values, delivered on the owner; `Unavailable` without a description, for a table whose
+    ///         description says it lists no values, and over a typed list action, whose reply holds rows alone.
+    async::Completion<std::expected<table::DistinctValues, table::TableError>> distinctValues(
+        table::DistinctRequest request) override {
+        using Result = std::expected<table::DistinctValues, table::TableError>;
+        auto [completion, promise] = async::Completion<Result>::makeSettleable(&_session->runtime().owner());
+        if (!_description || !_description->capabilities.distinct || !_options.action.empty()) {
+            promise.resolve(Result{std::unexpected(table::TableError{
+                .code = table::TableErrorCode::Unavailable, .column = {}, .message = "the table lists no values"})});
+            return std::move(completion);
+        }
+        table::TableQuery query;
+        query.filters = _filter;
+        query.distinct = std::move(request);
+        auto body = bodyOf(query);
+        if (!body) {
+            promise.resolve(Result{std::unexpected(std::move(body.error()))});
+            return std::move(completion);
+        }
+        std::string key = ui::detail::canonicalJson(*body);
+        if (auto const held = _distinct.find(key); held != _distinct.end()) {
+            promise.resolve(Result{held->second});
+            return std::move(completion);
+        }
+        std::stop_source stop;
+        ++_stats.distinctFetches;
+        auto reply = _session->read(_options.channel, actionName(), *body, stop.get_token());
+        _distinctStops.push_back(std::move(stop));
+        auto const settle = std::make_shared<async::Completion<Result>::Promise>(std::move(promise));
+        reply.then(_scope, [this, settle, key = std::move(key)](std::string const& text) {
+            auto read = table::readGenericPage(text, *_description, _units.get());
+            if (!read) {
+                settle->resolve(Result{std::unexpected(std::move(read.error()))});
+                return;
+            }
+            if (!read->distinct) {
+                settle->resolve(Result{std::unexpected(table::TableError{
+                    .code = table::TableErrorCode::InvalidValue, .column = {}, .message = "the reply holds no values"})});
+                return;
+            }
+            _distinct.insert_or_assign(key, *read->distinct);
+            settle->resolve(Result{std::move(*read->distinct)});
+        });
+        reply.onError(_scope, [settle](std::exception_ptr const& error) {
+            settle->resolve(Result{std::unexpected(failureOf(error))});
+        });
+        return std::move(completion);
     }
 
     /// @brief The window's counts: its total, undecided rows, awaited and failed levels, and whether a fetch is in
@@ -3244,6 +3346,8 @@ private:
     // A change of the table's record. While the order awaits a level every event invalidates; `pump` spaces the
     // refetches.
     void heard(effects::RecordChange const& change) {
+        // Any row may change a count: the values lists are asked again.
+        _distinct.clear();
         if (!change.keys) {
             _window.invalidate();
             pump();
@@ -3323,6 +3427,8 @@ private:
     mutable WindowRowsStats _stats;
     // The stops of the key pages a range selection fetched, and of the fetch that locates a highlighted row.
     std::vector<std::weak_ptr<KeysRequest>> _keyRequests;
+    std::map<std::string, table::DistinctValues, std::less<>> _distinct;
+    std::vector<std::stop_source> _distinctStops;
     std::stop_source _locateStop;
     // Last, so it is the first to go: no reply or timer reaches a half-destroyed object.
     async::CallbackScope _scope;

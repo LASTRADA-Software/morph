@@ -534,8 +534,10 @@ keeps its operands' 0 places and still fills 0.29 of a bar.
   header, menus and arrangement are configured as below ("Configuring a table"), its sort bound the node's literal
   `maxSortKeys`, else 8. The element value `sort` reads the bound sort or the
   table's own, `viewCount` the rows the table orders (every page), and `page`, `pageCount`, `pageFirst` and
-  `pageLast` the page. `filters` and `hoveredKey` are not lowered: the
-  loader refuses `filters` and `highlightKey` on a table over `rows`. With `empty`,
+  `pageLast` the page, and `filters` the filters its user set from the header, which the table holds (and keeps in
+  its persisted state) and does not take from the document: the loader refuses `filters` and `highlightKey` on a
+  table over `rows`. `hoveredKey` is not lowered. Its `groups` parts are the groups its source declares to the
+  engine, by which a group filter and a pooled values list name them. With `empty`,
   the table lowers to a `Column` holding the table and the lowered `empty` content, in the table's own scope:
   while `rows` evaluates to an empty list the table is hidden and the content shown; while it is a non-empty
   list, or `null` (a query not answered yet), the reverse. The column takes the node's `visible` and its layout,
@@ -670,13 +672,26 @@ keeps its operands' 0 places and still fills 0.29 of a bar.
   which the lowering mounts beside the table in a column that takes the table's layout and visibility; their open
   state and the group being formed live in the element, so a new mount keeps them. The chooser lists the table's
   columns in the layout's order (a companion is not one of them), and applies `ShowColumn`, `HideColumn`,
-  `MoveColumn` by one, `ResetColumns`, `FormGroup` and `RemoveGroup`; the sort dialog applies `applySortEdit`, whose
+  `MoveColumn` by one, `ResetColumns`, `FormGroup` and `RemoveGroup`, which also drops the group filter that names
+  the removed group's columns, as a user's filter change; the sort dialog applies `applySortEdit`, whose
   add, remove and direction are the header's sort gestures, so a key past the bound is refused as a Shift-click's
   is. Each change goes the way the same gesture from the header goes: refused in the status line, or set, saved and
-  run through `onLayoutChange` or `onSortChange`. A user-formed group is named in its members' header menus and in
-  the table's menu by its filter entry ("Filter {group}, {k} columns…"), shown disabled while the filter menu is not
-  lowered. The entries whose menus are not lowered (a column's filter menu, display units, copy) are not offered,
-  and a separator left beside another or at an end goes with them. Each
+  run through `onLayoutChange` or `onSortChange`. "Display unit" sets or, for the checked unit, clears
+  `SetDisplayUnit` in the layout. A filterable column (a column part with an id whose `filterable` is not `false`,
+  on a model's table also one its description marks filterable) draws a filter button (`Table::onFilter`) that,
+  like its menu's "Filter…", opens its filter menu (`ui/table_filter_menu.hpp`), a `FilterMenu` the element keeps
+  and a dialog (`table_filter`) mounted beside the chooser; a group, declared or user-formed, is named in its
+  members' header menus and in the table's menu ("Filter {group}, {k} columns…"), and while its columns stand side
+  by side in the layout as a header over them (`Table::columnGroups`, `Table::onGroupFilter`), each opening the
+  group's menu. The menu asks the rows for values (`TableRows::distinctValues`; a table over `rows` keeps the
+  listed columns in use while it is open); a search asks again, and a condition is sent,
+  `SessionOptions::tableFilterDebounce` (250 ms) after the last edit, while ticks apply on Apply. It sets the filters through one
+  path: the rows take them, the table holds them unless the document binds `filters`, they are saved with the
+  table's state, and `onFiltersChange` runs with `event` the new filters; a refusal goes to the status line.
+  "Clear all filters" sets empty filters the same way. `Table::filtered` names every column with a filter, a hidden
+  one included, so the header says so again once it is shown; the filter keeps applying while its column is hidden.
+  A table with `configurable: false` has neither menus nor filter buttons. Copy is not lowered, so its entries are
+  not offered, and a separator left beside another or at an end goes with them. Each
   gesture the lowering receives clears the status line's message before it acts, so the next gesture on the
   table clears a refusal. The element values `layout`, `visibleColumns` and `hiddenCount` read the layout the
   table holds or the document binds, fitted to its columns.

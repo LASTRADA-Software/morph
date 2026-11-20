@@ -293,7 +293,7 @@ constexpr std::array<KeySpec, 7> kForEachKeys = {{{"rows", Shape::Expr, {}, kReq
                                                   {"divided", Shape::Flag},
                                                   {"children", Shape::Nodes, {}, kInner}}};
 /// @brief The keys of `table`.
-constexpr std::array<KeySpec, 36> kTableKeys = {{{"rows", Shape::Expr},
+constexpr std::array<KeySpec, 37> kTableKeys = {{{"rows", Shape::Expr},
                                                  {"key", Shape::Expr, {}, kInner},
                                                  {"model", Shape::Name},
                                                  {"table", Shape::Name},
@@ -322,6 +322,7 @@ constexpr std::array<KeySpec, 36> kTableKeys = {{{"rows", Shape::Expr},
                                                  {"pageSize", Shape::Expr},
                                                  {"page", Shape::Expr},
                                                  {"group", Shape::Part, "group"},
+                                                 {"groups", Shape::Parts, "columnGroup"},
                                                  {"filters", Shape::Expr},
                                                  {"rowTone", Shape::Expr, {}, kInner},
                                                  {"rowSpans", Shape::Expr, {}, kInner},
@@ -354,6 +355,9 @@ constexpr std::array<KeySpec, 24> kColumnKeys = {{{"id", Shape::Name},
                                                   {"labels", Shape::Expr},
                                                   {"tone", Shape::Expr, {}, kInner},
                                                   {"tooltip", Shape::Expr, {}, kInner}}};
+/// @brief The keys of a `table` column group part: the group's id, its label and its columns' ids, a literal list.
+constexpr std::array<KeySpec, 3> kColumnGroupKeys = {
+    {{"id", Shape::Name, {}, kRequired}, {"label", Shape::Expr}, {"columns", Shape::Expr, {}, kRequired}}};
 /// @brief The keys of a `table` group part: the value its rows are grouped by, and the heading drawn before each
 ///        group, both read in the row scope.
 constexpr std::array<KeySpec, 2> kTableGroupKeys = {
@@ -527,7 +531,7 @@ constexpr std::array<KeySpec, 1> kDragKeys = {{{"payload", Shape::Expr, {}, kReq
 constexpr std::array<KeySpec, 2> kDropKeys = {{{"accepts", Shape::Expr}, {"onDrop", Shape::Commands}}};
 
 /// @brief The view node kinds of `ui/1` and the part kinds inside them.
-constexpr std::array<KindSpec, 61> kKinds = {{
+constexpr std::array<KindSpec, 62> kKinds = {{
     {"text", kTextKeys, kField},
     {"button", kButtonKeys},
     {"textInput", kTextInputKeys, kField | kWritable, kInputValues},
@@ -576,6 +580,7 @@ constexpr std::array<KindSpec, 61> kKinds = {{
     {"tab", kTabKeys, kPart},
     {"column", kColumnKeys, kPart},
     {"group", kTableGroupKeys, kPart},
+    {"columnGroup", kColumnGroupKeys, kPart},
     {"track", kTrackKeys, kPart},
     {"action", kActionKeys, kPart},
     {"a11y", kA11yKeys, kPart},
@@ -3215,6 +3220,7 @@ private:
             checkTableSortBound(node);
             checkTableConfigurable(node);
             checkTableGroup(node);
+            checkColumnGroups(node);
             checkRowsTableKeys(node);
             checkColumnKinds(node);
             if (!model.empty() && table.empty()) {
@@ -3374,6 +3380,56 @@ private:
         if (!node.name("model").empty() && !node.partList("group").empty()) {
             refuse(pointerAppend(node.path, "group"),
                    "a model-backed table's engine shapes its rows; `group` is for a table over `rows`");
+        }
+    }
+
+    // A table over `rows` declares its column groups: each 2 to 16 of its column parts, of one literal kind, and a
+    // column in at most one group. A model's table has its groups from its description.
+    static void checkColumnGroups(DocNode const& node) {
+        auto const groups = node.partList("groups");
+        if (groups.empty()) {
+            return;
+        }
+        if (!node.prop("rows")) {
+            refuse(pointerAppend(node.path, "groups"),
+                   "a model's table declares its column groups in its description; `groups` is for a table over `rows`");
+        }
+        auto const columns = node.partList("columns");
+        std::set<std::string, std::less<>> grouped;
+        std::set<std::string, std::less<>> ids;
+        for (DocNodePtr const& group : groups) {
+            std::string const where = pointerAppend(group->path, "columns");
+            if (!ids.insert(group->id).second) {
+                refuse(pointerAppend(group->path, "id"), "the group `" + group->id + "` is declared twice");
+            }
+            ExprPtr const members = group->prop("columns");
+            ValueList const* const list =
+                members != nullptr && members->kind == ExprKind::Literal ? members->literal.asList() : nullptr;
+            if (list == nullptr) {
+                refuse(where, "a group's `columns` is a literal list of its columns' ids");
+            }
+            if (list->size() < 2 || list->size() > 16) {
+                refuse(where, "a group has 2 to 16 columns");
+            }
+            std::optional<std::string_view> kind;
+            for (Value const& member : *list) {
+                std::string const* const id = member.asString();
+                auto const part = id == nullptr ? columns.end()
+                                                : std::ranges::find_if(columns, [id](DocNodePtr const& column) {
+                                                      return column->id == *id;
+                                                  });
+                if (part == columns.end()) {
+                    refuse(where, "a group's columns are the ids of the table's column parts");
+                }
+                if (!grouped.insert(*id).second) {
+                    refuse(where, "the column `" + *id + "` is in another group");
+                }
+                std::string_view const named = (*part)->name("kind");
+                if (kind && *kind != named) {
+                    refuse(where, "a group's columns hold one kind of value");
+                }
+                kind = named;
+            }
         }
     }
 

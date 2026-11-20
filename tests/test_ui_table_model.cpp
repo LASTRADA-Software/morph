@@ -11,6 +11,7 @@
 #include <catch2/catch_test_macros.hpp>
 #include <chrono>
 #include <cstdint>
+#include <format>
 #include <iterator>
 #include <map>
 #include <optional>
@@ -3450,4 +3451,677 @@ TEST_CASE("table dialogs: a content-height table in a row fills the column the r
     int const table = h.byTestId("Table", "t");
     CHECK(h.backend.prop(table, "layout") == "content max=50/stretch(1)");
     CHECK(h.backend.dump().contains("Column#2 gap=0 layout=content max=50/content"));
+}
+
+// ── The filter menu ─────────────────────────────────────────────────────────
+
+namespace {
+
+using morph::ui::testing::clickFilter;
+using morph::ui::testing::clickGroupFilter;
+
+// A rows table `t` of `status` (Open×3, Closed×2, Held×1 and one empty) and `site` (A×5, B×2), counting the runs of
+// `onFiltersChange` in `n`.
+constexpr std::string_view kStatusRows = R"({
+  "vocab": "ui/1", "id": "status",
+  "state": { "n": { "init": { "lit": 0 } }, "items": { "init": { "lit": [
+    { "id": 1, "status": "Open", "site": "A" }, { "id": 2, "status": "Open", "site": "A" },
+    { "id": 3, "status": "Open", "site": "B" }, { "id": 4, "status": "Closed", "site": "A" },
+    { "id": 5, "status": "Closed", "site": "A" }, { "id": 6, "status": "Held", "site": "B" },
+    { "id": 7, "site": "A" } ] } } },
+  "view": { "kind": "table", "id": "t", "rows": { "ref": "items" },
+            "columns": [ { "id": "status", "label": "Status" }, { "id": "site", "label": "Site" } ],
+            "onFiltersChange": [ { "set": "n", "value": { "fn": "add", "args": [ { "ref": "n" }, 1 ] } } ] } })";
+
+// Whether a widget of a kind with a test id is mounted.
+bool mounted(TableHarness const& h, std::string_view kind, std::string_view testId) {
+    return h.backend.find(kind, "testId", testId).has_value();
+}
+
+// A widget's property, found by its kind and test id.
+std::string propOf(TableHarness const& h, std::string_view kind, std::string_view testId, std::string_view name) {
+    return h.backend.prop(h.byTestId(kind, testId), name);
+}
+
+// Toggles a check box of the filter menu, then settles.
+void toggleBox(TableHarness& h, std::string_view testId) {
+    h.backend.toggle(h.byTestId("Checkbox", testId));
+    h.settle();
+}
+
+// Ticks or unticks "(Select all)" as a user who wants every value under the search ticked, or unticked, does: a box
+// that already shows the wanted state is toggled twice, since it shows only the values listed.
+void selectAll(TableHarness& h, bool ticked) {
+    toggleBox(h, "table_filter_all");
+    if ((propOf(h, "Checkbox", "table_filter_all", "checked") == "true") != ticked) {
+        toggleBox(h, "table_filter_all");
+    }
+}
+
+// Chooses an option of one of the filter menu's selects by its label, then settles.
+void chooseOption(TableHarness& h, std::string_view testId, std::string_view label) {
+    h.backend.choose(h.byTestId("Select", testId), Key{std::string{label}});
+    h.settle();
+}
+
+// Types into one of the filter menu's text inputs, then settles.
+void typeInto(TableHarness& h, std::string_view testId, std::string_view text) {
+    h.backend.edit(h.byTestId("TextInput", testId), std::string{text});
+    h.settle();
+}
+
+// Closes the filter menu as a dismissal does.
+void dismissMenu(TableHarness& h) {
+    h.backend.dismiss(h.byTestId("Dialog", "table_filter"));
+    h.settle();
+}
+
+// Presses one of the filter menu's buttons, then settles.
+void pressButton(TableHarness& h, std::string_view testId) {
+    h.backend.click(h.byTestId("Button", testId));
+    h.settle();
+}
+
+// A select's `options` property for options whose keys are their labels.
+std::string optionsOf(std::vector<std::string> const& labels) {
+    std::vector<morph::ui::SelectOption> options;
+    for (std::string const& label : labels) {
+        options.push_back(morph::ui::SelectOption{.key = Key{label}, .label = label});
+    }
+    return morph::ui::testing::detail::formatList(options, [](morph::ui::SelectOption const& option) {
+        return morph::ui::testing::detail::formatKey(option.key) + ":" + morph::ui::testing::detail::formatItem(option.label);
+    });
+}
+
+// A distinct-values reply against @p revision: a page with no rows whose `distinct` reads @p values.
+std::string distinctReply(std::string const& revision, std::string_view values) {
+    table::GenericPage page;
+    page.revision = revision;
+    table::DistinctValues read;
+    REQUIRE_FALSE(glz::read<glz::opts{.error_on_unknown_keys = false}>(read, values));
+    page.distinct = std::move(read);
+    return glz::write_json(page).value_or("");
+}
+
+// The `Table.samples` calls that fetch a query's first page of rows: one per query the rows are given.
+std::size_t pageCalls(TableHarness const& h) {
+    std::size_t out = 0;
+    for (std::size_t at = 0; at < h.dispatcher.calls.size(); ++at) {
+        if (h.dispatcher.calls[at].action == "Table.samples" && !queryOf(h, at).distinct &&
+            queryOf(h, at).page.offset == 0) {
+            ++out;
+        }
+    }
+    return out;
+}
+
+// The latest `Table.samples` call that asks for values.
+std::size_t lastDistinct(TableHarness const& h) {
+    for (std::size_t at = h.dispatcher.calls.size(); at-- > 0;) {
+        if (h.dispatcher.calls[at].action == "Table.samples" && queryOf(h, at).distinct) {
+            return at;
+        }
+    }
+    FAIL("no distinct request");
+    return 0;
+}
+
+// A column filter read back from the table's `filters` element value.
+table::ColumnFilter columnFilterOf(morph::ui::Screen const& screen, std::string_view column) {
+    table::ColumnFilter filter;
+    std::string const text = readJson(screen, R"({"ref":"t.filters.columns.)" + std::string{column} + R"("})");
+    REQUIRE_FALSE(glz::read<glz::opts{.error_on_unknown_keys = false}>(filter, text));
+    return filter;
+}
+
+// The model table `t` over @p description, its first page answered.
+std::unique_ptr<morph::ui::Screen> mountDescribed(TableHarness& h, table::TableDescription const& description,
+                                                  std::string_view text = morph::ui::testing::kConfigModelTable) {
+    auto screen = h.mount(text);
+    replyDescribe(h, description);
+    table::TableQuery const first = lastQuery(h);
+    h.reply(oldestOpen(h, "Table.samples"),
+            pageJsonAt(description.revision, 0, 0, 0, first.columns.value_or(std::vector<std::string>{})));
+    return screen;
+}
+
+// `id`, then a column of each kind a condition is offered by: `n` Integer, `b` Bool, `code` Custom, `d` Date, `dec`
+// Decimal and `weight` a Measure in g or kg.
+table::TableDescription kindsDescription() {
+    table::TableDescription d;
+    d.id = "samples";
+    d.label = "Samples";
+    d.key = "id";
+    auto const add = [&d](std::string id, table::ColumnKind kind) {
+        d.columns.push_back(table::TableColumn{.info = {.id = std::move(id), .kind = kind}});
+    };
+    add("id", table::ColumnKind::Integer);
+    add("n", table::ColumnKind::Integer);
+    add("b", table::ColumnKind::Bool);
+    add("code", table::ColumnKind::Custom);
+    add("d", table::ColumnKind::Date);
+    add("dec", table::ColumnKind::Decimal);
+    add("weight", table::ColumnKind::Measure);
+    d.columns.back().info.dimensions = {"mass"};
+    d.units = {table::UnitInfo{.id = "g", .symbol = "g", .dimension = "mass", .toBase = *table::parseDecimal("0.001"),
+                               .decimals = 0},
+               table::UnitInfo{.id = "kg", .symbol = "kg", .dimension = "mass", .toBase = *table::parseDecimal("1"),
+                               .decimals = 3},
+               table::UnitInfo{.id = "%", .symbol = "%", .dimension = "ratio", .toBase = *table::parseDecimal("0.01"),
+                               .decimals = 1}};
+    return table::describe(std::move(d));
+}
+
+// The days of a month as a distinct reply's values: `YYYY-MM-DD`, each a bucket of one day.
+std::string dayValues(std::string_view month, int days) {
+    std::string out = R"({"values":[)";
+    for (int day = 1; day <= days; ++day) {
+        std::string const text = std::format("{}-{:02}", month, day);
+        out += std::string{day == 1 ? "" : ","} + R"({"text":")" + text + R"(","operand":")" + text + ".." + text +
+               R"(","count":1})";
+    }
+    return out + "],\"distinct\":" + std::to_string(days) + "}";
+}
+
+}  // namespace
+
+// Mutation: Apply writing the side the plan did not choose (the ticked values where it chose the unticked ones).
+TEST_CASE("filter menu: values are counted over what the other filters leave, and ticks build the smaller side",
+          "[ui][table][config]") {
+    TableHarness h;
+    auto screen = h.mount(kStatusRows);
+    int const table = h.backend.all("Table").front();
+    clickFilter(h, table, 1);
+    chooseOption(h, "table_filter_op_1", "equals");
+    typeInto(h, "table_filter_operand_1", "A");
+    h.advance(250ms);
+    REQUIRE(readJson(*screen, R"({"ref":"t.filters.columns.site"})") ==
+            R"({"combine":"any","exclude":[],"include":[{"eq":"A"}]})");
+    dismissMenu(h);
+    std::int64_t const runs = std::stoll(readJson(*screen, R"({"ref":"n"})"));
+    clickFilter(h, table, 0);
+    CHECK(propOf(h, "Checkbox", "table_filter_value_0", "label") == "Closed (2)");
+    CHECK(propOf(h, "Checkbox", "table_filter_value_1", "label") == "Open (2)");
+    CHECK_FALSE(mounted(h, "Checkbox", "table_filter_value_2"));                       // no Held
+    CHECK(propOf(h, "Checkbox", "table_filter_blanks", "label") == "(Blanks)");
+    CHECK(propOf(h, "Checkbox", "table_filter_blanks", "visible") != "false");
+    toggleBox(h, "table_filter_value_1");
+    pressButton(h, "table_filter_apply");
+    CHECK(readJson(*screen, R"({"ref":"t.filters.columns.status"})") ==
+          R"({"combine":"any","exclude":[{"oneOf":["Open"]}],"include":[]})");
+    CHECK(propOf(h, "Dialog", "table_filter", "open") == "false");
+    CHECK(std::stoll(readJson(*screen, R"({"ref":"n"})")) == runs + 1);
+    CHECK(h.backend.prop(table, "filtered") == "[0,1]");
+    CHECK(elementValue(*screen, "t", "viewCount") == "3");
+    clickFilter(h, table, 0);
+    CHECK(propOf(h, "Checkbox", "table_filter_value_1", "label") == "Open (2)");
+    CHECK(propOf(h, "Checkbox", "table_filter_value_1", "checked") == "false");
+    CHECK(propOf(h, "Checkbox", "table_filter_value_0", "checked") == "true");
+    dismissMenu(h);
+    // Hiding a filtered column keeps its filter, and its header says so again once it is shown.
+    chooseMenu(h, table, 0, {"Hide column"});
+    CHECK(elementValue(*screen, "t", "viewCount") == "3");
+    CHECK(h.backend.prop(table, "filtered") == "[0,1]");
+    chooseMenu(h, table, std::nullopt, {"Reset columns"});
+    CHECK(h.backend.prop(table, "filtered") == "[0,1]");
+    chooseMenu(h, table, std::nullopt, {"Clear all filters"});
+    CHECK(elementValue(*screen, "t", "filters") == R"({"columns":{},"groups":[]})");
+    CHECK(h.backend.prop(table, "filtered") == "[]");
+    CHECK(std::stoll(readJson(*screen, R"({"ref":"n"})")) == runs + 2);
+}
+
+// Mutation: a condition's edit keeping the ticks (the values part stays beside the condition).
+TEST_CASE("filter menu: values and conditions are exclusive, and reopening shows the stored part", "[ui][table][config]") {
+    SECTION("a text column") {
+        TableHarness h;
+        auto screen = h.mount(kStatusRows);
+        int const table = h.backend.all("Table").front();
+        clickFilter(h, table, 0);
+        selectAll(h, false);
+        toggleBox(h, "table_filter_blanks");
+        pressButton(h, "table_filter_apply");
+        CHECK(readJson(*screen, R"({"ref":"t.filters.columns.status"})") ==
+              R"({"combine":"any","exclude":[],"include":[{"isEmpty":true}]})");
+        clickFilter(h, table, 0);
+        CHECK(propOf(h, "Checkbox", "table_filter_blanks", "checked") == "true");
+        for (std::string_view const value : {"table_filter_value_0", "table_filter_value_1", "table_filter_value_2"}) {
+            CHECK(propOf(h, "Checkbox", value, "checked") == "false");
+        }
+        CHECK(propOf(h, "Select", "table_filter_op_1", "selected") == "none");
+        chooseOption(h, "table_filter_op_1", "contains");
+        typeInto(h, "table_filter_operand_1", "pe");
+        h.advance(250ms);
+        CHECK(readJson(*screen, R"({"ref":"t.filters.columns.status"})") ==
+              R"({"combine":"any","exclude":[],"include":[{"contains":"pe"}]})");
+        CHECK(propOf(h, "Checkbox", "table_filter_blanks", "checked") == "true");   // the ticks start again
+        CHECK(propOf(h, "Checkbox", "table_filter_all", "checked") == "true");
+        dismissMenu(h);
+        clickFilter(h, table, 0);
+        CHECK(propOf(h, "Select", "table_filter_op_1", "selected") == R"("contains")");
+        CHECK(propOf(h, "TextInput", "table_filter_operand_1", "text") == "pe");
+        CHECK(propOf(h, "Checkbox", "table_filter_all", "checked") == "true");
+    }
+    SECTION("a custom column has conditions alone") {
+        TableHarness h;
+        auto screen = mountDescribed(h, kindsDescription(),
+                                     withTableKey(morph::ui::testing::kConfigModelTable,
+                                                  R"("filters":{"columns":{"code":{"include":[{"isEmpty":true}]}}})"));
+        int const table = h.backend.all("Table").front();
+        std::size_t const calls = h.dispatcher.count("Table.samples");
+        clickFilter(h, table, 3);
+        CHECK(propOf(h, "Select", "table_filter_op_1", "selected") == R"("is empty")");
+        CHECK_FALSE(mounted(h, "Checkbox", "table_filter_value_0"));
+        CHECK_FALSE(mounted(h, "TextInput", "table_filter_search"));
+        CHECK(h.dispatcher.count("Table.samples") == calls);                           // no values asked for
+    }
+}
+
+// Mutation: the search sent on every keystroke (no debounce).
+TEST_CASE("filter menu: a search typed quickly is one distinct request after the pause", "[ui][table][config]") {
+    TableHarness h;
+    auto screen = mountDescribed(h, samplesDescription(5));
+    int const table = h.backend.all("Table").front();
+    std::size_t const before = h.dispatcher.count("Table.samples");
+    clickFilter(h, table, 1);
+    REQUIRE(h.dispatcher.count("Table.samples") == before + 1);
+    REQUIRE(lastQuery(h).distinct.has_value());
+    h.reply(lastDistinct(h), distinctReply(h.described.revision, R"({"values":[{"text":"a","operand":"a","count":1}],"distinct":1})"));
+    typeInto(h, "table_filter_search", "a");
+    h.advance(50ms);
+    typeInto(h, "table_filter_search", "ab");
+    h.advance(50ms);
+    typeInto(h, "table_filter_search", "abc");
+    h.advance(249ms);
+    CHECK(h.dispatcher.count("Table.samples") == before + 1);
+    h.advance(1ms);
+    CHECK(h.dispatcher.count("Table.samples") == before + 2);
+    REQUIRE(lastQuery(h).distinct.has_value());
+    CHECK(lastQuery(h).distinct->search == "abc");
+}
+
+// Mutation: the condition sent on every keystroke, or a half-typed between sent.
+TEST_CASE("filter menu: a condition applies once after typing pauses, and an incomplete between is not sent",
+          "[ui][table][config]") {
+    TableHarness h;
+    auto screen = mountDescribed(h, samplesDescription(5));
+    int const table = h.backend.all("Table").front();
+    clickFilter(h, table, 1);
+    chooseOption(h, "table_filter_op_1", "contains");
+    std::string const letters = "abcdefghij";
+    for (std::size_t at = 1; at <= letters.size(); ++at) {
+        typeInto(h, "table_filter_operand_1", letters.substr(0, at));
+        if (at < letters.size()) {
+            h.advance(150ms);
+        }
+    }
+    std::size_t const pages = pageCalls(h);
+    h.advance(249ms);
+    CHECK(pageCalls(h) == pages);
+    h.advance(1ms);
+    REQUIRE(pageCalls(h) == pages + 1);
+    REQUIRE(lastQuery(h).filters.columns.contains("name"));
+    CHECK(lastQuery(h).filters.columns.at("name").include.front().contains == "abcdefghij");
+    dismissMenu(h);
+
+    clickFilter(h, table, 2);
+    chooseOption(h, "table_filter_op_1", "between");
+    typeInto(h, "table_filter_operand_1", "2");
+    std::size_t const waiting = pageCalls(h);
+    h.advance(1s);
+    CHECK(pageCalls(h) == waiting);                                                    // no second end
+    typeInto(h, "table_filter_second_1", "5");
+    h.advance(250ms);
+    REQUIRE(pageCalls(h) == waiting + 1);
+    REQUIRE(lastQuery(h).filters.columns.contains("c3"));
+    CHECK(lastQuery(h).filters.columns.at("c3").include.front().between ==
+          std::array<std::string, 2>{"2", "5"});
+    typeInto(h, "table_filter_operand_1", "3");
+    pressButton(h, "table_filter_apply");
+    REQUIRE(pageCalls(h) == waiting + 2);                                              // at once
+    CHECK(lastQuery(h).filters.columns.at("c3").include.front().between ==
+          std::array<std::string, 2>{"3", "5"});
+}
+
+// Mutation: the note line ignoring `partial`.
+TEST_CASE("filter menu: a partial list says it may grow and invalid cells are counted under it", "[ui][table][config]") {
+    TableHarness h;
+    auto screen = mountDescribed(h, samplesDescription(5));
+    int const table = h.backend.all("Table").front();
+    clickFilter(h, table, 1);
+    h.reply(lastDistinct(h),
+            distinctReply(h.described.revision, R"({"values":[{"text":"x","operand":"x","count":4}],"distinct":1,)"
+                                                R"("blanks":0,"invalid":3,"partial":true})"));
+    // The recording backend writes a line break as `\n`.
+    CHECK(h.text("table_filter_note") == R"(The list may grow while data loads\n3 cells could not be read)");
+    CHECK(mounted(h, "Checkbox", "table_filter_value_0"));
+    CHECK_FALSE(mounted(h, "Checkbox", "table_filter_value_1"));
+}
+
+// Mutation: "(Select all)" under a search resolved to the first page of the values it shows.
+TEST_CASE("filter menu: Select all under a search covers every match, and both sides over the bound refuse",
+          "[ui][table][config]") {
+    std::string rows;
+    for (int at = 0; at < 25'000; ++at) {
+        rows += std::format(R"({}{{"id":{},"code":"c{:05}"}})", at == 0 ? "" : ",", at, at);
+    }
+    std::string const text = R"({"vocab":"ui/1","id":"codes","state":{"items":{"init":{"lit":[)" + rows +
+                             R"(]}}},"view":{"kind":"table","id":"t","rows":{"ref":"items"},)"
+                             R"("columns":[{"id":"code","label":"Code"}]}})";
+    TableHarness h;
+    auto screen = h.mount(text);
+    int const table = h.backend.all("Table").front();
+    auto const search = [&h](std::string_view typed) {
+        typeInto(h, "table_filter_search", typed);
+        h.advance(250ms);
+    };
+    auto const members = [](table::FilterEntry const& entry) {
+        return entry.oneOf.value_or(std::vector<std::string>{});
+    };
+
+    clickFilter(h, table, 0);
+    selectAll(h, false);
+    search("c0");
+    selectAll(h, true);
+    pressButton(h, "table_filter_apply");
+    table::ColumnFilter filter = columnFilterOf(*screen, "code");
+    REQUIRE(filter.include.size() == 1);
+    CHECK(filter.exclude.empty());
+    std::vector<std::string> named = members(filter.include.front());
+    REQUIRE(named.size() == 10'000);
+    CHECK(named.front() == "c00000");
+    CHECK(named.back() == "c09999");
+
+    clickFilter(h, table, 0);
+    selectAll(h, false);
+    search("c1");
+    selectAll(h, true);
+    search("c2");
+    selectAll(h, true);
+    pressButton(h, "table_filter_apply");
+    filter = columnFilterOf(*screen, "code");
+    CHECK(filter.include.empty());
+    REQUIRE(filter.exclude.size() == 1);
+    named = members(filter.exclude.front());
+    REQUIRE(named.size() == 10'000);
+    CHECK(named.front() == "c00000");
+    CHECK(named.back() == "c09999");
+
+    std::string const before = elementValue(*screen, "t", "filters");
+    clickFilter(h, table, 0);
+    selectAll(h, false);
+    for (std::string_view const typed : {"c1", "c00", "c01"}) {
+        search(typed);
+        selectAll(h, true);
+    }
+    pressButton(h, "table_filter_apply");
+    CHECK(h.text("table_filter_note") == "Too many values to list; filter with a condition");
+    CHECK(elementValue(*screen, "t", "filters") == before);
+}
+
+// Mutation: conditions offered by Text for every kind; an operand sent as typed.
+TEST_CASE("filter menu: conditions follow the column's kind, and typed operands are canonical", "[ui][table][config]") {
+    TableHarness h;
+    auto screen = mountDescribed(
+        h, kindsDescription(),
+        R"({"vocab":"ui/1","id":"samples","models":{"sample":{"type":"Lims_SampleModel"}},)"
+        R"("view":{"kind":"localeScope","locale":"de","children":[)"
+        R"({"kind":"table","id":"t","model":"sample","table":"samples"}]}})");
+    int const table = h.backend.all("Table").front();
+    clickFilter(h, table, 1);
+    CHECK(propOf(h, "Select", "table_filter_op_1", "options") == optionsOf({"=", "≠", "<", "≤", ">", "≥", "between"}));
+    dismissMenu(h);
+    clickFilter(h, table, 2);
+    CHECK_FALSE(mounted(h, "Select", "table_filter_op_1"));
+    dismissMenu(h);
+    clickFilter(h, table, 3);
+    CHECK(propOf(h, "Select", "table_filter_op_1", "options") == optionsOf({"is empty", "is not empty"}));
+    dismissMenu(h);
+    clickFilter(h, table, 4);
+    CHECK(propOf(h, "DateTimeInput", "table_filter_operand_1", "mode") == "Date");
+    dismissMenu(h);
+
+    clickFilter(h, table, 5);
+    chooseOption(h, "table_filter_op_1", ">");
+    typeInto(h, "table_filter_operand_1", "1.234,5");
+    h.advance(250ms);
+    CHECK(readJson(*screen, R"({"ref":"t.filters.columns.dec.include"})") == R"([{"gt":"1234.5"}])");
+    dismissMenu(h);
+
+    clickFilter(h, table, 6);
+    CHECK(propOf(h, "Select", "table_filter_unit_1", "options") == optionsOf({"g", "kg"}));
+    chooseOption(h, "table_filter_op_1", ">");
+    typeInto(h, "table_filter_operand_1", "0,3 kg");
+    h.advance(250ms);
+    CHECK(readJson(*screen, R"({"ref":"t.filters.columns.weight.include"})") == R"([{"gt":"0.3 kg"}])");
+    typeInto(h, "table_filter_operand_1", "250");
+    chooseOption(h, "table_filter_unit_1", "g");
+    h.advance(250ms);
+    CHECK(readJson(*screen, R"({"ref":"t.filters.columns.weight.include"})") == R"([{"gt":"250 g"}])");
+    typeInto(h, "table_filter_operand_1", "12,5 xx");
+    h.advance(250ms);
+    CHECK(propOf(h, "TextInput", "table_filter_operand_1", "errors") != "[]");
+    CHECK(readJson(*screen, R"({"ref":"t.filters.columns.weight.include"})") == R"([{"gt":"250 g"}])");
+}
+
+// Mutation: the Measure list drawn without dimension headings.
+TEST_CASE("filter menu: a Measure column's values are grouped under a heading per dimension", "[ui][table][config]") {
+    TableHarness h;
+    auto screen = mountDescribed(h, kindsDescription());
+    int const table = h.backend.all("Table").front();
+    clickFilter(h, table, 6);
+    h.reply(lastDistinct(h),
+            distinctReply(h.described.revision,
+                          R"({"values":[{"text":"0.3 kg","operand":"0.3 kg","count":2,"dimension":"mass","unit":"kg"},)"
+                          R"({"text":"0.5 %","operand":"0.5 %","count":1,"dimension":"ratio","unit":"%"}],"distinct":2})"));
+    std::string const dump = h.backend.dump();
+    std::size_t const mass = dump.find("testId=table_filter_heading_mass");
+    std::size_t const first = dump.find("testId=table_filter_value_0");
+    std::size_t const ratio = dump.find("testId=table_filter_heading_ratio");
+    std::size_t const second = dump.find("testId=table_filter_value_1");
+    REQUIRE(mass != std::string::npos);
+    REQUIRE(ratio != std::string::npos);
+    CHECK(mass < first);
+    CHECK(first < ratio);
+    CHECK(ratio < second);
+}
+
+// Mutation: the group menu sending `together` as one oneOf.
+TEST_CASE("filter menu: a group's values are pooled and the match line builds the quantifier", "[ui][table][config]") {
+    constexpr std::string_view kCompanies = R"({
+      "vocab": "ui/1", "id": "companies",
+      "state": { "items": { "init": { "lit": [
+        { "id": 1, "companyA": "F", "companyB": "S", "companyC": "X" },
+        { "id": 2, "companyA": "F", "companyB": "F", "companyC": "X" },
+        { "id": 3, "companyA": "S", "companyB": "F", "companyC": "F" },
+        { "id": 4, "companyA": "F", "companyB": "X", "companyC": "Y" },
+        { "id": 5, "companyA": "X", "companyB": "Y", "companyC": "Z" } ] } } },
+      "view": { "kind": "table", "id": "t", "rows": { "ref": "items" },
+                "columns": [ { "id": "companyA" }, { "id": "companyB" }, { "id": "companyC" } ],
+                "groups": [ { "id": "company", "label": "Company", "columns": { "lit": ["companyA", "companyB", "companyC"] } } ] } })";
+    TableHarness h;
+    auto screen = h.mount(kCompanies);
+    int const table = h.backend.all("Table").front();
+    CHECK(h.backend.prop(table, "columnGroups") == "[Company:0+3]");
+    clickGroupFilter(h, table, 0);
+    CHECK(propOf(h, "Dialog", "table_filter", "open") == "true");
+    dismissMenu(h);
+    moveColumn(h, table, 1, 2);
+    CHECK(h.backend.prop(table, "columnGroups") == "[]");
+    CHECK(std::ranges::contains(labelsOf(menuOf(h, table, 0)), "Filter Company, 3 columns…"));
+    chooseMenu(h, table, 0, {"Filter Company, 3 columns…"});
+    CHECK(propOf(h, "Checkbox", "table_filter_value_0", "label") == "F (4)");
+    CHECK(propOf(h, "Checkbox", "table_filter_value_1", "label") == "S (2)");
+    CHECK(propOf(h, "Checkbox", "table_filter_value_2", "label") == "X (4)");
+    CHECK(propOf(h, "Checkbox", "table_filter_value_3", "label") == "Y (2)");
+    CHECK(propOf(h, "Checkbox", "table_filter_value_4", "label") == "Z (1)");
+    toggleBox(h, "table_filter_value_0");
+    toggleBox(h, "table_filter_value_1");
+    chooseOption(h, "table_filter_match", "all of them, each in a column");
+    pressButton(h, "table_filter_apply");
+    CHECK(readJson(*screen, R"({"ref":"t.filters.groups"})") ==
+          R"([{"combine":"any","exclude":[],"group":"company","include":[{"eq":"F"},{"eq":"S"}],"match":"any",)"
+          R"("mode":"together"}])");
+    CHECK(elementValue(*screen, "t", "viewCount") == "2");
+    chooseMenu(h, table, 0, {"Filter Company, 3 columns…"});
+    chooseOption(h, "table_filter_match", "in at least N columns");
+    typeInto(h, "table_filter_count", "2");
+    pressButton(h, "table_filter_apply");
+    CHECK(readJson(*screen, R"({"ref":"t.filters.groups"})") ==
+          R"([{"combine":"any","exclude":[],"group":"company","include":[{"oneOf":["F","S"]}],)"
+          R"("match":{"atLeast":2},"mode":"columns"}])");
+    CHECK(elementValue(*screen, "t", "viewCount") == "3");
+}
+
+// Index decision 26. Mutation: removing the group leaving its filter held (the last CHECK: the groups still hold it).
+TEST_CASE("filter menu: a user-formed group offers conditions and the match line, no values list", "[ui][table][config]") {
+    TableHarness h;
+    auto screen = h.mount(kKinds);
+    int const table = h.backend.all("Table").front();
+    chooseMenu(h, table, std::nullopt, {"Columns…"});
+    press(h, "table_columns_group");
+    toggleBox(h, "table_group_column_a");
+    toggleBox(h, "table_group_column_b");
+    typeInto(h, "table_group_label", "Pair");
+    press(h, "table_group_create");
+    press(h, "table_columns_done");
+    chooseMenu(h, table, 0, {"Filter Pair, 2 columns…"});
+    CHECK(propOf(h, "Dialog", "table_filter", "open") == "true");
+    CHECK_FALSE(mounted(h, "TextInput", "table_filter_search"));
+    CHECK_FALSE(mounted(h, "Checkbox", "table_filter_all"));
+    CHECK_FALSE(mounted(h, "Checkbox", "table_filter_value_0"));
+    CHECK(propOf(h, "Select", "table_filter_op_1", "options") ==
+          optionsOf({"equals", "does not equal", "contains", "begins with", "ends with"}));
+    CHECK(propOf(h, "Select", "table_filter_match", "options") ==
+          optionsOf({"in any column", "in every column", "in at least N columns", "in exactly N columns"}));
+    chooseOption(h, "table_filter_op_1", "equals");
+    typeInto(h, "table_filter_operand_1", "F");
+    chooseOption(h, "table_filter_match", "in every column");
+    h.advance(250ms);
+    CHECK(readJson(*screen, R"({"ref":"t.filters.groups"})") ==
+          R"([{"columns":["a","b"],"combine":"any","exclude":[],"include":[{"eq":"F"}],"match":"all","mode":"columns"}])");
+    dismissMenu(h);
+    chooseMenu(h, table, 0, {"Filter Pair, 2 columns…"});
+    CHECK(propOf(h, "Select", "table_filter_op_1", "selected") == R"("equals")");
+    CHECK(propOf(h, "TextInput", "table_filter_operand_1", "text") == "F");
+    CHECK(propOf(h, "Select", "table_filter_match", "selected") == R"("in every column")");
+    dismissMenu(h);
+    chooseMenu(h, table, std::nullopt, {"Columns…"});
+    press(h, "table_group_remove_g1");
+    CHECK(readJson(*screen, R"({"ref":"t.filters.groups"})") == "[]");
+}
+
+// Mutation: adjacent buckets sent as one entry each (the touching days' section).
+TEST_CASE("filter menu: a date column lists years, then a year's months, then a month's days", "[ui][table][config]") {
+    table::TableDescription described = samplesDescription(5);
+    described.columns.at(2).info.kind = table::ColumnKind::Date;
+    described = table::describe(std::move(described));
+    std::string const years = R"({"values":[{"text":"2025","operand":"2025-01-01..2025-12-31","count":3},)"
+                              R"({"text":"2026","operand":"2026-01-01..2026-12-31","count":5}],"distinct":2})";
+    std::string const months = R"({"values":[{"text":"2026-01","operand":"2026-01-01..2026-01-31","count":1},)"
+                               R"({"text":"2026-03","operand":"2026-03-01..2026-03-31","count":3},)"
+                               R"({"text":"2026-04","operand":"2026-04-01..2026-04-30","count":1},)"
+                               R"({"text":"2026-05","operand":"2026-05-01..2026-05-31","count":1}],"distinct":4})";
+    TableHarness h;
+    auto screen = mountDescribed(h, described);
+    int const table = h.backend.all("Table").front();
+    auto const answer = [&h](std::string const& values) {
+        h.reply(lastDistinct(h), distinctReply(h.described.revision, values));
+    };
+    // Opens the menu, then 2026 and its March; the list is 2025, 2026, its four months, March's days after March.
+    auto const openTree = [&] {
+        clickFilter(h, table, 2);
+        REQUIRE(lastQuery(h).distinct->bucket == table::DateBucket::Year);
+        answer(years);
+        pressButton(h, "table_filter_open_1");
+        REQUIRE(lastQuery(h).distinct->bucket == table::DateBucket::Month);
+        CHECK(lastQuery(h).distinct->search == "2026-");
+        answer(months);
+        pressButton(h, "table_filter_open_3");
+        REQUIRE(lastQuery(h).distinct->bucket == table::DateBucket::Day);
+        CHECK(lastQuery(h).distinct->search == "2026-03-");
+        answer(dayValues("2026-03", 31));
+    };
+    SECTION("buckets apply in ascending order, and reopen ticked") {
+        openTree();
+        CHECK_FALSE(mounted(h, "Checkbox", "table_filter_all"));
+        CHECK(propOf(h, "Checkbox", "table_filter_value_0", "checked") == "false");
+        CHECK(propOf(h, "Checkbox", "table_filter_value_1", "checked") == "false");
+        toggleBox(h, "table_filter_value_3");                                          // March
+        CHECK(propOf(h, "Checkbox", "table_filter_value_4", "checked") == "true");     // its first day, covered
+        CHECK(propOf(h, "Checkbox", "table_filter_value_4", "enabled") == "false");
+        toggleBox(h, "table_filter_value_0");                                          // 2025
+        pressButton(h, "table_filter_apply");
+        CHECK(readJson(*screen, R"({"ref":"t.filters.columns.c3"})") ==
+              R"({"combine":"any","exclude":[],"include":[{"between":["2025-01-01","2025-12-31"]},)"
+              R"({"between":["2026-03-01","2026-03-31"]}]})");
+        clickFilter(h, table, 2);
+        answer(years);
+        pressButton(h, "table_filter_open_1");
+        answer(months);
+        CHECK(propOf(h, "Checkbox", "table_filter_value_0", "checked") == "true");     // 2025
+        CHECK(propOf(h, "Checkbox", "table_filter_value_1", "checked") == "false");    // 2026
+        CHECK(propOf(h, "Checkbox", "table_filter_value_3", "checked") == "true");     // March
+    }
+    SECTION("touching days are one entry") {
+        openTree();
+        pressButton(h, "table_filter_open_35");                                        // April, after March's days
+        answer(dayValues("2026-04", 30));
+        for (int at = 4; at <= 34; ++at) {
+            toggleBox(h, "table_filter_value_" + std::to_string(at));
+        }
+        for (int at = 36; at <= 44; ++at) {
+            toggleBox(h, "table_filter_value_" + std::to_string(at));
+        }
+        pressButton(h, "table_filter_apply");
+        CHECK(readJson(*screen, R"({"ref":"t.filters.columns.c3"})") ==
+              R"({"combine":"any","exclude":[],"include":[{"between":["2026-03-01","2026-04-09"]}]})");
+    }
+    SECTION("more than 32 entries apply nothing") {
+        openTree();
+        pressButton(h, "table_filter_open_35");
+        answer(dayValues("2026-04", 30));
+        pressButton(h, "table_filter_open_66");                                        // May, after April's days
+        answer(dayValues("2026-05", 31));
+        std::string const before = elementValue(*screen, "t", "filters");
+        // Every second day from 2026-03-01: March's odd days, April's even days, then 2 and 4 May.
+        for (int at = 4; at <= 34; at += 2) {
+            toggleBox(h, "table_filter_value_" + std::to_string(at));
+        }
+        for (int at = 37; at <= 65; at += 2) {
+            toggleBox(h, "table_filter_value_" + std::to_string(at));
+        }
+        toggleBox(h, "table_filter_value_68");
+        toggleBox(h, "table_filter_value_70");
+        pressButton(h, "table_filter_apply");
+        CHECK(h.text("table_filter_note") == "Too many dates to list; filter with a condition");
+        CHECK(elementValue(*screen, "t", "filters") == before);
+    }
+}
+
+// Mutation: choosing an unchecked unit clearing it, as choosing the checked one does.
+TEST_CASE("display unit: the header menu writes the layout's units", "[ui][table][config]") {
+    TableHarness h;
+    auto screen = mountDescribed(h, kindsDescription());
+    int const table = h.backend.all("Table").front();
+    std::size_t const pages = pageCalls(h);
+    chooseMenu(h, table, 6, {"Display unit", "mass: g"});
+    CHECK(readJson(*screen, R"({"ref":"t.layout.units"})") == R"({"weight":{"mass":"g"}})");
+    CHECK(pageCalls(h) == pages);
+    chooseMenu(h, table, 6, {"Display unit", "mass: g"});                              // the checked one clears it
+    CHECK(readJson(*screen, R"({"ref":"t.layout.units"})") == "null");
+}
+
+// Mutation: the entry labelled with the reply's `text`.
+TEST_CASE("filter menu: the values list labels by the column's display", "[ui][table][config]") {
+    TableHarness h;
+    auto screen = mountDescribed(h, companionDescription(), doc(kTable));
+    int const table = h.backend.all("Table").front();
+    clickFilter(h, table, 1);
+    h.reply(lastDistinct(h), distinctReply(companionDescription().revision,
+                                           R"({"values":[{"text":"x","operand":"0.124","count":1},)"
+                                           R"({"text":"y","operand":"0.123","count":2},)"
+                                           R"({"text":"z","operand":"0.5","count":1}],"distinct":3})"));
+    CHECK(propOf(h, "Checkbox", "table_filter_value_0", "label") == "0.124 (1)");
+    CHECK(propOf(h, "Checkbox", "table_filter_value_1", "label") == "0.123 (2)");
+    CHECK(propOf(h, "Checkbox", "table_filter_value_2", "label") == "0.50 (1)");
 }

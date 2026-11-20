@@ -569,19 +569,19 @@ TEST_CASE(
     // Not known yet: the session's locale.
     CHECK(h.text("word") == "Word");
     CHECK(h.text("bound") == "1.5");
-    CHECK(h.backend.prop(h.byTestId("Table", "lines"), "columns") == "[Total:content]");
+    CHECK(h.backend.prop(h.byTestId("Table", "lines"), "columns") == "[Total:content;filterable=true]");
     h.backend.click(h.byTestId("Button", "toDe"));
     h.settle();
     CHECK(h.text("word") == "Wort");
     CHECK(h.text("bound") == "1,5");
     CHECK(h.text("plain") == "2,5");
-    CHECK(h.backend.prop(h.byTestId("Table", "lines"), "columns") == "[Summe:content]");
+    CHECK(h.backend.prop(h.byTestId("Table", "lines"), "columns") == "[Summe:content;filterable=true]");
     h.backend.click(h.byTestId("Button", "toEn"));
     h.settle();
     CHECK(h.text("word") == "Word!");
     CHECK(h.text("bound") == "1.5");
     CHECK(h.text("plain") == "2.5");
-    CHECK(h.backend.prop(h.byTestId("Table", "lines"), "columns") == "[Sum:content]");
+    CHECK(h.backend.prop(h.byTestId("Table", "lines"), "columns") == "[Sum:content;filterable=true]");
 }
 
 // The invoice's shape: the customer's locale comes from a query that loads after the mount, and the line table's
@@ -596,9 +596,9 @@ TEST_CASE("locale scope: a table's translated labels follow a tag a query delive
       "view": { "kind": "localeScope", "locale": { "query": "customer" }, "children": [
         { "kind": "table", "id": "lines", "testId": "lines", "rows": { "lit": [ { "total": "1" } ] },
           "columns": [ { "id": "total", "label": { "t": "total", "fallback": "Total" } } ] } ] } })");
-    CHECK(h.backend.prop(h.byTestId("Table", "lines"), "columns") == "[Total:content]");
+    CHECK(h.backend.prop(h.byTestId("Table", "lines"), "columns") == "[Total:content;filterable=true]");
     h.reply(0, "\"de\"");
-    CHECK(h.backend.prop(h.byTestId("Table", "lines"), "columns") == "[Summe:content]");
+    CHECK(h.backend.prop(h.byTestId("Table", "lines"), "columns") == "[Summe:content;filterable=true]");
 }
 
 // Mutation: leave `formatSource` out of the component's scope (the fallback's text shows 1.5).
