@@ -1936,6 +1936,130 @@ inline table::Cell const* cellOf(Screen& screen, std::int64_t row, std::string_v
     return cell;
 }
 
+// ── Configuring a table ─────────────────────────────────────────────────────
+
+/// @brief A rows table `t`: nine sortable columns c1…c9 labelled C1…C9, three rows keyed by `id`.
+inline constexpr std::string_view kNine = R"({
+  "vocab": "ui/1", "id": "nine",
+  "state": { "items": { "init": { "lit": [
+    { "id": 1, "c1": 3, "c2": 1, "c3": 2, "c4": 1, "c5": 2, "c6": 3, "c7": 1, "c8": 2, "c9": 3 },
+    { "id": 2, "c1": 1, "c2": 2, "c3": 3, "c4": 2, "c5": 3, "c6": 1, "c7": 2, "c8": 3, "c9": 1 },
+    { "id": 3, "c1": 2, "c2": 3, "c3": 1, "c4": 3, "c5": 1, "c6": 2, "c7": 3, "c8": 1, "c9": 2 } ] } } },
+  "view": { "kind": "table", "id": "t", "rows": { "ref": "items" },
+            "columns": [ { "id": "c1", "label": "C1", "sortable": true }, { "id": "c2", "label": "C2", "sortable": true },
+                         { "id": "c3", "label": "C3", "sortable": true }, { "id": "c4", "label": "C4", "sortable": true },
+                         { "id": "c5", "label": "C5", "sortable": true }, { "id": "c6", "label": "C6", "sortable": true },
+                         { "id": "c7", "label": "C7", "sortable": true }, { "id": "c8", "label": "C8", "sortable": true },
+                         { "id": "c9", "label": "C9", "sortable": true } ] } })";
+
+/// @brief The model-backed table `t` over `Table.samples`; its description is what the test replies (`h.replyDescribe`).
+inline constexpr std::string_view kConfigModelTable = R"({
+  "vocab": "ui/1", "id": "samples",
+  "models": { "sample": { "type": "Lims_SampleModel" } },
+  "view": { "kind": "table", "id": "t", "model": "sample", "table": "samples" } })";
+
+/// @brief A header's menu, or the table's, as a user opening it sees it.
+/// @param h      The harness.
+/// @param table  The table widget.
+/// @param column The column, an index into `Table::columns`; none for the table's menu.
+/// @return The entries.
+inline std::vector<MenuEntry> menuOf(TableHarness& h, int table, std::optional<std::size_t> column) {
+    std::vector<MenuEntry> entries = h.backend.menuOf(table, column);
+    h.settle();
+    return entries;
+}
+
+/// @brief Chooses a menu entry by its labels from the top, then settles.
+/// @param h      The harness.
+/// @param table  The table widget.
+/// @param column The column; none for the table's menu.
+/// @param labels The entry's label at each level.
+inline void chooseMenu(TableHarness& h, int table, std::optional<std::size_t> column,
+                       std::vector<std::string_view> const& labels) {
+    h.backend.chooseMenu(table, column, labels);
+    h.settle();
+}
+
+/// @brief Drags a column's header to a place among the visible columns, then settles.
+/// @param h        The harness.
+/// @param table    The table widget.
+/// @param column   The column.
+/// @param position Its new place.
+inline void moveColumn(TableHarness& h, int table, std::size_t column, std::size_t position) {
+    h.backend.moveColumn(table, column, position);
+    h.settle();
+}
+
+/// @brief Drags a column header's edge to a width, or double-clicks it, then settles.
+/// @param h      The harness.
+/// @param table  The table widget.
+/// @param column The column.
+/// @param units  The width; none for the double click.
+inline void resizeColumn(TableHarness& h, int table, std::size_t column, std::optional<int> units) {
+    h.backend.resizeColumn(table, column, units);
+    h.settle();
+}
+
+/// @brief Presses a column's filter button, then settles.
+/// @param h      The harness.
+/// @param table  The table widget.
+/// @param column The column.
+inline void clickFilter(TableHarness& h, int table, std::size_t column) {
+    h.backend.clickFilter(table, column);
+    h.settle();
+}
+
+/// @brief Presses a column group's filter button, then settles.
+/// @param h     The harness.
+/// @param table The table widget.
+/// @param group The group's index.
+inline void clickGroupFilter(TableHarness& h, int table, std::size_t group) {
+    h.backend.clickGroupFilter(table, group);
+    h.settle();
+}
+
+/// @brief Asks the table to copy, as `Ctrl+C` does, then settles.
+/// @param h     The harness.
+/// @param table The table widget.
+inline void pressCopy(TableHarness& h, int table) {
+    h.backend.pressCopy(table);
+    h.settle();
+}
+
+/// @brief The text last put on the clipboard.
+/// @param h The harness.
+/// @return It.
+inline std::string clipboardText(TableHarness const& h) { return h.backend.clipboardText(); }
+
+/// @brief A table widget's status line, as the mount last set it.
+/// @param h     The harness.
+/// @param table The table widget.
+/// @return It.
+inline TableStatus statusOf(TableHarness& h, int table) { return h.backend.tableStatus(table); }
+
+/// @brief The labels of a menu's entries that can be chosen or open a submenu, separators and headings left out.
+/// @param entries The entries.
+/// @return Their labels.
+inline std::vector<std::string> labelsOf(std::vector<MenuEntry> const& entries) {
+    std::vector<std::string> out;
+    for (MenuEntry const& entry : entries) {
+        if (!entry.separator && !entry.heading) {
+            out.push_back(entry.label);
+        }
+    }
+    return out;
+}
+
+/// @brief A menu's entry by its label.
+/// @param entries The entries.
+/// @param label   The label.
+/// @return The entry; the test fails without one.
+inline MenuEntry entryOf(std::vector<MenuEntry> const& entries, std::string_view label) {
+    auto const found = std::ranges::find(entries, label, &MenuEntry::label);
+    REQUIRE(found != entries.end());
+    return *found;
+}
+
 // ── Stores for saved views ──────────────────────────────────────────────────
 
 /// @brief One call a `RecordingTableStateStore` saw: what it was, and what the store answered.

@@ -409,7 +409,8 @@ columns. A tap, Enter or Space on a sortable one fires `sort` with `{column, shi
 (`HeaderClick::Shift`; Ctrl, on a tap or a key, sorts as `Plain`), which reaches `setOnSort`; another header takes neither. The table never sorts: `setSort` writes
 `sortMarks` and `sortDescriptions`, each by column, from `ui::sortMarkText` and `ui::sortDescription`, and a header in the
 chain shows its mark after its text (` ▲`, or ` ▲2` with two or more keys). Every sortable header keeps room for a
-one-key mark in its column's floor, so the columns do not move when such a sort does. Qt's accessibility has no sort
+one-key mark in its column's floor, so the columns do not move when such a sort does, and for the mark it draws now,
+so a header of a chain of two or more keys widens to hold its place (` ▲2`) rather than cutting it. Qt's accessibility has no sort
 state, so the header (a `ColumnHeader` named by its label, and `{label}, filtered` while `filteredColumns` names it)
 states the order in its `Accessible.description`, `sorted ascending` or `sorted ascending, key 2 of 3`, and nothing out
 of the chain.

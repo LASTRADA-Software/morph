@@ -359,11 +359,16 @@ MorphWidget {
     function measure(): var {
         // `advanceWidth` is a plain call, so the font is read here for the widths to follow a header font that changes.
         void headerMetrics.font
+        // Read here too, so the widths follow a chain whose marks grow with its keys' places.
+        void root.sortMarks
         const pad = 2 * Theme.tableCellPaddingX
         const out = []
         for (let i = 0; i < root.columns.length; ++i) {
             const column = root.columns[i]
-            const mark = column.sortable ? headerMetrics.advanceWidth(root.ascendingMark) : 0
+            // A sortable header keeps room for a one-key mark, and for the mark it draws now: a chain of two or more
+            // keys adds the key's place after its arrow.
+            const mark = column.sortable ? Math.max(headerMetrics.advanceWidth(root.ascendingMark),
+                                                    headerMetrics.advanceWidth(root.sortMarkOf(i))) : 0
             const button = column.filterable === true ? Theme.targetHeight : 0
             // The header draws its unit after its label: the column is never narrower than both, its sort mark and
             // its filter button.

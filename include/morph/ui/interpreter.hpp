@@ -427,6 +427,8 @@ struct SessionOptions {
     /// @brief The most rows a range selection of a model-backed table resolves; a longer range is refused in the
     ///        table's status line and selects nothing.
     std::size_t maxRangeRows = 10'000;
+    /// @brief The most rows a table's copy puts on the clipboard; a larger copy is refused in the table's status line.
+    std::size_t maxCopyRows = 10'000;
     /// @brief The application's id: the `application` of every table-state key.
     std::string application;
 };
@@ -1280,6 +1282,7 @@ struct CheckRuntime;
 struct BoundaryRuntime;
 struct ModelTable;
 struct RowsTable;
+struct TableConfig;
 
 /// @brief One state declaration at run time.
 struct StateSlot {
@@ -2317,6 +2320,8 @@ private:
     /// What a table over `rows` does when its engine's view changed: reports an invalid cell of a sort column once,
     /// and lets the rows through once the stored order is in place.
     void rowsTableChanged(RowsTable& table);
+    /// Shows @p text in the status line of a table over `rows`, as `tableMessage` does for a table's element.
+    void rowsTableMessage(RowsTable& table, std::string text);
     /// Applies a table over `rows`' stored state once its load completed, or reports why it could not.
     void storedRowsState(RowsTable& table, std::optional<std::string> const& json, std::string const& failure);
     void collect(DocNode const& node, RtScope& scope, std::vector<Commands const*>& commands);
@@ -2370,6 +2375,13 @@ private:
     /// A user's gesture on a model-backed table: the stored state no longer replaces the arrangement, and the
     /// status-line message goes.
     void tableGesture(ElementState& element);
+    /// Wires a table's header, menus and arrangement to its configuring: sort gestures held to the table's bound,
+    /// layout gestures to what it allows, each refusal shown in its status line and each change run through its
+    /// commands. @p keep is held by every handler, for a table its mount owns.
+    void configureTable(TableConfig& config, LowerCtx const& ctx, TableOptions& options,
+                        std::shared_ptr<void const> keep);
+    /// Takes the columns a model-backed table's layout arranges from the description its rows hold now.
+    void modelLayoutColumns(ElementState& element);
     /// A grouped table's heading row: its `group`'s `heading`, lowered as one cell in a row scope of its own whose
     /// row is the group's run record and whose key is `key`, the row's canonical key, as a data row's scope has.
     TableRowLook headingRow(DocNode const& node, LowerCtx const& ctx, reactive::Signal<Value> const& row,

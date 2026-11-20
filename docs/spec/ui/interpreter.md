@@ -511,12 +511,13 @@ keeps its operands' 0 places and still fills 0.29 of a bar.
   while `rows` is empty, not while a page is.
   **Its state and its status line.** A table over `rows` with an `id`, while the session has a table-state store and
   its `persist` is not `false`, keeps its sort under the key `{application, model "", table <id>, qualifier <the
-  persist name or the screen's id>, part "state"}`. Its rows are held back (`EngineRows::setRestoring`) until the
+  persist name or the screen's id>, part "state"}`: its sort and its column layout. Its rows are held back (`EngineRows::setRestoring`) until the
   stored state has been applied and the engine has ordered by it, or until `tableStateTimeout` passes (without a
   scheduler, once the work the stored sort posted has run), so the first rows drawn are in the stored order, the
   mount drawing placeholder rows meanwhile; a state that arrives later is applied unless the user changed the table
-  meanwhile. The stored state is fitted to the node's column parts, of the kinds their cells infer. A header click
-  is saved as a model-backed table's is, debounced, and an unmount saves at once. A table with no `id` keeps no
+  meanwhile. The stored state is fitted to the node's column parts, of the kinds their cells infer, and its layout
+  is in place in the turn the rows are let through. A sort or layout gesture is saved as a model-backed table's is,
+  debounced, and an unmount saves at once. A table with no `id` keeps no
   state. Its status line shows its counts and the latest message (`ScreenCore::tableMessage`), and takes space only
   while it has a message; `status: true` shows it always, and `status: false` never, its messages going to the
   host's notifications.
@@ -543,10 +544,9 @@ keeps its operands' 0 places and still fills 0.29 of a bar.
   from a report, since a virtualized backend's Ctrl+A or range can name a row it has not realized. `viewCount`,
   `selectedCount` and the page positions count data rows. A table lowered where names are bound (a component's
   `props`) has a source and an engine of its own, read with those names, which its element values cannot see, and
-  keeps no state. A row keeps its widget, its native state and its selection while its key stays on the page. The header marks the sort's first key (`Table::sort`); a header click on a
-  sortable column (`Table::onSort`) makes that column the single key, `desc` when it already is the first key
-  and `asc`, `asc` otherwise, sets the table's own sort when no key binds one, and runs `onSortChange` with
-  `event` the new sort, as a user event, in one batch. The element value `sort` reads the bound sort or the
+  keeps no state. A row keeps its widget, its native state and its selection while its key stays on the page. Its
+  header, menus and arrangement are configured as below ("Configuring a table"), its sort bound the node's literal
+  `maxSortKeys`, else 8. The element value `sort` reads the bound sort or the
   table's own, `viewCount` the rows the table orders (every page), and `page`, `pageCount`, `pageFirst` and
   `pageLast` the page. `filters` and `hoveredKey` are not lowered: the
   loader refuses `filters` and `highlightKey` on a table over `rows`. With `empty`,
@@ -568,9 +568,11 @@ keeps its operands' 0 places and still fills 0.29 of a bar.
   cells and the scroll offset are the mount's and are built again. A reply that names another revision than the
   one held asks for the description again, once per revision; the fitting of the new one drops a sort key, a
   filter and a fetched column that name a column it lacks, and reports a dropped filter once at the table.
-  Columns are the description's `shown` columns, or the node's `columns` parts, each naming a described column by
-  `id` (one it lacks is reported and left out) and setting its label, width, role, places and `wrap`; a column is
-  sortable as the description says. A column's `cell` is lowered per cell, in a row scope over the cell's own row
+  Columns are the description's columns but its companions, those it does not show hidden by the layout until the
+  user shows them, or the node's `columns` parts, each naming a described column by `id` (one it lacks is reported
+  and left out) and setting its label, width, role, places, `wrap` and `locked`; a column is sortable as the
+  description says. Its header, menus and arrangement are configured as below ("Configuring a table"), its sort
+  bound the description's `capabilities.maxSortKeys`, which its server's `limits` set. A column's `cell` is lowered per cell, in a row scope over the cell's own row
   signal; without one the cell is a text of the record's field. `rowTone` and `rowLabel` are lowered once per
   realized row, in a row scope over the row's signal, which `onActivate` runs in. The rows fetch, with every
   page, the description's key and each field `{"row": "<id>"}` names in `rowTone`, `rowLabel` and `onActivate`; a
@@ -584,22 +586,22 @@ keeps its operands' 0 places and still fills 0.29 of a bar.
   binding runs again when the column arrives. `body` is evaluated once and is the query's fixed part; its
   `query` member's `sort`, `filters`, `page`, `columns`, `keys` and `retry` are the table's own and replace
   what the body gives; each the body gives is reported once, at its pointer under `body/query`. A literal `sort` is the default a stored one replaces, any other expression binds it; a
-  literal `filters` object (`columns` and `groups` only) is likewise the default, an expression binds them. A
-  header click on a sortable column makes it the single key, `desc` when it is the first key `asc` already;
-  under a bound sort it changes nothing. **Persisted state.** With a session store and `persist` not `false`,
+  literal `filters` object (`columns` and `groups` only) is likewise the default, an expression binds them. The
+  headers of the columns the rows' filter names are marked filtered (`Table::filtered`). **Persisted state.** With a session store and `persist` not `false`,
   the state's key is `{application, model type, table, persist's name or the screen's id, "state"}`; its load
   starts when the element is wired, and the rows wait for it at most `tableStateTimeout`. A state that comes in
-  time is read (`readState`), fitted to the description held, and its sort and filters applied where the
-  document binds neither, before the first query; one that comes later is applied the same way, one more query,
+  time is read (`readState`), fitted to the description held, and its sort, filters and layout applied where the
+  document binds none of them, before the first query; one that comes later is applied the same way, one more query,
   unless the user scrolled, selected or sorted the table meanwhile. A state that does not read is reported once
   (`the stored state of table <id> is not used: …`) and a failed load once (`… could not be loaded: …`); the
-  table starts from its defaults and changes still save. A header click saves the sort (`TableStates::changed`,
-  debounced), and unmounting saves a pending change at once. **The status line** (`Table::status`) always takes
+  table starts from its defaults and changes still save. A sort or layout gesture saves its part
+  (`TableStates::changed`, debounced), and unmounting saves a pending change at once. **The status line** (`Table::status`) always takes
   space, unless `status` is `false`: its counts are `countsText` of the rows' counts and the selection's size; a
   failed level fills its state with "<Level> data could not be loaded." and a failed fetch with "The rows could
   not be loaded: <reason>", both with Retry (`WindowRows::retry`). `ScreenCore::tableMessage(table, text)` shows
   a refusal or notice there for `kStatusMessageHold` (6 s) on the session's scheduler, until the table's next
-  gesture (a header click, a selection change, a scroll, Retry) clears it; under `status: false` it goes to
+  gesture (a header click, a menu choice, a column moved or resized, a selection change, a scroll, Retry) clears
+  it; under `status: false` it goes to
   `InterpreterHost::notify` as a warning. A table state's save that does not end `Saved` is said there by every
   mounted table with its key: "The table's arrangement could not be saved: <reason>". `empty` shows once a reply
   said the view has, exactly, no row and no row is undecided. Its element values are a table's, with
@@ -659,6 +661,28 @@ keeps its operands' 0 places and still fills 0.29 of a bar.
   refuse (no member marked `x-table`, or neither `columns` nor a view document) is reported at the table when a
   catalog that lacks the lookup let it load, and a `key` that is not one row field is reported and the view
   document's `v-rowKey`, or `id`, is used.
+- **Configuring a table**, of either kind (`ScreenCore::configureTable`, over the `ui/table_config.hpp` gestures;
+  [`../table/table.md`](../table/table.md), "Configuring a table"). The element keeps the table's columns as its
+  layout knows them (id, label, `locked`, kind), its declared hidden columns, the layout it holds and what
+  `configurable` allows, across every mount. `Table::sort` is the whole chain, each key marking its column.
+  `Table::onSort` maps a plain click to `SortGesture::Click` and `Shift` to `Extend` and applies
+  `applySortGesture` with the table's bound; a refusal ("A table sorts by at most {n} columns") goes to the status
+  line and keeps the chain; a change sets the table's own sort when no key binds one, saves it, and runs
+  `onSortChange` with `event` the new sort, in one batch. A column move (`Table::onColumnMove`, `MoveColumnTo`)
+  and a resize (`Table::onColumnResize`, `ResizeColumn`, offered only while `resize` is allowed) go through
+  `applyLayoutGesture` with the columns and what the table allows; a refusal ("{label} is locked", "This table's
+  columns cannot be moved", …) goes to the status line; a change sets the table's own layout when `layout` binds
+  none, saves it, and runs `onLayoutChange` with `event` the new layout. `Table::arrangement` follows the layout,
+  so the mount shows the visible columns in order, pinned and at their widths, and fetches the columns it shows;
+  a layout that is the declared one is the default arrangement. Unless `configurable` is `false`, `Table::menu`
+  builds a header's menu (`headerMenu`) or the table's (`tableMenu`) from the chain and the layout of the moment,
+  and `Table::onMenu` builds it again and carries out the chosen entry: the sort entries as sort gestures, "Move
+  left" and "Move right" as `MoveColumn` by one, "Pin column", "Unpin", "Hide column" and "Reset columns" as their
+  layout gestures. The entries whose dialogs are not lowered (the filter menu, the column chooser, the sort dialog,
+  display units, copy) are not offered, and a separator left beside another or at an end goes with them. Each
+  gesture the lowering receives clears the status line's message before it acts, so the next gesture on the
+  table clears a refusal. The element values `layout`, `visibleColumns` and `hiddenCount` read the layout the
+  table holds or the document binds, fitted to its columns.
 - **`boundary`** is a `Switch` over loading, error and children. It owns the queries its children read
   (found statically, through `let`s, not inside a nested boundary): loading while one has neither a
   value nor a failure, error when one failed with no value to keep, children otherwise. Inside `error`,

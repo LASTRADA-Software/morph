@@ -396,7 +396,7 @@ TEST_CASE("table: a sort of two keys orders by each in turn, and a header click 
                              { "id": "due", "label": "Due", "sortable": true } ] } })");
     int const table = h.backend.all("Table").front();
     CHECK(rowOrder(h, table) == "s q r p");
-    CHECK(h.backend.prop(table, "sort") == "0:Ascending");
+    CHECK(h.backend.prop(table, "sort") == "0:Ascending,1:Ascending");          // every key marks its header
     h.backend.clickHeader(table, 1);
     h.settle();
     CHECK(readJson(*screen, R"({"ref":"order"})") == R"([{"column":"due","direction":"asc"}])");
