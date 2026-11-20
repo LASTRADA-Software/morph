@@ -4336,3 +4336,231 @@ TEST_CASE("filter menu: a table keeps at most 64 values lists, the oldest going 
     h.advance(250ms);
     CHECK(h.dispatcher.count("Table.samples") == calls + 1);
 }
+
+// ── Copy ────────────────────────────────────────────────────────────────────
+
+// Mutation: `fetchRows` giving a row its place among the keys asked for instead of its view row.
+TEST_CASE("engine rows: fetchRows reads the rows of keys at once, a key the view lacks left out", "[ui][table]") {
+    RowsFixture h;  auto const source = std::make_shared<TestRowsSource>(10);
+    EngineRows rows{source, source->recordOf(), table::EngineOptions{.owner = &h.owner}};
+    REQUIRE(rows.setSort({{.column = "id", .dir = table::SortDirection::Descending}}).has_value());
+    h.settle();
+    std::optional<std::expected<std::vector<morph::ui::FetchedRow>, table::TableError>> got;
+    rows.fetchRows({std::int64_t{2}, std::int64_t{99}, std::int64_t{7}}, {"name", "nosuch", "id"})
+        .then([&got](std::expected<std::vector<morph::ui::FetchedRow>, table::TableError> const& result) {
+            got = result;
+        });
+    h.settle();
+    REQUIRE(got.has_value());
+    REQUIRE(got->has_value());
+    REQUIRE((*got)->size() == 2);
+    morph::ui::FetchedRow const& two = (*got)->at(0);
+    CHECK(two.key == table::RowId{std::int64_t{2}});
+    CHECK(two.viewRow == 7);
+    CHECK(two.cells ==
+          std::vector<table::Cell>{table::Cell{std::string{"row-2"}}, table::Cell{}, table::Cell{std::int64_t{2}}});
+    CHECK((*got)->at(1).viewRow == 2);
+}
+
+namespace {
+
+using morph::ui::SelectionChange;
+using morph::ui::testing::clipboardText;
+using morph::ui::testing::keyedJsonAt;
+using morph::ui::testing::pageJsonAt;
+using morph::ui::testing::pressCopy;
+using morph::ui::testing::samplesDescription;
+
+// Answers every open `Table.samples` call that carries no keys with the page its query asks for, of a view of
+// @p total rows holding the columns the query names (row k keyed k, named "row-<k>"), until none is open.
+void replyConfigPages(TableHarness& h, std::int64_t total) {
+    for (int round = 0; round < 128; ++round) {
+        std::optional<std::size_t> open;
+        for (std::size_t index = 0; index < h.dispatcher.calls.size() && !open; ++index) {
+            auto const& call = h.dispatcher.calls[index];
+            if (call.action == "Table.samples" && !call.answered && !call.options.stop.stop_requested() &&
+                !queryOf(h, index).keys.has_value()) {
+                open = index;
+            }
+        }
+        if (!open) {
+            return;
+        }
+        table::TableQuery const query = queryOf(h, *open);
+        std::int64_t const count = std::clamp<std::int64_t>(total - query.page.offset, 0, query.page.limit);
+        h.reply(*open, pageJsonAt(h.described.revision, query.page.offset, count, total,
+                                  query.columns.value_or(std::vector<std::string>{})));
+    }
+    FAIL("the pages kept coming");
+}
+
+// Answers every open keyed `Table.samples` call with its keys, key k at view row k, holding the columns its query
+// names (each name "renamed-<k>"), of a view of @p total rows.
+void replyCopyFetches(TableHarness& h, std::int64_t total) {
+    for (std::size_t index = 0; index < h.dispatcher.calls.size(); ++index) {
+        auto const& call = h.dispatcher.calls[index];
+        if (call.action != "Table.samples" || call.answered || call.options.stop.stop_requested()) {
+            continue;
+        }
+        table::TableQuery const query = queryOf(h, index);
+        if (!query.keys) {
+            continue;
+        }
+        std::vector<std::pair<std::int64_t, std::int64_t>> rows;
+        for (table::RowId const& key : *query.keys) {
+            rows.emplace_back(std::get<std::int64_t>(key), std::get<std::int64_t>(key));
+        }
+        h.reply(index,
+                keyedJsonAt(h.described.revision, rows, total, query.columns.value_or(std::vector<std::string>{})));
+    }
+}
+
+}  // namespace
+
+// Mutation: copy writing rows in selection order instead of view order.
+TEST_CASE("copy: selected rows as tab-separated display text in layout order, rows not held fetched",
+          "[ui][table][config]") {
+    constexpr std::string_view kArranged =
+        R"("selectionMode":"multiple","sort":{"lit":[{"column":"name","direction":"asc"}]},)"
+        R"("layout":{"lit":{"order":["name","id","c3","c4","c5"],"hidden":["c3"],"pinned":0,"widths":{}}})";
+    std::string const text = withTableKey(kConfigModelTable, kArranged);
+    SECTION("the selected rows") {
+        TableHarness h;
+        auto screen = h.mount(text);
+        replyDescribe(h, samplesDescription(5));
+        replyConfigPages(h, 1000);                                             // rows 0 to 399 held
+        int const table = h.backend.all("Table").front();
+        REQUIRE(elementValue(*screen, "t", "visibleColumns") == R"(["name","id","c4","c5"])");
+        h.backend.selectTableRange(table, 700, 700);
+        h.settle();
+        replyConfigPages(h, 1000);
+        h.backend.selectTableRange(table, 500, 500, SelectionChange::Extend);
+        h.settle();
+        replyConfigPages(h, 1000);
+        h.backend.selectTableRange(table, 3, 3, SelectionChange::Extend);
+        h.settle();
+        REQUIRE(elementValue(*screen, "t", "selection") == "[700,500,3]");
+        std::size_t const sent = h.dispatcher.calls.size();
+        pressCopy(h, table);
+        REQUIRE(h.dispatcher.calls.size() == sent + 1);                        // one keyed request; row 3 is held
+        table::TableQuery const fetched = queryOf(h, sent);
+        CHECK(fetched.keys == std::optional{std::vector<table::RowId>{std::int64_t{700}, std::int64_t{500}}});
+        CHECK(fetched.columns == std::optional{std::vector<std::string>{"name", "id", "c4", "c5"}});
+        replyCopyFetches(h, 1000);
+        CHECK(clipboardText(h) == "row-3\t3\t3\t3\nrenamed-500\t500\t500\t500\nrenamed-700\t700\t700\t700");
+        CHECK(statusOf(h, table).message == "Copied 3 rows");
+        chooseMenu(h, table, std::nullopt, {"Copy with headers"});
+        replyCopyFetches(h, 1000);
+        CHECK(clipboardText(h) ==
+              "Name\tId\tC4\tC5\nrow-3\t3\t3\t3\nrenamed-500\t500\t500\t500\nrenamed-700\t700\t700\t700");
+    }
+    SECTION("no row selected: the focused cell") {
+        TableHarness h;
+        auto screen = h.mount(text);
+        replyDescribe(h, samplesDescription(5));
+        replyConfigPages(h, 1000);
+        int const table = h.backend.all("Table").front();
+        h.backend.focusMove(table, morph::ui::FocusMove::First);
+        h.backend.focusMove(table, morph::ui::FocusMove::Down);
+        h.settle();
+        pressCopy(h, table);
+        CHECK(clipboardText(h) == "row-1");
+        CHECK(statusOf(h, table).message == "Copied 1 row");
+    }
+    SECTION("a rows table's column with its own cell copies its value's text") {
+        TableHarness h;
+        auto screen =
+            h.mount(R"({"vocab":"ui/1","id":"samples","state":{"items":{"init":{"lit":)"
+                    R"([{"id":"a","name":"Ann"},{"id":"b","name":"Bob"},{"id":"c","name":"Cy"}]}}},)"
+                    R"("view":{"kind":"table","id":"list","testId":"list","rows":{"ref":"items"},"key":{"row":"id"},)"
+                    R"("selectionMode":"multiple","columns":[{"id":"id","label":"Id"},)"
+                    R"({"id":"name","label":"Name","cell":[{"kind":"badge","text":{"row":"name"}}]}]}})");
+        int const table = h.byTestId("Table", "list");
+        h.backend.selectRows(table, {Key{std::string{"c"}}, Key{std::string{"a"}}});
+        h.settle();
+        chooseMenu(h, table, std::nullopt, {"Copy with headers"});
+        CHECK(clipboardText(h) == "Id\tName\na\tAnn\nc\tCy");
+        CHECK(statusOf(h, table).message == "Copied 2 rows");
+    }
+}
+
+// Mutation: unloaded cells copied as their placeholder text.
+TEST_CASE("copy: unloaded cells copy as empty and are counted", "[ui][table][config]") {
+    TableHarness h;
+    auto screen = h.mount(withTableKey(kConfigModelTable, R"("selectionMode":"multiple")"));
+    replyDescribe(h, withLevel(samplesDescription(5), "c4", "recipe"));
+    table::TableQuery const first = lastQuery(h);
+    REQUIRE(first.columns.has_value());
+    // A hand-written reply: rows 0 and 1 lack the level `recipe`, their `c4` null on the wire.
+    table::GenericPage page = morph::ui::testing::pageAt(h.described.revision, 0, 200, 200, *first.columns);
+    auto const c4 = static_cast<std::size_t>(std::ranges::find(page.columns, "c4") - page.columns.begin());
+    REQUIRE(c4 < page.columns.size());
+    page.rows.at(0).at(c4) = table::Cell{};
+    page.rows.at(1).at(c4) = table::Cell{};
+    page.unloadedRows = {{.index = 0, .levels = {"recipe"}, .failed = {}},
+                         {.index = 1, .levels = {"recipe"}, .failed = {}}};
+    replyPage(h, glz::write_json(page).value_or(""));
+    int const table = h.backend.all("Table").front();
+    h.backend.selectTableRange(table, 0, 1);
+    h.settle();
+    REQUIRE(elementValue(*screen, "t", "selectedCount") == "2");
+    std::size_t const sent = h.dispatcher.calls.size();
+    pressCopy(h, table);
+    CHECK(h.dispatcher.calls.size() == sent);                                  // no request waits for the level
+    CHECK(clipboardText(h) == "0\trow-0\t0\t\t0\n1\trow-1\t1\t\t1");
+    CHECK(statusOf(h, table).message == "Copied 2 rows, 2 cells were not loaded");
+}
+
+// Review Focus 3. Mutation: the bounds compared with `>=`.
+TEST_CASE("range and copy at their bounds: 10,000 pass, 10,001 are refused", "[ui][table][config]") {
+    TableHarness h;
+    auto screen = h.mount(withTableKey(kConfigModelTable, R"("selectionMode":"multiple")"));
+    replyDescribe(h, samplesDescription(5));
+    replyConfigPages(h, 100'000);                                              // rows 0 to 399 held
+    int const table = h.backend.all("Table").front();
+    std::size_t const sent = h.dispatcher.calls.size();
+    h.backend.selectTableRange(table, 0, 9'999);
+    h.settle();
+    REQUIRE(h.dispatcher.calls.size() > sent);
+    for (std::size_t call = sent; call < h.dispatcher.calls.size(); ++call) {
+        CHECK(h.dispatcher.calls.at(call).body.contains(R"("columns":[])"));   // the key pages name no columns
+    }
+    replyConfigPages(h, 100'000);
+    REQUIRE(elementValue(*screen, "t", "selectedCount") == "10000");
+    pressCopy(h, table);
+    replyCopyFetches(h, 100'000);
+    std::string const copied = clipboardText(h);
+    CHECK(std::ranges::count(copied, '\n') == 9'999);
+    CHECK(copied.starts_with("0\trow-0\t0\t0\t0\n1\trow-1\t1\t1\t1\n"));
+    CHECK(copied.ends_with("\n9999\trenamed-9999\t9999\t9999\t9999"));
+    CHECK(statusOf(h, table).message == "Copied 10,000 rows");
+    std::size_t const before = h.dispatcher.calls.size();
+    h.backend.selectTableRange(table, 0, 10'000);                              // 10,001 rows
+    h.settle();
+    CHECK(h.dispatcher.calls.size() == before);
+    CHECK(statusOf(h, table).message == "A range selects at most 10,000 rows");
+    CHECK(elementValue(*screen, "t", "selectedCount") == "10000");
+    h.backend.selectTableRange(table, 10'000, 10'000, SelectionChange::Extend);
+    h.settle();
+    replyConfigPages(h, 100'000);
+    REQUIRE(elementValue(*screen, "t", "selectedCount") == "10001");
+    std::size_t const asked = h.dispatcher.calls.size();
+    pressCopy(h, table);
+    CHECK(h.dispatcher.calls.size() == asked);
+    CHECK(statusOf(h, table).message == "A copy holds at most 10,000 rows");
+    CHECK(clipboardText(h) == copied);
+}
+
+// Mutation: copy writing `table::displayText`, which writes `0.125`.
+TEST_CASE("copy: writes the shown text and the header with its unit", "[ui][table][config]") {
+    TableHarness h;
+    auto screen = h.mount(doc(R"({"kind":"table","id":"t","testId":"t","model":"sample","table":"samples",)"
+                              R"("selectionMode":"multiple","columns":[{"id":"id"},{"id":"mass"},{"id":"name"}]})"));
+    replyDescribe(h, describeJson(companionDescription()));
+    replyPage(h, companionPage(h));
+    int const table = h.byTestId("Table", "t");
+    h.backend.selectRows(table, {Key{std::int64_t{1}}});
+    h.settle();
+    chooseMenu(h, table, std::nullopt, {"Copy with headers"});
+    CHECK(clipboardText(h) == "Id\tMass [kg]\tName\n1\t0.13\tA");
+}

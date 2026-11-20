@@ -704,8 +704,20 @@ keeps its operands' 0 places and still fills 0.29 of a bar.
   table's state, and `onFiltersChange` runs with `event` the new filters; a refusal goes to the status line.
   "Clear all filters" sets empty filters the same way. `Table::filtered` names every column with a filter, a hidden
   one included, so the header says so again once it is shown; the filter keeps applying while its column is hidden.
-  A table with `configurable: false` has no menus, and keeps its filter buttons and their menu. Copy is not lowered, so its entries are
-  not offered, and a separator left beside another or at an end goes with them. Each
+  A table with `configurable: false` has no menus, and keeps its filter buttons and their menu. A menu entry the
+  lowering does not carry out is not offered, and a separator left beside another or at an end goes with it.
+  `Ctrl+C` (`Table::onCopy`) and the table menu's "Copy" put the selected rows on the clipboard through
+  `IViewBackend::copyText`: in view order, by the visible columns in layout order, each cell's text as its column
+  shows it (`formatCell` with the session's formatting and the layout's display units on a model's table; a column
+  with its own `cell` copies its value's text, not the template's), written by `ui::copyText`, so a tab or line
+  break in a cell is a space. "Copy with headers" adds a first line of the columns' headers, each with its unit
+  (`headerText`). With no row selected the focused cell (`Table::onFocusCell`) is copied alone. More than
+  `SessionOptions::maxCopyRows` (10,000) selected keys are refused in the status line, "A copy holds at most
+  10,000 rows", and nothing is copied. A model's table copies the rows its window holds and fetches the others
+  with `TableRows::fetchRows`: keyed queries naming the copied columns, `maxKeys` keys each, through the read that
+  makes no cache entry; a key no reply holds is left out. A cell of a level its row has not loaded is copied empty
+  and counted, and no copy waits for a level. The status line then says "Copied {n} rows", with ", {m} cells were
+  not loaded" when there were any; a failed fetch says "The rows could not be copied: {reason}". Each
   gesture the lowering receives clears the status line's message before it acts, so the next gesture on the
   table clears a refusal. The element values `layout`, `visibleColumns` and `hiddenCount` read the layout the
   table holds or the document binds, fitted to its columns.

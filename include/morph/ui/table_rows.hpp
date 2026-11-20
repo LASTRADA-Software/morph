@@ -121,6 +121,17 @@ struct TableCountsView {
 ///        that cannot be told.
 using RowLocation = std::expected<std::optional<std::int64_t>, table::TableError>;
 
+/// @brief A row `TableRows::fetchRows` fetched by its key: where it is in the view, and its cells.
+struct FetchedRow {
+    /// @brief The row's key.
+    table::RowId key;
+    /// @brief The row's view index under the current sort and filters.
+    std::int64_t viewRow = 0;
+    /// @brief One cell per column asked for, in that order; `table::Unloaded` for a cell of a level the row has not
+    ///        loaded, empty for a column the rows do not have.
+    std::vector<table::Cell> cells;
+};
+
 /// @brief What a table's mount reads, whatever serves the rows.
 ///
 /// Every member is called on the runtime's owner.
@@ -168,6 +179,15 @@ public:
     /// @param done Called once on the owner, never before this returns, with the row's view index, nothing when the
     ///        view has no row with @p key, or the error that kept the model from telling.
     virtual void locateRow(table::RowId key, std::stop_token stop, std::function<void(RowLocation const&)> done) = 0;
+
+    /// @brief Fetches rows by key, whether or not they are held, with the cells of the columns named: what a copy
+    ///        of rows the model does not hold reads. Nothing is held or cached for them.
+    /// @param keys    The rows' keys.
+    /// @param columns The column ids whose cells each row carries, in that order.
+    /// @return The rows the view has, each with its view index, in no particular order; a key the view lacks is
+    ///         left out. Delivered on the owner.
+    virtual async::Completion<std::expected<std::vector<FetchedRow>, table::TableError>> fetchRows(
+        std::vector<table::RowId> keys, std::vector<std::string> columns) = 0;
 
     /// @brief Sets the sort chain.
     /// @param sort The keys, most significant first; empty is the table's own order.
@@ -496,6 +516,41 @@ public:
             keys.push_back(_engine->rowIdAt(static_cast<std::size_t>(at)));
         }
         promise.resolve(Result{std::move(keys)});
+        return std::move(completion);
+    }
+
+    /// @brief The rows of keys in the engine's view, read from its snapshot at once.
+    /// @param keys    The rows' keys.
+    /// @param columns The column ids whose cells each row carries; a column the engine lacks gives an empty cell.
+    /// @return The rows the view has, in the order of @p keys, delivered on the engine's owner.
+    async::Completion<std::expected<std::vector<FetchedRow>, table::TableError>> fetchRows(
+        std::vector<table::RowId> keys, std::vector<std::string> columns) override {
+        using Result = std::expected<std::vector<FetchedRow>, table::TableError>;
+        auto [completion, promise] = async::Completion<Result>::makeSettleable(_owner);
+        auto const infos = _engine->columns();
+        std::vector<std::optional<std::size_t>> places;
+        places.reserve(columns.size());
+        for (std::string const& id : columns) {
+            auto const found = std::ranges::find(infos, id, &table::ColumnInfo::id);
+            places.push_back(found == infos.end() ? std::nullopt
+                                                  : std::optional{static_cast<std::size_t>(found - infos.begin())});
+        }
+        auto const& snapshot = *_engine->viewSnapshot();
+        std::vector<FetchedRow> rows;
+        for (table::RowId& key : keys) {
+            std::optional<std::size_t> const at = _engine->viewRowOfKey(key);
+            std::optional<std::size_t> const sourceRow = at ? _engine->sourceRowOf(*at) : std::nullopt;
+            if (!sourceRow) {
+                continue;
+            }
+            FetchedRow row{.key = std::move(key), .viewRow = static_cast<std::int64_t>(*at), .cells = {}};
+            row.cells.reserve(places.size());
+            for (std::optional<std::size_t> const place : places) {
+                row.cells.push_back(place ? snapshot.cell(*sourceRow, *place) : table::Cell{});
+            }
+            rows.push_back(std::move(row));
+        }
+        promise.resolve(Result{std::move(rows)});
         return std::move(completion);
     }
 
@@ -2253,6 +2308,20 @@ public:
                 }
             }
         }
+        for (auto const& held : _rowsRequests) {
+            if (auto const request = held.lock()) {
+                for (auto& stop : request->stops) {
+                    stop.request_stop();
+                }
+                if (request->waiting > 0) {
+                    request->waiting = 0;
+                    request->promise.resolve(std::expected<std::vector<FetchedRow>, table::TableError>{
+                        std::unexpected(table::TableError{.code = table::TableErrorCode::Unavailable,
+                                                          .column = {},
+                                                          .message = "the rows are gone"})});
+                }
+            }
+        }
         _locateStop.request_stop();
     }
 
@@ -2580,6 +2649,69 @@ public:
         });
     }
 
+    /// @brief Fetches rows by key: keyed queries under the current sort and filters naming @p columns, at most
+    ///        `WindowRowsOptions::maxKeys` keys each, through the session's read, which makes no cache entry. The
+    ///        replies are not held.
+    /// @param keys    The rows' keys.
+    /// @param columns The column ids whose cells each row carries.
+    /// @return The rows the replies hold, with their view indices; a key no reply holds is left out. A cell of a
+    ///         level the reply names the row as lacking is `table::Unloaded`. `Unavailable` while no description is
+    ///         held or when a fetch failed, and `InvalidValue` for a reply that gives a row no index.
+    async::Completion<std::expected<std::vector<FetchedRow>, table::TableError>> fetchRows(
+        std::vector<table::RowId> keys, std::vector<std::string> columns) override {
+        using Result = std::expected<std::vector<FetchedRow>, table::TableError>;
+        auto [completion, promise] = async::Completion<Result>::makeSettleable(&_session->runtime().owner());
+        auto state = std::make_shared<RowsRequest>(
+            RowsRequest{.promise = std::move(promise), .rows = {}, .waiting = 0, .failed = std::nullopt, .stops = {}});
+        if (keys.empty() || !_description) {
+            if (!_description) {
+                state->failed = unavailable();
+            }
+            finishRows(*state);
+            return std::move(completion);
+        }
+        std::size_t const chunk = std::max<std::size_t>(_options.maxKeys, 1);
+        state->waiting = (keys.size() + chunk - 1) / chunk;
+        std::erase_if(_rowsRequests, [](std::weak_ptr<RowsRequest> const& held) { return held.expired(); });
+        _rowsRequests.push_back(state);
+        auto const named = std::make_shared<std::vector<std::string> const>(std::move(columns));
+        for (std::size_t from = 0; from < keys.size(); from += chunk) {
+            table::TableQuery query = queryOf(table::PageRequest{}, {});
+            query.columns = *named;
+            query.keys = std::vector<table::RowId>(keys.begin() + static_cast<std::ptrdiff_t>(from),
+                                                   keys.begin() + static_cast<std::ptrdiff_t>(
+                                                                      std::min(from + chunk, keys.size())));
+            auto body = bodyOf(query);
+            if (!body) {
+                rowsAnswered(*state, std::unexpected(std::move(body.error())));
+                continue;
+            }
+            std::stop_source stop;
+            auto reply = _session->read(_options.channel, actionName(), *body, stop.get_token());
+            state->stops.push_back(std::move(stop));
+            reply.then(_scope, [this, state, named](std::string const& text) {
+                if (!_description) {
+                    rowsAnswered(*state, std::unexpected(unavailable()));
+                    return;
+                }
+                auto read = _options.action.empty() ? table::readGenericPage(text, *_description, _units.get())
+                                                    : readTypedPage(text, *_description, _units.get());
+                if (!read) {
+                    rowsAnswered(*state, std::unexpected(std::move(read.error())));
+                    return;
+                }
+                rowsAnswered(*state, fetchedOf(*read, *named));
+            });
+            reply.onError(_scope, [this, state](std::exception_ptr const& error) {
+                // A stopped fetch is the window going: the rows are never answered.
+                if (!wasCancelled(error)) {
+                    rowsAnswered(*state, std::unexpected(failureOf(error)));
+                }
+            });
+        }
+        return std::move(completion);
+    }
+
     /// @brief Finds a row's view index, as `locateRow` does, stopping the fetch an earlier call still has in flight,
     ///        whose handler is then never called.
     /// @param key  The row's key.
@@ -2788,6 +2920,78 @@ private:
             return;
         }
         request.promise.resolve(Result{std::move(keys)});
+    }
+
+    // A `fetchRows` in the making: the rows its replies held so far, and how many replies it still waits for.
+    struct RowsRequest {
+        async::Completion<std::expected<std::vector<FetchedRow>, table::TableError>>::Promise promise;
+        std::vector<FetchedRow> rows;
+        std::size_t waiting = 0;
+        std::optional<table::TableError> failed;
+        std::vector<std::stop_source> stops;
+    };
+
+    void rowsAnswered(RowsRequest& request, std::expected<std::vector<FetchedRow>, table::TableError> rows) {
+        if (rows) {
+            request.rows.insert(request.rows.end(), std::make_move_iterator(rows->begin()),
+                                std::make_move_iterator(rows->end()));
+        } else if (!request.failed) {
+            request.failed = std::move(rows.error());
+        }
+        if (request.waiting > 0 && --request.waiting == 0) {
+            finishRows(request);
+        }
+    }
+
+    static void finishRows(RowsRequest& request) {
+        using Result = std::expected<std::vector<FetchedRow>, table::TableError>;
+        if (request.failed) {
+            request.promise.resolve(Result{std::unexpected(*request.failed)});
+            return;
+        }
+        request.promise.resolve(Result{std::move(request.rows)});
+    }
+
+    // A keyed reply's rows, each with the cells of @p columns in that order; a cell of a level the reply names its
+    // row as lacking is unloaded, as it is `null` on the wire.
+    [[nodiscard]] std::expected<std::vector<FetchedRow>, table::TableError> fetchedOf(
+        table::GenericPage& page, std::vector<std::string> const& columns) const {
+        if (!page.rows.empty() && page.indices.size() != page.rows.size()) {
+            return std::unexpected(table::TableError{.code = table::TableErrorCode::InvalidValue,
+                                                     .column = {},
+                                                     .message = "the keyed reply gives its rows no index"});
+        }
+        std::vector<std::optional<std::size_t>> places;
+        places.reserve(columns.size());
+        for (std::string const& id : columns) {
+            auto const found = std::ranges::find(page.columns, id);
+            places.push_back(found == page.columns.end()
+                                 ? std::nullopt
+                                 : std::optional{static_cast<std::size_t>(found - page.columns.begin())});
+        }
+        std::vector<FetchedRow> out;
+        out.reserve(page.rows.size());
+        for (std::size_t at = 0; at < page.rows.size() && at < page.keys.size(); ++at) {
+            auto const unloaded = std::ranges::find(page.unloadedRows, static_cast<std::int64_t>(at),
+                                                    &table::UnloadedRow::index);
+            FetchedRow row{.key = std::move(page.keys.at(at)), .viewRow = page.indices.at(at), .cells = {}};
+            row.cells.reserve(columns.size());
+            for (std::size_t column = 0; column < columns.size(); ++column) {
+                std::optional<std::size_t> const place = places.at(column);
+                table::GenericRow& cells = page.rows.at(at);
+                if (!place || *place >= cells.size()) {
+                    row.cells.emplace_back();
+                    continue;
+                }
+                auto const info = _infos.find(columns.at(column));
+                bool const missing = unloaded != page.unloadedRows.end() && info != _infos.end() &&
+                                     !info->second.level.empty() &&
+                                     std::ranges::contains(unloaded->levels, info->second.level);
+                row.cells.push_back(missing ? table::Cell{table::Unloaded{}} : std::move(cells.at(*place)));
+            }
+            out.push_back(std::move(row));
+        }
+        return out;
     }
 
     struct RowsFlight {
@@ -3467,6 +3671,8 @@ private:
     mutable WindowRowsStats _stats;
     // The stops of the key pages a range selection fetched, and of the fetch that locates a highlighted row.
     std::vector<std::weak_ptr<KeysRequest>> _keyRequests;
+    // The stops of the keyed fetches `fetchRows` sent.
+    std::vector<std::weak_ptr<RowsRequest>> _rowsRequests;
     std::map<std::string, table::DistinctValues, std::less<>> _distinct;
     std::deque<std::string> _distinctOrder;
     std::uint64_t _distinctEpoch = 0;

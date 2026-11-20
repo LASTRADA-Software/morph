@@ -98,6 +98,15 @@ public:
         });
     }
 
+    // Nothing is fetched: every row the view has is held.
+    async::Completion<std::expected<std::vector<ui::FetchedRow>, table::TableError>> fetchRows(
+        std::vector<table::RowId> /*keys*/, std::vector<std::string> /*columns*/) override {
+        using Result = std::expected<std::vector<ui::FetchedRow>, table::TableError>;
+        auto [completion, promise] = async::Completion<Result>::makeSettleable(_owner);
+        promise.resolve(Result{std::vector<ui::FetchedRow>{}});
+        return std::move(completion);
+    }
+
     std::expected<void, table::TableError> setSort(ui::SortChain /*sort*/) override { return {}; }
     std::expected<void, table::TableError> setFilter(table::FilterSpec /*filter*/) override { return {}; }
     async::Completion<std::expected<table::DistinctValues, table::TableError>> distinctValues(
