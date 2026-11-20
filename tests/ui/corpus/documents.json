@@ -318,7 +318,8 @@
     {"name": "a run with the err tone", "doc": {"vocab": "ui/1", "id": "t", "view": {"kind": "text", "spans": {"list": [{"obj": {"text": "a", "tone": "err"}}]}}}},
     {"name": "a literal run with the err tone", "doc": {"vocab": "ui/1", "id": "t", "view": {"kind": "text", "spans": {"lit": [{"text": "a", "tone": "err"}]}}}},
     {"name": "a run with the neutral tone", "doc": {"vocab": "ui/1", "id": "t", "view": {"kind": "text", "spans": {"list": [{"obj": {"text": "a", "tone": "neutral"}}]}}}},
-    {"name": "a literal run with the neutral tone", "doc": {"vocab": "ui/1", "id": "t", "view": {"kind": "text", "spans": {"lit": [{"text": "a", "tone": "neutral"}]}}}}
+    {"name": "a literal run with the neutral tone", "doc": {"vocab": "ui/1", "id": "t", "view": {"kind": "text", "spans": {"lit": [{"text": "a", "tone": "neutral"}]}}}},
+    {"name": "elements with versions and a known version", "doc": {"vocab": "ui/1", "id": "custom:v", "knownVersion": "6.11.0", "view": {"kind": "tabs", "id": "pages", "since": "6.1", "tabs": [{"id": "one", "label": "One", "since": "6.11", "children": [{"kind": "form", "id": "entry", "since": "6.11.0", "model": "m", "action": "Lims_Save", "fields": {"since": {"hidden": true}}}]}]}, "models": {"m": {"type": "Lims_SampleModel"}}}}
   ],
   "invalid": [
     { "name": "not an object", "raw": [1], "at": "", "reason": "a document is a JSON object" },
@@ -797,6 +798,12 @@
     {"name": "a tabs inset below zero", "doc": {"vocab": "ui/1", "id": "t", "view": {"kind": "tabs", "inset": -1, "tabs": [{"id": "a", "label": "A", "children": []}]}}, "at": "/view/inset", "reason": "`inset` is a literal spacing step"},
     {"name": "a padding list with a name for a step", "doc": {"vocab": "ui/1", "id": "t", "view": {"kind": "column", "padding": {"lit": ["a", 2]}, "children": []}}, "at": "/view/padding", "reason": "a `padding` list is two spacing steps"},
     {"name": "a padding list with a negative step", "doc": {"vocab": "ui/1", "id": "t", "view": {"kind": "column", "padding": {"lit": [-1, 2]}, "children": []}}, "at": "/view/padding", "reason": "a `padding` list is two spacing steps"},
-    {"name": "a lead placed by a number", "doc": {"leadPlacement": 5}, "at": "/leadPlacement", "reason": "`leadPlacement` is `below`, `inline` or `end`"}
+    {"name": "a lead placed by a number", "doc": {"leadPlacement": 5}, "at": "/leadPlacement", "reason": "`leadPlacement` is `below`, `inline` or `end`"},
+    {"name": "an element since that is not a string", "doc": {"view": {"kind": "text", "id": "a", "since": 6, "text": "x"}}, "at": "/view/since", "reason": "`since` is a version"},
+    {"name": "an element since that is not a version", "doc": {"view": {"kind": "text", "id": "a", "since": "6.01", "text": "x"}}, "at": "/view/since", "reason": "a component has a leading zero"},
+    {"name": "an element since without an id", "doc": {"view": {"kind": "text", "since": "6.1", "text": "x"}}, "at": "/view/since", "reason": "an element with `since` has an `id`"},
+    {"name": "a part since without an id", "doc": {"view": {"kind": "tabs", "tabs": [{"label": "A", "since": "2", "children": []}]}}, "at": "/view/tabs/0/since", "reason": "an element with `since` has an `id`"},
+    {"name": "a known version that is not a string", "doc": {"knownVersion": 2}, "at": "/knownVersion", "reason": "`knownVersion` is a version"},
+    {"name": "a known version that is not a version", "doc": {"knownVersion": "v2"}, "at": "/knownVersion", "reason": "'v2' is not a version"}
   ]
 }

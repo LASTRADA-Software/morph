@@ -699,6 +699,25 @@ enum class Role : std::uint8_t { Propose, Read };
     return std::nullopt;
 }
 
+// Whether the patch moved the document's `knownVersion`, which only the person's update step changes, or why.
+[[nodiscard]] std::optional<std::string> movesKnownVersion(Json const& before, Json const& after) {
+    auto const versionOf = [](Json const& document) -> std::optional<std::string> {
+        auto const* const object = std::get_if<Object>(&document.data);
+        Object::const_iterator const found =
+            object == nullptr ? Object::const_iterator{} : object->find(kKnownVersionKey);
+        if (object == nullptr || found == object->end()) {
+            return std::nullopt;
+        }
+        return glz::write_json(found->second).value_or(std::string{});
+    };
+    if (versionOf(before) == versionOf(after)) {
+        return std::nullopt;
+    }
+    return std::string{
+        "The patch changes /knownVersion, the base version this screen was last updated against; "
+        "leave it as it is: only the person's update step changes it"};
+}
+
 ::core::async::Task<void> proposeTask(std::shared_ptr<CustomScreens> screens, std::string app, ChatToolContext context,
                                       std::string document, ChatToolDone done) {
     try {
@@ -741,6 +760,10 @@ void propose(std::shared_ptr<CustomScreens> const& screens, std::string const& a
         return;
     }
     if (auto const problem = misshapen(*patched, context.request.screenId)) {
+        done(refused(context, *problem));
+        return;
+    }
+    if (auto const problem = movesKnownVersion(*tree, *patched)) {
         done(refused(context, *problem));
         return;
     }

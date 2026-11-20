@@ -16,6 +16,7 @@
 #include "../reactive/runtime.hpp"
 #include "../reactive/signal.hpp"
 #include "custom_screen_sync.hpp"
+#include "custom_screen_versions.hpp"
 #include "custom_screens.hpp"
 #include "document.hpp"
 #include "host.hpp"
@@ -339,6 +340,24 @@ public:
     /// @param done     Called once with nothing, or the store's refusal as it gave it.
     void remove(std::string const& screenId, std::function<void(std::expected<void, std::string>)> done);
 
+    /// @brief What changed in a custom screen's base since the version it knows: `layoutChanges` of the stored
+    ///        document (`get`) against the base's text (`sourceOf`) and the catalog's schemas (`catalog().schema`).
+    /// @param screenId The custom screen.
+    /// @param done     Called once with the changes, or why they could not be read.
+    void layoutChangesOf(std::string const& screenId,
+                         std::function<void(std::expected<LayoutChanges, std::string>)> done);
+
+    /// @brief Takes the person's choices over a custom screen's base changes and saves the result over the screen:
+    ///        the stored document (`get`) updated by `applyLayoutChoices`, checked by the server's `check`, then saved
+    ///        with the screen's listed attributes. `onOutcome` is told `Saved`.
+    /// @param screenId The person's custom screen.
+    /// @param choices  The choice per addition and per removal.
+    /// @param done     Called once: `Done` once saved, or `Refused` with the update's, the check's or the store's
+    ///                 refusal; a screen that is not the person's own (`canChange`) is refused before anything is
+    ///                 read.
+    void applyLayoutChoices(std::string const& screenId, LayoutChoices choices,
+                            std::function<void(CustomScreenCheckResult)> done);
+
     /// @brief The entries **Open as** offers on a screen: the base, then each listed custom screen of that base.
     ///        Empty while custom screens are not offered, for a base that takes no params, and when none is listed.
     ///        A tracked read of the list and the offer.
@@ -398,6 +417,9 @@ private:
                    std::function<void(std::expected<void, std::string>)> const& done);
     void fallBack(std::string const& screenId, std::string const& basedOn, std::string const& title);
     void tellOutcome(CustomScreenOutcome const& outcome) const;
+    // Checks and saves an updated document over the person's own screen.
+    void saveUpdate(std::string const& screenId, CustomScreenSummary const& listed, std::string const& text,
+                    std::function<void(CustomScreenCheckResult)> done);
 
     CustomScreenControllerOptions _options;
     WorkspaceModel* _model = nullptr;
