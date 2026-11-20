@@ -2159,6 +2159,13 @@ public:
         set("selection", marked());
     }
 
+    /// @brief Remembers every key in the table's data, so a selected key whose row is not realized stays selected.
+    /// @param keys Every key currently in the data.
+    void setExistingKeys(std::vector<Key> const& keys) override {
+        _existing = std::unordered_set<Key>{keys.begin(), keys.end()};
+        remark();
+    }
+
     /// @brief Stores the handler `RecordingBackend::selectRows` calls.
     /// @param onSelectionChange The handler.
     void setOnSelectionChange(std::function<void(std::vector<Key>, SelectionChange)> onSelectionChange) override {
@@ -2298,7 +2305,7 @@ public:
     [[nodiscard]] std::vector<Key> markedKeys() const {
         std::vector<Key> keys;
         for (Key const& key : _requested.value_or(std::vector<Key>{})) {
-            if (rowOf(key).has_value() && !headingKey(key)) {
+            if ((rowOf(key).has_value() || _existing.contains(key)) && !headingKey(key)) {
                 keys.push_back(key);
             }
         }
@@ -2320,6 +2327,8 @@ private:
     std::vector<bool> _sortable;  // per column, as setColumns gave them
     std::set<int> _headings;      // the heading rows' ids
     std::map<int, Key> _rowKeys;  // row id -> key, as setRowKey told it
+    // Every key in the data, realized or not; empty below a windowed table's threshold.
+    std::unordered_set<Key> _existing;
     // Engaged once `setSelection` ran or the user selected.
     std::optional<std::vector<Key>> _requested;
     // The row a Shift-click's range starts from: the last row clicked without Shift.

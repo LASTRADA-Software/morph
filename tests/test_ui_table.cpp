@@ -548,3 +548,33 @@ TEST_CASE("ui::table: dropping below the threshold realizes every row and report
         CHECK(backend.dump().contains("text=row-" + std::to_string(i)));
     }
 }
+
+// Mutation: build a toggle's selection from the realized rows alone instead of from every key the data holds.
+TEST_CASE("ui::table: a Ctrl-click in a windowed table keeps selected keys whose rows are not realized", "[ui]") {
+    Owner owner;
+    Runtime runtime{owner};
+    RecordingBackend backend;
+    std::vector<std::vector<ui::Key>> reported;
+    std::vector<ui::Key> every;
+    for (std::int64_t id = 0; id < 10; ++id) {
+        every.push_back(intKey(id));
+    }
+    ui::Mounted const mounted{
+        runtime, backend,
+        ui::table<Item>({{.label = "Name"}}, [] { return itemsNamed(10); }, keyOf, nameCell,
+                        {.virtualize = {.threshold = 5, .overscan = 2},
+                         .selectionMode = ui::SelectionMode::Multiple,
+                         .selection = every,
+                         .onSelectionChange = [&reported](std::vector<ui::Key> keys, ui::SelectionChange /*change*/) {
+                             reported.push_back(std::move(keys));
+                         }})};
+    int const table = backend.idOf(mounted.root());
+    REQUIRE(backend.prop(table, "realizedWindow") == "0+2/10");
+
+    backend.clickRow(table, intKey(0), ui::RowClick::Toggle);
+    REQUIRE(reported.size() == 1);
+    CHECK(reported.back().size() == 9);
+    backend.clickRow(table, intKey(0), ui::RowClick::Toggle);
+    REQUIRE(reported.size() == 2);
+    CHECK(reported.back().size() == 10);
+}

@@ -2042,3 +2042,48 @@ TEST_CASE("qt_quick table: a virtualized table scrolls with a vertical bar sized
         CHECK_FALSE(candidate->isVisible());
     }
 }
+
+// Mutation: build a Ctrl-click's selection from the realized rows alone instead of from every key the data holds.
+TEST_CASE("qt_quick table: a Ctrl-click in a virtualized table keeps selected keys whose rows are not realized",
+          "[qt_quick]") {
+    Scene scene;
+    constexpr std::int64_t rowCount = 40;
+    std::vector<VirtualRow> const many = [] {
+        std::vector<VirtualRow> rows;
+        rows.reserve(rowCount);
+        for (std::int64_t index = 0; index < rowCount; ++index) {
+            rows.push_back(VirtualRow{.id = index, .name = "row-" + std::to_string(index)});
+        }
+        return rows;
+    }();
+    std::vector<std::vector<ui::Key>> reported;
+    ui::Mounted const mounted{scene.runtime(), scene.backend(),
+                              ui::table<VirtualRow>(
+                                  {{.label = "Name"}}, [&many] { return many; },
+                                  [](VirtualRow const& row) { return ui::Key{row.id}; }, virtualRowCell,
+                                  {.virtualize = {.threshold = 5, .overscan = 1},
+                                   .selectionMode = ui::SelectionMode::Multiple,
+                                   .onSelectionChange = [&reported](std::vector<ui::Key> const& keys,
+                                                                    ui::SelectionChange) { reported.push_back(keys); },
+                                   .common = {.layout = {.height = ui::Sizing::fixed(10)}}})};
+    scene.settle();
+    auto const* const core = dynamic_cast<detail::ContainerCore const*>(&mounted.root());
+    REQUIRE(core != nullptr);
+    auto const& rows = core->children();
+    REQUIRE_FALSE(rows.empty());
+    REQUIRE(rows.size() < static_cast<std::size_t>(rowCount));
+
+    std::vector<ui::Key> all;
+    all.reserve(rowCount);
+    for (std::int64_t index = 0; index < rowCount; ++index) {
+        all.emplace_back(index);
+    }
+    auto* const table = dynamic_cast<detail::TableImpl*>(const_cast<ui::Widget*>(&mounted.root()));
+    REQUIRE(table != nullptr);
+    table->setSelection(all);
+    scene.settle();
+
+    scene.click(*rows.at(0)->item(), Qt::ControlModifier);
+    REQUIRE(reported.size() == 1);
+    CHECK(reported.back().size() == static_cast<std::size_t>(rowCount - 1));
+}
