@@ -169,3 +169,72 @@ TEST_CASE("the_first_bad_limit_is_the_one_named", "[chat][config]") {
     CHECK(config.error().contains("maxToolCallsPerTurn"));
     CHECK_FALSE(config.error().contains("maxTurnsPerPrincipal"));
 }
+
+// Mutation: leave the transcription block's key variable unread.
+TEST_CASE("chat_config_dictation_block_and_limits_are_read", "[chat][config][dictation]") {
+    auto const config = chat::parseChatConfig(R"({
+      "provider": { "name": "anthropic", "model": "m", "apiKey": "k" },
+      "transcription": { "name": "openai-transcriptions", "baseUrl": "https://stt.example", "model": "whisper-1",
+                         "apiKeyEnv": "THE_KEY", "language": "en" },
+      "limits": { "maxDictationSeconds": 30, "maxDictationBytes": 1000000, "maxTranscriptionsPerPrincipal": 3,
+                  "transcriptionRetentionSeconds": 90 } })",
+                                              environment);
+    REQUIRE(config.has_value());
+    REQUIRE(config->transcription.has_value());
+    CHECK(config->transcription->name == "openai-transcriptions");
+    CHECK(config->transcription->baseUrl == "https://stt.example");
+    CHECK(config->transcription->model == "whisper-1");
+    CHECK(config->transcription->apiKey == kSecret);
+    CHECK(config->transcription->language == "en");
+    CHECK(config->limits.maxDictationSeconds == 30);
+    CHECK(config->limits.maxDictationBytes == 1000000);
+    CHECK(config->limits.maxTranscriptionsPerPrincipal == 3);
+    CHECK(config->limits.transcriptionRetention == std::chrono::seconds{90});
+}
+
+// Mutation: make the transcription block required.
+TEST_CASE("chat_config_dictation_defaults_without_a_block", "[chat][config][dictation]") {
+    auto const config =
+        chat::parseChatConfig(R"({ "provider": { "name": "anthropic", "model": "m", "apiKey": "k" } })", environment);
+    REQUIRE(config.has_value());
+    CHECK_FALSE(config->transcription.has_value());
+    CHECK(config->limits.maxDictationSeconds == 60);
+    CHECK(config->limits.maxDictationBytes == std::size_t{4} * 1024 * 1024);
+    CHECK(config->limits.maxTranscriptionsPerPrincipal == 2);
+    CHECK(config->limits.transcriptionRetention == std::chrono::seconds{60});
+}
+
+// Mutation: let the transcription block ignore unknown keys, or let its inline key win over its variable.
+TEST_CASE("chat_config_dictation_block_refuses_an_unknown_key_or_both_keys", "[chat][config][dictation]") {
+    std::string const unknown = R"({ "provider": { "name": "a", "model": "m", "apiKey": "k" },
+      "transcription": { "name": "openai-transcriptions", "model": "w", "apiKey": ")" +
+                                std::string{kSecret} + R"(", "voice": "x" } })";
+    auto const refusedUnknown = chat::parseChatConfig(unknown, environment);
+    REQUIRE_FALSE(refusedUnknown.has_value());
+    CHECK_FALSE(refusedUnknown.error().contains(kSecret));
+    auto const both = chat::parseChatConfig(R"({ "provider": { "name": "a", "model": "m", "apiKey": "k" },
+      "transcription": { "name": "openai-transcriptions", "model": "w", "apiKey": "k", "apiKeyEnv": "THE_KEY" } })",
+                                            environment);
+    REQUIRE_FALSE(both.has_value());
+    CHECK(both.error() == "the chat configuration's `transcription` names both `apiKey` and `apiKeyEnv`");
+}
+
+// Mutation: accept a dictation limit of zero, or a byte bound the envelope could not carry.
+TEST_CASE("chat_config_dictation_limit_of_zero_or_past_the_envelope_is_refused", "[chat][config][dictation]") {
+    auto const withLimits = [](std::string const& limits) {
+        return chat::parseChatConfig(
+            R"({ "provider": { "name": "a", "model": "m", "apiKey": "k" }, "limits": {)" + limits + "} }",
+            environment);
+    };
+    for (char const* const name : {"maxDictationSeconds", "maxDictationBytes", "maxTranscriptionsPerPrincipal",
+                                   "transcriptionRetentionSeconds"}) {
+        auto const refused = withLimits("\"" + std::string{name} + "\": 0");
+        REQUIRE_FALSE(refused.has_value());
+        CHECK(refused.error().contains(name));
+    }
+    auto const past = withLimits("\"maxDictationBytes\": " + std::to_string(chat::kMaxDictationBytes + 1));
+    REQUIRE_FALSE(past.has_value());
+    CHECK(past.error() ==
+          "the chat configuration's `maxDictationBytes` must be at most " + std::to_string(chat::kMaxDictationBytes));
+    CHECK(withLimits("\"maxDictationBytes\": " + std::to_string(chat::kMaxDictationBytes)).has_value());
+}

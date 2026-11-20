@@ -194,3 +194,16 @@ TEST_CASE("compactJson removes white space between tokens only, in order, and le
           R"({"k":[1,{"a":" "}],"j":null})");
     CHECK(morph::ui::compactJson("{ not json") == "{ not json");
 }
+
+// Mutation: let a member's name push its value past the line width without breaking the value, or leave a tab, a
+// carriage return or a line feed between tokens.
+TEST_CASE("prettyJson breaks a container that starts past the line width, and compactJson drops every kind of space",
+          "[ui][json-source]") {
+    std::string const name(120, 'k');
+    std::string const document = "{\"" + name + "\":{\"a\":1},\"list\":[[1],[2,[3]],\"x\"]}";
+    std::string const pretty = morph::ui::prettyJson(document);
+    CHECK(pretty.contains("\"" + name + "\": {\n    \"a\": 1\n  }"));
+    CHECK(pretty.contains("\"list\": [[1], [2, [3]], \"x\"]"));
+    CHECK(morph::ui::compactJson(pretty) == document);
+    CHECK(morph::ui::compactJson("{\t\"a\"\r\n:\t[ 1,\r2 ]\n}") == R"({"a":[1,2]})");
+}

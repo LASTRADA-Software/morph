@@ -127,14 +127,12 @@ struct HashedText {
     return std::holds_alternative<Object>(node.data) || std::holds_alternative<Array>(node.data);
 }
 
+// The members or items of @p node, which is an object or an array.
 [[nodiscard]] std::size_t childCount(Json const& node) {
     if (auto const* const object = std::get_if<Object>(&node.data)) {
         return object->size();
     }
-    if (auto const* const array = std::get_if<Array>(&node.data)) {
-        return array->size();
-    }
-    return 0;
+    return std::get<Array>(node.data).size();
 }
 
 [[nodiscard]] std::string summaryOf(Json const& node) {
@@ -399,14 +397,19 @@ void findInto(std::vector<std::string>& matches, std::size_t& total, Json const&
     return {std::move(copy)};
 }
 
-// The call's optional string argument @p name, or why it is not one.
-[[nodiscard]] std::expected<std::string, std::string> stringArgument(Json const& arguments, std::string_view name,
-                                                                     bool required) {
+// The call's arguments as an object, or why they are not one.
+[[nodiscard]] std::expected<Object const*, std::string> argumentsOf(Json const& arguments) {
     auto const* const object = std::get_if<Object>(&arguments.data);
     if (object == nullptr) {
         return std::unexpected(std::string{"the arguments are not a JSON object"});
     }
-    Json const* const found = member(*object, name);
+    return object;
+}
+
+// The call's string argument @p name, or why it is not one; absent, it is empty unless @p required.
+[[nodiscard]] std::expected<std::string, std::string> stringArgument(Object const& arguments, std::string_view name,
+                                                                     bool required) {
+    Json const* const found = member(arguments, name);
     if (found == nullptr) {
         if (required) {
             return std::unexpected("the arguments need `" + std::string{name} + "`, a string");
@@ -420,12 +423,9 @@ void findInto(std::vector<std::string>& matches, std::size_t& total, Json const&
     return *text;
 }
 
-[[nodiscard]] std::expected<std::uint64_t, std::string> depthArgument(Json const& arguments, std::uint64_t fallback) {
-    auto const* const object = std::get_if<Object>(&arguments.data);
-    if (object == nullptr) {
-        return std::unexpected(std::string{"the arguments are not a JSON object"});
-    }
-    Json const* const found = member(*object, "depth");
+[[nodiscard]] std::expected<std::uint64_t, std::string> depthArgument(Object const& arguments,
+                                                                      std::uint64_t fallback) {
+    Json const* const found = member(arguments, "depth");
     if (found == nullptr) {
         return fallback;
     }
@@ -563,8 +563,12 @@ enum class Role : std::uint8_t { Propose, Read };
 }
 
 [[nodiscard]] ChatToolOutcome outlineTool(ChatToolContext const& context, Json const& arguments) {
-    auto const pointer = stringArgument(arguments, "pointer", false);
-    auto const depth = depthArgument(arguments, kDefaultOutlineDepth);
+    auto const object = argumentsOf(arguments);
+    if (!object) {
+        return failed(object.error());
+    }
+    auto const pointer = stringArgument(**object, "pointer", false);
+    auto const depth = depthArgument(**object, kDefaultOutlineDepth);
     if (!pointer || !depth) {
         return failed(!pointer ? pointer.error() : depth.error());
     }
@@ -580,7 +584,11 @@ enum class Role : std::uint8_t { Propose, Read };
 }
 
 [[nodiscard]] ChatToolOutcome findTool(ChatToolContext const& context, Json const& arguments) {
-    auto const text = stringArgument(arguments, "text", true);
+    auto const object = argumentsOf(arguments);
+    if (!object) {
+        return failed(object.error());
+    }
+    auto const text = stringArgument(**object, "text", true);
     if (!text) {
         return failed(text.error());
     }
@@ -610,8 +618,12 @@ enum class Role : std::uint8_t { Propose, Read };
 }
 
 [[nodiscard]] ChatToolOutcome nodeTool(ChatToolContext const& context, Json const& arguments) {
-    auto const pointer = stringArgument(arguments, "pointer", false);
-    auto const depth = depthArgument(arguments, kDefaultNodeDepth);
+    auto const object = argumentsOf(arguments);
+    if (!object) {
+        return failed(object.error());
+    }
+    auto const pointer = stringArgument(**object, "pointer", false);
+    auto const depth = depthArgument(**object, kDefaultNodeDepth);
     if (!pointer || !depth) {
         return failed(!pointer ? pointer.error() : depth.error());
     }
@@ -737,24 +749,18 @@ constexpr std::array<PatchOpName, 6> kPatchOps{{{"add", glz::patch_op_type::add}
     return ops;
 }
 
+// The table lists the operations in the enumeration's order, so an operation's number is its place in it.
+static_assert(kPatchOps.at(static_cast<std::size_t>(glz::patch_op_type::add)).second == glz::patch_op_type::add &&
+              kPatchOps.at(static_cast<std::size_t>(glz::patch_op_type::remove)).second ==
+                  glz::patch_op_type::remove &&
+              kPatchOps.at(static_cast<std::size_t>(glz::patch_op_type::replace)).second ==
+                  glz::patch_op_type::replace &&
+              kPatchOps.at(static_cast<std::size_t>(glz::patch_op_type::move)).second == glz::patch_op_type::move &&
+              kPatchOps.at(static_cast<std::size_t>(glz::patch_op_type::copy)).second == glz::patch_op_type::copy &&
+              kPatchOps.at(static_cast<std::size_t>(glz::patch_op_type::test)).second == glz::patch_op_type::test);
+
 [[nodiscard]] std::string_view nameOf(glz::patch_op_type kind) {
-    switch (kind) {
-        case glz::patch_op_type::add:
-            return "add";
-        case glz::patch_op_type::remove:
-            return "remove";
-        case glz::patch_op_type::replace:
-            return "replace";
-        case glz::patch_op_type::move:
-            return "move";
-        case glz::patch_op_type::copy:
-            return "copy";
-        case glz::patch_op_type::test:
-            return "test";
-        default:
-            break;
-    }
-    return "?";
+    return kPatchOps.at(static_cast<std::size_t>(kind)).first;
 }
 
 [[nodiscard]] std::string whyFailed(glz::error_ctx const& error) {
@@ -846,17 +852,14 @@ void propose(std::shared_ptr<CustomScreens> const& screens, std::string const& a
         done(refused(context, *problem));
         return;
     }
-    auto document = glz::write_json(*patched);
-    if (!document) {
-        done(refused(context, "The patched document could not be written."));
-        return;
-    }
-    if (document->size() > context.limits.maxDraftBytes) {
+    // A document that cannot be written is empty, which the checks refuse.
+    std::string document = glz::write_json(*patched).value_or(std::string{});
+    if (document.size() > context.limits.maxDraftBytes) {
         done(refused(context, "The patched document would be longer than " +
                                   std::to_string(context.limits.maxDraftBytes) + " bytes"));
         return;
     }
-    async::spawn(executor, proposeTask(screens, app, std::move(context), std::move(*document), done));
+    async::spawn(executor, proposeTask(screens, app, std::move(context), std::move(document), done));
 }
 
 // What the conversation keeps of a call: a small patch as written, and of a larger one its size and hash.

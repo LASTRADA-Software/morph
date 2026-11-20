@@ -26,6 +26,16 @@ inline constexpr std::string_view kCancelKind = "ui-chat-cancel";
 inline constexpr std::string_view kEndKind = "ui-chat-end";
 /// @brief The event topic a turn's progress goes out on. Its payload is a `TurnEvent`.
 inline constexpr std::string_view kChatTopic = "chat";
+/// @brief The envelope kind that hands a dictated clip to the server. Its body is a `TranscribeRequest`, its reply a
+///        `TranscribeAccepted`.
+inline constexpr std::string_view kTranscribeKind = "ui-chat-transcribe";
+/// @brief The envelope kind that reads a transcription's state. Its body is a `TranscriptionQuery`, its reply a
+///        `TranscriptionState`.
+inline constexpr std::string_view kTranscriptionKind = "ui-chat-transcription";
+/// @brief The `kind` of a `TranscriptionEvent` on the `chat` topic, which tells it from a `TurnEvent`.
+inline constexpr std::string_view kTranscriptionEventKind = "transcription";
+/// @brief The one media type a dictated clip may have: 16 kHz mono 16-bit PCM in a WAV container.
+inline constexpr std::string_view kDictationMediaType = "audio/wav";
 
 /// @brief One model alias a screen holds, as the client knows it.
 struct ModelRef {
@@ -101,6 +111,14 @@ enum class TurnStatus : std::uint8_t {
     Cancelled,  ///< Stopped by the person, or by its connection closing.
 };
 
+/// @brief The dictation a server offers, as its probe answers it.
+struct DictationOffer {
+    /// @brief The longest clip, in seconds.
+    std::uint64_t maxSeconds = 0;
+    /// @brief The largest clip, in bytes, before base64.
+    std::uint64_t maxBytes = 0;
+};
+
 /// @brief A turn's state as the server holds it, which outranks any event.
 struct TurnState {
     /// @brief The turn's id; `0` when the principal has no such turn.
@@ -123,6 +141,9 @@ struct TurnState {
     ///        A draft reaches a client only through here and the `draft` event, and only after the server's checks
     ///        passed it.
     std::optional<std::string> draft;
+    /// @brief The dictation this server offers; set only in the answer to a request with no turn (the probe), and
+    ///        absent when the server offers none. An older peer ignores it.
+    std::optional<DictationOffer> dictation;
 };
 
 /// @brief Asks for a turn's state.
@@ -147,6 +168,56 @@ struct TurnEvent {
     bool ok = false;
     /// @brief Whether a `text` event is the first piece of a round that follows tool calls, so it starts a new text.
     bool newRound = false;
+};
+
+/// @brief A dictated clip handed to the server for transcription.
+struct TranscribeRequest {
+    /// @brief The clip, base64 (RFC 4648).
+    std::string audio;
+    /// @brief Its media type, which must be `kDictationMediaType`.
+    std::string mediaType;
+    /// @brief The language spoken, such as `en`; absent leaves it to the server's configured default.
+    std::optional<std::string> language;
+};
+
+/// @brief The reply to a `TranscribeRequest`: the clip was taken and is being transcribed.
+struct TranscribeAccepted {
+    /// @brief The transcription's id, which its event and state carry.
+    std::uint64_t id = 0;
+};
+
+/// @brief Asks for a transcription's state.
+struct TranscriptionQuery {
+    /// @brief The transcription.
+    std::uint64_t id = 0;
+};
+
+/// @brief How far a transcription has got.
+enum class TranscriptionStatus : std::uint8_t {
+    Running,  ///< Still being transcribed.
+    Done,     ///< Finished; `TranscriptionState::text` holds the text.
+    Failed,   ///< Stopped by a fault, a limit or a cancel; `TranscriptionState::error` says which.
+};
+
+/// @brief A transcription's state as the server holds it, which outranks any event.
+struct TranscriptionState {
+    /// @brief The transcription's id.
+    std::uint64_t id = 0;
+    /// @brief How far it has got.
+    TranscriptionStatus status = TranscriptionStatus::Running;
+    /// @brief The text, once done.
+    std::optional<std::string> text;
+    /// @brief Why it failed, once failed.
+    std::optional<std::string> error;
+};
+
+/// @brief A hint that a transcription ended, on the `chat` topic. Events can be lost, so `TranscriptionState` is the
+///        record.
+struct TranscriptionEvent {
+    /// @brief Always `kTranscriptionEventKind`, which an older client reads as a turn event's kind and ignores.
+    std::string kind = std::string{kTranscriptionEventKind};
+    /// @brief The state it ended in.
+    TranscriptionState state;
 };
 
 /// @brief Writes a chat message as JSON.
@@ -194,6 +265,41 @@ template <typename T>
     return ui::detail::readMessage<TurnEvent>(text, "the chat event", {}, {});
 }
 
+/// @brief Reads a `TranscribeRequest`.
+/// @param text The body.
+/// @return The request, or why it was refused.
+[[nodiscard]] inline std::expected<TranscribeRequest, std::string> readTranscribeRequest(std::string_view text) {
+    return ui::detail::readMessage<TranscribeRequest>(text, "the dictation", {}, {});
+}
+
+/// @brief Reads a `TranscribeAccepted`.
+/// @param text The body.
+/// @return The reply, or why it was refused.
+[[nodiscard]] inline std::expected<TranscribeAccepted, std::string> readTranscribeAccepted(std::string_view text) {
+    return ui::detail::readMessage<TranscribeAccepted>(text, "the dictation's reply", {}, {});
+}
+
+/// @brief Reads a `TranscriptionQuery`.
+/// @param text The body.
+/// @return The query, or why it was refused.
+[[nodiscard]] inline std::expected<TranscriptionQuery, std::string> readTranscriptionQuery(std::string_view text) {
+    return ui::detail::readMessage<TranscriptionQuery>(text, "the transcription query", {}, {});
+}
+
+/// @brief Reads a `TranscriptionState`.
+/// @param text The body.
+/// @return The state, or why it was refused.
+[[nodiscard]] inline std::expected<TranscriptionState, std::string> readTranscriptionState(std::string_view text) {
+    return ui::detail::readMessage<TranscriptionState>(text, "the transcription's state", {}, {});
+}
+
+/// @brief Reads a `TranscriptionEvent`.
+/// @param text The event's payload.
+/// @return The event, or why it was refused.
+[[nodiscard]] inline std::expected<TranscriptionEvent, std::string> readTranscriptionEvent(std::string_view text) {
+    return ui::detail::readMessage<TranscriptionEvent>(text, "the transcription event", {}, {});
+}
+
 }  // namespace morph::ui::chat
 
 /// @brief Names a turn's status on the wire.
@@ -203,4 +309,12 @@ struct glz::meta<morph::ui::chat::TurnStatus> {
     /// @brief The names.
     static constexpr auto value =
         glz::enumerate("running", Running, "done", Done, "failed", Failed, "cancelled", Cancelled);
+};
+
+/// @brief Names a transcription's status on the wire.
+template <>
+struct glz::meta<morph::ui::chat::TranscriptionStatus> {
+    using enum morph::ui::chat::TranscriptionStatus;
+    /// @brief The names.
+    static constexpr auto value = glz::enumerate("running", Running, "done", Done, "failed", Failed);
 };

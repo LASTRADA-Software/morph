@@ -13,6 +13,7 @@
 #include <morph/core/wire.hpp>
 #include <morph/session/session.hpp>
 #include <morph/ui/bundle.hpp>
+#include <morph/ui/chat/panel.hpp>
 #include <morph/ui/service.hpp>
 #include <stdexcept>
 #include <string>
@@ -187,6 +188,14 @@ TEST_CASE("UiRegistry::addScreen refuses what it cannot serve", "[ui-service][re
     SECTION("an id registered twice") {
         REQUIRE(refused(registry.addScreen(entry("lims.results"), results)) ==
                 "a catalog entry with this id is registered");
+    }
+    SECTION("the chat panel's id") {
+        std::string const panel = R"({"vocab":"ui/1","id":"morph.chat","view":{"kind":"text","text":"x"}})";
+        REQUIRE(refused(registry.addScreen(entry(std::string{morph::ui::chat::kChatPanelId}), panel)) ==
+                "the id `morph.chat` is the chat panel's");
+        CatalogEntry host = entry(std::string{morph::ui::chat::kChatPanelId});
+        host.host = "Chat";
+        REQUIRE(refused(registry.addEntry(host)) == "the id `morph.chat` is the chat panel's");
     }
     SECTION("a host screen") {
         CatalogEntry host = entry("lims.other");

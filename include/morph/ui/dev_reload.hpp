@@ -5,6 +5,7 @@
 #include <functional>
 #include <map>
 #include <memory>
+#include <optional>
 #include <span>
 #include <string>
 #include <string_view>
@@ -15,6 +16,7 @@
 #include "document.hpp"
 #include "frontend.hpp"
 #include "host.hpp"
+#include "served_document.hpp"
 #include "value.hpp"
 
 /// @file
@@ -88,8 +90,9 @@ struct ReloadOutcome {
 /// `DocumentScreenHost::remount`, on every screen of @p mounted showing it, which keeps each state of the screen's own
 /// scope declared under the same name and type. A screen showing a draft (`DocumentScreenHost::mountDraft`) is left as
 /// it is. A remount the interpreter refuses keeps that screen on the old document, and keeps the old document in @p
-/// documents. A changed id the bundle no longer holds, and the app document, which is the session's root scope and not
-/// a screen (`DocumentScreenHost::mountApp`), change nothing here.
+/// documents. A changed id that is the chat panel's, and a document that names another id than its screen's, are
+/// refused the same way. A changed id the bundle no longer holds, and the app document, which is the session's root
+/// scope and not a screen (`DocumentScreenHost::mountApp`), change nothing here.
 /// @param changed   The ids of the changed documents (`changedDocuments`).
 /// @param bundle    The new bundle's documents.
 /// @param options   How the documents load: the catalog facts.
@@ -106,6 +109,10 @@ struct ReloadOutcome {
         if (screenId == "app" || text == bundle.documents.end()) {
             continue;
         }
+        if (auto refusal = servedScreenRefusal(screenId)) {
+            outcome.refused.push_back(std::move(*refusal));
+            continue;
+        }
         auto loaded = loadDocumentText(text->second, options);
         if (!loaded) {
             Refusal refusal = std::move(loaded.error());
@@ -113,6 +120,10 @@ struct ReloadOutcome {
                 refusal.document = screenId;
             }
             outcome.refused.push_back(std::move(refusal));
+            continue;
+        }
+        if (auto refusal = servedDocumentRefusal(screenId, loaded->id)) {
+            outcome.refused.push_back(std::move(*refusal));
             continue;
         }
         auto const document = std::make_shared<Document const>(std::move(*loaded));

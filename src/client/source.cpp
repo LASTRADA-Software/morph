@@ -18,6 +18,7 @@
 #include <morph/ui/dev_reload.hpp>
 #include <morph/ui/document.hpp>
 #include <morph/ui/file_store.hpp>
+#include <morph/ui/served_document.hpp>
 #include <morph/ui/service.hpp>
 #include <morph/ui/service_client.hpp>
 #include <optional>
@@ -144,6 +145,12 @@ std::function<std::shared_ptr<ui::Document const>(std::string_view)> Source::doc
         if (text == loaded->documents.end()) {
             return nullptr;
         }
+        if (auto refusal = ui::servedScreenRefusal(screenId)) {
+            if (onRefused) {
+                onRefused(*refusal);
+            }
+            return nullptr;
+        }
         auto const cached = _documents.find(screenId);
         if (cached != _documents.end() && cached->second.catalogLoad == _catalogLoads &&
             cached->second.text == text->second) {
@@ -153,6 +160,12 @@ std::function<std::shared_ptr<ui::Document const>(std::string_view)> Source::doc
         if (!document) {
             if (onRefused) {
                 onRefused(document.error());
+            }
+            return nullptr;
+        }
+        if (auto refusal = ui::servedDocumentRefusal(screenId, document->id)) {
+            if (onRefused) {
+                onRefused(*refusal);
             }
             return nullptr;
         }

@@ -5,10 +5,7 @@
 #include <QByteArray>
 #include <QCoreApplication>
 #include <QEventLoop>
-#include <QHostAddress>
 #include <QObject>
-#include <QTcpServer>
-#include <QTcpSocket>
 #include <algorithm>
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/catch_tostring.hpp>
@@ -27,77 +24,16 @@
 #include <variant>
 #include <vector>
 
+#include "fake_http_server.hpp"
+
 namespace chat = morph::ui::chat;
 
 namespace {
 
 constexpr std::string_view kKey = "sk-test-secret-key";
 
-bool pumpUntil(std::function<bool()> const& done, std::chrono::milliseconds limit = std::chrono::seconds{10}) {
-    auto const deadline = std::chrono::steady_clock::now() + limit;
-    while (!done()) {
-        if (std::chrono::steady_clock::now() > deadline) {
-            return false;
-        }
-        QCoreApplication::processEvents(QEventLoop::AllEvents, 5);
-    }
-    return true;
-}
-
-// Answers each request with a canned response, and keeps what it was sent.
-class FakeServer {
-public:
-    explicit FakeServer(std::string response) : _response{std::move(response)} {
-        REQUIRE(_server.listen(QHostAddress::LocalHost));
-        QObject::connect(&_server, &QTcpServer::newConnection, &_server, [this] {
-            while (QTcpSocket* const socket = _server.nextPendingConnection()) {
-                QObject::connect(socket, &QTcpSocket::readyRead, socket, [this, socket] { read(*socket); });
-                QObject::connect(socket, &QTcpSocket::disconnected, socket, [this, socket] {
-                    disconnected = true;
-                    socket->deleteLater();
-                });
-            }
-        });
-    }
-
-    [[nodiscard]] std::string url() const {
-        return "http://127.0.0.1:" + std::to_string(static_cast<unsigned>(_server.serverPort()));
-    }
-
-    // NOLINTBEGIN(cppcoreguidelines-non-private-member-variables-in-classes): what a test sets and reads directly.
-    // Hold the response's end, so the test can act during the call.
-    bool holdOpen = false;
-    bool disconnected = false;
-    std::string received;
-    // NOLINTEND(cppcoreguidelines-non-private-member-variables-in-classes)
-
-private:
-    void read(QTcpSocket& socket) {
-        received += socket.readAll().toStdString();
-        auto const headersEnd = received.find("\r\n\r\n");
-        if (headersEnd == std::string::npos) {
-            return;
-        }
-        auto const at = received.find("content-length: ");
-        auto const atCapital = received.find("Content-Length: ");
-        auto const start = at != std::string::npos ? at : atCapital;
-        REQUIRE(start != std::string::npos);
-        std::size_t const length = std::stoul(received.substr(start + 16));
-        if (received.size() < headersEnd + 4 + length || _answered) {
-            return;
-        }
-        _answered = true;
-        socket.write(_response.data(), static_cast<qint64>(_response.size()));
-        socket.flush();
-        if (!holdOpen) {
-            socket.disconnectFromHost();
-        }
-    }
-
-    QTcpServer _server;
-    std::string _response;
-    bool _answered = false;
-};
+using qt_test::pumpUntil;
+using FakeServer = qt_test::FakeHttpServer;
 
 std::string streamOf(std::string const& events) {
     return "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nConnection: close\r\n\r\n" + events;

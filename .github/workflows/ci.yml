@@ -750,7 +750,9 @@ jobs:
           # "Install Qt6 WebSockets" to "Install ODBC + SQLite driver" —
           # every other job that builds the ladder on Linux (Application
           # ladder, all optional features) already carries this pair.
-          sudo apt-get install -y libgl1-mesa-dev unixodbc-dev libsqliteodbc libyaml-cpp-dev libzip-dev
+          # libpulse0: aqtinstall's libQt6Multimedia links libpulse.so.0, which the
+          # runner image does not carry.
+          sudo apt-get install -y libgl1-mesa-dev unixodbc-dev libsqliteodbc libyaml-cpp-dev libzip-dev libpulse0
 
       # Not the distro's Qt: examples/common/CMakeLists.txt requires 6.5+
       # and Ubuntu 24.04 still ships 6.4.2 -- the identical gap the "all optional
@@ -763,7 +765,7 @@ jobs:
         uses: jurplel/install-qt-action@v4.3.1
         with:
           version: ${{ env.QT_VERSION }}
-          modules: qtwebsockets
+          modules: qtwebsockets qtmultimedia
           cache: true
 
       - name: Set up sccache
@@ -880,14 +882,14 @@ jobs:
           key: cpm-${{ runner.os }}-${{ hashFiles('cmake/CPM.cmake', '**/CMakeLists.txt') }}
           restore-keys: cpm-${{ runner.os }}-
 
-      - name: Install GCC 15, ninja, catch2, Qt6 WebSockets
+      - name: Install GCC 15, ninja, catch2, Qt6 WebSockets and Multimedia
         run: |
           sudo apt-get update -q
           sudo apt-get install -y software-properties-common
           sudo add-apt-repository -y ppa:ubuntu-toolchain-r/test
           sudo apt-get update -q
           sudo apt-get install -y gcc-15 g++-15 ninja-build catch2 \
-            qt6-base-dev qt6-websockets-dev qt6-tools-dev libgl1-mesa-dev
+            qt6-base-dev qt6-websockets-dev qt6-multimedia-dev qt6-tools-dev libgl1-mesa-dev
           sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-15 15
           sudo update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-15 15
 
@@ -1151,7 +1153,7 @@ jobs:
           # that step's comment for why the distro package is unusable here.
           sudo apt-get install -y gcc-15 g++-15 ninja-build catch2 \
             libsqlite3-dev libyaml-cpp-dev libzip-dev libgl1-mesa-dev \
-            unixodbc-dev libsqliteodbc
+            unixodbc-dev libsqliteodbc libpulse0
           sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-15 15
           sudo update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-15 15
 
@@ -1163,7 +1165,7 @@ jobs:
         uses: jurplel/install-qt-action@v4.3.1
         with:
           version: ${{ env.QT_VERSION }}
-          modules: qtwebsockets
+          modules: qtwebsockets qtmultimedia
           cache: true
 
       # Skipped on the self-hosted path, which caches through pace-cc:
@@ -1485,7 +1487,7 @@ jobs:
           # time. libyaml-cpp-dev/libzip-dev/libgl1-mesa-dev round out the
           # same set every other ladder-building Linux job installs.
           sudo apt-get install -y ninja-build catch2 libsqlite3-dev \
-            unixodbc-dev libsqliteodbc libyaml-cpp-dev libzip-dev libgl1-mesa-dev
+            unixodbc-dev libsqliteodbc libyaml-cpp-dev libzip-dev libgl1-mesa-dev libpulse0
           # --fail, a file, and a non-empty check -- never `wget -qO- | sudo
           # bash`: see linux-compilers' identical install step for why the piped
           # form reports success having installed nothing.
@@ -1501,7 +1503,7 @@ jobs:
         uses: jurplel/install-qt-action@v4.3.1
         with:
           version: ${{ env.QT_VERSION }}
-          modules: qtwebsockets
+          modules: qtwebsockets qtmultimedia
           cache: true
 
       # Skipped on the self-hosted path, which caches through pace-cc:
@@ -1857,7 +1859,7 @@ jobs:
         uses: jurplel/install-qt-action@v4.3.1
         with:
           version: ${{ env.QT_VERSION }}
-          modules: qtwebsockets
+          modules: qtwebsockets qtmultimedia
           cache: true
 
       # Every optional feature is ON here purely so its sources land in

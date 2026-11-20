@@ -12,12 +12,25 @@
 #include <utility>
 #include <vector>
 
+#include "../../core/wire.hpp"
 #include "provider.hpp"
 
 /// @file
 /// @brief What a chat remembers between turns. Specified in `docs/spec/ui/chat.md`.
 
 namespace morph::ui::chat {
+
+/// @brief What a `transcribe` request carries beyond the base64 audio, in bytes: the request body's own JSON
+///        (`mediaType`, the optional `language`, the framing) escaped once more inside the envelope, and the
+///        envelope's other fields, among them the session context. The session token has no bound in code, so the
+///        margin is the one the inline file cap leaves for the same envelope (`kMaxInlineFileBytes`), far above a
+///        signed token's few hundred bytes.
+inline constexpr std::size_t kDictationEnvelopeOverhead = std::size_t{64} * 1024;
+
+/// @brief The largest dictated clip a server may accept, in bytes before base64: what fits one envelope once grown by
+///        4/3 and wrapped in `kDictationEnvelopeOverhead`. Past it the transport, not the chat, would refuse the
+///        request, and the person would not learn which bound they crossed.
+inline constexpr std::size_t kMaxDictationBytes = (wire::kMaxEnvelopeBytes - kDictationEnvelopeOverhead) * 3 / 4;
 
 /// @brief Bounds on what chats may consume.
 struct ChatLimits {
@@ -52,12 +65,23 @@ struct ChatLimits {
     /// @brief The refused proposals one turn may make. The turn that makes this many ends, with the last refusal
     ///        told to the person, and leaves the window as it was.
     std::size_t maxProposalsPerTurn = 3;
-    /// @brief How long the chat waits for one extra tool's offer or handler, or for the document source, to answer.
-    ///        Past it the call counts as failed (an offer as declined, the source as failing the turn) and a late
-    ///        answer is ignored, so a tool that never answers cannot hold a turn. Zero or less: no deadline.
+    /// @brief How long the chat waits for one extra tool's offer or handler, for the document source, or for the
+    ///        transcriber, to answer. Past it the call counts as failed (an offer as declined, the source as failing
+    ///        the turn, a transcription as failed) and a late answer is ignored, so a tool that never answers cannot
+    ///        hold a turn or a dictation. Zero or less: no deadline, and a transcriber that never answers holds its
+    ///        slots until `ui-chat-end` or the connection closing.
     std::chrono::milliseconds toolCallTimeout{std::chrono::seconds{30}};
     /// @brief How long an untouched conversation is kept.
     std::chrono::minutes idleRetention{std::chrono::hours{8}};
+    /// @brief The longest clip a person may dictate, in seconds; the client stops recording there.
+    std::size_t maxDictationSeconds = 60;
+    /// @brief The largest clip the server takes, in bytes after decoding; the client stops recording before a clip
+    ///        would pass it. At most `kMaxDictationBytes`.
+    std::size_t maxDictationBytes = std::size_t{4} * 1024 * 1024;
+    /// @brief Transcriptions one principal may have running across connections. One connection may have one.
+    std::size_t maxTranscriptionsPerPrincipal = 2;
+    /// @brief How long a finished transcription stays readable before it is forgotten.
+    std::chrono::seconds transcriptionRetention{60};
 };
 
 /// @brief Which conversation a turn belongs to.

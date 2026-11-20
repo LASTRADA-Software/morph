@@ -45,6 +45,9 @@
 #include <QString>
 #include <QTimer>
 #include <morph/qt_quick/frontend.hpp>
+#if MORPH_CLIENT_HAS_DICTATION
+#include <morph/qt/qt_dictation_recorder.hpp>
+#endif
 #ifdef __EMSCRIPTEN__
 #include <morph/qt_quick/browser_history.hpp>
 #endif
@@ -322,6 +325,9 @@ struct ShellFactory {
                 },
             .onMounted = {}};
         options.dev = args->dev;
+#if MORPH_CLIENT_HAS_DICTATION
+        options.dictation = [] { return std::make_unique<morph::qt::QtDictationRecorder>(); };
+#endif
 #if MORPH_CLIENT_HAS_QT_QUICK && defined(__EMSCRIPTEN__)
         // The page's history, made once the frontend's event loop exists. It is never destroyed, so its timer never
         // outlives the event loop; a page's runtime does not exit.

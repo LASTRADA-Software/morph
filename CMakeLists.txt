@@ -642,6 +642,7 @@ target_sources(morph
         include/morph/ui/author.hpp
         include/morph/ui/author_forms.hpp
         include/morph/ui/bundle.hpp
+        include/morph/ui/base64.hpp
         include/morph/ui/alignment.hpp
         include/morph/ui/date_pattern.hpp
         include/morph/ui/input_emphasis.hpp
@@ -667,6 +668,7 @@ target_sources(morph
         include/morph/ui/navigator.hpp
         include/morph/ui/route.hpp
         include/morph/ui/route_history.hpp
+        include/morph/ui/served_document.hpp
         include/morph/ui/service_client.hpp
         include/morph/ui/shell_frame.hpp
         include/morph/ui/shell_parts.hpp
@@ -678,13 +680,16 @@ target_sources(morph
         include/morph/ui/chat/client.hpp
         include/morph/ui/chat/config.hpp
         include/morph/ui/chat/conversations.hpp
+        include/morph/ui/chat/dictation.hpp
         include/morph/ui/chat/extra_tool.hpp
         include/morph/ui/chat/panel.hpp
+        include/morph/ui/chat/panel_id.hpp
         include/morph/ui/chat/protocol.hpp
         include/morph/ui/chat/propose_screen.hpp
         include/morph/ui/chat/provider.hpp
         include/morph/ui/chat/screen_tools.hpp
         include/morph/ui/chat/service.hpp
+        include/morph/ui/chat/transcriber.hpp
         include/morph/ui/preferences.hpp
         include/morph/ui/preference_sync.hpp
         include/morph/ui/host_vocabulary.hpp
@@ -694,6 +699,8 @@ target_sources(morph
         include/morph/ui/testing/memory_history.hpp
         include/morph/ui/testing/recording_backend.hpp
         include/morph/ui/testing/fake_chat_provider.hpp
+        include/morph/ui/testing/fake_dictation_recorder.hpp
+        include/morph/ui/testing/fake_transcriber.hpp
         include/morph/ui/testing/backend_conformance.hpp
         include/morph/render/i18n.hpp
         include/morph/render/locale_format.hpp
@@ -1206,8 +1213,24 @@ if(MORPH_BUILD_LOAD_TESTS)
 endif()
 
 # ── Qt WebSocket backend (optional) ─────────────────────────────────────────
+if(MORPH_ENABLE_DICTATION AND NOT MORPH_BUILD_QT)
+    message(FATAL_ERROR "MORPH_ENABLE_DICTATION=ON needs MORPH_BUILD_QT=ON: the recorder is part of morph_qt.")
+endif()
 if(MORPH_BUILD_QT)
     find_package(Qt6 COMPONENTS Network WebSockets REQUIRED)
+
+    # The chat's dictation recorder needs Qt Multimedia's audio input (QMediaDevices, Qt 6.2 and later); everything else
+    # about dictation does not.
+    find_package(Qt6 COMPONENTS Multimedia QUIET)
+    set(_morph_dictation_default OFF)
+    if(NOT EMSCRIPTEN AND TARGET Qt6::Multimedia AND Qt6Multimedia_VERSION VERSION_GREATER_EQUAL 6.2)
+        set(_morph_dictation_default ON)
+    endif()
+    option(MORPH_ENABLE_DICTATION "Build the chat's dictation recorder (needs Qt6::Multimedia 6.2 or later)"
+           ${_morph_dictation_default})
+    if(MORPH_ENABLE_DICTATION AND NOT _morph_dictation_default)
+        message(FATAL_ERROR "MORPH_ENABLE_DICTATION=ON needs Qt6::Multimedia 6.2 or later, which was not found.")
+    endif()
 
     # Header-only interface for consumers
     add_library(morph_qt INTERFACE)
@@ -1224,6 +1247,7 @@ if(MORPH_BUILD_QT)
             include/morph/qt/qt_chat_provider.hpp
             include/morph/qt/qt_executor.hpp
             include/morph/qt/qt_tls.hpp
+            include/morph/qt/qt_transcriber.hpp
             include/morph/qt/qt_websocket_server.hpp
             include/morph/qt/qt_websocket_backend.hpp
             include/morph/qt/detail/outbound_ledger.hpp
@@ -1232,12 +1256,24 @@ if(MORPH_BUILD_QT)
     # Compiled implementation (QObject subclass needs MOC via a .cpp file)
     add_library(morph_qt_impl STATIC
         src/qt/qt_chat_provider.cpp
+        src/qt/qt_transcriber.cpp
         src/qt/qt_websocket_server.cpp
         src/qt/qt_websocket_backend.cpp
         include/morph/qt/qt_websocket_server.hpp
     )
     target_link_libraries(morph_qt_impl PUBLIC morph_qt)
     set_target_properties(morph_qt_impl PROPERTIES AUTOMOC ON)
+
+    if(MORPH_ENABLE_DICTATION)
+        target_sources(morph_qt
+            INTERFACE
+            FILE_SET HEADERS
+            BASE_DIRS include
+            FILES include/morph/qt/qt_dictation_recorder.hpp)
+        target_sources(morph_qt_impl PRIVATE src/qt/qt_dictation_recorder.cpp)
+        target_link_libraries(morph_qt_impl PUBLIC Qt6::Multimedia)
+        target_compile_definitions(morph_qt_impl PUBLIC MORPH_ENABLE_DICTATION=1)
+    endif()
 
     # The Qt WebSocket server and backend are the only *compiled* translation
     # units in morph's own transport: everything else a Qt test exercises is

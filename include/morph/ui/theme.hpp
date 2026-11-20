@@ -45,11 +45,12 @@ inline constexpr std::size_t kMaxThemeIcons = 256;
 
 /// @brief The icon names the built-in components draw: an empty state without an icon of its own, a banner's tone,
 ///        a chevron that opens and closes, a select's drop-down indicator, a close button, a date input's calendar,
-///        an overflow menu's trigger, and the compact shell's navigation menu. A bundle's icon set replaces any of
-///        them by name.
-inline constexpr std::array<std::string_view, 15> kFrameworkIcons = {
-    "empty",        "tone.info",   "tone.ok",      "tone.warn", "tone.err",  "nav.back", "nav.forward", "nav.expand",
-    "nav.collapse", "select.open", "select.close", "close",     "date.pick", "more",     "nav.menu"};
+///        an overflow menu's trigger, the compact shell's navigation menu, and the chat panel's Dictate button. A
+///        bundle's icon set replaces any of them by name.
+inline constexpr std::array<std::string_view, 16> kFrameworkIcons = {
+    "empty",       "tone.info",  "tone.ok",      "tone.warn",   "tone.err",     "nav.back",
+    "nav.forward", "nav.expand", "nav.collapse", "select.open", "select.close", "close",
+    "date.pick",   "more",       "nav.menu",     "chat.dictate"};
 
 /// @brief Whether @p name is an icon name: `[a-z][a-z0-9.-]{0,63}`.
 /// @param name The name.

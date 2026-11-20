@@ -21,6 +21,7 @@
 #include <morph/reactive/scope.hpp>
 #include <morph/reactive/signal.hpp>
 #include <morph/ui/backend.hpp>
+#include <morph/ui/base64.hpp>
 #include <morph/ui/dev_tools.hpp>
 #include <morph/ui/document.hpp>
 #include <morph/ui/expression.hpp>
@@ -580,6 +581,10 @@ struct HostCommands {
     std::function<HostCommandResult(std::string const& name, Value const& args)> run;
 };
 
+/// @brief The host names limited to some documents, each with the ids of the documents that may name it. A name not
+///        listed is in scope for every document.
+using HostScopes = std::map<std::string, std::set<std::string, std::less<>>, std::less<>>;
+
 /// @brief What screens of one client session share (spec 5 §5, §12b): the query cache, the mounted queries, the
 ///        principal's permitted actions, the formatting facts and the client's `env`, `session` and `host` values.
 ///
@@ -600,6 +605,7 @@ public:
           _sessionValues{runtime},
           _hostValues{runtime},
           _hostCommandNames{runtime},
+          _hostScopesRevision{runtime, 0},
           _contextOffered{runtime, false} {}
 
     Session(Session const&) = delete;
@@ -731,6 +737,24 @@ public:
     ///        session without a runner asks `InterpreterHost::hostCommand`.
     /// @param commands The names and the runner.
     void setHostCommands(HostCommands commands);
+
+    /// @brief Limits host names to documents: a name listed is in scope only for the document ids listed with it, and
+    ///        a name not listed is in scope everywhere. Out of scope, a value reads as `null`, `{"can": "host:name"}`
+    ///        is false and a command is missing, exactly as for a name nobody registered.
+    /// @param scopes The names and their documents.
+    void setHostScopes(HostScopes scopes) {
+        if (scopes == _hostScopes) {
+            return;
+        }
+        _hostScopes = std::move(scopes);
+        _hostScopesRevision.set(_hostScopesRevision.peek() + 1);
+    }
+
+    /// @brief Whether a document may name a host value or command. A tracked read.
+    /// @param name     The host name.
+    /// @param document The document's id.
+    /// @return False when the name is limited to other documents.
+    [[nodiscard]] bool hostNameIn(std::string_view name, std::string_view document) const;
 
     /// @brief What runs host commands.
     /// @return It; empty when the application set none.
@@ -1014,6 +1038,10 @@ private:
     detail::RtScope const* _appScope = nullptr;
     std::vector<detail::ScreenCore*> _screens;
     reactive::Signal<std::set<std::string, std::less<>>> _hostCommandNames;
+    // The scopes are read through `_hostScopesRevision`, which is what a tracked read subscribes to: a signal over the
+    // scopes' own type would be one more template instance in every generated inheritance graph of the signal base.
+    HostScopes _hostScopes;
+    reactive::Signal<std::size_t> _hostScopesRevision;
     reactive::Signal<bool> _contextOffered;
     std::function<bool(Value const&)> _contextHandler;
     std::string _formatLocale;
@@ -2778,16 +2806,6 @@ namespace detail {
 /// @param text The JSON text.
 /// @return The value.
 [[nodiscard]] MORPH_API Value jsonTextValue(std::string_view text);
-
-/// @brief Base64 text as bytes (RFC 4648, with or without padding).
-/// @param text The text.
-/// @return The bytes, or `std::nullopt` for text that is not base64.
-[[nodiscard]] MORPH_API std::optional<std::string> base64Decode(std::string_view text);
-
-/// @brief How many bytes base64 text decodes to, read from its length alone.
-/// @param text The text.
-/// @return The byte count.
-[[nodiscard]] MORPH_API std::size_t base64Size(std::string_view text);
 
 /// @brief A byte count as a person reads it: `512 bytes`, `2.4 KiB`, `1 MiB`.
 /// @param bytes The count.

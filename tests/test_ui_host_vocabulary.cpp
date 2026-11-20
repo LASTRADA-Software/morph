@@ -218,3 +218,134 @@ TEST_CASE("host vocabulary: arguments that are not a record are refused, and so 
                                                .run = [](ValueRecord const&) {}}),
                     std::invalid_argument);
 }
+
+namespace {
+
+/// A screen with id @p id that reads `panel.secret`, asks whether it can run `panel.start`, and runs it.
+std::string scopedScreen(std::string const& id) {
+    return R"({"vocab":"ui/1","id":")" + id + R"(","view":{"kind":"column","children":[)" +
+           R"({"kind":"text","testId":"secret_)" + id +
+           R"(","text":{"fn":"coalesce","args":[{"host":"panel.secret"},"null"]}},)" +
+           R"({"kind":"text","testId":"can_)" + id +
+           R"(","text":{"fn":"format","args":["{0}",{"can":"host:panel.start"}]}},)" +
+           R"({"kind":"button","testId":"start_)" + id + R"(","label":"start","onClick":{"host":"panel.start"}}]}})";
+}
+
+}  // namespace
+
+// Mutation: drop the document check in ScopeEnv::client, ScopeEnv::control or ScreenCore::runHostCommand.
+TEST_CASE("host vocabulary: a name limited to one document is absent from every other", "[ui][host]") {
+    Harness h;
+    HostVocabulary vocabulary;
+    std::vector<std::string> ran;
+    vocabulary.add(HostCommand{.name = "panel.start",
+                               .version = 1,
+                               .args = {},
+                               .safeForUntrusted = true,
+                               .run = [&ran](ValueRecord const& /*args*/) { ran.emplace_back("start"); },
+                               .documents = {"panel"}});
+    vocabulary.add(HostValue{
+        .name = "panel.secret", .version = 1, .type = "string", .initial = Value{"heard"}, .documents = {"panel"}});
+    vocabulary.connect(h.session);
+    auto const panel = h.mount(scopedScreen("panel"));
+    auto const other = h.mount(scopedScreen("other"));
+
+    CHECK(h.text("secret_panel") == "heard");
+    CHECK(h.text("secret_other") == "null");
+    CHECK(h.text("can_panel") == "true");
+    CHECK(h.text("can_other") == "false");
+
+    h.backend.click(h.byTestId("Button", "start_other"));
+    h.settle();
+    CHECK(ran.empty());
+    CHECK(std::ranges::any_of(h.diagnostics, [](auto const& refusal) {
+        return refusal.message().contains("host command `panel.start` is missing");
+    }));
+
+    h.backend.click(h.byTestId("Button", "start_panel"));
+    h.settle();
+    CHECK(ran == std::vector<std::string>{"start"});
+}
+
+// Mutation: publish the value scopes only when a command has one.
+TEST_CASE("host vocabulary: a value limited to one document needs no command to be scoped", "[ui][host]") {
+    Harness h;
+    HostVocabulary vocabulary;
+    vocabulary.add(HostValue{
+        .name = "panel.secret", .version = 1, .type = "string", .initial = Value{"heard"}, .documents = {"panel"}});
+    vocabulary.connect(h.session);
+    auto const panel = h.mount(scopedScreen("panel"));
+    auto const other = h.mount(scopedScreen("other"));
+
+    CHECK(h.text("secret_panel") == "heard");
+    CHECK(h.text("secret_other") == "null");
+}
+
+// Mutation: read the scopes untracked in Session::hostNameIn.
+TEST_CASE("host vocabulary: a scope set after a screen mounted takes effect on it", "[ui][host]") {
+    Harness h;
+    HostVocabulary vocabulary;
+    vocabulary.add(HostValue{.name = "panel.secret", .version = 1, .type = "string", .initial = Value{"heard"}});
+    vocabulary.connect(h.session);
+    auto const panel = h.mount(scopedScreen("panel"));
+    auto const other = h.mount(scopedScreen("other"));
+    CHECK(h.text("secret_panel") == "heard");
+    CHECK(h.text("secret_other") == "heard");
+
+    h.session.setHostScopes(morph::ui::HostScopes{{"panel.secret", {"panel"}}});
+    h.settle();
+
+    CHECK(h.text("secret_panel") == "heard");
+    CHECK(h.text("secret_other") == "null");
+}
+
+namespace {
+
+/// A screen with id @p id whose mutation `go` runs the host command `panel.start`, and which asks whether it can.
+std::string mutationScreen(std::string const& id) {
+    return R"({"vocab":"ui/1","id":")" + id + R"(","models":{"m":{"type":"Lims_SampleModel"}},)" +
+           R"("mutations":{"go":{"model":"m","action":"host:panel.start"}},)" +
+           R"("view":{"kind":"text","testId":"can_)" + id +
+           R"(","text":{"fn":"format","args":["{0}",{"can":"go"}]}}})";
+}
+
+}  // namespace
+
+// Mutation: skip the document check for a mutation or query whose action is a host command.
+TEST_CASE("host vocabulary: can on a mutation that runs a limited host command follows the document scope",
+          "[ui][host]") {
+    Harness h;
+    HostVocabulary vocabulary;
+    vocabulary.add(HostCommand{.name = "panel.start",
+                               .version = 1,
+                               .args = {},
+                               .safeForUntrusted = true,
+                               .run = [](ValueRecord const& /*args*/) {},
+                               .documents = {"panel"}});
+    vocabulary.connect(h.session);
+    auto const panel = h.mount(mutationScreen("panel"));
+    auto const other = h.mount(mutationScreen("other"));
+
+    CHECK(h.text("can_panel") == "true");
+    CHECK(h.text("can_other") == "false");
+}
+
+// Mutation: drop the equality early return in Session::setHostScopes.
+TEST_CASE("host vocabulary: publishing the same scopes again does not re-run what reads them", "[ui][host]") {
+    Harness h;
+    int reads = 0;
+    morph::reactive::Effect const reader{h.runtime, [&] {
+                                             static_cast<void>(h.session.hostNameIn("panel.secret", "other"));
+                                             ++reads;
+                                         }};
+    h.session.setHostScopes(morph::ui::HostScopes{{"panel.secret", {"panel"}}});
+    h.settle();
+    int const afterFirst = reads;
+    h.session.setHostScopes(morph::ui::HostScopes{{"panel.secret", {"panel"}}});
+    h.settle();
+    CHECK(afterFirst >= 2);
+    CHECK(reads == afterFirst);
+    h.session.setHostScopes(morph::ui::HostScopes{{"panel.secret", {"other"}}});
+    h.settle();
+    CHECK(reads == afterFirst + 1);
+}

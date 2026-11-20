@@ -14,12 +14,13 @@ the push path every other change uses. The design is in
 - [Configuration](#configuration)
 - [The turn loop](#the-turn-loop)
 - [Conversations](#conversations)
+- [Dictation](#dictation)
 - [The client](#the-client)
 - [The panel](#the-panel)
 
 ## Protocol
 
-`protocol.hpp`. Four envelope kinds on the GUI's connection, under its session:
+`protocol.hpp`. Six envelope kinds on the GUI's connection, under its session:
 
 | Kind | Body | Reply |
 |---|---|---|
@@ -27,6 +28,13 @@ the push path every other change uses. The design is in
 | `ui-chat-state` | `StateRequest{turnId?}`; with no id, it only asks whether a chat is available | `TurnState` |
 | `ui-chat-cancel` | none | `ok` |
 | `ui-chat-end` | none | `ok` |
+| `ui-chat-transcribe` | `TranscribeRequest{audio, mediaType, language?}`: a dictated clip, base64, `audio/wav` | `TranscribeAccepted{id}`, at once |
+| `ui-chat-transcription` | `TranscriptionQuery{id}` | `TranscriptionState{id, status: running \| done \| failed, text?, error?}` |
+
+`ui-chat-state` with no turn (the probe) also answers `TurnState::dictation`, `{maxSeconds, maxBytes}`, when the server
+offers dictation, and leaves it out when it does not. A transcription ends with a `TranscriptionEvent` on the `chat`
+topic, `{kind: "transcription", state}`; its `kind` tells it from a `TurnEvent`, and an older client reads it as a turn
+event with turn id 0 and drops it. Like a turn's events it is a hint: the client reads `TranscriptionState`.
 
 A `TurnRequest` describes where the person is, and is a hint about what they mean. It grants nothing, because every
 action it leads to is checked under the envelope's session. Its `title` is the screen's title as the person sees it
@@ -137,6 +145,20 @@ one name is `anthropic`, over `QNetworkAccessManager` on `owner`'s thread, and `
 - A tool call cut off by the token limit is reported as a failure and not run, since it usually still parses as a partial
   object.
 
+`morph::qt::makeQtTranscriber(config, owner)` in `qt/qt_transcriber.hpp` is the one place that names a speech-to-text
+provider. Its one name is `openai-transcriptions`: a multipart `POST` to `{baseUrl}/v1/audio/transcriptions` over
+`QNetworkAccessManager` on `owner`'s thread, with the parts `file` (the WAV, as `audio.wav`), `model`,
+`response_format=json`, and `language` when the input carries one, and the header `Authorization: Bearer <key>`. It reads
+`text`. A non-2xx answer fails with the status and the provider's `error.message` when it has one, never with the
+request; an answer without a `text` fails as unreadable. `cancel` aborts the reply. A deployment that keeps audio on its
+own network points `baseUrl` at its own server; an empty `baseUrl` is `https://api.openai.com`. `model` and the key have
+no default, and the key appears in no log and no message: a reason that carries the key, such as a provider echoing it in
+its error text, has it replaced before it is relayed.
+
+OpenRouter is a verified example: `"transcription": {"name": "openai-transcriptions", "baseUrl": "https://openrouter.ai/api",
+"model": "openai/whisper-1", "apiKeyEnv": "..."}`. A spoken clip sent through it, checked on 2026-11-19, came back as the
+exact sentence spoken.
+
 ## Configuration
 
 `config.hpp`. `ChatConfig` is a plain struct of the provider, the limits and the system prompt. An application fills it
@@ -146,6 +168,7 @@ optional reader that fills it from a JSON file:
 ```json
 {
   "provider": { "name": "anthropic", "model": "...", "apiKeyEnv": "THE_KEY_VARIABLE" },
+  "transcription": { "name": "openai-transcriptions", "model": "whisper-1", "apiKeyEnv": "STT_KEY", "language": "en" },
   "limits": { "maxToolCallsPerTurn": 16, "idleRetentionMinutes": 480 },
   "systemPrompt": "..."
 }
@@ -153,6 +176,12 @@ optional reader that fills it from a JSON file:
 
 - `provider` takes `name`, `model`, `baseUrl`, `maxTokens`, and one of `apiKeyEnv` and `apiKey`. `apiKeyEnv` names an
   environment variable, which keeps the secret out of the file. Naming both is refused.
+- `transcription`, optional, names the dictation's provider with `name`, `baseUrl`, `model`, `language`, and one of
+  `apiKeyEnv` and `apiKey`, with the provider block's rules: an unknown key is refused, both keys are refused, and a
+  refusal never quotes the text. Without it the chat offers no dictation.
+- `limits` also takes `maxDictationSeconds` (60), `maxDictationBytes` (4 MiB), `maxTranscriptionsPerPrincipal` (2) and
+  `transcriptionRetentionSeconds` (60). 0 is refused for each, and so is a `maxDictationBytes` above
+  `kMaxDictationBytes` (about 6 MiB, what one envelope carries once base64 grows it by 4/3).
 - `limits` takes each field of `ChatLimits`, with `idleRetentionMinutes` for its time limit. What is left out keeps its
   default.
 - A key the format does not have is refused, so a misspelled limit cannot silently leave the default in force. A limit of
@@ -226,6 +255,62 @@ principal's turn on that connection and ends their conversations. A turn on anot
 The idle limit covers a client that never sent it. A token that stays valid after sign-out is not something a chat can
 revoke.
 
+## Dictation
+
+A person can speak a message instead of typing it. The words land in the chat's input, where the person reads,
+corrects and sends them as typed text. Speech becomes text on the server, through a configured speech-to-text
+provider; morph embeds no recognition engine and no model.
+
+**The seam.** `transcriber.hpp`. `ITranscriber::transcribe` takes a `TranscriptionInput` (the clip, its media type and
+one language or none) and a `TranscriberSink`, and returns an `ITranscriberCall` to cancel it. It is callable from any
+thread, and `done` runs exactly once unless the call was cancelled, possibly before `transcribe` returns. Nothing
+outside an implementation names a provider. `testing::FakeTranscriber` scripts answers and counts cancels.
+
+**Accepting.** `ChatOptions::transcriber` turns dictation on; with none the service serves neither transcription kind
+and its probe offers none, and a transcriber without a provider is refused when the service is built.
+`ui-chat-transcribe` passes the chat's gate and is answered at once, as a turn is: refused with a reason naming the
+bound when it arrives with no connection, when its base64 text is longer than `ceil(maxDictationBytes / 3) * 4`
+(checked before decoding), when it decodes to more than `maxDictationBytes`, when it is not base64, when its media type
+is not `audio/wav`, when the connection already has a transcription running (`busy`), or when the principal has
+`maxTranscriptionsPerPrincipal` running across connections. Otherwise it is recorded, answered with
+`TranscribeAccepted{id}`, and transcribed on the worker. The request's `language` wins over the configured
+`transcription.language`; the service applies the default, so a transcriber sees one value.
+
+**Reading.** `ui-chat-transcription` answers the state. A query for another principal's id, for one forgotten and for
+one that never was gets the same `failed` answer, "no such transcription", so ids reveal nothing.
+
+**Ending, exactly once.** Each accepted transcription ends in exactly one of `done` and `failed`, recorded in the
+service's table and sent as a `transcription` event to its connection: the transcriber's answer; the deadline,
+`ChatLimits::toolCallTimeout`, which cancels the call and fails with "the transcription did not answer in time"; or
+`ui-chat-end`, which cancels the principal's transcription on that connection and fails it with "cancelled". A
+connection closing cancels its calls and drops their entries, since no one can read them, and the service's destruction
+cancels every call and sends nothing. With `toolCallTimeout` of zero or less there is no deadline, and a transcriber
+that never answers holds its connection's `busy` slot and the principal's count until `ui-chat-end` or the connection
+closing. An answer arriving after the entry ended is ignored. The connection's `busy` slot
+and the principal's count free when the entry ends.
+
+**Nothing kept beyond the retention.** A finished transcription stays readable for `transcriptionRetention` (60
+seconds), swept whenever the table is touched, and then reads as "no such transcription". Neither audio nor text is
+journaled, logged or added to a conversation; the clip moves into the transcriber's call when it starts. The text
+reaches the assistant only inside a later `ui-chat-turn`, as text like any other.
+
+**Recording.** `dictation.hpp`. `IDictationRecorder` records a clip: `unavailable()` reports what is known without
+asking (no input device), `start(limits)` asks for permission where the platform does and answers through `onStarted`,
+`onProgress` counts seconds, and `onClip` delivers the WAV or why there is none. Each `start` ends in exactly one of a
+failed `onStarted` and an `onClip`; a `stop` before recording began is answered by an `onClip` error. A clip is 16 kHz
+mono 16-bit whatever the device offers, so its size is a function of its length alone: `SpeechResampler` averages the
+channels and the samples each output sample spans, `DictationClip` stops at `maxSeconds` or before the WAV would pass
+`maxBytes` (a `maxBytes` below the 44-byte header holds no sample and gives the bare header), and `wavFromPcm16` writes the 44-byte header. At this format 60 s is 1,920,044 bytes, 2,560,060 in base64.
+`morph::qt::QtDictationRecorder` is the Qt one, in `morph_qt`, built when `Qt6::Multimedia` 6.2 or later is found
+(`MORPH_ENABLE_DICTATION`, ON when it is; ON without it, or without `MORPH_BUILD_QT`, is refused at configure time):
+`QAudioSource` on the owner thread at the device's preferred format. A `start` while a recording runs or waits for
+permission fails its own `onStarted` with "a recording is already running" and changes nothing. Microphone permission
+is asked through `QMicrophonePermission` where the Qt has permissions (6.5 and later); on an older Qt the platform's own
+prompt, where there is one, appears when the device opens. The recorder takes its input and its permission question as
+`QtDictationOptions`, so its behaviour on a stream is tested without hardware; the input's `keepAlive` is released from the
+event loop of the recorder's thread after the clip is delivered, never from inside the device's `readyRead`, so the
+device is stopped and destroyed outside its own emission. Audio stays in memory and is never written to disk.
+
 ## The client
 
 `client.hpp`. `ChatClient` sends what a person says and keeps what to show per conversation, for display only and for the
@@ -248,12 +333,21 @@ session. It runs on the owner, and takes the source's exchange, the current sess
   draft the turn proposes (`onDraft`, once per distinct document, whether the `draft` event or the turn's state brought
   it first). The shell uses it to name the tab, so a draft the assistant proposes belongs to the tab the turn started
   in even when the person has since moved to another.
+- **Dictation.** The probe's answer also carries the dictation offer, which `dictation()` returns, or nothing.
+  `transcribe(wav, language, done)` sends `ui-chat-transcribe` with the clip as base64, keeps the id, and reads
+  `ui-chat-transcription` when the `transcription` event for that id arrives and on `resync`. `done` runs exactly once:
+  with the text when the state reads `done`, with the reason when it reads `failed`, when the server refuses the clip,
+  when the exchange fails, on a reconnect, when `end` runs (which also forgets the offer until the next probe), and at
+  once when another transcription still waits.
+- **Notes.** `note(text)` adds an entry of kind `note` to the selected conversation: a line of the client's own, such as
+  why a dictation failed. A running turn's redraw keeps it, after the turn's lines, and it is never sent.
 
 ## The panel
 
 `panel.hpp`. The panel is a document like any screen, `kChatPanelDocument`, so every frontend draws it and it uses the same
 vocabulary an application's screens use: a `forEach` of the conversation's lines (`chat_entry`, inside `chat_entries`), an
-input (`chat_input`), a send button (`chat_send`) and, while a turn runs, a stop button (`chat_cancel`).
+input (`chat_input`), a dictate button (`chat_dictate`), a send button (`chat_send`) and, while a turn runs, a stop
+button (`chat_cancel`).
 
 `ChatPanelBinding` connects it to a `ChatClient` through a `HostVocabulary`, the seam a document has to anything the client
 owns: the values `chat.entries`, `chat.running`, `chat.onScreen` and `chat.canSend`, and the commands `chat.send` and
@@ -264,6 +358,26 @@ the explorer, disables the input. So does a running turn: the input takes text o
 (`chat.canSend`, like the send button). Enter runs the input's submit, which clears it, so an enabled input during a turn
 would throw away what the person typed, without sending it. A turn ends for the client when it reads the turn's state
 after the `done` event, one round trip after the turn's last text is shown.
+
+**Dictation.** Beside Send, a **Dictate** button (`chat_dictate`, theme icon `chat.dictate`, a framework icon name, so a
+theme without it draws the label alone and nothing is reported) shows when the server offers dictation, the client can
+record, the person is on a screen and the panel is visible. Pressing it records, and it reads **Stop (12 s)**, counting
+seconds; pressing again stops, and so do `maxDictationSeconds` and `maxDictationBytes`. It then reads **Transcribing…**
+and is disabled. The transcript is appended to the input, trimmed, after one space when the input is not empty and does
+not already end in whitespace; it is never sent, since a misheard word sent to an assistant whose tools change data costs
+more than one more press of Send. Dictating is allowed while a turn runs. A failure (no microphone, permission denied, a
+refusal, a provider error, a timeout, a lost connection, or nothing heard) adds a `note` drawn in the `error` role and
+leaves the input as it was.
+
+The binding takes the recorder and whether the panel is visible, and registers for the panel document alone
+(`HostValue::documents`, `HostCommand::documents`): `chat.canDictate`, `chat.dictation` (`idle`, `recording`,
+`waiting`), `chat.dictationSeconds`, `chat.dictated` (`{seq, text}`, `seq` growing by one per transcript) and the commands
+`chat.dictateStart` and `chat.dictateStop`. In another document these names read `null` and do not run, so no screen,
+custom screen or draft can start the microphone or read a transcript. `refresh` stops a recording and drops its clip when
+the panel stops being visible or the offer is gone, as it is after `end` at sign-out. The document's top-level `watch` on
+`{"host": "chat.dictated"}` appends: a watch on a host value fires on each change of the record, so each new `seq`
+appends once, and the seconds' tick, a different value, appends nothing. `chat.dictated` is cleared (an empty `text`, which the watch appends nothing for) when the offer
+is gone, so no transcript outlives a sign-out. A failed read of a transcription's state ends the dictation with an error note.
 
 A screen's own draft is part of where the person is: the shell reads the draft the active tab holds at each send and
 carries it as `TurnRequest::draft` (`CustomScreenChrome::draftOf`), or nothing for a tab with no draft. The client bounds

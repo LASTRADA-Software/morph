@@ -31,6 +31,8 @@
 #include <morph/ui/service.hpp>
 #include <morph/ui/service_client.hpp>
 #include <morph/ui/testing/fake_chat_provider.hpp>
+#include <morph/ui/testing/fake_dictation_recorder.hpp>
+#include <morph/ui/testing/fake_transcriber.hpp>
 #include <morph/ui/testing/memory_history.hpp>
 #include <morph/ui/testing/recording_backend.hpp>
 #include <mutex>
@@ -540,8 +542,9 @@ namespace chat = morph::ui::chat;
 /// The customs application behind a real server, with the chat and `propose_screen` over `offered`'s custom screens.
 class ChatServedSource final : public client::Source {
 public:
-    ChatServedSource(Offered const& offered, std::shared_ptr<chat::testing::FakeChatProvider> provider)
-        : _offered{&offered}, _provider{std::move(provider)} {
+    ChatServedSource(Offered const& offered, std::shared_ptr<chat::testing::FakeChatProvider> provider,
+                     std::shared_ptr<chat::ITranscriber> transcriber = nullptr)
+        : _offered{&offered}, _provider{std::move(provider)}, _transcriber{std::move(transcriber)} {
         requestSession().token = "ann";
     }
     ~ChatServedSource() override { close(); }
@@ -560,6 +563,7 @@ protected:
         options.provider = _provider;
         options.worker = _worker.get();
         options.bundle = *served;
+        options.transcriber = _transcriber;
         chat::enableCustomScreensChat(options, _offered->screens, "customs", *_worker);
         morph::backend::ServerConfig config;
         config.services.push_back(std::make_shared<ui::UiService>(*served));
@@ -579,6 +583,7 @@ protected:
 private:
     Offered const* _offered;
     std::shared_ptr<chat::testing::FakeChatProvider> _provider;
+    std::shared_ptr<chat::ITranscriber> _transcriber;
     std::unique_ptr<morph::exec::ThreadPoolExecutor> _pool;
     std::unique_ptr<morph::exec::ThreadPoolExecutor> _worker;
     std::shared_ptr<morph::backend::RemoteServer> _server;
@@ -586,14 +591,20 @@ private:
 
 /// A window on the customs application over a chat-serving source, until the chat panel and "Mine" show.
 struct ChatWindow {
-    explicit ChatWindow(Offered const& offered) : source{offered, provider} {
+    explicit ChatWindow(Offered const& offered, std::shared_ptr<chat::ITranscriber> transcriber = nullptr)
+        : source{offered, provider, std::move(transcriber)} {
         std::optional<std::expected<ui::Bundle, ui::ConnectError>> opened;
         source.open(context,
                     [&opened](std::expected<ui::Bundle, ui::ConnectError> result) { opened = std::move(result); });
         REQUIRE(pumpUntil(context.owner(), [&opened] { return opened.has_value(); }));
         REQUIRE(opened->has_value());
-        shell = client::mountShell(context, backend, std::move(*opened), source,
-                                   client::ShellOptions{.startScreen = "customs.home"});
+        client::ShellOptions options{.startScreen = "customs.home"};
+        options.dictation = [this] {
+            auto made = std::make_unique<chat::testing::FakeDictationRecorder>();
+            recorder = made.get();
+            return made;
+        };
+        shell = client::mountShell(context, backend, std::move(*opened), source, std::move(options));
         mineId = offered.mineId;
         REQUIRE(wait([this] { return find("Button", "nav_" + mineId).has_value(); }));
         REQUIRE(wait([this] { return find("Button", "chat_send").has_value() && chatEnabled(); }));
@@ -638,6 +649,15 @@ struct ChatWindow {
             return backend.prop(widget, "testId") == "chat_entry" && backend.prop(widget, "text").contains(text);
         });
     }
+    void clickDictate() {
+        auto const button = find("Button", "chat_dictate");
+        REQUIRE(button.has_value());
+        backend.click(*button);
+    }
+    [[nodiscard]] std::string input() const {
+        auto const widget = find("TextInput", "chat_input");
+        return widget ? backend.prop(*widget, "text") : std::string{};
+    }
     /// Opens "Mine" from the navigator, and waits for its tab.
     void openMine() {
         auto const nav = find("Button", "nav_" + mineId);
@@ -651,6 +671,7 @@ struct ChatWindow {
     ui::testing::RecordingBackend backend;
     std::shared_ptr<chat::testing::FakeChatProvider> provider = std::make_shared<chat::testing::FakeChatProvider>();
     ChatServedSource source;
+    chat::testing::FakeDictationRecorder* recorder = nullptr;
     std::unique_ptr<ui::MountedShell> shell;
 };
 
@@ -765,4 +786,39 @@ TEST_CASE("Client shell: a draft for a tab that was closed is dropped quietly",
     CHECK_FALSE(window.shown("Row", "draft_bar_" + window.mineId));
     CHECK_FALSE(window.backend.find("Text", "text", "For a closed tab").has_value());
     CHECK_FALSE(window.backend.find("Text", "text", "The assistant's draft").has_value());
+}
+
+// Mutations: hand the binding no recorder (no button); send the transcript as a turn (the provider is called).
+TEST_CASE("Client shell: a dictated clip lands in the chat input through the server", "[client][chat][dictation]") {
+    Offered const offered;
+    auto const transcriber = std::make_shared<chat::testing::FakeTranscriber>();
+    transcriber->script(std::string{"spoken words"});
+    ChatWindow window{offered, transcriber};
+    REQUIRE(window.wait([&window] { return window.shown("Button", "chat_dictate"); }));
+    REQUIRE(window.recorder != nullptr);
+    window.clickDictate();
+    REQUIRE(window.wait([&window] { return window.recorder->starts == 1; }));
+    window.recorder->begin();
+    window.clickDictate();
+    REQUIRE(window.wait([&window] { return window.recorder->stops == 1; }));
+    window.recorder->clip(std::string{"RIFF-clip"});
+    REQUIRE(window.wait([&window] { return window.input() == "spoken words"; }));
+    CHECK(transcriber->calls() == 1);
+    CHECK(window.provider->calls() == 0);
+}
+
+// Mutation: leave the binding unrefreshed when the frame turns compact.
+TEST_CASE("Client shell: a compact frame stops a recording and drops its clip", "[client][chat][dictation]") {
+    Offered const offered;
+    auto const transcriber = std::make_shared<chat::testing::FakeTranscriber>();
+    ChatWindow window{offered, transcriber};
+    REQUIRE(window.wait([&window] { return window.shown("Button", "chat_dictate"); }));
+    window.clickDictate();
+    REQUIRE(window.wait([&window] { return window.recorder->starts == 1; }));
+    window.recorder->begin();
+    window.backend.setWidthClass("compact");
+    REQUIRE(window.wait([&window] { return window.recorder->stops == 1; }));
+    window.recorder->clip(std::string{"RIFF-clip"});
+    static_cast<void>(window.wait([] { return false; }));
+    CHECK(transcriber->calls() == 0);
 }

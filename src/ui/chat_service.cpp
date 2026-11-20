@@ -34,7 +34,9 @@
 #include <morph/ui/chat/provider.hpp>
 #include <morph/ui/chat/screen_tools.hpp>
 #include <morph/ui/chat/service.hpp>
+#include <morph/ui/chat/transcriber.hpp>
 #include <morph/ui/document.hpp>
+#include <morph/ui/interpreter.hpp>
 #include <morph/ui/service.hpp>
 #include <mutex>
 #include <optional>
@@ -52,6 +54,7 @@ void ChatOptions::configure(ChatConfig const& config) {
     if (!config.systemPrompt.empty()) {
         systemPrompt = config.systemPrompt;
     }
+    transcriptionLanguage = config.transcription ? config.transcription->language : std::nullopt;
 }
 
 // A turn's fields other than `state`, `seq` and `call` belong to whichever worker task is running its one next
@@ -91,6 +94,20 @@ struct ChatService::Turn {
     std::shared_ptr<IProviderCall> call;
 };
 
+// A dictated clip being transcribed, or one that ended and is kept for `transcriptionRetention`. `id`, `principal` and
+// `cid` never change; the rest is guarded by Shared::mutex.
+struct ChatService::Transcription {
+    std::uint64_t id = 0;
+    std::string principal;
+    backend::ConnectionId cid = 0;
+    TranscriptionStatus status = TranscriptionStatus::Running;
+    std::string text;
+    std::string error;
+    std::shared_ptr<ITranscriberCall> call;
+    ::morph::async::detail::TimeoutScheduler::Handle deadline = 0;
+    std::chrono::steady_clock::time_point finishedAt;
+};
+
 // Everything a turn's callbacks need, kept alive by them after the service is gone.
 struct ChatService::Shared {
     explicit Shared(ChatOptions given) : options{std::move(given)}, conversations{options.limits} {}
@@ -111,6 +128,15 @@ struct ChatService::Shared {
     std::map<std::string, std::vector<std::uint64_t>, std::less<>> finished;
     std::atomic<std::uint64_t> nextTurn{1};
     std::atomic<std::uint64_t> nextCall{1};
+
+    // Guarded by `mutex`.
+    std::map<std::uint64_t, std::shared_ptr<Transcription>> transcriptions;
+    std::atomic<std::uint64_t> nextTranscription{1};
+
+    using TranscriptionPtr = std::shared_ptr<Transcription>;
+    // Whether ending a transcription cancels its call, and whether its connection hears of it.
+    enum class CancelCall : std::uint8_t { No, Yes };
+    enum class Tell : std::uint8_t { No, Yes };
 
     void warnAboutOptOuts() const {
         if (options.bundle == nullptr) {
@@ -147,6 +173,10 @@ struct ChatService::Shared {
                 state = found->second->state;
                 state.seq = found->second->seq;
             }
+        } else if (options.transcriber != nullptr) {
+            state.dictation =
+                DictationOffer{.maxSeconds = static_cast<std::uint64_t>(options.limits.maxDictationSeconds),
+                               .maxBytes = static_cast<std::uint64_t>(options.limits.maxDictationBytes)};
         }
         return wire::encode(wire::makeOk(request.callId, writeMessage(state)));
     }
@@ -157,6 +187,9 @@ struct ChatService::Shared {
                                              backend::ConnectionId cid) {
         auto const& principal = request.session.principal;
         stopWhere(self, [&](Turn const& turn) { return turn.cid == cid && turn.session.principal == principal; });
+        stopTranscriptionsWhere(
+            self, [&](Transcription const& entry) { return entry.cid == cid && entry.principal == principal; },
+            "cancelled", Tell::Yes);
         {
             std::scoped_lock const lock{self->mutex};
             self->conversations.endAll(principal);
@@ -429,6 +462,284 @@ struct ChatService::Shared {
     [[nodiscard]] static std::shared_ptr<backend::RemoteServer> serverOf(Shared& self) {
         std::scoped_lock const lock{self.mutex};
         return self.server.lock();
+    }
+
+    // Drops finished transcriptions past their retention. The caller holds `mutex`.
+    void forgetExpired() {
+        auto const cutoff = now() - options.limits.transcriptionRetention;
+        std::erase_if(transcriptions, [cutoff](auto const& held) {
+            return held.second->status != TranscriptionStatus::Running && held.second->finishedAt <= cutoff;
+        });
+    }
+
+    [[nodiscard]] static TranscriptionState stateOf(Transcription const& entry) {
+        TranscriptionState state{.id = entry.id, .status = entry.status, .text = std::nullopt, .error = std::nullopt};
+        if (entry.status == TranscriptionStatus::Done) {
+            state.text = entry.text;
+        } else if (entry.status == TranscriptionStatus::Failed) {
+            state.error = entry.error;
+        }
+        return state;
+    }
+
+    // A hint to the transcription's connection. Lost events are expected: the client reads the state.
+    static void tellTranscription(Shared& self, backend::ConnectionId cid, TranscriptionState state) {
+        auto const server = serverOf(self);
+        if (server == nullptr) {
+            return;
+        }
+        server->post(cid, wire::encode(wire::makeEvent(
+                              kChatTopic, writeMessage(TranscriptionEvent{.kind = std::string{kTranscriptionEventKind},
+                                                                          .state = std::move(state)}))));
+    }
+
+    // Ends a transcription, once: with its text, or with why it failed. Whatever ends it second finds it ended and
+    // does nothing, which is what makes a late answer harmless.
+    static void endTranscription(std::shared_ptr<Shared> const& self, TranscriptionPtr const& entry,
+                                 std::expected<std::string, std::string> outcome, CancelCall cancel, Tell tell) {
+        std::shared_ptr<ITranscriberCall> call;
+        std::optional<::morph::async::detail::TimeoutScheduler::Handle> handle;
+        TranscriptionState state;
+        {
+            std::scoped_lock const lock{self->mutex};
+            if (entry->status != TranscriptionStatus::Running) {
+                return;
+            }
+            if (outcome) {
+                entry->status = TranscriptionStatus::Done;
+                entry->text = std::move(*outcome);
+            } else {
+                entry->status = TranscriptionStatus::Failed;
+                entry->error = std::move(outcome.error());
+            }
+            entry->finishedAt = self->now();
+            call = std::move(entry->call);
+            entry->call = nullptr;
+            if (entry->deadline != 0) {
+                handle = entry->deadline;
+            }
+            entry->deadline = 0;
+            state = stateOf(*entry);
+        }
+        cancelTimer(*self, handle);
+        if (call != nullptr && cancel == CancelCall::Yes) {
+            call->cancel();
+        }
+        if (tell == Tell::Yes) {
+            tellTranscription(*self, entry->cid, std::move(state));
+        }
+    }
+
+    [[nodiscard]] static bool transcribing(Shared& self, Transcription const& entry) {
+        std::scoped_lock const lock{self.mutex};
+        return entry.status == TranscriptionStatus::Running;
+    }
+
+    // Starts the transcriber's call on the worker. The clip moves into the call, so the service holds no audio once
+    // it started. An entry that ended before its call existed has the call cancelled at once; cancelling one that
+    // already answered does nothing.
+    static void callTranscriber(std::shared_ptr<Shared> const& self, TranscriptionPtr const& entry,
+                                TranscriptionInput input) {
+        if (!transcribing(*self, *entry)) {
+            return;
+        }
+        TranscriberSink sink{
+            .done = [weakSelf = std::weak_ptr<Shared>{self}, weakEntry = std::weak_ptr<Transcription>{entry}](
+                        std::expected<std::string, std::string> outcome) {
+                auto const lockedSelf = weakSelf.lock();
+                auto const lockedEntry = weakEntry.lock();
+                if (lockedSelf != nullptr && lockedEntry != nullptr) {
+                    endTranscription(lockedSelf, lockedEntry, std::move(outcome), CancelCall::No, Tell::Yes);
+                }
+            }};
+        std::shared_ptr<ITranscriberCall> call;
+        try {
+            call = self->options.transcriber->transcribe(std::move(input), std::move(sink));
+        } catch (std::exception const& error) {
+            endTranscription(self, entry, std::unexpected("the transcription failed: " + std::string{error.what()}),
+                             CancelCall::No, Tell::Yes);
+            return;
+        } catch (...) {
+            endTranscription(self, entry, std::unexpected(std::string{"the transcription failed"}), CancelCall::No,
+                             Tell::Yes);
+            return;
+        }
+        bool ended = false;
+        {
+            std::scoped_lock const lock{self->mutex};
+            if (entry->status == TranscriptionStatus::Running) {
+                entry->call = call;
+            } else {
+                ended = true;
+            }
+        }
+        if (ended && call != nullptr) {
+            call->cancel();
+        }
+    }
+
+    // Fails the entry when the transcriber has not answered within `toolCallTimeout`, and cancels its call. The timer
+    // holds both weakly and hands the ending to the worker, as a turn's deadline does.
+    static void armTranscriptionDeadline(std::shared_ptr<Shared> const& self, TranscriptionPtr const& entry) {
+        auto const limit = self->options.limits.toolCallTimeout;
+        if (limit.count() <= 0) {
+            return;
+        }
+        // NOLINTNEXTLINE(misc-const-correctness): `schedule` is not const.
+        ::morph::async::detail::TimeoutScheduler* timers = nullptr;
+        {
+            std::scoped_lock const lock{self->mutex};
+            if (self->timers == nullptr) {
+                self->timers = std::make_unique<::morph::async::detail::TimeoutScheduler>();
+            }
+            timers = self->timers.get();
+        }
+        auto const handle =
+            timers->schedule(limit, [weakSelf = std::weak_ptr<Shared>{self},
+                                     weakEntry = std::weak_ptr<Transcription>{entry}, worker = self->options.worker] {
+                auto lockedSelf = weakSelf.lock();
+                auto lockedEntry = weakEntry.lock();
+                if (lockedSelf == nullptr || lockedEntry == nullptr) {
+                    return;
+                }
+                try {
+                    worker->post([lockedSelf = std::move(lockedSelf), lockedEntry = std::move(lockedEntry)] {
+                        endTranscription(lockedSelf, lockedEntry,
+                                         std::unexpected(std::string{"the transcription did not answer in time"}),
+                                         CancelCall::Yes, Tell::Yes);
+                    });
+                    // NOLINTNEXTLINE(bugprone-empty-catch): the worker is gone, so the service is being torn down.
+                } catch (...) {
+                }
+            });
+        std::optional<::morph::async::detail::TimeoutScheduler::Handle> stale;
+        {
+            std::scoped_lock const lock{self->mutex};
+            if (entry->status == TranscriptionStatus::Running) {
+                entry->deadline = handle;
+            } else {
+                stale = handle;
+            }
+        }
+        cancelTimer(*self, stale);
+    }
+
+    // Ends each running transcription @p which picks, cancelling its call. Never blocks: a service callback runs on
+    // the server strand.
+    template <typename Which>
+    static void stopTranscriptionsWhere(std::shared_ptr<Shared> const& self, Which const& which,
+                                        std::string const& reason, Tell tell) {
+        std::vector<TranscriptionPtr> matched;
+        {
+            std::scoped_lock const lock{self->mutex};
+            for (auto const& [key, held] : self->transcriptions) {
+                static_cast<void>(key);
+                if (held->status == TranscriptionStatus::Running && which(*held)) {
+                    matched.push_back(held);
+                }
+            }
+        }
+        for (TranscriptionPtr const& entry : matched) {
+            endTranscription(self, entry, std::unexpected(reason), CancelCall::Yes, tell);
+        }
+    }
+
+    // `handle` runs on the server strand and must not block, so a clip is checked, recorded and accepted here, and
+    // transcribed on the worker. The base64 text's size is checked before decoding, so an oversized body is refused
+    // for its size, not for what it holds.
+    [[nodiscard]] static std::string startTranscription(std::shared_ptr<Shared> const& self,
+                                                        wire::Envelope const& request, backend::ConnectionId cid) {
+        auto parsed = readTranscribeRequest(request.body);
+        if (!parsed) {
+            return err(request, parsed.error());
+        }
+        if (cid == 0) {
+            return err(request, "dictation needs a connection");
+        }
+        ChatLimits const& limits = self->options.limits;
+        std::string const bound =
+            "the recording is larger than " + std::to_string(limits.maxDictationBytes) + " bytes";
+        if (parsed->audio.size() > ((limits.maxDictationBytes + 2) / 3) * 4) {
+            return err(request, bound);
+        }
+        std::optional<std::string> audio = ui::detail::base64Decode(parsed->audio);
+        if (!audio) {
+            return err(request, "the recording is not base64");
+        }
+        if (audio->size() > limits.maxDictationBytes) {
+            return err(request, bound);
+        }
+        if (parsed->mediaType != kDictationMediaType) {
+            return err(request, "the recording is not " + std::string{kDictationMediaType});
+        }
+        parsed->audio = std::string{};
+        auto entry = std::make_shared<Transcription>();
+        entry->id = self->nextTranscription.fetch_add(1);
+        entry->principal = request.session.principal;
+        entry->cid = cid;
+        {
+            std::scoped_lock const lock{self->mutex};
+            self->forgetExpired();
+            std::size_t onConnection = 0;
+            std::size_t ofPrincipal = 0;
+            for (auto const& [key, held] : self->transcriptions) {
+                static_cast<void>(key);
+                if (held->status == TranscriptionStatus::Running) {
+                    onConnection += held->cid == cid ? 1U : 0U;
+                    ofPrincipal += held->principal == entry->principal ? 1U : 0U;
+                }
+            }
+            if (onConnection > 0) {
+                return err(request, "busy: a dictation is already being transcribed on this connection");
+            }
+            if (ofPrincipal >= limits.maxTranscriptionsPerPrincipal) {
+                return err(request, "too many dictations are being transcribed");
+            }
+            self->transcriptions.insert_or_assign(entry->id, entry);
+        }
+        TranscriptionInput input{
+            .audio = std::move(*audio),
+            .mediaType = std::move(parsed->mediaType),
+            .language = parsed->language ? std::move(parsed->language) : self->options.transcriptionLanguage};
+        try {
+            self->options.worker->post(
+                [self, entry, input = std::move(input)]() mutable { callTranscriber(self, entry, std::move(input)); });
+        } catch (std::exception const& error) {
+            std::scoped_lock const lock{self->mutex};
+            self->transcriptions.erase(entry->id);
+            return err(request, error.what());
+        }
+        // The entry is recorded and its call posted, so a deadline that cannot be armed ends the entry as failed: the
+        // client hears of it through the event and the state, rather than waiting on a call nothing times.
+        try {
+            armTranscriptionDeadline(self, entry);
+        } catch (...) {
+            endTranscription(self, entry, std::unexpected(std::string{"the transcription could not be timed"}),
+                             CancelCall::Yes, Tell::Yes);
+        }
+        return wire::encode(wire::makeOk(request.callId, writeMessage(TranscribeAccepted{.id = entry->id})));
+    }
+
+    // The same answer for another principal's transcription, one forgotten and one that never was, so ids reveal
+    // nothing.
+    [[nodiscard]] std::string readTranscription(wire::Envelope const& request) {
+        auto const asked = readTranscriptionQuery(request.body);
+        if (!asked) {
+            return err(request, asked.error());
+        }
+        TranscriptionState state{.id = asked->id,
+                                 .status = TranscriptionStatus::Failed,
+                                 .text = std::nullopt,
+                                 .error = std::string{"no such transcription"}};
+        {
+            std::scoped_lock const lock{mutex};
+            forgetExpired();
+            auto const found = transcriptions.find(asked->id);
+            if (found != transcriptions.end() && found->second->principal == request.session.principal) {
+                state = stateOf(*found->second);
+            }
+        }
+        return wire::encode(wire::makeOk(request.callId, writeMessage(state)));
     }
 
     static void readCatalog(std::shared_ptr<Shared> const& self, TurnPtr const& turn) {
@@ -1055,6 +1366,20 @@ ChatService::ChatService(ChatOptions options) : _shared{std::make_shared<Shared>
         (_shared->options.worker == nullptr || _shared->options.bundle == nullptr)) {
         throw std::invalid_argument{"ChatService: a provider needs a worker and a bundle"};
     }
+    if (_shared->options.transcriber != nullptr) {
+        ChatLimits const& limits = _shared->options.limits;
+        if (_shared->options.provider == nullptr) {
+            throw std::invalid_argument{"ChatService: a transcriber needs a provider"};
+        }
+        if (limits.maxDictationSeconds == 0 || limits.maxDictationBytes == 0 ||
+            limits.maxTranscriptionsPerPrincipal == 0 || limits.transcriptionRetention.count() <= 0) {
+            throw std::invalid_argument{"ChatService: a dictation limit of 0 would refuse every dictation"};
+        }
+        if (limits.maxDictationBytes > kMaxDictationBytes) {
+            throw std::invalid_argument{"ChatService: maxDictationBytes is above " +
+                                        std::to_string(kMaxDictationBytes)};
+        }
+    }
 }
 
 ChatService::~ChatService() {
@@ -1062,6 +1387,9 @@ ChatService::~ChatService() {
     // and that event is only a hint.
     try {
         Shared::stopWhere(_shared, [](Turn const&) { return true; });
+        // Nobody is left to read a transcription, so it is cancelled and announced to no one.
+        Shared::stopTranscriptionsWhere(
+            _shared, [](Transcription const&) { return true; }, "the chat service stopped", Shared::Tell::No);
         // NOLINTNEXTLINE(bugprone-empty-catch)
     } catch (...) {
     }
@@ -1072,8 +1400,13 @@ std::string ChatService::err(wire::Envelope const& request, std::string message)
 }
 
 bool ChatService::serves(std::string_view kind) const {
-    return _shared->options.provider != nullptr &&
-           (kind == kTurnKind || kind == kStateKind || kind == kCancelKind || kind == kEndKind);
+    if (_shared->options.provider == nullptr) {
+        return false;
+    }
+    if (kind == kTranscribeKind || kind == kTranscriptionKind) {
+        return _shared->options.transcriber != nullptr;
+    }
+    return kind == kTurnKind || kind == kStateKind || kind == kCancelKind || kind == kEndKind;
 }
 
 std::string ChatService::handle(wire::Envelope const& request, session::IAuthorizer const& authorizer) {
@@ -1091,6 +1424,12 @@ std::string ChatService::handle(wire::Envelope const& request, session::IAuthori
     }
     if (request.kind == kStateKind) {
         return _shared->readState(request);
+    }
+    if (request.kind == kTranscribeKind) {
+        return Shared::startTranscription(_shared, request, facts.cid);
+    }
+    if (request.kind == kTranscriptionKind) {
+        return _shared->readTranscription(request);
     }
     if (request.kind == kCancelKind) {
         auto const principal = request.session.principal;
@@ -1114,6 +1453,12 @@ void ChatService::bound(std::weak_ptr<backend::RemoteServer> const& server) {
 
 void ChatService::connectionClosed(backend::ConnectionId cid) {
     Shared::stopWhere(_shared, [cid](Turn const& turn) { return turn.cid == cid; });
+    // No one can read a closed connection's transcriptions: they are cancelled silently and forgotten.
+    Shared::stopTranscriptionsWhere(
+        _shared, [cid](Transcription const& entry) { return entry.cid == cid; }, "the connection closed",
+        Shared::Tell::No);
+    std::scoped_lock const lock{_shared->mutex};
+    std::erase_if(_shared->transcriptions, [cid](auto const& held) { return held.second->cid == cid; });
 }
 
 }  // namespace morph::ui::chat

@@ -78,8 +78,13 @@ foreach(_morph_client IN LISTS _morph_clients)
     if(_morph_client_tui)
         target_link_libraries(${_morph_client} PRIVATE morph::tui)
     endif()
+    set(_morph_client_dictation 0)
+    if(_morph_client_qt_quick AND MORPH_ENABLE_DICTATION)
+        set(_morph_client_dictation 1)
+    endif()
     target_compile_definitions(${_morph_client} PRIVATE
         MORPH_CLIENT_HAS_QT_QUICK=${_morph_client_qt_quick}
+        MORPH_CLIENT_HAS_DICTATION=${_morph_client_dictation}
         MORPH_CLIENT_HAS_TUI=${_morph_client_tui})
     apply_warnings(${_morph_client})
     if(DEFINED AF_SANITIZER)

@@ -830,6 +830,12 @@ void Session::setHostCommands(HostCommands commands) {
     _hostCommandNames.set(std::move(commands.available));
 }
 
+bool Session::hostNameIn(std::string_view name, std::string_view document) const {
+    static_cast<void>(_hostScopesRevision.get());
+    auto const found = _hostScopes.find(name);
+    return found == _hostScopes.end() || found->second.contains(document);
+}
+
 std::function<HostCommandResult(std::string const&, Value const&)> const& Session::hostCommandRunner() const noexcept {
     return _hostCommandRunner;
 }
@@ -2115,13 +2121,19 @@ Value ScopeEnv::control(ExprKind form, std::string_view name) const {
     Session const& session = _scope->core.session;
     NameRef const* const found = _scope->find(name);
     if (form == ExprKind::Can) {
+        static constexpr std::string_view kHostPrefix = "host:";
+        std::string_view action = name;
         if (found != nullptr && found->category == NameCategory::Query) {
-            return session.can(found->query->decl().action);
+            action = found->query->decl().action;
+        } else if (found != nullptr && found->category == NameCategory::Mutation) {
+            action = found->mutation->decl().action;
         }
-        if (found != nullptr && found->category == NameCategory::Mutation) {
-            return session.can(found->mutation->decl().action);
+        // A query or mutation whose action is a host command is held to the same document scope as the command.
+        if (action.starts_with(kHostPrefix) &&
+            !session.hostNameIn(action.substr(kHostPrefix.size()), _scope->core.doc().id)) {
+            return Value{false};
         }
-        return session.can(name);
+        return session.can(action);
     }
     if (found != nullptr && found->category == NameCategory::Query) {
         QueryRuntime const& query = *found->query;
@@ -2164,7 +2176,14 @@ Value ScopeEnv::pref(std::string_view point, std::span<std::string const> path) 
     return found == prefs.end() ? Value{} : walk(found->second, path);
 }
 
-Value ScopeEnv::client(ExprKind form, std::string_view name) const { return _scope->core.session.client(form, name); }
+Value ScopeEnv::client(ExprKind form, std::string_view name) const {
+    Session const& session = _scope->core.session;
+    // A host value limited to other documents reads as one nobody registered.
+    if (form == ExprKind::Host && !session.hostNameIn(name, _scope->core.doc().id)) {
+        return Value{};
+    }
+    return session.client(form, name);
+}
 
 FormatContext const& RtScope::formatting() const {
     for (RtScope const* scope = this; scope != nullptr;
@@ -4108,6 +4127,12 @@ void ScreenCore::runReset(Command const& command, CommandCtx const& ctx, Done co
 }
 
 void ScreenCore::runHostCommand(Command const& command, CommandCtx const& ctx, Done const& done) {
+    // A command limited to other documents is one this document cannot see: missing, and nothing runs.
+    if (!session.hostNameIn(command.target, doc().id)) {
+        report(command.path, "host command `" + command.target + "` is missing");
+        done(false);
+        return;
+    }
     Value const args = evalIn(*ctx.scope, ctx.bindings.get(), command.value);
     if (auto const& run = session.hostCommandRunner()) {
         HostCommandResult const result = run(command.target, args);
@@ -4167,9 +4192,8 @@ private:
     State _state = State::NotTaken;
 };
 
-/// @brief Bytes as base64 (RFC 4648, with padding): how a document carries an inline file.
-/// @param bytes The bytes.
-/// @return The text.
+}  // namespace
+
 [[nodiscard]] std::string base64Encode(std::string_view bytes) {
     static constexpr std::string_view kAlphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
     std::string out;
@@ -4189,7 +4213,6 @@ private:
     }
     return out;
 }
-}  // namespace
 
 [[nodiscard]] std::optional<std::string> base64Decode(std::string_view text) {
     while (!text.empty() && text.back() == '=') {

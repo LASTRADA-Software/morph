@@ -33,6 +33,7 @@
 #include <morph/ui/mount.hpp>
 #include <morph/ui/navigator.hpp>
 #include <morph/ui/route_history.hpp>
+#include <morph/ui/served_document.hpp>
 #include <morph/ui/service_client.hpp>
 #include <morph/ui/shell_frame.hpp>
 #include <morph/ui/shell_parts.hpp>
@@ -243,6 +244,11 @@ public:
             if (ui::isCustomScreenId(screenId)) {
                 return _customSync->documents().find(screenId);
             }
+            if (screenId == ui::chat::kChatPanelId) {
+                // Only the client's own panel, whatever the server listed.
+                auto const panel = _generated.find(screenId);
+                return panel == _generated.end() ? nullptr : panel->second;
+            }
             auto const found = _documents.find(screenId);
             if (found != _documents.end()) {
                 return found->second;
@@ -422,6 +428,9 @@ public:
                 }
                 if (_frame) {
                     _frame->setCompact(compactFrame(widthClass));
+                    if (_chatBinding) {
+                        _chatBinding->refresh();
+                    }
                 }
             }
         });
@@ -533,6 +542,10 @@ private:
         _workspace.reset();
         _appRoot.reset();
         _frame.reset();
+        // No frame, no panel in view: a recording stops before the new frame is built.
+        if (_chatBinding) {
+            _chatBinding->refresh();
+        }
         ui::CatalogReply const* const catalog = _source->catalogReply();
         std::vector<ui::CatalogEntry> entries;
         if (catalog != nullptr) {
@@ -704,9 +717,13 @@ private:
                 _source->exchange(), [this] { return _source->currentSession(); }, [this] { chatChanged(); });
             _chat->onDraft(
                 [this](ui::chat::ChatClient::DraftProposal const& proposal) { mountProposedDraft(proposal); });
+            if (_options.dictation) {
+                _recorder = _options.dictation();
+            }
             _chatBinding = std::make_unique<ui::chat::ChatPanelBinding>(
                 _chatHost, *_chat, [this] { return chatContext(); }, [this] { return chatOrigin(); },
-                [this] { return chatDraft(); });
+                [this] { return chatDraft(); }, _recorder.get(),
+                [this] { return _frame != nullptr && _frame->chatVisible(); });
         }
         auto document = ui::chat::chatPanelDocument();
         if (!document) {
@@ -992,6 +1009,9 @@ private:
     // The sidebar and the top bar, with the principal, while the shell is signed in; the page alone otherwise.
     void showSignedIn() {
         _frame->showSignedIn(_signedIn);
+        if (_chatBinding) {
+            _chatBinding->refresh();
+        }
         _frame->setPrincipal(_signedIn ? _source->principal() : std::string{});
     }
 
@@ -1097,9 +1117,17 @@ private:
             }
         }
         for (std::string const& screenId : _source->screens()) {
+            if (auto refusal = ui::servedScreenRefusal(screenId)) {
+                problem(refusal->message());
+                continue;
+            }
             auto loaded = ui::loadDocumentText(bundle.documents.at(screenId), ui::LoadOptions{.catalog = catalog});
             if (!loaded) {
                 problem(loaded.error().message());
+                continue;
+            }
+            if (auto refusal = ui::servedDocumentRefusal(screenId, loaded->id)) {
+                problem(refusal->message());
                 continue;
             }
             _documents.emplace(screenId, std::make_shared<ui::Document const>(std::move(*loaded)));
@@ -1266,6 +1294,10 @@ private:
     // As `mount`, but the refusal is answered, not shown.
     std::expected<bool, std::string> tryMount(std::string const& screenId, ui::ParamMap const& params) {
         _message.reset();
+        // The chat panel is the frame's own slot: a route or a navigation to it must not open a second one.
+        if (screenId == ui::chat::kChatPanelId) {
+            return std::unexpected("the chat panel is not a screen to open");
+        }
         if (!_workspace) {
             buildFrame();
         }
@@ -1507,6 +1539,8 @@ private:
     std::unique_ptr<ui::CustomScreenChrome> _customChrome;
     // Counts the workspaces built, so a turn's tab is told from a tab of a later workspace with the same number.
     std::uint64_t _workspaceNumber = 0;
+    // What the chat panel dictates with; made once, before the binding, which goes first.
+    std::unique_ptr<ui::chat::IDictationRecorder> _recorder;
     std::unique_ptr<ui::chat::ChatClient> _chat;
     std::unique_ptr<ui::chat::ChatPanelBinding> _chatBinding;
     std::unique_ptr<ui::ShellFrame> _frame;
