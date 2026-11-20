@@ -660,6 +660,7 @@ target_sources(morph
         include/morph/ui/value.hpp
         include/morph/ui/locale_table.hpp
         include/morph/ui/table_config.hpp
+        include/morph/ui/table_dialogs.hpp
         include/morph/ui/measure.hpp
         include/morph/ui/table_rows.hpp
         include/morph/ui/cell_format.hpp

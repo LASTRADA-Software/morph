@@ -430,6 +430,17 @@ description, and a checkable one is a checkable button whose `checked` follows i
 the column and the path. A closed popup is not shown, so it is neither a Tab stop nor an
 accessible node.
 
+**The column chooser and the sort dialog.** "Columns…" and "Sort…" in the table's menu open dialogs the interpreter
+builds from widgets the backend already has (`ui/table_dialogs.hpp`), so the backend adds nothing for them: each is a
+`MorphDialog` (test ids `table_columns` and `table_sort`, titled `Columns` and `Sort`), mounted beside the table in a
+column that takes the table's place and visibility, its zero-sized placeholder taking no room there. The chooser holds,
+per column in the layout's order, a `MorphCheckbox` and two `MorphButton`s (`Move up`, `Move down`), then `Reset
+columns`, `Group columns…` with its form (a `MorphTextInput`, a check box per column, `Create group`), a line and a
+`Remove group` button per user-formed group, and `Done`; the sort dialog, per key, two `MorphSelect`s (the column, and
+`ascending` or `descending`) and `Move up`, `Move down` and `Remove`, then `Add key` and `Done`. Escape or a press
+outside dismisses either, which closes it as `Done` does. Each change applies as it is made; a refusal goes to the
+table's status line, under the dialog.
+
 **Moving and resizing.** While the table moves its columns (`movable`), dragging a header and releasing it over
 another fires `columnMove` with the dragged column and the other's visible place (`visibleColumns`, or the column's own
 index when every column shows), and Ctrl+Shift+Left and Ctrl+Shift+Right on a focused header fire it with the place one

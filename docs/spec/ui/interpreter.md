@@ -680,8 +680,17 @@ keeps its operands' 0 places and still fills 0.29 of a bar.
   builds a header's menu (`headerMenu`) or the table's (`tableMenu`) from the chain and the layout of the moment,
   and `Table::onMenu` builds it again and carries out the chosen entry: the sort entries as sort gestures, "Move
   left" and "Move right" as `MoveColumn` by one, "Pin column", "Unpin", "Hide column" and "Reset columns" as their
-  layout gestures. The entries whose dialogs are not lowered (the filter menu, the column chooser, the sort dialog,
-  display units, copy) are not offered, and a separator left beside another or at an end goes with them. Each
+  layout gestures, and "Columns…" and "Sort…" open the column chooser and the sort dialog (`ui/table_dialogs.hpp`),
+  which the lowering mounts beside the table in a column that takes the table's layout and visibility; their open
+  state and the group being formed live in the element, so a new mount keeps them. The chooser lists the table's
+  columns in the layout's order (a companion is not one of them), and applies `ShowColumn`, `HideColumn`,
+  `MoveColumn` by one, `ResetColumns`, `FormGroup` and `RemoveGroup`; the sort dialog applies `applySortEdit`, whose
+  add, remove and direction are the header's sort gestures, so a key past the bound is refused as a Shift-click's
+  is. Each change goes the way the same gesture from the header goes: refused in the status line, or set, saved and
+  run through `onLayoutChange` or `onSortChange`. A user-formed group is named in its members' header menus and in
+  the table's menu by its filter entry ("Filter {group}, {k} columns…"), shown disabled while the filter menu is not
+  lowered. The entries whose menus are not lowered (a column's filter menu, display units, copy) are not offered,
+  and a separator left beside another or at an end goes with them. Each
   gesture the lowering receives clears the status line's message before it acts, so the next gesture on the
   table clears a refusal. The element values `layout`, `visibleColumns` and `hiddenCount` read the layout the
   table holds or the document binds, fitted to its columns.
