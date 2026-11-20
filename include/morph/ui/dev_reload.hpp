@@ -86,8 +86,13 @@ struct ReloadOutcome {
 
 namespace detail {
 
-// A changed screen's new text, loaded and checked as a served screen document: its id may be served, it parses,
-// and the document claims the id it is served under.
+/// @brief Loads a changed screen's new text and checks it as a served screen document: its id may be served, it
+/// parses,
+///        and the document claims the id it is served under.
+/// @param screenId The id the screen is served under.
+/// @param text     The screen's new document text.
+/// @param options  How the document loads: the catalog facts.
+/// @return The loaded document, or why it is refused, naming @p screenId when the loader named no document.
 [[nodiscard]] inline std::expected<Document, Refusal> loadReloadedScreen(std::string const& screenId,
                                                                          std::string const& text,
                                                                          LoadOptions const& options) {

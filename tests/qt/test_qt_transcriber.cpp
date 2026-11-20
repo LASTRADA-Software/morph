@@ -95,11 +95,10 @@ struct Rig {
     }
 };
 
-}  // namespace
-
 // The value of request header @p name, found whatever case the client wrote its name in: Qt versions differ, and
 // header names are case-insensitive.
-static std::optional<std::string> headerValue(std::string_view request, std::string_view name) {
+std::optional<std::string> headerValue(std::string_view request,  // NOLINT(bugprone-easily-swappable-parameters)
+                                       std::string_view name) {
     std::string lowered{request};
     std::ranges::transform(lowered, lowered.begin(),
                            [](unsigned char const letter) { return static_cast<char>(std::tolower(letter)); });
@@ -110,6 +109,8 @@ static std::optional<std::string> headerValue(std::string_view request, std::str
     auto const value = start + 2 + name.size() + 2;
     return std::string{request.substr(value, request.find("\r\n", value) - value)};
 }
+
+}  // namespace
 
 // Mutation: leave out a part, or send the key in another header.
 TEST_CASE("qt_transcriber_posts_the_clip_model_format_and_key", "[qt][dictation]") {
