@@ -21,11 +21,12 @@ import QtQuick.Layouts
 // (`measuredIndex`), at the window's offset and width; a pinned column's cell is held at the leading edge, over the
 // rest. A cell whose column has not loaded (`cellLoads`) keeps its content, bound but invisible, under a mark: a
 // rounded bar 3 em wide for one not loaded, an error mark of the same width for one that failed. A cell's accent
-// (`cellAccents`) tints its slot with the tone's fill under the cell, so the row's selection and focus marks still
-// show; a tooltip draws the "more here" mark, shows on hover after the style's delay and at once while the cell has
-// the keyboard focus, and is the accessible description of the cell's slot; a value that could not be read draws the error mark
-// in place of the cell, with the accent's tooltip. The row's
-// `measuredHeight` is its tallest placed cell's, unless every column keeps one line; the table sets its height.
+// (`cellAccents`) tints its slot over the row's background and under the cell, at half the tone's fill, so the
+// cell keeps its tone in a toned or selected row and the selection shows through; a tooltip draws the "more here"
+// mark, shows on hover after the style's delay and at once while the cell has the keyboard focus, and is the slot's
+// accessible name; a value that could not be read draws the error mark in place of the cell, with the accent's
+// tooltip. The row's `measuredHeight` is its tallest placed cell's, unless every column keeps one line; the table
+// sets its height.
 MorphWidget {
     id: root
 
@@ -75,7 +76,7 @@ MorphWidget {
     onCellLoadsChanged: root.place()
     // The columns whose cells have an accent, by column as text: {tone, tooltip, invalid}. C++ writes it.
     property var cellAccents: ({})
-    // The accents drawn in those cells' slots: [{x, width, column, tone, tooltip, pinned}].
+    // The accents drawn in those cells' slots: [{x, offset, width, column, tone, tooltip, pinned}].
     property var accentMarks: []
     function accentOf(column: int): var {
         return root.cellAccents[String(column)] ?? null
@@ -318,8 +319,8 @@ MorphWidget {
                 marks.push({"x": left + inset, "width": room, "load": load, "align": across, "pinned": pinned,
                             "tip": loaded === 0 && accent ? accent.tooltip : ""})
             if (accent && (accent.tone >= 0 || accent.tooltip !== ""))
-                accents.push({"x": left, "width": slot.width, "column": column, "tone": accent.tone,
-                              "tooltip": accent.tooltip, "pinned": pinned})
+                accents.push({"x": left, "offset": slot.offset, "width": slot.width, "column": column,
+                              "tone": accent.tone, "tooltip": accent.tooltip, "pinned": pinned})
             if (cell.textAlign !== undefined && !cell.ownAlign)
                 cell.textAlign = across === 3 ? Qt.AlignRight : across === 2 ? Qt.AlignHCenter : Qt.AlignLeft
             if (cell.singleLine !== undefined)
@@ -410,6 +411,11 @@ MorphWidget {
                 property: "selectColumn"
                 value: root.table ? root.table.selectColumn : false
                 when: backdropLoader.item !== null && ("selectColumn" in backdropLoader.item)
+            }
+            // The pinned cells' accent slots, over the backdrop's background and under the pinned cells.
+            Repeater {
+                model: root.accentMarks.filter(mark => mark.pinned)
+                delegate: accentSlot
             }
         }
     }
@@ -645,19 +651,21 @@ MorphWidget {
         }
     }
 
-    // Each accented cell's slot: the tone's tint, the "more here" mark and the tooltip. A scrolled cell's slot lies
-    // under the row's background (z -1), so the selection fill, its bar and the focus marks draw over the tint; a
-    // pinned cell's lies over the pinned backdrop, which is opaque, and under the pinned cells.
-    Repeater {
-        model: root.accentMarks
-        delegate: Item {
+    // Each accented cell's slot: the tone's tint, the "more here" mark and the tooltip. A slot lies over the row's
+    // background, so a cell keeps its tone in a toned or a selected row, and under the cells; its tint is half the
+    // tone's fill, so the selection fill and bar show through it. A scrolled cell's slot is the row's own child, made
+    // after the background and before `cells`; a pinned cell's is the pinned backdrop's, over its copy of the
+    // background and under the pinned cells. Either way the same layers lie under and over it.
+    Component {
+        id: accentSlot
+        Item {
             id: accentMark
             required property var modelData
             readonly property bool focusedCell: root.current && root.table !== null
                                                 && root.table.focusedColumnIndex === modelData.column
             objectName: "cellAccent" + modelData.column
-            x: modelData.x
-            z: modelData.pinned ? 0.75 : -1
+            // A pinned slot is placed in the backdrop, which follows the sideways scroll itself.
+            x: modelData.pinned ? modelData.offset : modelData.x
             width: modelData.width
             height: root.height
             Rectangle {
@@ -687,6 +695,11 @@ MorphWidget {
             Accessible.description: accentMark.modelData.tooltip
             Accessible.ignored: accentMark.modelData.tooltip === ""
         }
+    }
+    Repeater {
+        objectName: "scrolledAccents"
+        model: root.accentMarks.filter(mark => !mark.pinned)
+        delegate: accentSlot
     }
 
     Item {

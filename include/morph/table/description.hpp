@@ -194,6 +194,36 @@ struct glz::meta<morph::table::TableColumn> {
                     &T::tooltip);
 };
 
+namespace morph::table::detail {
+
+/// @brief Converts to any member's type, to count an aggregate's members; never called.
+struct AnyMember {
+    /// @brief The conversion an initializer of any member takes.
+    /// @tparam M The member's type.
+    template <typename M>
+    constexpr operator M() const;  // NOLINT(google-explicit-constructor): it stands for any initializer
+};
+
+/// @brief How many members an aggregate has: the most initializers it takes.
+/// @tparam T    The aggregate.
+/// @tparam Args The initializers counted so far.
+/// @return The count.
+template <typename T, typename... Args>
+[[nodiscard]] consteval std::size_t memberCount() {
+    if constexpr (requires { T{Args{}..., AnyMember{}}; }) {
+        return memberCount<T, Args..., AnyMember>();
+    } else {
+        return sizeof...(Args);
+    }
+}
+
+}  // namespace morph::table::detail
+
+// The JSON above names each member: a member added to `TableColumn` and not listed there would never reach the wire.
+static_assert(morph::table::detail::memberCount<morph::table::TableColumn>() == 9,
+              "a TableColumn member is missing from glz::meta<morph::table::TableColumn>: list it there, then update "
+              "this count");
+
 namespace morph::table {
 
 /// @brief What the server offers on a table beyond paging, sorting and filtering.
