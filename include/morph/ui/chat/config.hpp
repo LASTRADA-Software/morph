@@ -74,6 +74,8 @@ struct LimitsFile {
     std::optional<std::size_t> maxToolResultBytes;
     std::optional<std::size_t> maxConversationBytes;
     std::optional<std::size_t> maxProposalBytes;
+    std::optional<std::size_t> maxDraftBytes;
+    std::optional<std::size_t> maxInlineDocumentBytes;
     std::optional<std::size_t> maxProposalsPerTurn;
     std::optional<std::int64_t> idleRetentionMinutes;
     std::optional<std::int64_t> toolCallTimeoutSeconds;
@@ -159,6 +161,8 @@ struct ConfigFile {
     apply(limits.maxToolResultBytes, config.limits.maxToolResultBytes, "maxToolResultBytes", problem);
     apply(limits.maxConversationBytes, config.limits.maxConversationBytes, "maxConversationBytes", problem);
     apply(limits.maxProposalBytes, config.limits.maxProposalBytes, "maxProposalBytes", problem);
+    apply(limits.maxDraftBytes, config.limits.maxDraftBytes, "maxDraftBytes", problem);
+    apply(limits.maxInlineDocumentBytes, config.limits.maxInlineDocumentBytes, "maxInlineDocumentBytes", problem);
     apply(limits.maxProposalsPerTurn, config.limits.maxProposalsPerTurn, "maxProposalsPerTurn", problem);
     if (!problem.empty()) {
         return std::unexpected(std::move(problem));

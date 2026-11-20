@@ -471,9 +471,9 @@ struct morph::model::ActionTraits<WhoAmI> {
 TEST_CASE(
     "morph::backend::RemoteServer::dispatchExecute: a verifying authorizer overrides the client-asserted principal",
     "[remote][auth]") {
-    morph::exec::ThreadPoolExecutor pool{2};
     morph::model::detail::ModelRegistryFactory registry;
     morph::model::detail::ActionDispatcher dispatcher;
+    morph::exec::ThreadPoolExecutor pool{2};
     registry.registerModel<PrincipalEchoModel>("RX_PrincipalEchoModel");
     dispatcher.registerAction<PrincipalEchoModel, WhoAmI>("RX_PrincipalEchoModel", "RX_WhoAmI");
 

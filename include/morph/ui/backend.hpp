@@ -286,6 +286,12 @@ public:
     /// @param mono Whether to.
     virtual void setMono(bool mono) = 0;
 
+    /// @brief Stops a multiline input wrapping a line longer than the field: each line stays whole and the field
+    ///        scrolls sideways. A new multiline field wraps; the mount calls this once, only for `false`, and only on
+    ///        a multiline input. A terminal field shows each line as written, so it draws nothing new.
+    /// @param wrap Always false: an input that wraps is never told.
+    virtual void setWrap(bool wrap) = 0;
+
     /// @brief Places the text in the field. A new field's text starts at the leading edge; the mount calls it once,
     ///        only for `Center` or `End`, and only on a single-line or password input. An `End` field draws its
     ///        digits at one width each, so a column of values lines up.

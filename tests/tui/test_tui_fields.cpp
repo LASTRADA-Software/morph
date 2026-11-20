@@ -153,6 +153,17 @@ TEST_CASE("tui fields: an end-aligned text ends at the field's last cell, and a 
     CHECK(window->accessibleDescription() == "±");
 }
 
+// Mutation: make `setWrap` throw, or draw a no-wrap area differently: a terminal field shows each line as written, so
+// there is nothing to turn off.
+TEST_CASE("tui fields: a multiline input accepts no-wrap and draws as before", "[tui][fields]") {
+    Harness harness{12, 2};
+    auto const input = harness.make<TextInputImpl>(nullptr, ui::TextInputMode::Multiline);
+    input->setText("one\ntwo");
+    Rows const before = harness.draw();
+    CHECK_NOTHROW(input->setWrap(false));
+    CHECK(harness.draw() == before);
+}
+
 // Mutation: ignore `shown` in setCaption (no caption row is drawn).
 TEST_CASE("tui fields: a shown caption is drawn on its own row above the control", "[tui][fields]") {
     Harness harness{20, 3};

@@ -1103,6 +1103,9 @@ private:
         if (spec.mono) {
             widget.setMono(true);
         }
+        if (!spec.wrap) {
+            widget.setWrap(false);
+        }
         if (spec.align != Align::Start) {
             widget.setAlign(spec.align);
         }
@@ -1738,6 +1741,66 @@ private:
         return widget;
     }
 
+    // Runs a pass that changes @p rows inside the observer's begin and end. The end runs also when the pass throws, so
+    // a failed row never leaves the table counting a pass that is over.
+    [[nodiscard]] static auto observedPass(RowsObserver observer, KeyedRows const& rows) {
+        return [observer = std::move(observer), &rows](auto&& pass) {
+            if (observer.begin) {
+                observer.begin();
+            }
+            try {
+                pass();
+            } catch (...) {
+                if (observer.end) {
+                    observer.end(rows.list);
+                }
+                throw;
+            }
+            if (observer.end) {
+                observer.end(rows.list);
+            }
+        };
+    }
+
+    // The reconcile of a windowed table's rows Effect: below the threshold every row is realized, above it only the
+    // rows in @p window and its overscan are.
+    void reconcileWindowed(std::size_t depth, ForEachSession& session, KeyedRows& rows, ContainerWidget& container,
+                           TableWidget& table, std::vector<Key> const& keys, RowHook const& onRow,
+                           VisibleRange const& window, Virtualization const& setting, bool windowed) {
+        if (keys.size() < setting.threshold) {
+            reconcile(depth, session, rows.list, container, keys, onRow);
+            if (windowed) {
+                // Rows released while the table was windowed come back: below the threshold every row is realized.
+                applyWindow(depth, rows.list, container, {.first = 0, .count = rows.list.size()}, 0, onRow);
+            }
+            return;
+        }
+        std::pair<VisibleRange, std::size_t> const windowAndOverscan{window, setting.overscan};
+        reconcile(depth, session, rows.list, container, keys, onRow, &windowAndOverscan);
+        // The kept rows have new view positions, and reconcile realizes only new keys: apply the window again so the
+        // realized rows are the ones now at the window's view positions.
+        applyWindow(depth, rows.list, container, window, setting.overscan, onRow);
+        // Only above threshold: a backend's own selection-filtering logic may need to know a key still exists even
+        // without a realized row for it right now (backend.hpp's setExistingKeys). Below threshold every key already
+        // has a realized row, so this would add nothing.
+        table.setExistingKeys(keys);
+    }
+
+    // Tells the backend which rows are realized once @p keyCount is at or above the threshold, and that the window is
+    // over once the count has fallen back below it; @p windowed is whether the backend was last told the rows are
+    // windowed, and is updated.
+    static void publishRealizedWindow(TableWidget& table, KeyedRows const& rows, std::size_t keyCount,
+                                      Virtualization const& setting, bool& windowed) {
+        if (keyCount >= setting.threshold) {
+            auto const [first, count] = realizedExtent(rows.list);
+            table.setRealizedWindow(first, count, rows.list.size());
+            windowed = true;
+        } else if (windowed) {
+            table.setRealizedWindow(0, rows.list.size(), rows.list.size());
+            windowed = false;
+        }
+    }
+
     // The model, then the session, then the rows, then the Effect(s): destroyed in reverse, so an Effect stops
     // first, the rows (whose slots point into the session's snapshot) go next, and the model outlives its session.
     // @p virtualize is null for a ForEach (no backend seam exists yet to dewindow a bare keyed stack); when
@@ -1773,27 +1836,14 @@ private:
         table->setOnVisibleRangeChanged([this, &range](std::size_t first, std::size_t count) {
             runCallback(*_rt, [&] { range.set({.first = first, .count = count}); });
         });
-        // The observer sees every pass that changes the rows, the windowing one included, and its end runs also when
-        // the pass throws, so a failed row never leaves the table counting a pass that is over.
-        auto const around = [observer, &rows](auto&& pass) {
-            if (observer.begin) {
-                observer.begin();
-            }
-            try {
-                pass();
-            } catch (...) {
-                if (observer.end) {
-                    observer.end(rows.list);
-                }
-                throw;
-            }
-            if (observer.end) {
-                observer.end(rows.list);
-            }
-        };
-        scope.effect([this, &session, &rows, &container, &range, threshold = virtualize->threshold,
-                      overscan = virtualize->overscan, depth = scope.depth() + 1, onRow, table, overlay = _overlay,
-                      around, track = observer.track] {
+        // The observer sees every pass that changes the rows, the windowing one included.
+        auto const observerTrack = observer.track;
+        auto const around = observedPass(std::move(observer), rows);
+        // Whether the backend was last told the rows are windowed: a count that falls back below the threshold then
+        // owes it the end of the window.
+        auto& windowed = scope.make<bool>(false);
+        scope.effect([this, &session, &rows, &container, &range, &windowed, setting = *virtualize,
+                      depth = scope.depth() + 1, onRow, table, overlay = _overlay, around, track = observerTrack] {
             // tracked: the rows are one source, and the sort that `track` reads is the other
             std::vector<Key> const keys = session.pull();
             if (track) {
@@ -1803,33 +1853,26 @@ private:
             around([&] {
                 underOverlay(overlay, [&] {
                     _rt->untracked([&] {
-                        if (keys.size() < threshold) {
-                            reconcile(depth, session, rows.list, container, keys, onRow);
-                            return;
-                        }
-                        std::pair<VisibleRange, std::size_t> const windowAndOverscan{window, overscan};
-                        reconcile(depth, session, rows.list, container, keys, onRow, &windowAndOverscan);
-                        // Only above threshold: a backend's own selection-filtering logic may need to know a key
-                        // still exists even without a realized row for it right now (backend.hpp's setExistingKeys).
-                        // Below threshold every key already has a realized row, so this would add nothing.
-                        table->setExistingKeys(keys);
+                        reconcileWindowed(depth, session, rows, container, *table, keys, onRow, window, setting,
+                                          windowed);
                     });
                 });
             });
+            publishRealizedWindow(*table, rows, keys.size(), setting, windowed);
         });
-        scope.effect([this, &rows, &container, &range, threshold = virtualize->threshold,
-                      overscan = virtualize->overscan, depth = scope.depth() + 1, onRow, table, overlay = _overlay,
-                      around] {
+        scope.effect([this, &rows, &container, &range, setting = *virtualize, depth = scope.depth() + 1, onRow, table,
+                      overlay = _overlay, around] {
             VisibleRange const window = range.get();  // tracked: this Effect's own trigger
             // Below threshold, every row is already realized (reconcile's own unconditional path, §4.4), and
             // setRealizedWindow is not called at all -- not even once with "everything realized" -- so a table
             // that never crosses its threshold is indistinguishable, on the backend, from one with no
             // virtualization machinery at all.
-            if (rows.list.size() < threshold) {
+            if (rows.list.size() < setting.threshold) {
                 return;
             }
             around([&] {
-                underOverlay(overlay, [&] { applyWindow(depth, rows.list, container, window, overscan, onRow); });
+                underOverlay(overlay,
+                             [&] { applyWindow(depth, rows.list, container, window, setting.overscan, onRow); });
             });
             auto const [first, count] = realizedExtent(rows.list);
             table->setRealizedWindow(first, count, rows.list.size());

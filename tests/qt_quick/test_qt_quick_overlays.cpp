@@ -1314,3 +1314,50 @@ TEST_CASE("qt_quick menu: a trigger draws its avatar before the label and its ch
     CHECK(namedItem(item, "contentCaret")->isVisible());
     CHECK(namedItem(item, "contentCaret")->height() > downHeight);
 }
+
+namespace {
+// The scroll bars of the dialog's body, by orientation.
+std::map<int, QQuickItem const*> bodyBarsOf(QQuickItem& dialogItem) {
+    QObject const* const popup = popupOf(dialogItem);
+    REQUIRE(popup != nullptr);
+    auto* const contentItem = popup->property("contentItem").value<QQuickItem*>();
+    REQUIRE(contentItem != nullptr);
+    std::map<int, QQuickItem const*> bars;
+    for (QQuickItem const* const bar : Scene::itemsOf(*contentItem, "QQuickScrollBar")) {
+        bars.emplace(bar->property("orientation").toInt(), bar);
+    }
+    return bars;
+}
+}  // namespace
+
+// Mutation: leave the body's scroll bars on their default policy, which keeps them in the way of what is under them.
+TEST_CASE("qt_quick dialog: a body that fits has no scroll bar to take a child's presses", "[qt_quick]") {
+    Scene scene;
+    auto dialog = scene.backend().createDialog(nullptr);
+    dialog->setTitle("Short");
+    auto body = scene.backend().createText(dialog.get());
+    body->setText("Just one line.");
+    dialog->setOpen(true);
+    scene.settle();
+    auto const bars = bodyBarsOf(Scene::itemOf(static_cast<ui::Widget&>(*dialog)));
+    REQUIRE(bars.contains(Qt::Vertical));
+    CHECK(bars.at(Qt::Vertical)->property("policy").toInt() == Qt::ScrollBarAlwaysOff);
+    REQUIRE(bars.contains(Qt::Horizontal));
+    CHECK(bars.at(Qt::Horizontal)->property("policy").toInt() == Qt::ScrollBarAlwaysOff);
+}
+
+TEST_CASE("qt_quick dialog: a body taller than the window keeps its vertical bar", "[qt_quick]") {
+    Scene scene;
+    auto dialog = scene.backend().createDialog(nullptr);
+    dialog->setTitle("Tall");
+    std::vector<std::unique_ptr<ui::TextWidget>> lines;
+    for (int i = 0; i < 80; ++i) {
+        lines.push_back(scene.backend().createText(dialog.get()));
+        lines.back()->setText("line " + std::to_string(i));
+    }
+    dialog->setOpen(true);
+    scene.settle();
+    auto const bars = bodyBarsOf(Scene::itemOf(static_cast<ui::Widget&>(*dialog)));
+    REQUIRE(bars.contains(Qt::Vertical));
+    CHECK(bars.at(Qt::Vertical)->property("policy").toInt() == Qt::ScrollBarAsNeeded);
+}

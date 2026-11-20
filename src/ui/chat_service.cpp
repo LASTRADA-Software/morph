@@ -240,7 +240,7 @@ struct ChatService::Shared {
             return err(request, "the message is too long");
         }
         if (parsed->draft) {
-            if (auto const refused = refuseDraft(*parsed->draft, self->options.limits.maxProposalBytes)) {
+            if (auto const refused = refuseDraft(*parsed->draft, self->options.limits.maxDraftBytes)) {
                 return err(request, *refused);
             }
         }
@@ -561,11 +561,20 @@ struct ChatService::Shared {
         return found == self.options.tools.end() ? nullptr : &*found;
     }
 
-    [[nodiscard]] static ChatToolContext contextOf(Shared const& self, Turn const& turn, ChatTool const& tool,
+    [[nodiscard]] static ChatToolContext contextOf(Shared& self, Turn const& turn, ChatTool const& tool,
                                                    std::shared_ptr<void const> carried) {
         auto const failed = turn.extraFailures.find(tool.spec.name);
+        // The latest accepted draft, else the draft the request began with. `state.draft` is guarded by the mutex.
+        std::optional<std::string> document = turn.request.draft;
+        {
+            std::scoped_lock const lock{self.mutex};
+            if (turn.state.draft) {
+                document = turn.state.draft;
+            }
+        }
         return ChatToolContext{.session = turn.session,
                                .request = turn.request,
+                               .document = std::move(document),
                                .bundle = self.options.bundle,
                                .limits = self.options.limits,
                                .external = turn.external,
@@ -918,7 +927,7 @@ struct ChatService::Shared {
     static void finishExtra(std::shared_ptr<Shared> const& self, TurnPtr const& turn, ToolCall const& call,
                             ChatToolOutcome outcome) {
         // A draft is bounded here whatever tool made it, so none can send the client more than the limit.
-        std::size_t const limit = self->options.limits.maxProposalBytes;
+        std::size_t const limit = self->options.limits.maxDraftBytes;
         if (!outcome.isError && outcome.draft && outcome.draft->size() > limit) {
             outcome = ChatToolOutcome{.text = "the tool's draft is longer than " + std::to_string(limit) + " bytes",
                                       .isError = true,

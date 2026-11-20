@@ -242,7 +242,10 @@ public:
     /// connection to settle. The queued request is sent — with a call-id
     /// assigned at that point — the moment `connected` fires next, first
     /// connect included, in FIFO order. If the backend is torn down first,
-    /// `cancelPending` rejects each queued entry exactly once. A keyed bind on
+    /// `cancelPending` rejects each queued entry exactly once. Once a first
+    /// open has been refused and `retryFirstConnect` is off, no connect is
+    /// coming: a private bind then rejects at once with
+    /// `backend::DisconnectedError`. A keyed bind on
     /// a disconnected socket rejects immediately instead: it may re-point a
     /// live instance, and replaying that against a later connection would
     /// attach from a `current` that connection never issued.
@@ -309,7 +312,8 @@ public:
     ///
     /// The envelope gets a fresh `callId` and keeps the session it carries. Made while the socket is not connected,
     /// it is held and sent at the next connect, the first included, as a private bind is; `cancelPending`, a drop
-    /// and the destructor reject what is pending or held. On the socket's thread.
+    /// and the destructor reject what is pending or held. After a first open that was refused with
+    /// `retryFirstConnect` off, no connect is coming, so it rejects at once instead. On the socket's thread.
     /// @param envelope The request; its `callId` is replaced.
     /// @param cbExec   Executor the answer is delivered on. Borrowed: it must outlive the returned `Completion`.
     /// @return A `Completion` resolved with the reply envelope, `ok` or `err`; rejected with
@@ -498,6 +502,9 @@ private:
     std::chrono::milliseconds _currentReconnectDelay;
     bool _connected{false};
     bool _everConnected{false};
+    /// True once the first open was refused and no retry of it is configured: calls that would queue for a connect
+    /// reject instead, since none is coming.
+    bool _firstOpenFailed{false};
     bool _shuttingDown{false};
     std::function<void()> _reconnectHandler;
     ::morph::exec::IExecutor* _reconnectExec{nullptr};

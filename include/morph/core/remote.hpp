@@ -412,9 +412,14 @@ public:
     ///                   `docs/spec/concurrency_and_lifetimes.md`, "Destruction
     ///                   ordering").
     /// @param dispatcher Action dispatcher; defaults to the process-level
-    ///                   singleton. Borrowed: it must outlive this server.
+    ///                   singleton. Borrowed: destroy it after the worker
+    ///                   pool has drained, because in-flight runs keep the
+    ///                   server, and through it the dispatcher, alive past
+    ///                   the owner's last reference to the server.
     /// @param registry   Model factory registry; defaults to the process-level
-    ///                   singleton. Borrowed: it must outlive this server.
+    ///                   singleton. Borrowed on the same terms as
+    ///                   @p dispatcher: destroy it after the worker pool has
+    ///                   drained.
     /// @throws morph::model::EffectsRegistrationError if the process's record
     ///         and effects declarations are invalid: the server reads them
     ///         here, so such a server is never constructed.
@@ -433,9 +438,14 @@ public:
     /// @param authorizer Authorizer consulted for every envelope that makes an
     ///                   authorization decision; null means allow-all.
     /// @param dispatcher Action dispatcher; defaults to the process-level
-    ///                   singleton. Borrowed: it must outlive this server.
+    ///                   singleton. Borrowed: destroy it after the worker
+    ///                   pool has drained, because in-flight runs keep the
+    ///                   server, and through it the dispatcher, alive past
+    ///                   the owner's last reference to the server.
     /// @param registry   Model factory registry; defaults to the process-level
-    ///                   singleton. Borrowed: it must outlive this server.
+    ///                   singleton. Borrowed on the same terms as
+    ///                   @p dispatcher: destroy it after the worker pool has
+    ///                   drained.
     /// @throws morph::model::EffectsRegistrationError if the process's record
     ///         and effects declarations are invalid: the server reads them
     ///         here, so such a server is never constructed.
@@ -454,9 +464,14 @@ public:
     /// @param config     Limits, log provider, health handler, protocol range
     ///                   and payload rule, fixed for the server's life.
     /// @param dispatcher Action dispatcher; defaults to the process-level
-    ///                   singleton. Borrowed: it must outlive this server.
+    ///                   singleton. Borrowed: destroy it after the worker
+    ///                   pool has drained, because in-flight runs keep the
+    ///                   server, and through it the dispatcher, alive past
+    ///                   the owner's last reference to the server.
     /// @param registry   Model factory registry; defaults to the process-level
-    ///                   singleton. Borrowed: it must outlive this server.
+    ///                   singleton. Borrowed on the same terms as
+    ///                   @p dispatcher: destroy it after the worker pool has
+    ///                   drained.
     /// @throws std::invalid_argument if `config.minProtocolVersion` exceeds
     ///         `config.maxProtocolVersion`, or `config.services` holds a null
     ///         entry.
@@ -482,9 +497,14 @@ public:
     /// @param config     Limits, log provider, health handler, protocol range
     ///                   and payload rule, fixed for the server's life.
     /// @param dispatcher Action dispatcher; defaults to the process-level
-    ///                   singleton. Borrowed: it must outlive this server.
+    ///                   singleton. Borrowed: destroy it after the worker
+    ///                   pool has drained, because in-flight runs keep the
+    ///                   server, and through it the dispatcher, alive past
+    ///                   the owner's last reference to the server.
     /// @param registry   Model factory registry; defaults to the process-level
-    ///                   singleton. Borrowed: it must outlive this server.
+    ///                   singleton. Borrowed on the same terms as
+    ///                   @p dispatcher: destroy it after the worker pool has
+    ///                   drained.
     /// @throws std::invalid_argument if `config.minProtocolVersion` exceeds
     ///         `config.maxProtocolVersion`, or `config.services` holds a null
     ///         entry.

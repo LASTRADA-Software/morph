@@ -174,7 +174,14 @@ struct Rig {
             budget);
     }
 
-    void say(std::string text) { backend.submit(*backend.find("TextInput", "testId", "chat_input"), std::move(text)); }
+    // Waits for the input to take text first: it is disabled while the previous turn runs, which can last a round
+    // trip after that turn's reply is shown, and a message submitted then would be dropped.
+    void say(std::string text) {
+        auto const input = backend.find("TextInput", "testId", "chat_input");
+        REQUIRE(input.has_value());
+        REQUIRE(pump([&] { return backend.prop(*input, "enabled") != "false"; }));
+        backend.submit(*input, std::move(text));
+    }
 
     [[nodiscard]] bool showsText(std::string_view text) const { return backend.dump().contains(text); }
 

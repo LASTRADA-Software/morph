@@ -65,9 +65,9 @@ struct Harness {
         return morph::wire::decode(server->handleInline(morph::wire::encode(request)));
     }
 
-    morph::exec::ThreadPoolExecutor pool{2};
     morph::model::detail::ActionDispatcher dispatcher;
     morph::model::detail::ModelRegistryFactory registry;
+    morph::exec::ThreadPoolExecutor pool{2};
     std::shared_ptr<morph::ui::MemoryFileStore> store = std::make_shared<morph::ui::MemoryFileStore>();
     std::shared_ptr<morph::backend::RemoteServer> server;
     int exchanges = 0;

@@ -11,6 +11,7 @@
 #include <QList>
 #include <QObject>
 #include <QPointF>
+#include <QPointer>
 #include <QQmlContext>
 #include <QQmlEngine>
 #include <QQmlExpression>
@@ -1861,4 +1862,183 @@ TEST_CASE("qt_quick table: hovering the part of a spanning cell over a covered r
     scene.settle();
     CHECK_FALSE(origin.property("hovered").toBool());
     CHECK(covered.property("hovered").toBool());
+}
+
+namespace {
+
+// How many rows a viewport of this table shows, plus the one a scroll offset can straddle.
+int rowsToFill(QQuickItem const& tableItem, QQuickItem const& flick) {
+    return static_cast<int>(std::ceil(flick.height() / tableItem.property("estimatedRowHeight").toReal())) + 1;
+}
+
+}  // namespace
+
+// Mutation: drop the report a height change makes in MorphTable.qml (the table then keeps its startup window).
+TEST_CASE("qt_quick table: a virtualized table realizes its viewport at mount and again when the viewport grows",
+          "[qt_quick]") {
+    Scene scene;
+    std::vector<VirtualRow> const many = [] {
+        std::vector<VirtualRow> rows;
+        rows.reserve(2000);
+        for (std::int64_t i = 0; i < 2000; ++i) {
+            rows.push_back(VirtualRow{.id = i, .name = "row-" + std::to_string(i)});
+        }
+        return rows;
+    }();
+    ui::Mounted const mounted{scene.runtime(), scene.backend(),
+                              ui::table<VirtualRow>(
+                                  {{.label = "Name"}}, [&many] -> std::vector<VirtualRow> const& { return many; },
+                                  [](VirtualRow const& row) { return ui::Key{row.id}; }, virtualRowCell,
+                                  {.virtualize = {.threshold = 5, .overscan = 1},
+                                   .common = {.layout = {.height = ui::Sizing::stretch(1)}}})};
+    scene.settle();
+
+    QQuickItem const& tableItem = Scene::itemOf(mounted.root());
+    auto* const flick = tableItem.findChild<QQuickItem*>(QStringLiteral("flick"));
+    REQUIRE(flick != nullptr);
+    REQUIRE(flick->height() > 100);
+    REQUIRE(flick->height() < 1000);
+    INFO("flick height " << flick->height() << ", realized " << tableItem.property("realizedCount").toInt());
+    CHECK(tableItem.property("realizedCount").toInt() >= rowsToFill(tableItem, *flick));
+
+    int const small = tableItem.property("realizedCount").toInt();
+    scene.window().resize(800, 1200);
+    scene.settle();
+    INFO("flick height " << flick->height() << ", realized " << tableItem.property("realizedCount").toInt());
+    CHECK(tableItem.property("realizedCount").toInt() > small);
+    CHECK(tableItem.property("realizedCount").toInt() >= rowsToFill(tableItem, *flick));
+}
+
+// Mutation: drop MorphTable.qml's report on a change of totalRows and its viewport's height.
+TEST_CASE("qt_quick table: rows that arrive after the mount fill the viewport without a scroll", "[qt_quick]") {
+    Scene scene;
+    auto const make = [](std::int64_t count) {
+        std::vector<VirtualRow> rows;
+        rows.reserve(static_cast<std::size_t>(count));
+        for (std::int64_t i = 0; i < count; ++i) {
+            rows.push_back(VirtualRow{.id = i, .name = "row-" + std::to_string(i)});
+        }
+        return rows;
+    };
+    morph::reactive::Signal<std::vector<VirtualRow>> rows{scene.runtime(), make(3)};
+    ui::Mounted const mounted{
+        scene.runtime(), scene.backend(),
+        ui::table<VirtualRow>(
+            {{.label = "Name"}}, [&rows] { return rows.get(); }, [](VirtualRow const& row) { return ui::Key{row.id}; },
+            virtualRowCell,
+            {.virtualize = {.threshold = 5, .overscan = 1}, .common = {.layout = {.height = ui::Sizing::fixed(20)}}})};
+    scene.settle();
+    QQuickItem const& tableItem = Scene::itemOf(mounted.root());
+    auto* const flick = tableItem.findChild<QQuickItem*>(QStringLiteral("flick"));
+    REQUIRE(flick != nullptr);
+    CHECK(tableItem.property("totalRows").toInt() == -1);
+
+    rows.set(make(500));
+    scene.settle();
+    CHECK(tableItem.property("totalRows").toInt() == 500);
+    INFO("flick height " << flick->height() << ", realized " << tableItem.property("realizedCount").toInt());
+    CHECK(flick->height() > 0);
+    CHECK(tableItem.property("realizedCount").toInt() >= rowsToFill(tableItem, *flick));
+}
+
+namespace {
+
+// A row 3 in 4 of whose names run to five lines, so the rows' heights differ.
+std::vector<VirtualRow> mixedRows(std::int64_t count) {
+    std::vector<VirtualRow> rows;
+    rows.reserve(static_cast<std::size_t>(count));
+    for (std::int64_t i = 0; i < count; ++i) {
+        rows.push_back(VirtualRow{.id = i, .name = i % 4 == 0 ? "row\nwith\nfive\nlines\nhere" : "row"});
+    }
+    return rows;
+}
+
+}  // namespace
+
+// Mutation: size the spacers from the realized rows' average (the estimate) instead of the measured heights.
+TEST_CASE("qt_quick table: a scrolling virtualized table of mixed row heights moves its rows by the scroll",
+          "[qt_quick]") {
+    Scene scene;
+    std::vector<VirtualRow> const many = mixedRows(600);
+    ui::Mounted const mounted{scene.runtime(), scene.backend(),
+                              ui::table<VirtualRow>(
+                                  {{.label = "Name"}}, [&many] -> std::vector<VirtualRow> const& { return many; },
+                                  [](VirtualRow const& row) { return ui::Key{row.id}; }, virtualRowCell,
+                                  {.virtualize = {.threshold = 5, .overscan = 3},
+                                   .common = {.layout = {.height = ui::Sizing::stretch(1)}}})};
+    scene.settle();
+    QQuickItem const& tableItem = Scene::itemOf(mounted.root());
+    auto* const flick = tableItem.findChild<QQuickItem*>(QStringLiteral("flick"));
+    REQUIRE(flick != nullptr);
+    auto* const body = tableItem.property("content").value<QQuickItem*>();
+    REQUIRE(body != nullptr);
+
+    // The first row whose top is at or below the viewport's top, and where it sits in the viewport.
+    auto const topRow = [&]() -> QQuickItem* {
+        QQuickItem* best = nullptr;
+        for (QQuickItem* const child : body->childItems()) {
+            if (child->isVisible() && child->mapToItem(flick, QPointF{0, 0}).y() >= 0 &&
+                (best == nullptr || child->y() < best->y())) {
+                best = child;
+            }
+        }
+        return best;
+    };
+
+    qreal worst = 0;
+    int compared = 0;
+    for (int step = 0; step < 120; ++step) {
+        QPointer<QQuickItem> const row = topRow();
+        REQUIRE(!row.isNull());
+        qreal const before = row->mapToItem(flick, QPointF{0, 0}).y();
+        qreal const delta = 30;
+        flick->setProperty("contentY", flick->property("contentY").toReal() + delta);
+        scene.settle();
+        if (!row.isNull() && row->isVisible()) {
+            qreal const moved = before - row->mapToItem(flick, QPointF{0, 0}).y();
+            worst = std::max(worst, std::abs(moved - delta));
+            ++compared;
+        }
+    }
+    INFO("rows compared " << compared << ", worst deviation from a 30 px scroll " << worst << " px");
+    CHECK(compared > 60);
+    CHECK(worst < 1.0);
+}
+
+// Mutation: do not create the vertical bar in MorphTable.qml.
+TEST_CASE("qt_quick table: a virtualized table scrolls with a vertical bar sized by its content", "[qt_quick]") {
+    Scene scene;
+    std::vector<VirtualRow> const many = mixedRows(600);
+    ui::Mounted const mounted{scene.runtime(), scene.backend(),
+                              ui::table<VirtualRow>(
+                                  {{.label = "Name"}}, [&many] -> std::vector<VirtualRow> const& { return many; },
+                                  [](VirtualRow const& row) { return ui::Key{row.id}; }, virtualRowCell,
+                                  {.virtualize = {.threshold = 5, .overscan = 3},
+                                   .common = {.layout = {.height = ui::Sizing::stretch(1)}}})};
+    scene.settle();
+    QQuickItem const& tableItem = Scene::itemOf(mounted.root());
+    auto* const flick = tableItem.findChild<QQuickItem*>(QStringLiteral("flick"));
+    REQUIRE(flick != nullptr);
+    auto const bars = Scene::itemsOf(*flick, "QQuickScrollBar");
+    INFO("scroll bars under the flickable: " << bars.size());
+    REQUIRE(bars.size() == 1);
+    QQuickItem const* const vertical = bars.front();
+    CHECK(vertical->isVisible());
+    CHECK(vertical->property("orientation").toInt() == Qt::Vertical);
+    CHECK(vertical->property("size").toReal() < 0.5);
+    CHECK(vertical->property("minimumSize").toReal() == Catch::Approx(0.08));
+
+    // A table that is not virtualized has no vertical bar: its ancestor scrolls.
+    std::vector<VirtualRow> const few = mixedRows(3);
+    ui::Mounted const small{scene.runtime(), scene.backend(),
+                            ui::table<VirtualRow>(
+                                {{.label = "Name"}}, [&few] -> std::vector<VirtualRow> const& { return few; },
+                                [](VirtualRow const& row) { return ui::Key{row.id}; }, virtualRowCell,
+                                {.virtualize = {.threshold = 5, .overscan = 3}})};
+    scene.settle();
+    auto* const smallFlick = Scene::itemOf(small.root()).findChild<QQuickItem*>(QStringLiteral("flick"));
+    REQUIRE(smallFlick != nullptr);
+    for (QQuickItem const* const candidate : Scene::itemsOf(*smallFlick, "QQuickScrollBar")) {
+        CHECK_FALSE(candidate->isVisible());
+    }
 }

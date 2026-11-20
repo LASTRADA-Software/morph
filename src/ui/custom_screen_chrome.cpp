@@ -345,6 +345,9 @@ void CustomScreenChrome::openSource(SourceMode mode, std::optional<WorkspaceTabI
 
     Dialog dialog;
     dialog.open = Prop<bool>{true};
+    // A sheet, so the editor uses the window: a document is read across, and a small dialog would give it a narrow
+    // column.
+    dialog.sheet = Prop<bool>{true};
     dialog.title = Prop<std::string>{"Source of " + titleOf(source->screenId)};
     if (readOnly) {
         dialog.description = Prop<std::string>{std::string{"Read only: this server does not store custom screens."}};
@@ -362,6 +365,9 @@ void CustomScreenChrome::openSource(SourceMode mode, std::optional<WorkspaceTabI
     };
     input.mode = TextInputMode::Multiline;
     input.mono = true;
+    // A document is read across: its lines stay whole and the editor scrolls sideways, which also costs less to lay
+    // out than a wrapped text of this size.
+    input.wrap = false;
     input.label = Prop<std::string>{std::string{"Document source"}};
     // Read only while a check runs, so the draft that mounts is exactly the text the check saw.
     input.field.readonly = Prop<bool>{[source] { return source->readOnly || source->busy->get(); }};

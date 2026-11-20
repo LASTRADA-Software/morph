@@ -309,10 +309,18 @@ MorphWidget {
                                                               contentColumn.spacing * 2))
                 clip: true
                 contentHeight: column.naturalHeight
+                // A bar that is hidden still takes the pointer: a scrollable child at the dialog's edge, a virtualized
+                // table, would find it in front of its own bar. So the vertical bar exists only while the body
+                // overflows, and the column, which takes the available width, never needs a sideways one.
+                ScrollBar.vertical.policy: column.naturalHeight > scroll.availableHeight ? ScrollBar.AsNeeded
+                                                                                         : ScrollBar.AlwaysOff
+                ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
 
                 MorphShareColumn {
                     id: column
-                    width: scroll.availableWidth
+                    // Beside the vertical bar while it shows, so it does not draw over the content.
+                    width: scroll.availableWidth - (scroll.ScrollBar.vertical.policy === ScrollBar.AlwaysOff
+                                                    ? 0 : scroll.ScrollBar.vertical.width)
                     height: column.naturalHeight
                 }
             }

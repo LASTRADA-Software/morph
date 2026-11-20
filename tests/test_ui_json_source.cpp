@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <catch2/catch_test_macros.hpp>
 #include <cstddef>
+#include <glaze/glaze.hpp>
 #include <morph/ui/json_source.hpp>
 #include <morph/ui/value.hpp>
 #include <optional>
@@ -35,14 +36,63 @@ std::string_view at(std::string_view pointer) {
 
 }  // namespace
 
-// Mutation: answer the text unchanged (no line breaks are added).
-TEST_CASE("prettyJson writes one member per line in their order, and keeps what is not JSON", "[ui][json-source]") {
-    std::string const pretty = morph::ui::prettyJson(R"({"vocab":"ui/1","id":"a","view":{"kind":"text","text":"x"}})");
-    CHECK(std::ranges::count(pretty, '\n') >= 5);
+namespace {
+
+/// A document of @p rows button nodes, each with an action list too wide for a line once the whole row is on one.
+std::string wideDocument(int rows) {
+    std::string document = R"({"vocab":"ui/1","id":"a","title":"A","view":{"kind":"column","children":[)";
+    for (int row = 0; row < rows; ++row) {
+        document += std::string{row == 0 ? "" : ","} + R"({"kind":"button","label":"Button number )" +
+                    std::to_string(row) + R"(","testId":"b)" + std::to_string(row) +
+                    R"(","onClick":[{"run":"save"},{"host":"print"},{"set":{"path":"x","value":1.50}}]})";
+    }
+    return document + "]}}";
+}
+
+}  // namespace
+
+// Mutation: answer the text unchanged (no line breaks are added); put every value on a line of its own; keep a
+// container over 100 columns on one line.
+TEST_CASE("prettyJson indents by 2, keeps a container that fits on one line, and keeps what is not JSON",
+          "[ui][json-source]") {
+    std::string const pretty = morph::ui::prettyJson(wideDocument(3));
     CHECK(pretty.find("\"vocab\"") < pretty.find("\"id\""));
     CHECK(pretty.find("\"id\"") < pretty.find("\"view\""));
-    CHECK(morph::ui::parseJson(pretty).has_value());
+    CHECK(pretty.contains("\n  \"vocab\": \"ui/1\",\n"));
+    CHECK(pretty.contains("\n      {\n        \"kind\": \"button\",\n"));
+    // What fits on a line stays on it, with a space after the colon and the comma.
+    CHECK(pretty.contains("\"onClick\": [{\"run\": \"save\"}, {\"host\": \"print\"}, "));
+    CHECK(morph::ui::prettyJson(R"({"kind":"text","text":"x"})") == R"({"kind": "text", "text": "x"})");
+    CHECK(morph::ui::prettyJson(R"( { "a" : [ ] , "b" : { } } )") == R"({"a": [], "b": {}})");
     CHECK(morph::ui::prettyJson("{not json") == "{not json");
+}
+
+// Mutation: reformat a number or a string, drop or reorder a member, or break a container the line cannot hold.
+TEST_CASE("prettyJson changes only the white space, and is much smaller than one value per line",
+          "[ui][json-source]") {
+    std::string const document = wideDocument(400);
+    std::string const pretty = morph::ui::prettyJson(document);
+    CHECK(morph::ui::compactJson(pretty) == document);
+    CHECK(morph::ui::parseJson(pretty).has_value());
+    std::string oneEach;
+    glz::prettify_json(document, oneEach);
+    INFO("compact " << document.size() << ", this " << pretty.size() << ", one per line " << oneEach.size());
+    CHECK(pretty.size() * 10 < oneEach.size() * 7);
+    // A line is a container that fits 100 columns, or a part of one that does not.
+    for (std::size_t from = 0; from < pretty.size();) {
+        std::size_t const end = std::min(pretty.find('\n', from), pretty.size());
+        std::string_view const line = std::string_view{pretty}.substr(from, end - from);
+        bool const closes = line.ends_with("}") || line.ends_with("},") || line.ends_with("]") || line.ends_with("],");
+        bool const opens = line.ends_with("{") || line.ends_with("[");
+        if (closes && !opens && line.find_first_not_of(' ') != std::string_view::npos &&
+            (line[line.find_first_not_of(' ')] == '{' || line.contains(": {") || line.contains(": ["))) {
+            CHECK(line.size() <= 101);
+        }
+        from = end + 1;
+    }
+    // A string longer than a line is not cut.
+    std::string const longText = std::string(300, 'w');
+    CHECK(morph::ui::prettyJson("{\"t\":\"" + longText + "\",\"u\":1}").contains(longText));
 }
 
 // Mutations: answer a member's value instead of its name (`/view` lands on `{`); drop the `~1` unescape (`a~1b` is
@@ -133,4 +183,14 @@ TEST_CASE("pointerOffset and lineAt agree on CRLF text and non-ASCII values", "[
     REQUIRE(target.has_value());
     CHECK(*target == text.find("\"target\""));
     CHECK(morph::ui::lineAt(text, *target) == 3);
+}
+
+// Mutation: drop spaces inside strings, or reorder members, or compact text that is not JSON.
+TEST_CASE("compactJson removes white space between tokens only, in order, and leaves non-JSON alone",
+          "[ui][json-source]") {
+    std::string const spaced = "{ \"b\" : [ 1 , 2 ],\n  \"a\" : \"x  y \\\" z\\\\\" , \"c\":{ } }";
+    CHECK(morph::ui::compactJson(spaced) == R"({"b":[1,2],"a":"x  y \" z\\","c":{}})");
+    CHECK(morph::ui::compactJson(morph::ui::prettyJson(R"({"k":[1,{"a":" "}],"j":null})")) ==
+          R"({"k":[1,{"a":" "}],"j":null})");
+    CHECK(morph::ui::compactJson("{ not json") == "{ not json");
 }

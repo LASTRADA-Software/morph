@@ -130,7 +130,7 @@ constexpr std::array<KeySpec, 12> kButtonKeys = {{{"label", Shape::Expr},
                                                   {"mono", Shape::Flag},
                                                   {"weight", Shape::Text}}};
 /// @brief The keys of `textInput`.
-constexpr std::array<KeySpec, 16> kTextInputKeys = {{{"value", Shape::Expr},
+constexpr std::array<KeySpec, 17> kTextInputKeys = {{{"value", Shape::Expr},
                                                      {"placeholder", Shape::Expr},
                                                      {"mode", Shape::Expr},
                                                      {"icon", Shape::Expr},
@@ -139,6 +139,7 @@ constexpr std::array<KeySpec, 16> kTextInputKeys = {{{"value", Shape::Expr},
                                                      {"prefix", Shape::Expr},
                                                      {"emphasis", Shape::Text},
                                                      {"mono", Shape::Flag},
+                                                     {"wrap", Shape::Flag},
                                                      {"align", Shape::Text},
                                                      {"commitOn", Shape::Text},
                                                      {"label", Shape::Expr},
@@ -4025,6 +4026,10 @@ private:
         std::string const* const name =
             mode != nullptr && mode->kind == ExprKind::Literal ? mode->literal.asString() : nullptr;
         if (name == nullptr || *name != "multiline") {
+            if (node.flags.contains("wrap")) {
+                refuse(pointerAppend(node.path, "wrap"),
+                       "only a multiline input wraps; this one has no lines to wrap");
+            }
             return;
         }
         for (std::string_view const key : {

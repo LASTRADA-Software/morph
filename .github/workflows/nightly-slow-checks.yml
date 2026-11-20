@@ -93,7 +93,9 @@ jobs:
             echo "── memcheck: $suite ──"
             EXTRA_ARGS=()
             if [ "$suite" = "tests/morph_tests" ]; then
-              EXTRA_ARGS=("~[oom-injector]" "~[issue108]")
+              # [registration-phase] forks a child that exits holding the parent's
+              # heap; under memcheck the child reports it as leaked and exits 1.
+              EXTRA_ARGS=("~[oom-injector]" "~[issue108]" "~[registration-phase]")
             fi
             valgrind \
               --tool=memcheck \

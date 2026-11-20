@@ -5863,6 +5863,7 @@ std::optional<Node> ScreenCore::lowerWidget(DocNode const& node, LowerCtx const&
             }
         }
         spec.mono = node.flag("mono");
+        spec.wrap = spec.mode != TextInputMode::Multiline || node.flag("wrap", true);
         if (spec.mode != TextInputMode::Multiline) {
             spec.emphasis = node.name("emphasis") == "prominent" ? InputEmphasis::Prominent : InputEmphasis::Normal;
             spec.icon = kit.onceText("icon");

@@ -177,9 +177,9 @@ struct Harness {
         return morph::wire::decode(server->handleInline(morph::wire::encode(request)));
     }
 
-    morph::exec::ThreadPoolExecutor pool{2};
     morph::model::detail::ActionDispatcher dispatcher;
     morph::model::detail::ModelRegistryFactory registry;
+    morph::exec::ThreadPoolExecutor pool{2};
     std::shared_ptr<morph::backend::RemoteServer> server;
 };
 

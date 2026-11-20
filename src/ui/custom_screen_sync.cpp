@@ -11,6 +11,7 @@
 #include <morph/core/logger.hpp>
 #include <morph/core/wire.hpp>
 #include <morph/ui/custom_screen_sync.hpp>
+#include <morph/ui/json_source.hpp>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -246,7 +247,7 @@ void CustomScreenSync::check(std::string basedOn, std::string document,
     call(
         kCustomScreensCheck,
         model::ActionTraits<CustomScreensCheck>::toJson(
-            CustomScreensCheck{.app = _application, .basedOn = std::move(basedOn), .document = std::move(document)}),
+            CustomScreensCheck{.app = _application, .basedOn = std::move(basedOn), .document = compactJson(document)}),
         [shared](std::string const& reply) {
             try {
                 (*shared)(model::ActionTraits<CustomScreensCheck>::resultFromJson(reply).refusal);
@@ -262,6 +263,7 @@ void CustomScreenSync::save(CustomScreensSave request,
     auto const shared =
         std::make_shared<std::function<void(std::expected<std::string, std::string>)>>(std::move(done));
     request.app = _application;
+    request.document = compactJson(request.document);
     call(
         kCustomScreensSave, model::ActionTraits<CustomScreensSave>::toJson(request),
         [this, shared](std::string const& reply) {

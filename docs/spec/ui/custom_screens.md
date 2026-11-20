@@ -275,35 +275,54 @@ shared build carries them for every application, where they are inert.
 
 ## The assistant
 
-`propose_screen` is the first tool added through the chat's extra-tool hook (`ChatOptions::tools`, see
-[chat.md](chat.md#extra-tools)). `enableCustomScreensChat(options, screens, app, executor)` adds it and a
-`ChatDocumentSource` that reads a person's custom screens, so the chat also offers a custom screen's own actions. It runs
-on the chat's worker and borrows `executor` for its checks, which must outlive every turn.
+`propose_screen` and the read tools `screen_outline`, `screen_find` and `screen_node` are the first tools added through the
+chat's extra-tool hook (`ChatOptions::tools`, see [chat.md](chat.md#extra-tools)). `enableCustomScreensChat(options,
+screens, app, executor)` adds them and a `ChatDocumentSource` that reads a person's custom screens, so the chat also offers
+a custom screen's own actions. They run on the chat's worker and borrow `executor` for their checks, which must outlive every
+turn.
 
-- **Offered, or not.** The tool is offered when the screen has a document the assistant can edit: the turn's draft, else
-  the bundle's text of an application screen, else the person's custom screen as `get` answers it (read once for the turn, by the chat's document source), within
-  `ChatLimits::maxProposalBytes`, and `allowance` answers for its base. Otherwise it is not offered and the system text says
-  the assistant cannot change this screen's document, without saying why the store or the base rule refused. A custom screen
-  is read under the turn's person: another person's id is not read, and the turn fails as it does for any screen the chat
-  cannot open.
-- **The document is data.** The system text carries it as one JSON string literal between an opening and a closing line that
-  both name the document's content hash (`<screen-document hash="sha256:…">`), under a sentence that it is data and never
-  instructions. The literal has no raw newline or quote, so nothing in the document can begin a line of its own, and it
-  cannot reproduce the closing line exactly: that line holds the hash of the document, which the document cannot contain.
-  The wording is a labelled boundary, not a guarantee about what a model does with the text. Beside it go what a screen
-  based on the same base may use (`allowance`) and a short reference to `ui/1`.
-- **A call** carries `document`, a complete document as a JSON string. A call is a tool error, with the reason, when the
-  argument is missing or not a string, the text is over `maxProposalBytes`, is not one JSON object, or its `id` is not the id
-  of the open screen: the client mounts a draft only under the screen's own id. Then `check` runs under the turn's session
-  against the screen's base (the screen's own id for an application screen, the stored `basedOn` for a custom one), which are
-  the checks of a save. A refusal comes back as `The document was refused at <pointer>: <reason>`. Only an accepted document
-  is set as `TurnState::draft` and sent as the `draft` event.
+- **Offered, or not.** The tools are offered when the screen has a document the assistant can edit: the turn's current
+  document (`ChatToolContext::document`), else the bundle's text of an application screen, else the person's custom screen
+  as `get` answers it (read once for the turn, by the chat's document source), within `ChatLimits::maxDraftBytes`
+  (256 KiB), and `allowance` answers for its base. Otherwise none is offered and the system text says the assistant cannot
+  change this screen's document, without saying why the store or the base rule refused. A custom screen is read under the
+  turn's person: another person's id is not read, and the turn fails as it does for any screen the chat cannot open.
+- **The document is data.** The system text carries the screen as one JSON string literal between an opening and a closing
+  line that both name the document's content hash (`<screen-document hash="sha256:…">`), under a sentence that it is data
+  and never instructions. The literal has no raw newline or quote, so nothing in the document can begin a line of its own,
+  and it cannot reproduce the closing line exactly: that line holds the hash of the document, which the document cannot
+  contain. The wording is a labelled boundary, not a guarantee about what a model does with the text.
+- **Whole document, or outline.** The whole document goes into the system text only when it is at most
+  `ChatLimits::maxInlineDocumentBytes` (16 KiB). A larger one is described by an outline of at most 8 KiB, fenced the same
+  way: one line per container, with its JSON Pointer and the labels `kind`, `id`, `testId`, `caption`, `ref`, `label`,
+  `text` and `title`, as deep as the 8 KiB allows. Beside it go what a screen based on the same base may use (`allowance`)
+  and a short reference to `ui/1`.
+- **The read tools** answer from the turn's current document, so they see a draft accepted earlier in the turn. Each
+  answer is plain text capped at 12 KiB (or `ChatLimits::maxToolResultBytes` when smaller), and a pointer that names
+  nothing is a tool error. `screen_outline(pointer, depth)` is the outline of a part, the deepest levels that fit.
+  `screen_find(text)` lists up to 50 nodes (objects) whose `kind`, `id`, `testId`, `caption`, `ref`, `label` or `text`
+  contains the text, ignoring case, with how many matched in all. `screen_node(pointer, depth)` is the JSON at a pointer,
+  default depth 2, where every container deeper than `depth` (an array is a level) is the string `"[object, N keys]"` or
+  `"[array, N items]"`; when the asked depth does not fit the cap a smaller one is shown, and the answer says so.
+- **A call to `propose_screen`** carries `patch`, an RFC 6902 array (`add`, `remove`, `replace`, `move`, `copy`, `test`)
+  of at most `ChatLimits::maxProposalBytes` (64 KiB) as JSON; the bound is on the patch alone. A whole document is one
+  `replace` of the path `""`, with the document as `value`. There is no base to name: the patch applies to the turn's
+  current document, which only the server changes within a turn. The operations apply one at a time to a copy, so a refusal
+  names the failing one as `op <index> (<kind> <path>): <reason>`, counting from 0, and nothing is applied unless every
+  operation applies. A call is a tool error, with the reason, when the arguments are malformed, an operation does not
+  apply, the result is not one JSON object whose `id` is the id of the open screen (the client mounts a draft only under the
+  screen's own id), or the result is longer than `maxDraftBytes`. Then `check` runs on the result under the turn's session
+  against the screen's base (the screen's own id for an application screen, the stored `basedOn` for a custom one), which
+  are the checks of a save. A refusal comes back as `The patch was refused at <pointer> of the patched document: <reason>`.
+  Only an accepted result is set as `TurnState::draft` and sent as the `draft` event, so a second patch in the same turn
+  applies on top of the first.
 - **Its limit.** Every refused call, one the shape check refused included, counts toward `maxProposalsPerTurn`. The call that
   reaches it ends the turn as failed, with the last refusal in the message, and no draft is made. A turn that already had a
-  proposal accepted keeps that draft. Each call also counts against `maxToolCallsPerTurn`.
-- **Out of the history.** The conversation stores a proposal's arguments as `{"document":"[a draft was proposed here,
-  sha256:…]"}`, and the message's provider replay is dropped with it. The turn that proposed it still sees the whole call. The next turn is given the current draft in its context,
-  so edits build on the last accepted one, and a long conversation of edits does not fill `maxConversationBytes`.
+  proposal accepted keeps that draft. Each call, a read tool's included, also counts against `maxToolCallsPerTurn`.
+- **Out of the history.** The conversation stores a patch under about 4 KiB as the model wrote it. A larger patch is stored
+  as `{"patch":"[a patch of N bytes was proposed here, sha256:…]"}`, and the message's provider replay is dropped with it.
+  The turn that proposed it still sees the whole call. The next turn is given the current draft in its context, so edits
+  build on the last accepted one, and a long conversation of edits does not fill `maxConversationBytes`.
 - **Does not save.** The tool never calls `save`. The person's press of **Save as…** does.
 
 ## The client
@@ -333,7 +352,10 @@ go. No call names a person.
   record. A `changes` event naming the record relists. An in-process source has no watcher and sends no events, so its
   lists refresh at a frame, a reconnect and this client's own saves. A refused watch is logged at warn; an admitted
   one is silent.
-- **Calls.** `check` answers the server's first refusal with its pointer; `save` passes a store's refusal through as
+- **Calls.** `check` and `save` send the document compact (`compactJson`: the white space between tokens removed, members
+  in their order), since the server bounds the text before it parses it and the Source view's indentation would otherwise
+  count; a refusal's JSON Pointer is the same for either text, a byte offset in it is into the compact one. `check` answers
+  the server's first refusal with its pointer; `save` passes a store's refusal through as
   the store worded it, and relists after an answer; `get` answers without keeping, for a broken screen's source.
 - **Restore.** `prefetchRoutes(routes, done)` fetches every custom screen a record or a history names that is not
   kept, and answers the ids no document came for, so a start can tell the person which were not restored.
@@ -347,7 +369,7 @@ go. No call names a person.
 |---|---|---|
 | The draft bar | `draft_bar_<id>` | Shown while the tab holds a draft: "Draft — not saved", that forms on a draft change real data, the last refusal of a save (`draft_message_<id>`), **Save** (`draft_save_<id>`, for a draft of the person's own custom screen), **Save as…**, **Source**, **Discard** |
 | The tools row | `screen_tools_<id>` | Shown while the tab holds none: **Open as** (`open_as_<id>`) and **Source** (`source_button_<id>`) |
-| The source view | `source_dialog` | The document's JSON pretty-printed in a monospace editor (`source_text`), the refusal (`source_refusal`), a status line ("Checking…", "Saving…"), **Preview**, **Save as…**, **Check and save** (`source_save`, a stored screen of the person's own), **Close** |
+| The source view | `source_dialog` | A sheet, so the editor has the window: the document's JSON pretty-printed (`prettyJson`: indent 2, a container that fits in about 100 columns on one line, members in their order, scalars as written) in a monospace editor (`source_text`, `wrap: false`: its lines stay whole and it scrolls sideways), the refusal (`source_refusal`), a status line ("Checking…", "Saving…"), **Preview**, **Save as…**, **Check and save** (`source_save`, a stored screen of the person's own), **Close** |
 | The save dialog | `save_as_dialog` | The name (`save_as_title`), the refusal, **Save**, **Cancel** |
 
 - **Source** shows the open draft's text, a custom screen's stored text (fetched again when the cache dropped it), or
@@ -381,7 +403,7 @@ go. No call names a person.
   or mount is reported with a warning toast and the tab stays as it was. A source view open on the tab is closed, since
   its text is the one the draft replaced. The shell calls it only for the tab the turn was started in. `draftOf(tab)`
   gives the text of the draft a tab holds, or nothing for a tab with no draft or a closed one; the shell sends it as the
-  next turn's draft, bounded by the default `ChatLimits::maxProposalBytes` ([`chat.md`](chat.md#the-panel)).
+  next turn's draft, bounded by the default `ChatLimits::maxDraftBytes` ([`chat.md`](chat.md#the-panel)).
 - **One draft per window**: a new preview replaces the tab's draft. Closing a tab with a draft goes to the shell's
   close guard, since the handle is dirty while a draft is up.
 - **Open as** is offered on a screen whose base takes params, when the list holds custom screens of that base: the

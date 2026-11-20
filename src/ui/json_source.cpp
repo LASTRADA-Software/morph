@@ -243,12 +243,157 @@ std::optional<std::size_t> indexOf(std::string const& token) {
 
 }  // namespace
 
+namespace {
+
+// How wide a line of the source view may be before a container that would fit on it is broken up.
+constexpr std::size_t kSourceColumns = 100;
+constexpr std::size_t kSourceIndent = 2;
+
+// Writes valid JSON text with members in their order and every scalar as it was written, one container per line unless
+// the whole container fits in `kSourceColumns` columns. The text must already be valid JSON nested within
+// `kMaxJsonDepth`, which `prettyJson` checks.
+class SourcePrinter {
+public:
+    explicit SourcePrinter(std::string_view text) : _text{text} {}
+
+    std::string print() {
+        std::size_t const start = skipSpace(_text, 0);
+        _out.reserve(_text.size());
+        write(start, {.indent = 0, .column = 0, .depth = 0});
+        return std::move(_out);
+    }
+
+private:
+    // Where a value is written: nested @p indent columns in, starting at @p column on its line, @p depth containers
+    // down.
+    struct Placement {
+        std::size_t indent;
+        std::size_t column;
+        std::size_t depth;
+    };
+
+    // @p pos starts a value, written at @p where. Answers where the value ends in the text.
+    // NOLINTNEXTLINE(misc-no-recursion): bounded by kMaxJsonDepth, which prettyJson checks first.
+    std::size_t write(std::size_t pos, Placement const& where) {
+        auto const [indent, column, depth] = where;
+        char const first = _text.at(pos);
+        if (first != '{' && first != '[') {
+            std::size_t const end = skipValue(_text, pos, depth).value_or(_text.size());
+            _out.append(_text.substr(pos, end - pos));
+            return end;
+        }
+        std::string line;
+        // Room for the container and a comma after it.
+        std::size_t const room = column + 1 < kSourceColumns ? kSourceColumns - column - 1 : 0;
+        if (std::optional<std::size_t> const end = oneLine(pos, line, room, depth)) {
+            _out += line;
+            return *end;
+        }
+        char const close = first == '{' ? '}' : ']';
+        _out.push_back(first);
+        std::size_t cursor = skipSpace(_text, pos + 1);
+        bool firstMember = true;
+        while (cursor < _text.size() && _text.at(cursor) != close) {
+            _out += firstMember ? "\n" : ",\n";
+            firstMember = false;
+            std::size_t const inner = indent + kSourceIndent;
+            _out.append(inner, ' ');
+            std::size_t shown = inner;
+            if (first == '{') {
+                std::size_t const nameEnd = scanString(_text, cursor, nullptr).value_or(_text.size());
+                _out.append(_text.substr(cursor, nameEnd - cursor));
+                _out += ": ";
+                shown += nameEnd - cursor + 2;
+                cursor = skipSpace(_text, skipSpace(_text, nameEnd) + 1);
+            }
+            cursor = skipSpace(_text, write(cursor, {.indent = inner, .column = shown, .depth = depth + 1}));
+            if (cursor < _text.size() && _text.at(cursor) == ',') {
+                cursor = skipSpace(_text, cursor + 1);
+            }
+        }
+        _out.push_back('\n');
+        _out.append(indent, ' ');
+        _out.push_back(close);
+        return cursor + 1;
+    }
+
+    // The value at @p pos on one line, `, ` and `: ` between its parts, appended to @p line; where it ends in the
+    // text, or nothing when the line would be longer than @p room bytes.
+    // NOLINTNEXTLINE(misc-no-recursion): bounded by kMaxJsonDepth, which prettyJson checks first.
+    [[nodiscard]] std::optional<std::size_t> oneLine(std::size_t pos, std::string& line, std::size_t room,
+                                                     std::size_t depth) const {
+        char const first = _text.at(pos);
+        if (first != '{' && first != '[') {
+            std::size_t const end = skipValue(_text, pos, depth).value_or(_text.size());
+            line.append(_text.substr(pos, end - pos));
+            return line.size() <= room ? std::optional<std::size_t>{end} : std::nullopt;
+        }
+        char const close = first == '{' ? '}' : ']';
+        line.push_back(first);
+        std::size_t cursor = skipSpace(_text, pos + 1);
+        bool firstMember = true;
+        while (cursor < _text.size() && _text.at(cursor) != close) {
+            if (!firstMember) {
+                line += ", ";
+            }
+            firstMember = false;
+            if (first == '{') {
+                std::size_t const nameEnd = scanString(_text, cursor, nullptr).value_or(_text.size());
+                line.append(_text.substr(cursor, nameEnd - cursor));
+                line += ": ";
+                cursor = skipSpace(_text, skipSpace(_text, nameEnd) + 1);
+            }
+            std::optional<std::size_t> const end = oneLine(cursor, line, room, depth + 1);
+            if (!end || line.size() > room) {
+                return std::nullopt;
+            }
+            cursor = skipSpace(_text, *end);
+            if (cursor < _text.size() && _text.at(cursor) == ',') {
+                cursor = skipSpace(_text, cursor + 1);
+            }
+        }
+        line.push_back(close);
+        return line.size() <= room ? std::optional<std::size_t>{cursor + 1} : std::nullopt;
+    }
+
+    std::string_view _text;
+    std::string _out;
+};
+
+}  // namespace
+
 std::string prettyJson(std::string_view text) {
     if (!parseJson(text)) {
         return std::string{text};
     }
+    return SourcePrinter{text}.print();
+}
+
+std::string compactJson(std::string_view text) {
+    if (!parseJson(text)) {
+        return std::string{text};
+    }
     std::string out;
-    glz::prettify_json(text, out);
+    out.reserve(text.size());
+    bool inString = false;
+    bool escaped = false;
+    for (char const character : text) {
+        if (inString) {
+            out.push_back(character);
+            if (escaped) {
+                escaped = false;
+            } else if (character == '\\') {
+                escaped = true;
+            } else if (character == '"') {
+                inString = false;
+            }
+        } else if (character == '"') {
+            inString = true;
+            out.push_back(character);
+        } else if (character != ' ' && character != '\t' && character != '\n' && character != '\r') {
+            out.push_back(character);
+        }
+    }
     return out;
 }
 

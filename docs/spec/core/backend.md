@@ -275,8 +275,9 @@ request's `Completion` exactly once. A
 *keyed* bind carries no queue: it is rejected immediately (`"disconnected"`
 from Qt, `DisconnectedError` from `SocketBackend`), since replayed on a later
 connection it would attach from a `current` that connection never issued.
-Without `retryFirstConnect`, `SocketBackend` also rejects, rather than queues, a
-private bind made once no connect will be attempted again: the first connect failed, or the connection
+Without `retryFirstConnect`, both transports also reject, rather than queue, a
+private bind or a `request` made once no connect will be attempted again: the
+first connect failed (`DisconnectedError`), or, on `SocketBackend`, the connection
 dropped with reconnecting disabled.
 
 ## The structural registration surface — `bindModel` and `promoteModel`
@@ -1550,7 +1551,10 @@ main thread cannot spin.
   first connect included, before the reconnect handler is posted. If the
   backend is destroyed (or the socket disconnects) before the queue is flushed,
   `cancelPending` drains it and rejects each entry's `Completion` exactly once.
-  A keyed bind on a disconnected socket rejects at once.
+  A keyed bind on a disconnected socket rejects at once. After a first open
+  that was refused with no `retryFirstConnect` (`_firstOpenFailed`), a private
+  bind rejects at once with `DisconnectedError` too: no connect is coming, so a
+  queued entry would never be flushed.
 - `promoteModel` — sends `assign`; the documented no-op cases resolve without
   sending.
 - `instances(typeId, cbExec)` — sends `instances`; the reply's body is the
@@ -1623,7 +1627,11 @@ The state machine:
   `retryFirstConnect` is set: then the refused first open (which emits
   `disconnected`, after `errorOccurred`) is retried on the same backoff, and the
   private binds and requests held for the first connect survive each failed
-  attempt, to be sent when one succeeds. `execute`, keyed binds, listings and
+  attempt, to be sent when one succeeds. Without it, a refused first open is
+  final: it rejects the calls already held for it, sets `_firstOpenFailed`, and
+  a `request` or private bind made afterwards rejects at once with
+  `DisconnectedError` rather than waiting for a connect that is not coming.
+  `execute`, keyed binds, listings and
   `negotiateProtocolVersion` still reject while the socket is down, as they do
   during a reconnect.
 - `attemptReconnect` re-opens the socket; if it fails, `QWebSocket` fires

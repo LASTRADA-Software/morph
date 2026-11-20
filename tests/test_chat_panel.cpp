@@ -203,6 +203,19 @@ TEST_CASE("the_panel_does_not_send_while_a_turn_runs", "[chat][panel]") {
     CHECK(rig.sent.size() == 1);
 }
 
+// Mutation: enable the input whenever a screen is open. Enter in the input would then send nothing while a turn runs
+// and clear what was typed, so the message is lost.
+TEST_CASE("the_input_takes_text_only_while_a_message_can_be_sent", "[chat][panel]") {
+    Rig rig;
+    int const input = rig.id("TextInput", "chat_input");
+    CHECK(rig.harness.backend.prop(input, "enabled") != "false");
+    rig.submit("hello");
+    CHECK(rig.harness.backend.prop(input, "enabled") == "false");
+    rig.answers.at(0)(wire::makeErr("refused", 0));
+    rig.harness.settle();
+    CHECK(rig.harness.backend.prop(input, "enabled") != "false");
+}
+
 // Mutation: call the context without asking whether there is one.
 TEST_CASE("a_panel_with_no_context_disables_the_input", "[chat][panel]") {
     Rig rig{false};

@@ -86,6 +86,11 @@ QtWebSocketBackend::QtWebSocketBackend(QUrl serverUrl, ::morph::model::detail::A
             _queuedRegistrations = std::move(heldRegistrations);
             _queuedRequests = std::move(heldRequests);
         } else {
+            // A first open that was refused and will not be retried is final: nothing will flush the calls that
+            // queue for a connection, so from here on they reject at once.
+            if (!_everConnected && !_shuttingDown) {
+                _firstOpenFailed = true;
+            }
             cancelPending(std::make_exception_ptr(::morph::backend::DisconnectedError{}));
         }
         if (!_shuttingDown && _cfg.reconnectEnabled && (_everConnected || _cfg.retryFirstConnect)) {
@@ -163,6 +168,10 @@ QtWebSocketBackend::PendingControl QtWebSocketBackend::modelIdReply(
         // already is) and degrade to a private registration.
         if (request.current.v != 0U) {
             deregisterModel(request.current);
+        }
+        if (!_connected && _firstOpenFailed) {
+            promise.reject(std::make_exception_ptr(::morph::backend::DisconnectedError{}));
+            return std::move(completion);
         }
         if (!_connected) {
             // Queue rather than fail: this is exactly the ordering a
@@ -248,6 +257,10 @@ void QtWebSocketBackend::flushQueuedRegistrations() {
     PendingControl pending{.reply = [shared](const ::morph::wire::Envelope& env) { shared->resolve(env); },
                            .fail = [shared](const std::exception_ptr& exc) { shared->reject(exc); },
                            .keepSession = true};
+    if (!_connected && _firstOpenFailed) {
+        pending.fail(std::make_exception_ptr(::morph::backend::DisconnectedError{}));
+        return std::move(completion);
+    }
     if (!_connected) {
         _queuedRequests.push_back(QueuedRequest{.envelope = std::move(envelope), .pending = std::move(pending)});
         return std::move(completion);

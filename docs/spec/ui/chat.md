@@ -44,7 +44,7 @@ read as its `steps` and then its `text`.
 `TurnState::draft` is the last document the server accepted this turn. A `draft` event on the `chat` topic carries that
 document in its `text`, so a client can mount it at once; like every event it is a hint, and a client that missed it reads
 the document from `TurnState`. All three are optional on the wire: a peer that does not know them ignores them, and a
-message with none says nothing. The server refuses a turn whose draft is over `ChatLimits::maxProposalBytes` (64 KiB) or is
+message with none says nothing. The server refuses a turn whose draft is over `ChatLimits::maxDraftBytes` (256 KiB) or is
 not a JSON object, so a client's text is bounded and parsed before anything reads it. The server reaches a draft only
 through an extra tool, which is also what checks it.
 
@@ -90,7 +90,7 @@ that is not one of the screen's actions. A `ChatTool` is a `ToolSpec`, an `offer
 - **What an outcome can do.** `isError` marks the call failed, and `ChatToolContext::failedCalls` tells the next call of the
   tool how many already failed, so a tool can set its own limit. `stop` ends the turn as failed with that text, after the
   call's result is recorded. `draft` becomes `TurnState::draft` and goes out as a `draft` event; a failed call's draft is
-  dropped, and so is a draft longer than `ChatLimits::maxProposalBytes`, which makes the call fail. The `stop` text is cut like
+  dropped, and so is a draft longer than `ChatLimits::maxDraftBytes`, which makes the call fail. The `stop` text is cut like
   a step's message. A turn that stopped before the outcome arrived records neither.
 - **What the conversation keeps.** `record` rewrites a call's arguments before the conversation stores them, so a large
   argument is not carried through every later turn. The message's provider replay (`Message::opaque`) is dropped with it,
@@ -98,8 +98,14 @@ that is not one of the screen's actions. A `ChatTool` is a `ToolSpec`, an `offer
 - **Names.** 1 to 64 characters of letters, digits, `_` and `-`, with no `__`, which every screen tool's name has, and distinct
   from the other extra tools. `ChatService` refuses a tool that breaks the rules, or has no handler, when it is built.
 
-`propose_screen` (`propose_screen.hpp`) is the first extra tool: it proposes a new document for the open screen, and
-[custom_screens.md](custom_screens.md#the-assistant) describes it. A chat reads a screen the bundle does not hold, such as a
+- **The turn's current document.** `ChatToolContext::document` is the latest draft a tool accepted in this turn, else the
+  draft the request carried, else absent (the tool then reads where the turn started, from the bundle or `external`). The
+  service sets it from `TurnState::draft` each time it builds a context, so a call sees what the calls before it accepted;
+  the server is the only writer of the document within a turn.
+
+`propose_screen` and the read tools `screen_outline`, `screen_find` and `screen_node` (`propose_screen.hpp`) are the first
+extra tools: they let the assistant read and change the open screen's document, and
+[custom_screens.md](custom_screens.md#the-assistant) describes them. A chat reads a screen the bundle does not hold, such as a
 person's own custom screen, through `ChatOptions::documentSource`, which is asked only for an id the bundle has no screen of,
 once per turn, and answers for the turn's person alone. What it read reaches each tool as `ChatToolContext::external`.
 
@@ -254,11 +260,14 @@ owns: the values `chat.entries`, `chat.running`, `chat.onScreen` and `chat.canSe
 `chat.cancel`. The commands are safe for an untrusted document: they do only what the person could do by typing, under
 their own session, and every action they lead to is checked on the server. The binding reads where the person is at each
 send, so a message goes to the screen they are looking at when they send it. A screen with no document behind it, such as
-the explorer, disables the input.
+the explorer, disables the input. So does a running turn: the input takes text only while a message can be sent
+(`chat.canSend`, like the send button). Enter runs the input's submit, which clears it, so an enabled input during a turn
+would throw away what the person typed, without sending it. A turn ends for the client when it reads the turn's state
+after the `done` event, one round trip after the turn's last text is shown.
 
 A screen's own draft is part of where the person is: the shell reads the draft the active tab holds at each send and
 carries it as `TurnRequest::draft` (`CustomScreenChrome::draftOf`), or nothing for a tab with no draft. The client bounds
-it with the default `ChatLimits` (`maxProposalBytes`) and sends none when the draft is over the bound, which the server
+it with the default `ChatLimits` (`maxDraftBytes`) and sends none when the draft is over the bound, which the server
 would refuse. A draft the assistant proposes is mounted through the custom-screen chrome's draft path
 ([`custom_screens.md`](custom_screens.md#the-client): `CustomScreenChrome::proposeDraft`) for the turn's own tab only,
 and only while that tab is open and still shows the screen the turn was about; the next turn then carries that draft.
