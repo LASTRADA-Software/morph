@@ -786,8 +786,18 @@ keeps its operands' 0 places and still fills 0.29 of a bar.
   does. They lower to `forms::collectionView` and `forms::wizardView`, with the forms' own titles
   left out, inside a column that carries the node's common properties. `submitLabel`, `showStatus`, `columns` and
   `fieldLayout` reach every form the view draws (`options.form`), as on a `form`; `title`, bound in the node's scope, replaces the
-  view's heading (`collection_title`, `wizard_title`). They have no element values
-  and no events. A document the catalog lacks, one for another action, one that does not build, or
+  view's heading (`collection_title`, `wizard_title`). A collection's rows are a table on the
+  engine, over the session's `source()` with the collator every other table uses, kept in the
+  element across mounts: every `v-columns` entry is a column of it (`v-hidden` ones hidden), each
+  sortable and filterable, with the header and table menus, the column chooser, the sort dialog and
+  copy of any table; then a last column of the row's buttons, which no layout arranges. Each cell
+  shows the session's formatted text, with the test id `cell_<field>_<rowKey>`. The engine keys a
+  row by its integer key's value and the session by its text; the master-detail selection and a
+  row's activation are translated between the two, so the open row stays selected through a sort.
+  The arrangement, sort and filters persist under
+  `{application, the model alias's type, the collection's action, the screen's id, "state"}`, and
+  the rows are held back while that state loads, as a table over `rows`'s are. They have no
+  element values and no events. A document the catalog lacks, one for another action, one that does not build, or
   a wizard step without a schema is reported and shown as a muted text naming the action.
 
 ### Charts
@@ -889,7 +899,7 @@ stops when its scope is gone.
 
 Reported when met, and shown as a muted text naming the kind:
 
-- The chrome of a `collection` or `wizard` (its header, rows, confirm, editor and navigation drawn
+- The chrome of a `collection` or `wizard` (its header, row, confirm, editor and navigation drawn
   by the host's own kit): C++ code replaces them through `forms::CollectionChrome` and
   `forms::WizardChrome`.
 - A `form` node's subtree overrides (spec 2 §7): document subtrees replacing a field's control. A host

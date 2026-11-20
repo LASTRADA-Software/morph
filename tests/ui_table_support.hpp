@@ -1795,6 +1795,56 @@ inline std::string rowOrder(TableHarness const& h) {
     return out;
 }
 
+/// @brief The keys of a table's realized rows that have one, in child order (the order the mount placed them), a
+///        text key without its quotes: a collection keyed by text and a rows table keyed by integer compare equal.
+/// @param h     The harness.
+/// @param table The table widget.
+/// @return The keys.
+inline std::vector<std::string> rowKeys(TableHarness const& h, int table) {
+    std::vector<std::string> out;
+    for (int const row : h.backend.children(table)) {
+        std::string key = h.backend.prop(row, "rowKey");
+        if (key.empty()) {
+            continue;
+        }
+        if (key.size() >= 2 && key.front() == '"' && key.back() == '"') {
+            key = key.substr(1, key.size() - 2);
+        }
+        out.push_back(std::move(key));
+    }
+    return out;
+}
+
+/// @brief The Samples collection beside a rows table `t` over the same four rows.
+inline constexpr std::string_view kCollectionBesideTable = R"({
+  "vocab": "ui/1", "id": "both",
+  "models": { "sample": { "type": "Lims_SampleModel" } },
+  "state": { "rows": { "init": { "lit": [ { "id": 1, "name": "beta" }, { "id": 2, "name": "Alpha" },
+                                          { "id": 3, "name": "álpha" }, { "id": 4, "name": "Gamma" } ] } } },
+  "view": { "kind": "column", "children": [
+    { "kind": "collection", "model": "sample", "action": "Lims_ListSamples" },
+    { "kind": "table", "id": "t", "testId": "t", "rows": { "ref": "rows" },
+      "columns": [ { "id": "id", "label": "ID", "sortable": true },
+                   { "id": "name", "label": "Name", "sortable": true } ] } ] } })";
+
+/// @brief The Samples collection alone, on the screen `samples`.
+inline constexpr std::string_view kSamplesCollection = R"({
+  "vocab": "ui/1", "id": "samples",
+  "models": { "sample": { "type": "Lims_SampleModel" } },
+  "view": { "kind": "collection", "model": "sample", "action": "Lims_ListSamples" } })";
+
+/// @brief A master-detail view of `Lims_ListSamples`: `ID` (hidden) and `Name`, its rows opening the capture form.
+inline constexpr std::string_view kMasterDetailSamples =
+    R"({"v-kind":"master-detail","v-title":"Samples","v-query":"Lims_ListSamples","v-rowKey":"id",
+        "v-columns":[{"field":"id","label":"ID","kind":"integer","v-hidden":true},{"field":"name","label":"Name"}],
+        "v-rowAction":{"action":"Lims_CaptureConcentration","bind":{"sampleId":"id"}}})";
+
+/// @brief A view of `Lims_ListSamples` with the columns of `mixedRows`, in `rowsDoc`'s order: `id`, `name`, `weight`.
+inline constexpr std::string_view kMixedSamplesView =
+    R"({"v-kind":"collection","v-title":"Samples","v-query":"Lims_ListSamples","v-rowKey":"id",
+        "v-columns":[{"field":"id","label":"Id","kind":"integer"},{"field":"name","label":"Name"},
+                     {"field":"weight","label":"Weight","kind":"decimal"}]})";
+
 /// @brief The engine that orders a table over `rows`.
 /// @param screen The screen.
 /// @param id     The table's element id.

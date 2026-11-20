@@ -412,6 +412,57 @@ TEST_CASE("interpreter baseline: U5 a collection of 20,000", "[.benchmark][basel
     printRow("U5: one row edited (the list reloaded) and the sorted view repaired", kRows, spreadOf(edits));
 }
 
+// U5 on a screen: a `collection` node over the corpus's sample list, its rows a table on the engine. Mount is the
+// list's reply to settled; sort is a header click on Name to settled; an edit is a row's delete answered, then the
+// reloaded list with one row renamed answered, to settled. docs/spec/table/table.md, "Performance". Run on a
+// Release build:
+//
+//   morph_tests "interpreter bench: a collection of 20\,000 rows*"   (Catch2 reads an unescaped comma as a list)
+TEST_CASE("interpreter bench: a collection of 20,000 rows: mount, sort, one row edited", "[.benchmark][interpreter]") {
+    constexpr std::size_t kRows = 20'000;
+    bench::WideTableSource const source{{.rows = kRows, .columns = 30, .seed = 1}};
+    std::string const original = listReply(source, 0);
+    std::string const edited = listReply(source, 1);
+    constexpr std::string_view kDocument = R"({
+  "vocab": "ui/1", "id": "bench",
+  "models": { "sample": { "type": "Lims_SampleModel" } },
+  "view": { "kind": "collection", "model": "sample", "action": "Lims_ListSamples" } })";
+    std::println("\nU5: a collection node of 20,000 rows on the table engine, call to settled\n\n"
+                 "| scenario | rows | median ms | p10-p90 ms |\n|---|---:|---:|---:|");
+    std::vector<double> mounts;
+    std::vector<double> sorts;
+    std::vector<double> edits;
+    for (int run = 0; run < 7; ++run) {
+        Harness h;
+        auto screen = h.mount(kDocument);
+        auto began = Clock::now();
+        h.reply(h.dispatcher.last("Lims_ListSamples"), original);
+        mounts.push_back(millisSince(began));
+        int const table = h.byTestId("Table", "collection_rows");
+        REQUIRE_FALSE(h.backend.children(table).empty());
+
+        began = Clock::now();
+        h.backend.clickHeader(table, 1, ui::HeaderClick::Plain);  // Name
+        h.settle();
+        sorts.push_back(millisSince(began));
+        REQUIRE(h.backend.prop(table, "sort") == "1:Ascending");
+
+        std::string const key = h.backend.prop(h.backend.children(table).front(), "rowKey");
+        h.backend.click(h.byTestId("Button", "rowAction_Lims_DeleteSample_" + key));
+        h.settle();
+        h.backend.click(h.byTestId("Button", "confirm_accept"));
+        h.settle();
+        h.reply(h.dispatcher.last("Lims_DeleteSample"), "{}");
+        began = Clock::now();
+        h.reply(h.dispatcher.last("Lims_ListSamples"), edited);
+        edits.push_back(millisSince(began));
+        REQUIRE(h.backend.prop(table, "sort") == "1:Ascending");
+    }
+    printRow("U5: mount (the list's reply to settled)", kRows, spreadOf(mounts));
+    printRow("U5: sort on Name from the header, click to settled", kRows, spreadOf(sorts));
+    printRow("U5: one row edited (the list reloaded), reply to settled", kRows, spreadOf(edits));
+}
+
 
 namespace {
 

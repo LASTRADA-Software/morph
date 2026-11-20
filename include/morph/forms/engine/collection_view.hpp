@@ -36,6 +36,11 @@ struct CollectionChrome {
     /// @brief Replaces each row's cells and buttons: the rows are then a list of these nodes rather than a table.
     ///        Called once per row mounted, with the session and the row's signal (read it inside bindings).
     std::function<ui::Node(CollectionSession&, reactive::Signal<CollectionRow> const&)> row;
+    /// @brief Replaces the rows table whole: an interpreter lowers it as it lowers its other tables, over the
+    ///        session's `source()`. Called once, with the session and what draws a row's buttons (Open and the row
+    ///        actions) for its key text; that is empty when the view has neither. Unused while `row` is set.
+    std::function<ui::Node(CollectionSession&, std::function<ui::Node(std::string const& rowKey)> const& buttons)>
+        rows;
     /// @brief Replaces the confirm dialog: mounted while an action waits for confirmation, unmounted once it is
     ///        answered. Called with the session, whose `pendingConfirm`, `confirm` and `cancelConfirm` it uses.
     std::function<ui::Node(CollectionSession&)> confirm;
@@ -174,8 +179,9 @@ namespace detail::engine {
     return table;
 }
 
-/// @brief The rows: a table of the visible columns' cells and the row buttons, or a list of the row chrome's nodes.
-///        In a master-detail view a row is selected while the editor is open on it, and selecting one opens it.
+/// @brief The rows: a table of the visible columns' cells and the row buttons, a list of the row chrome's nodes, or
+///        the rows chrome's table. In a master-detail view a row is selected while the editor is open on it, and
+///        selecting one opens it.
 /// @param session The session.
 /// @param options The view options, shared with the row views.
 /// @return The rows.
@@ -190,6 +196,15 @@ namespace detail::engine {
             [view, options](reactive::Signal<CollectionRow> const& slot) { return options->chrome.row(*view, slot); });
         return list;
     }
+    bool const buttons =
+        session.model().rowAction().has_value() || !actionsOf(session.model(), CollectionActionScope::Row).empty();
+    if (options->chrome.rows) {
+        std::function<ui::Node(std::string const&)> drawn;
+        if (buttons) {
+            drawn = [view, options](std::string const& rowKey) { return rowButtons(*view, rowKey, *options); };
+        }
+        return options->chrome.rows(session, drawn);
+    }
     std::vector<ui::TableColumn> columns;
     std::vector<std::string> fields;
     for (CollectionColumn const& column : session.model().columns()) {
@@ -198,8 +213,6 @@ namespace detail::engine {
             fields.push_back(column.field);
         }
     }
-    bool const buttons =
-        session.model().rowAction().has_value() || !actionsOf(session.model(), CollectionActionScope::Row).empty();
     if (buttons) {
         columns.push_back(ui::TableColumn{.label = std::string{}});
     }
