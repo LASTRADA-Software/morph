@@ -29,6 +29,7 @@ the kinds are in the wire kind table ([`../core/wire.md`](../core/wire.md#the-ui
 - [The registry](#the-registry)
 - [The client](#the-client)
 - [Design decisions](#design-decisions)
+- [Texts](#texts)
 - [Development reload](#development-reload)
 - [Not yet](#not-yet)
 
@@ -41,6 +42,7 @@ the kinds are in the wire kind table ([`../core/wire.md`](../core/wire.md#the-ui
 | `ui-fetch` | `FetchRequest`: `{hash}` | the file's exact bytes |
 | `ui-evaluate` | the action's JSON body; `modelType` and `actionType` name it | `EvaluateReply`: `{body, errors, ready}` |
 | `ui-file` | `FileRequest`: `{op, …}`, one step of an upload or a download | `FileReply`: the members its `op` answers |
+| `ui-texts` | empty; the locale is the session's | `TextsReply`: `{locale, messages}`, the application's texts by message key |
 
 Every request carries the envelope's `session`; the server stamps the verified principal onto it before the
 service sees it. `ui-hello` refuses a client that does not speak every vocabulary the bundle needs with
@@ -96,6 +98,7 @@ Every kind calls the authoriser. The pseudo-model is `ui`.
 | `ui-evaluate` | `authorize(session, modelType, actionType)`: a principal who may not run the action may not evaluate it |
 | `ui-file` `begin` | `authorize(session, model, action)`: as the mutation that will reference the file |
 | `ui-file` `chunk`, `end`, `read` | the upload id or file reference belongs to the session's principal |
+| `ui-texts` | `authorize(session, "ui", "texts")`; `isUiServiceRead` admits it beside `hello`, `catalog` and `fetch` |
 
 A refusal is `err "unauthorized"`. An `IAuthorizer` that switches on its model type sees `ui` for the first three
 kinds, the screen's own model types for the catalog's, and the action's model type for `ui-evaluate`.
@@ -160,6 +163,8 @@ For each registered entry, in registration order:
 | Vocabularies; host components, commands, values | 256 each (`kMaxListItems`) | both parsers; the registry |
 | A name: id, kind, vocabulary, host name, application id or version | 256 bytes (`kMaxNameBytes`) | both parsers; the registry |
 | JSON depth | 64 (`kMaxJsonDepth`) | every parse, before the parser runs |
+| A `ui-texts` reply: its body; its texts; a key | 1 MiB (`kMaxTextsBytes`); 16384 (`kMaxTextEntries`); 1 to 256 bytes | the server (`fieldTextsFor`); the client's parser |
+| The locale a `ui-texts` request names | 35 bytes (`kMaxLocaleBytes`), BCP 47-shaped (`isLocaleTag`) | the server; the client's parser, for the reply's |
 
 A file's escaped size matters because the reply carries it as a JSON string: a control byte is six bytes on the
 wire, so a 4 MiB file of them would not fit an 8 MiB envelope. The registry refuses such a file, so a reply never
@@ -261,6 +266,9 @@ outlives the `UiClient` that started it.
 | The catalog's facts | Only for documents the principal may fetch | They name model types and actions; a hidden screen's should not be disclosed. |
 | Fetching | All missing files at once | One round trip of latency, not one per file. |
 | SHA-256 | The repository's implementation | No new dependency; integrity needs only a correct SHA-256, which the known-answer test pins. |
+| Where the texts' locale travels | The session's `locale`, not the request body | Every envelope already carries it, so the chat's turns and the models know the person's language without a field of their own. |
+| A server with no text source | `err "no texts are served"`, the kind still served | A client tells "this server translates nothing" from a refusal it should report, and an older client never asks. |
+| Who may read the texts | The `texts` pseudo-action, a UI-service read | A login screen's fields are translated before sign-in; the texts are the application's words, as a bundled catalogue holds them, not data. |
 
 ## Evaluation
 
@@ -330,7 +338,37 @@ an `IFileStore` (`ui/file_store.hpp`); without one, `ui-file` is an unknown kind
   document's `{"upload": e, "to": "m"}`; its default calls `upload(file, …)`, so a host that overrides only that
   keeps working.
 
-## Development reload
+## Texts
+
+The server owns the application's texts, and a thin client, the browser build included, ships no catalogue of its
+own. `ui-texts` hands it the texts in the person's language, so a form's labels, help and placeholders are translated
+while the schema stays free of language and is cached once for everyone ([../forms/forms.md](../forms/forms.md#the-catalog-seam)).
+
+- **The source.** `UiRegistry::setFieldTexts(FieldTextSource)` stores the host's source in the bundle
+  (`ServedBundle::fieldTexts`). A `FieldTextSource` is `(bcp47Locale) -> FieldTexts`, the texts by message key: the
+  keys `forms::i18n` derives (`<actionTypeId>.<field>.label`, `.help`, `.placeholder`, or a field's `x-i18nKey` stem
+  with the same suffixes), and any other key the application translates. The host owns the storage and the language
+  fallback; the source is called on server threads, so it must be safe to call concurrently.
+- **The locale.** It travels with the session: `session::Context::locale`, which every envelope carries. The request
+  body is empty. The client's source sets it from the shell's locale, so the chat's turns and the models' calls carry
+  it too.
+- **The answer.** `fieldTextsFor(bundle, locale)` builds the reply, and both `ui-texts` and the chat's read tools use
+  it. It refuses, with the reason as the `err` message: a session with no locale (`the session names no locale`); a
+  locale that is not `isLocaleTag` (subtags of 1 to 8 ASCII letters and digits joined by `-`, the first of 2 to 8
+  letters, at most `kMaxLocaleBytes`), which the source never sees; a bundle with no source (`kNoTextsReason`, "no
+  texts are served"); a source that throws (logged at warn, `the texts for <locale> could not be read`); and an answer
+  over the bounds: more than `kMaxTextEntries` texts, an empty key or one over `kMaxNameBytes`, or a reply over
+  `kMaxTextsBytes`. A locale the source has no texts for is an `ok` reply with no texts.
+- **The client.** `Source` asks for the texts in `textsLocale()` (the session's locale, `en` while it names none)
+  each time it loads a bundle, after the schemas, and again from `setLocale` when the locale changes. `parseTextsReply`
+  checks the reply's bounds and must-understand keys. The answer is kept as one catalogue (`Source::texts()`); a
+  refusal other than `kNoTextsReason`, or a server that does not know the kind, is a problem the shell reports once.
+  The shell installs `layeredProvider(texts, catalogues)` ([catalogue.md](catalogue.md#texts-from-the-server)).
+- **What a form shows.** A form resolves its texts when it is built. The source loads the texts before it delivers
+  the bundle, so the start screen's forms have them when the shell starts in the locale the source asked in (`en`,
+  unless `setLocale` was called before `open`). A form already mounted when the locale changes, or when texts for a
+  new locale arrive, keeps the texts it was built with until it is mounted again.
+
 
 A client in development mode follows the server's documents as they change (spec 5 §12, spec 6 §21). The pieces
 every such client needs are in the library (`service_client.hpp`, `dev_reload.hpp`, `host.hpp`). The loop and the

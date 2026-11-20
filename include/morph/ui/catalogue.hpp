@@ -177,6 +177,27 @@ private:
     std::vector<std::string> _problems;
 };
 
+/// @brief A provider that answers from @p first, and from @p second where @p first has no text for the key: what a
+///        client installs when the server sends texts (`ui-texts`) beside the bundle's own catalogues.
+///
+/// Each side looks a key up as `MessageCatalogues::lookup` does (the exact locale, then each shorter tag), and @p
+/// first wins whole: its `de` text is used before @p second's `de-AT`. A key neither holds is a miss, and the caller
+/// shows its fallback (`resolveText`'s schema literal, `t`'s `fallback`). Like `provider()`, it shares the
+/// catalogues as they are now.
+/// @param first  The catalogues read first: the server's texts.
+/// @param second The catalogues read where @p first misses: the bundle's.
+/// @return The provider, for `Session::setTranslations`.
+[[nodiscard]] inline render::TranslationProvider layeredProvider(MessageCatalogues const& first,
+                                                                 MessageCatalogues const& second) {
+    return [over = first.provider(), under = second.provider()](
+               std::string_view key, std::string_view locale) -> std::optional<std::string> {
+        if (auto text = over(key, locale)) {
+            return text;
+        }
+        return under(key, locale);
+    };
+}
+
 /// @brief Reads every message catalogue a verified bundle lists.
 ///
 /// A catalogue whose id is not `i18n/LOCALE.json`, whose bytes are not among @p files, or that `parseCatalogue`

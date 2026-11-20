@@ -424,6 +424,14 @@ turn.
   contains the text, ignoring case, with how many matched in all. `screen_node(pointer, depth)` is the JSON at a pointer,
   default depth 2, where every container deeper than `depth` (an array is a level) is the string `"[object, N keys]"` or
   `"[array, N items]"`; when the asked depth does not fit the cap a smaller one is shown, and the answer says so.
+- **What a form's fields mean.** `screen_outline` follows each `form` node's line with one indented line per field of
+  its action whose description is not empty, `field <name>: "<description>"`; `screen_node` adds, after the JSON, the
+  same lines for each `form` the view expands, under a sentence that they come from the action's schema and are not
+  part of the document. The schema is the turn's (`ChatToolContext::schemas`), and a description is resolved as the
+  form shows it: the field's `x-i18nKey` key, then `<action>.<field>.help`, from the application's texts in the
+  conversation's locale (`fieldTextsFor`, [service.md](service.md#texts)), else the schema's `description`. Each is cut
+  at 200 bytes, and both stay within the answer's cap: the outline counts the lines with their node's, and the node
+  lists the descriptions that fit and says when it left some out.
 - **A call to `propose_screen`** carries `patch`, an RFC 6902 array (`add`, `remove`, `replace`, `move`, `copy`, `test`)
   of at most `ChatLimits::maxProposalBytes` (64 KiB) as JSON; the bound is on the patch alone. A whole document is one
   `replace` of the path `""`, with the document as `value`. There is no base to name: the patch applies to the turn's

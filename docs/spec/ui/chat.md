@@ -106,6 +106,10 @@ that is not one of the screen's actions. A `ChatTool` is a `ToolSpec`, an `offer
 - **Names.** 1 to 64 characters of letters, digits, `_` and `-`, with no `__`, which every screen tool's name has, and distinct
   from the other extra tools. `ChatService` refuses a tool that breaks the rules, or has no handler, when it is built.
 
+- **The turn's schemas and locale.** `ChatToolContext::schemas` is the schema of each action of the model types the turn
+  bound, by action id, as `schemas` answered them under the turn's session (null when none were read), so a tool can say
+  what a form's fields are. The conversation's locale is `session.locale`, the one the client's session carries
+  ([service.md](service.md#texts)); a tool translates through `fieldTextsFor(*bundle, session.locale)`.
 - **The turn's current document.** `ChatToolContext::document` is the latest draft a tool accepted in this turn, else the
   draft the request carried, else absent (the tool then reads where the turn started, from the bundle or `external`). The
   service sets it from `TurnState::draft` each time it builds a context, so a call sees what the calls before it accepted;

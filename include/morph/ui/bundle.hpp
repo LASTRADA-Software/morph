@@ -26,7 +26,8 @@
 
 /// @file
 /// @brief What the UI service's client and server share (spec 5 §12): content hashes, the bundle's manifest, and
-///        the bodies of the `ui-hello`, `ui-catalog` and `ui-fetch` envelopes, with their bounds and their parsers.
+///        the bodies of the `ui-hello`, `ui-catalog`, `ui-fetch` and `ui-texts` envelopes, with their bounds and their
+///        parsers.
 ///
 /// Specified in `docs/spec/ui/service.md`.
 
@@ -45,6 +46,9 @@ inline constexpr std::string_view kFetchKind = "ui-fetch";
 inline constexpr std::string_view kEvaluateKind = "ui-evaluate";
 /// @brief The envelope kind of the file side channel (`files/1`, spec 6 §18): uploads and downloads in chunks.
 inline constexpr std::string_view kFileKind = "ui-file";
+/// @brief The envelope kind that asks for the application's texts (field labels, help and placeholders) in the
+///        locale the request's session names.
+inline constexpr std::string_view kTextsKind = "ui-texts";
 
 /// @brief The pseudo-model the service's envelopes are authorised under: `authorize(session, "ui", <action>)`.
 inline constexpr std::string_view kServiceModel = "ui";
@@ -54,6 +58,8 @@ inline constexpr std::string_view kHelloAction = "hello";
 inline constexpr std::string_view kCatalogAction = "catalog";
 /// @brief The pseudo-action that gates the fetch of a file that is not public.
 inline constexpr std::string_view kFetchAction = "fetch";
+/// @brief The pseudo-action that gates `ui-texts`.
+inline constexpr std::string_view kTextsAction = "texts";
 
 /// @brief The prefix of a content hash.
 inline constexpr std::string_view kHashPrefix = "sha256:";
@@ -77,6 +83,15 @@ inline constexpr std::size_t kMaxCatalogFacts = 16384;
 inline constexpr std::size_t kMaxListItems = 256;
 /// @brief The longest name: an id, a kind, a vocabulary, a host name, an application id or version.
 inline constexpr std::size_t kMaxNameBytes = 256;
+/// @brief The longest locale tag a `ui-texts` request names: the 35 bytes RFC 5646 asks every implementation to
+///        accept, which covers a language, script, region and variant.
+inline constexpr std::size_t kMaxLocaleBytes = 35;
+/// @brief The most texts a `ui-texts` reply carries: as many as one message catalogue holds.
+inline constexpr std::size_t kMaxTextEntries = 16384;
+/// @brief The largest `ui-texts` reply body a server sends and a client reads.
+inline constexpr std::size_t kMaxTextsBytes = std::size_t{1024} * 1024;
+/// @brief The refusal of a `ui-texts` request by a server that was given no text source.
+inline constexpr std::string_view kNoTextsReason = "no texts are served";
 
 /// @brief The file kinds of a manifest.
 inline constexpr std::string_view kScreenFile = "screen";
@@ -332,6 +347,14 @@ struct CatalogReply {
 struct FetchRequest {
     /// @brief The content hash of the file wanted: the manifest's digest, or a file the manifest lists.
     std::string hash;
+};
+
+/// @brief The body of a `ui-texts` reply: the application's texts in one locale, by message key.
+struct TextsReply {
+    /// @brief The locale the texts are in: the one the request's session named.
+    std::string locale;
+    /// @brief Each text by its message key, such as `<actionTypeId>.<field>.help`.
+    std::map<std::string, std::string, std::less<>> messages;
 };
 
 /// @brief A model's `schemas` document: `{actionType: schema}`, or why the server would not describe the model.
@@ -729,6 +752,69 @@ template <typename T>
         return std::unexpected(std::string{"the ui-fetch request's hash is not a content hash"});
     }
     return request;
+}
+
+/// @brief Whether @p tag is a locale tag a `ui-texts` request may name: at most `kMaxLocaleBytes`, subtags of 1 to 8
+///        ASCII letters and digits joined by single `-`, the first of 2 to 8 letters (`de`, `de-AT`, `zh-Hant-TW`).
+///
+/// The shape of BCP 47, not its registry: a well-formed tag that names no language passes, and the host's text
+/// source answers it as it answers any locale it has no texts for.
+/// @param tag The tag.
+/// @return Whether it has that shape.
+[[nodiscard]] inline bool isLocaleTag(std::string_view tag) {
+    if (tag.empty() || tag.size() > kMaxLocaleBytes) {
+        return false;
+    }
+    auto const letter = [](char const symbol) {
+        return (symbol >= 'a' && symbol <= 'z') || (symbol >= 'A' && symbol <= 'Z');
+    };
+    auto const alphanumeric = [&letter](char const symbol) {
+        return letter(symbol) || (symbol >= '0' && symbol <= '9');
+    };
+    bool first = true;
+    std::size_t start = 0;
+    while (start <= tag.size()) {
+        std::size_t const stop = std::min(tag.find('-', start), tag.size());
+        std::string_view const subtag = tag.substr(start, stop - start);
+        bool const valid = first ? subtag.size() >= 2 && subtag.size() <= 8 && std::ranges::all_of(subtag, letter)
+                                 : !subtag.empty() && subtag.size() <= 8 && std::ranges::all_of(subtag, alphanumeric);
+        if (!valid) {
+            return false;
+        }
+        first = false;
+        start = stop + 1;
+    }
+    return true;
+}
+
+/// @brief Reads a `ui-texts` reply body.
+///
+/// Refused: a body longer than `kMaxTextsBytes`, text that is not JSON or nests too deep, a must-understand key, a
+/// locale that is not `isLocaleTag`, more than `kMaxTextEntries` texts, or an empty key or one longer than
+/// `kMaxNameBytes`. Unknown keys are ignored.
+/// @param text The reply body.
+/// @return The reply, or why it was refused.
+[[nodiscard]] inline std::expected<TextsReply, std::string> parseTextsReply(std::string_view text) {
+    if (text.size() > kMaxTextsBytes) {
+        return std::unexpected("the ui-texts reply is larger than " + std::to_string(kMaxTextsBytes) + " bytes");
+    }
+    auto reply = detail::readMessage<TextsReply>(text, "the ui-texts reply", {}, {});
+    if (!reply) {
+        return std::unexpected(std::move(reply.error()));
+    }
+    if (!isLocaleTag(reply->locale)) {
+        return std::unexpected(std::string{"the ui-texts reply's locale is not a locale tag"});
+    }
+    if (reply->messages.size() > kMaxTextEntries) {
+        return std::unexpected("the ui-texts reply carries more than " + std::to_string(kMaxTextEntries) + " texts");
+    }
+    for (auto const& [key, message] : reply->messages) {
+        static_cast<void>(message);
+        if (key.empty() || key.size() > kMaxNameBytes) {
+            return std::unexpected("a ui-texts key is 1 to " + std::to_string(kMaxNameBytes) + " bytes");
+        }
+    }
+    return reply;
 }
 
 }  // namespace morph::ui

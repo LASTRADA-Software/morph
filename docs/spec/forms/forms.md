@@ -1521,6 +1521,17 @@ only; it defines no translation storage format — a host adapts whatever
 catalog it already owns (Qt `QTranslator`/`.qm`, a JSON bundle, a database)
 into the one `TranslationProvider` signature.
 
+**Texts from the server.** A thin client, the browser build included, ships
+no catalogue of its own. The server owns the application's texts, so it hands
+them over: a host gives `UiRegistry::setFieldTexts` a `FieldTextSource`,
+`(bcp47Locale) -> {messageKey: text}` keyed by exactly the keys above, and the
+generic client asks for them with `ui-texts` in its session's locale
+([../ui/service.md](../ui/service.md#texts)). It installs them in front of
+the bundle's catalogues, so `resolveText`'s order is unchanged: explicit key,
+derived key, schema literal, with the server's text winning over a bundled
+one for the same key ([../ui/catalogue.md](../ui/catalogue.md#texts-from-the-server)).
+The schema stays free of language either way.
+
 The forms engine resolves field labels, help, placeholders and group titles
 through this seam ([engine.md](engine.md), "FormSession"). Cross-field rules
 (above) carry no translatable message text of their own — the `x-rules`

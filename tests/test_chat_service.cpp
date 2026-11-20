@@ -1303,7 +1303,7 @@ TEST_CASE("an_extra_tool_is_offered_beside_the_screens_tools", "[chat][service][
     CHECK(offers(tools, "notes__Chat_Add"));
 }
 
-// Mutation: run the handler under another session, or without the request's screen.
+// Mutation: run the handler under another session, without the request's screen, or without the turn's schemas.
 TEST_CASE("a_call_runs_the_handler_with_the_session_the_screen_and_the_arguments", "[chat][service][extra]") {
     auto const seen = std::make_shared<Seen>();
     Rig rig{{}, true, nullptr, {extraTool("echo", seen, [](auto const&) {
@@ -1330,6 +1330,9 @@ TEST_CASE("a_call_runs_the_handler_with_the_session_the_screen_and_the_arguments
     CHECK(context.request.text == "say hi");
     CHECK(context.bundle != nullptr);
     CHECK(context.failedCalls == 0);
+    // The schemas the turn read for its bound models, which a read tool describes a form's fields from.
+    REQUIRE(context.schemas != nullptr);
+    CHECK(context.schemas->contains("Chat_Add"));
     CHECK(seen->arguments.front().contains("hi"));
     auto const sent = rig.fake->requests().at(1).messages.at(2).results.at(0);
     CHECK(sent.callId == "x1");

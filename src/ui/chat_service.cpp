@@ -72,6 +72,8 @@ struct ChatService::Turn {
     std::map<std::string, std::size_t, std::less<>> extraFailures;
     // What the document source read for a screen outside the bundle; read once, for every tool.
     std::optional<ChatScreenSource> external;
+    // The schemas the turn read, by action id, for every extra tool.
+    std::shared_ptr<std::map<std::string, Json, std::less<>> const> schemas;
     // What each offered tool's `offer` carried to its handler, by tool name.
     std::map<std::string, std::shared_ptr<void const>, std::less<>> carried;
     std::vector<Message> messages;
@@ -852,6 +854,7 @@ struct ChatService::Shared {
     static void assemble(std::shared_ptr<Shared> const& self, TurnPtr const& turn, CatalogReply const& catalog,
                          std::map<std::string, Json, std::less<>> const& schemas, Document const& document) {
         std::set<std::string, std::less<>> const permitted(catalog.permitted.begin(), catalog.permitted.end());
+        turn->schemas = std::make_shared<std::map<std::string, Json, std::less<>> const>(schemas);
         turn->tools = screenTools(document, turn->request.models, permitted, schemas,
                                   catalog.actions ? &*catalog.actions : nullptr);
         // An extra tool's name is the one the model is told, so a screen tool that took it is withheld.
@@ -890,7 +893,8 @@ struct ChatService::Shared {
                                .limits = self.options.limits,
                                .external = turn.external,
                                .failedCalls = failed == turn.extraFailures.end() ? 0U : failed->second,
-                               .carried = std::move(carried)};
+                               .carried = std::move(carried),
+                               .schemas = turn.schemas};
     }
 
     // What a completion runs once its answer reaches the worker: the service, the turn and the answer.

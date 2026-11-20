@@ -91,6 +91,19 @@ struct ServedScreen {
 ///        screen and an application's can never share an id.
 inline constexpr std::string_view kCustomScreenIdPrefix = "custom:";
 
+/// @brief The application's texts in one locale, by message key: what a `FieldTextSource` answers.
+using FieldTexts = std::map<std::string, std::string, std::less<>>;
+
+/// @brief Where a server reads the application's texts for a locale: a field's label, help and placeholder under the
+///        keys `forms::i18n` derives (`<actionTypeId>.<field>.label`, `.help`, `.placeholder`, or the field's
+///        `x-i18nKey` stem with the same suffixes), and any other message key the application translates.
+///
+/// Given the BCP 47 tag the request's session names, already checked by `isLocaleTag`; it answers the texts it has
+/// for that locale, empty for none. The host owns the storage and the language fallback (`de-AT` falling back to
+/// `de` is the source's choice to make). It is called on server threads, the server strand and the chat's worker,
+/// so it must be safe to call concurrently. One that throws is answered as a refusal.
+using FieldTextSource = std::function<FieldTexts(std::string_view bcp47Locale)>;
+
 /// @brief An application's bundle, built and immutable: what `UiService` serves.
 struct ServedBundle {
     /// @brief The application.
@@ -128,7 +141,22 @@ struct ServedBundle {
     ///        runtime, on server threads, for as long as the bundle lives, so each must stay valid and be safe to
     ///        call concurrently.
     Catalog catalog;
+    /// @brief Where `ui-texts` and the chat's read tools read the application's texts; empty when the application
+    ///        serves none (`UiRegistry::setFieldTexts`).
+    FieldTextSource fieldTexts;
 };
+
+/// @brief The application's texts in @p locale, as `ui-texts` answers them: read from the bundle's source and
+///        checked against the reply's bounds.
+///
+/// Refused when @p locale is empty (`the session names no locale`) or not `isLocaleTag`, when the bundle has no
+/// source (`kNoTextsReason`), when the source throws, and when its answer holds more than `kMaxTextEntries` texts, an
+/// empty key or one longer than `kMaxNameBytes`, or writes to more than `kMaxTextsBytes`.
+/// @param bundle The bundle.
+/// @param locale The BCP 47 tag the request's session names.
+/// @return The reply, or why there is none.
+[[nodiscard]] MORPH_API std::expected<TextsReply, std::string> fieldTextsFor(ServedBundle const& bundle,
+                                                                             std::string_view locale);
 
 /// @brief The actions of @p bundle that the principal of @p session may run: what `ui-catalog` answers as
 ///        `permitted`.
@@ -234,6 +262,12 @@ public:
     ///        client that does not speak it is refused at `ui-hello`.
     /// @param vocabulary The vocabulary.
     void requireVocabulary(std::string vocabulary) { _vocabularies.insert(std::move(vocabulary)); }
+
+    /// @brief Sets where the bundle's texts come from: `ui-texts` answers a client in its session's locale from it,
+    ///        and the chat's read tools translate a field's description through it. The schemas stay free of
+    ///        language, so one schema serves every locale. A later call replaces an earlier one; empty serves none.
+    /// @param source The source; see `FieldTextSource` for what it must answer and on which threads.
+    void setFieldTexts(FieldTextSource source) { _fieldTexts = std::move(source); }
 
     /// @brief Builds the bundle.
     ///
@@ -363,19 +397,23 @@ private:
     bool _appSynthesised = false;
     std::vector<std::string> _appModelTypes;
     std::set<std::string, std::less<>> _vocabularies{std::string{kExprVocabulary}, std::string{kVocabulary}};
+    FieldTextSource _fieldTexts;
 };
 
-/// @brief Whether an authoriser is asked about one of the UI service's reads: `ui`'s `hello`, `catalog` or `fetch`.
+/// @brief Whether an authoriser is asked about one of the UI service's reads: `ui`'s `hello`, `catalog`, `fetch` or
+///        `texts`.
 ///
 /// An application that serves a login screen admits these for a session with no principal yet, so a client can greet
-/// the service, read the catalog and fetch the login screen. Admitting them discloses no other screen: `ui-catalog`
-/// lists, and `ui-fetch` serves, a non-public screen only to a principal who may run its queries, which the
-/// authoriser still decides.
+/// the service, read the catalog, fetch the login screen and show its fields' texts in the person's language.
+/// Admitting them discloses no other screen: `ui-catalog` lists, and `ui-fetch` serves, a non-public screen only to a
+/// principal who may run its queries, which the authoriser still decides. `ui-texts` answers the application's
+/// words, as a bundled message catalogue holds them, and no data.
 /// @param modelType  The model type asked about.
 /// @param actionType The action asked about.
 /// @return Whether it is one of those reads.
 [[nodiscard]] constexpr bool isUiServiceRead(std::string_view modelType, std::string_view actionType) noexcept {
-    return modelType == "ui" && (actionType == "hello" || actionType == "catalog" || actionType == "fetch");
+    return modelType == "ui" &&
+           (actionType == "hello" || actionType == "catalog" || actionType == "fetch" || actionType == "texts");
 }
 
 /// @brief The UI service: answers `ui-hello`, `ui-catalog` and `ui-fetch` from one `ServedBundle`, and `ui-evaluate`
@@ -391,6 +429,7 @@ private:
 /// | `ui-fetch` of the manifest or a public file | the `ui-hello` gate |
 /// | `ui-fetch` of any other file | `authorize(session, "ui", "fetch")`; for a screen, also the catalog's rule |
 /// | `ui-evaluate` | `authorize(session, modelType, actionType)`: as the action it evaluates |
+/// | `ui-texts` | `authorize(session, "ui", "texts")` |
 ///
 /// A refusal is `err "unauthorized"`. A request body that is too large, malformed or carries a must-understand key
 /// is refused with the parser's reason.
@@ -409,7 +448,8 @@ public:
 
     /// @brief Whether @p kind is one of the service's kinds.
     /// @param kind The envelope kind.
-    /// @return `true` for `ui-hello`, `ui-catalog`, `ui-fetch` and `ui-evaluate`.
+    /// @return `true` for `ui-hello`, `ui-catalog`, `ui-fetch`, `ui-evaluate` and `ui-texts`, and for `ui-file` when
+    ///         the service has a file store.
     [[nodiscard]] bool serves(std::string_view kind) const override;
 
     /// @brief Answers one request with no connection behind it: a `ui-hello` offer of events is accepted in the
@@ -520,6 +560,14 @@ private:
     /// @return What the documents the principal may fetch name.
     [[nodiscard]] Fetchable listEntries(CatalogReply& reply, ::morph::session::Context const& session,
                                         ::morph::session::IAuthorizer const& authorizer) const;
+
+    /// @brief Answers a `ui-texts` with the application's texts in the session's locale, and logs the outcome at
+    ///        debug.
+    /// @param request    The envelope; its session names the locale, and its body is ignored.
+    /// @param authorizer The server's authoriser.
+    /// @return The encoded reply: a `TextsReply`, or `err` with why there is none.
+    [[nodiscard]] std::string texts(::morph::wire::Envelope const& request,
+                                    ::morph::session::IAuthorizer const& authorizer) const;
 
     /// @brief Answers a `ui-fetch` and logs the outcome at debug.
     /// @param request    The envelope; its body is a `FetchRequest`.
