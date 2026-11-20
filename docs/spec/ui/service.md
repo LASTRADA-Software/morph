@@ -364,10 +364,9 @@ while the schema stays free of language and is cached once for everyone ([../for
   checks the reply's bounds and must-understand keys. The answer is kept as one catalogue (`Source::texts()`); a
   refusal other than `kNoTextsReason`, or a server that does not know the kind, is a problem the shell reports once.
   The shell installs `layeredProvider(texts, catalogues)` ([catalogue.md](catalogue.md#texts-from-the-server)).
-- **What a form shows.** A form resolves its texts when it is built. The source loads the texts before it delivers
-  the bundle, so the start screen's forms have them when the shell starts in the locale the source asked in (`en`,
-  unless `setLocale` was called before `open`). A form already mounted when the locale changes, or when texts for a
-  new locale arrive, keeps the texts it was built with until it is mounted again.
+- **What a form shows.** A mounted form's field texts follow the session's translations and locale
+  ([../forms/engine.md](../forms/engine.md)), so texts that arrive after a form mounted, as after a locale change,
+  show on it at once, without a remount.
 
 
 A client in development mode follows the server's documents as they change (spec 5 §12, spec 6 §21). The pieces

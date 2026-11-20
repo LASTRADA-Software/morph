@@ -149,7 +149,7 @@ using ViewOptions = std::shared_ptr<FormViewOptions const>;
                 return error.has_value() ? std::vector<std::string>{error->message} : std::vector<std::string>{};
             },
         .stale = false,
-        .description = field->help(),
+        .description = [field] { return field->help(); },
     };
 }
 
@@ -159,7 +159,7 @@ using ViewOptions = std::shared_ptr<FormViewOptions const>;
 [[nodiscard]] inline ui::Common controlCommon(FieldState const* field) {
     ui::Common common{};
     common.testId = "field_" + field->path();
-    common.a11y.name = field->label();
+    common.a11y.name = [field] { return field->label(); };
     return common;
 }
 
@@ -216,7 +216,7 @@ using ViewOptions = std::shared_ptr<FormViewOptions const>;
             .onChange = [field](std::string text) { field->text().set(std::move(text)); },
             .onSubmit = {},
             .onCommit = {},
-            .placeholder = field->placeholder(),
+            .placeholder = [field] { return field->placeholder(); },
             .mode = mode,
             .unit = std::move(unit),
             .decimals = std::move(decimals),
@@ -289,7 +289,7 @@ using ViewOptions = std::shared_ptr<FormViewOptions const>;
         }
         ui::Common unitCommon{};
         unitCommon.testId = "unit_" + field->path();
-        unitCommon.a11y.name = field->label();
+        unitCommon.a11y.name = [field] { return field->label(); };
         return ui::row(ui::Row{
             .children = {textInput(ui::TextInputMode::SingleLine),
                          ui::select(ui::Select{
@@ -313,7 +313,7 @@ using ViewOptions = std::shared_ptr<FormViewOptions const>;
     }
     if (spec.kind == FieldKind::Boolean) {
         return ui::checkbox(ui::Checkbox{
-            .label = field->label(),
+            .label = [field] { return field->label(); },
             .checked = [field] { return trim(field->text().get()) == "true"; },
             .onToggle = [field](bool checked) { field->text().set(checked ? "true" : "false"); },
             .field = fieldState(field),
@@ -362,8 +362,10 @@ using ViewOptions = std::shared_ptr<FormViewOptions const>;
         for (auto const& member : state.members()) {
             cells.push_back(fieldCell(session, *member, options));
         }
-        ui::Panel panel{
-            .title = state.label(), .padding = 4, .child = ui::column(ui::Column{.children = std::move(cells)})};
+        FieldState const* const object = &state;
+        ui::Panel panel{.title = [object] { return object->label(); },
+                        .padding = 4,
+                        .child = ui::column(ui::Column{.children = std::move(cells)})};
         panel.common.testId = "field_" + state.path();
         return ui::panel(std::move(panel));
     }
@@ -443,13 +445,13 @@ using ViewOptions = std::shared_ptr<FormViewOptions const>;
     holder.common.layout = {.width = ui::Sizing::stretch(), .height = {}};
     ui::Row line{
         .children = {std::move(caption), ui::column(std::move(holder))}, .gap = 3, .align = ui::Align::Center};
-    if (!helpOutside || state.help().empty()) {
+    if (!helpOutside || !state.hasHelp()) {
         line.common = std::move(common);
         return ui::row(std::move(line));
     }
-    ui::Row help{
-        .children = {captionSpace(width), ui::text(ui::Text{.text = state.help(), .role = ui::TextRole::Muted})},
-        .gap = 3};
+    ui::Row help{.children = {captionSpace(width), ui::text(ui::Text{.text = [field] { return field->help(); },
+                                                                     .role = ui::TextRole::Muted})},
+                 .gap = 3};
     ui::Column cell{.children = {ui::row(std::move(line)), ui::row(std::move(help))}};
     cell.common = std::move(common);
     return ui::column(std::move(cell));
@@ -491,8 +493,8 @@ inline ui::Node fieldCell(FormSession& session, FieldState& state, ViewOptions c
         children.push_back(ui::text(std::move(label)));
     }
     children.push_back(std::move(control));
-    if (helpOutside && !state.help().empty()) {
-        children.push_back(ui::text(ui::Text{.text = state.help(), .role = ui::TextRole::Muted}));
+    if (helpOutside && state.hasHelp()) {
+        children.push_back(ui::text(ui::Text{.text = [field] { return field->help(); }, .role = ui::TextRole::Muted}));
     }
     ui::Column cell{.children = std::move(children), .common = std::move(common)};
     return ui::column(std::move(cell));
@@ -563,7 +565,7 @@ inline ui::Node FieldView::defaultControl() const {
             while (i < groups.size() && detail::engine::elementAt(groups, i).kind == GroupKind::Tab &&
                    !detail::engine::elementAt(groups, i).implicit) {
                 tabs.push_back(
-                    ui::Tab{.label = session.groupTitle(i),
+                    ui::Tab{.label = [owner = &session, i] { return owner->groupTitle(i); },
                             .node = groupGrid(session, detail::engine::elementAt(groups, i), columns, shared)});
                 ++i;
             }
@@ -574,7 +576,7 @@ inline ui::Node FieldView::defaultControl() const {
                                   .onSelect = [selected](std::size_t index) { selected->set(index); }}));
         } else if (group.kind == GroupKind::Accordion) {
             reactive::Signal<bool>* const collapsed = &session.groupCollapsed(i);
-            children.push_back(ui::panel(ui::Panel{.title = session.groupTitle(i),
+            children.push_back(ui::panel(ui::Panel{.title = [owner = &session, i] { return owner->groupTitle(i); },
                                                    .padding = 4,
                                                    .child = groupGrid(session, group, columns, shared),
                                                    .collapsible = true,
@@ -582,8 +584,9 @@ inline ui::Node FieldView::defaultControl() const {
                                                    .onToggle = [collapsed](bool value) { collapsed->set(value); }}));
             ++i;
         } else {
-            children.push_back(ui::panel(ui::Panel{
-                .title = session.groupTitle(i), .padding = 4, .child = groupGrid(session, group, columns, shared)}));
+            children.push_back(ui::panel(ui::Panel{.title = [owner = &session, i] { return owner->groupTitle(i); },
+                                                   .padding = 4,
+                                                   .child = groupGrid(session, group, columns, shared)}));
             ++i;
         }
     }
