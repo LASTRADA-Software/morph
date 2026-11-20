@@ -175,6 +175,17 @@ TEST_CASE("table state: a user group and its filter are fitted together", "[tabl
 }
 
 // The parser's half of a stored document of an unknown version. Mutation: readState accepting an unknown version.
+// Mutation: `writeState` rebuilding `hidden` by walking `order` alone (`c3` is dropped).
+TEST_CASE("table state: a hidden column the stored order does not name is written back", "[table][state]") {
+    auto const read = readState(R"({"version":1,"layout":{"order":["c2","c1"],"hidden":["c3","c1"],"pinned":0,"widths":{}}})");
+    REQUIRE(read.has_value());
+    auto const again = readState(writeState(*read));
+    REQUIRE(again.has_value());
+    REQUIRE(again->layout.has_value());
+    CHECK(again->layout->order == std::vector<std::string>{"c2", "c1"});
+    CHECK(again->layout->hidden == std::vector<std::string>{"c1", "c3"});   // `order`'s first, then the rest as listed
+}
+
 TEST_CASE("table state: a document that is not JSON or of an unknown version is refused", "[table][state]") {
     CHECK_FALSE(readState("{not json").has_value());
     CHECK_FALSE(readState(R"({"version":2,"sort":[]})").has_value());
