@@ -11012,8 +11012,8 @@ Node ScreenCore::configureTable(TableConfig& config, LowerCtx const& ctx, TableO
         };
     }
     // Filters from the header, on every table: a column filters unless it says `filterable: false`, whatever
-    // `configurable` lets the user change about the columns. A user's filters go to the rows, and are held and saved, unless the document binds
-    // them; then `onFiltersChange` runs with `event` the new filters.
+    // `configurable` lets the user change about the columns. A user's filters go to the rows, and are held and
+    // saved, unless the document binds them; then `onFiltersChange` runs with `event` the new filters.
     FilterMenu& menu = *config.filterMenu;
     auto const refilter = [this, ctx, &config, keep, commands = node.event("onFiltersChange")](
                               table::FilterSpec const& spec) {
@@ -11193,9 +11193,10 @@ Node ScreenCore::configureTable(TableConfig& config, LowerCtx const& ctx, TableO
             openGroup(shown.at(index).second);
         }
     };
-    // A table with `configurable: false` has no menus, so neither the column chooser nor the sort dialog.
+    // A table with `configurable: false` has no menus, so neither the column chooser nor the sort dialog; with no
+    // column that filters, no dialog can open either, and the table is mounted alone.
     if (!config.menus) {
-        return filterMenuDialog(menu);
+        return std::ranges::contains(*filterable, true) ? filterMenuDialog(menu) : nullptr;
     }
     // A menu is built when it opens, and again when an entry is chosen, from the chain and the layout of the moment,
     // so the path the backend reports names the entry it showed.

@@ -644,14 +644,7 @@ public:
                 return;
             }
             state.ticks.ops.push_back(TickOp{.search = {}, .operand = entry.value.operand, .ticked = checked});
-            // "all of them, each in a column" is offered while 2 or more values are ticked: below that the line
-            // falls back to its default.
-            if (state.match == GroupMatch::Together &&
-                std::ranges::count_if(state.list, [&](FilterListEntry const& listed) {
-                    return tickedNow(state, listed.value);
-                }) < 2) {
-                state.match = GroupMatch::AnyColumn;
-            }
+            leaveTogether(state);
         });
     }
 
@@ -666,6 +659,7 @@ public:
             if (state.search.empty() && state.ticks.blanks) {
                 state.ticks.blanks = checked;
             }
+            leaveTogether(state);
         });
     }
 
@@ -847,6 +841,7 @@ public:
                                      .blanks = state.blanks > 0 ? std::optional{!dates(state)} : std::nullopt};
             state.dates.clear();
             state.refusal.clear();
+            leaveTogether(state);
         });
     }
 
@@ -921,15 +916,22 @@ public:
         if (state.target.formed) {
             return false;
         }
-        if (state.ticks.blanks == true) {
+        if (state.ticks.blanks == true ||
+            std::ranges::any_of(state.list, [&](FilterListEntry const& entry) { return tickedNow(state, entry.value); })) {
             return true;
         }
-        // Every value's state after the last operation that set them all, then any operation since that ticks.
+        // No listed value is ticked; one the list does not show may be: every value is, after the last operation
+        // that set them all, unless the list shows them all; and a "(Select all)" under a search since may tick
+        // values past the page.
         auto const last = std::ranges::find_if(state.ticks.ops.rbegin(), state.ticks.ops.rend(), [](TickOp const& op) {
             return !op.operand && op.search.empty();
         });
         bool const base = last == state.ticks.ops.rend() ? state.ticks.ticked : last->ticked;
-        return base || std::any_of(state.ticks.ops.rbegin(), last, [](TickOp const& op) { return op.ticked; });
+        bool const unlisted = !state.search.empty() || state.total < 0 ||
+                              static_cast<std::int64_t>(state.list.size()) < state.total;
+        return (base && unlisted) || std::any_of(state.ticks.ops.rbegin(), last, [](TickOp const& op) {
+                   return !op.operand && op.ticked;
+               });
     }
 
     /// @brief The note under the list: that it may grow, how many cells could not be read, and why the last Apply
@@ -989,6 +991,16 @@ private:
 
     [[nodiscard]] static std::vector<std::string> columnsOf(FilterTarget const& target) {
         return target.column.empty() ? target.columns : std::vector<std::string>{target.column};
+    }
+
+    // "all of them, each in a column" is offered while 2 or more values are ticked: below that the match line falls
+    // back to its default.
+    static void leaveTogether(FilterMenuState& state) {
+        if (state.match == GroupMatch::Together &&
+            std::ranges::count_if(state.list, [&](FilterListEntry const& listed) { return tickedNow(state, listed.value); }) <
+                2) {
+            state.match = GroupMatch::AnyColumn;
+        }
     }
 
     // Whether a date bucket lies under a listed bucket that is ticked itself.
