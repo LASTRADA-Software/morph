@@ -2109,6 +2109,32 @@ private:
         }
     }
 
+    // A selection of the view and the status line's entries. While `selectionView` is engaged the backend marks every
+    // row but its keys; when it disengages the selection is given again, since the one the backend showed before the
+    // view may equal the one it ends on, which would not be sent again.
+    void bindSelectionView(reactive::Scope& scope, Table const& spec, TableWidget& widget, bool& viewing) {
+        if (spec.onStatusEntry) {
+            widget.setOnStatusEntry(event(spec.onStatusEntry));
+        }
+        if (!spec.selectionView.isBound() && !spec.selectionView.constant()) {
+            return;
+        }
+        bind(scope, spec.selectionView,
+             [this, &widget, &viewing, selection = spec.selection](std::optional<std::vector<Key>> const& except) {
+                 if (except) {
+                     viewing = true;
+                     widget.setSelectionView(*except);
+                     return;
+                 }
+                 if (!viewing) {
+                     return;
+                 }
+                 viewing = false;
+                 widget.setSelection(selection.isBound() ? _rt->untracked([&] { return selection.binding()(); })
+                                                         : selection.constant());
+             });
+    }
+
     // Rows first, then the selection. The widget marks a selected key whenever its row arrives, so the order only
     // shapes the log: the first setSelection comes after the rows and already marks them.
     Widget& mountKind(reactive::Scope& scope, Table const& spec, ContainerWidget* parent) {
@@ -2199,10 +2225,16 @@ private:
                                       [&present](auto const& entry) { return !present.contains(entry.first); });
                         resolveSpans(widget, spans);
                     }});
+        // While the selection is of the view the backend marks it, and the key list it holds is not sent over it.
+        auto& viewing = scope.make<bool>(false);
         widget.setOnSelectionChange(inputEvent(
-            spec.onSelectionChange, controlled(scope, spec.selection, [&widget](std::vector<Key> const& keys) {
-                widget.setSelection(keys);
+            spec.onSelectionChange,
+            controlled(scope, spec.selection, [&widget, &viewing](std::vector<Key> const& keys) {
+                if (!viewing) {
+                    widget.setSelection(keys);
+                }
             })));
+        bindSelectionView(scope, spec, widget, viewing);
         return widget;
     }
 
@@ -3624,10 +3656,16 @@ private:
         bind(scope, spec.highlight, [this, &table](std::optional<TableHighlight> const& highlight) {
             static_cast<void>(runCallback(*_rt, [&] { highlightFrom(table, highlight); }));
         });
+        // While the selection is of the view the backend marks it, and the key list it holds is not sent over it.
+        auto& viewing = scope.make<bool>(false);
         widget.setOnSelectionChange(inputEvent(
-            spec.onSelectionChange, controlled(scope, spec.selection, [&widget](std::vector<Key> const& keys) {
-                widget.setSelection(keys);
+            spec.onSelectionChange,
+            controlled(scope, spec.selection, [&widget, &viewing](std::vector<Key> const& keys) {
+                if (!viewing) {
+                    widget.setSelection(keys);
+                }
             })));
+        bindSelectionView(scope, spec, widget, viewing);
         return widget;
     }
 

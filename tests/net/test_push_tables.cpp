@@ -30,7 +30,9 @@
 #include <morph/net/socket_server.hpp>
 #include <morph/reactive/runtime.hpp>
 #include <morph/session/session.hpp>
+#include <morph/forms/forms.hpp>
 #include <morph/table/description.hpp>
+#include <morph/table/row_selection.hpp>
 #include <morph/table/level_cache.hpp>
 #include <morph/ui/interpreter.hpp>
 #include <morph/ui/preferences.hpp>
@@ -1224,3 +1226,180 @@ TEST_CASE("shared views: a view published twice under one name over a socket is 
     REQUIRE(views->views.size() == 1);
     CHECK(views->views.front().sort.front().dir == morph::table::SortDirection::Descending);
 }
+
+// ── A selection of the view, resolved on the server ────────────────────────────────────────────────────────
+// Written by reading: morph_net_tests builds on POSIX only, and was not built or run for these cases.
+
+// NOLINTBEGIN(misc-use-internal-linkage)
+namespace selnet {
+
+struct TagRows;
+struct MoveRow;
+
+// Ten rows keyed 0..9: status "open" for 0..5, "closed" for 6..9. alice sees every row, bob rows 0..4.
+class Rows {
+public:
+    Rows();
+    morph::table::ServedTable rows(morph::table::TableContext const& context);
+    core::async::Task<morph::table::ChangedRows<&Rows::rows>> execute(TagRows action);
+    morph::table::ChangedRows<&Rows::rows> execute(MoveRow const& action);
+
+    static inline std::int64_t maxSelectedRows = 1'000'000;
+
+private:
+    std::shared_ptr<morph::table::VectorSource> _source;
+};
+
+struct TagRows {
+    morph::table::RowSelection<&Rows::rows> rows;
+    morph::table::RowRef<&Rows::rows> focus;
+};
+
+struct MoveRow {
+    std::int64_t key = 0;
+    std::string status;
+};
+
+}  // namespace selnet
+
+BRIDGE_REGISTER_MODEL(selnet::Rows, "selnet::Rows")
+BRIDGE_REGISTER_TABLE(selnet::Rows, "rows", &selnet::Rows::rows, morph::table::rowScoped)
+BRIDGE_REGISTER_ACTION(selnet::Rows, selnet::TagRows, "TagRows")
+BRIDGE_REGISTER_ACTION(selnet::Rows, selnet::MoveRow, "MoveRow")
+BRIDGE_REGISTER_EFFECTS(selnet::MoveRow, morph::effects::updatesTable<&selnet::Rows::rows>)
+
+namespace selnet {
+
+namespace {
+
+std::vector<morph::table::TableColumn> rowColumns() {
+    return {morph::table::TableColumn{.info = {.id = "id", .kind = morph::table::ColumnKind::Integer}, .label = "Id"},
+            morph::table::TableColumn{.info = {.id = "status", .kind = morph::table::ColumnKind::Text},
+                                      .label = "Status"}};
+}
+
+}  // namespace
+
+Rows::Rows() {
+    morph::table::TableDescription description;
+    description.columns = rowColumns();
+    _source = std::make_shared<morph::table::VectorSource>(morph::table::columnInfos(description));
+    std::vector<morph::table::RowId> keys;
+    std::vector<std::vector<morph::table::Cell>> cells;
+    for (std::int64_t row = 0; row < 10; ++row) {
+        keys.emplace_back(row);
+        cells.push_back({morph::table::Cell{row}, morph::table::Cell{std::string{row < 6 ? "open" : "closed"}}});
+    }
+    _source->setRows(std::move(keys), std::move(cells));
+}
+
+morph::table::ServedTable Rows::rows(morph::table::TableContext const& context) {
+    morph::table::ServedTable served;
+    served.description.id = "rows";
+    served.description.key = "id";
+    served.description.columns = rowColumns();
+    served.scope = context.session.principal;
+    served.limits.maxSelectedRows = maxSelectedRows;
+    if (context.session.principal == "bob") {
+        std::vector<morph::table::RowId> mine;
+        for (std::int64_t row = 0; row < 5; ++row) {
+            mine.emplace_back(row);
+        }
+        served.source = morph::table::scoped(_source, std::move(mine));
+    } else {
+        served.source = _source;
+    }
+    return served;
+}
+
+core::async::Task<morph::table::ChangedRows<&Rows::rows>> Rows::execute(TagRows action) {
+    auto const context = morph::table::detail::callerContext();
+    auto completion = morph::table::resolve(*this, action.rows, context, morph::table::SelectionPolicy::Exact);
+    auto resolved = co_await std::move(completion);
+    if (!resolved) {
+        morph::table::refuse(resolved.error());
+    }
+    morph::table::ChangedRows<&Rows::rows> out;
+    for (auto const& key : resolved->keys) {
+        out.rows.push_back(morph::table::ChangedRow{.key = key});
+    }
+    co_return out;
+}
+
+morph::table::ChangedRows<&Rows::rows> Rows::execute(MoveRow const& action) {
+    _source->patchRow(morph::table::RowId{action.key},
+                      {morph::table::Cell{action.key}, morph::table::Cell{action.status}});
+    return {.rows = {morph::table::ChangedRow{.key = morph::table::RowId{action.key}}}};
+}
+
+}  // namespace selnet
+// NOLINTEND(misc-use-internal-linkage)
+
+namespace {
+
+constexpr std::string_view kOpen = R"({"columns":{"status":{"include":[{"eq":"open"}]}}})";
+
+// The keys of a ChangedRows reply (`rows`, objects with `key`) or a SelectedRows reply (`keys`).
+std::vector<std::int64_t> keysOfReply(std::string const& body, std::string const& member) {
+    glz::generic_u64 json;
+    REQUIRE_FALSE(glz::read_json(json, body));
+    std::vector<std::int64_t> out;
+    for (auto const& item : json[member].get_array()) {
+        out.push_back(item.is_object() ? item.at("key").as<std::int64_t>() : item.as<std::int64_t>());
+    }
+    return out;
+}
+
+}  // namespace
+
+TEST_CASE("tables: an action resolves a view selection on its own model", "[net][tables][selection]") {
+    Server server;
+    Client alice{server.url, "alice"};
+    auto const model = alice.create("selnet::Rows");
+    auto const page =
+        pageOf(alice.execute(model, "selnet::Rows", "Table.rows", R"({"filters":)" + std::string{kOpen} + "}"));
+    std::string const revision = page.viewRevision;
+    REQUIRE(revision.size() == 48);
+    std::string const tag = R"({"rows":{"view":{"filters":)" + std::string{kOpen} + R"(,"retained":[],"revision":")" +
+                            revision + R"("},"except":[3]},"focus":0})";
+    auto const tagged = alice.execute(model, "selnet::Rows", "TagRows", tag);
+    REQUIRE(tagged.kind == "ok");
+    CHECK(keysOfReply(tagged.body, "rows") == std::vector<std::int64_t>{0, 1, 2, 4, 5});
+    REQUIRE(alice.execute(model, "selnet::Rows", "MoveRow", R"({"key":7,"status":"open"})").kind == "ok");
+    auto const refused = alice.execute(model, "selnet::Rows", "TagRows", tag);
+    CHECK(refused.kind == "err");
+    CHECK(refused.body.find("morph.table.viewChanged") != std::string::npos);
+}
+// Mutation: viewRevision that ignores the source snapshot, which tags rows under the old revision.
+
+TEST_CASE("tables: Table.<id>.resolve answers for the caller", "[net][tables][selection]") {
+    Server server;
+    Client bob{server.url, "bob"};
+    Client alice{server.url, "alice"};
+    auto const bobModel = bob.create("selnet::Rows");
+    auto const keys = bob.execute(bobModel, "selnet::Rows", "Table.rows.resolve",
+                                  R"({"selection":{"keys":[1,3,8]},"policy":"current"})");
+    REQUIRE(keys.kind == "ok");
+    CHECK(keysOfReply(keys.body, "keys") == std::vector<std::int64_t>{1, 3});
+    CHECK(keys.body.find(R"("dropped":1)") != std::string::npos);
+    std::string const view = R"({"selection":{"view":{"filters":)" + std::string{kOpen} +
+                             R"(,"retained":[],"revision":""},"except":[]},"policy":"current"})";
+    auto const scoped = bob.execute(bobModel, "selnet::Rows", "Table.rows.resolve", view);
+    REQUIRE(scoped.kind == "ok");
+    CHECK(keysOfReply(scoped.body, "keys") == std::vector<std::int64_t>{0, 1, 2, 3, 4});  // none outside the scope
+    selnet::Rows::maxSelectedRows = 5;
+    auto const aliceModel = alice.create("selnet::Rows");
+    auto const over = alice.execute(aliceModel, "selnet::Rows", "Table.rows.resolve", view);
+    selnet::Rows::maxSelectedRows = 1'000'000;
+    CHECK(over.kind == "err");
+    CHECK(over.body.find("limitExceeded") != std::string::npos);
+}
+// Mutation: resolve run under the server principal, which returns rows outside the caller scope.
+
+TEST_CASE("tables: a selection's schema names its table", "[net][tables][selection]") {
+    glz::generic_u64 schema;
+    REQUIRE_FALSE(glz::read_json(schema, morph::forms::schemaJson<selnet::TagRows>()));
+    CHECK(schema["properties"]["rows"]["x-selectionOf"].get_string() == "selnet::Rows.rows");
+    CHECK(schema["properties"]["focus"]["x-rowOf"].get_string() == "selnet::Rows.rows");
+}
+// Mutation: schemaValue returning an empty name, which leaves the client unable to mark busy rows.

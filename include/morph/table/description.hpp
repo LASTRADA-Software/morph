@@ -469,6 +469,9 @@ struct GenericPage {
     std::vector<std::int64_t> indices;
     /// @brief A distinct-values reply only: the values; the page then has no rows.
     std::optional<DistinctValues> distinct;
+    /// @brief The view's membership (`MembershipDigest::text`): two pages with the same one are of views of the same
+    ///        rows, whatever their sort. Empty on a distinct-values reply, and then left out of the JSON.
+    std::string viewRevision;
     /// @brief The id of each unit number the page's `Measure` cells hold, by which they are written: filled by
     ///        `writeGenericPage` and `readGenericPage`. Not a member of the JSON, where a measure names its unit's id.
     std::map<UnitId, std::string> units;
@@ -962,7 +965,7 @@ struct glz::meta<morph::table::GenericPage> {
     /// @param member  The member.
     /// @param key     Its JSON name.
     /// @param context Unused.
-    /// @return `true` for an empty `failed` or `indices`.
+    /// @return `true` for an empty `failed`, `indices` or `viewRevision`.
     template <typename V>
     static constexpr bool skip_if(V const& member, std::string_view key, glz::meta_context const& context) {
         static_cast<void>(context);
@@ -977,7 +980,7 @@ struct glz::meta<morph::table::GenericPage> {
                                 [](T const& page) { return morph::table::detail::writePageRows(page); }>,
                     "total", &T::total, "totalKind", &T::totalKind, "offset", &T::offset, "unloadedRows",
                     &T::unloadedRows, "undecided", &T::undecided, "awaiting", &T::awaiting, "failed", &T::failed,
-                    "indices", &T::indices, "distinct", &T::distinct);
+                    "indices", &T::indices, "distinct", &T::distinct, "viewRevision", &T::viewRevision);
 };
 
 namespace morph::table {
@@ -1047,6 +1050,7 @@ namespace morph::table {
     out.awaiting = page.awaiting;
     out.failed = page.failed;
     out.indices = page.indices;
+    out.viewRevision = page.viewRevision;
     return out;
 }
 
@@ -2478,3 +2482,6 @@ struct glz::meta<morph::table::QueryTable<Function>> {
     /// @brief The action is written as its query.
     static constexpr auto value = &T::query;
 };
+
+// The selection types `BRIDGE_REGISTER_TABLE` registers `Table.<id>.resolve` with; they build on this header.
+#include <morph/table/row_selection.hpp>

@@ -68,6 +68,11 @@ TableImpl::TableImpl(Context& context, ui::ContainerWidget* parent)
                                                                  : ui::SelectionChange::Replace);
         }
     });
+    relay().on(QStringLiteral("statusEntry"), [this](QVariant const& id) {
+        if (auto const handler = _onStatusEntry) {
+            handler(id.toString().toStdString());
+        }
+    });
     relay().on(QStringLiteral("retry"), [this](QVariant const&) {
         if (auto const handler = _onRetry) {
             handler();
@@ -290,8 +295,18 @@ void TableImpl::setRowLabel(ui::Widget& row, std::string_view label) {
 }
 
 void TableImpl::setSelection(std::vector<ui::Key> const& keys) {
+    _viewExcept.reset();
     _requested = keys;
     mark();
+}
+
+void TableImpl::setSelectionView(std::vector<ui::Key> const& except) {
+    _viewExcept = except;
+    mark();
+}
+
+void TableImpl::setOnStatusEntry(std::function<void(std::string id)> onStatusEntry) {
+    _onStatusEntry = std::move(onStatusEntry);
 }
 
 void TableImpl::setOnSelectionChange(
@@ -432,15 +447,24 @@ void TableImpl::setRowIndex(ui::Widget& row, std::size_t viewRow) {
     }
 }
 
-// The counts, the state and the message on one line, two spaces apart.
+// The counts, the state, what stands and the message on one line, two spaces apart; the entries are buttons after
+// it, the standing ones first, each with its id and label.
 void TableImpl::setStatus(ui::TableStatus const& status) {
     QStringList parts;
-    for (std::string const* const part : {&status.counts, &status.state, &status.message}) {
+    for (std::string const* const part : {&status.counts, &status.state, &status.standing, &status.message}) {
         if (!part->empty()) {
             parts.append(toQString(*part));
         }
     }
     write("statusText", parts.join(QStringLiteral("  ")));
+    QVariantList entries;
+    for (auto const* const list : {&status.standingEntries, &status.entries}) {
+        for (ui::StatusEntry const& entry : *list) {
+            entries.append(QVariantMap{{QStringLiteral("id"), toQString(entry.id)},
+                                       {QStringLiteral("label"), toQString(entry.label)}});
+        }
+    }
+    write("statusEntries", status.shown ? entries : QVariantList{});
     write("retryShown", status.shown && status.retry);
     write("statusShown", status.shown);
 }
@@ -691,7 +715,9 @@ void TableImpl::mark() const {
             continue;
         }
         bool const selected =
-            row->key() && !heading(*row) && std::ranges::find(_requested, *row->key()) != _requested.end();
+            row->key() && !heading(*row) &&
+            (_viewExcept ? !std::ranges::contains(*_viewExcept, *row->key())
+                         : std::ranges::find(_requested, *row->key()) != _requested.end());
         row->write("selected", selected);
     }
 }
@@ -751,6 +777,24 @@ void TableImpl::tapped(TableRowImpl const& row, ui::RowClick click) {
         auto const [low, high] = std::minmax(from, target);
         select(target == keys.end() ? std::vector<ui::Key>{key} : std::vector<ui::Key>{low, std::next(high)},
                ui::SelectionChange::Replace);
+        return;
+    }
+    // A selection of the view: the keys now marked among the rows held, the clicked one toggled. The view state
+    // lasts until the caller sets the selection or the view again.
+    if (_viewExcept) {
+        std::vector<ui::Key> marked;
+        for (ui::Key const& held : rowKeys()) {
+            bool const out = std::ranges::contains(*_viewExcept, held);
+            if (held == key ? out : !out) {
+                marked.push_back(held);
+            }
+        }
+        _anchor = key;
+        if (_onSelectionChange) {
+            // A copy: the handler may destroy this table.
+            auto const handler = _onSelectionChange;
+            handler(std::move(marked), ui::SelectionChange::Extend);
+        }
         return;
     }
     // A user's change drops a requested key still waiting for its row.

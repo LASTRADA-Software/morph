@@ -2410,6 +2410,7 @@ public:
     /// @brief Requests the rows with @p keys, and records property `selection` as the rows it marks.
     /// @param keys The selected keys.
     void setSelection(std::vector<Key> const& keys) override {
+        _viewExcept.reset();
         _requested = keys;
         set("selection", marked());
     }
@@ -2420,6 +2421,24 @@ public:
         _existing = std::unordered_set<Key>{keys.begin(), keys.end()};
         remark();
     }
+
+    /// @brief Marks every row but those of @p except until the next `setSelection`, and records property
+    ///        `selection` as the rows it marks.
+    /// @param except The keys left out.
+    void setSelectionView(std::vector<Key> const& except) override {
+        _viewExcept = except;
+        set("selection", marked());
+    }
+
+    /// @brief Stores the handler `RecordingBackend::chooseStatusEntry` calls.
+    /// @param onStatusEntry The handler.
+    void setOnStatusEntry(std::function<void(std::string id)> onStatusEntry) override {
+        _onStatusEntry = std::move(onStatusEntry);
+    }
+
+    /// @brief The handler `setOnStatusEntry` stored.
+    /// @return It; empty when none.
+    [[nodiscard]] std::function<void(std::string)> const& onStatusEntry() const noexcept { return _onStatusEntry; }
 
     /// @brief Stores the handler `RecordingBackend::selectRows` calls.
     /// @param onSelectionChange The handler.
@@ -2992,6 +3011,7 @@ public:
     ///        input left it; nothing is logged.
     /// @param keys Keys of current rows.
     void select(std::vector<Key> const& keys) {
+        _viewExcept.reset();
         _requested = keys;
         remark();
     }
@@ -3051,6 +3071,14 @@ public:
     /// @return The keys.
     [[nodiscard]] std::vector<Key> markedKeys() const {
         std::vector<Key> keys;
+        if (_viewExcept) {
+            for (Key const& key : rowKeys()) {
+                if (!std::ranges::contains(*_viewExcept, key)) {
+                    keys.push_back(key);
+                }
+            }
+            return keys;
+        }
         for (Key const& key : _requested.value_or(std::vector<Key>{})) {
             if ((rowOf(key).has_value() || _existing.contains(key)) && !headingKey(key)) {
                 keys.push_back(key);
@@ -3078,6 +3106,9 @@ private:
     std::unordered_set<Key> _existing;
     // Engaged once `setSelection` ran or the user selected.
     std::optional<std::vector<Key>> _requested;
+    // Engaged while the selection is of the view: every row but these keys is marked.
+    std::optional<std::vector<Key>> _viewExcept;
+    std::function<void(std::string)> _onStatusEntry;
     // The row a Shift-click's range starts from: the last row clicked without Shift.
     std::optional<Key> _anchor;
     std::function<void(std::size_t, std::size_t)> _onVisibleRangeChanged;
@@ -3845,6 +3876,54 @@ public:
         auto [keys, change] = table->clicked(key, click);
         table->select(keys);
         invoke(record.callbacks.selection, std::move(keys), change);
+    }
+
+    /// @brief A plain click on a row: `clickRow` with `RowClick::Only`.
+    /// @param widgetId The table.
+    /// @param key      The row's key.
+    void clickRow(int widgetId, Key const& key) { clickRow(widgetId, key, RowClick::Only); }
+
+    /// @brief A `Ctrl`+click on a row: `clickRow` with `RowClick::Toggle`.
+    /// @param widgetId The table.
+    /// @param key      The row's key.
+    void ctrlClickRow(int widgetId, Key const& key) { clickRow(widgetId, key, RowClick::Toggle); }
+
+    /// @brief The user's select-all on a `Multiple` table (`Ctrl+A`, the select-all box): the handler
+    ///        `setOnSelectAll` stored.
+    /// @param widgetId The table.
+    /// @throws std::logic_error when the widget is not a table or has no select-all handler.
+    void selectAll(int widgetId) {
+        detail::Record const& record = expectKind(widgetId, "selectAll", {"Table"});
+        auto* const table = dynamic_cast<detail::FakeTable*>(record.widget);
+        if (table == nullptr || !table->onSelectAll()) {
+            throw std::logic_error{"RecordingBackend: selectAll of Table#" + std::to_string(widgetId) +
+                                   ", which has no select-all handler"};
+        }
+        if (reachable(record)) {
+            std::function<void()> const selectAll = table->onSelectAll();
+            selectAll();
+        }
+    }
+
+    /// @brief Chooses an entry the status line shows: the handler `setOnStatusEntry` stored, with its id.
+    /// @param widgetId The table.
+    /// @param entry    The entry's id.
+    /// @throws std::logic_error when the widget is not a table, has no handler, or its status shows no such entry.
+    void chooseStatusEntry(int widgetId, std::string const& entry) {
+        detail::Record const& record = expectKind(widgetId, "chooseStatusEntry", {"Table"});
+        auto* const table = dynamic_cast<detail::FakeTable*>(record.widget);
+        bool const shown =
+            table != nullptr &&
+            (std::ranges::contains(table->status().entries, entry, &StatusEntry::id) ||
+             std::ranges::contains(table->status().standingEntries, entry, &StatusEntry::id));
+        if (!shown || !table->onStatusEntry()) {
+            throw std::logic_error{"RecordingBackend: chooseStatusEntry of " + entry + " on Table#" +
+                                   std::to_string(widgetId) + ", whose status line shows no such entry"};
+        }
+        if (reachable(record)) {
+            std::function<void(std::string)> const choose = table->onStatusEntry();
+            choose(entry);
+        }
     }
 
     /// @brief Clicks a column's header as the user would: a sortable column's reaches `onSort` with its index and

@@ -676,6 +676,69 @@ private:
     std::shared_ptr<detail::WatchRegistration> _registration;
 };
 
+/// @brief A mutation's run as it is sent.
+struct RunStarted {
+    /// @brief The run's id, unique in the session.
+    std::uint64_t run;
+    /// @brief The action's id.
+    std::string const& action;
+    /// @brief The body sent.
+    Value const& body;
+};
+
+/// @brief A mutation's run as it settles.
+struct RunSettled {
+    /// @brief The run's id, as `RunStarted` gave it.
+    std::uint64_t run;
+    /// @brief The action's id.
+    std::string const& action;
+    /// @brief The body sent.
+    Value const& body;
+    /// @brief Whether the action replied.
+    bool succeeded;
+    /// @brief The reply; null for a run that failed.
+    Value const& reply;
+    /// @brief The `ActionRefusal` code of a refused run; empty for none.
+    std::string const& refusalCode;
+    /// @brief Runs the same mutation again, with the run's bindings and another body.
+    std::function<void(Value body)> rerun;
+};
+
+/// @brief Whether an action's input names rows of a table as a selection or as one row.
+enum class TableInputKind : std::uint8_t {
+    Selection,  ///< A `table::RowSelection`: its schema property carries `x-selectionOf`.
+    Row,        ///< A `table::RowRef`: its schema property carries `x-rowOf`.
+};
+
+/// @brief A top-level member of an action's input that names rows of a table.
+struct TableInput {
+    /// @brief The member's name.
+    std::string member;
+    /// @brief The table's record, as the keyword names it.
+    std::string record;
+    /// @brief A selection or one row.
+    TableInputKind kind = TableInputKind::Selection;
+};
+
+/// @brief The members of an action's input schema that name rows of a table.
+/// @param schemaJson The action's input schema.
+/// @return Each top-level property carrying `x-selectionOf` or `x-rowOf`, by member name; none for a schema that
+///         does not read.
+[[nodiscard]] MORPH_API std::vector<TableInput> tableInputsOf(std::string_view schemaJson);
+
+/// @brief Hears every mutation run of a session: what a model-backed table marks its rows by, and offers again.
+// NOLINTNEXTLINE(cppcoreguidelines-special-member-functions): an interface; observers are not copied through it.
+class RunObserver {
+public:
+    virtual ~RunObserver() = default;
+    /// @brief A run was sent.
+    /// @param run The run.
+    virtual void started(RunStarted const& run) = 0;
+    /// @brief A run settled.
+    /// @param run The run.
+    virtual void settled(RunSettled const& run) = 0;
+};
+
 /// @brief What screens of one client session share (spec 5 §5, §12b): the query cache, the mounted queries, the
 ///        principal's permitted actions, the formatting facts and the client's `env`, `session` and `host` values.
 ///
@@ -683,6 +746,22 @@ private:
 /// principal change.
 class MORPH_API Session {
 public:
+    /// @brief Adds an observer of every mutation run; it must be removed before it goes.
+    /// @param observer The observer.
+    void addRunObserver(RunObserver* observer) { _runObservers.push_back(observer); }
+
+    /// @brief Removes an observer added with `addRunObserver`.
+    /// @param observer The observer.
+    void removeRunObserver(RunObserver* observer) { std::erase(_runObservers, observer); }
+
+    /// @brief The observers of mutation runs, in the order they were added.
+    /// @return A copy, so an observer may remove itself while it is told.
+    [[nodiscard]] std::vector<RunObserver*> runObservers() const { return _runObservers; }
+
+    /// @brief The next run id: one counter for the whole session, so two mutations never share one.
+    /// @return The id.
+    [[nodiscard]] std::uint64_t nextRunId() noexcept { return ++_runIds; }
+
     /// @brief An empty session.
     /// @param runtime The runtime. Borrowed.
     /// @param options Timers, clock, catalog and the inline cap.
@@ -1208,6 +1287,8 @@ private:
     int _userDepth = 0;
     bool _lastWriteUser = false;
     std::uint64_t _privateTokens = 0;
+    std::vector<RunObserver*> _runObservers;
+    std::uint64_t _runIds = 0;
     /// After everything a save or load reaches, so it is destroyed first.
     std::shared_ptr<TableStates> _tableStates;
 };
@@ -1827,6 +1908,8 @@ public:
 private:
     struct Run {
         std::uint64_t id = 0;
+        /// The id observers know the run by: `Session::nextRunId`, unique across mutations.
+        std::uint64_t sessionRun = 0;
         Value body;
         std::shared_ptr<Bindings const> bindings;
         RunDone done;
@@ -2110,6 +2193,9 @@ public:
     /// @param table The table's element; one that is neither a model-backed table nor one over `rows` is left alone.
     /// @param text  The message, or empty.
     void tableMessage(ElementState& table, std::string text);
+    /// Shows a message in a table's status line with the choices it offers, each with what choosing it runs.
+    void tableMessage(ElementState& table, std::string text,
+                      std::vector<std::pair<StatusEntry, std::function<void()>>> entries);
 
     /// @brief Says a table state's failed save in the status line of every table of the screen mounted with its key.
     /// @param key    The state's key.

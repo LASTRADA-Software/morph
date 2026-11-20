@@ -47,6 +47,7 @@
 #include <morph/table/engine.hpp>
 #include <morph/table/filter.hpp>
 #include <morph/table/query.hpp>
+#include <morph/table/row_selection.hpp>
 #include <morph/table/state_store.hpp>
 #include <morph/table/view_change.hpp>
 #include <morph/ui/expression.hpp>
@@ -57,6 +58,7 @@
 #include <morph/util/rational.hpp>
 #include <optional>
 #include <set>
+#include <unordered_set>
 #include <span>
 #include <stdexcept>
 #include <stop_token>
@@ -131,6 +133,93 @@ struct FetchedRow {
     ///        loaded, empty for a column the rows do not have.
     std::vector<table::Cell> cells;
 };
+
+/// @brief The view a selection of the view is of: what the server resolves it against.
+struct ViewSelection {
+    /// @brief The view's filter, as the table queried it.
+    table::FilterSpec filters;
+    /// @brief The rows the view kept although they no longer match.
+    std::vector<table::RowId> retained;
+    /// @brief The view's `viewRevision` when the user selected it.
+    std::string revision;
+
+    /// @brief Member-wise equality.
+    /// @param other The view to compare with.
+    /// @return `true` when every member matches.
+    [[nodiscard]] bool operator==(ViewSelection const& other) const = default;
+};
+
+/// @brief What a user selected in a table: exactly some keys, or every row of a view less some keys. Its JSON is
+///        `table::RowSelection`'s (`selectionJsonOf`).
+struct TableSelection {
+    /// @brief Without `view`: exactly these rows.
+    std::vector<table::RowId> keys;
+    /// @brief With it: every row of that view, less `except`.
+    std::optional<ViewSelection> view;
+    /// @brief The keys a selection of the view leaves out.
+    std::vector<table::RowId> except;
+
+    /// @brief Member-wise equality.
+    /// @param other The selection to compare with.
+    /// @return `true` when every member matches.
+    [[nodiscard]] bool operator==(TableSelection const& other) const = default;
+};
+
+/// @brief Whether a selected count is the count or an estimate; element value `exact` or `approximate`.
+enum class CountKind : std::uint8_t {
+    Exact,        ///< The count of the rows selected.
+    Approximate,  ///< An estimate: the total is a lower bound, or a key left out is not accounted for.
+};
+
+/// @brief How many rows a selection holds.
+struct SelectedCount {
+    /// @brief The rows.
+    std::int64_t rows = 0;
+    /// @brief Whether `rows` is exact.
+    CountKind kind = CountKind::Exact;
+
+    /// @brief Member-wise equality.
+    /// @param other The count to compare with.
+    /// @return `true` when rows and kind match.
+    [[nodiscard]] bool operator==(SelectedCount const& other) const = default;
+};
+
+/// @brief Why the view cannot be selected yet: its membership is still open.
+struct SelectAllRefusal {
+    /// @brief Rows the filter cannot decide until a level loads.
+    std::int64_t undecided = 0;
+    /// @brief The awaited levels a filtered column needs.
+    std::vector<std::string> levels;
+};
+
+/// @brief The JSON of a selection, as an action's body carries it: `{"keys": […]}`, or `{"view": {…}, "except":
+///        […]}` with the filter's default members left out.
+/// @param selection The selection.
+/// @return The JSON text.
+[[nodiscard]] inline std::string selectionJsonOf(TableSelection const& selection) {
+    return table::detail::selectionJson(
+        selection.keys, selection.view ? &selection.view->filters : nullptr,
+        selection.view ? std::span<table::RowId const>{selection.view->retained} : std::span<table::RowId const>{},
+        selection.view ? std::string_view{selection.view->revision} : std::string_view{}, selection.except);
+}
+
+/// @brief What the status line says when select-all is refused.
+/// @param refusal Why.
+/// @param locale  The formatting facts: the count's group separator.
+/// @return `"Select all is available once <n> rows are decided"`, or with no undecided row `"Select all is available
+///         once <levels joined by " and "> data has loaded"`.
+[[nodiscard]] inline std::string selectAllRefusalText(SelectAllRefusal const& refusal, FormatContext const& locale) {
+    if (refusal.undecided > 0) {
+        return "Select all is available once " +
+               render::formatCanonicalNumber(std::to_string(refusal.undecided), locale.numeric) +
+               (refusal.undecided == 1 ? " row is decided" : " rows are decided");
+    }
+    std::string levels;
+    for (std::string const& level : refusal.levels) {
+        levels += (levels.empty() ? "" : " and ") + level;
+    }
+    return "Select all is available once " + levels + " data has loaded";
+}
 
 /// @brief What a table's mount reads, whatever serves the rows.
 ///
@@ -209,6 +298,44 @@ public:
     /// @brief What the status line counts.
     /// @return The counts.
     [[nodiscard]] virtual TableCountsView counts() const = 0;
+
+    /// @brief The view as a selection of it takes it: its filter, its retained rows and its revision.
+    /// @return The view, or why it cannot be selected yet; rows that select by keys alone refuse with nothing
+    ///         undecided and no level.
+    [[nodiscard]] virtual std::expected<ViewSelection, SelectAllRefusal> selectView() const {
+        return std::unexpected(SelectAllRefusal{});
+    }
+
+    /// @brief How many rows a selection holds, as far as the rows know.
+    /// @param selection The selection.
+    /// @return The count; for keys, their number, exact.
+    [[nodiscard]] virtual SelectedCount selectedCount(TableSelection const& selection) const {
+        return SelectedCount{.rows = static_cast<std::int64_t>(selection.keys.size()), .kind = CountKind::Exact};
+    }
+
+    /// @brief Whether a reply has shown that the view has no row with a key: a key of a selection's `except` that
+    ///        left the view is dropped from it.
+    /// @param key The key.
+    /// @return `true` once a reply that asked for the key left it out, until one holds it again.
+    [[nodiscard]] virtual bool leftView(table::RowId const& key) const {
+        static_cast<void>(key);
+        return false;
+    }
+
+    /// @brief Fetches a range of view rows with the cells of the columns named, whether or not they are held: what
+    ///        a copy of a selection of the view reads. Nothing is held or cached for them.
+    /// @param first   The first view row.
+    /// @param count   The rows.
+    /// @param columns The column ids whose cells each row carries, in that order.
+    /// @return One row per view row of the range the view has, in view order, delivered on the owner; none from
+    ///         rows that cannot read a range.
+    virtual async::Completion<std::expected<std::vector<FetchedRow>, table::TableError>> rowsOf(
+        std::int64_t first, std::int64_t count, std::span<std::string const> columns) {
+        static_cast<void>(first);
+        static_cast<void>(count);
+        static_cast<void>(columns);
+        return fetchRows({}, {});
+    }
 
     /// @brief Sets the one receiver of the view's changes, called after the rows changed with the operations that
     ///        turn the old view into the new one.
@@ -552,6 +679,49 @@ public:
         }
         promise.resolve(Result{std::move(rows)});
         return std::move(completion);
+    }
+
+    /// @brief The engine's view as a selection takes it. A table held whole selects all by keys, so the lowering
+    ///        does not ask; the answer is the engine's filter and the digest of its view's keys.
+    /// @return The view; never refused, since every row is decided.
+    [[nodiscard]] std::expected<ViewSelection, SelectAllRefusal> selectView() const override {
+        table::MembershipDigest digest;
+        for (std::size_t at = 0; at < _engine->viewRowCount(); ++at) {
+            digest.add(_engine->rowIdAt(at));
+        }
+        return ViewSelection{.filters = _engine->filter(), .retained = {}, .revision = digest.text()};
+    }
+
+    /// @brief How many rows a selection holds: every row is here, so the count is exact.
+    /// @param selection The selection.
+    /// @return The keys' number, or the view's rows less the keys of `except` in it.
+    [[nodiscard]] SelectedCount selectedCount(TableSelection const& selection) const override {
+        if (!selection.view) {
+            return SelectedCount{.rows = static_cast<std::int64_t>(selection.keys.size()), .kind = CountKind::Exact};
+        }
+        auto rows = static_cast<std::int64_t>(_engine->viewRowCount());
+        for (table::RowId const& key : selection.except) {
+            if (_engine->viewRowOfKey(key)) {
+                --rows;
+            }
+        }
+        return SelectedCount{.rows = rows, .kind = CountKind::Exact};
+    }
+
+    /// @brief A range of view rows, read from the engine at once.
+    /// @param first   The first view row.
+    /// @param count   The rows.
+    /// @param columns The column ids whose cells each row carries.
+    /// @return The rows in view order, delivered on the engine's owner; the part of the range outside the view has
+    ///         none.
+    async::Completion<std::expected<std::vector<FetchedRow>, table::TableError>> rowsOf(
+        std::int64_t first, std::int64_t count, std::span<std::string const> columns) override {
+        auto const rows = static_cast<std::int64_t>(_engine->viewRowCount());
+        std::vector<table::RowId> keys;
+        for (std::int64_t at = std::max<std::int64_t>(first, 0); at < std::min(rows, first + count); ++at) {
+            keys.push_back(_engine->rowIdAt(static_cast<std::size_t>(at)));
+        }
+        return fetchRows(std::move(keys), std::vector<std::string>(columns.begin(), columns.end()));
     }
 
     /// @brief Finds the view index of the row with a key in the engine's view, as it is now.
@@ -2779,6 +2949,7 @@ public:
             return {};
         }
         _filter = std::move(filter);
+        _outOfView.clear();
         restart();
         return {};
     }
@@ -2859,6 +3030,152 @@ public:
                                .pending = _window.pending() || !_rowsFlights.empty(),
                                .awaiting = {awaiting.begin(), awaiting.end()},
                                .failed = {failed.begin(), failed.end()}};
+    }
+
+    /// @brief The view as a selection takes it: the held filter and the latest reply's revision.
+    ///
+    /// Refused while the view's membership is open: rows are undecided, or an awaited level is one a filtered
+    /// column needs. A level only the sort needs refuses nothing, since order is not membership.
+    /// @return The view, or the refusal with the undecided rows and the filtered columns' awaited levels.
+    [[nodiscard]] std::expected<ViewSelection, SelectAllRefusal> selectView() const override {
+        auto const shown = counts();
+        std::vector<std::string> levels;
+        if (_description) {
+            std::vector<std::string> filtered;
+            for (auto const& [column, entry] : _filter.columns) {
+                static_cast<void>(entry);
+                filtered.push_back(column);
+            }
+            for (table::GroupFilter const& group : _filter.groups) {
+                filtered.insert(filtered.end(), group.columns.begin(), group.columns.end());
+                for (table::ColumnGroupInfo const& declared : _description->groups) {
+                    if (!group.group.empty() && declared.id == group.group) {
+                        filtered.insert(filtered.end(), declared.columns.begin(), declared.columns.end());
+                    }
+                }
+            }
+            for (table::TableColumn const& column : _description->columns) {
+                if (!column.info.level.empty() && std::ranges::contains(filtered, column.info.id) &&
+                    std::ranges::contains(shown.awaiting, column.info.level) &&
+                    !std::ranges::contains(levels, column.info.level)) {
+                    levels.push_back(column.info.level);
+                }
+            }
+        }
+        if (shown.undecided > 0 || !levels.empty()) {
+            return std::unexpected(SelectAllRefusal{.undecided = shown.undecided, .levels = std::move(levels)});
+        }
+        return ViewSelection{.filters = _filter, .retained = {}, .revision = _viewRevision};
+    }
+
+    /// @brief How many rows a selection holds, as far as the window knows.
+    ///
+    /// A selection of the view holds the view's total less each key of `except` the window holds; a key owed a
+    /// refetch still subtracts. The count is exact when the total is, and every key of `except` is held and owed
+    /// nothing, or known to have left the view.
+    /// @param selection The selection.
+    /// @return The count.
+    [[nodiscard]] SelectedCount selectedCount(TableSelection const& selection) const override {
+        if (!selection.view) {
+            return SelectedCount{.rows = static_cast<std::int64_t>(selection.keys.size()), .kind = CountKind::Exact};
+        }
+        auto const view = total();
+        std::unordered_set<table::RowId> held;
+        for (auto const& [first, count] : heldRanges()) {
+            for (std::int64_t at = first; at < first + count; ++at) {
+                if (auto const* const key = _window.key(at)) {
+                    held.insert(*key);
+                }
+            }
+        }
+        std::unordered_set<table::RowId> owed;
+        for (RowsFlight const& flight : _rowsFlights) {
+            owed.insert(flight.fetch.keys.begin(), flight.fetch.keys.end());
+        }
+        bool exact = view.known && view.kind == table::TotalKind::Exact;
+        std::int64_t rows = view.rows;
+        for (table::RowId const& key : selection.except) {
+            if (held.contains(key)) {
+                --rows;
+                exact = exact && !owed.contains(key);
+            } else {
+                exact = exact && _outOfView.contains(key);
+            }
+        }
+        return SelectedCount{.rows = std::max<std::int64_t>(rows, 0),
+                             .kind = exact ? CountKind::Exact : CountKind::Approximate};
+    }
+
+    /// @brief Whether a keyed reply left a key out of the view since the filter was set.
+    /// @param key The key.
+    /// @return `true` until a reply holds the key again.
+    [[nodiscard]] bool leftView(table::RowId const& key) const override { return _outOfView.contains(key); }
+
+    /// @brief Fetches a range of view rows as page queries of `pageSize` rows naming @p columns, under the held sort
+    ///        and filter, whether or not the window holds them.
+    /// @param first   The first view row.
+    /// @param count   The rows.
+    /// @param columns The column ids whose cells each row carries.
+    /// @return The rows of the range, delivered on the owner; `Unavailable` without a description.
+    async::Completion<std::expected<std::vector<FetchedRow>, table::TableError>> rowsOf(
+        std::int64_t first, std::int64_t count, std::span<std::string const> columns) override {
+        using Result = std::expected<std::vector<FetchedRow>, table::TableError>;
+        auto [completion, promise] = async::Completion<Result>::makeSettleable(&_session->runtime().owner());
+        auto state = std::make_shared<RowsRequest>(
+            RowsRequest{.promise = std::move(promise), .rows = {}, .waiting = 0, .failed = std::nullopt, .stops = {}});
+        if (!_description || first < 0 || count <= 0) {
+            if (!_description) {
+                state->failed = unavailable();
+            }
+            finishRows(*state);
+            return std::move(completion);
+        }
+        auto const size = std::max<std::int64_t>(_options.pageSize, 1);
+        auto const named = std::make_shared<std::vector<std::string> const>(columns.begin(), columns.end());
+        std::vector<std::int64_t> offsets;
+        for (std::int64_t offset = first; offset < first + count; offset += size) {
+            offsets.push_back(offset);
+        }
+        state->waiting = offsets.size();
+        std::erase_if(_rowsRequests, [](std::weak_ptr<RowsRequest> const& held) { return held.expired(); });
+        _rowsRequests.push_back(state);
+        for (std::int64_t const offset : offsets) {
+            table::TableQuery query =
+                queryOf(table::PageRequest{.offset = offset, .limit = std::min(size, first + count - offset)}, {});
+            query.columns = *named;
+            auto body = bodyOf(query);
+            if (!body) {
+                rowsAnswered(*state, std::unexpected(std::move(body.error())));
+                continue;
+            }
+            std::stop_source stop;
+            auto reply = _session->read(_options.channel, actionName(), *body, stop.get_token());
+            state->stops.push_back(std::move(stop));
+            reply.then(_scope, [this, state, named](std::string const& text) {
+                if (!_description) {
+                    rowsAnswered(*state, std::unexpected(unavailable()));
+                    return;
+                }
+                auto read = _options.action.empty() ? table::readGenericPage(text, *_description, _units.get())
+                                                    : readTypedPage(text, *_description, _units.get());
+                if (!read) {
+                    rowsAnswered(*state, std::unexpected(std::move(read.error())));
+                    return;
+                }
+                // A page's rows are at its offset onward.
+                read->indices.clear();
+                for (std::size_t at = 0; at < read->rows.size(); ++at) {
+                    read->indices.push_back(read->offset + static_cast<std::int64_t>(at));
+                }
+                rowsAnswered(*state, fetchedOf(*read, *named));
+            });
+            reply.onError(_scope, [this, state](std::exception_ptr const& error) {
+                if (!wasCancelled(error)) {
+                    rowsAnswered(*state, std::unexpected(failureOf(error)));
+                }
+            });
+        }
+        return std::move(completion);
     }
 
     /// @brief Sets the one receiver of the rows' changes.
@@ -3480,6 +3797,14 @@ private:
             return;
         }
         heardRevision(page->revision);
+        if (fetch.query == _window.query()) {
+            if (!page->viewRevision.empty()) {
+                _viewRevision = page->viewRevision;
+            }
+            for (table::RowId const& key : page->keys) {
+                _outOfView.erase(key);
+            }
+        }
         auto const size = std::max<std::int64_t>(_options.pageSize, 1);
         auto const index = fetch.request.offset / size;
         auto const before = slotsOfPage(index);
@@ -3530,6 +3855,19 @@ private:
             return;
         }
         heardRevision(page->revision);
+        if (fetch.query == _window.query()) {
+            if (!page->viewRevision.empty()) {
+                _viewRevision = page->viewRevision;
+            }
+            std::unordered_set<table::RowId> const answered(page->keys.begin(), page->keys.end());
+            for (table::RowId const& key : fetch.keys) {
+                if (answered.contains(key)) {
+                    _outOfView.erase(key);
+                } else {
+                    _outOfView.insert(key);
+                }
+            }
+        }
         auto const revision = _window.revision();
         auto const replaced = _window.patch(fetch, std::move(*page));
         table::ViewChange change;
@@ -3677,6 +4015,10 @@ private:
     // The pages the mount has been told of, so one the window evicts is reported as changed places.
     std::set<std::int64_t> _heldPages;
     std::vector<RowsFlight> _rowsFlights;
+    // The latest reply's `viewRevision`: the membership a selection of the view names.
+    std::string _viewRevision;
+    // Keys a keyed reply asked for and left out of the view, until a reply holds them again or the filter changes.
+    std::unordered_set<table::RowId> _outOfView;
     std::set<std::string, std::less<>> _staleRevisions;
     std::function<void()> _onStale;
     std::function<void(table::ViewChange const&)> _onChange;

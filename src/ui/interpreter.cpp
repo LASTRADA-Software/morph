@@ -316,10 +316,24 @@ public:
         return _inner->distinctValues(std::move(request));
     }
     [[nodiscard]] TableCountsView counts() const override { return _inner->counts(); }
+    [[nodiscard]] std::expected<ViewSelection, SelectAllRefusal> selectView() const override {
+        return _inner->selectView();
+    }
+    [[nodiscard]] SelectedCount selectedCount(TableSelection const& selection) const override {
+        return _inner->selectedCount(selection);
+    }
+    [[nodiscard]] bool leftView(table::RowId const& key) const override { return _inner->leftView(key); }
+    async::Completion<std::expected<std::vector<FetchedRow>, table::TableError>> rowsOf(
+        std::int64_t first, std::int64_t count, std::span<std::string const> columns) override {
+        return _inner->rowsOf(first, count, columns);
+    }
     void onChange(std::function<void(table::ViewChange const&)> handler) override { _handler = std::move(handler); }
 
     /// The next `visible` call is a new mount's first, not a scroll.
     void mounting() { _mounting = true; }
+
+    /// The view rows the mount last named in or near view: the rows a backend holds.
+    [[nodiscard]] std::pair<std::int64_t, std::int64_t> shownRange() const { return {_first, _count}; }
 
     /// Sets what widens the columns the mount names into those fetched: each with its companions.
     void companions(std::function<std::vector<std::string>(std::span<std::string const>)> widen) {
@@ -486,6 +500,12 @@ struct TableConfig {
     std::function<std::optional<HeldCell>(Key const&, std::string const&)> heldCell;
     /// The latest copy: a copy whose rows arrive after a later one started writes nothing.
     std::uint64_t copies = 0;
+    /// The rows a selection of the view holds, while the selection is one; none while it is keys. Set by each mount
+    /// of a model's table.
+    std::function<std::optional<std::int64_t>()> viewSelected;
+    /// Gathers the rows of the selection of the view, in view order, by the column ids given. Set by each mount of a
+    /// model's table.
+    std::function<void(std::vector<std::string> const&, CopyDone)> gatherView;
     /// The saved view the arrangement was taken from, the state's `view`, and whether it is a shared one applied from
     /// "Shared views"; a stored `view` names one of the user's own.
     std::optional<std::string> savedView;
@@ -526,6 +546,8 @@ struct TableConfig {
                     config->dimensions = {};
                     config->gather = {};
                     config->heldCell = {};
+                    config->viewSelected = {};
+                    config->gatherView = {};
                 }
             }
         };
@@ -852,6 +874,8 @@ struct ModelTable {
           revision{runtime, std::string{}},
           highlight{runtime, std::nullopt},
           message{runtime, std::string{}},
+          entries{runtime, std::vector<StatusEntry>{}},
+          viewSelection{runtime, std::nullopt},
           config{runtime} {}
 
     ModelTable(ModelTable const&) = delete;
@@ -863,6 +887,9 @@ struct ModelTable {
     ~ModelTable() {
         if (core != nullptr) {
             std::erase(core->modelTables, element);
+            if (runs != nullptr) {
+                core->session.removeRunObserver(runs.get());
+            }
         }
         if (states != nullptr && stateKey) {
             states->flush(*stateKey);
@@ -902,9 +929,15 @@ struct ModelTable {
     reactive::Signal<std::string> revision;
     /// The highlighted row: the key `highlightKey` names and the view row a keyed fetch found it at.
     reactive::Signal<std::optional<TableHighlight>> highlight;
-    /// The status line's message.
+    /// The status line's message, the choices it offers, and what each choice runs, by its id.
     reactive::Signal<std::string> message;
+    reactive::Signal<std::vector<StatusEntry>> entries;
+    std::map<std::string, std::function<void()>, std::less<>> entryHandlers;
     reactive::TimerHandle messageTimer;
+    /// The selection while it is of the view (`view` engaged): the element's `selection` is then empty.
+    reactive::Signal<std::optional<TableSelection>> viewSelection;
+    /// Hears the session's runs while the table lives, to offer a refused selection of the view again.
+    std::unique_ptr<RunObserver> runs;
     /// Whether the status line takes space; `status: false` sends messages to the host instead.
     bool statusShown = true;
     /// The persisted state's key, and the states it is loaded from and saved to; none without persistence.
@@ -3794,6 +3827,39 @@ bool QueryRuntime::settled() const {
     return !current || current->hasValue.get() || !current->error.get().empty();
 }
 
+}  // namespace detail
+
+// --- Rows an action works on ----------------------------------------------------------------------------------
+
+std::vector<TableInput> tableInputsOf(std::string_view schemaJson) {
+    std::vector<TableInput> out;
+    glz::generic_u64 schema;
+    if (glz::read_json(schema, schemaJson) || !schema.is_object()) {
+        return out;
+    }
+    auto const& members = schema.get_object();
+    auto const properties = members.find("properties");
+    if (properties == members.end() || !properties->second.is_object()) {
+        return out;
+    }
+    for (auto const& [name, property] : properties->second.get_object()) {
+        if (!property.is_object()) {
+            continue;
+        }
+        auto const& keywords = property.get_object();
+        for (auto const& [keyword, kind] : {std::pair{std::string_view{"x-selectionOf"}, TableInputKind::Selection},
+                                            std::pair{std::string_view{"x-rowOf"}, TableInputKind::Row}}) {
+            auto const found = keywords.find(std::string{keyword});
+            if (found != keywords.end() && found->second.is_string()) {
+                out.push_back(TableInput{.member = name, .record = found->second.get_string(), .kind = kind});
+            }
+        }
+    }
+    return out;
+}
+
+namespace detail {
+
 // --- Mutations -------------------------------------------------------------------------------------------------
 
 MutationRuntime::MutationRuntime(MutationDecl const& decl, RtScope& scope, ModelAlias* alias)
@@ -3847,6 +3913,10 @@ void MutationRuntime::run(Value body, std::shared_ptr<Bindings const> bindings, 
 void MutationRuntime::send(std::shared_ptr<Run> const& run) {
     run->id = ++_runs;
     _latest = run->id;
+    run->sessionRun = _core->session.nextRunId();
+    for (RunObserver* const observer : _core->session.runObservers()) {
+        observer->started(RunStarted{.run = run->sessionRun, .action = _decl->action, .body = run->body});
+    }
     applyOptimistic(*run);
     std::shared_ptr<ModelChannel> const channel = channelOf(*_alias, _scope->core);
     if (channel == nullptr) {
@@ -3994,6 +4064,32 @@ void MutationRuntime::settle(std::shared_ptr<Run> const& run, std::optional<Valu
     });
     if (_decl->concurrency == Concurrency::Serial) {
         next(run->serialKey);
+    }
+    if (auto const observers = session.runObservers(); !observers.empty()) {
+        std::string code;
+        if (!succeeded) {
+            Value const refusal = detail::refusalValue(error);
+            if (Value const* const named = refusal.field("code"); named != nullptr && named->asString() != nullptr) {
+                code = *named->asString();
+            }
+        }
+        // The rerun holds the mutation weakly: it may be chosen after the screen that ran it is gone.
+        std::weak_ptr<bool> const alive = _alive;
+        auto rerun = [this, alive, bindings = run->bindings](Value body) {
+            if (!alive.expired()) {
+                this->run(std::move(body), bindings, [](bool, Value const&) {});
+            }
+        };
+        Value const replied = reply ? *reply : Value{};
+        for (RunObserver* const observer : observers) {
+            observer->settled(RunSettled{.run = run->sessionRun,
+                                         .action = _decl->action,
+                                         .body = run->body,
+                                         .succeeded = succeeded,
+                                         .reply = replied,
+                                         .refusalCode = code,
+                                         .rerun = rerun});
+        }
     }
     run->done(succeeded, delivered);
 }
@@ -4737,6 +4833,27 @@ namespace {
 ///        the table's own. A bound value that is not a list (`null` while state starts empty) selects nothing.
 /// @param element The table's element.
 /// @return A list of keys. Tracked.
+[[nodiscard]] Value tableSelection(ElementState const& element);
+
+/// @brief A table's selection as an action takes it: the selection of the view while a model's table holds one,
+///        else the selected keys. Tracked.
+/// @param element The table's element.
+/// @return The selection.
+[[nodiscard]] TableSelection selectionNow(ElementState const& element) {
+    if (element.modelTable != nullptr) {
+        if (auto const& view = element.modelTable->viewSelection.get()) {
+            return *view;
+        }
+    }
+    TableSelection out;
+    if (ValueList const* const items = tableSelection(element).asList()) {
+        for (Value const& item : *items) {
+            out.keys.push_back(keyOf(item));
+        }
+    }
+    return out;
+}
+
 [[nodiscard]] Value tableSelection(ElementState const& element) {
     if (element.bound == nullptr) {
         return element.selection.get();
@@ -4890,6 +5007,23 @@ Value ScreenCore::elementValue(ElementState const& element, std::string_view nam
                                           : element.modelTable != nullptr ? &element.modelTable->config
                                                                           : nullptr;
         return config == nullptr || !config->filters ? Value{} : filtersValueOf(config->filters());
+    }
+    if (kind == "table" && (name == "selectionSet" || name == "selectedCount" || name == "selectedCountKind")) {
+        TableSelection const selection = selectionNow(element);
+        if (name == "selectionSet") {
+            auto const json = parseJson(selectionJsonOf(selection));
+            auto read = json ? valueFromJson(*json) : std::expected<Value, std::string>{Value{}};
+            return read ? std::move(*read) : Value{};
+        }
+        SelectedCount counted{.rows = static_cast<std::int64_t>(selection.keys.size()), .kind = CountKind::Exact};
+        if (element.modelTable != nullptr && element.modelTable->rows != nullptr) {
+            static_cast<void>(element.modelTable->version.get());
+            counted = element.modelTable->rows->selectedCount(selection);
+        }
+        if (name == "selectedCount") {
+            return Value{counted.rows};
+        }
+        return Value{std::string{counted.kind == CountKind::Exact ? "exact" : "approximate"}};
     }
     if (kind == "table" && element.modelTable != nullptr && element.modelTable->window != nullptr) {
         if (std::optional<Value> value = modelTableValue(*element.modelTable, name)) {
@@ -10989,6 +11123,108 @@ ActionTable actionTableOf(DocNode const& node, Catalog const& catalog) {
     return out;
 }
 
+/// @brief Keeps a model table's selection of the view true to its rows after they changed: a selection of another
+///        filter than the rows hold ends, the description's new revision having dropped a filter included, and a
+///        key of `except` a reply left out of the view is dropped from it.
+/// @param core    The screen.
+/// @param element The table's element.
+/// @param model   The table.
+void fitViewSelection(ScreenCore& core, ElementState& element, ModelTable& model) {
+    std::optional<TableSelection> const& current = model.viewSelection.peek();
+    if (!current || !current->view) {
+        return;
+    }
+    if (model.window->filter() != current->view->filters) {
+        core.runtime().batch([&] {
+            model.viewSelection.set(std::nullopt);
+            if (element.bound == nullptr) {
+                core.session.asUser([&] {
+                    core.session.noteWrite();
+                    element.selection.set(Value{ValueList{}});
+                });
+            }
+        });
+        return;
+    }
+    TableSelection next = *current;
+    auto const dropped = std::erase_if(next.except, [&model](table::RowId const& key) { return model.rows->leftView(key); });
+    if (dropped > 0) {
+        model.viewSelection.set(std::move(next));
+    }
+}
+
+/// @brief A model table's ear on the session's runs: a run refused because the rows of its selection of this table's
+///        view changed is offered again, on the view as it is now, through the status line.
+///
+/// Holds the table and its element by reference: the table owns it and removes it before either goes. The screen's
+/// scope is held weakly, so the observer keeps nothing of the screen alive.
+class TableRuns final : public RunObserver {
+public:
+    TableRuns(ScreenCore& core, ElementState& element, ModelTable& model)
+        : _core{&core}, _element{&element}, _model{&model} {}
+
+    void started(RunStarted const& run) override { static_cast<void>(run); }
+
+    void settled(RunSettled const& run) override {
+        if (run.refusalCode != "morph.table.viewChanged" || _model->rows == nullptr) {
+            return;
+        }
+        auto const& catalog = _core->session.options().catalog;
+        std::optional<std::string> const schema = catalog.schema ? catalog.schema(run.action) : std::nullopt;
+        ValueRecord const* const body = run.body.asRecord();
+        if (!schema || body == nullptr) {
+            return;
+        }
+        std::string const record = _model->modelType + "." + _model->id;
+        for (TableInput const& input : tableInputsOf(*schema)) {
+            if (input.kind != TableInputKind::Selection || input.record != record) {
+                continue;
+            }
+            auto const member = body->find(input.member);
+            if (member == body->end() || member->second.field("view") == nullptr ||
+                member->second.field("view")->isNull()) {
+                continue;
+            }
+            auto taken = _model->rows->selectView();
+            if (!taken) {
+                continue;
+            }
+            TableSelection again{.keys = {}, .view = std::move(*taken), .except = {}};
+            if (Value const* const except = member->second.field("except"); except != nullptr) {
+                if (ValueList const* const keys = except->asList()) {
+                    for (Value const& key : *keys) {
+                        again.except.push_back(keyOf(key));
+                    }
+                }
+            }
+            auto const json = parseJson(selectionJsonOf(again));
+            auto selection = json ? valueFromJson(*json) : std::expected<Value, std::string>{Value{}};
+            if (!selection) {
+                return;
+            }
+            ValueRecord nextBody = *body;
+            nextBody.insert_or_assign(input.member, std::move(*selection));
+            std::int64_t const rows = _model->rows->selectedCount(again).rows;
+            std::string const id = "rerun." + std::to_string(run.run);
+            auto const rerun = [model = _model, again, rerun = run.rerun, nextBody = Value{std::move(nextBody)}] {
+                model->viewSelection.set(again);
+                rerun(nextBody);
+            };
+            _core->tableMessage(*_element,
+                                "The rows changed since you selected them: " +
+                                    render::formatCanonicalNumber(std::to_string(rows), _core->session.formatting().numeric) +
+                                    " rows now. Run on these?",
+                                {{StatusEntry{.id = id, .label = "Run on these"}, rerun}});
+            return;
+        }
+    }
+
+private:
+    ScreenCore* _core;
+    ElementState* _element;
+    ModelTable* _model;
+};
+
 }  // namespace
 
 void ScreenCore::wireModelTable(ElementState& element) {
@@ -11131,7 +11367,10 @@ void ScreenCore::wireModelTable(ElementState& element) {
                                    .restoring = model.waiting});
     element.tableWindow = model.window;
     model.rows = std::make_shared<ObservedRows>(
-        model.window, model.scope.token().guard([&model] { model.bump(); }),
+        model.window, model.scope.token().guard([this, &model, &element] {
+            model.bump();
+            fitViewSelection(*this, element, model);
+        }),
         model.scope.token().guard([this, &element] { tableGesture(element); }),
         model.scope.token().guard([&model] { model.resets.set(model.resets.peek() + 1); }),
         model.scope.token().guard([this, &model, &element] {
@@ -11139,6 +11378,8 @@ void ScreenCore::wireModelTable(ElementState& element) {
             tableGesture(element);
         }));
     element.tableRows = model.rows;
+    model.runs = std::make_unique<TableRuns>(*this, element, model);
+    session.addRunObserver(model.runs.get());
     if (model.describe != nullptr) {
         model.window->onStaleDescription(model.scope.token().guard([&model] { model.describe->invalidate(); }));
     }
@@ -11527,6 +11768,8 @@ void ScreenCore::tableMessage(ElementState& table, std::string text) {
     if (model == nullptr) {
         return;
     }
+    model->entryHandlers.clear();
+    model->entries.set({});
     if (text.empty()) {
         model->messageTimer.cancel();
         model->message.set({});
@@ -11545,9 +11788,26 @@ void ScreenCore::tableMessage(ElementState& table, std::string text) {
             kStatusMessageHold, model->scope.token().guard([model, shown = std::move(text)] {
                 if (model->message.peek() == shown) {
                     model->message.set({});
+                    model->entries.set({});
+                    model->entryHandlers.clear();
                 }
             }));
     }
+}
+
+void ScreenCore::tableMessage(ElementState& table, std::string text,
+                              std::vector<std::pair<StatusEntry, std::function<void()>>> entries) {
+    tableMessage(table, std::move(text));
+    ModelTable* const model = table.modelTable.get();
+    if (model == nullptr || !model->statusShown || model->message.peek().empty()) {
+        return;
+    }
+    std::vector<StatusEntry> shown;
+    for (auto& [entry, handler] : entries) {
+        model->entryHandlers.insert_or_assign(entry.id, std::move(handler));
+        shown.push_back(std::move(entry));
+    }
+    model->entries.set(std::move(shown));
 }
 
 void ScreenCore::tablePoints(ElementState& table) {
@@ -11789,11 +12049,13 @@ Node ScreenCore::configureTable(TableConfig& config, LowerCtx const& ctx, TableO
         });
         std::string separator{scope->formatting().numeric.groupSeparator};
         std::size_t const bound = session.options().maxCopyRows;
-        if (keys.size() > bound) {
+        std::optional<std::int64_t> const viewing =
+            config.viewSelected ? runtime().untracked([&] { return config.viewSelected(); }) : std::nullopt;
+        if (keys.size() > bound || (viewing && *viewing > static_cast<std::int64_t>(bound))) {
             config.message(tableText::copyBound(bound, separator));
             return;
         }
-        if (keys.empty()) {
+        if (keys.empty() && !viewing) {
             if (!config.focused || !std::ranges::contains(columns, config.focused->column)) {
                 return;
             }
@@ -11802,8 +12064,15 @@ Node ScreenCore::configureTable(TableConfig& config, LowerCtx const& ctx, TableO
         }
         // A copy started after this one wins: this one's rows, arriving late, write nothing.
         std::uint64_t const started = ++config.copies;
-        config.gather(std::move(keys), columns,
-                      [this, &config, &element, headers, started, separator = std::move(separator)](
+        auto gather = [&config, viewing, keys = std::move(keys)](std::vector<std::string> const& named,
+                                                                      CopyDone done) mutable {
+            if (viewing && config.gatherView) {
+                config.gatherView(named, std::move(done));
+            } else {
+                config.gather(std::move(keys), named, std::move(done));
+            }
+        };
+        gather(columns, [this, &config, &element, headers, started, separator = std::move(separator)](
                           std::expected<CopyGathered, std::string> gathered) {
                           if (started != config.copies) {
                               return;
@@ -12832,9 +13101,16 @@ Node ScreenCore::modelTableOf(DocNode const& node, LowerCtx const& ctx, ElementS
         TableCountsView const counts = model.rows->counts();
         TableStatus status;
         status.shown = model.statusShown;
-        ValueList const* const selected = tableSelection(element).asList();
-        status.counts = countsText(counts, selected == nullptr ? 0 : static_cast<std::int64_t>(selected->size()),
-                                   scope->formatting());
+        SelectedCount const selected = model.rows->selectedCount(selectionNow(element));
+        status.counts = countsText(counts, selected.rows, scope->formatting());
+        if (selected.kind == CountKind::Approximate && selected.rows > 0 && counts.view.known &&
+            counts.undecided == 0) {
+            auto const grouped = [&scope](std::int64_t number) {
+                return render::formatCanonicalNumber(std::to_string(number), scope->formatting().numeric);
+            };
+            status.counts = "about " + grouped(selected.rows) + " of " + grouped(counts.view.rows) +
+                            (counts.view.kind == table::TotalKind::AtLeast ? " or more" : "") + " selected";
+        }
         if (!counts.failed.empty()) {
             status.state = levelWords(counts.failed.front()) + " data could not be loaded.";
             status.retry = true;
@@ -12847,9 +13123,20 @@ Node ScreenCore::modelTableOf(DocNode const& node, LowerCtx const& ctx, ElementS
         }
         if (model.statusShown) {
             status.message = model.message.get();
+            status.entries = model.entries.get();
         }
         return status;
     });
+    options.onStatusEntry = [this, &element, &model](std::string const& id) {
+        auto const found = model.entryHandlers.find(id);
+        if (found == model.entryHandlers.end()) {
+            return;
+        }
+        // Taken before the message is cleared, which drops the handlers.
+        std::function<void()> const chosen = found->second;
+        tableMessage(element, {});
+        chosen();
+    };
     options.onRetry = [this, &element, &model] {
         tableGesture(element);
         model.window->retry();
@@ -13230,11 +13517,68 @@ Node ScreenCore::modelTableOf(DocNode const& node, LowerCtx const& ctx, ElementS
     // Held by the table's handlers; a range's reply, which may come after the table is gone, holds it weakly, so it
     // keeps no scope of the screen alive.
     auto const select = std::make_shared<std::function<void(std::vector<Key> const&)>>(selectRows);
-    options.onSelectionChange = [this, &element, select](std::vector<Key> const& keys, SelectionChange change) {
-        static_cast<void>(change);
+    // While the selection is of the view, the backend marks every row but `except`. A `Ctrl`+click reports the keys
+    // now selected among the rows it holds: each held key absent from the report is left out, each present one is
+    // selected again. A plain click ends the selection of the view.
+    options.selectionView = slotProp<std::optional<std::vector<Key>>>([&model]() -> std::optional<std::vector<Key>> {
+        auto const& view = model.viewSelection.get();
+        if (!view) {
+            return std::nullopt;
+        }
+        return std::vector<Key>(view->except.begin(), view->except.end());
+    });
+    options.onSelectionChange = [this, &element, &model, select](std::vector<Key> const& keys,
+                                                                   SelectionChange change) {
         tableGesture(element);
-        (*select)(keys);
+        std::optional<TableSelection> const viewing = model.viewSelection.peek();
+        if (viewing && change == SelectionChange::Extend) {
+            std::unordered_set<Key> const reported(keys.begin(), keys.end());
+            TableSelection next = *viewing;
+            // The rows the backend holds are those the mount named in or near view; a held row outside them is not
+            // in the report, and is not read as left out.
+            auto const [first, count] = model.rows->shownRange();
+            for (std::int64_t at = first; at < first + count; ++at) {
+                std::optional<TableRowRef> const row = model.rows->row(at);
+                if (!row) {
+                    continue;
+                }
+                if (reported.contains(row->key)) {
+                    std::erase(next.except, row->key);
+                } else if (!std::ranges::contains(next.except, row->key)) {
+                    next.except.push_back(row->key);
+                }
+            }
+            model.viewSelection.set(std::move(next));
+            return;
+        }
+        runtime().batch([&] {
+            if (viewing) {
+                model.viewSelection.set(std::nullopt);
+            }
+            (*select)(keys);
+        });
     };
+    // Select-all on a table that may select many rows selects the view: no row is fetched, and the server resolves
+    // it when an action runs. Refused while the view's membership is open.
+    if (options.selectionMode == SelectionMode::Multiple) {
+        options.onSelectAll = [this, ctx, &element, &model] {
+            tableGesture(element);
+            auto view = model.rows->selectView();
+            if (!view) {
+                tableMessage(element, selectAllRefusalText(view.error(), ctx.scope->formatting()));
+                return;
+            }
+            runtime().batch([&] {
+                model.viewSelection.set(TableSelection{.keys = {}, .view = std::move(*view), .except = {}});
+                if (element.bound == nullptr) {
+                    session.asUser([&] {
+                        session.noteWrite();
+                        element.selection.set(Value{ValueList{}});
+                    });
+                }
+            });
+        };
+    }
     // A range the backend reports as view rows: its keys come from the rows, fetched as pages of keys alone where the
     // window does not hold them, and select as the gesture says. Past `maxRangeRows` it is refused and selects
     // nothing.
@@ -13249,6 +13593,33 @@ Node ScreenCore::modelTableOf(DocNode const& node, LowerCtx const& ctx, ElementS
                                       render::formatCanonicalNumber(std::to_string(bound),
                                                                     ctx.scope->formatting().numeric) +
                                       " rows");
+            return;
+        }
+        // In a selection of the view a range changes `except`: from an anchor left out it leaves the range out,
+        // from a selected anchor it selects the range again.
+        if (std::optional<TableSelection> const viewing = model.viewSelection.peek()) {
+            std::optional<TableRowRef> const anchorRow = model.rows->row(static_cast<std::int64_t>(anchor));
+            bool const leaving = anchorRow && std::ranges::contains(viewing->except, anchorRow->key);
+            model.rows->keysOf(static_cast<std::int64_t>(first), static_cast<std::int64_t>(count))
+                .then(model.scope, [this, &element, &model, leaving](
+                                       std::expected<std::vector<table::RowId>, table::TableError> const& found) {
+                    if (!found) {
+                        tableMessage(element, "The range could not be selected: " + found.error().message);
+                        return;
+                    }
+                    std::optional<TableSelection> next = model.viewSelection.peek();
+                    if (!next) {
+                        return;
+                    }
+                    for (table::RowId const& key : *found) {
+                        if (!leaving) {
+                            std::erase(next->except, key);
+                        } else if (!std::ranges::contains(next->except, key)) {
+                            next->except.push_back(key);
+                        }
+                    }
+                    model.viewSelection.set(std::move(next));
+                });
             return;
         }
         model.rows->keysOf(static_cast<std::int64_t>(first), static_cast<std::int64_t>(count))
@@ -13387,6 +13758,64 @@ Node ScreenCore::modelTableOf(DocNode const& node, LowerCtx const& ctx, ElementS
     for (TableColumn const& column : columns) {
         headers->push_back(headerText(column.label, column.unit));
     }
+    model.config.viewSelected = [&model]() -> std::optional<std::int64_t> {
+        auto const& view = model.viewSelection.peek();
+        if (!view) {
+            return std::nullopt;
+        }
+        return model.rows->selectedCount(*view).rows;
+    };
+    // A selection of the view is copied from page queries of the view's rows naming the columns copied, in view
+    // order, its `except` left out.
+    model.config.gatherView = [&model, shown, displayUnits, registry, headers, scope = ctx.scope](
+                                  std::vector<std::string> const& ids, CopyDone done) {
+        std::vector<std::size_t> places;
+        std::vector<std::string> named;
+        CopyGathered gathered;
+        for (std::string const& id : ids) {
+            auto const found = std::ranges::find_if(*shown, [&id](table::TableColumn const& column) {
+                return column.info.id == id;
+            });
+            if (found != shown->end()) {
+                places.push_back(static_cast<std::size_t>(found - shown->begin()));
+                named.push_back(id);
+                gathered.headers.push_back(headers->at(places.back()));
+            }
+        }
+        std::optional<TableSelection> const view = model.viewSelection.peek();
+        if (!view) {
+            done(std::move(gathered));
+            return;
+        }
+        std::unordered_set<Key> const except(view->except.begin(), view->except.end());
+        FormatContext const format = scope->formatting();
+        model.rows->rowsOf(0, model.rows->total().rows, named)
+            .then(model.scope, [shown, displayUnits, registry, places, format, except, done,
+                                gathered = std::move(gathered)](
+                                   std::expected<std::vector<FetchedRow>, table::TableError> const& found) mutable {
+                if (!found) {
+                    done(std::unexpected("The rows could not be copied: " + found.error().message));
+                    return;
+                }
+                for (FetchedRow const& fetchedRow : *found) {
+                    if (except.contains(fetchedRow.key)) {
+                        continue;
+                    }
+                    CopyRow row{.viewRow = fetchedRow.viewRow, .cells = {}};
+                    for (std::size_t column = 0; column < places.size() && column < fetchedRow.cells.size();
+                         ++column) {
+                        table::Cell const& cell = fetchedRow.cells.at(column);
+                        std::size_t const place = places.at(column);
+                        row.cells.push_back(std::holds_alternative<table::Unloaded>(cell)
+                                                ? std::nullopt
+                                                : std::optional{formatCell(cell, shown->at(place), format,
+                                                                           displayUnits->at(place))});
+                    }
+                    gathered.rows.push_back(std::move(row));
+                }
+                done(std::move(gathered));
+            });
+    };
     model.config.gather = [&model, shown, displayUnits, registry, headers, textOfCell, scope = ctx.scope](
                               std::vector<Key> keys, std::vector<std::string> const& ids, CopyDone done) {
         std::vector<std::size_t> places;

@@ -13,14 +13,23 @@
 //  - Engine holding a dirty row whose edit just ended (drop the
 //    _releaseOnRepair check): "under deferred reorder, a committed edit moves
 //    its row when the commit settles" fails.
+//  - Each "view selection:" case names, after it, the mutation it was seen to
+//    fail on.
 
 #include <catch2/catch_test_macros.hpp>
 #include <chrono>
 #include <cstdint>
 #include <functional>
+#include <glaze/glaze.hpp>
+#include <initializer_list>
+#include <morph/core/bridge.hpp>
 #include <morph/core/executor.hpp>
+#include <morph/session/session.hpp>
+#include <morph/table/description.hpp>
 #include <morph/table/edits.hpp>
+#include <morph/table/row_selection.hpp>
 #include <morph/table/selection.hpp>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -28,6 +37,37 @@
 
 using namespace morph::table;
 using tabletest::viewKeys;
+
+namespace seltest {
+
+// Ten rows, keys 0..9: status "open" for 0..5, "closed" for 6..9; mass i/10.
+struct SelectionModel {
+    std::shared_ptr<VectorSource> source = tabletest::makeSource(
+        {tabletest::col("status", ColumnKind::Text), tabletest::col("mass", ColumnKind::Decimal)}, [] {
+            std::vector<std::vector<Cell>> rows;
+            for (int i = 0; i < 10; ++i) {
+                rows.push_back({Cell{std::string{i < 6 ? "open" : "closed"}},
+                                Cell{tabletest::dec(std::to_string(i) + ".0")}});
+            }
+            return rows;
+        }());
+    QueryLimits limits{};
+    // The caller's rows when set, through table::scoped; every row otherwise.
+    std::optional<std::vector<RowId>> scope;
+    [[nodiscard]] ServedTable rows(TableContext const& /*context*/) {  // non-const, as the spec's table functions
+        std::shared_ptr<DataSource const> served = source;
+        if (scope) {
+            served = scoped(source, *scope);
+        }
+        return ServedTable{.description = {}, .source = served, .levels = {}, .mayRead = {}, .scope = {},
+                           .services = {}, .limits = limits};
+    }
+};
+
+}  // namespace seltest
+
+BRIDGE_REGISTER_MODEL(seltest::SelectionModel, "seltest::SelectionModel")
+BRIDGE_REGISTER_TABLE(seltest::SelectionModel, "rows", &seltest::SelectionModel::rows)
 
 namespace {
 
@@ -44,6 +84,38 @@ Selection make(SelectionOptions options) {
     auto selection = Selection::create(options);
     REQUIRE(selection.has_value());
     return std::move(*selection);
+}
+
+using seltest::SelectionModel;
+
+FilterSpec open() { return FilterSpec{.columns = {{"status", ColumnFilter{.include = {{.eq = "open"}}}}}}; }
+
+// TableContext holds a reference: one caller context outlives every call in the file.
+TableContext const& caller() {
+    static morph::session::Context const session{};
+    static TableContext const context{.session = session};
+    return context;
+}
+
+// resolve with no TableRuntime settles on its own inline owner before it returns: `then` runs at once.
+template <typename T>
+T settledNow(morph::async::Completion<T>& completion) {
+    std::optional<T> out;
+    completion.then([&out](T const& value) { out = value; });
+    REQUIRE(out.has_value());
+    return std::move(*out);
+}
+
+std::string revisionOf(SelectionModel& model, FilterSpec const& filters, std::vector<RowId> retained = {}) {
+    return detail::membership(model.rows(caller()), filters, retained, nullptr).value().digest.text();
+}
+
+std::vector<RowId> keysOf(std::initializer_list<std::int64_t> keys) {
+    std::vector<RowId> out;
+    for (auto const k : keys) {
+        out.emplace_back(k);
+    }
+    return out;
 }
 
 }  // namespace
@@ -298,3 +370,107 @@ TEST_CASE("table: a field error without a column attaches to the edited cell", "
     CHECK(edits.error(key(3), "c") == "refused");
     CHECK_FALSE(edits.error(key(3), "").has_value());
 }
+
+TEST_CASE("view selection: the view revision is membership", "[table][selection][revision]") {
+    SelectionModel model;
+    std::string const before = revisionOf(model, open());
+    CHECK(before.size() == 48);
+    model.source->patchRow(RowId{std::int64_t{2}}, {Cell{std::string{"open"}}, Cell{tabletest::dec("9.5")}});
+    CHECK(revisionOf(model, open()) == before);  // a cell changed, membership did not
+    TableQuery ascending{.sort = {{.column = "mass", .dir = SortDirection::Ascending}}, .filters = open()};
+    TableQuery descending{.sort = {{.column = "mass", .dir = SortDirection::Descending}}, .filters = open()};
+    CHECK(apply(*model.source, ascending).value().viewRevision == before);
+    CHECK(apply(*model.source, descending).value().viewRevision == before);  // the sort is not membership
+    model.source->patchRow(RowId{std::int64_t{7}}, {Cell{std::string{"open"}}, Cell{tabletest::dec("0.7")}});
+    CHECK(revisionOf(model, open()) != before);  // a row came in
+    CHECK(revisionOf(model, open(), {RowId{std::int64_t{8}}}) != revisionOf(model, open()));
+}
+// Mutation: the revision taken from the snapshot's version, which changes it on the first edit.
+
+TEST_CASE("view selection: resolve under Exact is the view less except, in source order",
+          "[table][selection][resolve]") {
+    SelectionModel model;
+    RowSelection<&SelectionModel::rows> selection{
+        .keys = {}, .view = {{.filters = open(), .retained = {}, .revision = revisionOf(model, open())}},
+        .except = {RowId{std::int64_t{3}}}};
+    auto exact = resolve(model, selection, caller(), SelectionPolicy::Exact);
+    auto const rows = settledNow(exact).value();
+    CHECK(rows.keys == std::vector<RowId>{std::int64_t{0}, std::int64_t{1}, std::int64_t{2}, std::int64_t{4},
+                                          std::int64_t{5}});
+    CHECK(rows.dropped == 0);
+
+    model.source->patchRow(RowId{std::int64_t{7}}, {Cell{std::string{"open"}}, Cell{tabletest::dec("0.7")}});
+    auto changed = resolve(model, selection, caller(), SelectionPolicy::Exact);
+    CHECK(settledNow(changed).error().code == TableErrorCode::ViewChanged);
+    auto current = resolve(model, selection, caller(), SelectionPolicy::Current);
+    CHECK(settledNow(current).value().keys ==
+          std::vector<RowId>{std::int64_t{0}, std::int64_t{1}, std::int64_t{2}, std::int64_t{4}, std::int64_t{5},
+                             std::int64_t{7}});
+}
+// Mutation: `viewRevision` that ignores the source snapshot (a digest of the filter alone), which resolves the
+// edited view under Exact.
+
+TEST_CASE("view selection: a key selection resolves to the keys the caller sees", "[table][selection][resolve]") {
+    SelectionModel model;
+    // The caller's source is rows 0..4 only, through Task 2's table::scoped.
+    model.scope = keysOf({0, 1, 2, 3, 4});
+    RowSelection<&SelectionModel::rows> selection{.keys = keysOf({3, 1, 8}), .view = {}, .except = {}};
+    auto resolved = resolve(model, selection, caller(), SelectionPolicy::Exact);
+    auto const rows = settledNow(resolved).value();
+    CHECK(rows.keys == keysOf({1, 3}));  // source order
+    CHECK(rows.dropped == 1);
+}
+// Mutation: dropped keys left in the reply, which returns 8.
+
+TEST_CASE("view selection: a view over maxSelectedRows is LimitExceeded", "[table][selection][resolve]") {
+    CHECK(QueryLimits{}.maxSelectedRows == 1'000'000);
+    SelectionModel model;
+    model.limits.maxSelectedRows = 5;  // the open view has 6 rows
+    RowSelection<&SelectionModel::rows> selection{
+        .keys = {}, .view = {{.filters = open(), .retained = {}, .revision = {}}}, .except = keysOf({3})};
+    auto over = resolve(model, selection, caller(), SelectionPolicy::Current);
+    // The bound is on the view, 6 rows, not on what is left of it, 5.
+    CHECK(settledNow(over).error().code == TableErrorCode::LimitExceeded);
+    model.limits.maxSelectedRows = 6;
+    auto within = resolve(model, selection, caller(), SelectionPolicy::Current);
+    CHECK(settledNow(within).value().keys == keysOf({0, 1, 2, 4, 5}));
+}
+// Mutation: the bound compared against the view less `except` (5 rows), which resolves the first case.
+
+TEST_CASE("view selection: retained rows are in the membership", "[table][selection][resolve]") {
+    SelectionModel model;
+    RowSelection<&SelectionModel::rows> selection{
+        .keys = {},
+        .view = {{.filters = open(), .retained = keysOf({8}), .revision = revisionOf(model, open(), keysOf({8}))}},
+        .except = {}};
+    auto exact = resolve(model, selection, caller(), SelectionPolicy::Exact);
+    CHECK(settledNow(exact).value().keys == keysOf({0, 1, 2, 3, 4, 5, 8}));
+
+    // Retained {42}, a key the source lacks, adds nothing.
+    CHECK(revisionOf(model, open(), keysOf({42})) == revisionOf(model, open()));
+    RowSelection<&SelectionModel::rows> absent{
+        .keys = {},
+        .view = {{.filters = open(), .retained = keysOf({42}), .revision = revisionOf(model, open(), keysOf({42}))}},
+        .except = {}};
+    auto none = resolve(model, absent, caller(), SelectionPolicy::Exact);
+    CHECK(settledNow(none).value().keys == keysOf({0, 1, 2, 3, 4, 5}));
+}
+// Mutation: retained rows left out of `membership`, which refuses with ViewChanged.
+
+TEST_CASE("view selection: its JSON", "[table][selection]") {
+    RowSelection<&SelectionModel::rows> keys;
+    REQUIRE_FALSE(glz::read_json(keys, std::string_view{R"({"keys":[1,"a"]})"}));
+    CHECK(keys.keys == std::vector<RowId>{std::int64_t{1}, std::string{"a"}});
+    CHECK_FALSE(keys.view.has_value());
+
+    std::string const text = R"({"view":{"filters":{"columns":{"status":{"include":[{"eq":"open"}]}}},)"
+                             R"("retained":[8],"revision":"r"},"except":[3]})";
+    RowSelection<&SelectionModel::rows> view;
+    REQUIRE_FALSE(glz::read_json(view, text));
+    REQUIRE(view.view.has_value());
+    CHECK(view.view->filters == open());
+    CHECK(glz::write_json(view).value_or("") == text);  // byte for byte
+    CHECK(glz::write_json(SelectionPolicy::Exact).value_or("") == R"("exact")");
+    CHECK(glz::write_json(SelectionPolicy::Current).value_or("") == R"("current")");
+}
+// Mutation: `SelectionPolicy` without glaze meta, which writes 0 and 1.

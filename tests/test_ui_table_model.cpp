@@ -5258,3 +5258,390 @@ TEST_CASE("table menus: a table over rows takes the cell and header menus and a 
         CHECK_FALSE(entryOf(h.backend.rightClickCell(table, b, name), "Filter by this value").enabled);
     }
 }
+
+// ── A selection of the view ─────────────────────────────────────────────────────────────────────────────────
+
+namespace {
+
+using morph::ui::TableStatus;
+using morph::ui::testing::value;
+using morph::ui::testing::withLevel;
+
+// id (Integer, key), status (Text), and the lock companion. Ten rows, keys 0..9: "open" for 0..5, "closed" for 6..9.
+morph::table::TableDescription selectionDescription() {
+    using namespace morph::table;
+    TableDescription d;
+    d.id = "samples";
+    d.key = "id";
+    d.columns = {
+        TableColumn{.info = {.id = "id", .kind = ColumnKind::Integer}, .label = "Id"},
+        TableColumn{.info = {.id = "status", .kind = ColumnKind::Text}, .label = "Status"},
+        TableColumn{.info = {.id = "lockedBy", .kind = ColumnKind::Text}, .shown = false},
+    };
+    d.rowLock = "lockedBy";
+    return describe(std::move(d));
+}
+
+// One row of a page: its key, its status and its lock text.
+struct SelRow {
+    std::int64_t key;
+    std::string status = "open";
+    std::string lockedBy;
+};
+
+// A page reply of selectionDescription(), against the revision @p description has; a keyed reply carries `indices`,
+// each row's view row from 0. @p extra is more members, written `"name":value,…`.
+std::string selectionReply(std::vector<SelRow> const& rows, std::int64_t total, std::string_view viewRevision,
+                           std::vector<std::int64_t> const& unmatched, bool keyed, std::string_view extra = {},
+                           morph::table::TableDescription const& description = selectionDescription()) {
+    std::string keys;
+    std::string cells;
+    std::string indices;
+    for (std::size_t at = 0; at < rows.size(); ++at) {
+        std::string const comma = at == 0 ? "" : ",";
+        keys += comma + std::to_string(rows[at].key);
+        cells += comma + "[" + std::to_string(rows[at].key) + ",\"" + rows[at].status + "\",\"" + rows[at].lockedBy +
+                 "\"]";
+        indices += comma + std::to_string(at);
+    }
+    std::string out = R"({"revision":")" + description.revision + R"(","columns":["id","status","lockedBy"],"keys":[)" +
+                      keys + R"(],"rows":[)" + cells + R"(],"total":)" + std::to_string(total) +
+                      R"(,"offset":0,"viewRevision":")" + std::string{viewRevision} + "\"";
+    if (keyed) {
+        out += R"(,"indices":[)" + indices + "]";
+    }
+    if (!unmatched.empty()) {
+        std::string list;
+        for (auto const key : unmatched) {
+            list += (list.empty() ? "" : ",") + std::to_string(key);
+        }
+        out += R"(,"unmatched":[)" + list + "]";
+    }
+    if (!extra.empty()) {
+        out += "," + std::string{extra};
+    }
+    return out + "}";
+}
+
+// A page reply of selectionDescription(): {"revision", "columns":["id","status","lockedBy"], "keys", "rows", "total",
+// "offset": 0, "viewRevision", "unmatched"}.
+std::string selectionPage(std::vector<SelRow> const& rows, std::int64_t total, std::string_view viewRevision,
+                          std::vector<std::int64_t> const& unmatched = {}) {
+    return selectionReply(rows, total, viewRevision, unmatched, false);
+}
+
+// The same reply, keyed: with "indices".
+std::string selectionKeyed(std::vector<SelRow> const& rows, std::int64_t total, std::string_view viewRevision) {
+    return selectionReply(rows, total, viewRevision, {}, true);
+}
+
+std::vector<SelRow> openRows() { return {{0}, {1}, {2}, {3}, {4}, {5}}; }
+
+// The catalog entry of an action on Lims_SampleModel that declares `updatesTable` on `samples` and returns
+// {"rows": ChangedRows}: the held record's keys are at "rows.rows", by the member "key".
+morph::ui::ActionInfo samplesAction() {
+    morph::ui::ActionInfo info;
+    info.modelType = "Lims_SampleModel";
+    info.effects = std::vector<morph::ui::ActionEffect>{{.kind = "updates", .record = "Lims_SampleModel.samples"}};
+    info.records = {morph::ui::ActionRecordInfo{
+        .record = "Lims_SampleModel.samples", .keyField = "key", .paths = {"rows.rows"}}};
+    return info;
+}
+
+// An action whose member `rows` is a RowSelection of the table, and one whose member `row` is a RowRef of it.
+inline constexpr std::string_view kSelectionSchema =
+    R"({"type":"object","properties":{"rows":{"type":"object","x-selectionOf":"Lims_SampleModel.samples"}}})";
+inline constexpr std::string_view kRowSchema =
+    R"({"type":"object","properties":{"row":{"x-rowOf":"Lims_SampleModel.samples"}}})";
+
+// The table of Tasks 17a to 17c: filtered to open(), with the mutations of the "Catalog actions" table.
+inline constexpr std::string_view kSelectionTable =
+    R"({"kind":"table","id":"t","testId":"t","model":"sample","table":"samples",
+    "selectionMode":"multiple","filters":{"columns":{"status":{"include":[{"eq":"open"}]}}}})";
+inline constexpr std::string_view kSelectionMutations = R"({
+    "tag":{"model":"sample","action":"Lims_TagRows","body":{"obj":{"rows":{"ref":"t.selectionSet"}}}}})";
+
+// The document of @p table and @p mutations: the table, and a button `run-<name>` running each mutation.
+std::string selectionDoc(std::string_view table, std::string_view mutations, TableHarness& h) {
+    auto const parsed = morph::ui::parseJson(mutations);
+    REQUIRE(parsed.has_value());
+    std::string children{table};
+    for (auto const& [name, mutation] : std::get<morph::ui::Json::object_t>(parsed->data)) {
+        auto const& fields = std::get<morph::ui::Json::object_t>(mutation.data);
+        h.mutationActions.insert_or_assign(name, std::get<std::string>(fields.at("action").data));
+        children += R"(,{"kind":"button","testId":"run-)" + name + R"(","label":")" + name +
+                    R"(","onClick":[{"run":")" + name + R"("}]})";
+    }
+    return doc(R"({"kind":"column","children":[)" + children + "]}", mutations);
+}
+
+// Mounts it and answers the describe request and the first page: six open rows, total 6, viewRevision "v1".
+std::unique_ptr<morph::ui::Screen> mountSelection(TableHarness& h, std::string_view table = kSelectionTable,
+                                                  std::string_view mutations = kSelectionMutations) {
+    addAction(h, "Lims_TagRows", std::string{kSelectionSchema}, samplesAction());
+    auto screen = h.mount(selectionDoc(table, mutations, h));
+    replyDescribe(h, describeJson(selectionDescription()));
+    replyPage(h, selectionPage(openRows(), 6, "v1"));
+    return screen;
+}
+
+// The text of a query, for comparing two.
+std::string queryText(table::TableQuery const& query) { return glz::write_json(query).value_or(""); }
+
+}  // namespace
+
+TEST_CASE("view selection: Ctrl+A selects the view and fetches no row", "[ui][table][selection]") {
+    TableHarness h;
+    auto screen = mountSelection(h);
+    int const table = h.byTestId("Table", "t");
+    auto const before = lastQuery(h);
+    std::size_t const sent = h.dispatcher.count("Table.samples");
+    h.backend.selectAll(table);  // the backend's Ctrl+A
+    h.settle();
+    CHECK(h.dispatcher.count("Table.samples") == sent);  // nothing sent
+    CHECK(queryText(lastQuery(h)) == queryText(before));
+    CHECK(elementValue(h, "t", "selectionSet") ==
+          value(R"({"view":{"filters":{"columns":{"status":{"include":[{"eq":"open"}]}}},
+                    "retained":[],"revision":"v1"},"except":[]})"));
+    CHECK(elementValue(h, "t", "selection") == value("[]"));
+    CHECK(elementValue(h, "t", "selectedCount") == morph::ui::Value{std::int64_t{6}});
+    CHECK(elementValue(h, "t", "selectedCountKind") == morph::ui::Value{std::string{"exact"}});
+    h.backend.ctrlClickRow(table, std::int64_t{3});
+    h.settle();
+    CHECK(elementValue(h, "t", "selectedCount") == morph::ui::Value{std::int64_t{5}});
+    h.backend.clickRow(table, std::int64_t{2});
+    h.settle();
+    CHECK(elementValue(h, "t", "selectionSet") == value(R"({"keys":[2]})"));
+}
+// Mutation: select-all selecting the held keys, which sends no view and counts the held rows only.
+
+TEST_CASE("view selection: a key of except that leaves the view is dropped from it", "[ui][table][selection][review]") {
+    TableHarness h;
+    auto screen = mountSelection(h);
+    int const table = h.byTestId("Table", "t");
+    h.backend.selectAll(table);
+    h.settle();
+    h.backend.ctrlClickRow(table, std::int64_t{3});
+    h.settle();
+    CHECK(elementValue(h, "t", "selectedCount") == morph::ui::Value{std::int64_t{5}});
+    fireEvent(h, "Lims_SampleModel.samples", {3});
+    REQUIRE(lastQuery(h).keys.has_value());
+    SECTION("the keyed reply leaves 3 out of the view") {
+        // Row 3 became "closed": the reply holds 0, 1, 2, 4 and 5, and a page refetch, if any, answers the same.
+        std::vector<SelRow> const left{{0}, {1}, {2}, {4}, {5}};
+        replyPage(h, selectionKeyed(left, 5, "v2"));
+        if (openCalls(h, "Table.samples") > 0) {
+            replyPage(h, selectionPage(left, 5, "v2"));
+        }
+        CHECK(elementValue(h, "t", "selectedCount") == morph::ui::Value{std::int64_t{5}});
+        CHECK(elementValue(h, "t", "selectedCountKind") == morph::ui::Value{std::string{"exact"}});
+        CHECK(*elementValue(h, "t", "selectionSet").field("except") == value("[]"));
+    }
+    SECTION("the event's keyed fetch is left unanswered: key 3 is held but owed a refetch") {
+        CHECK(elementValue(h, "t", "selectedCountKind") == morph::ui::Value{std::string{"approximate"}});
+        CHECK(statusOf(h, table).counts == "about 5 of 6 selected");
+    }
+}
+// Mutation: except keys never pruned, which leaves except [3].
+
+TEST_CASE("view selection: its life", "[ui][table][selection]") {
+    TableHarness h;
+    addAction(h, "Lims_TagRows", std::string{kSelectionSchema}, samplesAction());
+    auto screen = h.mount(
+        R"({"vocab":"ui/1","id":"samples","models":{"sample":{"type":"Lims_SampleModel"}},)"
+        R"("state":{"f":{"init":{"lit":{"columns":{"status":{"include":[{"eq":"open"}]}}}}}},)"
+        R"("view":{"kind":"column","children":[{"kind":"table","id":"t","testId":"t","model":"sample",)"
+        R"("table":"samples","selectionMode":"multiple","filters":{"ref":"f"}},)"
+        R"({"kind":"button","testId":"clear","label":"clear","onClick":[{"set":"f","value":{"lit":{"columns":{}}}}]}]}})");
+    replyDescribe(h, describeJson(selectionDescription()));
+    replyPage(h, selectionPage(openRows(), 6, "v1"));
+    int const table = h.byTestId("Table", "t");
+    h.backend.selectAll(table);
+    h.settle();
+    h.backend.clickHeader(table, 1);  // a header sort
+    h.settle();
+    CHECK(elementValue(h, "t", "selectionSet").field("view") != nullptr);
+    h.backend.click(h.byTestId("Button", "clear"));  // a filter change
+    h.settle();
+    CHECK(elementValue(h, "t", "selectionSet") == value(R"({"keys":[]})"));
+}
+// Mutation: the selection ended by a sort, which empties it on the first step.
+
+TEST_CASE("view selection: not while membership is open", "[ui][table][selection]") {
+    TableHarness h;
+    SECTION("rows are undecided") {
+        auto screen = mountSelection(h);
+        int const table = h.byTestId("Table", "t");
+        fireEvent(h, "Lims_SampleModel.samples", {});
+        replyPage(h, selectionReply(openRows(), 6, "v1", {}, false, R"("undecided":40,"totalKind":"atLeast")"));
+        h.backend.selectAll(table);
+        h.settle();
+        CHECK(elementValue(h, "t", "selectionSet") == value(R"({"keys":[]})"));
+        CHECK(statusOf(h, table).message == "Select all is available once 40 rows are decided");
+    }
+    SECTION("the filtered column's level is awaited") {
+        addAction(h, "Lims_TagRows", std::string{kSelectionSchema}, samplesAction());
+        auto const described = withLevel(selectionDescription(), "status", "recipe");
+        auto screen = h.mount(selectionDoc(kSelectionTable, kSelectionMutations, h));
+        replyDescribe(h, describeJson(described));
+        replyPage(h, selectionReply(openRows(), 6, "v1", {}, false, R"("awaiting":["recipe"])", described));
+        int const table = h.byTestId("Table", "t");
+        h.backend.selectAll(table);
+        h.settle();
+        CHECK(elementValue(h, "t", "selectionSet") == value(R"({"keys":[]})"));
+        CHECK(statusOf(h, table).message == "Select all is available once recipe data has loaded");
+    }
+    SECTION("only a column the filter does not read has the level") {
+        addAction(h, "Lims_TagRows", std::string{kSelectionSchema}, samplesAction());
+        auto const described = withLevel(selectionDescription(), "lockedBy", "recipe");
+        auto screen = h.mount(selectionDoc(kSelectionTable, kSelectionMutations, h));
+        replyDescribe(h, describeJson(described));
+        replyPage(h, selectionReply(openRows(), 6, "v1", {}, false, R"("awaiting":["recipe"])", described));
+        int const table = h.byTestId("Table", "t");
+        h.backend.selectAll(table);
+        h.settle();
+        CHECK(elementValue(h, "t", "selectionSet").field("view") != nullptr);
+    }
+}
+// Mutation: select-all ignoring `undecided`, which selects a view whose rows are not known.
+
+TEST_CASE("view selection: the rows changed since the user selected them", "[ui][table][selection]") {
+    TableHarness h;
+    auto screen = mountSelection(h);
+    int const table = h.byTestId("Table", "t");
+    h.backend.selectAll(table);
+    h.settle();
+    h.backend.ctrlClickRow(table, std::int64_t{3});
+    h.settle();
+    runMutation(h, "tag");
+    REQUIRE(h.dispatcher.count("Lims_TagRows") == 1);
+    // Seven rows now: a change of the record refetches the page.
+    fireEvent(h, "Lims_SampleModel.samples", {});
+    replyPage(h, selectionPage({{0}, {1}, {2}, {3}, {4}, {5}, {6}}, 7, "v2"));
+    refuseMutation(h, "tag", "morph.table.viewChanged");
+    TableStatus const status = statusOf(h, table);
+    CHECK(status.message == "The rows changed since you selected them: 6 rows now. Run on these?");
+    REQUIRE(status.entries.size() == 1);
+    CHECK(status.entries.front().label == "Run on these");
+    CHECK(h.dispatcher.count("Lims_TagRows") == 1);  // not choosing it sends nothing
+    h.backend.chooseStatusEntry(table, status.entries.front().id);
+    h.settle();
+    REQUIRE(h.dispatcher.count("Lims_TagRows") == 2);
+    Value const body = value(h.dispatcher.calls.at(h.dispatcher.last("Lims_TagRows")).body);
+    CHECK(*body.field("rows")->field("view")->field("revision") == Value{std::string{"v2"}});
+    CHECK(*body.field("rows")->field("except") == value("[3]"));
+}
+// Mutation: the rerun sending the old revision, which is refused again.
+
+TEST_CASE("view selection: a Shift range toggles a range of except", "[ui][table][selection]") {
+    TableHarness h;
+    auto screen = mountSelection(h);
+    int const table = h.byTestId("Table", "t");
+    auto const except = [&h] { return *elementValue(h, "t", "selectionSet").field("except"); };
+    h.backend.selectAll(table);
+    h.settle();
+    h.backend.ctrlClickRow(table, std::int64_t{1});  // anchor 1
+    h.settle();
+    CHECK(except() == value("[1]"));
+    h.backend.selectTableRange(table, 1, 3);  // keys 1, 2, 3 through keysOf
+    h.settle();
+    CHECK(except() == value("[1,2,3]"));
+    CHECK(elementValue(h, "t", "selectedCount") == morph::ui::Value{std::int64_t{3}});
+    h.backend.ctrlClickRow(table, std::int64_t{5});
+    h.settle();
+    h.backend.ctrlClickRow(table, std::int64_t{5});  // anchor 5, selected again
+    h.settle();
+    h.backend.selectTableRange(table, 5, 2);  // keys 2..5
+    h.settle();
+    CHECK(except() == value("[1]"));
+    CHECK(elementValue(h, "t", "selectedCount") == morph::ui::Value{std::int64_t{5}});
+    // Over maxRangeRows (10,000): refused, except unchanged.
+    h.backend.selectTableRange(table, 0, 10'000);
+    h.settle();
+    CHECK(except() == value("[1]"));
+    CHECK(statusOf(h, table).message == "A range selects at most 10,000 rows");
+}
+// Mutation: a Shift range in a view selection replacing the selection with the range's keys.
+
+TEST_CASE("view selection: copying it fetches the view's rows in order", "[ui][table][selection]") {
+    TableHarness h;
+    auto screen = mountSelection(h);
+    int const table = h.byTestId("Table", "t");
+    h.backend.selectAll(table);
+    h.settle();
+    h.backend.ctrlClickRow(table, std::int64_t{1});
+    h.settle();
+    h.backend.ctrlClickRow(table, std::int64_t{4});
+    h.settle();
+    std::size_t const sent = h.dispatcher.count("Table.samples");
+    pressCopy(h, table);
+    REQUIRE(h.dispatcher.count("Table.samples") == sent + 1);
+    auto const query = lastQuery(h);
+    CHECK_FALSE(query.keys.has_value());
+    REQUIRE(query.columns.has_value());
+    CHECK(*query.columns == std::vector<std::string>{"id", "status"});  // the visible columns
+    replyPage(h, selectionPage(openRows(), 6, "v1"));
+    CHECK(clipboardText(h) == "0\topen\n2\topen\n3\topen\n5\topen");
+    SECTION("over maxCopyRows it is refused") {
+        std::string const kept = clipboardText(h);
+        fireEvent(h, "Lims_SampleModel.samples", {});
+        replyPage(h, selectionPage(openRows(), 10'001, "v3"));
+        h.backend.selectAll(table);
+        h.settle();
+        pressCopy(h, table);
+        CHECK(statusOf(h, table).message == "A copy holds at most 10,000 rows");
+        CHECK(clipboardText(h) == kept);
+    }
+}
+// Mutation: copying the held rows only, which writes rows 0 and 2.
+
+TEST_CASE("table rows: a new description revision drops a view selection that names a removed column",
+          "[ui][table][selection]") {
+    using namespace morph::table;
+    TableDescription withC = selectionDescription();
+    withC.columns.push_back(TableColumn{.info = {.id = "c", .kind = ColumnKind::Text}, .label = "C"});
+    withC = describe(std::move(withC));
+    TableDescription const withoutC = selectionDescription();
+    auto const run = [&](std::string_view filters, bool dropped) {
+        TableHarness h;
+        addAction(h, "Lims_TagRows", std::string{kSelectionSchema}, samplesAction());
+        std::string const tableNode =
+            R"({"kind":"table","id":"t","testId":"t","model":"sample","table":"samples","selectionMode":"multiple",)"
+            R"("filters":)" + std::string{filters} + "}";
+        auto screen = h.mount(selectionDoc(tableNode, kSelectionMutations, h));
+        replyDescribe(h, describeJson(withC));
+        replyPage(h, selectionReply(openRows(), 6, "v1", {}, false, {}, withC));
+        int const table = h.byTestId("Table", "t");
+        h.backend.selectAll(table);
+        h.settle();
+        h.backend.ctrlClickRow(table, std::int64_t{3});
+        h.settle();
+        REQUIRE(elementValue(h, "t", "selectionSet").field("view") != nullptr);
+        // A page names revision B; the describe reply B lacks c.
+        fireEvent(h, "Lims_SampleModel.samples", {});
+        replyPage(h, selectionReply(openRows(), 6, "v1", {}, false, {}, withoutC));
+        if (openCalls(h, "Table.samples.describe") > 0) {
+            replyDescribe(h, describeJson(withoutC));
+        }
+        while (openCalls(h, "Table.samples") > 0) {
+            replyPage(h, selectionPage(openRows(), 6, "v1"));
+        }
+        if (dropped) {
+            CHECK(elementValue(h, "t", "selectionSet") == value(R"({"keys":[]})"));
+            CHECK_FALSE(lastQuery(h).filters.columns.contains("c"));
+            runMutation(h, "tag");
+            CHECK(h.dispatcher.calls.at(h.dispatcher.last("Lims_TagRows")).body.find("\"c\"") == std::string::npos);
+        } else {
+            Value const selection = elementValue(h, "t", "selectionSet");
+            REQUIRE(selection.field("view") != nullptr);
+            CHECK(*selection.field("except") == value("[3]"));
+            CHECK(*selection.field("view")->field("filters") ==
+                  value(R"({"columns":{"status":{"include":[{"eq":"open"}]}}})"));
+        }
+    };
+    SECTION("a filter on c") {
+        run(R"({"columns":{"status":{"include":[{"eq":"open"}]},"c":{"include":[{"eq":"x"}]}}})", true);
+    }
+    SECTION("a filter on status only") { run(R"({"columns":{"status":{"include":[{"eq":"open"}]}}})", false); }
+}
+// Mutation: setDescription leaving the view selection as it was, which sends a view whose filter names c.

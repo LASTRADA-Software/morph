@@ -1447,6 +1447,19 @@ struct TableSource {
     std::vector<bool> rowScopedCells;
 };
 
+/// @brief A choice the status line offers beside its text, as a button the user may choose.
+struct StatusEntry {
+    /// @brief What the choice reports through `Table::onStatusEntry`.
+    std::string id;
+    /// @brief The button's text.
+    std::string label;
+
+    /// @brief Member-wise equality.
+    /// @param other The entry to compare with.
+    /// @return `true` when id and label match.
+    [[nodiscard]] bool operator==(StatusEntry const& other) const = default;
+};
+
 /// @brief A table's status line: its counts, the state of its fetches and levels, and the latest message.
 struct TableStatus {
     /// @brief The leading part: the rows counted, or empty while no total is known.
@@ -1457,6 +1470,12 @@ struct TableStatus {
     bool retry = false;
     /// @brief The latest refusal or notice; empty when none.
     std::string message;
+    /// @brief The choices the message offers, after it.
+    std::vector<StatusEntry> entries;
+    /// @brief What stays on the line while its cause lasts, as rows being saved; empty when nothing does.
+    std::string standing;
+    /// @brief The choices `standing` offers, after it.
+    std::vector<StatusEntry> standingEntries;
     /// @brief Whether the line takes space.
     bool shown = false;
 
@@ -1611,6 +1630,11 @@ struct Table {
     ///        called, for the caller to refuse; the table's own menu (`menu` with no column) and `headerEntries` are
     ///        left as given.
     Prop<bool> headerEnabled = true;
+    /// @brief Engaged: the selection is every row of the view less these keys, which the mount gives the backend
+    ///        through `setSelectionView` on each change; when it disengages the mount sets `selection` again.
+    Prop<std::optional<std::vector<Key>>> selectionView;
+    /// @brief Called with the id of the status line's entry the user chose.
+    std::function<void(std::string id)> onStatusEntry;
 };
 
 /// @brief A date, or a date and time, edited in a display zone and reported as an instant.
@@ -2434,6 +2458,11 @@ struct TableOptions {
     std::function<std::vector<MenuItem>(std::size_t column)> headerEntries;
     /// @brief Whether the header's sort, filter and arrangement entries are enabled.
     Prop<bool> headerEnabled = true;
+    /// @brief Engaged: the selection is every row of the view less these keys, which the mount gives the backend
+    ///        through `setSelectionView` on each change; when it disengages the mount sets `selection` again.
+    Prop<std::optional<std::vector<Key>>> selectionView;
+    /// @brief Called with the id of the status line's entry the user chose.
+    std::function<void(std::string id)> onStatusEntry;
 };
 
 /// @brief What a table's row view builds for one row: its cells, one per column, and its tone.
@@ -2556,6 +2585,8 @@ template <typename RowT>
     spec.cellMenuKeys = std::move(options.cellMenuKeys);
     spec.headerEntries = std::move(options.headerEntries);
     spec.headerEnabled = std::move(options.headerEnabled);
+    spec.selectionView = std::move(options.selectionView);
+    spec.onStatusEntry = std::move(options.onStatusEntry);
     return detail::makeNode(std::move(spec));
 }
 
@@ -2607,6 +2638,8 @@ template <typename RowT>
     spec.cellMenuKeys = std::move(options.cellMenuKeys);
     spec.headerEntries = std::move(options.headerEntries);
     spec.headerEnabled = std::move(options.headerEnabled);
+    spec.selectionView = std::move(options.selectionView);
+    spec.onStatusEntry = std::move(options.onStatusEntry);
     return detail::makeNode(std::move(spec));
 }
 

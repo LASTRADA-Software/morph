@@ -161,6 +161,7 @@ enum class TableErrorCode : std::uint8_t {
     Unavailable,          ///< An operation the table's mode does not offer.
     ServiceFailed,        ///< An injected service (collator, date parser, comparator) threw.
     SourceContract,       ///< The source broke its contract: an unloaded cell in a base-level column.
+    ViewChanged,          ///< A selection of the view resolved under `Exact` after the view's rows changed.
 };
 
 /// @brief The error every fallible table call returns.
@@ -1525,5 +1526,5 @@ struct glz::meta<morph::table::TableErrorCode> {
     static constexpr auto value = glz::enumerate(
         "unknownColumn", UnknownColumn, "unsupportedOperator", UnsupportedOperator, "invalidValue", InvalidValue,
         "invalidSpec", InvalidSpec, "limitExceeded", LimitExceeded, "columnNotReadable", ColumnNotReadable,
-        "unavailable", Unavailable, "serviceFailed", ServiceFailed, "sourceContract", SourceContract);
+        "unavailable", Unavailable, "serviceFailed", ServiceFailed, "sourceContract", SourceContract, "viewChanged", ViewChanged);
 };

@@ -14,6 +14,7 @@
 #include <map>
 #include <memory>
 #include <morph/core/owner_strand.hpp>
+#include <morph/core/action_refusal.hpp>
 #include <morph/core/wire.hpp>
 #include <morph/reactive/runtime.hpp>
 #include <morph/reactive/testing/manual_scheduler.hpp>
@@ -1086,6 +1087,10 @@ struct TableHarness : ExtraActions, RowsFixture {
     RecordingBackend backend;
     /// @brief Every diagnostic reported, oldest first.
     std::vector<Refusal> diagnostics;
+    /// @brief The screen `mount` mounted last, which `elementValue(h, …)` reads; the test owns it.
+    Screen* mounted = nullptr;
+    /// @brief The action each mutation of the document mounted last runs, by the mutation's name.
+    std::map<std::string, std::string, std::less<>> mutationActions;
     /// @brief The interpreter.
     Interpreter interpreter{session, dispatcher,
                             InterpreterOptions{.host = &host, .diagnostics = [this](Refusal const& refusal) {
@@ -1103,6 +1108,7 @@ struct TableHarness : ExtraActions, RowsFixture {
         if (!screen) {
             FAIL(screen.error().message());
         }
+        mounted = screen->get();
         settle();
         return std::move(*screen);
     }
@@ -1175,6 +1181,74 @@ inline void addAction(TableHarness& h, std::string id, std::string schemaJson, A
     h.extraActions.insert_or_assign(std::move(id), std::pair{std::move(schemaJson), std::move(info)});
 }
 
+/// @brief A document value from JSON text.
+/// @param json The text.
+/// @return The value; the text must read.
+inline Value value(std::string_view json) {
+    auto parsed = parseJson(json);
+    REQUIRE(parsed.has_value());
+    auto read = valueFromJson(*parsed);
+    REQUIRE(read.has_value());
+    return std::move(*read);
+}
+
+/// @brief A record change event of the session, then settles.
+/// @param h      The harness.
+/// @param record The record.
+/// @param keys   The changed keys; empty for a change of the whole record.
+inline void fireEvent(TableHarness& h, std::string record, std::vector<std::int64_t> const& keys) {
+    effects::RecordChange change{.record = std::move(record), .keys = std::nullopt};
+    if (!keys.empty()) {
+        std::vector<glz::raw_json> raw;
+        for (auto const key : keys) {
+            raw.emplace_back(std::to_string(key));
+        }
+        change.keys = std::move(raw);
+    }
+    wire::ChangesBody body;
+    body.records.push_back(std::move(change));
+    h.session.applyChanges(body);
+    h.settle();
+}
+
+/// @brief Runs a mutation of the document through its button `run-<name>`, then settles.
+/// @param h    The harness.
+/// @param name The mutation's name.
+inline void runMutation(TableHarness& h, std::string_view name) {
+    h.backend.click(h.byTestId("Button", "run-" + std::string{name}));
+    h.settle();
+}
+
+/// @brief The latest call of a mutation's action.
+/// @param h    The harness.
+/// @param name The mutation's name.
+/// @return The call's index.
+inline std::size_t mutationCall(TableHarness const& h, std::string_view name) {
+    auto const found = h.mutationActions.find(name);
+    REQUIRE(found != h.mutationActions.end());
+    return h.dispatcher.last(found->second);
+}
+
+/// @brief Answers a mutation's latest call with @p replyJson, then settles.
+/// @param h         The harness.
+/// @param name      The mutation's name.
+/// @param replyJson The reply.
+inline void settleMutation(TableHarness& h, std::string_view name, std::string replyJson) {
+    h.reply(mutationCall(h, name), std::move(replyJson));
+}
+
+/// @brief Refuses a mutation's latest call with an `ActionRefusal` of @p code, then settles.
+/// @param h    The harness.
+/// @param name The mutation's name.
+/// @param code The refusal's code.
+inline void refuseMutation(TableHarness& h, std::string_view name, std::string code) {
+    auto& call = h.dispatcher.calls.at(mutationCall(h, name));
+    REQUIRE_FALSE(call.answered);
+    call.answered = true;
+    call.promise.reject(std::make_exception_ptr(model::ActionRefusal{std::move(code), {}, "refused"}));
+    h.settle();
+}
+
 /// @brief The test document: a table `list` of the table `samples` of the model alias `lab`, with `empty` content.
 inline constexpr std::string_view kModelTable =
     R"({"vocab":"ui/1","id":"samples","models":{"lab":{"type":"Lims_SampleModel"}},"view":{"kind":"table","id":"list","testId":"list","model":"lab","table":"samples","empty":[{"kind":"text","text":"No samples"}]}})";
@@ -1231,6 +1305,16 @@ inline int tableOf(TableHarness const& h) { return h.byTestId("Table", "list"); 
 /// @return `readJson` of `{"ref": "<id>.<name>"}`.
 inline std::string elementValue(Screen const& screen, std::string_view id, std::string_view name) {
     return readJson(screen, R"({"ref":")" + std::string{id} + "." + std::string{name} + R"("})");
+}
+
+/// @brief An element value of the screen the harness mounted last.
+/// @param h    The harness.
+/// @param id   The element's id.
+/// @param name The value's name.
+/// @return The value.
+inline Value elementValue(TableHarness const& h, std::string_view id, std::string_view name) {
+    REQUIRE(h.mounted != nullptr);
+    return value(elementValue(*h.mounted, id, name));
 }
 
 /// @brief The oldest call of an action neither answered nor stopped.

@@ -568,8 +568,19 @@ concept DeclaresSchemaMarker = requires {
     { std::remove_cvref_t<T>::schemaMarker() } noexcept -> std::convertible_to<std::string_view>;
 };
 
+/// @brief Concept: a field type that marks its schema property with a
+///        keyword and a text value of its own, through a `static schemaValue()`
+///        returning the pair — `morph::table::RowSelection` names its table's
+///        record under `x-selectionOf` this way. The value is computed when the
+///        schema is written, since it may come from a registry.
+template <typename T>
+concept DeclaresSchemaValue = requires {
+    { std::remove_cvref_t<T>::schemaValue() } -> std::convertible_to<std::pair<std::string_view, std::string>>;
+};
+
 /// @brief Sets the keyword a member type declares with `schemaMarker()` on
-///        its property; does nothing for any other type.
+///        its property, and the keyword and value it declares with
+///        `schemaValue()`; does nothing for any other type.
 /// @tparam Member The member's type.
 /// @param property The property's schema node.
 template <typename Member>
@@ -577,6 +588,11 @@ void annotateSchemaMarker(glz::generic_u64& property) {
     if constexpr (DeclaresSchemaMarker<Member>) {
         // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access) -- glaze DOM requires operator[]
         property[std::string{Member::schemaMarker()}] = true;
+    }
+    if constexpr (DeclaresSchemaValue<Member>) {
+        auto [keyword, value] = std::remove_cvref_t<Member>::schemaValue();
+        // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access) -- glaze DOM requires operator[]
+        property[std::string{keyword}] = std::move(value);
     }
 }
 
