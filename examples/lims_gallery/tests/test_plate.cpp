@@ -69,7 +69,7 @@ TEST_CASE("plate, expanded: the samples to place beside the 12-column plate, A3 
     // The title is runs: the plate's ID in the mono face.
     CHECK(screen.prop("Text", "shell_title", "spans") == "[Plate ,PL-0193;mono]");
     // The head's subtitle carries the worksheet's ID in the mono face.
-    CHECK(screen.prop("Text", "head_subtitle", "spans") ==
+    CHECK(screen.prop("Text", "head_subtitle_inline", "spans") ==
           "[ELISA\\, host cell protein · worksheet ,WS-2026-0415;mono]");
     CHECK(screen.shows("Panel", "bulk"));
     // The legend's chips are round mono outline badges.

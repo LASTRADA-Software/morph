@@ -853,8 +853,41 @@ private:
         if (justify != Justify::Start) {
             widget.setJustify(justify);
         }
-        mountChildren(scope, children, widget);
+        if (startsHidden(common) && dynamic_cast<TableWidget const*>(parent) == nullptr) {
+            mountWhenShown(scope, children, widget, common.visible);
+        } else {
+            mountChildren(scope, children, widget);
+        }
         return widget;
+    }
+
+    // Whether a node's `visible` is false as it mounts.
+    static bool startsHidden(Common const& common) {
+        return common.visible.isBound() ? !common.visible.evaluate() : !common.visible.constant();
+    }
+
+    // The children of a stack that mounts hidden: its own widget exists, and they mount the first time `visible`
+    // becomes true, into a scope of their own one level deeper than the stack's. They stay mounted after that, and
+    // hiding the stack again only hides it. A `visible` that is a constant `false` never shows, so they never mount.
+    void mountWhenShown(reactive::Scope& scope, std::vector<Node> const& children, ContainerWidget& container,
+                        Prop<bool> const& visible) {
+        if (!visible.isBound()) {
+            return;
+        }
+        reactive::Scope& content = scope.child();
+        bool& mounted = scope.make<bool>(false);
+        bind(scope, visible, [this, &content, &container, &mounted, children](bool shown) {
+            if (!shown || mounted) {
+                return;
+            }
+            mounted = true;
+            _rt->untracked([&] {
+                mountPass([&] {
+                    mountChildren(content, children, container);
+                    return 0;
+                });
+            });
+        });
     }
 
     // A path through a menu tree: an index at each level from the top.

@@ -218,12 +218,14 @@ TEST_CASE("lims screens: the results screen previews the reported concentration 
     REQUIRE(harness.waitFor(
         [&harness, &dilution] { return harness.backend().prop(*dilution, "options").contains("diluted"); }));
     harness.chooseField("capture", "dilution", R"("diluted")");
-    // The factor is shown only once the choice reaches the form, and a hidden field takes no typing.
-    auto const factor = harness.findIn("capture", "TextInput", "field_dilutionFactor");
+    // The factor is shown only once the choice reaches the form, and a hidden field takes no typing. Its input is
+    // built the first time it is shown, so it is looked up inside the wait.
     auto const form = harness.find("Column", "capture");
-    REQUIRE(factor);
     REQUIRE(form);
-    REQUIRE(harness.waitFor([&] { return harness.shownUnder(*form, *factor); }));
+    REQUIRE(harness.waitFor([&] {
+        auto const factor = harness.findIn("capture", "TextInput", "field_dilutionFactor");
+        return factor.has_value() && harness.shownUnder(*form, *factor);
+    }));
     harness.editField("capture", "dilutionFactor", "4");
     bool const diluted = previews("Reported 5.000 mg/L");
     INFO("reported: " << harness.text("reported").value_or("<none>"));

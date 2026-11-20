@@ -93,9 +93,9 @@ TEST_CASE("receipt, expanded: scan field, duplicate notice, the sample's card an
     CHECK(screen.prop("Text", "session-title", "spans") == "[This session;strong]");
     CHECK(screen.prop("Panel", "session-panel", "a11yName") == "This session");
     CHECK(screen.prop("Text", "last-rejection", "spans") == rejection("S-26-104228", "seal broken"));
-    CHECK(screen.text("head_subtitle") == "Session since 08:30");
-    CHECK(screen.prop("Badge", "head_status_0", "text") == "12 received");
-    CHECK(screen.prop("Badge", "head_status_1", "text") == "1 rejected");
+    CHECK(screen.text("head_subtitle_end") == "Session since 08:30");
+    CHECK(screen.prop("Badge", "head_status_end_0", "text") == "12 received");
+    CHECK(screen.prop("Badge", "head_status_end_1", "text") == "1 rejected");
 }
 
 TEST_CASE("receipt, expanded: receiving moves to the next sample and counts it", "[lims-gallery]") {
@@ -103,7 +103,7 @@ TEST_CASE("receipt, expanded: receiving moves to the next sample and counts it",
     REQUIRE(screen.prop("Button", "receive", "enabled") != "false");
     screen.click("receive");
     CHECK(showsRuns(screen, "sample-id", heading("S-26-104231")));
-    CHECK(screen.waitFor([&screen] { return screen.prop("Badge", "head_status_0", "text") == "13 received"; }));
+    CHECK(screen.waitFor([&screen] { return screen.prop("Badge", "head_status_end_0", "text") == "13 received"; }));
     CHECK_FALSE(screen.shows("Banner", "duplicate"));
     screen.requireNoProblems();
 }
@@ -144,7 +144,7 @@ TEST_CASE("receipt, expanded: rejecting asks why and records it", "[lims-gallery
     screen.click("action_confirm");
     CHECK(showsRuns(screen, "last-rejection", rejection("S-26-104230", "container damaged")));
     CHECK(screen.waitFor([&screen] { return !screen.find("Select", "reject-reason").has_value(); }));
-    CHECK(screen.waitFor([&screen] { return screen.prop("Badge", "head_status_1", "text") == "2 rejected"; }));
+    CHECK(screen.waitFor([&screen] { return screen.prop("Badge", "head_status_end_1", "text") == "2 rejected"; }));
     CHECK(screen.prop("Text", "sample-id", "spans") == heading("S-26-104231"));
     screen.requireNoProblems();
 }
@@ -161,7 +161,7 @@ TEST_CASE("receipt, compact: one column, every field kept, the session folded aw
     CHECK(screen.backend().dump().contains(" · Lot ,L-26-0381;mono]"));
     CHECK(screen.find("Column", "conditions").has_value());
     CHECK(screen.prop("Collapsible", "session-panel", "title") == "This session · 13 scans");
-    CHECK(screen.prop("Badge", "head_status_0", "text") == "12");
+    CHECK(screen.prop("Badge", "head_status_end_0", "text") == "12");
     CHECK(screen.prop("Collapsible", "session-panel", "open") == "false");
     // Reject and Receive sit 8 px apart.
     CHECK(screen.isActionRow("Row", "footer-actions"));

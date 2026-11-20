@@ -23,7 +23,7 @@ TEST_CASE("console, expanded: navigation, alert, figures, chart, instruments and
     CHECK(screen.prop("Badge", "nav_badge_lims-gallery.review", "text") == "4");
     CHECK(screen.prop("Badge", "nav_badge_lims-gallery.instrument", "text") == "1");
     CHECK(screen.prop("Badge", "nav_badge_lims-gallery.instrument", "tone") == "Warn");
-    CHECK(screen.prop("Badge", "head_status_0", "text") == "Connected");
+    CHECK(screen.prop("Badge", "head_status_end_0", "text") == "Connected");
     CHECK(screen.shows("Row", "shell_sidebar"));
     CHECK(screen.shows("Banner", "alert"));
     // The unit is a column of its own beside the input, not drawn inside it.
