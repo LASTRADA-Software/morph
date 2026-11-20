@@ -46,6 +46,7 @@
 #include <morph/ui/locale_table.hpp>
 #include <morph/ui/message.hpp>
 #include <morph/ui/mount.hpp>
+#include <morph/ui/table_config.hpp>
 #include <morph/ui/table_rows.hpp>
 #include <morph/ui/table_views.hpp>
 #include <morph/ui/table_state.hpp>
@@ -353,6 +354,223 @@ private:
     bool _mounting = false;
 };
 
+/// What a table keeps of its configuring across every mount of it: the columns its layout arranges, in the order of
+/// `Table::columns`, what the user may change of them, the layout it holds, and what a change does beyond that.
+struct TableConfig {
+    explicit TableConfig(reactive::Runtime& runtime) : version{runtime, 0} {}
+
+    /// The table's element, whose sort, status line and commands the gestures reach.
+    ElementState* element = nullptr;
+    /// The columns, each with its id, label, lock and kind; those declared hidden; and which of them sort.
+    std::vector<LayoutColumn> columns;
+    std::vector<std::string> declaredHidden;
+    std::vector<bool> sortable;
+    /// What `configurable` lets the user change, and whether the table has menus (`configurable: false` has none).
+    Configure allowed = Configure::All;
+    bool menus = true;
+    /// The table's own layout, as the user or the stored state left it; none: as declared.
+    std::optional<table::ColumnLayoutValue> held;
+    /// The document's `layout`; null while the table holds its own.
+    reactive::Computed<Value>* bound = nullptr;
+    /// Bumped on every change of the columns or of the held layout.
+    reactive::Signal<std::uint64_t> version;
+    /// The bound on the sort chain, read at each gesture: a model's table has it from the description it holds.
+    std::function<std::size_t()> maxSortKeys;
+    /// Shows a message in the table's status line, or clears it with an empty one.
+    std::function<void(std::string)> message;
+    /// Marks the table as changed by its user, so a stored state that arrives later is not applied over it, and
+    /// clears its status line's message.
+    std::function<void()> touch;
+    /// Saves parts of the arrangement; empty for a table that persists nothing.
+    std::function<void(table::StateDocument const&, StateParts)> save;
+};
+
+namespace {
+
+/// What a table's literal `configurable` lets its user change, and whether it has menus: `true` and an absent key
+/// allow everything, `false` nothing and offers no menu, a list what it names. The loader refused any other value.
+[[nodiscard]] std::pair<Configure, bool> configurableOf(DocNode const& node) {
+    ExprPtr const expr = node.prop("configurable");
+    if (!expr || expr->kind != ExprKind::Literal) {
+        return {Configure::All, true};
+    }
+    if (bool const* const flag = expr->literal.asBool()) {
+        return {*flag ? Configure::All : Configure::None, *flag};
+    }
+    Configure allowed = Configure::None;
+    if (ValueList const* const names = expr->literal.asList()) {
+        for (Value const& item : *names) {
+            std::string const* const name = item.asString();
+            std::string_view const named = name == nullptr ? std::string_view{} : std::string_view{*name};
+            allowed = allowed | (named == "reorder"  ? Configure::Reorder
+                                 : named == "hide"   ? Configure::Hide
+                                 : named == "pin"    ? Configure::Pin
+                                 : named == "resize" ? Configure::Resize
+                                                     : Configure::None);
+        }
+    }
+    return {allowed, true};
+}
+
+/// The layout of a table's columns: as declared, fitted to @p value when one is given.
+[[nodiscard]] table::ColumnLayout layoutOver(std::span<LayoutColumn const> columns,
+                                             std::vector<std::string> const& declaredHidden,
+                                             std::optional<table::ColumnLayoutValue> const& value) {
+    std::vector<std::string> ids;
+    ids.reserve(columns.size());
+    for (LayoutColumn const& column : columns) {
+        ids.push_back(column.id);
+    }
+    table::ColumnLayout layout{std::move(ids), declaredHidden};
+    if (value) {
+        layout.apply(*value);
+    }
+    return layout;
+}
+
+/// A layout read from a document's value; none for `null`, or for a value that is not a layout.
+[[nodiscard]] std::optional<table::ColumnLayoutValue> layoutFromValue(Value const& value) {
+    if (value.isNull()) {
+        return std::nullopt;
+    }
+    table::ColumnLayoutValue out;
+    if (glz::read<glz::opts{.error_on_unknown_keys = false}>(out, canonicalJson(value))) {
+        return std::nullopt;
+    }
+    return out;
+}
+
+/// A layout as the `layout` element value and `onLayoutChange`'s event hold it: `order`, `hidden`, `pinned` and
+/// `widths`, and `groups` and `units` while they hold anything.
+[[nodiscard]] Value layoutValueOf(table::ColumnLayoutValue const& layout) {
+    auto const ids = [](std::span<std::string const> list) {
+        ValueList out;
+        for (std::string const& id : list) {
+            out.emplace_back(id);
+        }
+        return Value{std::move(out)};
+    };
+    ValueRecord out;
+    out.insert_or_assign("order", ids(layout.order));
+    out.insert_or_assign("hidden", ids(layout.hidden));
+    out.insert_or_assign("pinned", Value{static_cast<std::int64_t>(layout.pinned)});
+    ValueRecord widths;
+    for (auto const& [id, width] : layout.widths) {
+        widths.insert_or_assign(id, Value{static_cast<std::int64_t>(width)});
+    }
+    out.insert_or_assign("widths", Value{std::move(widths)});
+    if (!layout.groups.empty() || !layout.units.empty()) {
+        auto const json = parseJson(glz::write_json(layout).value_or("null"));
+        auto read = json ? valueFromJson(*json) : std::expected<Value, std::string>{Value{}};
+        if (ValueRecord const* const whole = read ? read->asRecord() : nullptr) {
+            if (auto const groups = whole->find("groups"); groups != whole->end() && !layout.groups.empty()) {
+                out.insert_or_assign("groups", groups->second);
+            }
+            if (auto const units = whole->find("units"); units != whole->end() && !layout.units.empty()) {
+                out.insert_or_assign("units", units->second);
+            }
+        }
+    }
+    return Value{std::move(out)};
+}
+
+/// The layout a table holds now: the document's, when it binds one, else the table's own. Tracked.
+[[nodiscard]] std::optional<table::ColumnLayoutValue> layoutNow(TableConfig const& config) {
+    static_cast<void>(config.version.get());
+    if (config.bound != nullptr) {
+        return layoutFromValue(config.bound->get());
+    }
+    return config.held;
+}
+
+/// The arrangement a mount takes from a layout, by index into @p columns; the default one while the layout is the
+/// declared order with every column shown, none pinned and no width set, so such a table is laid out as one with
+/// no layout is.
+[[nodiscard]] TableArrangement arrangementOf(std::span<LayoutColumn const> columns, table::ColumnLayout const& layout) {
+    std::vector<std::string> const visible = layout.visible();
+    bool plain = visible.size() == columns.size() && layout.pinned() == 0 && layout.widths().empty();
+    for (std::size_t at = 0; plain && at < visible.size(); ++at) {
+        plain = visible[at] == columns[at].id;
+    }
+    TableArrangement out;
+    if (plain) {
+        return out;
+    }
+    auto const indexOf = [columns](std::string const& id) -> std::optional<std::size_t> {
+        auto const found = std::ranges::find(columns, id, &LayoutColumn::id);
+        return found == columns.end() ? std::nullopt
+                                      : std::optional{static_cast<std::size_t>(found - columns.begin())};
+    };
+    for (std::string const& id : visible) {
+        if (std::optional<std::size_t> const index = indexOf(id)) {
+            out.visible.push_back(*index);
+        }
+    }
+    out.pinned = layout.pinned();
+    for (auto const& [id, width] : layout.widths()) {
+        if (std::optional<std::size_t> const index = indexOf(id)) {
+            out.widths.insert_or_assign(*index, width);
+        }
+    }
+    return out;
+}
+
+/// A table's `layout`, `visibleColumns` or `hiddenCount` element value. Tracked.
+[[nodiscard]] Value layoutElementValue(TableConfig const& config, std::string_view name) {
+    table::ColumnLayout const layout = layoutOver(config.columns, config.declaredHidden, layoutNow(config));
+    if (name == "layout") {
+        return layoutValueOf(layout.value());
+    }
+    std::vector<std::string> const visible = layout.visible();
+    if (name == "hiddenCount") {
+        return static_cast<std::int64_t>(layout.order().size() - visible.size());
+    }
+    ValueList ids;
+    for (std::string const& id : visible) {
+        ids.emplace_back(id);
+    }
+    return Value{std::move(ids)};
+}
+
+/// The entries of a menu whose commands the lowering carries out: the sort and arranging entries and "Reset
+/// columns". The filter menu, the column chooser, the sort dialog, display units and copy are not lowered, so
+/// their entries are not offered; a separator left at either end or beside another goes with them.
+[[nodiscard]] std::vector<TableMenuEntry> offeredEntries(std::vector<TableMenuEntry> entries) {
+    auto const offered = [](TableMenuEntry const& entry) {
+        if (entry.entry.separator) {
+            return true;
+        }
+        switch (entry.command) {
+            case MenuCommand::SortAscending:
+            case MenuCommand::SortDescending:
+            case MenuCommand::AddToSort:
+            case MenuCommand::RemoveFromSort:
+            case MenuCommand::MoveLeft:
+            case MenuCommand::MoveRight:
+            case MenuCommand::PinColumn:
+            case MenuCommand::UnpinColumn:
+            case MenuCommand::HideColumn:
+            case MenuCommand::ResetColumns:
+                return true;
+            default:
+                return false;
+        }
+    };
+    std::vector<TableMenuEntry> kept;
+    for (TableMenuEntry& entry : entries) {
+        if (!offered(entry) || (entry.entry.separator && (kept.empty() || kept.back().entry.separator))) {
+            continue;
+        }
+        kept.push_back(std::move(entry));
+    }
+    if (!kept.empty() && kept.back().entry.separator) {
+        kept.pop_back();
+    }
+    return kept;
+}
+
+}  // namespace
+
 /// What a model-backed table keeps in its element, across every mount of it: its rows and the query of its
 /// description, the arrangement it gave the rows, its persisted state's key and load, and its status line's message.
 struct ModelTable {
@@ -361,7 +579,8 @@ struct ModelTable {
           resets{runtime, 0},
           revision{runtime, std::string{}},
           highlight{runtime, std::nullopt},
-          message{runtime, std::string{}} {}
+          message{runtime, std::string{}},
+          config{runtime} {}
 
     ModelTable(ModelTable const&) = delete;
     ModelTable& operator=(ModelTable const&) = delete;
@@ -428,8 +647,9 @@ struct ModelTable {
     /// The sort and filters the rows were given, so a new description's fitting can name what it drops.
     SortChain sort;
     table::FilterSpec filter;
-    /// The column layout and the saved view's name, as the stored state or a `columns` or `saved` point gave them.
-    std::optional<table::ColumnLayoutValue> layout;
+    /// The column layout, which the stored state, a `columns` point and the user's gestures set, and the saved
+    /// view's name, as the stored state or a `saved` point gave it.
+    TableConfig config;
     std::optional<std::string> view;
     /// Whether the document binds the filters: they are neither restored nor saved.
     bool filtersBound = false;
@@ -572,7 +792,8 @@ private:
 /// A table lowered where names its element cannot see are bound has one of its own, kept by its mount, which
 /// persists nothing.
 struct RowsTable {
-    explicit RowsTable(reactive::Runtime& runtime) : version{runtime, 0}, message{runtime, std::string{}} {}
+    explicit RowsTable(reactive::Runtime& runtime)
+        : version{runtime, 0}, message{runtime, std::string{}}, config{runtime} {}
 
     RowsTable(RowsTable const&) = delete;
     RowsTable& operator=(RowsTable const&) = delete;
@@ -634,6 +855,8 @@ struct RowsTable {
     reactive::Signal<std::string> message;
     reactive::TimerHandle messageTimer;
     std::optional<bool> status;
+    /// The column layout and what its user may change.
+    TableConfig config;
     /// The persisted state's key, and the states it is loaded from and saved to; none without persistence.
     std::optional<table::TableStateKey> stateKey;
     TableStates* states = nullptr;
@@ -4244,6 +4467,12 @@ Value ScreenCore::elementValue(ElementState const& element, std::string_view nam
             return element.submitted.get();
         }
         return Value{};
+    }
+    if (kind == "table" && (name == "layout" || name == "visibleColumns" || name == "hiddenCount")) {
+        TableConfig const* const config = element.rowsTable != nullptr     ? &element.rowsTable->config
+                                          : element.modelTable != nullptr ? &element.modelTable->config
+                                                                          : nullptr;
+        return config == nullptr ? Value{} : layoutElementValue(*config, name);
     }
     if (kind == "table" && element.modelTable != nullptr && element.modelTable->window != nullptr) {
         if (std::optional<Value> value = modelTableValue(*element.modelTable, name)) {
@@ -8383,8 +8612,6 @@ Node ScreenCore::lowerRows(DocNode const& node, LowerCtx const& ctx, ElementStat
             }
         }
     }
-    // A part's column index, which a header click reports, counts the derived columns before it.
-    std::size_t const derivedCount = columns.size();
     for (DocNodePtr const& part : node.partList("columns")) {
         ExprPtr const label = part->prop("label");
         ExprPtr const width = part->prop("width");
@@ -8675,67 +8902,8 @@ Node ScreenCore::lowerRows(DocNode const& node, LowerCtx const& ctx, ElementStat
             });
         };
     }
-    // The header marks the sort's first key; a sort that names no sortable column marks none.
-    auto const columnIndex = [&node, derivedCount](std::string_view columnId) -> std::optional<std::size_t> {
-        auto const parts = node.partList("columns");
-        auto const found =
-            std::ranges::find_if(parts, [columnId](DocNodePtr const& part) { return part->id == columnId; });
-        if (found == parts.end()) {
-            return std::nullopt;
-        }
-        return derivedCount + static_cast<std::size_t>(std::distance(parts.begin(), found));
-    };
-    options.sort = slotProp<std::vector<TableSort>>([element, &node, columnIndex] -> std::vector<TableSort> {
-        std::optional<std::vector<SortKey>> const keys = sortKeysOf(node, tableSort(*element));
-        if (!keys || keys->empty()) {
-            return {};
-        }
-        std::optional<std::size_t> const index = columnIndex(keys->front().column->id);
-        if (!index) {
-            return {};
-        }
-        return {TableSort{
-            .column = *index,
-            .direction = keys->front().descending ? SortDirection::Descending : SortDirection::Ascending,
-        }};
-    });
-    // A header click makes its column the single key: descending when it already is the first key ascending,
-    // ascending otherwise. The table's own sort takes it when no key binds one, and is saved with the table's
-    // state, then `onSortChange` runs with `event` the new sort.
-    options.onSort = [this, ctx, element, table, &node, derivedCount,
-                      commands = node.event("onSortChange")](std::size_t index, HeaderClick) {
-        auto const parts = node.partList("columns");
-        if (index < derivedCount || index - derivedCount >= parts.size() ||
-            !parts.subspan(index - derivedCount).front()->flag("sortable")) {
-            return;
-        }
-        table->touched = true;
-        std::string const& columnId = parts.subspan(index - derivedCount).front()->id;
-        Value const current = runtime().untracked([&] { return tableSort(*element); });
-        std::optional<std::vector<SortKey>> const keys = sortKeysOf(node, current);
-        bool const descending =
-            keys && !keys->empty() && keys->front().column->id == columnId && !keys->front().descending;
-        ValueRecord key;
-        key.insert_or_assign("column", Value{columnId});
-        key.insert_or_assign("direction", Value{std::string{descending ? "desc" : "asc"}});
-        Value const next{ValueList{Value{std::move(key)}}};
-        runtime().batch([&] {
-            if (element->sortBound == nullptr) {
-                session.asUser([&] {
-                    session.noteWrite();
-                    element->sort.set(next);
-                });
-                if (table->stateKey) {
-                    table::StateDocument changed;
-                    changed.sort = SortChain{table::SortKey{
-                        .column = columnId,
-                        .dir = descending ? table::SortDirection::Descending : table::SortDirection::Ascending}};
-                    table->states->changed(*table->stateKey, changed, StateParts::Sort);
-                }
-            }
-            runEvent(commands, ctx, next);
-        });
-    };
+    // The header's sort chain and menus, and the columns' arrangement.
+    configureTable(table->config, ctx, options, own);
     options.onActivate = [this, ctx, element, registry, commands = node.event("onActivate")](Key const& key) {
         Value const activated = valueOfKey(key);
         session.asUser([&] {
@@ -9063,6 +9231,66 @@ std::unique_ptr<RowsTable> ScreenCore::makeRowsTable(ElementState& element, std:
     }
     table.units = scope.formatting().units;
     table.elementOwn = persisted;
+    // The columns its layout arranges, in the order the lowering gives them: the derived `columns`, then the parts.
+    // A column with no id cannot be named by a stored layout: it is named by its place, and locked there.
+    TableConfig& config = table.config;
+    config.element = &element;
+    auto const [allowed, menus] = configurableOf(node);
+    config.allowed = allowed;
+    config.menus = menus;
+    runtime().untracked([&] {
+        FormatContext const& format = scope.formatting();
+        auto const add = [&config](std::string id, std::string label, bool locked, bool sortable,
+                                   table::ColumnKind kind) {
+            if (id.empty()) {
+                id = "#" + std::to_string(config.columns.size());
+                locked = true;
+            }
+            config.columns.push_back(
+                LayoutColumn{.id = std::move(id), .label = std::move(label), .locked = locked, .kind = kind});
+            config.sortable.push_back(sortable);
+        };
+        if (ExprPtr const derived = node.prop("columns")) {
+            Value const list = evalIn(scope, bindings.get(), derived);
+            if (ValueList const* const items = list.asList()) {
+                for (Value const& item : *items) {
+                    Value const* const field = item.field("id");
+                    Value const* const label = item.field("label");
+                    std::string id = field == nullptr ? std::string{} : textOf(*field, format);
+                    std::string text = label != nullptr ? textOf(*label, format) : id;
+                    add(std::move(id), std::move(text), false, false, table::ColumnKind::Text);
+                }
+            }
+        }
+        for (DocNodePtr const& part : node.partList("columns")) {
+            ExprPtr const label = part->prop("label");
+            add(part->id, label ? textOf(evalIn(scope, bindings.get(), label), format) : part->id,
+                part->flag("locked"), part->flag("sortable"),
+                columnKindNamed(part->name("kind")).value_or(table::ColumnKind::Text));
+        }
+    });
+    std::size_t sortBound = 8;
+    if (ExprPtr const bound = node.prop("maxSortKeys"); bound && bound->kind == ExprKind::Literal) {
+        if (std::int64_t const* const keys = bound->literal.asInt(); keys != nullptr && *keys >= 1) {
+            sortBound = static_cast<std::size_t>(*keys);
+        }
+    }
+    config.maxSortKeys = [sortBound] { return sortBound; };
+    config.message = [this, &table](std::string text) { rowsTableMessage(table, std::move(text)); };
+    config.touch = [this, &table] {
+        table.touched = true;
+        rowsTableMessage(table, {});
+    };
+    config.save = [&table](table::StateDocument const& document, StateParts parts) {
+        if (table.stateKey) {
+            table.states->changed(*table.stateKey, document, parts);
+        }
+    };
+    // A bound layout is controlled, as a bound sort is: any expression but a literal `null` binds it.
+    if (ExprPtr const layout = node.prop("layout");
+        layout && (layout->kind != ExprKind::Literal || !layout->literal.isNull())) {
+        config.bound = &scope.nodes.computed([&scope, bindings, layout] { return evalIn(scope, bindings.get(), layout); });
+    }
     // Shows the page of @p view: each group's heading entry before the first of its rows the page holds, and the
     // engine's own operations when the page is the whole ungrouped view and they made it, a reset otherwise.
     auto const show = [&table](TableView const& view, table::ViewChange const* change) {
@@ -9335,6 +9563,11 @@ void ScreenCore::storedRowsState(RowsTable& table, std::optional<std::string> co
     table::StateDocument const document = table::fitState(std::move(*read), description, fitted);
     if (element.sortBound == nullptr && document.sort) {
         element.sort.set(sortValueOf(*document.sort));
+    }
+    // A bound layout is the document's: the stored one is neither applied nor saved over it.
+    if (table.config.bound == nullptr && document.layout) {
+        table.config.held = *document.layout;
+        table.config.version.set(table.config.version.peek() + 1);
     }
     if (!late) {
         // The rows come through once the engine's view is in the stored order: after the work the new sort posted.
@@ -9625,6 +9858,28 @@ void ScreenCore::wireModelTable(ElementState& element) {
     model.id = action.empty() ? std::string{node.name("table")} : action;
     model.modelType = alias->decl->type;
     model.statusShown = node.flag("status", true);
+    TableConfig& config = model.config;
+    config.element = &element;
+    auto const [allowed, menus] = configurableOf(node);
+    config.allowed = allowed;
+    config.menus = menus;
+    // The bound the server's `limits` set, which the description carries.
+    config.maxSortKeys = [&model] {
+        table::TableDescription const* const description = model.window->description();
+        return description == nullptr ? std::size_t{8} : std::size_t{description->capabilities.maxSortKeys};
+    };
+    config.message = [this, &element](std::string text) { tableMessage(element, std::move(text)); };
+    config.touch = [this, &element] { tableGesture(element); };
+    config.save = [&model](table::StateDocument const& document, StateParts parts) {
+        if (model.stateKey) {
+            model.states->changed(*model.stateKey, document, parts);
+        }
+    };
+    // A bound layout is controlled, as a bound sort is: any expression but a literal `null` binds it.
+    if (ExprPtr const layout = node.prop("layout");
+        layout && (layout->kind != ExprKind::Literal || !layout->literal.isNull())) {
+        config.bound = &scope.nodes.computed([&scope, layout] { return evalIn(scope, nullptr, layout); });
+    }
     std::string qualifier = _doc->id;
     bool persists = true;
     if (ExprPtr const persist = node.prop("persist"); persist && persist->kind == ExprKind::Literal) {
@@ -9809,6 +10064,7 @@ void ScreenCore::wireModelTable(ElementState& element) {
                 model.described.insert(column.info.id);
             }
         }
+        modelLayoutColumns(element);
         model.bump();
     } else {
         scope.nodes.effect([this, &element] {
@@ -9920,14 +10176,23 @@ void ScreenCore::storedTableState(ElementState& element, std::optional<std::stri
             model.heldFilter.reset();
         }
     }
-    if (document.layout) {
-        model.layout = std::move(document.layout);
+    // A bound layout is the document's: the stored one is neither applied nor saved over it.
+    bool const arranged = document.layout && model.config.bound == nullptr;
+    if (arranged) {
+        model.config.held = std::move(document.layout);
+        model.config.version.set(model.config.version.peek() + 1);
     }
     if (document.view) {
         model.view = std::move(document.view);
     }
     tablePoints(element);
-    model.release();
+    if (late || !arranged) {
+        model.release();
+        return;
+    }
+    // A mounted table takes the new arrangement in a pass of its own, which tells the rows the columns it shows: the
+    // first query goes after it, so it names those columns.
+    runtime().owner().post(model.scope.token().guard([&model] { model.release(); }));
 }
 
 void ScreenCore::describedTable(ElementState& element, Value const& described) {
@@ -9971,6 +10236,7 @@ void ScreenCore::describedTable(ElementState& element, Value const& described) {
     for (table::TableColumn const& column : now->columns) {
         model.described.insert(column.info.id);
     }
+    modelLayoutColumns(element);
     // The fitted sort and filters are what the rows hold now.
     table::FitReport ignored;
     table::StateDocument const fitted = table::fitState(
@@ -10043,29 +10309,33 @@ void ScreenCore::tableGesture(ElementState& element) {
     tableMessage(element, {});
 }
 
+void ScreenCore::rowsTableMessage(RowsTable& rows, std::string text) {
+    if (text.empty()) {
+        rows.messageTimer.cancel();
+        rows.message.set({});
+        return;
+    }
+    if (rows.status == false) {
+        if (host != nullptr) {
+            static_cast<void>(host->notify(text, "warning"));
+        }
+        return;
+    }
+    rows.message.set(text);
+    rows.messageTimer.cancel();
+    if (reactive::Scheduler* const scheduler = session.options().scheduler) {
+        rows.messageTimer = scheduler->after(
+            kStatusMessageHold, rows.scope.token().guard([&rows, shown = std::move(text)] {
+                if (rows.message.peek() == shown) {
+                    rows.message.set({});
+                }
+            }));
+    }
+}
+
 void ScreenCore::tableMessage(ElementState& table, std::string text) {
     if (RowsTable* const rows = table.rowsTable.get()) {
-        if (text.empty()) {
-            rows->messageTimer.cancel();
-            rows->message.set({});
-            return;
-        }
-        if (rows->status == false) {
-            if (host != nullptr) {
-                static_cast<void>(host->notify(text, "warning"));
-            }
-            return;
-        }
-        rows->message.set(text);
-        rows->messageTimer.cancel();
-        if (reactive::Scheduler* const scheduler = session.options().scheduler) {
-            rows->messageTimer = scheduler->after(
-                kStatusMessageHold, rows->scope.token().guard([rows, shown = std::move(text)] {
-                    if (rows->message.peek() == shown) {
-                        rows->message.set({});
-                    }
-                }));
-        }
+        rowsTableMessage(*rows, std::move(text));
         return;
     }
     ModelTable* const model = table.modelTable.get();
@@ -10109,8 +10379,8 @@ void ScreenCore::tablePoints(ElementState& table) {
         Value value;
         if (point.kind == "saved") {
             value = model->view ? Value{*model->view} : Value{};
-        } else if (model->layout) {
-            auto const json = parseJson(glz::write_json(*model->layout).value_or("null"));
+        } else if (model->config.held) {
+            auto const json = parseJson(glz::write_json(*model->config.held).value_or("null"));
             auto read = json ? valueFromJson(*json) : std::expected<Value, std::string>{Value{}};
             value = read ? std::move(*read) : Value{};
         } else {
@@ -10152,8 +10422,9 @@ std::optional<bool> ScreenCore::tablePoint(CustomizePoint const& point, Value co
         if (glz::read_json(layout, canonicalJson(value))) {
             return false;
         }
-        model.layout = std::move(layout);
-        changed.layout = model.layout;
+        model.config.held = std::move(layout);
+        model.config.version.set(model.config.version.peek() + 1);
+        changed.layout = model.config.held;
     }
     model.touched = true;
     if (model.stateKey) {
@@ -10183,6 +10454,289 @@ void ScreenCore::tableSaveFailed(table::TableStateKey const& key, table::SaveRes
     for (ElementState* const table : tables) {
         tableMessage(*table, text);
     }
+}
+
+namespace {
+
+/// The description's columns a model-backed table's `Table::columns` are, in order: those its column parts name, or
+/// without parts every column but the companions, which travel with their columns and are never one of them.
+[[nodiscard]] std::vector<table::TableColumn const*> arrangedColumns(DocNode const& node,
+                                                                    table::TableDescription const& description) {
+    std::vector<std::string> const companions = table::companionColumns(description);
+    std::vector<table::TableColumn const*> out;
+    if (auto const parts = node.partList("columns"); !parts.empty()) {
+        for (DocNodePtr const& part : parts) {
+            auto const found = std::ranges::find(description.columns, part->id,
+                                                 [](table::TableColumn const& column) -> auto const& {
+                                                     return column.info.id;
+                                                 });
+            if (found != description.columns.end() && !std::ranges::binary_search(companions, part->id)) {
+                out.push_back(&*found);
+            }
+        }
+        return out;
+    }
+    for (table::TableColumn const& column : description.columns) {
+        if (!std::ranges::binary_search(companions, column.info.id)) {
+            out.push_back(&column);
+        }
+    }
+    return out;
+}
+
+}  // namespace
+
+void ScreenCore::modelLayoutColumns(ElementState& element) {
+    ModelTable& model = *element.modelTable;
+    TableConfig& config = model.config;
+    DocNode const& node = *element.node;
+    RtScope& scope = *element.scope;
+    auto const parts = node.partList("columns");
+    config.columns.clear();
+    config.declaredHidden.clear();
+    config.sortable.clear();
+    if (table::TableDescription const* const description = model.window->description()) {
+        for (table::TableColumn const* const column : arrangedColumns(node, *description)) {
+            auto const part = std::ranges::find(parts, column->info.id,
+                                                [](DocNodePtr const& given) -> auto const& { return given->id; });
+            bool const named = part != parts.end();
+            std::string label = column->label.empty() ? column->info.id : column->label;
+            if (ExprPtr const given = named ? (*part)->prop("label") : nullptr) {
+                label = runtime().untracked([&] { return textOf(evalIn(scope, nullptr, given), scope.formatting()); });
+            }
+            config.columns.push_back(LayoutColumn{.id = column->info.id,
+                                                  .label = std::move(label),
+                                                  .locked = named && (*part)->flag("locked"),
+                                                  .kind = column->info.kind});
+            config.sortable.push_back(column->sortable);
+            // A column the description does not show starts hidden; a column part shows the column it names.
+            if (!named && !column->shown) {
+                config.declaredHidden.push_back(column->info.id);
+            }
+        }
+    }
+    config.version.set(config.version.peek() + 1);
+}
+
+// NOLINTNEXTLINE(readability-function-cognitive-complexity): the sort, the layout, then the menus that reach both.
+void ScreenCore::configureTable(TableConfig& config, LowerCtx const& ctx, TableOptions& options,
+                                std::shared_ptr<void const> keep) {
+    ElementState& element = *config.element;
+    DocNode const& node = *element.node;
+    // This mount's columns: a new description mounts the table again, with its own.
+    auto const columns = std::make_shared<std::vector<LayoutColumn> const>(config.columns);
+    auto const sortable = std::make_shared<std::vector<bool> const>(config.sortable);
+    auto const hidden = std::make_shared<std::vector<std::string> const>(config.declaredHidden);
+    auto const layoutHeld = [&config, columns, hidden] {
+        return layoutOver(*columns, *hidden, layoutNow(config));
+    };
+    // Every key of the chain marks its header, in the chain's order; a sort that is not a list of keys naming
+    // sortable columns, each with a direction, marks none, as the rows keep their order under it.
+    options.sort = slotProp<std::vector<TableSort>>([&element, columns, sortable] {
+        std::vector<TableSort> out;
+        Value const sort = tableSort(element);
+        if (sort.isNull()) {
+            return out;
+        }
+        ValueList const* const keys = sort.asList();
+        if (keys == nullptr) {
+            return out;
+        }
+        for (Value const& key : *keys) {
+            Value const* const column = key.field("column");
+            Value const* const direction = key.field("direction");
+            std::string const* const id = column == nullptr ? nullptr : column->asString();
+            std::string const* const way = direction == nullptr ? nullptr : direction->asString();
+            auto const found = id == nullptr ? columns->end() : std::ranges::find(*columns, *id, &LayoutColumn::id);
+            if (found == columns->end() || way == nullptr || (*way != "asc" && *way != "desc")) {
+                return std::vector<TableSort>{};
+            }
+            auto const index = static_cast<std::size_t>(found - columns->begin());
+            if (!sortable->at(index)) {
+                return std::vector<TableSort>{};
+            }
+            out.push_back(TableSort{.column = index,
+                                    .direction = *way == "desc" ? SortDirection::Descending : SortDirection::Ascending});
+        }
+        return out;
+    });
+    options.arrangement = slotProp<TableArrangement>([columns, layoutHeld] { return arrangementOf(*columns, layoutHeld()); });
+    // A sort gesture: held to the table's bound, a key past it refused in the status line and the chain kept. The
+    // table's own sort takes the new chain when no key binds one, and is saved; then `onSortChange` runs with
+    // `event` the new sort.
+    auto const sortBy = [this, ctx, &config, &element, columns, sortable, keep,
+                         commands = node.event("onSortChange")](std::size_t index, SortGesture gesture) {
+        static_cast<void>(keep);
+        config.touch();
+        if (index >= columns->size() || !sortable->at(index)) {
+            return;
+        }
+        SortChain const current = runtime().untracked([&] { return sortChainOf(tableSort(element)); });
+        SortChange const change = applySortGesture(current, columns->at(index).id, gesture, config.maxSortKeys());
+        if (change.refusal) {
+            config.message(*change.refusal);
+            return;
+        }
+        if (change.chain == current) {
+            return;
+        }
+        Value const next = sortValueOf(change.chain);
+        runtime().batch([&] {
+            if (element.sortBound == nullptr) {
+                session.asUser([&] {
+                    session.noteWrite();
+                    element.sort.set(next);
+                });
+                if (config.save) {
+                    table::StateDocument changed;
+                    changed.sort = change.chain;
+                    config.save(changed, StateParts::Sort);
+                }
+            }
+            runEvent(commands, ctx, next);
+        });
+    };
+    // A layout gesture: refused in the status line when its column is locked or the table does not allow it. The
+    // table's own layout takes the change when no key binds one, and is saved; then `onLayoutChange` runs with
+    // `event` the new layout. The arrangement follows the layout, so the mount fetches the columns it shows.
+    auto const arrange = [this, ctx, &config, &element, columns, layoutHeld, keep,
+                          commands = node.event("onLayoutChange")](LayoutGesture const& gesture) {
+        static_cast<void>(keep);
+        config.touch();
+        table::ColumnLayout layout = runtime().untracked(layoutHeld);
+        LayoutResult const result = applyLayoutGesture(layout, *columns, config.allowed, gesture);
+        if (result.refusal) {
+            config.message(*result.refusal);
+            return;
+        }
+        if (!result.changed) {
+            return;
+        }
+        table::ColumnLayoutValue value = layout.value();
+        Value const event = layoutValueOf(value);
+        runtime().batch([&] {
+            if (config.bound == nullptr) {
+                session.asUser([&] {
+                    session.noteWrite();
+                    config.held = value;
+                    config.version.set(config.version.peek() + 1);
+                });
+                if (config.save) {
+                    table::StateDocument changed;
+                    changed.layout = std::move(value);
+                    config.save(changed, StateParts::Layout);
+                }
+                tablePoints(element);
+            }
+            runEvent(commands, ctx, event);
+        });
+    };
+    options.onSort = [sortBy](std::size_t index, HeaderClick click) {
+        sortBy(index, click == HeaderClick::Shift ? SortGesture::Extend : SortGesture::Click);
+    };
+    options.onColumnMove = [&config, arrange, columns](std::size_t column, std::size_t position) {
+        if (column >= columns->size()) {
+            config.touch();
+            return;
+        }
+        arrange(MoveColumnTo{.id = columns->at(column).id, .position = position});
+    };
+    // A table whose widths its user cannot set offers no edge to drag.
+    if (allows(config.allowed, Configure::Resize)) {
+        options.onColumnResize = [&config, arrange, columns](std::size_t column, std::optional<int> units) {
+            if (column >= columns->size()) {
+                config.touch();
+                return;
+            }
+            arrange(ResizeColumn{.id = columns->at(column).id, .units = units});
+        };
+    }
+    if (!config.menus) {
+        return;
+    }
+    // A menu is built when it opens, and again when an entry is chosen, from the chain and the layout of the moment,
+    // so the path the backend reports names the entry it showed.
+    auto const entriesOf = [this, &config, &element, columns, sortable, layoutHeld](
+                               std::optional<std::size_t> column) -> std::vector<TableMenuEntry> {
+        return runtime().untracked([&]() -> std::vector<TableMenuEntry> {
+            if (!column) {
+                return offeredEntries(tableMenu(TableMenuInput{.anyFilter = false, .groups = {}, .allowed = config.allowed}));
+            }
+            if (*column >= columns->size()) {
+                return {};
+            }
+            table::ColumnLayout const layout = layoutHeld();
+            std::vector<std::string> const visible = layout.visible();
+            LayoutColumn const& at = columns->at(*column);
+            SortChain const chain = sortChainOf(tableSort(element));
+            auto const held = std::ranges::find(chain, at.id, &table::SortKey::column);
+            return offeredEntries(headerMenu(HeaderMenuInput{
+                .column = at,
+                .sortable = sortable->at(*column),
+                .filterable = false,
+                .sortPlace = held == chain.end() ? std::nullopt
+                                                 : std::optional{static_cast<std::size_t>(held - chain.begin())},
+                .chainSize = chain.size(),
+                .maxSortKeys = config.maxSortKeys(),
+                .visibleIndex = static_cast<std::size_t>(std::ranges::find(visible, at.id) - visible.begin()),
+                .visibleCount = visible.size(),
+                .pinned = layout.pinned(),
+                .dimensions = {},
+                .groups = {},
+                .allowed = config.allowed,
+            }));
+        });
+    };
+    options.menu = [entriesOf](std::optional<std::size_t> column) {
+        std::vector<TableMenuEntry> const entries = entriesOf(column);
+        return menuEntries(entries);
+    };
+    options.onMenu = [&config, entriesOf, sortBy, arrange, columns](std::optional<std::size_t> column,
+                                                                    std::vector<std::size_t> const& path) {
+        config.touch();
+        std::vector<TableMenuEntry> const entries = entriesOf(column);
+        TableMenuEntry const* const entry = chosen(entries, path);
+        if (entry == nullptr) {
+            return;
+        }
+        std::size_t const index = column.value_or(columns->size());
+        std::string const id = index < columns->size() ? columns->at(index).id : std::string{};
+        switch (entry->command) {
+            case MenuCommand::SortAscending:
+                sortBy(index, SortGesture::Ascending);
+                break;
+            case MenuCommand::SortDescending:
+                sortBy(index, SortGesture::Descending);
+                break;
+            case MenuCommand::AddToSort:
+                sortBy(index, SortGesture::Add);
+                break;
+            case MenuCommand::RemoveFromSort:
+                sortBy(index, SortGesture::Remove);
+                break;
+            case MenuCommand::MoveLeft:
+                arrange(MoveColumn{.id = id, .by = -1});
+                break;
+            case MenuCommand::MoveRight:
+                arrange(MoveColumn{.id = id, .by = 1});
+                break;
+            case MenuCommand::PinColumn:
+                arrange(PinColumn{.id = id});
+                break;
+            case MenuCommand::UnpinColumn:
+                arrange(UnpinColumn{.id = id});
+                break;
+            case MenuCommand::HideColumn:
+                arrange(HideColumn{.id = id});
+                break;
+            case MenuCommand::ResetColumns:
+                arrange(ResetColumns{});
+                break;
+            default:
+                // `offeredEntries` offers no other entry.
+                break;
+        }
+    };
 }
 
 Node ScreenCore::lowerModelTable(DocNode const& node, LowerCtx const& ctx, ElementState* element) {
@@ -10316,8 +10870,9 @@ Node ScreenCore::modelTableOf(DocNode const& node, LowerCtx const& ctx, ElementS
         }
         column.unit = display.display.unit;
         DisplayUnits units{.units = registry.get(), .byDimension = {}};
-        if (model.layout) {
-            if (auto const chosen = model.layout->units.find(described.info.id); chosen != model.layout->units.end()) {
+        if (model.config.held) {
+            if (auto const chosen = model.config.held->units.find(described.info.id);
+                chosen != model.config.held->units.end()) {
                 units.byDimension.insert(chosen->second.begin(), chosen->second.end());
             }
         }
@@ -10367,8 +10922,9 @@ Node ScreenCore::modelTableOf(DocNode const& node, LowerCtx const& ctx, ElementS
             }
         }
     } else {
+        // A column the description does not show is a column too, hidden by the layout until its user shows it.
         for (table::TableColumn const& described : description->columns) {
-            if (described.shown && !std::ranges::binary_search(companions, described.info.id)) {
+            if (!std::ranges::binary_search(companions, described.info.id)) {
                 add(described, nullptr);
             }
         }
@@ -10675,46 +11231,19 @@ Node ScreenCore::modelTableOf(DocNode const& node, LowerCtx const& ctx, ElementS
                   });
     };
     options.highlight = slotProp<std::optional<TableHighlight>>([&model] { return model.highlight.get(); });
-    options.sort = slotProp<std::vector<TableSort>>([&element, ids] -> std::vector<TableSort> {
-        SortChain const chain = sortChainOf(tableSort(element));
-        if (chain.empty()) {
-            return {};
+    // The header's sort chain and menus, and the columns' arrangement.
+    configureTable(model.config, ctx, options, nullptr);
+    // The columns with a filter, whose headers say so: the filters the rows hold, which a new query brings.
+    options.filtered = slotProp<std::vector<std::size_t>>([&model, ids] {
+        static_cast<void>(model.version.get());
+        std::vector<std::size_t> out;
+        for (std::size_t at = 0; at < ids.size(); ++at) {
+            if (model.filter.columns.contains(ids.at(at))) {
+                out.push_back(at);
+            }
         }
-        auto const found = std::ranges::find(ids, chain.front().column);
-        if (found == ids.end()) {
-            return {};
-        }
-        return {TableSort{.column = static_cast<std::size_t>(std::distance(ids.begin(), found)),
-                          .direction = chain.front().dir == table::SortDirection::Descending
-                                           ? SortDirection::Descending
-                                           : SortDirection::Ascending}};
+        return out;
     });
-    // A header click makes its column the single key: descending when it is the first key ascending already,
-    // ascending otherwise. A bound sort is the document's: the click changes nothing and is not saved.
-    options.onSort = [this, &element, &model, ids](std::size_t index, HeaderClick) {
-        if (index >= ids.size()) {
-            return;
-        }
-        tableGesture(element);
-        if (element.sortBound != nullptr) {
-            return;
-        }
-        SortChain const current = runtime().untracked([&] { return sortChainOf(tableSort(element)); });
-        bool const descending = !current.empty() && current.front().column == ids.at(index) &&
-                                current.front().dir == table::SortDirection::Ascending;
-        SortChain const next{table::SortKey{.column = ids.at(index),
-                                            .dir = descending ? table::SortDirection::Descending
-                                                              : table::SortDirection::Ascending}};
-        session.asUser([&] {
-            session.noteWrite();
-            element.sort.set(sortValueOf(next));
-        });
-        if (model.stateKey) {
-            table::StateDocument changed;
-            changed.sort = next;
-            model.states->changed(*model.stateKey, changed, StateParts::Sort);
-        }
-    };
     options.onActivate = [this, ctx, &element, &model, commands = activateCommands](Key const& key) {
         Value const activated = valueOfKey(key);
         session.asUser([&] {

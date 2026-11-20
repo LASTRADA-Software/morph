@@ -105,9 +105,10 @@ constexpr std::array<std::string_view, 2> kSelectValues = {"selected", "selected
 /// @brief The element values of a tabs node: the id of the tab shown.
 constexpr std::array<std::string_view, 1> kTabsValues = {"selected"};
 /// @brief The element values of a table.
-constexpr std::array<std::string_view, 14> kTableValues = {
-    "selection", "activeKey", "sort",       "filters", "viewCount", "sourceCount", "selectedCount",
-    "pending",   "error",     "hoveredKey", "page",    "pageCount", "pageFirst",   "pageLast"};
+constexpr std::array<std::string_view, 17> kTableValues = {
+    "selection", "activeKey", "sort",       "filters", "viewCount", "sourceCount",    "selectedCount", "pending",
+    "error",     "hoveredKey", "page",      "pageCount", "pageFirst", "pageLast",     "layout",        "visibleColumns",
+    "hiddenCount"};
 /// @brief The element values of a dialog or drawer.
 constexpr std::array<std::string_view, 3> kDialogValues = {"open", "ready", "submitted"};
 /// @brief The element values of a form, beside its fields.
@@ -292,7 +293,7 @@ constexpr std::array<KeySpec, 7> kForEachKeys = {{{"rows", Shape::Expr, {}, kReq
                                                   {"divided", Shape::Flag},
                                                   {"children", Shape::Nodes, {}, kInner}}};
 /// @brief The keys of `table`.
-constexpr std::array<KeySpec, 32> kTableKeys = {{{"rows", Shape::Expr},
+constexpr std::array<KeySpec, 36> kTableKeys = {{{"rows", Shape::Expr},
                                                  {"key", Shape::Expr, {}, kInner},
                                                  {"model", Shape::Name},
                                                  {"table", Shape::Name},
@@ -314,6 +315,10 @@ constexpr std::array<KeySpec, 32> kTableKeys = {{{"rows", Shape::Expr},
                                                  {"sort", Shape::Expr},
                                                  {"onSortChange", Shape::Commands},
                                                  {"maxSortKeys", Shape::Expr},
+                                                 {"layout", Shape::Expr},
+                                                 {"onLayoutChange", Shape::Commands},
+                                                 {"configurable", Shape::Expr},
+                                                 {"onFiltersChange", Shape::Commands},
                                                  {"pageSize", Shape::Expr},
                                                  {"page", Shape::Expr},
                                                  {"group", Shape::Part, "group"},
@@ -325,7 +330,7 @@ constexpr std::array<KeySpec, 32> kTableKeys = {{{"rows", Shape::Expr},
                                                  {"valign", Shape::Text},
                                                  {"empty", Shape::Nodes}}};
 /// @brief The keys of a `table` column part; `tone` and `tooltip` are read in the row's scope.
-constexpr std::array<KeySpec, 22> kColumnKeys = {{{"id", Shape::Name},
+constexpr std::array<KeySpec, 24> kColumnKeys = {{{"id", Shape::Name},
                                                   {"kind", Shape::Text},
                                                   {"label", Shape::Expr},
                                                   {"width", Shape::Expr},
@@ -333,6 +338,8 @@ constexpr std::array<KeySpec, 22> kColumnKeys = {{{"id", Shape::Name},
                                                   {"align", Shape::Text},
                                                   {"valign", Shape::Text},
                                                   {"sortable", Shape::Flag},
+                                                  {"locked", Shape::Flag},
+                                                  {"filterable", Shape::Flag},
                                                   {"wrap", Shape::Flag},
                                                   {"shrink", Shape::Flag},
                                                   {"sortBy", Shape::Expr, {}, kInner},
@@ -3206,6 +3213,7 @@ private:
             checkTableSort(node);
             checkTablePaging(node);
             checkTableSortBound(node);
+            checkTableConfigurable(node);
             checkTableGroup(node);
             checkRowsTableKeys(node);
             checkColumnKinds(node);
@@ -3302,7 +3310,8 @@ private:
 
     // A sortable column is named by its id, which a sort key gives; `sortBy` says how a sortable column orders. A
     // literal `sort` names sortable columns, each once, with a direction, and `onSortChange` needs a header that
-    // sorts. A model-backed table's engine sorts, so none of these belongs on one.
+    // sorts. A model-backed table's engine sorts and its description says which columns do, so neither `sortable`
+    // nor `sortBy` belongs on one.
     static void checkTableSort(DocNode const& node) {
         bool const modelBacked = !node.name("model").empty();
         std::set<std::string, std::less<>> sortable;
@@ -3323,7 +3332,7 @@ private:
                 sortable.insert(column->id);
             }
         }
-        if (node.event("onSortChange") != nullptr && sortable.empty()) {
+        if (node.event("onSortChange") != nullptr && sortable.empty() && !modelBacked) {
             refuse(pointerAppend(node.path, "onSortChange"),
                    "`onSortChange` runs when a header sorts the table; give a column `sortable`");
         }
@@ -3402,6 +3411,37 @@ private:
         std::int64_t const* const keys = bound->kind == ExprKind::Literal ? bound->literal.asInt() : nullptr;
         if (keys == nullptr || *keys < 1 || *keys > 32) {
             refuse(path, "`maxSortKeys` is 1 to 32");
+        }
+    }
+
+    // What a table lets its user change about its columns: a literal `true`, `false`, or a list of the four.
+    static void checkTableConfigurable(DocNode const& node) {
+        ExprPtr const expr = node.prop("configurable");
+        if (expr == nullptr) {
+            return;
+        }
+        std::string const path = pointerAppend(node.path, "configurable");
+        std::string_view const shape =
+            R"(`configurable` is a literal `true`, `false`, or a list of "reorder", "hide", "pin" and "resize")";
+        if (expr->kind != ExprKind::Literal) {
+            refuse(path, std::string{shape});
+        }
+        if (expr->literal.asBool() != nullptr) {
+            return;
+        }
+        ValueList const* const names = expr->literal.asList();
+        if (names == nullptr) {
+            refuse(path, std::string{shape});
+        }
+        static constexpr std::array<std::string_view, 4> kConfigurable = {"reorder", "hide", "pin", "resize"};
+        for (Value const& item : *names) {
+            std::string const* const name = item.asString();
+            if (name == nullptr) {
+                refuse(path, std::string{shape});
+            }
+            if (!listed(kConfigurable, *name)) {
+                refuse(path, "`configurable` names `" + *name + "`; it lists reorder, hide, pin and resize");
+            }
         }
     }
 

@@ -708,3 +708,43 @@ TEST_CASE("interpreter bench: U1 U2 split between the source and the engine", "[
     printRow("U2 split: assign of the list with one row renamed, the source matching it", kRows, spreadOf(assign));
     printRow("U2 split: the engine absorbing and repairing it", kRows, spreadOf(repair));
 }
+
+// D7: the Shift-click that adds a third key to a settled two-key sort of 100,000 document rows, click to settled.
+// docs/spec/table/table.md, "Performance"; budget 50 ms. Run on a Release build:
+//
+//   morph_tests "interpreter bench: a third sort key on 100,000 rows"
+TEST_CASE("interpreter bench: a third sort key on 100,000 rows", "[.benchmark][interpreter]") {
+    constexpr std::size_t kRows = 100'000;
+    std::string items;
+    for (std::size_t i = 0; i < kRows; ++i) {
+        items += std::format(R"({}{{"id":{},"a":{},"b":{},"c":{}}})", i == 0 ? "" : ",", i, i % 7, i % 13, i % 101);
+    }
+    std::string const document = std::format(R"({{
+  "vocab": "ui/1", "id": "chain",
+  "state": {{ "items": {{ "init": {{ "lit": [{}] }} }} }},
+  "view": {{ "kind": "table", "id": "t", "rows": {{ "ref": "items" }},
+             "columns": [ {{ "id": "a", "label": "A", "sortable": true }}, {{ "id": "b", "label": "B", "sortable": true }},
+                          {{ "id": "c", "label": "C", "sortable": true }} ] }} }})",
+                                             items);
+    Harness h;
+    auto screen = h.mount(document);
+    int const table = h.backend.all("Table").front();
+    h.backend.clickHeader(table, 0, ui::HeaderClick::Plain);
+    h.backend.clickHeader(table, 1, ui::HeaderClick::Shift);
+    h.settle();
+    REQUIRE(h.backend.prop(table, "sort") == "0:Ascending,1:Ascending");
+    std::println("\nD7: a third sort key added from the header to a two-key sort of 100,000 rows, click to settled\n\n"
+                 "| scenario | rows | median ms | p10-p90 ms |\n|---|---:|---:|---:|");
+    std::vector<double> adds;
+    for (int run = 0; run < 7; ++run) {
+        auto const began = Clock::now();
+        h.backend.clickHeader(table, 2, ui::HeaderClick::Shift);
+        h.settle();
+        adds.push_back(millisSince(began));
+        REQUIRE(h.backend.prop(table, "sort") == "0:Ascending,1:Ascending,2:Ascending");
+        h.backend.chooseMenu(table, 2, {"Remove from sort"});  // untimed: back to two keys
+        h.settle();
+        REQUIRE(h.backend.prop(table, "sort") == "0:Ascending,1:Ascending");
+    }
+    printRow("D7: Shift-click a third key, click to settled", kRows, spreadOf(adds));
+}

@@ -1505,6 +1505,27 @@ TEST_CASE("table display: companion columns are not arranged", "[ui][table][disp
         }
         CHECK(ids == std::vector<std::string>{"id", "mass", "name", "count"});
     }
+    {
+        // Mutation: the layout built from every column of the description (hiddenCount 3, and the menus offer to
+        // show the companions).
+        TableHarness h;
+        auto screen = h.mount(doc(kTable));
+        replyDescribe(h, describeJson(companionDescription()));
+        CHECK(elementValue(*screen, "t", "visibleColumns") == R"(["id","mass","name","count"])");
+        CHECK(elementValue(*screen, "t", "hiddenCount") == "0");
+        int const table = h.byTestId("Table", "t");
+        std::vector<std::vector<morph::ui::MenuEntry>> menus{menuOf(h, table, std::nullopt)};
+        for (std::size_t column = 0; column < 4; ++column) {
+            menus.push_back(menuOf(h, table, column));
+        }
+        for (auto const& entries : menus) {
+            for (std::string const& label : labelsOf(entries)) {
+                for (std::string_view const companion : {"massTone", "massTip", "lockedBy"}) {
+                    CHECK(label.find(companion) == std::string::npos);
+                }
+            }
+        }
+    }
     TableHarness h;  // a companion the document names is reported and not shown
     auto screen = h.mount(doc(R"({"kind":"table","id":"t","testId":"t","model":"sample","table":"samples",
                                   "columns":[{"id":"name"},{"id":"massTip"}]})"));
@@ -2494,7 +2515,8 @@ TEST_CASE("model table over an action: columns and kinds come from the action's 
               ActionInfo{.modelType = "Lims_SampleModel"});
     auto screen = h.mount(withTableKey(kActionTableNoColumns, R"("action":"Lims_ListSamples")"));
     h.reply(h.dispatcher.last("Lims_ListSamples"), R"({"rows":[{"id":"7","name":"a"}],"total":1})");
-    CHECK(headerLabels(h) == std::vector<std::string>{"Name"});               // v-columns' label; `id` is v-hidden
+    CHECK(headerLabels(h) == std::vector<std::string>{"ID", "Name"});         // v-columns' labels
+    CHECK(elementValue(*screen, "list", "visibleColumns") == R"(["name"])");  // `id` is v-hidden: hidden, not gone
     CHECK(kindOfColumn(*screen, "id") == table::ColumnKind::Integer);         // v-columns' kind, not the reply's
 }
 
@@ -2822,4 +2844,368 @@ TEST_CASE("model table over an action: a window that outlives its table reads it
     h.reply(pending, std::string{kRatioRows});
     CHECK_FALSE(window->inferring());                                         // the reply was read
     CHECK(h.diagnostics.empty());
+}
+
+// ── Configuring a table ─────────────────────────────────────────────────────
+
+namespace {
+
+using morph::ui::HeaderClick;
+using morph::ui::MenuEntry;
+using morph::ui::testing::chooseMenu;
+using morph::ui::testing::entryOf;
+using morph::ui::testing::kConfigModelTable;
+using morph::ui::testing::kNine;
+using morph::ui::testing::labelsOf;
+using morph::ui::testing::menuOf;
+using morph::ui::testing::moveColumn;
+using morph::ui::testing::resizeColumn;
+
+// A document's text with a top-level `state` entry @p name initialised to @p init (JSON).
+std::string withState(std::string_view text, std::string_view name, std::string_view init) {
+    auto json = morph::ui::parseJson(text);
+    REQUIRE(json.has_value());
+    auto initJson = morph::ui::parseJson(R"({"init":{"lit":)" + std::string{init} + "}}");
+    REQUIRE(initJson.has_value());
+    auto& root = std::get<morph::ui::Json::object_t>(json->data);
+    if (!root.contains("state")) {
+        root.insert_or_assign("state", morph::ui::Json{morph::ui::Json::object_t{}});
+    }
+    std::get<morph::ui::Json::object_t>(root.at("state").data).insert_or_assign(std::string{name}, *initJson);
+    return glz::write_json(*json).value_or("");
+}
+
+// A document's text whose table's first column part takes the member @p member, written `"key":value`.
+std::string withFirstColumnKey(std::string_view text, std::string_view member) {
+    auto json = morph::ui::parseJson(text);
+    REQUIRE(json.has_value());
+    auto field = morph::ui::parseJson("{" + std::string{member} + "}");
+    REQUIRE(field.has_value());
+    auto& view = std::get<morph::ui::Json::object_t>(std::get<morph::ui::Json::object_t>(json->data).at("view").data);
+    auto& first = std::get<morph::ui::Json::object_t>(
+        std::get<morph::ui::Json::array_t>(view.at("columns").data).front().data);
+    for (auto& [key, value] : std::get<morph::ui::Json::object_t>(field->data)) {
+        first.insert_or_assign(key, value);
+    }
+    return glz::write_json(*json).value_or("");
+}
+
+// A rows table `t` of @p count sortable columns c1… over one row, with the table node's members @p extra.
+std::string sortableRows(int count, std::string_view extra) {
+    std::string row = R"({"id":1)";
+    std::string columns;
+    for (int at = 1; at <= count; ++at) {
+        row += ",\"c" + std::to_string(at) + "\":" + std::to_string(at);
+        columns += std::string{at == 1 ? "" : ","} + R"({"id":"c)" + std::to_string(at) + R"(","sortable":true})";
+    }
+    row += "}";
+    return R"({"vocab":"ui/1","id":"many","state":{"items":{"init":{"lit":[)" + row +
+           R"(]}}},"view":{"kind":"table","id":"t","rows":{"ref":"items"},"columns":[)" + columns + "]," +
+           std::string{extra} + "}}";
+}
+
+// The commands that count a table event's runs in `n` and keep its last `event` in `last`.
+constexpr std::string_view kCount =
+    R"([{"set":"n","value":{"fn":"add","args":[{"ref":"n"},1]}},{"set":"last","value":{"ref":"event"}}])";
+
+// kNine with a counter `n` and `last`, and @p event running `kCount`.
+std::string countingNine(std::string_view event, std::string_view text = kNine) {
+    return withTableKey(withState(withState(text, "n", "0"), "last", "null"),
+                        "\"" + std::string{event} + "\":" + std::string{kCount});
+}
+
+}  // namespace
+
+// Mutation: the lowering mapping HeaderClick::Shift to Click.
+TEST_CASE("sort chains: a plain click replaces, Shift adds and flips, a key past the bound is refused", "[ui][table][config]") {
+    morph::ui::testing::TableHarness h;
+    auto screen = h.mount(kNine);
+    int const table = h.backend.all("Table").front();
+    h.backend.clickHeader(table, 0, HeaderClick::Plain);
+    h.backend.clickHeader(table, 1, HeaderClick::Shift);
+    h.backend.clickHeader(table, 0, HeaderClick::Shift);
+    h.settle();
+    CHECK(elementValue(*screen, "t", "sort") == R"([{"column":"c1","direction":"desc"},{"column":"c2","direction":"asc"}])");
+    CHECK(h.backend.prop(table, "sort") == "0:Descending,1:Ascending");
+    for (std::size_t column = 2; column < 9; ++column) {
+        h.backend.clickHeader(table, column, HeaderClick::Shift);
+    }
+    h.settle();
+    CHECK(h.backend.prop(table, "sort") ==
+          "0:Descending,1:Ascending,2:Ascending,3:Ascending,4:Ascending,5:Ascending,6:Ascending,7:Ascending");
+    CHECK(statusOf(h, table).message == "A table sorts by at most 8 columns");
+    CHECK(statusOf(h, table).shown);
+    h.backend.clickHeader(table, 4, HeaderClick::Plain);
+    h.settle();
+    CHECK(elementValue(*screen, "t", "sort") == R"([{"column":"c5","direction":"asc"}])");
+    CHECK(statusOf(h, table).message.empty());
+    CHECK_FALSE(statusOf(h, table).shown);
+}
+
+// Mutation: the client holding 8 whatever the description says.
+TEST_CASE("sort chains: a table whose limits set 32 accepts 32 keys from the header and refuses the 33rd", "[ui][table][config]") {
+    SECTION("a model's table, whose description carries the bound") {
+        morph::ui::testing::TableHarness h;
+        auto screen = h.mount(kConfigModelTable);
+        table::TableDescription described = samplesDescription(40);
+        described.capabilities.maxSortKeys = 32;
+        replyDescribe(h, table::describe(described));
+        int const table = h.backend.all("Table").front();
+        for (std::size_t column = 0; column < 33; ++column) {
+            h.backend.clickHeader(table, column, HeaderClick::Shift);
+        }
+        h.settle();
+        Value const sort = screen->read(*morph::ui::parseJson(R"({"ref":"t.sort"})"));
+        REQUIRE(sort.asList() != nullptr);
+        CHECK(sort.asList()->size() == 32);
+        CHECK(lastQuery(h).sort.size() == 32);
+        CHECK(statusOf(h, table).message == "A table sorts by at most 32 columns");
+    }
+    SECTION("a rows table, whose node carries it") {
+        morph::ui::testing::TableHarness h;
+        auto screen = h.mount(sortableRows(13, R"("maxSortKeys":12)"));
+        int const table = h.backend.all("Table").front();
+        for (std::size_t column = 0; column < 13; ++column) {
+            h.backend.clickHeader(table, column, HeaderClick::Shift);
+        }
+        h.settle();
+        Value const sort = screen->read(*morph::ui::parseJson(R"({"ref":"t.sort"})"));
+        REQUIRE(sort.asList() != nullptr);
+        CHECK(sort.asList()->size() == 12);
+        CHECK(statusOf(h, table).message == "A table sorts by at most 12 columns");
+    }
+}
+
+// Mutation: "Add to sort" mapped to SortGesture::Click.
+TEST_CASE("sort chains: the header menu builds a chain without a modifier", "[ui][table][config]") {
+    morph::ui::testing::TableHarness h;
+    auto screen = h.mount(countingNine("onSortChange"));
+    int const table = h.backend.all("Table").front();
+    chooseMenu(h, table, 0, {"Sort descending"});
+    chooseMenu(h, table, 2, {"Add to sort"});
+    CHECK(elementValue(*screen, "t", "sort") == R"([{"column":"c1","direction":"desc"},{"column":"c3","direction":"asc"}])");
+    chooseMenu(h, table, 0, {"Remove from sort"});
+    CHECK(elementValue(*screen, "t", "sort") == R"([{"column":"c3","direction":"asc"}])");
+    CHECK(readJson(*screen, R"({"ref":"n"})") == "3");
+    CHECK(readJson(*screen, R"({"ref":"last"})") == R"([{"column":"c3","direction":"asc"}])");
+}
+
+// Mutations: the lowering applying a menu gesture without updating `visibleColumns`; a driver's column read as a
+// visible place (the resize after the move lands on c1).
+TEST_CASE("column layout: hiding, moving, pinning and resetting from the menus change the layout and the visible columns",
+          "[ui][table][config]") {
+    morph::ui::testing::TableHarness h;
+    auto screen = h.mount(countingNine("onLayoutChange"));
+    int const table = h.backend.all("Table").front();
+    chooseMenu(h, table, 2, {"Hide column"});
+    chooseMenu(h, table, 1, {"Move left"});
+    chooseMenu(h, table, 1, {"Pin column"});
+    CHECK(elementValue(*screen, "t", "visibleColumns") == R"(["c2","c1","c4","c5","c6","c7","c8","c9"])");
+    CHECK(elementValue(*screen, "t", "hiddenCount") == "1");
+    CHECK(elementValue(*screen, "t", "layout") ==
+          R"({"hidden":["c3"],"order":["c2","c1","c3","c4","c5","c6","c7","c8","c9"],"pinned":1,"widths":{}})");
+    CHECK_THROWS(h.backend.menuOf(table, 2));                                  // the mount draws no header for c3
+    resizeColumn(h, table, 1, 20);                                             // index 1 is c2 wherever it stands
+    CHECK(elementValue(*screen, "t", "layout") ==
+          R"({"hidden":["c3"],"order":["c2","c1","c3","c4","c5","c6","c7","c8","c9"],"pinned":1,"widths":{"c2":20}})");
+    resizeColumn(h, table, 1, std::nullopt);
+    CHECK(elementValue(*screen, "t", "layout") ==
+          R"({"hidden":["c3"],"order":["c2","c1","c3","c4","c5","c6","c7","c8","c9"],"pinned":1,"widths":{}})");
+    chooseMenu(h, table, std::nullopt, {"Reset columns"});
+    CHECK(elementValue(*screen, "t", "layout") ==
+          R"({"hidden":[],"order":["c1","c2","c3","c4","c5","c6","c7","c8","c9"],"pinned":0,"widths":{}})");
+    CHECK(readJson(*screen, R"({"ref":"n"})") == "6");
+    CHECK(readJson(*screen, R"({"ref":"last"})") == elementValue(*screen, "t", "layout"));
+}
+
+// Mutation: `configurable` ignored for menus (the hide entry is present).
+TEST_CASE("column layout: configurable and locked limit what the user can do, and each refusal is shown", "[ui][table][config]") {
+    SECTION("hide only, the first column locked") {
+        morph::ui::testing::TableHarness h;
+        auto screen = h.mount(withFirstColumnKey(withTableKey(kNine, R"("configurable":{"lit":["hide"]})"), R"("locked":true)"));
+        int const table = h.backend.all("Table").front();
+        std::vector<std::string> const labels = labelsOf(menuOf(h, table, 1));
+        CHECK(std::ranges::find(labels, "Move left") == labels.end());
+        CHECK(std::ranges::find(labels, "Hide column") != labels.end());
+        std::string const before = elementValue(*screen, "t", "visibleColumns");
+        moveColumn(h, table, 1, 0);
+        CHECK(elementValue(*screen, "t", "visibleColumns") == before);
+        CHECK(statusOf(h, table).message == "This table's columns cannot be moved");
+        CHECK_FALSE(entryOf(menuOf(h, table, 0), "Hide column").enabled);
+        moveColumn(h, table, 0, 1);
+        CHECK(statusOf(h, table).message == "C1 is locked");
+        CHECK(elementValue(*screen, "t", "visibleColumns") == before);
+    }
+    SECTION("nothing, and no menu") {
+        morph::ui::testing::TableHarness h;
+        auto screen = h.mount(withTableKey(kNine, R"("configurable":false)"));
+        int const table = h.backend.all("Table").front();
+        CHECK(menuOf(h, table, 1).empty());
+        CHECK(menuOf(h, table, std::nullopt).empty());
+    }
+}
+
+// Mutation: a header click lowered without `tableMessage(table, "")` (the message outlives the gesture).
+TEST_CASE("status line: a refusal is shown once, until the next gesture or six seconds", "[ui][table][config]") {
+    auto const refuse = [](morph::ui::testing::TableHarness& h, int table) {
+        for (std::size_t column = 0; column < 9; ++column) {
+            h.backend.clickHeader(table, column, HeaderClick::Shift);
+        }
+        h.settle();
+    };
+    SECTION("in the status line") {
+        morph::ui::testing::TableHarness h;
+        auto screen = h.mount(kNine);
+        int const table = h.backend.all("Table").front();
+        refuse(h, table);
+        CHECK(statusOf(h, table).message == "A table sorts by at most 8 columns");
+        h.advance(5'999ms);
+        CHECK(statusOf(h, table).message == "A table sorts by at most 8 columns");
+        CHECK(statusOf(h, table).shown);
+        h.advance(1ms);
+        CHECK(statusOf(h, table).message.empty());
+        CHECK_FALSE(statusOf(h, table).shown);                               // a rows table with nothing to say
+        h.backend.clickHeader(table, 8, HeaderClick::Shift);
+        h.settle();
+        REQUIRE(statusOf(h, table).message == "A table sorts by at most 8 columns");
+        h.backend.clickHeader(table, 0, HeaderClick::Plain);
+        h.settle();
+        CHECK(statusOf(h, table).message.empty());
+    }
+    SECTION("with `status: false`, as a notification") {
+        morph::ui::testing::TableHarness h;
+        auto screen = h.mount(withTableKey(kNine, R"("status":false)"));
+        int const table = h.backend.all("Table").front();
+        refuse(h, table);
+        REQUIRE(h.host.notified.size() == 1);
+        CHECK(h.host.notified.front() ==
+              std::pair<std::string, std::string>{"A table sorts by at most 8 columns", "warning"});
+        CHECK_FALSE(statusOf(h, table).shown);
+    }
+}
+
+// Mutation: the lowering applying a stored layout after the first query.
+TEST_CASE("persisted layout: a stored layout applies before the first query, a change saves once after the debounce",
+          "[ui][table][config]") {
+    constexpr std::string_view kLayout =
+        R"({"version":1,"layout":{"order":["c2","c1"],"hidden":["c3"],"pinned":0,"widths":{"c2":20}},)"
+        R"("sort":[{"column":"c4","direction":"desc"}]})";
+    auto store = std::make_shared<GatedTableStateStore>(storeExecutor(), std::string{kLayout});
+    morph::ui::testing::TableHarness h{store};
+    SECTION("the table's own layout") {
+        auto screen = h.mount(kNine);
+        int const table = h.backend.all("Table").front();
+        CHECK(morph::ui::testing::rowOrder(h).empty());                         // the rows wait for the stored state
+        store->release();
+        h.settle();
+        // c3 to c9 are placed after their nearest declared predecessor the layout places, c2; c3 stays hidden.
+        CHECK(elementValue(*screen, "t", "visibleColumns") == R"(["c2","c4","c5","c6","c7","c8","c9","c1"])");
+        CHECK(elementValue(*screen, "t", "layout").find(R"("widths":{"c2":20})") != std::string::npos);
+        CHECK_FALSE(morph::ui::testing::rowOrder(h).empty());
+        chooseMenu(h, table, 0, {"Hide column"});
+        h.advance(100ms);
+        chooseMenu(h, table, 3, {"Hide column"});
+        h.advance(100ms);
+        chooseMenu(h, table, 4, {"Hide column"});
+        CHECK(store->saves() == 0);
+        h.advance(500ms);
+        REQUIRE(store->saves() == 1);
+        auto const saved = table::readState(store->lastSaved());
+        REQUIRE(saved.has_value());
+        REQUIRE(saved->layout.has_value());
+        std::vector<std::string> hiddenColumns = saved->layout->hidden;
+        std::ranges::sort(hiddenColumns);
+        CHECK(hiddenColumns == std::vector<std::string>{"c1", "c3", "c4", "c5"});
+    }
+    SECTION("a model's table: the first query names only the columns the stored layout shows") {
+        auto modelStore = std::make_shared<GatedTableStateStore>(
+            storeExecutor(), R"({"version":1,"layout":{"order":["name","id","c3","c4","c5"],"hidden":["c3"],"pinned":0,"widths":{}}})");
+        morph::ui::testing::TableHarness m{modelStore};
+        auto screen = m.mount(kConfigModelTable);
+        replyDescribe(m, samplesDescription(5));
+        REQUIRE(m.dispatcher.count("Table.samples") == 0);                    // the first query waits for the state
+        modelStore->release();
+        m.settle();
+        REQUIRE(m.dispatcher.count("Table.samples") >= 1);
+        std::size_t firstCall = 0;
+        while (m.dispatcher.calls.at(firstCall).action != "Table.samples") {
+            ++firstCall;
+        }
+        table::TableQuery const first = queryOf(m, firstCall);
+        REQUIRE(first.columns.has_value());
+        CHECK_FALSE(std::ranges::contains(*first.columns, "c3"));
+        CHECK(elementValue(*screen, "t", "visibleColumns") == R"(["name","id","c4","c5"])");
+    }
+    SECTION("a bound layout") {
+        auto screen = h.mount(withTableKey(withState(kNine, "lay", "null"), R"("layout":{"ref":"lay"})"));
+        int const table = h.backend.all("Table").front();
+        store->release();
+        h.settle();
+        CHECK(elementValue(*screen, "t", "visibleColumns") == R"(["c1","c2","c3","c4","c5","c6","c7","c8","c9"])");
+        CHECK(elementValue(*screen, "t", "sort") == R"([{"column":"c4","direction":"desc"}])");
+        chooseMenu(h, table, 0, {"Hide column"});
+        h.advance(500ms);
+        CHECK(store->saves() == 0);                                            // the layout is the document's
+        h.backend.clickHeader(table, 1, HeaderClick::Plain);
+        h.advance(500ms);
+        REQUIRE(store->saves() == 1);
+        auto const saved = table::readState(store->lastSaved());
+        REQUIRE(saved.has_value());
+        CHECK(saved->sort == table::SortChain{{.column = "c2", .dir = table::SortDirection::Ascending}});
+        INFO(store->lastSaved());
+        REQUIRE(saved->layout.has_value());                                    // the stored one, as it was kept
+        CHECK(saved->layout->order == std::vector<std::string>{"c2", "c1"});
+        CHECK_FALSE(std::ranges::contains(saved->layout->hidden, "c1"));       // the user's hide is not saved
+    }
+}
+
+// Review Focus 1. Mutation: hiding a column removing it from the query's sort.
+TEST_CASE("hiding a sorted and filtered column changes no row", "[ui][table][config]") {
+    morph::ui::testing::TableHarness h;
+    auto screen = h.mount(withTableKey(
+        kConfigModelTable,
+        R"("sort":{"lit":[{"column":"name","direction":"asc"}]},"filters":{"columns":{"name":{"include":[{"contains":"a"}]}}})"));
+    replyDescribe(h, samplesDescription(5));
+    table::TableQuery const first = lastQuery(h);
+    REQUIRE(first.columns.has_value());
+    replyPage(h, pageJson(0, 50, 50, *first.columns));
+    int const table = h.backend.all("Table").front();
+    std::string const rows = morph::ui::testing::rowOrder(h);
+    REQUIRE_FALSE(rows.empty());
+    std::size_t const calls = h.dispatcher.count("Table.samples");
+    CHECK(h.backend.prop(table, "sort") == "1:Ascending");
+    CHECK(h.backend.prop(table, "filtered") == "[1]");
+    chooseMenu(h, table, 1, {"Hide column"});
+    CHECK(elementValue(*screen, "t", "visibleColumns") == R"(["id","c3","c4","c5"])");
+    if (h.dispatcher.count("Table.samples") > calls) {                         // a column fetch of the rows held
+        table::TableQuery const fetched = lastQuery(h);
+        CHECK(fetched.sort == first.sort);
+        CHECK(fetched.filters == first.filters);
+        REQUIRE(fetched.columns.has_value());
+        CHECK_FALSE(std::ranges::contains(*fetched.columns, "name"));
+    }
+    CHECK(morph::ui::testing::rowOrder(h) == rows);
+    chooseMenu(h, table, std::nullopt, {"Reset columns"});
+    CHECK(h.backend.prop(table, "sort") == "1:Ascending");
+    CHECK(h.backend.prop(table, "filtered") == "[1]");
+    CHECK(elementValue(*screen, "t", "visibleColumns") == R"(["id","name","c3","c4","c5"])");
+}
+
+// Review Focus 2 (message half). Mutation: refusing Shift on a column already in the chain at the bound.
+TEST_CASE("sort chains: at the bound a key in the chain still flips, with no message", "[ui][table][config]") {
+    morph::ui::testing::TableHarness h;
+    auto screen = h.mount(kNine);
+    int const table = h.backend.all("Table").front();
+    for (std::size_t column = 0; column < 8; ++column) {
+        h.backend.clickHeader(table, column, HeaderClick::Shift);
+    }
+    h.settle();
+    REQUIRE(statusOf(h, table).message.empty());
+    h.backend.clickHeader(table, 3, HeaderClick::Shift);
+    h.settle();
+    Value const sort = screen->read(*morph::ui::parseJson(R"({"ref":"t.sort"})"));
+    REQUIRE(sort.asList() != nullptr);
+    REQUIRE(sort.asList()->size() == 8);
+    CHECK(*sort.asList()->at(3).field("direction") == Value{std::string{"desc"}});
+    CHECK(statusOf(h, table).message.empty());
 }
