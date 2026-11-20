@@ -404,7 +404,7 @@ clear until a theme sets `color.table.header`, so in the stock theme a heading s
 
 A column's header label (`header<index>`) is a Tab stop while it is sortable, or the table has menus or moves its
 columns. A tap, Enter or Space on a sortable one fires `sort` with `{column, shift}`, `shift` while Shift is held
-(`HeaderClick::Shift`), which reaches `setOnSort`; another header takes neither. The table never sorts: `setSort` writes
+(`HeaderClick::Shift`; Ctrl, on a tap or a key, sorts as `Plain`), which reaches `setOnSort`; another header takes neither. The table never sorts: `setSort` writes
 `sortMarks` and `sortDescriptions`, each by column, from `ui::sortMarkText` and `ui::sortDescription`, and a header in the
 chain shows its mark after its text (` ▲`, or ` ▲2` with two or more keys). Every sortable header keeps room for a
 one-key mark in its column's floor, so the columns do not move when such a sort does. Qt's accessibility has no sort
@@ -423,7 +423,7 @@ Escape or a press outside closes it and gives the focus back to the header. An e
 `MorphMenu` draws it (`menuEntryText`): a checkable entry's `✓` (or room for one), an icon the theme names drawn as its
 icon (one it does not, written as its name), the label, `›` for a submenu, the chord after it, and the description as
 a muted line under it; a separator is a `MenuSeparator` line. Each entry is an `Accessible.MenuItem` with its
-description, and a checkable one is `Accessible.checkable` with `Accessible.checked` following its mark. A choice comes back as `menuChoose` with
+description, and a checkable one is a checkable button whose `checked` follows its mark: the state is on the button, which is what assistive technology reads, and a click puts the binding back before it is acted on. A choice comes back as `menuChoose` with
 the column and the path. A closed popup is not shown, so it is neither a Tab stop nor an
 accessible node.
 
