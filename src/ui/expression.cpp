@@ -58,7 +58,8 @@ constexpr KindSet kAllKinds = 0xFFFF;
 constexpr KindSet kNumeric = kindBit(TypeKind::Int) | kindBit(TypeKind::Decimal) | kindBit(TypeKind::Quantity);
 /// @brief The ordered kinds.
 // NOLINTNEXTLINE(bugprone-signed-bitwise): the operands are `uint16_t` values promoted to `int`, never negative.
-constexpr KindSet kOrdered = kNumeric | kindBit(TypeKind::Timestamp) | kindBit(TypeKind::String);
+constexpr KindSet kOrdered =
+    kNumeric | kindBit(TypeKind::Timestamp) | kindBit(TypeKind::String) | kindBit(TypeKind::Bool);
 
 /// @brief The sentence `refusalText` shows when the catalogue has neither a refusal's code nor a class of it.
 constexpr std::string_view kBuiltInRefusal = "This was refused.";
@@ -1701,7 +1702,8 @@ private:
         return makeNumber(*result, lhs->integer && rhs->integer, unit);
     }
 
-    /// Orders two values of one comparable kind: numbers exactly (quantities converted), timestamps, strings.
+    /// Orders two values of one comparable kind: numbers exactly (quantities converted), timestamps, strings, and
+    /// booleans with `false` before `true`.
     std::optional<std::strong_ordering> order(Value const& lhs, Value const& rhs) {
         auto const lhsNumber = numeric(lhs);
         auto const rhsNumber = numeric(rhs);
@@ -1728,6 +1730,11 @@ private:
         if (std::string const* const lhsText = lhs.asString()) {
             if (std::string const* const rhsText = rhs.asString()) {
                 return *lhsText <=> *rhsText;
+            }
+        }
+        if (bool const* const lhsFlag = lhs.asBool()) {
+            if (bool const* const rhsFlag = rhs.asBool()) {
+                return static_cast<int>(*lhsFlag) <=> static_cast<int>(*rhsFlag);
             }
         }
         return std::nullopt;

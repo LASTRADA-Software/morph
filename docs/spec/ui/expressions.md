@@ -134,7 +134,8 @@ over the tree recurse, and a few hundred levels exhaust a 1 MB thread stack.
 - **Equality.** `eq` and `ne` compare numbers by value (an `int` and a decimal; quantities across
   units), lists and records element by element, and anything else by kind and value; values of
   kinds that cannot compare are unequal. `lt`, `le`, `gt` and `ge` order numbers, quantities,
-  timestamps and strings (by bytes); anything else is a mismatch. Two `yyyy-MM-dd` dates order
+  timestamps, strings (by bytes) and booleans (`false` before `true`); anything else, and a boolean
+  against another kind, is a mismatch. Two `yyyy-MM-dd` dates order
   correctly as strings; ISO date-time text orders correctly only against text in the same spelling
   (`…:00Z` sorts after `…:00.500Z`), so a document that orders instants holds timestamps. A date
   and a timestamp do not compare: relating a calendar day to an instant needs a zone, which a
