@@ -518,7 +518,11 @@ keeps its operands' 0 places and still fills 0.29 of a bar.
   not follow saves made elsewhere. Views that cannot be read are left unsaid at mount. The table's stored state is
   applied once both its state and its views have answered: with no stored `state`, the `default` view is applied,
   its name the state's `view`; with `defaultOnMount`, the default view's sort and filters replace the stored ones
-  and the stored layout still applies (`stateAtMount`). Either is fitted as a stored state is.
+  and the stored layout still applies (`stateAtMount`). Either is fitted as a stored state is. A default view applied
+  with nothing stored is the table's state from then on (`TableStates::start`), unsaved until the next change, which
+  saves on top of it, so its layout, sort, filters and name outlast that change. Under `defaultOnMount` the stored
+  `view` stays, so the menu marks it modified while its sort or filters differ from the default's. A stored `view`
+  names one of the user's own views: a shared view applied is marked as shared only until the table mounts again.
   **The `Views` submenu.** The table menu of a table that keeps a state (model-backed, over `rows` with an `id`, or a
   collection) has `Views` (`viewsMenu`): each of the user's own views, checked while it is the state's `view` and
   labelled `{name} (modified)` while the arrangement (the layout laid over the table's columns, the sort and the
@@ -527,10 +531,15 @@ keeps its operands' 0 places and still fills 0.29 of a bar.
   view", checked with `defaultOnMount`, which it toggles. Applying a view fits it as a stored state is fitted and sets
   its layout, sort and filters through the gestures' own paths (held and saved unless the document binds them,
   `onLayoutChange`, `onSortChange` and `onFiltersChange` run), then writes its name to the state's `view`; a filter or
-  sort key on a column the table lacks is not applied. "Save view…", "Rename view…" and "Publish view…" open the view
+  sort key on a column the table lacks is not applied. A table over `rows` knows a column's kind only while the column
+  is in use, and its engine takes the kind in when it next flushes its changes: the columns a stored state or a view
+  sorts and filters by are put in use before it is fitted, and its filters (a view whole) go to the engine a task
+  later. "Save view…", "Rename view…" and "Publish view…" open the view
   name dialog (`viewNameDialog`, test id `table_view_dialog`: the input `table_view_name`, the buttons
   `table_view_save`, enabled while the name is not blank, and `table_view_cancel`), whose state lives in the
-  element. Saving under a name the user already has is a `ReplaceView`, any other an `AddView`; done, the state's
+  element. Saving under a name the user already has is a `ReplaceView`, any other an `AddView`, decided against the
+  views document the save is applied to (`TableViews::saveView`), so a name another window took after the table
+  loaded, met as a `Conflict` and read again, is replaced too; done, the state's
   `view` is that name and the status line says "Saved view {name}". A rename onto a taken name is refused in the
   status line, "A view named {name} exists", and changes nothing. "Remove view" clears the state's `view`. Every
   refusal or failure of a views change goes to the status line, and a change answering after the table is gone
@@ -538,8 +547,9 @@ keeps its operands' 0 places and still fills 0.29 of a bar.
   **Shared views.** While the store's `shared` part holds views, `Views` adds the heading "Shared views" and each
   shared view, applied as an own view is; while the state's `view` is a shared view so applied, "Save as my view"
   adds it to the user's views (an `AddView`) and says "Saved view {name}". While the store shares, "Publish view…"
-  names the arrangement and publishes it (`TableViews::publish`, the model's `publish` action, never `save`): an
-  `AddView`, or a `ReplaceView` over a shared view of that name; done, "Published view {name}", refused or failed,
+  names the arrangement and publishes it (`TableViews::publishView`, the model's `publish` action, never `save`): an
+  `AddView`, or a `ReplaceView` over a shared view of that name in the shared document it is applied to, as a save
+  decides; done, "Published view {name}", refused or failed,
   "This view could not be published: {reason}". Over a store that does not share, neither entry is offered and no
   shared part is read.
   **Groups.** With `group`, the source splits its rows into runs by `by` (read per row, untracked: what `by` reads

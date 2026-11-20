@@ -480,6 +480,19 @@ public:
         entry.timer = _scheduler->after(_debounce, _scope.token().guard([this, key] { trySave(key); }));
     }
 
+    /// @brief Takes @p document as the key's state now, without saving it, as a table does when it starts from a view
+    ///        while nothing is stored: the next change is saved on top of it, so the rest of what it started from is
+    ///        kept. Ignored until the key's load settles, and once a change has been made.
+    /// @param key      The key.
+    /// @param document The state the table started from.
+    void start(table::TableStateKey const& key, table::StateDocument document) {
+        auto const found = _entries.find(tie(key));
+        if (found == _entries.end() || !found->second.settled || found->second.dirty) {
+            return;
+        }
+        found->second.current = std::move(document);
+    }
+
     /// @brief Saves a key's unsaved change now, as a table does when it unmounts; held until its load settles.
     /// @param key The key.
     void flush(table::TableStateKey const& key) {
