@@ -296,7 +296,7 @@ constexpr std::array<KeySpec, 7> kForEachKeys = {{{"rows", Shape::Expr, {}, kReq
                                                   {"divided", Shape::Flag},
                                                   {"children", Shape::Nodes, {}, kInner}}};
 /// @brief The keys of `table`.
-constexpr std::array<KeySpec, 37> kTableKeys = {{{"rows", Shape::Expr},
+constexpr std::array<KeySpec, 40> kTableKeys = {{{"rows", Shape::Expr},
                                                  {"key", Shape::Expr, {}, kInner},
                                                  {"model", Shape::Name},
                                                  {"table", Shape::Name},
@@ -332,7 +332,10 @@ constexpr std::array<KeySpec, 37> kTableKeys = {{{"rows", Shape::Expr},
                                                  {"highlightKey", Shape::Expr},
                                                  {"onActivate", Shape::Commands, {}, kInner},
                                                  {"valign", Shape::Text},
-                                                 {"empty", Shape::Nodes}}};
+                                                 {"empty", Shape::Nodes},
+                                                 {"cellMenu", Shape::Parts, "menuItem", kInner},
+                                                 {"headerMenu", Shape::Parts, "menuItem"},
+                                                 {"headerEnabled", Shape::Condition}}};
 /// @brief The keys of a `table` column part; `tone` and `tooltip` are read in the row's scope.
 constexpr std::array<KeySpec, 24> kColumnKeys = {{{"id", Shape::Name},
                                                   {"kind", Shape::Text},
@@ -3217,7 +3220,15 @@ private:
             }
         }
         for (auto const& [key, parts] : node.parts) {
-            CheckContext const& context = isInner(spec, key) ? inner : outer;
+            CheckContext context = isInner(spec, key) ? inner : outer;
+            // A table's menu entries read the column they open on, and a cell's entries its row and its value.
+            if (node.kind == "table" && (key == "cellMenu" || key == "headerMenu")) {
+                context.bindings.emplace_back("column", Type::of(TypeKind::String));
+                if (key == "cellMenu") {
+                    context.bindings.emplace_back("row", Type::any());
+                    context.bindings.emplace_back("value", Type::any());
+                }
+            }
             for (DocNodePtr const& child : parts) {
                 checkElement(*child, context, true);
             }
@@ -3683,6 +3694,10 @@ private:
         }
         if (node.prop("highlightKey") != nullptr) {
             refuse(pointerAppend(node.path, "highlightKey"), "`highlightKey` links a model-backed table to a chart");
+        }
+        // A cell's menu reads the cell as the description's column shows it, which a table over `rows` has not.
+        if (!node.partList("cellMenu").empty()) {
+            refuse(pointerAppend(node.path, "cellMenu"), "`cellMenu` belongs to a model-backed table");
         }
         // Its arrangement is kept under the table's id, so a table with none persists nothing, and says so when it
         // asks to.

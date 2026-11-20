@@ -1593,6 +1593,20 @@ struct Table {
     ///        (`Ctrl+A`): the handler selects the whole view, rows the backend does not hold included. Empty: the
     ///        backend selects the rows it holds and reports them through `onSelectionChange`.
     std::function<void()> onSelectAll;
+    /// @brief The entries of a cell's menu, given its row's key and its column (an index into `columns`), asked for
+    ///        each time the menu opens (a right click, the menu key or a long press on the cell) and once per key the
+    ///        user presses while the table has the focus, for the focused cell. The mount reads each entry's bound
+    ///        parts once, untracked, and runs the chosen entry's `onSelect`. Empty: no cell menu.
+    std::function<std::vector<MenuItem>(Key const& row, std::size_t column)> cellMenu;
+    /// @brief The caller's entries of a header's menu, given its column, read when the menu opens: shown after
+    ///        `menu`'s own entries for that column and a separator, and run by the mount when chosen. An entry hidden
+    ///        by its `visible` is left out, and with no entry shown nothing is added. Empty: `menu`'s entries alone.
+    std::function<std::vector<MenuItem>(std::size_t column)> headerEntries;
+    /// @brief Whether the header's sort, filter and arrangement gestures are offered, read each time a header's menu
+    ///        opens: while false, every entry `menu` gives for a column is disabled. The gestures' handlers are still
+    ///        called, for the caller to refuse; the table's own menu (`menu` with no column) and `headerEntries` are
+    ///        left as given.
+    Prop<bool> headerEnabled = true;
 };
 
 /// @brief A date, or a date and time, edited in a display zone and reported as an instant.
@@ -2408,6 +2422,12 @@ struct TableOptions {
     ///        (`Ctrl+A`): the handler selects the whole view, rows the backend does not hold included. Empty: the
     ///        backend selects the rows it holds and reports them through `onSelectionChange`.
     std::function<void()> onSelectAll;
+    /// @brief The entries of a cell's menu, given its row's key and its column; empty for no cell menu.
+    std::function<std::vector<MenuItem>(Key const& row, std::size_t column)> cellMenu;
+    /// @brief The caller's entries of a header's menu, given its column, shown after `menu`'s own.
+    std::function<std::vector<MenuItem>(std::size_t column)> headerEntries;
+    /// @brief Whether the header's sort, filter and arrangement entries are enabled.
+    Prop<bool> headerEnabled = true;
 };
 
 /// @brief What a table's row view builds for one row: its cells, one per column, and its tone.
@@ -2526,6 +2546,9 @@ template <typename RowT>
     spec.focus = std::move(options.focus);
     spec.onFocusCell = std::move(options.onFocusCell);
     spec.onSelectAll = std::move(options.onSelectAll);
+    spec.cellMenu = std::move(options.cellMenu);
+    spec.headerEntries = std::move(options.headerEntries);
+    spec.headerEnabled = std::move(options.headerEnabled);
     return detail::makeNode(std::move(spec));
 }
 
@@ -2573,6 +2596,9 @@ template <typename RowT>
     spec.focus = std::move(options.focus);
     spec.onFocusCell = std::move(options.onFocusCell);
     spec.onSelectAll = std::move(options.onSelectAll);
+    spec.cellMenu = std::move(options.cellMenu);
+    spec.headerEntries = std::move(options.headerEntries);
+    spec.headerEnabled = std::move(options.headerEnabled);
     return detail::makeNode(std::move(spec));
 }
 

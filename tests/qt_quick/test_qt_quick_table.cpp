@@ -27,6 +27,7 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <functional>
 #include <map>
 #include <memory>
 #include <morph/qt_quick/theme.hpp>
@@ -2191,6 +2192,8 @@ struct QuickWindowOptions {
     std::vector<std::string> units = {};
     // Whether the table has a select-all handler, which counts its calls in `selectAlls`.
     bool selectAllHandler = false;
+    // The cells' menu; empty for none.
+    std::function<std::vector<ui::MenuItem>(ui::Key const&, std::size_t)> cellMenu = {};
 };
 
 std::string groupedCount(std::int64_t n) {
@@ -2231,6 +2234,7 @@ struct QuickWindowFixture {
           focus{scene.runtime(), std::nullopt},
           status{scene.runtime(), ui::TableStatus{.counts = groupedCount(rowCount) + " rows", .shown = true}},
           accents{scene.runtime(), {}},
+          selected{scene.runtime(), {}},
           wrapped{std::move(options.wrapped)} {
         scene.window().resize(1280, 800);
         std::vector<ui::TableColumn> columns;
@@ -2274,6 +2278,13 @@ struct QuickWindowFixture {
         if (options.selectAllHandler) {
             tableOptions.onSelectAll = [this] { ++selectAlls; };
         }
+        // The selection is held here, as a document holds it: each change the user makes is recorded and kept.
+        tableOptions.selection = [this] { return selected.get(); };
+        tableOptions.onSelectionChange = [this](std::vector<ui::Key> keys, ui::SelectionChange change) {
+            selections.emplace_back(keys, change);
+            selected.set(std::move(keys));
+        };
+        tableOptions.cellMenu = std::move(options.cellMenu);
         view.emplace(scene.runtime(), scene.backend(),
                      ui::table(std::move(columns), std::move(source), std::move(tableOptions)));
         settle();
@@ -2375,6 +2386,9 @@ struct QuickWindowFixture {
     morph::reactive::Signal<ui::TableStatus> status;
     // Each cell's accent, by row id and column; a cell not named has none.
     morph::reactive::Signal<std::map<std::pair<std::int64_t, std::size_t>, ui::CellAccent>> accents;
+    // The selected keys, and every change the backend reported.
+    morph::reactive::Signal<std::vector<ui::Key>> selected;
+    std::vector<std::pair<std::vector<ui::Key>, ui::SelectionChange>> selections;
     std::vector<QuickWindowOptions::Wrapped> wrapped;
     int retries = 0;
     int selectAlls = 0;
@@ -2747,4 +2761,63 @@ TEST_CASE("qt_quick table: a header menu shows a checked entry's mark, its chord
     CHECK_FALSE(pinNode->state().checked);
     QAccessible::setActive(wasActive);
     scene.key(Qt::Key_Escape);
+}
+
+// Mutation: the menu opened without moving focus (the cell menu's entries not focusing the cell, so the focused row
+// stays -1).
+TEST_CASE("qt_quick table: a right-click opens the cell menu on that cell and selects its row alone",
+          "[qt_quick][table]") {
+    QuickWindowOptions options{.selection = ui::SelectionMode::Multiple};
+    options.cellMenu = [](ui::Key const&, std::size_t) {
+        std::vector<ui::MenuItem> items(2);
+        items.at(0).label = std::string{"Open"};
+        items.at(1).label = std::string{"Close"};
+        return items;
+    };
+    QuickWindowFixture f{10, 3, std::move(options)};
+    f.selected.set({ui::Key{std::int64_t{1}}, ui::Key{std::int64_t{3}}});
+    f.settle();
+    QQmlExpression find{f.scene.engine().rootContext(), f.item(), QStringLiteral(R"((() => {
+        const row = rowAt(2)
+        if (!row)
+            return null
+        for (let i = 0; i < row.content.children.length; ++i) {
+            const cell = row.content.children[i]
+            if (cell.measuredIndex === 1 && cell.visible)
+                return cell
+        }
+        return null
+    })())")};
+    auto* const cell = qobject_cast<QQuickItem*>(find.evaluate().value<QObject*>());
+    REQUIRE_FALSE(find.hasError());
+    REQUIRE(cell != nullptr);
+    QTest::mouseClick(&f.scene.window(), Qt::RightButton, {}, Scene::centreOf(*cell));
+    f.settle();
+    REQUIRE_FALSE(f.selections.empty());
+    CHECK(f.selections.back() ==
+          std::pair{std::vector<ui::Key>{ui::Key{std::int64_t{2}}}, ui::SelectionChange::Replace});
+    CHECK(f.call("focusedRow").toInt() == 2);
+    CHECK(f.call("focusedColumn").toInt() == 1);
+    QObject* const menu = f.item()->findChild<QObject*>(QStringLiteral("configMenu"));
+    REQUIRE(menu != nullptr);
+    REQUIRE(menu->property("opened").toBool());
+    auto const labels = [menu] {
+        QStringList out;
+        for (QVariant const& entry : menu->property("entries").toList()) {
+            out.append(entry.toMap().value(QStringLiteral("label")).toString());
+        }
+        return out;
+    };
+    QStringList const expected{QStringLiteral("Open"), QStringLiteral("Close")};
+    CHECK(labels() == expected);
+    f.scene.key(Qt::Key_Escape);
+    f.settle();
+    REQUIRE_FALSE(menu->property("opened").toBool());
+    // The menu key on the focused cell opens the same menu.
+    f.item()->forceActiveFocus();
+    f.scene.key(Qt::Key_Menu);
+    f.settle();
+    CHECK(menu->property("opened").toBool());
+    CHECK(labels() == expected);
+    f.scene.key(Qt::Key_Escape);
 }

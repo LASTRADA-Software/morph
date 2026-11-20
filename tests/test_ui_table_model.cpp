@@ -4922,3 +4922,289 @@ TEST_CASE("collection: its saved views load beside its state", "[ui][table][stat
     std::ranges::sort(parts);
     CHECK(parts == std::vector<std::string>{"state", "views"});
 }
+
+// ── The application's menu entries, and a disabled header ───────────────────
+
+namespace {
+
+// `id` (the key), `mass` (a decimal), and `companyA` and `companyB`, the declared group `company` ("Company").
+table::TableDescription menuDescription() {
+    table::TableDescription d;
+    d.id = "samples";
+    d.label = "Samples";
+    d.key = "id";
+    d.columns = {
+        table::TableColumn{.info = {.id = "id", .kind = table::ColumnKind::Integer}, .label = "Id"},
+        table::TableColumn{.info = {.id = "mass", .kind = table::ColumnKind::Decimal}, .label = "Mass"},
+        table::TableColumn{
+            .info = {.id = "companyA", .kind = table::ColumnKind::Text}, .label = "Company A", .group = "company"},
+        table::TableColumn{
+            .info = {.id = "companyB", .kind = table::ColumnKind::Text}, .label = "Company B", .group = "company"},
+    };
+    d.groups = {table::ColumnGroupInfo{.id = "company", .label = "Company", .columns = {"companyA", "companyB"}}};
+    return table::describe(std::move(d));
+}
+
+using MenuRow = std::map<std::string, table::Cell, std::less<>>;
+
+// Rows 1 to 4 weigh 0.1 to 0.4, row 5 has no mass; row 1 is of companies E and G, row 2 of F.
+std::vector<MenuRow> menuRows() {
+    auto const mass = [](std::string_view text) { return table::Cell{table::parseDecimal(text).value()}; };
+    auto const text = [](std::string value) { return table::Cell{std::move(value)}; };
+    return {
+        MenuRow{{"id", table::Cell{std::int64_t{1}}}, {"mass", mass("0.1")}, {"companyA", text("E")},
+                {"companyB", text("G")}},
+        MenuRow{{"id", table::Cell{std::int64_t{2}}}, {"mass", mass("0.2")}, {"companyA", text("F")}},
+        MenuRow{{"id", table::Cell{std::int64_t{3}}}, {"mass", mass("0.3")}},
+        MenuRow{{"id", table::Cell{std::int64_t{4}}}, {"mass", mass("0.4")}},
+        MenuRow{{"id", table::Cell{std::int64_t{5}}}},
+    };
+}
+
+// The page answering the latest query with `menuRows()`, each holding the columns the query names, against
+// @p description; the rows of @p unloaded have levels not loaded.
+std::string menuPageOf(std::vector<std::string> columns, table::TableDescription const& description,
+                       std::vector<table::UnloadedRow> unloaded) {
+    std::vector<MenuRow> const rows = menuRows();
+    table::GenericPage page;
+    page.revision = description.revision;
+    page.columns = std::move(columns);
+    page.total = static_cast<std::int64_t>(rows.size());
+    page.totalKind = table::TotalKind::Exact;
+    page.offset = 0;
+    for (MenuRow const& row : rows) {
+        page.keys.emplace_back(std::get<std::int64_t>(row.at("id")));
+        table::GenericRow cells;
+        for (std::string const& column : page.columns) {
+            auto const found = row.find(column);
+            cells.push_back(found == row.end() ? table::Cell{} : found->second);
+        }
+        page.rows.push_back(std::move(cells));
+    }
+    page.unloadedRows = std::move(unloaded);
+    return glz::write_json(page).value_or("");
+}
+
+std::string menuPage(TableHarness const& h, table::TableDescription const& description = menuDescription(),
+                     std::vector<table::UnloadedRow> unloaded = {}) {
+    return menuPageOf(morph::ui::testing::lastQuery(h).columns.value_or(std::vector<std::string>{}), description,
+                      std::move(unloaded));
+}
+
+// Answers every open `Table.samples` call with `menuRows()`, each by the columns its own query names: the server
+// answers a filtered query with every row, so each cell stays to be chosen.
+void answerMenu(TableHarness& h) {
+    using morph::ui::testing::openCalls;
+    using morph::ui::testing::oldestOpen;
+    using morph::ui::testing::queryOf;
+    for (int round = 0; round < 16 && openCalls(h, "Table.samples") > 0; ++round) {
+        std::size_t const index = oldestOpen(h, "Table.samples");
+        h.reply(index, menuPageOf(queryOf(h, index).columns.value_or(std::vector<std::string>{}), menuDescription(),
+                                  {}));
+    }
+    REQUIRE(openCalls(h, "Table.samples") == 0);
+}
+
+// A document whose table `t` over the samples selects several rows and carries @p tableKeys, beside a button
+// `other` that sets `idle`; the state `picked`, `opened` and `idle` (false) is the cases' to set and read.
+std::string menuDoc(std::string_view tableKeys) {
+    std::string table = R"({"kind":"table","id":"t","testId":"t","model":"sample","table":"samples",)"
+                        R"("selectionMode":"multiple")";
+    if (!tableKeys.empty()) {
+        table += "," + std::string{tableKeys};
+    }
+    table += "}";
+    return R"({"vocab":"ui/1","id":"samples","models":{"sample":{"type":"Lims_SampleModel"}},)"
+           R"("state":{"picked":{"init":{"lit":null}},"opened":{"init":{"lit":null}},"idle":{"init":{"lit":false}}},)"
+           R"("view":{"kind":"column","children":[)" +
+           table +
+           R"(,{"kind":"button","testId":"other","label":"Other","onClick":[{"set":"idle","value":true}]}]}})";
+}
+
+// A menu's labels, a separator written `-`.
+std::vector<std::string> menuLabels(std::vector<morph::ui::MenuEntry> const& entries) {
+    std::vector<std::string> out;
+    for (morph::ui::MenuEntry const& entry : entries) {
+        out.push_back(entry.separator ? std::string{"-"} : entry.label);
+    }
+    return out;
+}
+
+// A filter from its JSON.
+table::FilterSpec filterSpec(std::string_view json) {
+    table::FilterSpec out;
+    REQUIRE_FALSE(glz::read<glz::opts{.error_on_unknown_keys = false}>(out, json));
+    return out;
+}
+
+// The table `t`'s filters, its element value read back.
+table::FilterSpec filtersOf(morph::ui::Screen const& screen) { return filterSpec(elementValue(screen, "t", "filters")); }
+
+morph::ui::Key menuKey(std::int64_t key) { return morph::ui::Key{key}; }
+
+}  // namespace
+
+// Mutation: the cell menu read in the table's scope, which reads `row` as null.
+TEST_CASE("table menus: the application's entries read the row, the column and the value", "[ui][table][menu]") {
+    using namespace morph::ui::testing;
+    TableHarness h;
+    auto screen = h.mount(menuDoc(
+        R"("cellMenu":[{"label":{"fn":"format","args":["{0} = {1} of {2}",{"ref":"column"},{"ref":"value"},{"ref":"row.id"}]},)"
+        R"("onClick":[{"set":"picked","value":{"ref":"row.id"}}]}],)"
+        R"("headerMenu":[{"label":"Units…","visible":{"fn":"eq","args":[{"ref":"column"},"mass"]}}])"));
+    REQUIRE(reportsOf(h).empty());
+    replyDescribe(h, describeJson(menuDescription()));
+    replyPage(h, menuPage(h));
+    int const table = h.byTestId("Table", "t");
+    std::size_t const mass = columnIndex(h, "mass");
+    CHECK(menuLabels(h.backend.rightClickCell(table, menuKey(2), mass)) ==
+          std::vector<std::string>{"Copy", "Copy with headers", "Filter by this value", "Exclude this value", "-",
+                                   "mass = 0.2 of 2"});
+    h.backend.chooseCellMenu(table, menuKey(2), mass, {"mass = 0.2 of 2"});
+    CHECK(readJson(*screen, R"({"ref":"picked"})") == "2");
+    // A right-click on a row that is not selected selects it alone; on a selected row the selection stays.
+    h.backend.selectRows(table, {menuKey(1), menuKey(3)});
+    static_cast<void>(h.backend.rightClickCell(table, menuKey(2), mass));
+    CHECK(elementValue(*screen, "t", "selection") == "[2]");
+    h.backend.selectRows(table, {menuKey(1), menuKey(3)});
+    static_cast<void>(h.backend.rightClickCell(table, menuKey(1), mass));
+    CHECK(elementValue(*screen, "t", "selection") == "[1,3]");
+    // A header's entry shows on the columns its `visible` names.
+    std::vector<std::string> const massHeader = menuLabels(h.backend.menuOf(table, mass));
+    REQUIRE(massHeader.size() >= 2);
+    CHECK(massHeader.at(massHeader.size() - 2) == "-");
+    CHECK(massHeader.back() == "Units…");
+    std::vector<std::string> const idHeader = menuLabels(h.backend.menuOf(table, columnIndex(h, "id")));
+    CHECK_FALSE(std::ranges::contains(idHeader, std::string{"Units…"}));
+    CHECK(idHeader.back() != "-");
+}
+
+// Mutation: "Filter by this value" adding to include instead of replacing it, which keeps the earlier entry.
+TEST_CASE("table menus: filter by this value", "[ui][table][menu]") {
+    using namespace morph::ui::testing;
+    {
+        TableHarness h;
+        auto screen = h.mount(menuDoc(""));
+        replyDescribe(h, describeJson(menuDescription()));
+        replyPage(h, menuPage(h));
+        int const table = h.byTestId("Table", "t");
+        std::size_t const mass = columnIndex(h, "mass");
+        // The rows stay held across each new filter: `answerMenu` answers it with every row.
+        h.backend.chooseCellMenu(table, menuKey(3), mass, {"Filter by this value"});
+        answerMenu(h);
+        h.backend.chooseCellMenu(table, menuKey(2), mass, {"Filter by this value"});
+        answerMenu(h);
+        CHECK(filtersOf(*screen) == filterSpec(R"({"columns":{"mass":{"include":[{"oneOf":["0.2"]}]}}})"));
+        h.backend.chooseCellMenu(table, menuKey(3), mass, {"Exclude this value"});
+        answerMenu(h);
+        h.backend.chooseCellMenu(table, menuKey(4), mass, {"Exclude this value"});
+        answerMenu(h);
+        CHECK(filtersOf(*screen).columns.at("mass").exclude ==
+              filterSpec(R"({"columns":{"mass":{"exclude":[{"oneOf":["0.3","0.4"]}]}}})").columns.at("mass").exclude);
+        // An empty cell filters by emptiness.
+        h.backend.chooseCellMenu(table, menuKey(5), mass, {"Filter by this value"});
+        answerMenu(h);
+        CHECK(filtersOf(*screen).columns.at("mass").include ==
+              filterSpec(R"({"columns":{"mass":{"include":[{"isEmpty":true}]}}})").columns.at("mass").include);
+        // A column of a declared group offers the group's filter.
+        std::size_t const companyA = columnIndex(h, "companyA");
+        CHECK(entryOf(h.backend.rightClickCell(table, menuKey(2), companyA), "Filter by this value in any Company")
+                  .enabled);
+        h.backend.chooseCellMenu(table, menuKey(2), companyA, {"Filter by this value in any Company"});
+        answerMenu(h);
+        CHECK(filtersOf(*screen).groups ==
+              filterSpec(R"({"groups":[{"group":"company","include":[{"oneOf":["F"]}]}]})").groups);
+        CHECK(std::ranges::none_of(menuLabels(h.backend.rightClickCell(table, menuKey(2), mass)),
+                                   [](std::string const& label) { return label.starts_with("Filter by this value in"); }));
+    }
+    {
+        // On a cell whose level has not loaded, both entries are disabled.
+        TableHarness h;
+        table::TableDescription const described = withLevel(menuDescription(), "mass", "assay");
+        auto screen = h.mount(menuDoc(""));
+        replyDescribe(h, describeJson(described));
+        replyPage(h, menuPage(h, described, {table::UnloadedRow{.index = 2, .levels = {"assay"}, .failed = {}}}));
+        int const table = h.byTestId("Table", "t");
+        std::size_t const mass = columnIndex(h, "mass");
+        std::vector<morph::ui::MenuEntry> const unloaded = h.backend.rightClickCell(table, menuKey(3), mass);
+        CHECK_FALSE(entryOf(unloaded, "Filter by this value").enabled);
+        CHECK_FALSE(entryOf(unloaded, "Exclude this value").enabled);
+        CHECK(entryOf(h.backend.rightClickCell(table, menuKey(2), mass), "Filter by this value").enabled);
+    }
+}
+
+// Mutation: keys bound only while the menu is open.
+TEST_CASE("table menus: an entry's keys work while the table has focus", "[ui][table][menu]") {
+    using namespace morph::ui::testing;
+    TableHarness h;
+    auto screen = h.mount(menuDoc(
+        R"("columns":[{"id":"id"},{"id":"mass"}],)"
+        R"("cellMenu":[{"label":"Open","keys":"Ctrl+O","description":{"ref":"row.companyB"},)"
+        R"("onClick":[{"set":"opened","value":{"ref":"row.id"}}]}])"));
+    replyDescribe(h, describeJson(menuDescription()));
+    // What the entries read is fetched for every row, though no column shows it.
+    std::vector<std::string> const named = lastQuery(h).columns.value_or(std::vector<std::string>{});
+    CHECK(std::ranges::contains(named, std::string{"id"}));
+    CHECK(std::ranges::contains(named, std::string{"companyB"}));
+    replyPage(h, menuPage(h));
+    int const table = h.byTestId("Table", "t");
+    h.backend.focusMove(table, morph::ui::FocusMove::Down);
+    h.backend.focusMove(table, morph::ui::FocusMove::Down);
+    CHECK_FALSE(h.backend.press(h.byTestId("Button", "other"), "Ctrl+O"));
+    CHECK(readJson(*screen, R"({"ref":"opened"})") == "null");
+    CHECK(h.backend.press(table, "Ctrl+O"));
+    CHECK(readJson(*screen, R"({"ref":"opened"})") == "3");
+}
+
+// Mutation: headerEnabled read once at mount, which leaves the header enabled after the condition turns false.
+TEST_CASE("table menus: a disabled header", "[ui][table][header]") {
+    using namespace morph::ui::testing;
+    TableHarness h;
+    auto screen = h.mount(menuDoc(R"("headerEnabled":{"ref":"idle"},)"
+                                  R"("cellMenu":[{"label":"Pick","onClick":[{"set":"picked","value":{"ref":"row.id"}}]}])"));
+    replyDescribe(h, describeJson(menuDescription()));
+    replyPage(h, menuPage(h));
+    int const table = h.byTestId("Table", "t");
+    std::size_t const mass = columnIndex(h, "mass");
+    std::string const busy = "Sorting, filtering and arranging are unavailable right now";
+    auto const message = [&] {
+        h.settle();
+        return h.backend.tableStatus(table).message;
+    };
+    std::string const sort = elementValue(*screen, "t", "sort");
+    std::string const layout = elementValue(*screen, "t", "layout");
+    std::string const filters = elementValue(*screen, "t", "filters");
+    std::size_t const pages = pageCalls(h);
+    h.backend.clickHeader(table, mass);
+    CHECK(message() == busy);
+    h.advance(7s);
+    REQUIRE(message().empty());
+    h.backend.clickFilter(table, mass);
+    CHECK(message() == busy);
+    h.advance(7s);
+    REQUIRE(message().empty());
+    h.backend.moveColumn(table, mass, 0);
+    CHECK(message() == busy);
+    CHECK(elementValue(*screen, "t", "sort") == sort);
+    CHECK(elementValue(*screen, "t", "layout") == layout);
+    CHECK(elementValue(*screen, "t", "filters") == filters);
+    CHECK(pageCalls(h) == pages);
+    // The header's own entries are disabled; the application's stay.
+    std::vector<morph::ui::MenuEntry> const header = h.backend.menuOf(table, mass);
+    REQUIRE_FALSE(header.empty());
+    CHECK(std::ranges::none_of(header, &morph::ui::MenuEntry::enabled));
+    CHECK(entryOf(h.backend.menuOf(table, std::nullopt), "Copy").enabled);
+    CHECK_FALSE(entryOf(h.backend.menuOf(table, std::nullopt), "Sort…").enabled);
+    // Selecting, copying and the cell menu's entries still work.
+    h.backend.clickRow(table, menuKey(2), morph::ui::RowClick::Only);
+    CHECK(elementValue(*screen, "t", "selection") == "[2]");
+    h.backend.pressCopy(table);
+    CHECK_FALSE(h.backend.clipboardText().empty());
+    h.backend.chooseCellMenu(table, menuKey(2), mass, {"Pick"});
+    CHECK(readJson(*screen, R"({"ref":"picked"})") == "2");
+    // Once the application is idle, a header click sorts.
+    h.backend.click(h.byTestId("Button", "other"));
+    h.settle();
+    h.backend.clickHeader(table, mass);
+    CHECK(elementValue(*screen, "t", "sort") == R"([{"column":"mass","direction":"asc"}])");
+}

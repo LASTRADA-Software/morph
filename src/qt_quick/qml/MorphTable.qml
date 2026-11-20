@@ -32,7 +32,11 @@ import QtQuick.Layouts
 // click on the edge none (`columnResize`). A filterable header ends in a filter button (`filter`), filled while
 // `filteredColumns` names it, and then named "{label}, filtered". Column groups draw a line above the headers, each
 // group's label over the visible places it names with its own filter button (`groupFilter`). Ctrl+C on the table asks
-// to copy (`copy`).
+// to copy (`copy`). With a cell menu (`hasCellMenu`), a right click or a long press on a cell asks its row for the
+// cell's menu (the row's `cellMenu`, with the column), as Shift+F10 or the menu key does on the focused cell over a
+// source; C++ answers with `showCellMenu`, which shows the entries in the same popup under the cell, and the choice
+// is reported as `menuChoose` with the column -2. Over a source, a key the table leaves is offered to the focused
+// cell's entries (`cellKey`).
 MorphWidget {
     id: root
 
@@ -47,6 +51,8 @@ MorphWidget {
     readonly property string ascendingMark: " \u25B2"
     // Whether the headers and the table have menus, columns can be moved and resized, and the table copies.
     property bool hasMenu: false
+    // Whether the cells have a menu.
+    property bool hasCellMenu: false
     property bool movable: false
     property bool resizable: false
     property bool copies: false
@@ -156,6 +162,23 @@ MorphWidget {
         configMenu.path = []
         configMenu.current = configMenu.nextEntry(-1, 1)
         configMenu.y = anchor.mapToItem(root, 0, anchor.height).y
+        if (configMenu.opened)
+            root.placeMenu()
+        else
+            configMenu.open()
+    }
+
+    // Shows a cell's menu, as C++ read it for the cell `anchor` is; a choice goes back with the column -2.
+    function showCellMenu(anchor: var, entries: var) {
+        const at = anchor as Item
+        if (!at)
+            return
+        root.menuColumn = -2
+        configMenu.anchorItem = at
+        configMenu.entries = entries
+        configMenu.path = []
+        configMenu.current = configMenu.nextEntry(-1, 1)
+        configMenu.y = at.mapToItem(root, 0, at.height).y
         if (configMenu.opened)
             root.placeMenu()
         else
@@ -1534,6 +1557,13 @@ MorphWidget {
             return true
         }
         const row = root.rowAt(root.focusedRowIndex)
+        if (row && root.hasCellMenu
+                && ((event.key === Qt.Key_F10 && mods === Qt.ShiftModifier) || event.key === Qt.Key_Menu)) {
+            row.fire("cellMenu", {"column": root.focusedColumnIndex})
+            return true
+        }
+        if (root.hasCellMenu && root.question("cellKey", [event.key, event.modifiers]))
+            return true
         if (!row || mods !== Qt.NoModifier)
             return false
         if (event.key === Qt.Key_Space) {
