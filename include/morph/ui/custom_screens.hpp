@@ -76,6 +76,10 @@ struct CustomScreen {
     time::DateTime savedAt;
     /// @brief The principal that saved it.
     std::string savedBy;
+    /// @brief What the store records about it, such as whether it is shared or someone's default: the store's own
+    ///        record, which the model carries through `list`, `get` and `save` without reading it. Absent when the
+    ///        store records nothing.
+    std::optional<Json::object_t> attributes;
 };
 
 /// @brief A store's refusal, shown to the person as it is.
@@ -296,12 +300,16 @@ struct EventKey {
 /// @brief The longest `broken.reason` of a summary, in bytes; a longer one is cut and ends with an ellipsis.
 inline constexpr std::size_t kMaxBrokenReasonBytes = 1024;
 
+/// @brief The longest `attributes` record, in bytes, as JSON. A `save` with a longer one is refused, and a stored
+///        screen whose record is longer is listed broken without it.
+inline constexpr std::size_t kMaxAttributesBytes = 1024;
+
 /// @brief The most bytes one summary takes before escaping. Every field is capped when the summary is built: `id`,
-///        `title`, `basedOn`, `savedBy` and `broken.pointer` at `kMaxNameBytes` and `broken.reason` at
-///        `kMaxBrokenReasonBytes`, a cut one ending with an ellipsis; `hash` is 71 bytes (`sha256:` and 64 digits).
-///        That is 5 * 256 + 1024 + 71 = 2375 bytes of text; the keys, the punctuation and `savedAt` take under 300
-///        more, and 3 KiB leaves a margin.
-inline constexpr std::size_t kMaxSummaryBytes = std::size_t{3} * 1024;
+///        `title`, `basedOn`, `savedBy` and `broken.pointer` at `kMaxNameBytes`, `broken.reason` at
+///        `kMaxBrokenReasonBytes`, a cut one ending with an ellipsis, and `attributes` at `kMaxAttributesBytes`;
+///        `hash` is 71 bytes (`sha256:` and 64 digits). That is 5 * 256 + 1024 + 1024 + 71 = 3399 bytes of text;
+///        the keys, the punctuation and `savedAt` take under 300 more, and 4 KiB leaves a margin.
+inline constexpr std::size_t kMaxSummaryBytes = std::size_t{4} * 1024;
 
 /// @brief The most a byte of a summary grows to in an envelope: the reply is written with control bytes escaped, so
 ///        one becomes a six-byte escape sequence, and the envelope then doubles each backslash of the reply, making
@@ -309,7 +317,7 @@ inline constexpr std::size_t kMaxSummaryBytes = std::size_t{3} * 1024;
 inline constexpr std::size_t kMaxEscapedGrowth = 7;
 
 /// @brief The bytes of a `get` reply that are not its document: one capped summary, at most
-///        `kMaxEscapedGrowth * kMaxSummaryBytes` = 21 KiB once escaped, with a margin to 64 KiB.
+///        `kMaxEscapedGrowth * kMaxSummaryBytes` = 28 KiB once escaped, with a margin to 64 KiB.
 inline constexpr std::size_t kCustomScreenReplyOverhead = std::size_t{64} * 1024;
 
 /// @brief The custom screens' bounds.
@@ -324,7 +332,7 @@ struct CustomScreensOptions {
     /// @brief The most summaries `list` answers; it says `truncated` when the store held more. A capped summary is at
     ///        most `kMaxSummaryBytes` and grows at most `kMaxEscapedGrowth`-fold in an envelope, so
     ///        `maxListed * kMaxEscapedGrowth * kMaxSummaryBytes + kCustomScreenReplyOverhead` must not exceed
-    ///        `wire::kMaxEnvelopeBytes`: at most 387. The default of 200 takes at most 4.3 MB.
+    ///        `wire::kMaxEnvelopeBytes`: at most 290. The default of 200 takes at most 5.8 MB.
     std::size_t maxListed = 200;
 };
 
@@ -482,8 +490,12 @@ struct CustomScreenSummary {
     /// @brief Whether it opens from the navigator: it is not broken, and its base declares no params (a custom
     ///        screen declares exactly its base's).
     bool opensWithoutParams = false;
-    /// @brief The refusal the checks give it today; absent when it may be mounted.
+    /// @brief The refusal the checks give it today, or that its stored `attributes` are longer than
+    ///        `kMaxAttributesBytes`; absent when it may be mounted.
     std::optional<CheckRefusal> broken;
+    /// @brief What the store records about it, as the store answered it (`CustomScreen::attributes`); absent when the
+    ///        store records nothing, or its record is too long to send.
+    std::optional<Json::object_t> attributes;
 };
 
 /// @brief `list`: the caller's custom screens of an application.
@@ -544,6 +556,9 @@ struct CustomScreensSave {
     std::string basedOn;
     /// @brief The document's JSON text.
     std::string document;
+    /// @brief What the store is asked to record about the screen, at most `kMaxAttributesBytes` as JSON. The store
+    ///        validates it and may refuse; absent asks for nothing.
+    std::optional<Json::object_t> attributes;
 };
 
 /// @brief What `save` answers.

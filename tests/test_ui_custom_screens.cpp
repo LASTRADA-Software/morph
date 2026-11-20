@@ -505,13 +505,17 @@ TEST_CASE("custom screens: a full list of adversarial summaries fits one envelop
     std::string const control(5000, '\x0b');
     for (std::size_t i = 0; i < options.maxListed + 5; ++i) {
         std::string const id = "custom:" + std::to_string(1000 + i) + control;
-        REQUIRE(settled(
-            store->put({.person = "alice", .app = "lims", .id = id}, morph::ui::CustomScreen{.id = id,
-                                                                                             .title = control,
-                                                                                             .basedOn = control,
-                                                                                             .document = "{}",
-                                                                                             .savedAt = {},
-                                                                                             .savedBy = control})));
+        // A record at its bound, of control bytes too: each is written as a six-byte escape, which the bound counts.
+        morph::ui::Json::object_t record;
+        record.emplace("pad", std::string((morph::ui::kMaxAttributesBytes - 10) / 6, '\x0b'));
+        REQUIRE(settled(store->put({.person = "alice", .app = "lims", .id = id, .session = {}},
+                                   morph::ui::CustomScreen{.id = id,
+                                                           .title = control,
+                                                           .basedOn = control,
+                                                           .document = "{}",
+                                                           .savedAt = {},
+                                                           .savedBy = control,
+                                                           .attributes = record})));
     }
     Server s{store, options};
     Envelope const reply = s.call(morph::ui::kCustomScreensList, R"({"app":"lims"})", "alice");
@@ -521,6 +525,9 @@ TEST_CASE("custom screens: a full list of adversarial summaries fits one envelop
     REQUIRE_FALSE(glz::read_json(out, reply.body));
     CHECK(out.screens.size() == options.maxListed);
     CHECK(out.truncated);
+    // The records were sent, not dropped as too long.
+    CHECK(std::ranges::all_of(
+        out.screens, [](morph::ui::CustomScreenSummary const& screen) { return screen.attributes.has_value(); }));
 }
 
 TEST_CASE("custom screens: only an id that starts with `custom:` is read, written or removed",
@@ -899,4 +906,92 @@ TEST_CASE("custom screens: the store is given the verified session, so its polic
     CHECK(std::ranges::any_of(store->seen(), [](morph::session::Context const& session) {
         return session.principal == "carol" && session.metadata.contains("role");
     }));
+}
+
+namespace {
+
+/// @p text read as an attributes record; fails the test when it is not one.
+morph::ui::Json::object_t attributesOf(std::string const& text) {
+    morph::ui::Json::object_t out;
+    REQUIRE_FALSE(glz::read_json(out, text));
+    return out;
+}
+
+/// @p attributes written as JSON, for comparing records.
+std::string written(std::optional<morph::ui::Json::object_t> const& attributes) {
+    return attributes.has_value() ? glz::write_json(*attributes).value_or("?") : std::string{"absent"};
+}
+
+}  // namespace
+
+// Mutation: drop the attributes from the stored screen (the list and get answer none).
+TEST_CASE("custom screens: a store's attributes round-trip through save, list and get",
+          "[ui][custom-screens][remote]") {
+    Server s;
+    std::string const record = R"({"default":false,"note":"for the morning shift","shared":["team-a"]})";
+    Envelope const saved = s.call(morph::ui::kCustomScreensSave,
+                                  R"({"app":"lims","title":"Mine","basedOn":"lims.base","document":)" +
+                                      quoted(baseScreen("lims.base")) + R"(,"attributes":)" + record + "}",
+                                  "alice");
+    std::string const id = savedId(saved);
+    auto const mine = listed(s, "alice");
+    REQUIRE(mine.screens.size() == 1);
+    CHECK(written(mine.screens.front().attributes) == written(attributesOf(record)));
+
+    Envelope const got = s.call(morph::ui::kCustomScreensGet, R"({"app":"lims","id":)" + quoted(id) + "}", "alice");
+    REQUIRE(got.kind == "ok");
+    morph::ui::CustomScreenFound found;
+    REQUIRE_FALSE(glz::read_json(found, got.body));
+    CHECK(written(found.summary.attributes) == written(attributesOf(record)));
+
+    // A save that names none stores none: the record is the store's, and the model adds nothing of its own.
+    REQUIRE(s.save(baseScreen("lims.base"), "bob").kind == "ok");
+    auto const bobs = listed(s, "bob");
+    REQUIRE(bobs.screens.size() == 1);
+    CHECK_FALSE(bobs.screens.front().attributes.has_value());
+}
+
+// Mutation: skip the attributes bound on save (the oversized record is stored and listed).
+TEST_CASE("custom screens: a save whose attributes are over the bound is refused", "[ui][custom-screens][remote]") {
+    Server s;
+    std::string const pad(morph::ui::kMaxAttributesBytes, 'x');
+    Envelope const refused = s.call(morph::ui::kCustomScreensSave,
+                                    R"({"app":"lims","title":"Mine","basedOn":"lims.base","document":)" +
+                                        quoted(baseScreen("lims.base")) + R"(,"attributes":{"pad":")" + pad + "\"}}",
+                                    "alice");
+    REQUIRE(refused.kind == "err");
+    CHECK(refused.message.contains("`attributes` are at most 1024 bytes"));
+    CHECK(listed(s, "alice").screens.empty());
+
+    // At the bound exactly, it is stored: `{"pad":"` and `"}` take 10 bytes of it.
+    std::string const fits(morph::ui::kMaxAttributesBytes - 10, 'x');
+    CHECK(s.call(morph::ui::kCustomScreensSave,
+                 R"({"app":"lims","title":"Mine","basedOn":"lims.base","document":)" +
+                     quoted(baseScreen("lims.base")) + R"(,"attributes":{"pad":")" + fits + "\"}}",
+                 "alice")
+              .kind == "ok");
+}
+
+// Mutation: send a stored record whatever its length (the list carries it, and the screen is not broken).
+TEST_CASE("custom screens: a stored record too long to send is listed broken, without it",
+          "[ui][custom-screens][remote]") {
+    auto const store = std::make_shared<morph::ui::MemoryCustomScreenStore>(morph::exec::detail::inlineExecutor());
+    std::string const id = "custom:0123456789abcdef0123456789abcdef";
+    REQUIRE(settled(store->put(
+        {.person = "alice", .app = "lims", .id = id, .session = {}},
+        morph::ui::CustomScreen{
+            .id = id,
+            .title = "Mine",
+            .basedOn = "lims.base",
+            .document = baseScreen(id),
+            .savedAt = {},
+            .savedBy = "alice",
+            .attributes = attributesOf(R"({"pad":")" + std::string(morph::ui::kMaxAttributesBytes, 'x') + "\"}")})));
+    Server s{store};
+    auto const mine = listed(s, "alice");
+    REQUIRE(mine.screens.size() == 1);
+    CHECK_FALSE(mine.screens.front().attributes.has_value());
+    REQUIRE(mine.screens.front().broken.has_value());
+    CHECK(mine.screens.front().broken->reason.contains("attributes"));
+    CHECK_FALSE(mine.screens.front().opensWithoutParams);
 }

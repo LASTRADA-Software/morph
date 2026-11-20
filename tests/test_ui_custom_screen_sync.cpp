@@ -558,3 +558,75 @@ TEST_CASE("custom screen sync: a store's refusal of remove reaches the caller as
     REQUIRE_FALSE(removed->has_value());
     CHECK(removed->error().contains("no such custom screen"));
 }
+
+namespace {
+
+/// A store that keeps what a memory store keeps but refuses any record that marks a screen someone's default.
+struct DefaultRefusingStore final : morph::ui::ICustomScreenStore {
+    explicit DefaultRefusingStore(morph::exec::IExecutor& base) : inner{base}, strand{base} {}
+    morph::async::Completion<std::vector<morph::ui::CustomScreen>> list(morph::ui::CustomScreenScope scope) override {
+        return inner.list(std::move(scope));
+    }
+    morph::async::Completion<std::expected<morph::ui::CustomScreen, morph::ui::CustomScreenRefusal>> get(
+        morph::ui::CustomScreenKey key) override {
+        return inner.get(std::move(key));
+    }
+    morph::async::Completion<std::expected<void, morph::ui::CustomScreenRefusal>> put(
+        morph::ui::CustomScreenKey key, morph::ui::CustomScreen screen) override {
+        if (screen.attributes.has_value() && screen.attributes->contains("default")) {
+            auto [completion, promise] =
+                morph::async::Completion<std::expected<void, morph::ui::CustomScreenRefusal>>::makeSettleable(&strand);
+            promise.resolve(std::unexpected(
+                morph::ui::CustomScreenRefusal{.reason = "only an administrator sets someone's default screen"}));
+            return std::move(completion);
+        }
+        return inner.put(std::move(key), std::move(screen));
+    }
+    morph::async::Completion<std::expected<void, morph::ui::CustomScreenRefusal>> remove(
+        morph::ui::CustomScreenKey key) override {
+        return inner.remove(std::move(key));
+    }
+    morph::ui::MemoryCustomScreenStore inner;
+    /// The serial owner the refusal is delivered on, declared last so it is destroyed first.
+    morph::exec::OwnerStrand strand;
+};
+
+}  // namespace
+
+// Mutations: drop the attributes from the request (the store accepts, and the save answers an id); word the store's
+// refusal over (the reason is not the store's).
+TEST_CASE(
+    "custom screen sync: a store's refusal of the attributes reaches the caller unchanged, and accepted ones are "
+    "listed",
+    "[ui][custom-screens][sync]") {
+    morph::exec::ThreadPoolExecutor storePool{1};
+    screens_test::Server const server{std::make_shared<DefaultRefusingStore>(storePool)};
+    SyncClient client{*server.server, "ann", "lims"};
+    REQUIRE(client.probe());
+    auto const record = [](std::string const& text) {
+        morph::ui::Json::object_t out;
+        REQUIRE_FALSE(glz::read_json(out, text));
+        return out;
+    };
+    auto const save = [&client](morph::ui::Json::object_t attributes) {
+        std::optional<std::expected<std::string, std::string>> saved;
+        client.sync.save(morph::ui::CustomScreensSave{.app = {},
+                                                      .id = std::nullopt,
+                                                      .title = "Mine",
+                                                      .basedOn = "lims.base",
+                                                      .document = screens_test::baseScreen("lims.base"),
+                                                      .attributes = std::move(attributes)},
+                         [&saved](std::expected<std::string, std::string> answer) { saved = std::move(answer); });
+        REQUIRE(client.pump([&saved] { return saved.has_value(); }));
+        return *saved;
+    };
+    auto const refused = save(record(R"({"default":true})"));
+    REQUIRE_FALSE(refused.has_value());
+    CHECK(refused.error() == "only an administrator sets someone's default screen");
+
+    auto const accepted = save(record(R"({"shared":true})"));
+    REQUIRE(accepted.has_value());
+    REQUIRE(client.pump([&client] { return client.sync.listed().screens.size() == 1; }));
+    REQUIRE(client.sync.listed().screens.front().attributes.has_value());
+    CHECK(client.sync.listed().screens.front().attributes->contains("shared"));
+}
