@@ -3288,7 +3288,8 @@ private:
         }
     }
 
-    // A form's derive action is an action of the form's model; `deriveDebounce` is a literal count of milliseconds.
+    // A form's derive action is an action of the form's model; `deriveDebounce` is a literal count of milliseconds. The
+    // debounce times a round's evaluation as well as its derive call, so a form that names no `derive` takes it too.
     void checkFormDerive(CheckContext const& context, DocNode const& node) {
         if (std::string_view const derive = node.name("derive"); !derive.empty()) {
             static_cast<void>(checkModelAction(context, std::string{node.name("model")}, std::string{derive},
@@ -3299,9 +3300,6 @@ private:
                 debounce->kind == ExprKind::Literal ? debounce->literal.asInt() : static_cast<std::int64_t const*>(nullptr);
             if (millis == nullptr || *millis < 0) {
                 refuse(debounce->path, "`deriveDebounce` is a literal count of milliseconds, 0 or more");
-            }
-            if (node.name("derive").empty()) {
-                refuse(debounce->path, "`deriveDebounce` times the form's `derive`, and the form names none");
             }
         }
     }

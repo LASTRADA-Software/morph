@@ -445,7 +445,8 @@ TEST_CASE("grid: the held row is let go when focus leaves, on submit, on a click
 using namespace std::chrono_literals;
 std::string const kNoValues = R"({"values":[]})";
 
-// Mutation: loadDerived resolving `specimens[i]` against the current rows (the value lands on the inserted row).
+// Mutations: loadDerived resolving `specimens[i]` against the current rows (the value lands on the inserted row);
+// FormGridSource::deriveFailed reading `deriveState() == Failed` (the standing state is gone while the retry runs).
 TEST_CASE("grid: derived values", "[ui][grid][derive]") {
     GridFixture f{3};
     f.enableDerive();
@@ -460,6 +461,7 @@ TEST_CASE("grid: derived values", "[ui][grid][derive]") {
     CHECK(f.derive.submits().at(0).body == R"({"body":{"sampleId":1,"specimens":[{"mass":{"num":400,"den":100,"dp":2}},{},{}]}})");
     CHECK(f.form->deriveState() == forms::DeriveState::Running);
     CHECK(f.source->marks(ui::Key{std::int64_t{1}}, "limit").muted);
+    CHECK_FALSE(f.source->marks(ui::Key{std::int64_t{1}}, "mass").muted);      // an entered cell is not recomputed
 
     f.form->field("specimens").insertRow(1);                                  // above rows 2 and 3
     f.grid->focusCell(at(2, "note")); f.grid->type("typed"); f.grid->press("Enter");   // a commit during the round
@@ -488,11 +490,48 @@ TEST_CASE("grid: derived values", "[ui][grid][derive]") {
     f.h.settle();
     CHECK(f.form->deriveState() == forms::DeriveState::Failed);
     CHECK(f.source->marks(ui::Key{std::int64_t{2}}, "limit").stale);
+    CHECK_FALSE(f.source->marks(ui::Key{std::int64_t{2}}, "mass").stale);
     CHECK(f.json("specimens[2].limit") == R"({"num":700,"den":100,"dp":2})");
     CHECK(f.grid->standing() == "Derived values could not be recalculated");
     CHECK(f.grid->standingEntries() == std::vector<ui::StatusEntry>{{"recalculate", "Recalculate"}});
     f.grid->chooseEntry("recalculate"); f.h.settle();
     CHECK(f.evaluate.submits().size() == 4);
+    // The failure stands, and the values stay stale, while the retry runs, until a round succeeds.
+    CHECK(f.grid->standing() == "Derived values could not be recalculated");
+    CHECK(f.source->marks(ui::Key{std::int64_t{2}}, "limit").stale);
+    f.evaluate.resolveSubmit(3, R"({"errors":{},"ready":false})");
+    f.derive.resolveSubmit(3, kNoValues);
+    f.h.settle();
+    CHECK(f.grid->standing().empty());
+    CHECK(f.grid->standingEntries().empty());
+    CHECK_FALSE(f.source->marks(ui::Key{std::int64_t{2}}, "limit").stale);
+}
+
+// Mutation: noteCommit keeping the timer of the first commit (`if (!_debounce.active())`), which sends 150 ms after
+// it rather than after the last commit.
+TEST_CASE("grid: a commit restarts the debounce", "[ui][grid][derive]") {
+    GridFixture f{2};
+    f.enableDerive();
+    f.grid->focusCell(at(1, "mass")); f.grid->type("1"); f.grid->press("Enter");
+    f.scheduler.advance(100ms); f.h.settle();
+    f.grid->type("2"); f.grid->press("Enter");                  // (2, mass), 100 ms after the first commit
+    f.scheduler.advance(50ms); f.h.settle();
+    CHECK(f.evaluate.submits().empty());                        // 150 ms after the first, 50 after the last
+    f.scheduler.advance(100ms); f.h.settle();
+    CHECK(f.evaluate.submits().size() == 1);
+}
+
+// Mutation: loadDerived(round, evaluatedBody) without its sequence check (the older body overwrites 9 with 8).
+TEST_CASE("grid: an older evaluation is ignored", "[ui][grid][derive]") {
+    GridFixture f{1};
+    auto const older = f.form->captureRound();
+    auto const newer = f.form->captureRound();
+    auto const body = [](std::string_view density) {
+        return std::string{R"({"sampleId":1,"specimens":[{"density":)"} + std::string{density} + "}]}";
+    };
+    CHECK(f.form->loadDerived(newer, std::string_view{body(R"({"num":9,"den":1,"dp":3})")}).loaded == 1);
+    CHECK(f.form->loadDerived(older, std::string_view{body(R"({"num":8,"den":1,"dp":3})")}).loaded == 0);
+    CHECK(f.json("specimens[0].density") == R"({"num":9000,"den":1000,"dp":3})");
 }
 
 // Mutation: loadDerived without the sequence check (the late older reply overwrites 9 with 8).
@@ -996,10 +1035,11 @@ TEST_CASE("grid: the loader checks a form's derive keys and keeps a grid column'
     computed.replace(computed.find(R"("deriveDebounce":40)"), std::string_view{R"("deriveDebounce":40)"}.size(),
                      R"("deriveDebounce":{"ref":"rec.ready"})");
     CHECK(refusal(computed).find("`deriveDebounce` is a literal count of milliseconds") != std::string::npos);
+    // The debounce times the evaluation too, so a form whose rows are only computed takes it without `derive`.
     std::string unnamed = text;
     unnamed.replace(unnamed.find(R"("derive":"Lims_DeriveSpecimens",)"),
                     std::string_view{R"("derive":"Lims_DeriveSpecimens",)"}.size(), "");
-    CHECK(refusal(unnamed).find("the form names none") != std::string::npos);
+    CHECK(refusal(unnamed).empty());
     std::string foreign = text;
     foreign.replace(foreign.find("Lims_DeriveSpecimens"), std::string_view{"Lims_DeriveSpecimens"}.size(),
                     "Lims_ClientDerive");   // an action of another model

@@ -8,6 +8,7 @@
 #include <catch2/catch_test_macros.hpp>
 #include <cstdint>
 #include <glaze/glaze.hpp>
+#include <optional>
 #include <morph/core/bridge.hpp>
 #include <morph/core/registry.hpp>
 #include <morph/forms/derive.hpp>
@@ -40,6 +41,31 @@ struct DeriveBoxModel {
 BRIDGE_REGISTER_MODEL(DeriveBoxModel, "T_DeriveBoxes")
 BRIDGE_REGISTER_ACTION(DeriveBoxModel, RecordBoxes, "T_RecordBoxes")
 
+// A nested struct, plain and optional, with its own computed and derived members.
+struct DeriveLid {
+    std::int64_t width = 0;
+    std::int64_t area = 0;    // computed: width * width
+    std::int64_t mark = 0;    // derived: the model's
+    static constexpr auto computedFields = morph::forms::computeList(
+        morph::forms::computed<&DeriveLid::area, &DeriveLid::width>([](auto const& lid) { return lid.width * lid.width; }));
+    static const std::array<morph::forms::FieldMeta, 1> fieldMetadata;
+};
+inline const std::array<morph::forms::FieldMeta, 1> DeriveLid::fieldMetadata{morph::forms::derived<&DeriveLid::mark>()};
+
+struct RecordCrate {
+    DeriveLid lid;
+    std::optional<DeriveLid> spare;
+    std::int64_t lidArea = 0;  // computed: the lid's area, read recomputed
+    static constexpr auto computedFields = morph::forms::computeList(
+        morph::forms::computed<&RecordCrate::lidArea, &RecordCrate::lid>([](auto const& crate) { return crate.lid.area; }));
+};
+struct DeriveCrateModel {
+    static inline RecordCrate last{};
+    bool execute(RecordCrate const& crate) { last = crate; return true; }
+};
+BRIDGE_REGISTER_MODEL(DeriveCrateModel, "T_DeriveCrates")
+BRIDGE_REGISTER_ACTION(DeriveCrateModel, RecordCrate, "T_RecordCrate")
+
 namespace {
 
 constexpr std::string_view kForged = R"({"boxes":[{"count":2,"perBox":3,"total":999,"limit":555}],"sum":999})";
@@ -65,6 +91,21 @@ TEST_CASE("derive: a row type's schema marks computed and derived members", "[fo
     CHECK(glz::write_json(box["properties"]["total"]["x-computed"]["inputs"]).value() == R"(["count","perBox"])");
     CHECK(glz::write_json(box["properties"]["limit"]["x-derived"]).value() == "true");
     CHECK(glz::write_json(box["required"]).value() == R"(["count","perBox"])");
+}
+
+// Mutation: detail::forEachNested skipping a plain nested struct member (lid.area stays 999, lid.mark 555, lidArea 999).
+TEST_CASE("derive: the server recomputes and clears a nested struct's members", "[forms][derive]") {
+    auto holder = morph::model::detail::defaultRegistry().create("T_DeriveCrates");
+    morph::model::detail::defaultDispatcher().dispatch(
+        "T_DeriveCrates", "T_RecordCrate", *holder,
+        R"({"lid":{"width":3,"area":999,"mark":555},"spare":{"width":2,"area":999,"mark":555},"lidArea":999})");
+    RecordCrate const& kept = DeriveCrateModel::last;
+    CHECK(kept.lid.area == 9);
+    CHECK(kept.lid.mark == 0);
+    CHECK(kept.lidArea == 9);
+    REQUIRE(kept.spare.has_value());
+    CHECK(kept.spare->area == 4);
+    CHECK(kept.spare->mark == 0);
 }
 
 // A derive action's input is `{"body": …}`, through the meta its deriving type inherits.

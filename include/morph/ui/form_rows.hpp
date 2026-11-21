@@ -142,6 +142,22 @@ namespace detail {
     return std::string{field.draft()};
 }
 
+/// @brief The cell of a member a column edits per row, whose kind varies by row: text, so the column sorts and filters
+///        as one kind. A member that encodes a string (an Enum's or a Choice's option, a text) gives the string, not the
+///        draft's JSON literal; any other gives its draft.
+/// @param field The member. Read untracked by the caller.
+/// @return The cell; empty while the draft is blank.
+[[nodiscard]] inline table::Cell perRowCell(forms::FieldState const& field) {
+    forms::Encoding const& encoding = field.encoded().get();
+    if (encoding.has_value() && encoding->has_value()) {
+        if (std::string const* const text = (*encoding)->value.asString()) {
+            return *text;
+        }
+    }
+    std::string const& draft = field.draft();
+    return draft.empty() ? table::Cell{} : table::Cell{draft};
+}
+
 /// @brief The rows of a form's collection as a snapshot: each row's key, its cells and its record.
 class FormRowsSnapshot final : public table::RowSnapshot {
 public:
@@ -215,7 +231,8 @@ public:
     /// @param members   The member of the row type each column reads, by index into @p columns; empty: each column's
     ///                  id names its member.
     /// @param perRow    For a column whose member varies by row, by index into @p columns, the member's name for a row;
-    ///                  its member in @p members is then empty, and its cell is the member's draft (a `Text` column).
+    ///                  its member in @p members is then empty, and its cell is text (`detail::perRowCell`, a `Text`
+    ///                  column).
     ///                  Empty: no column varies.
     /// @throws std::out_of_range when no field has @p arrayPath.
     /// @throws std::invalid_argument when the field is not a collection, @p members is neither empty nor one per
@@ -422,10 +439,9 @@ private:
                 rowCells.reserve(_columns.size());
                 for (std::size_t at = 0; at < _columns.size(); ++at) {
                     if (_perRow.at(at)) {
-                        // A member per row: its kind varies, so the cell is its draft.
+                        // A member per row: its kind varies, so the cell is text (`detail::perRowCell`).
                         forms::FieldState const* const member = row->field(_perRow.at(at)(*row));
-                        std::string const draft = member == nullptr ? std::string{} : member->draft();
-                        rowCells.push_back(draft.empty() ? table::Cell{} : table::Cell{draft});
+                        rowCells.push_back(member == nullptr ? table::Cell{} : detail::perRowCell(*member));
                         continue;
                     }
                     forms::FieldState const* const member = row->field(_members.at(at));

@@ -72,8 +72,9 @@ template <auto MemberPtr>
 }
 
 /// @brief Value-initialises every derived member of @p action (`FieldMeta::derived` in its type's `fieldMetadata`),
-///        and of each element of every `std::vector` member of a reflectable aggregate, recursively: what the server
-///        dispatch path runs before the model, so a derived value a client sent is never the one kept.
+///        and of every nested aggregate of it (each element of a `std::vector` member, a nested struct member, an
+///        engaged `std::optional` one, recursively: `detail::forEachNested`): what the server dispatch path runs before
+///        the model, so a derived value a client sent is never the one kept.
 /// @tparam A The action or row type.
 /// @param action The value cleared in place.
 template <typename A>
@@ -96,21 +97,13 @@ void clearDerived(A& action) {
                         // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access): Idx < size.
                         if (detail::declaredDerived<Plain>(glz::reflect<Plain>::keys[Idx])) {
                             member = Member{};
-                            return;
-                        }
-                    }
-                    if constexpr (detail::IsStdVector<Member>::value) {
-                        using Row = typename detail::IsStdVector<Member>::ValueType;
-                        if constexpr (detail::ReflectableAggregate<Row>) {
-                            for (Row& row : member) {
-                                clearDerived(row);
-                            }
                         }
                     }
                 }
             };
             (clear.template operator()<I>(), ...);
         }(std::make_index_sequence<memberCount>{});
+        detail::forEachNested(action, [](auto& nested) { clearDerived(nested); });
     } else {
         static_cast<void>(action);
     }
