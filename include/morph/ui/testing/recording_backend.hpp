@@ -2587,13 +2587,24 @@ public:
     }
 
     /// @brief Records property `focusCell` as `<row>:<column>`, which `RecordingBackend::focusCell` reads, and adds
-    ///        the cell to the ones `RecordingBackend::focusCells` lists.
+    ///        the cell to the ones `RecordingBackend::focusCells` lists, and the key of the row at that view row now to
+    ///        the ones `RecordingBackend::focusKeys` lists.
     /// @param viewRow The row.
     /// @param column  The column.
     void setFocusCell(std::size_t viewRow, std::size_t column) override {
         _focusCell = {viewRow, column};
         _focusSet = true;
         _focusCells.emplace_back(viewRow, column);
+        std::optional<Key> named;
+        for (int const child : store().at(id()).children) {
+            auto const& props = store().at(child).props;
+            auto const at = props.find("viewRow");
+            auto const key = _rowKeys.find(child);
+            if (at != props.end() && at->second == std::to_string(viewRow) && key != _rowKeys.end()) {
+                named = key->second;
+            }
+        }
+        _focusKeys.push_back(std::move(named));
         set("focusCell", std::to_string(viewRow) + ":" + std::to_string(column));
     }
 
@@ -2728,6 +2739,10 @@ public:
     [[nodiscard]] std::vector<std::pair<std::size_t, std::size_t>> const& focusCells() const noexcept {
         return _focusCells;
     }
+
+    /// @brief For every focused cell set, the key of the row the table held at that view row when it was set.
+    /// @return The keys, oldest first; none where no row was at that view row.
+    [[nodiscard]] std::vector<std::optional<Key>> const& focusKeys() const noexcept { return _focusKeys; }
 
     /// @brief The counts last set.
     /// @return The rows (or nothing) and the columns.
@@ -2932,6 +2947,7 @@ private:
     std::optional<int> _horizontalOffset;
     std::pair<std::size_t, std::size_t> _focusCell;
     std::vector<std::pair<std::size_t, std::size_t>> _focusCells;
+    std::vector<std::optional<Key>> _focusKeys;
     std::pair<std::optional<std::int64_t>, std::size_t> _counts;
     std::function<void(int, int)> _onHorizontal;
     std::function<void(std::size_t, std::size_t, SelectionChange)> _onSelectRange;
@@ -4076,6 +4092,14 @@ public:
     /// @throws std::logic_error when the widget is not a table.
     [[nodiscard]] std::vector<std::pair<std::size_t, std::size_t>> focusCells(int widgetId) {
         return fakeTable(widgetId, "focusCells").focusCells();
+    }
+
+    /// @brief For every focused cell the mount set on a table, the key of the row at that view row when it was set.
+    /// @param widgetId The table.
+    /// @return The keys, oldest first; none where no row was at that view row.
+    /// @throws std::logic_error when the widget is not a table.
+    [[nodiscard]] std::vector<std::optional<Key>> focusKeys(int widgetId) {
+        return fakeTable(widgetId, "focusKeys").focusKeys();
     }
 
     /// @brief A table's counts, as the mount last set them.

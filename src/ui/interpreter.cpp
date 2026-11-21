@@ -11411,11 +11411,15 @@ private:
                 moves.emplace_back(*row.from, row.key);
             }
         }
-        if (!told.empty()) {
-            _model->keyMoves.set(
-                KeyMoves{.generation = _model->keyMoves.peek().generation + 1, .moves = std::move(told)});
-        }
+        // The mount is told after the selection is rewritten: a handler reading both in one turn sees them agree.
+        auto const tell = [this, &told] {
+            if (!told.empty()) {
+                _model->keyMoves.set(
+                    KeyMoves{.generation = _model->keyMoves.peek().generation + 1, .moves = std::move(told)});
+            }
+        };
         if (moves.empty()) {
+            tell();
             return;
         }
         std::optional<TableSelection> view = _model->viewSelection.peek();
@@ -11450,6 +11454,7 @@ private:
         } else if (reselect) {
             select(keys);
         }
+        tell();
     }
 
     ScreenCore* _core;

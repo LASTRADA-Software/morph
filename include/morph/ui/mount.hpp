@@ -2276,6 +2276,10 @@ private:
         // so a key move from it that arrives after the row left still takes focus to the row's new key.
         bool focusLeft = false;
         std::optional<Key> focusWas;
+        // The focused index came from the rows' answer to where the key is, which is of the view as it is now, while
+        // the rows held may not have taken in the change that put the key there yet: the index is trusted only once a
+        // realized row holds the key, and the backend is never told an index whose row holds another key.
+        bool focusUnconfirmed = false;
         // The latest `KeyMoves` generation applied.
         std::uint64_t keyMovesApplied = 0;
         // A reset moved the focused or highlighted key where no realized row has it yet: each pass looks for it
@@ -3069,6 +3073,17 @@ private:
                 tellLocatedFocus(table);
             }
         }
+        if (table.focused && table.focusUnconfirmed && table.focusKey) {
+            std::optional<TableRowRef> const ref = table.source.rows->row(table.focusIndex);
+            std::optional<std::int64_t> const now = ref && ref->key == *table.focusKey
+                                                        ? std::optional{table.focusIndex}
+                                                        : placeOfKey(table, *table.focusKey, table.focusIndex);
+            if (now) {
+                table.focusUnconfirmed = false;
+                table.focusIndex = *now;
+                table.widget->setFocusCell(static_cast<std::size_t>(*now), table.focusColumn);
+            }
+        }
         if (table.focused) {
             std::optional<TableRowRef> const ref = table.source.rows->row(table.focusIndex);
             // The row at the focused index arrived, or took the place of the focused row that left the view; a row
@@ -3119,14 +3134,24 @@ private:
     // scrolled to, so the window fetches it, as for a move onto a row not fetched; a held row is left where it is.
     void tellLocatedFocus(SourceTable& table) {
         auto const at = static_cast<std::size_t>(table.focusIndex);
+        // A row held at the located index with another key is of the view before the change that moved the key
+        // there: the index is scrolled to, so its rows are realized, and focus waits for a realized row to hold the
+        // key. A row not held names no key, and is fetched.
+        std::optional<TableRowRef> const ref = table.source.rows->row(table.focusIndex);
+        bool const other = !table.focusLeft && table.focusKey && ref && ref->key != *table.focusKey;
+        if (!table.focusLeft && table.focusKey) {
+            table.focusUnconfirmed = !ref || other;
+        }
         VisibleRange range = focusRangeOf(table);
-        if (!table.source.rows->row(table.focusIndex) && (at < range.first || at >= range.first + range.count)) {
+        if ((!ref || other) && (at < range.first || at >= range.first + range.count)) {
             range.first = at < range.first ? at : at + 1 - range.count;
             table.range = range;
             table.widget->scrollToRow(at);
             tellVisible(table);
         }
-        table.widget->setFocusCell(at, table.focusColumn);
+        if (!other) {
+            table.widget->setFocusCell(at, table.focusColumn);
+        }
     }
 
     void reportFocus(SourceTable const& table) {
@@ -3234,6 +3259,7 @@ private:
         table.focusSearching = false;
         table.focusUntold = false;
         table.focusWas.reset();
+        table.focusUnconfirmed = false;
         table.focusLocate.request_stop();
         table.focusIndex = index;
         table.focusColumn = table.visible.at(place);
@@ -3270,6 +3296,7 @@ private:
         table.focusSearching = false;
         table.focusUntold = false;
         table.focusWas.reset();
+        table.focusUnconfirmed = false;
         table.focusLocate.request_stop();
         table.focusKey = cell->key;
         table.focusIndex = row->index;
@@ -3296,6 +3323,7 @@ private:
         table.focusSearching = false;
         table.focusUntold = false;
         table.focusWas.reset();
+        table.focusUnconfirmed = false;
         table.focusLocate.request_stop();
         table.focusKey = key;
         table.focusIndex = row->index;
@@ -3315,6 +3343,8 @@ private:
             return;
         }
         table.keyMovesApplied = moves.generation;
+        // A key focus left is followed by the first generation of moves after it left, and by no later one.
+        std::optional<Key> const left = std::exchange(table.focusWas, std::nullopt);
         for (auto const& [from, to] : moves.moves) {
             if (table.highlightKey == from) {
                 table.highlightKey = to;
@@ -3326,11 +3356,11 @@ private:
                     table.highlightSearching = true;
                 }
             }
-            if (!table.focused || (table.focusKey != from && table.focusWas != from)) {
+            if (!table.focused || (table.focusKey != from && left != from)) {
                 continue;
             }
             table.focusKey = to;
-            table.focusWas.reset();
+            table.focusUnconfirmed = false;
             table.focusLeft = false;
             table.focusUntold = false;
             table.focusLocate.request_stop();
