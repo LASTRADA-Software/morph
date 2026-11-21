@@ -3063,3 +3063,34 @@ TEST_CASE("qt_quick grid: a double click opens the editor in the cell and focus 
     CHECK(g.form->field("specimens[1].mass").draft() == "7");
     CHECK(Scene::itemsOf(g.named(QStringLiteral("grid")), "QQuickTextField").empty());
 }
+
+// Mutation: the column's field resolved once for every row (row 2's editor is a ComboBox too).
+TEST_CASE("qt_quick grid: a column's kind follows its row", "[qt_quick][grid]") {
+    Scene scene;
+    morph::test::formsengine::FakeServer server{scene.owner()};
+    auto form = std::make_unique<morph::forms::FormSession>(
+        scene.runtime(), morph::test::formsengine::modelOf("Lims_RecordRows", morph::test::grid::kKindPerRow),
+        server.submitter(), server.fetcher(),
+        morph::forms::FormSessionOptions{.locale = ui::localeFacts("de").numeric, .bcp47 = "de"});
+    form->prefill(R"({"rows":[{"isChoice":true},{"isChoice":false}]})");
+    ui::TableOptions options;
+    options.common.testId = "grid";
+    ui::FormGrid grid = ui::makeFormGrid(*form, form->field("rows"), morph::test::grid::kindPerRowColumns(), {},
+                                         ui::formatOf(*form), std::move(options));
+    std::optional<ui::Mounted> view;
+    view.emplace(scene.runtime(), scene.backend(), grid.node);
+    scene.settle();
+    QQuickItem* const table = itemNamed(*scene.window().contentItem(), QStringLiteral("grid"));
+    REQUIRE(table != nullptr);
+    grid.grid->activate(morph::test::grid::at(1, "value"));
+    scene.settle();
+    CHECK(Scene::itemsOf(*table, "QQuickComboBox").size() == 1);
+    CHECK(Scene::itemsOf(*table, "QQuickTextField").empty());
+    grid.grid->press("Escape");
+    grid.grid->activate(morph::test::grid::at(2, "value"));
+    scene.settle();
+    CHECK(Scene::itemsOf(*table, "QQuickComboBox").empty());
+    CHECK(Scene::itemsOf(*table, "QQuickTextField").size() == 1);
+    view.reset();
+    grid = {};
+}

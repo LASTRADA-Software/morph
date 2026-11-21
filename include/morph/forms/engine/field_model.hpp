@@ -187,6 +187,8 @@ struct FieldSpec {
     bool computed = false;
     /// @brief `x-computed.inputs`: the members a computed field derives from.
     std::vector<std::string> computedInputs;
+    /// @brief `x-derived`: a member the model sets from the domain's data, which only a round writes.
+    bool derived = false;
     /// @brief `minimum`, as canonical decimal text.
     std::optional<std::string> minimum;
     /// @brief `maximum`, as canonical decimal text.
@@ -597,6 +599,7 @@ private:
         spec.required = required;
         spec.readOnly = flagOf(raw, prop, "x-readonly");
         spec.hidden = flagOf(raw, prop, "x-hidden");
+        spec.derived = flagOf(raw, prop, "x-derived");
         spec.widget = textOf(raw, prop, "x-widget");
         if (Json const* const computed = either(raw, prop, "x-computed")) {
             spec.computed = true;

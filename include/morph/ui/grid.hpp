@@ -56,10 +56,25 @@ struct GridColumn {
     std::string id;
     /// @brief The header's text.
     std::string label;
-    /// @brief The member of the row type the column edits; empty for a display column.
+    /// @brief The member of the row type the column edits; empty for a display column, or one with `fieldOf`.
     std::string field;
-    /// @brief A display column's text for a row; read only while `field` is empty.
+    /// @brief A display column's text for a row; read only while `field` and `fieldOf` are empty.
     std::function<std::string(forms::RowState const&)> value;
+    /// @brief The member the column edits in a row, when it varies by row: the record decides a value's kind. Tracked.
+    ///        A name that is no member leaves the row's cell with no field, so it is read-only.
+    std::function<std::string(forms::RowState const&)> fieldOf;
+    /// @brief The entry places of the row's member, which are also its wire `dp`; nothing keeps the field's. Tracked.
+    std::function<std::optional<std::uint32_t>(forms::RowState const&)> decimals;
+    /// @brief The unit the row's member is entered in, an id of its `FieldSpec::units`; nothing keeps the field's.
+    ///        Tracked.
+    std::function<std::optional<std::string>(forms::RowState const&)> unit;
+    /// @brief Whether the row's cell is read-only beyond its field (`CellFacts::overlayReadOnly`). Tracked.
+    std::function<bool(forms::RowState const&)> readonly;
+    /// @brief The options the row's member offers, as their values' JSON literals, narrowing a choice's; nothing
+    ///        offers every option. Tracked.
+    std::function<std::optional<std::vector<std::string>>(forms::RowState const&)> options;
+    /// @brief The row's member's placeholder; empty keeps the field's. Tracked.
+    std::function<std::string(forms::RowState const&)> placeholder;
 };
 
 /// @brief How a grid walks and what activating a read-only cell does.
@@ -217,6 +232,22 @@ public:
     ///        filter; nothing lets it go. A source whose rows never move under an edit does nothing.
     /// @param key The row's key, or nothing.
     virtual void holdRow(std::optional<Key> key) { static_cast<void>(key); }
+
+    /// @brief A cell's editor opened: a choice in it fetches its options from now on. A source with nothing to fetch
+    ///        does nothing.
+    /// @param key    The row's key.
+    /// @param column The column's id.
+    virtual void editorOpened(Key const& key, std::string_view column) {
+        static_cast<void>(key);
+        static_cast<void>(column);
+    }
+
+    /// @brief Whether the last round of derived values failed, which the status line offers to recalculate. Tracked.
+    /// @return `true` while it holds; `false` for a source with no derived values.
+    [[nodiscard]] virtual bool deriveFailed() const { return false; }
+
+    /// @brief Makes one more round of derived values. A source with none does nothing.
+    virtual void recalculate() {}
 };
 // NOLINTEND(cppcoreguidelines-special-member-functions)
 
@@ -620,7 +651,7 @@ public:
             throw std::invalid_argument{"morph::ui::FormGridSource: `" + _arrayPath + "` is not a collection"};
         }
         for (GridColumn const& column : _columns) {
-            if (!column.field.empty() &&
+            if (!column.fieldOf && !column.field.empty() &&
                 std::ranges::none_of(array.spec().children,
                                      [&column](forms::FieldSpec const& member) { return member.name == column.field; })) {
                 throw std::invalid_argument{"morph::ui::FormGridSource: no member `" + column.field + "` in `" +
@@ -632,15 +663,30 @@ public:
         // table does; a display column has no cell there and neither sorts nor filters.
         std::vector<table::ColumnInfo> infos;
         std::vector<std::string> members;
+        std::vector<std::function<std::string(forms::RowState const&)>> perRow;
         for (GridColumn const& column : _columns) {
+            if (column.fieldOf) {
+                // A member per row: the kind varies, so the column sorts and filters the drafts as text.
+                infos.push_back(table::ColumnInfo{.id = column.id, .kind = table::ColumnKind::Text});
+                members.emplace_back();
+                perRow.push_back(column.fieldOf);
+                continue;
+            }
             auto const member = std::ranges::find(array.spec().children, column.field, &forms::FieldSpec::name);
             if (!column.field.empty() && member != array.spec().children.end()) {
                 infos.push_back(table::ColumnInfo{.id = column.id, .kind = detail::columnKindOf(member->kind)});
                 members.push_back(column.field);
+                perRow.emplace_back();
             }
         }
-        _rowsSource = std::make_shared<FormRowsSource>(form, _arrayPath, std::move(infos), std::move(members));
+        _rowsSource =
+            std::make_shared<FormRowsSource>(form, _arrayPath, std::move(infos), std::move(members), std::move(perRow));
         _rows = std::make_unique<GridRows>(_rowsSource);
+        if (std::ranges::any_of(_columns, [](GridColumn const& column) {
+                return column.decimals || column.unit || column.options || column.placeholder;
+            })) {
+            _overlays = std::make_unique<reactive::Effect>(form.runtime(), [this] { applyOverlays(); });
+        }
     }
 
     FormGridSource(FormGridSource const&) = delete;
@@ -694,18 +740,25 @@ public:
     /// @param visible The column ids.
     void setLayout(std::vector<std::string> visible) { _layout = std::move(visible); }
 
-    /// @brief A cell's field.
+    /// @brief A cell's field: the member its column names, or the one `GridColumn::fieldOf` names for the row.
+    ///        Tracked through `fieldOf`.
     /// @param row    The row's key.
     /// @param column The column's id.
-    /// @return The field; null for a display column, an unknown column, or a row the field does not hold.
+    /// @return The field; null for a display column, an unknown column, a row the field does not hold, or a name
+    ///         `fieldOf` gives that is no member.
     [[nodiscard]] forms::FieldState* field(Key const& row, std::string_view column) const {
         GridColumn const* const declared = columnOf(column);
-        if (declared == nullptr || declared->field.empty()) {
+        if (declared == nullptr || !edits(*declared)) {
             return nullptr;
         }
         forms::RowState* const held = _rowsSource->row(row);
-        return held == nullptr ? nullptr : held->field(declared->field);
+        return held == nullptr ? nullptr : memberOf(*declared, *held);
     }
+
+    /// @brief A row by its key.
+    /// @param row The row's key.
+    /// @return The row; null for one the field does not hold.
+    [[nodiscard]] forms::RowState* rowOf(Key const& row) const { return _rowsSource->row(row); }
 
     /// @brief The forms control of the cell's field.
     /// @param key    The row's key.
@@ -734,7 +787,14 @@ public:
     /// @return `true` when read-only.
     [[nodiscard]] bool readOnly(Key const& key, std::string_view column) const override {
         GridColumn const* const declared = columnOf(column);
-        return cellReadOnly(CellFacts{.field = field(key, column), .hasEdit = declared != nullptr && !declared->field.empty()});
+        bool overlay = false;
+        if (declared != nullptr && declared->readonly) {
+            forms::RowState const* const held = _rowsSource->row(key);
+            overlay = held != nullptr && declared->readonly(*held);
+        }
+        return cellReadOnly(CellFacts{.field = field(key, column),
+                                      .hasEdit = declared != nullptr && edits(*declared),
+                                      .overlayReadOnly = overlay});
     }
 
     /// @brief No cell of a grid of a form is covered.
@@ -766,7 +826,7 @@ public:
         if (declared == nullptr) {
             return {};
         }
-        if (declared->field.empty()) {
+        if (!edits(*declared)) {
             forms::RowState const* const held = _rowsSource->row(key);
             return held != nullptr && declared->value ? declared->value(*held) : std::string{};
         }
@@ -817,26 +877,49 @@ public:
         }
     }
 
-    /// @brief An edit is meant; tells the observer `onCommitted` gave.
+    /// @brief An edit is meant: the form's derived values follow (`forms::FormSession::noteCommit`), then the observer
+    ///        `onCommitted` gave is told.
     void committed() override {
+        _form->noteCommit();
         if (_committed) {
             _committed();
         }
     }
 
+    /// @brief A cell's editor opened: its field fetches its options from now on (`forms::FieldState::openOptions`).
+    /// @param key    The row's key.
+    /// @param column The column's id.
+    void editorOpened(Key const& key, std::string_view column) override {
+        if (forms::FieldState* const state = field(key, column)) {
+            state->openOptions();
+        }
+    }
+
+    /// @brief Whether the form's last round of derived values failed. Tracked.
+    /// @return `true` while `forms::FormSession::deriveState` is `Failed`.
+    [[nodiscard]] bool deriveFailed() const override { return _form->deriveState() == forms::DeriveState::Failed; }
+
+    /// @brief Makes one more round of the form's derived values (`forms::FormSession::recalculate`).
+    void recalculate() override { _form->recalculate(); }
+
     /// @brief Calls @p observer at the end of each `committed`: a test seam.
     /// @param observer The observer; empty for none.
     void onCommitted(std::function<void()> observer) { _committed = std::move(observer); }
 
-    /// @brief The cell's marks: read-only, modified, and not encoding. Tracked.
+    /// @brief The cell's marks: read-only, modified, and not encoding; a computed or derived member's cell muted while
+    ///        a round of derived values is in flight, and stale after one failed. Tracked.
     /// @param key    The row's key.
     /// @param column The column's id.
     /// @return The marks.
     [[nodiscard]] CellMarks marks(Key const& key, std::string_view column) const override {
         forms::FieldState const* const state = field(key, column);
+        bool const derived = state != nullptr && (state->spec().computed || state->spec().derived);
+        forms::DeriveState const round = derived ? _form->deriveState() : forms::DeriveState::Current;
         return CellMarks{.readOnly = readOnly(key, column),
                          .modified = state != nullptr && _form->modified(state->path()),
-                         .error = error(key, column).has_value()};
+                         .error = error(key, column).has_value(),
+                         .stale = round == forms::DeriveState::Failed,
+                         .muted = round == forms::DeriveState::Running};
     }
 
     /// @brief The key a grid's record holds in `#key`.
@@ -931,6 +1014,13 @@ public:
             return std::nullopt;
         }
         table::TableColumn shown;
+        GridColumn const* const declared = columnOf(column);
+        if (declared != nullptr && declared->fieldOf) {
+            // The rows' column holds the draft as text, whatever the row's member is.
+            shown.info = table::ColumnInfo{.id = std::string{column}, .kind = table::ColumnKind::Text};
+            std::string const draft = state->draft();
+            return std::pair{draft.empty() ? table::Cell{} : table::Cell{draft}, shown};
+        }
         shown.info = table::ColumnInfo{.id = std::string{column}, .kind = detail::columnKindOf(state->spec().kind)};
         return std::pair{detail::memberCell(*state, shown.info.kind), shown};
     }
@@ -941,12 +1031,60 @@ private:
         return found == _columns.end() ? nullptr : &*found;
     }
 
+    // A column with an edit: a member it names, or one per row.
+    [[nodiscard]] static bool edits(GridColumn const& column) { return column.fieldOf || !column.field.empty(); }
+
+    // The member a column edits in a row; null for none.
+    [[nodiscard]] static forms::FieldState* memberOf(GridColumn const& column, forms::RowState const& row) {
+        if (column.fieldOf) {
+            return row.field(column.fieldOf(row));
+        }
+        return column.field.empty() ? nullptr : row.field(column.field);
+    }
+
+    // The columns' overlays per row, onto each row's member: its places, its entry unit, its options and its
+    // placeholder. Rerun when a row, an overlay's reads or the member a row's column edits changes.
+    void applyOverlays() {
+        for (auto const& row : _rowsSource->array().rows()) {
+            for (GridColumn const& column : _columns) {
+                forms::FieldState* const state = memberOf(column, *row);
+                if (state == nullptr) {
+                    continue;
+                }
+                std::optional<std::uint32_t> const places = column.decimals ? column.decimals(*row) : std::nullopt;
+                std::optional<std::string> const unit = column.unit ? column.unit(*row) : std::nullopt;
+                std::optional<std::vector<std::string>> options =
+                    column.options ? column.options(*row) : std::nullopt;
+                std::string placeholder = column.placeholder ? column.placeholder(*row) : std::string{};
+                _form->runtime().untracked([&] {
+                    if (column.decimals && state->places().peek() != places) {
+                        state->places().set(places);
+                    }
+                    if (unit) {
+                        std::vector<forms::UnitOption> const& units = state->spec().units;
+                        auto const found = std::ranges::find(units, *unit, &forms::UnitOption::id);
+                        auto const index = static_cast<std::size_t>(found - units.begin());
+                        if (found != units.end() && state->unit().peek() != index) {
+                            state->unit().set(index);
+                        }
+                    }
+                    if (column.options) {
+                        state->narrowOptions(std::move(options));
+                    }
+                    if (column.placeholder) {
+                        state->overridePlaceholder(std::move(placeholder));
+                    }
+                });
+            }
+        }
+    }
+
     template <typename Test>
     [[nodiscard]] std::size_t countCells(Test test) const {
         std::size_t count = 0;
         for (auto const& row : _rowsSource->array().rows()) {
             for (GridColumn const& column : _columns) {
-                forms::FieldState const* const state = column.field.empty() ? nullptr : row->field(column.field);
+                forms::FieldState const* const state = memberOf(column, *row);
                 count += state != nullptr && test(*state) ? 1 : 0;
             }
         }
@@ -964,6 +1102,7 @@ private:
     std::unique_ptr<GridRows> _rows;
     std::function<void()> _committed;
     std::optional<std::size_t> _hook;
+    std::unique_ptr<reactive::Effect> _overlays;
 };
 
 /// @brief A grid's focus, its cell editor and its walk over a `GridSource`, and the table node that shows them.
@@ -1068,6 +1207,7 @@ public:
         _kept = _source->draft(cell.key, cell.column);
         _source->holdRow(cell.key);
         _editing.set(cell);
+        _source->editorOpened(cell.key, cell.column);
     }
 
     /// @brief The cell whose editor is open. Tracked.
@@ -1169,6 +1309,7 @@ public:
         _source->holdRow(focused->key);
         _source->write(focused->key, focused->column, std::string{text});
         _editing.set(*focused);
+        _source->editorOpened(focused->key, focused->column);
     }
 
     /// @brief Focus left the table: an open editor is committed.
@@ -1205,17 +1346,33 @@ public:
     /// @return The entries.
     [[nodiscard]] std::vector<StatusEntry> const& messageEntries() const { return _messageEntries.get(); }
 
-    /// @brief A state that lasts while its source holds. Tracked.
+    /// @brief A state that lasts while its source holds: `kDeriveFailedText` while the source's last round of derived
+    ///        values failed, until a round succeeds. Tracked.
     /// @return The text; empty for none.
-    [[nodiscard]] std::string standing() const { return _standing.get(); }
+    [[nodiscard]] std::string standing() const {
+        if (_source->deriveFailed()) {
+            return std::string{kDeriveFailedText};
+        }
+        return _standing.get();
+    }
 
-    /// @brief The choices the standing state offers. Tracked.
+    /// @brief The choices the standing state offers: "Recalculate" (`recalculate`) while a round of derived values
+    ///        failed. Tracked.
     /// @return The entries.
-    [[nodiscard]] std::vector<StatusEntry> standingEntries() const { return _standingEntries.get(); }
+    [[nodiscard]] std::vector<StatusEntry> standingEntries() const {
+        if (_source->deriveFailed()) {
+            return {StatusEntry{.id = "recalculate", .label = "Recalculate"}};
+        }
+        return _standingEntries.get();
+    }
 
-    /// @brief An entry chosen in the status line.
+    /// @brief An entry chosen in the status line: `recalculate` makes one more round of derived values.
     /// @param id The entry's id; one the grid does not offer is ignored.
-    void chooseEntry(std::string_view id) { static_cast<void>(id); }
+    void chooseEntry(std::string_view id) {
+        if (id == "recalculate") {
+            _source->recalculate();
+        }
+    }
 
     /// @brief The grid's entries of a cell's menu: "Revert cell", enabled while the cell is modified, and "Revert row",
     ///        enabled while the row is modified, each restoring the loaded value and then committing once.
@@ -1354,6 +1511,8 @@ public:
 
     /// @brief The status line's refusal of typing on a read-only cell.
     static constexpr std::string_view kReadOnlyText = "This cell is read-only";
+    /// @brief The standing state while a round of derived values failed.
+    static constexpr std::string_view kDeriveFailedText = "Derived values could not be recalculated";
 
 private:
     // Lets go of the row an editor was open on, once no editor is open: the sort and the filter place it again.

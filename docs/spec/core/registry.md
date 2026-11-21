@@ -645,7 +645,9 @@ class ActionDispatcher {
 
 - `evaluate` runs the gates `dispatch` runs, as checks rather than refusals,
   and never `Model::execute`: it decodes the body, reconciles `Quantity`
-  precision, recomputes the computed fields, and returns an `Evaluation` — the
+  precision, clears the derived members (`forms::clearDerived`), recomputes the
+  computed fields — a row type's own, in each element of a `std::vector`
+  member, before the action's — and returns an `Evaluation` — the
   recomputed body (`ActionTraits<Action>::toJson`), `forms::fieldErrors` of
   it, and `ready`, whether `dispatch` would execute it (every `Quantity` within
   its unit's bounds, and `ActionValidator<Action>::ready`). No model instance,
@@ -659,8 +661,13 @@ class ActionDispatcher {
   `Quantity` fields to their declared precision, rejects any `Quantity` field
   outside its unit's declared bounds (`morph::forms::enforceQuantityBounds`,
   throwing `QuantityDecodeError`; a no-op for actions with no `Quantity`
-  members or whose units declare no `bounds()`), overwrites any declared
-  computed fields from their inputs (`morph::forms::recomputeAll`,
+  members or whose units declare no `bounds()`), value-initialises every
+  derived member (`morph::forms::clearDerived`, `forms/derive.hpp`: a member its
+  type's field metadata marks `derived()`, in the action and in each element of
+  its `std::vector` members — the model's to set, so a value a client sent is
+  never the one kept), overwrites any declared
+  computed fields from their inputs (`morph::forms::recomputeAll`, the rows'
+  own first,
   [forms.md](../forms/forms.md) — a no-op for actions with no
   `computedFields`; runs after precision reconciliation and bounds
   enforcement and before the validator check, so the validator sees the
@@ -1790,6 +1797,13 @@ read through `detail::recordRegistry()`.
   `localOp`, which enforces the same `ValidationError` gate as this spec's
   `ActionDispatcher::registerAction` for the local execution path and performs
   the same computed-field recompute (`morph::forms::recomputeAll`) for it.
+- **Derive actions.** A form's derive action is an ordinary action of the
+  form's model whose input derives from `forms::DeriveOf<A>` (its JSON
+  `{"body": <the form's body as far as it encodes>}`, through the in-class glaze
+  meta the deriving type inherits) and whose result is `forms::Derived`
+  (`{"values": [{"path": "specimens[3].limit", "value": …}]}`). The application
+  registers it as `Loggable::No` with no effects, so a derive call is a read
+  ([../table/editing.md](../table/editing.md#derived-values)).
 - **[forms.md](../forms/forms.md)** — `allRequiredEngaged`; the closed
   cross-field rule vocabulary (`allRulesSatisfied`, `x-rules`) that composes
   into `validate()` alongside it; and `computed`/`computeList`/`recomputeAll`,

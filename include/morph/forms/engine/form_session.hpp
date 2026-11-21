@@ -28,12 +28,14 @@
 #include <vector>
 
 #include "../../attributes.hpp"
+#include "../../core/callback_scope.hpp"
 #include "../../core/completion.hpp"
 #include "../../reactive/control.hpp"
 #include "../../reactive/runtime.hpp"
 #include "../../reactive/signal.hpp"
 #include "../../render/i18n.hpp"
 #include "../../render/locale_format.hpp"
+#include "../derive.hpp"
 #include "../i18n.hpp"
 #include "detail/text.hpp"
 #include "field_model.hpp"
@@ -183,7 +185,56 @@ public:
     /// @return A lookup reading each named field's encoding.
     [[nodiscard]] RuleLookup lookup() const;
 
+    /// @brief Fetches a Choice's options through the fetcher, once per `(optionsAction, request)` for the session's
+    ///        life: a second ask for a pair joins the fetch in flight or takes its reply. A failed fetch is not kept,
+    ///        so the next ask fetches again.
+    /// @param action  The options action.
+    /// @param request The request body.
+    /// @return The reply, delivered on the runtime's owner.
+    [[nodiscard]] async::Completion<std::string> sharedChoices(std::string const& action, std::string request) {
+        std::string const key = action + '\n' + request;
+        auto [completion, promise] = async::Completion<std::string>::makeSettleable(&_rt->owner());
+        auto& fetches = *_fetches;
+        if (auto const found = fetches.find(key); found != fetches.end()) {
+            if (found->second->reply) {
+                promise.resolve(*found->second->reply);
+            } else {
+                found->second->waiting.push_back(std::move(promise));
+            }
+            return std::move(completion);
+        }
+        auto fetch = std::make_shared<SharedFetch>();
+        fetch->waiting.push_back(std::move(promise));
+        fetches.emplace(key, fetch);
+        std::weak_ptr<Fetches> const weak = _fetches;
+        _choices(action, std::move(request))
+            .then([fetch](std::string const& reply) {
+                fetch->reply = reply;
+                for (auto& waiter : std::exchange(fetch->waiting, {})) {
+                    waiter.resolve(reply);
+                }
+            })
+            .onError([fetch, weak, key](std::exception_ptr const& error) {
+                if (auto const held = weak.lock()) {
+                    if (auto const found = held->find(key); found != held->end() && found->second == fetch) {
+                        held->erase(found);
+                    }
+                }
+                for (auto& waiter : std::exchange(fetch->waiting, {})) {
+                    waiter.reject(error);
+                }
+            });
+        return std::move(completion);
+    }
+
 private:
+    // One shared options fetch: its reply once it arrived, and who waits for it until then.
+    struct SharedFetch {
+        std::optional<std::string> reply;
+        std::vector<async::Completion<std::string>::Promise> waiting;
+    };
+    using Fetches = std::map<std::string, std::shared_ptr<SharedFetch>, std::less<>>;
+
     reactive::Runtime* _rt;
     FormModel _model;
     ChoiceFetcher _choices;
@@ -194,6 +245,7 @@ private:
     reactive::Signal<std::uint64_t> _texts;
     std::function<void()> _programmatic;
     std::vector<std::unique_ptr<FieldState>> const* _fields = nullptr;
+    std::shared_ptr<Fetches> _fetches = std::make_shared<Fetches>();
 };
 
 }  // namespace detail::engine
@@ -259,6 +311,8 @@ public:
           _unit{core.runtime(), spec.entryUnit},
           _places{core.runtime(), std::optional<std::uint32_t>{}},
           _engaged{core.runtime(), false},
+          _opened{core.runtime(), false},
+          _narrow{core.runtime(), std::optional<std::vector<std::string>>{}},
           _rows{core.runtime(), std::vector<std::shared_ptr<RowState>>{}},
           _encoded{core.runtime(), [this] { return computeEncoding(); }},
           _error{core.runtime(),
@@ -279,7 +333,8 @@ public:
                    }},
           _readonly{core.runtime(),
                     [this] {
-                        if (_spec->readOnly || _spec->computed || (_parent != nullptr && _parent->readonly().get())) {
+                        if (_spec->readOnly || _spec->computed || _spec->derived ||
+                            (_parent != nullptr && _parent->readonly().get())) {
                             return true;
                         }
                         return _parent == nullptr &&
@@ -289,7 +344,21 @@ public:
                         return _spec->required ||
                                (_parent == nullptr &&
                                 requiredVerdict(_core->model().rules(), _spec->name, _core->lookup()) == Tri::True);
-                    }} {
+                    }},
+          _offered{core.runtime(), [this] {
+                       std::vector<ChoiceOption> const& all = _fetched ? _fetched->get() : _spec->enumOptions;
+                       std::optional<std::vector<std::string>> const& keep = _narrow.get();
+                       if (!keep.has_value()) {
+                           return all;
+                       }
+                       std::vector<ChoiceOption> kept;
+                       for (ChoiceOption const& option : all) {
+                           if (std::ranges::find(*keep, option.valueJson) != keep->end()) {
+                               kept.push_back(option);
+                           }
+                       }
+                       return kept;
+                   }} {
         if (_spec->kind == FieldKind::Object) {
             for (FieldSpec const& child : _spec->children) {
                 _members.push_back(
@@ -379,8 +448,8 @@ public:
     /// @return The visibility computed.
     [[nodiscard]] reactive::Computed<bool> const& visible() const noexcept { return _visible; }
 
-    /// @brief Whether the field is frozen: `x-readonly`, `x-computed`, a frozen parent, or a `readonlyWhen` naming it
-    ///        that is True.
+    /// @brief Whether the field is frozen: `x-readonly`, `x-computed`, `x-derived`, a frozen parent, or a `readonlyWhen`
+    ///        naming it that is True.
     /// @return The read-only computed.
     [[nodiscard]] reactive::Computed<bool> const& readonly() const noexcept { return _readonly; }
 
@@ -423,13 +492,36 @@ public:
     }
 
     /// @brief The selectable options: an Enum's from the schema, a Choice's as last fetched for
-    ///        its current parents. Tracked.
+    ///        its current parents, less those `narrowOptions` leaves out. Tracked.
     /// @return The options; empty for every other kind, and for a Choice with nothing fetched.
-    [[nodiscard]] std::vector<ChoiceOption> const& options() const {
-        if (_fetched) {
-            return _fetched->get();
+    [[nodiscard]] std::vector<ChoiceOption> const& options() const { return _offered.get(); }
+
+    /// @brief Narrows the options `options()` offers to those whose value is listed: a grid column's `options` overlay
+    ///        for the field's row.
+    /// @param keep The option values kept, as their JSON literals; nothing offers every option.
+    void narrowOptions(std::optional<std::vector<std::string>> keep) {
+        if (_narrow.peek() != keep) {
+            _narrow.set(std::move(keep));
         }
-        return _spec->enumOptions;
+    }
+
+    /// @brief Replaces the placeholder: a grid column's `placeholder` overlay for the field's row.
+    /// @param text The placeholder; empty restores the schema's.
+    void overridePlaceholder(std::string text) {
+        _placeholder = text.empty() ? (_spec->placeholder.empty()
+                                           ? defaultPlaceholder(*_spec)
+                                           : resolveSlot(i18n::FieldSlot::Placeholder, _spec->placeholder))
+                                    : std::move(text);
+    }
+
+    /// @brief What an editor of the field runs as it opens: a Choice member of a collection row fetches its options
+    ///        from now on (a column of rows fetches only for the rows a user opens), and a failed fetch is retried
+    ///        (`retryOptions`).
+    void openOptions() {
+        if (!_opened.peek()) {
+            _opened.set(true);
+        }
+        retryOptions();
     }
 
     /// @brief Fetches a Choice's options again when the last fetch failed; does nothing otherwise. What opening its
@@ -494,6 +586,26 @@ public:
         std::uint64_t const key = row->key();
         _core->runtime().batch([&] {
             _rows.mutate([&](auto& rows) { rows.push_back(std::move(row)); });
+            _engaged.set(true);
+        });
+        return key;
+    }
+
+    /// @brief Inserts a blank row into a collection before the row at @p position and engages it. A user action.
+    /// @param position The new row's position; one past the end appends.
+    /// @return The new row's key; 0 when the field is not a collection, or a truncated one.
+    std::uint64_t insertRow(std::size_t position) {
+        if (_spec->kind != FieldKind::ObjectArray || _spec->truncated) {
+            return 0;
+        }
+        auto row = std::make_shared<RowState>(*_core, *_spec, _path, _nextRowKey++, this);
+        row->start();
+        std::uint64_t const key = row->key();
+        _core->runtime().batch([&] {
+            _rows.mutate([&](auto& rows) {
+                auto const at = static_cast<std::ptrdiff_t>(std::min(position, rows.size()));
+                rows.insert(rows.begin() + at, std::move(row));
+            });
             _engaged.set(true);
         });
         return key;
@@ -637,9 +749,14 @@ public:
         }
         if (_spec->kind == FieldKind::Choice && _spec->choice.has_value() && _core->choices()) {
             reactive::Runtime& runtime = _core->runtime();
+            // A row's member shares its fetches with every row asking the same: a column of rows over five materials
+            // fetches five times.
             _optionsQuery = std::make_unique<reactive::Query<std::string, std::string>>(
                 runtime,
-                [this](std::string const& request) { return _core->choices()(_spec->choice->optionsAction, request); },
+                [this](std::string const& request) {
+                    return inRow() ? _core->sharedChoices(_spec->choice->optionsAction, request)
+                                   : _core->choices()(_spec->choice->optionsAction, request);
+                },
                 [this] { return optionsRequest(); });
             _fetched = std::make_unique<reactive::Computed<std::vector<ChoiceOption>>>(runtime, [this] {
                 std::optional<std::string> const& reply = _optionsQuery->value();
@@ -687,17 +804,29 @@ private:
         return literal;
     }
 
-    [[nodiscard]] FieldState* sibling(std::string_view name) const {
-        if (_siblings == nullptr) {
-            return nullptr;
-        }
-        auto const found =
-            std::ranges::find_if(*_siblings, [&](auto const& entry) { return entry->spec().name == name; });
-        return found == _siblings->end() ? nullptr : found->get();
+    // A member of a collection row.
+    [[nodiscard]] bool inRow() const noexcept {
+        return _parent != nullptr && _parent->spec().kind == FieldKind::ObjectArray;
     }
 
-    /// The options request for the current parents, or nullopt while one does not encode.
+    // A field `x-optionsDependsOn` names: a sibling first (a row's member, an object's member), then a top-level field.
+    [[nodiscard]] FieldState* sibling(std::string_view name) const {
+        if (_siblings != nullptr) {
+            auto const found =
+                std::ranges::find_if(*_siblings, [&](auto const& entry) { return entry->spec().name == name; });
+            if (found != _siblings->end()) {
+                return found->get();
+            }
+        }
+        return _parent != nullptr ? _core->topLevel(name) : nullptr;
+    }
+
+    /// The options request for the current parents, or nullopt while one does not encode, or while a row's member was
+    /// never opened.
     [[nodiscard]] std::optional<std::string> optionsRequest() const {
+        if (inRow() && !_opened.get()) {
+            return std::nullopt;
+        }
         std::string body = "{";
         bool first = true;
         // NOLINTNEXTLINE(bugprone-unchecked-optional-access): only a Choice asks, and a Choice has its spec.
@@ -818,6 +947,8 @@ private:
     reactive::Signal<std::size_t> _unit;
     reactive::Signal<std::optional<std::uint32_t>> _places;
     reactive::Signal<bool> _engaged;
+    reactive::Signal<bool> _opened;
+    reactive::Signal<std::optional<std::vector<std::string>>> _narrow;
     reactive::Signal<std::vector<std::shared_ptr<RowState>>> _rows;
     std::vector<std::unique_ptr<FieldState>> _members;
     reactive::Computed<Encoding> _encoded;
@@ -829,6 +960,8 @@ private:
     std::unique_ptr<reactive::Query<std::string, std::string>> _optionsQuery;
     std::unique_ptr<reactive::Computed<std::vector<ChoiceOption>>> _fetched;
     std::unique_ptr<reactive::Effect> _clearStale;
+    // Last: it reads `_fetched`.
+    reactive::Computed<std::vector<ChoiceOption>> _offered;
 };
 
 inline RowState::RowState(detail::engine::SessionCore& core, FieldSpec const& arraySpec, std::string const& arrayPath,
@@ -908,7 +1041,8 @@ public:
                     [this](std::string body) { return _submit(_core->model().actionType(), std::move(body)); }},
           _attempts{runtime, std::uint64_t{0}},
           _loadGeneration{runtime, std::uint64_t{0}},
-          _refusals{runtime, std::map<std::string, Refused, std::less<>>{}} {
+          _refusals{runtime, std::map<std::string, Refused, std::less<>>{}},
+          _deriveState{runtime, DeriveState::Current} {
         if (!_submit) {
             throw std::invalid_argument{"FormSession: a Submitter is required"};
         }
@@ -1307,6 +1441,145 @@ public:
         });
     }
 
+    /// @brief Asks for derived and computed values in rounds from now on: each commit (`noteCommit`) starts a round once
+    ///        `options.debounce` passed with no further commit, which evaluates the body and calls the derive action.
+    /// @param options The evaluation, the derive call, the timers and the debounce.
+    void deriveWith(DeriveOptions options) {
+        _debounce.cancel();
+        _derive = std::move(options);
+    }
+
+    /// @brief An edit was committed (a grid's cell): with a round in flight its replies are marked stale, so one more
+    ///        round follows them; otherwise a round starts once the debounce passed with no further commit, at once
+    ///        when there are no timers. Does nothing until `deriveWith` gave an evaluation or a derive call.
+    void noteCommit() {
+        if (!_derive.evaluate && !_derive.derive) {
+            return;
+        }
+        if (_round) {
+            _round->stale = true;
+            return;
+        }
+        if (_derive.scheduler == nullptr) {
+            startRound();
+            return;
+        }
+        _debounce = _derive.scheduler->after(_derive.debounce, _deriveScope.guard([this] { startRound(); }));
+    }
+
+    /// @brief Makes one more round at once, unless one is in flight: what "Recalculate" runs after a failed round.
+    void recalculate() {
+        if (!_round && (_derive.evaluate || _derive.derive)) {
+            _debounce.cancel();
+            startRound();
+        }
+    }
+
+    /// @brief Where the derived values stand. Tracked.
+    /// @return `Running` while a round is in flight, `Failed` after a round whose evaluation or derive call failed,
+    ///         else `Current`.
+    [[nodiscard]] DeriveState deriveState() const { return _deriveState.get(); }
+
+    /// @brief The body as far as it encodes: every top-level field that encodes; an Object or a collection member by
+    ///        member, leaving out a member that is blank or does not encode; every row of a collection written, in
+    ///        order, `{}` for a row with nothing. Untracked.
+    /// @return The JSON body.
+    [[nodiscard]] std::string partialBody() const {
+        return runtime().untracked([&] {
+            std::string json = "{";
+            bool first = true;
+            for (auto const& field : _fields) {
+                std::optional<std::string> literal = partialOf(*field);
+                if (!literal) {
+                    continue;
+                }
+                json += (first ? "" : ",") + detail::engine::quote(field->spec().name) + ":" + *literal;
+                first = false;
+            }
+            return json + "}";
+        });
+    }
+
+    /// @brief Starts a round's record: the next sequence, `partialBody()`, and the row keys of every collection by its
+    ///        `FieldState::path()`, in the order the body writes the rows. Untracked.
+    /// @return The round.
+    [[nodiscard]] DeriveRound captureRound() {
+        DeriveRound round;
+        round.sequence = ++_sequence;
+        round.body = partialBody();
+        runtime().untracked([&] {
+            for (auto const& field : _fields) {
+                collectRowKeys(*field, round.rowKeys);
+            }
+        });
+        return round;
+    }
+
+    /// @brief Loads a derive reply's values: each path names a derived member (`x-derived`) of the body @p round sent,
+    ///        `rows[i]` resolved through the row keys at sending to the row's current position, so a value lands on the
+    ///        row it was computed for; a value for a row removed since is dropped. Programmatic: nothing is submitted,
+    ///        and no field's loaded snapshot moves. A round older than the last loaded derive reply loads nothing.
+    /// @param round The round the reply answers.
+    /// @param reply The reply.
+    /// @return How many members were written, and the paths refused: those naming no derived member.
+    DeriveLoad loadDerived(DeriveRound const& round, Derived const& reply) {
+        DeriveLoad load;
+        if (round.sequence < _derivedLoaded) {
+            return load;
+        }
+        _derivedLoaded = round.sequence;
+        runtime().batch([&] {
+            for (Derived::Value const& value : reply.values) {
+                Resolved const target = resolve(round, value.path);
+                if (target.kind == Resolved::Kind::Dropped) {
+                    continue;
+                }
+                if (target.kind == Resolved::Kind::Missing || !target.field->spec().derived ||
+                    isComposite(target.field->spec())) {
+                    load.refused.push_back(value.path);
+                    continue;
+                }
+                auto const dom = detail::engine::parseJson(value.value.str);
+                if (!dom) {
+                    load.refused.push_back(value.path);
+                    continue;
+                }
+                target.field->load(&*dom);
+                ++load.loaded;
+            }
+            _core->markProgrammatic();
+        });
+        return load;
+    }
+
+    /// @brief Loads an evaluation's recomputed body: every computed member (`x-computed`) of the body @p round sent,
+    ///        rows resolved as `loadDerived(round, Derived)` resolves them; a computed member the body leaves out of an
+    ///        object it holds is blank. The reply's `errors` and `ready` are not read. Programmatic, and no loaded
+    ///        snapshot moves. A round older than the last loaded evaluation loads nothing.
+    /// @param round         The round the reply answers.
+    /// @param evaluatedBody The recomputed body.
+    /// @return How many members were written; nothing is refused, since only computed members are read.
+    DeriveLoad loadDerived(DeriveRound const& round, std::string_view evaluatedBody) {
+        DeriveLoad load;
+        if (round.sequence < _evaluationLoaded) {
+            return load;
+        }
+        auto const dom = detail::engine::parseJson(evaluatedBody);
+        if (!dom || !dom->is_object()) {
+            return load;
+        }
+        _evaluationLoaded = round.sequence;
+        runtime().batch([&] {
+            runtime().untracked([&] {
+                for (auto const& field : _fields) {
+                    loadComputed(round, *field, *dom, load);
+                }
+            });
+            _core->markProgrammatic();
+        });
+        return load;
+    }
+
     /// @brief Whether a submission is in flight. Tracked.
     /// @return `true` while one is.
     [[nodiscard]] bool pending() const { return _mutation.pending(); }
@@ -1512,7 +1785,7 @@ private:
     [[nodiscard]] bool modified(FieldState const& state) const {
         FieldSpec const& spec = state.spec();
         if (spec.truncated || spec.kind == FieldKind::Object || spec.kind == FieldKind::ObjectArray ||
-            spec.computed) {
+            spec.computed || spec.derived) {
             return false;
         }
         static_cast<void>(_loadGeneration.get());
@@ -1623,6 +1896,252 @@ private:
         });
     }
 
+    [[nodiscard]] static bool isComposite(FieldSpec const& spec) noexcept {
+        return spec.truncated || spec.kind == FieldKind::Object || spec.kind == FieldKind::ObjectArray;
+    }
+
+    // What one field adds to the partial body: a scalar's encoding, an object's or a collection's members that encode;
+    // nothing for a blank field or one that does not encode.
+    // NOLINTNEXTLINE(misc-no-recursion): an Object's members and a row's are fields.
+    [[nodiscard]] static std::optional<std::string> partialOf(FieldState const& field) {
+        FieldSpec const& spec = field.spec();
+        auto const membersOf = [](std::span<std::unique_ptr<FieldState> const> members) {
+            std::string json = "{";
+            bool first = true;
+            for (auto const& member : members) {
+                if (std::optional<std::string> literal = partialOf(*member)) {
+                    json += (first ? "" : ",") + detail::engine::quote(member->spec().name) + ":" + *literal;
+                    first = false;
+                }
+            }
+            return json + "}";
+        };
+        if (!spec.truncated && spec.kind == FieldKind::Object) {
+            std::string json = membersOf(field.members());
+            return json == "{}" ? std::nullopt : std::optional{json};
+        }
+        if (!spec.truncated && spec.kind == FieldKind::ObjectArray && !field.rows().empty()) {
+            std::string json = "[";
+            bool first = true;
+            for (auto const& row : field.rows()) {
+                json += (first ? "" : ",") + membersOf(row->fields());
+                first = false;
+            }
+            return json + "]";
+        }
+        Encoding const& encoding = field.encoded().get();
+        if (encoding.has_value() && encoding->has_value()) {
+            return (*encoding)->json;
+        }
+        if (!encoding.has_value() && spec.blankAs == BlankAs::Empty &&
+            const_cast<FieldState&>(field).engaged().get()) {  // NOLINT(cppcoreguidelines-pro-type-const-cast)
+            return std::string{R"("")"};
+        }
+        return std::nullopt;
+    }
+
+    // Every collection's row keys, by its path, in order, its rows' own collections included.
+    // NOLINTNEXTLINE(misc-no-recursion): an Object's members and a row's are fields.
+    static void collectRowKeys(FieldState const& field, std::map<std::string, std::vector<std::uint64_t>, std::less<>>& out) {
+        FieldSpec const& spec = field.spec();
+        if (spec.truncated) {
+            return;
+        }
+        if (spec.kind == FieldKind::Object) {
+            for (auto const& member : field.members()) {
+                collectRowKeys(*member, out);
+            }
+        } else if (spec.kind == FieldKind::ObjectArray) {
+            std::vector<std::uint64_t>& keys = out[field.path()];
+            for (auto const& row : field.rows()) {
+                keys.push_back(row->key());
+                for (auto const& member : row->fields()) {
+                    collectRowKeys(*member, out);
+                }
+            }
+        }
+    }
+
+    // Where a reply's path lands: a field, a row removed since the round was sent, or nothing the body held.
+    struct Resolved {
+        enum class Kind : std::uint8_t { Found, Dropped, Missing } kind = Kind::Missing;
+        FieldState* field = nullptr;
+    };
+
+    // Resolves `name`, `parent.member` and `rows[i].member` against the body @p round sent: `rows[i]` is the row whose
+    // key was i-th when it was sent, wherever it is now.
+    // NOLINTNEXTLINE(readability-function-cognitive-complexity): one case per segment's form.
+    [[nodiscard]] Resolved resolve(DeriveRound const& round, std::string_view path) const {
+        return runtime().untracked([&] {
+            std::span<std::unique_ptr<FieldState> const> scope = _fields;
+            FieldState* current = nullptr;
+            std::string_view rest = path;
+            while (!rest.empty()) {
+                auto const dot = rest.find('.');
+                std::string_view segment = rest.substr(0, dot);
+                rest = dot == std::string_view::npos ? std::string_view{} : rest.substr(dot + 1);
+                std::optional<std::size_t> index;
+                if (auto const bracket = segment.find('['); bracket != std::string_view::npos) {
+                    if (!segment.ends_with(']')) {
+                        return Resolved{};
+                    }
+                    index = rowIndexOf(segment.substr(bracket + 1, segment.size() - bracket - 2));
+                    if (!index) {
+                        return Resolved{};
+                    }
+                    segment = segment.substr(0, bracket);
+                }
+                auto const found =
+                    std::ranges::find_if(scope, [&](auto const& entry) { return entry->spec().name == segment; });
+                if (found == scope.end()) {
+                    return Resolved{};
+                }
+                current = found->get();
+                if (index) {
+                    if (current->spec().kind != FieldKind::ObjectArray || rest.empty()) {
+                        return Resolved{};
+                    }
+                    auto const sent = round.rowKeys.find(current->path());
+                    if (sent == round.rowKeys.end() || *index >= sent->second.size()) {
+                        return Resolved{};
+                    }
+                    auto const& rows = current->rows();
+                    auto const row = std::ranges::find(rows, sent->second.at(*index), &RowState::key);
+                    if (row == rows.end()) {
+                        return Resolved{.kind = Resolved::Kind::Dropped, .field = nullptr};
+                    }
+                    scope = (*row)->fields();
+                } else {
+                    scope = current->members();
+                    if (!rest.empty() && scope.empty()) {
+                        return Resolved{};
+                    }
+                }
+            }
+            return current == nullptr ? Resolved{} : Resolved{.kind = Resolved::Kind::Found, .field = current};
+        });
+    }
+
+    // Loads the computed members under one field from the recomputed body's value for it: a scalar's when computed, an
+    // object's members, a collection's rows by the keys they had when the round was sent.
+    // NOLINTNEXTLINE(misc-no-recursion): an Object's members and a row's are fields.
+    static void loadComputedIn(DeriveRound const& round, std::span<std::unique_ptr<FieldState> const> members,
+                               detail::engine::Json const& object, DeriveLoad& load) {
+        for (auto const& member : members) {
+            loadComputed(round, *member, object, load);
+        }
+    }
+
+    // NOLINTNEXTLINE(misc-no-recursion): an Object's members and a row's are fields.
+    static void loadComputed(DeriveRound const& round, FieldState& field, detail::engine::Json const& object,
+                             DeriveLoad& load) {
+        FieldSpec const& spec = field.spec();
+        if (spec.truncated) {
+            return;
+        }
+        detail::engine::Json const* const value = detail::engine::member(object, spec.name);
+        if (spec.kind == FieldKind::Object) {
+            if (value != nullptr && value->is_object()) {
+                loadComputedIn(round, field.members(), *value, load);
+            }
+            return;
+        }
+        if (spec.kind == FieldKind::ObjectArray) {
+            auto const sent = round.rowKeys.find(field.path());
+            if (value == nullptr || !value->is_array() || sent == round.rowKeys.end()) {
+                return;
+            }
+            auto const& elements = value->get_array();
+            auto const& rows = field.rows();
+            for (std::size_t at = 0; at < elements.size() && at < sent->second.size(); ++at) {
+                auto const row = std::ranges::find(rows, sent->second.at(at), &RowState::key);
+                if (row != rows.end() && elements.at(at).is_object()) {
+                    loadComputedIn(round, (*row)->fields(), elements.at(at), load);
+                }
+            }
+            return;
+        }
+        if (spec.computed) {
+            field.load(value);
+            ++load.loaded;
+        }
+    }
+
+    // One round in flight: what it sent, which replies settled, whether one failed, and whether a commit came since.
+    struct InFlight {
+        DeriveRound round;
+        bool evaluated = false;
+        bool derived = false;
+        bool failed = false;
+        bool stale = false;
+    };
+
+    // Sends a round: the evaluation and the derive call, each with the partial body.
+    void startRound() {
+        _debounce.cancel();
+        _round = InFlight{.round = captureRound()};
+        _round->evaluated = !_derive.evaluate;
+        _round->derived = !_derive.derive;
+        _deriveState.set(DeriveState::Running);
+        std::uint64_t const sequence = _round->round.sequence;
+        std::string const body = _round->round.body;
+        if (_derive.evaluate) {
+            _derive.evaluate(body)
+                .then(_deriveScope.token(),
+                      [this, sequence](std::string const& reply) {
+                          if (_round && _round->round.sequence == sequence) {
+                              static_cast<void>(loadDerived(_round->round, std::string_view{reply}));
+                          }
+                          settled(sequence, true, false);
+                      })
+                .onError(_deriveScope.token(),
+                         [this, sequence](std::exception_ptr const&) { settled(sequence, true, true); });
+        }
+        if (_derive.derive) {
+            _derive.derive(R"({"body":)" + body + "}")
+                .then(_deriveScope.token(),
+                      [this, sequence](std::string const& reply) {
+                          bool failed = false;
+                          if (_round && _round->round.sequence == sequence) {
+                              Derived values;
+                              if (auto const error = glz::read<glz::opts{.error_on_unknown_keys = false}>(values, reply)) {
+                                  failed = true;
+                              } else {
+                                  DeriveLoad const load = loadDerived(_round->round, values);
+                                  if (!load.refused.empty() && _derive.refused) {
+                                      _derive.refused(load.refused);
+                                  }
+                              }
+                          }
+                          settled(sequence, false, failed);
+                      })
+                .onError(_deriveScope.token(),
+                         [this, sequence](std::exception_ptr const&) { settled(sequence, false, true); });
+        }
+        if (_round->evaluated && _round->derived) {
+            settled(sequence, true, false);
+        }
+    }
+
+    // One reply of the round in flight settled; once both did, the state follows, and a stale round makes one more.
+    void settled(std::uint64_t sequence, bool evaluation, bool failed) {
+        if (!_round || _round->round.sequence != sequence) {
+            return;
+        }
+        (evaluation ? _round->evaluated : _round->derived) = true;
+        _round->failed = _round->failed || failed;
+        if (!_round->evaluated || !_round->derived) {
+            return;
+        }
+        bool const stale = _round->stale;
+        bool const anyFailed = _round->failed;
+        _round.reset();
+        _deriveState.set(anyFailed ? DeriveState::Failed : DeriveState::Current);
+        if (stale) {
+            startRound();
+        }
+    }
+
     std::unique_ptr<detail::engine::SessionCore> _core;
     Submitter _submit;
     std::vector<std::unique_ptr<FieldState>> _fields;
@@ -1651,6 +2170,15 @@ private:
     reactive::Signal<std::map<std::string, Refused, std::less<>>> _refusals;
     std::exception_ptr _refusalSeen;
     std::uint64_t _errorsSeenSuccesses = 0;
+    /// @brief How the session asks for derived values, and the round in flight.
+    DeriveOptions _derive;
+    std::optional<InFlight> _round;
+    std::uint64_t _sequence = 0;
+    std::uint64_t _derivedLoaded = 0;
+    std::uint64_t _evaluationLoaded = 0;
+    reactive::Signal<DeriveState> _deriveState;
+    reactive::TimerHandle _debounce;
+    async::CallbackScope _deriveScope;
     std::unique_ptr<reactive::Effect> _autoSubmit;
     std::unique_ptr<reactive::Effect> _acceptSent;
     std::unique_ptr<reactive::Effect> _refused;

@@ -4,10 +4,12 @@
 // (docs/spec/table/editing.md, delivery step 1).
 
 #include <catch2/catch_test_macros.hpp>
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <morph/core/action_refusal.hpp>
+#include <morph/forms/derive.hpp>
 #include <morph/forms/engine/form_session.hpp>
 #include <morph/ui/document.hpp>
 #include <morph/ui/grid.hpp>
@@ -438,6 +440,148 @@ TEST_CASE("grid: the held row is let go when focus leaves, on submit, on a click
     }
 }
 
+// ── Derived values ──────────────────────────────────────────────────────────
+
+using namespace std::chrono_literals;
+std::string const kNoValues = R"({"values":[]})";
+
+// Mutation: loadDerived resolving `specimens[i]` against the current rows (the value lands on the inserted row).
+TEST_CASE("grid: derived values", "[ui][grid][derive]") {
+    GridFixture f{3};
+    f.enableDerive();
+    f.grid->focusCell(at(1, "mass")); f.grid->type("4,00"); f.grid->press("Enter");
+    f.grid->type("abc"); f.grid->press("Enter");                 // (2, mass): does not encode, left out
+    f.scheduler.advance(149ms); f.h.settle();
+    CHECK(f.evaluate.submits().empty());
+    f.scheduler.advance(1ms); f.h.settle();
+    REQUIRE(f.evaluate.submits().size() == 1);
+    REQUIRE(f.derive.submits().size() == 1);
+    CHECK(f.evaluate.submits().at(0).body == R"({"sampleId":1,"specimens":[{"mass":{"num":400,"den":100,"dp":2}},{},{}]})");
+    CHECK(f.derive.submits().at(0).body == R"({"body":{"sampleId":1,"specimens":[{"mass":{"num":400,"den":100,"dp":2}},{},{}]}})");
+    CHECK(f.form->deriveState() == forms::DeriveState::Running);
+    CHECK(f.source->marks(ui::Key{std::int64_t{1}}, "limit").muted);
+
+    f.form->field("specimens").insertRow(1);                                  // above rows 2 and 3
+    f.grid->focusCell(at(2, "note")); f.grid->type("typed"); f.grid->press("Enter");   // a commit during the round
+    f.derive.resolveSubmit(0, R"({"values":[{"path":"specimens[1].limit","value":{"num":7,"den":1,"dp":2}},
+                                            {"path":"specimens[1].note","value":"server"}]})");
+    f.evaluate.resolveSubmit(0, R"({"sampleId":1,"specimens":[{"mass":{"num":400,"den":100,"dp":2},
+                                    "density":{"num":2,"den":1,"dp":3}},{},{}],"errors":{},"ready":true})");
+    f.h.settle();
+    CHECK(f.json("specimens[2].limit") == R"({"num":700,"den":100,"dp":2})");   // row key 2, now at position 2
+    CHECK(f.json("specimens[1].limit").empty());                                // the inserted row is untouched
+    CHECK(f.json("specimens[0].density") == R"({"num":2000,"den":1000,"dp":3})");
+    CHECK(f.form->field("specimens#2.note").draft() == "typed");               // not a derived member: refused
+    CHECK(f.form->modified("specimens#2.note"));
+    CHECK(f.evaluate.submits().size() == 2);                                    // the stale round: one more, at once
+    CHECK(f.derive.submits().size() == 2);
+    f.evaluate.resolveSubmit(1, R"({"errors":{},"ready":false})");
+    f.derive.resolveSubmit(1, kNoValues);
+    f.h.settle();
+    CHECK(f.form->deriveState() == forms::DeriveState::Current);
+
+    // A failed round keeps the values, marks them stale, and Recalculate runs one more.
+    f.grid->focusCell(at(1, "mass")); f.grid->type("5"); f.grid->press("Enter");
+    f.scheduler.advance(150ms); f.h.settle();
+    f.evaluate.rejectSubmit(2, "unreachable");
+    f.derive.resolveSubmit(2, kNoValues);
+    f.h.settle();
+    CHECK(f.form->deriveState() == forms::DeriveState::Failed);
+    CHECK(f.source->marks(ui::Key{std::int64_t{2}}, "limit").stale);
+    CHECK(f.json("specimens[2].limit") == R"({"num":700,"den":100,"dp":2})");
+    CHECK(f.grid->standing() == "Derived values could not be recalculated");
+    CHECK(f.grid->standingEntries() == std::vector<ui::StatusEntry>{{"recalculate", "Recalculate"}});
+    f.grid->chooseEntry("recalculate"); f.h.settle();
+    CHECK(f.evaluate.submits().size() == 4);
+}
+
+// Mutation: loadDerived without the sequence check (the late older reply overwrites 9 with 8).
+TEST_CASE("grid: an older derive reply is ignored", "[ui][grid][derive]") {
+    GridFixture f{2};
+    auto const older = f.form->captureRound();
+    auto const newer = f.form->captureRound();
+    auto const value = [](std::string json) { return forms::Derived{.values = {{"specimens[1].limit", glz::raw_json{std::move(json)}}}}; };
+    CHECK(f.form->loadDerived(newer, value(R"({"num":9,"den":1,"dp":2})")).loaded == 1);
+    CHECK(f.form->loadDerived(older, value(R"({"num":8,"den":1,"dp":2})")).loaded == 0);
+    CHECK(f.json("specimens[1].limit") == R"({"num":900,"den":100,"dp":2})");
+}
+
+// Mutation: loadDerived resolving `specimens[i]` against the current rows. The first row is the one removed, so the
+// mutation writes row 1's value onto row 2, now at position 0, and drops row 2's (a removed last row would pass for
+// the wrong reason: its path falls past the end either way).
+TEST_CASE("grid: a value for a row removed since the call is dropped", "[ui][grid][derive]") {
+    GridFixture f{2};
+    auto const round = f.form->captureRound();                 // rows 1, 2 at sending
+    f.form->field("specimens").removeRow(1);                   // then row 1 goes; row 2 is at position 0
+    auto const load = f.form->loadDerived(round, forms::Derived{.values = {
+        {"specimens[0].limit", glz::raw_json{R"({"num":1,"den":1,"dp":2})"}},
+        {"specimens[1].limit", glz::raw_json{R"({"num":3,"den":1,"dp":2})"}}}});
+    CHECK(load.loaded == 1);
+    CHECK(load.refused.empty());                                 // a removed row is dropped, not refused
+    CHECK(f.json("specimens[0].limit") == R"({"num":300,"den":100,"dp":2})");   // row 2's own value
+    CHECK(f.form->field("specimens").rows().size() == 1);
+}
+
+// Mutation: a derive reply that moves the loaded snapshot of the members it writes.
+TEST_CASE("grid: a derive reply moves no snapshot", "[ui][grid][derive]") {
+    GridFixture f{1};
+    f.grid->focusCell(at(1, "mass")); f.grid->type("4"); f.grid->press("Enter");
+    auto const round = f.form->captureRound();
+    auto const load = f.form->loadDerived(round, forms::Derived{.values = {{"specimens[0].limit", glz::raw_json{R"({"num":1,"den":1,"dp":2})"}},
+                                                                           {"specimens[0].mass",  glz::raw_json{R"({"num":5,"den":1,"dp":2})"}}}});
+    CHECK(load.loaded == 1);
+    CHECK(load.refused == std::vector<std::string>{"specimens[0].mass"});
+    CHECK(f.form->modified("specimens#1.mass"));
+    CHECK(f.form->field("specimens[0].mass").draft() == "4");
+    CHECK_FALSE(f.form->modified("specimens#1.limit"));        // a derived member draws no modified mark
+}
+
+// Mutation: the column's field resolved once for every row.
+TEST_CASE("grid: kind per row", "[ui][grid][derive]") {
+    GridFixture f{morph::test::grid::GridSpec{.schema = std::string{morph::test::grid::kKindPerRow},
+                                              .body = R"({"rows":[{"isChoice":true},{"isChoice":false}]})",
+                                              .array = "rows",
+                                              .columns = morph::test::grid::kindPerRowColumns(),
+                                              .options = {}}};
+    CHECK(f.source->field(ui::Key{std::int64_t{1}}, "value")->spec().kind == forms::FieldKind::Enum);
+    CHECK(f.source->field(ui::Key{std::int64_t{2}}, "value")->spec().kind == forms::FieldKind::Decimal);
+    f.grid->focusCell(at(2, "value")); f.grid->type("3,5"); f.grid->press("Enter");
+    CHECK(f.json("rows[1].amount") == R"({"num":35,"den":10,"dp":1})");
+    f.grid->focusCell(at(1, "mass")); f.grid->type("1,25"); f.grid->press("Enter");
+    REQUIRE(f.form->field("rows[0].mass").error().peek().has_value());
+    CHECK(f.form->field("rows[0].mass").error().peek()->code == "too-precise");
+    f.grid->focusCell(at(2, "mass")); f.grid->type("1,255"); f.grid->press("Enter");
+    CHECK(f.json("rows[1].mass") == R"({"num":1255,"den":1000,"dp":3})");
+}
+
+// Rows whose `grade` options depend on the row's `material` and the form's `site`.
+constexpr std::string_view kChoicesPerRow = R"({"type":"object","title":"Grades","properties":{
+  "site":{"type":["string","null"],"title":"Site","x-order":0},
+  "rows":{"type":"array","title":"Rows","x-order":1,"items":{"type":"object","properties":{
+    "material":{"type":["string","null"],"title":"Material","x-order":0},
+    "grade":{"type":["string","null"],"title":"Grade","x-optionsAction":"Lims_ListGrades",
+             "x-optionsDependsOn":["material","site"],"x-order":1}}}}}})";
+
+// Mutation: a fetch per row (no shared fetch).
+TEST_CASE("grid: choices per row", "[ui][grid][derive]") {
+    GridFixture f{morph::test::grid::GridSpec{
+        .schema = std::string{kChoicesPerRow},
+        .body = R"({"site":"north","rows":[{"material":"A"},{"material":"A"},{"material":"B"},{"material":"B"},)"
+                R"({"material":"C"},{"material":"A"}]})",
+        .array = "rows",
+        .columns = {},
+        .options = {}}};
+    f.h.settle();
+    CHECK(f.h.server.fetches().empty());                     // nothing is fetched before an editor opens
+    for (std::int64_t key = 1; key <= 6; ++key) {
+        f.grid->focusCell(at(key, "grade")); f.grid->press("F2"); f.h.settle(); f.grid->press("Escape");
+    }
+    REQUIRE(f.h.server.fetches().size() == 3);
+    CHECK(f.h.server.fetches().at(0).body == R"({"material":"A","site":"north"})");
+    CHECK(f.h.server.fetches().at(1).body == R"({"material":"B","site":"north"})");
+    CHECK(f.h.server.fetches().at(2).body == R"({"material":"C","site":"north"})");
+}
+
 // ── In a document ───────────────────────────────────────────────────────────
 
 constexpr std::string_view kGridDocument = R"({"vocab":"ui/1","id":"specimens",
@@ -768,6 +912,105 @@ TEST_CASE("grid: a click focuses a cell, a double click opens its editor, focus 
     REQUIRE_FALSE(opened.empty());
     CHECK(g.h.backend.prop(std::stoi(opened), "text") == "8");
     CHECK(g.h.backend.prop(g.table, "keys") == "Enter,Tab,Shift+Tab,Escape,Ctrl+Enter");
+}
+
+// A form with a derive action and a debounce of 40 ms, and a grid whose `value` column edits `volume` in a row whose
+// note is "fine" and `label` in any other, whose `mass` takes three places in such a row and two in any other, and
+// whose `note` is read-only in a row labelled "locked". Its columns by index are mass 0, value 1, limit 2, note 3.
+constexpr std::string_view kDeriveDocument = R"({"vocab":"ui/1","id":"specimens",
+  "models":{"sample":{"type":"Lims_SampleModel"}},
+  "view":{"kind":"column","children":[
+    {"kind":"form","id":"rec","model":"sample","action":"Lims_RecordSpecimens","submit":"explicit",
+     "derive":"Lims_DeriveSpecimens","deriveDebounce":40},
+    {"kind":"table","id":"grid","testId":"t","form":"rec","field":"specimens",
+     "columns":[{"id":"mass","field":"mass","decimals":{"if":[{"fn":"eq","args":[{"fn":"coalesce","args":[{"ref":"row.note"},""]},"fine"]},3,2]}},
+                {"id":"value","field":{"if":[{"fn":"eq","args":[{"fn":"coalesce","args":[{"ref":"row.note"},""]},"fine"]},"note","label"]}},
+                {"id":"limit","field":"limit"},
+                {"id":"note","field":"note","readonly":{"fn":"eq","args":[{"fn":"coalesce","args":[{"ref":"row.label"},""]},"locked"]},
+                 "placeholder":"Remark"}]}]}})";
+
+void addDeriveActions(ui::testing::TableHarness& h) {
+    ui::testing::addAction(h, "Lims_RecordSpecimens", std::string{morph::test::grid::kSpecimens},
+                           ui::ActionInfo{.modelType = "Lims_SampleModel"});
+    ui::testing::addAction(h, "Lims_DeriveSpecimens", R"({"type":"object","properties":{"body":{"type":"object"}}})",
+                           ui::ActionInfo{.modelType = "Lims_SampleModel"});
+}
+
+// Mutations: the lowering not reading `deriveDebounce` (no derive call at 40 ms); a column's member resolved once for
+// every row (row 2's `value` cell shows its label, row 1's member, not its note).
+TEST_CASE("grid: a form's derive action and debounce and a column's member and overlays per row",
+          "[ui][grid][interpreter][derive]") {
+    using namespace std::chrono_literals;
+    ui::testing::TableHarness h;
+    addDeriveActions(h);
+    auto const screen = h.mount(kDeriveDocument);
+    forms::FormSession& form = *ui::testing::elementOf(*screen, "rec").form;
+    form.prefill(R"({"sampleId":4,"specimens":[{},{"label":"locked","note":"fine"}]})");
+    h.settle();
+    int const table = h.byTestId("Table", "t");
+    CHECK(form.field("specimens[0].mass").places().peek() == std::optional<std::uint32_t>{2});
+    CHECK(form.field("specimens[1].mass").places().peek() == std::optional<std::uint32_t>{3});
+    CHECK(ui::testing::cellText(h, 2, "value") == "fine");     // row 2 edits its note
+    CHECK(ui::testing::cellText(h, 1, "value").empty());       // row 1 its label, blank
+    h.backend.clickCell(table, 1, 3);                          // (2, note): read-only in a row labelled "locked"
+    h.settle();
+    h.backend.typeInto(table, "z");
+    h.settle();
+    CHECK(ui::testing::elementValue(h, "grid", "editing") == ui::Value{});
+    h.backend.clickCell(table, 0, 0);                          // (1, mass)
+    h.settle();
+    h.backend.typeInto(table, "1.5");
+    h.settle();
+    h.backend.press(table, "Enter");
+    h.settle();
+    h.advance(39ms);
+    CHECK(h.dispatcher.count("Lims_DeriveSpecimens") == 0);
+    h.advance(1ms);
+    REQUIRE(h.dispatcher.count("Lims_DeriveSpecimens") == 1);
+    std::size_t const derive = h.dispatcher.last("Lims_DeriveSpecimens");
+    CHECK(h.dispatcher.calls.at(derive).body ==
+          R"({"body":{"sampleId":4,"specimens":[{"mass":{"num":150,"den":100,"dp":2}},{"label":"locked","note":"fine"}]}})");
+    std::size_t const evaluation = h.dispatcher.last("Lims_RecordSpecimens");
+    CHECK(h.dispatcher.calls.at(evaluation).options.evaluate);   // density is computed: the action is evaluated
+    h.dispatcher.reply(derive, R"({"values":[{"path":"specimens[1].limit","value":{"num":5,"den":1,"dp":2}},
+                                             {"path":"specimens[0].note","value":"x"}]})");
+    h.dispatcher.reply(evaluation, R"({"sampleId":4,"specimens":[{},{}],"errors":{},"ready":false})");
+    h.settle();
+    CHECK(ui::testing::cellText(h, 2, "limit") == "5.00");
+    CHECK(form.field("specimens[0].note").draft().empty());
+    CHECK(ui::testing::diagnosticsMentioning(h, "names `specimens[0].note`, which is not a derived member") == 1);
+}
+
+// Mutation: the loader taking any `deriveDebounce` (the computed one loads).
+TEST_CASE("grid: the loader checks a form's derive keys and keeps a grid column's keys to grids",
+          "[ui][grid][interpreter][derive]") {
+    ui::testing::TableHarness h;
+    addDeriveActions(h);
+    auto const refusal = [&h](std::string text) {
+        auto const loaded = ui::loadDocumentText(text, ui::LoadOptions{.catalog = h.session.options().catalog});
+        return loaded.has_value() ? std::string{} : loaded.error().reason;
+    };
+    std::string text{kDeriveDocument};
+    CHECK(refusal(text).empty());
+    std::string computed = text;
+    computed.replace(computed.find(R"("deriveDebounce":40)"), std::string_view{R"("deriveDebounce":40)"}.size(),
+                     R"("deriveDebounce":{"ref":"rec.ready"})");
+    CHECK(refusal(computed).find("`deriveDebounce` is a literal count of milliseconds") != std::string::npos);
+    std::string unnamed = text;
+    unnamed.replace(unnamed.find(R"("derive":"Lims_DeriveSpecimens",)"),
+                    std::string_view{R"("derive":"Lims_DeriveSpecimens",)"}.size(), "");
+    CHECK(refusal(unnamed).find("the form names none") != std::string::npos);
+    std::string foreign = text;
+    foreign.replace(foreign.find("Lims_DeriveSpecimens"), std::string_view{"Lims_DeriveSpecimens"}.size(),
+                    "Lims_ClientDerive");   // an action of another model
+    std::string const foreignReason = refusal(foreign);
+    INFO(foreignReason);
+    CHECK(foreignReason.find("belongs to `Lims_ClientModel`") != std::string::npos);
+    constexpr std::string_view kRowsTable = R"({"vocab":"ui/1","id":"plain","state":{"items":{"init":{"lit":[]}}},
+      "view":{"kind":"table","rows":{"ref":"items"},"columns":[{"id":"a","placeholder":"x"}]}})";
+    std::string const plainReason = refusal(std::string{kRowsTable});
+    INFO(plainReason);
+    CHECK(plainReason.find("is a grid column's") != std::string::npos);
 }
 
 }  // namespace

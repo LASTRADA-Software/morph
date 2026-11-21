@@ -2571,6 +2571,8 @@ private:
     Node lowerArrangeEditor(DocNode const& node, LowerCtx const& ctx, std::string const& point,
                             CustomizePoint const& spec, std::function<void(Value)> const& choose);
     void wireForm(ElementState& element);
+    /// A form's rounds of derived values over its alias: its evaluation and its `derive` action.
+    void deriveForm(ElementState& element, ModelAlias* alias);
     Node lowerForm(DocNode const& node, LowerCtx const& ctx, ElementState* element);
     [[nodiscard]] FormSubmitter aliasCalls(ModelAlias* alias);
     [[nodiscard]] FormSubmitter aliasSubmits(ModelAlias* alias, std::string read = {});

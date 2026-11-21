@@ -12,6 +12,7 @@
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <optional>
 #include <unordered_map>
@@ -213,16 +214,21 @@ public:
     /// @param columns   The columns.
     /// @param members   The member of the row type each column reads, by index into @p columns; empty: each column's
     ///                  id names its member.
+    /// @param perRow    For a column whose member varies by row, by index into @p columns, the member's name for a row;
+    ///                  its member in @p members is then empty, and its cell is the member's draft (a `Text` column).
+    ///                  Empty: no column varies.
     /// @throws std::out_of_range when no field has @p arrayPath.
     /// @throws std::invalid_argument when the field is not a collection, @p members is neither empty nor one per
-    ///         column, or a column reads no member.
+    ///         column, @p perRow is neither empty nor one per column, or a column reads no member.
     FormRowsSource(forms::FormSession& form, std::string arrayPath, std::vector<table::ColumnInfo> columns,
-                   std::vector<std::string> members = {})
+                   std::vector<std::string> members = {},
+                   std::vector<std::function<std::string(forms::RowState const&)>> perRow = {})
         : _form{&form},
           _arrayPath{std::move(arrayPath)},
           _array{&form.field(_arrayPath)},
           _columns{std::move(columns)},
-          _members{std::move(members)} {
+          _members{std::move(members)},
+          _perRow{std::move(perRow)} {
         if (_array->spec().kind != forms::FieldKind::ObjectArray || _array->spec().truncated) {
             throw std::invalid_argument{"morph::ui::FormRowsSource: `" + _arrayPath + "` is not a collection"};
         }
@@ -234,7 +240,17 @@ public:
         if (_members.size() != _columns.size()) {
             throw std::invalid_argument{"morph::ui::FormRowsSource: one member per column"};
         }
-        for (std::string const& name : _members) {
+        if (_perRow.empty()) {
+            _perRow.resize(_columns.size());
+        }
+        if (_perRow.size() != _columns.size()) {
+            throw std::invalid_argument{"morph::ui::FormRowsSource: one per-row member reader per column"};
+        }
+        for (std::size_t at = 0; at < _members.size(); ++at) {
+            std::string const& name = _members.at(at);
+            if (_perRow.at(at)) {
+                continue;
+            }
             if (std::ranges::none_of(_array->spec().children,
                                      [&name](forms::FieldSpec const& member) { return member.name == name; })) {
                 throw std::invalid_argument{"morph::ui::FormRowsSource: no member `" + name + "` in `" + _arrayPath +
@@ -405,6 +421,13 @@ private:
                 std::vector<table::Cell> rowCells;
                 rowCells.reserve(_columns.size());
                 for (std::size_t at = 0; at < _columns.size(); ++at) {
+                    if (_perRow.at(at)) {
+                        // A member per row: its kind varies, so the cell is its draft.
+                        forms::FieldState const* const member = row->field(_perRow.at(at)(*row));
+                        std::string const draft = member == nullptr ? std::string{} : member->draft();
+                        rowCells.push_back(draft.empty() ? table::Cell{} : table::Cell{draft});
+                        continue;
+                    }
                     forms::FieldState const* const member = row->field(_members.at(at));
                     rowCells.push_back(member == nullptr ? table::Cell{}
                                                          : detail::memberCell(*member, _columns.at(at).kind));
@@ -440,6 +463,7 @@ private:
     forms::FieldState* _array;
     std::vector<table::ColumnInfo> _columns;
     std::vector<std::string> _members;
+    std::vector<std::function<std::string(forms::RowState const&)>> _perRow;
     std::shared_ptr<detail::FormRowsSnapshot const> _held;
     table::detail::Listeners _listeners;
     bool _watching = false;

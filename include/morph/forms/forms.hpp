@@ -88,6 +88,10 @@
 ///   sibling inputs (named in `x-computed.inputs`) and must not be rendered as
 ///   an editable control (`x-readonly: true`). See `morph::forms::computed`,
 ///   `morph::forms::computeList`, and `morph::forms::recomputeAll`.
+/// - **`x-derived` / `x-readonly`** — for a member its type's `fieldMetadata`
+///   marks `derived()` (`forms/derive.hpp`): a value the model sets from the
+///   domain's data, read-only in a form, left out of `required`, untouched by
+///   `recomputeAll` and cleared by the server dispatch path before the model runs.
 ///
 /// `morph::time::Timestamp` members need no extension keys: their schema
 /// carries the standard `"format": "date-time"` annotation.
@@ -101,8 +105,10 @@
 /// whatever depth it has: there is no depth limit, and a self- or
 /// mutually-referential type is described rather than rejected — glaze emits
 /// a finite `$ref`-cyclic schema for it, and the runtime `$defs` visited set
-/// walks that once. Computed fields/`formLayout`/`fieldSpans`/`formRules`
-/// remain top-level-only regardless of depth. See docs/spec/forms/forms.md,
+/// walks that once. A nested type's own `computedFields` are written as the
+/// top level's are, and recomputed per element by `recomputeAll`;
+/// `formLayout`/`fieldSpans`/`formRules` remain top-level-only regardless of
+/// depth. See docs/spec/forms/forms.md,
 /// "Nested aggregates (recursive, cycle-safe)", and
 /// `detail::annotateNestedAggregateRef`.
 ///
@@ -343,6 +349,11 @@ struct FieldMeta {
     /// @brief Field of each options row shown to the user (`x-optionLabel`); set with `optionsAction`.
     // NOLINTNEXTLINE(readability-redundant-member-init) -- as `unit` above
     std::string_view labelField{};
+    /// @brief A derived member when `true`: a value the model sets when it executes the action, from the domain's
+    ///        data, which no pure function of the record can compute. Emits `x-derived` (read-only in a form) and
+    ///        leaves the member out of `required`; `recomputeAll` does not touch it, and the server dispatch path
+    ///        clears it before the model runs (`clearDerived`), so the value a client sends is never kept.
+    bool derived{false};
 
     /// @brief The version this field first ships in, a dotted numeric version such as `"6.11.0"` (`FieldVersion`);
     ///        emitted as `x-since`. Empty means the first version.
@@ -441,6 +452,14 @@ struct FieldMeta {
         copy.since = version;
         return copy;
     }
+
+    /// @brief Returns a copy with `derived` set to `true`.
+    /// @return The updated descriptor.
+    [[nodiscard]] constexpr FieldMeta withDerived() const noexcept {
+        FieldMeta copy = *this;
+        copy.derived = true;
+        return copy;
+    }
 };
 
 /// @brief Concept: a field type with an internal empty state (`Quantity`,
@@ -522,6 +541,21 @@ template <typename A>
         static_cast<void>(fieldName);
     }
     return nullptr;
+}
+
+/// @brief Whether `A::fieldMetadata` marks @p fieldName `derived` (`FieldMeta::withDerived`).
+/// @tparam A The type declaring the member.
+/// @param fieldName The member's wire name.
+/// @return `true` for a derived member.
+template <typename A>
+[[nodiscard]] constexpr bool declaredDerived(std::string_view fieldName) noexcept {
+    if constexpr (HasFieldMetadata<A>) {
+        FieldMeta const* const meta = findFieldMeta<A>(fieldName);
+        return meta != nullptr && meta->derived;
+    } else {
+        static_cast<void>(fieldName);
+        return false;
+    }
 }
 
 /// @brief Splits @p fieldName on camelCase/underscore boundaries and
@@ -649,6 +683,20 @@ template <typename A>
 template <typename T>
 concept WrittenAsMember = requires { glz::meta<T>::value; } &&
                           std::is_member_object_pointer_v<std::remove_cvref_t<decltype(glz::meta<T>::value)>>;
+
+/// @brief How many members glaze reflects on @p T, counted without reading their names: naming a member needs the type
+///        to have linkage, so a walk that reads no name (a type local to a translation unit's unnamed namespace) still
+///        compiles.
+/// @tparam T A type glaze reflects by itself or one with a `glz::meta` object.
+/// @return The count, equal to `glz::reflect<T>::size`.
+template <typename T>
+[[nodiscard]] consteval std::size_t reflectedCount() noexcept {
+    if constexpr (glz::reflectable<T>) {
+        return glz::detail::count_members<T>;
+    } else {
+        return glz::reflect<T>::size;
+    }
+}
 
 /// @brief Invokes `visitor.operator()<I>(name, member)` for every key glaze
 ///        reflects on @p action, with the value glaze reads and writes under
@@ -2294,6 +2342,22 @@ void collectComputedInputs(const A& probe, const ComputedField<Dst, Fn, Inputs..
     out.emplace(resolveMemberName(probe, Dst), std::vector<std::string_view>{resolveMemberName(probe, Inputs)...});
 }
 
+/// @brief Writes a computed member's `x-readonly` and `x-computed` (`{"inputs": [...]}`) on its property.
+/// @param property The member's property node.
+/// @param inputs   The wire names of the members it is computed from, in declaration order.
+// NOLINTBEGIN(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access) — glaze DOM requires operator[]
+inline void annotateComputedProperty(glz::generic_u64& property, std::vector<std::string_view> const& inputs) {
+    property["x-readonly"] = true;
+    glz::generic_u64 computedMeta{};
+    glz::generic_u64::array_t inputsList{};
+    for (auto const& inputName : inputs) {
+        inputsList.emplace_back(std::string{inputName});
+    }
+    computedMeta["inputs"] = inputsList;
+    property["x-computed"] = computedMeta;
+}
+// NOLINTEND(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access)
+
 /// @brief Trait: is `T` a `std::vector<...>`? Exposes the element type as
 ///        `ValueType` (`void` when `T` is not a vector).
 template <typename T>
@@ -2540,8 +2604,8 @@ void annotateMetaOptions(glz::generic_u64& property, std::string_view name, Fiel
 }
 
 // NOLINTBEGIN(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access) -- glaze DOM requires operator[]
-/// @brief Applies the annotations a member's `FieldMeta` declares: help, placeholder, flags, bounds, display unit,
-///        options, `since` and `blankAs`.
+/// @brief Applies the annotations a member's `FieldMeta` declares: help, placeholder, flags (`derived` implies
+///        read-only), bounds, display unit, options, `since` and `blankAs`.
 /// @tparam Owner  The type declaring @p name.
 /// @tparam Member The static type of the member.
 /// @param property DOM node for this one property.
@@ -2556,6 +2620,10 @@ void annotateFieldMeta(glz::generic_u64& property, std::string_view name, FieldM
         property["x-placeholder"] = std::string{meta.placeholder};
     }
     if (meta.readOnly) {
+        property["x-readonly"] = true;
+    }
+    if (meta.derived) {
+        property["x-derived"] = true;
         property["x-readonly"] = true;
     }
     if (meta.hidden) {
@@ -2607,9 +2675,9 @@ void annotateQuantity(glz::generic_u64& property) {
 ///        single implementation of those rules; neither caller duplicates it.
 ///
 /// Deliberately excludes computed-field annotations (`x-computed`/
-/// `x-readonly`) and `x-order`: computed fields are not supported inside a
-/// nested aggregate (see `annotateNestedAggregate`), and `x-order`'s source index
-/// differs by caller, so each caller sets it itself.
+/// `x-readonly`) and `x-order`: each caller reads the computed fields of its own
+/// type (`annotateComputedProperty`), and `x-order`'s source index differs by
+/// caller, so each caller sets them itself.
 /// @tparam Owner  The type declaring @p name (drives `FieldMeta`/widget-override lookup).
 /// @tparam Member The static type of the member itself (drives type-driven annotations).
 /// @param property DOM node for this one property; annotations are merged in, not replacing.
@@ -2887,9 +2955,12 @@ void recurseIntoNestedAggregateIfAny(SchemaDomRef dom, glz::generic_u64& propert
 /// {...}}` shape this function needs, so one implementation handles both --
 /// see the call site in `mergeSchemaExtras` for how @p node is resolved.
 ///
-/// Computed fields, `formLayout`/`fieldSpans`, and `formRules` stay
-/// top-level-only regardless of depth; a nested `Sub` declaring any of those
-/// has no effect here.
+/// A `Sub` declaring `computedFields` has those members written `x-computed`
+/// and `x-readonly` and left out of `required`, as the top level's are, since
+/// `recomputeAll` recomputes the elements of a `std::vector<Sub>` member; a
+/// derived member (`FieldMeta::derived`) is left out of `required` too.
+/// `formLayout`/`fieldSpans` and `formRules` stay top-level-only regardless of
+/// depth; a nested `Sub` declaring any of those has no effect here.
 ///
 /// For a `Sub` that is reachable from itself, this is entered once: the
 /// caller's @p visited set records the `$defs` key on first arrival, and a
@@ -2907,13 +2978,23 @@ template <typename Sub>
 void annotateNestedAggregate(SchemaDomRef dom, glz::generic_u64& node, NestedDefsVisited& visited) {
     Sub probe{};
     glz::generic_u64::array_t requiredNames{};
+    // A row type's own computed fields: recomputed with each element (`recomputeAll`), so written as the top level's.
+    std::unordered_map<std::string_view, std::vector<std::string_view>> computedInputs{};
+    if constexpr (HasComputedFields<Sub>) {
+        std::apply([&](const auto&... field) { (collectComputedInputs(probe, field, computedInputs), ...); },
+                   Sub::computedFields.fields);
+    }
     forEachNamedMember(probe, [&]<std::size_t I>(std::string_view name, const auto& member) {
         using Member = std::remove_cvref_t<decltype(member)>;
-        if (!(isStdOptional<Member> || declaredOptional<Sub>(name))) {
+        bool const isComputed = computedInputs.contains(name);
+        if (!(isStdOptional<Member> || declaredOptional<Sub>(name) || isComputed || declaredDerived<Sub>(name))) {
             requiredNames.emplace_back(std::string{name});
         }
         auto& property = node["properties"][std::string{name}];
         property["x-order"] = std::uint64_t{I};
+        if (isComputed) {
+            annotateComputedProperty(property, computedInputs.at(name));
+        }
         annotateBasicMemberProperty<Sub, Member>(property, name);
         recurseIntoNestedAggregateIfAny<Member>(dom, property, visited);
     });
@@ -3415,7 +3496,8 @@ template <typename A>
         const bool isComputed = computedInputs.contains(name);
         // A computed field is derived, not user-entered: exclude it from
         // `required` the same way an opted-out or std::optional field is.
-        const bool isOptional = isStdOptional<Member> || declaredOptional<A>(name) || isComputed;
+        // A derived member is the model's to set, so it is not required either.
+        const bool isOptional = isStdOptional<Member> || declaredOptional<A>(name) || isComputed || declaredDerived<A>(name);
         if (!isOptional) {
             requiredNames.emplace_back(std::string{name});
             requiredMemberNames.push_back(name);
@@ -3423,14 +3505,7 @@ template <typename A>
         auto& property = dom["properties"][std::string{name}];
         property["x-order"] = std::uint64_t{I};
         if (isComputed) {
-            property["x-readonly"] = true;
-            glz::generic_u64 computedMeta{};
-            glz::generic_u64::array_t inputsList{};
-            for (auto const& inputName : computedInputs.at(name)) {
-                inputsList.emplace_back(std::string{inputName});
-            }
-            computedMeta["inputs"] = inputsList;
-            property["x-computed"] = computedMeta;
+            annotateComputedProperty(property, computedInputs.at(name));
         }
 
         // Label/title/FieldMeta/Quantity/Choice/widget/ranged-bounds: shared
@@ -3593,10 +3668,12 @@ template <typename... Fields>
     return detail::ComputeList<Fields...>{std::tuple<Fields...>{fields...}};
 }
 
-/// @brief Recomputes every entry of `A::computedFields` in place on @p action.
+/// @brief Recomputes every entry of `A::computedFields` in place on @p action,
+///        after each element of every `std::vector<R>` member whose `R` declares
+///        `computedFields` (recursively), so an entry over the rows reads them
+///        recomputed. A derived member (`FieldMeta::derived`) is never touched.
 ///
-/// A no-op for actions with no `computedFields` declaration -- backward
-/// compatible with every existing action type. For an action that does
+/// A no-op for actions with no `computedFields` declaration and no such rows. For an action that does
 /// declare `computedFields`, every entry is evaluated in declaration order via
 /// `detail::recomputeOne` (see that function for the per-entry semantics:
 /// empty-input propagation and declared-precision retagging). Called from the
@@ -3607,12 +3684,50 @@ template <typename... Fields>
 /// @tparam A     Action type (a reflectable aggregate).
 /// @param action Draft action whose computed members are overwritten in place.
 template <typename A>
+constexpr void recomputeAll(A& action);
+
+namespace detail {
+
+/// @brief Recomputes every element of each `std::vector<R>` member of @p action whose `R` declares
+///        `computedFields` (`recomputeAll` on each element, so a row's own rows go first).
+/// @tparam A     Action or row type.
+/// @param action The value whose rows are recomputed in place.
+template <typename A>
+constexpr void recomputeRows(A& action) {
+    using Plain = std::remove_cvref_t<A>;
+    if constexpr ((glz::reflectable<Plain> || glz::glaze_object_t<Plain>) && !WrittenAsMember<Plain>) {
+        constexpr auto memberCount = reflectedCount<Plain>();
+        [&]<std::size_t... I>(std::index_sequence<I...>) {
+            [[maybe_unused]] auto rows = [&]<std::size_t Idx>() {
+                // A `glz::meta` entry that computes its value yields a value: there are no stored rows behind it.
+                [[maybe_unused]] decltype(auto) member = morph::detail::reflectedMember<Idx>(action);
+                using Member = std::remove_cvref_t<decltype(member)>;
+                if constexpr (std::is_lvalue_reference_v<decltype(member)> && IsStdVector<Member>::value) {
+                    using Row = typename IsStdVector<Member>::ValueType;
+                    if constexpr (HasComputedFields<Row>) {
+                        for (Row& row : member) {
+                            ::morph::forms::recomputeAll(row);
+                        }
+                    }
+                }
+            };
+            (rows.template operator()<I>(), ...);
+        }(std::make_index_sequence<memberCount>{});
+    } else {
+        static_cast<void>(action);
+    }
+}
+
+}  // namespace detail
+
+template <typename A>
 constexpr void recomputeAll(A& action) {
+    // The rows first, so a top-level entry over a `std::vector` member (a sum of the rows' totals) reads them
+    // recomputed.
+    detail::recomputeRows(action);
     if constexpr (detail::HasComputedFields<A>) {
         std::apply([&](const auto&... field) { (detail::recomputeOne(action, field), ...); },
                    A::computedFields.fields);
-    } else {
-        static_cast<void>(action);
     }
 }
 
@@ -3783,9 +3898,10 @@ inline void enforceQuantityBounds(const A& action) {
 ///
 /// Empty-capable covers `Quantity`, `Choice`, `Timestamp`, and any user type
 /// satisfying `EmptyCapableField`. Required means: not a `std::optional<...>`
-/// member, not listed in `A::optionalFields`, and not the destination of a
+/// member, not listed in `A::optionalFields`, not the destination of a
 /// `A::computedFields` entry (a computed field is never something the user
-/// must fill -- see `morph::forms::recomputeAll`). Intended as the body of the
+/// must fill -- see `morph::forms::recomputeAll`), and not a derived member
+/// (`FieldMeta::derived`, which the model sets). Intended as the body of the
 /// action's `validate()`.
 ///
 /// The walk is flat: only @p action's own top-level members are inspected,
@@ -3805,7 +3921,9 @@ template <typename A>
         if constexpr (EmptyCapableField<Member>) {
             const bool isComputed =
                 detail::isComputedDestinationMember(action, static_cast<const void*>(std::addressof(member)));
-            if (!detail::declaredOptional<A>(name) && !isComputed && !member.hasValue()) {
+            // A derived member is the model's to set, and the dispatch path clears it before the validator runs.
+            if (!detail::declaredOptional<A>(name) && !isComputed && !detail::declaredDerived<A>(name) &&
+                !member.hasValue()) {
                 allEngaged = false;
             }
         } else {

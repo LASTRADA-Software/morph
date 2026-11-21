@@ -344,7 +344,7 @@ constexpr std::array<KeySpec, 45> kTableKeys = {{{"rows", Shape::Expr},
                                                  {"headerMenu", Shape::Parts, "menuItem"},
                                                  {"headerEnabled", Shape::Condition}}};
 /// @brief The keys of a `table` column part; `tone` and `tooltip` are read in the row's scope.
-constexpr std::array<KeySpec, 26> kColumnKeys = {{{"id", Shape::Name},
+constexpr std::array<KeySpec, 29> kColumnKeys = {{{"id", Shape::Name},
                                                   {"field", Shape::Text},
                                                   {"value", Shape::Expr, {}, kInner},
                                                   {"kind", Shape::Text},
@@ -369,7 +369,10 @@ constexpr std::array<KeySpec, 26> kColumnKeys = {{{"id", Shape::Name},
                                                   {"date", Shape::Text},
                                                   {"labels", Shape::Expr},
                                                   {"tone", Shape::Expr, {}, kInner},
-                                                  {"tooltip", Shape::Expr, {}, kInner}}};
+                                                  {"tooltip", Shape::Expr, {}, kInner},
+                                                  {"readonly", Shape::Expr},
+                                                  {"options", Shape::Expr},
+                                                  {"placeholder", Shape::Expr}}};
 /// @brief The keys of a form field overlay's `grid` part: the keys a `table` over a `form` takes beyond its `form` and
 ///        `field`, its columns, walk and activation, its layout, menus and filters.
 constexpr std::array<KeySpec, 12> kGridPartKeys = {{{"columns", Shape::Parts, "column"},
@@ -523,7 +526,7 @@ constexpr std::array<KeySpec, 1> kCustomizeKeys = {{{"point", Shape::Name, {}, k
 constexpr std::array<KeySpec, 3> kBoundaryKeys = {
     {{"loading", Shape::Nodes}, {"error", Shape::Nodes, {}, kBoundaryError}, {"children", Shape::Nodes}}};
 /// @brief The keys of `form`.
-constexpr std::array<KeySpec, 16> kFormKeys = {{{"model", Shape::Name, {}, kRequired},
+constexpr std::array<KeySpec, 18> kFormKeys = {{{"model", Shape::Name, {}, kRequired},
                                                 {"action", Shape::Text, {}, kRequired},
                                                 {"prefill", Shape::Expr},
                                                 {"key", Shape::Expr},
@@ -538,7 +541,9 @@ constexpr std::array<KeySpec, 16> kFormKeys = {{{"model", Shape::Name, {}, kRequ
                                                 {"showStatus", Shape::Flag},
                                                 {"columns", Shape::Expr},
                                                 {"fieldLayout", Shape::Text},
-                                                {"captionWidth", Shape::Expr}}};
+                                                {"captionWidth", Shape::Expr},
+                                                {"derive", Shape::Text},
+                                                {"deriveDebounce", Shape::Expr}}};
 /// @brief The keys of `collection` and `wizard`: the model and action, and the presentation keys that reach every
 ///        form the view draws.
 constexpr std::array<KeySpec, 8> kCollectionKeys = {{{"model", Shape::Name, {}, kRequired},
@@ -2069,6 +2074,11 @@ private:
                 refuse(path, "`persist` is a literal: true, false or a name");
             }
         }
+        // A grid column's `field` and `unit` may be expressions in the row's scope; a string stays a name.
+        if (made.kind == "column" && (name == "field" || name == "unit") && std::get_if<std::string>(&value.data) == nullptr) {
+            made.props.emplace(name, expr(value, path));
+            return;
+        }
         switch (key.shape) {
             case Shape::Expr:
             case Shape::Condition:
@@ -2212,6 +2222,8 @@ struct CheckContext {
     bool onClose = false;
     /// @brief Names bound here: `as` of a sequence step or `each`, `result`, `body`, `props`.
     std::vector<std::pair<std::string, Type>> bindings;
+    /// @brief The column parts of a grid, whose keys take expressions in the row's scope.
+    bool gridColumns = false;
 };
 
 class DocumentValidator;
@@ -3254,9 +3266,11 @@ private:
                     context.bindings.emplace_back("value", Type::any());
                 }
             }
-            // A grid's display column reads its row's record as `row`.
+            // A grid's column reads its row's record as `row`: a display column's `value`, and an edit column's `field`
+            // expression and overlays.
             if (key == "columns" && (node.kind == "fieldGrid" || (node.kind == "table" && !node.name("form").empty()))) {
                 context.bindings.emplace_back("row", Type::any());
+                context.gridColumns = true;
             }
             for (DocNodePtr const& child : parts) {
                 checkElement(*child, context, true);
@@ -3265,7 +3279,7 @@ private:
         checkPlacements(node);
         checkTabBleed(node);
         if (part) {
-            checkPartNode(node);
+            checkPartNode(node, outer.gridColumns);
         } else {
             checkFlags(node);
             checkLayoutKeys(node);
@@ -3276,12 +3290,12 @@ private:
         }
     }
 
-    static void checkPartNode(DocNode const& node) {
+    static void checkPartNode(DocNode const& node, bool gridColumn) {
         if (node.kind == "column" || node.kind == "track") {
             checkNoPercentWidth(node);
         }
         if (node.kind == "column") {
-            checkColumnPart(node);
+            checkColumnPart(node, gridColumn);
         } else if (node.kind == "track") {
             checkCellPlace(node, "align");
         } else if (isMenuEntry(node.kind)) {
@@ -3420,6 +3434,9 @@ private:
                 refuse(node.path, "a `" + node.kind + "` with a `model` names its `action`");
             }
             checkModelAction(context, std::string{model}, std::string{node.name("action")}, node.path);
+            if (node.kind == "form") {
+                checkFormDerive(context, node);
+            }
         } else if (node.kind == "table" && !node.name("form").empty()) {
             checkFormGrid(node);
         } else if (node.kind == "table" && !node.prop("rows")) {
@@ -3438,6 +3455,24 @@ private:
             checkColumnKinds(node);
             if (!model.empty() && table.empty()) {
                 checkActionTable(node);
+            }
+        }
+    }
+
+    // A form's derive action is an action of the form's model; `deriveDebounce` is a literal count of milliseconds.
+    void checkFormDerive(CheckContext const& context, DocNode const& node) {
+        if (std::string_view const derive = node.name("derive"); !derive.empty()) {
+            static_cast<void>(checkModelAction(context, std::string{node.name("model")}, std::string{derive},
+                                               pointerAppend(node.path, "derive")));
+        }
+        if (ExprPtr const debounce = node.prop("deriveDebounce")) {
+            std::int64_t const* const millis =
+                debounce->kind == ExprKind::Literal ? debounce->literal.asInt() : static_cast<std::int64_t const*>(nullptr);
+            if (millis == nullptr || *millis < 0) {
+                refuse(debounce->path, "`deriveDebounce` is a literal count of milliseconds, 0 or more");
+            }
+            if (node.name("derive").empty()) {
+                refuse(debounce->path, "`deriveDebounce` times the form's `derive`, and the form names none");
             }
         }
     }
@@ -3474,7 +3509,7 @@ private:
             }
         }
         for (DocNodePtr const& column : part.partList("columns")) {
-            if (column->name("field").empty() && column->prop("value") == nullptr) {
+            if (column->name("field").empty() && column->prop("field") == nullptr && column->prop("value") == nullptr) {
                 refuse(column->path, "a grid's column edits the member its `field` names, or shows its `value`");
             }
         }
@@ -4659,11 +4694,23 @@ private:
     // A table column's closed sets: its default cell's text role, and its cells' places; and its display parts,
     // which are literals: `decimals` 0 to 18, `rounding` one of two names, `date` a pattern, `labels` a list of
     // `{operand, text}`.
-    static void checkColumnPart(DocNode const& node) {
+    static void checkColumnPart(DocNode const& node, bool gridColumn) {
         checkTextRole(node);
         checkCellPlace(node, "align");
         checkCellPlace(node, "valign");
-        if (ExprPtr const decimals = node.prop("decimals")) {
+        // A grid column's overlays are per row; a table over rows has none of them.
+        if (!gridColumn) {
+            for (std::string_view const key : {std::string_view{"readonly"}, std::string_view{"options"},
+                                               std::string_view{"placeholder"}, std::string_view{"field"},
+                                               std::string_view{"unit"}}) {
+                if (ExprPtr const given = node.prop(key)) {
+                    refuse(given->path, "`" + std::string{key} +
+                                            (key == "field" || key == "unit" ? "` as an expression" : "`") +
+                                            " is a grid column's, read per row; this table is not a grid of a form");
+                }
+            }
+        }
+        if (ExprPtr const decimals = node.prop("decimals"); decimals && (!gridColumn || decimals->kind == ExprKind::Literal)) {
             std::int64_t const* const places = decimals->kind == ExprKind::Literal
                                                    ? decimals->literal.asInt()
                                                    : static_cast<std::int64_t const*>(nullptr);

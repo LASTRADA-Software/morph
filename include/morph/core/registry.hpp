@@ -23,6 +23,7 @@
 #include <utility>
 #include <vector>
 
+#include "../forms/derive.hpp"
 #include "../forms/field_errors.hpp"
 #include "../forms/forms.hpp"
 #include "detail/action_guard_core.hpp"
@@ -922,7 +923,9 @@ private:
         // bypassing every client-side gate. A tampered computed value on
         // the wire is discarded here, before the validator check and
         // Model::execute run. No-op for actions with no computedFields. See
-        // docs/spec/forms/forms.md.
+        // docs/spec/forms/forms.md. A derived member is the model's to set: what the client sent for it is cleared
+        // first, so neither the model nor a computed field over it reads a forged value.
+        ::morph::forms::clearDerived(action);
         ::morph::forms::recomputeAll(action);
         // Enforce the action's validator on the server dispatch path — the
         // one path an untrusted remote client can drive directly with a
@@ -952,6 +955,7 @@ private:
         MORPH_ZONE("ActionDispatcher::evaluateAction");
         auto action = ActionTraits<Action>::fromJson(payloadJson);
         ::morph::forms::reconcileDeclaredPrecision(action);
+        ::morph::forms::clearDerived(action);
         ::morph::forms::recomputeAll(action);
         Evaluation evaluation;
         evaluation.errors = ::morph::forms::fieldErrors(action);
