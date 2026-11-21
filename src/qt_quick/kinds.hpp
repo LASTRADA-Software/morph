@@ -711,6 +711,7 @@ public:
     /// `kCellMenuColumn`. A key the table leaves is offered to the focused cell's entries through `cellKey`.
     void setCellMenu(std::function<std::vector<ui::MenuEntry>(ui::Key const&, std::size_t)> entries,
                      std::function<void(ui::Key const&, std::size_t, std::vector<std::size_t> const&)> chosen) override;
+    void setCellMenuKeys(std::vector<std::string> const& chords) override { _cellMenuKeys = chords; }
     void setVisibleColumns(std::vector<std::size_t> const& visible) override;
     void setOnColumnMove(std::function<void(std::size_t, std::size_t)> handler) override;
     /// MorphTable reports the header's width in pixels; its padding is taken off and the rest rounded to units of
@@ -813,6 +814,8 @@ private:
     std::function<void(ui::Key const&, std::size_t, std::vector<std::size_t> const&)> _cellChosen;
     /// The cell whose menu is open; none before any.
     std::optional<std::pair<ui::Key, std::size_t>> _cellMenuAt;
+    /// The chords that ask for the focused cell's entries.
+    std::vector<std::string> _cellMenuKeys;
     std::function<void(std::size_t, std::size_t)> _onColumnMove;
     std::function<void(std::size_t, std::optional<int>)> _onColumnResize;
     std::function<void(std::size_t)> _onFilter;

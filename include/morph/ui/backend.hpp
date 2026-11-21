@@ -892,10 +892,11 @@ public:
     /// @brief Gives the cells their menu. A right click, a long press, or `Shift+F10` or the context-menu key on the
     ///        focused cell opens it on that cell: the backend first makes the cell's row the selection alone, reported
     ///        as `Replace`, when the row is not selected already (a row already selected keeps the selection as it
-    ///        is), then asks for the entries, which also focuses the cell, and shows them at the cell. While the table
-    ///        has the focus, a key the table does not take itself is matched against the `keys` of the focused cell's
-    ///        entries, at every level: the first enabled entry without a submenu whose chord it is runs, as if chosen
-    ///        from the menu, and the key stops there.
+    ///        is), then asks for the entries, which focuses the cell when it is not focused, and shows them at the
+    ///        cell. While the table has the focus, a key the table does not take itself that is one of the chords
+    ///        `setCellMenuKeys` gave asks for the focused cell's entries and is matched against their `keys` at every
+    ///        level: the first enabled entry without a submenu whose chord it is runs, as if chosen from the menu, and
+    ///        the key stops there. Any other key never asks for the entries.
     /// @param entries The entries of a cell's menu, given its row's key and its column (an index into the columns
     ///                `setColumns` gave); asked for each time the menu opens or a key is matched.
     /// @param chosen  Called with the cell's row and column and the chosen entry's path, an index per level from the
@@ -904,6 +905,12 @@ public:
                              std::function<void(Key const& row, std::size_t column,
                                                 std::vector<std::size_t> const& path)>
                                  chosen) = 0;
+
+    /// @brief The chords the cell menu's entries may declare, the only keys that ask for the focused cell's entries
+    ///        (`setCellMenu`). Called for a table with a cell menu, once it is built; a table never told this runs no
+    ///        entry from a key.
+    /// @param chords The chords, as an entry's `keys` writes them.
+    virtual void setCellMenuKeys(std::vector<std::string> const& chords) { static_cast<void>(chords); }
 
     /// @brief Tells the backend which columns are visible, in their places, so that a move and a group header count
     ///        places as the arrangement does. Called for a table over a `TableSource` once it is built and whenever

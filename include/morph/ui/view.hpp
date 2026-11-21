@@ -1594,10 +1594,14 @@ struct Table {
     ///        backend selects the rows it holds and reports them through `onSelectionChange`.
     std::function<void()> onSelectAll;
     /// @brief The entries of a cell's menu, given its row's key and its column (an index into `columns`), asked for
-    ///        each time the menu opens (a right click, the menu key or a long press on the cell) and once per key the
-    ///        user presses while the table has the focus, for the focused cell. The mount reads each entry's bound
-    ///        parts once, untracked, and runs the chosen entry's `onSelect`. Empty: no cell menu.
+    ///        each time the menu opens (a right click, the menu key or a long press on the cell), which focuses the
+    ///        cell, and for a key of `cellMenuKeys` the user presses while the table has the focus, for the focused
+    ///        cell. The mount reads each entry's bound parts once, untracked, and runs the chosen entry's `onSelect`.
+    ///        Empty: no cell menu.
     std::function<std::vector<MenuItem>(Key const& row, std::size_t column)> cellMenu;
+    /// @brief The chords `cellMenu`'s entries may declare in `keys`: while the table has the focus, a key that is one
+    ///        of them asks for the focused cell's entries and runs the one that declares it; any other key never asks.
+    std::vector<std::string> cellMenuKeys;
     /// @brief The caller's entries of a header's menu, given its column, read when the menu opens: shown after
     ///        `menu`'s own entries for that column and a separator, and run by the mount when chosen. An entry hidden
     ///        by its `visible` is left out, and with no entry shown nothing is added. Empty: `menu`'s entries alone.
@@ -2424,6 +2428,8 @@ struct TableOptions {
     std::function<void()> onSelectAll;
     /// @brief The entries of a cell's menu, given its row's key and its column; empty for no cell menu.
     std::function<std::vector<MenuItem>(Key const& row, std::size_t column)> cellMenu;
+    /// @brief The chords `cellMenu`'s entries may declare; any other key never asks for a cell's entries.
+    std::vector<std::string> cellMenuKeys;
     /// @brief The caller's entries of a header's menu, given its column, shown after `menu`'s own.
     std::function<std::vector<MenuItem>(std::size_t column)> headerEntries;
     /// @brief Whether the header's sort, filter and arrangement entries are enabled.
@@ -2547,6 +2553,7 @@ template <typename RowT>
     spec.onFocusCell = std::move(options.onFocusCell);
     spec.onSelectAll = std::move(options.onSelectAll);
     spec.cellMenu = std::move(options.cellMenu);
+    spec.cellMenuKeys = std::move(options.cellMenuKeys);
     spec.headerEntries = std::move(options.headerEntries);
     spec.headerEnabled = std::move(options.headerEnabled);
     return detail::makeNode(std::move(spec));
@@ -2597,6 +2604,7 @@ template <typename RowT>
     spec.onFocusCell = std::move(options.onFocusCell);
     spec.onSelectAll = std::move(options.onSelectAll);
     spec.cellMenu = std::move(options.cellMenu);
+    spec.cellMenuKeys = std::move(options.cellMenuKeys);
     spec.headerEntries = std::move(options.headerEntries);
     spec.headerEnabled = std::move(options.headerEnabled);
     return detail::makeNode(std::move(spec));

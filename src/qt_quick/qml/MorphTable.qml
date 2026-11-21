@@ -1732,7 +1732,10 @@ MorphWidget {
         }
         onOpened: entryColumn.forceActiveFocus()
         onClosed: {
-            if (configMenu.anchorItem && configMenu.anchorItem.visible && configMenu.anchorItem.activeFocusOnTab)
+            // A cell's menu gives the focus back to the table, which holds it for its cells.
+            if (root.menuColumn === -2)
+                root.forceActiveFocus()
+            else if (configMenu.anchorItem && configMenu.anchorItem.visible && configMenu.anchorItem.activeFocusOnTab)
                 configMenu.anchorItem.forceActiveFocus()
         }
 
@@ -1745,7 +1748,8 @@ MorphWidget {
             objectName: "configMenuEntries"
             focus: true
             Accessible.role: Accessible.PopupMenu
-            Accessible.name: root.menuColumn >= 0 ? (root.columns[root.menuColumn]?.label ?? "") : "Table options"
+            Accessible.name: root.menuColumn >= 0 ? (root.columns[root.menuColumn]?.label ?? "")
+                             : root.menuColumn === -2 ? "Cell options" : "Table options"
             Keys.onPressed: event => {
                 const level = configMenu.level
                 if (event.key === Qt.Key_Down) {

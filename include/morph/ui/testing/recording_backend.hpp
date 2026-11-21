@@ -2471,6 +2471,18 @@ public:
         _cellChosen = std::move(chosen);
     }
 
+    /// @brief Stores the chords that ask for the focused cell's entries, which `RecordingBackend::press` checks.
+    /// @param chords The chords.
+    void setCellMenuKeys(std::vector<std::string> const& chords) override { _cellMenuKeys = chords; }
+
+    /// @brief The chords `setCellMenuKeys` gave.
+    /// @return They; empty before any.
+    [[nodiscard]] std::vector<std::string> const& cellMenuKeys() const noexcept { return _cellMenuKeys; }
+
+    /// @brief How many times the cell menu's entries were asked for.
+    /// @return The count.
+    [[nodiscard]] std::size_t cellMenuAsks() const noexcept { return _cellMenuAsks; }
+
     /// @brief Stores the visible columns, which the drivers check a column against.
     /// @param visible The visible columns, in layout order.
     void setVisibleColumns(std::vector<std::size_t> const& visible) override { _visible = visible; }
@@ -2593,7 +2605,11 @@ public:
     /// @param column The cell's column.
     /// @return The entries; none when the table has no cell menu.
     [[nodiscard]] std::vector<MenuEntry> cellMenuEntries(Key const& key, std::size_t column) const {
-        return _cellMenu ? _cellMenu(key, column) : std::vector<MenuEntry>{};
+        if (!_cellMenu) {
+            return {};
+        }
+        ++_cellMenuAsks;
+        return _cellMenu(key, column);
     }
 
     /// @brief The handler `setCellMenu` gave for a chosen entry.
@@ -3071,6 +3087,8 @@ private:
     std::function<void(std::optional<std::size_t>, std::vector<std::size_t>)> _onMenu;
     std::function<std::vector<MenuEntry>(Key const&, std::size_t)> _cellMenu;
     std::function<void(Key const&, std::size_t, std::vector<std::size_t> const&)> _cellChosen;
+    std::vector<std::string> _cellMenuKeys;
+    mutable std::size_t _cellMenuAsks = 0;  // how many times the cell menu's entries were asked for
     std::map<int, std::size_t> _viewRows;  // row id -> view index, as setRowIndex told it
     bool _focusSet = false;                // whether setFocusCell ran
     std::vector<std::size_t> _visible;
@@ -3915,6 +3933,12 @@ public:
         return exists(widgetId) ? table->cellMenuEntries(key, column) : std::vector<MenuEntry>{};
     }
 
+    /// @brief How many times a table's cell menu entries were asked for: by an opened menu or by a key.
+    /// @param widgetId The table.
+    /// @return The count.
+    /// @throws std::logic_error when the widget is not a table.
+    [[nodiscard]] std::size_t cellMenuAsks(int widgetId) { return fakeTable(widgetId, "cellMenuAsks").cellMenuAsks(); }
+
     /// @brief Chooses an entry of a cell's menu by its labels from the top, as a user opening it on the cell and each
     ///        submenu on the way would. Nothing is reported for a disabled entry, an entry inside a disabled one, or
     ///        an entry with a submenu.
@@ -4424,13 +4448,14 @@ private:
         return false;
     }
 
-    // A chord on a table runs the focused cell's menu entry that declares it: the first enabled one without a
-    // submenu, in the order the menu lists them, a submenu's entries after the entry that opens it.
+    // A chord of the table's cell menu keys runs the focused cell's menu entry that declares it: the first enabled one
+    // without a submenu, in the order the menu lists them, a submenu's entries after the entry that opens it. Any
+    // other chord asks for nothing.
     bool cellKey(detail::Record const& record, std::string const& chord) {
         auto const* const table = dynamic_cast<detail::FakeTable const*>(record.widget);
         std::optional<std::pair<Key, std::size_t>> const cell =
             table == nullptr ? std::nullopt : table->focusedCellKey();
-        if (!cell || !table->cellChosen()) {
+        if (!cell || !table->cellChosen() || !std::ranges::contains(table->cellMenuKeys(), chord)) {
             return false;
         }
         std::vector<MenuEntry> const entries = table->cellMenuEntries(cell->first, cell->second);

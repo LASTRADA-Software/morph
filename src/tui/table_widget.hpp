@@ -43,7 +43,7 @@ namespace morph::tui::detail {
 /// Ctrl+Shift+Left and Ctrl+Shift+Right on the focused header, and nothing resizes a column. With a cell menu
 /// (`setCellMenu`), a right click on a row's cell opens it below the cell, after selecting the row alone when it is not
 /// selected; over a source, Shift+F10 or the context-menu key opens it on the focused cell, and a key the table leaves
-/// runs the focused cell's entry whose chord it is.
+/// that is one of `setCellMenuKeys` runs the focused cell's entry whose chord it is.
 ///
 /// While a header can act (a column sorts, or the table has menus or moves columns), it takes the keyboard focus
 /// within the table: Up on the first row (the first view row over a source) focuses the header of the chain's first
@@ -121,6 +121,7 @@ public:
                  std::function<void(std::optional<std::size_t>, std::vector<std::size_t>)> onChoose) override;
     void setCellMenu(std::function<std::vector<ui::MenuEntry>(ui::Key const&, std::size_t)> entries,
                      std::function<void(ui::Key const&, std::size_t, std::vector<std::size_t> const&)> chosen) override;
+    void setCellMenuKeys(std::vector<std::string> const& chords) override { _cellMenuKeys = chords; }
     void setVisibleColumns(std::vector<std::size_t> const& visible) override;
     void setOnColumnMove(std::function<void(std::size_t, std::size_t)> handler) override;
     void setOnFilter(std::function<void(std::size_t)> handler) override;
@@ -400,6 +401,7 @@ private:
     std::function<void(std::optional<std::size_t>, std::vector<std::size_t>)> _onMenu;
     std::function<std::vector<ui::MenuEntry>(ui::Key const&, std::size_t)> _cellMenu;
     std::function<void(ui::Key const&, std::size_t, std::vector<std::size_t> const&)> _cellChosen;
+    std::vector<std::string> _cellMenuKeys;  ///< The chords that ask for the focused cell's entries.
     std::vector<std::size_t> _visible;  ///< The visible columns, as `setVisibleColumns` told them; empty: every one.
     std::function<void(std::size_t, std::size_t)> _onColumnMove;
     std::function<void(std::size_t)> _onFilter;

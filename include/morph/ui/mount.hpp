@@ -2080,6 +2080,7 @@ private:
                         static_cast<void>(runCallback(*runtime, run));
                     }
                 });
+            widget.setCellMenuKeys(spec.cellMenuKeys);
         }
         if (spec.onColumnMove) {
             widget.setOnColumnMove(event(spec.onColumnMove));
@@ -3362,6 +3363,10 @@ private:
     // Focuses a realized row's cell, as a cell menu opening on it does, and reports it as a key's move is reported.
     void focusAt(SourceTable& table, Key const& key, std::size_t column) {
         if (column >= table.columns.size()) {
+            return;
+        }
+        // The focused cell's own entries, asked for a key, leave the focus and the view where they are.
+        if (table.focused && table.focusKey == key && table.focusColumn == column) {
             return;
         }
         auto const row = std::ranges::find(table.realized, std::optional<Key>{key}, &SourceTable::Realized::key);

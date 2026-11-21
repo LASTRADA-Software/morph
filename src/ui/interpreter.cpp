@@ -581,6 +581,18 @@ void clearsMessageFirst(TableConfig& config, std::vector<MenuItem>& items) {
     }
 }
 
+/// The chords menu entry parts declare in `keys`, their submenus' included, each once.
+// NOLINTNEXTLINE(misc-no-recursion): a submenu is a menu one level down.
+std::vector<std::string> chordsOf(std::span<DocNodePtr const> parts, std::vector<std::string> out = {}) {
+    for (DocNodePtr const& part : parts) {
+        if (std::string const chord{part->name("keys")}; !chord.empty() && !std::ranges::contains(out, chord)) {
+            out.push_back(chord);
+        }
+        out = chordsOf(part->partList("items"), std::move(out));
+    }
+    return out;
+}
+
 /// The layout of a table's columns: as declared, fitted to @p value when one is given.
 [[nodiscard]] table::ColumnLayout layoutOver(std::span<LayoutColumn const> columns,
                                              std::vector<std::string> const& declaredHidden,
@@ -9361,6 +9373,36 @@ Node ScreenCore::lowerRows(DocNode const& node, LowerCtx const& ctx, ElementStat
     for (TableColumn const& column : columns) {
         headers->push_back(headerText(column.label, column.unit));
     }
+    // A cell a menu opens on, read as its column's filter reads it: by the kind the column's cells infer and the
+    // column's display parts.
+    table->config.heldCell = [table, fields, displays](Key const& key,
+                                                       std::string const& id) -> std::optional<HeldCell> {
+        std::vector<LayoutColumn> const& arranged = table->config.columns;
+        auto const found = std::ranges::find(arranged, id, &LayoutColumn::id);
+        auto const at = static_cast<std::size_t>(found - arranged.begin());
+        if (found == arranged.end() || at >= fields.size() || table->source == nullptr || table->engine == nullptr) {
+            return std::nullopt;
+        }
+        std::span<table::ColumnInfo const> const infos = table->source->columns();
+        auto const info = std::ranges::find(infos, id, &table::ColumnInfo::id);
+        if (info == infos.end()) {
+            return std::nullopt;
+        }
+        table::TableColumn const shown{.info = *info, .display = displays.at(at).value_or(table::ColumnDisplay{})};
+        EngineRows const& rows = *table->engine;
+        std::int64_t const total = rows.total().rows;
+        for (std::int64_t row = 0; row < total; ++row) {
+            std::optional<TableRowRef> const ref = rows.row(row);
+            if (ref && ref->key == key) {
+                return HeldCell{.record = ref->row,
+                                .cell = cellOfRecord(ref->row.field(fields.at(at)), shown, nullptr),
+                                .shown = shown,
+                                .units = {},
+                                .keep = nullptr};
+            }
+        }
+        return std::nullopt;
+    };
     // The engine's view holds every row, its record the row as `rows` gave it.
     table->config.gather = [table, fields, displays, plainText, headers, scope = ctx.scope](
                                std::vector<Key> keys, std::vector<std::string> const& ids, CopyDone done) {
@@ -12121,10 +12163,11 @@ Node ScreenCore::configureTable(TableConfig& config, LowerCtx const& ctx, TableO
     // A cell's menu: "Copy", "Copy with headers", "Filter by this value", "Exclude this value" and, on a column of a
     // declared group, "Filter by this value in any <group>"; then the document's `cellMenu` entries, lowered in the
     // row's scope with `row`, `column` (the column's id) and `value` (the cell) bound. The filter entries take the
-    // cell's operand, or `isEmpty` on an empty cell, and are disabled on a cell not loaded or not readable.
+    // cell's operand, or `isEmpty` on an empty cell, and are disabled on a cell not loaded or not readable, and while
+    // the header is disabled, when one chosen anyway is refused as the header's gestures are.
     if (config.heldCell) {
-        options.cellMenu = [this, ctx, &config, &node, columns, filterable, copy, refilter, filtersNow, keep](
-                               Key const& key, std::size_t column) {
+        options.cellMenu = [this, ctx, &config, &node, columns, filterable, copy, refilter, filtersNow, keep,
+                            headerOn](Key const& key, std::size_t column) {
             static_cast<void>(keep);
             std::vector<MenuItem> items;
             std::string const id = column < columns->size() ? columns->at(column).id : std::string{};
@@ -12134,7 +12177,7 @@ Node ScreenCore::configureTable(TableConfig& config, LowerCtx const& ctx, TableO
             std::optional<std::string> const operand =
                 held ? operandOf(held->cell, held->shown, held->units) : std::nullopt;
             bool const usable = (look == CellLook::Empty || (look == CellLook::Text && operand.has_value())) &&
-                                column < filterable->size() && filterable->at(column);
+                                column < filterable->size() && filterable->at(column) && headerOn();
             table::FilterEntry const entry = look == CellLook::Empty
                                                  ? table::FilterEntry{.isEmpty = true}
                                                  : table::FilterEntry{.oneOf = std::vector{operand.value_or("")}};
@@ -12148,19 +12191,26 @@ Node ScreenCore::configureTable(TableConfig& config, LowerCtx const& ctx, TableO
                 };
                 return item;
             };
+            auto const filtering = [&config, headerOn](std::function<void()> run) {
+                return [&config, headerOn, run = std::move(run)] {
+                    if (!headerOn()) {
+                        config.message(std::string{tableText::kHeaderBusy});
+                        return;
+                    }
+                    run();
+                };
+            };
             items.push_back(command("Copy", [copy] { copy(false); }));
             items.push_back(command("Copy with headers", [copy] { copy(true); }));
-            items.push_back(command(
-                "Filter by this value",
-                [this, id, entry, refilter, filtersNow] {
-                    table::FilterSpec spec = runtime().untracked(filtersNow);
-                    spec.columns.insert_or_assign(id, table::ColumnFilter{.include = {entry}});
-                    static_cast<void>(refilter(spec));
-                },
-                usable));
+            items.push_back(command("Filter by this value", filtering([this, id, entry, refilter, filtersNow] {
+                                        table::FilterSpec spec = runtime().untracked(filtersNow);
+                                        spec.columns.insert_or_assign(id, table::ColumnFilter{.include = {entry}});
+                                        static_cast<void>(refilter(spec));
+                                    }),
+                                    usable));
             items.push_back(command(
                 "Exclude this value",
-                [this, id, entry, refilter, filtersNow] {
+                filtering([this, id, entry, refilter, filtersNow] {
                     table::FilterSpec spec = runtime().untracked(filtersNow);
                     std::vector<table::FilterEntry>& exclude = spec.columns[id].exclude;
                     auto const listed = std::ranges::find_if(exclude, [](table::FilterEntry const& excluded) {
@@ -12174,7 +12224,7 @@ Node ScreenCore::configureTable(TableConfig& config, LowerCtx const& ctx, TableO
                         exclude.push_back(entry);
                     }
                     static_cast<void>(refilter(spec));
-                },
+                }),
                 usable));
             if (config.declaredGroups) {
                 for (table::ColumnGroupInfo const& group : runtime().untracked([&] { return config.declaredGroups(); })) {
@@ -12183,14 +12233,14 @@ Node ScreenCore::configureTable(TableConfig& config, LowerCtx const& ctx, TableO
                     }
                     items.push_back(command(
                         "Filter by this value in any " + group.label,
-                        [this, groupId = group.id, entry, refilter, filtersNow] {
+                        filtering([this, groupId = group.id, entry, refilter, filtersNow] {
                             table::FilterSpec spec = runtime().untracked(filtersNow);
                             std::erase_if(spec.groups, [&groupId](table::GroupFilter const& filter) {
                                 return filter.group == groupId;
                             });
                             spec.groups.push_back(table::GroupFilter{.group = groupId, .include = {entry}});
                             static_cast<void>(refilter(spec));
-                        },
+                        }),
                         usable));
                 }
             }
@@ -12201,7 +12251,8 @@ Node ScreenCore::configureTable(TableConfig& config, LowerCtx const& ctx, TableO
             MenuItem separator;
             separator.separator = true;
             items.push_back(std::move(separator));
-            // The entries read the row as it was when the menu opened; the scope owns the signal that holds it.
+            // The entries read the row as it was when the menu opened; the scope owns the signal that holds it. The
+            // scope is the menu's own: state the table's row scope declares starts at its initial value in it.
             Value const record = held ? held->record : Value{};
             auto const scope =
                 std::make_shared<RtScope>(*this, ctx.scope, nullptr, ctx.scope->nodes.depth() + 2);
@@ -12223,6 +12274,15 @@ Node ScreenCore::configureTable(TableConfig& config, LowerCtx const& ctx, TableO
             return items;
         };
     }
+    // The chords the document's cell entries declare: a key that is none of them never asks for a cell's entries.
+    if (options.cellMenu) {
+        options.cellMenuKeys = chordsOf(node.partList("cellMenu"));
+    }
+    // A table with `configurable: false` has no menus, so neither the column chooser nor the sort dialog; with no
+    // column that filters, no dialog can open either, and the table is mounted alone.
+    if (!config.menus) {
+        return std::ranges::contains(*filterable, true) ? filterMenuDialog(menu) : nullptr;
+    }
     // A header's menu ends with the document's `headerMenu` entries, read in a scope with `column`, the column's id.
     if (std::span<DocNodePtr const> const parts = node.partList("headerMenu"); !parts.empty()) {
         options.headerEntries = [this, ctx, &config, parts, columns](std::size_t column) {
@@ -12234,11 +12294,6 @@ Node ScreenCore::configureTable(TableConfig& config, LowerCtx const& ctx, TableO
             clearsMessageFirst(config, own);
             return own;
         };
-    }
-    // A table with `configurable: false` has no menus, so neither the column chooser nor the sort dialog; with no
-    // column that filters, no dialog can open either, and the table is mounted alone.
-    if (!config.menus) {
-        return std::ranges::contains(*filterable, true) ? filterMenuDialog(menu) : nullptr;
     }
     // The saved views. A view is fitted to the table as a stored state is, and the arrangement is the view's while its
     // layout, laid over the table's columns, its sort and its filters are those fitted ones.
@@ -12512,12 +12567,17 @@ Node ScreenCore::configureTable(TableConfig& config, LowerCtx const& ctx, TableO
         }
         return menuEntries(entries);
     };
-    options.onMenu = [&config, &menu, entriesOf, sortBy, arrange, columns, openColumn, openGroup, refilter, copy,
+    options.onMenu = [&config, &menu, entriesOf, sortBy, arrange, columns, openColumn, openGroup, refilter, copy, headerOn,
                       viewCommand](std::optional<std::size_t> column, std::vector<std::size_t> const& path) {
         config.touch();
         std::vector<TableMenuEntry> const entries = entriesOf(column);
         TableMenuEntry const* const entry = chosen(entries, path);
         if (entry == nullptr) {
+            return;
+        }
+        // A menu opened while the header was enabled cannot sort, filter or arrange once it is not.
+        if (entry->command != MenuCommand::Copy && entry->command != MenuCommand::CopyWithHeaders && !headerOn()) {
+            config.message(std::string{tableText::kHeaderBusy});
             return;
         }
         std::size_t const index = column.value_or(columns->size());
