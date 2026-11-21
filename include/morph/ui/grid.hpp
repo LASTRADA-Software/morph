@@ -65,8 +65,10 @@ struct GridColumn {
     std::function<std::string(forms::RowState const&)> fieldOf;
     /// @brief The entry places of the row's member, which are also its wire `dp`; nothing keeps the field's. Tracked.
     std::function<std::optional<std::uint32_t>(forms::RowState const&)> decimals;
-    /// @brief The unit the row's member is entered in, an id of its `FieldSpec::units`; nothing, or an id it does not
-    ///        have, restores the field's entry unit. The draft is not converted: its text is read in the unit set. Tracked.
+    /// @brief The unit the row's member is entered in, an id of its `FieldSpec::units`: applied, converting the draft as the
+    ///        editor's unit select does, when it first gives a unit for the row or gives another one, so a unit the user
+    ///        picks afterwards stays; nothing, or an id the field does not have, after a unit restores the field's entry
+    ///        unit. Tracked.
     std::function<std::optional<std::string>(forms::RowState const&)> unit;
     /// @brief Whether the row's cell is read-only beyond its field (`CellFacts::overlayReadOnly`). Tracked.
     std::function<bool(forms::RowState const&)> readonly;
@@ -1061,15 +1063,7 @@ private:
                         state->places().set(places);
                     }
                     if (column.unit) {
-                        // No unit, or one the field does not have, restores the field's entry unit.
-                        std::vector<forms::UnitOption> const& units = state->spec().units;
-                        auto const found =
-                            unit ? std::ranges::find(units, *unit, &forms::UnitOption::id) : units.end();
-                        std::size_t const index = found != units.end() ? static_cast<std::size_t>(found - units.begin())
-                                                                       : state->spec().entryUnit;
-                        if (state->unit().peek() != index) {
-                            state->unit().set(index);
-                        }
+                        applyUnit(*state, unit);
                     }
                     if (column.options) {
                         state->narrowOptions(std::move(options));
@@ -1080,6 +1074,24 @@ private:
                 });
             }
         }
+    }
+
+    // A row's `unit` overlay, applied only when it first gives a unit or gives another one than it last did: the effect
+    // reruns on every change of a row, and the unit the user then picks in the editor must stay. It switches the way the
+    // editor does, converting the draft; no unit, or one the field does not have, after a unit restores the field's
+    // entry unit.
+    void applyUnit(forms::FieldState& state, std::optional<std::string> const& unit) {
+        auto const applied = _unitApplied.find(state.path());
+        bool const changed = applied == _unitApplied.end() ? unit.has_value() : applied->second != unit;
+        _unitApplied.insert_or_assign(state.path(), unit);
+        if (!changed) {
+            return;
+        }
+        std::vector<forms::UnitOption> const& units = state.spec().units;
+        auto const found = unit ? std::ranges::find(units, *unit, &forms::UnitOption::id) : units.end();
+        std::size_t const index =
+            found != units.end() ? static_cast<std::size_t>(found - units.begin()) : state.spec().entryUnit;
+        state.switchUnit(index);
     }
 
     template <typename Test>
@@ -1105,6 +1117,8 @@ private:
     std::unique_ptr<GridRows> _rows;
     std::function<void()> _committed;
     std::optional<std::size_t> _hook;
+    // The unit each member's `unit` overlay last gave, by the member's path; a member it never reached has none.
+    std::unordered_map<std::string, std::optional<std::string>> _unitApplied;
     std::unique_ptr<reactive::Effect> _overlays;
 };
 

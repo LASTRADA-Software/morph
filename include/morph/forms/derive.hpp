@@ -72,9 +72,9 @@ template <auto MemberPtr>
 }
 
 /// @brief Value-initialises every derived member of @p action (`FieldMeta::derived` in its type's `fieldMetadata`),
-///        and of every nested aggregate of it (each element of a `std::vector` member, a nested struct member, an
-///        engaged `std::optional` one, recursively: `detail::forEachNested`): what the server dispatch path runs before
-///        the model, so a derived value a client sent is never the one kept.
+///        and of every nested aggregate of it (each element of a `std::vector` member, a nested struct member, either
+///        inside an engaged `std::optional`, recursively: `detail::forEachNested`): what the server dispatch path runs
+///        before the model, so a derived value a client sent is never the one kept.
 /// @tparam A The action or row type.
 /// @param action The value cleared in place.
 template <typename A>
