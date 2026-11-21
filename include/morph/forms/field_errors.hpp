@@ -30,7 +30,9 @@ template <typename A, typename Member>
     if constexpr (EmptyCapableField<Member>) {
         bool const isComputed =
             detail::isComputedDestinationMember(action, static_cast<void const*>(std::addressof(member)));
-        return !detail::declaredOptional<A>(name) && !isComputed && !member.hasValue();
+        // A derived member is the model's to set: the dispatch path clears what a client sent for it.
+        return !detail::declaredOptional<A>(name) && !isComputed && !detail::declaredDerived<A>(name) &&
+               !member.hasValue();
     } else {
         static_cast<void>(action);
         static_cast<void>(name);

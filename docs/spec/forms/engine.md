@@ -21,6 +21,7 @@ which is the host's contract ([../ui/host.md](../ui/host.md)).
 - [Submitters and typed forms](#submitters-and-typed-forms)
 - [The field overlay](#the-field-overlay)
 - [Rendering](#rendering)
+- [Derived values](#derived-values)
 - [Collections](#collections)
 - [Wizards](#wizards)
 - [Rendering collections and wizards](#rendering-collections-and-wizards)
@@ -36,7 +37,7 @@ Header-only, in the base `morph` target:
 | `field_model.hpp` | `FieldKind`, `SubmitMode`, `FieldSpec`, `FieldGroupSpec`, `FormModel` |
 | `rules.hpp` | `SchemaError`, `Tri`, `RuleOperand`, `RuleExpr`, the gating and presentation verdicts |
 | `values.hpp` | `FieldError`, `WireValue`, `Encoding`, `ValueContext`, `encodeScalar`, `decodeScalar`, `convertDraft`, `parseOptions` |
-| `form_session.hpp` | `Submitter`, `ChoiceFetcher`, `FormSessionOptions`, `FieldState`, `RowState`, `FormSession` |
+| `form_session.hpp` | `Submitter`, `ChoiceFetcher`, `FormSessionOptions`, `FieldState`, `RowState`, `FormSession`; its rounds of derived values use `forms/derive.hpp`'s `DeriveOptions`, `DeriveRound`, `DeriveLoad` and `DeriveState` |
 | `handler_submitter.hpp` | `handlerSubmitter`, `handlerChoiceFetcher` |
 | `typed_form.hpp` | `Form<A, M, S>`, and the definition of `FormModel::forAction<A>()` |
 | `overrides.hpp` | `FieldView`, `Overrides` |
@@ -82,7 +83,7 @@ the text does not matter).
 | `ObjectArray` | an array of objects | an array of nested objects |
 
 A `FieldSpec` also carries the label, help, placeholder and i18n key; `required` and `x-blankAs`; `x-readonly`,
-`x-hidden`, `x-computed`'s inputs; exact bounds (`minimum`, `maximum`, `multipleOf`, `x-exactMinimum`,
+`x-hidden`, `x-computed` and its inputs, `x-derived`; exact bounds (`minimum`, `maximum`, `multipleOf`, `x-exactMinimum`,
 `x-exactMaximum`) and instance bounds (`x-minimum`, `x-maximum`); places; the units with their exact factors;
 the enum options; the Choice descriptor; the section and column span; the slider range; and the children of an
 `Object` or `ObjectArray`. Nesting is described to `kMaxNestingDepth` (4) levels and stops where a `$ref` chain
@@ -217,6 +218,17 @@ it. A view mounted on it is destroyed first.
   fetch, keep the selection. A failed fetch is not repeated on its own: `retryOptions()` fetches again, and opening
   the field's dropdown in `formView` runs it, so options that failed when the form was built (an action that needs
   the screen's own setup first) are fetched once the user asks for them.
+- **A Choice member of a collection row** looks up each `x-optionsDependsOn` name among its row's members first, then
+  among the top-level fields, so a grade can depend on its row's material and the form's site. Its options are not
+  fetched until an editor of it opens (`FieldState::openOptions()`, which a grid's cell editor calls as it opens), so
+  a column of 300 rows fetches nothing until a user opens a cell. Every row member's fetch goes through one cache of
+  the session (`SessionCore::sharedChoices`): identical `(optionsAction, request)` pairs share one fetch for the
+  session's life, a second ask joining the fetch in flight or taking its reply, and a failed fetch is not kept, so
+  the next ask fetches again. A column of rows over five materials makes five requests. A top-level Choice keeps its
+  own query, unshared.
+- **Options narrowed per row.** `FieldState::narrowOptions(values)` keeps only the options whose JSON literal is
+  listed (a grid column's `options` overlay); `options()` offers the narrowed list, and nothing restores every option.
+  `overridePlaceholder(text)` replaces the placeholder the same way (a column's `placeholder` overlay).
 - **Automatic submission waits for options in flight.** While any top-level Choice is fetching, its selection is
   unjudged — a parent just changed — so the automatic Effect does not submit; the settled query wakes it, after
   a stale selection has been cleared.
@@ -331,8 +343,8 @@ field)` in `forms/engine/field_control.hpp`, which a grid's cell editor draws to
   a `refill` that loads a field and a successful submission that ends a field's edit write it, for the fields they
   load.
 - **`modified(path)`** (tracked) is true when the field's draft or unit differs from the record, or the field is a
-  member of a row added since the load. A computed member (`FieldSpec::computed`, from `x-computed`) is never
-  modified: only a round writes it. Any other member stays modified whatever freezes it after the user typed in it.
+  member of a row added since the load. A computed member (`FieldSpec::computed`, from `x-computed`) and a derived
+  one (`FieldSpec::derived`, from `x-derived`) are never modified: only a round writes them. Any other member stays modified whatever freezes it after the user typed in it.
   **`rowModified(arrayPath, key)`** is true when a member of the row is modified or the row was added since.
 - **`revert(path)`** restores the record's draft and unit, programmatically; a row's path (`specimens#3`) reverts
   each member, and reverting a row added since the load removes it.
@@ -349,7 +361,44 @@ field)` in `forms/engine/field_control.hpp`, which a grid's cell editor draws to
   `model::ActionRefusal`'s arguments fill its sentence, and an argument whose name happens to be a field's path is
   not that field's error. A reply member named `errors` is reserved for field errors: an action whose reply carries
   a domain member of that name has it read as field errors, and the record taken as not saved.
-- A field is frozen (`readonly()`) by `x-readonly`, `x-computed`, a frozen parent or a `readonlyWhen` naming it.
+- A field is frozen (`readonly()`) by `x-readonly`, `x-computed`, `x-derived`, a frozen parent or a `readonlyWhen`
+  naming it.
+
+## Derived values
+
+A form asks for the values it cannot compute from what it holds in **rounds**
+([../table/editing.md](../table/editing.md#derived-values)): an evaluation of the action, whose recomputed body gives
+the computed members (`x-computed`, on the action and on a row type), and a call of the form's derive action, whose
+`forms::Derived` reply gives the derived members (`x-derived`, `FieldSpec::derived`). Neither is a member the user can
+edit, so a round never replaces a draft the user typed.
+
+- **`deriveWith(DeriveOptions)`** turns rounds on: `evaluate` sends the body to the action's evaluation (the UI
+  service's `ui-evaluate`), `derive` sends `{"body": <body>}` to the derive action, `scheduler` runs the debounce,
+  `debounce` is how long a commit waits for a further one (**150 ms** by default), and `refused` is told the paths a
+  derive reply named that are no derived member. Until it is called a session makes no round.
+- **`noteCommit()`** is what a committed edit runs (a grid's `FormGridSource::committed`). With a round in flight
+  it marks the round stale; otherwise it restarts the debounce timer, whose expiry starts a round; with no scheduler
+  a round starts at once.
+- **A round** captures itself (`captureRound()`: the next sequence, `partialBody()`, and the row keys of every
+  collection by `FieldState::path()`), sets `deriveState()` to `Running`, and sends the evaluation and the derive call,
+  each when set, with that body. At most one round is in flight.
+- **`partialBody()`** is the body as far as it encodes: every top-level field that encodes; an Object or a collection
+  member by member, a blank member or one that does not encode left out; every row written, in order, `{}` for a row
+  with nothing. A left-out member decodes to its default on the server.
+- **Loading.** `loadDerived(round, Derived)` writes the derived members a reply names, and
+  `loadDerived(round, evaluatedBody)` the computed members of the recomputed body (a computed member the body leaves
+  out of an object it holds is blank; its `errors` and `ready` are not read). Both resolve `name[i]` through
+  `round.rowKeys[name][i]` and the row's current position by key, so a value lands on the row it was computed for
+  after rows were inserted or removed, and a value for a row removed since is dropped (not refused). A path that
+  names no member of the reply's kind is refused and returned in `DeriveLoad::refused`. A load is programmatic
+  (nothing is submitted) and moves no snapshot: what the user typed stays an edit, and a computed or derived member
+  is never `modified`.
+- **Order.** Each kind of reply keeps the sequence it last loaded; a reply of an older round loads nothing, so derived
+  values never go back to an older result. When both replies of a round settle, `deriveState()` is `Failed` if
+  either failed (the values stay as they were), else `Current`; a stale round then starts one more at once, with the
+  newer body. `recalculate()` starts a round unless one is in flight.
+- **`insertRow(position)`** inserts a blank row before `position` (past the end appends), a user action like
+  `addRow`.
 
 ## Collections
 

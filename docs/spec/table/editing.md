@@ -101,7 +101,7 @@ declaration beyond layout. A column without `field` is a display column: its `ce
 read in the row's scope and it takes no edit.
 
 **Per row.** A column's field part may be an expression in the row's scope, naming a different member per row:
-`{"field": {"fn": "if", "args": [{"ref": "row.isChoice"}, "choice", "amount"]}}`. A row type that holds a value
+`{"field": {"if": [{"ref": "row.isChoice"}, "choice", "amount"]}}`. A row type that holds a value
 of one kind for some rows and another kind for others has a member per kind, and the grid shows the one each row
 uses. The kind of a value is the record's, never the grid's.
 
@@ -175,7 +175,9 @@ commit, the form evaluates its body, and calls its derive action when it names o
   sequence, and a reply older than one already loaded is ignored, so derived cells show at most one round trip
   behind the last commit and never go back to an older result.
 - While a round is in flight, derived cells draw muted. A failed round leaves the derived cells as they were,
-  marked stale, and the status line offers "Recalculate", which makes one more round.
+  marked stale, and the status line offers "Recalculate", which makes one more round. The failure is a standing
+  state, "Derived values could not be recalculated" with the entry "Recalculate": it lasts, through the hold of any
+  message, until a round succeeds.
 
 ### Submission
 

@@ -776,7 +776,13 @@ keeps its operands' 0 places and still fills 0.29 of a bar.
   mount of the table shows the same grid, its focus, its open editor, its layout, its sort and its filters. Its
   columns are the column parts, each editing the member its `field` names, or a display column showing its `value`,
   read with `row` bound to the row's record (each member's encoded value, `null` when blank), which the walk skips;
-  each is labelled by its `label` read once; with no parts, every member of the row type in schema order.
+  each is labelled by its `label` read once; with no parts, every member of the row type in schema order. A `field`
+  expression becomes the column's `GridColumn::fieldOf`, read in the row's scope as `value` is, and a name it gives
+  that is no member is reported once (the cell has no field, so it is read-only); such a column sorts and filters
+  its drafts as text. The column's `decimals`, `unit`, `readonly`, `options` (each value's JSON literal kept) and
+  `placeholder` become its per-row overlays, read in the same scope; `FormGridSource` applies `decimals`, `unit`,
+  `options` and `placeholder` to each row's member (`FieldState::places`, `unit`, `narrowOptions`,
+  `overridePlaceholder`) in an effect that follows them, and `readonly` is the cell's `CellFacts::overlayReadOnly`.
   `enterMoves` and `walk` give its `GridOptions`, and `onActivate` runs with `event` the row's key when `Enter` or a
   double click lands on a read-only cell. What a display column and `onActivate` keep holds the scope weakly. Its
   header, menus, cell menu and arrangement are a table's (`configureTable` over a `TableConfig` the grid keeps): an
@@ -816,7 +822,12 @@ keeps its operands' 0 places and still fills 0.29 of a bar.
   another model therefore fails its fetch); `prefill` is followed, each non-null
   value loading the form as a programmatic change: the first value, and a value whose `key` equals the
   previous one's, `refill` the form, so a field the user changed keeps what they entered; a new `key`,
-  or any later value of a form without a `key`, `prefill`s every field. It lowers to `forms::formView` inside a column that
+  or any later value of a form without a `key`, `prefill`s every field. A form whose model has a computed member
+  (at any depth), or that names `derive`, makes rounds of derived values (`FormSession::deriveWith`): `evaluate` is
+  the alias's channel `execute(action, body, {.evaluate = true})` while a member is computed, and `derive` is
+  `execute(derive, {"body": body})` when the form names one, on the session's timers, `deriveDebounce` (150 ms when
+  absent) after a grid's last commit; each path a derive reply names that is no derived member is reported once. It
+  lowers to `forms::formView` inside a column that
   carries the node's common properties. `title` (a heading over the fields) and `submitLabel` (the explicit-mode
   button, and the status line's `ready: press <label>`) are bound in the node's scope, so a `t` re-resolves on
   `setLocale`; `showStatus`, `columns`, `fieldLayout` and `captionWidth` are read at load, `columns` setting every group's grid and

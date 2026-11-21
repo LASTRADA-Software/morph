@@ -8203,6 +8203,7 @@ void ScreenCore::wireForm(ElementState& element) {
     element.form = std::make_unique<forms::FormSession>(runtime(), *std::move(model), aliasSubmits(alias->model),
                                                         aliasCalls(alias->model), engineOptions());
     followFormatting(element, scope);
+    deriveForm(element, alias->model);
     // An overlay's `decimals` follows its expression: the field keeps the draft as typed and checks it again against
     // the places the expression gives now.
     for (DocNodePtr const& record : node.partList("fields")) {
@@ -8255,6 +8256,62 @@ void ScreenCore::wireForm(ElementState& element) {
             });
         });
     }
+}
+
+namespace {
+
+// Whether a field, or a member of it at any depth, is computed: what an evaluation round would bring back.
+// NOLINTNEXTLINE(misc-no-recursion): an object's and a row's members are fields.
+[[nodiscard]] bool computesAny(std::span<forms::FieldSpec const> fields) {
+    return std::ranges::any_of(fields, [](forms::FieldSpec const& field) {
+        return field.computed || computesAny(field.children);
+    });
+}
+
+}  // namespace
+
+// A form's rounds of derived values: its action's evaluation while a member is computed, and its `derive` action when
+// it names one, each sent through the form's alias, `deriveDebounce` (150 ms when absent) after the last commit on the
+// session's timers. A path a derive reply names that is no derived member is reported once.
+void ScreenCore::deriveForm(ElementState& element, ModelAlias* alias) {
+    DocNode const& node = *element.node;
+    std::string const action{node.name("action")};
+    std::string const derive{node.name("derive")};
+    bool const computes = computesAny(element.form->model().fields());
+    if (derive.empty() && !computes) {
+        return;
+    }
+    auto const call = [this, alias](std::string actionId, bool evaluate) {
+        return [this, alias, actionId = std::move(actionId), evaluate](std::string body) -> async::Completion<std::string> {
+            std::shared_ptr<ModelChannel> const channel = channelOf(*alias, *this);
+            if (channel == nullptr) {
+                auto [failed, promise] = async::Completion<std::string>::makeSettleable(&runtime().owner());
+                promise.reject(std::make_exception_ptr(std::runtime_error{"the node's model alias is not bound"}));
+                return std::move(failed);
+            }
+            return channel->execute(actionId, body, CallOptions{.evaluate = evaluate});
+        };
+    };
+    forms::DeriveOptions options;
+    if (computes) {
+        options.evaluate = call(action, true);
+    }
+    if (!derive.empty()) {
+        options.derive = call(derive, false);
+    }
+    options.scheduler = session.options().scheduler;
+    if (ExprPtr const debounce = node.prop("deriveDebounce"); debounce && debounce->kind == ExprKind::Literal) {
+        if (std::int64_t const* const millis = debounce->literal.asInt(); millis != nullptr && *millis >= 0) {
+            options.debounce = std::chrono::milliseconds{*millis};
+        }
+    }
+    options.refused = [this, path = node.path, derive](std::vector<std::string> const& paths) {
+        for (std::string const& refused : paths) {
+            report(path + "/derive",
+                   "the reply of `" + derive + "` names `" + refused + "`, which is not a derived member of the form");
+        }
+    };
+    element.form->deriveWith(std::move(options));
 }
 
 Node ScreenCore::lowerForm(DocNode const& node, LowerCtx const& ctx, ElementState* element) {
@@ -8344,31 +8401,100 @@ Node ScreenCore::lowerForm(DocNode const& node, LowerCtx const& ctx, ElementStat
 // `value` is read with `row` the row's record, every member of the row type in schema order when it gives none;
 // `enterMoves`, `walk`, and `onActivate`, run with the row's key on a read-only cell. What the columns and
 // `onActivate` keep holds the scope weakly: the grid lives as long as the element the scope owns.
+// NOLINTNEXTLINE(readability-function-cognitive-complexity): one section per key of a grid column.
 void ScreenCore::gridParts(DocNode const& part, LowerCtx const& ctx, forms::FieldState const& array,
                            std::vector<GridColumn>& columns, GridOptions& options) {
     DetachedLower const detached = detachedLower(ctx);
+    // An expression read in a row's scope, `row` its record of encoded members; null once the scope is gone. Tracked.
+    auto const inRow = [detached](ExprPtr expr) {
+        return [detached, expr](forms::RowState const& row) -> std::optional<std::pair<Value, FormatContext>> {
+            LowerCtx const live = attached(detached);
+            if (live.scope == nullptr) {
+                return std::nullopt;
+            }
+            ValueRecord record;
+            for (auto const& member : row.fields()) {
+                forms::Encoding const& encoding = member->encoded().get();
+                record.insert_or_assign(member->spec().name, encoding.has_value() && encoding->has_value()
+                                                                 ? (*encoding)->value
+                                                                 : Value{});
+            }
+            Bindings bindings = live.bindings != nullptr ? *live.bindings : Bindings{};
+            bindings.push_back(Binding{.name = "row", .read = [record] { return Value{record}; }});
+            return std::pair{evalIn(*live.scope, &bindings, expr), live.scope->formatting()};
+        };
+    };
     for (DocNodePtr const& column : part.partList("columns")) {
         ExprPtr const label = column->prop("label");
         GridColumn made{.id = column->id,
                         .label = label ? textOf(once(ctx, label), ctx.scope->formatting()) : column->id,
                         .field = std::string{column->name("field")},
                         .value = {}};
-        if (ExprPtr const value = column->prop("value"); made.field.empty() && value) {
-            made.value = [detached, value](forms::RowState const& row) {
-                LowerCtx const live = attached(detached);
-                if (live.scope == nullptr) {
-                    return std::string{};
+        if (ExprPtr const field = column->prop("field")) {
+            // One member per row: a name that is no member of the row type is reported once, and its cell is read-only.
+            std::vector<std::string> members;
+            for (forms::FieldSpec const& member : array.spec().children) {
+                members.push_back(member.name);
+            }
+            made.fieldOf = [this, read = inRow(field), members = std::move(members), path = field->path](
+                               forms::RowState const& row) {
+                auto const read_ = read(row);
+                std::string const name = read_ ? textOf(read_->first, read_->second) : std::string{};
+                if (!name.empty() && std::ranges::find(members, name) == members.end()) {
+                    report(path, "`" + name + "` names no member of the row");
                 }
-                ValueRecord record;
-                for (auto const& member : row.fields()) {
-                    forms::Encoding const& encoding = member->encoded().get();
-                    record.insert_or_assign(member->spec().name, encoding.has_value() && encoding->has_value()
-                                                                     ? (*encoding)->value
-                                                                     : Value{});
+                return name;
+            };
+        }
+        ExprPtr const value = column->prop("value");
+        if (made.field.empty() && !made.fieldOf && value) {
+            made.value = [read = inRow(value)](forms::RowState const& row) {
+                auto const read_ = read(row);
+                return read_ ? textOf(read_->first, read_->second) : std::string{};
+            };
+        }
+        // Overlays per row, as a form field's overlays, each read in the row's scope.
+        if (ExprPtr const decimals = column->prop("decimals")) {
+            made.decimals = [read = inRow(decimals)](forms::RowState const& row) -> std::optional<std::uint32_t> {
+                auto const read_ = read(row);
+                int const places = read_ ? placesOf(read_->first, read_->second) : -1;
+                return places >= 0 ? std::optional{static_cast<std::uint32_t>(places)} : std::nullopt;
+            };
+        }
+        if (ExprPtr const unit = column->prop("unit")) {
+            made.unit = [read = inRow(unit)](forms::RowState const& row) -> std::optional<std::string> {
+                auto const read_ = read(row);
+                std::string const* const id = read_ ? read_->first.asString() : nullptr;
+                return id != nullptr && !id->empty() ? std::optional{*id} : std::nullopt;
+            };
+        } else if (std::string_view const unitName = column->name("unit"); !unitName.empty()) {
+            made.unit = [id = std::string{unitName}](forms::RowState const&) { return std::optional{id}; };
+        }
+        if (ExprPtr const readonly = column->prop("readonly")) {
+            made.readonly = [read = inRow(readonly)](forms::RowState const& row) {
+                auto const read_ = read(row);
+                bool const* const flag = read_ ? read_->first.asBool() : nullptr;
+                return flag != nullptr && *flag;
+            };
+        }
+        if (ExprPtr const offered = column->prop("options")) {
+            made.options = [read = inRow(offered)](forms::RowState const& row) -> std::optional<std::vector<std::string>> {
+                auto const read_ = read(row);
+                ValueList const* const items = read_ ? read_->first.asList() : nullptr;
+                if (items == nullptr) {
+                    return std::nullopt;
                 }
-                Bindings bindings = live.bindings != nullptr ? *live.bindings : Bindings{};
-                bindings.push_back(Binding{.name = "row", .read = [record] { return Value{record}; }});
-                return textOf(evalIn(*live.scope, &bindings, value), live.scope->formatting());
+                std::vector<std::string> kept;
+                for (Value const& item : *items) {
+                    kept.push_back(glz::write_json(valueToJson(item)).value_or(std::string{}));
+                }
+                return kept;
+            };
+        }
+        if (ExprPtr const placeholder = column->prop("placeholder")) {
+            made.placeholder = [read = inRow(placeholder)](forms::RowState const& row) {
+                auto const read_ = read(row);
+                return read_ ? textOf(read_->first, read_->second) : std::string{};
             };
         }
         columns.push_back(std::move(made));
@@ -8440,11 +8566,14 @@ Node ScreenCore::formGridTable(DocNode const& part, LowerCtx const& ctx, Element
     for (std::size_t at = 0; at < columns.size(); ++at) {
         GridColumn const& column = columns.at(at);
         auto const member = std::ranges::find(array.spec().children, column.field, &forms::FieldSpec::name);
-        bool const edits = !column.field.empty() && member != array.spec().children.end();
+        // A member per row sorts and filters its drafts as text.
+        bool const perRow = static_cast<bool>(column.fieldOf);
+        bool const edits = perRow || (!column.field.empty() && member != array.spec().children.end());
         config.columns.push_back(LayoutColumn{.id = column.id,
                                               .label = column.label,
                                               .locked = false,
-                                              .kind = edits ? detail::columnKindOf(member->kind) : table::ColumnKind::Text});
+                                              .kind = edits && !perRow ? detail::columnKindOf(member->kind)
+                                                                       : table::ColumnKind::Text});
         config.sortable.push_back(edits && at < parts.size() && parts[at]->flag("sortable"));
         filterable.push_back(edits && (at >= parts.size() || parts[at]->flag("filterable", true)));
         held->shown.push_back(TableColumn{.id = column.id, .label = column.label, .sortable = config.sortable.back()});

@@ -81,6 +81,7 @@ add_executable(morph_tests
     test_ui_interpreter_cache.cpp
     test_ui_table_model.cpp
     test_ui_grid.cpp
+    forms/test_forms_derive.cpp
     test_ui_table_state.cpp
     test_push_agent.cpp
     test_chat_settle.cpp
