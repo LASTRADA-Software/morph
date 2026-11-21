@@ -210,19 +210,35 @@ public:
     /// @brief A source over a collection of @p form.
     /// @param form      The form. Borrowed: it must outlive the source.
     /// @param arrayPath The collection's path (`forms::FormSession::field`).
-    /// @param columns   The columns, each id the name of a member of the row type.
+    /// @param columns   The columns.
+    /// @param members   The member of the row type each column reads, by index into @p columns; empty: each column's
+    ///                  id names its member.
     /// @throws std::out_of_range when no field has @p arrayPath.
-    /// @throws std::invalid_argument when the field is not a collection, or a column names no member.
-    FormRowsSource(forms::FormSession& form, std::string arrayPath, std::vector<table::ColumnInfo> columns)
-        : _form{&form}, _arrayPath{std::move(arrayPath)}, _array{&form.field(_arrayPath)}, _columns{std::move(columns)} {
+    /// @throws std::invalid_argument when the field is not a collection, @p members is neither empty nor one per
+    ///         column, or a column reads no member.
+    FormRowsSource(forms::FormSession& form, std::string arrayPath, std::vector<table::ColumnInfo> columns,
+                   std::vector<std::string> members = {})
+        : _form{&form},
+          _arrayPath{std::move(arrayPath)},
+          _array{&form.field(_arrayPath)},
+          _columns{std::move(columns)},
+          _members{std::move(members)} {
         if (_array->spec().kind != forms::FieldKind::ObjectArray || _array->spec().truncated) {
             throw std::invalid_argument{"morph::ui::FormRowsSource: `" + _arrayPath + "` is not a collection"};
         }
-        for (table::ColumnInfo const& column : _columns) {
+        if (_members.empty()) {
+            for (table::ColumnInfo const& column : _columns) {
+                _members.push_back(column.id);
+            }
+        }
+        if (_members.size() != _columns.size()) {
+            throw std::invalid_argument{"morph::ui::FormRowsSource: one member per column"};
+        }
+        for (std::string const& name : _members) {
             if (std::ranges::none_of(_array->spec().children,
-                                     [&column](forms::FieldSpec const& member) { return member.name == column.id; })) {
-                throw std::invalid_argument{"morph::ui::FormRowsSource: no member `" + column.id + "` in `" +
-                                            _arrayPath + "`"};
+                                     [&name](forms::FieldSpec const& member) { return member.name == name; })) {
+                throw std::invalid_argument{"morph::ui::FormRowsSource: no member `" + name + "` in `" + _arrayPath +
+                                            "`"};
             }
         }
         // Reading it is free while nothing it tracks changed, and walks every member once after a change.
@@ -388,9 +404,10 @@ private:
                 keys.emplace_back(static_cast<std::int64_t>(row->key()));
                 std::vector<table::Cell> rowCells;
                 rowCells.reserve(_columns.size());
-                for (table::ColumnInfo const& column : _columns) {
-                    forms::FieldState const* const member = row->field(column.id);
-                    rowCells.push_back(member == nullptr ? table::Cell{} : detail::memberCell(*member, column.kind));
+                for (std::size_t at = 0; at < _columns.size(); ++at) {
+                    forms::FieldState const* const member = row->field(_members.at(at));
+                    rowCells.push_back(member == nullptr ? table::Cell{}
+                                                         : detail::memberCell(*member, _columns.at(at).kind));
                 }
                 cells.push_back(std::move(rowCells));
                 ValueRecord record;
@@ -422,6 +439,7 @@ private:
     std::string _arrayPath;
     forms::FieldState* _array;
     std::vector<table::ColumnInfo> _columns;
+    std::vector<std::string> _members;
     std::shared_ptr<detail::FormRowsSnapshot const> _held;
     table::detail::Listeners _listeners;
     bool _watching = false;

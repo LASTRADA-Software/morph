@@ -410,7 +410,8 @@ each on `Table` and `TableOptions` alike:
   the realized rows when the given position holds another key, or at `viewRow` while it names no key, and keeps that
   row realized, so the window fetches a placeholder. A click or a `FocusMove` is resolved to a cell and handed to
   **`onGridFocus`** (its key empty when that row is not fetched), and does not move the mount's own focus; the
-  focused cell's menu opening does the same.
+  focused cell's menu opening does the same. `GridController::node` passes the cell its focus then names to the
+  table's `onFocusCell`, so what a table's focus feeds (a copy of the focused cell) follows a grid's.
 - **`onActivateCell(CellRef)`**: a double click on a cell. **`onClickCell(CellRef)`**: a single click on a fetched
   row's cell, after the click moved focus (a grid toggles a Boolean cell with it). **`onFocusOut()`**: focus left
   the table and everything inside it, an open popup of a widget inside it (an editor's list) included. **`onText(text)`**: printable text typed while a cell has focus and no editor is open.

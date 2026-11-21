@@ -1459,10 +1459,8 @@ bool TableImpl::clickCell(WidgetBase const* row, int x, bool twice) {
             // A copy: the handler may destroy this table.
             auto const handler = _onCellClick;
             std::size_t const viewRow = index->second;
-            handler(viewRow, column.column, false);
-            if (twice) {
-                handler(viewRow, column.column, true);
-            }
+            // The first click of a double click was reported on its own: the second is reported once, as the second.
+            handler(viewRow, column.column, twice);
             return true;
         }
     }

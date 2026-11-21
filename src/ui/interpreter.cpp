@@ -1305,7 +1305,10 @@ struct RowsTable {
 /// A grid of a form: the grid it shows, and its status line's message, held for 6 s as a table's is.
 struct GridTable {
     explicit GridTable(reactive::Runtime& runtime)
-        : layout{runtime, std::nullopt}, message{runtime, std::string{}}, entries{runtime, std::vector<StatusEntry>{}} {}
+        : config{runtime},
+          filterVersion{runtime, std::uint64_t{0}},
+          message{runtime, std::string{}},
+          entries{runtime, std::vector<StatusEntry>{}} {}
 
     GridTable(GridTable const&) = delete;
     GridTable& operator=(GridTable const&) = delete;
@@ -1313,13 +1316,15 @@ struct GridTable {
     GridTable& operator=(GridTable&&) = delete;
     ~GridTable() = default;
 
-    /// The grid: its source, its controller and its node.
+    /// The grid: its source, its controller and its table node.
     FormGrid grid;
-    /// The columns, for the layout; the layout the grid holds while the document binds none; the filter its cell
-    /// menu set.
-    std::vector<LayoutColumn> columns;
-    reactive::Signal<std::optional<table::ColumnLayoutValue>> layout;
+    /// The table's columns, one per grid column.
+    std::vector<TableColumn> shown;
+    /// The table's configuring: its columns, layout, menus and filters.
+    TableConfig config;
+    /// The filters the user set, and a count that moves with each.
     table::FilterSpec filter;
+    reactive::Signal<std::uint64_t> filterVersion;
     /// The status line's message and the choices it offers, with what each runs.
     reactive::Signal<std::string> message;
     reactive::Signal<std::vector<StatusEntry>> entries;
@@ -3511,6 +3516,7 @@ RtScope::RtScope(ScreenCore& screen, std::shared_ptr<RtScope> enclosing, reactiv
 RtScope::~RtScope() {
     // A grid of a form calls back into its form's session, an element declared before it.
     for (auto const& element : elements) {
+        element->fieldGrids.clear();
         element->gridTable.reset();
     }
     if (core.recording) {
@@ -8381,27 +8387,23 @@ Node ScreenCore::lowerForm(DocNode const& node, LowerCtx const& ctx, ElementStat
                                               return fieldComponent(view, *field, ctx);
                                           });
             }
-            // A `grid` part gives a grid widget its columns and walk; the scope is held weakly, as the grid's is.
+            // A `grid` part makes the field a grid table, kept on the form's element by the field's name so every
+            // mount of the form shows the same grid; the scope is held weakly, as the grid's is.
             if (std::span<DocNodePtr const> const grid = overlay->partList("grid"); !grid.empty()) {
                 options.overrides.byField(
-                    overlay->id, [this, detached = detachedLower(ctx), part = grid.front().get()](
-                                     forms::FieldView const& view) {
+                    overlay->id, [this, element, detached = detachedLower(ctx), part = grid.front().get(),
+                                  name = overlay->id](forms::FieldView const& view) {
                         LowerCtx const live = attached(detached);
-                        Node const muted = ui::text(Text{.text = view.state().path(), .role = TextRole::Muted});
                         if (live.scope == nullptr) {
-                            return muted;
+                            return ui::text(Text{.text = view.state().path(), .role = TextRole::Muted});
                         }
-                        std::vector<GridColumn> columns;
-                        GridOptions gridOptions;
-                        gridParts(*part, live, view.state(), columns, gridOptions);
-                        try {
-                            return makeFormGrid(view.session(), view.state(), std::move(columns), std::move(gridOptions),
-                                                live.scope->formatting())
-                                .node;
-                        } catch (std::invalid_argument const& failure) {
-                            report(part->path, failure.what());
-                            return muted;
+                        std::unique_ptr<ElementState>& slot = element->fieldGrids[name];
+                        if (slot == nullptr) {
+                            slot = std::make_unique<ElementState>(runtime());
+                            slot->node = part;
+                            slot->scope = element->scope;
                         }
+                        return formGridTable(*part, live, *slot, view.session(), view.state());
                     });
             }
         }
@@ -8462,51 +8464,225 @@ void ScreenCore::gridParts(DocNode const& part, LowerCtx const& ctx, forms::Fiel
     }
 }
 
-// A grid of a form, made once per element: every mount of the table shows the same grid, so its focus, its open editor
-// and its messages outlive a remount. Its columns and walk are `gridParts`'. Its cell menu offers "Copy", "Copy with
-// headers", "Filter by this value" and "Exclude this value" before the grid's own entries. Its column layout, held or
-// bound to `layout`, arranges the columns and is the order the walk follows; a user's move of a column changes the
-// held one.
+// A grid of a form named by a table's `form` and `field`.
 Node ScreenCore::lowerFormGrid(DocNode const& node, LowerCtx const& ctx, ElementState* element) {
     NameRef const* const named = ctx.scope->find(node.name("form"));
     forms::FormSession* const form =
         named != nullptr && named->element != nullptr ? named->element->form.get() : nullptr;
-    auto const muted = [&node] { return ui::text(Text{.text = std::string{node.name("field")}, .role = TextRole::Muted}); };
     if (form == nullptr || element == nullptr) {
-        return muted();
-    }
-    if (element->gridTable != nullptr) {
-        return element->gridTable->grid.node;
+        return ui::text(Text{.text = std::string{node.name("field")}, .role = TextRole::Muted});
     }
     forms::FieldState* array = nullptr;
     try {
         array = &form->field(node.name("field"));
     } catch (std::out_of_range const&) {
         report(node.path, "`" + std::string{node.name("field")} + "` is not a field of the form");
-        return muted();
+        return ui::text(Text{.text = std::string{node.name("field")}, .role = TextRole::Muted});
     }
-    if (array->spec().kind != forms::FieldKind::ObjectArray || array->spec().truncated) {
-        report(node.path, "`" + std::string{node.name("field")} + "` is not a list of records");
+    return formGridTable(node, ctx, *element, *form, *array);
+}
+
+// A grid of a form, made once per element: every mount of the table shows the same grid, so its focus, its open editor,
+// its messages, its layout, its sort and its filters outlive a remount. Its columns and walk are `gridParts`'; its
+// header, its menus, its cell menu and its arrangement are a table's (`configureTable`): an edit column whose part says
+// `sortable` sorts, every edit column filters unless its part says `filterable: false`, and a display column does
+// neither. The grid's own cell entries come after the built-ins and before the separator and the document's `cellMenu`
+// entries. Sorting and filtering change the view, never the record's order.
+// NOLINTNEXTLINE(readability-function-cognitive-complexity): one section per part of a table's configuring.
+Node ScreenCore::formGridTable(DocNode const& part, LowerCtx const& ctx, ElementState& element,
+                               forms::FormSession& form, forms::FieldState& array) {
+    if (element.gridTable != nullptr) {
+        return gridTableNode(part, ctx, element);
+    }
+    auto const muted = [&array] { return ui::text(Text{.text = array.path(), .role = TextRole::Muted}); };
+    if (array.spec().kind != forms::FieldKind::ObjectArray || array.spec().truncated) {
+        report(part.path, "`" + array.path() + "` is not a list of records");
         return muted();
     }
     std::vector<GridColumn> columns;
     GridOptions options;
-    gridParts(node, ctx, *array, columns, options);
+    gridParts(part, ctx, array, columns, options);
     auto grid = std::make_unique<GridTable>(runtime());
     GridTable* const held = grid.get();
-    for (GridColumn const& column : columns) {
-        held->columns.push_back(LayoutColumn{.id = column.id, .label = column.label});
+    TableConfig& config = held->config;
+    config.element = &element;
+    std::tie(config.allowed, config.menus) = configurableOf(part);
+    // A column part filters unless it says `filterable: false`; a display column never does.
+    std::vector<bool> filterable;
+    std::span<DocNodePtr const> const parts = part.partList("columns");
+    for (std::size_t at = 0; at < columns.size(); ++at) {
+        GridColumn const& column = columns.at(at);
+        auto const member = std::ranges::find(array.spec().children, column.field, &forms::FieldSpec::name);
+        bool const edits = !column.field.empty() && member != array.spec().children.end();
+        config.columns.push_back(LayoutColumn{.id = column.id,
+                                              .label = column.label,
+                                              .locked = false,
+                                              .kind = edits ? detail::columnKindOf(member->kind) : table::ColumnKind::Text});
+        config.sortable.push_back(edits && at < parts.size() && parts[at]->flag("sortable"));
+        filterable.push_back(edits && (at >= parts.size() || parts[at]->flag("filterable", true)));
+        held->shown.push_back(TableColumn{.id = column.id, .label = column.label, .sortable = config.sortable.back()});
     }
+    config.maxSortKeys = [] { return std::size_t{8}; };
+    config.message = [this, &element](std::string text) { tableMessage(element, std::move(text)); };
+    config.touch = [this, &element] { tableMessage(element, std::string{}); };
+    config.filters = [held] {
+        static_cast<void>(held->filterVersion.get());
+        return held->filter;
+    };
+    config.setFilters = [this, &element, held](table::FilterSpec const& filter) {
+        if (auto const set = held->grid.source->view().setFilter(filter); !set) {
+            tableMessage(element, "The filter is refused: " + set.error().message);
+            return false;
+        }
+        held->filter = filter;
+        held->filterVersion.set(held->filterVersion.peek() + 1);
+        return true;
+    };
+    config.rows = [held]() -> TableRows* { return held->grid.source ? &held->grid.source->view() : nullptr; };
+    if (ExprPtr const layout = part.prop("layout");
+        layout && (layout->kind != ExprKind::Literal || !layout->literal.isNull())) {
+        RtScope& scope = *element.scope;
+        config.bound = &scope.nodes.computed(
+            [&scope, bindings = ctx.bindings, layout] { return evalIn(scope, bindings.get(), layout); });
+    }
+    config.filterTarget = [held, filterable](std::string const& id) -> std::optional<FilterTarget> {
+        auto const found = std::ranges::find(held->config.columns, id, &LayoutColumn::id);
+        auto const at = static_cast<std::size_t>(found - held->config.columns.begin());
+        if (held->grid.source == nullptr || found == held->config.columns.end() || !filterable.at(at)) {
+            return std::nullopt;
+        }
+        std::span<table::ColumnInfo const> const infos = held->grid.source->view().source().columns();
+        auto const info = std::ranges::find(infos, id, &table::ColumnInfo::id);
+        if (info == infos.end()) {
+            return std::nullopt;
+        }
+        FilterTarget target;
+        target.column = id;
+        target.label = found->label;
+        target.shown = table::TableColumn{.info = *info};
+        target.listed = true;
+        return target;
+    };
+    // A cell a menu opens on: the member as its column's filter reads it, and the row's record.
+    config.heldCell = [held](Key const& key, std::string const& id) -> std::optional<HeldCell> {
+        FormGridSource const* const source = held->grid.source.get();
+        if (source == nullptr) {
+            return std::nullopt;
+        }
+        std::optional<std::size_t> const at = source->positionOf(key);
+        std::optional<TableRowRef> const ref =
+            at ? held->grid.source->view().row(static_cast<std::int64_t>(*at)) : std::nullopt;
+        if (!ref) {
+            return std::nullopt;
+        }
+        std::optional<std::pair<table::Cell, table::TableColumn>> cell = source->filterCell(key, id);
+        if (!cell) {
+            return HeldCell{.record = ref->row, .cell = table::Cell{}, .shown = {}, .units = {}, .keep = nullptr};
+        }
+        return HeldCell{
+            .record = ref->row, .cell = std::move(cell->first), .shown = std::move(cell->second), .units = {}, .keep = nullptr};
+    };
+    // A copy: each cell's text as the grid shows it, under its column's label.
+    config.gather = [this, held](std::vector<Key> keys, std::vector<std::string> const& ids, CopyDone done) {
+        CopyGathered gathered;
+        std::vector<std::string> kept;
+        for (std::string const& id : ids) {
+            auto const found = std::ranges::find(held->config.columns, id, &LayoutColumn::id);
+            if (found != held->config.columns.end()) {
+                kept.push_back(id);
+                gathered.headers.push_back(found->label);
+            }
+        }
+        FormGridSource const& source = *held->grid.source;
+        runtime().untracked([&] {
+            for (Key const& key : keys) {
+                std::optional<std::size_t> const at = source.positionOf(key);
+                if (!at) {
+                    continue;
+                }
+                CopyRow row{.viewRow = static_cast<std::int64_t>(*at), .cells = {}};
+                for (std::string const& id : kept) {
+                    row.cells.emplace_back(source.text(key, id));
+                }
+                gathered.rows.push_back(std::move(row));
+            }
+        });
+        done(std::move(gathered));
+    };
+    try {
+        held->grid = makeFormGrid(form, array, std::move(columns), std::move(options), ctx.scope->formatting());
+    } catch (std::invalid_argument const& failure) {
+        report(part.path, failure.what());
+        return muted();
+    }
+    // Each lowering makes the table node anew, over the grid kept here: the node's handlers hold the lowering's
+    // scope, which holds this element, so the element never holds a node.
+    held->grid.node = nullptr;
+    element.gridTable = std::move(grid);
+    // The walk follows the visible columns in layout order, and the cells the scope's formatting; a copy with no row
+    // selected copies the focused cell.
+    RtScope* const scope = element.scope;
+    scope->nodes.effect([this, held, scope] {
+        TableConfig const& arranged = held->config;
+        std::vector<std::string> visible =
+            layoutOver(arranged.columns, arranged.declaredHidden, layoutNow(arranged)).visible();
+        FormatContext format = scope->formatting();
+        std::optional<CellRef> focused = held->grid.grid->focus();
+        runtime().untracked([&] {
+            held->grid.source->setLayout(std::move(visible));
+            held->grid.source->setFormat(std::move(format));
+            held->config.focused = std::move(focused);
+        });
+    });
+    // The sort the element holds, or the document binds, orders the view; one naming no edit column is refused.
+    scope->nodes.effect([this, &element, held, path = part.path] {
+        Value const sort = tableSort(element);
+        runtime().untracked([&] {
+            SortChain chain;
+            if (ValueList const* const keys = sort.asList()) {
+                for (Value const& key : *keys) {
+                    Value const* const column = key.field("column");
+                    Value const* const direction = key.field("direction");
+                    if (column != nullptr && column->asString() != nullptr) {
+                        bool const descending =
+                            direction != nullptr && direction->asString() != nullptr && *direction->asString() == "desc";
+                        chain.push_back(table::SortKey{.column = *column->asString(),
+                                                       .dir = descending ? table::SortDirection::Descending
+                                                                         : table::SortDirection::Ascending});
+                    }
+                }
+            }
+            if (auto const set = held->grid.source->view().setSort(std::move(chain)); !set) {
+                report(pointerAppend(path, "sort"), "the sort is refused: " + set.error().message);
+            }
+        });
+    });
+    scope->nodes.effect([this, &element, held] {
+        std::string const text = held->grid.grid->message();
+        static_cast<void>(held->grid.grid->notices());
+        std::vector<StatusEntry> const offered = held->grid.grid->messageEntries();
+        runtime().untracked([&] {
+            std::vector<std::pair<StatusEntry, std::function<void()>>> entries;
+            for (StatusEntry const& entry : offered) {
+                entries.emplace_back(entry, [held, id = entry.id] { held->grid.grid->chooseEntry(id); });
+            }
+            tableMessage(element, text, std::move(entries));
+        });
+    });
+    return gridTableNode(part, ctx, element);
+}
+
+// The table node of a grid kept in @p element: its status line, its configuring and its columns' filter buttons.
+Node ScreenCore::gridTableNode(DocNode const& part, LowerCtx const& ctx, ElementState& element) {
+    GridTable* const held = element.gridTable.get();
     TableOptions table;
-    commonOf(node, ctx, element, table.common);
+    commonOf(part, ctx, &element, table.common);
     // The status line: the grid's notices, posted through `tableMessage` so they are held as a table's are, and the
     // state that lasts while its cause holds.
     table.status = slotProp<TableStatus>([held] {
         TableStatus status{.message = held->message.get(), .entries = held->entries.get()};
-        if (held->grid.grid != nullptr) {
-            status.standing = held->grid.grid->standing();
-            status.standingEntries = held->grid.grid->standingEntries();
-        }
+        status.standing = held->grid.grid->standing();
+        status.standingEntries = held->grid.grid->standingEntries();
         status.shown = !status.message.empty() || !status.entries.empty() || !status.standing.empty() ||
                        !status.standingEntries.empty();
         return status;
@@ -8517,112 +8693,14 @@ Node ScreenCore::lowerFormGrid(DocNode const& node, LowerCtx const& ctx, Element
             run();
             return;
         }
-        if (held->grid.grid != nullptr) {
-            held->grid.grid->chooseEntry(id);
-        }
+        held->grid.grid->chooseEntry(id);
     };
-    // The layout: the document's `layout` while it binds one, else the one the grid holds. Tracked.
-    ExprPtr const layoutExpr = node.prop("layout");
-    RtScope* const scope = element->scope;
-    auto const layoutNow = [held, layoutExpr, scope] {
-        std::optional<table::ColumnLayoutValue> const value =
-            layoutExpr ? layoutFromValue(evalIn(*scope, nullptr, layoutExpr)) : held->layout.get();
-        return layoutOver(held->columns, {}, value);
-    };
-    table.arrangement = Prop<TableArrangement>{[held, layoutNow] { return arrangementOf(held->columns, layoutNow()); }};
-    if (!layoutExpr) {
-        table.onColumnMove = [this, held, layoutNow](std::size_t column, std::size_t position) {
-            if (column >= held->columns.size()) {
-                return;
-            }
-            table::ColumnLayout layout = runtime().untracked(layoutNow);
-            LayoutResult const result =
-                applyLayoutGesture(layout, held->columns, Configure::All,
-                                   MoveColumnTo{.id = held->columns.at(column).id, .position = position});
-            if (result.changed) {
-                held->layout.set(layout.value());
-            }
-        };
-    }
-    // The cell menu's built-ins, before the grid's own entries.
-    table.cellMenu = [this, element, held](Key const& key, std::size_t column) {
-        std::vector<MenuItem> items;
-        if (held->grid.source == nullptr || column >= held->columns.size()) {
-            return items;
-        }
-        std::string const id = held->columns.at(column).id;
-        std::string const label = held->columns.at(column).label;
-        auto const command = [this, element](std::string text, std::function<void()> run, bool enabled) {
-            MenuItem item;
-            item.label = std::move(text);
-            item.enabled = enabled;
-            item.onSelect = [this, element, run = std::move(run)] {
-                tableMessage(*element, std::string{});
-                run();
-            };
-            return item;
-        };
-        auto const copy = [this, element, held, key, id, label](bool headers) {
-            std::vector<std::string> const labels = headers ? std::vector<std::string>{label} : std::vector<std::string>{};
-            std::vector<std::vector<std::optional<std::string>>> const rows{
-                {std::optional<std::string>{runtime().untracked([&] { return held->grid.source->text(key, id); })}}};
-            CopiedText const text = ui::copyText(labels, rows);
-            if (!clipboard || !clipboard(text.text)) {
-                return;
-            }
-            tableMessage(*element, tableText::copied(1, 0));
-        };
-        std::optional<std::pair<std::string, table::FilterEntry>> const entry =
-            runtime().untracked([&] { return held->grid.source->filterEntry(key, id); });
-        auto const refilter = [this, element, held, entry](bool exclude) {
-            if (!entry) {
-                return;
-            }
-            table::FilterSpec spec = held->filter;
-            table::ColumnFilter& filter = spec.columns[entry->first];
-            (exclude ? filter.exclude : filter.include) = {entry->second};
-            if (auto const done = held->grid.source->view().setFilter(spec); !done) {
-                tableMessage(*element, done.error().message);
-                return;
-            }
-            held->filter = std::move(spec);
-        };
-        items.push_back(command("Copy", [copy] { copy(false); }, true));
-        items.push_back(command("Copy with headers", [copy] { copy(true); }, true));
-        items.push_back(command("Filter by this value", [refilter] { refilter(false); }, entry.has_value()));
-        items.push_back(command("Exclude this value", [refilter] { refilter(true); }, entry.has_value()));
-        return items;
-    };
-    try {
-        grid->grid = makeFormGrid(*form, *array, std::move(columns), std::move(options), ctx.scope->formatting(),
-                                  std::move(table));
-    } catch (std::invalid_argument const& failure) {
-        report(node.path, failure.what());
-        return muted();
-    }
-    element->gridTable = std::move(grid);
-    // The walk follows the visible columns in layout order, and the cells the scope's formatting.
-    element->scope->nodes.effect([this, held, layoutNow, scope] {
-        std::vector<std::string> visible = layoutNow().visible();
-        FormatContext format = scope->formatting();
-        runtime().untracked([&] {
-            held->grid.source->setLayout(std::move(visible));
-            held->grid.source->setFormat(std::move(format));
-        });
-    });
-    element->scope->nodes.effect([this, element, held] {
-        std::string const text = held->grid.grid->message();
-        static_cast<void>(held->grid.grid->notices());
-        std::vector<StatusEntry> const offered = held->grid.grid->messageEntries();
-        runtime().untracked([&] {
-            std::vector<std::pair<StatusEntry, std::function<void()>>> entries;
-            for (StatusEntry const& entry : offered) {
-                entries.emplace_back(entry, [held, id = entry.id] { held->grid.grid->chooseEntry(id); });
-            }
-            tableMessage(*element, text, std::move(entries));
-        });
-    });
-    return element->gridTable->grid.node;
+    held->config.beginMount();
+    Node dialogs = configureTable(held->config, ctx, table, nullptr);
+    std::vector<TableColumn> columns = held->shown;
+    markFilterable(held->config, columns, table);
+    return besideDialogs(table.common, std::move(dialogs),
+                         [&] { return held->grid.grid->node(std::move(columns), std::move(table)); });
 }
 
 [[nodiscard]] std::expected<forms::detail::engine::Json, std::string> changeWire(std::string const& payload,

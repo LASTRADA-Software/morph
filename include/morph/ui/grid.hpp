@@ -560,11 +560,18 @@ public:
             }
             _layout.push_back(column.id);
         }
+        // The rows' columns are the edit columns, by their own ids, so a sort or a filter names a column as the
+        // table does; a display column has no cell there and neither sorts nor filters.
         std::vector<table::ColumnInfo> infos;
-        for (forms::FieldSpec const& member : array.spec().children) {
-            infos.push_back(table::ColumnInfo{.id = member.name, .kind = detail::columnKindOf(member.kind)});
+        std::vector<std::string> members;
+        for (GridColumn const& column : _columns) {
+            auto const member = std::ranges::find(array.spec().children, column.field, &forms::FieldSpec::name);
+            if (!column.field.empty() && member != array.spec().children.end()) {
+                infos.push_back(table::ColumnInfo{.id = column.id, .kind = detail::columnKindOf(member->kind)});
+                members.push_back(column.field);
+            }
         }
-        _rowsSource = std::make_shared<FormRowsSource>(form, _arrayPath, std::move(infos));
+        _rowsSource = std::make_shared<FormRowsSource>(form, _arrayPath, std::move(infos), std::move(members));
         _rows = std::make_unique<GridRows>(_rowsSource);
     }
 
@@ -840,28 +847,20 @@ public:
     /// @return They, as given.
     [[nodiscard]] std::vector<GridColumn> const& gridColumns() const noexcept { return _columns; }
 
-    /// @brief What "Filter by this value" on a cell filters by: the column's member and the cell's value as a filter
-    ///        entry takes it, `isEmpty` for an empty cell. Tracked.
+    /// @brief A cell as its column's filter reads it: the cell of the column's kind and the column. Tracked.
     /// @param key    The row's key.
     /// @param column The column's id.
-    /// @return The member and the entry; nothing for a display column, or a cell whose draft does not encode.
-    [[nodiscard]] std::optional<std::pair<std::string, table::FilterEntry>> filterEntry(Key const& key,
-                                                                                       std::string_view column) const {
+    /// @return The cell and its column, the column's id that of the rows' column; nothing for a display column or a
+    ///         row the field does not hold.
+    [[nodiscard]] std::optional<std::pair<table::Cell, table::TableColumn>> filterCell(Key const& key,
+                                                                                      std::string_view column) const {
         forms::FieldState const* const state = field(key, column);
         if (state == nullptr) {
             return std::nullopt;
         }
         table::TableColumn shown;
-        shown.info = table::ColumnInfo{.id = state->spec().name, .kind = detail::columnKindOf(state->spec().kind)};
-        table::Cell const cell = detail::memberCell(*state, shown.info.kind);
-        if (cellLook(cell, shown) == CellLook::Empty) {
-            return std::pair{shown.info.id, table::FilterEntry{.isEmpty = true}};
-        }
-        std::optional<std::string> const operand = operandOf(cell, shown);
-        if (!operand) {
-            return std::nullopt;
-        }
-        return std::pair{shown.info.id, table::FilterEntry{.oneOf = std::vector{*operand}}};
+        shown.info = table::ColumnInfo{.id = std::string{column}, .kind = detail::columnKindOf(state->spec().kind)};
+        return std::pair{detail::memberCell(*state, shown.info.kind), shown};
     }
 
 private:
@@ -987,7 +986,8 @@ public:
             }
             return;
         }
-        // A Boolean opens no editor: a click or `Space` flips it, so a double click is two flips.
+        // A Boolean opens no editor: a click or `Space` flips it, and the second click of a double click, which
+        // activates, flips nothing more.
         if (_source->toggles(cell.key, cell.column)) {
             return;
         }
@@ -1220,7 +1220,13 @@ public:
             return look;
         };
         options.gridFocus = Prop<std::optional<GridFocus>>{[self] { return self->place(); }};
-        options.onGridFocus = [self, keep](GridFocus target) { self->focusPlace(std::move(target)); };
+        // The table's `onFocusCell` hears where a click or a move put the grid's focus, as a table's does.
+        options.onGridFocus = [self, keep, heard = std::move(options.onFocusCell)](GridFocus target) {
+            self->focusPlace(std::move(target));
+            if (heard) {
+                heard(self->_rt->untracked([&] { return self->focus(); }));
+            }
+        };
         options.onKey = [self](std::string const& chord) { return self->press(chord); };
         options.keyChords = Prop<std::vector<std::string>>{[self] { return self->keyChords(); }};
         options.onText = [self](std::string text) { self->type(text); };
@@ -1433,15 +1439,21 @@ struct FormGrid {
 /// @param options The walk and the activation.
 /// @param format  How values are shown.
 /// @param table   The table's other options.
+/// @param shown   The table's columns, one per grid column in its order, each with the grid column's id; empty: each
+///                with the grid column's id and label alone.
 /// @return The grid.
-/// @throws std::invalid_argument when @p array is not a collection of @p form, or a column names no member.
+/// @throws std::invalid_argument when @p array is not a collection of @p form, a column names no member, or @p shown
+///         is neither empty nor one per grid column.
 [[nodiscard]] inline FormGrid makeFormGrid(forms::FormSession& form, forms::FieldState& array,
                                            std::vector<GridColumn> columns, GridOptions options, FormatContext format,
-                                           TableOptions table = {}) {
-    std::vector<TableColumn> shown;
-    shown.reserve(columns.size());
-    for (GridColumn const& column : columns) {
-        shown.push_back(TableColumn{.id = column.id, .label = column.label});
+                                           TableOptions table = {}, std::vector<TableColumn> shown = {}) {
+    if (shown.empty()) {
+        for (GridColumn const& column : columns) {
+            shown.push_back(TableColumn{.id = column.id, .label = column.label});
+        }
+    }
+    if (shown.size() != columns.size()) {
+        throw std::invalid_argument{"morph::ui::makeFormGrid: one table column per grid column"};
     }
     auto source = std::make_shared<FormGridSource>(form, array.path(), std::move(columns), std::move(format));
     auto grid = std::make_shared<GridController>(form.runtime(), *source, std::move(options));

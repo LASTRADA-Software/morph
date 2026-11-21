@@ -370,11 +370,20 @@ constexpr std::array<KeySpec, 26> kColumnKeys = {{{"id", Shape::Name},
                                                   {"labels", Shape::Expr},
                                                   {"tone", Shape::Expr, {}, kInner},
                                                   {"tooltip", Shape::Expr, {}, kInner}}};
-/// @brief The keys of a form field overlay's `grid` part: a grid widget's columns, walk and activation.
-constexpr std::array<KeySpec, 4> kGridPartKeys = {{{"columns", Shape::Parts, "column"},
-                                                   {"enterMoves", Shape::Text},
-                                                   {"walk", Shape::Text},
-                                                   {"onActivate", Shape::Commands}}};
+/// @brief The keys of a form field overlay's `grid` part: the keys a `table` over a `form` takes beyond its `form` and
+///        `field`, its columns, walk and activation, its layout, menus and filters.
+constexpr std::array<KeySpec, 12> kGridPartKeys = {{{"columns", Shape::Parts, "column"},
+                                                    {"enterMoves", Shape::Text},
+                                                    {"walk", Shape::Text},
+                                                    {"onActivate", Shape::Commands},
+                                                    {"layout", Shape::Expr},
+                                                    {"onLayoutChange", Shape::Commands},
+                                                    {"configurable", Shape::Expr},
+                                                    {"onFiltersChange", Shape::Commands},
+                                                    {"cellMenu", Shape::Parts, "menuItem", kInner},
+                                                    {"headerMenu", Shape::Parts, "menuItem"},
+                                                    {"headerEnabled", Shape::Condition},
+                                                    {"testId", Shape::Text}}};
 /// @brief The keys of a `table` column group part: the group's id, its label and its columns' ids, a literal list.
 constexpr std::array<KeySpec, 3> kColumnGroupKeys = {
     {{"id", Shape::Name, {}, kRequired}, {"label", Shape::Expr}, {"columns", Shape::Expr, {}, kRequired}}};
@@ -3238,7 +3247,7 @@ private:
         for (auto const& [key, parts] : node.parts) {
             CheckContext context = isInner(spec, key) ? inner : outer;
             // A table's menu entries read the column they open on, and a cell's entries its row and its value.
-            if (node.kind == "table" && (key == "cellMenu" || key == "headerMenu")) {
+            if ((node.kind == "table" || node.kind == "fieldGrid") && (key == "cellMenu" || key == "headerMenu")) {
                 context.bindings.emplace_back("column", Type::of(TypeKind::String));
                 if (key == "cellMenu") {
                     context.bindings.emplace_back("row", Type::any());
@@ -4048,6 +4057,7 @@ private:
                         refuse(grid.front()->path, "a field's `grid` gives a grid widget its columns; give it `widget: \"grid\"`");
                     }
                     checkGridPart(*grid.front(), form, field->id, field->path);
+                    checkTableConfigurable(*grid.front());
                 }
             }
         }
