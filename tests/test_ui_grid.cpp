@@ -420,7 +420,9 @@ TEST_CASE("grid: a refusal's argument named like a field is not a field error", 
     CHECK(g.h.backend.cellAccent(g.table, ui::Key{std::int64_t{2}}, 0).tooltip.empty());
 }
 
-// Mutation: the lowering leaving out the cell menu's built-in entries (the menu starts at "Revert cell").
+// Mutations: the lowering leaving out the cell menu's built-in entries (the menu starts at "Revert cell"); the grid's
+// columns given no filter target (the filter entries are disabled, and row 1 stays in view); the grid's filters not
+// held (the table menu's "Clear all filters" stays disabled, and row 1 stays out of view).
 TEST_CASE("grid: the cell menu offers copy and filter before the grid's own entries", "[ui][grid][interpreter]") {
     GridScreen g;
     g.form().field("specimens[0].note").text().set("a");
@@ -440,6 +442,56 @@ TEST_CASE("grid: the cell menu offers copy and filter before the grid's own entr
     g.h.settle();
     CHECK_FALSE(g.h.backend.tableRow(g.table, ui::Key{std::int64_t{1}}).has_value());
     CHECK(g.h.backend.tableRow(g.table, ui::Key{std::int64_t{2}}).has_value());
+    // The filter shows on its column's header, and the table menu clears it.
+    CHECK(g.h.backend.prop(g.table, "filtered") == "[1]");
+    CHECK(g.h.backend.prop(g.table, "columns").find("filterable=true") != std::string::npos);
+    g.h.backend.chooseMenu(g.table, std::nullopt, {"Clear all filters"});
+    g.h.settle();
+    CHECK(g.h.backend.tableRow(g.table, ui::Key{std::int64_t{1}}).has_value());
+    CHECK(g.h.backend.prop(g.table, "filtered") == "[]");
+}
+
+constexpr std::string_view kMenuGridDocument = R"({"vocab":"ui/1","id":"specimens",
+  "models":{"sample":{"type":"Lims_SampleModel"}},
+  "state":{"picked":{"init":null}},
+  "view":{"kind":"column","children":[
+    {"kind":"form","id":"rec","model":"sample","action":"Lims_RecordSpecimens","submit":"explicit"},
+    {"kind":"table","id":"grid","testId":"grid","form":"rec","field":"specimens",
+     "columns":[{"id":"mass","field":"mass"},{"id":"note","field":"note","sortable":true}],
+     "cellMenu":[{"label":"Pick","onClick":[{"set":"picked","value":{"ref":"column"}}]}]},
+    {"kind":"text","testId":"picked","text":{"fn":"coalesce","args":[{"ref":"picked"},"-"]}}]}})";
+
+// Mutations: the cell menu leaving out the document's `cellMenu` parts (no separator and no "Pick"); the grid's sort
+// not given to its rows (after the header click, view row 0 still holds key 1).
+TEST_CASE("grid: the document's cell menu entries follow a separator after the grid's, and its header sorts",
+          "[ui][grid][interpreter]") {
+    ui::testing::TableHarness h;
+    ui::testing::addAction(h, "Lims_RecordSpecimens", std::string{morph::test::grid::kSpecimens},
+                           ui::ActionInfo{.modelType = "Lims_SampleModel"});
+    auto const screen = h.mount(kMenuGridDocument);
+    ui::testing::elementOf(*screen, "rec").form->prefill(R"({"sampleId":4,"specimens":[{},{}]})");
+    h.settle();
+    int const table = h.byTestId("Table", "grid");
+    std::vector<std::string> labels;
+    for (ui::MenuEntry const& shown : h.backend.rightClickCell(table, ui::Key{std::int64_t{1}}, 1)) {
+        labels.push_back(shown.separator ? std::string{"--"} : shown.label);
+    }
+    CHECK(labels == std::vector<std::string>{"Copy", "Copy with headers", "Filter by this value", "Exclude this value",
+                                             "Revert cell", "Revert row", "--", "Pick"});
+    h.backend.chooseCellMenu(table, ui::Key{std::int64_t{1}}, 1, {"Pick"});
+    h.settle();
+    CHECK(h.text("picked") == "note");
+    forms::FormSession& form = *ui::testing::elementOf(*screen, "rec").form;
+    form.field("specimens[0].note").text().set("b");
+    form.field("specimens[1].note").text().set("a");
+    h.settle();
+    h.backend.clickHeader(table, 1);
+    h.settle();
+    h.backend.clickCell(table, 0, 1);
+    h.settle();
+    h.backend.typeInto(table, "c");
+    h.settle();
+    CHECK(ui::testing::elementValue(h, "grid", "editing") == ui::testing::value(R"({"key":2,"column":"note"})"));
 }
 
 constexpr std::string_view kDisplayGridDocument = R"({"vocab":"ui/1","id":"specimens",
@@ -501,13 +553,18 @@ constexpr std::string_view kOverlayGridDocument = R"({"vocab":"ui/1","id":"speci
   "view":{"kind":"column","children":[
     {"kind":"form","id":"rec","model":"sample","action":"Lims_RecordSpecimens","submit":"explicit",
      "fields":{"specimens":{"widget":"grid","grid":{"walk":"columns",
-       "columns":[{"id":"mass","label":"Mass","field":"mass"},{"id":"density","label":"Density","field":"density"}],
+       "columns":[{"id":"mass","label":"Mass","field":"mass"},{"id":"density","label":"Density","field":"density"},
+                  {"id":"note","label":"Note","field":"note"}],
+       "layout":{"lit":{"order":["mass","density","note"],"hidden":["note"],"pinned":0,"widths":{}}},
+       "cellMenu":[{"label":"Pick","onClick":[{"set":"picked","value":{"ref":"column"}}]}],
        "onActivate":[{"set":"picked","value":{"ref":"event"}}]}}}},
     {"kind":"text","testId":"picked","text":{"fn":"coalesce","args":[{"ref":"picked"},"-"]}}]}})";
 
 // Mutations: the form's lowering ignoring a field overlay's `grid` part (the grid shows every member); the grid's
-// `onActivate` not lowered (a double click on the read-only density leaves `picked` empty).
-TEST_CASE("grid: a field overlay's grid part gives the grid its columns and its onActivate", "[ui][grid][interpreter]") {
+// `onActivate` not lowered (a double click on the read-only density leaves `picked` empty); the overlay's grid drawn
+// without its table's configuring (no arrangement hides `note`, and the cell menu has no "Pick").
+TEST_CASE("grid: a field overlay's grid part gives the grid its columns, its onActivate and a table's keys",
+          "[ui][grid][interpreter]") {
     ui::testing::TableHarness h;
     ui::testing::addAction(h, "Lims_RecordSpecimens", std::string{morph::test::grid::kSpecimens},
                            ui::ActionInfo{.modelType = "Lims_SampleModel"});
@@ -519,10 +576,23 @@ TEST_CASE("grid: a field overlay's grid part gives the grid its columns and its 
     int const table = tables.front();
     CHECK(h.backend.headerText(table, 0) == "Mass");
     CHECK(h.backend.headerText(table, 1) == "Density");
-    CHECK(h.backend.headerText(table, 2).empty());
+    CHECK(h.backend.headerText(table, 2) == "Note");
+    CHECK(h.backend.headerText(table, 3).empty());
     h.backend.clickCell(table, 1, 1, true);   // (2, density), read-only
     h.settle();
     CHECK(h.text("picked") == "2");
+    // Its layout hides `note`.
+    CHECK(h.backend.headerShown(table, 1));
+    CHECK_FALSE(h.backend.headerShown(table, 2));
+    std::vector<std::string> labels;
+    for (ui::MenuEntry const& shown : h.backend.rightClickCell(table, ui::Key{std::int64_t{1}}, 0)) {
+        labels.push_back(shown.separator ? std::string{"--"} : shown.label);
+    }
+    CHECK(labels.back() == "Pick");
+    CHECK(std::ranges::contains(labels, std::string{"Copy"}));
+    h.backend.chooseCellMenu(table, ui::Key{std::int64_t{1}}, 0, {"Pick"});
+    h.settle();
+    CHECK(h.text("picked") == "mass");
 }
 
 // Mutation: the loader taking a field overlay's `grid` part on a field that is not drawn as a grid (it loads).

@@ -1476,6 +1476,9 @@ struct MORPH_API ElementState {
     /// @brief A grid of a form (a table with `form` and `field`): its grid and its status line, made when the table is
     ///        first lowered; null for any other element. It outlives every mount of the table.
     std::unique_ptr<GridTable> gridTable;
+    /// @brief A form's fields drawn as grids through a field overlay's `grid` part, by the field's name: each an element
+    ///        of its own, whose node is the part, holding its grid. Empty for any other element.
+    std::map<std::string, std::unique_ptr<ElementState>, std::less<>> fieldGrids;
 };
 
 /// @brief One check at run time.
@@ -2426,6 +2429,12 @@ private:
     Node lowerModelTable(DocNode const& node, LowerCtx const& ctx, ElementState* element);
     /// A grid of a form: a table over a form node's collection, its rows the field's and its cells its members.
     Node lowerFormGrid(DocNode const& node, LowerCtx const& ctx, ElementState* element);
+    /// The table of a grid of a form, kept in @p element: a `table` node's with `form` and `field`, or a field overlay's
+    /// `grid` part's.
+    Node formGridTable(DocNode const& part, LowerCtx const& ctx, ElementState& element, forms::FormSession& form,
+                       forms::FieldState& array);
+    /// The table node of the grid @p element keeps, made anew by each lowering.
+    Node gridTableNode(DocNode const& part, LowerCtx const& ctx, ElementState& element);
     /// What a grid's part (a `table` with a `form`, a field overlay's `grid`) gives beyond its table: its columns and
     /// its options.
     void gridParts(DocNode const& part, LowerCtx const& ctx, forms::FieldState const& array,

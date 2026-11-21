@@ -4019,6 +4019,16 @@ public:
         return fakeTable(expectKind(widgetId, "headerText", {"Table"})).headerText(column);
     }
 
+    /// @brief Whether a column's header is drawn: the column is one of the table's and, once the visible columns were
+    ///        told, one of them.
+    /// @param widgetId The table.
+    /// @param column   The column.
+    /// @return True when its header is drawn.
+    /// @throws std::logic_error when the widget is not a table.
+    [[nodiscard]] bool headerShown(int widgetId, std::size_t column) {
+        return fakeTable(expectKind(widgetId, "headerShown", {"Table"})).headerShown(column);
+    }
+
     /// @brief A column header's accessible description: its sort key's, or empty.
     /// @param widgetId The table.
     /// @param column   The column.

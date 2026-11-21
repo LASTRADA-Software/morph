@@ -347,7 +347,8 @@ field)` in `forms/engine/field_control.hpp`, which a grid's cell editor draws to
   a path the form has no field for is not shown. Such a reply did not save the record, so what it sent stays an
   edit. The next reply replaces them, and a failure clears them. A failure names no field: a
   `model::ActionRefusal`'s arguments fill its sentence, and an argument whose name happens to be a field's path is
-  not that field's error.
+  not that field's error. A reply member named `errors` is reserved for field errors: an action whose reply carries
+  a domain member of that name has it read as field errors, and the record taken as not saved.
 - A field is frozen (`readonly()`) by `x-readonly`, `x-computed`, a frozen parent or a `readonlyWhen` naming it.
 
 ## Collections

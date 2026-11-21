@@ -1859,6 +1859,30 @@ TEST_CASE("tui grid: focus in an editor's own popup does not leave the table", "
     CHECK(g.f.grid->editing() == morph::test::grid::at(1, "unit"));
 }
 
+// Mutation: the terminal table reporting the second click of a double click twice, once as a single click (the check
+// box flips back: its value is false).
+TEST_CASE("tui grid: a double click on a Boolean cell flips it once", "[tui][grid]") {
+    TuiGridFixture g{morph::test::grid::specimensWithChoices()};
+    REQUIRE(g.table != nullptr);
+    std::size_t headerLine = 0;
+    while (headerLine < 12 && g.line(headerLine).find("checked") == std::string::npos) {
+        ++headerLine;
+    }
+    std::size_t const checkedAt = g.line(headerLine).find("checked");
+    REQUIRE(checkedAt != std::string::npos);
+    using Type = core::tui::MouseEvent::Type;
+    int const x = static_cast<int>(checkedAt) + 2;
+    int const y = static_cast<int>(headerLine) + 2;   // the first row, 1-based
+    for (int click = 0; click < 2; ++click) {
+        static_cast<void>(g.screen.dispatchEvent(core::tui::MouseEvent{.type = Type::Press, .button = 0, .x = x, .y = y}));
+        static_cast<void>(
+            g.screen.dispatchEvent(core::tui::MouseEvent{.type = Type::Release, .button = 0, .x = x, .y = y}));
+    }
+    g.settle();
+    CHECK(g.f.grid->focus() == morph::test::grid::at(1, "checked"));
+    CHECK(g.f.json("specimens[0].checked") == "true");
+}
+
 // Mutation: the terminal table ignoring setOnText (the keystroke moves nothing and opens no editor).
 TEST_CASE("tui grid: typing on a focused cell opens its editor, Enter commits and moves down", "[tui][grid]") {
     TuiGridFixture g;

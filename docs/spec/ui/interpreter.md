@@ -773,25 +773,31 @@ keeps its operands' 0 places and still fills 0.29 of a bar.
   backend that loads nothing.
 - **A grid of a form.** A `table` with `form` and `field` lowers to `ui::makeFormGrid` over the form element's
   session and the named collection, made when the table is first lowered and kept in the table's element, so every
-  mount of the table shows the same grid, its focus and its open editor. Its columns are the column parts, each
-  editing the member its `field` names, or a display column showing its `value`, read with `row` bound to the row's
-  record (each member's encoded value, `null` when blank), which the walk skips; each is labelled by its `label` read
-  once; with no parts, every member of the row type in schema order. `enterMoves` and `walk` give its
-  `GridOptions`, and `onActivate` runs with `event` the row's key when `Enter` or a double click lands on a
-  read-only cell. What a display column and `onActivate` keep holds the scope weakly. The column layout is the
-  document's `layout` while it binds one, else the grid's own, which a move of a column's header changes; it
-  arranges the columns and is fed to `FormGridSource::setLayout`, so the walk follows the visible columns in layout
-  order. The cell menu shows "Copy", "Copy with headers" (the cell's text), "Filter by this value" and "Exclude this
-  value" (the cell's member, its operand or `isEmpty`; disabled on a display column and on a cell whose draft does
-  not encode) before the grid's "Revert cell" and "Revert row". The scope's formatting is followed
-  (`FormGridSource::setFormat`). The grid's notices are posted through `tableMessage`, held as a table's messages
-  are, a repeated one posted again, and what stands while its cause lasts is the status line's `standing`. A grid
-  the form cannot make (a column naming no member) is reported and drawn as muted text. The form's `form_submit`
-  submits through `FormSession::submit`, whose before-submit hooks commit the grid's open editor first. Element
-  values `modifiedCount`, `modifiedRows`, `errorCount` and `editing` read the grid. A form field overlay's
-  `widget: grid` (or the schema's `x-widget: grid`) draws the field as a grid inside the form's own view: of every
-  member, or of what the overlay's `grid` part gives (`columns`, `enterMoves`, `walk`, `onActivate`, read as the
-  table's are), through a `forms::Overrides::byField` for the field.
+  mount of the table shows the same grid, its focus, its open editor, its layout, its sort and its filters. Its
+  columns are the column parts, each editing the member its `field` names, or a display column showing its `value`,
+  read with `row` bound to the row's record (each member's encoded value, `null` when blank), which the walk skips;
+  each is labelled by its `label` read once; with no parts, every member of the row type in schema order.
+  `enterMoves` and `walk` give its `GridOptions`, and `onActivate` runs with `event` the row's key when `Enter` or a
+  double click lands on a read-only cell. What a display column and `onActivate` keep holds the scope weakly. Its
+  header, menus, cell menu and arrangement are a table's (`configureTable` over a `TableConfig` the grid keeps): an
+  edit column whose part says `sortable` sorts by its header, and the sort orders the grid's rows; every edit column
+  filters unless its part says `filterable: false`, with its header's filter button, its values list, `onFiltersChange`
+  and the table menu's "Clear all filters"; a display column neither sorts nor filters; the layout (the document's
+  `layout` while it binds one, else the grid's own, which the header and the column chooser change) arranges the
+  columns and is fed to `FormGridSource::setLayout`, so the walk follows the visible columns in layout order. The rows'
+  columns are the edit columns by their own ids, so a sort and a filter name a column as the table does. The cell menu
+  shows "Copy", "Copy with headers", "Filter by this value" and "Exclude this value", then the grid's "Revert cell" and
+  "Revert row", then a separator and the document's `cellMenu` entries, read in a row scope with `row`, `column` and
+  `value` bound as a table over `rows` reads them. A copy with no row selected copies the focused cell. The scope's
+  formatting is followed (`FormGridSource::setFormat`). The grid's notices are posted through `tableMessage`, held as
+  a table's messages are, a repeated one posted again, and what stands while its cause lasts is the status line's
+  `standing`. A grid the form cannot make (a column naming no member) is reported and drawn as muted text. The form's
+  `form_submit` submits through `FormSession::submit`, whose before-submit hooks commit the grid's open editor first.
+  Element values `modifiedCount`, `modifiedRows`, `errorCount` and `editing` read the grid. A form field overlay's
+  `widget: grid` (or the schema's `x-widget: grid`) draws the field as a grid of every member inside the form's own
+  view; with a `grid` part, through a `forms::Overrides::byField` for the field, the same table a `table` node with
+  those keys makes, kept in an element of its own on the form's element (`ElementState::fieldGrids`, by the field's
+  name, its node the part) so every mount of the form shows the same grid.
 - **A form field's component.** A top-level field whose overlay names a `component` is drawn by it: the
   form's view is given a `forms::Overrides::byField` per such field, whose render builds the `custom` node
   `lowerCustom` would, with the field's built-in control as the fallback. The form fills the props it knows:
