@@ -5985,9 +5985,10 @@ std::vector<SelRow> tenRowsMoved(std::int64_t gone, std::optional<std::int64_t> 
     return rows;
 }
 
-// A keyed reply of selectionDescription() naming each row at the view row given.
+// A reply of selectionDescription() naming each row at the view row given: keyed (with `indices`), or a page from
+// @p offset.
 std::string keyedAt(std::vector<std::pair<std::int64_t, SelRow>> const& placed, std::int64_t total,
-                    std::string_view viewRevision) {
+                    std::string_view viewRevision, std::optional<std::int64_t> offset = std::nullopt) {
     std::string keys;
     std::string cells;
     std::string indices;
@@ -5999,8 +6000,8 @@ std::string keyedAt(std::vector<std::pair<std::int64_t, SelRow>> const& placed, 
     }
     return R"({"revision":")" + selectionDescription().revision +
            R"(","columns":["id","status","lockedBy"],"keys":[)" + keys + R"(],"rows":[)" + cells + R"(],"total":)" +
-           std::to_string(total) +
-           R"(,"offset":0,"viewRevision":")" + std::string{viewRevision} + R"(","indices":[)" + indices + "]}";
+           std::to_string(total) + R"(,"offset":)" + std::to_string(offset.value_or(0)) + R"(,"viewRevision":")" +
+           std::string{viewRevision} + "\"" + (offset ? std::string{} : R"(,"indices":[)" + indices + "]") + "}";
 }
 
 // The document: @p table, a button `run-<name>` for each mutation, and buttons `pick-<key>` setting `picked`.
@@ -6066,7 +6067,11 @@ void answerView(TableHarness& h, std::vector<SelRow> const& view, std::string_vi
         std::size_t const index = morph::ui::testing::oldestOpen(h, "Table.samples");
         table::TableQuery const query = morph::ui::testing::queryOf(h, index);
         if (!query.keys) {
-            h.reply(index, selectionPage(view, total, revision));
+            std::vector<std::pair<std::int64_t, SelRow>> page;
+            for (std::int64_t at = query.page.offset; at < std::min(total, query.page.offset + query.page.limit); ++at) {
+                page.emplace_back(at, view.at(static_cast<std::size_t>(at)));
+            }
+            h.reply(index, keyedAt(page, total, revision, query.page.offset));
             continue;
         }
         std::vector<std::pair<std::int64_t, SelRow>> placed;
@@ -6077,6 +6082,16 @@ void answerView(TableHarness& h, std::vector<SelRow> const& view, std::string_vi
         }
         h.reply(index, keyedAt(placed, total, revision));
     }
+}
+
+// Answers the describe request and the open queries from @p view, of revision "v1".
+std::unique_ptr<morph::ui::Screen> mountActingOver(TableHarness& h, std::vector<SelRow> const& view) {
+    addAction(h, "Lims_SaveAs", std::string{kSelectionSchema}, samplesAction());
+    addAction(h, "Lims_TouchRow", std::string{kRowSchema}, samplesAction());
+    auto screen = h.mount(actingDoc(h, kActingTable, kActingMutations));
+    replyDescribe(h, describeJson(selectionDescription()));
+    answerView(h, view, "v1");
+    return screen;
 }
 
 // The JSON of a ChangedRows reply under `rows`.
@@ -6428,3 +6443,48 @@ TEST_CASE("row states: a move keeps the new key's own state", "[ui][table][keys]
     CHECK(states.busyCount() == 0);
 }
 // Mutation: a move that overwrites the new key's failed mark with the old key's, which leaves "two" on 7.
+
+TEST_CASE("key change: focus alone follows a from whose event came first", "[ui][table][keys][review]") {
+    TableHarness h;
+    auto screen = mountActing(h);
+    int const table = h.byTestId("Table", "t");
+    SECTION("nothing selected") {}
+    SECTION("a selection of the view, which leaves 2 in") {
+        h.backend.selectAll(table);
+        h.settle();
+        REQUIRE(elementValue(h, "t", "selectionSet").field("view") != nullptr);
+    }
+    // Focus on row 2, which no selected key, retained row or failed mark holds.
+    focusRow(h, table, 2);
+    runMutation(h, "save");
+    fireEvent(h, "Lims_SampleModel.samples", {10, 2});
+    answerView(h, tenRowsMoved(2, 10));
+    REQUIRE(focusedKey(*screen, h, table) == std::optional{rid(3)});  // the row now at 2's index took focus
+    settleMutation(h, "save", savedReply(R"({"key":10,"from":2})"));
+    answerView(h, tenRowsMoved(2, 10));
+    CHECK(h.backend.focusCell(table).first == 9);
+    CHECK(focusedKey(*screen, h, table) == std::optional{rid(10)});
+}
+// Mutation: moves told to the mount only for a `from` the lowering holds, which leaves focus on key 3.
+
+TEST_CASE("key change: focus follows a new key outside the rows in view", "[ui][table][keys][review]") {
+    TableHarness h;
+    std::vector<SelRow> rows = tenRows();
+    for (std::int64_t key = 10; key < 300; ++key) {
+        rows.push_back(SelRow{.key = key});
+    }
+    auto screen = mountActingOver(h, rows);
+    int const table = h.byTestId("Table", "t");
+    focusRow(h, table, 2);
+    runMutation(h, "save");
+    settleMutation(h, "save", savedReply(R"({"key":1000,"from":2})"));
+    // Row 2 is gone and row 1000 is the view's last, far from the rows in view.
+    std::vector<SelRow> after = rows;
+    std::erase_if(after, [](SelRow const& row) { return row.key == 2; });
+    after.push_back(SelRow{.key = 1000});
+    fireEvent(h, "Lims_SampleModel.samples", {1000, 2});
+    answerView(h, after);
+    CHECK(h.backend.focusCell(table).first == 299);
+    CHECK(focusedKey(*screen, h, table) == std::optional{rid(1000)});
+}
+// Mutation: no locateRow for a new key no realized row holds, which leaves focus told at view row 2.

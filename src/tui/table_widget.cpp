@@ -46,6 +46,9 @@ constexpr std::string_view kFilterFilled = "\u25BE";
 /// What the gutter's last cell shows for a row an action is working on, and for a row another user holds.
 constexpr std::string_view kBusyGlyph = "\u2026";
 constexpr std::string_view kLockGlyph = "#";
+/// The gutter cells a busy or locked glyph takes: the glyph, and a gap, so the ellipsis is not read as the first
+/// cell's truncation.
+constexpr int kMarkCells = 2;
 /// What a busy or locked row says on hover when its marks carry no text of their own.
 constexpr std::string_view kBusyText = "Saving this row";
 constexpr std::string_view kLockText = "Locked by another user";
@@ -332,7 +335,9 @@ std::size_t TableImpl::dataPlace(std::span<WidgetBase* const> rows, std::size_t 
     return place;
 }
 
-int TableImpl::gutter() const noexcept { return (_selectColumn ? kSelectGutter : kGutter) + (_markGutter ? 1 : 0); }
+int TableImpl::gutter() const noexcept {
+    return (_selectColumn ? kSelectGutter : kGutter) + (_markGutter ? kMarkCells : 0);
+}
 
 std::string TableImpl::headerBox() const {
     auto const rows = shownChildren();
@@ -376,7 +381,7 @@ void TableImpl::setRowMarks(ui::Widget& row, ui::RowMarks const& marks) {
                                   : marks.busy           ? kBusyText
                                                          : std::string_view{};
     base.applyMarksTooltip(said);
-    // The gutter takes a cell for the glyph from the first busy or locked row on, and keeps it, so the columns do not
+    // The gutter takes cells for the glyph from the first busy or locked row on, and keeps it, so the columns do not
     // move as rows start and stop being busy.
     _markGutter = _markGutter || marks.busy || marks.locked;
     refresh();
@@ -1054,12 +1059,13 @@ std::string TableImpl::rowMark(WidgetBase const* row, bool cursor) const {
         mark = isMarked(row) ? "*" : " ";
     }
     mark += cursor ? ">" : " ";
-    // A busy or locked row's glyph takes the gutter's own last cell, after the selection and cursor marks.
+    // A busy or locked row's glyph takes the gutter's own cells, after the selection and cursor marks.
     if (_markGutter) {
         auto const found = _marks.find(row);
         bool const busy = found != _marks.end() && found->second.busy;
         bool const locked = found != _marks.end() && found->second.locked;
         mark += busy ? kBusyGlyph : locked ? kLockGlyph : " ";
+        mark += " ";
     }
     return mark;
 }

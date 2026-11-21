@@ -1668,7 +1668,8 @@ struct Table {
     ///        through `setSelectionView` on each change; when it disengages the mount sets `selection` again.
     Prop<std::optional<std::vector<Key>>> selectionView;
     /// @brief Rows an action gave new keys: the mount's focus and highlighted row follow a row from its old key to
-    ///        its new one, before the change that removes the old key moves them. A table over a `TableSource` only.
+    ///        its new one, and focus the change that removed the old key already moved to the row at its index is
+    ///        taken back to the new key. A table over a `TableSource` only.
     Prop<KeyMoves> keyMoves;
     /// @brief Called with the id of the status line's entry the user chose.
     std::function<void(std::string id)> onStatusEntry;
@@ -2499,7 +2500,8 @@ struct TableOptions {
     ///        through `setSelectionView` on each change; when it disengages the mount sets `selection` again.
     Prop<std::optional<std::vector<Key>>> selectionView;
     /// @brief Rows an action gave new keys: the mount's focus and highlighted row follow a row from its old key to
-    ///        its new one, before the change that removes the old key moves them. A table over a `TableSource` only.
+    ///        its new one, and focus the change that removed the old key already moved to the row at its index is
+    ///        taken back to the new key. A table over a `TableSource` only.
     Prop<KeyMoves> keyMoves;
     /// @brief Called with the id of the status line's entry the user chose.
     std::function<void(std::string id)> onStatusEntry;

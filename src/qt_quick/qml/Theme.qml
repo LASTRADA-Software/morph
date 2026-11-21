@@ -207,7 +207,7 @@ QtObject {
     property real mutedOpacity: 0.55
     // A busy table row's bar and a locked one's wash: `color.table.busy`, `color.table.locked`.
     property color tableBusy: "#1565c0"
-    property color tableLocked: "#8e8e9338"
+    property color tableLocked: "#388e8e93"
     // The window behind every surface, the corner radii, the height of an input or a button, and the font sizes, in
     // px. A font size of 0 is derived from the platform font: the body is its size, a heading 1.3 times the body.
     property color background: "#f2f3f7"

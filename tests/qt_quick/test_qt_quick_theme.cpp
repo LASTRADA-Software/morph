@@ -192,6 +192,23 @@ TEST_CASE("qt_quick theme: a host component reads the same tokens; a missing tok
     CHECK(item.property("muted").value<QColor>() == QColor{"#6e6e73"});
 }
 
+// Mutation: `Theme.tableLocked` written in the token's byte order (#RRGGBBAA, which QML reads as #AARRGGBB: an
+// olive wash at 56 %).
+TEST_CASE("qt_quick theme: Theme's table row defaults are the token defaults", "[qt_quick]") {
+    Scene scene;
+    auto const* const theme =
+        scene.engine().singletonInstance<QObject*>(QStringLiteral("MorphUi"), QStringLiteral("Theme"));
+    REQUIRE(theme != nullptr);
+    ui::ThemeValues const defaults = ui::themeValues();
+    for (auto const& [path, property] : {std::pair{"color.table.busy", "tableBusy"},
+                                         std::pair{"color.table.locked", "tableLocked"}}) {
+        INFO(path);
+        ui::Rgba const& token = defaults.colors.at(path);
+        CHECK(theme->property(property).value<QColor>() == QColor{token.r, token.g, token.b, token.a});
+    }
+    CHECK(theme->property("mutedOpacity").toDouble() == defaults.numbers.at("opacity.muted"));
+}
+
 // Mutation: `opacity.muted` left out of applyTheme (Theme keeps 0.55), or either table colour left out of
 // kColorProperties (Theme keeps its default).
 TEST_CASE("qt_quick theme: a table row's busy, locked and muted tokens reach Theme", "[qt_quick]") {

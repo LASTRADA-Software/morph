@@ -195,7 +195,7 @@ built in nor in the theme draws nothing and changes no colour.
 | `color.table.busy` (`#1565c0`, the info colour): the 3 px bar a table row an action of this session is working on draws just inside the selection's bar. The terminal draws a glyph and reads no colour | colour |
 | `color.table.locked` (`#8e8e9338`, grey at 22 %): the wash over the cells of a table row another user holds; translucent, so the cells read through it. The terminal draws a glyph and reads no colour | colour |
 | `opacity.stale` | number |
-| `opacity.muted` (0.55): the opacity of a table row kept in view although it no longer matches the filter. `opacity.stale` and `opacity.muted` outside 0 to 1 are refused by `checkTheme` as `opacity.muted: must be between 0 and 1`. The terminal draws such a row dim | number |
+| `opacity.muted` (0.55): the opacity of a table row kept in view although it no longer matches the filter. `opacity.stale` and `opacity.muted` outside 0 to 1 are refused by `checkTheme` as `<path>: must be between 0 and 1`. The terminal draws such a row dim | number |
 | `space.0` … `space.5`, defaults 0, 4, 8, 12, 16, 24 | dimension, in px |
 | `color.background` (`#f2f3f7`) | colour |
 | `radius.control` (6), `radius.card` (10), `radius.badge` (4: a tag, a chip and a select option), `control.height` (32) | dimension, in px |

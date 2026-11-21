@@ -11468,8 +11468,9 @@ private:
     }
 
     // A reply's failed rows are marked, and each changed row with a `from` this session holds moves what it holds
-    // from that key to the new one: the selection, the retained rows and the states here, the focus and the highlight
-    // in the mount. @p moved gets each old key moved.
+    // from that key to the new one: the selection, the retained rows and the states. Every `from` goes to the mount,
+    // which moves its focus and highlight by its own keys: focus the action's own event already moved off the old row
+    // is held only there. @p moved gets each old key moved here.
     void applyReply(RunSettled const& run, std::vector<Key>& moved) {
         auto const& catalog = _core->session.options().catalog;
         std::optional<ActionInfo> const info = catalog.action ? catalog.action(run.action) : std::nullopt;
@@ -11479,10 +11480,19 @@ private:
         ChangedRowsValue const changed = changedRowsOf(run.reply, *info, recordName());
         _model->rows->states().fail(changed.failed);
         std::vector<std::pair<Key, Key>> moves;
+        std::vector<std::pair<Key, Key>> told;
         for (table::ChangedRow const& row : changed.rows) {
-            if (row.from && *row.from != row.key && holds(*row.from)) {
+            if (!row.from || *row.from == row.key) {
+                continue;
+            }
+            told.emplace_back(*row.from, row.key);
+            if (holds(*row.from)) {
                 moves.emplace_back(*row.from, row.key);
             }
+        }
+        if (!told.empty()) {
+            _model->keyMoves.set(
+                KeyMoves{.generation = _model->keyMoves.peek().generation + 1, .moves = std::move(told)});
         }
         if (moves.empty()) {
             return;
@@ -11519,8 +11529,6 @@ private:
         } else if (reselect) {
             select(keys);
         }
-        KeyMoves next{.generation = _model->keyMoves.peek().generation + 1, .moves = std::move(moves)};
-        _model->keyMoves.set(std::move(next));
     }
 
     ScreenCore* _core;
