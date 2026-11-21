@@ -6147,12 +6147,19 @@ TEST_CASE("key change: the session that ran the action moves what it holds", "[u
     CHECK(focusedKey(*screen, h, table) == std::optional{rid(10)});
     std::vector<std::pair<std::size_t, std::size_t>> const cells = h.backend.focusCells(table);
     REQUIRE(cells.size() > told);
+    std::vector<std::optional<morph::table::RowId>> const named = h.backend.focusKeys(table);
     for (std::size_t at = told; at < cells.size(); ++at) {
         CHECK(cells.at(at).first == 9);  // key 10's view row; no other row was focused meanwhile
+        CHECK(named.at(at) == std::optional{rid(10)});  // and the row there held key 10 when it was told
     }
     CHECK(elementValue(h, "t", "selectionSet") == value(R"({"keys":[10,5]})"));
+    // The mount's own focus is on key 10's row: a move up lands on key 9's.
+    h.backend.focusMove(table, morph::ui::FocusMove::Up);
+    h.settle();
+    CHECK(focusedKey(*screen, h, table) == std::optional{rid(9)});
 }
-// Mutation: the client ignoring `from`, which leaves 2 selected and 10 not.
+// Mutations: the client ignoring `from`, which leaves 2 selected and 10 not; a located index told while the rows held
+// another key there, which tells key 9's row and leaves the mount on it.
 
 TEST_CASE("key change: the action's event before its reply", "[ui][table][keys]") {
     TableHarness h;
@@ -6482,9 +6489,21 @@ TEST_CASE("key change: focus follows a new key outside the rows in view", "[ui][
     std::vector<SelRow> after = rows;
     std::erase_if(after, [](SelRow const& row) { return row.key == 2; });
     after.push_back(SelRow{.key = 1000});
+    std::size_t const told = h.backend.focusKeys(table).size();
     fireEvent(h, "Lims_SampleModel.samples", {1000, 2});
     answerView(h, after);
     CHECK(h.backend.focusCell(table).first == 299);
     CHECK(focusedKey(*screen, h, table) == std::optional{rid(1000)});
+    // No focus told named a row that held another key when it was told.
+    std::vector<std::optional<morph::table::RowId>> const named = h.backend.focusKeys(table);
+    for (std::size_t at = told; at < named.size(); ++at) {
+        CHECK((!named.at(at) || *named.at(at) == rid(1000)));
+    }
+    // The mount's own focus is on key 1000's row: a move up lands on key 299's.
+    h.backend.focusMove(table, morph::ui::FocusMove::Up);
+    h.settle();
+    CHECK(h.backend.focusCell(table).first == 298);
+    CHECK(focusedKey(*screen, h, table) == std::optional{rid(299)});
 }
-// Mutation: no locateRow for a new key no realized row holds, which leaves focus told at view row 2.
+// Mutations: no locateRow for a new key no realized row holds, which leaves focus told at view row 2; the located
+// index followed by index rather than by key, which leaves the mount on view row 298 while the backend shows 299.
