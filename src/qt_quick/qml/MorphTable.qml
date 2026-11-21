@@ -279,17 +279,34 @@ MorphWidget {
     property bool reportsFocusOut: false
     // Whether the window's active focus was in the table, a cell editor in one of its rows included.
     property bool focusWithin: false
+    // Whether a row holds an open cell editor.
+    function editorOpen(): bool {
+        for (let i = 0; i < rowsPlane.children.length; ++i) {
+            const row = rowsPlane.children[i]
+            if (row.editorColumn !== undefined && row.editorColumn >= 0)
+                return true
+        }
+        return false
+    }
     Connections {
         target: root.Window.window
         enabled: root.reportsFocusOut
         function onActiveFocusItemChanged() {
             let within = false
+            let overlaid = false
+            const overlay = root.Overlay.overlay
             for (let at = root.Window.activeFocusItem; at; at = at.parent) {
                 if (at === root) {
                     within = true
                     break
                 }
+                if (at === overlay)
+                    overlaid = true
             }
+            // A popup lives in the window's overlay, not under the table: focus in one while a cell editor is open is
+            // the editor's own (a dropdown's list, a date picker), and stays in the table.
+            if (!within && overlaid && root.editorOpen())
+                within = true
             if (root.focusWithin && !within)
                 root.fire("focusOut", undefined)
             root.focusWithin = within

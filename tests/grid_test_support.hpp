@@ -21,8 +21,8 @@
 
 namespace morph::test::grid {
 
-// A form whose `specimens` rows are entered in a grid. `density` is computed, `limit` derived (Task 20 adds the
-// `x-derived` reading; until then its `x-readonly` makes it read-only). `reviewer` freezes the grid by rule.
+// A form whose `specimens` rows are entered in a grid. `density` is computed, `limit` derived and read-only.
+// `reviewer` freezes the grid by rule.
 inline constexpr std::string_view kSpecimens = R"({"type":"object","title":"Specimens","properties":{
   "sampleId":{"type":"integer","title":"Sample","x-order":0},
   "reviewer":{"type":["string","null"],"title":"Reviewer","x-order":1},
@@ -48,6 +48,16 @@ struct GridFixture {
     explicit GridFixture(std::size_t rows, ui::GridOptions options = {}, std::string schema = std::string{kSpecimens});
     [[nodiscard]] std::string json(std::string_view path) const;  // the field's encoded JSON, "" when none
 };
+// `kSpecimens` with a Boolean member `checked` and an enumerated member `unit` (g or kg) after `note`.
+inline std::string specimensWithChoices() {
+    std::string schema{kSpecimens};
+    std::string_view const note = R"("note":{"type":["string","null"],"title":"Note","x-order":5})";
+    schema.replace(schema.find(note), note.size(),
+                   std::string{note} + R"(,"checked":{"type":"boolean","title":"Checked","x-order":6},)" +
+                       R"("unit":{"enum":["g","kg",null],"title":"Unit","x-order":7})");
+    return schema;
+}
+
 inline ui::CellRef at(std::int64_t key, std::string column) { return ui::CellRef{ui::Key{key}, std::move(column)}; }
 // Every fetched key of the source's view, in view order.
 inline std::vector<ui::Key> keysOf(ui::GridSource const& source) {

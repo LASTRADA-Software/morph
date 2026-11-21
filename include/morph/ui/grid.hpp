@@ -270,8 +270,9 @@ public:
     /// @brief Takes in the field's rows as they are now, and the engine the change at once, so the view read next is
     ///        the field's.
     void sync() {
-        _source->sync();
-        _engine->engine().flush();
+        if (_source->sync()) {
+            _engine->engine().flush();
+        }
     }
 
     /// @brief Every row of the view, counted exactly.
@@ -544,7 +545,8 @@ public:
           _formAlive{form.alive()},
           _arrayPath{std::move(arrayPath)},
           _columns{std::move(columns)},
-          _format{std::move(format)} {
+          _format{std::move(format)},
+          _formatVersion{form.runtime(), std::uint64_t{0}} {
         forms::FieldState const& array = form.field(_arrayPath);
         if (array.spec().kind != forms::FieldKind::ObjectArray || array.spec().truncated) {
             throw std::invalid_argument{"morph::ui::FormGridSource: `" + _arrayPath + "` is not a collection"};
@@ -605,6 +607,13 @@ public:
     /// @brief The visible columns in layout order.
     /// @return The ids, as `setLayout` gave them; every column in declared order before it.
     [[nodiscard]] std::vector<std::string> columns() const override { return _layout; }
+
+    /// @brief Shows the cells in another formatting from now on: a mounted cell's text follows.
+    /// @param format How values are shown.
+    void setFormat(FormatContext format) {
+        _format = std::move(format);
+        _formatVersion.set(_formatVersion.peek() + 1);
+    }
 
     /// @brief Sets the visible columns in layout order: what the walk follows.
     /// @param visible The column ids.
@@ -706,6 +715,7 @@ public:
         } else if (spec.kind == forms::FieldKind::Integer) {
             shown.display.decimals = 0;
         }
+        static_cast<void>(_formatVersion.get());
         return formatCell(detail::memberCell(*state, shown.info.kind), shown, _format);
     }
 
@@ -830,6 +840,30 @@ public:
     /// @return They, as given.
     [[nodiscard]] std::vector<GridColumn> const& gridColumns() const noexcept { return _columns; }
 
+    /// @brief What "Filter by this value" on a cell filters by: the column's member and the cell's value as a filter
+    ///        entry takes it, `isEmpty` for an empty cell. Tracked.
+    /// @param key    The row's key.
+    /// @param column The column's id.
+    /// @return The member and the entry; nothing for a display column, or a cell whose draft does not encode.
+    [[nodiscard]] std::optional<std::pair<std::string, table::FilterEntry>> filterEntry(Key const& key,
+                                                                                       std::string_view column) const {
+        forms::FieldState const* const state = field(key, column);
+        if (state == nullptr) {
+            return std::nullopt;
+        }
+        table::TableColumn shown;
+        shown.info = table::ColumnInfo{.id = state->spec().name, .kind = detail::columnKindOf(state->spec().kind)};
+        table::Cell const cell = detail::memberCell(*state, shown.info.kind);
+        if (cellLook(cell, shown) == CellLook::Empty) {
+            return std::pair{shown.info.id, table::FilterEntry{.isEmpty = true}};
+        }
+        std::optional<std::string> const operand = operandOf(cell, shown);
+        if (!operand) {
+            return std::nullopt;
+        }
+        return std::pair{shown.info.id, table::FilterEntry{.oneOf = std::vector{*operand}}};
+    }
+
 private:
     [[nodiscard]] GridColumn const* columnOf(std::string_view id) const {
         auto const found = std::ranges::find(_columns, id, &GridColumn::id);
@@ -853,6 +887,7 @@ private:
     std::string _arrayPath;
     std::vector<GridColumn> _columns;
     FormatContext _format;
+    reactive::Signal<std::uint64_t> _formatVersion;
     std::vector<std::string> _layout;
     std::shared_ptr<FormRowsSource> _rowsSource;
     std::unique_ptr<GridRows> _rows;
@@ -877,6 +912,7 @@ public:
           _place{runtime, std::optional<GridFocus>{}},
           _editing{runtime, std::optional<CellRef>{}},
           _message{runtime, std::string{}},
+          _notices{runtime, std::uint64_t{0}},
           _messageEntries{runtime, std::vector<StatusEntry>{}},
           _standing{runtime, std::string{}},
           _standingEntries{runtime, std::vector<StatusEntry>{}} {}
@@ -920,8 +956,9 @@ public:
         _message.set({});
     }
 
-    /// @brief Focuses a cell, as a click or an arrow does; a covered cell is refused. An open editor on another cell is
-    ///        committed first. The status line shows the cell's error while it has focus.
+    /// @brief Focuses a cell, as a click or an arrow does; a covered cell, and a key the view does not hold, are
+    ///        refused. An open editor on another cell is committed first. The status line shows the cell's error while
+    ///        it has focus.
     /// @param cell The cell.
     void focusCell(CellRef cell) {
         if (_source->covered(cell.key, cell.column)) {
@@ -930,13 +967,16 @@ public:
         if (std::optional<CellRef> const open = _editing.peek(); open && *open != cell) {
             commit();
         }
-        std::size_t const at = _source->positionOf(cell.key).value_or(0);
-        _place.set(GridFocus{.key = cell.key, .viewRow = at, .column = cell.column});
-        _message.set(_rt->untracked([&] { return _source->error(cell.key, cell.column).value_or(std::string{}); }));
+        std::optional<std::size_t> const at = _source->positionOf(cell.key);
+        if (!at) {
+            return;
+        }
+        _place.set(GridFocus{.key = cell.key, .viewRow = *at, .column = cell.column});
+        _message.set({});
     }
 
     /// @brief What `Enter` and `F2` with no editor, and a double click, do: focuses the cell, then opens its editor
-    ///        holding the value on an editable cell, flips a Boolean's, or runs `GridOptions::onActivate` on a
+    ///        holding the value on an editable cell (none for a Boolean), or runs `GridOptions::onActivate` on a
     ///        read-only one.
     /// @param cell The cell.
     void activate(CellRef cell) {
@@ -947,8 +987,8 @@ public:
             }
             return;
         }
+        // A Boolean opens no editor: a click or `Space` flips it, so a double click is two flips.
         if (_source->toggles(cell.key, cell.column)) {
-            toggle(cell);
             return;
         }
         _kept = _source->draft(cell.key, cell.column);
@@ -1033,6 +1073,7 @@ public:
         }
         if (_rt->untracked([&] { return _source->readOnly(focused->key, focused->column); })) {
             _message.set(std::string{kReadOnlyText});
+            _notices.set(_notices.peek() + 1);
             return;
         }
         if (_source->toggles(focused->key, focused->column)) {
@@ -1046,9 +1087,29 @@ public:
     /// @brief Focus left the table: an open editor is committed.
     void leave() { commit(); }
 
-    /// @brief The latest transient refusal or notice. Tracked.
+    /// @brief The latest transient refusal or notice, else the focused cell's error while it has one. Tracked.
     /// @return The text; empty for none.
-    [[nodiscard]] std::string const& message() const { return _message.get(); }
+    [[nodiscard]] std::string message() const {
+        if (std::string const& notice = _message.get(); !notice.empty()) {
+            return notice;
+        }
+        std::optional<CellRef> const focused = focus();
+        return focused ? _source->error(focused->key, focused->column).value_or(std::string{}) : std::string{};
+    }
+
+    /// @brief How many refusals and notices were given: it moves on each, so one equal to the last is posted again.
+    ///        Tracked.
+    /// @return The count.
+    [[nodiscard]] std::uint64_t notices() const { return _notices.get(); }
+
+    /// @brief A click on a cell: focuses it, and flips a Boolean's.
+    /// @param cell The cell.
+    void click(CellRef cell) {
+        focusCell(cell);
+        if (_rt->untracked([&] { return focus(); }) == cell && _source->toggles(cell.key, cell.column)) {
+            toggle(cell);
+        }
+    }
 
     /// @brief The choices the latest notice offers. Tracked.
     /// @return The entries.
@@ -1164,6 +1225,7 @@ public:
         options.keyChords = Prop<std::vector<std::string>>{[self] { return self->keyChords(); }};
         options.onText = [self](std::string text) { self->type(text); };
         options.onActivateCell = [self](CellRef cell) { self->activate(std::move(cell)); };
+        options.onClickCell = [self](CellRef cell) { self->click(std::move(cell)); };
         options.onFocusOut = [self] { self->leave(); };
         options.editing = Prop<std::optional<CellRef>>{[self] { return self->editing(); }};
         options.editor = [source](CellRef const& cell) { return source->editor(cell.key, cell.column); };
@@ -1344,6 +1406,7 @@ private:
     reactive::Signal<std::optional<GridFocus>> _place;
     reactive::Signal<std::optional<CellRef>> _editing;
     reactive::Signal<std::string> _message;
+    reactive::Signal<std::uint64_t> _notices;
     reactive::Signal<std::vector<StatusEntry>> _messageEntries;
     reactive::Signal<std::string> _standing;
     reactive::Signal<std::vector<StatusEntry>> _standingEntries;

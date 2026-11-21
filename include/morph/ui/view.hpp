@@ -1741,6 +1741,8 @@ struct Table {
     std::function<void(GridFocus)> onGridFocus;
     /// @brief Called with the cell the user double-clicked.
     std::function<void(CellRef)> onActivateCell;
+    /// @brief Called with the cell the user clicked once, after the click moved focus (a fetched row's only).
+    std::function<void(CellRef)> onClickCell;
     /// @brief Called when focus leaves the table's widget and everything inside it, an open editor included.
     std::function<void()> onFocusOut;
     /// @brief Engaged: the cell whose editor is open, or none. While it names a cell, the mount builds `editor` for
@@ -2606,6 +2608,8 @@ struct TableOptions {
     std::function<void(GridFocus)> onGridFocus;
     /// @brief Called with the cell the user double-clicked.
     std::function<void(CellRef)> onActivateCell;
+    /// @brief Called with the cell the user clicked once (`Table::onClickCell`).
+    std::function<void(CellRef)> onClickCell;
     /// @brief Called when focus leaves the table and everything inside it.
     std::function<void()> onFocusOut;
     /// @brief Engaged: the cell whose editor is open, or none (`Table::editing`).
@@ -2746,6 +2750,7 @@ template <typename RowT>
     spec.gridFocus = std::move(options.gridFocus);
     spec.onGridFocus = std::move(options.onGridFocus);
     spec.onActivateCell = std::move(options.onActivateCell);
+    spec.onClickCell = std::move(options.onClickCell);
     spec.onFocusOut = std::move(options.onFocusOut);
     spec.editing = std::move(options.editing);
     spec.editor = std::move(options.editor);
@@ -2809,6 +2814,7 @@ template <typename RowT>
     spec.gridFocus = std::move(options.gridFocus);
     spec.onGridFocus = std::move(options.onGridFocus);
     spec.onActivateCell = std::move(options.onActivateCell);
+    spec.onClickCell = std::move(options.onClickCell);
     spec.onFocusOut = std::move(options.onFocusOut);
     spec.editing = std::move(options.editing);
     spec.editor = std::move(options.editor);

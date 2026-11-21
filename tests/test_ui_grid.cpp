@@ -8,6 +8,7 @@
 #include <cstdint>
 #include <memory>
 #include <morph/core/action_refusal.hpp>
+#include <morph/forms/engine/form_session.hpp>
 #include <morph/ui/document.hpp>
 #include <morph/ui/grid.hpp>
 #include <morph/ui/interpreter.hpp>
@@ -115,7 +116,7 @@ TEST_CASE("grid: the walk", "[ui][grid]") {
     }
 }
 
-// Review Focus 1, walk half. Mutation: an empty grid answering Tab with Handled.
+// Mutation: an empty grid answering Tab with Handled.
 TEST_CASE("grid: an empty grid lets Tab leave at once", "[ui][grid]") {
     GridFixture f{0};
     CHECK_FALSE(f.grid->focus().has_value());
@@ -233,6 +234,37 @@ TEST_CASE("grid: the form's submit ends an open edit first", "[ui][grid]") {
     CHECK(f.h.server.lastBody().find(R"("mass":{"num":750,"den":100,"dp":2})") != std::string::npos);
 }
 
+// Mutation: GridController::click only focusing the cell (the check box stays unset).
+TEST_CASE("grid: a click on a Boolean cell toggles it", "[ui][grid]") {
+    GridFixture f{2, {}, morph::test::grid::specimensWithChoices()};
+    f.grid->click(at(1, "checked"));
+    f.h.settle();
+    CHECK(f.json("specimens[0].checked") == "true");
+    CHECK(f.grid->focus() == at(1, "checked"));
+    f.grid->click(at(1, "checked"));
+    f.h.settle();
+    CHECK(f.json("specimens[0].checked") == "false");
+    f.grid->click(at(1, "note"));
+    f.h.settle();
+    CHECK_FALSE(f.grid->editing().has_value());
+}
+
+// Mutation: FormRowsSource::row building the whole snapshot on every read (the walk builds once per step).
+TEST_CASE("grid: a walk over a large grid reads its rows without rebuilding them", "[ui][grid]") {
+    GridFixture f{300};
+    f.grid->focusCell(at(1, "label"));
+    f.h.settle();
+    ui::FormRowsSource const& rows = f.source->view().source();
+    std::size_t const before = rows.builds();
+    for (int step = 0; step < 200; ++step) {
+        f.grid->press("Tab");
+    }
+    f.h.settle();
+    CHECK(f.grid->focus().has_value());
+    CHECK(f.grid->focus() != at(1, "label"));
+    CHECK(rows.builds() == before);
+}
+
 // ── Mounted ─────────────────────────────────────────────────────────────────
 
 // A grid of `GridFixture` mounted on a recording backend: its node over every member in schema order (label 0, mass 1,
@@ -264,8 +296,8 @@ struct MountedGrid {
     int table = 0;
 };
 
-// Mutations: the marks binding reading the cell's row signal untracked (the cell rebound to show row 30 keeps row 1's
-// "m"); the marks bound once per row by the row's key (`marks:1` of the row showing key 30 stays "m").
+// Mutation: the marks binding reading the cell's row signal untracked (the cell rebound to show row 30 keeps row 1's
+// "m").
 TEST_CASE("grid: a cell's marks are drawn by its cell view and follow the row it shows", "[ui][grid][mount]") {
     MountedGrid m{40};
     m.backend.scrollTable(m.table, 0, 10);   // rows 0 to 19 realized
@@ -347,9 +379,9 @@ struct GridScreen {
     int table = 0;
 };
 
-// Mutation: the lowering's form_submit sending the body without running the session's before-submit hooks (the
-// editor is still open after the click: `editing` is not null and "editor:0" still names the TextInput).
-TEST_CASE("grid: submission commits the open editor and places field errors", "[ui][grid][interpreter]") {
+// Mutations: FormSession::submit not running its before-submit hooks (the editor is still open after the click:
+// `editing` is not null); FormSession reading no field errors from the reply's `errors` (errorCount is 0).
+TEST_CASE("grid: submission commits the open editor and places the reply's field errors", "[ui][grid][interpreter]") {
     GridScreen g;
     g.h.backend.clickCell(g.table, 0, 0);
     g.h.settle();
@@ -362,13 +394,147 @@ TEST_CASE("grid: submission commits the open editor and places field errors", "[
     CHECK(g.h.backend.prop(g.row(1), "editor:0").empty());
     auto& call = g.h.dispatcher.calls.at(g.h.dispatcher.last("Lims_RecordSpecimens"));
     CHECK(call.body.find(R"("mass":{"num":750,"den":100,"dp":2})") != std::string::npos);
+    g.h.dispatcher.reply(g.h.dispatcher.last("Lims_RecordSpecimens"),
+                         R"({"errors":{"specimens[1].mass":"must be positive","nosuch":"ignored"}})");
+    g.h.settle();
+    CHECK(g.value("errorCount") == ui::Value{std::int64_t{1}});
+    CHECK(g.h.backend.cellAccent(g.table, ui::Key{std::int64_t{2}}, 0).tooltip == "must be positive");
+    CHECK(g.h.backend.cellAccent(g.table, ui::Key{std::int64_t{1}}, 0).tooltip.empty());
+    // A reply that names field errors did not save: the cell sent stays an edit.
+    CHECK(g.value("modifiedCount") == ui::Value{std::int64_t{1}});
+}
+
+// Mutation: FormSession taking a refusal's sentence arguments as field errors by their names (errorCount is 1 and the
+// cell's tooltip is the argument's value).
+TEST_CASE("grid: a refusal's argument named like a field is not a field error", "[ui][grid][interpreter]") {
+    GridScreen g;
+    g.h.backend.click(g.h.byTestId("Button", "form_submit"));
+    g.h.settle();
+    auto& call = g.h.dispatcher.calls.at(g.h.dispatcher.last("Lims_RecordSpecimens"));
     call.answered = true;
     call.promise.reject(std::make_exception_ptr(model::ActionRefusal{
         "lims.specimens.invalid", {model::RefusalArg{.name = "specimens[1].mass", .value = "must be positive"}},
         "refused"}));
     g.h.settle();
-    CHECK(g.value("errorCount") == ui::Value{std::int64_t{1}});
-    CHECK(g.h.backend.cellAccent(g.table, ui::Key{std::int64_t{2}}, 0).tooltip == "must be positive");
+    CHECK(g.value("errorCount") == ui::Value{std::int64_t{0}});
+    CHECK(g.h.backend.cellAccent(g.table, ui::Key{std::int64_t{2}}, 0).tooltip.empty());
+}
+
+// Mutation: the lowering leaving out the cell menu's built-in entries (the menu starts at "Revert cell").
+TEST_CASE("grid: the cell menu offers copy and filter before the grid's own entries", "[ui][grid][interpreter]") {
+    GridScreen g;
+    g.form().field("specimens[0].note").text().set("a");
+    g.form().field("specimens[1].note").text().set("b");
+    g.h.settle();
+    std::vector<ui::MenuEntry> const entries = g.h.backend.rightClickCell(g.table, ui::Key{std::int64_t{1}}, 1);
+    std::vector<std::string> labels;
+    for (ui::MenuEntry const& shown : entries) {
+        labels.push_back(shown.label);
+    }
+    CHECK(labels == std::vector<std::string>{"Copy", "Copy with headers", "Filter by this value", "Exclude this value",
+                                             "Revert cell", "Revert row"});
+    g.h.backend.chooseCellMenu(g.table, ui::Key{std::int64_t{1}}, 1, {"Copy with headers"});
+    g.h.settle();
+    CHECK(g.h.backend.clipboardText() == "note\na");
+    g.h.backend.chooseCellMenu(g.table, ui::Key{std::int64_t{1}}, 1, {"Exclude this value"});
+    g.h.settle();
+    CHECK_FALSE(g.h.backend.tableRow(g.table, ui::Key{std::int64_t{1}}).has_value());
+    CHECK(g.h.backend.tableRow(g.table, ui::Key{std::int64_t{2}}).has_value());
+}
+
+constexpr std::string_view kDisplayGridDocument = R"({"vocab":"ui/1","id":"specimens",
+  "models":{"sample":{"type":"Lims_SampleModel"}},
+  "view":{"kind":"column","children":[
+    {"kind":"form","id":"rec","model":"sample","action":"Lims_RecordSpecimens","submit":"explicit"},
+    {"kind":"table","id":"grid","testId":"grid","form":"rec","field":"specimens",
+     "layout":{"lit":{"order":["mass","label","shown","note"],"hidden":["label"],"pinned":0,"widths":{}}},
+     "columns":[{"id":"mass","field":"mass"},{"id":"label","field":"label"},
+                {"id":"shown","label":"Shown","value":{"fn":"concat","args":["n:",{"ref":"row.note"}]}},
+                {"id":"note","field":"note"}]}]}})";
+
+// Mutations: the lowering never feeding the layout to FormGridSource::setLayout (Tab from mass lands on the hidden
+// label); a display column's value read with no `row` bound (the cell is empty).
+TEST_CASE("grid: a display column shows its value, and the walk skips it and hidden columns",
+          "[ui][grid][interpreter]") {
+    ui::testing::TableHarness h;
+    ui::testing::addAction(h, "Lims_RecordSpecimens", std::string{morph::test::grid::kSpecimens},
+                           ui::ActionInfo{.modelType = "Lims_SampleModel"});
+    auto const screen = h.mount(kDisplayGridDocument);
+    forms::FormSession& form = *ui::testing::elementOf(*screen, "rec").form;
+    form.prefill(R"({"sampleId":4,"specimens":[{"note":"x"},{}]})");
+    h.settle();
+    int const table = h.byTestId("Table", "grid");
+    std::optional<int> const first = h.backend.tableRow(table, ui::Key{std::int64_t{1}});
+    REQUIRE(first.has_value());
+    std::string shown;
+    for (int const cell : h.backend.children(*first)) {
+        if (h.backend.prop(cell, "column") == "2") {
+            shown = h.backend.prop(cell, "text");
+        }
+    }
+    CHECK(shown == "n:x");
+    h.backend.clickCell(table, 0, 0);   // (1, mass)
+    h.settle();
+    h.backend.press(table, "Tab");
+    h.settle();
+    CHECK(ui::testing::elementValue(h, "grid", "editing") == ui::Value{});
+    CHECK(h.backend.focusCell(table) == std::pair{std::size_t{0}, std::size_t{3}});   // (1, note)
+}
+
+// Mutation: the loader taking a grid column with neither `field` nor `value` (the document loads).
+TEST_CASE("grid: a column with neither a field nor a value is refused when the document loads",
+          "[ui][grid][interpreter]") {
+    ui::testing::TableHarness h;
+    ui::testing::addAction(h, "Lims_RecordSpecimens", std::string{morph::test::grid::kSpecimens},
+                           ui::ActionInfo{.modelType = "Lims_SampleModel"});
+    std::string text{kGridDocument};
+    text.replace(text.find(R"({"id":"note","field":"note"})"), std::string_view{R"({"id":"note","field":"note"})"}.size(),
+                 R"({"id":"note"})");
+    auto const loaded = ui::loadDocumentText(text, ui::LoadOptions{.catalog = h.session.options().catalog});
+    REQUIRE_FALSE(loaded.has_value());
+    CHECK(loaded.error().reason.find("`field`") != std::string::npos);
+}
+
+constexpr std::string_view kOverlayGridDocument = R"({"vocab":"ui/1","id":"specimens",
+  "models":{"sample":{"type":"Lims_SampleModel"}},
+  "state":{"picked":{"init":null}},
+  "view":{"kind":"column","children":[
+    {"kind":"form","id":"rec","model":"sample","action":"Lims_RecordSpecimens","submit":"explicit",
+     "fields":{"specimens":{"widget":"grid","grid":{"walk":"columns",
+       "columns":[{"id":"mass","label":"Mass","field":"mass"},{"id":"density","label":"Density","field":"density"}],
+       "onActivate":[{"set":"picked","value":{"ref":"event"}}]}}}},
+    {"kind":"text","testId":"picked","text":{"fn":"coalesce","args":[{"ref":"picked"},"-"]}}]}})";
+
+// Mutations: the form's lowering ignoring a field overlay's `grid` part (the grid shows every member); the grid's
+// `onActivate` not lowered (a double click on the read-only density leaves `picked` empty).
+TEST_CASE("grid: a field overlay's grid part gives the grid its columns and its onActivate", "[ui][grid][interpreter]") {
+    ui::testing::TableHarness h;
+    ui::testing::addAction(h, "Lims_RecordSpecimens", std::string{morph::test::grid::kSpecimens},
+                           ui::ActionInfo{.modelType = "Lims_SampleModel"});
+    auto const screen = h.mount(kOverlayGridDocument);
+    ui::testing::elementOf(*screen, "rec").form->prefill(R"({"sampleId":4,"specimens":[{},{}]})");
+    h.settle();
+    std::vector<int> const tables = h.backend.all("Table");
+    REQUIRE(tables.size() == 1);
+    int const table = tables.front();
+    CHECK(h.backend.headerText(table, 0) == "Mass");
+    CHECK(h.backend.headerText(table, 1) == "Density");
+    CHECK(h.backend.headerText(table, 2).empty());
+    h.backend.clickCell(table, 1, 1, true);   // (2, density), read-only
+    h.settle();
+    CHECK(h.text("picked") == "2");
+}
+
+// Mutation: the loader taking a field overlay's `grid` part on a field that is not drawn as a grid (it loads).
+TEST_CASE("grid: a field overlay's grid part needs the grid widget", "[ui][grid][interpreter]") {
+    ui::testing::TableHarness h;
+    ui::testing::addAction(h, "Lims_RecordSpecimens", std::string{morph::test::grid::kSpecimens},
+                           ui::ActionInfo{.modelType = "Lims_SampleModel"});
+    std::string text{kOverlayGridDocument};
+    text.replace(text.find(R"("widget":"grid",)"), std::string_view{R"("widget":"grid",)"}.size(), "");
+    auto const loaded = ui::loadDocumentText(text, ui::LoadOptions{.catalog = h.session.options().catalog});
+    REQUIRE_FALSE(loaded.has_value());
+    CHECK(loaded.error().reason.find("widget") != std::string::npos);
 }
 
 // Mutation: the mount ignoring KeyOutcome::FocusNext.

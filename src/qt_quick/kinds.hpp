@@ -1,9 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
+#include <QHash>
 #include <QKeyEvent>
 #include <QMetaObject>
 #include <QPointer>
+#include <QQuickItem>
 #include <QQuickWindow>
 #include <QString>
 #include <QStringList>
@@ -858,6 +860,8 @@ private:
     std::function<void(std::string)> _onText;
     std::function<void(std::size_t, std::size_t, bool)> _onCellClick;
     std::function<void()> _onFocusOut;
+    /// Each row's open cell editor's item, by row.
+    QHash<TableRowImpl const*, QPointer<QQuickItem>> _editors;
     /// Each row's effective spans, as last told.
     std::unordered_map<ItemBase const*, std::vector<ui::RowSpan>> _spans;
     /// Whether any row has been told it spans or is covered, so a table that never spans does no work.

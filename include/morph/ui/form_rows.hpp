@@ -14,6 +14,7 @@
 #include <cstdint>
 #include <memory>
 #include <optional>
+#include <unordered_map>
 #include <span>
 #include <stdexcept>
 #include <string>
@@ -224,6 +225,17 @@ public:
                                             _arrayPath + "`"};
             }
         }
+        // Reading it is free while nothing it tracks changed, and walks every member once after a change.
+        _version = std::make_unique<reactive::Computed<std::uint64_t>>(form.runtime(), [this] {
+            for (auto const& row : _array->rows()) {
+                for (auto const& member : row->fields()) {
+                    static_cast<void>(member->encoded().get());
+                    static_cast<void>(member->draft());
+                }
+            }
+            return ++_versions;
+        });
+        _synced = currentVersion();
         _held = build();
         _watch = std::make_unique<reactive::Effect>(form.runtime(), [this] { watch(); });
     }
@@ -271,12 +283,24 @@ public:
         if (number == nullptr || *number < 0) {
             return nullptr;
         }
-        return _form->runtime().untracked([&]() -> forms::RowState* {
-            auto const& rows = _array->rows();
-            auto const found = std::ranges::find(rows, static_cast<std::uint64_t>(*number), &forms::RowState::key);
-            return found == rows.end() ? nullptr : found->get();
-        });
+        // The rows by key, taken again only after the field's rows or a draft changed.
+        if (std::uint64_t const now = currentVersion(); now != _indexed) {
+            _indexed = now;
+            _byKey.clear();
+            _form->runtime().untracked([&] {
+                for (auto const& held : _array->rows()) {
+                    _byKey.insert_or_assign(held->key(), held.get());
+                }
+            });
+        }
+        auto const found = _byKey.find(static_cast<std::uint64_t>(*number));
+        return found == _byKey.end() ? nullptr : found->second;
     }
+
+    /// @brief How many times the rows were read whole into a snapshot: once at construction and once per change taken
+    ///        in, whatever reads the rows in between.
+    /// @return The count.
+    [[nodiscard]] std::size_t builds() const noexcept { return _builds; }
 
     /// @brief What `EngineRows` reads a row's key and record through: the grid's own record, `{"<member>": the member's
     ///        encoded value, null when blank or not encoding, …, "#key": the row's key}`.
@@ -288,9 +312,16 @@ public:
         };
     }
 
-    /// @brief Takes in the field's rows as they are now, notifying what changed since they were last taken in.
-    void sync() {
+    /// @brief Takes in the field's rows as they are now, notifying what changed since they were last taken in. Costs
+    ///        nothing while neither the rows nor a member's draft changed since.
+    /// @return Whether anything was taken in.
+    bool sync() {
         _posted = false;
+        if (std::uint64_t const now = currentVersion(); now != _synced) {
+            _synced = now;
+        } else {
+            return false;
+        }
         auto next = build();
         auto const& before = *_held;
         auto const& after = *next;
@@ -302,15 +333,16 @@ public:
                 }
             }
             if (changed.empty()) {
-                return;
+                return false;
             }
             _held = std::move(next);
             _listeners.notify(table::RowChange{.kind = table::ChangeKind::Updated, .rows = std::move(changed)});
-            return;
+            return true;
         }
         std::optional<table::RowChange> const change = structural(before, after);
         _held = std::move(next);
         _listeners.notify(change.value_or(table::RowChange{.kind = table::ChangeKind::Reset, .rows = {}}));
+        return true;
     }
 
 private:
@@ -340,8 +372,14 @@ private:
                                 .rows = std::move(rows)};
     }
 
+    // The version of what the rows hold, read untracked.
+    [[nodiscard]] std::uint64_t currentVersion() const {
+        return _form->runtime().untracked([&] { return _version->get(); });
+    }
+
     // The rows as the field holds them now, read untracked.
     [[nodiscard]] std::shared_ptr<detail::FormRowsSnapshot const> build() const {
+        ++_builds;
         return _form->runtime().untracked([&] {
             std::vector<table::RowId> keys;
             std::vector<std::vector<table::Cell>> cells;
@@ -372,12 +410,7 @@ private:
 
     // Tracks the rows and every member's draft; a change is taken in at the owner's next turn.
     void watch() {
-        for (auto const& row : _array->rows()) {
-            for (auto const& member : row->fields()) {
-                static_cast<void>(member->encoded().get());
-                static_cast<void>(member->draft());
-            }
-        }
+        static_cast<void>(_version->get());
         if (_watching && !_posted) {
             _posted = true;
             _form->runtime().owner().post(_alive.guard([this] { sync(); }));
@@ -394,6 +427,12 @@ private:
     bool _watching = false;
     bool _posted = false;
     async::CallbackScope _alive;
+    mutable std::uint64_t _versions = 0;
+    std::uint64_t _synced = 0;
+    mutable std::uint64_t _indexed = 0;
+    mutable std::unordered_map<std::uint64_t, forms::RowState*> _byKey;
+    mutable std::size_t _builds = 0;
+    std::unique_ptr<reactive::Computed<std::uint64_t>> _version;
     std::unique_ptr<reactive::Effect> _watch;
 };
 

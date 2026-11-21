@@ -1817,8 +1817,11 @@ using morph::tui::detail::WidgetBase;
 // A grid of two specimens (`GridFixture`) between two text inputs, on the terminal backend: its columns are every
 // member in schema order, label first.
 struct TuiGridFixture {
-    TuiGridFixture()
-        : terminal{std::make_unique<core::tui::MockTerminalOutput>(100, 12)}, screen{terminal}, backend{screen} {
+    explicit TuiGridFixture(std::string schema = std::string{morph::test::grid::kSpecimens})
+        : f{2, {}, std::move(schema)},
+          terminal{std::make_unique<core::tui::MockTerminalOutput>(100, 12)},
+          screen{terminal},
+          backend{screen} {
         ui::TextInput before;
         before.common.testId = "before";
         ui::TextInput after;
@@ -1861,7 +1864,7 @@ struct TuiGridFixture {
         return at < lines.size() ? lines.at(at) : std::string{};
     }
 
-    morph::test::grid::GridFixture f{2};
+    morph::test::grid::GridFixture f;
     core::tui::Terminal terminal;
     core::tui::Screen screen;
     morph::tui::Backend backend;
@@ -1871,6 +1874,22 @@ struct TuiGridFixture {
 };
 
 }  // namespace
+
+// Mutation: the terminal table taking focus in an open popup of a widget inside it for focus leaving (the dropdown's
+// list taking the focus commits and closes the editor).
+TEST_CASE("tui grid: focus in an editor's own popup does not leave the table", "[tui][grid]") {
+    TuiGridFixture g{morph::test::grid::specimensWithChoices()};
+    REQUIRE(g.table != nullptr);
+    g.f.grid->focusCell(morph::test::grid::at(1, "unit"));
+    g.settle();
+    g.screen.setFocus(&g.table->view());
+    g.send(core::tui::test::specialKey(KeyCode::F2));
+    REQUIRE(g.f.grid->editing() == morph::test::grid::at(1, "unit"));
+    g.send(core::tui::test::specialKey(KeyCode::Down));
+    // The list has the focus, in the screen's overlay rather than under the table.
+    CHECK_FALSE(morph::tui::detail::isWithin(g.screen.focusedComponent(), g.table->view()));
+    CHECK(g.f.grid->editing() == morph::test::grid::at(1, "unit"));
+}
 
 // Mutation: the terminal table ignoring setOnText (the keystroke moves nothing and opens no editor).
 TEST_CASE("tui grid: typing on a focused cell opens its editor, Enter commits and moves down", "[tui][grid]") {
