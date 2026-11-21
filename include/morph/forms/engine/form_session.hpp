@@ -960,7 +960,9 @@ private:
     std::unique_ptr<reactive::Query<std::string, std::string>> _optionsQuery;
     std::unique_ptr<reactive::Computed<std::vector<ChoiceOption>>> _fetched;
     std::unique_ptr<reactive::Effect> _clearStale;
-    // Last: it reads `_fetched`.
+    // Last: it reads `_fetched`, which is a pointer and not a reactive source, so nothing may read `options()` before
+    // `start()` made it: the Computed would keep the options it read then. A row is started before it is published and
+    // `load` decodes without options, so no path does.
     reactive::Computed<std::vector<ChoiceOption>> _offered;
 };
 
@@ -1042,7 +1044,8 @@ public:
           _attempts{runtime, std::uint64_t{0}},
           _loadGeneration{runtime, std::uint64_t{0}},
           _refusals{runtime, std::map<std::string, Refused, std::less<>>{}},
-          _deriveState{runtime, DeriveState::Current} {
+          _deriveState{runtime, DeriveState::Current},
+          _deriveFailing{runtime, false} {
         if (!_submit) {
             throw std::invalid_argument{"FormSession: a Submitter is required"};
         }
@@ -1479,6 +1482,12 @@ public:
     /// @return `Running` while a round is in flight, `Failed` after a round whose evaluation or derive call failed,
     ///         else `Current`.
     [[nodiscard]] DeriveState deriveState() const { return _deriveState.get(); }
+
+    /// @brief Whether the derived values are the last ones loaded before a failure: true from a round that failed until
+    ///        a round succeeds, so it holds through a retry in flight (what "Recalculate" offers stays until it worked).
+    ///        Tracked.
+    /// @return `true` while the last round to settle failed.
+    [[nodiscard]] bool deriveFailing() const { return _deriveFailing.get(); }
 
     /// @brief The body as far as it encodes: every top-level field that encodes; an Object or a collection member by
     ///        member, leaving out a member that is blank or does not encode; every row of a collection written, in
@@ -2137,6 +2146,7 @@ private:
         bool const anyFailed = _round->failed;
         _round.reset();
         _deriveState.set(anyFailed ? DeriveState::Failed : DeriveState::Current);
+        _deriveFailing.set(anyFailed);
         if (stale) {
             startRound();
         }
@@ -2177,6 +2187,7 @@ private:
     std::uint64_t _derivedLoaded = 0;
     std::uint64_t _evaluationLoaded = 0;
     reactive::Signal<DeriveState> _deriveState;
+    reactive::Signal<bool> _deriveFailing;
     reactive::TimerHandle _debounce;
     async::CallbackScope _deriveScope;
     std::unique_ptr<reactive::Effect> _autoSubmit;

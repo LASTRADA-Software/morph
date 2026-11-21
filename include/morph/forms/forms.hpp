@@ -106,7 +106,7 @@
 /// mutually-referential type is described rather than rejected — glaze emits
 /// a finite `$ref`-cyclic schema for it, and the runtime `$defs` visited set
 /// walks that once. A nested type's own `computedFields` are written as the
-/// top level's are, and recomputed per element by `recomputeAll`;
+/// top level's are, and recomputed in every nested value by `recomputeAll`;
 /// `formLayout`/`fieldSpans`/`formRules` remain top-level-only regardless of
 /// depth. See docs/spec/forms/forms.md,
 /// "Nested aggregates (recursive, cycle-safe)", and
@@ -692,7 +692,7 @@ concept WrittenAsMember = requires { glz::meta<T>::value; } &&
 template <typename T>
 [[nodiscard]] consteval std::size_t reflectedCount() noexcept {
     if constexpr (glz::reflectable<T>) {
-        return glz::detail::count_members<T>;
+        return glz::tuple_size_v<std::remove_cvref_t<decltype(glz::to_tie(std::declval<T&>()))>>;
     } else {
         return glz::reflect<T>::size;
     }
@@ -2957,7 +2957,7 @@ void recurseIntoNestedAggregateIfAny(SchemaDomRef dom, glz::generic_u64& propert
 ///
 /// A `Sub` declaring `computedFields` has those members written `x-computed`
 /// and `x-readonly` and left out of `required`, as the top level's are, since
-/// `recomputeAll` recomputes the elements of a `std::vector<Sub>` member; a
+/// `recomputeAll` recomputes every nested aggregate (`detail::forEachNested`); a
 /// derived member (`FieldMeta::derived`) is left out of `required` too.
 /// `formLayout`/`fieldSpans` and `formRules` stay top-level-only regardless of
 /// depth; a nested `Sub` declaring any of those has no effect here.
@@ -3669,11 +3669,12 @@ template <typename... Fields>
 }
 
 /// @brief Recomputes every entry of `A::computedFields` in place on @p action,
-///        after each element of every `std::vector<R>` member whose `R` declares
-///        `computedFields` (recursively), so an entry over the rows reads them
-///        recomputed. A derived member (`FieldMeta::derived`) is never touched.
+///        after every nested aggregate of it (each element of a `std::vector`
+///        member, a nested struct member, an engaged `std::optional` one,
+///        recursively: `detail::forEachNested`), so an entry over the rows reads
+///        them recomputed. A derived member (`FieldMeta::derived`) is never touched.
 ///
-/// A no-op for actions with no `computedFields` declaration and no such rows. For an action that does
+/// A no-op for actions with no `computedFields` declaration at any depth. For an action that does
 /// declare `computedFields`, every entry is evaluated in declaration order via
 /// `detail::recomputeOne` (see that function for the per-entry semantics:
 /// empty-input propagation and declared-precision retagging). Called from the
@@ -3688,33 +3689,55 @@ constexpr void recomputeAll(A& action);
 
 namespace detail {
 
-/// @brief Recomputes every element of each `std::vector<R>` member of @p action whose `R` declares
-///        `computedFields` (`recomputeAll` on each element, so a row's own rows go first).
-/// @tparam A     Action or row type.
-/// @param action The value whose rows are recomputed in place.
-template <typename A>
-constexpr void recomputeRows(A& action) {
+/// @brief A member type the server's walks descend into: a reflectable aggregate with no empty state of its own (not a
+///        `Quantity`, `Choice` or `Timestamp`), whose members can be computed or derived.
+/// @tparam T The member's type.
+template <typename T>
+concept NestedAggregate = ReflectableAggregate<T> && !EmptyCapableField<T>;
+
+/// @brief Calls @p visit on every nested aggregate directly inside @p object: a member of a `NestedAggregate` type, the
+///        value of such a `std::optional` while engaged, and each element of such a `std::vector`. The walk reads no
+///        member name, so it compiles for a type local to an unnamed namespace.
+/// @tparam A     The object's type.
+/// @tparam Visit A callable taking any nested aggregate by reference.
+/// @param object The object whose nested aggregates are visited.
+/// @param visit  Called once per nested aggregate, in member order.
+template <typename A, typename Visit>
+constexpr void forEachNested(A& object, Visit const& visit) {
     using Plain = std::remove_cvref_t<A>;
-    if constexpr ((glz::reflectable<Plain> || glz::glaze_object_t<Plain>) && !WrittenAsMember<Plain>) {
+    if constexpr (WrittenAsMember<Plain>) {
+        forEachNested(object.*(glz::meta<Plain>::value), visit);
+    } else if constexpr (glz::reflectable<Plain> || glz::glaze_object_t<Plain>) {
         constexpr auto memberCount = reflectedCount<Plain>();
         [&]<std::size_t... I>(std::index_sequence<I...>) {
-            [[maybe_unused]] auto rows = [&]<std::size_t Idx>() {
-                // A `glz::meta` entry that computes its value yields a value: there are no stored rows behind it.
-                [[maybe_unused]] decltype(auto) member = morph::detail::reflectedMember<Idx>(action);
+            [[maybe_unused]] auto one = [&]<std::size_t Idx>() {
+                // A `glz::meta` entry that computes its value yields a value: nothing is stored behind it.
+                [[maybe_unused]] decltype(auto) member = morph::detail::reflectedMember<Idx>(object);
                 using Member = std::remove_cvref_t<decltype(member)>;
-                if constexpr (std::is_lvalue_reference_v<decltype(member)> && IsStdVector<Member>::value) {
-                    using Row = typename IsStdVector<Member>::ValueType;
-                    if constexpr (HasComputedFields<Row>) {
-                        for (Row& row : member) {
-                            ::morph::forms::recomputeAll(row);
+                if constexpr (!std::is_lvalue_reference_v<decltype(member)> || std::is_const_v<
+                                  std::remove_reference_t<decltype(member)>>) {
+                    return;
+                } else if constexpr (IsStdVector<Member>::value) {
+                    if constexpr (NestedAggregate<typename IsStdVector<Member>::ValueType>) {
+                        for (auto& element : member) {
+                            visit(element);
                         }
                     }
+                } else if constexpr (isStdOptional<Member>) {
+                    if constexpr (NestedAggregate<typename Member::value_type>) {
+                        if (member.has_value()) {
+                            visit(*member);
+                        }
+                    }
+                } else if constexpr (NestedAggregate<Member>) {
+                    visit(member);
                 }
             };
-            (rows.template operator()<I>(), ...);
+            (one.template operator()<I>(), ...);
         }(std::make_index_sequence<memberCount>{});
     } else {
-        static_cast<void>(action);
+        static_cast<void>(object);
+        static_cast<void>(visit);
     }
 }
 
@@ -3722,9 +3745,9 @@ constexpr void recomputeRows(A& action) {
 
 template <typename A>
 constexpr void recomputeAll(A& action) {
-    // The rows first, so a top-level entry over a `std::vector` member (a sum of the rows' totals) reads them
-    // recomputed.
-    detail::recomputeRows(action);
+    // The nested aggregates first (each element of a `std::vector`, a nested struct), so a top-level entry over them
+    // (a sum of the rows' totals) reads them recomputed.
+    detail::forEachNested(action, [](auto& nested) { ::morph::forms::recomputeAll(nested); });
     if constexpr (detail::HasComputedFields<A>) {
         std::apply([&](const auto&... field) { (detail::recomputeOne(action, field), ...); },
                    A::computedFields.fields);

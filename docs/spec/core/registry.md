@@ -646,8 +646,8 @@ class ActionDispatcher {
 - `evaluate` runs the gates `dispatch` runs, as checks rather than refusals,
   and never `Model::execute`: it decodes the body, reconciles `Quantity`
   precision, clears the derived members (`forms::clearDerived`), recomputes the
-  computed fields — a row type's own, in each element of a `std::vector`
-  member, before the action's — and returns an `Evaluation` — the
+  computed fields — those of each nested aggregate (a `std::vector` element,
+  a nested struct, an engaged `std::optional`) before the action's — and returns an `Evaluation` — the
   recomputed body (`ActionTraits<Action>::toJson`), `forms::fieldErrors` of
   it, and `ready`, whether `dispatch` would execute it (every `Quantity` within
   its unit's bounds, and `ActionValidator<Action>::ready`). No model instance,
@@ -663,11 +663,11 @@ class ActionDispatcher {
   throwing `QuantityDecodeError`; a no-op for actions with no `Quantity`
   members or whose units declare no `bounds()`), value-initialises every
   derived member (`morph::forms::clearDerived`, `forms/derive.hpp`: a member its
-  type's field metadata marks `derived()`, in the action and in each element of
-  its `std::vector` members — the model's to set, so a value a client sent is
+  type's field metadata marks `derived()`, in the action and in every nested
+  aggregate of it — the model's to set, so a value a client sent is
   never the one kept), overwrites any declared
-  computed fields from their inputs (`morph::forms::recomputeAll`, the rows'
-  own first,
+  computed fields from their inputs (`morph::forms::recomputeAll`, the nested
+  aggregates' own first,
   [forms.md](../forms/forms.md) — a no-op for actions with no
   `computedFields`; runs after precision reconciliation and bounds
   enforcement and before the validator check, so the validator sees the

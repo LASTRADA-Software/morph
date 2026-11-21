@@ -65,8 +65,8 @@ struct GridColumn {
     std::function<std::string(forms::RowState const&)> fieldOf;
     /// @brief The entry places of the row's member, which are also its wire `dp`; nothing keeps the field's. Tracked.
     std::function<std::optional<std::uint32_t>(forms::RowState const&)> decimals;
-    /// @brief The unit the row's member is entered in, an id of its `FieldSpec::units`; nothing keeps the field's.
-    ///        Tracked.
+    /// @brief The unit the row's member is entered in, an id of its `FieldSpec::units`; nothing, or an id it does not
+    ///        have, restores the field's entry unit. The draft is not converted: its text is read in the unit set. Tracked.
     std::function<std::optional<std::string>(forms::RowState const&)> unit;
     /// @brief Whether the row's cell is read-only beyond its field (`CellFacts::overlayReadOnly`). Tracked.
     std::function<bool(forms::RowState const&)> readonly;
@@ -242,7 +242,8 @@ public:
         static_cast<void>(column);
     }
 
-    /// @brief Whether the last round of derived values failed, which the status line offers to recalculate. Tracked.
+    /// @brief Whether the derived values are the last ones loaded before a failed round, until a round succeeds: what the
+    ///        status line offers to recalculate. Tracked.
     /// @return `true` while it holds; `false` for a source with no derived values.
     [[nodiscard]] virtual bool deriveFailed() const { return false; }
 
@@ -895,9 +896,10 @@ public:
         }
     }
 
-    /// @brief Whether the form's last round of derived values failed. Tracked.
-    /// @return `true` while `forms::FormSession::deriveState` is `Failed`.
-    [[nodiscard]] bool deriveFailed() const override { return _form->deriveState() == forms::DeriveState::Failed; }
+    /// @brief Whether the form's derived values are the last ones loaded before a failure. Tracked.
+    /// @return `forms::FormSession::deriveFailing`: from a failed round until a round succeeds, a retry in flight
+    ///         included.
+    [[nodiscard]] bool deriveFailed() const override { return _form->deriveFailing(); }
 
     /// @brief Makes one more round of the form's derived values (`forms::FormSession::recalculate`).
     void recalculate() override { _form->recalculate(); }
@@ -907,19 +909,18 @@ public:
     void onCommitted(std::function<void()> observer) { _committed = std::move(observer); }
 
     /// @brief The cell's marks: read-only, modified, and not encoding; a computed or derived member's cell muted while
-    ///        a round of derived values is in flight, and stale after one failed. Tracked.
+    ///        a round of derived values is in flight, and stale from a failed round until a round succeeds. Tracked.
     /// @param key    The row's key.
     /// @param column The column's id.
     /// @return The marks.
     [[nodiscard]] CellMarks marks(Key const& key, std::string_view column) const override {
         forms::FieldState const* const state = field(key, column);
         bool const derived = state != nullptr && (state->spec().computed || state->spec().derived);
-        forms::DeriveState const round = derived ? _form->deriveState() : forms::DeriveState::Current;
         return CellMarks{.readOnly = readOnly(key, column),
                          .modified = state != nullptr && _form->modified(state->path()),
                          .error = error(key, column).has_value(),
-                         .stale = round == forms::DeriveState::Failed,
-                         .muted = round == forms::DeriveState::Running};
+                         .stale = derived && _form->deriveFailing(),
+                         .muted = derived && _form->deriveState() == forms::DeriveState::Running};
     }
 
     /// @brief The key a grid's record holds in `#key`.
@@ -1016,10 +1017,9 @@ public:
         table::TableColumn shown;
         GridColumn const* const declared = columnOf(column);
         if (declared != nullptr && declared->fieldOf) {
-            // The rows' column holds the draft as text, whatever the row's member is.
+            // The rows' column holds text, whatever the row's member is.
             shown.info = table::ColumnInfo{.id = std::string{column}, .kind = table::ColumnKind::Text};
-            std::string const draft = state->draft();
-            return std::pair{draft.empty() ? table::Cell{} : table::Cell{draft}, shown};
+            return std::pair{detail::perRowCell(*state), shown};
         }
         shown.info = table::ColumnInfo{.id = std::string{column}, .kind = detail::columnKindOf(state->spec().kind)};
         return std::pair{detail::memberCell(*state, shown.info.kind), shown};
@@ -1060,11 +1060,14 @@ private:
                     if (column.decimals && state->places().peek() != places) {
                         state->places().set(places);
                     }
-                    if (unit) {
+                    if (column.unit) {
+                        // No unit, or one the field does not have, restores the field's entry unit.
                         std::vector<forms::UnitOption> const& units = state->spec().units;
-                        auto const found = std::ranges::find(units, *unit, &forms::UnitOption::id);
-                        auto const index = static_cast<std::size_t>(found - units.begin());
-                        if (found != units.end() && state->unit().peek() != index) {
+                        auto const found =
+                            unit ? std::ranges::find(units, *unit, &forms::UnitOption::id) : units.end();
+                        std::size_t const index = found != units.end() ? static_cast<std::size_t>(found - units.begin())
+                                                                       : state->spec().entryUnit;
+                        if (state->unit().peek() != index) {
                             state->unit().set(index);
                         }
                     }
@@ -1346,8 +1349,8 @@ public:
     /// @return The entries.
     [[nodiscard]] std::vector<StatusEntry> const& messageEntries() const { return _messageEntries.get(); }
 
-    /// @brief A state that lasts while its source holds: `kDeriveFailedText` while the source's last round of derived
-    ///        values failed, until a round succeeds. Tracked.
+    /// @brief A state that lasts while its source holds: `kDeriveFailedText` from a failed round of derived values until
+    ///        a round succeeds, a retry in flight included. Tracked.
     /// @return The text; empty for none.
     [[nodiscard]] std::string standing() const {
         if (_source->deriveFailed()) {

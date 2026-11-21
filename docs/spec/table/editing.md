@@ -177,7 +177,7 @@ commit, the form evaluates its body, and calls its derive action when it names o
 - While a round is in flight, derived cells draw muted. A failed round leaves the derived cells as they were,
   marked stale, and the status line offers "Recalculate", which makes one more round. The failure is a standing
   state, "Derived values could not be recalculated" with the entry "Recalculate": it lasts, through the hold of any
-  message, until a round succeeds.
+  message and through a retry in flight, until a round succeeds, and the cells stay marked stale as long.
 
 ### Submission
 

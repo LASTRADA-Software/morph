@@ -404,7 +404,9 @@ edit, so a round never replaces a draft the user typed.
 - **Order.** Each kind of reply keeps the sequence it last loaded; a reply of an older round loads nothing, so derived
   values never go back to an older result. When both replies of a round settle, `deriveState()` is `Failed` if
   either failed (the values stay as they were), else `Current`; a stale round then starts one more at once, with the
-  newer body. `recalculate()` starts a round unless one is in flight.
+  newer body. `recalculate()` starts a round unless one is in flight. `deriveFailing()` is true from a round that
+  failed until a round succeeds, a retry in flight included: a grid's stale marks and its standing "Derived values could
+  not be recalculated" with "Recalculate" follow it, so they stay while the retry runs.
 - **`insertRow(position)`** inserts a blank row before `position` (past the end appends), a user action like
   `addRow`.
 
