@@ -341,6 +341,59 @@ TEST_CASE("grid: a cell's column is its index among every column, hidden ones in
     CHECK_FALSE(m.backend.prop(m.row(1), "editor:1").empty());
 }
 
+// Mutation: the row not held (FormGridSource::holdRow doing nothing: the edited row moves under its editor, which is
+// built again, and leaves the view while the filter rejects its draft).
+TEST_CASE("grid: the row an editor is open on holds its place until the edit ends", "[ui][grid][mount]") {
+    MountedGrid m{3};
+    for (std::size_t row = 0; row < 3; ++row) {
+        m.f.form->field("specimens[" + std::to_string(row) + "].mass").text().set(std::to_string(row + 1));
+    }
+    m.f.h.settle();
+    SECTION("sorted by mass") {
+        REQUIRE(m.f.source->view().setSort({table::SortKey{.column = "mass", .dir = table::SortDirection::Ascending}}));
+        m.f.h.settle();
+        REQUIRE(keysOf(*m.f.source) == std::vector<ui::Key>{ui::Key{std::int64_t{1}}, ui::Key{std::int64_t{2}},
+                                                               ui::Key{std::int64_t{3}}});
+        m.f.grid->focusCell(at(1, "mass"));
+        m.f.grid->type("9");
+        m.f.h.settle();
+        std::string const editor = m.backend.prop(m.row(1), "editor:1");
+        REQUIRE_FALSE(editor.empty());
+        m.backend.edit(std::stoi(editor), "95");
+        m.f.h.settle();
+        CHECK(m.f.grid->editing() == at(1, "mass"));
+        CHECK(m.f.source->positionOf(ui::Key{std::int64_t{1}}) == std::optional<std::size_t>{0});
+        CHECK(m.backend.prop(m.row(1), "editor:1") == editor);
+        m.f.grid->press("Enter");
+        m.f.h.settle();
+        CHECK_FALSE(m.f.grid->editing().has_value());
+        CHECK(keysOf(*m.f.source) == std::vector<ui::Key>{ui::Key{std::int64_t{2}}, ui::Key{std::int64_t{3}},
+                                                             ui::Key{std::int64_t{1}}});
+        CHECK(m.f.grid->focus() == at(2, "mass"));   // down from view row 0, as the rows stood at the commit
+    }
+    SECTION("filtered by mass") {
+        table::FilterSpec filter;
+        filter.columns["mass"].include = {table::FilterEntry{.lt = "5"}};
+        REQUIRE(m.f.source->view().setFilter(filter));
+        m.f.h.settle();
+        m.f.grid->focusCell(at(2, "mass"));
+        m.f.grid->type("9");
+        m.f.h.settle();
+        CHECK(m.f.grid->editing() == at(2, "mass"));
+        CHECK(m.f.source->positionOf(ui::Key{std::int64_t{2}}) == std::optional<std::size_t>{1});
+        CHECK_FALSE(m.backend.prop(m.row(2), "editor:1").empty());
+        m.f.grid->press("Escape");
+        m.f.h.settle();
+        CHECK(m.f.source->positionOf(ui::Key{std::int64_t{2}}) == std::optional<std::size_t>{1});   // cancelled
+        m.f.grid->type("9");
+        m.f.h.settle();
+        m.f.grid->press("Enter");
+        m.f.h.settle();
+        CHECK_FALSE(m.f.source->positionOf(ui::Key{std::int64_t{2}}).has_value());
+        CHECK(keysOf(*m.f.source) == std::vector<ui::Key>{ui::Key{std::int64_t{1}}, ui::Key{std::int64_t{3}}});
+    }
+}
+
 // ── In a document ───────────────────────────────────────────────────────────
 
 constexpr std::string_view kGridDocument = R"({"vocab":"ui/1","id":"specimens",
@@ -422,7 +475,8 @@ TEST_CASE("grid: a refusal's argument named like a field is not a field error", 
 
 // Mutations: the lowering leaving out the cell menu's built-in entries (the menu starts at "Revert cell"); the grid's
 // columns given no filter target (the filter entries are disabled, and row 1 stays in view); the grid's filters not
-// held (the table menu's "Clear all filters" stays disabled, and row 1 stays out of view).
+// held (the table menu's "Clear all filters" stays disabled, and row 1 stays out of view); the grid's element values
+// not read from its configuring (`filters` is null).
 TEST_CASE("grid: the cell menu offers copy and filter before the grid's own entries", "[ui][grid][interpreter]") {
     GridScreen g;
     g.form().field("specimens[0].note").text().set("a");
@@ -444,6 +498,8 @@ TEST_CASE("grid: the cell menu offers copy and filter before the grid's own entr
     CHECK(g.h.backend.tableRow(g.table, ui::Key{std::int64_t{2}}).has_value());
     // The filter shows on its column's header, and the table menu clears it.
     CHECK(g.h.backend.prop(g.table, "filtered") == "[1]");
+    CHECK(g.value("filters").field("columns") != nullptr);
+    CHECK(g.value("filters").field("columns")->field("note") != nullptr);
     CHECK(g.h.backend.prop(g.table, "columns").find("filterable=true") != std::string::npos);
     g.h.backend.chooseMenu(g.table, std::nullopt, {"Clear all filters"});
     g.h.settle();
@@ -505,7 +561,7 @@ constexpr std::string_view kDisplayGridDocument = R"({"vocab":"ui/1","id":"speci
                 {"id":"note","field":"note"}]}]}})";
 
 // Mutations: the lowering never feeding the layout to FormGridSource::setLayout (Tab from mass lands on the hidden
-// label); a display column's value read with no `row` bound (the cell is empty).
+// label); the grid's element values not read from its configuring (`visibleColumns` is null); a display column's value read with no `row` bound (the cell is empty).
 TEST_CASE("grid: a display column shows its value, and the walk skips it and hidden columns",
           "[ui][grid][interpreter]") {
     ui::testing::TableHarness h;
@@ -531,6 +587,8 @@ TEST_CASE("grid: a display column shows its value, and the walk skips it and hid
     h.settle();
     CHECK(ui::testing::elementValue(h, "grid", "editing") == ui::Value{});
     CHECK(h.backend.focusCell(table) == std::pair{std::size_t{0}, std::size_t{3}});   // (1, note)
+    CHECK(ui::testing::elementValue(h, "grid", "visibleColumns") == ui::testing::value(R"(["mass","shown","note"])"));
+    CHECK(ui::testing::elementValue(h, "grid", "hiddenCount") == ui::Value{std::int64_t{1}});
 }
 
 // Mutation: the loader taking a grid column with neither `field` nor `value` (the document loads).

@@ -212,12 +212,18 @@ public:
     /// @brief Restores a row's loaded values. A source with no loaded values does nothing.
     /// @param key The row's key.
     virtual void revertRow(Key const& key) { static_cast<void>(key); }
+
+    /// @brief Holds the row an editor is open on where it is in the view, whatever its values do to the sort and the
+    ///        filter; nothing lets it go. A source whose rows never move under an edit does nothing.
+    /// @param key The row's key, or nothing.
+    virtual void holdRow(std::optional<Key> key) { static_cast<void>(key); }
 };
 // NOLINTEND(cppcoreguidelines-special-member-functions)
 
 /// @brief The rows of a grid of a form: the engine's view over a `FormRowsSource`, less the rows added since the sort
 ///        or the filter last changed, which follow it in the order they were added and pass the filter until it
-///        changes. With no sort and no filter the view is the array's order, an inserted row in its place.
+///        changes, and less the row `hold` holds, which keeps the place it had and passes the filter until it is let
+///        go. With no sort and no filter the view is the array's order, an inserted row in its place.
 ///
 /// A grid of a form runs no action per row: its `states()` hold nothing, and `moveKey` does nothing, since a form
 /// row's key never changes.
@@ -236,19 +242,27 @@ public:
         options.services.collator = std::make_shared<ValueRowsCollator const>();
         _engine = std::make_unique<EngineRows>(_source, _source->recordOf(), std::move(options));
         rebuild();
+        // The engine's change is the view's while both views were the engine's own; a view that kept its keys in
+        // order changed only in content; anything else is a reset.
         _engine->onChange([this](table::ViewChange const& change) {
-            bool const appendedBefore = !_appended.empty();
+            bool const alignedBefore = _aligned;
+            std::vector<table::RowId> const before = keys();
             rebuild();
             if (!_onChange) {
                 return;
             }
-            if (!appendedBefore && _appended.empty()) {
+            if (alignedBefore && _aligned) {
                 _onChange(change);
                 return;
             }
-            table::ViewChange reset;
-            reset.ops.push_back(table::ViewOp{.kind = table::ViewOp::Kind::Reset, .first = 0, .count = 0, .to = 0});
-            _onChange(reset);
+            table::ViewChange out;
+            if (keys() == before) {
+                out.ops.push_back(table::ViewOp{
+                    .kind = table::ViewOp::Kind::Changed, .first = 0, .count = _items.size(), .to = 0});
+            } else {
+                out.ops.push_back(table::ViewOp{.kind = table::ViewOp::Kind::Reset, .first = 0, .count = 0, .to = 0});
+            }
+            _onChange(out);
         });
     }
 
@@ -422,6 +436,30 @@ public:
     /// @param handler The receiver; empty to stop receiving.
     void onChange(std::function<void(table::ViewChange const&)> handler) override { _onChange = std::move(handler); }
 
+    /// @brief Holds a row where it is in the view, and in it, whatever its values do to the sort and the filter, until
+    ///        another row is held or none: the row an editor is open on stays under the editor. Letting it go puts it
+    ///        where the sort and the filter place it.
+    /// @param key The row to hold; nothing lets the held row go.
+    void hold(std::optional<table::RowId> key) {
+        if (key == _held) {
+            return;
+        }
+        sync();
+        std::vector<table::RowId> const before = keys();
+        _held = std::move(key);
+        _heldAt = _held ? positionOf(*_held).value_or(_items.size()) : 0;
+        rebuild();
+        if (_onChange && keys() != before) {
+            table::ViewChange reset;
+            reset.ops.push_back(table::ViewOp{.kind = table::ViewOp::Kind::Reset, .first = 0, .count = 0, .to = 0});
+            _onChange(reset);
+        }
+    }
+
+    /// @brief The row `hold` holds.
+    /// @return Its key; nothing while none is held.
+    [[nodiscard]] std::optional<table::RowId> const& held() const noexcept { return _held; }
+
     /// @brief Where a key is in the view.
     /// @param key The key.
     /// @return Its view index, or nothing.
@@ -458,11 +496,28 @@ private:
         }
     }
 
-    // The view: the engine's rows but the added ones, then the added ones still in the source.
+    // The view's keys, in order.
+    [[nodiscard]] std::vector<table::RowId> keys() const {
+        std::vector<table::RowId> out;
+        out.reserve(_items.size());
+        for (Item const& item : _items) {
+            out.push_back(item.key);
+        }
+        return out;
+    }
+
+    // The view: the engine's rows but the added ones and the held one, then the added ones still in the source, and
+    // the held one at its place.
     void rebuild() {
         _items.clear();
         _positions.clear();
-        std::unordered_set<table::RowId> const appended(_appended.begin(), _appended.end());
+        std::unordered_set<table::RowId> appended(_appended.begin(), _appended.end());
+        if (_held && _source->row(*_held) == nullptr) {
+            _held.reset();
+        }
+        if (_held) {
+            appended.insert(*_held);
+        }
         TableTotal const engineTotal = _engine->total();
         std::unordered_map<table::RowId, std::size_t> inEngine;
         for (std::int64_t at = 0; at < engineTotal.rows; ++at) {
@@ -476,13 +531,23 @@ private:
             }
         }
         std::erase_if(_appended, [this](table::RowId const& key) { return _source->row(key) == nullptr; });
-        for (table::RowId const& key : _appended) {
+        auto const itemOf = [&inEngine](table::RowId const& key) {
             auto const found = inEngine.find(key);
-            _items.push_back(Item{.engine = found == inEngine.end() ? std::nullopt : std::optional{found->second},
-                                  .key = key});
+            return Item{.engine = found == inEngine.end() ? std::nullopt : std::optional{found->second}, .key = key};
+        };
+        for (table::RowId const& key : _appended) {
+            if (key != _held) {
+                _items.push_back(itemOf(key));
+            }
         }
+        if (_held) {
+            auto const place = static_cast<std::ptrdiff_t>(std::min(_heldAt, _items.size()));
+            _items.insert(_items.begin() + place, itemOf(*_held));
+        }
+        _aligned = _items.size() == static_cast<std::size_t>(std::max<std::int64_t>(engineTotal.rows, 0));
         for (std::size_t at = 0; at < _items.size(); ++at) {
             _positions.emplace(_items.at(at).key, at);
+            _aligned = _aligned && _items.at(at).engine == at;
         }
     }
 
@@ -510,6 +575,9 @@ private:
     RowStates _states;
     bool _sorted = false;
     bool _filtered = false;
+    std::optional<table::RowId> _held;
+    std::size_t _heldAt = 0;
+    bool _aligned = true;
 };
 
 /// @brief The formatting a form's values are shown in, read from its options when called: a later
@@ -792,6 +860,10 @@ public:
     /// @return They.
     [[nodiscard]] GridRows& view() override { return *_rows; }
 
+    /// @brief Holds the row an editor is open on in the view (`GridRows::hold`).
+    /// @param key The row's key, or nothing to let it go.
+    void holdRow(std::optional<Key> key) override { _rows->hold(std::move(key)); }
+
     /// @brief Restores the cell's loaded value.
     /// @param key    The row's key.
     /// @param column The column's id.
@@ -951,6 +1023,7 @@ public:
             return;
         }
         commit();
+        letGo();
         _place.set(std::move(target));
         _message.set({});
     }
@@ -965,6 +1038,7 @@ public:
         }
         if (std::optional<CellRef> const open = _editing.peek(); open && *open != cell) {
             commit();
+            letGo();
         }
         std::optional<std::size_t> const at = _source->positionOf(cell.key);
         if (!at) {
@@ -992,6 +1066,7 @@ public:
             return;
         }
         _kept = _source->draft(cell.key, cell.column);
+        _source->holdRow(cell.key);
         _editing.set(cell);
     }
 
@@ -1014,6 +1089,17 @@ public:
     /// @return `FocusNext` or `FocusPrevious` when `Tab` or `Shift+Tab` runs past the last or the first editable cell,
     ///         `Ignored` for a chord the grid does not take, else `Handled`.
     KeyOutcome press(std::string_view chord) {
+        // The row an editor was open on is let go once the key is handled: the walk moves by view position at the
+        // moment of the commit, so the edited row stays where it was while focus moves on.
+        struct LetGo {
+            GridController* grid;
+            explicit LetGo(GridController* held) : grid{held} {}
+            LetGo(LetGo const&) = delete;
+            LetGo& operator=(LetGo const&) = delete;
+            LetGo(LetGo&&) = delete;
+            LetGo& operator=(LetGo&&) = delete;
+            ~LetGo() { grid->letGo(); }
+        } const letting{this};
         std::optional<CellRef> const open = _editing.peek();
         if (chord == "Tab" || chord == "Shift+Tab") {
             commit();
@@ -1080,12 +1166,16 @@ public:
             return;
         }
         _kept = _source->draft(focused->key, focused->column);
+        _source->holdRow(focused->key);
         _source->write(focused->key, focused->column, std::string{text});
         _editing.set(*focused);
     }
 
     /// @brief Focus left the table: an open editor is committed.
-    void leave() { commit(); }
+    void leave() {
+        commit();
+        letGo();
+    }
 
     /// @brief The latest transient refusal or notice, else the focused cell's error while it has one. Tracked.
     /// @return The text; empty for none.
@@ -1266,6 +1356,13 @@ public:
     static constexpr std::string_view kReadOnlyText = "This cell is read-only";
 
 private:
+    // Lets go of the row an editor was open on, once no editor is open: the sort and the filter place it again.
+    void letGo() {
+        if (!_editing.peek()) {
+            _source->holdRow(std::nullopt);
+        }
+    }
+
     // A cell a walk may stop on: editable and not covered.
     [[nodiscard]] bool editable(CellRef const& cell) const {
         return _rt->untracked([&] {

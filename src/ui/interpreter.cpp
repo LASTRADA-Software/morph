@@ -5064,12 +5064,14 @@ Value ScreenCore::elementValue(ElementState const& element, std::string_view nam
     if (kind == "table" && (name == "layout" || name == "visibleColumns" || name == "hiddenCount")) {
         TableConfig const* const config = element.rowsTable != nullptr     ? &element.rowsTable->config
                                           : element.modelTable != nullptr ? &element.modelTable->config
+                                          : element.gridTable != nullptr  ? &element.gridTable->config
                                                                           : nullptr;
         return config == nullptr ? Value{} : layoutElementValue(*config, name);
     }
     if (kind == "table" && name == "filters") {
         TableConfig const* const config = element.rowsTable != nullptr     ? &element.rowsTable->config
                                           : element.modelTable != nullptr ? &element.modelTable->config
+                                          : element.gridTable != nullptr  ? &element.gridTable->config
                                                                           : nullptr;
         return config == nullptr || !config->filters ? Value{} : filtersValueOf(config->filters());
     }

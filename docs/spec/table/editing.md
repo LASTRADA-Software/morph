@@ -81,7 +81,10 @@ when its draft encodes, and an invalid cell when it does not, so sorting and fil
 rules. Sorting or filtering a grid changes what is shown and never the array's order or its members: the body
 holds the rows in the order they were entered. A row added while the grid is sorted or filtered is shown at
 the end of the view, and passes the filter, until the sort or the filter next changes, so the row being entered
-does not jump or vanish under the cursor. A grid sorts and filters through a table's own header and menus: a column's
+does not jump or vanish under the cursor. For the same reason the row whose cell editor is open keeps the place
+it had in the view, and stays in the view whatever the filter makes of its draft, until the edit is committed or
+cancelled; then the sort and the filter place it, after the walk that the commit's key starts has moved on by view
+position. A grid sorts and filters through a table's own header and menus: a column's
 sort by its header, its filter button and values list, the cell menu's "Filter by this value" and "Exclude this
 value", and the table menu's "Clear all filters", so a filter the user set shows on its column's header and is
 cleared where any table's is. A display column neither sorts nor filters.

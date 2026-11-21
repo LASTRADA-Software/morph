@@ -279,11 +279,36 @@ MorphWidget {
     property bool reportsFocusOut: false
     // Whether the window's active focus was in the table, a cell editor in one of its rows included.
     property bool focusWithin: false
-    // Whether a row holds an open cell editor.
-    function editorOpen(): bool {
+    // Whether @p focused is inside an open popup that @p item, or an object it holds, owns: a control's `popup` (a
+    // combo box's list) or a Popup among its data. A popup lives in the window's overlay, not under its control.
+    function popupHolds(item, focused, depth: int): bool {
+        if (!item || depth > 12)
+            return false
+        const owned = []
+        if (item.popup instanceof Popup)
+            owned.push(item.popup)
+        if (item instanceof Popup)
+            owned.push(item)
+        for (const popup of owned) {
+            if (!popup.opened || !popup.contentItem)
+                continue
+            for (let at = focused; at; at = at.parent) {
+                if (at === popup.contentItem || at === popup.contentItem.parent)
+                    return true
+            }
+        }
+        const held = item.data ? item.data : (item.contentData ? item.contentData : [])
+        for (let i = 0; i < held.length; ++i) {
+            if (root.popupHolds(held[i], focused, depth + 1))
+                return true
+        }
+        return false
+    }
+    // Whether @p focused is inside a popup of a row's open cell editor.
+    function inEditorPopup(focused): bool {
         for (let i = 0; i < rowsPlane.children.length; ++i) {
             const row = rowsPlane.children[i]
-            if (row.editorColumn !== undefined && row.editorColumn >= 0)
+            if (row.editorItem && root.popupHolds(row.editorItem, focused, 0))
                 return true
         }
         return false
@@ -292,20 +317,17 @@ MorphWidget {
         target: root.Window.window
         enabled: root.reportsFocusOut
         function onActiveFocusItemChanged() {
+            const focused = root.Window.activeFocusItem
             let within = false
-            let overlaid = false
-            const overlay = root.Overlay.overlay
-            for (let at = root.Window.activeFocusItem; at; at = at.parent) {
+            for (let at = focused; at; at = at.parent) {
                 if (at === root) {
                     within = true
                     break
                 }
-                if (at === overlay)
-                    overlaid = true
             }
-            // A popup lives in the window's overlay, not under the table: focus in one while a cell editor is open is
-            // the editor's own (a dropdown's list, a date picker), and stays in the table.
-            if (!within && overlaid && root.editorOpen())
+            // Focus in an open cell editor's own popup (a dropdown's list, a date picker) stays in the table; any
+            // other popup or dialog is outside it.
+            if (!within && focused && root.inEditorPopup(focused))
                 within = true
             if (root.focusWithin && !within)
                 root.fire("focusOut", undefined)
