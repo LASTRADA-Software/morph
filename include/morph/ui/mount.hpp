@@ -2272,8 +2272,12 @@ private:
         bool focused = false;
         std::optional<Key> focusKey;
         std::int64_t focusIndex = 0;
-        // The focused row left the view: focus goes to the row now at its index.
+        // The focused row left the view: focus goes to the row now at its index. `focusWas` keeps the key it left,
+        // so a key move from it that arrives after the row left still takes focus to the row's new key.
         bool focusLeft = false;
+        std::optional<Key> focusWas;
+        // The latest `KeyMoves` generation applied.
+        std::uint64_t keyMovesApplied = 0;
         // A reset moved the focused or highlighted key where no realized row has it yet: each pass looks for it
         // until a row has it, or the user moves focus or the highlight changes. Focus also asks the rows where its
         // key is, an ask `focusLocate` stops, and their answer ends its search.
@@ -3105,6 +3109,7 @@ private:
         if (*found && **found >= 0) {
             table.focusIndex = **found;
         } else {
+            table.focusWas = table.focusKey;
             table.focusLeft = true;
         }
         realizeWindow(table, [](std::int64_t) { return false; });
@@ -3228,6 +3233,7 @@ private:
         table.focused = true;
         table.focusSearching = false;
         table.focusUntold = false;
+        table.focusWas.reset();
         table.focusLocate.request_stop();
         table.focusIndex = index;
         table.focusColumn = table.visible.at(place);
@@ -3263,6 +3269,7 @@ private:
         table.focused = true;
         table.focusSearching = false;
         table.focusUntold = false;
+        table.focusWas.reset();
         table.focusLocate.request_stop();
         table.focusKey = cell->key;
         table.focusIndex = row->index;
@@ -3288,6 +3295,7 @@ private:
         table.focused = true;
         table.focusSearching = false;
         table.focusUntold = false;
+        table.focusWas.reset();
         table.focusLocate.request_stop();
         table.focusKey = key;
         table.focusIndex = row->index;
@@ -3296,6 +3304,44 @@ private:
         realizeWindow(table, [](std::int64_t) { return false; });
         table.widget->setFocusCell(static_cast<std::size_t>(table.focusIndex), table.focusColumn);
         reportFocus(table);
+    }
+
+    // Moves focus and the highlight from a row's old key to its new one, for each new generation of moves. Focus on
+    // the old key, or left by it when its row went, goes to the new key: at once when a realized row holds it, else
+    // once one does, the change that removes the old row moving it nowhere meanwhile.
+    void applyKeyMoves(SourceTable& table, KeyMoves const& moves) {
+        if (moves.generation <= table.keyMovesApplied) {
+            return;
+        }
+        table.keyMovesApplied = moves.generation;
+        for (auto const& [from, to] : moves.moves) {
+            if (table.highlightKey == from) {
+                table.highlightKey = to;
+                if (std::optional<std::int64_t> const now = placeOfKey(table, to, table.highlightIndex)) {
+                    table.highlightSearching = false;
+                    table.highlightIndex = *now;
+                    table.widget->setHighlightedRow(static_cast<std::size_t>(*now));
+                } else {
+                    table.highlightSearching = true;
+                }
+            }
+            if (!table.focused || (table.focusKey != from && table.focusWas != from)) {
+                continue;
+            }
+            table.focusKey = to;
+            table.focusWas.reset();
+            table.focusLeft = false;
+            table.focusUntold = false;
+            table.focusLocate.request_stop();
+            if (std::optional<std::int64_t> const now = placeOfKey(table, to, table.focusIndex)) {
+                table.focusSearching = false;
+                table.focusIndex = *now;
+                table.widget->setFocusCell(static_cast<std::size_t>(*now), table.focusColumn);
+            } else {
+                table.focusSearching = true;
+            }
+            reportFocus(table);
+        }
     }
 
     // Takes a highlight: the rows fetch around it, the view scrolls to it and marks it, and its key is followed.
@@ -3392,6 +3438,9 @@ private:
             // A focused row the change removed leaves focus at its view index, on the row now there, or the last; a
             // count not known yet names no last row.
             std::optional<std::int64_t> const now = followed(table.focusIndex);
+            if (!now && !table.focusLeft) {
+                table.focusWas = table.focusKey;
+            }
             table.focusLeft = table.focusLeft || !now.has_value();
             table.focusIndex = now.value_or(table.focusIndex);
             if (total.known) {
@@ -3535,6 +3584,9 @@ private:
         });
         bind(scope, spec.highlight, [this, &table](std::optional<TableHighlight> const& highlight) {
             static_cast<void>(runCallback(*_rt, [&] { highlightFrom(table, highlight); }));
+        });
+        bind(scope, spec.keyMoves, [this, &table](KeyMoves const& moves) {
+            static_cast<void>(runCallback(*_rt, [&] { applyKeyMoves(table, moves); }));
         });
         // While the selection is of the view the backend marks it, and the key list it holds is not sent over it.
         auto& viewing = scope.make<bool>(false);

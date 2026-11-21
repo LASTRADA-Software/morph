@@ -33,7 +33,7 @@ namespace morph::qt_quick {
 namespace {
 
 /// The `Theme` property each colour token of the set sets.
-constexpr std::array<std::pair<std::string_view, char const*>, 45> kColorProperties = {{
+constexpr std::array<std::pair<std::string_view, char const*>, 47> kColorProperties = {{
     {"color.text", "text"},
     {"color.muted", "muted"},
     {"color.err", "error"},
@@ -68,6 +68,8 @@ constexpr std::array<std::pair<std::string_view, char const*>, 45> kColorPropert
     {"color.info.dot", "infoDot"},
     {"color.table.header", "tableHeader"},
     {"color.table.headerRule", "tableHeaderRule"},
+    {"color.table.busy", "tableBusy"},
+    {"color.table.locked", "tableLocked"},
     {"color.chart.1", "chart1"},
     {"color.chart.2", "chart2"},
     {"color.chart.3", "chart3"},
@@ -181,8 +183,8 @@ void setOptionalColorFlags(QObject& theme, ui::ThemeValues const& values, std::v
     }
 }
 
-// The colours, the stale opacity, the background and the dimensions; each property that would not take its value
-// is added to @p unset.
+// The colours, the stale and muted opacities, the background and the dimensions; each property that would not take
+// its value is added to @p unset.
 void setPlainTokens(QObject& theme, ui::ThemeValues const& values, std::vector<std::string>& unset) {
     for (auto const& [path, property] : kColorProperties) {
         auto const found = values.colors.find(path);
@@ -197,6 +199,10 @@ void setPlainTokens(QObject& theme, ui::ThemeValues const& values, std::vector<s
     if (auto const stale = values.numbers.find("opacity.stale");
         stale != values.numbers.end() && !theme.setProperty("staleOpacity", stale->second)) {
         unset.emplace_back("staleOpacity");
+    }
+    if (auto const muted = values.numbers.find("opacity.muted");
+        muted != values.numbers.end() && !theme.setProperty("mutedOpacity", muted->second)) {
+        unset.emplace_back("mutedOpacity");
     }
     if (!theme.setProperty("borderDashed", dashed(values))) {
         unset.emplace_back("borderDashed");

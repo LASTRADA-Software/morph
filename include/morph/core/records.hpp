@@ -53,6 +53,9 @@ struct RecordInfo {
     std::type_index type;
     /// The glaze JSON name of the key member; empty for a keyless record or one without an `id` member.
     std::optional<std::string> keyField;
+    /// The glaze JSON name of the member holding the key a record had before an action changed it, collected beside
+    /// `keyField` at the same paths; empty for a record whose key does not change. `"from"` on a table's record.
+    std::optional<std::string> previousKeyField;
     /// The source types this record is derived from.
     std::vector<std::type_index> derivedFrom;
     /// True when the record's keys must not reach other principals.
@@ -238,6 +241,7 @@ inline bool registerTableRecordOnce(std::string const& name) noexcept {
                   "BRIDGE_REGISTER_TABLE: a table's record takes only privateKeys and derivedFrom<>");
     RecordInfo info{.name = name, .type = std::type_index{typeid(T)}, .keyField = "key", .derivedFrom = {}};
     info.table = true;
+    info.previousKeyField = "from";
     info.privateKeys = (std::is_same_v<Opts, privateKeys> || ... || false);
     // Unused when the table takes no options: the fold below is then empty.
     [[maybe_unused]] auto const addSources = []<typename O>(RecordInfo& target) {

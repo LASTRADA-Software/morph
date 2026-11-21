@@ -113,8 +113,10 @@ public:
     [[nodiscard]] std::optional<ui::Tone> effectiveRowTone() const noexcept;
     /// Sets the text core::tui's hover shows; empty shows none.
     void applyTooltip(std::string_view text) { _tooltip = text; }
-    /// What the hover shows: the tooltip, and a field adds its messages.
-    [[nodiscard]] virtual std::string hoverText() const { return _tooltip; }
+    /// Sets what a table row's marks say on hover, which wins over its own tooltip; empty leaves the tooltip.
+    void applyMarksTooltip(std::string_view text) { _marksTooltip = text; }
+    /// What the hover shows: a row's marks' text, else the tooltip, and a field adds its messages.
+    [[nodiscard]] virtual std::string hoverText() const { return _marksTooltip.empty() ? _tooltip : _marksTooltip; }
     /// What assistive technology reads as the widget's description; none for a widget that is not described.
     [[nodiscard]] virtual std::string accessibleDescription() const { return {}; }
     /// Declares the chords this widget handles while the focus is inside it.
@@ -257,6 +259,7 @@ private:
     std::optional<ui::Tone> _rowTone;
     bool _rowMuted = false;
     std::string _tooltip;
+    std::string _marksTooltip;
     std::vector<std::string> _chords;
     std::function<void(std::string)> _onChord;
     ::core::tui::Point _drawShift{};

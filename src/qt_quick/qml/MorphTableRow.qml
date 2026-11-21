@@ -103,7 +103,11 @@ MorphWidget {
     property bool unmatched: false
     property string marksTooltip: ""
     opacity: unmatched ? Theme.mutedOpacity : 1.0
-    tooltipText: marksTooltip !== "" ? marksTooltip : tooltip
+    // A busy or locked row always says why, over the row's own tooltip.
+    tooltipText: marksTooltip !== "" ? marksTooltip
+                 : locked ? qsTr("Locked by another user")
+                 : busy ? qsTr("Saving this row")
+                 : tooltip
     readonly property Item backgroundItem: backgroundLoader.item as Item
     // The cells that span, C++'s resolve of the row's spans: [{column, rows}], and the columns of this row that a
     // span above covers: [column]. The table gives each spanning column the block it covers: [{column, height}], and
@@ -611,29 +615,25 @@ MorphWidget {
         id: rowHover
     }
 
-    // A busy row's mark: a bar at its leading edge in the info colour. A locked row's: a hatch over its cells.
+    // A busy row's mark: a 3 px bar in `Theme.tableBusy` just inside the selection's bar, so a selected busy row shows
+    // both; the anchors follow a right-to-left layout. A locked row's: a `Theme.tableLocked` wash over its cells.
     Rectangle {
         objectName: "busyMark"
         visible: root.busy
-        x: 0
+        anchors.left: parent.left
+        anchors.leftMargin: 3
+        anchors.top: parent.top
         z: 3
         width: 3
         height: root.height
-        color: root.scheme.info
+        color: Theme.tableBusy
     }
     Rectangle {
-        objectName: "lockedHatch"
+        objectName: "lockedWash"
         visible: root.locked
         anchors.fill: parent
         z: 3
-        color: "transparent"
-        border.width: 0
-        gradient: Gradient {
-            orientation: Gradient.Horizontal
-            GradientStop { position: 0.0; color: Qt.alpha(root.scheme.muted, 0.18) }
-            GradientStop { position: 0.5; color: Qt.alpha(root.scheme.muted, 0.06) }
-            GradientStop { position: 1.0; color: Qt.alpha(root.scheme.muted, 0.18) }
-        }
+        color: Theme.tableLocked
     }
 
     // Hover is delivered only to an item whose bounds hold the pointer, so the part of a spanning cell below the row

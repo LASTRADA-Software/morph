@@ -757,20 +757,60 @@ TEST_CASE("tui table: a row's marks are drawn", "[tui][table]") {
                              ui::RowMarks{.locked = true, .tooltip = "Being edited by another user"});
     auto const lines = harness.draw();
     auto const& buffer = harness.screen().renderedBuffer();
-    // Row 0 is the first data line; its first cell starts after the two-cell gutter.
-    CHECK(buffer.cellAt({.x = 2, .y = 1})->style.dim);
-    CHECK_FALSE(buffer.cellAt({.x = 2, .y = 2})->style.dim);
-    CHECK(lines.at(2).starts_with("…"));
-    CHECK(lines.at(3).starts_with("#"));
-    CHECK_FALSE(lines.at(1).starts_with("…"));
+    // Row 0 is the first data line; its first cell starts after the gutter, two cells and the glyph's own.
+    CHECK(buffer.cellAt({.x = 3, .y = 1})->style.dim);
+    CHECK_FALSE(buffer.cellAt({.x = 3, .y = 2})->style.dim);
+    CHECK(lines.at(2).starts_with("  …"));
+    CHECK(lines.at(3).starts_with("  #"));
+    CHECK(lines.at(1).starts_with("   "));
     for (auto const& row : fruit.rows) {
         fruit.table->setRowMarks(*row, ui::RowMarks{});
     }
     auto const plain = harness.draw();
-    CHECK_FALSE(harness.screen().renderedBuffer().cellAt({.x = 2, .y = 1})->style.dim);
-    CHECK(plain.at(2).starts_with(" "));
-    CHECK(plain.at(3).starts_with(" "));
+    CHECK_FALSE(harness.screen().renderedBuffer().cellAt({.x = 3, .y = 1})->style.dim);
+    CHECK(plain.at(2).starts_with("   "));
+    CHECK(plain.at(3).starts_with("   "));
     CHECK_THROWS_AS(fruit.table->setRowMarks(*fruit.cells.at(0), ui::RowMarks{}), std::logic_error);
+}
+
+// Mutation: the glyph written over the gutter's first cell, which hides the selection mark `*` of a busy row.
+TEST_CASE("tui table: a busy or locked row's glyph hides no mark", "[tui][table]") {
+    Harness harness{30, 5};
+    Fruit fruit{harness, ui::SelectionMode::Multiple};
+    fruit.addRow(harness, key(3), "plum", "1");
+    fruit.table->setSelection({key(1), key(3)});
+    auto const before = harness.draw();
+    CHECK(before.at(1).starts_with("* apple"));
+    fruit.table->setRowMarks(*fruit.rows.at(0), ui::RowMarks{.busy = true});
+    fruit.table->setRowMarks(*fruit.rows.at(2), ui::RowMarks{.locked = true});
+    auto const lines = harness.draw();
+    // Selection mark, cursor mark, then the glyph's own cell; the cells start one further right.
+    CHECK(lines.at(1).starts_with("* …apple"));
+    CHECK(lines.at(2).starts_with("   kiwi"));
+    CHECK(lines.at(3).starts_with("* #plum"));
+    fruit.table->setRowMarks(*fruit.rows.at(0), ui::RowMarks{});
+    CHECK(harness.draw().at(1).starts_with("*  apple"));
+}
+
+// Mutation: the marks' text written over the row's own tooltip, which leaves the row's hover blank once its marks
+// clear.
+TEST_CASE("tui table: a busy or locked row says why on hover", "[tui][table]") {
+    Harness harness{30, 5};
+    Fruit fruit{harness, ui::SelectionMode::Single};
+    auto& apple = morph::tui::detail::WidgetBase::of(*fruit.rows.at(0));
+    auto& kiwi = morph::tui::detail::WidgetBase::of(*fruit.rows.at(1));
+    apple.applyTooltip("Fresh today");
+    fruit.table->setRowMarks(*fruit.rows.at(0), ui::RowMarks{.busy = true});
+    fruit.table->setRowMarks(*fruit.rows.at(1),
+                             ui::RowMarks{.locked = true, .tooltip = "Being edited by another user"});
+    CHECK(apple.hoverText() == "Saving this row");
+    CHECK(kiwi.hoverText() == "Being edited by another user");
+    fruit.table->setRowMarks(*fruit.rows.at(1), ui::RowMarks{.locked = true});
+    CHECK(kiwi.hoverText() == "Locked by another user");
+    fruit.table->setRowMarks(*fruit.rows.at(0), ui::RowMarks{});
+    CHECK(apple.hoverText() == "Fresh today");
+    fruit.table->setRowMarks(*fruit.rows.at(1), ui::RowMarks{});
+    CHECK(kiwi.hoverText().empty());
 }
 
 namespace {

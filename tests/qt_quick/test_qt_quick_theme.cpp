@@ -192,6 +192,24 @@ TEST_CASE("qt_quick theme: a host component reads the same tokens; a missing tok
     CHECK(item.property("muted").value<QColor>() == QColor{"#6e6e73"});
 }
 
+// Mutation: `opacity.muted` left out of applyTheme (Theme keeps 0.55), or either table colour left out of
+// kColorProperties (Theme keeps its default).
+TEST_CASE("qt_quick theme: a table row's busy, locked and muted tokens reach Theme", "[qt_quick]") {
+    Scene scene;
+    auto const tokens = ui::parseTokens(R"({"color": {"table": {"$type": "color", "busy": {"$value": "#123456"},
+      "locked": {"$value": "#65432180"}}}, "opacity": {"muted": {"$type": "number", "$value": 0.4}}})");
+    REQUIRE(tokens);
+    auto const resolved = ui::resolveTokens({&*tokens});
+    REQUIRE(resolved);
+    REQUIRE(morph::qt_quick::applyTheme(scene.engine(), ui::themeValues(*resolved)).empty());
+    auto const* const theme =
+        scene.engine().singletonInstance<QObject*>(QStringLiteral("MorphUi"), QStringLiteral("Theme"));
+    REQUIRE(theme != nullptr);
+    CHECK(theme->property("tableBusy").value<QColor>() == QColor{"#123456"});
+    CHECK(theme->property("tableLocked").value<QColor>() == QColor::fromRgb(0x65, 0x43, 0x21, 0x80));
+    CHECK(theme->property("mutedOpacity").toDouble() == 0.4);
+}
+
 TEST_CASE("qt_quick theme: the shell's tokens reach Theme", "[qt_quick]") {
     Scene scene;
     auto const tokens = ui::parseTokens(R"({"color": {"background": {"$type": "color", "$value": "#101010"}},

@@ -1235,6 +1235,8 @@ namespace selnet {
 
 struct TagRows;
 struct MoveRow;
+struct SaveAs;
+struct SavedAs;
 
 // Ten rows keyed 0..9: status "open" for 0..5, "closed" for 6..9. alice sees every row, bob rows 0..4.
 class Rows {
@@ -1243,6 +1245,7 @@ public:
     morph::table::ServedTable rows(morph::table::TableContext const& context);
     core::async::Task<morph::table::ChangedRows<&Rows::rows>> execute(TagRows action);
     morph::table::ChangedRows<&Rows::rows> execute(MoveRow const& action);
+    SavedAs execute(SaveAs const& action);
 
     static inline std::int64_t maxSelectedRows = 1'000'000;
 
@@ -1260,6 +1263,15 @@ struct MoveRow {
     std::string status;
 };
 
+// Saves row 2 as the new row 10, and cannot save row 4.
+struct SaveAs {
+    std::int64_t key = 0;
+};
+
+struct SavedAs {
+    morph::table::ChangedRows<&Rows::rows> rows;
+};
+
 }  // namespace selnet
 
 BRIDGE_REGISTER_MODEL(selnet::Rows, "selnet::Rows")
@@ -1267,6 +1279,8 @@ BRIDGE_REGISTER_TABLE(selnet::Rows, "rows", &selnet::Rows::rows, morph::table::r
 BRIDGE_REGISTER_ACTION(selnet::Rows, selnet::TagRows, "TagRows")
 BRIDGE_REGISTER_ACTION(selnet::Rows, selnet::MoveRow, "MoveRow")
 BRIDGE_REGISTER_EFFECTS(selnet::MoveRow, morph::effects::updatesTable<&selnet::Rows::rows>)
+BRIDGE_REGISTER_ACTION(selnet::Rows, selnet::SaveAs, "SaveAs")
+BRIDGE_REGISTER_EFFECTS(selnet::SaveAs, morph::effects::updatesTable<&selnet::Rows::rows>)
 
 namespace selnet {
 
@@ -1330,6 +1344,16 @@ morph::table::ChangedRows<&Rows::rows> Rows::execute(MoveRow const& action) {
     _source->patchRow(morph::table::RowId{action.key},
                       {morph::table::Cell{action.key}, morph::table::Cell{action.status}});
     return {.rows = {morph::table::ChangedRow{.key = morph::table::RowId{action.key}}}};
+}
+
+SavedAs Rows::execute(SaveAs const& action) {
+    static_cast<void>(action);
+    SavedAs out;
+    out.rows.rows.push_back(morph::table::ChangedRow{.key = morph::table::RowId{std::int64_t{10}},
+                                                     .from = morph::table::RowId{std::int64_t{2}}});
+    out.rows.failed.push_back(
+        morph::table::FailedRow{.key = morph::table::RowId{std::int64_t{4}}, .message = "Locked"});
+    return out;
 }
 
 }  // namespace selnet
@@ -1403,3 +1427,21 @@ TEST_CASE("tables: a selection's schema names its table", "[net][tables][selecti
     CHECK(schema["properties"]["focus"]["x-rowOf"].get_string() == "selnet::Rows.rows");
 }
 // Mutation: schemaValue returning an empty name, which leaves the client unable to mark busy rows.
+
+TEST_CASE("tables: a changed key's event names both keys", "[net][tables][keys]") {
+    Server server;
+    Client alice{server.url, "alice"};
+    REQUIRE(alice.watch({"selnet::Rows.rows"}).empty());
+    auto const model = alice.create("selnet::Rows");
+    auto const saved = alice.execute(model, "selnet::Rows", "SaveAs", R"({"key":2})");
+    REQUIRE(saved.kind == "ok");
+    CHECK(saved.body.find(R"("from":2)") != std::string::npos);
+    CHECK(saved.body.find(R"("message":"Locked")") != std::string::npos);
+    REQUIRE(alice.pumpUntil([&] { return !alice.changes.empty(); }));
+    alice.pumpFor(3 * kCoalesce);
+    REQUIRE(alice.changes.size() == 1);
+    auto keys = alice.keysOf("selnet::Rows.rows");
+    std::ranges::sort(keys);
+    CHECK(keys == std::vector<std::string>{"10", "2"});
+}
+// Mutation: the walk ignoring `from`, which leaves the old row's watchers untold (keys {10}).

@@ -347,6 +347,9 @@ std::optional<std::string> combinationProblem(ThemeIndex const& index, TokenFile
     if (auto problem = dimensionProblem(*resolved)) {
         return combinationLabel(variant, density, surface) + ": " + *problem;
     }
+    if (auto problem = opacityProblem(*resolved)) {
+        return combinationLabel(variant, density, surface) + ": " + *problem;
+    }
     return std::nullopt;
 }
 
@@ -1067,6 +1070,20 @@ std::optional<std::string> dimensionProblem(TokenSet const& resolved) {
         auto const pixels = pixelsOf(found->second.value);
         if (pixels && *pixels < 0.0) {
             return std::string{path} + ": must not be negative";
+        }
+    }
+    return std::nullopt;
+}
+
+std::optional<std::string> opacityProblem(TokenSet const& resolved) {
+    for (std::string_view const path : kOpacityPaths) {
+        auto const found = resolved.find(path);
+        if (found == resolved.end() || found->second.type != "number") {
+            continue;
+        }
+        auto const number = numberOf(found->second.value);
+        if (number && (*number < 0.0 || *number > 1.0)) {
+            return std::string{path} + ": must be between 0 and 1";
         }
     }
     return std::nullopt;

@@ -1401,6 +1401,20 @@ struct RowMarks {
     [[nodiscard]] bool operator==(RowMarks const& other) const = default;
 };
 
+/// @brief Rows whose keys an action changed, for the mount to move what it holds by key: its focus and its
+///        highlighted row. A generation the mount has applied is not applied again.
+struct KeyMoves {
+    /// @brief Increases with each set of moves; 0 holds none.
+    std::uint64_t generation = 0;
+    /// @brief Each row's old key, then its new one.
+    std::vector<std::pair<Key, Key>> moves;
+
+    /// @brief Member-wise equality.
+    /// @param other The moves to compare with.
+    /// @return `true` when generation and moves match.
+    [[nodiscard]] bool operator==(KeyMoves const& other) const = default;
+};
+
 /// @brief A row's own parts beyond its cells, for a table mounted over a `TableSource`: built once per realized row
 ///        key, bound in the row's scope. Nothing per cell is carried here.
 struct TableRowLook {
@@ -1649,6 +1663,9 @@ struct Table {
     /// @brief Engaged: the selection is every row of the view less these keys, which the mount gives the backend
     ///        through `setSelectionView` on each change; when it disengages the mount sets `selection` again.
     Prop<std::optional<std::vector<Key>>> selectionView;
+    /// @brief Rows an action gave new keys: the mount's focus and highlighted row follow a row from its old key to
+    ///        its new one, before the change that removes the old key moves them. A table over a `TableSource` only.
+    Prop<KeyMoves> keyMoves;
     /// @brief Called with the id of the status line's entry the user chose.
     std::function<void(std::string id)> onStatusEntry;
 };
@@ -2477,6 +2494,9 @@ struct TableOptions {
     /// @brief Engaged: the selection is every row of the view less these keys, which the mount gives the backend
     ///        through `setSelectionView` on each change; when it disengages the mount sets `selection` again.
     Prop<std::optional<std::vector<Key>>> selectionView;
+    /// @brief Rows an action gave new keys: the mount's focus and highlighted row follow a row from its old key to
+    ///        its new one, before the change that removes the old key moves them. A table over a `TableSource` only.
+    Prop<KeyMoves> keyMoves;
     /// @brief Called with the id of the status line's entry the user chose.
     std::function<void(std::string id)> onStatusEntry;
 };
@@ -2602,6 +2622,7 @@ template <typename RowT>
     spec.headerEntries = std::move(options.headerEntries);
     spec.headerEnabled = std::move(options.headerEnabled);
     spec.selectionView = std::move(options.selectionView);
+    spec.keyMoves = std::move(options.keyMoves);
     spec.onStatusEntry = std::move(options.onStatusEntry);
     return detail::makeNode(std::move(spec));
 }
@@ -2655,6 +2676,7 @@ template <typename RowT>
     spec.headerEntries = std::move(options.headerEntries);
     spec.headerEnabled = std::move(options.headerEnabled);
     spec.selectionView = std::move(options.selectionView);
+    spec.keyMoves = std::move(options.keyMoves);
     spec.onStatusEntry = std::move(options.onStatusEntry);
     return detail::makeNode(std::move(spec));
 }
