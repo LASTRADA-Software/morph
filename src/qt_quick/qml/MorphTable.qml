@@ -265,8 +265,10 @@ MorphWidget {
     property bool reportsFocusOut: false
     // Whether the window's active focus was in the table, a cell editor in one of its rows included.
     property bool focusWithin: false
-    // Whether @p focused is inside an open popup that @p item, or an object it holds, owns: a control's `popup` (a
+    // Whether @p focused is inside a shown popup that @p item, or an object it holds, owns: a control's `popup` (a
     // combo box's list) or a Popup among its data. A popup lives in the window's overlay, not under its control.
+    // `visible`, not `opened`: a popup takes the focus as it opens, before its enter transition ends and `opened`
+    // turns true.
     function popupHolds(item, focused, depth: int): bool {
         if (!item || depth > 12)
             return false
@@ -276,7 +278,7 @@ MorphWidget {
         if (item instanceof Popup)
             owned.push(item)
         for (const popup of owned) {
-            if (!popup.opened || !popup.contentItem)
+            if (!popup.visible || !popup.contentItem)
                 continue
             for (let at = focused; at; at = at.parent) {
                 if (at === popup.contentItem || at === popup.contentItem.parent)

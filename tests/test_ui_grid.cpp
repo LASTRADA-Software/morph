@@ -394,6 +394,50 @@ TEST_CASE("grid: the row an editor is open on holds its place until the edit end
     }
 }
 
+// Mutations, each with its own build: `GridController::leave` not letting go (focus leaving, and the form's submit,
+// whose before-submit hook is `leave`, keep key 1 first); `focusCell` not letting go (a click on another cell keeps
+// key 1 first); `GridRows::rebuild` keeping a held row the form no longer has (key 1 stays in the view).
+TEST_CASE("grid: the held row is let go when focus leaves, on submit, on a click elsewhere, and when it is removed",
+          "[ui][grid][mount]") {
+    MountedGrid m{3};
+    for (std::size_t row = 0; row < 3; ++row) {
+        m.f.form->field("specimens[" + std::to_string(row) + "].mass").text().set(std::to_string(row + 1));
+    }
+    m.f.h.settle();
+    REQUIRE(m.f.source->view().setSort({table::SortKey{.column = "mass", .dir = table::SortDirection::Ascending}}));
+    m.f.grid->focusCell(at(1, "mass"));
+    m.f.grid->type("9");
+    m.f.h.settle();
+    REQUIRE(m.f.grid->editing() == at(1, "mass"));
+    REQUIRE(m.f.source->positionOf(ui::Key{std::int64_t{1}}) == std::optional<std::size_t>{0});
+    std::vector<ui::Key> const moved{ui::Key{std::int64_t{2}}, ui::Key{std::int64_t{3}}, ui::Key{std::int64_t{1}}};
+    SECTION("focus leaving") {
+        m.backend.focusOut(m.table);
+        m.f.h.settle();
+        CHECK_FALSE(m.f.grid->editing().has_value());
+        CHECK(keysOf(*m.f.source) == moved);
+    }
+    SECTION("submit") {
+        m.f.form->submit();
+        m.f.h.settle();
+        CHECK_FALSE(m.f.grid->editing().has_value());
+        CHECK(keysOf(*m.f.source) == moved);
+    }
+    SECTION("a click on another cell") {
+        m.backend.clickCell(m.table, 2, 1);   // (3, mass), view row 2 at the click
+        m.f.h.settle();
+        CHECK_FALSE(m.f.grid->editing().has_value());
+        CHECK(keysOf(*m.f.source) == moved);
+        CHECK(m.f.grid->focus() == at(3, "mass"));
+    }
+    SECTION("removed from outside") {
+        m.f.form->field("specimens").removeRow(1);
+        m.f.h.settle();
+        CHECK(keysOf(*m.f.source) == std::vector<ui::Key>{ui::Key{std::int64_t{2}}, ui::Key{std::int64_t{3}}});
+        CHECK_FALSE(m.f.source->positionOf(ui::Key{std::int64_t{1}}).has_value());
+    }
+}
+
 // ── In a document ───────────────────────────────────────────────────────────
 
 constexpr std::string_view kGridDocument = R"({"vocab":"ui/1","id":"specimens",
