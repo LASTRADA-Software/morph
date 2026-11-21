@@ -70,6 +70,27 @@ constexpr std::string_view kStatusGap = "  ";
 /// Whether @p key is the special key @p code, not a typed character whose codepoint has the same value.
 bool isKey(::core::tui::KeyEvent const& key, KeyCode code) noexcept { return key.codepoint == 0 && key.key == code; }
 
+/// A codepoint as UTF-8.
+std::string utf8Of(char32_t codepoint) {
+    std::string out;
+    if (codepoint < 0x80) {
+        out += static_cast<char>(codepoint);
+    } else if (codepoint < 0x800) {
+        out += static_cast<char>(0xC0 | (codepoint >> 6));
+        out += static_cast<char>(0x80 | (codepoint & 0x3F));
+    } else if (codepoint < 0x10000) {
+        out += static_cast<char>(0xE0 | (codepoint >> 12));
+        out += static_cast<char>(0x80 | ((codepoint >> 6) & 0x3F));
+        out += static_cast<char>(0x80 | (codepoint & 0x3F));
+    } else {
+        out += static_cast<char>(0xF0 | (codepoint >> 18));
+        out += static_cast<char>(0x80 | ((codepoint >> 12) & 0x3F));
+        out += static_cast<char>(0x80 | ((codepoint >> 6) & 0x3F));
+        out += static_cast<char>(0x80 | (codepoint & 0x3F));
+    }
+    return out;
+}
+
 /// The lines a row takes: its natural height, and a line even when it has nothing to show.
 int rowHeight(WidgetBase const& row) { return std::max(1, row.naturalSize().height); }
 
@@ -723,6 +744,9 @@ void TableImpl::childForgotten(WidgetBase& child) {
     _cellColumns.erase(&child);
     _loads.erase(&child);
     _accents.erase(&child);
+    _editors.erase(&child);
+    _cellMarks.erase(&child);
+    _modifiedRows.erase(&child);
     // The plan points at rows and at the cells lifted out of them, and is rebuilt only by the next fit: until then a
     // click would hit-test a block of a row that is gone, and read its freed cell.
     _plan.clear();
@@ -1056,7 +1080,7 @@ std::string TableImpl::rowMark(WidgetBase const* row, bool cursor) const {
     if (_selectColumn) {
         mark = isMarked(row) ? "[x]" : "[ ]";
     } else {
-        mark = isMarked(row) ? "*" : " ";
+        mark = isMarked(row) ? "*" : (_modifiedRows.contains(row) ? "+" : " ");
     }
     mark += cursor ? ">" : " ";
     // A busy or locked row's glyph takes the gutter's own cells, after the selection and cursor marks.
@@ -1163,8 +1187,38 @@ void TableImpl::paint(::core::tui::Canvas& canvas) {
     }
     if (_source) {
         paintLoads(canvas, drawn, areas);
+        paintMarks(canvas, drawn, areas);
+        // Focus that left the table and everything in it is reported before the next frame, outside this one.
+        bool const within = isWithin(context().screen->focusedComponent(), view());
+        if (std::exchange(_focusWithin, within) && !within && _onFocusOut) {
+            _focusLeft = true;
+            if (std::ranges::find(context().windowTables, this) == context().windowTables.end()) {
+                context().windowTables.push_back(this);
+            }
+            refresh();
+        }
     }
     paintStatus(canvas);
+}
+
+void TableImpl::paintMarks(::core::tui::Canvas& canvas, std::vector<DrawnColumn> const& drawn,
+                           std::vector<::core::tui::Rect> const& areas) const {
+    auto const& theme = canvas.theme();
+    for (auto const [row, area] : std::views::zip(children(), areas)) {
+        auto const marks = _cellMarks.find(row);
+        if (area.empty() || marks == _cellMarks.end()) {
+            continue;
+        }
+        for (DrawnColumn const& column : drawn) {
+            auto const found = marks->second.find(column.column);
+            if (found == marks->second.end() || column.width <= 0 ||
+                (!found->second.error && !found->second.modified)) {
+                continue;
+            }
+            canvas.putString(area.y, gutter() + column.x + column.width - 1, found->second.error ? "!" : "+",
+                             found->second.error ? theme.error : theme.textMuted);
+        }
+    }
 }
 
 // Shift with an arrow moves as the arrow does and, in Multiple mode, selects from the anchor to the new cursor row;
@@ -1230,6 +1284,14 @@ EventResult TableImpl::key(::core::tui::KeyEvent const& key) {
             handler(_entriesDrawn.at(at).id);
             return EventResult::Handled;
         }
+    }
+    if (_source && _onText && _focusCell && key.codepoint >= U' ' && key.codepoint != 0x7f &&
+        (::core::tui::withoutLockKeys(key.modifiers) == ::core::tui::Modifier::None ||
+         ::core::tui::withoutLockKeys(key.modifiers) == ::core::tui::Modifier::Shift)) {
+        // A copy: the handler may destroy this table.
+        auto const handler = _onText;
+        handler(utf8Of(key.codepoint));
+        return EventResult::Handled;
     }
     if (_source) {
         if (auto const result = sourceKey(key); result == EventResult::Handled) {
@@ -1368,11 +1430,36 @@ void TableImpl::clickWith(::core::tui::Point cell, ::core::tui::Modifier modifie
     auto const rows = shownChildren();
     moveCursor(rows, static_cast<std::size_t>(std::distance(rows.begin(), std::ranges::find(rows, row))));
     refresh();
-    if (!twice) {
-        static_cast<void>(choose(*row, click));
-    } else if (auto const rowKey = keyOf(row)) {
+    if (!twice && !choose(*row, click)) {
+        return;
+    }
+    if (clickCell(row, cell.x, twice) || !twice) {
+        return;
+    }
+    if (auto const rowKey = keyOf(row)) {
         activateRow(*rowKey);
     }
+}
+
+bool TableImpl::clickCell(WidgetBase const* row, int x, bool twice) {
+    auto const index = _viewRows.find(row);
+    if (!_source || !_onCellClick || index == _viewRows.end()) {
+        return false;
+    }
+    int const across = x - gutter();
+    for (DrawnColumn const& column : drawnColumns(_size.width)) {
+        if (across >= column.x && across <= column.x + column.width) {
+            // A copy: the handler may destroy this table.
+            auto const handler = _onCellClick;
+            std::size_t const viewRow = index->second;
+            handler(viewRow, column.column, false);
+            if (twice) {
+                handler(viewRow, column.column, true);
+            }
+            return true;
+        }
+    }
+    return false;
 }
 
 // A move the user asked for counts as having followed the cursor and the focus as they are now, so the next frame
@@ -1705,6 +1792,60 @@ void TableImpl::setFocusCell(std::size_t viewRow, std::size_t column) {
 
 void TableImpl::setOnFocusMove(std::function<void(ui::FocusMove)> handler) { _onFocusMove = std::move(handler); }
 
+void TableImpl::setOnText(std::function<void(std::string)> onText) { _onText = std::move(onText); }
+
+void TableImpl::setOnCellClick(std::function<void(std::size_t, std::size_t, bool)> onClick) {
+    _onCellClick = std::move(onClick);
+}
+
+void TableImpl::setOnFocusOut(std::function<void()> onFocusOut) { _onFocusOut = std::move(onFocusOut); }
+
+void TableImpl::setCellEditor(ui::Widget& row, std::size_t column, ui::Widget* editor) {
+    auto& base = WidgetBase::of(row);
+    if (base.container() != this) {
+        throw std::logic_error{"morph::tui: setCellEditor of a widget that is not this table's row"};
+    }
+    if (editor == nullptr) {
+        auto const found = _editors.find(&base);
+        bool const focused = found != _editors.end() && found->second.second->hasFocus();
+        _editors.erase(&base);
+        if (focused) {
+            takeFocus();
+        }
+    } else {
+        _editors.insert_or_assign(&base, std::pair{column, &WidgetBase::of(*editor)});
+    }
+    refresh();
+}
+
+void TableImpl::setCellMarks(ui::Widget& row, std::size_t column, ui::CellMarks const& marks) {
+    auto& base = WidgetBase::of(row);
+    if (base.container() != this) {
+        throw std::logic_error{"morph::tui: setCellMarks of a widget that is not this table's row"};
+    }
+    if (marks == ui::CellMarks{}) {
+        if (auto const found = _cellMarks.find(&base); found != _cellMarks.end()) {
+            found->second.erase(column);
+        }
+    } else {
+        _cellMarks[&base].insert_or_assign(column, marks);
+    }
+    refresh();
+}
+
+void TableImpl::setRowModified(ui::Widget& row, bool modified) {
+    auto& base = WidgetBase::of(row);
+    if (base.container() != this) {
+        throw std::logic_error{"morph::tui: setRowModified of a widget that is not this table's row"};
+    }
+    if (modified) {
+        _modifiedRows.insert(&base);
+    } else {
+        _modifiedRows.erase(&base);
+    }
+    refresh();
+}
+
 void TableImpl::scrollToRow(std::size_t viewRow) {
     auto const room = static_cast<std::size_t>(std::max(_rowRoom, 1));
     if (viewRow < _top) {
@@ -1735,6 +1876,12 @@ void TableImpl::scrollColumnsTo(int scrollX) {
 
 // Columns first: the rows the mount realizes next are then built with the columns in view only.
 void TableImpl::reportRanges() {
+    if (std::exchange(_focusLeft, false) && _onFocusOut) {
+        // A copy: the handler may destroy this table.
+        auto const handler = _onFocusOut;
+        handler();
+        return;
+    }
     if (!_source || _size.width <= 0) {
         return;
     }
@@ -1844,10 +1991,19 @@ void TableImpl::slotCells(std::vector<DrawnColumn> const& drawn) {
         }
         std::vector<CellSlot> slots;
         slots.reserve(stack->children().size());
+        auto const editor = _editors.find(row);
         for (auto* const cell : stack->children()) {
             CellSlot slot;
             auto const column = columnOf(row, cell, 0);
-            if (isHeading(row)) {
+            if (editor != _editors.end() && (cell == editor->second.second || column == editor->second.first)) {
+                // An open editor is drawn in its cell's slot, the cell it edits in none.
+                if (auto const found = byColumn.find(editor->second.first);
+                    cell == editor->second.second && found != byColumn.end()) {
+                    slot = CellSlot{.x = found->second->x,
+                                    .width = found->second->width,
+                                    .place = CellPlace{.across = ui::Align::Stretch, .down = ui::Align::Center}};
+                }
+            } else if (isHeading(row)) {
                 if (!_cellColumns.contains(row) || !_cellColumns.at(row).contains(cell)) {
                     slot = CellSlot{.x = 0, .width = across, .place = CellPlace{.across = ui::Align::Start}};
                 }

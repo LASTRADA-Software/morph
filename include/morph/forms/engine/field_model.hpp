@@ -182,6 +182,9 @@ struct FieldSpec {
     bool readOnly = false;
     /// @brief `x-hidden`.
     bool hidden = false;
+    /// @brief `x-computed`: a member the action recomputes, which only a round writes; `computedInputs` alone cannot
+    ///        tell an `x-computed` with no inputs from none.
+    bool computed = false;
     /// @brief `x-computed.inputs`: the members a computed field derives from.
     std::vector<std::string> computedInputs;
     /// @brief `minimum`, as canonical decimal text.
@@ -596,6 +599,7 @@ private:
         spec.hidden = flagOf(raw, prop, "x-hidden");
         spec.widget = textOf(raw, prop, "x-widget");
         if (Json const* const computed = either(raw, prop, "x-computed")) {
+            spec.computed = true;
             if (Json const* const inputs = member(*computed, "inputs"); inputs != nullptr && inputs->is_array()) {
                 for (Json const& input : inputs->get_array()) {
                     if (auto const* const text = input.get_if<std::string>()) {

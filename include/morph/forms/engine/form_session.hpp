@@ -16,6 +16,7 @@
 #include <exception>
 #include <expected>
 #include <functional>
+#include <map>
 #include <memory>
 #include <optional>
 #include <span>
@@ -27,6 +28,7 @@
 #include <vector>
 
 #include "../../attributes.hpp"
+#include "../../core/action_refusal.hpp"
 #include "../../core/completion.hpp"
 #include "../../reactive/control.hpp"
 #include "../../reactive/runtime.hpp"
@@ -278,7 +280,7 @@ public:
                    }},
           _readonly{core.runtime(),
                     [this] {
-                        if (_spec->readOnly || (_parent != nullptr && _parent->readonly().get())) {
+                        if (_spec->readOnly || _spec->computed || (_parent != nullptr && _parent->readonly().get())) {
                             return true;
                         }
                         return _parent == nullptr &&
@@ -378,8 +380,8 @@ public:
     /// @return The visibility computed.
     [[nodiscard]] reactive::Computed<bool> const& visible() const noexcept { return _visible; }
 
-    /// @brief Whether the field is frozen: `x-readonly`, a frozen parent, or a `readonlyWhen` naming it that is
-    ///        True.
+    /// @brief Whether the field is frozen: `x-readonly`, `x-computed`, a frozen parent, or a `readonlyWhen` naming it
+    ///        that is True.
     /// @return The read-only computed.
     [[nodiscard]] reactive::Computed<bool> const& readonly() const noexcept { return _readonly; }
 
@@ -905,7 +907,9 @@ public:
           _body{runtime, [this] { return _ready.get() ? _assembled.get() : std::optional<std::string>{}; }},
           _mutation{runtime,
                     [this](std::string body) { return _submit(_core->model().actionType(), std::move(body)); }},
-          _attempts{runtime, std::uint64_t{0}} {
+          _attempts{runtime, std::uint64_t{0}},
+          _loadGeneration{runtime, std::uint64_t{0}},
+          _refusals{runtime, std::map<std::string, Refused, std::less<>>{}} {
         if (!_submit) {
             throw std::invalid_argument{"FormSession: a Submitter is required"};
         }
@@ -926,6 +930,10 @@ public:
         _acceptSent = std::make_unique<reactive::Effect>(runtime, [this, &runtime] {
             static_cast<void>(_mutation.successCount());
             runtime.untracked([&] { acceptSent(); });
+        });
+        _refused = std::make_unique<reactive::Effect>(runtime, [this, &runtime] {
+            std::exception_ptr const error = _mutation.error();
+            runtime.untracked([&] { takeRefusal(error); });
         });
     }
 
@@ -999,7 +1007,8 @@ public:
         return parsed;
     }
 
-    /// @brief A field by path: `name`, `parent.member`, or `rows[i].member` (a row by position).
+    /// @brief A field by path: `name`, `parent.member`, `rows[i].member` (a row by position) or `rows#key.member` (a
+    ///        row by its key, as `FieldState::path` writes it).
     /// @param path The path.
     /// @return The field.
     /// @throws std::out_of_range when no field has that path.
@@ -1025,13 +1034,29 @@ public:
                 }
                 segment = segment.substr(0, bracket);
             }
+            std::optional<std::uint64_t> key;
+            if (auto const hash = segment.find('#'); hash != std::string_view::npos && !index.has_value()) {
+                std::optional<std::size_t> const parsed = rowIndexOf(segment.substr(hash + 1));
+                if (!parsed.has_value()) {
+                    throw missing();
+                }
+                key = static_cast<std::uint64_t>(*parsed);
+                segment = segment.substr(0, hash);
+            }
             auto const found =
                 std::ranges::find_if(scope, [&](auto const& entry) { return entry->spec().name == segment; });
             if (found == scope.end()) {
                 throw missing();
             }
             current = found->get();
-            if (index.has_value()) {
+            if (key.has_value()) {
+                auto const& rows = current->rows();
+                auto const row = std::ranges::find(rows, *key, &RowState::key);
+                if (row == rows.end() || rest.empty()) {
+                    throw missing();
+                }
+                scope = (*row)->fields();
+            } else if (index.has_value()) {
                 auto const& rows = current->rows();
                 if (*index >= rows.size() || rest.empty()) {
                     throw missing();
@@ -1063,6 +1088,13 @@ public:
     ///        flight (the submission is `Exclusive`). The explicit-mode trigger; in automatic mode
     ///        it forces a resubmission of an unchanged body.
     void submit() {
+        // A hook ends an edit not yet committed (a grid's open cell editor), so the body sent holds it.
+        auto const hooks = _beforeSubmit;
+        for (auto const& [id, hook] : hooks) {
+            if (hook) {
+                hook();
+            }
+        }
         std::optional<std::string> const body = _body.peek();
         if (!body.has_value()) {
             return;
@@ -1127,6 +1159,7 @@ public:
         });
         for (std::size_t const index : loaded) {
             _loaded.at(index) = _fields.at(index)->snapshot();
+            reloaded(*_fields.at(index));
         }
     }
 
@@ -1164,6 +1197,113 @@ public:
             _core->markProgrammatic();
         });
         markLoaded();
+    }
+
+    /// @brief A token that expires when the session is destroyed: what an object that may outlive it (a grid's source,
+    ///        whose node a mount holds) checks before it calls back into the session.
+    /// @return The token.
+    [[nodiscard]] std::weak_ptr<void const> alive() const noexcept { return _alive; }
+
+    /// @brief Registers what `submit` runs first, before it assembles the body: what ends an edit not committed yet,
+    ///        such as a grid's open cell editor. Hooks run in the order they were added.
+    /// @param hook The hook.
+    /// @return The hook's id, for `removeBeforeSubmit`.
+    [[nodiscard]] std::size_t addBeforeSubmit(std::function<void()> hook) {
+        std::size_t const id = ++_nextHook;
+        _beforeSubmit.emplace_back(id, std::move(hook));
+        return id;
+    }
+
+    /// @brief Removes a hook `addBeforeSubmit` registered.
+    /// @param id The hook's id; one not registered is ignored.
+    void removeBeforeSubmit(std::size_t id) {
+        std::erase_if(_beforeSubmit, [id](auto const& entry) { return entry.first == id; });
+    }
+
+    /// @brief Whether a scalar field holds another entry than when the form was last loaded: its draft or its unit
+    ///        differs, or it is a member of a row added since. Tracked. A computed or derived member is never modified:
+    ///        only a round writes it. Any other member stays modified whatever freezes it after the user typed in it.
+    /// @param path The field's path (see `field`), such as `specimens#3.mass`.
+    /// @return `true` when modified; `false` for a path that names no field, and for an Object or a collection.
+    [[nodiscard]] bool modified(std::string_view path) const {
+        FieldState* state = nullptr;
+        try {
+            state = &field(path);
+        } catch (std::out_of_range const&) {
+            return false;
+        }
+        return modified(*state);
+    }
+
+    /// @brief Whether a row of a collection holds another entry than when the form was last loaded: one of its members
+    ///        is modified, or the row was added since. Tracked.
+    /// @param arrayPath The collection's path.
+    /// @param key       The row's key.
+    /// @return `true` when modified; `false` for a row the collection does not hold.
+    [[nodiscard]] bool rowModified(std::string_view arrayPath, std::uint64_t key) const {
+        RowState const* const row = rowOf(arrayPath, key);
+        if (row == nullptr) {
+            return false;
+        }
+        static_cast<void>(_loadGeneration.get());
+        if (addedSinceLoad(*row)) {
+            return true;
+        }
+        return std::ranges::any_of(row->fields(), [this](auto const& member) { return modified(*member); });
+    }
+
+    /// @brief Why the last submission refused a field: an `model::ActionRefusal`'s argument whose name is the field's
+    ///        path (`field`) carries the message. Held while the field keeps the draft it had then. Tracked.
+    /// @param path The field's path.
+    /// @return The message; empty while none holds.
+    [[nodiscard]] std::optional<std::string> refusal(std::string_view path) const {
+        auto const& held = _refusals.get();
+        FieldState const* state = nullptr;
+        try {
+            state = &field(path);
+        } catch (std::out_of_range const&) {
+            return std::nullopt;
+        }
+        auto const found = held.find(state->path());
+        if (found == held.end() || state->draft() != found->second.draft) {
+            return std::nullopt;
+        }
+        return found->second.message;
+    }
+
+    /// @brief Restores what a field held when the form was last loaded, programmatically (nothing is submitted): a
+    ///        scalar's draft and unit, or each member of a row (`rows#key`). A row added since the load is removed.
+    /// @param path The field's or the row's path.
+    void revert(std::string_view path) {
+        if (auto const hash = path.rfind('#'); hash != std::string_view::npos && path.find('.', hash) == std::string_view::npos) {
+            std::optional<std::size_t> const key = rowIndexOf(path.substr(hash + 1));
+            RowState const* const row = key ? rowOf(path.substr(0, hash), *key) : nullptr;
+            if (row == nullptr) {
+                return;
+            }
+            FieldState& array = field(path.substr(0, hash));
+            runtime().batch([&] {
+                if (addedSinceLoad(*row)) {
+                    array.removeRow(row->key());
+                } else {
+                    for (auto const& member : row->fields()) {
+                        restoreLoaded(*member);
+                    }
+                }
+                _core->markProgrammatic();
+            });
+            return;
+        }
+        FieldState* state = nullptr;
+        try {
+            state = &field(path);
+        } catch (std::out_of_range const&) {
+            return;
+        }
+        runtime().batch([&] {
+            restoreLoaded(*state);
+            _core->markProgrammatic();
+        });
     }
 
     /// @brief Whether a submission is in flight. Tracked.
@@ -1252,6 +1392,7 @@ private:
         for (std::size_t index = 0; index < _sent.size(); ++index) {
             if (_fields.at(index)->snapshot() == _sent.at(index) && endsEditOnSave(*_fields.at(index))) {
                 _loaded.at(index) = _sent.at(index);
+                reloaded(*_fields.at(index));
             }
         }
         _sent.clear();
@@ -1262,6 +1403,145 @@ private:
         for (auto const& field : _fields) {
             _loaded.push_back(field->snapshot());
         }
+        _loadedCells.clear();
+        for (auto const& field : _fields) {
+            recordLoaded(*field);
+        }
+        _loadGeneration.set(_loadGeneration.peek() + 1);
+    }
+
+    // A field the last submission refused: the message, and the draft the field held then.
+    struct Refused {
+        std::string message;
+        std::string draft;
+    };
+
+    // Takes the field refusals of the submission that failed last; a success clears them.
+    void takeRefusal(std::exception_ptr const& error) {
+        if (error == _refusalSeen) {
+            return;
+        }
+        _refusalSeen = error;
+        std::map<std::string, Refused, std::less<>> next;
+        if (error != nullptr) {
+            try {
+                std::rethrow_exception(error);
+            } catch (model::ActionRefusal const& refusal) {
+                for (model::RefusalArg const& arg : refusal.args()) {
+                    try {
+                        FieldState const& state = field(arg.name);
+                        next.insert_or_assign(state.path(), Refused{.message = arg.value, .draft = state.draft()});
+                    } catch (std::out_of_range const&) {  // NOLINT(bugprone-empty-catch)
+                        // An argument that names no field is the sentence's, not a field's.
+                    }
+                }
+            } catch (...) {  // NOLINT(bugprone-empty-catch)
+                // Any other failure names no field.
+            }
+        }
+        _refusals.set(std::move(next));
+    }
+
+    // What one scalar held when the form was last loaded; a row's own entry marks the row as loaded.
+    struct LoadedCell {
+        std::string text;
+        std::size_t unit = 0;
+    };
+
+    // Records what a field holds now as loaded: each scalar's draft and unit, each row of a collection, each member.
+    // NOLINTNEXTLINE(misc-no-recursion): an Object's members and a row's are fields.
+    void recordLoaded(FieldState const& state) {
+        FieldSpec const& spec = state.spec();
+        if (spec.truncated) {
+            return;
+        }
+        runtime().untracked([&] {
+            if (spec.kind == FieldKind::Object) {
+                for (auto const& member : state.members()) {
+                    recordLoaded(*member);
+                }
+            } else if (spec.kind == FieldKind::ObjectArray) {
+                for (auto const& row : state.rows()) {
+                    _loadedCells.insert_or_assign(state.path() + "#" + std::to_string(row->key()), LoadedCell{});
+                    for (auto const& member : row->fields()) {
+                        recordLoaded(*member);
+                    }
+                }
+            } else {
+                _loadedCells.insert_or_assign(
+                    state.path(),
+                    LoadedCell{.text = state.draft(), .unit = const_cast<FieldState&>(state).unit().get()});
+            }
+        });
+    }
+
+    // Records a top-level field as loaded again, forgetting what it held before.
+    void reloaded(FieldState const& state) {
+        std::string const& name = state.path();
+        std::erase_if(_loadedCells, [&name](auto const& entry) {
+            std::string const& path = entry.first;
+            return path == name || (path.size() > name.size() && path.starts_with(name) &&
+                                    (path.at(name.size()) == '.' || path.at(name.size()) == '#'));
+        });
+        recordLoaded(state);
+        _loadGeneration.set(_loadGeneration.peek() + 1);
+    }
+
+    // NOLINTNEXTLINE(misc-no-recursion): an Object's members are fields.
+    [[nodiscard]] bool modified(FieldState const& state) const {
+        FieldSpec const& spec = state.spec();
+        if (spec.truncated || spec.kind == FieldKind::Object || spec.kind == FieldKind::ObjectArray ||
+            spec.computed) {
+            return false;
+        }
+        static_cast<void>(_loadGeneration.get());
+        auto const found = _loadedCells.find(state.path());
+        // A member of a row added since the load.
+        if (found == _loadedCells.end()) {
+            return true;
+        }
+        return state.draft() != found->second.text || const_cast<FieldState&>(state).unit().get() != found->second.unit;
+    }
+
+    // A collection's row by key, tracked; null when there is none.
+    [[nodiscard]] RowState const* rowOf(std::string_view arrayPath, std::uint64_t key) const {
+        FieldState* array = nullptr;
+        try {
+            array = &field(arrayPath);
+        } catch (std::out_of_range const&) {
+            return nullptr;
+        }
+        if (array->spec().kind != FieldKind::ObjectArray) {
+            return nullptr;
+        }
+        auto const& rows = array->rows();
+        auto const found = std::ranges::find(rows, key, &RowState::key);
+        return found == rows.end() ? nullptr : found->get();
+    }
+
+    [[nodiscard]] bool addedSinceLoad(RowState const& row) const {
+        std::string const& first = row.fields().empty() ? std::string{} : row.fields().front()->path();
+        // A member's path is `<array>#<key>.<member>`: the row's own entry is the part before the member.
+        std::string const rowPath = first.substr(0, first.rfind('.'));
+        return !_loadedCells.contains(rowPath);
+    }
+
+    // Puts back what a scalar held when the form was last loaded, or blanks a member of a row added since.
+    // NOLINTNEXTLINE(misc-no-recursion): an Object's members are fields.
+    void restoreLoaded(FieldState& state) {
+        FieldSpec const& spec = state.spec();
+        if (spec.truncated || spec.kind == FieldKind::ObjectArray) {
+            return;
+        }
+        if (spec.kind == FieldKind::Object) {
+            for (auto const& member : state.members()) {
+                restoreLoaded(*member);
+            }
+            return;
+        }
+        auto const found = _loadedCells.find(state.path());
+        state.text().set(found == _loadedCells.end() ? std::string{} : found->second.text);
+        state.unit().set(found == _loadedCells.end() ? spec.entryUnit : found->second.unit);
     }
 
     [[nodiscard]] std::optional<std::string> assemble() const {
@@ -1338,8 +1618,20 @@ private:
     /// @brief Each top-level field's snapshot when the explicit submission in flight was sent.
     std::vector<std::string> _sent;
     std::uint64_t _acceptedSuccesses = 0;
+    /// @brief What each scalar held when the form was last loaded, by its path, and each row of a collection then.
+    std::map<std::string, LoadedCell, std::less<>> _loadedCells;
+    /// @brief Moves on every change of `_loadedCells`, so what compares against it is evaluated again.
+    reactive::Signal<std::uint64_t> _loadGeneration;
+    /// @brief What `submit` runs first, by id, in the order added.
+    std::vector<std::pair<std::size_t, std::function<void()>>> _beforeSubmit;
+    std::size_t _nextHook = 0;
+    std::shared_ptr<void const> _alive = std::make_shared<int const>(0);
+    /// @brief The fields the last failed submission refused, by path, and the failure they were read from.
+    reactive::Signal<std::map<std::string, Refused, std::less<>>> _refusals;
+    std::exception_ptr _refusalSeen;
     std::unique_ptr<reactive::Effect> _autoSubmit;
     std::unique_ptr<reactive::Effect> _acceptSent;
+    std::unique_ptr<reactive::Effect> _refused;
 };
 
 }  // namespace morph::forms

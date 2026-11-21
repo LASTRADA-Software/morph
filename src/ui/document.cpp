@@ -14,6 +14,7 @@
 #include <memory>
 #include <morph/core/wire.hpp>
 #include <morph/forms/version.hpp>
+#include <morph/forms/engine/field_model.hpp>
 #include <morph/table/filter.hpp>
 #include <morph/table/query.hpp>
 #include <morph/ui/control_shape.hpp>
@@ -107,10 +108,11 @@ constexpr std::array<std::string_view, 2> kSelectValues = {"selected", "selected
 /// @brief The element values of a tabs node: the id of the tab shown.
 constexpr std::array<std::string_view, 1> kTabsValues = {"selected"};
 /// @brief The element values of a table.
-constexpr std::array<std::string_view, 20> kTableValues = {
+constexpr std::array<std::string_view, 24> kTableValues = {
     "selection", "activeKey", "sort",       "filters", "viewCount", "sourceCount",    "selectedCount", "pending",
     "error",     "hoveredKey", "page",      "pageCount", "pageFirst", "pageLast",     "layout",        "visibleColumns",
-    "hiddenCount", "selectionSet", "selectedCountKind", "busyCount"};
+    "hiddenCount", "selectionSet", "selectedCountKind", "busyCount", "modifiedCount", "modifiedRows", "errorCount",
+    "editing"};
 /// @brief The element values of a dialog or drawer.
 constexpr std::array<std::string_view, 3> kDialogValues = {"open", "ready", "submitted"};
 /// @brief The element values of a form, beside its fields.
@@ -296,7 +298,11 @@ constexpr std::array<KeySpec, 7> kForEachKeys = {{{"rows", Shape::Expr, {}, kReq
                                                   {"divided", Shape::Flag},
                                                   {"children", Shape::Nodes, {}, kInner}}};
 /// @brief The keys of `table`.
-constexpr std::array<KeySpec, 41> kTableKeys = {{{"rows", Shape::Expr},
+constexpr std::array<KeySpec, 45> kTableKeys = {{{"rows", Shape::Expr},
+                                                 {"form", Shape::Text},
+                                                 {"field", Shape::Text},
+                                                 {"enterMoves", Shape::Text},
+                                                 {"walk", Shape::Text},
                                                  {"key", Shape::Expr, {}, kInner},
                                                  {"model", Shape::Name},
                                                  {"table", Shape::Name},
@@ -338,7 +344,8 @@ constexpr std::array<KeySpec, 41> kTableKeys = {{{"rows", Shape::Expr},
                                                  {"headerMenu", Shape::Parts, "menuItem"},
                                                  {"headerEnabled", Shape::Condition}}};
 /// @brief The keys of a `table` column part; `tone` and `tooltip` are read in the row's scope.
-constexpr std::array<KeySpec, 24> kColumnKeys = {{{"id", Shape::Name},
+constexpr std::array<KeySpec, 25> kColumnKeys = {{{"id", Shape::Name},
+                                                  {"field", Shape::Text},
                                                   {"kind", Shape::Text},
                                                   {"label", Shape::Expr},
                                                   {"width", Shape::Expr},
@@ -3392,6 +3399,8 @@ private:
                 refuse(node.path, "a `" + node.kind + "` with a `model` names its `action`");
             }
             checkModelAction(context, std::string{model}, std::string{node.name("action")}, node.path);
+        } else if (node.kind == "table" && !node.name("form").empty()) {
+            checkFormGrid(node);
         } else if (node.kind == "table" && !node.prop("rows")) {
             refuse(node.path, "a table takes `rows`, or a `model` and `action`");
         }
@@ -3408,6 +3417,58 @@ private:
             checkColumnKinds(node);
             if (!model.empty() && table.empty()) {
                 checkActionTable(node);
+            }
+        }
+    }
+
+    // A grid of a form: a table over a form node's collection field, in place of `rows`. Each column's `field` names a
+    // member of the field's row type, read from the form action's schema when the catalog has it.
+    void checkFormGrid(DocNode const& node) const {
+        if (node.prop("rows")) {
+            refuse(pointerAppend(node.path, "form"), "a table takes `rows` or a `form`, not both");
+        }
+        std::string_view const field = node.name("field");
+        if (field.empty()) {
+            refuse(node.path, "a table over a `form` names its `field`, the form's collection");
+        }
+        for (std::string_view const key : {std::string_view{"enterMoves"}, std::string_view{"walk"}}) {
+            std::string_view const given = node.name(key);
+            bool const known = given.empty() ||
+                               (key == "enterMoves" ? given == "down" || given == "right" || given == "none"
+                                                    : given == "rows" || given == "columns");
+            if (!known) {
+                refuse(pointerAppend(node.path, key),
+                       key == "enterMoves" ? "`enterMoves` is `down`, `right` or `none`" : "`walk` is `rows` or `columns`");
+            }
+        }
+        auto const form = _elements.find(node.name("form"));
+        if (form == _elements.end() || form->second->kind != "form") {
+            refuse(pointerAppend(node.path, "form"), "`" + std::string{node.name("form")} + "` is not a form of this document");
+        }
+        if (!_options->catalog.schema) {
+            return;
+        }
+        std::string const action{form->second->name("action")};
+        std::optional<std::string> const schema = _options->catalog.schema(action);
+        if (!schema) {
+            return;
+        }
+        auto const model = forms::FormModel::fromSchema(action, *schema);
+        if (!model) {
+            return;
+        }
+        auto const array = std::ranges::find(model->fields(), field, &forms::FieldSpec::name);
+        if (array == model->fields().end() || array->kind != forms::FieldKind::ObjectArray) {
+            refuse(pointerAppend(node.path, "field"),
+                   "`" + std::string{field} + "` is not a list of records of the form of `" + action + "`");
+        }
+        for (DocNodePtr const& column : node.partList("columns")) {
+            std::string_view const member = column->name("field");
+            if (!member.empty() && std::ranges::none_of(array->children, [member](forms::FieldSpec const& child) {
+                    return child.name == member;
+                })) {
+                refuse(pointerAppend(column->path, "field"), "`" + std::string{member} + "` names no member of `" +
+                                                                std::string{field} + "`");
             }
         }
     }

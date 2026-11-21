@@ -25,8 +25,11 @@ import QtQuick.Layouts
 // cell keeps its tone in a toned or selected row and the selection shows through; a tooltip draws the "more here"
 // mark, shows on hover after the style's delay and at once while the cell has the keyboard focus, and is the slot's
 // accessible name; a value that could not be read draws the error mark in place of the cell, with the accent's
-// tooltip. The row's `measuredHeight` is its tallest placed cell's, unless every column keeps one line; the table
-// sets its height.
+// tooltip. A cell's marks (`cellMarks`) draw over its slot: a read-only cell's muted wash, a modified cell's corner
+// mark, an error outline. An open cell editor is placed in its cell's column, over the cell, which C++ covers. A
+// modified row (`modified`) draws its mark at the leading edge. In a table that reports cell clicks, each tap reports
+// its cell (`cellClick`), a double tap a second time with `double`. The row's `measuredHeight` is its tallest placed
+// cell's, unless every column keeps one line; the table sets its height.
 MorphWidget {
     id: root
 
@@ -82,6 +85,15 @@ MorphWidget {
         return root.cellAccents[String(column)] ?? null
     }
     onCellAccentsChanged: root.place()
+    // The columns whose cells have marks, by column as text: {readOnly, modified, error, stale, muted}. C++ writes it.
+    property var cellMarks: ({})
+    // The marks drawn over those cells' slots: [{x, width, column, readOnly, modified, error, muted}].
+    property var cellMarkSlots: []
+    onCellMarksChanged: root.place()
+    // Whether a cell of the row changed since the record was loaded; C++ writes it.
+    property bool modified: false
+    // The column of the row's open cell editor, or -1; C++ writes it.
+    property int editorColumn: -1
     // Over a source the table holds the focus and names the focused row; otherwise the row holds it.
     readonly property bool current: root.table && root.table.sourceRows
                                     ? root.table.activeFocus && root.viewRow === root.table.focusedRowIndex
@@ -336,6 +348,7 @@ MorphWidget {
         const placed = []
         const marks = []
         const accents = []
+        const marked = []
         let tallest = 0
         for (let i = 0; i < cells.children.length; ++i) {
             const cell = cells.children[i]
@@ -368,6 +381,11 @@ MorphWidget {
             if (accent && (accent.tone >= 0 || accent.tooltip !== ""))
                 accents.push({"x": left, "offset": slot.offset, "width": slot.width, "column": column,
                               "tone": accent.tone, "tooltip": accent.tooltip, "pinned": pinned})
+            const cellMark = root.cellMarks[String(column)] ?? null
+            if (cellMark && cell.visible)
+                marked.push({"x": left, "width": slot.width, "column": column, "readOnly": cellMark.readOnly,
+                             "modified": cellMark.modified, "error": cellMark.error,
+                             "muted": cellMark.muted || cellMark.stale})
             if (cell.textAlign !== undefined && !cell.ownAlign)
                 cell.textAlign = across === 3 ? Qt.AlignRight : across === 2 ? Qt.AlignHCenter : Qt.AlignLeft
             if (cell.singleLine !== undefined)
@@ -397,6 +415,8 @@ MorphWidget {
             root.loadMarks = marks
         if (JSON.stringify(accents) !== JSON.stringify(root.accentMarks))
             root.accentMarks = accents
+        if (JSON.stringify(marked) !== JSON.stringify(root.cellMarkSlots))
+            root.cellMarkSlots = marked
         root.placeBackdrop()
     }
 
@@ -770,10 +790,60 @@ MorphWidget {
         delegate: accentSlot
     }
 
+    // A read-only cell's wash, under the cells; a modified cell's corner mark and an error outline over them.
+    Repeater {
+        objectName: "cellMarks"
+        model: root.cellMarkSlots
+        delegate: Item {
+            id: cellMark
+            required property var modelData
+            objectName: "cellMark" + modelData.column
+            x: modelData.x
+            z: 2
+            width: modelData.width
+            height: root.height
+            Rectangle {
+                objectName: "readOnlyWash"
+                anchors.fill: parent
+                visible: cellMark.modelData.readOnly
+                color: Qt.alpha(root.scheme.muted, 0.12)
+            }
+            Rectangle {
+                objectName: "modifiedMark"
+                visible: cellMark.modelData.modified
+                anchors.top: parent.top
+                anchors.left: parent.left
+                width: Math.round(Theme.bodyFont.pixelSize * 0.4)
+                height: width
+                color: root.scheme.accent
+            }
+            Rectangle {
+                objectName: "errorOutline"
+                anchors.fill: parent
+                visible: cellMark.modelData.error
+                color: "transparent"
+                border.width: 1
+                border.color: root.scheme.error
+            }
+            opacity: modelData.muted ? Theme.mutedOpacity : 1.0
+        }
+    }
+
     Item {
         id: cells
         anchors.fill: parent
         onChildrenChanged: root.place()
+    }
+
+    // A modified row's mark: a bar at the leading edge.
+    Rectangle {
+        objectName: "rowModifiedMark"
+        visible: root.modified
+        x: 0
+        width: 2
+        height: root.height
+        z: 2
+        color: root.scheme.accent
     }
 
     // A cell not loaded draws a rounded bar; one that failed, an error mark; each 3 em wide in its column's alignment.
@@ -855,6 +925,17 @@ MorphWidget {
         if (fromRow && root.inSpannedColumn(x))
             return
         const held = modifiers & (Qt.ControlModifier | Qt.ShiftModifier)
+        // A table that takes cell clicks hears every tap on a cell; its second tap of a double tap opens the cell.
+        if (root.table && root.table.reportsCellClicks) {
+            const column = root.columnAt(x)
+            if (column >= 0) {
+                if (root.table.sourceRows && !root.holdsFocus(root.Window.activeFocusItem))
+                    root.table.forceActiveFocus(Qt.MouseFocusReason)
+                root.fire("cellClick", {"column": column, "double": tapCount >= 2 && held === Qt.NoModifier})
+                if (tapCount >= 2)
+                    return
+            }
+        }
         // Only plain clicks make a double click, so two quick Ctrl-clicks toggle a row twice.
         if (tapCount >= 2 && held === Qt.NoModifier) {
             root.fire("activate", undefined)

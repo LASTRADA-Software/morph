@@ -86,7 +86,8 @@ public:
 
     /// @brief Declares the keyboard chords the widget handles while focus is inside it.
     ///
-    /// A chord pressed while focus is inside several widgets that declare it goes to the innermost of them only.
+    /// A chord pressed while focus is inside several widgets that declare it goes to the innermost of them only. A
+    /// widget that declares `Tab` or `Shift+Tab` receives them instead of focus moving.
     /// @param chords The chords, each modifiers joined to a key name, such as `"Ctrl+S"`.
     /// @param onChord Called with the chord that was pressed.
     virtual void setKeys(std::vector<std::string> const& chords, std::function<void(std::string)> onChord) = 0;
@@ -1120,6 +1121,54 @@ public:
     ///        and columns it may not have realized.
     /// @param handler The handler, with the move; empty does nothing.
     virtual void setOnFocusMove(std::function<void(FocusMove)> handler) { static_cast<void>(handler); }
+
+    /// @brief Sets what printable text typed while a cell has focus and no editor is open calls, with the text.
+    /// @param onText The handler; empty does nothing and lets the key go on.
+    virtual void setOnText(std::function<void(std::string)> onText) { static_cast<void>(onText); }
+
+    /// @brief Sets what a click on a cell calls: a single click with `false`, the second click of a double click with
+    ///        `true` (its first click calls it with `false`, as a single click does).
+    /// @param onClick The handler, with the cell's view row and its column (an index into the columns `setColumns`
+    ///        gave); empty does nothing.
+    virtual void setOnCellClick(std::function<void(std::size_t viewRow, std::size_t column, bool doubleClick)> onClick) {
+        static_cast<void>(onClick);
+    }
+
+    /// @brief Sets what focus moving to a widget outside the table, its cell editor and its popups calls.
+    /// @param onFocusOut The handler; empty does nothing.
+    virtual void setOnFocusOut(std::function<void()> onFocusOut) { static_cast<void>(onFocusOut); }
+
+    /// @brief Draws a cell editor over a cell's area in place of the cell's content, or the cell again.
+    /// @param row    One of this table's rows; @p editor is one of its children.
+    /// @param column The cell's column: an index into the columns `setColumns` gave.
+    /// @param editor The editor, or null to draw the cell again.
+    virtual void setCellEditor(Widget& row, std::size_t column, Widget* editor) {
+        static_cast<void>(row);
+        static_cast<void>(column);
+        static_cast<void>(editor);
+    }
+
+    /// @brief Sets a cell's marks; called after the row's key, on every change, and whenever a cell is attached to a
+    ///        row at a column, for a table whose rows come from a `TableSource`. `readOnly` draws the theme's read-only
+    ///        cell surface, `modified` the modified mark, `error` the error mark, `stale` and `muted` the stale and
+    ///        muted looks. A cell no call names has no marks.
+    /// @param row    One of this table's rows.
+    /// @param column The cell's column: an index into the columns `setColumns` gave.
+    /// @param marks  The marks.
+    virtual void setCellMarks(Widget& row, std::size_t column, CellMarks const& marks) {
+        static_cast<void>(row);
+        static_cast<void>(column);
+        static_cast<void>(marks);
+    }
+
+    /// @brief Sets whether a row draws the row header's modified mark; called after `setRowKey` for a row whose look
+    ///        carries it, and on every change.
+    /// @param row      One of this table's rows.
+    /// @param modified Whether a cell of the row changed since the record was loaded.
+    virtual void setRowModified(Widget& row, bool modified) {
+        static_cast<void>(row);
+        static_cast<void>(modified);
+    }
 
     /// @brief Tells the backend the counts it reports to assistive technology.
     /// @param rows    The view's total when it is exact; nothing when it is a lower bound or not known yet.

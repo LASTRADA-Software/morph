@@ -282,7 +282,7 @@ before it.
 | Slider | `Slider` over `x-min`..`x-max` by `x-step` |
 | Array | `TextInput`, comma-separated |
 | Object | `Panel` of its members' cells |
-| ObjectArray | a `forEach` of row panels, each with Remove, and an Add button |
+| ObjectArray | a `forEach` of row panels, each with Remove, and an Add button; with `x-widget: grid` (or an overlay's `widget: grid`), a grid of its rows (`ui::formGrid`, [../table/editing.md](../table/editing.md#a-grid-of-a-form)), one column per member in schema order |
 
 - **A cell** is the label (a `ui::TextRole::Label` text, so the theme's `field.caption.case` shapes it) and the control (which marks a required field, live, and describes itself with the help),
   visible while the field is. The cell owns the caption, and the control owns the required mark and the unit: the mark is the
@@ -325,9 +325,35 @@ before it.
   ([../ui/interpreter.md](../ui/interpreter.md#lowering)): the interpreter adds it as a field-path override, and the cell
   around it (caption, help, visibility) is drawn as for every override.
 
-**Not supported:** the grid widget (`x-widget: grid` on an `ObjectArray`), whose keyboard model needs a way for the
-view tree to move focus, which it does not have (a kit's grid is reached through a host component); and a
-document's subtree overrides.
+The scalar controls (every kind but an Object and an ObjectArray) are `detail::engine::scalarControl(session,
+field)` in `forms/engine/field_control.hpp`, which a grid's cell editor draws too; `form_view.hpp` includes it and
+`ui/grid.hpp`, and neither of those includes `form_view.hpp`.
+
+**Not supported:** a document's subtree overrides.
+
+## What changed, and edits not yet committed
+
+- **The load record.** For every scalar field, the members of an Object and of each row of an `ObjectArray`
+  included, the session keeps the draft and the unit it held when the form was last loaded, by
+  `FieldState::path()` (`specimens#3.mass`), and each row of a collection then. Construction, `prefill`, `reset`,
+  a `refill` that loads a field and a successful submission that ends a field's edit write it, for the fields they
+  load.
+- **`modified(path)`** (tracked) is true when the field's draft or unit differs from the record, or the field is a
+  member of a row added since the load. A computed member (`FieldSpec::computed`, from `x-computed`) is never
+  modified: only a round writes it. Any other member stays modified whatever freezes it after the user typed in it.
+  **`rowModified(arrayPath, key)`** is true when a member of the row is modified or the row was added since.
+- **`revert(path)`** restores the record's draft and unit, programmatically; a row's path (`specimens#3`) reverts
+  each member, and reverting a row added since the load removes it.
+- **`field(path)`** takes a row by key too: `rows#<key>.member`, as `FieldState::path()` writes it, beside
+  `rows[i].member` by position.
+- **Before-submit hooks.** `addBeforeSubmit(hook)` returns an id for `removeBeforeSubmit`; `submit()` runs every
+  hook, in the order added, before it reads the body, so an edit not committed yet (a grid's open cell editor)
+  is sent with the rest.
+- **A refused submission's fields.** When a submission fails with a `model::ActionRefusal`, each of its arguments
+  whose name is a field's path (`specimens[1].mass`) is that field's refusal, its value the message:
+  `refusal(path)` (tracked) gives it while the field keeps the draft it had then. The next failure replaces them,
+  and a success clears them.
+- A field is frozen (`readonly()`) by `x-readonly`, `x-computed`, a frozen parent or a `readonlyWhen` naming it.
 
 ## Collections
 

@@ -40,6 +40,7 @@
 #include <morph/table/view_change.hpp>
 #include <morph/ui/backend.hpp>
 #include <morph/ui/cell_format.hpp>
+#include <morph/ui/grid.hpp>
 #include <morph/ui/chart_scale.hpp>
 #include <morph/ui/dev_tools.hpp>
 #include <morph/ui/document.hpp>
@@ -1300,6 +1301,27 @@ struct RowsTable {
     async::CallbackScope scope;
 };
 
+
+/// A grid of a form: the grid it shows, and its status line's message, held for 6 s as a table's is.
+struct GridTable {
+    explicit GridTable(reactive::Runtime& runtime) : message{runtime, std::string{}}, entries{runtime, std::vector<StatusEntry>{}} {}
+
+    GridTable(GridTable const&) = delete;
+    GridTable& operator=(GridTable const&) = delete;
+    GridTable(GridTable&&) = delete;
+    GridTable& operator=(GridTable&&) = delete;
+    ~GridTable() = default;
+
+    /// The grid: its source, its controller and its node.
+    FormGrid grid;
+    /// The status line's message and the choices it offers, with what each runs.
+    reactive::Signal<std::string> message;
+    reactive::Signal<std::vector<StatusEntry>> entries;
+    std::map<std::string, std::function<void()>, std::less<>> entryHandlers;
+    reactive::TimerHandle messageTimer;
+    /// Last, so what the message's timer posts does nothing once the grid is gone.
+    async::CallbackScope scope;
+};
 
 ElementState::ElementState(reactive::Runtime& runtime)
     : draft{runtime},
@@ -3481,6 +3503,10 @@ RtScope::RtScope(ScreenCore& screen, std::shared_ptr<RtScope> enclosing, reactiv
 }
 
 RtScope::~RtScope() {
+    // A grid of a form calls back into its form's session, an element declared before it.
+    for (auto const& element : elements) {
+        element->gridTable.reset();
+    }
     if (core.recording) {
         std::erase(core.scopes, this);
     }
@@ -5034,6 +5060,28 @@ Value ScreenCore::elementValue(ElementState const& element, std::string_view nam
                                           : element.modelTable != nullptr ? &element.modelTable->config
                                                                           : nullptr;
         return config == nullptr || !config->filters ? Value{} : filtersValueOf(config->filters());
+    }
+    if (kind == "table" && element.gridTable != nullptr) {
+        FormGrid const& grid = element.gridTable->grid;
+        if (name == "modifiedCount") {
+            return Value{static_cast<std::int64_t>(grid.source->modifiedCount())};
+        }
+        if (name == "modifiedRows") {
+            return Value{static_cast<std::int64_t>(grid.source->modifiedRows())};
+        }
+        if (name == "errorCount") {
+            return Value{static_cast<std::int64_t>(grid.source->errorCount())};
+        }
+        if (name == "editing") {
+            std::optional<CellRef> const cell = grid.grid->editing();
+            if (!cell) {
+                return Value{};
+            }
+            return Value{ValueRecord{{"key", valueOfKey(cell->key)}, {"column", Value{cell->column}}}};
+        }
+    }
+    if (kind == "table" && (name == "modifiedCount" || name == "modifiedRows" || name == "errorCount")) {
+        return Value{std::int64_t{0}};
     }
     if (kind == "table" && name == "busyCount") {
         if (element.modelTable == nullptr || element.modelTable->rows == nullptr) {
@@ -8046,6 +8094,9 @@ Node ScreenCore::lowerKind(DocNode const& node, LowerCtx const& ctx, ElementStat
         commonOf(node, ctx, element, spec.common);
         return ui::busy(std::move(spec));
     }
+    if (kind == "table" && !node.name("form").empty()) {
+        return lowerFormGrid(node, ctx, element);
+    }
     if (kind == "table" && !node.name("model").empty()) {
         return lowerModelTable(node, ctx, element);
     }
@@ -8329,6 +8380,93 @@ Node ScreenCore::lowerForm(DocNode const& node, LowerCtx const& ctx, ElementStat
     Column column{.children = {forms::formView(*form, std::move(options))}};
     commonOf(node, ctx, element, column.common);
     return ui::column(std::move(column));
+}
+
+// A grid of a form, made once per element: every mount of the table shows the same grid, so its focus, its open editor
+// and its messages outlive a remount. Its columns are the table's `columns` parts, each naming its member in `field`,
+// or every member of the row type in schema order.
+Node ScreenCore::lowerFormGrid(DocNode const& node, LowerCtx const& ctx, ElementState* element) {
+    NameRef const* const named = ctx.scope->find(node.name("form"));
+    forms::FormSession* const form =
+        named != nullptr && named->element != nullptr ? named->element->form.get() : nullptr;
+    auto const muted = [&node] { return ui::text(Text{.text = std::string{node.name("field")}, .role = TextRole::Muted}); };
+    if (form == nullptr || element == nullptr) {
+        return muted();
+    }
+    if (element->gridTable != nullptr) {
+        return element->gridTable->grid.node;
+    }
+    forms::FieldState* array = nullptr;
+    try {
+        array = &form->field(node.name("field"));
+    } catch (std::out_of_range const&) {
+        report(node.path, "`" + std::string{node.name("field")} + "` is not a field of the form");
+        return muted();
+    }
+    if (array->spec().kind != forms::FieldKind::ObjectArray || array->spec().truncated) {
+        report(node.path, "`" + std::string{node.name("field")} + "` is not a list of records");
+        return muted();
+    }
+    std::vector<GridColumn> columns;
+    for (DocNodePtr const& part : node.partList("columns")) {
+        ExprPtr const label = part->prop("label");
+        columns.push_back(GridColumn{
+            .id = part->id,
+            .label = label ? textOf(once(ctx, label), ctx.scope->formatting()) : part->id,
+            .field = std::string{part->name("field").empty() ? std::string_view{part->id} : part->name("field")},
+            .value = {}});
+    }
+    if (columns.empty()) {
+        for (forms::FieldSpec const& member : array->spec().children) {
+            columns.push_back(GridColumn{.id = member.name, .label = member.title, .field = member.name, .value = {}});
+        }
+    }
+    std::string_view const enter = node.name("enterMoves");
+    GridOptions options{
+        .enterMoves = enter == "right" ? EnterMoves::Right : (enter == "none" ? EnterMoves::None : EnterMoves::Down),
+        .walk = node.name("walk") == "columns" ? Walk::Columns : Walk::Rows,
+        .onActivate = {},
+    };
+    auto grid = std::make_unique<GridTable>(runtime());
+    GridTable* const held = grid.get();
+    TableOptions table;
+    commonOf(node, ctx, element, table.common);
+    // The status line: the grid's notices, posted through `tableMessage` so they are held as a table's are, and the
+    // state that lasts while its cause holds.
+    table.status = slotProp<TableStatus>([held] {
+        TableStatus status{.message = held->message.get(), .entries = held->entries.get()};
+        if (held->grid.grid != nullptr) {
+            status.standing = held->grid.grid->standing();
+            status.standingEntries = held->grid.grid->standingEntries();
+        }
+        status.shown = !status.message.empty() || !status.standing.empty();
+        return status;
+    });
+    table.onStatusEntry = [held](std::string const& id) {
+        if (auto const handler = held->entryHandlers.find(id); handler != held->entryHandlers.end()) {
+            std::function<void()> const run = handler->second;
+            run();
+            return;
+        }
+        if (held->grid.grid != nullptr) {
+            held->grid.grid->chooseEntry(id);
+        }
+    };
+    grid->grid = makeFormGrid(*form, *array, std::move(columns), std::move(options), ctx.scope->formatting(),
+                              std::move(table));
+    element->gridTable = std::move(grid);
+    element->scope->nodes.effect([this, element, held] {
+        std::string const text = held->grid.grid->message();
+        std::vector<StatusEntry> const offered = held->grid.grid->messageEntries();
+        runtime().untracked([&] {
+            std::vector<std::pair<StatusEntry, std::function<void()>>> entries;
+            for (StatusEntry const& entry : offered) {
+                entries.emplace_back(entry, [held, id = entry.id] { held->grid.grid->chooseEntry(id); });
+            }
+            tableMessage(*element, text, std::move(entries));
+        });
+    });
+    return element->gridTable->grid.node;
 }
 
 [[nodiscard]] std::expected<forms::detail::engine::Json, std::string> changeWire(std::string const& payload,
@@ -12091,6 +12229,22 @@ void ScreenCore::tableMessage(ElementState& table, std::string text) {
         rowsTableMessage(*rows, std::move(text));
         return;
     }
+    if (GridTable* const grid = table.gridTable.get()) {
+        grid->entryHandlers.clear();
+        grid->entries.set({});
+        grid->messageTimer.cancel();
+        grid->message.set(text);
+        if (reactive::Scheduler* const scheduler = session.options().scheduler; scheduler != nullptr && !text.empty()) {
+            grid->messageTimer = scheduler->after(kStatusMessageHold, grid->scope.token().guard([grid, shown = text] {
+                if (grid->message.peek() == shown) {
+                    grid->message.set({});
+                    grid->entries.set({});
+                    grid->entryHandlers.clear();
+                }
+            }));
+        }
+        return;
+    }
     ModelTable* const model = table.modelTable.get();
     if (model == nullptr) {
         return;
@@ -12125,6 +12279,18 @@ void ScreenCore::tableMessage(ElementState& table, std::string text) {
 void ScreenCore::tableMessage(ElementState& table, std::string text,
                               std::vector<std::pair<StatusEntry, std::function<void()>>> entries) {
     tableMessage(table, std::move(text));
+    if (GridTable* const grid = table.gridTable.get()) {
+        if (grid->message.peek().empty()) {
+            return;
+        }
+        std::vector<StatusEntry> shown;
+        for (auto& [entry, handler] : entries) {
+            grid->entryHandlers.insert_or_assign(entry.id, std::move(handler));
+            shown.push_back(std::move(entry));
+        }
+        grid->entries.set(std::move(shown));
+        return;
+    }
     ModelTable* const model = table.modelTable.get();
     if (model == nullptr || !model->statusShown || model->message.peek().empty()) {
         return;

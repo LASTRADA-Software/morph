@@ -592,6 +592,8 @@ struct Callbacks {
     std::function<void(std::size_t, HeaderClick)> sort;
     /// @brief From `TableWidget::setOnRetry`.
     Action retry;
+    /// @brief From `TableWidget::setOnFocusOut`: called when focus moves from inside the table to outside it.
+    Action focusOut;
     /// @brief The drop handler's predicate, from `Widget::setDropHandler`.
     std::function<bool(Key const&)> accepts;
     /// @brief The drop handler, from `Widget::setDropHandler`.
@@ -801,7 +803,33 @@ public:
     /// @throws std::out_of_range for an id that names no live widget.
     void focus(int widgetId) {
         _log.push_back("focus " + label(at(widgetId)));
-        _focused = widgetId;
+        int const previous = std::exchange(_focused, widgetId);
+        if (previous == 0 || previous == widgetId) {
+            return;
+        }
+        // Focus that leaves a table and everything inside it tells the table, innermost first.
+        std::vector<std::function<void()>> leaving;
+        for (auto found = _records.find(previous); found != _records.end(); found = _records.find(found->second.parent)) {
+            if (found->second.callbacks.focusOut && !within(widgetId, found->first)) {
+                leaving.push_back(found->second.callbacks.focusOut);
+            }
+        }
+        for (auto const& leave : leaving) {
+            leave();
+        }
+    }
+
+    /// @brief Whether a widget is a container or lies inside it.
+    /// @param widgetId  The widget.
+    /// @param container The container.
+    /// @return `true` when @p container is @p widgetId or one of its ancestors.
+    [[nodiscard]] bool within(int widgetId, int container) const {
+        for (auto found = _records.find(widgetId); found != _records.end(); found = _records.find(found->second.parent)) {
+            if (found->first == container) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /// @brief The widget that last took focus.
@@ -2869,6 +2897,84 @@ public:
     /// @param handler The handler.
     void setOnFocusMove(std::function<void(FocusMove)> handler) override { _onFocusMove = std::move(handler); }
 
+    /// @brief Stores the handler `RecordingBackend::typeInto` calls.
+    /// @param onText The handler.
+    void setOnText(std::function<void(std::string)> onText) override { _onText = std::move(onText); }
+
+    /// @brief The handler `setOnText` stored.
+    /// @return It; empty when none.
+    [[nodiscard]] std::function<void(std::string)> const& onText() const noexcept { return _onText; }
+
+    /// @brief Stores the handler `RecordingBackend::clickCell` calls.
+    /// @param onClick The handler.
+    void setOnCellClick(std::function<void(std::size_t, std::size_t, bool)> onClick) override {
+        _onCellClick = std::move(onClick);
+    }
+
+    /// @brief The handler `setOnCellClick` stored.
+    /// @return It; empty when none.
+    [[nodiscard]] std::function<void(std::size_t, std::size_t, bool)> const& onCellClick() const noexcept {
+        return _onCellClick;
+    }
+
+    /// @brief Stores the handler `RecordingBackend::focusOut` calls, which focus moving from inside the table to a
+    ///        widget outside it calls too.
+    /// @param onFocusOut The handler.
+    void setOnFocusOut(std::function<void()> onFocusOut) override { callbacks().focusOut = std::move(onFocusOut); }
+
+    /// @brief Records the row's property `editor:<column>`: the editor widget's id, empty for none.
+    /// @param row    One of this table's rows.
+    /// @param column The cell's column.
+    /// @param editor The editor, a child of @p row, or null.
+    /// @throws std::logic_error when @p row is not this table's child, or @p editor not the row's.
+    void setCellEditor(Widget& row, std::size_t column, Widget* editor) override {
+        int const rowId = store().idOf(row);
+        if (store().at(rowId).parent != id()) {
+            throw std::logic_error{"RecordingBackend: setCellEditor of a widget that is not this table's row"};
+        }
+        std::string shown;
+        if (editor != nullptr) {
+            int const editorId = store().idOf(*editor);
+            if (store().at(editorId).parent != rowId) {
+                throw std::logic_error{"RecordingBackend: setCellEditor of an editor that is not the row's child"};
+            }
+            shown = std::to_string(editorId);
+        }
+        store().set(rowId, "editor:" + std::to_string(column), shown);
+    }
+
+    /// @brief Records the row's property `marks:<column>`: `r`, `m`, `e`, `s` and `u` for the marks set, in that
+    ///        order, empty for none.
+    /// @param row    One of this table's rows.
+    /// @param column The cell's column.
+    /// @param marks  The marks.
+    /// @throws std::logic_error when @p row is not this table's child.
+    void setCellMarks(Widget& row, std::size_t column, CellMarks const& marks) override {
+        int const rowId = store().idOf(row);
+        if (store().at(rowId).parent != id()) {
+            throw std::logic_error{"RecordingBackend: setCellMarks of a widget that is not this table's row"};
+        }
+        std::string shown;
+        shown += marks.readOnly ? "r" : "";
+        shown += marks.modified ? "m" : "";
+        shown += marks.error ? "e" : "";
+        shown += marks.stale ? "s" : "";
+        shown += marks.muted ? "u" : "";
+        store().set(rowId, "marks:" + std::to_string(column), shown);
+    }
+
+    /// @brief Records the row's property `modified`.
+    /// @param row      One of this table's rows.
+    /// @param modified Whether the row draws its modified mark.
+    /// @throws std::logic_error when @p row is not this table's child.
+    void setRowModified(Widget& row, bool modified) override {
+        int const rowId = store().idOf(row);
+        if (store().at(rowId).parent != id()) {
+            throw std::logic_error{"RecordingBackend: setRowModified of a widget that is not this table's row"};
+        }
+        store().set(rowId, "modified", formatBool(modified));
+    }
+
     /// @brief Records property `counts` as `<rows or unknown>/<columns>`, which `RecordingBackend::lastCounts` reads.
     /// @param rows    The rows, or nothing.
     /// @param columns The visible columns.
@@ -3206,6 +3312,8 @@ private:
     std::function<void(std::size_t, std::size_t, SelectionChange)> _onSelectRange;
     std::function<void(std::size_t, int)> _onMeasured;
     std::function<void(FocusMove)> _onFocusMove;
+    std::function<void(std::string)> _onText;
+    std::function<void(std::size_t, std::size_t, bool)> _onCellClick;
     std::shared_ptr<TableMeasure const> _measure;
 
     [[nodiscard]] static std::string formatCellLoad(CellLoad load) {
@@ -4294,6 +4402,48 @@ public:
     /// @param move     The move.
     /// @throws std::logic_error when the widget is not a table.
     void focusMove(int widgetId, FocusMove move) { fakeTable(widgetId, "focusMove").moveFocus(move); }
+
+    /// @brief Types printable text on a table's focused cell, as a key with no editor open does: calls the handler
+    ///        `TableWidget::setOnText` stored, if any.
+    /// @param widgetId The table.
+    /// @param text     The text.
+    /// @throws std::logic_error when the widget is not a table.
+    void typeInto(int widgetId, std::string text) {
+        detail::FakeTable& table = fakeTable(widgetId, "typeInto");
+        if (reachable(_store->at(widgetId)) && table.onText()) {
+            std::function<void(std::string)> const handler = table.onText();
+            handler(std::move(text));
+        }
+    }
+
+    /// @brief Clicks a table's cell: calls the handler `TableWidget::setOnCellClick` stored with `false`, and for a
+    ///        double click then again with `true`, as a backend does.
+    /// @param widgetId    The table.
+    /// @param viewRow     The cell's view row.
+    /// @param column      The cell's column: an index into the table's columns.
+    /// @param doubleClick Whether the click is a double click.
+    /// @throws std::logic_error when the widget is not a table.
+    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): a row and a column, as every cell driver takes them.
+    void clickCell(int widgetId, std::size_t viewRow, std::size_t column, bool doubleClick = false) {
+        detail::FakeTable& table = fakeTable(widgetId, "clickCell");
+        if (!reachable(_store->at(widgetId)) || !table.onCellClick()) {
+            return;
+        }
+        std::function<void(std::size_t, std::size_t, bool)> const handler = table.onCellClick();
+        handler(viewRow, column, false);
+        if (doubleClick) {
+            handler(viewRow, column, true);
+        }
+    }
+
+    /// @brief Moves focus out of a table and everything inside it: calls the handler `TableWidget::setOnFocusOut`
+    ///        stored, if any.
+    /// @param widgetId The table.
+    /// @throws std::logic_error when the widget is not a table.
+    void focusOut(int widgetId) {
+        detail::Record const& record = expectKind(widgetId, "focusOut", {"Table"});
+        invoke(record.callbacks.focusOut);
+    }
 
     /// @brief Selects a range of view rows as a Shift+click over rows the backend holds no keys for would: the
     ///        handler `setOnSelectRange` stored gets the two rows and @p change, `Replace` unless the range is added

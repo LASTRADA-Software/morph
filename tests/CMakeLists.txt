@@ -85,6 +85,7 @@ add_executable(morph_tests
     test_push_cache.cpp
     test_ui_interpreter_cache.cpp
     test_ui_table_model.cpp
+    test_ui_grid.cpp
     test_ui_table_state.cpp
     test_push_agent.cpp
     test_mcp_transport.cpp

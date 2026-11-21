@@ -557,9 +557,60 @@ public:
                     checkPlacement(spec.common, parent);
                     checkShare(spec.common, parent);
                 }
-                return &this->mountKind(scope, spec, parent);
+                Widget& widget = this->mountKind(scope, spec, parent);
+                link(scope, widget, parent, takesFocus(spec));
+                return &widget;
             },
             node->kind);
+    }
+
+    /// @brief Moves keyboard focus along the focus chain from the mounted widget whose `focusId` is @p focusId.
+    /// @param focusId The name.
+    /// @param forward Whether to the next control, or the previous one.
+    /// @return Whether a control took focus.
+    bool focusAlong(std::string_view focusId, bool forward) {
+        auto const found = _focusable.lower_bound(focusId);
+        if (found == _focusable.end() || found->first != focusId) {
+            return false;
+        }
+        return focusAlong(*found->second, forward);
+    }
+
+    /// @brief Moves keyboard focus along the focus chain from @p from: the mounted widgets that take focus (a text
+    ///        input, a button, a check box, a select, a menu, a date-time input, a slider, a file picker, a table, a
+    ///        tabs, a badge that can be removed), shown and enabled with every container around them, in document
+    ///        order, walked when asked.
+    /// @param from    The widget focus leaves.
+    /// @param forward Whether to the next control, or the previous one.
+    /// @return Whether a control took focus; `false` when none lies that way.
+    bool focusAlong(Widget const& from, bool forward) {
+        std::vector<std::pair<Widget*, bool>> order;
+        for (Widget* const root : _chainRoots) {
+            chainOrder(*root, true, order);
+        }
+        auto const at = std::ranges::find(order, &from, [](auto const& entry) { return entry.first; });
+        if (at == order.end()) {
+            return false;
+        }
+        auto const index = static_cast<std::size_t>(at - order.begin());
+        for (std::size_t step = 1; step < order.size(); ++step) {
+            if (!forward && step > index) {
+                break;
+            }
+            std::size_t const next = forward ? index + step : index - step;
+            if (next >= order.size()) {
+                break;
+            }
+            if (order.at(next).second) {
+                try {
+                    order.at(next).first->focus();
+                } catch (...) {  // NOLINT(bugprone-empty-catch)
+                    // Focus is a request: a backend that cannot move it leaves it where it was.
+                }
+                return true;
+            }
+        }
+        return false;
     }
 
     /// @brief Mounts @p node as `mount` does, as a mount of its own: the first `autofocus` widget it mounts, in
@@ -935,11 +986,23 @@ private:
     }
 
     void applyCommon(reactive::Scope& scope, Widget& widget, Common const& common) {
+        // The focus chain passes over a hidden or disabled widget and what is inside it.
+        ChainFlags* const flags =
+            common.visible.isBound() || !common.visible.constant() || common.enabled.isBound() ||
+                    !common.enabled.constant()
+                ? &scope.make<ChainFlags>(_chainFlags, &widget)
+                : nullptr;
         if (common.visible.isBound() || !common.visible.constant()) {
-            bind(scope, common.visible, [&widget](bool shown) { widget.setVisible(shown); });
+            bind(scope, common.visible, [&widget, flags](bool shown) {
+                flags->set(true, shown);
+                widget.setVisible(shown);
+            });
         }
         if (common.enabled.isBound() || !common.enabled.constant()) {
-            bind(scope, common.enabled, [&widget](bool enabled) { widget.setEnabled(enabled); });
+            bind(scope, common.enabled, [&widget, flags](bool enabled) {
+                flags->set(false, enabled);
+                widget.setEnabled(enabled);
+            });
         }
         if (common.layout != LayoutHints{}) {
             checkLayout(common);
@@ -984,6 +1047,167 @@ private:
     }
 
     using FocusMap = std::multimap<std::string, Widget*, std::less<>>;
+
+    // One widget of the focus chain's tree: the container `mount` appended it to, its children in their order, and
+    // whether it takes focus. A container a node did not mount (a table's row) has an entry while it has children,
+    // and no parent: what is inside it is not on the chain.
+    struct ChainEntry {
+        Widget const* parent = nullptr;
+        std::vector<Widget*> children;
+        bool takesFocus = false;
+        bool linked = false;
+    };
+
+    // Whether a widget is shown and enabled, as its `Common` says now, while it has a bound or non-default one.
+    struct ChainFlags {
+        ChainFlags(std::unordered_map<Widget const*, std::pair<bool, bool>>& owner, Widget const* widget)
+            : flags{&owner}, of{widget} {
+            flags->insert_or_assign(of, std::pair{true, true});
+        }
+        ChainFlags(ChainFlags const&) = delete;
+        ChainFlags& operator=(ChainFlags const&) = delete;
+        ChainFlags(ChainFlags&&) = delete;
+        ChainFlags& operator=(ChainFlags&&) = delete;
+        ~ChainFlags() { flags->erase(of); }
+
+        void set(bool visible, bool value) const {
+            auto& entry = flags->at(of);
+            (visible ? entry.first : entry.second) = value;
+        }
+
+        std::unordered_map<Widget const*, std::pair<bool, bool>>* flags;
+        Widget const* of;
+    };
+
+    // A mounted widget's place in the chain's tree, owned by its scope after the widget and its content, so it is let
+    // go before them.
+    struct ChainLink {
+        ChainLink(Mounter& owner, Widget* widget) noexcept : mounter{&owner}, of{widget} {}
+        ChainLink(ChainLink const&) = delete;
+        ChainLink& operator=(ChainLink const&) = delete;
+        ChainLink(ChainLink&&) = delete;
+        ChainLink& operator=(ChainLink&&) = delete;
+        ~ChainLink() { mounter->unlink(of); }
+
+        Mounter* mounter;
+        Widget* of;
+    };
+
+    // A container whose content is not on the chain, registered while it is mounted.
+    struct OffChain {
+        OffChain(std::unordered_set<Widget const*>& owner, Widget const* container) : set{&owner}, of{container} {
+            set->insert(of);
+        }
+        OffChain(OffChain const&) = delete;
+        OffChain& operator=(OffChain const&) = delete;
+        OffChain(OffChain&&) = delete;
+        OffChain& operator=(OffChain&&) = delete;
+        ~OffChain() { set->erase(of); }
+
+        std::unordered_set<Widget const*>* set;
+        Widget const* of;
+    };
+
+    // Which nodes take focus: the controls a user tabs through.
+    template <typename Spec>
+    [[nodiscard]] static bool takesFocus(Spec const& spec) {
+        if constexpr (std::is_same_v<Spec, Badge>) {
+            return static_cast<bool>(spec.onRemove);
+        } else {
+            return std::is_same_v<Spec, TextInput> || std::is_same_v<Spec, Button> || std::is_same_v<Spec, Checkbox> ||
+                   std::is_same_v<Spec, Select> || std::is_same_v<Spec, Menu> ||
+                   std::is_same_v<Spec, DateTimeInput> || std::is_same_v<Spec, Slider> ||
+                   std::is_same_v<Spec, FilePicker> || std::is_same_v<Spec, Table> || std::is_same_v<Spec, Tabs>;
+        }
+    }
+
+    // Records a widget a node mounted as its container's last child. A widget mounted twice over (a cell's content,
+    // mounted for its accented or marked cell) keeps its first place.
+    void link(reactive::Scope& scope, Widget& widget, ContainerWidget const* parent, bool focusable) {
+        // A source table's cells, and an editor in one, are inside the table, which is one stop of the chain.
+        if (parent != nullptr && _offChain.contains(parent)) {
+            return;
+        }
+        ChainEntry& entry = _chain[&widget];
+        if (entry.linked) {
+            entry.takesFocus = entry.takesFocus || focusable;
+            return;
+        }
+        entry.linked = true;
+        entry.parent = parent;
+        entry.takesFocus = focusable;
+        if (parent != nullptr) {
+            _chain[parent].children.push_back(&widget);
+        } else {
+            _chainRoots.push_back(&widget);
+        }
+        scope.make<ChainLink>(*this, &widget);
+    }
+
+    void unlink(Widget* widget) noexcept {
+        auto const found = _chain.find(widget);
+        if (found == _chain.end()) {
+            return;
+        }
+        Widget const* const parent = found->second.parent;
+        found->second.linked = false;
+        found->second.parent = nullptr;
+        if (found->second.children.empty()) {
+            _chain.erase(found);
+        }
+        std::erase(_chainRoots, widget);
+        if (parent == nullptr) {
+            return;
+        }
+        if (auto const above = _chain.find(parent); above != _chain.end()) {
+            std::erase(above->second.children, widget);
+            if (!above->second.linked && above->second.children.empty()) {
+                _chain.erase(above);
+            }
+        }
+    }
+
+    // Brings a container's children in the chain's tree to the order the mount moved them to.
+    void reorderChain(Widget const& container, std::vector<Widget*> const& order) {
+        auto const found = _chain.find(&container);
+        if (found == _chain.end()) {
+            return;
+        }
+        std::vector<Widget*>& children = found->second.children;
+        std::vector<Widget*> next;
+        next.reserve(children.size());
+        for (Widget* const child : order) {
+            if (std::ranges::contains(children, child)) {
+                next.push_back(child);
+            }
+        }
+        for (Widget* const child : children) {
+            if (!std::ranges::contains(next, child)) {
+                next.push_back(child);
+            }
+        }
+        children = std::move(next);
+    }
+
+    // The widgets that take focus under @p widget, in document order, each with whether it is shown and enabled with
+    // every container around it.
+    // NOLINTNEXTLINE(misc-no-recursion): a container's children are walked in turn.
+    void chainOrder(Widget& widget, bool shown, std::vector<std::pair<Widget*, bool>>& out) const {
+        bool here = shown;
+        if (auto const flags = _chainFlags.find(&widget); flags != _chainFlags.end()) {
+            here = here && flags->second.first && flags->second.second;
+        }
+        auto const found = _chain.find(&widget);
+        if (found == _chain.end()) {
+            return;
+        }
+        if (found->second.takesFocus) {
+            out.emplace_back(&widget, here);
+        }
+        for (Widget* const child : found->second.children) {
+            chainOrder(*child, here, out);
+        }
+    }
 
     // A container whose children may be sized by a share of its width, registered while it is mounted.
     struct ShareParent {
@@ -2312,6 +2536,13 @@ private:
             CellAccent last;
         };
 
+        // Where a marked cell's marks are told, as for an accent.
+        struct Marks {
+            Widget* row = nullptr;
+            std::size_t column = 0;
+            CellMarks last;
+        };
+
         // One cell: its scope owns its view, its bindings and its widget; its signals are the record it shows and,
         // for the default cell, the column it shows.
         struct Cell {
@@ -2320,6 +2551,8 @@ private:
             reactive::Signal<std::size_t>* column = nullptr;
             // Engaged for a cell whose view is an `AccentedCell`; owned by `scope`.
             Accent* accent = nullptr;
+            // Engaged for a cell whose view is a `MarkedCell`; owned by `scope`.
+            Marks* marks = nullptr;
             Widget* widget = nullptr;
             PoolKey pool;
         };
@@ -2346,6 +2579,10 @@ private:
             std::map<std::size_t, CellLoad> loads;
             std::map<std::size_t, Placed> cells;
             std::map<PoolKey, std::vector<Cell>> pool;
+            // An open cell editor, a child of this row drawn over the cell at `editorColumn`: last, so it goes first.
+            std::unique_ptr<reactive::Scope> editor;
+            Widget* editorWidget = nullptr;
+            std::size_t editorColumn = 0;
         };
 
         SourceTable() = default;
@@ -2420,6 +2657,13 @@ private:
         std::size_t lastCount = 0;
         std::size_t focusColumn = 0;
         std::function<void(std::optional<CellRef>)> onFocusCell;
+        // A grid's focus (`Table::gridFocus`): the user's moves go to `onGridFocus`, and focus is shown where the
+        // grid says.
+        bool grid = false;
+        std::function<void(GridFocus)> onGridFocus;
+        // The cell `Table::editing` names, and the editor's builder; the editor is open on a realized row of its key.
+        std::optional<CellRef> editWanted;
+        std::function<Node(CellRef const&)> editor;
         // The highlighted row, followed by key.
         std::optional<Key> highlightKey;
         std::int64_t highlightIndex = 0;
@@ -2628,11 +2872,24 @@ private:
         }
         Node const& node = scope.make<Node>(std::move(made));
         auto* const stack = dynamic_cast<ContainerWidget*>(row.widget);
-        // An accented cell mounts its content as the cell; its accent is bound in the cell's scope and told once the
-        // cell is attached to a row (`realizeCell`), so a cell built for a pool tells nothing yet.
-        AccentedCell const* const accented = node ? std::get_if<AccentedCell>(&node->kind) : nullptr;
-        Widget* const widget = node ? mount(scope, accented != nullptr ? accented->content : node, stack)
-                                    : &scope.adopt(_backend->createSpacer(stack));
+        // A marked cell's content is the cell, which may be accented; an accented cell mounts its content as the
+        // cell. The marks and the accent are bound in the cell's scope and told once the cell is attached to a row
+        // (`realizeCell`), so a cell built for a pool tells nothing yet.
+        MarkedCell const* const marked = node ? std::get_if<MarkedCell>(&node->kind) : nullptr;
+        Node const& inner = marked != nullptr ? marked->content : node;
+        AccentedCell const* const accented = inner ? std::get_if<AccentedCell>(&inner->kind) : nullptr;
+        Widget* const widget = inner ? mount(scope, accented != nullptr ? accented->content : inner, stack)
+                                     : &scope.adopt(_backend->createSpacer(stack));
+        if (marked != nullptr) {
+            SourceTable::Marks& marks = scope.make<SourceTable::Marks>();
+            cell.marks = &marks;
+            bind(scope, marked->marks, [&table, &marks](CellMarks const& value) {
+                marks.last = value;
+                if (marks.row != nullptr) {
+                    table.widget->setCellMarks(*marks.row, marks.column, value);
+                }
+            });
+        }
         if (accented != nullptr) {
             SourceTable::Accent& accent = scope.make<SourceTable::Accent>();
             cell.accent = &accent;
@@ -2662,6 +2919,7 @@ private:
     // to be built for this one.
     void assignRow(SourceTable& table, SourceTable::Realized& slot, std::int64_t index, TableRowRef const& ref) {
         if (slot.key && *slot.key != ref.key) {
+            closeEditor(table, slot);
             dropRowScoped(table, slot);
         }
         slot.index = index;
@@ -2719,8 +2977,62 @@ private:
                 table.widget->setRowMarks(*widget, marks);
             });
         }
+        if (look.modified) {
+            bind(lookScope, *look.modified, [&table, widget = slot.widget](bool modified) {
+                table.widget->setRowModified(*widget, modified);
+            });
+        }
         for (auto& [column, placed] : slot.cells) {
             placed.fresh = false;
+        }
+    }
+
+    // Unmounts a row's open cell editor, and draws the cell again.
+    static void closeEditor(SourceTable& table, SourceTable::Realized& slot) {
+        if (slot.editor == nullptr) {
+            return;
+        }
+        Widget* const editor = std::exchange(slot.editorWidget, nullptr);
+        table.widget->setCellEditor(*slot.widget, slot.editorColumn, nullptr);
+        std::erase(slot.children, editor);
+        slot.editor.reset();
+    }
+
+    // Brings the open editor to the cell `Table::editing` names: the one open on another cell is closed, and the
+    // wanted one is opened once a realized row holds its key, built once, drawn over the cell and focused.
+    void syncEditor(SourceTable& table) {
+        std::optional<std::size_t> column;
+        if (table.editWanted) {
+            auto const found = std::ranges::find(table.columns, table.editWanted->column, &TableColumn::id);
+            if (found != table.columns.end()) {
+                column = static_cast<std::size_t>(found - table.columns.begin());
+            }
+        }
+        for (SourceTable::Realized& slot : table.realized) {
+            bool const wanted = column && slot.key && *slot.key == table.editWanted->key && !slot.heading;
+            if (slot.editor != nullptr && (!wanted || slot.editorColumn != *column)) {
+                closeEditor(table, slot);
+            }
+            if (!wanted || slot.editor != nullptr || !table.editor) {
+                continue;
+            }
+            auto scope = std::make_unique<reactive::Scope>(*_rt, table.depth + 1);
+            Node const& node = scope->make<Node>(table.editor(*table.editWanted));
+            Widget* const made =
+                mountPass([&] { return mount(*scope, node, dynamic_cast<ContainerWidget*>(slot.widget)); });
+            if (made == nullptr) {
+                continue;
+            }
+            slot.editor = std::move(scope);
+            slot.editorWidget = made;
+            slot.editorColumn = *column;
+            slot.children.push_back(made);
+            table.widget->setCellEditor(*slot.widget, *column, made);
+            try {
+                made->focus();
+            } catch (...) {  // NOLINT(bugprone-empty-catch)
+                // Focus is a request: a backend that cannot move it leaves it where it was.
+            }
         }
     }
 
@@ -2730,6 +3042,7 @@ private:
         made.index = index;
         made.scope = std::make_unique<reactive::Scope>(*_rt, table.depth);
         StackWidget& stack = made.scope->adopt(_backend->createStack(table.widget, Axis::Horizontal));
+        made.scope->make<OffChain>(_offChain, &stack);
         made.widget = &stack;
         std::optional<TableRowRef> const ref = table.source.rows->row(index);
         made.row = &made.scope->make<reactive::Signal<Value>>(*_rt, ref ? ref->row : Value{});
@@ -2749,6 +3062,9 @@ private:
         slot.cells.erase(found);
         if (cell.accent != nullptr) {
             cell.accent->row = nullptr;
+        }
+        if (cell.marks != nullptr) {
+            cell.marks->row = nullptr;
         }
         table.widget->setCellColumn(*slot.widget, *cell.widget, std::nullopt);
         slot.pool[cell.pool].push_back(std::move(cell));
@@ -2778,6 +3094,9 @@ private:
             if (cell.accent != nullptr) {
                 cell.accent->row = nullptr;
             }
+            if (cell.marks != nullptr) {
+                cell.marks->row = nullptr;
+            }
             if (cell.column != nullptr && cell.column->peek() != column) {
                 cell.column->set(column);
             }
@@ -2792,6 +3111,13 @@ private:
             cell.accent->row = slot.widget;
             cell.accent->column = column;
             table.widget->setCellAccent(*slot.widget, column, cell.accent->last);
+        }
+        // The marks likewise: a cell rebound to another row re-evaluates them with its content, and this row is told
+        // them even when they equal the ones it showed.
+        if (cell.marks != nullptr) {
+            cell.marks->row = slot.widget;
+            cell.marks->column = column;
+            table.widget->setCellMarks(*slot.widget, column, cell.marks->last);
         }
         slot.cells.emplace(column, SourceTable::Placed{.cell = std::move(cell), .fresh = true});
     }
@@ -2938,6 +3264,7 @@ private:
         for (auto row = old.rbegin(); row != old.rend(); ++row) {
             if (row->scope) {
                 std::erase(current, row->widget);
+                row->editor.reset();
                 row->pool.clear();
                 row->cells.clear();
                 row->look.reset();
@@ -2990,6 +3317,7 @@ private:
             resolveSpans(*table.widget, spans);
         }
         realizeCells(table, shown);
+        syncEditor(table);
         // The contiguous range only: a focused row kept beyond it is placed by its own `setRowIndex`. Every source table
         // is told it, one that realizes every row as the whole view: a backend takes the view's count from it. Whether
         // spans are drawn is the span table's (`SpanTable::windowed`), not this call's.
@@ -3380,6 +3708,49 @@ private:
         if (table.visible.empty()) {
             return;
         }
+        if (table.grid) {
+            handFocus(table, index, table.visible.at(place));
+            return;
+        }
+        placeFocus(table, index, table.visible.at(place));
+        reportFocus(table);
+    }
+
+    // A grid's focus moves where the grid says: a gesture is handed to it as a cell, a row not fetched yet by its view
+    // position alone.
+    void handFocus(SourceTable const& table, std::int64_t index, std::size_t column) const {
+        if (!table.onGridFocus || column >= table.columns.size()) {
+            return;
+        }
+        std::optional<TableRowRef> const ref = table.source.rows->row(index);
+        table.onGridFocus(GridFocus{.key = ref ? std::optional<Key>{ref->key} : std::nullopt,
+                                    .viewRow = static_cast<std::size_t>(std::max<std::int64_t>(index, 0)),
+                                    .column = table.columns.at(column).id});
+    }
+
+    // Shows the focus a grid holds: its key's row where a realized row holds it, else the view position it gives, and
+    // its column by id.
+    void gridFocusFrom(SourceTable& table, std::optional<GridFocus> const& focus) {
+        if (!focus) {
+            return;
+        }
+        auto const column = std::ranges::find(table.columns, focus->column, &TableColumn::id);
+        if (column == table.columns.end()) {
+            return;
+        }
+        auto index = static_cast<std::int64_t>(focus->viewRow);
+        if (focus->key) {
+            std::optional<TableRowRef> const ref = table.source.rows->row(index);
+            if (!ref || ref->key != *focus->key) {
+                index = placeOfKey(table, *focus->key, index).value_or(index);
+            }
+        }
+        placeFocus(table, index, static_cast<std::size_t>(column - table.columns.begin()));
+    }
+
+    // Puts focus on a cell by view row and column: the row is kept realized, scrolled to when it is outside the rows
+    // in view, and the backend shows it.
+    void placeFocus(SourceTable& table, std::int64_t index, std::size_t column) {
         table.focused = true;
         table.focusSearching = false;
         table.focusUntold = false;
@@ -3387,7 +3758,7 @@ private:
         table.focusUnconfirmed = false;
         table.focusLocate.request_stop();
         table.focusIndex = index;
-        table.focusColumn = table.visible.at(place);
+        table.focusColumn = column;
         std::optional<TableRowRef> const ref = table.source.rows->row(index);
         table.focusKey = ref ? std::optional<Key>{ref->key} : std::nullopt;
         VisibleRange range = focusRangeOf(table);
@@ -3401,7 +3772,6 @@ private:
         table.windowDirty = true;
         realizeWindow(table, [](std::int64_t) { return false; });
         table.widget->setFocusCell(at, table.focusColumn);
-        reportFocus(table);
     }
 
     // Takes focus from `Table::focus`: the cell's row by key among the realized rows, and its column by id.
@@ -3442,6 +3812,10 @@ private:
         }
         auto const row = std::ranges::find(table.realized, std::optional<Key>{key}, &SourceTable::Realized::key);
         if (row == table.realized.end()) {
+            return;
+        }
+        if (table.grid) {
+            handFocus(table, row->index, column);
             return;
         }
         table.focused = true;
@@ -3626,6 +4000,74 @@ private:
         });
     }
 
+    // What an editable table adds: its focus held by a grid, a click on a cell, typed text, its own keys, and focus
+    // leaving it.
+    void bindGrid(reactive::Scope& scope, Table const& spec, TableWidget& widget, SourceTable& table) {
+        table.grid = spec.gridFocus.has_value();
+        table.onGridFocus = event(spec.onGridFocus);
+        table.editor = spec.editor;
+        if (spec.onText) {
+            widget.setOnText(event(spec.onText));
+        }
+        if (spec.onFocusOut) {
+            widget.setOnFocusOut(event(spec.onFocusOut));
+        }
+        if (table.grid || spec.onActivateCell) {
+            widget.setOnCellClick([this, &table, activate = spec.onActivateCell](std::size_t viewRow, std::size_t column,
+                                                                                 bool doubleClick) {
+                static_cast<void>(runCallback(*_rt, [&] {
+                    if (column >= table.columns.size()) {
+                        return;
+                    }
+                    auto const index = static_cast<std::int64_t>(viewRow);
+                    std::optional<TableRowRef> const ref = table.source.rows->row(index);
+                    if (!doubleClick) {
+                        if (table.grid) {
+                            handFocus(table, index, column);
+                        } else if (ref) {
+                            focusAt(table, ref->key, column);
+                        }
+                        return;
+                    }
+                    if (ref && activate) {
+                        activate(CellRef{.key = ref->key, .column = table.columns.at(column).id});
+                    }
+                }));
+            });
+        }
+        if (!spec.onKey) {
+            return;
+        }
+        // The table's own chords join the document's keys in one declaration; a chord of both is the table's.
+        bind(scope, spec.keyChords,
+             [this, &widget, onKey = spec.onKey, common = spec.common.keys](std::vector<std::string> const& chords) {
+                 std::vector<std::string> all;
+                 for (KeyBinding const& binding : common) {
+                     all.push_back(binding.chord);
+                 }
+                 for (std::string const& chord : chords) {
+                     if (!std::ranges::contains(all, chord)) {
+                         all.push_back(chord);
+                     }
+                 }
+                 widget.setKeys(all, [this, &widget, onKey, common, chords](std::string const& chord) {
+                     static_cast<void>(runCallback(*_rt, [&] {
+                         if (std::ranges::contains(chords, chord)) {
+                             KeyOutcome const outcome = onKey(chord);
+                             if (outcome == KeyOutcome::FocusNext || outcome == KeyOutcome::FocusPrevious) {
+                                 static_cast<void>(focusAlong(widget, outcome == KeyOutcome::FocusNext));
+                             }
+                             return;
+                         }
+                         auto const bound = std::ranges::find(common, chord, &KeyBinding::chord);
+                         if (bound != common.end() && bound->onPress) {
+                             bound->onPress();
+                         }
+                     }));
+                 });
+             });
+    }
+
     // A table over a `TableSource`. Rows are windowed, except a table over a document's rows below its threshold,
     // which realizes every row: the mount realizes the rows the backend reports in view and `overscan` rows either
     // side; before any report, the first `overscan` rows of a server's rows, and none of a document's (`shownOf`).
@@ -3731,6 +4173,7 @@ private:
             static_cast<void>(runCallback(*_rt, [&] { moveFocus(table, move); }));
         });
         widget.setOnSelectRange(event(spec.onSelectRange));
+        bindGrid(scope, spec, widget, table);
         _rt->untracked([&] {
             realizeWindow(table, [](std::int64_t) { return false; });
             tellVisible(table);
@@ -3745,6 +4188,19 @@ private:
         bind(scope, spec.keyMoves, [this, &table](KeyMoves const& moves) {
             static_cast<void>(runCallback(*_rt, [&] { applyKeyMoves(table, moves); }));
         });
+        if (spec.gridFocus) {
+            bind(scope, *spec.gridFocus, [this, &table](std::optional<GridFocus> const& focus) {
+                static_cast<void>(runCallback(*_rt, [&] { gridFocusFrom(table, focus); }));
+            });
+        }
+        if (spec.editing) {
+            bind(scope, *spec.editing, [this, &table](std::optional<CellRef> const& cell) {
+                static_cast<void>(runCallback(*_rt, [&] {
+                    table.editWanted = cell;
+                    syncEditor(table);
+                }));
+            });
+        }
         // While the selection is of the view the backend marks it, and the key list it holds is not sent over it.
         auto& viewing = scope.make<bool>(false);
         widget.setOnSelectionChange(inputEvent(
@@ -3934,7 +4390,7 @@ private:
 
     // Moves the widgets into the snapshot's order, and `rows` with them. A move that throws is recorded in `failure`
     // when it is the first failure, and leaves `rows` mirroring the container as it stands.
-    static void reorder(std::vector<KeyedRow>& rows, ContainerWidget& container, std::vector<Key> const& keys,
+    void reorder(std::vector<KeyedRow>& rows, ContainerWidget& container, std::vector<Key> const& keys,
                         std::vector<std::size_t> const& order, std::exception_ptr& failure) {
         std::unordered_map<Key, std::size_t> position;  // key -> index in `rows`
         std::unordered_map<Widget const*, std::size_t> rowOf;
@@ -3965,6 +4421,7 @@ private:
                 failure = std::current_exception();
             }
         }
+        reorderChain(container, present);
         // `present` is the container's order now: the snapshot's, unless a move threw. Rows without a widget have
         // no place in the container and go last.
         for (Widget const* const widget : present) {
@@ -4333,6 +4790,11 @@ private:
         return *mount(scope, spec.content, parent);
     }
 
+    // A marked cell anywhere but a source table's cell: its content, with the marks not read.
+    Widget& mountKind(reactive::Scope& scope, MarkedCell const& spec, ContainerWidget* parent) {
+        return *mount(scope, spec.content, parent);
+    }
+
     Widget& mountKind(reactive::Scope& scope, PageRegion const& spec, ContainerWidget* parent) {
         auto* const page = dynamic_cast<PageWidget*>(parent);
         if (page == nullptr || _page == nullptr) {
@@ -4484,6 +4946,12 @@ private:
     // The mounted widgets with a focus name. A multimap keeps equal names in insertion order, so the first mounted
     // is found first.
     FocusMap _focusable;
+    // The focus chain's tree: every widget a node mounted, by its container, and the roots in the order mounted.
+    std::unordered_map<Widget const*, ChainEntry> _chain;
+    std::vector<Widget*> _chainRoots;
+    std::unordered_map<Widget const*, std::pair<bool, bool>> _chainFlags;
+    // The rows of source tables: what is mounted in them is not on the chain.
+    std::unordered_set<Widget const*> _offChain;
     // The mounted containers that take a share of their width for a child's.
     std::set<ContainerWidget const*> _shareParents;
     // What the mount did to the rows of its source tables.
@@ -4584,6 +5052,20 @@ public:
     /// @param offset  A byte offset into the text it shows.
     /// @return Whether a mounted text input has that name.
     bool placeCursor(std::string_view focusId, std::size_t offset) { return _mounter.placeCursor(focusId, offset); }
+
+    /// @brief Moves keyboard focus to the control after the mounted widget whose `Common::focusId` is @p focusId on
+    ///        the focus chain: the mounted widgets that take focus (a text input, a button, a check box, a select, a
+    ///        menu, a date-time input, a slider, a file picker, a table, a tabs, a badge with `onRemove`), shown and
+    ///        enabled with every container around them, in document order.
+    /// @param focusId The name.
+    /// @return Whether a control took focus: `false` when no widget has the name, or none comes after it.
+    bool focusNext(std::string_view focusId) { return _mounter.focusAlong(focusId, true); }
+
+    /// @brief Moves keyboard focus to the control before the mounted widget whose `Common::focusId` is @p focusId on
+    ///        the focus chain (`focusNext`).
+    /// @param focusId The name.
+    /// @return Whether a control took focus: `false` when no widget has the name, or none comes before it.
+    bool focusPrevious(std::string_view focusId) { return _mounter.focusAlong(focusId, false); }
 
     /// @brief What the mount did to the rows of its tables mounted over a `TableSource`, the whole mount's.
     /// @return The counters; valid as long as this object.

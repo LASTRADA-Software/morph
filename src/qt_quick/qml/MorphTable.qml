@@ -271,6 +271,30 @@ MorphWidget {
     property bool sourceRows: false
     // Whether C++ selects the whole view itself on "selectAll", in place of a range through the mount.
     property bool selectAllHandled: false
+    // Whether printable text typed on the focused cell goes to C++ as the `text` event, while no editor is open.
+    property bool takesText: false
+    // Whether a tap on a cell goes to C++ as its row's `cellClick` event (MorphTableRow).
+    property bool reportsCellClicks: false
+    // Whether the focus leaving the table and everything in it goes to C++ as the `focusOut` event.
+    property bool reportsFocusOut: false
+    // Whether the window's active focus was in the table, a cell editor in one of its rows included.
+    property bool focusWithin: false
+    Connections {
+        target: root.Window.window
+        enabled: root.reportsFocusOut
+        function onActiveFocusItemChanged() {
+            let within = false
+            for (let at = root.Window.activeFocusItem; at; at = at.parent) {
+                if (at === root) {
+                    within = true
+                    break
+                }
+            }
+            if (root.focusWithin && !within)
+                root.fire("focusOut", undefined)
+            root.focusWithin = within
+        }
+    }
     readonly property Item content: root.sourceRows ? rowsPlane : body
     readonly property Item rowsHolder: root.sourceRows ? rowsPlane : body
     // The column window, once the mount lays the columns out: [{column, offset, width}] in pixels, the pinned ones
@@ -1566,6 +1590,13 @@ MorphWidget {
         }
         if (move >= 0) {
             root.fire("focusMove", move)
+            return true
+        }
+        // Printable text on the focused cell opens its editor with the text.
+        if (root.takesText && root.focusedRowIndex >= 0 && event.text.length > 0
+                && (mods & (Qt.ControlModifier | Qt.AltModifier | Qt.MetaModifier)) === 0
+                && event.text.charCodeAt(0) >= 32 && event.text.charCodeAt(0) !== 127) {
+            root.fire("text", event.text)
             return true
         }
         const row = root.rowAt(root.focusedRowIndex)

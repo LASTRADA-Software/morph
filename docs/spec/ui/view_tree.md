@@ -388,6 +388,50 @@ point), focuses it, and asks it to reveal the cursor's line (`TextInputWidget::r
 several inputs with one name, the one mounted first is taken. It answers whether a mounted text input had the
 name; a widget of another kind with that name answers false and is left alone.
 
+### The focus chain
+
+The **focus chain** is the mounted widgets that take focus — a text input, a button, a check box, a select, a menu,
+a date-time input, a slider, a file picker, a table, a tabs, and a badge with `onRemove` — that are shown and enabled
+with every container around them, in document order: a walk of the mounted tree in child order, which the mount
+keeps through every reorder it makes, computed when asked. A table is one stop: what a source table mounts in its
+rows (its cells, an open cell editor) is not on the chain. `Mounted::focusNext(name)` and `focusPrevious(name)` move
+focus to the control after or before the widget whose `focusId` is `name`, through `Widget::focus()`, and answer
+whether one took it. A table's key handler moves focus the same way when it answers `KeyOutcome::FocusNext` or
+`FocusPrevious` ([Editable tables](#editable-tables)).
+
+### Editable tables
+
+A table over a `TableSource` takes what a grid needs (`ui/grid.hpp`, [`../table/editing.md`](../table/editing.md)),
+each on `Table` and `TableOptions` alike:
+
+- **`gridFocus`** (`std::optional<Prop<std::optional<GridFocus>>>`): engaged, the table's focus is a grid's.
+  `GridFocus{key, viewRow, column}` names a row by key, or by view position while the row there is not fetched yet
+  (`key` empty), and a column by id. The mount shows it with `setFocusCell` at the key's view position, found among
+  the realized rows when the given position holds another key, or at `viewRow` while it names no key, and keeps that
+  row realized, so the window fetches a placeholder. A click or a `FocusMove` is resolved to a cell and handed to
+  **`onGridFocus`** (its key empty when that row is not fetched), and does not move the mount's own focus; the
+  focused cell's menu opening does the same.
+- **`onActivateCell(CellRef)`**: a double click on a cell. **`onFocusOut()`**: focus left the table and everything
+  inside it. **`onText(text)`**: printable text typed while a cell has focus and no editor is open.
+- **`onKey(chord) -> KeyOutcome`** with **`keyChords`**: the chords are declared to the backend with `setKeys`, after
+  the node's own `keys`, on every change of `keyChords`; a chord of `keyChords` goes to `onKey`, any other declared one
+  to its key binding. `Handled` and `Ignored` end there; `FocusNext` and `FocusPrevious` move focus along the chain
+  from the table.
+- **`editing`** (`std::optional<Prop<std::optional<CellRef>>>`) with **`editor(CellRef) -> Node`**: while `editing`
+  names a cell whose row is realized, the mount builds `editor(cell)` once, mounts it as a child of that row's widget
+  in a scope of its own, calls `setCellEditor(row, column, &widget)` (`column` an index into `columns`) and
+  `widget.focus()`; when `editing` changes, the row is given another key, or the row goes, it calls
+  `setCellEditor(row, column, nullptr)` and unmounts the editor. A focused cell's row stays realized, so an open
+  editor's row is never pooled.
+- **Marks are a cell's.** `markedCell(content, marks)` gives `MarkedCell{content, marks}` (`CellMarks{readOnly,
+  modified, error, stale, muted}`), a node a `TableSource::cellView` returns, whose content may be an `accentedCell`.
+  The mount mounts the content as the cell and binds the marks in the cell's own scope, as an accent is: it calls
+  `setCellMarks(row, column, marks)` on every change and whenever the cell is attached to a row at a column, whether
+  or not the marks changed. The binding reads the cell's own row signal, so a cell rebound to another row (its
+  signal set) evaluates its marks again with its content, and nothing per row holds them. Anywhere but a table cell a
+  `MarkedCell` mounts its content and its marks are not read. A row's own mark is `TableRowLook::modified`
+  (`std::optional<Prop<bool>>`), bound in the row's scope and told with `setRowModified`.
+
 ### Callbacks
 
 Every callback the mount hands a widget, a drop's `accepts` predicate included, runs:

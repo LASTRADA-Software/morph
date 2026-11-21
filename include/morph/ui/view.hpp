@@ -1333,6 +1333,30 @@ struct CellRef {
     [[nodiscard]] bool operator==(CellRef const& other) const = default;
 };
 
+/// @brief A grid's focused cell as the mount shows it: a row by key, or by view position while the row there is not
+///        fetched yet, and a column by id.
+struct GridFocus {
+    /// @brief The row's key; empty while the row at `viewRow` is not fetched yet (a placeholder).
+    std::optional<Key> key;
+    /// @brief The row's view position: read only while `key` is empty.
+    std::size_t viewRow = 0;
+    /// @brief The column's id (`TableColumn::id`).
+    std::string column;
+
+    /// @brief Member-wise equality.
+    /// @param other The focus to compare with.
+    /// @return `true` when key, view row and column match.
+    [[nodiscard]] bool operator==(GridFocus const& other) const = default;
+};
+
+/// @brief What a table's key handler did with a chord.
+enum class KeyOutcome : std::uint8_t {
+    Handled,        ///< The table took the key.
+    Ignored,        ///< The table did not take it.
+    FocusNext,      ///< Focus leaves the table for the next control of the focus chain.
+    FocusPrevious,  ///< Focus leaves the table for the previous control of the focus chain.
+};
+
 /// @brief One widget per row of a keyed collection, updated in place when a row with the same key changes.
 struct ForEach {
     /// @brief The rows, the key function and the row view, type-erased; null shows no rows.
@@ -1387,6 +1411,37 @@ struct AccentedCell {
     Prop<CellAccent> accent;
 };
 
+/// @brief What marks one cell of an editable table: read-only, changed since the record was loaded, not encoding, being
+///        saved, or being recomputed.
+struct CellMarks {
+    /// @brief The cell takes no edit: drawn on the theme's read-only cell surface.
+    bool readOnly = false;
+    /// @brief The cell's value differs from the loaded one: the theme's modified mark.
+    bool modified = false;
+    /// @brief The cell's draft does not encode, or the server refused it: the theme's error mark.
+    bool error = false;
+    /// @brief The cell's value is being saved, or is the last one known: drawn stale.
+    bool stale = false;
+    /// @brief The cell's value is being recomputed: drawn muted.
+    bool muted = false;
+
+    /// @brief Member-wise equality.
+    /// @param other The marks to compare with.
+    /// @return `true` when every member matches.
+    [[nodiscard]] bool operator==(CellMarks const& other) const = default;
+};
+
+/// @brief A table cell with marks: a node a `TableSource::cellView` returns. Mounted as a cell of a source table, its
+///        content is the cell and its marks are bound in the cell's own scope and told to `TableWidget::setCellMarks`
+///        on every change and whenever the cell is attached to a row; mounted anywhere else, its content is mounted
+///        and the marks are not read. Its content may be an `AccentedCell`, whose accent is bound in the same scope.
+struct MarkedCell {
+    /// @brief The cell's content. Must not be null.
+    Node content;
+    /// @brief The marks.
+    Prop<CellMarks> marks;
+};
+
 /// @brief What marks a whole row: it is being worked on, it is locked by someone else, or it is kept in view although
 ///        it no longer matches the filter. A row's marks do not vary by cell, so its row look carries them.
 struct RowMarks {
@@ -1428,6 +1483,9 @@ struct TableRowLook {
     std::optional<Prop<RowMarks>> marks;
     /// @brief The row's accessible name, bound in the row's scope; disengaged names the row by its key.
     std::optional<Prop<std::string>> label;
+    /// @brief Whether some cell of the row changed since the record was loaded, bound in the row's scope: the row
+    ///        header's modified mark (`TableWidget::setRowModified`); disengaged for a table whose rows carry none.
+    std::optional<Prop<bool>> modified;
     /// @brief The cells of this row that cover the rows below, bound in the row's scope; disengaged for none.
     std::optional<Prop<std::vector<RowSpan>>> spans;
     /// @brief Non-null: the row is a heading, this node its one cell spanning every column; no cell is built for it.
@@ -1673,6 +1731,31 @@ struct Table {
     Prop<KeyMoves> keyMoves;
     /// @brief Called with the id of the status line's entry the user chose.
     std::function<void(std::string id)> onStatusEntry;
+    /// @brief Engaged: the table's focus is a grid's. The mount shows the cell it names, at its key's view position
+    ///        now, or at `GridFocus::viewRow` while it names no key, and keeps that row realized, fetched or not; a
+    ///        click or a `FocusMove` goes to `onGridFocus` and does not move the mount's own focus. A table over a
+    ///        `TableSource` only.
+    std::optional<Prop<std::optional<GridFocus>>> gridFocus;
+    /// @brief Called, while `gridFocus` is engaged, with the cell a click or a `FocusMove` resolves to; its key is
+    ///        empty when that row is not fetched yet.
+    std::function<void(GridFocus)> onGridFocus;
+    /// @brief Called with the cell the user double-clicked.
+    std::function<void(CellRef)> onActivateCell;
+    /// @brief Called when focus leaves the table's widget and everything inside it, an open editor included.
+    std::function<void()> onFocusOut;
+    /// @brief Engaged: the cell whose editor is open, or none. While it names a cell, the mount builds `editor` for
+    ///        it once, mounts it in that cell's row, draws it over the cell and focuses it; a change unmounts it. A
+    ///        table over a `TableSource` only.
+    std::optional<Prop<std::optional<CellRef>>> editing;
+    /// @brief Builds the editor of the cell `editing` names.
+    std::function<Node(CellRef const&)> editor;
+    /// @brief Called with each chord of `keyChords` pressed while focus is in the table; the outcome says whether the
+    ///        table took it, or whether focus leaves the table along the focus chain.
+    std::function<KeyOutcome(std::string const& chord)> onKey;
+    /// @brief The chords `onKey` takes, declared to the backend again on each change.
+    Prop<std::vector<std::string>> keyChords;
+    /// @brief Called with printable text typed while a cell has focus and no editor is open.
+    std::function<void(std::string)> onText;
 };
 
 /// @brief A date, or a date and time, edited in a display zone and reported as an instant.
@@ -2139,7 +2222,7 @@ struct NodeData {
     std::variant<Text, Button, TextInput, Checkbox, Select, Menu, Column, Row, Grid, Spacer, Panel, Scroll, Switch,
                  Tabs, Dialog, Busy, ForEach, Table, DateTimeInput, Slider, FilePicker, Banner, Badge, Progress, Steps,
                  KeyValue, EmptyState, Drawer, Splitter, Collapsible, DropZone, Custom, ActionBar, Chart, Page,
-                 PageRegion, AccentedCell>
+                 PageRegion, AccentedCell, MarkedCell>
         kind;
 };
 
@@ -2171,6 +2254,18 @@ template <typename Kind>
         throw std::invalid_argument{"ui::accentedCell: the content must not be null"};
     }
     return detail::makeNode(AccentedCell{.content = std::move(content), .accent = std::move(accent)});
+}
+
+/// @brief A table cell with marks.
+/// @param content The cell's content; must not be null.
+/// @param marks   The marks.
+/// @return The node.
+/// @throws std::invalid_argument when @p content is null.
+[[nodiscard]] inline Node markedCell(Node content, Prop<CellMarks> marks) {
+    if (content == nullptr) {
+        throw std::invalid_argument{"ui::markedCell: the content must not be null"};
+    }
+    return detail::makeNode(MarkedCell{.content = std::move(content), .marks = std::move(marks)});
 }
 
 /// @brief A push button.
@@ -2505,6 +2600,24 @@ struct TableOptions {
     Prop<KeyMoves> keyMoves;
     /// @brief Called with the id of the status line's entry the user chose.
     std::function<void(std::string id)> onStatusEntry;
+    /// @brief Engaged: the table's focus is a grid's (`Table::gridFocus`).
+    std::optional<Prop<std::optional<GridFocus>>> gridFocus;
+    /// @brief Called with the cell a click or a `FocusMove` resolves to, while `gridFocus` is engaged.
+    std::function<void(GridFocus)> onGridFocus;
+    /// @brief Called with the cell the user double-clicked.
+    std::function<void(CellRef)> onActivateCell;
+    /// @brief Called when focus leaves the table and everything inside it.
+    std::function<void()> onFocusOut;
+    /// @brief Engaged: the cell whose editor is open, or none (`Table::editing`).
+    std::optional<Prop<std::optional<CellRef>>> editing;
+    /// @brief Builds the editor of the cell `editing` names.
+    std::function<Node(CellRef const&)> editor;
+    /// @brief Called with each chord of `keyChords` pressed while focus is in the table.
+    std::function<KeyOutcome(std::string const& chord)> onKey;
+    /// @brief The chords `onKey` takes.
+    Prop<std::vector<std::string>> keyChords;
+    /// @brief Called with printable text typed while a cell has focus and no editor is open.
+    std::function<void(std::string)> onText;
 };
 
 /// @brief What a table's row view builds for one row: its cells, one per column, and its tone.
@@ -2630,6 +2743,15 @@ template <typename RowT>
     spec.selectionView = std::move(options.selectionView);
     spec.keyMoves = std::move(options.keyMoves);
     spec.onStatusEntry = std::move(options.onStatusEntry);
+    spec.gridFocus = std::move(options.gridFocus);
+    spec.onGridFocus = std::move(options.onGridFocus);
+    spec.onActivateCell = std::move(options.onActivateCell);
+    spec.onFocusOut = std::move(options.onFocusOut);
+    spec.editing = std::move(options.editing);
+    spec.editor = std::move(options.editor);
+    spec.onKey = std::move(options.onKey);
+    spec.keyChords = std::move(options.keyChords);
+    spec.onText = std::move(options.onText);
     return detail::makeNode(std::move(spec));
 }
 
@@ -2684,6 +2806,15 @@ template <typename RowT>
     spec.selectionView = std::move(options.selectionView);
     spec.keyMoves = std::move(options.keyMoves);
     spec.onStatusEntry = std::move(options.onStatusEntry);
+    spec.gridFocus = std::move(options.gridFocus);
+    spec.onGridFocus = std::move(options.onGridFocus);
+    spec.onActivateCell = std::move(options.onActivateCell);
+    spec.onFocusOut = std::move(options.onFocusOut);
+    spec.editing = std::move(options.editing);
+    spec.editor = std::move(options.editor);
+    spec.onKey = std::move(options.onKey);
+    spec.keyChords = std::move(options.keyChords);
+    spec.onText = std::move(options.onText);
     return detail::makeNode(std::move(spec));
 }
 

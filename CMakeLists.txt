@@ -664,6 +664,8 @@ target_sources(morph
         include/morph/ui/table_filter_menu.hpp
         include/morph/ui/measure.hpp
         include/morph/ui/table_rows.hpp
+        include/morph/ui/form_rows.hpp
+        include/morph/ui/grid.hpp
         include/morph/ui/cell_format.hpp
         include/morph/ui/page_layout.hpp
         include/morph/ui/message.hpp
@@ -773,6 +775,7 @@ target_sources(morph
         include/morph/forms/engine/overrides.hpp
         include/morph/forms/engine/field_layout.hpp
         include/morph/forms/engine/form_view.hpp
+        include/morph/forms/engine/field_control.hpp
         include/morph/forms/engine/collection.hpp
         include/morph/forms/engine/wizard.hpp
         include/morph/forms/engine/collection_view.hpp

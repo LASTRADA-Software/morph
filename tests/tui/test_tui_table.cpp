@@ -28,6 +28,7 @@
 #include "tui/display_widgets.hpp"
 #include "tui/leaf_widgets.hpp"
 #include "tui/table_widget.hpp"
+#include "grid_test_support.hpp"
 #include "tui_harness.hpp"
 #include "ui_fake_rows.hpp"
 
@@ -1807,4 +1808,97 @@ TEST_CASE("tui table: select-all asks the handler; a status entry reports its id
     static_cast<void>(f.screen.dispatchEvent(core::tui::test::charKey('2', core::tui::Modifier::Alt)));
     f.settle();
     CHECK(chosen == std::vector<std::string>{"clear"});
+}
+
+namespace {
+
+using morph::tui::detail::WidgetBase;
+
+// A grid of two specimens (`GridFixture`) between two text inputs, on the terminal backend: its columns are every
+// member in schema order, label first.
+struct TuiGridFixture {
+    TuiGridFixture()
+        : terminal{std::make_unique<core::tui::MockTerminalOutput>(100, 12)}, screen{terminal}, backend{screen} {
+        ui::TextInput before;
+        before.common.testId = "before";
+        ui::TextInput after;
+        after.common.testId = "after";
+        view.emplace(f.h.rt, backend,
+                     ui::column(ui::Column{.children = {ui::textInput(std::move(before)),
+                                                        f.grid->node(morph::test::grid::columnsOf(f), {}),
+                                                        ui::textInput(std::move(after))}}));
+        auto const& column = dynamic_cast<morph::tui::detail::ContainerBase const&>(WidgetBase::of(view->root()));
+        table = dynamic_cast<TableImpl*>(column.children()[1]);
+        afterInput = column.children()[2];
+        settle();
+    }
+    TuiGridFixture(TuiGridFixture const&) = delete;
+    TuiGridFixture& operator=(TuiGridFixture const&) = delete;
+    TuiGridFixture(TuiGridFixture&&) = delete;
+    TuiGridFixture& operator=(TuiGridFixture&&) = delete;
+    ~TuiGridFixture() { view.reset(); }
+
+    void settle() {
+        for (int turn = 0; turn < 32; ++turn) {
+            backend.fit();
+            screen.draw();
+            if (f.h.owner.runAll() == 0) {
+                backend.fit();
+                screen.draw();
+                return;
+            }
+        }
+        FAIL("the grid did not settle");
+    }
+
+    void send(core::tui::InputEvent const& event) {
+        static_cast<void>(screen.dispatchEvent(event));
+        settle();
+    }
+
+    [[nodiscard]] std::string line(std::size_t at) const {
+        Rows const lines = morph::tui::testing::rowsOf(screen);
+        return at < lines.size() ? lines.at(at) : std::string{};
+    }
+
+    morph::test::grid::GridFixture f{2};
+    core::tui::Terminal terminal;
+    core::tui::Screen screen;
+    morph::tui::Backend backend;
+    std::optional<ui::Mounted> view;
+    TableImpl* table = nullptr;
+    WidgetBase* afterInput = nullptr;
+};
+
+}  // namespace
+
+// Mutation: the terminal table ignoring setOnText (the keystroke moves nothing and opens no editor).
+TEST_CASE("tui grid: typing on a focused cell opens its editor, Enter commits and moves down", "[tui][grid]") {
+    TuiGridFixture g;
+    REQUIRE(g.table != nullptr);
+    g.f.grid->focusCell(morph::test::grid::at(1, "mass"));
+    g.settle();
+    g.screen.setFocus(&g.table->view());
+    g.send(core::tui::test::charKey('5'));
+    REQUIRE(g.f.grid->editing() == morph::test::grid::at(1, "mass"));
+    // The editor has the focus, inside the table, and row 1 shows what it holds.
+    auto const* const focused = g.screen.focusedComponent();
+    CHECK(focused != &g.table->view());
+    CHECK(morph::tui::detail::isWithin(focused, g.table->view()));
+    std::size_t headerLine = 0;
+    while (headerLine < 12 && g.line(headerLine).find("mass") == std::string::npos) {
+        ++headerLine;
+    }
+    std::size_t const massAt = g.line(headerLine).find("mass");
+    REQUIRE(massAt != std::string::npos);
+    CHECK(g.line(headerLine + 1).substr(massAt, 6).find('5') != std::string::npos);
+    g.send(core::tui::test::specialKey(KeyCode::Enter));
+    CHECK(g.f.form->field("specimens[0].mass").draft() == "5");
+    CHECK_FALSE(g.f.grid->editing().has_value());
+    CHECK(g.f.grid->focus() == morph::test::grid::at(2, "mass"));
+    g.f.grid->focusCell(morph::test::grid::at(2, "note"));
+    g.settle();
+    g.screen.setFocus(&g.table->view());
+    g.send(core::tui::test::specialKey(KeyCode::Tab));
+    CHECK(g.screen.focusedComponent() == &g.afterInput->view());
 }
