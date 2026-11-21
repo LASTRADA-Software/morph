@@ -92,8 +92,9 @@ MorphWidget {
     onCellMarksChanged: root.place()
     // Whether a cell of the row changed since the record was loaded; C++ writes it.
     property bool modified: false
-    // The column of the row's open cell editor, or -1; C++ writes it.
+    // The column of the row's open cell editor, or -1, and the editor's item, or null; C++ writes both.
     property int editorColumn: -1
+    property Item editorItem: null
     // Over a source the table holds the focus and names the focused row; otherwise the row holds it.
     readonly property bool current: root.table && root.table.sourceRows
                                     ? root.table.activeFocus && root.viewRow === root.table.focusedRowIndex

@@ -573,8 +573,9 @@ void TableImpl::setOnFocusOut(std::function<void()> onFocusOut) {
 }
 
 // The editor is placed as a cell of its column is, over the cell, which is covered while it is open; the row's
-// `editorColumn` says which column, which the table's focus watch reads. An editor that holds the focus when it closes
-// gives it back to the table, so the next key reaches the table.
+// `editorColumn` says which column and `editorItem` the editor, whose own popups the table's focus watch counts as
+// inside the table. An editor that holds the focus when it closes gives it back to the table, so the next key reaches
+// the table.
 void TableImpl::setCellEditor(ui::Widget& row, std::size_t column, ui::Widget* editor) {
     auto* const tableRow = dynamic_cast<TableRowImpl*>(&row);
     if (tableRow == nullptr || tableRow->container() != this) {
@@ -608,6 +609,7 @@ void TableImpl::setCellEditor(ui::Widget& row, std::size_t column, ui::Widget* e
         shown->cover(false);
     }
     tableRow->write("editorColumn", shown != nullptr ? static_cast<int>(column) : -1);
+    tableRow->write("editorItem", QVariant::fromValue(shown != nullptr ? shown->item() : nullptr));
     if (QQuickItem* const rowItem = tableRow->item(); rowItem != nullptr) {
         QMetaObject::invokeMethod(rowItem, "schedulePlace", Qt::DirectConnection);
     }
