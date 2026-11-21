@@ -138,7 +138,7 @@ Public Attributes</h2></td></tr>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>The custom screens' bounds. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html#l00324">324</a> of file <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html">custom_screens.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html#l00325">325</a> of file <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html">custom_screens.hpp</a>.</p>
 </div><a name="doc-variable-members" id="doc-variable-members"></a><h2 id="header-doc-variable-members" class="groupheader">Member Data Documentation</h2>
 <a id="aa10316b6c5aec039dfcf85921d544768" name="aa10316b6c5aec039dfcf85921d544768"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#aa10316b6c5aec039dfcf85921d544768">&#9670;&#160;</a></span>maxDocumentBytes</h2>
@@ -154,7 +154,7 @@ Public Attributes</h2></td></tr>
 
 <p>The longest custom document, in bytes. At most <span class="tt"><a class="el" href="../../d0/dab/bundle_8hpp.html#ab3522276f59bad162fb9ab02cf36f55c" title="The largest file a bundle may hold, and a client accepts.">kMaxFileBytes</a></span>, and small enough that a <span class="tt">get</span> reply fits <span class="tt">wire::kMaxEnvelopeBytes</span>: the document is escaped once into the reply's JSON and the reply is escaped again as the envelope's body, so a document of quotes and backslashes grows four-fold, and <span class="tt">4 * <a class="el" href="#aa10316b6c5aec039dfcf85921d544768" title="The longest custom document, in bytes. At most kMaxFileBytes, and small enough that a get reply fits ...">maxDocumentBytes</a> + <a class="el" href="../../d5/d92/custom__screens_8hpp.html#ab701556c495f1f0c32c7c2262368fd01" title="The bytes of a get reply that are not its document: one capped summary, at most kMaxEscapedGrowth * k...">kCustomScreenReplyOverhead</a></span> must not exceed the envelope bound. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html#l00329">329</a> of file <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html">custom_screens.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html#l00330">330</a> of file <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html">custom_screens.hpp</a>.</p>
 
 </div>
 </div>
@@ -172,7 +172,7 @@ Public Attributes</h2></td></tr>
 
 <p>The most verdicts <span class="tt"><a class="el" href="../../dd/dab/classmorph_1_1ui_1_1VerdictCache.html" title="The checks&#39; verdicts by verdictKey, bounded, dropping the least recently used.">VerdictCache</a></span> keeps. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html#l00331">331</a> of file <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html">custom_screens.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html#l00332">332</a> of file <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html">custom_screens.hpp</a>.</p>
 
 </div>
 </div>
@@ -190,7 +190,7 @@ Public Attributes</h2></td></tr>
 
 <p>The most summaries <span class="tt">list</span> answers; it says <span class="tt">truncated</span> when the store held more. A capped summary is at most <span class="tt"><a class="el" href="../../d5/d92/custom__screens_8hpp.html#ac45aedb8ac6070c9933b0c53e6de4587" title="The most bytes one summary takes before escaping. Every field is capped when the summary is built: id...">kMaxSummaryBytes</a></span> and grows at most <span class="tt"><a class="el" href="../../d5/d92/custom__screens_8hpp.html#ace662c40aebdcf642573fff59c576c78" title="The most a byte of a summary grows to in an envelope: the reply is written with control bytes escaped...">kMaxEscapedGrowth</a></span>-fold in an envelope, so <span class="tt"><a class="el" href="#a017c81b9e5e71cc32a9234726348a0a7" title="The most summaries list answers; it says truncated when the store held more. A capped summary is at m...">maxListed</a> * <a class="el" href="../../d5/d92/custom__screens_8hpp.html#ace662c40aebdcf642573fff59c576c78" title="The most a byte of a summary grows to in an envelope: the reply is written with control bytes escaped...">kMaxEscapedGrowth</a> * <a class="el" href="../../d5/d92/custom__screens_8hpp.html#ac45aedb8ac6070c9933b0c53e6de4587" title="The most bytes one summary takes before escaping. Every field is capped when the summary is built: id...">kMaxSummaryBytes</a> + <a class="el" href="../../d5/d92/custom__screens_8hpp.html#ab701556c495f1f0c32c7c2262368fd01" title="The bytes of a get reply that are not its document: one capped summary, at most kMaxEscapedGrowth * k...">kCustomScreenReplyOverhead</a></span> must not exceed <span class="tt">wire::kMaxEnvelopeBytes</span>: at most 290. The default of 200 takes at most 5.8 MB. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html#l00336">336</a> of file <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html">custom_screens.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html#l00337">337</a> of file <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html">custom_screens.hpp</a>.</p>
 
 </div>
 </div>

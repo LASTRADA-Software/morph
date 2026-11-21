@@ -147,6 +147,7 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d5/d92/custom_
 <code>#include &quot;../core/registry.hpp&quot;</code><br />
 <code>#include &quot;../session/session.hpp&quot;</code><br />
 <code>#include &quot;<a class="el" href="../../d7/d4a/datetime_8hpp_source.html">../util/datetime.hpp</a>&quot;</code><br />
+<code>#include &quot;<a class="el" href="../../d6/d25/custom__screen__versions_8hpp_source.html">custom_screen_versions.hpp</a>&quot;</code><br />
 <code>#include &quot;<a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>&quot;</code><br />
 <code>#include &quot;<a class="el" href="../../d3/d31/service_8hpp_source.html">service.hpp</a>&quot;</code><br />
 <code>#include &quot;<a class="el" href="../../d6/dda/value_8hpp_source.html">value.hpp</a>&quot;</code><br />
@@ -237,7 +238,7 @@ Variables</h2></td></tr>
 <tr class="memitem:a85edfd1f6b28ae4d95eeb7999fe65d7a" id="r_a85edfd1f6b28ae4d95eeb7999fe65d7a"><td class="memItemLeft">constexpr std::size_t&#160;</td><td class="memItemRight"><a class="el" href="#a85edfd1f6b28ae4d95eeb7999fe65d7a">morph::ui::kMaxAttributesBytes</a> = 1024</td></tr>
 <tr class="memdesc:a85edfd1f6b28ae4d95eeb7999fe65d7a"><td class="mdescLeft">&#160;</td><td class="mdescRight">The longest <span class="tt">attributes</span> record, in bytes, as JSON. A <span class="tt">save</span> with a longer one is refused, and a stored screen whose record is longer is listed broken without it.  <br /></td></tr>
 <tr class="memitem:ac45aedb8ac6070c9933b0c53e6de4587" id="r_ac45aedb8ac6070c9933b0c53e6de4587"><td class="memItemLeft">constexpr std::size_t&#160;</td><td class="memItemRight"><a class="el" href="#ac45aedb8ac6070c9933b0c53e6de4587">morph::ui::kMaxSummaryBytes</a> = std::size_t{4} * 1024</td></tr>
-<tr class="memdesc:ac45aedb8ac6070c9933b0c53e6de4587"><td class="mdescLeft">&#160;</td><td class="mdescRight">The most bytes one summary takes before escaping. Every field is capped when the summary is built: <span class="tt">id</span>, <span class="tt">title</span>, <span class="tt">basedOn</span>, <span class="tt">savedBy</span> and <span class="tt">broken.pointer</span> at <span class="tt"><a class="el" href="../../d0/dab/bundle_8hpp.html#afb8fd4d49b556176e90b375abafb4fec" title="The longest name: an id, a kind, a vocabulary, a host name, an application id or version.">kMaxNameBytes</a></span>, <span class="tt">broken.reason</span> at <span class="tt"><a class="el" href="#a6deecdab8c98b0c8bfbef7260a67d058" title="The longest broken.reason of a summary, in bytes; a longer one is cut and ends with an ellipsis.">kMaxBrokenReasonBytes</a></span>, a cut one ending with an ellipsis, and <span class="tt">attributes</span> at <span class="tt"><a class="el" href="#a85edfd1f6b28ae4d95eeb7999fe65d7a" title="The longest attributes record, in bytes, as JSON. A save with a longer one is refused,...">kMaxAttributesBytes</a></span>; <span class="tt">hash</span> is 71 bytes (<span class="tt">sha256:</span> and 64 digits). That is 5 * 256 + 1024 + 1024 + 71 = 3399 bytes of text; the keys, the punctuation and <span class="tt">savedAt</span> take under 300 more, and 4 KiB leaves a margin.  <br /></td></tr>
+<tr class="memdesc:ac45aedb8ac6070c9933b0c53e6de4587"><td class="mdescLeft">&#160;</td><td class="mdescRight">The most bytes one summary takes before escaping. Every field is capped when the summary is built: <span class="tt">id</span>, <span class="tt">title</span>, <span class="tt">basedOn</span>, <span class="tt">savedBy</span> and <span class="tt">broken.pointer</span> at <span class="tt"><a class="el" href="../../d0/dab/bundle_8hpp.html#afb8fd4d49b556176e90b375abafb4fec" title="The longest name: an id, a kind, a vocabulary, a host name, an application id or version.">kMaxNameBytes</a></span>, <span class="tt">broken.reason</span> at <span class="tt"><a class="el" href="#a6deecdab8c98b0c8bfbef7260a67d058" title="The longest broken.reason of a summary, in bytes; a longer one is cut and ends with an ellipsis.">kMaxBrokenReasonBytes</a></span>, a cut one ending with an ellipsis, and <span class="tt">attributes</span> at <span class="tt"><a class="el" href="#a85edfd1f6b28ae4d95eeb7999fe65d7a" title="The longest attributes record, in bytes, as JSON. A save with a longer one is refused,...">kMaxAttributesBytes</a></span>; <span class="tt">hash</span> is 71 bytes (<span class="tt">sha256:</span> and 64 digits). That is 5 * 256 + 1024 + 1024 + 71 = 3399 bytes of text; the keys, the punctuation, <span class="tt">savedAt</span> and the four flags take under 350 more, and 4 KiB leaves a margin.  <br /></td></tr>
 <tr class="memitem:ace662c40aebdcf642573fff59c576c78" id="r_ace662c40aebdcf642573fff59c576c78"><td class="memItemLeft">constexpr std::size_t&#160;</td><td class="memItemRight"><a class="el" href="#ace662c40aebdcf642573fff59c576c78">morph::ui::kMaxEscapedGrowth</a> = 7</td></tr>
 <tr class="memdesc:ace662c40aebdcf642573fff59c576c78"><td class="mdescLeft">&#160;</td><td class="mdescRight">The most a byte of a summary grows to in an envelope: the reply is written with control bytes escaped, so one becomes a six-byte escape sequence, and the envelope then doubles each backslash of the reply, making seven.  <br /></td></tr>
 <tr class="memitem:ab701556c495f1f0c32c7c2262368fd01" id="r_ab701556c495f1f0c32c7c2262368fd01"><td class="memItemLeft">constexpr std::size_t&#160;</td><td class="memItemRight"><a class="el" href="#ab701556c495f1f0c32c7c2262368fd01">morph::ui::kCustomScreenReplyOverhead</a> = std::size_t{64} * 1024</td></tr>
@@ -295,7 +296,7 @@ Variables</h2></td></tr>
 </td></tr>
 </table>
 
-<p class="definition">Definition at line <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html#l00261">261</a> of file <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html">custom_screens.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html#l00262">262</a> of file <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html">custom_screens.hpp</a>.</p>
 
 </div>
 </div>
@@ -736,7 +737,7 @@ Variables</h2></td></tr>
     <tr><td class="paramname">store</td><td>Where custom screens are kept, and the application's policy over them. </td></tr>
     <tr><td class="paramname">bundle</td><td>The bundle being served now; called at every action, so a development reload is seen, from action strands on any thread, so it must be thread-safe. </td></tr>
     <tr><td class="paramname">authorizer</td><td>The server's authoriser, for the permitted set and the base screen's admission. </td></tr>
-    <tr><td class="paramname">dispatcher</td><td>The server's action dispatcher. </td></tr>
+    <tr><td class="paramname">dispatcher</td><td>The server's action dispatcher. Borrowed: the action schemas a base screen's version reads come from it at every list, so it must outlive every call, as it does for the server. </td></tr>
     <tr><td class="paramname">registry</td><td>The server's model registry. </td></tr>
     <tr><td class="paramname">options</td><td>The bounds. <span class="tt">maxDocumentBytes</span> is at most <span class="tt">kMaxFileBytes</span>. </td></tr>
   </table>
@@ -769,7 +770,7 @@ Variables</h2></td></tr>
 
 <p>The longest <span class="tt">broken.reason</span> of a summary, in bytes; a longer one is cut and ends with an ellipsis. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html#l00301">301</a> of file <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html">custom_screens.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html#l00302">302</a> of file <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html">custom_screens.hpp</a>.</p>
 
 </div>
 </div>
@@ -795,7 +796,7 @@ Variables</h2></td></tr>
 
 <p>The longest <span class="tt">attributes</span> record, in bytes, as JSON. A <span class="tt">save</span> with a longer one is refused, and a stored screen whose record is longer is listed broken without it. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html#l00305">305</a> of file <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html">custom_screens.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html#l00306">306</a> of file <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html">custom_screens.hpp</a>.</p>
 
 </div>
 </div>
@@ -819,9 +820,9 @@ Variables</h2></td></tr>
 </table>
 </div><div class="memdoc">
 
-<p>The most bytes one summary takes before escaping. Every field is capped when the summary is built: <span class="tt">id</span>, <span class="tt">title</span>, <span class="tt">basedOn</span>, <span class="tt">savedBy</span> and <span class="tt">broken.pointer</span> at <span class="tt">kMaxNameBytes</span>, <span class="tt">broken.reason</span> at <span class="tt">kMaxBrokenReasonBytes</span>, a cut one ending with an ellipsis, and <span class="tt">attributes</span> at <span class="tt">kMaxAttributesBytes</span>; <span class="tt">hash</span> is 71 bytes (<span class="tt">sha256:</span> and 64 digits). That is 5 * 256 + 1024 + 1024 + 71 = 3399 bytes of text; the keys, the punctuation and <span class="tt">savedAt</span> take under 300 more, and 4 KiB leaves a margin. </p>
+<p>The most bytes one summary takes before escaping. Every field is capped when the summary is built: <span class="tt">id</span>, <span class="tt">title</span>, <span class="tt">basedOn</span>, <span class="tt">savedBy</span> and <span class="tt">broken.pointer</span> at <span class="tt">kMaxNameBytes</span>, <span class="tt">broken.reason</span> at <span class="tt">kMaxBrokenReasonBytes</span>, a cut one ending with an ellipsis, and <span class="tt">attributes</span> at <span class="tt">kMaxAttributesBytes</span>; <span class="tt">hash</span> is 71 bytes (<span class="tt">sha256:</span> and 64 digits). That is 5 * 256 + 1024 + 1024 + 71 = 3399 bytes of text; the keys, the punctuation, <span class="tt">savedAt</span> and the four flags take under 350 more, and 4 KiB leaves a margin. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html#l00312">312</a> of file <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html">custom_screens.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html#l00313">313</a> of file <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html">custom_screens.hpp</a>.</p>
 
 </div>
 </div>
@@ -847,7 +848,7 @@ Variables</h2></td></tr>
 
 <p>The most a byte of a summary grows to in an envelope: the reply is written with control bytes escaped, so one becomes a six-byte escape sequence, and the envelope then doubles each backslash of the reply, making seven. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html#l00317">317</a> of file <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html">custom_screens.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html#l00318">318</a> of file <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html">custom_screens.hpp</a>.</p>
 
 </div>
 </div>
@@ -873,7 +874,7 @@ Variables</h2></td></tr>
 
 <p>The bytes of a <span class="tt">get</span> reply that are not its document: one capped summary, at most <span class="tt">kMaxEscapedGrowth * kMaxSummaryBytes</span> = 28 KiB once escaped, with a margin to 64 KiB. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html#l00321">321</a> of file <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html">custom_screens.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html#l00322">322</a> of file <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html">custom_screens.hpp</a>.</p>
 
 </div>
 </div>
@@ -899,7 +900,7 @@ Variables</h2></td></tr>
 
 <p>The type id the custom screens model is registered under. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html#l00451">451</a> of file <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html">custom_screens.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html#l00452">452</a> of file <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html">custom_screens.hpp</a>.</p>
 
 </div>
 </div>
@@ -925,7 +926,7 @@ Variables</h2></td></tr>
 
 <p>The record type a custom screen's summary is, which <span class="tt">save</span> and <span class="tt">remove</span> change. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html#l00453">453</a> of file <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html">custom_screens.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html#l00454">454</a> of file <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html">custom_screens.hpp</a>.</p>
 
 </div>
 </div>
@@ -951,7 +952,7 @@ Variables</h2></td></tr>
 
 <p>The <span class="tt">list</span> action's id. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html#l00455">455</a> of file <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html">custom_screens.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html#l00456">456</a> of file <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html">custom_screens.hpp</a>.</p>
 
 </div>
 </div>
@@ -977,7 +978,7 @@ Variables</h2></td></tr>
 
 <p>The <span class="tt">get</span> action's id. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html#l00457">457</a> of file <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html">custom_screens.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html#l00458">458</a> of file <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html">custom_screens.hpp</a>.</p>
 
 </div>
 </div>
@@ -1003,7 +1004,7 @@ Variables</h2></td></tr>
 
 <p>The <span class="tt">check</span> action's id. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html#l00459">459</a> of file <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html">custom_screens.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html#l00460">460</a> of file <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html">custom_screens.hpp</a>.</p>
 
 </div>
 </div>
@@ -1029,7 +1030,7 @@ Variables</h2></td></tr>
 
 <p>The <span class="tt">save</span> action's id. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html#l00461">461</a> of file <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html">custom_screens.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html#l00462">462</a> of file <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html">custom_screens.hpp</a>.</p>
 
 </div>
 </div>
@@ -1055,7 +1056,7 @@ Variables</h2></td></tr>
 
 <p>The <span class="tt">remove</span> action's id. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html#l00463">463</a> of file <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html">custom_screens.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html#l00464">464</a> of file <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html">custom_screens.hpp</a>.</p>
 
 </div>
 </div>

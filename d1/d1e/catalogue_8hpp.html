@@ -156,6 +156,8 @@ Functions</h2></td></tr>
 <tr class="memdesc:a78b07ad959f060c3d016e43b57758479"><td class="mdescLeft">&#160;</td><td class="mdescRight">Reads the locale from a catalogue's id.  <br /></td></tr>
 <tr class="memitem:a935ff438e23593faa128224518dfad59" id="r_a935ff438e23593faa128224518dfad59"><td class="memItemLeft">std::expected&lt; <a class="el" href="../../d9/d73/structmorph_1_1ui_1_1Catalogue.html">Catalogue</a>, std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a935ff438e23593faa128224518dfad59">morph::ui::parseCatalogue</a> (std::string_view text)</td></tr>
 <tr class="memdesc:a935ff438e23593faa128224518dfad59"><td class="mdescLeft">&#160;</td><td class="mdescRight">Parses a catalogue: a flat JSON object of message key to MessageFormat 2 pattern.  <br /></td></tr>
+<tr class="memitem:a2ba834c489d6d2fe5bb163bc36c4ac78" id="r_a2ba834c489d6d2fe5bb163bc36c4ac78"><td class="memItemLeft"><a class="el" href="../../d8/d22/render_2i18n_8hpp.html#a6022e390d39cf81cd37bba36b5f65283">render::TranslationProvider</a>&#160;</td><td class="memItemRight"><a class="el" href="#a2ba834c489d6d2fe5bb163bc36c4ac78">morph::ui::layeredProvider</a> (<a class="el" href="../../da/d9d/classmorph_1_1ui_1_1MessageCatalogues.html">MessageCatalogues</a> const &amp;first, <a class="el" href="../../da/d9d/classmorph_1_1ui_1_1MessageCatalogues.html">MessageCatalogues</a> const &amp;second)</td></tr>
+<tr class="memdesc:a2ba834c489d6d2fe5bb163bc36c4ac78"><td class="mdescLeft">&#160;</td><td class="mdescRight">A provider that answers from <code class="param">first</code>, and from <code class="param">second</code> where <code class="param">first</code> has no text for the key: what a client installs when the server sends texts (<span class="tt">ui-texts</span>) beside the bundle's own catalogues.  <br /></td></tr>
 <tr class="memitem:aa05cc67c04981b6b969f96379db95aa8" id="r_aa05cc67c04981b6b969f96379db95aa8"><td class="memItemLeft"><a class="el" href="../../da/d9d/classmorph_1_1ui_1_1MessageCatalogues.html">MessageCatalogues</a>&#160;</td><td class="memItemRight"><a class="el" href="#aa05cc67c04981b6b969f96379db95aa8">morph::ui::loadCatalogues</a> (<a class="el" href="../../dd/dd5/structmorph_1_1ui_1_1Manifest.html">Manifest</a> const &amp;manifest, std::map&lt; std::string, std::string, std::less&lt;&gt; &gt; const &amp;files)</td></tr>
 <tr class="memdesc:aa05cc67c04981b6b969f96379db95aa8"><td class="mdescLeft">&#160;</td><td class="mdescRight">Reads every message catalogue a verified bundle lists.  <br /></td></tr>
 <tr class="memitem:afd37662fba518c148e132a5d8113159e" id="r_afd37662fba518c148e132a5d8113159e"><td class="memItemLeft">std::vector&lt; std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="#afd37662fba518c148e132a5d8113159e">morph::ui::textInEveryLocale</a> (<a class="el" href="../../da/d9d/classmorph_1_1ui_1_1MessageCatalogues.html">MessageCatalogues</a> const &amp;catalogues, std::string_view key, std::string_view fallback)</td></tr>
@@ -262,6 +264,47 @@ Variables</h2></td></tr>
 
 </div>
 </div>
+<a id="a2ba834c489d6d2fe5bb163bc36c4ac78" name="a2ba834c489d6d2fe5bb163bc36c4ac78"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a2ba834c489d6d2fe5bb163bc36c4ac78">&#9670;&#160;</a></span>layeredProvider()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">render::TranslationProvider morph::ui::layeredProvider </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="../../da/d9d/classmorph_1_1ui_1_1MessageCatalogues.html">MessageCatalogues</a> const &amp;</td>          <td class="paramname"><span class="paramname"><em>first</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype"><a class="el" href="../../da/d9d/classmorph_1_1ui_1_1MessageCatalogues.html">MessageCatalogues</a> const &amp;</td>          <td class="paramname"><span class="paramname"><em>second</em></span>&#160;)</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>A provider that answers from <code class="param">first</code>, and from <code class="param">second</code> where <code class="param">first</code> has no text for the key: what a client installs when the server sends texts (<span class="tt">ui-texts</span>) beside the bundle's own catalogues. </p>
+<p>Each side looks a key up as <span class="tt">MessageCatalogues::lookup</span> does (the exact locale, then each shorter tag), and <code class="param">first</code> wins whole: its <span class="tt">de</span> text is used before <code class="param">second's</code> <span class="tt">de-AT</span>. A key neither holds is a miss, and the caller shows its fallback (<span class="tt">resolveText</span>'s schema literal, <span class="tt">t</span>'s <span class="tt">fallback</span>). Like <span class="tt">provider()</span>, it shares the catalogues as they are now. </p><dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">first</td><td>The catalogues read first: the server's texts. </td></tr>
+    <tr><td class="paramname">second</td><td>The catalogues read where <code class="param">first</code> misses: the bundle's. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>The provider, for <span class="tt">Session::setTranslations</span>. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d1/d1e/catalogue_8hpp_source.html#l00190">190</a> of file <a class="el" href="../../d1/d1e/catalogue_8hpp_source.html">catalogue.hpp</a>.</p>
+
+</div>
+</div>
 <a id="aa05cc67c04981b6b969f96379db95aa8" name="aa05cc67c04981b6b969f96379db95aa8"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#aa05cc67c04981b6b969f96379db95aa8">&#9670;&#160;</a></span>loadCatalogues()</h2>
 
@@ -299,7 +342,7 @@ Variables</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The catalogues. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/d1e/catalogue_8hpp_source.html#l00188">188</a> of file <a class="el" href="../../d1/d1e/catalogue_8hpp_source.html">catalogue.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/d1e/catalogue_8hpp_source.html#l00209">209</a> of file <a class="el" href="../../d1/d1e/catalogue_8hpp_source.html">catalogue.hpp</a>.</p>
 
 </div>
 </div>
@@ -346,7 +389,7 @@ Variables</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>One text per locale, in the order of <span class="tt">locales()</span>; the fallback alone when there are no catalogues. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/d1e/catalogue_8hpp_source.html#l00224">224</a> of file <a class="el" href="../../d1/d1e/catalogue_8hpp_source.html">catalogue.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/d1e/catalogue_8hpp_source.html#l00245">245</a> of file <a class="el" href="../../d1/d1e/catalogue_8hpp_source.html">catalogue.hpp</a>.</p>
 
 </div>
 </div>
@@ -399,7 +442,7 @@ Variables</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Whether any locale's text contains it. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/d1e/catalogue_8hpp_source.html#l00264">264</a> of file <a class="el" href="../../d1/d1e/catalogue_8hpp_source.html">catalogue.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/d1e/catalogue_8hpp_source.html#l00285">285</a> of file <a class="el" href="../../d1/d1e/catalogue_8hpp_source.html">catalogue.hpp</a>.</p>
 
 </div>
 </div>
@@ -435,7 +478,7 @@ Variables</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Its parts; all empty for a title that is neither a string nor an object. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/d1e/catalogue_8hpp_source.html#l00292">292</a> of file <a class="el" href="../../d1/d1e/catalogue_8hpp_source.html">catalogue.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/d1e/catalogue_8hpp_source.html#l00313">313</a> of file <a class="el" href="../../d1/d1e/catalogue_8hpp_source.html">catalogue.hpp</a>.</p>
 
 </div>
 </div>
@@ -476,7 +519,7 @@ Variables</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The text, or nothing when the pattern does not parse. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/d1e/catalogue_8hpp_source.html#l00318">318</a> of file <a class="el" href="../../d1/d1e/catalogue_8hpp_source.html">catalogue.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/d1e/catalogue_8hpp_source.html#l00339">339</a> of file <a class="el" href="../../d1/d1e/catalogue_8hpp_source.html">catalogue.hpp</a>.</p>
 
 </div>
 </div>
@@ -523,7 +566,7 @@ Variables</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The title. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/d1e/catalogue_8hpp_source.html#l00337">337</a> of file <a class="el" href="../../d1/d1e/catalogue_8hpp_source.html">catalogue.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/d1e/catalogue_8hpp_source.html#l00358">358</a> of file <a class="el" href="../../d1/d1e/catalogue_8hpp_source.html">catalogue.hpp</a>.</p>
 
 </div>
 </div>
@@ -564,7 +607,7 @@ Variables</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The titles; never empty. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/d1e/catalogue_8hpp_source.html#l00365">365</a> of file <a class="el" href="../../d1/d1e/catalogue_8hpp_source.html">catalogue.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/d1e/catalogue_8hpp_source.html#l00386">386</a> of file <a class="el" href="../../d1/d1e/catalogue_8hpp_source.html">catalogue.hpp</a>.</p>
 
 </div>
 </div>
@@ -611,7 +654,7 @@ Variables</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The titles; never empty. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/d1e/catalogue_8hpp_source.html#l00385">385</a> of file <a class="el" href="../../d1/d1e/catalogue_8hpp_source.html">catalogue.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/d1e/catalogue_8hpp_source.html#l00406">406</a> of file <a class="el" href="../../d1/d1e/catalogue_8hpp_source.html">catalogue.hpp</a>.</p>
 
 </div>
 </div>
@@ -658,7 +701,7 @@ Variables</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The message, or <code class="param">text</code> as written when no catalogue holds it as a key. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/d1e/catalogue_8hpp_source.html#l00406">406</a> of file <a class="el" href="../../d1/d1e/catalogue_8hpp_source.html">catalogue.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/d1e/catalogue_8hpp_source.html#l00427">427</a> of file <a class="el" href="../../d1/d1e/catalogue_8hpp_source.html">catalogue.hpp</a>.</p>
 
 </div>
 </div>

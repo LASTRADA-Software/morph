@@ -195,6 +195,10 @@ Public Member Functions</h2></td></tr>
 <tr class="memdesc:a30908af5867d7e98e0c34a166a840477"><td class="mdescLeft">&#160;</td><td class="mdescRight">Opens a custom screen as a tab through <span class="tt">openTab</span>, fetching its document into the cache first.  <br /></td></tr>
 <tr class="memitem:a4ecf4a0f434033df1a7de0b931ecacbd" id="r_a4ecf4a0f434033df1a7de0b931ecacbd"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a4ecf4a0f434033df1a7de0b931ecacbd">remove</a> (std::string const &amp;screenId, std::function&lt; void(std::expected&lt; void, std::string &gt;)&gt; done)</td></tr>
 <tr class="memdesc:a4ecf4a0f434033df1a7de0b931ecacbd"><td class="mdescLeft">&#160;</td><td class="mdescRight">Removes a custom screen, then opens its base in the place of every tab that shows it, with the tab's params. Told as <span class="tt">Removed</span>, and a tab that stayed open as <span class="tt">RemovedStaysOpen</span>.  <br /></td></tr>
+<tr class="memitem:a09a90c25fad78c90a8ced5315c9d90cf" id="r_a09a90c25fad78c90a8ced5315c9d90cf"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a09a90c25fad78c90a8ced5315c9d90cf">layoutChangesOf</a> (std::string const &amp;screenId, std::function&lt; void(std::expected&lt; <a class="el" href="../../d3/dc0/structmorph_1_1ui_1_1LayoutChanges.html">LayoutChanges</a>, std::string &gt;)&gt; done)</td></tr>
+<tr class="memdesc:a09a90c25fad78c90a8ced5315c9d90cf"><td class="mdescLeft">&#160;</td><td class="mdescRight">What changed in a custom screen's base since the version it knows: <span class="tt"><a class="el" href="../../d6/d25/custom__screen__versions_8hpp.html#aad8269df39de974c05616a2c9ba161e2" title="What changed in base since the version layout knows.">layoutChanges</a></span> of the stored document (<span class="tt">get</span>) against the base's text (<span class="tt">sourceOf</span>) and the catalog's schemas (<span class="tt">catalog().schema</span>).  <br /></td></tr>
+<tr class="memitem:a54f819300f9264064f513c833f4b5f74" id="r_a54f819300f9264064f513c833f4b5f74"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a54f819300f9264064f513c833f4b5f74">applyLayoutChoices</a> (std::string const &amp;screenId, <a class="el" href="../../dc/d25/structmorph_1_1ui_1_1LayoutChoices.html">LayoutChoices</a> choices, std::function&lt; void(<a class="el" href="../../d6/d64/structmorph_1_1ui_1_1CustomScreenCheckResult.html">CustomScreenCheckResult</a>)&gt; done)</td></tr>
+<tr class="memdesc:a54f819300f9264064f513c833f4b5f74"><td class="mdescLeft">&#160;</td><td class="mdescRight">Takes the person's choices over a custom screen's base changes and saves the result over the screen: the stored document (<span class="tt">get</span>) updated by <span class="tt"><a class="el" href="#a54f819300f9264064f513c833f4b5f74" title="Takes the person&#39;s choices over a custom screen&#39;s base changes and saves the result over the screen: ...">applyLayoutChoices</a></span>, checked by the server's <span class="tt">check</span>, then saved with the screen's listed attributes. <span class="tt">onOutcome</span> is told <span class="tt">Saved</span>.  <br /></td></tr>
 <tr class="memitem:abb180d27e08b8f1b90ea5a2c18733047" id="r_abb180d27e08b8f1b90ea5a2c18733047"><td class="memItemLeft">std::vector&lt; <a class="el" href="../../db/d84/structmorph_1_1ui_1_1CustomScreenChoice.html">CustomScreenChoice</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#abb180d27e08b8f1b90ea5a2c18733047">openAsChoices</a> (std::string const &amp;screenId) const</td></tr>
 <tr class="memdesc:abb180d27e08b8f1b90ea5a2c18733047"><td class="mdescLeft">&#160;</td><td class="mdescRight">The entries <b>Open as</b> offers on a screen: the base, then each listed custom screen of that base. Empty while custom screens are not offered, for a base that takes no params, and when none is listed. A tracked read of the list and the offer.  <br /></td></tr>
 <tr class="memitem:a1f2b8639c155d62c557e8fe699da70b6" id="r_a1f2b8639c155d62c557e8fe699da70b6"><td class="memItemLeft">std::vector&lt; <a class="el" href="../../db/dc6/structmorph_1_1ui_1_1NavigatorCustomEntry.html">NavigatorCustomEntry</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a1f2b8639c155d62c557e8fe699da70b6">navigatorEntries</a> () const</td></tr>
@@ -204,7 +208,7 @@ Public Member Functions</h2></td></tr>
 <div class="textblock"><p>The headless controller of custom screens over one workspace: what each tab holds and the commands over it, with no view of its own. </p>
 <p>It keeps, per tab, the draft's text, a generation that changes with every draft mounted or ended, whether a save is in flight and the last refusal of a save. Its commands mount a checked edit as a tab's draft, save it as a new screen or over the person's own, discard it, open a screen in a tab's place, and remove a screen; an answer acts only on the draft it was asked about, and one that finds the tab holding another draft, or none, or closed, leaves the tab as it is and is told as an outcome. Outcomes and refusals are data (<span class="tt"><a class="el" href="../../d1/d97/structmorph_1_1ui_1_1CustomScreenOutcome.html" title="An outcome the person should be told of, as data: the view words it.">CustomScreenOutcome</a></span>, <span class="tt"><a class="el" href="../../d6/d64/structmorph_1_1ui_1_1CustomScreenCheckResult.html" title="What a check asked from a source view answers.">CustomScreenCheckResult</a></span>): wording them, in whatever language, is the view's. Its state is reactive, so a view's bindings follow it. Everything runs on the runtime's owner. Neither copyable nor movable. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../de/d2e/custom__screen__controller_8hpp_source.html#l00162">162</a> of file <a class="el" href="../../de/d2e/custom__screen__controller_8hpp_source.html">custom_screen_controller.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/d2e/custom__screen__controller_8hpp_source.html#l00163">163</a> of file <a class="el" href="../../de/d2e/custom__screen__controller_8hpp_source.html">custom_screen_controller.hpp</a>.</p>
 </div><a name="doc-constructors" id="doc-constructors"></a><h2 id="header-doc-constructors" class="groupheader">Constructor &amp; Destructor Documentation</h2>
 <a id="a3e25f0069d15c6b81264f8770aa8c283" name="a3e25f0069d15c6b81264f8770aa8c283"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a3e25f0069d15c6b81264f8770aa8c283">&#9670;&#160;</a></span>CustomScreenController()</h2>
@@ -877,7 +881,7 @@ Public Member Functions</h2></td></tr>
 
 <p>Makes every check asked through <span class="tt"><a class="el" href="#af706b9f964ac5d1180b3feb4e1b481d6" title="Loads text in the client, asks the server&#39;s check against the screen&#39;s base, and mounts what passes a...">preview</a></span> or <span class="tt"><a class="el" href="#a84f732a3df93e54cc5eabe459212e87d" title="Checks text on the server against the stored screen&#39;s base and saves it over the screen: what a sourc...">checkAndSave</a></span> so far answer <span class="tt">Dropped</span>: what a view does when the source view that asked closes or is replaced. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../de/d2e/custom__screen__controller_8hpp_source.html#l00287">287</a> of file <a class="el" href="../../de/d2e/custom__screen__controller_8hpp_source.html">custom_screen_controller.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/d2e/custom__screen__controller_8hpp_source.html#l00288">288</a> of file <a class="el" href="../../de/d2e/custom__screen__controller_8hpp_source.html">custom_screen_controller.hpp</a>.</p>
 
 </div>
 </div>
@@ -1100,6 +1104,72 @@ Public Member Functions</h2></td></tr>
   <table class="params">
     <tr><td class="paramname">screenId</td><td>The person's custom screen. </td></tr>
     <tr><td class="paramname">done</td><td>Called once with nothing, or the store's refusal as it gave it. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+</div>
+</div>
+<a id="a09a90c25fad78c90a8ced5315c9d90cf" name="a09a90c25fad78c90a8ced5315c9d90cf"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a09a90c25fad78c90a8ced5315c9d90cf">&#9670;&#160;</a></span>layoutChangesOf()</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">void morph::ui::CustomScreenController::layoutChangesOf </td>
+          <td>(</td>
+          <td class="paramtype">std::string const &amp;</td>          <td class="paramname"><span class="paramname"><em>screenId</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">std::function&lt; void(std::expected&lt; <a class="el" href="../../d3/dc0/structmorph_1_1ui_1_1LayoutChanges.html">LayoutChanges</a>, std::string &gt;)&gt;</td>          <td class="paramname"><span class="paramname"><em>done</em></span>&#160;)</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>What changed in a custom screen's base since the version it knows: <span class="tt"><a class="el" href="../../d6/d25/custom__screen__versions_8hpp.html#aad8269df39de974c05616a2c9ba161e2" title="What changed in base since the version layout knows.">layoutChanges</a></span> of the stored document (<span class="tt">get</span>) against the base's text (<span class="tt">sourceOf</span>) and the catalog's schemas (<span class="tt">catalog().schema</span>). </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">screenId</td><td>The custom screen. </td></tr>
+    <tr><td class="paramname">done</td><td>Called once with the changes, or why they could not be read. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+</div>
+</div>
+<a id="a54f819300f9264064f513c833f4b5f74" name="a54f819300f9264064f513c833f4b5f74"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a54f819300f9264064f513c833f4b5f74">&#9670;&#160;</a></span>applyLayoutChoices()</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">void morph::ui::CustomScreenController::applyLayoutChoices </td>
+          <td>(</td>
+          <td class="paramtype">std::string const &amp;</td>          <td class="paramname"><span class="paramname"><em>screenId</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype"><a class="el" href="../../dc/d25/structmorph_1_1ui_1_1LayoutChoices.html">LayoutChoices</a></td>          <td class="paramname"><span class="paramname"><em>choices</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">std::function&lt; void(<a class="el" href="../../d6/d64/structmorph_1_1ui_1_1CustomScreenCheckResult.html">CustomScreenCheckResult</a>)&gt;</td>          <td class="paramname"><span class="paramname"><em>done</em></span>&#160;)</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>Takes the person's choices over a custom screen's base changes and saves the result over the screen: the stored document (<span class="tt">get</span>) updated by <span class="tt"><a class="el" href="#a54f819300f9264064f513c833f4b5f74" title="Takes the person&#39;s choices over a custom screen&#39;s base changes and saves the result over the screen: ...">applyLayoutChoices</a></span>, checked by the server's <span class="tt">check</span>, then saved with the screen's listed attributes. <span class="tt">onOutcome</span> is told <span class="tt">Saved</span>. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">screenId</td><td>The person's custom screen. </td></tr>
+    <tr><td class="paramname">choices</td><td>The choice per addition and per removal. </td></tr>
+    <tr><td class="paramname">done</td><td>Called once: <span class="tt">Done</span> once saved, or <span class="tt">Refused</span> with the update's, the check's or the store's refusal; a screen that is not the person's own (<span class="tt"><a class="el" href="#a586e575aaa7533ff839bb4926fd80e39" title="Whether screenId may be saved over and removed from this client: a listed custom screen of the person...">canChange</a></span>) is refused before anything is read. </td></tr>
   </table>
   </dd>
 </dl>

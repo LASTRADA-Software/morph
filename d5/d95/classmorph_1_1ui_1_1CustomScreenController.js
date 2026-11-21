@@ -29,6 +29,8 @@ var classmorph_1_1ui_1_1CustomScreenController =
     [ "openAs", "d5/d95/classmorph_1_1ui_1_1CustomScreenController.html#a298e5d3b6de62b908a52960d3ab511e3", null ],
     [ "openCustom", "d5/d95/classmorph_1_1ui_1_1CustomScreenController.html#a30908af5867d7e98e0c34a166a840477", null ],
     [ "remove", "d5/d95/classmorph_1_1ui_1_1CustomScreenController.html#a4ecf4a0f434033df1a7de0b931ecacbd", null ],
+    [ "layoutChangesOf", "d5/d95/classmorph_1_1ui_1_1CustomScreenController.html#a09a90c25fad78c90a8ced5315c9d90cf", null ],
+    [ "applyLayoutChoices", "d5/d95/classmorph_1_1ui_1_1CustomScreenController.html#a54f819300f9264064f513c833f4b5f74", null ],
     [ "openAsChoices", "d5/d95/classmorph_1_1ui_1_1CustomScreenController.html#abb180d27e08b8f1b90ea5a2c18733047", null ],
     [ "navigatorEntries", "d5/d95/classmorph_1_1ui_1_1CustomScreenController.html#a1f2b8639c155d62c557e8fe699da70b6", null ]
 ];

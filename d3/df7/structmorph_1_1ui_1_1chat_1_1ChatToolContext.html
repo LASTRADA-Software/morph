@@ -144,12 +144,14 @@ Public Attributes</h2></td></tr>
 <tr class="memdesc:a52dc238e46cd09f8a26c22213d0e73d9"><td class="mdescLeft">&#160;</td><td class="mdescRight">How many earlier calls of this tool, in this turn, came back as an error.  <br /></td></tr>
 <tr class="memitem:a6e331b14b82a2a2a055d1da981cc2937" id="r_a6e331b14b82a2a2a055d1da981cc2937"><td class="memItemLeft">std::shared_ptr&lt; void const  &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a6e331b14b82a2a2a055d1da981cc2937">carried</a></td></tr>
 <tr class="memdesc:a6e331b14b82a2a2a055d1da981cc2937"><td class="mdescLeft">&#160;</td><td class="mdescRight">Whatever the tool's <span class="tt">offer</span> handed to <span class="tt"><a class="el" href="../../d0/dfb/structmorph_1_1ui_1_1chat_1_1ChatToolOffer.html#ae5eb4e5e64aab2ef853db7f3d3685e23" title="Whatever the tool&#39;s handler needs again from the work this answer took; reaches it as ChatToolContext...">ChatToolOffer::carried</a></span>; null without one.  <br /></td></tr>
+<tr class="memitem:a809184caad570c888489adf44eae3ef7" id="r_a809184caad570c888489adf44eae3ef7"><td class="memItemLeft">std::shared_ptr&lt; std::map&lt; std::string, <a class="el" href="../../d6/dda/value_8hpp.html#a289786f075a2eb48cac06ad898fc421b">Json</a>, std::less&lt;&gt; &gt; const  &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a809184caad570c888489adf44eae3ef7">schemas</a></td></tr>
+<tr class="memdesc:a809184caad570c888489adf44eae3ef7"><td class="mdescLeft">&#160;</td><td class="mdescRight">The schema of each action of the model types the turn bound, by action id, as the server's <span class="tt"><a class="el" href="#a809184caad570c888489adf44eae3ef7" title="The schema of each action of the model types the turn bound, by action id, as the server&#39;s schemas an...">schemas</a></span> answered them under the turn's session: what a <span class="tt">form</span> node of the document builds its fields from. Null when the service read none.  <br /></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>What an extra tool is told about the turn that may call it. </p>
 <p>Everything in it comes from the verified session or from the client's <span class="tt"><a class="el" href="../../d5/d78/structmorph_1_1ui_1_1chat_1_1TurnRequest.html" title="One thing a person said, and where they were when they said it.">TurnRequest</a></span>, which is a hint: a tool treats the request's fields, and above all its draft, as data a person or a document's author may have written, and checks what it does under <span class="tt"><a class="el" href="#a9d44354b1531f59b68d0a8a19f5aae21" title="The turn&#39;s session, its principal verified.">session</a></span>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../df/d53/extra__tool_8hpp_source.html#l00039">39</a> of file <a class="el" href="../../df/d53/extra__tool_8hpp_source.html">extra_tool.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../df/d53/extra__tool_8hpp_source.html#l00040">40</a> of file <a class="el" href="../../df/d53/extra__tool_8hpp_source.html">extra_tool.hpp</a>.</p>
 </div><a name="doc-variable-members" id="doc-variable-members"></a><h2 id="header-doc-variable-members" class="groupheader">Member Data Documentation</h2>
 <a id="a9d44354b1531f59b68d0a8a19f5aae21" name="a9d44354b1531f59b68d0a8a19f5aae21"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a9d44354b1531f59b68d0a8a19f5aae21">&#9670;&#160;</a></span>session</h2>
@@ -165,7 +167,7 @@ Public Attributes</h2></td></tr>
 
 <p>The turn's session, its principal verified. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../df/d53/extra__tool_8hpp_source.html#l00041">41</a> of file <a class="el" href="../../df/d53/extra__tool_8hpp_source.html">extra_tool.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../df/d53/extra__tool_8hpp_source.html#l00042">42</a> of file <a class="el" href="../../df/d53/extra__tool_8hpp_source.html">extra_tool.hpp</a>.</p>
 
 </div>
 </div>
@@ -183,7 +185,7 @@ Public Attributes</h2></td></tr>
 
 <p>The screen the person is on: its id, title, identity, params, models and draft, and what they said. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../df/d53/extra__tool_8hpp_source.html#l00043">43</a> of file <a class="el" href="../../df/d53/extra__tool_8hpp_source.html">extra_tool.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../df/d53/extra__tool_8hpp_source.html#l00044">44</a> of file <a class="el" href="../../df/d53/extra__tool_8hpp_source.html">extra_tool.hpp</a>.</p>
 
 </div>
 </div>
@@ -201,7 +203,7 @@ Public Attributes</h2></td></tr>
 
 <p>The document the turn is working on, as JSON text: the latest draft a tool accepted in this turn, else the draft the request carried; absent when neither exists, in which case the screen's own document is where the turn started (<span class="tt"><a class="el" href="#a589ca4f65438139600b4f1a29489bf23" title="The bundle the chat serves, which is where an application screen&#39;s own document is read.">bundle</a></span>, <span class="tt"><a class="el" href="#a41431eba98fda8bcd385dbb0e60e8e0a" title="What ChatOptions::documentSource read for the open screen, when the bundle does not hold it....">external</a></span>). A tool that reads or patches the screen reads this, so a call sees what the calls before it accepted. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../df/d53/extra__tool_8hpp_source.html#l00048">48</a> of file <a class="el" href="../../df/d53/extra__tool_8hpp_source.html">extra_tool.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../df/d53/extra__tool_8hpp_source.html#l00049">49</a> of file <a class="el" href="../../df/d53/extra__tool_8hpp_source.html">extra_tool.hpp</a>.</p>
 
 </div>
 </div>
@@ -219,7 +221,7 @@ Public Attributes</h2></td></tr>
 
 <p>The bundle the chat serves, which is where an application screen's own document is read. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../df/d53/extra__tool_8hpp_source.html#l00050">50</a> of file <a class="el" href="../../df/d53/extra__tool_8hpp_source.html">extra_tool.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../df/d53/extra__tool_8hpp_source.html#l00051">51</a> of file <a class="el" href="../../df/d53/extra__tool_8hpp_source.html">extra_tool.hpp</a>.</p>
 
 </div>
 </div>
@@ -237,7 +239,7 @@ Public Attributes</h2></td></tr>
 
 <p>The chat's bounds. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../df/d53/extra__tool_8hpp_source.html#l00052">52</a> of file <a class="el" href="../../df/d53/extra__tool_8hpp_source.html">extra_tool.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../df/d53/extra__tool_8hpp_source.html#l00053">53</a> of file <a class="el" href="../../df/d53/extra__tool_8hpp_source.html">extra_tool.hpp</a>.</p>
 
 </div>
 </div>
@@ -255,7 +257,7 @@ Public Attributes</h2></td></tr>
 
 <p>What <span class="tt"><a class="el" href="../../d3/d4e/structmorph_1_1ui_1_1chat_1_1ChatOptions.html#a6bda5475840e39d169fe01d66d9bcd77" title="Where the document of a screen outside the bundle is read, so the chat can offer such a screen&#39;s acti...">ChatOptions::documentSource</a></span> read for the open screen, when the bundle does not hold it. It is read once per turn, so a tool does not read the screen again. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../df/d53/extra__tool_8hpp_source.html#l00055">55</a> of file <a class="el" href="../../df/d53/extra__tool_8hpp_source.html">extra_tool.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../df/d53/extra__tool_8hpp_source.html#l00056">56</a> of file <a class="el" href="../../df/d53/extra__tool_8hpp_source.html">extra_tool.hpp</a>.</p>
 
 </div>
 </div>
@@ -273,7 +275,7 @@ Public Attributes</h2></td></tr>
 
 <p>How many earlier calls of this tool, in this turn, came back as an error. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../df/d53/extra__tool_8hpp_source.html#l00057">57</a> of file <a class="el" href="../../df/d53/extra__tool_8hpp_source.html">extra_tool.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../df/d53/extra__tool_8hpp_source.html#l00058">58</a> of file <a class="el" href="../../df/d53/extra__tool_8hpp_source.html">extra_tool.hpp</a>.</p>
 
 </div>
 </div>
@@ -291,7 +293,25 @@ Public Attributes</h2></td></tr>
 
 <p>Whatever the tool's <span class="tt">offer</span> handed to <span class="tt"><a class="el" href="../../d0/dfb/structmorph_1_1ui_1_1chat_1_1ChatToolOffer.html#ae5eb4e5e64aab2ef853db7f3d3685e23" title="Whatever the tool&#39;s handler needs again from the work this answer took; reaches it as ChatToolContext...">ChatToolOffer::carried</a></span>; null without one. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../df/d53/extra__tool_8hpp_source.html#l00059">59</a> of file <a class="el" href="../../df/d53/extra__tool_8hpp_source.html">extra_tool.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../df/d53/extra__tool_8hpp_source.html#l00060">60</a> of file <a class="el" href="../../df/d53/extra__tool_8hpp_source.html">extra_tool.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a809184caad570c888489adf44eae3ef7" name="a809184caad570c888489adf44eae3ef7"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a809184caad570c888489adf44eae3ef7">&#9670;&#160;</a></span>schemas</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::shared_ptr&lt;std::map&lt;std::string, <a class="el" href="../../d6/dda/value_8hpp.html#a289786f075a2eb48cac06ad898fc421b">Json</a>, std::less&lt;&gt; &gt; const&gt; morph::ui::chat::ChatToolContext::schemas</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>The schema of each action of the model types the turn bound, by action id, as the server's <span class="tt"><a class="el" href="#a809184caad570c888489adf44eae3ef7" title="The schema of each action of the model types the turn bound, by action id, as the server&#39;s schemas an...">schemas</a></span> answered them under the turn's session: what a <span class="tt">form</span> node of the document builds its fields from. Null when the service read none. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../df/d53/extra__tool_8hpp_source.html#l00064">64</a> of file <a class="el" href="../../df/d53/extra__tool_8hpp_source.html">extra_tool.hpp</a>.</p>
 
 </div>
 </div>

@@ -9,5 +9,7 @@ var structmorph_1_1ui_1_1CustomScreenSummary =
     [ "hash", "d6/d6c/structmorph_1_1ui_1_1CustomScreenSummary.html#a285977ea0ba439a72b252263e9f8e0e6", null ],
     [ "opensWithoutParams", "d6/d6c/structmorph_1_1ui_1_1CustomScreenSummary.html#a1e34834f3d16395e3642645a1793b7a9", null ],
     [ "broken", "d6/d6c/structmorph_1_1ui_1_1CustomScreenSummary.html#a95805c088b971a1cb9eba083ef1a459e", null ],
-    [ "attributes", "d6/d6c/structmorph_1_1ui_1_1CustomScreenSummary.html#af123a2034c09dff926143e9d26f0022d", null ]
+    [ "attributes", "d6/d6c/structmorph_1_1ui_1_1CustomScreenSummary.html#af123a2034c09dff926143e9d26f0022d", null ],
+    [ "needsUpdate", "d6/d6c/structmorph_1_1ui_1_1CustomScreenSummary.html#a3a70ea597d4e0420f650bb05530dce32", null ],
+    [ "needsAttention", "d6/d6c/structmorph_1_1ui_1_1CustomScreenSummary.html#adcb0b4fececd94e9caa213d7b55f4c7f", null ]
 ];

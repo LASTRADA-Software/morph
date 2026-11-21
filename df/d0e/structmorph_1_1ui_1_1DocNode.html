@@ -151,6 +151,8 @@ Public Attributes</h2></td></tr>
 <tr class="memdesc:aecba77cb28946a0dd4d8b468c535c98b"><td class="mdescLeft">&#160;</td><td class="mdescRight">The element id; empty when none is given.  <br /></td></tr>
 <tr class="memitem:a1bade8936c558b84eb8b59235b14eae9" id="r_a1bade8936c558b84eb8b59235b14eae9"><td class="memItemLeft">std::string&#160;</td><td class="memItemRight"><a class="el" href="#a1bade8936c558b84eb8b59235b14eae9">path</a></td></tr>
 <tr class="memdesc:a1bade8936c558b84eb8b59235b14eae9"><td class="mdescLeft">&#160;</td><td class="mdescRight">The node's JSON Pointer.  <br /></td></tr>
+<tr class="memitem:aac56627b4d74e53c720a57ab349272a0" id="r_aac56627b4d74e53c720a57ab349272a0"><td class="memItemLeft">std::string&#160;</td><td class="memItemRight"><a class="el" href="#aac56627b4d74e53c720a57ab349272a0">since</a></td></tr>
+<tr class="memdesc:aac56627b4d74e53c720a57ab349272a0"><td class="mdescLeft">&#160;</td><td class="mdescRight">The version the element first ships in (<span class="tt"><a class="el" href="../../d1/d02/classmorph_1_1forms_1_1FieldVersion.html" title="A dotted numeric version such as 6.11.0, ordered component by component.">forms::FieldVersion</a></span>), as written; empty for the first version. Only an element with an <span class="tt"><a class="el" href="#aecba77cb28946a0dd4d8b468c535c98b" title="The element id; empty when none is given.">id</a></span> carries one.  <br /></td></tr>
 <tr class="memitem:afaa0307e960eabc3fa2f984095c890e9" id="r_afaa0307e960eabc3fa2f984095c890e9"><td class="memItemLeft">std::map&lt; std::string, <a class="el" href="../../d8/d0e/expression_8hpp.html#afd2a5cd1f335b4767cfc15f779a912d5">ExprPtr</a>, std::less&lt;&gt; &gt;&#160;</td><td class="memItemRight"><a class="el" href="#afaa0307e960eabc3fa2f984095c890e9">props</a></td></tr>
 <tr class="memdesc:afaa0307e960eabc3fa2f984095c890e9"><td class="mdescLeft">&#160;</td><td class="mdescRight">Expression properties, by key.  <br /></td></tr>
 <tr class="memitem:a7b41f48ad5f843a4231f8237544ac15a" id="r_a7b41f48ad5f843a4231f8237544ac15a"><td class="memItemLeft">std::map&lt; std::string, <a class="el" href="../../dd/d39/document_8hpp.html#a6fe69a3d9daee6fa69dda107c09687e7">Commands</a>, std::less&lt;&gt; &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a7b41f48ad5f843a4231f8237544ac15a">events</a></td></tr>
@@ -206,7 +208,7 @@ Public Attributes</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The expression, or <span class="tt">nullptr</span> when absent. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00415">415</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00418">418</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
 
 </div>
 </div>
@@ -242,7 +244,7 @@ Public Attributes</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The commands, or <span class="tt">nullptr</span> when absent. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00423">423</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00426">426</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
 
 </div>
 </div>
@@ -278,7 +280,7 @@ Public Attributes</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The nodes; empty when absent. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00431">431</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00434">434</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
 
 </div>
 </div>
@@ -314,7 +316,7 @@ Public Attributes</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The parts; empty when absent. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00439">439</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00442">442</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
 
 </div>
 </div>
@@ -350,7 +352,7 @@ Public Attributes</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The string; empty when absent. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00447">447</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00450">450</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
 
 </div>
 </div>
@@ -386,7 +388,7 @@ Public Attributes</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Its value; <span class="tt">false</span> when absent. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00455">455</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00458">458</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
 
 </div>
 </div>
@@ -427,7 +429,7 @@ Public Attributes</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Its value; <code class="param">absent</code> when the key is absent. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00464">464</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00467">467</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
 
 </div>
 </div>
@@ -486,6 +488,24 @@ Public Attributes</h2></td></tr>
 
 </div>
 </div>
+<a id="aac56627b4d74e53c720a57ab349272a0" name="aac56627b4d74e53c720a57ab349272a0"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#aac56627b4d74e53c720a57ab349272a0">&#9670;&#160;</a></span>since</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::string morph::ui::DocNode::since</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>The version the element first ships in (<span class="tt"><a class="el" href="../../d1/d02/classmorph_1_1forms_1_1FieldVersion.html" title="A dotted numeric version such as 6.11.0, ordered component by component.">forms::FieldVersion</a></span>), as written; empty for the first version. Only an element with an <span class="tt"><a class="el" href="#aecba77cb28946a0dd4d8b468c535c98b" title="The element id; empty when none is given.">id</a></span> carries one. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00395">395</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+
+</div>
+</div>
 <a id="afaa0307e960eabc3fa2f984095c890e9" name="afaa0307e960eabc3fa2f984095c890e9"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#afaa0307e960eabc3fa2f984095c890e9">&#9670;&#160;</a></span>props</h2>
 
@@ -500,7 +520,7 @@ Public Attributes</h2></td></tr>
 
 <p>Expression properties, by key. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00394">394</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00397">397</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
 
 </div>
 </div>
@@ -518,7 +538,7 @@ Public Attributes</h2></td></tr>
 
 <p><a class="el" href="../../d9/d50/structmorph_1_1ui_1_1Command.html" title="One command. Which members a kind uses is listed with each member.">Command</a> lists, by key (<span class="tt">onClick</span>, …), including a custom node's <span class="tt">on</span> events as <span class="tt">on.&lt;<a class="el" href="#a35e9a46703cf903a044c876ad8080d14" title="A command list.">event</a>&gt;</span>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00396">396</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00399">399</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
 
 </div>
 </div>
@@ -536,7 +556,7 @@ Public Attributes</h2></td></tr>
 
 <p>Child node lists, by key (<span class="tt"><a class="el" href="#a18a0afaf234d82c94998876c804bfc1f" title="Child node lists, by key (children, header, loading, error, default, cell, fallback).">children</a></span>, <span class="tt">header</span>, <span class="tt">loading</span>, <span class="tt">error</span>, <span class="tt">default</span>, <span class="tt">cell</span>, <span class="tt">fallback</span>). </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00398">398</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00401">401</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
 
 </div>
 </div>
@@ -554,7 +574,7 @@ Public Attributes</h2></td></tr>
 
 <p>Structured parts, by key (<span class="tt">columns</span>, <span class="tt"><a class="el" href="../../d8/d11/view_8hpp.html#ad8fe6a646863660b9d373f46ed7854f8" title="A tab bar over pages.">tabs</a></span>, <span class="tt">cases</span>, <span class="tt">items</span>, <span class="tt">a11y</span>, <span class="tt">action</span>, <span class="tt">fields</span>, …). </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00400">400</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00403">403</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
 
 </div>
 </div>
@@ -572,7 +592,7 @@ Public Attributes</h2></td></tr>
 
 <p>Plain string properties, by key (<span class="tt">testId</span>, <span class="tt">surface</span>, <span class="tt"><a class="el" href="#a2c0419388a14b9af344095dd2cd1fa5d" title="A plain string property.">name</a></span> of a custom node, <span class="tt">model</span> and <span class="tt">action</span> of a form, <span class="tt">point</span> of <span class="tt">customize</span>, <span class="tt">role</span> of <span class="tt">a11y</span>, a column's <span class="tt"><a class="el" href="#aecba77cb28946a0dd4d8b468c535c98b" title="The element id; empty when none is given.">id</a></span>, …). </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00403">403</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00406">406</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
 
 </div>
 </div>
@@ -590,7 +610,7 @@ Public Attributes</h2></td></tr>
 
 <p><a class="el" href="../../d8/d11/view_8hpp.html#aced394ae55a9af2d993a520a69c2fde2" title="The identity of a Switch case, a Select option, a ForEach or Table row and a drag payload.">Key</a> bindings: chord to commands. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00405">405</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00408">408</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
 
 </div>
 </div>
@@ -608,7 +628,7 @@ Public Attributes</h2></td></tr>
 
 <p>Literal flags, by key (<span class="tt">showLabel</span> of an input). </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00407">407</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00410">410</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
 
 </div>
 </div>
@@ -626,7 +646,7 @@ Public Attributes</h2></td></tr>
 
 <p>The declarations of the scope the node creates (dialog, drawer, switch case, <span class="tt"><a class="el" href="../../d8/d11/view_8hpp.html#a85c5613ad529665babdb9bf7026d81bc" title="One widget per row of a keyed collection read through a binding (a Query&#39;s value() included).">forEach</a></span> or <span class="tt"><a class="el" href="../../d8/d11/view_8hpp.html#acf831cc5b89c22045d627630e96bf21b" title="A table of keyed rows: one Row of cells per row, under the column headers.">table</a></span> row); empty for a node that creates none. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00410">410</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00413">413</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
 
 </div>
 </div>

@@ -128,8 +128,8 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d9/d38/classmo
 <table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 id="header-pub-methods" class="groupheader"><a id="pub-methods" name="pub-methods"></a>
 Public Member Functions</h2></td></tr>
-<tr class="memitem:a37f81bff7ecbaf5b4c58a43799a723fb" id="r_a37f81bff7ecbaf5b4c58a43799a723fb"><td class="memItemLeft">&#160;</td><td class="memItemRight"><a class="el" href="#a37f81bff7ecbaf5b4c58a43799a723fb">CustomScreens</a> (std::shared_ptr&lt; <a class="el" href="../../d3/d8d/classmorph_1_1ui_1_1ICustomScreenStore.html">ICustomScreenStore</a> &gt; store, std::function&lt; std::shared_ptr&lt; <a class="el" href="../../de/d9f/structmorph_1_1ui_1_1ServedBundle.html">ServedBundle</a> const &gt;()&gt; bundle, std::shared_ptr&lt;<a class="el" href="../../d5/d07/structmorph_1_1session_1_1IAuthorizer.html">::morph::session::IAuthorizer</a> const &gt; authorizer, <a class="el" href="../../da/dba/structmorph_1_1ui_1_1CustomScreensOptions.html">CustomScreensOptions</a> options)</td></tr>
-<tr class="memdesc:a37f81bff7ecbaf5b4c58a43799a723fb"><td class="mdescLeft">&#160;</td><td class="mdescRight">The custom screens of one application.  <br /></td></tr>
+<tr class="memitem:adf70563d8cff8f68980e656b996b6732" id="r_adf70563d8cff8f68980e656b996b6732"><td class="memItemLeft">&#160;</td><td class="memItemRight"><a class="el" href="#adf70563d8cff8f68980e656b996b6732">CustomScreens</a> (std::shared_ptr&lt; <a class="el" href="../../d3/d8d/classmorph_1_1ui_1_1ICustomScreenStore.html">ICustomScreenStore</a> &gt; store, std::function&lt; std::shared_ptr&lt; <a class="el" href="../../de/d9f/structmorph_1_1ui_1_1ServedBundle.html">ServedBundle</a> const &gt;()&gt; bundle, std::shared_ptr&lt;<a class="el" href="../../d5/d07/structmorph_1_1session_1_1IAuthorizer.html">::morph::session::IAuthorizer</a> const &gt; authorizer, <a class="el" href="../../da/dba/structmorph_1_1ui_1_1CustomScreensOptions.html">CustomScreensOptions</a> options, <a class="el" href="../../d6/d25/custom__screen__versions_8hpp.html#ac1d6430ec34d803662c2c6478f027d96">ActionSchemaLookup</a> schemas={})</td></tr>
+<tr class="memdesc:adf70563d8cff8f68980e656b996b6732"><td class="mdescLeft">&#160;</td><td class="mdescRight">The custom screens of one application.  <br /></td></tr>
 <tr class="memitem:a27218e378aca9384f7f41026c861fbf2" id="r_a27218e378aca9384f7f41026c861fbf2"><td class="memItemLeft">::core::async::Task&lt; std::optional&lt; <a class="el" href="../../de/d52/structmorph_1_1ui_1_1Refusal.html">Refusal</a> &gt; &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a27218e378aca9384f7f41026c861fbf2">check</a> (<a class="el" href="../../dd/d85/structmorph_1_1session_1_1Context.html">::morph::session::Context</a> const &amp;session, std::string app, std::string basedOn, std::string document) const</td></tr>
 <tr class="memdesc:a27218e378aca9384f7f41026c861fbf2"><td class="mdescLeft">&#160;</td><td class="mdescRight">Whether <code class="param">document</code> would be saved, by the checks of <span class="tt"><a class="el" href="../../d5/d92/custom__screens_8hpp.html#a7095b18a95f117f2e315df0de8fdb9c9" title="Runs every check a custom document passes, in order, and answers the first refusal.">checkCustomScreen</a></span> and the verdict cache that the <span class="tt"><a class="el" href="#a27218e378aca9384f7f41026c861fbf2" title="Whether document would be saved, by the checks of checkCustomScreen and the verdict cache that the ch...">check</a></span> action uses.  <br /></td></tr>
 <tr class="memitem:a81f7d77e3bff91dd53b6c24cb68247de" id="r_a81f7d77e3bff91dd53b6c24cb68247de"><td class="memItemLeft">::core::async::Task&lt; std::expected&lt; <a class="el" href="../../df/d81/structmorph_1_1ui_1_1CustomScreenFound.html">CustomScreenFound</a>, <a class="el" href="../../db/d87/structmorph_1_1ui_1_1CustomScreenRefusal.html">CustomScreenRefusal</a> &gt; &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a81f7d77e3bff91dd53b6c24cb68247de">get</a> (<a class="el" href="../../dd/d85/structmorph_1_1session_1_1Context.html">::morph::session::Context</a> const &amp;session, std::string app, std::string screenId) const</td></tr>
@@ -141,10 +141,10 @@ Public Member Functions</h2></td></tr>
 <div class="textblock"><p>A server's custom screens: the store, the bundle being served, the authoriser, the bounds and the verdict cache that the model and anything beside it (an assistant that proposes screens) share. </p>
 <p><span class="tt"><a class="el" href="../../d5/d92/custom__screens_8hpp.html#a14c823c1805894c239f5f86a35b09266" title="Registers the custom screens model and its five actions, with a factory that gives every instance one...">registerCustomScreens</a></span> makes it and returns it. Every member is safe to call from any thread: the verdict cache is locked, the store is the application's, and the bundle is read through the getter given at registration. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html#l00589">589</a> of file <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html">custom_screens.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html#l00595">595</a> of file <a class="el" href="../../d5/d92/custom__screens_8hpp_source.html">custom_screens.hpp</a>.</p>
 </div><a name="doc-constructors" id="doc-constructors"></a><h2 id="header-doc-constructors" class="groupheader">Constructor &amp; Destructor Documentation</h2>
-<a id="a37f81bff7ecbaf5b4c58a43799a723fb" name="a37f81bff7ecbaf5b4c58a43799a723fb"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a37f81bff7ecbaf5b4c58a43799a723fb">&#9670;&#160;</a></span>CustomScreens()</h2>
+<a id="adf70563d8cff8f68980e656b996b6732" name="adf70563d8cff8f68980e656b996b6732"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#adf70563d8cff8f68980e656b996b6732">&#9670;&#160;</a></span>CustomScreens()</h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -167,7 +167,12 @@ Public Member Functions</h2></td></tr>
         <tr>
           <td class="paramkey"></td>
           <td></td>
-          <td class="paramtype"><a class="el" href="../../da/dba/structmorph_1_1ui_1_1CustomScreensOptions.html">CustomScreensOptions</a></td>          <td class="paramname"><span class="paramname"><em>options</em></span>&#160;)</td>
+          <td class="paramtype"><a class="el" href="../../da/dba/structmorph_1_1ui_1_1CustomScreensOptions.html">CustomScreensOptions</a></td>          <td class="paramname"><span class="paramname"><em>options</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype"><a class="el" href="../../d6/d25/custom__screen__versions_8hpp.html#ac1d6430ec34d803662c2c6478f027d96">ActionSchemaLookup</a></td>          <td class="paramname"><span class="paramname"><em>schemas</em></span><span class="paramdefsep"> = </span><span class="paramdefval">{}</span>&#160;)</td>
         </tr>
       </table>
 </div><div class="memdoc">
@@ -179,6 +184,7 @@ Public Member Functions</h2></td></tr>
     <tr><td class="paramname">bundle</td><td>The bundle being served now. Called at every use, so a development reload is seen, and from action strands on any thread, so it must be thread-safe. </td></tr>
     <tr><td class="paramname">authorizer</td><td>The server's authoriser, for the permitted set and the base screen's admission. </td></tr>
     <tr><td class="paramname">options</td><td>The bounds. </td></tr>
+    <tr><td class="paramname">schemas</td><td>The schemas of the actions base screens' forms bind, for the base's version; called from action strands on any thread, so it must be thread-safe. Empty counts no field versions. </td></tr>
   </table>
   </dd>
 </dl>

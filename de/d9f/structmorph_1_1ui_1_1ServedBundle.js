@@ -13,5 +13,6 @@ var structmorph_1_1ui_1_1ServedBundle =
     [ "actions", "de/d9f/structmorph_1_1ui_1_1ServedBundle.html#a9753af171d05e310b61428b051b338f8", null ],
     [ "views", "de/d9f/structmorph_1_1ui_1_1ServedBundle.html#a3b57667d9c1e1b737f9a68c8d76e1188", null ],
     [ "wizards", "de/d9f/structmorph_1_1ui_1_1ServedBundle.html#a9bf33f1a83cbbcbc86b6f0a652ce0526", null ],
-    [ "catalog", "de/d9f/structmorph_1_1ui_1_1ServedBundle.html#a01d1842ee9340a83b18d08f307876e4d", null ]
+    [ "catalog", "de/d9f/structmorph_1_1ui_1_1ServedBundle.html#a01d1842ee9340a83b18d08f307876e4d", null ],
+    [ "fieldTexts", "de/d9f/structmorph_1_1ui_1_1ServedBundle.html#a49031bde5c3825c5f288405c8b66faab", null ]
 ];

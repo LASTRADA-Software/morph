@@ -175,10 +175,12 @@ IEnvelopeService &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (IEnv
 <td class="markdownTableBodyNone"><span class="tt">ui-fetch</span> of any other file  </td><td class="markdownTableBodyNone"><span class="tt">authorize(session, "ui", "fetch")</span>; for a screen, also the catalog's rule  </td></tr>
 <tr class="markdownTableRowOdd">
 <td class="markdownTableBodyNone"><span class="tt">ui-evaluate</span>  </td><td class="markdownTableBodyNone"><span class="tt">authorize(session, modelType, actionType)</span>: as the action it evaluates  </td></tr>
+<tr class="markdownTableRowEven">
+<td class="markdownTableBodyNone"><span class="tt">ui-texts</span>  </td><td class="markdownTableBodyNone"><span class="tt">authorize(session, "ui", "texts")</span>  </td></tr>
 </table>
 <p>A refusal is <span class="tt">err "unauthorized"</span>. A request body that is too large, malformed or carries a must-understand key is refused with the parser's reason. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d3/d31/service_8hpp_source.html#l00397">397</a> of file <a class="el" href="../../d3/d31/service_8hpp_source.html">service.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d3/d31/service_8hpp_source.html#l00436">436</a> of file <a class="el" href="../../d3/d31/service_8hpp_source.html">service.hpp</a>.</p>
 </div><a name="doc-constructors" id="doc-constructors"></a><h2 id="header-doc-constructors" class="groupheader">Constructor &amp; Destructor Documentation</h2>
 <a id="ac9ac244f8579c90e84493fb529577e96" name="ac9ac244f8579c90e84493fb529577e96"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#ac9ac244f8579c90e84493fb529577e96">&#9670;&#160;</a></span>UiService()</h2>
@@ -266,7 +268,7 @@ IEnvelopeService &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (IEnv
   </table>
   </dd>
 </dl>
-<dl class="section return"><dt>Returns</dt><dd><span class="tt">true</span> for <span class="tt">ui-hello</span>, <span class="tt">ui-catalog</span>, <span class="tt">ui-fetch</span> and <span class="tt">ui-evaluate</span>. </dd></dl>
+<dl class="section return"><dt>Returns</dt><dd><span class="tt">true</span> for <span class="tt">ui-hello</span>, <span class="tt">ui-catalog</span>, <span class="tt">ui-fetch</span>, <span class="tt">ui-evaluate</span> and <span class="tt">ui-texts</span>, and for <span class="tt">ui-file</span> when the service has a file store. </dd></dl>
 
 <p>Implements <a class="el" href="../../d6/de2/classmorph_1_1backend_1_1IEnvelopeService.html#a508eee14a840935f84eb6ab6ef91fece">morph::backend::IEnvelopeService</a>.</p>
 

@@ -5,6 +5,7 @@ var catalogue_8hpp =
     [ "morph::ui::detail::catalogue::TitleParts", "d2/d80/structmorph_1_1ui_1_1detail_1_1catalogue_1_1TitleParts.html", "d2/d80/structmorph_1_1ui_1_1detail_1_1catalogue_1_1TitleParts" ],
     [ "morph::ui::catalogueLocale", "d1/d1e/catalogue_8hpp.html#a78b07ad959f060c3d016e43b57758479", null ],
     [ "morph::ui::parseCatalogue", "d1/d1e/catalogue_8hpp.html#a935ff438e23593faa128224518dfad59", null ],
+    [ "morph::ui::layeredProvider", "d1/d1e/catalogue_8hpp.html#a2ba834c489d6d2fe5bb163bc36c4ac78", null ],
     [ "morph::ui::loadCatalogues", "d1/d1e/catalogue_8hpp.html#aa05cc67c04981b6b969f96379db95aa8", null ],
     [ "morph::ui::textInEveryLocale", "d1/d1e/catalogue_8hpp.html#afd37662fba518c148e132a5d8113159e", null ],
     [ "morph::ui::matchesInAnyLocale", "d1/d1e/catalogue_8hpp.html#a6c81785729676e28fe2b27748dbe05b5", null ],

@@ -16,6 +16,7 @@ var classmorph_1_1forms_1_1CollectionSession =
     [ "openRow", "df/d8a/classmorph_1_1forms_1_1CollectionSession.html#ad080537430c994dd2dd113cb1c741c72", null ],
     [ "editor", "df/d8a/classmorph_1_1forms_1_1CollectionSession.html#a09aa7e61ccbec002acf7ab1802fa515e", null ],
     [ "setFormat", "df/d8a/classmorph_1_1forms_1_1CollectionSession.html#ae2a366cfa62d57e2717a5cb6443221c5", null ],
+    [ "setTranslations", "df/d8a/classmorph_1_1forms_1_1CollectionSession.html#a507c37aed56296b5424b873e6db8ce7a", null ],
     [ "actionPending", "df/d8a/classmorph_1_1forms_1_1CollectionSession.html#af9ae8c29e927b6909e1890d2f8c5bddc", null ],
     [ "actionError", "df/d8a/classmorph_1_1forms_1_1CollectionSession.html#a7dd54637c881ef612adfcae7fd8d11e7", null ]
 ];

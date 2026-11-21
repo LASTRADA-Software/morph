@@ -167,6 +167,8 @@ Public Member Functions</h2></td></tr>
 <tr class="memdesc:a09aa7e61ccbec002acf7ab1802fa515e"><td class="mdescLeft">&#160;</td><td class="mdescRight">The row editor.  <br /></td></tr>
 <tr class="memitem:ae2a366cfa62d57e2717a5cb6443221c5" id="r_ae2a366cfa62d57e2717a5cb6443221c5"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#ae2a366cfa62d57e2717a5cb6443221c5">setFormat</a> (<a class="el" href="../../dc/ddc/structmorph_1_1render_1_1NumericLocale.html">render::NumericLocale</a> locale, std::string datePattern, std::string dateTimePattern)</td></tr>
 <tr class="memdesc:ae2a366cfa62d57e2717a5cb6443221c5"><td class="mdescLeft">&#160;</td><td class="mdescRight">Replaces the number locale and the date patterns the editor reads (<span class="tt"><a class="el" href="../../dc/dd2/classmorph_1_1forms_1_1FormSession.html#af8e56e5805129b4ce748be40fb6f4ccd" title="Replaces the number locale and the date patterns the form reads, so a mounted form follows a change o...">FormSession::setFormat</a></span>); nothing when the collection has no editor.  <br /></td></tr>
+<tr class="memitem:a507c37aed56296b5424b873e6db8ce7a" id="r_a507c37aed56296b5424b873e6db8ce7a"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a507c37aed56296b5424b873e6db8ce7a">setTranslations</a> (<a class="el" href="../../d8/d22/render_2i18n_8hpp.html#a6022e390d39cf81cd37bba36b5f65283">render::TranslationProvider</a> translations, std::string bcp47)</td></tr>
+<tr class="memdesc:a507c37aed56296b5424b873e6db8ce7a"><td class="mdescLeft">&#160;</td><td class="mdescRight">Replaces the translations and the locale the editor resolves its texts in (<span class="tt"><a class="el" href="../../dc/dd2/classmorph_1_1forms_1_1FormSession.html#a338624a4533986613d24438666971bd4" title="Replaces the translations and the locale the form&#39;s texts are resolved in, so a mounted form follows ...">FormSession::setTranslations</a></span>); nothing when the collection has no editor.  <br /></td></tr>
 <tr class="memitem:af9ae8c29e927b6909e1890d2f8c5bddc" id="r_af9ae8c29e927b6909e1890d2f8c5bddc"><td class="memItemLeft">bool&#160;</td><td class="memItemRight"><a class="el" href="#af9ae8c29e927b6909e1890d2f8c5bddc">actionPending</a> () const</td></tr>
 <tr class="memdesc:af9ae8c29e927b6909e1890d2f8c5bddc"><td class="mdescLeft">&#160;</td><td class="mdescRight">Whether an action is in flight. Tracked.  <br /></td></tr>
 <tr class="memitem:a7dd54637c881ef612adfcae7fd8d11e7" id="r_a7dd54637c881ef612adfcae7fd8d11e7"><td class="memItemLeft">std::exception_ptr&#160;</td><td class="memItemRight"><a class="el" href="#a7dd54637c881ef612adfcae7fd8d11e7">actionError</a> () const</td></tr>
@@ -730,6 +732,46 @@ Public Member Functions</h2></td></tr>
 
 </div>
 </div>
+<a id="a507c37aed56296b5424b873e6db8ce7a" name="a507c37aed56296b5424b873e6db8ce7a"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a507c37aed56296b5424b873e6db8ce7a">&#9670;&#160;</a></span>setTranslations()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">void morph::forms::CollectionSession::setTranslations </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="../../d8/d22/render_2i18n_8hpp.html#a6022e390d39cf81cd37bba36b5f65283">render::TranslationProvider</a></td>          <td class="paramname"><span class="paramname"><em>translations</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">std::string</td>          <td class="paramname"><span class="paramname"><em>bcp47</em></span>&#160;)</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Replaces the translations and the locale the editor resolves its texts in (<span class="tt"><a class="el" href="../../dc/dd2/classmorph_1_1forms_1_1FormSession.html#a338624a4533986613d24438666971bd4" title="Replaces the translations and the locale the form&#39;s texts are resolved in, so a mounted form follows ...">FormSession::setTranslations</a></span>); nothing when the collection has no editor. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">translations</td><td>The catalog; empty shows every schema literal. </td></tr>
+    <tr><td class="paramname">bcp47</td><td>The locale. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d4/db6/collection_8hpp_source.html#l00509">509</a> of file <a class="el" href="../../d4/db6/collection_8hpp_source.html">collection.hpp</a>.</p>
+
+</div>
+</div>
 <a id="af9ae8c29e927b6909e1890d2f8c5bddc" name="af9ae8c29e927b6909e1890d2f8c5bddc"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#af9ae8c29e927b6909e1890d2f8c5bddc">&#9670;&#160;</a></span>actionPending()</h2>
 
@@ -756,7 +798,7 @@ Public Member Functions</h2></td></tr>
 <p>Whether an action is in flight. Tracked. </p>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">true</span> while one is. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/db6/collection_8hpp_source.html#l00507">507</a> of file <a class="el" href="../../d4/db6/collection_8hpp_source.html">collection.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/db6/collection_8hpp_source.html#l00517">517</a> of file <a class="el" href="../../d4/db6/collection_8hpp_source.html">collection.hpp</a>.</p>
 
 </div>
 </div>
@@ -786,7 +828,7 @@ Public Member Functions</h2></td></tr>
 <p>The last action failure. Tracked. </p>
 <dl class="section return"><dt>Returns</dt><dd>The exception, or null; cleared by the next success. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/db6/collection_8hpp_source.html#l00511">511</a> of file <a class="el" href="../../d4/db6/collection_8hpp_source.html">collection.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/db6/collection_8hpp_source.html#l00521">521</a> of file <a class="el" href="../../d4/db6/collection_8hpp_source.html">collection.hpp</a>.</p>
 
 </div>
 </div>

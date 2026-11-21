@@ -168,6 +168,12 @@ Public Member Functions</h2></td></tr>
 <tr class="memdesc:ac48d8f353dd23c29435731b2460280ed"><td class="mdescLeft">&#160;</td><td class="mdescRight">The bundle the catalog currently lists.  <br /></td></tr>
 <tr class="memitem:a7cf36584cd533b47f9cdf1ca415b3179" id="r_a7cf36584cd533b47f9cdf1ca415b3179"><td class="memItemLeft"><a class="el" href="../../da/d9d/classmorph_1_1ui_1_1MessageCatalogues.html">ui::MessageCatalogues</a>&#160;</td><td class="memItemRight"><a class="el" href="#a7cf36584cd533b47f9cdf1ca415b3179">catalogues</a> () const</td></tr>
 <tr class="memdesc:a7cf36584cd533b47f9cdf1ca415b3179"><td class="mdescLeft">&#160;</td><td class="mdescRight">The message catalogues of the current bundle, loaded from its verified files.  <br /></td></tr>
+<tr class="memitem:a8137cc27fbe07ed1305f9778aa5573a2" id="r_a8137cc27fbe07ed1305f9778aa5573a2"><td class="memItemLeft"><a class="el" href="../../da/d9d/classmorph_1_1ui_1_1MessageCatalogues.html">ui::MessageCatalogues</a> const &amp;&#160;</td><td class="memItemRight"><a class="el" href="#a8137cc27fbe07ed1305f9778aa5573a2">texts</a> () const noexcept</td></tr>
+<tr class="memdesc:a8137cc27fbe07ed1305f9778aa5573a2"><td class="mdescLeft">&#160;</td><td class="mdescRight">The texts the server sent (<span class="tt">ui-texts</span>) for the locale <span class="tt"><a class="el" href="#ac3d1426f93f2c065a9a83eb82739d450" title="The locale the source asks the server&#39;s texts in: the session&#39;s, or en, the locale a session starts i...">textsLocale</a></span> names, as one catalogue, which a shell reads before the bundle's own (<span class="tt">layeredProvider</span>).  <br /></td></tr>
+<tr class="memitem:ac3d1426f93f2c065a9a83eb82739d450" id="r_ac3d1426f93f2c065a9a83eb82739d450"><td class="memItemLeft">std::string&#160;</td><td class="memItemRight"><a class="el" href="#ac3d1426f93f2c065a9a83eb82739d450">textsLocale</a> () const</td></tr>
+<tr class="memdesc:ac3d1426f93f2c065a9a83eb82739d450"><td class="mdescLeft">&#160;</td><td class="mdescRight">The locale the source asks the server's texts in: the session's, or <span class="tt">en</span>, the locale a session starts in, while the session names none.  <br /></td></tr>
+<tr class="memitem:ae45dcebaa837c6e552aa5da38b224c68" id="r_ae45dcebaa837c6e552aa5da38b224c68"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#ae45dcebaa837c6e552aa5da38b224c68">setLocale</a> (std::string locale, std::function&lt; void()&gt; loaded)</td></tr>
+<tr class="memdesc:ae45dcebaa837c6e552aa5da38b224c68"><td class="mdescLeft">&#160;</td><td class="mdescRight">Makes <code class="param">locale</code> the session's (<span class="tt"><a class="el" href="../../dd/d85/structmorph_1_1session_1_1Context.html#ac2a24784bc441ed64dbb3753fd9d5633" title="BCP-47 locale tag (e.g. en-US, fr-FR) for i18n. Empty for app default.">session::Context::locale</a></span>), so every later model call and UI-service request carries it, the chat's turns included; and, when the source is open and its texts are for another locale, asks the server for the texts in <code class="param">locale</code>.  <br /></td></tr>
 <tr class="memitem:add2a95e2a800a3c9ae2ee78dc6108497" id="r_add2a95e2a800a3c9ae2ee78dc6108497"><td class="memItemLeft"><a class="el" href="../../de/df1/structmorph_1_1ui_1_1CatalogReply.html">ui::CatalogReply</a> const *&#160;</td><td class="memItemRight"><a class="el" href="#add2a95e2a800a3c9ae2ee78dc6108497">catalogReply</a> () const noexcept</td></tr>
 <tr class="memdesc:add2a95e2a800a3c9ae2ee78dc6108497"><td class="mdescLeft">&#160;</td><td class="mdescRight">The catalog for the current principal: its entries, what the principal may run, and the facts.  <br /></td></tr>
 <tr class="memitem:aa22e5799d85b1e7bff781e9176a79e0a" id="r_aa22e5799d85b1e7bff781e9176a79e0a"><td class="memItemLeft"><a class="el" href="../../d0/dab/bundle_8hpp.html#a1a29de123e21fc804c77937bcb84f2d9">ui::SchemasByModel</a> const &amp;&#160;</td><td class="memItemRight"><a class="el" href="#aa22e5799d85b1e7bff781e9176a79e0a">schemasByModel</a> () const noexcept</td></tr>
@@ -611,6 +617,94 @@ Protected Member Functions</h2></td></tr>
 
 </div>
 </div>
+<a id="a8137cc27fbe07ed1305f9778aa5573a2" name="a8137cc27fbe07ed1305f9778aa5573a2"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a8137cc27fbe07ed1305f9778aa5573a2">&#9670;&#160;</a></span>texts()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="../../da/d9d/classmorph_1_1ui_1_1MessageCatalogues.html">ui::MessageCatalogues</a> const  &amp; morph::client::Source::texts </td>
+          <td>(</td>
+          <td class="paramname"><span class="paramname"><em></em></span></td><td>)</td>
+          <td> const</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span><span class="mlabel noexcept">noexcept</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>The texts the server sent (<span class="tt">ui-texts</span>) for the locale <span class="tt"><a class="el" href="#ac3d1426f93f2c065a9a83eb82739d450" title="The locale the source asks the server&#39;s texts in: the session&#39;s, or en, the locale a session starts i...">textsLocale</a></span> names, as one catalogue, which a shell reads before the bundle's own (<span class="tt">layeredProvider</span>). </p>
+<dl class="section return"><dt>Returns</dt><dd>They; empty before any arrived, or when the server serves none. Their <span class="tt">problems()</span> hold why the last request was refused, when it was refused for any reason but <span class="tt">kNoTextsReason</span> or a server that does not know the kind. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d2/d2e/source_8hpp_source.html#l00152">152</a> of file <a class="el" href="../../d2/d2e/source_8hpp_source.html">source.hpp</a>.</p>
+
+</div>
+</div>
+<a id="ac3d1426f93f2c065a9a83eb82739d450" name="ac3d1426f93f2c065a9a83eb82739d450"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ac3d1426f93f2c065a9a83eb82739d450">&#9670;&#160;</a></span>textsLocale()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::string morph::client::Source::textsLocale </td>
+          <td>(</td>
+          <td class="paramname"><span class="paramname"><em></em></span></td><td>)</td>
+          <td> const</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>The locale the source asks the server's texts in: the session's, or <span class="tt">en</span>, the locale a session starts in, while the session names none. </p>
+<dl class="section return"><dt>Returns</dt><dd>The tag. </dd></dl>
+
+</div>
+</div>
+<a id="ae45dcebaa837c6e552aa5da38b224c68" name="ae45dcebaa837c6e552aa5da38b224c68"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ae45dcebaa837c6e552aa5da38b224c68">&#9670;&#160;</a></span>setLocale()</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">void morph::client::Source::setLocale </td>
+          <td>(</td>
+          <td class="paramtype">std::string</td>          <td class="paramname"><span class="paramname"><em>locale</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">std::function&lt; void()&gt;</td>          <td class="paramname"><span class="paramname"><em>loaded</em></span>&#160;)</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>Makes <code class="param">locale</code> the session's (<span class="tt"><a class="el" href="../../dd/d85/structmorph_1_1session_1_1Context.html#ac2a24784bc441ed64dbb3753fd9d5633" title="BCP-47 locale tag (e.g. en-US, fr-FR) for i18n. Empty for app default.">session::Context::locale</a></span>), so every later model call and UI-service request carries it, the chat's turns included; and, when the source is open and its texts are for another locale, asks the server for the texts in <code class="param">locale</code>. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">locale</td><td>The BCP 47 tag. </td></tr>
+    <tr><td class="paramname">loaded</td><td>Called once, on the owner, after a request for texts was answered and <span class="tt"><a class="el" href="#a8137cc27fbe07ed1305f9778aa5573a2" title="The texts the server sent (ui-texts) for the locale textsLocale names, as one catalogue,...">texts()</a></span> reflects it; not called when no request was needed, nor after <span class="tt"><a class="el" href="#aafe1e52304476a80028d428748b3344a" title="Drops a ready not yet delivered and releases the bridge, the transport and the bundle.">close</a></span>. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+</div>
+</div>
 <a id="add2a95e2a800a3c9ae2ee78dc6108497" name="add2a95e2a800a3c9ae2ee78dc6108497"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#add2a95e2a800a3c9ae2ee78dc6108497">&#9670;&#160;</a></span>catalogReply()</h2>
 
@@ -637,7 +731,7 @@ Protected Member Functions</h2></td></tr>
 <p>The catalog for the current principal: its entries, what the principal may run, and the facts. </p>
 <dl class="section return"><dt>Returns</dt><dd>It; null before a bundle was delivered. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d2/d2e/source_8hpp_source.html#l00149">149</a> of file <a class="el" href="../../d2/d2e/source_8hpp_source.html">source.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d2/d2e/source_8hpp_source.html#l00169">169</a> of file <a class="el" href="../../d2/d2e/source_8hpp_source.html">source.hpp</a>.</p>
 
 </div>
 </div>
@@ -667,7 +761,7 @@ Protected Member Functions</h2></td></tr>
 <p>The <span class="tt">schemas</span> document of every model the catalog names, by model type, or why it did not arrive: what the explorer lists each model's actions from. </p>
 <dl class="section return"><dt>Returns</dt><dd>Them; empty before a bundle was delivered. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d2/d2e/source_8hpp_source.html#l00156">156</a> of file <a class="el" href="../../d2/d2e/source_8hpp_source.html">source.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d2/d2e/source_8hpp_source.html#l00176">176</a> of file <a class="el" href="../../d2/d2e/source_8hpp_source.html">source.hpp</a>.</p>
 
 </div>
 </div>
@@ -697,7 +791,7 @@ Protected Member Functions</h2></td></tr>
 <p>The principal the source's session carries now. </p>
 <dl class="section return"><dt>Returns</dt><dd>It; empty for none. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d2/d2e/source_8hpp_source.html#l00160">160</a> of file <a class="el" href="../../d2/d2e/source_8hpp_source.html">source.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d2/d2e/source_8hpp_source.html#l00180">180</a> of file <a class="el" href="../../d2/d2e/source_8hpp_source.html">source.hpp</a>.</p>
 
 </div>
 </div>
@@ -815,7 +909,7 @@ Protected Member Functions</h2></td></tr>
 <p>Whether the source's transport is connected now: false from the moment the transport drops until it connects again. An in-process source has no transport to lose and stays true. </p>
 <dl class="section return"><dt>Returns</dt><dd>The state. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d2/d2e/source_8hpp_source.html#l00182">182</a> of file <a class="el" href="../../d2/d2e/source_8hpp_source.html">source.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d2/d2e/source_8hpp_source.html#l00202">202</a> of file <a class="el" href="../../d2/d2e/source_8hpp_source.html">source.hpp</a>.</p>
 
 </div>
 </div>
@@ -872,7 +966,7 @@ Protected Member Functions</h2></td></tr>
 
 <p>Reimplemented in <a class="el" href="../../d1/d98/classmorph_1_1client_1_1LocalSource.html#a269e1ddb653265e435e2d999c9e0683b">morph::client::LocalSource</a>, and <a class="el" href="../../d2/d13/classmorph_1_1client_1_1RemoteSource.html#a0a9a81c60c8d4e6f4d3afa276860a56d">morph::client::RemoteSource</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../d2/d2e/source_8hpp_source.html#l00191">191</a> of file <a class="el" href="../../d2/d2e/source_8hpp_source.html">source.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d2/d2e/source_8hpp_source.html#l00211">211</a> of file <a class="el" href="../../d2/d2e/source_8hpp_source.html">source.hpp</a>.</p>
 
 </div>
 </div>
@@ -955,7 +1049,7 @@ Protected Member Functions</h2></td></tr>
 <p>The exchange the UI service is reached by, which a client's other services share. </p>
 <dl class="section return"><dt>Returns</dt><dd>It; empty before the source opened. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d2/d2e/source_8hpp_source.html#l00205">205</a> of file <a class="el" href="../../d2/d2e/source_8hpp_source.html">source.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d2/d2e/source_8hpp_source.html#l00225">225</a> of file <a class="el" href="../../d2/d2e/source_8hpp_source.html">source.hpp</a>.</p>
 
 </div>
 </div>
@@ -985,7 +1079,7 @@ Protected Member Functions</h2></td></tr>
 <p>The session every call carries now, which a sign-in replaces. </p>
 <dl class="section return"><dt>Returns</dt><dd>It. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d2/d2e/source_8hpp_source.html#l00209">209</a> of file <a class="el" href="../../d2/d2e/source_8hpp_source.html">source.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d2/d2e/source_8hpp_source.html#l00229">229</a> of file <a class="el" href="../../d2/d2e/source_8hpp_source.html">source.hpp</a>.</p>
 
 </div>
 </div>
@@ -1017,7 +1111,7 @@ Protected Member Functions</h2></td></tr>
 
 <p>Reimplemented in <a class="el" href="../../d1/d98/classmorph_1_1client_1_1LocalSource.html#a186bfa54800603e503af579499bd026f">morph::client::LocalSource</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../d2/d2e/source_8hpp_source.html#l00213">213</a> of file <a class="el" href="../../d2/d2e/source_8hpp_source.html">source.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d2/d2e/source_8hpp_source.html#l00233">233</a> of file <a class="el" href="../../d2/d2e/source_8hpp_source.html">source.hpp</a>.</p>
 
 </div>
 </div>
@@ -1085,7 +1179,7 @@ Protected Member Functions</h2></td></tr>
 
 <p>Reimplemented in <a class="el" href="../../d2/d13/classmorph_1_1client_1_1RemoteSource.html#aaf58b97837f7d5217dda96ae7d16e7dc">morph::client::RemoteSource</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../d2/d2e/source_8hpp_source.html#l00234">234</a> of file <a class="el" href="../../d2/d2e/source_8hpp_source.html">source.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d2/d2e/source_8hpp_source.html#l00254">254</a> of file <a class="el" href="../../d2/d2e/source_8hpp_source.html">source.hpp</a>.</p>
 
 </div>
 </div>
@@ -1116,7 +1210,7 @@ Protected Member Functions</h2></td></tr>
 
 <p>Reimplemented in <a class="el" href="../../d1/d98/classmorph_1_1client_1_1LocalSource.html#aecef09617452f1b38080912d72268f25">morph::client::LocalSource</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../d2/d2e/source_8hpp_source.html#l00237">237</a> of file <a class="el" href="../../d2/d2e/source_8hpp_source.html">source.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d2/d2e/source_8hpp_source.html#l00257">257</a> of file <a class="el" href="../../d2/d2e/source_8hpp_source.html">source.hpp</a>.</p>
 
 </div>
 </div>
@@ -1186,7 +1280,7 @@ Protected Member Functions</h2></td></tr>
 <p>The session every request carries, for a source to fill before <span class="tt"><a class="el" href="#a9d81d8a1c64187d1be0b70aafc11011c" title="Opens the source: the transport, the bridge and the bundle, verified.">open</a></span> sends anything. </p>
 <dl class="section return"><dt>Returns</dt><dd>It. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d2/d2e/source_8hpp_source.html#l00248">248</a> of file <a class="el" href="../../d2/d2e/source_8hpp_source.html">source.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d2/d2e/source_8hpp_source.html#l00268">268</a> of file <a class="el" href="../../d2/d2e/source_8hpp_source.html">source.hpp</a>.</p>
 
 </div>
 </div>

@@ -167,14 +167,23 @@ Classes</h2></td></tr>
 <tr class="memitem:morph_3A_3Aui_3A_3AUiService" id="r_morph_3A_3Aui_3A_3AUiService"><td class="memItemLeft">class &#160;</td><td class="memItemRight"><a class="el" href="../../d1/d38/classmorph_1_1ui_1_1UiService.html">morph::ui::UiService</a></td></tr>
 <tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">The UI service: answers <span class="tt">ui-hello</span>, <span class="tt">ui-catalog</span> and <span class="tt">ui-fetch</span> from one <span class="tt"><a class="el" href="../../de/d9f/structmorph_1_1ui_1_1ServedBundle.html" title="An application&#39;s bundle, built and immutable: what UiService serves.">ServedBundle</a></span>, and <span class="tt">ui-evaluate</span> through the server's <span class="tt">ActionDispatcher</span>, as an envelope service of a <span class="tt">RemoteServer</span> (<span class="tt">ServerConfig::services</span>).  <a href="../../d1/d38/classmorph_1_1ui_1_1UiService.html#details">More...</a><br /></td></tr>
 </table><table class="memberdecls">
+<tr class="heading"><td colspan="2"><h2 id="header-typedef-members" class="groupheader"><a id="typedef-members" name="typedef-members"></a>
+Typedefs</h2></td></tr>
+<tr class="memitem:a309f19158f48dc06f3f10a04fcc3e64a" id="r_a309f19158f48dc06f3f10a04fcc3e64a"><td class="memItemLeft">using&#160;</td><td class="memItemRight"><a class="el" href="#a309f19158f48dc06f3f10a04fcc3e64a">morph::ui::FieldTexts</a> = std::map&lt;std::string, std::string, std::less&lt;&gt;&gt;</td></tr>
+<tr class="memdesc:a309f19158f48dc06f3f10a04fcc3e64a"><td class="mdescLeft">&#160;</td><td class="mdescRight">The application's texts in one locale, by message key: what a <span class="tt"><a class="el" href="#a27957aceae2cfd09374e857642519f24" title="Where a server reads the application&#39;s texts for a locale: a field&#39;s label, help and placeholder unde...">FieldTextSource</a></span> answers.  <br /></td></tr>
+<tr class="memitem:a27957aceae2cfd09374e857642519f24" id="r_a27957aceae2cfd09374e857642519f24"><td class="memItemLeft">using&#160;</td><td class="memItemRight"><a class="el" href="#a27957aceae2cfd09374e857642519f24">morph::ui::FieldTextSource</a> = std::function&lt;<a class="el" href="#a309f19158f48dc06f3f10a04fcc3e64a">FieldTexts</a>(std::string_view bcp47Locale)&gt;</td></tr>
+<tr class="memdesc:a27957aceae2cfd09374e857642519f24"><td class="mdescLeft">&#160;</td><td class="mdescRight">Where a server reads the application's texts for a locale: a field's label, help and placeholder under the keys <span class="tt">forms::i18n</span> derives (<span class="tt">&lt;actionTypeId&gt;.&lt;field&gt;.label</span>, <span class="tt">.help</span>, <span class="tt">.placeholder</span>, or the field's <span class="tt">x-i18nKey</span> stem with the same suffixes), and any other message key the application translates.  <br /></td></tr>
+</table><table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 id="header-func-members" class="groupheader"><a id="func-members" name="func-members"></a>
 Functions</h2></td></tr>
+<tr class="memitem:abc88b66472d45608bab0a98921eba5f4" id="r_abc88b66472d45608bab0a98921eba5f4"><td class="memItemLeft">MORPH_API std::expected&lt; <a class="el" href="../../d0/d19/structmorph_1_1ui_1_1TextsReply.html">TextsReply</a>, std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="#abc88b66472d45608bab0a98921eba5f4">morph::ui::fieldTextsFor</a> (<a class="el" href="../../de/d9f/structmorph_1_1ui_1_1ServedBundle.html">ServedBundle</a> const &amp;bundle, std::string_view locale)</td></tr>
+<tr class="memdesc:abc88b66472d45608bab0a98921eba5f4"><td class="mdescLeft">&#160;</td><td class="mdescRight">The application's texts in <code class="param">locale</code>, as <span class="tt">ui-texts</span> answers them: read from the bundle's source and checked against the reply's bounds.  <br /></td></tr>
 <tr class="memitem:af1ce9d7e1e327596bee65e840527663b" id="r_af1ce9d7e1e327596bee65e840527663b"><td class="memItemLeft">MORPH_API std::vector&lt; std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="#af1ce9d7e1e327596bee65e840527663b">morph::ui::permittedActions</a> (<a class="el" href="../../de/d9f/structmorph_1_1ui_1_1ServedBundle.html">ServedBundle</a> const &amp;bundle, <a class="el" href="../../dd/d85/structmorph_1_1session_1_1Context.html">::morph::session::Context</a> const &amp;session, <a class="el" href="../../d5/d07/structmorph_1_1session_1_1IAuthorizer.html">::morph::session::IAuthorizer</a> const &amp;authorizer)</td></tr>
 <tr class="memdesc:af1ce9d7e1e327596bee65e840527663b"><td class="mdescLeft">&#160;</td><td class="mdescRight">The actions of <code class="param">bundle</code> that the principal of <code class="param">session</code> may run: what <span class="tt">ui-catalog</span> answers as <span class="tt">permitted</span>.  <br /></td></tr>
 <tr class="memitem:ac8a3395864bbe9e7a972d956c80e9f60" id="r_ac8a3395864bbe9e7a972d956c80e9f60"><td class="memItemLeft">MORPH_API bool&#160;</td><td class="memItemRight"><a class="el" href="#ac8a3395864bbe9e7a972d956c80e9f60">morph::ui::screenAdmitted</a> (<a class="el" href="../../db/d17/structmorph_1_1ui_1_1ServedScreen.html">ServedScreen</a> const &amp;screen, <a class="el" href="../../dd/d85/structmorph_1_1session_1_1Context.html">::morph::session::Context</a> const &amp;session, <a class="el" href="../../d5/d07/structmorph_1_1session_1_1IAuthorizer.html">::morph::session::IAuthorizer</a> const &amp;authorizer)</td></tr>
 <tr class="memdesc:ac8a3395864bbe9e7a972d956c80e9f60"><td class="mdescLeft">&#160;</td><td class="mdescRight">Whether the principal of <code class="param">session</code> may open <code class="param">screen:</code> it is available, and the principal may run every query the screen declares at its top level (spec 5 §12b).  <br /></td></tr>
 <tr class="memitem:ad69b07175bd3a612103673995ff06c20" id="r_ad69b07175bd3a612103673995ff06c20"><td class="memItemLeft">constexpr bool&#160;</td><td class="memItemRight"><a class="el" href="#ad69b07175bd3a612103673995ff06c20">morph::ui::isUiServiceRead</a> (std::string_view modelType, std::string_view actionType) noexcept</td></tr>
-<tr class="memdesc:ad69b07175bd3a612103673995ff06c20"><td class="mdescLeft">&#160;</td><td class="mdescRight">Whether an authoriser is asked about one of the UI service's reads: <span class="tt">ui</span>'s <span class="tt">hello</span>, <span class="tt">catalog</span> or <span class="tt">fetch</span>.  <br /></td></tr>
+<tr class="memdesc:ad69b07175bd3a612103673995ff06c20"><td class="mdescLeft">&#160;</td><td class="mdescRight">Whether an authoriser is asked about one of the UI service's reads: <span class="tt">ui</span>'s <span class="tt">hello</span>, <span class="tt">catalog</span>, <span class="tt">fetch</span> or <span class="tt">texts</span>.  <br /></td></tr>
 </table><table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 id="header-var-members" class="groupheader"><a id="var-members" name="var-members"></a>
 Variables</h2></td></tr>
@@ -186,7 +195,84 @@ Variables</h2></td></tr>
 <p>Specified in <span class="tt">docs/spec/ui/service.md</span>. </p>
 
 <p class="definition">Definition in file <a class="el" href="../../d3/d31/service_8hpp_source.html">service.hpp</a>.</p>
-</div><a name="doc-func-members" id="doc-func-members"></a><h2 id="header-doc-func-members" class="groupheader">Function Documentation</h2>
+</div><a name="doc-typedef-members" id="doc-typedef-members"></a><h2 id="header-doc-typedef-members" class="groupheader">Typedef Documentation</h2>
+<a id="a309f19158f48dc06f3f10a04fcc3e64a" name="a309f19158f48dc06f3f10a04fcc3e64a"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a309f19158f48dc06f3f10a04fcc3e64a">&#9670;&#160;</a></span>FieldTexts</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">using <a class="el" href="#a309f19158f48dc06f3f10a04fcc3e64a">morph::ui::FieldTexts</a> = std::map&lt;std::string, std::string, std::less&lt;&gt;&gt;</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>The application's texts in one locale, by message key: what a <span class="tt">FieldTextSource</span> answers. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d3/d31/service_8hpp_source.html#l00095">95</a> of file <a class="el" href="../../d3/d31/service_8hpp_source.html">service.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a27957aceae2cfd09374e857642519f24" name="a27957aceae2cfd09374e857642519f24"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a27957aceae2cfd09374e857642519f24">&#9670;&#160;</a></span>FieldTextSource</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">using <a class="el" href="#a27957aceae2cfd09374e857642519f24">morph::ui::FieldTextSource</a> = std::function&lt;FieldTexts(std::string_view bcp47Locale)&gt;</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>Where a server reads the application's texts for a locale: a field's label, help and placeholder under the keys <span class="tt">forms::i18n</span> derives (<span class="tt">&lt;actionTypeId&gt;.&lt;field&gt;.label</span>, <span class="tt">.help</span>, <span class="tt">.placeholder</span>, or the field's <span class="tt">x-i18nKey</span> stem with the same suffixes), and any other message key the application translates. </p>
+<p>Given the BCP 47 tag the request's session names, already checked by <span class="tt">isLocaleTag</span>; it answers the texts it has for that locale, empty for none. The host owns the storage and the language fallback (<span class="tt">de-AT</span> falling back to <span class="tt">de</span> is the source's choice to make). It is called on server threads, the server strand and the chat's worker, so it must be safe to call concurrently. One that throws is answered as a refusal. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d3/d31/service_8hpp_source.html#l00105">105</a> of file <a class="el" href="../../d3/d31/service_8hpp_source.html">service.hpp</a>.</p>
+
+</div>
+</div>
+<a name="doc-func-members" id="doc-func-members"></a><h2 id="header-doc-func-members" class="groupheader">Function Documentation</h2>
+<a id="abc88b66472d45608bab0a98921eba5f4" name="abc88b66472d45608bab0a98921eba5f4"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#abc88b66472d45608bab0a98921eba5f4">&#9670;&#160;</a></span>fieldTextsFor()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">MORPH_API std::expected&lt; TextsReply, std::string &gt; morph::ui::fieldTextsFor </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="../../de/d9f/structmorph_1_1ui_1_1ServedBundle.html">ServedBundle</a> const &amp;</td>          <td class="paramname"><span class="paramname"><em>bundle</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">std::string_view</td>          <td class="paramname"><span class="paramname"><em>locale</em></span>&#160;)</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>The application's texts in <code class="param">locale</code>, as <span class="tt">ui-texts</span> answers them: read from the bundle's source and checked against the reply's bounds. </p>
+<p>Refused when <code class="param">locale</code> is empty (<span class="tt">the session names no locale</span>) or not <span class="tt">isLocaleTag</span>, when the bundle has no source (<span class="tt">kNoTextsReason</span>), when the source throws, and when its answer holds more than <span class="tt">kMaxTextEntries</span> texts, an empty key or one longer than <span class="tt">kMaxNameBytes</span>, or writes to more than <span class="tt">kMaxTextsBytes</span>. </p><dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">bundle</td><td>The bundle. </td></tr>
+    <tr><td class="paramname">locale</td><td>The BCP 47 tag the request's session names. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>The reply, or why there is none. </dd></dl>
+
+</div>
+</div>
 <a id="af1ce9d7e1e327596bee65e840527663b" name="af1ce9d7e1e327596bee65e840527663b"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#af1ce9d7e1e327596bee65e840527663b">&#9670;&#160;</a></span>permittedActions()</h2>
 
@@ -304,8 +390,8 @@ Variables</h2></td></tr>
 </table>
 </div><div class="memdoc">
 
-<p>Whether an authoriser is asked about one of the UI service's reads: <span class="tt">ui</span>'s <span class="tt">hello</span>, <span class="tt">catalog</span> or <span class="tt">fetch</span>. </p>
-<p>An application that serves a login screen admits these for a session with no principal yet, so a client can greet the service, read the catalog and fetch the login screen. Admitting them discloses no other screen: <span class="tt">ui-catalog</span> lists, and <span class="tt">ui-fetch</span> serves, a non-public screen only to a principal who may run its queries, which the authoriser still decides. </p><dl class="params"><dt>Parameters</dt><dd>
+<p>Whether an authoriser is asked about one of the UI service's reads: <span class="tt">ui</span>'s <span class="tt">hello</span>, <span class="tt">catalog</span>, <span class="tt">fetch</span> or <span class="tt">texts</span>. </p>
+<p>An application that serves a login screen admits these for a session with no principal yet, so a client can greet the service, read the catalog, fetch the login screen and show its fields' texts in the person's language. Admitting them discloses no other screen: <span class="tt">ui-catalog</span> lists, and <span class="tt">ui-fetch</span> serves, a non-public screen only to a principal who may run its queries, which the authoriser still decides. <span class="tt">ui-texts</span> answers the application's words, as a bundled message catalogue holds them, and no data. </p><dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
     <tr><td class="paramname">modelType</td><td>The model type asked about. </td></tr>
     <tr><td class="paramname">actionType</td><td>The action asked about. </td></tr>
@@ -314,7 +400,7 @@ Variables</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Whether it is one of those reads. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d3/d31/service_8hpp_source.html#l00377">377</a> of file <a class="el" href="../../d3/d31/service_8hpp_source.html">service.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d3/d31/service_8hpp_source.html#l00414">414</a> of file <a class="el" href="../../d3/d31/service_8hpp_source.html">service.hpp</a>.</p>
 
 </div>
 </div>

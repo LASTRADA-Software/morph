@@ -19,6 +19,7 @@ var dir_63485de5f871f172c543f2cdef9d00a8 =
     [ "custom_screen_chrome.hpp", "dc/def/custom__screen__chrome_8hpp.html", "dc/def/custom__screen__chrome_8hpp" ],
     [ "custom_screen_controller.hpp", "de/d2e/custom__screen__controller_8hpp.html", "de/d2e/custom__screen__controller_8hpp" ],
     [ "custom_screen_sync.hpp", "d9/d6e/custom__screen__sync_8hpp.html", "d9/d6e/custom__screen__sync_8hpp" ],
+    [ "custom_screen_versions.hpp", "d6/d25/custom__screen__versions_8hpp.html", "d6/d25/custom__screen__versions_8hpp" ],
     [ "custom_screens.hpp", "d5/d92/custom__screens_8hpp.html", "d5/d92/custom__screens_8hpp" ],
     [ "date_pattern.hpp", "d3/d89/date__pattern_8hpp.html", "d3/d89/date__pattern_8hpp" ],
     [ "dev_reload.hpp", "d0/dcd/dev__reload_8hpp.html", "d0/dcd/dev__reload_8hpp" ],

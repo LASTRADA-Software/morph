@@ -140,6 +140,8 @@ Public Member Functions</h2></td></tr>
 <tr class="memdesc:a8e9f7d88058e2060184894916c05b640"><td class="mdescLeft">&#160;</td><td class="mdescRight">Declares the shell's parts (<span class="tt">docs/spec/ui/shell_parts.md</span>): a scope switcher, module counts, search, an inbox and the person's menu. They are written into the app document's <span class="tt">shell</span> member, so they travel in the file every client already reads; an application that added no app document gets an otherwise empty one, public.  <br /></td></tr>
 <tr class="memitem:adae15f8f4c1545612750c75b1f52ef22" id="r_adae15f8f4c1545612750c75b1f52ef22"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#adae15f8f4c1545612750c75b1f52ef22">requireVocabulary</a> (std::string vocabulary)</td></tr>
 <tr class="memdesc:adae15f8f4c1545612750c75b1f52ef22"><td class="mdescLeft">&#160;</td><td class="mdescRight">Adds a vocabulary the bundle needs beyond <span class="tt">ui/1</span> and <span class="tt">expr/1</span>, such as <span class="tt">forms/1</span> or <span class="tt">files/1</span>. A client that does not speak it is refused at <span class="tt">ui-hello</span>.  <br /></td></tr>
+<tr class="memitem:a5da760505ca2849d69d6afb1d7ef46fe" id="r_a5da760505ca2849d69d6afb1d7ef46fe"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a5da760505ca2849d69d6afb1d7ef46fe">setFieldTexts</a> (<a class="el" href="../../d3/d31/service_8hpp.html#a27957aceae2cfd09374e857642519f24">FieldTextSource</a> source)</td></tr>
+<tr class="memdesc:a5da760505ca2849d69d6afb1d7ef46fe"><td class="mdescLeft">&#160;</td><td class="mdescRight">Sets where the bundle's texts come from: <span class="tt">ui-texts</span> answers a client in its session's locale from it, and the chat's read tools translate a field's description through it. The schemas stay free of language, so one schema serves every locale. A later call replaces an earlier one; empty serves none.  <br /></td></tr>
 <tr class="memitem:a104e81c219e2531a0284d5d107d9c923" id="r_a104e81c219e2531a0284d5d107d9c923"><td class="memItemLeft">std::expected&lt; std::shared_ptr&lt; <a class="el" href="../../de/d9f/structmorph_1_1ui_1_1ServedBundle.html">ServedBundle</a> const &gt;, <a class="el" href="../../de/d52/structmorph_1_1ui_1_1Refusal.html">Refusal</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a104e81c219e2531a0284d5d107d9c923">build</a> () const</td></tr>
 <tr class="memdesc:a104e81c219e2531a0284d5d107d9c923"><td class="mdescLeft">&#160;</td><td class="mdescRight">Builds the bundle.  <br /></td></tr>
 </table>
@@ -147,7 +149,7 @@ Public Member Functions</h2></td></tr>
 <div class="textblock"><p>Collects an application's screens and files and builds the bundle the UI service serves. </p>
 <p>Built once, before the service answers anything; <span class="tt"><a class="el" href="#a104e81c219e2531a0284d5d107d9c923" title="Builds the bundle.">build</a></span> copies everything into an immutable <span class="tt"><a class="el" href="../../de/d9f/structmorph_1_1ui_1_1ServedBundle.html" title="An application&#39;s bundle, built and immutable: what UiService serves.">ServedBundle</a></span>. A screen authored with the C++ builders is added by its emitted text, so an authoring registry feeds this one through <span class="tt"><a class="el" href="#aeffd84aad6901012d278b55fff460242" title="Registers a screen: its catalog entry and its document.">addScreen</a></span> without either depending on the other. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d3/d31/service_8hpp_source.html#l00172">172</a> of file <a class="el" href="../../d3/d31/service_8hpp_source.html">service.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d3/d31/service_8hpp_source.html#l00200">200</a> of file <a class="el" href="../../d3/d31/service_8hpp_source.html">service.hpp</a>.</p>
 </div><a name="doc-constructors" id="doc-constructors"></a><h2 id="header-doc-constructors" class="groupheader">Constructor &amp; Destructor Documentation</h2>
 <a id="ad9d853d15da0d8f07b0a334895a82571" name="ad9d853d15da0d8f07b0a334895a82571"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#ad9d853d15da0d8f07b0a334895a82571">&#9670;&#160;</a></span>UiRegistry()</h2>
@@ -185,7 +187,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d3/d31/service_8hpp_source.html#l00179">179</a> of file <a class="el" href="../../d3/d31/service_8hpp_source.html">service.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d3/d31/service_8hpp_source.html#l00207">207</a> of file <a class="el" href="../../d3/d31/service_8hpp_source.html">service.hpp</a>.</p>
 
 </div>
 </div>
@@ -336,7 +338,42 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d3/d31/service_8hpp_source.html#l00236">236</a> of file <a class="el" href="../../d3/d31/service_8hpp_source.html">service.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d3/d31/service_8hpp_source.html#l00264">264</a> of file <a class="el" href="../../d3/d31/service_8hpp_source.html">service.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a5da760505ca2849d69d6afb1d7ef46fe" name="a5da760505ca2849d69d6afb1d7ef46fe"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a5da760505ca2849d69d6afb1d7ef46fe">&#9670;&#160;</a></span>setFieldTexts()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">void morph::ui::UiRegistry::setFieldTexts </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="../../d3/d31/service_8hpp.html#a27957aceae2cfd09374e857642519f24">FieldTextSource</a></td>          <td class="paramname"><span class="paramname"><em>source</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Sets where the bundle's texts come from: <span class="tt">ui-texts</span> answers a client in its session's locale from it, and the chat's read tools translate a field's description through it. The schemas stay free of language, so one schema serves every locale. A later call replaces an earlier one; empty serves none. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">source</td><td>The source; see <span class="tt"><a class="el" href="../../d3/d31/service_8hpp.html#a27957aceae2cfd09374e857642519f24" title="Where a server reads the application&#39;s texts for a locale: a field&#39;s label, help and placeholder unde...">FieldTextSource</a></span> for what it must answer and on which threads. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d3/d31/service_8hpp_source.html#l00270">270</a> of file <a class="el" href="../../d3/d31/service_8hpp_source.html">service.hpp</a>.</p>
 
 </div>
 </div>

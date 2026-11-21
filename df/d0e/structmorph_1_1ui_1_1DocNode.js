@@ -10,6 +10,7 @@ var structmorph_1_1ui_1_1DocNode =
     [ "kind", "df/d0e/structmorph_1_1ui_1_1DocNode.html#a5cef522f4ac93eaeb7d2eda0c7674444", null ],
     [ "id", "df/d0e/structmorph_1_1ui_1_1DocNode.html#aecba77cb28946a0dd4d8b468c535c98b", null ],
     [ "path", "df/d0e/structmorph_1_1ui_1_1DocNode.html#a1bade8936c558b84eb8b59235b14eae9", null ],
+    [ "since", "df/d0e/structmorph_1_1ui_1_1DocNode.html#aac56627b4d74e53c720a57ab349272a0", null ],
     [ "props", "df/d0e/structmorph_1_1ui_1_1DocNode.html#afaa0307e960eabc3fa2f984095c890e9", null ],
     [ "events", "df/d0e/structmorph_1_1ui_1_1DocNode.html#a7b41f48ad5f843a4231f8237544ac15a", null ],
     [ "children", "df/d0e/structmorph_1_1ui_1_1DocNode.html#a18a0afaf234d82c94998876c804bfc1f", null ],

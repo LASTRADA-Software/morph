@@ -21,6 +21,7 @@ var forms_8hpp =
     [ "morph::forms::UnsatisfiableFormError", "d0/d10/structmorph_1_1forms_1_1UnsatisfiableFormError.html", "d0/d10/structmorph_1_1forms_1_1UnsatisfiableFormError" ],
     [ "morph::forms::ConflictingOptionsError", "db/d03/structmorph_1_1forms_1_1ConflictingOptionsError.html", "db/d03/structmorph_1_1forms_1_1ConflictingOptionsError" ],
     [ "morph::forms::IncompleteOptionsError", "d9/d5c/structmorph_1_1forms_1_1IncompleteOptionsError.html", "d9/d5c/structmorph_1_1forms_1_1IncompleteOptionsError" ],
+    [ "morph::forms::InvalidSinceError", "d7/df1/structmorph_1_1forms_1_1InvalidSinceError.html", "d7/df1/structmorph_1_1forms_1_1InvalidSinceError" ],
     [ "morph::forms::QuantityDecodeError", "d9/d1c/structmorph_1_1forms_1_1QuantityDecodeError.html", "d9/d1c/structmorph_1_1forms_1_1QuantityDecodeError" ],
     [ "morph::forms::EmptyCapableField", "d7/df7/conceptmorph_1_1forms_1_1EmptyCapableField.html", null ],
     [ "morph::forms::EngageableField", "d7/db5/conceptmorph_1_1forms_1_1EngageableField.html", null ],
@@ -57,6 +58,8 @@ var forms_8hpp =
     [ "morph::forms::enforceQuantityBounds", "d4/d11/forms_8hpp.html#a2efd8d0c4e186eab6d6798766ce4c530", null ],
     [ "morph::forms::allRequiredEngaged", "d4/d11/forms_8hpp.html#a189f23031917866a3f217aa288506601", null ],
     [ "morph::forms::allFieldBoundsSatisfied", "d4/d11/forms_8hpp.html#a9cf203c8a58f1739c806a087c222b8b7", null ],
+    [ "morph::forms::fieldInventory", "d4/d11/forms_8hpp.html#ad9301b00cda2a83e830a0ff70b12bae5", null ],
+    [ "morph::forms::schemaVersion", "d4/d11/forms_8hpp.html#ae3a3a0d4de48b7740020ad1290966068", null ],
     [ "morph::forms::schemaJson", "d4/d11/forms_8hpp.html#a25cc82b6b279223af29633fa946095ca", null ],
     [ "morph::forms::kExactDoubleLimit", "d4/d11/forms_8hpp.html#aade4a42e3eb13935f956624311dddde0", null ],
     [ "morph::forms::kExactDoubleLimitSigned", "d4/d11/forms_8hpp.html#a1874a08196a685c11f1e529ed1066ecf", null ]
