@@ -6985,7 +6985,8 @@ forms::FormSessionOptions ScreenCore::engineOptions() const {
     return options;
 }
 
-// Keeps a form's, collection's or wizard's number locale and date patterns at the session's current formatting. The
+// Keeps a form's, collection's or wizard's number locale, date patterns, translations and locale at the session's
+// current formatting, so its field texts follow a `setLocale` or `setTranslations` without a remount. The
 // engine's number locale holds views into the facts it was given, so the effect also holds the facts it last applied.
 void ScreenCore::followFormatting(ElementState& element, RtScope& scope) {
     auto const held = std::make_shared<std::shared_ptr<FormatContext const>>();
@@ -6998,12 +6999,15 @@ void ScreenCore::followFormatting(ElementState& element, RtScope& scope) {
             render::NumericLocale const locale = withoutGrouping(format->numeric);
             if (form != nullptr) {
                 form->setFormat(locale, format->datePattern, format->dateTimePattern);
+                form->setTranslations(format->translations, format->locale);
             }
             if (collection != nullptr) {
                 collection->setFormat(locale, format->datePattern, format->dateTimePattern);
+                collection->setTranslations(format->translations, format->locale);
             }
             if (wizard != nullptr) {
                 wizard->setFormat(locale, format->datePattern, format->dateTimePattern);
+                wizard->setTranslations(format->translations, format->locale);
             }
             *held = format;
         });

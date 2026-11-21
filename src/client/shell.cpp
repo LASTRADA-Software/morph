@@ -283,6 +283,7 @@ public:
                 return;
             }
             reportMissingFacts(locale);
+            followLocale(locale);
             relabel();
             if (_options.onLocale) {
                 _options.onLocale(locale);
@@ -332,23 +333,39 @@ public:
         }
     }
 
-    /// Reads the source's catalogues, reports each that did not load, and gives the session their provider, so every
-    /// `t` re-resolves. Called each time a bundle is loaded.
+    /// Reads the source's catalogues and the server's texts, reports each that did not load, and gives the session a
+    /// provider over both, the server's texts first since the server owns them, so every `t` re-resolves. Called each
+    /// time a bundle is loaded and each time the server's texts change.
     void installCatalogues() {
         _catalogues = _source->catalogues();
         // Each line once per shell: a development poll installs them every second.
-        for (std::string const& line : _catalogues.problems()) {
-            if (_reportedCatalogueProblems.insert(line).second) {
-                problem(line);
+        auto const report = [this](std::vector<std::string> const& lines) {
+            for (std::string const& line : lines) {
+                if (_reportedCatalogueProblems.insert(line).second) {
+                    problem(line);
+                }
             }
-        }
-        _session->setTranslations(_catalogues.provider());
+        };
+        report(_catalogues.problems());
+        report(_source->texts().problems());
+        _session->setTranslations(ui::layeredProvider(_source->texts(), _catalogues));
     }
 
     /// Makes @p locale the session's: its catalogue, and its number, money and date facts from the locale table.
     void applyLocale(std::string const& locale) {
         _session->setLocale(locale);
         reportMissingFacts(locale);
+        followLocale(locale);
+    }
+
+    /// Hands @p locale to the source, which carries it on every request and asks the server for its texts in it; the
+    /// texts that arrive are installed beside the catalogues.
+    void followLocale(std::string const& locale) {
+        _source->setLocale(locale, [this, alive = std::weak_ptr<bool>{_alive}] {
+            if (auto const live = alive.lock(); live != nullptr && *live && _session) {
+                installCatalogues();
+            }
+        });
     }
 
     /// Reports a locale the table has no facts for, once per tag: its numbers, money and dates are written as `en`'s.
@@ -920,6 +937,7 @@ private:
     void localeChosen() {
         std::string const locale = currentLocale();
         reportMissingFacts(locale);
+        followLocale(locale);
         relabel();
         if (_options.onLocale) {
             _options.onLocale(locale);

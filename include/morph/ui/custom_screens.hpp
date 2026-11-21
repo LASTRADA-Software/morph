@@ -26,6 +26,7 @@
 #include "../core/registry.hpp"
 #include "../session/session.hpp"
 #include "../util/datetime.hpp"
+#include "custom_screen_versions.hpp"
 #include "document.hpp"
 #include "service.hpp"
 #include "value.hpp"
@@ -308,7 +309,7 @@ inline constexpr std::size_t kMaxAttributesBytes = 1024;
 ///        `title`, `basedOn`, `savedBy` and `broken.pointer` at `kMaxNameBytes`, `broken.reason` at
 ///        `kMaxBrokenReasonBytes`, a cut one ending with an ellipsis, and `attributes` at `kMaxAttributesBytes`;
 ///        `hash` is 71 bytes (`sha256:` and 64 digits). That is 5 * 256 + 1024 + 1024 + 71 = 3399 bytes of text;
-///        the keys, the punctuation and `savedAt` take under 300 more, and 4 KiB leaves a margin.
+///        the keys, the punctuation, `savedAt` and the four flags take under 350 more, and 4 KiB leaves a margin.
 inline constexpr std::size_t kMaxSummaryBytes = std::size_t{4} * 1024;
 
 /// @brief The most a byte of a summary grows to in an envelope: the reply is written with control bytes escaped, so
@@ -496,6 +497,11 @@ struct CustomScreenSummary {
     /// @brief What the store records about it, as the store answered it (`CustomScreen::attributes`); absent when the
     ///        store records nothing, or its record is too long to send.
     std::optional<Json::object_t> attributes;
+    /// @brief Whether the version it knows (`knownVersion`) is below its base's: the base changed since, and the
+    ///        person may take its changes over (`layoutChanges`).
+    bool needsUpdate = false;
+    /// @brief Whether it refers to elements or fields its base no longer has.
+    bool needsAttention = false;
 };
 
 /// @brief `list`: the caller's custom screens of an application.
@@ -594,9 +600,12 @@ public:
     ///                   action strands on any thread, so it must be thread-safe.
     /// @param authorizer The server's authoriser, for the permitted set and the base screen's admission.
     /// @param options    The bounds.
+    /// @param schemas    The schemas of the actions base screens' forms bind, for the base's version; called from
+    ///                   action strands on any thread, so it must be thread-safe. Empty counts no field versions.
     CustomScreens(std::shared_ptr<ICustomScreenStore> store,
                   std::function<std::shared_ptr<ServedBundle const>()> bundle,
-                  std::shared_ptr<::morph::session::IAuthorizer const> authorizer, CustomScreensOptions options);
+                  std::shared_ptr<::morph::session::IAuthorizer const> authorizer, CustomScreensOptions options,
+                  ActionSchemaLookup schemas = {});
 
     /// @brief Whether @p document would be saved, by the checks of `checkCustomScreen` and the verdict cache that the
     ///        `check` action uses.
@@ -641,19 +650,27 @@ private:
     [[nodiscard]] std::expected<std::shared_ptr<ServedBundle const>, std::string> servedFor(
         std::string const& app) const;
 
-    /// @brief @p document with its `id` rewritten to @p screenId, after the checks of `checkCustomScreen` passed it as
-    ///        so rewritten: the text `save` stores.
+    /// @brief @p document with its `id` rewritten to @p screenId and, for a new screen that records none, the base's
+    ///        version as `knownVersion`, after the checks of `checkCustomScreen` passed it as so rewritten: the text
+    ///        `save` stores.
     /// @param bundle   The bundle being served.
     /// @param session  The session of the person.
     /// @param basedOn  The base screen's id.
     /// @param document The custom document's text.
     /// @param screenId The id it is stored under.
+    /// @param isNew    Whether it is saved as a new screen, which records the base's version.
     /// @return The rewritten text, or the first refusal.
     [[nodiscard]] std::expected<std::string, Refusal> rewrittenAndChecked(ServedBundle const& bundle,
                                                                           ::morph::session::Context const& session,
                                                                           std::string_view basedOn,
                                                                           std::string_view document,
-                                                                          std::string_view screenId) const;
+                                                                          std::string_view screenId, bool isNew) const;
+
+    /// @brief @p text with the base's version as `knownVersion`, when it records none and the base has one above
+    ///        the first version; @p text as it is otherwise, a base that is not served or does not load included,
+    ///        which the checks refuse.
+    [[nodiscard]] std::string withBaseVersion(ServedBundle const& bundle, std::string_view basedOn,
+                                              std::string text) const;
 
     /// @brief What `check` answers once the bundle is known: `rewrittenAndChecked` under a placeholder id as long as
     ///        a real one, so the verdict is the one `save` would give.
@@ -682,6 +699,7 @@ private:
     std::function<std::shared_ptr<ServedBundle const>()> _bundle;
     std::shared_ptr<::morph::session::IAuthorizer const> _authorizer;
     CustomScreensOptions _options;
+    ActionSchemaLookup _schemas;
     mutable VerdictCache _verdicts;
 };
 
@@ -764,7 +782,8 @@ namespace morph::ui {
 /// @param bundle     The bundle being served now; called at every action, so a development reload is seen, from
 ///                   action strands on any thread, so it must be thread-safe.
 /// @param authorizer The server's authoriser, for the permitted set and the base screen's admission.
-/// @param dispatcher The server's action dispatcher.
+/// @param dispatcher The server's action dispatcher. Borrowed: the action schemas a base screen's version reads come
+///                   from it at every list, so it must outlive every call, as it does for the server.
 /// @param registry   The server's model registry.
 /// @param options    The bounds. `maxDocumentBytes` is at most `kMaxFileBytes`.
 /// @return The handle the model uses, for whatever else serves custom screens on this server.

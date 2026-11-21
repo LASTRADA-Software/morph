@@ -3,18 +3,22 @@
 // The custom screens' memory store, and the model through a RemoteServer.
 
 #include <algorithm>
+#include <array>
 #include <catch2/catch_test_macros.hpp>
 #include <core/async/Task.hpp>
 #include <future>
 #include <initializer_list>
 #include <map>
+#include <morph/core/bridge.hpp>
 #include <morph/core/completion.hpp>
 #include <morph/core/coroutine.hpp>
 #include <morph/core/effects.hpp>
 #include <morph/core/executor.hpp>
 #include <morph/core/owner_strand.hpp>
+#include <morph/core/registry.hpp>
 #include <morph/core/remote.hpp>
 #include <morph/core/wire.hpp>
+#include <morph/forms/forms.hpp>
 #include <morph/session/session.hpp>
 #include <morph/ui/custom_screens.hpp>
 #include <mutex>
@@ -994,4 +998,207 @@ TEST_CASE("custom screens: a stored record too long to send is listed broken, wi
     REQUIRE(mine.screens.front().broken.has_value());
     CHECK(mine.screens.front().broken->reason.contains("attributes"));
     CHECK_FALSE(mine.screens.front().opensWithoutParams);
+}
+
+// ---- Versions ----
+
+// Registered globally with ids of their own, and in a fixture's dispatcher under the base's form action, so the
+// model's schema lookup finds a field with a version.
+// NOLINTBEGIN(misc-use-internal-linkage): glaze's reflection needs a type with linkage.
+struct CSVVerify {
+    std::string sample;
+    double pressure = 0.0;
+
+    static constexpr std::array<morph::forms::FieldMeta, 1> fieldMetadata{
+        morph::forms::FieldMeta{.field = "pressure", .since = "3.0"},
+    };
+};
+
+struct CSVModel {
+    static int execute(CSVVerify const& /*action*/) { return 0; }
+};
+// NOLINTEND(misc-use-internal-linkage)
+
+BRIDGE_REGISTER_MODEL(CSVModel, "Test_CSVModel")
+BRIDGE_REGISTER_ACTION(CSVModel, CSVVerify, "Test_CSVVerify")
+
+namespace {
+
+/// The base screen with `results` given a version: what 2.0 added.
+std::string versionedBase(std::string_view id) {
+    return replaced(baseScreen(id), R"({"kind":"text","text":"Results"})",
+                    R"({"kind":"text","id":"results","since":"2.0","text":"Results"})");
+}
+
+/// A server whose `lims.base` is @p base.
+Server serverWith(std::string const& base, morph::ui::CustomScreensOptions options = {}) {
+    morph::ui::UiRegistry made = uiservice::registry();
+    REQUIRE(made.addScreen(uiservice::entry("lims.base"), base));
+    auto const built = made.build();
+    REQUIRE(built);
+    return Server{nullptr, options, *built};
+}
+
+/// The document `get` answers for @p id.
+std::string storedDocument(Server& s, std::string const& id) {
+    Envelope const got = s.call(morph::ui::kCustomScreensGet, R"({"app":"lims","id":)" + quoted(id) + "}", "alice");
+    REQUIRE(got.kind == "ok");
+    morph::ui::CustomScreenFound found;
+    REQUIRE_FALSE(glz::read_json(found, got.body));
+    return found.document;
+}
+
+/// The summary `list` answers for @p id.
+morph::ui::CustomScreenSummary summaryOf(Server& s, std::string const& id) {
+    for (auto const& screen : listed(s, "alice").screens) {
+        if (screen.id == id) {
+            return screen;
+        }
+    }
+    FAIL("not listed: " << id);
+    return {};
+}
+
+std::optional<std::string> knownVersionIn(std::string const& document) {
+    auto const json = morph::ui::parseJson(document).value();
+    auto const& object = json.get_object();
+    auto const* const found = object.find("knownVersion");
+    if (found == object.end()) {
+        return std::nullopt;
+    }
+    return found->second.get_string();
+}
+
+}  // namespace
+
+// Mutation: skip withBaseVersion in the save of a new screen (the stored document records no version).
+TEST_CASE("custom screens: a new screen records its base's version and lists as current",
+          "[ui][custom-screens][versions]") {
+    Server s = serverWith(versionedBase("lims.base"));
+    std::string const id = savedId(s.save(versionedBase("lims.base"), "alice"));
+    CHECK(knownVersionIn(storedDocument(s, id)) == std::optional<std::string>{"2.0"});
+    auto const summary = summaryOf(s, id);
+    CHECK_FALSE(summary.broken.has_value());
+    CHECK_FALSE(summary.needsUpdate);
+    CHECK_FALSE(summary.needsAttention);
+
+    // An overwrite keeps the version the document carries, and so does a new screen that records one.
+    std::string const older =
+        replaced(versionedBase("lims.base"), R"("vocab":"ui/1",)", R"("vocab":"ui/1","knownVersion":"1.0",)");
+    Envelope const overwritten =
+        s.call(morph::ui::kCustomScreensSave,
+               R"({"app":"lims","id":)" + quoted(id) + R"(,"title":"Mine","basedOn":"lims.base","document":)" +
+                   quoted(older) + "}",
+               "alice");
+    REQUIRE(overwritten.kind == "ok");
+    CHECK(knownVersionIn(storedDocument(s, id)) == std::optional<std::string>{"1.0"});
+    CHECK(summaryOf(s, id).needsUpdate);
+    std::string const copied = savedId(s.save(older, "alice"));
+    CHECK(knownVersionIn(storedDocument(s, copied)) == std::optional<std::string>{"1.0"});
+
+    // A base with no version gives a new screen none to record.
+    Server plain;
+    std::string const unversioned = savedId(plain.save(baseScreen("lims.base"), "alice"));
+    CHECK_FALSE(knownVersionIn(storedDocument(plain, unversioned)).has_value());
+}
+
+// Mutation: leave needsAttention false in summarize (the screen with a removed element is not marked).
+TEST_CASE("custom screens: list marks a screen that refers to what its base removed",
+          "[ui][custom-screens][versions]") {
+    Server s;
+    std::string const legacy =
+        replaced(baseScreen("lims.base"), R"({"kind":"text","text":"Results"})",
+                 R"({"kind":"text","text":"Results"},{"kind":"text","id":"legacy","since":"1.0","text":"Old"})");
+    std::string const id = savedId(s.save(legacy, "alice"));
+    auto const summary = summaryOf(s, id);
+    CHECK_FALSE(summary.broken.has_value());
+    CHECK(summary.needsAttention);
+    CHECK_FALSE(summary.needsUpdate);
+}
+
+// Mutation: drop kKnownVersionSlack from the size pre-check (a document within the bound once stamped is refused
+// without being parsed).
+TEST_CASE("custom screens: check and save bound the stored text with the base's version in it",
+          "[ui][custom-screens][versions]") {
+    std::string const document = versionedBase("lims.base");
+    auto const checkBody = R"({"app":"lims","basedOn":"lims.base","document":)" + quoted(document) + "}";
+    std::string const rewritten =
+        morph::ui::withScreenId(document, std::string{morph::ui::kCustomScreenIdPrefix} + std::string(32, '0'))
+            .value();
+    std::size_t const stored =
+        morph::ui::withKnownVersion(rewritten, morph::forms::FieldVersion::parse("2.0").value()).value().size();
+    REQUIRE(stored > rewritten.size());
+    auto const verdictOf = [&](Server& s) {
+        Envelope const reply = s.call(morph::ui::kCustomScreensCheck, checkBody, "alice");
+        REQUIRE(reply.kind == "ok");
+        morph::ui::CustomScreenChecked verdict;
+        REQUIRE_FALSE(glz::read_json(verdict, reply.body));
+        return verdict;
+    };
+    Server tight = serverWith(document, morph::ui::CustomScreensOptions{.maxDocumentBytes = rewritten.size()});
+    auto const refused = verdictOf(tight);
+    REQUIRE(refused.refusal.has_value());
+    CHECK(refused.refusal->reason.contains("longer than"));
+    CHECK(tight.save(document, "alice").kind == "err");
+
+    Server roomy = serverWith(document, morph::ui::CustomScreensOptions{.maxDocumentBytes = stored});
+    CHECK_FALSE(verdictOf(roomy).refusal.has_value());
+    CHECK(roomy.save(document, "alice").kind == "ok");
+
+    // White space the rewrite drops: the sent text is longer than the bound plus the id's room, and what is stored
+    // fits, so it is parsed rather than refused for its length.
+    std::string const padded = "{" + std::string(stored - document.size() + 100, ' ') + document.substr(1);
+    REQUIRE(padded.size() == stored + 100);
+    auto const paddedBody = R"({"app":"lims","basedOn":"lims.base","document":)" + quoted(padded) + "}";
+    Envelope const paddedReply = roomy.call(morph::ui::kCustomScreensCheck, paddedBody, "alice");
+    REQUIRE(paddedReply.kind == "ok");
+    morph::ui::CustomScreenChecked paddedVerdict;
+    REQUIRE_FALSE(glz::read_json(paddedVerdict, paddedReply.body));
+    CHECK_FALSE(paddedVerdict.refusal.has_value());
+}
+
+// Mutation: answer nothing from the dispatcher's schema lookup (the field's version is not the base's).
+TEST_CASE("custom screens: the base's version counts the fields of the actions its forms bind",
+          "[ui][custom-screens][versions]") {
+    std::string const withForm =
+        replaced(baseScreen("lims.base"), R"({"kind":"text","text":"Results"})",
+                 R"({"kind":"text","text":"Results"},{"kind":"form","id":"check","model":"sample",)"
+                 R"("action":"Lims_Verify","submit":"explicit"})");
+    Server s = serverWith(withForm);
+    s.dispatcher.registerAction<CSVModel, CSVVerify>("Lims_Sample", "Lims_Verify");
+    std::string const id = savedId(s.save(withForm, "alice"));
+    CHECK(knownVersionIn(storedDocument(s, id)) == std::optional<std::string>{"3.0"});
+
+    // A copy that knows an older version is told that `pressure` came since.
+    std::string const older = replaced(withForm, R"("vocab":"ui/1",)", R"("vocab":"ui/1","knownVersion":"2.0",)");
+    std::string const old = savedId(s.save(older, "alice"));
+    CHECK(summaryOf(s, old).needsUpdate);
+}
+
+// The bound `list` and `get` are sized by: every capped field at its cap, every flag set.
+TEST_CASE("custom screens: a summary at every cap with every flag set is within kMaxSummaryBytes",
+          "[ui][custom-screens][versions]") {
+    std::string const name(morph::ui::kMaxNameBytes, 'n');
+    morph::ui::Json::object_t record;
+    // Written as JSON the record is exactly at its bound: the key, its quotes, the colon and the braces take 10 bytes.
+    record.emplace("pad", std::string(morph::ui::kMaxAttributesBytes - 10, 'a'));
+    REQUIRE(glz::write_json(record).value().size() == morph::ui::kMaxAttributesBytes);
+    morph::ui::CustomScreenSummary const summary{
+        .id = name,
+        .title = name,
+        .basedOn = name,
+        .savedAt = morph::time::DateTime::now(),
+        .savedBy = name,
+        .mine = true,
+        .hash = "sha256:" + std::string(64, 'f'),
+        .opensWithoutParams = true,
+        .broken =
+            morph::ui::CheckRefusal{.pointer = name, .reason = std::string(morph::ui::kMaxBrokenReasonBytes, 'r')},
+        .attributes = record,
+        .needsUpdate = true,
+        .needsAttention = true,
+    };
+    std::string const written = glz::write_json(summary).value();
+    UNSCOPED_INFO("a full summary is " << written.size() << " bytes");
+    CHECK(written.size() <= morph::ui::kMaxSummaryBytes);
 }

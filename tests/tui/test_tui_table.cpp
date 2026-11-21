@@ -1167,3 +1167,35 @@ TEST_CASE("tui table: a span whose origin row has scrolled off the top still sho
     CHECK(drawn.at(0) == "  Name  Qty");
     CHECK(drawn.at(1).contains("apple"));
 }
+
+// Mutation: build a Ctrl-click's selection from the rows drawn instead of from the selection the table holds.
+TEST_CASE("tui table: a Ctrl-click keeps every selected key whose row is off screen", "[tui][table][selection]") {
+    Harness harness{30, 5};
+    Fruit fruit{harness, ui::SelectionMode::Multiple};
+    constexpr std::int64_t rowCount = 30;
+    for (std::int64_t index = 3; index <= rowCount; ++index) {
+        fruit.addRow(harness, key(index), "row", "1");
+    }
+    std::vector<std::vector<ui::Key>> selections;
+    fruit.table->setOnSelectionChange(
+        [&](std::vector<ui::Key> keys, ui::SelectionChange /*change*/) { selections.push_back(std::move(keys)); });
+    std::vector<ui::Key> all;
+    all.reserve(rowCount);
+    for (std::int64_t index = 1; index <= rowCount; ++index) {
+        all.push_back(key(index));
+    }
+    fruit.table->setSelection(all);
+    static_cast<void>(harness.draw());
+
+    // Deselecting a drawn row leaves the other 29 keys, drawn or not.
+    CHECK(harness.click({.x = 3, .y = 1}, core::tui::Modifier::Ctrl) == EventResult::Handled);
+    REQUIRE(selections.size() == 1);
+    CHECK(selections.back().size() == static_cast<std::size_t>(rowCount - 1));
+    CHECK(std::ranges::find(selections.back(), key(1)) == selections.back().end());
+    CHECK(std::ranges::find(selections.back(), key(30)) != selections.back().end());
+
+    // Selecting it again keeps them all.
+    CHECK(harness.click({.x = 3, .y = 1}, core::tui::Modifier::Ctrl) == EventResult::Handled);
+    REQUIRE(selections.size() == 2);
+    CHECK(selections.back().size() == static_cast<std::size_t>(rowCount));
+}

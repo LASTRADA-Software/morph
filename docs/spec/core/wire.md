@@ -46,6 +46,7 @@ default-constructed values, which `encode` leaves out of the JSON (see
 | `"ui-fetch"` | request   | A bundle file by its content hash; replies with the file's exact bytes in `body`. UI service only. | `body`, `session` |
 | `"ui-evaluate"` | request | Evaluates an action's body without executing it; replies with the recomputed body, its field errors and readiness. UI service only. | `body`, `modelType`, `actionType`, `session` |
 | `"ui-file"` | request  | One step of a file upload or read. UI service with a file store only. | `body`, `session` |
+| `"ui-texts"` | request | The application's texts (field labels, help, placeholders) in the locale `session.locale` names. UI service only. | `session` |
 | `"watch"` / `"unwatch"` | request | Adds topics to (or, with `replace`, sets) / removes them from the connection's watch set. See [The watch, unwatch and changes bodies](#the-watch-unwatch-and-changes-bodies). | `body`, `session` |
 | `"event"`    | server-initiated | An unprompted notification on a connection that negotiated events. Never a reply to anything. See [The `event` kind](#the-event-kind). | `callId` (always `0`), `body` (`{topic, payload}`) |
 | `"ok"`       | reply     | Server success. | `callId`, `body` (serialized result, or — for a `"hello"` reply — the server's `ProtocolRange`), `modelId` (for register-replies) |
@@ -694,6 +695,7 @@ an application's inventory.
 | `"ui-fetch"` | `{hash}` | the file's bytes | The manifest and a public file: the `ui-hello` gate. Any other file: `authorize(session, "ui", "fetch")`, and for a screen the catalog's rule (available, every top-level query permitted). An unknown hash is answered `err "not found"` only past the `fetch` gate. |
 | `"ui-evaluate"` | the action's JSON body, with `modelType` and `actionType` naming it | `{body, errors, ready}` | `authorize(session, modelType, actionType)`: as the action it evaluates. A body that does not decode is answered `err` with the decoder's reason. |
 | `"ui-file"` | `{op, …}`: `begin` `{name, type, size, model, action}`, `chunk` `{upload, offset, data}`, `end` `{upload}`, `read` `{ref, offset, length}` | `{upload}`, `{received}`, `{ref}`, `{data, total, name, type}` | `begin`: `authorize(session, model, action)`, as the mutation that will reference the file. The rest: the upload id or reference belongs to the principal; another principal's is `not found`. Served only by a `UiService` with a file store. |
+| `"ui-texts"` | empty; the locale is `session.locale` | `{locale, messages}`: each text by its message key | `authorize(session, "ui", "texts")`. A session with no locale, or one that is not a BCP 47-shaped tag of at most 35 bytes, is refused with the reason; a server given no text source answers `err "no texts are served"`. |
 
 Every refusal is `err "unauthorized"`. A request body over 64 KiB, that is not
 JSON, nests deeper than 64 levels or carries a must-understand (`!`) key is

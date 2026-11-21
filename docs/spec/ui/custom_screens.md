@@ -12,11 +12,13 @@ base rule on the server, and the client that offers them.
 | `include/morph/ui/custom_screen_sync.hpp` | `isCustomScreenId`, `routeScreen`, `CustomDocuments`, `CustomScreensOffer`, `CustomScreenSync` |
 | `include/morph/ui/custom_screen_controller.hpp` | `CustomScreenControllerOptions`, `CustomScreenController`, its outcomes and results as data |
 | `include/morph/ui/custom_screen_chrome.hpp` | `CustomScreenChromeOptions`, `CustomScreenChrome` |
+| `include/morph/ui/custom_screen_versions.hpp` | `ActionSchemaLookup`, `baseVersion`, `layoutChanges`, `LayoutChanges`, `LayoutChoices`, `applyLayoutChoices`, `withKnownVersion` |
 | `include/morph/ui/json_source.hpp` | `prettyJson`, `pointerOffset`, `lineAt` |
 | `include/morph/ui/chat/propose_screen.hpp` | `customScreensChatTool` (`propose_screen`), `customScreensDocumentSource`, `enableCustomScreensChat` |
 | `src/ui/chat_propose_screen.cpp` | The tool: its offer, its handler and what the conversation keeps of a call |
 | `src/ui/custom_screen_checks.cpp` | The checks, the base rule's walk and the table that classifies every command-list key |
 | `src/ui/custom_screens.cpp` | `CustomScreens`, the model, its registration, the record and its effects |
+| `src/ui/custom_screen_versions.cpp` | The versions: the walk that finds elements and forms, the comparison, the update |
 | `src/ui/document_actions.hpp` | `DocumentActions`: the actions a document names, and the kind of position of each |
 
 ## Contents
@@ -26,6 +28,7 @@ base rule on the server, and the client that offers them.
 - [The checks](#the-checks)
 - [The base rule](#the-base-rule)
 - [Records and effects](#records-and-effects)
+- [Versions](#versions)
 - [The assistant](#the-assistant)
 - [The client](#the-client)
 - [Not yet](#not-yet)
@@ -74,6 +77,9 @@ before it serves.
 
 - `bundle` is a getter, called at each action, so a development reload is seen. Actions run on strands, on any thread,
   so it must be thread-safe.
+- `dispatcher` is borrowed: the schemas of the actions a base's forms bind, which a base's version reads
+  ([Versions](#versions)), come from it at every `list`, `get` and `save`, so it outlives every call, as it does for
+  the server.
 - `authorizer` is the server's, for `permittedActions` and the base screen's admission. The server's authoriser must
   admit `morph.customScreens` and its actions for every signed-in principal; the model keeps each person to what the
   store answers them.
@@ -118,7 +124,8 @@ What every action does, in order:
   custom screen`, is the error as the store gave it, so a client cannot choose an id. With no `id`, the id is
   `custom:` and 32 hexadecimal digits from `newFileRef`. `withScreenId` then writes that id into the document,
   escaping control bytes inside the writer as the wire does (the writer's default leaves them raw, which is invalid
-  JSON and can corrupt a byte after an earlier escaped character), and `checkCustomScreen` checks the rewritten text,
+  JSON and can corrupt a byte after an earlier escaped character), a new screen records its base's version
+  ([Versions](#versions)), and `checkCustomScreen` checks the rewritten text,
   the text that is stored, so the size bound holds for the longer id too; a refusal is the `err` reply's message,
   pointer included. Only then is `put` called, with `savedAt` the current time and `savedBy` the caller. `check` runs
   the same rewrite under a placeholder id as long as a real one, so its verdict is the one `save` would give.
@@ -138,6 +145,8 @@ not the document is bounded whatever the store holds: `id`, `title`, `basedOn`, 
 as a whole: a record cannot be cut, so one too long is not sent and the screen is listed broken). A longer value is cut on a UTF-8 boundary and
 ends with an ellipsis (U+2026). A reason can quote a whole host command, and a pointer or a principal can be of any
 length, so without the caps the reply would have no bound. `mine` is computed from the stored `savedBy`, before the cap.
+The four flags (`mine`, `opensWithoutParams`, `needsUpdate`, `needsAttention`) take under 80 bytes with their keys, so
+with the keys, the punctuation and `savedAt` the fixed part stays under 350 bytes beside the 3399 of capped text.
 One summary is then at most `kMaxSummaryBytes` (4 KiB) before escaping and at most seven times that after it (see
 `list`).
 A store keeps its ids within `kMaxNameBytes`, since an id shown cut could not be given back to `get` or `remove`; the
@@ -173,6 +182,9 @@ A `CustomScreenSummary` carries `id`, `title`, `basedOn`, `savedAt`, `savedBy` a
   are too long to send; absent when it may be mounted. A broken screen is listed, so the person can open its source
   and fix it, and is never mounted.
 - `attributes`: the store's record, as the store answered it; absent when it records nothing.
+- `needsUpdate`: the version the document knows (`knownVersion`) is below its base's, so the base changed since
+  ([Versions](#versions)).
+- `needsAttention`: the document refers to elements or fields its base no longer has.
 
 The actions are `Loggable::No`: a screen is not application data, and the store keeps who saved it and when.
 
@@ -187,8 +199,8 @@ once; the set is never kept across calls. `save` and `check` run it on the reque
 1. **Bounds.** At most `maxDocumentBytes` (256 KiB by default, at most `kMaxFileBytes`), nested within
    `kMaxJsonDepth`. They are cheap and need no parse of the document, so they come first. The id rewrite parses the
    document, so `save` and `check` first refuse any document longer than `maxDocumentBytes` plus the most the rewrite
-   can add (47 bytes: the `,"id":""` member and the 39-byte custom id), with this check's wording, before the
-   document is parsed. A document within that margin is rewritten, and the bound is checked again on the rewritten
+   can add (129 bytes: the `,"id":""` member and the 39-byte custom id, and the `,"knownVersion":""` member with the
+   longest version a new screen records), with this check's wording, before the document is parsed. A document within that margin is rewritten, and the bound is checked again on the rewritten
    text, which is the text that is stored.
 2. **The base.** `basedOn` names a screen of the bundle that has a document (a host screen has none), and
    `screenAdmitted` admits the person to it: it is available and the person may run every top-level query it declares.
@@ -292,6 +304,95 @@ initialisation in `src/ui/custom_screens.cpp`, beside `registerCustomScreens`, b
 resolve once, at their first read. A static build links them only into a server that calls `registerCustomScreens`; a
 shared build carries them for every application, where they are inert.
 
+## Versions
+
+A custom screen is a full copy of its base's document, so a base that changes in a new release does not change the copy.
+Versions let the person see that their copy is older than its base, and take over what they want once, after which the
+copy counts as current. The functions are pure, over JSON texts, so the server and a client compute the same answer.
+
+**The base's version.** An element of a document may carry `since` next to its `id`
+([`document.md`](document.md#element-versions)), and a field of an action carries `x-since`
+([`../forms/forms.md`](../forms/forms.md#field-versions--since)); both are `forms::FieldVersion`s. `baseVersion(base,
+schemas)` is the highest of the base's elements' and of the fields of the actions its `form` nodes bind, the first
+version (`0`) when there is none. `schemas` is an `ActionSchemaLookup`, an action's schema JSON by its id; an action it
+does not know adds no fields.
+
+**The copy's version.** A custom screen's document carries `knownVersion`, the base version it was last saved or
+updated against; one without counts as the first version. The loader refuses one that is not a version.
+
+- **A new screen records its base's version.** `save` without an `id`, and `check`, which checks a document as a new
+  one, write the base's version as `knownVersion` into a document that carries none, after the id rewrite and before
+  the checks, so the stored text is the checked text. A base at the first version has nothing to record, since a
+  document without `knownVersion` already knows it. A document that carries one keeps it: **Save as…** of an older
+  copy is as old as the copy. An overwrite (`save` with an `id`) keeps the document's as sent. What the person changes
+  is saved through the same actions, so the controller's **Save**, **Save as…** and **Check and save** need nothing of
+  their own.
+- **The assistant does not change it.** `propose_screen` refuses a patch whose result has another `knownVersion` than
+  the turn's current document, or none where it had one: `The patch changes /knownVersion, ...`. Only the person's
+  update step moves it.
+
+**What changed.** `layoutChanges(base, baseSchemas, layout)` loads both texts (with no catalog: the comparison reads
+only their structure) and answers a `LayoutChanges`: both versions, `added`, `removed`, `needsUpdate()` (the copy's
+version is below the base's) and `needsAttention()` (something is removed).
+
+- **Elements.** An element is a node or a part with an `id`, found by walking the head's parts (`status`, `actions`,
+  `menu`, `tools`) and the view; a form's field overlay is not one (its key is a field name), and a component's
+  fallback is a scope nothing outside it names, so it is not walked. An id is matched by its first occurrence in
+  document order.
+- **Added elements:** each base element whose `since` is above the copy's `knownVersion` and whose id the copy does not
+  have, in the base's document order, with its place: `parent`, the id of the nearest element holding it (empty for the
+  document itself); `path`, the pointer from that element to the member holding it (`/children`, `/tabs`,
+  `/view/children`, `/actions`); and `index`, its position when that member is an array. An element held by another
+  added element comes with it and is not listed.
+- **Added fields:** each field of a base form's action whose `x-since` is above `knownVersion`, for a form the copy
+  has (the same id, or for a form without one the copy's first form of the same action) and gives no overlay for that
+  field. A field with an overlay was decided already; a form the copy dropped shows nothing to decide.
+- **Removed elements:** each element of the copy that carries a `since` and whose id the base no longer has. An element
+  a person adds carries none, so it is never taken for one the base removed; an element of the base that may be
+  removed in a later release is given a `since`.
+- **Removed fields:** each field overlay of a copy's form that names a field its action's schema no longer has. A
+  form whose action the lookup does not know is not compared.
+- **Keys.** Each item has a `key` a choice names it by: an element's id, or `<form>/<field>`, where `<form>` is the
+  form's id, or its action for a form without one.
+
+A schema whose `x-since` is not a version is a refusal at the form's pointer; a document that does not load is the
+loader's refusal.
+
+**The update.** `applyLayoutChoices(base, baseSchemas, layout, choices)` takes the person's choice per item
+(`LayoutChoices`, by key) and answers the updated copy:
+
+1. Each removal chosen `Drop` is removed: an element from wherever it sits, a field's overlay from its form's `fields`.
+   A removal with no choice is kept.
+2. Each field addition not chosen `TakeOver` gets `"omit": true` in its form's `fields` (created when the form has
+   none). An addition with no choice is left out, so the copy changes only where the person said. A field taken over
+   needs nothing: the form shows every field its schema has.
+3. Each element addition chosen `TakeOver` is inserted at its place: into the copy's element with the base's `parent`
+   id (the document itself for none), in the same member, at the base's index or at the end when the member is
+   shorter; a member the copy lacks is created. A parent the copy does not have, a member that is not a list where the
+   base's was, and an occupied member where the base's held the element itself are refusals.
+4. `knownVersion` is set to the base's version.
+
+The result is loaded as a save loads it, so what comes back is a document; the server's checks still decide when it
+is saved. A choice whose key names no item is refused, rather than ignored. `withKnownVersion(document, version)` sets
+the member alone.
+
+**Status.** The model computes it, since it holds the base: `list` and `get` fill each summary's `needsUpdate` and
+`needsAttention` from `layoutChanges` of the stored document against the base as the bundle serves it, both `false`
+for a screen whose base is gone or whose document does not load (such a screen is `broken`). The schemas come from
+the server's dispatcher (`ActionDispatcher::schemasJson` of each model type that registers the action), which
+`registerCustomScreens` borrows for that: it must outlive every call, as it already does for the server.
+
+**The client.** `CustomScreenController` has two commands over them, as data like its others:
+
+- `layoutChangesOf(screenId, done)` reads the stored screen (`get`) and answers `layoutChanges` against the base's
+  text as the bundle has it (`sourceOf`) and the catalog's schemas (`catalog().schema`), or why it could not.
+- `applyLayoutChoices(screenId, choices, done)` reads the stored screen the same way, applies the choices, asks the
+  server's `check`, and saves the result over the screen with its listed attributes. `done` answers a
+  `CustomScreenCheckResult`: `Done` once saved, `Refused` with the update's, the check's or the store's refusal; a
+  screen that is not the person's own (`canChange`) is refused before anything is read. `onOutcome` is told `Saved`.
+
+The application draws the update step; morph has no view for it.
+
 ## The assistant
 
 `propose_screen` and the read tools `screen_outline`, `screen_find` and `screen_node` are the first tools added through the
@@ -323,6 +424,14 @@ turn.
   contains the text, ignoring case, with how many matched in all. `screen_node(pointer, depth)` is the JSON at a pointer,
   default depth 2, where every container deeper than `depth` (an array is a level) is the string `"[object, N keys]"` or
   `"[array, N items]"`; when the asked depth does not fit the cap a smaller one is shown, and the answer says so.
+- **What a form's fields mean.** `screen_outline` follows each `form` node's line with one indented line per field of
+  its action whose description is not empty, `field <name>: "<description>"`; `screen_node` adds, after the JSON, the
+  same lines for each `form` the view expands, under a sentence that they come from the action's schema and are not
+  part of the document. The schema is the turn's (`ChatToolContext::schemas`), and a description is resolved as the
+  form shows it: the field's `x-i18nKey` key, then `<action>.<field>.help`, from the application's texts in the
+  conversation's locale (`fieldTextsFor`, [service.md](service.md#texts)), else the schema's `description`. Each is cut
+  at 200 bytes, and both stay within the answer's cap: the outline counts the lines with their node's, and the node
+  lists the descriptions that fit and says when it left some out.
 - **A call to `propose_screen`** carries `patch`, an RFC 6902 array (`add`, `remove`, `replace`, `move`, `copy`, `test`)
   of at most `ChatLimits::maxProposalBytes` (64 KiB) as JSON; the bound is on the patch alone. A whole document is one
   `replace` of the path `""`, with the document as `value`. There is no base to name: the patch applies to the turn's
@@ -387,7 +496,8 @@ go. No call names a person.
 over the same drafts. It holds, per tab, the draft's text, a generation that changes with every draft mounted or
 ended, whether a save is in flight and the last refusal of a save (`message`), and runs the commands: `source` and
 `storedSource` (the text a source view opens with), `preview`, `checkAndSave`, `proposeDraft`, `saveAs` (with the
-attributes the store is asked to record), `save`, `discard`, `openAs`, `openCustom` and `remove`. Its state is
+attributes the store is asked to record), `save`, `discard`, `openAs`, `openCustom`, `remove`, and `layoutChangesOf` and
+`applyLayoutChoices` ([Versions](#versions)). Its state is
 reactive, so a view's bindings follow `drafted`, `saving`, `message`, `offered` and `canChange`. A view calls
 `follow(tab)` when it draws a tab, as the chrome does from `WorkspaceOptions::chrome`.
 

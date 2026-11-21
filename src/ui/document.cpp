@@ -12,6 +12,8 @@
 #include <limits>
 #include <map>
 #include <memory>
+#include <morph/core/wire.hpp>
+#include <morph/forms/version.hpp>
 #include <morph/ui/control_shape.hpp>
 #include <morph/ui/date_pattern.hpp>
 #include <morph/ui/document.hpp>
@@ -659,6 +661,7 @@ public:
         if (doc.id.empty()) {
             refuse("/id", "a document has a non-empty id");
         }
+        checkKnownVersion(*object);
         doc.title = optionalExpr(*object, "title", "");
         doc.identity = optionalExpr(*object, "identity", "");
         doc.dirty = optionalExpr(*object, "dirty", "");
@@ -963,7 +966,7 @@ private:
             refuse("/shell", "`shell` is the app document's; a screen has none");
         }
         ShellParts parts;
-        auto const text = glz::write_json(*declared);
+        auto const text = glz::write<::morph::wire::detail::EscapingWriteOpts{}>(*declared);
         if (!text || glz::read_json(parts, *text)) {
             refuse("/shell",
                    "`shell` holds the parts: context, modules, search, inbox, principal, brand, help, searchHint");
@@ -1780,7 +1783,42 @@ private:
             for (auto const& [field, overlay] : object) {
                 made.parts["fields"].push_back(fieldOverlay(field, overlay, pointerAppend(path, field)));
             }
+        } else if (Json const* const since = member(object, "since")) {
+            made.since = sinceOf(*since, made.id, pointerAppend(path, "since"));
         }
+    }
+
+    // A screen's `knownVersion`, when it has one: the base version a person's copy was last saved against.
+    static void checkKnownVersion(Json::object_t const& object) {
+        Json const* const known = member(object, "knownVersion");
+        if (known == nullptr) {
+            return;
+        }
+        auto const* const version = std::get_if<std::string>(&known->data);
+        if (version == nullptr) {
+            refuse("/knownVersion", "`knownVersion` is a version, such as \"6.11.0\"");
+        }
+        if (auto parsed = forms::FieldVersion::parse(*version); !parsed.has_value()) {
+            refuse("/knownVersion", std::move(parsed.error()));
+        }
+    }
+
+    // An element's `since`: a version, on an element that has an id, since versions are what a person's copy of the
+    // screen is compared by, and an element is found there by its id.
+    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): the value, the element's id, then where the value is.
+    [[nodiscard]] static std::string sinceOf(Json const& value, std::string const& elementId,
+                                             std::string const& where) {
+        auto const* const text = std::get_if<std::string>(&value.data);
+        if (text == nullptr) {
+            refuse(where, "`since` is a version, such as \"6.11.0\"");
+        }
+        if (auto parsed = forms::FieldVersion::parse(*text); !parsed.has_value()) {
+            refuse(where, std::move(parsed.error()));
+        }
+        if (elementId.empty()) {
+            refuse(where, "an element with `since` has an `id`");
+        }
+        return *text;
     }
 
     // One field overlay of a form's `fields`: expressions by key, and the host `component` that draws the field with

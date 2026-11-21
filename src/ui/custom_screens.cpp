@@ -38,6 +38,11 @@ namespace {
 inline constexpr std::size_t kCustomScreenIdSlack =
     std::string_view{R"(,"id":"")"}.size() + kCustomScreenIdPrefix.size() + 32;
 
+/// @brief The most a new screen's `knownVersion` can add: the member with its quotes and comma, and the longest
+///        version.
+inline constexpr std::size_t kKnownVersionSlack =
+    std::string_view{R"(,"knownVersion":"")"}.size() + forms::FieldVersion::kMaxTextBytes;
+
 /// @brief The session of the action being run, copied: the session is the dispatching thread's, and an action
 ///        resumes elsewhere after its first await.
 [[nodiscard]] ::morph::session::Context callerSession() {
@@ -146,16 +151,41 @@ void refuseProblem(std::optional<std::string> const& problem) {
     return found == bundle.screens.end() || found->hash.empty() ? nullptr : &*found;
 }
 
+/// @brief Whether @p text is a JSON object with a `knownVersion` member.
+[[nodiscard]] bool recordsKnownVersion(std::string_view text) {
+    auto const parsed = parseJson(text);
+    auto const* const object = parsed ? std::get_if<Json::object_t>(&parsed->data) : nullptr;
+    return object != nullptr && object->contains(kKnownVersionKey);
+}
+
+/// @brief The schema of each action, read from @p dispatcher: the action's entry of `schemasJson` of the first model
+///        type that registers it.
+[[nodiscard]] ActionSchemaLookup dispatcherSchemas(model::detail::ActionDispatcher const& dispatcher) {
+    return [&dispatcher](std::string_view actionId) -> std::optional<std::string> {
+        for (std::string const& modelType : dispatcher.modelsOf(actionId)) {
+            auto const all = parseJson(dispatcher.schemasJson(modelType));
+            auto const* const object = all ? std::get_if<Json::object_t>(&all->data) : nullptr;
+            Json::object_t::const_iterator const found =
+                object == nullptr ? Json::object_t::const_iterator{} : object->find(actionId);
+            if (object != nullptr && found != object->end()) {
+                return glz::write<::morph::wire::detail::EscapingWriteOpts{}>(found->second).value_or(std::string{});
+            }
+        }
+        return std::nullopt;
+    };
+}
+
 }  // namespace
 
 CustomScreens::CustomScreens(std::shared_ptr<ICustomScreenStore> store,
                              std::function<std::shared_ptr<ServedBundle const>()> bundle,
                              std::shared_ptr<::morph::session::IAuthorizer const> authorizer,
-                             CustomScreensOptions options)
+                             CustomScreensOptions options, ActionSchemaLookup schemas)
     : _store{std::move(store)},
       _bundle{std::move(bundle)},
       _authorizer{std::move(authorizer)},
       _options{options},
+      _schemas{std::move(schemas)},
       _verdicts{options.verdictCacheSize} {}
 
 std::expected<std::shared_ptr<ServedBundle const>, std::string> CustomScreens::servedFor(
@@ -177,10 +207,10 @@ std::expected<std::string, Refusal> CustomScreens::rewrittenAndChecked(ServedBun
                                                                        ::morph::session::Context const& session,
                                                                        std::string_view basedOn,
                                                                        std::string_view document,
-                                                                       std::string_view screenId) const {
+                                                                       std::string_view screenId, bool isNew) const {
     // The rewrite parses the document, so a document no bound could admit is refused before it, with the wording the
     // bounds check gives.
-    if (document.size() > _options.maxDocumentBytes + kCustomScreenIdSlack) {
+    if (document.size() > _options.maxDocumentBytes + kCustomScreenIdSlack + kKnownVersionSlack) {
         return std::unexpected(Refusal{
             .document = {},
             .path = {},
@@ -195,6 +225,9 @@ std::expected<std::string, Refusal> CustomScreens::rewrittenAndChecked(ServedBun
         }
         return std::unexpected(std::move(text.error()));
     }
+    if (isNew) {
+        text = withBaseVersion(bundle, basedOn, std::move(*text));
+    }
     if (auto refusal =
             checkCustomScreen(bundle, session, *_authorizer, basedOn, *text, screenId, _options, &_verdicts)) {
         return std::unexpected(std::move(*refusal));
@@ -202,10 +235,24 @@ std::expected<std::string, Refusal> CustomScreens::rewrittenAndChecked(ServedBun
     return text;
 }
 
+std::string CustomScreens::withBaseVersion(ServedBundle const& bundle, std::string_view basedOn,
+                                           std::string text) const {
+    ServedScreen const* const base = screenOf(bundle, basedOn);
+    if (base == nullptr || recordsKnownVersion(text)) {
+        return text;
+    }
+    auto const version = baseVersion(bundle.files.at(base->hash).bytes, _schemas);
+    // The first version is what a document without one knows already, so it is not written.
+    if (!version || *version == forms::FieldVersion{}) {
+        return text;
+    }
+    return withKnownVersion(text, *version).value_or(std::move(text));
+}
+
 std::optional<Refusal> CustomScreens::checkedAsNew(ServedBundle const& bundle,
                                                    ::morph::session::Context const& session, std::string_view basedOn,
                                                    std::string_view document) const {
-    auto const checked = rewrittenAndChecked(bundle, session, basedOn, document, placeholderId());
+    auto const checked = rewrittenAndChecked(bundle, session, basedOn, document, placeholderId(), true);
     if (checked) {
         return std::nullopt;
     }
@@ -319,6 +366,12 @@ CustomScreenSummary CustomScreens::summarize(ServedBundle const& bundle, ::morph
                                             std::to_string(kMaxAttributesBytes) + " bytes as JSON"};
         }
     }
+    // How the stored document stands against its base today. A document that does not load, or a base that is gone,
+    // is broken, and neither flag is set.
+    ServedScreen const* const served = screenOf(bundle, screen.basedOn);
+    auto const changes = served == nullptr
+                             ? std::expected<LayoutChanges, Refusal>{std::unexpected(Refusal{})}
+                             : layoutChanges(bundle.files.at(served->hash).bytes, _schemas, screen.document);
     // A custom screen declares exactly its base's params, so a screen that is not broken opens from the navigator when
     // its base takes none. The base is read once per list, not once per screen.
     bool opensWithoutParams = false;
@@ -343,6 +396,8 @@ CustomScreenSummary CustomScreens::summarize(ServedBundle const& bundle, ::morph
         .opensWithoutParams = opensWithoutParams,
         .broken = std::move(broken),
         .attributes = std::move(attributes),
+        .needsUpdate = changes.has_value() && changes->needsUpdate(),
+        .needsAttention = changes.has_value() && changes->needsAttention(),
     };
 }
 
@@ -422,7 +477,8 @@ namespace {
     }
     std::string const screenId = request.id ? *request.id : newFileRef(kCustomScreenIdPrefix);
     // The id is rewritten first, and the checks run on the text that is stored: every bound applies to it.
-    auto text = _context->rewrittenAndChecked(*bundle, session, request.basedOn, request.document, screenId);
+    auto text =
+        _context->rewrittenAndChecked(*bundle, session, request.basedOn, request.document, screenId, !request.id);
     if (!text) {
         throw std::invalid_argument{text.error().message()};
     }
@@ -479,8 +535,8 @@ std::shared_ptr<CustomScreens> registerCustomScreens(std::shared_ptr<ICustomScre
             "registerCustomScreens: maxListed is too large for a `list` reply to fit one envelope "
             "once escaped"};
     }
-    auto context =
-        std::make_shared<CustomScreens>(std::move(store), std::move(bundle), std::move(authorizer), options);
+    auto context = std::make_shared<CustomScreens>(std::move(store), std::move(bundle), std::move(authorizer), options,
+                                                   dispatcherSchemas(dispatcher));
     registry.registerModel<CustomScreensModel>(kCustomScreensModel, [context] {
         return std::make_unique<model::detail::ModelHolder<CustomScreensModel>>(context);
     });

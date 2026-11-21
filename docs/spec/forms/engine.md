@@ -207,7 +207,15 @@ it. A view mounted on it is destroyed first.
   follows; the drafts keep the text as typed, so `1,5` typed under a comma locale reads as an error once the locale
   switches to a point. The date inputs' `pattern` is read tracked and follows. The screen's interpreter keeps an effect per
   form, collection and wizard that applies the session's current formatting, and holds the facts it applied, because the
-  number locale is a set of views into them. The display zone and the translations are read once, at build.
+  number locale is a set of views into them. The display zone is read once, at build.
+- **Texts follow the screen.** `setTranslations(provider, bcp47)` on a `FormSession` (and so on a `WizardSession`'s
+  steps and a `CollectionSession`'s editor) replaces the catalogue and the locale of a built form. A field's `label()`,
+  `help()` and `placeholder()`, `groupTitle(i)`, a wizard's `title()` and `stepTitle(i)`, and the error messages
+  (`values()`) resolve through them on each read and are tracked, so a view that binds them shows the new text without
+  a remount; `formView` binds every one of them, the control's accessible name and description included. Whether a
+  field has a help line at all (`hasHelp()`) is decided untracked when the view is built. The same effect that applies
+  the formatting calls `setTranslations` with the session's translations and locale, so a `setLocale` or
+  `setTranslations` on the `Session` reaches every mounted form.
 - **Choice options** are a `reactive::Query<std::string, std::string>` per Choice, keyed on the options request:
   `{}` for an independent Choice, `{"parent": <literal>, …}` once every parent encodes, idle while one does not.
   A parent change refetches, and a reply for a superseded request is dropped. A selection the answered options no
@@ -224,7 +232,7 @@ it. A view mounted on it is destroyed first.
   another is in flight would be refused; the Effect waits instead and sends the latest body when the one in flight
   settles, so typing against a slow server loses nothing.
 - **Groups.** `groupCollapsed(i)` and `tabSelection(i)` are per-group signals a view binds; `groupTitle(i)`
-  resolves `<action>.group.<i>` through the translations.
+  resolves `<action>.group.<i>` through the translations, tracked.
 
 Labels resolve the explicit `x-i18nKey` first, then (top level only) the derived `<action>.<field>.<slot>`, then
 the schema's literal (`render::resolveText`).
@@ -362,7 +370,8 @@ wizard's lifetime, and throws `std::invalid_argument` when a step's schema is un
   `"<Action>.<member>"`, so the reply wins on a name collision. Entering a step assigns its prefill from them as
   JSON values, programmatically; a step the prefill leaves ready and not done submits once in automatic mode, and
   returning to a done step submits nothing.
-- `title()` and `stepTitle(i)` resolve `<id>.title` and `<id>.step.<i>.title` through the translations.
+- `title()` and `stepTitle(i)` resolve `<id>.title` and `<id>.step.<i>.title` through the translations, tracked;
+  `setTranslations` forwards to every step.
 
 ## Rendering collections and wizards
 

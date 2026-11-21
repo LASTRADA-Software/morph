@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <functional>
 #include <memory>
+#include <morph/core/wire.hpp>
 #include <morph/reactive/signal.hpp>
 #include <morph/ui/interpreter.hpp>
 #include <morph/ui/shell_parts.hpp>
@@ -597,7 +598,7 @@ ShellHelpView ShellPartsModel::helpView() const {
 
 ValueRecord ShellPartsModel::helpParams() const {
     // NOLINTNEXTLINE(bugprone-unchecked-optional-access): helpParams runs only while a help view is declared.
-    auto const text = glz::write_json(_parts->help->params);
+    auto const text = glz::write<::morph::wire::detail::EscapingWriteOpts{}>(_parts->help->params);
     auto const json = text ? parseJson(*text) : std::unexpected(std::string{"unwritable"});
     auto const value = json ? valueFromJson(*json) : std::unexpected(json.error());
     ValueRecord const* const record = value ? value->asRecord() : nullptr;

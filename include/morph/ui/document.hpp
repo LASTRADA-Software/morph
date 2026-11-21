@@ -390,6 +390,9 @@ struct DocNode {
     std::string id;
     /// @brief The node's JSON Pointer.
     std::string path;
+    /// @brief The version the element first ships in (`forms::FieldVersion`), as written; empty for the first
+    ///        version. Only an element with an `id` carries one.
+    std::string since;
     /// @brief Expression properties, by key.
     std::map<std::string, ExprPtr, std::less<>> props;
     /// @brief Command lists, by key (`onClick`, …), including a custom node's `on` events as `on.<event>`.

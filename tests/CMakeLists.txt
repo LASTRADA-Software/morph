@@ -158,6 +158,7 @@ add_executable(morph_tests
     test_forms_display_unit.cpp
     test_forms_meta_options.cpp
     test_forms_blank_as.cpp
+    test_forms_since.cpp
     test_forms_instance_constraints.cpp
     test_widget_hints.cpp
     test_datetime.cpp
@@ -286,8 +287,10 @@ add_executable(morph_tests
     test_ui_custom_screen_sync.cpp
     test_ui_custom_screen_chrome.cpp
     test_ui_custom_screen_controller.cpp
+    test_ui_custom_screen_versions.cpp
     test_ui_host_vocabulary.cpp
     test_ui_catalogue.cpp
+    test_ui_texts.cpp
     test_ui_locale_table.cpp
     test_action_refusal.cpp
 )

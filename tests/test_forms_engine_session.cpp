@@ -1,7 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 
+#include <array>
 #include <catch2/catch_test_macros.hpp>
+#include <cstddef>
+#include <functional>
+#include <memory>
 #include <morph/forms/engine/form_session.hpp>
+#include <morph/reactive/signal.hpp>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -10,6 +15,7 @@
 
 namespace {
 
+using morph::forms::FieldState;
 using morph::forms::FormSessionOptions;
 using morph::test::formsengine::Harness;
 
@@ -627,6 +633,77 @@ TEST_CASE("FormSession: labels resolve through the translations; numbers read in
     CHECK(signForm->body() == R"({"mass":{"num":-5000,"den":1000,"dp":3}})");
     harness.type(*signForm, "mass", "-5");
     CHECK(signForm->body() == R"({"mass":{"num":-5000,"den":1000,"dp":3}})");
+}
+
+// Mutations: resolve the texts once at construction (the labels keep their English words); re-resolve without tracking
+// (the effect does not rerun); leave a group title or a row's member out of the switch.
+TEST_CASE("FormSession: a mounted form's field texts and group titles follow setTranslations",
+          "[forms-engine][session]") {
+    morph::render::TranslationProvider const german = [](std::string_view key,
+                                                         std::string_view locale) -> std::optional<std::string> {
+        if (locale != "de") {
+            return std::nullopt;
+        }
+        if (key == "Probe.slot.label") {
+            return "Steckplatz";
+        }
+        if (key == "Probe.slot.help") {
+            return "Die Nummer des Platzes";
+        }
+        if (key == "Probe.slot.placeholder") {
+            return "z. B. 4";
+        }
+        if (key == "Probe.group.0") {
+            return "Allgemein";
+        }
+        if (key == "custom.row.label") {
+            return "Zeile";
+        }
+        if (key == "error.integer") {
+            return "keine ganze Zahl";
+        }
+        return std::nullopt;
+    };
+    constexpr std::string_view kSchema = R"({"properties":{
+      "slot":{"type":["integer","null"],"title":"Slot","description":"The slot's number","x-placeholder":"e.g. 4",
+              "x-order":0,"x-section":0},
+      "rows":{"type":"array","x-order":1,"items":{"type":"object","properties":{
+              "line":{"type":"integer","title":"Line","x-i18nKey":"custom.row"}}}}},
+      "x-layout":{"groups":[{"title":"General","kind":"section","fields":["slot"]}]}})";
+    Harness harness;
+    auto const form = harness.session("Probe", kSchema);
+    FieldState const& slot = form->field("slot");
+    CHECK(slot.label() == "Slot");
+    CHECK(slot.help() == "The slot's number");
+    CHECK(slot.placeholder() == "e.g. 4");
+    CHECK(form->groupTitle(0) == "General");
+    // One effect per text, so each accessor is shown to be tracked on its own.
+    std::array<std::string, 4> seen;
+    auto const watch = [&harness](std::string& into, std::function<std::string()> read) {
+        return std::make_unique<morph::reactive::Effect>(harness.rt,
+                                                         [&into, read = std::move(read)] { into = read(); });
+    };
+    std::array const watchers{watch(seen.at(0), [&slot] { return slot.label(); }),
+                              watch(seen.at(1), [&slot] { return slot.help(); }),
+                              watch(seen.at(2), [&slot] { return slot.placeholder(); }),
+                              watch(seen.at(3), [&form] { return form->groupTitle(0); })};
+    harness.settle();
+    CHECK(seen == std::array<std::string, 4>{"Slot", "The slot's number", "e.g. 4", "General"});
+
+    form->setTranslations(german, "de");
+    harness.settle();
+    CHECK(form->options().bcp47 == "de");
+    CHECK(seen == std::array<std::string, 4>{"Steckplatz", "Die Nummer des Platzes", "z. B. 4", "Allgemein"});
+
+    // A row's member resolves through its own key once it exists, and follows a switch back.
+    form->field("rows").addRow();
+    harness.settle();
+    CHECK(form->field("rows[0].line").label() == "Zeile");
+
+    form->setTranslations({}, "en");
+    harness.settle();
+    CHECK(seen == std::array<std::string, 4>{"Slot", "The slot's number", "e.g. 4", "General"});
+    CHECK(form->field("rows[0].line").label() == "Line");
 }
 
 TEST_CASE("FormSession: a failed submission is the last error; a later success clears it", "[forms-engine][session]") {

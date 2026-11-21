@@ -94,7 +94,8 @@ public:
               .translations = _options.translations,
               .bcp47 = _options.bcp47,
           },
-          _format{runtime, std::uint64_t{0}} {}
+          _format{runtime, std::uint64_t{0}},
+          _texts{runtime, std::uint64_t{0}} {}
 
     /// @brief The runtime.
     /// @return The runtime passed at construction.
@@ -108,11 +109,12 @@ public:
     /// @return The options.
     [[nodiscard]] FormSessionOptions const& options() const noexcept { return _options; }
 
-    /// @brief The options a value conversion reads. Tracked: a change of the number format (`setFormat`) reruns what
-    ///        read them.
+    /// @brief The options a value conversion reads. Tracked: a change of the number format (`setFormat`) or of the
+    ///        translations (`setTranslations`) reruns what read them.
     /// @return The value context.
     [[nodiscard]] ValueContext const& values() const {
         static_cast<void>(_format.get());
+        trackTexts();
         return _values;
     }
 
@@ -136,6 +138,21 @@ public:
         _values.locale = locale;
         _format.set(_format.peek() + 1);
     }
+
+    /// @brief Replaces the translations and the locale every field text is resolved in, and reruns what read one.
+    /// @param translations The catalog; empty shows every schema literal.
+    /// @param bcp47        The locale.
+    void setTranslations(render::TranslationProvider translations, std::string bcp47) {
+        _options.translations = std::move(translations);
+        _options.bcp47 = std::move(bcp47);
+        _values.translations = _options.translations;
+        _values.bcp47 = _options.bcp47;
+        _texts.set(_texts.peek() + 1);
+    }
+
+    /// @brief Records the translations and the locale as a dependency of the running computation, so a text it
+    ///        resolves follows `setTranslations`.
+    void trackTexts() const { static_cast<void>(_texts.get()); }
 
     /// @brief The Choice fetcher.
     /// @return The fetcher; may be empty.
@@ -172,6 +189,8 @@ private:
     FormSessionOptions _options;
     ValueContext _values;
     reactive::Signal<std::uint64_t> _format;
+    // Bumped by setTranslations: what resolved a text through the translations reads it.
+    reactive::Signal<std::uint64_t> _texts;
     std::function<void()> _programmatic;
     std::vector<std::unique_ptr<FieldState>> const* _fields = nullptr;
 };
@@ -276,10 +295,6 @@ public:
                     std::make_unique<FieldState>(core, child, _path + "." + child.name, &_members, this));
             }
         }
-        _label = resolveSlot(i18n::FieldSlot::Label, _spec->title);
-        _help = resolveSlot(i18n::FieldSlot::Help, _spec->help);
-        _placeholder = _spec->placeholder.empty() ? defaultPlaceholder(*_spec)
-                                                  : resolveSlot(i18n::FieldSlot::Placeholder, _spec->placeholder);
     }
 
     ~FieldState() = default;
@@ -297,17 +312,36 @@ public:
     [[nodiscard]] std::string const& path() const noexcept { return _path; }
 
     /// @brief The label: the explicit key's translation, else the derived key's (top level
-    ///        only), else the schema's title.
+    ///        only), else the schema's title. Tracked: it follows the session's `setTranslations`.
     /// @return The label.
-    [[nodiscard]] std::string const& label() const noexcept { return _label; }
+    [[nodiscard]] std::string label() const {
+        _core->trackTexts();
+        return resolveSlot(i18n::FieldSlot::Label, _spec->title);
+    }
 
-    /// @brief The help text, resolved like the label.
-    /// @return The help text; empty when the schema states none.
-    [[nodiscard]] std::string const& help() const noexcept { return _help; }
+    /// @brief The help text, resolved like the label. Tracked.
+    /// @return The help text; empty when neither the schema nor the translations state one.
+    [[nodiscard]] std::string help() const {
+        _core->trackTexts();
+        return resolveSlot(i18n::FieldSlot::Help, _spec->help);
+    }
 
-    /// @brief The placeholder: `x-placeholder` resolved like the label, else `defaultPlaceholder`.
+    /// @brief Whether the field has a help text now, read without tracking: what a view decides, when it is built,
+    ///        whether to give the help a line of its own. The line's text is `help()`, which follows the translations.
+    /// @return Whether `help()` is not empty.
+    [[nodiscard]] bool hasHelp() const {
+        return !_core->runtime().untracked([this] { return help(); }).empty();
+    }
+
+    /// @brief The placeholder: `x-placeholder` resolved like the label, else `defaultPlaceholder`. Tracked.
     /// @return The placeholder.
-    [[nodiscard]] std::string const& placeholder() const noexcept { return _placeholder; }
+    [[nodiscard]] std::string placeholder() const {
+        if (_spec->placeholder.empty()) {
+            return defaultPlaceholder(*_spec);
+        }
+        _core->trackTexts();
+        return resolveSlot(i18n::FieldSlot::Placeholder, _spec->placeholder);
+    }
 
     /// @brief The draft: what the control holds. Setting it is a user edit.
     /// @return The draft signal.
@@ -778,9 +812,6 @@ private:
     std::string _path;
     std::vector<std::unique_ptr<FieldState>> const* _siblings;
     FieldState const* _parent;
-    std::string _label;
-    std::string _help;
-    std::string _placeholder;
     std::uint64_t _nextRowKey = 1;
     reactive::Signal<std::string> _text;
     reactive::Signal<std::size_t> _unit;
@@ -933,6 +964,23 @@ public:
     /// @param date `true` for the date pattern, `false` for the date-time pattern.
     /// @return The pattern; empty keeps ISO.
     [[nodiscard]] std::string const& pattern(bool date) const { return _core->pattern(date); }
+
+    /// @brief Replaces the translations and the locale the form's texts are resolved in, so a mounted form follows a
+    ///        change of the session's catalogue or locale: every label, help text, placeholder, group title and error
+    ///        message read through a tracked accessor is resolved again. Drafts and values are untouched.
+    /// @param translations The catalog; empty shows every schema literal.
+    /// @param bcp47        The locale.
+    void setTranslations(render::TranslationProvider translations, std::string bcp47) {
+        _core->setTranslations(std::move(translations), std::move(bcp47));
+    }
+
+    /// @brief The session options, read as a dependency on the translations and the locale: a computation that
+    ///        resolves a text through them reruns on `setTranslations`.
+    /// @return The options.
+    [[nodiscard]] FormSessionOptions const& trackedOptions() const {
+        _core->trackTexts();
+        return _core->options();
+    }
 
     /// @brief The top-level fields, in `x-order`.
     /// @return The fields.
@@ -1154,13 +1202,14 @@ public:
 
     /// @brief A group's title, resolved through the translations (key `<action>.group.<index>`).
     /// @param group Index into `model().groups()`.
-    /// @return The title; empty for the implicit trailing group.
+    /// @return The title; empty for the implicit trailing group. Tracked: it follows `setTranslations`.
     /// @throws std::out_of_range for an index past the groups.
     [[nodiscard]] std::string groupTitle(std::size_t group) const {
         FieldGroupSpec const& spec = detail::engine::elementAt(_core->model().groups(), group);
         if (spec.implicit) {
             return {};
         }
+        _core->trackTexts();
         return render::resolveText(_core->options().translations, _core->options().bcp47, std::nullopt,
                                    i18n::groupKey(_core->model().actionType(), group), spec.title);
     }

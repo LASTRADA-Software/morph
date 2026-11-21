@@ -24,6 +24,7 @@
 #include <morph/ui/service.hpp>
 #include <morph/ui/testing/recording_backend.hpp>
 #include <optional>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <testkit/fake_app_context.hpp>
@@ -54,10 +55,13 @@ constexpr char const* kEn =
 constexpr char const* kDe =
     R"({"probe.group.main": "Hauptarbeit", "probe.hello": "Hallo", "probe.words.title": "Wörter und Beträge"})";
 
-/// The one screen, listed for a signed-in person under a group that is a catalogue key, with the given catalogues.
+/// The one screen, listed for a signed-in person under a group that is a catalogue key, with the given catalogues and
+/// the server's text source.
 /// @return It, or the refusal.
-std::expected<std::shared_ptr<ui::ServedBundle const>, ui::Refusal> wordsBundleWith(char const* en, char const* de) {
+std::expected<std::shared_ptr<ui::ServedBundle const>, ui::Refusal> wordsBundleWith(char const* en, char const* de,
+                                                                                    ui::FieldTextSource texts = {}) {
     ui::UiRegistry served{ui::ApplicationInfo{.id = "probe", .version = "1"}};
+    served.setFieldTexts(std::move(texts));
     ui::CatalogEntry entry;
     entry.id = "probe.words";
     entry.title = *ui::parseJson(R"({"t": "probe.words.title", "fallback": "Words"})");
@@ -281,4 +285,100 @@ TEST_CASE("Client shell: a development reload that changed only a catalogue re-r
         CHECK(textOf(backend, "hello") == "Hi there");
     }
     source.close();
+}
+
+namespace {
+
+/// The words bundle served with @p texts as its text source.
+std::shared_ptr<ui::UiService> servingTexts(ui::FieldTextSource texts) {
+    auto built = wordsBundleWith(kEn, kDe, std::move(texts));
+    REQUIRE(built);
+    return std::make_shared<ui::UiService>(std::move(*built));
+}
+
+}  // namespace
+
+// Mutations: install the bundle's catalogues ahead of the server's texts (hello reads "Hello"); never hand the locale
+// to the source (the German text never arrives, and the source is asked in en only); ask again for a locale whose
+// texts are already held.
+TEST_CASE("Client shell: the server's texts come before the bundle's catalogues, in the session's locale",
+          "[client][shell][locale][texts]") {
+    FakeAppContext context;
+    ui::testing::RecordingBackend backend;
+    RedeployedSource source;
+    auto const asked = std::make_shared<std::vector<std::string>>();
+    source.service = servingTexts([asked](std::string_view locale) -> ui::FieldTexts {
+        asked->emplace_back(locale);
+        if (locale == "de") {
+            return {{"probe.hello", "Servus"}};
+        }
+        return {{"probe.hello", "Howdy"}};
+    });
+    std::optional<Opened> opened;
+    source.open(context, [&opened](Opened result) { opened = std::move(result); });
+    REQUIRE(pumpUntil(context.owner(), [&opened] { return opened.has_value(); }));
+    CHECK(source.textsLocale() == "en");
+    std::vector<std::string> problems;
+    {
+        auto const shell = morph::client::mountShell(
+            context, backend, std::move(*opened), source,
+            morph::client::ShellOptions{
+                .startScreen = "probe.words",
+                .onProblem = [&problems](std::string const& line) { problems.push_back(line); }});
+        REQUIRE(pumpUntil(context.owner(), [&backend] { return textOf(backend, "hello") == "Howdy"; }));
+        // The texts were asked for once, in en, before the bundle was delivered; the shell starting in en asks no
+        // more.
+        CHECK(*asked == std::vector<std::string>{"en"});
+        CHECK(source.currentSession().locale == "en");
+
+        auto const german = backend.find("Button", "testId", "german");
+        REQUIRE(german.has_value());
+        backend.click(*german);
+        CHECK(pumpUntil(context.owner(), [&backend] { return textOf(backend, "hello") == "Servus"; }));
+        CHECK(*asked == std::vector<std::string>{"en", "de"});
+        CHECK(source.currentSession().locale == "de");
+        CHECK(source.texts().lookup("probe.hello", "de") == std::optional<std::string>{"Servus"});
+    }
+    CHECK(problems.empty());
+    source.close();
+}
+
+// Mutations: report a server that serves no texts as a problem; drop the report of a refusal; report it on every
+// install instead of once.
+TEST_CASE("Client shell: a server with no texts is quiet, and a refused request is reported once",
+          "[client][shell][locale][texts]") {
+    auto const run = [](std::shared_ptr<ui::UiService> service) {
+        FakeAppContext context;
+        ui::testing::RecordingBackend backend;
+        RedeployedSource source;
+        source.service = std::move(service);
+        std::optional<Opened> opened;
+        source.open(context, [&opened](Opened result) { opened = std::move(result); });
+        REQUIRE(pumpUntil(context.owner(), [&opened] { return opened.has_value(); }));
+        std::vector<std::string> problems;
+        {
+            auto const shell = morph::client::mountShell(
+                context, backend, std::move(*opened), source,
+                morph::client::ShellOptions{
+                    .startScreen = "probe.words",
+                    .onProblem = [&problems](std::string const& line) { problems.push_back(line); }});
+            // The bundle's catalogue answers where the server sends nothing.
+            REQUIRE(pumpUntil(context.owner(), [&backend] { return textOf(backend, "hello") == "Hello"; }));
+            auto const german = backend.find("Button", "testId", "german");
+            REQUIRE(german.has_value());
+            backend.click(*german);
+            REQUIRE(pumpUntil(context.owner(), [&backend] { return textOf(backend, "hello") == "Hallo"; }));
+        }
+        source.close();
+        return problems;
+    };
+    CHECK(run(serving(kEn)).empty());
+    auto const failed =
+        run(servingTexts([](std::string_view) -> ui::FieldTexts { throw std::runtime_error{"down"}; }));
+    auto const reported = std::ranges::count_if(failed, [](std::string const& line) {
+        return line.contains("the server refused the texts for `en`: the texts for `en` could not be read");
+    });
+    CHECK(reported == 1);
+    CHECK(std::ranges::any_of(
+        failed, [](std::string const& line) { return line.contains("the server refused the texts for `de`"); }));
 }
