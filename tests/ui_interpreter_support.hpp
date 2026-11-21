@@ -411,6 +411,24 @@ inline Catalog corpusCatalog() {
                 "value":{"type":"integer","title":"Value","x-order":1}},"required":["value"]}}},
               "required":["sampleId"]})"};
         }
+        // Specimens entered in a grid: `grid_test_support.hpp`'s `kSpecimens`.
+        if (action == "Lims_RecordSpecimens") {
+            return std::string{R"({"type":"object","title":"Specimens","properties":{
+  "sampleId":{"type":"integer","title":"Sample","x-order":0},
+  "reviewer":{"type":["string","null"],"title":"Reviewer","x-order":1},
+  "specimens":{"type":"array","title":"Specimens","x-order":2,"minItems":0,"maxItems":5,
+    "items":{"type":"object","properties":{
+      "label":{"type":["string","null"],"title":"Label","x-order":0},
+      "mass":{"type":["object","null"],"title":"Mass","x-decimalPlaces":2,"x-order":1},
+      "volume":{"type":["object","null"],"title":"Volume","x-decimalPlaces":1,"x-order":2},
+      "density":{"type":["object","null"],"title":"Density","x-decimalPlaces":3,"x-readonly":true,
+                 "x-computed":{"inputs":["mass","volume"]},"x-order":3},
+      "limit":{"type":["object","null"],"title":"Limit","x-decimalPlaces":2,"x-readonly":true,"x-derived":true,
+               "x-order":4},
+      "note":{"type":["string","null"],"title":"Note","x-order":5}}}}},
+  "required":["sampleId"],
+  "x-rules":[{"kind":"readonlyWhen","fields":["specimens"],"when":{"kind":"engaged","fields":["reviewer"]}}]})"};
+        }
         // A mass in kilograms (3 places) that is also entered in grams (1 place).
         if (action == "Lims_WeighSample") {
             return std::string{R"({"type":"object","title":"Weigh","properties":{

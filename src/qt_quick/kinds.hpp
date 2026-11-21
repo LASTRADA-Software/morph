@@ -695,6 +695,21 @@ public:
     [[nodiscard]] ui::TableMeasure tableMeasure() const override;
     void setFocusCell(std::size_t viewRow, std::size_t column) override;
     void setOnFocusMove(std::function<void(ui::FocusMove)> handler) override;
+    /// MorphTable reports printable text typed on its focused cell, while no editor is open, as its `text` event.
+    void setOnText(std::function<void(std::string)> onText) override;
+    /// A row reports a tap on a cell as its `cellClick` event, `{column, double}`.
+    void setOnCellClick(std::function<void(std::size_t viewRow, std::size_t column, bool doubleClick)> onClick) override;
+    /// MorphTable reports its `focusOut` event once the active focus is outside the table, its editor and its popups.
+    void setOnFocusOut(std::function<void()> onFocusOut) override;
+    /// The editor's item takes the cell's column, the cell in that column is covered, and the row places the editor
+    /// over the cell's rectangle. Throws std::logic_error when @p row is not one of this table's rows.
+    void setCellEditor(ui::Widget& row, std::size_t column, ui::Widget* editor) override;
+    /// Throws std::logic_error when @p row is not one of this table's rows.
+    void setCellMarks(ui::Widget& row, std::size_t column, ui::CellMarks const& marks) override;
+    /// Throws std::logic_error when @p row is not one of this table's rows.
+    void setRowModified(ui::Widget& row, bool modified) override;
+    /// A tap on a row's cell, reported by the row.
+    void cellClicked(TableRowImpl const& row, std::size_t column, bool doubleClick) const;
     /// Shift with an arrow, a Shift-click and Ctrl+A over a source go to the handler as view rows.
     void setOnSelectRange(
         std::function<void(std::size_t anchorRow, std::size_t focusRow, ui::SelectionChange)> handler) override;
@@ -780,6 +795,9 @@ private:
     std::function<void(std::size_t, int)> _onColumnMeasured;
     std::function<void(ui::FocusMove)> _onFocusMove;
     std::function<void(std::size_t, std::size_t, ui::SelectionChange)> _onSelectRange;
+    std::function<void(std::string)> _onText;
+    std::function<void(std::size_t, std::size_t, bool)> _onCellClick;
+    std::function<void()> _onFocusOut;
     /// Each row's effective spans, as last told.
     std::unordered_map<ItemBase const*, std::vector<ui::RowSpan>> _spans;
     /// Whether any row has been told it spans or is covered, so a table that never spans does no work.
@@ -818,6 +836,13 @@ public:
     /// Writes the accent of the row's cell in @p column to the row's `cellAccents`, which holds the columns with one:
     /// `{tone, tooltip, invalid}`, the tone -1 for none.
     void setAccent(std::size_t column, ui::CellAccent const& accent);
+    /// Writes the marks of the row's cell in @p column to the row's `cellMarks`, which holds the columns with some:
+    /// `{readOnly, modified, error, stale, muted}`.
+    void setMarks(std::size_t column, ui::CellMarks const& marks);
+    /// Its view row, once the table was told it.
+    [[nodiscard]] std::optional<std::size_t> viewRow() const noexcept { return _viewRow; }
+    /// Remembers the view row the table told it.
+    void setViewRow(std::size_t viewRow) noexcept { _viewRow = viewRow; }
 
 protected:
     /// The table places a row's cells in its columns.
@@ -830,6 +855,9 @@ private:
     QVariantMap _loads;
     /// The columns with an accent, by column as text.
     QVariantMap _accents;
+    /// The columns with marks, by column as text.
+    QVariantMap _marks;
+    std::optional<std::size_t> _viewRow;
 };
 
 }  // namespace morph::qt_quick::detail

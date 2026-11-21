@@ -181,6 +181,20 @@ public:
     void setHorizontalOffset(int scrollX) override;
     void setFocusCell(std::size_t viewRow, std::size_t column) override;
     void setOnFocusMove(std::function<void(ui::FocusMove)> handler) override;
+    /// Printable text typed on a focused cell of a table over a source, with no chord of the table's for the key.
+    void setOnText(std::function<void(std::string)> onText) override;
+    void setOnCellClick(std::function<void(std::size_t viewRow, std::size_t column, bool doubleClick)> onClick) override;
+    /// Reported before the frame after the one that found the focus outside the table and everything in it.
+    void setOnFocusOut(std::function<void()> onFocusOut) override;
+    /// The editor takes the cell's slot and the cell none; an editor that had the focus gives it back to the table when
+    /// it goes. Throws std::logic_error when @p row is not one of this table's rows.
+    void setCellEditor(ui::Widget& row, std::size_t column, ui::Widget* editor) override;
+    /// An error mark draws `!` and a modified one `+` at the cell's trailing edge. Throws std::logic_error when @p row
+    /// is not one of this table's rows.
+    void setCellMarks(ui::Widget& row, std::size_t column, ui::CellMarks const& marks) override;
+    /// A modified row draws `+` in its selection mark's cell while it is not selected. Throws std::logic_error when
+    /// @p row is not one of this table's rows.
+    void setRowModified(ui::Widget& row, bool modified) override;
     /// Over a source, Shift with Up or Down, a Shift-click and Ctrl+A (and the header box) go to the handler as view
     /// rows; the mount resolves them over rows not realized.
     void setOnSelectRange(
@@ -362,6 +376,11 @@ private:
     /// Draws the marks of the cells that are not loaded, in their rows' @p areas.
     void paintLoads(::core::tui::Canvas& canvas, std::vector<DrawnColumn> const& drawn,
                     std::vector<::core::tui::Rect> const& areas) const;
+    /// Draws the marks of the cells that have some, in their rows' @p areas.
+    void paintMarks(::core::tui::Canvas& canvas, std::vector<DrawnColumn> const& drawn,
+                    std::vector<::core::tui::Rect> const& areas) const;
+    /// Calls onCellClick for a click at column @p x of @p row, a second time for a double click; whether it did.
+    bool clickCell(WidgetBase const* row, int x, bool twice);
     /// The realized row at view row @p viewRow, or null.
     [[nodiscard]] WidgetBase* rowAtView(std::size_t viewRow) const;
     /// Calls onSelectRange with a range of view rows in `Multiple` mode; whether it was called.
@@ -452,6 +471,16 @@ private:
     std::optional<std::pair<std::size_t, std::size_t>> _reportedRows;
     std::optional<std::pair<int, int>> _reportedColumns;
     std::function<void(ui::FocusMove)> _onFocusMove;
+    std::function<void(std::string)> _onText;
+    std::function<void(std::size_t, std::size_t, bool)> _onCellClick;
+    std::function<void()> _onFocusOut;
+    bool _focusWithin = false;  ///< Whether the focus was in the table at the last frame.
+    bool _focusLeft = false;    ///< Whether the next fit reports that the focus left the table.
+    /// Each row's open cell editor and the column it is drawn over.
+    std::unordered_map<WidgetBase const*, std::pair<std::size_t, WidgetBase*>> _editors;
+    /// Each row's cells' marks, by column; a cell with none has no entry.
+    std::unordered_map<WidgetBase const*, std::unordered_map<std::size_t, ui::CellMarks>> _cellMarks;
+    std::unordered_set<WidgetBase const*> _modifiedRows;
     std::function<void(std::size_t, std::size_t, ui::SelectionChange)> _onSelectRange;
     std::optional<std::size_t> _anchorRow;  ///< Over a source, where a range starts: a view row.
     std::optional<std::pair<std::size_t, std::size_t>> _focusCell;  ///< The focused cell's view row and column.

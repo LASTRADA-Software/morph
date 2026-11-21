@@ -29,9 +29,12 @@
 #include <functional>
 #include <map>
 #include <memory>
+#include <morph/forms/engine/form_session.hpp>
 #include <morph/qt_quick/theme.hpp>
 #include <morph/reactive/signal.hpp>
 #include <morph/ui/backend.hpp>
+#include <morph/ui/grid.hpp>
+#include <morph/ui/locale_table.hpp>
 #include <morph/ui/mount.hpp>
 #include <morph/ui/theme.hpp>
 #include <morph/ui/view.hpp>
@@ -45,6 +48,7 @@
 #include <utility>
 #include <vector>
 
+#include "grid_test_support.hpp"
 #include "qt_quick/kinds.hpp"
 #include "qt_quick_harness.hpp"
 #include "ui_fake_rows.hpp"
@@ -2708,4 +2712,129 @@ TEST_CASE("qt_quick table: a status entry reports its id", "[qt_quick]") {
     }
     scene.click(*item.findChild<QQuickItem*>(QStringLiteral("statusEntry_clear")));
     CHECK(chosen == std::vector<std::string>{"clear"});
+}
+
+namespace {
+
+// The first item at or under @p root, by visual children, named @p name; null for none.
+QQuickItem* itemNamed(QQuickItem& root, QString const& name) {
+    if (root.objectName() == name) {
+        return &root;
+    }
+    for (QQuickItem* const child : root.childItems()) {
+        if (QQuickItem* const found = itemNamed(*child, name)) {
+            return found;
+        }
+    }
+    return nullptr;
+}
+
+// A grid of two specimens (`morph::test::grid::kSpecimens`) between two text inputs, `before` and `after`, on Qt
+// Quick. Its columns are every member in schema order: label 0, mass 1, volume 2, density 3, limit 4, note 5.
+struct QuickGrid {
+    QuickGrid() {
+        form = std::make_unique<morph::forms::FormSession>(
+            scene.runtime(),
+            morph::test::formsengine::modelOf("Lims_RecordSpecimens", morph::test::grid::kSpecimens),
+            server.submitter(), server.fetcher(),
+            morph::forms::FormSessionOptions{.locale = ui::localeFacts("de").numeric, .bcp47 = "de"});
+        form->prefill(R"({"sampleId":1,"specimens":[{},{}]})");
+        std::vector<ui::GridColumn> columns;
+        for (morph::forms::FieldSpec const& member : form->field("specimens").spec().children) {
+            columns.push_back(ui::GridColumn{.id = member.name, .label = member.name, .field = member.name, .value = {}});
+        }
+        ui::TableOptions table;
+        table.common.testId = "grid";
+        grid = ui::makeFormGrid(*form, form->field("specimens"), std::move(columns), {}, ui::formatOf(*form),
+                                std::move(table));
+        ui::TextInput before;
+        before.common.testId = "before";
+        ui::TextInput after;
+        after.common.testId = "after";
+        view.emplace(scene.runtime(), scene.backend(),
+                     ui::column(ui::Column{.children = {ui::textInput(std::move(before)), grid.node,
+                                                        ui::textInput(std::move(after))}}));
+        scene.settle();
+    }
+    QuickGrid(QuickGrid const&) = delete;
+    QuickGrid& operator=(QuickGrid const&) = delete;
+    QuickGrid(QuickGrid&&) = delete;
+    QuickGrid& operator=(QuickGrid&&) = delete;
+    ~QuickGrid() {
+        view.reset();
+        grid = {};
+    }
+
+    [[nodiscard]] QQuickItem& named(QString const& name) {
+        QQuickItem* const found = itemNamed(*scene.window().contentItem(), name);
+        REQUIRE(found != nullptr);
+        return *found;
+    }
+
+    // The cell of view row @p viewRow in column @p column.
+    [[nodiscard]] QQuickItem& cellAt(int viewRow, int column) {
+        for (QQuickItem* const row : Scene::itemsOf(named(QStringLiteral("grid")), "QQuickItem")) {
+            if (row->property("viewRow").toInt() != viewRow || !row->property("cellMarks").isValid()) {
+                continue;
+            }
+            for (QQuickItem* const cell : Scene::itemsOf(*row, "QQuickItem")) {
+                if (cell->property("measuredIndex").isValid() && cell->property("measuredIndex").toInt() == column &&
+                    cell->isVisible()) {
+                    return *cell;
+                }
+            }
+        }
+        FAIL("no cell at " << viewRow << ", " << column);
+        throw std::logic_error{"unreachable"};
+    }
+
+    Scene scene;
+    morph::test::formsengine::FakeServer server{scene.owner()};
+    std::unique_ptr<morph::forms::FormSession> form;
+    ui::FormGrid grid;
+    std::optional<ui::Mounted> view;
+};
+
+}  // namespace
+
+// Mutation: the QML cell ignoring setOnText.
+TEST_CASE("qt_quick grid: typing on a focused cell opens its editor, Tab walks and leaves", "[qt_quick][grid]") {
+    QuickGrid g;
+    g.grid.grid->focusCell(morph::test::grid::at(1, "mass"));
+    g.scene.settle();
+    QQuickItem& table = g.named(QStringLiteral("grid"));
+    table.forceActiveFocus();
+    g.scene.type(QStringLiteral("5"));
+    CHECK(g.grid.grid->editing() == morph::test::grid::at(1, "mass"));
+    QList<QQuickItem*> const fields = Scene::itemsOf(table, "QQuickTextField");
+    REQUIRE(fields.size() == 1);
+    CHECK(fields.front()->property("text").toString() == QStringLiteral("5"));
+    g.scene.key(Qt::Key_Tab);
+    CHECK(g.form->field("specimens[0].mass").draft() == "5");
+    CHECK(g.grid.grid->focus() == morph::test::grid::at(1, "volume"));
+    g.grid.grid->focusCell(morph::test::grid::at(2, "note"));
+    g.scene.settle();
+    table.forceActiveFocus();
+    g.scene.key(Qt::Key_Tab);
+    QQuickItem const* const focused = g.scene.window().activeFocusItem();
+    REQUIRE(focused != nullptr);
+    CHECK(focused->objectName() == QStringLiteral("after"));
+}
+
+// Mutation: the QML cell sending a double click as two single clicks (no editor opens).
+TEST_CASE("qt_quick grid: a double click opens the editor in the cell and focus leaving commits", "[qt_quick][grid]") {
+    QuickGrid g;
+    QQuickItem& cell = g.cellAt(1, 1);
+    QRectF const area = cell.mapRectToScene(QRectF{0, 0, cell.width(), cell.height()});
+    g.scene.doubleClick(cell);
+    CHECK(g.grid.grid->editing() == morph::test::grid::at(2, "mass"));
+    QList<QQuickItem*> const fields = Scene::itemsOf(g.named(QStringLiteral("grid")), "QQuickTextField");
+    REQUIRE(fields.size() == 1);
+    QPointF const centre = fields.front()->mapToScene(QPointF{fields.front()->width() / 2, fields.front()->height() / 2});
+    CHECK(area.contains(centre));
+    CHECK(fields.front()->hasActiveFocus());
+    g.scene.type(QStringLiteral("7"));
+    g.scene.click(g.named(QStringLiteral("after")));
+    CHECK(g.form->field("specimens[1].mass").draft() == "7");
+    CHECK(Scene::itemsOf(g.named(QStringLiteral("grid")), "QQuickTextField").empty());
 }

@@ -1326,6 +1326,10 @@ public:
         relayout();
     }
 
+    /// @brief Takes in every change the source notified at once, rather than at the owner's next turn: what a
+    ///        caller that changed the source and reads the view in the same turn calls. Nothing notified, nothing done.
+    void flush() { flushChanges(); }
+
     /// @brief Rows currently held in place by `Deferred` reorder.
     /// @return Their keys.
     [[nodiscard]] std::vector<RowId> heldRows() const { return {_holds.begin(), _holds.end()}; }

@@ -78,6 +78,16 @@ TableImpl::TableImpl(Context& context, ui::ContainerWidget* parent)
             handler();
         }
     });
+    relay().on(QStringLiteral("text"), [this](QVariant const& text) {
+        if (auto const handler = _onText) {
+            handler(text.toString().toStdString());
+        }
+    });
+    relay().on(QStringLiteral("focusOut"), [this](QVariant const&) {
+        if (auto const handler = _onFocusOut) {
+            handler();
+        }
+    });
     relay().on(QStringLiteral("sort"), [this](QVariant const& payload) {
         QVariantMap const map = payload.toMap();
         qlonglong const column = map.value(QStringLiteral("column")).toLongLong();
@@ -448,10 +458,11 @@ void TableImpl::setOnVisibleRangeChanged(std::function<void(std::size_t, std::si
 }
 
 void TableImpl::setRowIndex(ui::Widget& row, std::size_t viewRow) {
-    auto const* const tableRow = dynamic_cast<TableRowImpl const*>(&row);
+    auto* const tableRow = dynamic_cast<TableRowImpl*>(&row);
     if (tableRow == nullptr || tableRow->container() != this) {
         throw std::logic_error{"morph::qt_quick: setRowIndex of a widget that is not this table's row"};
     }
+    tableRow->setViewRow(viewRow);
     tableRow->write("viewRow", static_cast<qlonglong>(viewRow));
     if (item() != nullptr) {
         QMetaObject::invokeMethod(item(), "scheduleRows", Qt::DirectConnection);
@@ -544,6 +555,71 @@ void TableImpl::setFocusCell(std::size_t viewRow, std::size_t column) {
 }
 
 void TableImpl::setOnFocusMove(std::function<void(ui::FocusMove)> handler) { _onFocusMove = std::move(handler); }
+
+void TableImpl::setOnText(std::function<void(std::string)> onText) {
+    _onText = std::move(onText);
+    write("takesText", static_cast<bool>(_onText));
+}
+
+void TableImpl::setOnCellClick(std::function<void(std::size_t, std::size_t, bool)> onClick) {
+    _onCellClick = std::move(onClick);
+    write("reportsCellClicks", static_cast<bool>(_onCellClick));
+}
+
+void TableImpl::setOnFocusOut(std::function<void()> onFocusOut) {
+    _onFocusOut = std::move(onFocusOut);
+    write("reportsFocusOut", static_cast<bool>(_onFocusOut));
+}
+
+// The editor is placed as a cell of its column is, over the cell, which is covered while it is open; `editing` on
+// the row keeps the row's keys away from the table while the editor has the focus.
+void TableImpl::setCellEditor(ui::Widget& row, std::size_t column, ui::Widget* editor) {
+    auto* const tableRow = dynamic_cast<TableRowImpl*>(&row);
+    if (tableRow == nullptr || tableRow->container() != this) {
+        throw std::logic_error{"morph::qt_quick: setCellEditor of a widget that is not this table's row"};
+    }
+    ItemBase* const shown = editor != nullptr ? baseOf(*editor) : nullptr;
+    for (ItemBase* const cell : tableRow->children()) {
+        if (cell == shown || cell->item() == nullptr) {
+            continue;
+        }
+        if (cell->item()->property("measuredIndex").toInt() == static_cast<int>(column)) {
+            cell->cover(shown != nullptr);
+        }
+    }
+    if (shown != nullptr) {
+        shown->offer("measuredIndex", static_cast<int>(column));
+        shown->cover(false);
+    }
+    tableRow->write("editorColumn", shown != nullptr ? static_cast<int>(column) : -1);
+    if (QQuickItem* const rowItem = tableRow->item(); rowItem != nullptr) {
+        QMetaObject::invokeMethod(rowItem, "schedulePlace", Qt::DirectConnection);
+    }
+}
+
+void TableImpl::setCellMarks(ui::Widget& row, std::size_t column, ui::CellMarks const& marks) {
+    auto* const tableRow = dynamic_cast<TableRowImpl*>(&row);
+    if (tableRow == nullptr || tableRow->container() != this) {
+        throw std::logic_error{"morph::qt_quick: setCellMarks of a widget that is not this table's row"};
+    }
+    tableRow->setMarks(column, marks);
+}
+
+void TableImpl::setRowModified(ui::Widget& row, bool modified) {
+    auto* const tableRow = dynamic_cast<TableRowImpl*>(&row);
+    if (tableRow == nullptr || tableRow->container() != this) {
+        throw std::logic_error{"morph::qt_quick: setRowModified of a widget that is not this table's row"};
+    }
+    tableRow->write("modified", modified);
+}
+
+void TableImpl::cellClicked(TableRowImpl const& row, std::size_t column, bool doubleClick) const {
+    if (!row.viewRow() || !row.reachable() || !_onCellClick) {
+        return;
+    }
+    auto const handler = _onCellClick;
+    handler(*row.viewRow(), column, doubleClick);
+}
 
 void TableImpl::setOnSelectRange(
     std::function<void(std::size_t anchorRow, std::size_t focusRow, ui::SelectionChange)> handler) {
@@ -902,6 +978,14 @@ TableRowImpl::TableRowImpl(Context& context, ui::ContainerWidget* parent, TableI
             owner->activated(*this);
         }
     });
+    // A tap on one of the row's cells, by its column: the second tap of a double tap with `double`.
+    relay().on(QStringLiteral("cellClick"), [this](QVariant const& payload) {
+        QVariantMap const map = payload.toMap();
+        qlonglong const column = map.value(QStringLiteral("column")).toLongLong();
+        if (auto const* const owner = dynamic_cast<TableImpl const*>(container()); owner != nullptr && column >= 0) {
+            owner->cellClicked(*this, static_cast<std::size_t>(column), map.value(QStringLiteral("double")).toBool());
+        }
+    });
 }
 
 void TableRowImpl::adopted(ItemBase& child) {
@@ -978,6 +1062,20 @@ void TableRowImpl::setAccent(std::size_t column, ui::CellAccent const& accent) {
                                          {QStringLiteral("invalid"), accent.invalid}});
     }
     write("cellAccents", _accents);
+}
+
+void TableRowImpl::setMarks(std::size_t column, ui::CellMarks const& marks) {
+    QString const key = QString::number(column);
+    if (marks == ui::CellMarks{}) {
+        _marks.remove(key);
+    } else {
+        _marks.insert(key, QVariantMap{{QStringLiteral("readOnly"), marks.readOnly},
+                                       {QStringLiteral("modified"), marks.modified},
+                                       {QStringLiteral("error"), marks.error},
+                                       {QStringLiteral("stale"), marks.stale},
+                                       {QStringLiteral("muted"), marks.muted}});
+    }
+    write("cellMarks", _marks);
 }
 
 void TableRowImpl::setGap(int gap) { static_cast<void>(gap); }

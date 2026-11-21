@@ -265,7 +265,8 @@ order, then diff) it runs in steps. A job never names the engine.
 
 Notifications are coalesced: the first one in an owner turn posts a flush; the
 flush takes the source's new snapshot and handles everything notified since.
-With no owner executor the flush runs inside the notification.
+With no owner executor the flush runs inside the notification. `Engine::flush()` runs it at once, for a caller
+that changed the source and reads the view in the same turn (a grid of a form, which takes in its rows when it walks).
 
 - **Updated** rows are repaired: their keys are rebuilt on copies of the key
   columns, they are filtered, sorted among themselves and merged into the

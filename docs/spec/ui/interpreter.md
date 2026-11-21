@@ -771,6 +771,16 @@ keeps its operands' 0 places and still fills 0.29 of a bar.
   `bool` as a bool and `number` as a double. An event runs the node's `on.<event>` commands with its payload read as
   the declared type: `i:<int>`, `s:<text>`, or JSON text. The fallback is lowered too, with `props` bound, for a
   backend that loads nothing.
+- **A grid of a form.** A `table` with `form` and `field` lowers to `ui::makeFormGrid` over the form element's
+  session and the named collection, made when the table is first lowered and kept in the table's element, so every
+  mount of the table shows the same grid, its focus and its open editor. Its columns are the column parts, each
+  editing the member its `field` names (else its `id`), labelled by its `label` read once; with none, every member
+  of the row type in schema order. `enterMoves` and `walk` give its `GridOptions`. The grid's notices are posted
+  through `tableMessage`, held as a table's messages are, and what stands while its cause lasts is the status line's
+  `standing`. The form's `form_submit` submits through `FormSession::submit`, whose before-submit hooks commit the
+  grid's open editor first. Element values `modifiedCount`, `modifiedRows`, `errorCount` and `editing` read the grid.
+  A form field overlay's `widget: grid` (or the schema's `x-widget: grid`) draws the field as a grid of every member
+  inside the form's own view.
 - **A form field's component.** A top-level field whose overlay names a `component` is drawn by it: the
   form's view is given a `forms::Overrides::byField` per such field, whose render builds the `custom` node
   `lowerCustom` would, with the field's built-in control as the fallback. The form fills the props it knows:

@@ -388,7 +388,19 @@ show through it (a pinned cell's slot is the pinned backdrop's, over its copy of
 cells, so it lies between the same layers); for a tooltip a small accent square at the slot's top end (`moreMark`), a `ToolTip` on
 hover after the style's press-and-hold interval and at once while the cell holds the keyboard focus, and an
 accessible `ToolTip` named by the text, ignored while there is none. An `invalid` cell draws the `!` mark of a failed
-load, with the accent's tooltip as its tooltip and accessible name. **Headers with a unit.** A column's `unit` is written after
+load, with the accent's tooltip as its tooltip and accessible name. **Cell marks and editors.** `setCellMarks`
+writes the row's `cellMarks` (`{readOnly, modified, error, stale, muted}` by column); the row draws each marked
+cell's slot (`cellMarkSlots`, item `cellMark<column>`): a read-only cell's wash of the scheme's muted colour at 12%
+(`readOnlyWash`), a modified cell's accent square at the slot's top start (`modifiedMark`), an error outline in the
+scheme's error colour (`errorOutline`), and a stale or muted cell at the theme's muted opacity. `setRowModified`
+writes the row's `modified`, an accent bar at the row's leading edge (`rowModifiedMark`). `setCellEditor` gives the
+editor's item the cell's column (`measuredIndex`) and covers the cells of that column, so the row places the editor
+over the cell's rectangle; null uncovers them; the row's `editorColumn` says which column it is, -1 for none. While a
+table takes text (`setOnText`, MorphTable's `takesText`), printable text on the focused cell is its `text` event; a
+table that takes cell clicks (`reportsCellClicks`) has each tap on a cell reported as its row's `cellClick`
+(`{column, double}`), the second tap of a double tap with `double`; and one that reports focus leaving
+(`reportsFocusOut`) watches the window's active focus item and fires `focusOut` once it leaves the table and every
+item in it. **Headers with a unit.** A column's `unit` is written after
 its label, `Mass [kg]`, the column is measured to that text, and the header's `Accessible.name` is
 `headerAccessibleName`, `Mass, kg`. **The status line** (`setStatus`) is one `Text` under the
 rows and outside the sideways scroll (`statusText`: the counts, the state, what stands and the message, two spaces
