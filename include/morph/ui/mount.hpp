@@ -584,9 +584,18 @@ public:
     /// @param forward Whether to the next control, or the previous one.
     /// @return Whether a control took focus; `false` when none lies that way.
     bool focusAlong(Widget const& from, bool forward) {
+        // The chain of the mount the widget is in: Tab in a dialog stays in the dialog.
+        Widget const* top = &from;
+        for (auto found = _chain.find(top); found != _chain.end() && found->second.parent != nullptr;
+             found = _chain.find(top)) {
+            top = found->second.parent;
+        }
+        bool const rooted = std::ranges::contains(_chainRoots, top);
         std::vector<std::pair<Widget*, bool>> order;
         for (Widget* const root : _chainRoots) {
-            chainOrder(*root, true, order);
+            if (root == top || !rooted) {
+                chainOrder(*root, true, order);
+            }
         }
         auto const at = std::ranges::find(order, &from, [](auto const& entry) { return entry.first; });
         if (at == order.end()) {
@@ -3887,9 +3896,9 @@ private:
         if (spec.onFocusOut) {
             widget.setOnFocusOut(event(spec.onFocusOut));
         }
-        if (table.grid || spec.onActivateCell) {
-            widget.setOnCellClick([this, &table, activate = spec.onActivateCell](std::size_t viewRow, std::size_t column,
-                                                                                 bool doubleClick) {
+        if (table.grid || spec.onActivateCell || spec.onClickCell) {
+            widget.setOnCellClick([this, &table, activate = spec.onActivateCell, clicked = spec.onClickCell](
+                                      std::size_t viewRow, std::size_t column, bool doubleClick) {
                 static_cast<void>(runCallback(*_rt, [&] {
                     if (column >= table.columns.size()) {
                         return;
@@ -3901,6 +3910,9 @@ private:
                             handFocus(table, index, column);
                         } else if (ref) {
                             focusAt(table, ref->key, column);
+                        }
+                        if (ref && clicked) {
+                            clicked(CellRef{.key = ref->key, .column = table.columns.at(column).id});
                         }
                         return;
                     }

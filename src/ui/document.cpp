@@ -341,8 +341,9 @@ constexpr std::array<KeySpec, 45> kTableKeys = {{{"rows", Shape::Expr},
                                                  {"headerMenu", Shape::Parts, "menuItem"},
                                                  {"headerEnabled", Shape::Condition}}};
 /// @brief The keys of a `table` column part; `tone` and `tooltip` are read in the row's scope.
-constexpr std::array<KeySpec, 25> kColumnKeys = {{{"id", Shape::Name},
+constexpr std::array<KeySpec, 26> kColumnKeys = {{{"id", Shape::Name},
                                                   {"field", Shape::Text},
+                                                  {"value", Shape::Expr, {}, kInner},
                                                   {"kind", Shape::Text},
                                                   {"label", Shape::Expr},
                                                   {"width", Shape::Expr},
@@ -366,6 +367,11 @@ constexpr std::array<KeySpec, 25> kColumnKeys = {{{"id", Shape::Name},
                                                   {"labels", Shape::Expr},
                                                   {"tone", Shape::Expr, {}, kInner},
                                                   {"tooltip", Shape::Expr, {}, kInner}}};
+/// @brief The keys of a form field overlay's `grid` part: a grid widget's columns, walk and activation.
+constexpr std::array<KeySpec, 4> kGridPartKeys = {{{"columns", Shape::Parts, "column"},
+                                                   {"enterMoves", Shape::Text},
+                                                   {"walk", Shape::Text},
+                                                   {"onActivate", Shape::Commands}}};
 /// @brief The keys of a `table` column group part: the group's id, its label and its columns' ids, a literal list.
 constexpr std::array<KeySpec, 3> kColumnGroupKeys = {
     {{"id", Shape::Name, {}, kRequired}, {"label", Shape::Expr}, {"columns", Shape::Expr, {}, kRequired}}};
@@ -542,7 +548,7 @@ constexpr std::array<KeySpec, 1> kDragKeys = {{{"payload", Shape::Expr, {}, kReq
 constexpr std::array<KeySpec, 2> kDropKeys = {{{"accepts", Shape::Expr}, {"onDrop", Shape::Commands}}};
 
 /// @brief The view node kinds of `ui/1` and the part kinds inside them.
-constexpr std::array<KindSpec, 62> kKinds = {{
+constexpr std::array<KindSpec, 63> kKinds = {{
     {"text", kTextKeys, kField},
     {"button", kButtonKeys},
     {"textInput", kTextInputKeys, kField | kWritable, kInputValues},
@@ -590,6 +596,7 @@ constexpr std::array<KindSpec, 62> kKinds = {{
     {"case", kCaseKeys, kPart | kScope},
     {"tab", kTabKeys, kPart},
     {"column", kColumnKeys, kPart},
+    {"fieldGrid", kGridPartKeys, kPart},
     {"group", kTableGroupKeys, kPart},
     {"columnGroup", kColumnGroupKeys, kPart},
     {"track", kTrackKeys, kPart},
@@ -1822,10 +1829,9 @@ private:
         }
     }
 
-    // One field overlay of a form's `fields`: expressions by key, and the host `component` that draws the field with
-    // its `props`.
-    [[nodiscard]] static DocNodePtr fieldOverlay(std::string const& field, Json const& overlay,
-                                                 std::string const& where) {
+    // One field overlay of a form's `fields`: expressions by key, the host `component` that draws the field with its
+    // `props`, and a grid widget's `grid` part.
+    [[nodiscard]] DocNodePtr fieldOverlay(std::string const& field, Json const& overlay, std::string const& where) {
         auto const& settings = objectOf(overlay, where, "a field overlay is an object");
         auto part = std::make_shared<DocNode>();
         part->kind = "field";
@@ -1848,6 +1854,8 @@ private:
                     record->props.emplace(prop, expr(propValue, pointerAppend(keyPath, prop)));
                 }
                 part->parts["props"].push_back(std::move(record));
+            } else if (key == "grid") {
+                part->parts["grid"].push_back(this->part(value, "fieldGrid", keyPath));
             } else {
                 part->props.emplace(key, expr(value, keyPath));
             }
@@ -3066,6 +3074,10 @@ private:
                     context.bindings.emplace_back("value", Type::any());
                 }
             }
+            // A grid's display column reads its row's record as `row`.
+            if (key == "columns" && (node.kind == "fieldGrid" || (node.kind == "table" && !node.name("form").empty()))) {
+                context.bindings.emplace_back("row", Type::any());
+            }
             for (DocNodePtr const& child : parts) {
                 checkElement(*child, context, true);
             }
@@ -3260,24 +3272,36 @@ private:
         if (field.empty()) {
             refuse(node.path, "a table over a `form` names its `field`, the form's collection");
         }
-        for (std::string_view const key : {std::string_view{"enterMoves"}, std::string_view{"walk"}}) {
-            std::string_view const given = node.name(key);
-            bool const known = given.empty() ||
-                               (key == "enterMoves" ? given == "down" || given == "right" || given == "none"
-                                                    : given == "rows" || given == "columns");
-            if (!known) {
-                refuse(pointerAppend(node.path, key),
-                       key == "enterMoves" ? "`enterMoves` is `down`, `right` or `none`" : "`walk` is `rows` or `columns`");
-            }
-        }
         auto const form = _elements.find(node.name("form"));
         if (form == _elements.end() || form->second->kind != "form") {
             refuse(pointerAppend(node.path, "form"), "`" + std::string{node.name("form")} + "` is not a form of this document");
         }
+        checkGridPart(node, *form->second, field, pointerAppend(node.path, "field"));
+    }
+
+    // What a grid takes beyond its table, on a `table` over a form or a field overlay's `grid` part: `enterMoves` and
+    // `walk` by name, and columns that each edit a member, named by `field`, or show a `value`. A `field` must name a
+    // member of the collection's row type, read from the form action's schema when the catalog has it.
+    void checkGridPart(DocNode const& part, DocNode const& form, std::string_view field, std::string const& where) const {
+        for (std::string_view const key : {std::string_view{"enterMoves"}, std::string_view{"walk"}}) {
+            std::string_view const given = part.name(key);
+            bool const known = given.empty() ||
+                               (key == "enterMoves" ? given == "down" || given == "right" || given == "none"
+                                                    : given == "rows" || given == "columns");
+            if (!known) {
+                refuse(pointerAppend(part.path, key),
+                       key == "enterMoves" ? "`enterMoves` is `down`, `right` or `none`" : "`walk` is `rows` or `columns`");
+            }
+        }
+        for (DocNodePtr const& column : part.partList("columns")) {
+            if (column->name("field").empty() && column->prop("value") == nullptr) {
+                refuse(column->path, "a grid's column edits the member its `field` names, or shows its `value`");
+            }
+        }
         if (!_options->catalog.schema) {
             return;
         }
-        std::string const action{form->second->name("action")};
+        std::string const action{form.name("action")};
         std::optional<std::string> const schema = _options->catalog.schema(action);
         if (!schema) {
             return;
@@ -3288,10 +3312,9 @@ private:
         }
         auto const array = std::ranges::find(model->fields(), field, &forms::FieldSpec::name);
         if (array == model->fields().end() || array->kind != forms::FieldKind::ObjectArray) {
-            refuse(pointerAppend(node.path, "field"),
-                   "`" + std::string{field} + "` is not a list of records of the form of `" + action + "`");
+            refuse(where, "`" + std::string{field} + "` is not a list of records of the form of `" + action + "`");
         }
-        for (DocNodePtr const& column : node.partList("columns")) {
+        for (DocNodePtr const& column : part.partList("columns")) {
             std::string_view const member = column->name("field");
             if (!member.empty() && std::ranges::none_of(array->children, [member](forms::FieldSpec const& child) {
                     return child.name == member;
@@ -3844,6 +3867,16 @@ private:
             for (DocNodePtr const& field : record->partList("fields")) {
                 if (!field->name("component").empty()) {
                     checkFieldComponent(*field);
+                }
+                if (std::span<DocNodePtr const> const grid = field->partList("grid"); !grid.empty()) {
+                    // A literal `widget: "grid"` only: a grid part on any other control would be dropped silently.
+                    ExprPtr const widget = field->prop("widget");
+                    std::string const* const named =
+                        widget != nullptr && widget->kind == ExprKind::Literal ? widget->literal.asString() : nullptr;
+                    if (named == nullptr || *named != "grid") {
+                        refuse(grid.front()->path, "a field's `grid` gives a grid widget its columns; give it `widget: \"grid\"`");
+                    }
+                    checkGridPart(*grid.front(), form, field->id, field->path);
                 }
             }
         }

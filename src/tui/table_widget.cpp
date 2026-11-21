@@ -1188,8 +1188,15 @@ void TableImpl::paint(::core::tui::Canvas& canvas) {
     if (_source) {
         paintLoads(canvas, drawn, areas);
         paintMarks(canvas, drawn, areas);
-        // Focus that left the table and everything in it is reported before the next frame, outside this one.
-        bool const within = isWithin(context().screen->focusedComponent(), view());
+        // Focus that left the table and everything in it, an open popup of a widget in it (an editor's list)
+        // included, is reported before the next frame, outside this one.
+        auto const* const focusedNow = context().screen->focusedComponent();
+        bool within = isWithin(focusedNow, view());
+        for (WidgetBase const* const owner : context().popups) {
+            if (!within && owner->openPopup() != nullptr && isWithin(&owner->view(), view())) {
+                within = isWithin(focusedNow, *owner->openPopup());
+            }
+        }
         if (std::exchange(_focusWithin, within) && !within && _onFocusOut) {
             _focusLeft = true;
             if (std::ranges::find(context().windowTables, this) == context().windowTables.end()) {
@@ -1877,10 +1884,16 @@ void TableImpl::scrollColumnsTo(int scrollX) {
 // Columns first: the rows the mount realizes next are then built with the columns in view only.
 void TableImpl::reportRanges() {
     if (std::exchange(_focusLeft, false) && _onFocusOut) {
-        // A copy: the handler may destroy this table.
+        // A copy: the handler may destroy this table, and then nothing more is reported.
         auto const handler = _onFocusOut;
+        Context& held = context();
+        WidgetBase* alive = this;
+        held.watches.push_back(&alive);
         handler();
-        return;
+        std::erase(held.watches, &alive);
+        if (alive == nullptr) {
+            return;
+        }
     }
     if (!_source || _size.width <= 0) {
         return;

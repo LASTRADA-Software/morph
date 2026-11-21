@@ -87,6 +87,8 @@ namespace morph::ui {
 class TableStates;
 
 class Mounted;
+struct GridColumn;
+struct GridOptions;
 struct ChartRange;
 
 // ---------------------------------------------------------------------------------------------------------------
@@ -2424,6 +2426,10 @@ private:
     Node lowerModelTable(DocNode const& node, LowerCtx const& ctx, ElementState* element);
     /// A grid of a form: a table over a form node's collection, its rows the field's and its cells its members.
     Node lowerFormGrid(DocNode const& node, LowerCtx const& ctx, ElementState* element);
+    /// What a grid's part (a `table` with a `form`, a field overlay's `grid`) gives beyond its table: its columns and
+    /// its options.
+    void gridParts(DocNode const& part, LowerCtx const& ctx, forms::FieldState const& array,
+                   std::vector<GridColumn>& columns, GridOptions& options);
     /// The table a model-backed table shows for the description its rows hold, or the status line alone without one.
     Node modelTableOf(DocNode const& node, LowerCtx const& ctx, ElementState& element);
     /// Makes a model-backed table's rows, its description query and its persisted state's load.

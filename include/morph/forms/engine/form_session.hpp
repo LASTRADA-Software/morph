@@ -28,7 +28,6 @@
 #include <vector>
 
 #include "../../attributes.hpp"
-#include "../../core/action_refusal.hpp"
 #include "../../core/completion.hpp"
 #include "../../reactive/control.hpp"
 #include "../../reactive/runtime.hpp"
@@ -901,8 +900,9 @@ public:
             runtime.untracked([&] { acceptSent(); });
         });
         _refused = std::make_unique<reactive::Effect>(runtime, [this, &runtime] {
+            std::uint64_t const successes = _mutation.successCount();
             std::exception_ptr const error = _mutation.error();
-            runtime.untracked([&] { takeRefusal(error); });
+            runtime.untracked([&] { takeFieldErrors(successes, error); });
         });
     }
 
@@ -1204,8 +1204,9 @@ public:
         return std::ranges::any_of(row->fields(), [this](auto const& member) { return modified(*member); });
     }
 
-    /// @brief Why the last submission refused a field: an `model::ActionRefusal`'s argument whose name is the field's
-    ///        path (`field`) carries the message. Held while the field keeps the draft it had then. Tracked.
+    /// @brief Why the last submission's reply refused a field: the reply's `errors` member, an object of field paths
+    ///        (`field`) to a message or a list of messages, names it. Held while the field keeps the draft it had then.
+    ///        Tracked.
     /// @param path The field's path.
     /// @return The message; empty while none holds.
     [[nodiscard]] std::optional<std::string> refusal(std::string_view path) const {
@@ -1340,6 +1341,11 @@ private:
             return;
         }
         _acceptedSuccesses = successes;
+        // A reply that names field errors did not save the record: what was sent stays an edit.
+        if (!fieldErrorsOf(_mutation.lastResult()).empty()) {
+            _sent.clear();
+            return;
+        }
         for (std::size_t index = 0; index < _sent.size(); ++index) {
             if (_fields.at(index)->snapshot() == _sent.at(index) && endsEditOnSave(*_fields.at(index))) {
                 _loaded.at(index) = _sent.at(index);
@@ -1367,30 +1373,45 @@ private:
         std::string draft;
     };
 
-    // Takes the field refusals of the submission that failed last; a success clears them.
-    void takeRefusal(std::exception_ptr const& error) {
-        if (error == _refusalSeen) {
-            return;
+    // The field errors a reply names in its `errors` member, by the field's path: the first message of each entry. An
+    // entry that names no field of the form is left out. A failure's exception names none: a refusal's arguments are
+    // its sentence's.
+    [[nodiscard]] std::map<std::string, Refused, std::less<>> fieldErrorsOf(std::optional<std::string> const& reply) const {
+        std::map<std::string, Refused, std::less<>> out;
+        auto const dom = reply ? detail::engine::parseJson(*reply) : std::nullopt;
+        detail::engine::Json const* const errors = dom ? detail::engine::member(*dom, "errors") : nullptr;
+        if (errors == nullptr || !errors->is_object()) {
+            return out;
         }
-        _refusalSeen = error;
-        std::map<std::string, Refused, std::less<>> next;
-        if (error != nullptr) {
+        for (auto const& [path, entry] : errors->get_object()) {
+            std::string message;
+            if (entry.is_string()) {
+                message = entry.get_string();
+            } else if (entry.is_array() && !entry.get_array().empty() && entry.get_array().front().is_string()) {
+                message = entry.get_array().front().get_string();
+            }
+            if (message.empty()) {
+                continue;
+            }
             try {
-                std::rethrow_exception(error);
-            } catch (model::ActionRefusal const& refusal) {
-                for (model::RefusalArg const& arg : refusal.args()) {
-                    try {
-                        FieldState const& state = field(arg.name);
-                        next.insert_or_assign(state.path(), Refused{.message = arg.value, .draft = state.draft()});
-                    } catch (std::out_of_range const&) {  // NOLINT(bugprone-empty-catch)
-                        // An argument that names no field is the sentence's, not a field's.
-                    }
-                }
-            } catch (...) {  // NOLINT(bugprone-empty-catch)
-                // Any other failure names no field.
+                FieldState const& state = field(path);
+                out.insert_or_assign(state.path(), Refused{.message = std::move(message), .draft = state.draft()});
+            } catch (std::out_of_range const&) {  // NOLINT(bugprone-empty-catch)
+                // A path the form has no field for is not shown at any field.
             }
         }
-        _refusals.set(std::move(next));
+        return out;
+    }
+
+    // Takes the field errors of each submission as it settles: a reply's `errors`, or none for a failure.
+    void takeFieldErrors(std::uint64_t successes, std::exception_ptr const& error) {
+        if (successes == _errorsSeenSuccesses && error == _refusalSeen) {
+            return;
+        }
+        bool const succeeded = successes != _errorsSeenSuccesses;
+        _errorsSeenSuccesses = successes;
+        _refusalSeen = error;
+        _refusals.set(succeeded ? fieldErrorsOf(_mutation.lastResult()) : std::map<std::string, Refused, std::less<>>{});
     }
 
     // What one scalar held when the form was last loaded; a row's own entry marks the row as loaded.
@@ -1580,6 +1601,7 @@ private:
     /// @brief The fields the last failed submission refused, by path, and the failure they were read from.
     reactive::Signal<std::map<std::string, Refused, std::less<>>> _refusals;
     std::exception_ptr _refusalSeen;
+    std::uint64_t _errorsSeenSuccesses = 0;
     std::unique_ptr<reactive::Effect> _autoSubmit;
     std::unique_ptr<reactive::Effect> _acceptSent;
     std::unique_ptr<reactive::Effect> _refused;

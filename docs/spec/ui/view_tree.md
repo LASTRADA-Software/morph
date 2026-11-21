@@ -398,8 +398,9 @@ each on `Table` and `TableOptions` alike:
   row realized, so the window fetches a placeholder. A click or a `FocusMove` is resolved to a cell and handed to
   **`onGridFocus`** (its key empty when that row is not fetched), and does not move the mount's own focus; the
   focused cell's menu opening does the same.
-- **`onActivateCell(CellRef)`**: a double click on a cell. **`onFocusOut()`**: focus left the table and everything
-  inside it. **`onText(text)`**: printable text typed while a cell has focus and no editor is open.
+- **`onActivateCell(CellRef)`**: a double click on a cell. **`onClickCell(CellRef)`**: a single click on a fetched
+  row's cell, after the click moved focus (a grid toggles a Boolean cell with it). **`onFocusOut()`**: focus left
+  the table and everything inside it, an open popup of a widget inside it (an editor's list) included. **`onText(text)`**: printable text typed while a cell has focus and no editor is open.
 - **`onKey(chord) -> KeyOutcome`** with **`keyChords`**: the chords are declared to the backend with `setKeys`, after
   the node's own `keys`, on every change of `keyChords`; a chord of `keyChords` goes to `onKey`, any other declared one
   to its key binding. `Handled` and `Ignored` end there; `FocusNext` and `FocusPrevious` move focus along the chain

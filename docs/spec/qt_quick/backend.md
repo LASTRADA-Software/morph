@@ -395,7 +395,10 @@ cell's slot (`cellMarkSlots`, item `cellMark<column>`): a read-only cell's wash 
 scheme's error colour (`errorOutline`), and a stale or muted cell at the theme's muted opacity. `setRowModified`
 writes the row's `modified`, an accent bar at the row's leading edge (`rowModifiedMark`). `setCellEditor` gives the
 editor's item the cell's column (`measuredIndex`) and covers the cells of that column, so the row places the editor
-over the cell's rectangle; null uncovers them; the row's `editorColumn` says which column it is, -1 for none. While a
+over the cell's rectangle; null uncovers them, and gives the focus back to the table when the window's active
+focus item was inside the closing editor; the row's `editorColumn` says which column it is, -1 for none, which the
+table's focus watch reads: while a row holds an editor, focus inside the window's `Overlay.overlay` (the editor's
+own popup) counts as inside the table. While a
 table takes text (`setOnText`, MorphTable's `takesText`), printable text on the focused cell is its `text` event; a
 table that takes cell clicks (`reportsCellClicks`) has each tap on a cell reported as its row's `cellClick`
 (`{column, double}`), the second tap of a double tap with `double`; and one that reports focus leaving

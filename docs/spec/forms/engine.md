@@ -341,10 +341,13 @@ field)` in `forms/engine/field_control.hpp`, which a grid's cell editor draws to
 - **Before-submit hooks.** `addBeforeSubmit(hook)` returns an id for `removeBeforeSubmit`; `submit()` runs every
   hook, in the order added, before it reads the body, so an edit not committed yet (a grid's open cell editor)
   is sent with the rest.
-- **A refused submission's fields.** When a submission fails with a `model::ActionRefusal`, each of its arguments
-  whose name is a field's path (`specimens[1].mass`) is that field's refusal, its value the message:
-  `refusal(path)` (tracked) gives it while the field keeps the draft it had then. The next failure replaces them,
-  and a success clears them.
+- **A refused submission's fields.** A reply's `errors` member names them: an object from a field's path
+  (`specimens[1].mass`, read as `field(path)` reads it) to a message, or to a list of messages of which the first is
+  shown. Each is that field's refusal: `refusal(path)` (tracked) gives it while the field keeps the draft it had then;
+  a path the form has no field for is not shown. Such a reply did not save the record, so what it sent stays an
+  edit. The next reply replaces them, and a failure clears them. A failure names no field: a
+  `model::ActionRefusal`'s arguments fill its sentence, and an argument whose name happens to be a field's path is
+  not that field's error.
 - A field is frozen (`readonly()`) by `x-readonly`, `x-computed`, a frozen parent or a `readonlyWhen` naming it.
 
 ## Collections

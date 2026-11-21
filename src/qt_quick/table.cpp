@@ -4,6 +4,7 @@
 #include <QObject>
 #include <QPointer>
 #include <QQuickItem>
+#include <QQuickWindow>
 #include <QStringList>
 #include <QVariantList>
 #include <QVariantMap>
@@ -571,14 +572,29 @@ void TableImpl::setOnFocusOut(std::function<void()> onFocusOut) {
     write("reportsFocusOut", static_cast<bool>(_onFocusOut));
 }
 
-// The editor is placed as a cell of its column is, over the cell, which is covered while it is open; `editing` on
-// the row keeps the row's keys away from the table while the editor has the focus.
+// The editor is placed as a cell of its column is, over the cell, which is covered while it is open; the row's
+// `editorColumn` says which column, which the table's focus watch reads. An editor that holds the focus when it closes
+// gives it back to the table, so the next key reaches the table.
 void TableImpl::setCellEditor(ui::Widget& row, std::size_t column, ui::Widget* editor) {
     auto* const tableRow = dynamic_cast<TableRowImpl*>(&row);
     if (tableRow == nullptr || tableRow->container() != this) {
         throw std::logic_error{"morph::qt_quick: setCellEditor of a widget that is not this table's row"};
     }
     ItemBase* const shown = editor != nullptr ? baseOf(*editor) : nullptr;
+    if (shown == nullptr) {
+        QPointer<QQuickItem> const closing = _editors.take(tableRow);
+        QQuickWindow* const window = item() != nullptr ? item()->window() : nullptr;
+        bool held = false;
+        for (QQuickItem* at = window != nullptr ? window->activeFocusItem() : nullptr; at != nullptr && closing != nullptr;
+             at = at->parentItem()) {
+            held = held || at == closing.data();
+        }
+        if (held && item() != nullptr) {
+            item()->forceActiveFocus(Qt::OtherFocusReason);
+        }
+    } else if (shown->item() != nullptr) {
+        _editors.insert(tableRow, QPointer<QQuickItem>{shown->item()});
+    }
     for (ItemBase* const cell : tableRow->children()) {
         if (cell == shown || cell->item() == nullptr) {
             continue;
@@ -687,6 +703,7 @@ void TableImpl::moved() {
 void TableImpl::releasing(ItemBase& child) noexcept {
     stripe(&child);
     _spans.erase(&child);
+    _editors.remove(dynamic_cast<TableRowImpl const*>(&child));
     planSpans(&child);
     // `child`'s item is still parented into the QML body (ItemBase's own destructor calls release() -- which calls
     // this -- before it hides and reparents the item away), so a QML-side rescan of body.children would still see

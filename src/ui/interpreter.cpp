@@ -1302,7 +1302,8 @@ struct RowsTable {
 
 /// A grid of a form: the grid it shows, and its status line's message, held for 6 s as a table's is.
 struct GridTable {
-    explicit GridTable(reactive::Runtime& runtime) : message{runtime, std::string{}}, entries{runtime, std::vector<StatusEntry>{}} {}
+    explicit GridTable(reactive::Runtime& runtime)
+        : layout{runtime, std::nullopt}, message{runtime, std::string{}}, entries{runtime, std::vector<StatusEntry>{}} {}
 
     GridTable(GridTable const&) = delete;
     GridTable& operator=(GridTable const&) = delete;
@@ -1312,6 +1313,11 @@ struct GridTable {
 
     /// The grid: its source, its controller and its node.
     FormGrid grid;
+    /// The columns, for the layout; the layout the grid holds while the document binds none; the filter its cell
+    /// menu set.
+    std::vector<LayoutColumn> columns;
+    reactive::Signal<std::optional<table::ColumnLayoutValue>> layout;
+    table::FilterSpec filter;
     /// The status line's message and the choices it offers, with what each runs.
     reactive::Signal<std::string> message;
     reactive::Signal<std::vector<StatusEntry>> entries;
@@ -8300,6 +8306,29 @@ Node ScreenCore::lowerForm(DocNode const& node, LowerCtx const& ctx, ElementStat
                                               return fieldComponent(view, *field, ctx);
                                           });
             }
+            // A `grid` part gives a grid widget its columns and walk; the scope is held weakly, as the grid's is.
+            if (std::span<DocNodePtr const> const grid = overlay->partList("grid"); !grid.empty()) {
+                options.overrides.byField(
+                    overlay->id, [this, detached = detachedLower(ctx), part = grid.front().get()](
+                                     forms::FieldView const& view) {
+                        LowerCtx const live = attached(detached);
+                        Node const muted = ui::text(Text{.text = view.state().path(), .role = TextRole::Muted});
+                        if (live.scope == nullptr) {
+                            return muted;
+                        }
+                        std::vector<GridColumn> columns;
+                        GridOptions gridOptions;
+                        gridParts(*part, live, view.state(), columns, gridOptions);
+                        try {
+                            return makeFormGrid(view.session(), view.state(), std::move(columns), std::move(gridOptions),
+                                                live.scope->formatting())
+                                .node;
+                        } catch (std::invalid_argument const& failure) {
+                            report(part->path, failure.what());
+                            return muted;
+                        }
+                    });
+            }
         }
     }
     Column column{.children = {forms::formView(*form, std::move(options))}};
@@ -8307,9 +8336,62 @@ Node ScreenCore::lowerForm(DocNode const& node, LowerCtx const& ctx, ElementStat
     return ui::column(std::move(column));
 }
 
+// What a grid's part gives beyond its table: its columns, each a member its `field` names or a display column whose
+// `value` is read with `row` the row's record, every member of the row type in schema order when it gives none;
+// `enterMoves`, `walk`, and `onActivate`, run with the row's key on a read-only cell. What the columns and
+// `onActivate` keep holds the scope weakly: the grid lives as long as the element the scope owns.
+void ScreenCore::gridParts(DocNode const& part, LowerCtx const& ctx, forms::FieldState const& array,
+                           std::vector<GridColumn>& columns, GridOptions& options) {
+    DetachedLower const detached = detachedLower(ctx);
+    for (DocNodePtr const& column : part.partList("columns")) {
+        ExprPtr const label = column->prop("label");
+        GridColumn made{.id = column->id,
+                        .label = label ? textOf(once(ctx, label), ctx.scope->formatting()) : column->id,
+                        .field = std::string{column->name("field")},
+                        .value = {}};
+        if (ExprPtr const value = column->prop("value"); made.field.empty() && value) {
+            made.value = [detached, value](forms::RowState const& row) {
+                LowerCtx const live = attached(detached);
+                if (live.scope == nullptr) {
+                    return std::string{};
+                }
+                ValueRecord record;
+                for (auto const& member : row.fields()) {
+                    forms::Encoding const& encoding = member->encoded().get();
+                    record.insert_or_assign(member->spec().name, encoding.has_value() && encoding->has_value()
+                                                                     ? (*encoding)->value
+                                                                     : Value{});
+                }
+                Bindings bindings = live.bindings != nullptr ? *live.bindings : Bindings{};
+                bindings.push_back(Binding{.name = "row", .read = [record] { return Value{record}; }});
+                return textOf(evalIn(*live.scope, &bindings, value), live.scope->formatting());
+            };
+        }
+        columns.push_back(std::move(made));
+    }
+    if (columns.empty()) {
+        for (forms::FieldSpec const& member : array.spec().children) {
+            columns.push_back(GridColumn{.id = member.name, .label = member.title, .field = member.name, .value = {}});
+        }
+    }
+    std::string_view const enter = part.name("enterMoves");
+    options.enterMoves = enter == "right" ? EnterMoves::Right : (enter == "none" ? EnterMoves::None : EnterMoves::Down);
+    options.walk = part.name("walk") == "columns" ? Walk::Columns : Walk::Rows;
+    if (Commands const* const commands = part.event("onActivate"); commands != nullptr && !commands->empty()) {
+        options.onActivate = [this, detached, commands](Key const& key) {
+            LowerCtx const live = attached(detached);
+            if (live.scope != nullptr) {
+                runEvent(commands, live, valueOfKey(key));
+            }
+        };
+    }
+}
+
 // A grid of a form, made once per element: every mount of the table shows the same grid, so its focus, its open editor
-// and its messages outlive a remount. Its columns are the table's `columns` parts, each naming its member in `field`,
-// or every member of the row type in schema order.
+// and its messages outlive a remount. Its columns and walk are `gridParts`'. Its cell menu offers "Copy", "Copy with
+// headers", "Filter by this value" and "Exclude this value" before the grid's own entries. Its column layout, held or
+// bound to `layout`, arranges the columns and is the order the walk follows; a user's move of a column changes the
+// held one.
 Node ScreenCore::lowerFormGrid(DocNode const& node, LowerCtx const& ctx, ElementState* element) {
     NameRef const* const named = ctx.scope->find(node.name("form"));
     forms::FormSession* const form =
@@ -8333,27 +8415,13 @@ Node ScreenCore::lowerFormGrid(DocNode const& node, LowerCtx const& ctx, Element
         return muted();
     }
     std::vector<GridColumn> columns;
-    for (DocNodePtr const& part : node.partList("columns")) {
-        ExprPtr const label = part->prop("label");
-        columns.push_back(GridColumn{
-            .id = part->id,
-            .label = label ? textOf(once(ctx, label), ctx.scope->formatting()) : part->id,
-            .field = std::string{part->name("field").empty() ? std::string_view{part->id} : part->name("field")},
-            .value = {}});
-    }
-    if (columns.empty()) {
-        for (forms::FieldSpec const& member : array->spec().children) {
-            columns.push_back(GridColumn{.id = member.name, .label = member.title, .field = member.name, .value = {}});
-        }
-    }
-    std::string_view const enter = node.name("enterMoves");
-    GridOptions options{
-        .enterMoves = enter == "right" ? EnterMoves::Right : (enter == "none" ? EnterMoves::None : EnterMoves::Down),
-        .walk = node.name("walk") == "columns" ? Walk::Columns : Walk::Rows,
-        .onActivate = {},
-    };
+    GridOptions options;
+    gridParts(node, ctx, *array, columns, options);
     auto grid = std::make_unique<GridTable>(runtime());
     GridTable* const held = grid.get();
+    for (GridColumn const& column : columns) {
+        held->columns.push_back(LayoutColumn{.id = column.id, .label = column.label});
+    }
     TableOptions table;
     commonOf(node, ctx, element, table.common);
     // The status line: the grid's notices, posted through `tableMessage` so they are held as a table's are, and the
@@ -8364,7 +8432,8 @@ Node ScreenCore::lowerFormGrid(DocNode const& node, LowerCtx const& ctx, Element
             status.standing = held->grid.grid->standing();
             status.standingEntries = held->grid.grid->standingEntries();
         }
-        status.shown = !status.message.empty() || !status.standing.empty();
+        status.shown = !status.message.empty() || !status.entries.empty() || !status.standing.empty() ||
+                       !status.standingEntries.empty();
         return status;
     });
     table.onStatusEntry = [held](std::string const& id) {
@@ -8377,11 +8446,98 @@ Node ScreenCore::lowerFormGrid(DocNode const& node, LowerCtx const& ctx, Element
             held->grid.grid->chooseEntry(id);
         }
     };
-    grid->grid = makeFormGrid(*form, *array, std::move(columns), std::move(options), ctx.scope->formatting(),
-                              std::move(table));
+    // The layout: the document's `layout` while it binds one, else the one the grid holds. Tracked.
+    ExprPtr const layoutExpr = node.prop("layout");
+    RtScope* const scope = element->scope;
+    auto const layoutNow = [held, layoutExpr, scope] {
+        std::optional<table::ColumnLayoutValue> const value =
+            layoutExpr ? layoutFromValue(evalIn(*scope, nullptr, layoutExpr)) : held->layout.get();
+        return layoutOver(held->columns, {}, value);
+    };
+    table.arrangement = Prop<TableArrangement>{[held, layoutNow] { return arrangementOf(held->columns, layoutNow()); }};
+    if (!layoutExpr) {
+        table.onColumnMove = [this, held, layoutNow](std::size_t column, std::size_t position) {
+            if (column >= held->columns.size()) {
+                return;
+            }
+            table::ColumnLayout layout = runtime().untracked(layoutNow);
+            LayoutResult const result =
+                applyLayoutGesture(layout, held->columns, Configure::All,
+                                   MoveColumnTo{.id = held->columns.at(column).id, .position = position});
+            if (result.changed) {
+                held->layout.set(layout.value());
+            }
+        };
+    }
+    // The cell menu's built-ins, before the grid's own entries.
+    table.cellMenu = [this, element, held](Key const& key, std::size_t column) {
+        std::vector<MenuItem> items;
+        if (held->grid.source == nullptr || column >= held->columns.size()) {
+            return items;
+        }
+        std::string const id = held->columns.at(column).id;
+        std::string const label = held->columns.at(column).label;
+        auto const command = [this, element](std::string text, std::function<void()> run, bool enabled) {
+            MenuItem item;
+            item.label = std::move(text);
+            item.enabled = enabled;
+            item.onSelect = [this, element, run = std::move(run)] {
+                tableMessage(*element, std::string{});
+                run();
+            };
+            return item;
+        };
+        auto const copy = [this, element, held, key, id, label](bool headers) {
+            std::vector<std::string> const labels = headers ? std::vector<std::string>{label} : std::vector<std::string>{};
+            std::vector<std::vector<std::optional<std::string>>> const rows{
+                {std::optional<std::string>{runtime().untracked([&] { return held->grid.source->text(key, id); })}}};
+            CopiedText const text = ui::copyText(labels, rows);
+            if (!clipboard || !clipboard(text.text)) {
+                return;
+            }
+            tableMessage(*element, tableText::copied(1, 0));
+        };
+        std::optional<std::pair<std::string, table::FilterEntry>> const entry =
+            runtime().untracked([&] { return held->grid.source->filterEntry(key, id); });
+        auto const refilter = [this, element, held, entry](bool exclude) {
+            if (!entry) {
+                return;
+            }
+            table::FilterSpec spec = held->filter;
+            table::ColumnFilter& filter = spec.columns[entry->first];
+            (exclude ? filter.exclude : filter.include) = {entry->second};
+            if (auto const done = held->grid.source->view().setFilter(spec); !done) {
+                tableMessage(*element, done.error().message);
+                return;
+            }
+            held->filter = std::move(spec);
+        };
+        items.push_back(command("Copy", [copy] { copy(false); }, true));
+        items.push_back(command("Copy with headers", [copy] { copy(true); }, true));
+        items.push_back(command("Filter by this value", [refilter] { refilter(false); }, entry.has_value()));
+        items.push_back(command("Exclude this value", [refilter] { refilter(true); }, entry.has_value()));
+        return items;
+    };
+    try {
+        grid->grid = makeFormGrid(*form, *array, std::move(columns), std::move(options), ctx.scope->formatting(),
+                                  std::move(table));
+    } catch (std::invalid_argument const& failure) {
+        report(node.path, failure.what());
+        return muted();
+    }
     element->gridTable = std::move(grid);
+    // The walk follows the visible columns in layout order, and the cells the scope's formatting.
+    element->scope->nodes.effect([this, held, layoutNow, scope] {
+        std::vector<std::string> visible = layoutNow().visible();
+        FormatContext format = scope->formatting();
+        runtime().untracked([&] {
+            held->grid.source->setLayout(std::move(visible));
+            held->grid.source->setFormat(std::move(format));
+        });
+    });
     element->scope->nodes.effect([this, element, held] {
         std::string const text = held->grid.grid->message();
+        static_cast<void>(held->grid.grid->notices());
         std::vector<StatusEntry> const offered = held->grid.grid->messageEntries();
         runtime().untracked([&] {
             std::vector<std::pair<StatusEntry, std::function<void()>>> entries;
