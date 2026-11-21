@@ -107,10 +107,10 @@ constexpr std::array<std::string_view, 2> kSelectValues = {"selected", "selected
 /// @brief The element values of a tabs node: the id of the tab shown.
 constexpr std::array<std::string_view, 1> kTabsValues = {"selected"};
 /// @brief The element values of a table.
-constexpr std::array<std::string_view, 19> kTableValues = {
+constexpr std::array<std::string_view, 20> kTableValues = {
     "selection", "activeKey", "sort",       "filters", "viewCount", "sourceCount",    "selectedCount", "pending",
     "error",     "hoveredKey", "page",      "pageCount", "pageFirst", "pageLast",     "layout",        "visibleColumns",
-    "hiddenCount", "selectionSet", "selectedCountKind"};
+    "hiddenCount", "selectionSet", "selectedCountKind", "busyCount"};
 /// @brief The element values of a dialog or drawer.
 constexpr std::array<std::string_view, 3> kDialogValues = {"open", "ready", "submitted"};
 /// @brief The element values of a form, beside its fields.

@@ -119,6 +119,8 @@ struct TableCountsView {
     std::vector<std::string> failed;
     /// @brief Held view rows that are retained and no longer match the filter.
     std::int64_t retained = 0;
+    /// @brief Rows an action of this session is working on: `RowStates::busyCount`.
+    std::int64_t busy = 0;
 };
 
 /// @brief What `TableRows::retain` did with the keys it was given.
@@ -249,8 +251,9 @@ struct ChangedRowsValue {
 /// @brief Reads the `ChangedRows` of one table from an action's reply.
 ///
 /// Each path the catalog gives for @p record names a `ChangedRows`' `rows` member: `"<member>.rows"`, or `"rows"`
-/// for the result itself. The value at the path's parent is read as `{"rows": [{"key"}], "failed": [{"key",
-/// "message"}]}`; a number is an integer key and a string a text key, and an entry of neither is skipped.
+/// for the result itself. The value at the path's parent is read as `{"rows": [{"key", "from"}], "failed": [{"key",
+/// "message"}]}`; a number is an integer key and a string a text key, and an entry whose `key` is neither is
+/// skipped, as is a `from` of neither.
 /// @param reply  The action's reply.
 /// @param action The action's catalog entry.
 /// @param record The table's record, `<model type>.<table id>`.
@@ -295,7 +298,8 @@ struct ChangedRowsValue {
             if (Value const* const rows = at->field("rows"); rows != nullptr && rows->asList() != nullptr) {
                 for (Value const& row : *rows->asList()) {
                     if (auto key = keyOf(row.field("key"))) {
-                        out.rows.push_back(table::ChangedRow{.key = std::move(*key)});
+                        out.rows.push_back(
+                            table::ChangedRow{.key = std::move(*key), .from = keyOf(row.field("from"))});
                     }
                 }
             }
@@ -314,6 +318,164 @@ struct ChangedRowsValue {
     }
     return out;
 }
+
+/// @brief The rows of a table an action of this session is working on, and those an action could not change.
+///
+/// A run's rows are busy until it settles, whatever its outcome: the keys of a key selection or of a row, or every
+/// row of a selection of the view but its `except`. Runs are kept apart, so two runs over one row keep it busy until
+/// both settle. A failed row holds its message until its mark is cleared.
+class RowStates {
+public:
+    /// @brief Makes rows busy for a run; a run named again adds to its keys.
+    /// @param run  The run's id, unique in the session.
+    /// @param keys The rows' keys.
+    void busyKeys(std::uint64_t run, std::vector<table::RowId> keys) {
+        std::vector<table::RowId>& held = _keyRuns[run];
+        for (table::RowId& key : keys) {
+            if (!std::ranges::contains(held, key)) {
+                held.push_back(std::move(key));
+            }
+        }
+    }
+
+    /// @brief Makes every row of a selection of the view busy for a run, but its `except`.
+    /// @param run    The run's id, unique in the session.
+    /// @param except The keys the selection leaves out.
+    /// @param count  The rows the selection held when the run started: what `busyCount` counts for it.
+    void busyView(std::uint64_t run, std::vector<table::RowId> except, std::int64_t count) {
+        _viewRuns.insert_or_assign(run,
+                                   ViewRun{.except = std::move(except), .count = std::max<std::int64_t>(count, 0)});
+    }
+
+    /// @brief Ends a run: its rows are no longer busy for it, whatever its outcome.
+    /// @param run The run's id; one that holds nothing is ignored.
+    void settle(std::uint64_t run) {
+        _keyRuns.erase(run);
+        _viewRuns.erase(run);
+    }
+
+    /// @brief Marks rows an action could not change, each with its message; a row marked already takes the new one.
+    /// @param rows The rows.
+    void fail(std::span<table::FailedRow const> rows) {
+        for (table::FailedRow const& row : rows) {
+            auto const found = std::ranges::find(_failed, row.key, &table::FailedRow::key);
+            if (found != _failed.end()) {
+                found->message = row.message;
+            } else {
+                _failed.push_back(row);
+            }
+        }
+    }
+
+    /// @brief Drops the failed marks of some rows.
+    /// @param keys The rows' keys.
+    void clearFailed(std::span<table::RowId const> keys) {
+        std::erase_if(_failed, [&keys](table::FailedRow const& row) { return std::ranges::contains(keys, row.key); });
+    }
+
+    /// @brief Drops every failed mark.
+    void clearFailed() { _failed.clear(); }
+
+    /// @brief Moves a row's busy membership and failed mark from its old key to its new one; where the new key has
+    ///        its own, the new key's is kept and the old key's dropped.
+    /// @param from The row's old key.
+    /// @param to   The row's new key.
+    void move(table::RowId const& from, table::RowId const& to) {
+        if (from == to) {
+            return;
+        }
+        for (auto& [run, keys] : _keyRuns) {
+            auto const old = std::ranges::find(keys, from);
+            if (old == keys.end()) {
+                continue;
+            }
+            if (std::ranges::contains(keys, to)) {
+                keys.erase(old);
+            } else {
+                *old = to;
+            }
+        }
+        // A view run holds a row unless its `except` names it: a busy old key makes the new key busy, and is then
+        // left out itself.
+        for (auto& [run, view] : _viewRuns) {
+            if (!std::ranges::contains(view.except, from)) {
+                std::erase(view.except, to);
+                view.except.push_back(from);
+            }
+        }
+        auto const old = std::ranges::find(_failed, from, &table::FailedRow::key);
+        if (old == _failed.end()) {
+            return;
+        }
+        if (std::ranges::contains(_failed, to, &table::FailedRow::key)) {
+            _failed.erase(old);
+        } else {
+            old->key = to;
+        }
+    }
+
+    /// @brief Whether a row is busy: a key run holds it, or a view run does not leave it out.
+    /// @param key The row's key.
+    /// @return `true` while any run in flight works on it.
+    [[nodiscard]] bool isBusy(table::RowId const& key) const {
+        auto const holds = [&key](auto const& run) { return std::ranges::contains(run.second, key); };
+        auto const leavesIn = [&key](auto const& run) { return !std::ranges::contains(run.second.except, key); };
+        return std::ranges::any_of(_keyRuns, holds) || std::ranges::any_of(_viewRuns, leavesIn);
+    }
+
+    /// @brief A row's failed mark.
+    /// @param key The row's key.
+    /// @return Its message, or nothing for a row not marked.
+    [[nodiscard]] std::optional<std::string> failure(table::RowId const& key) const {
+        auto const found = std::ranges::find(_failed, key, &table::FailedRow::key);
+        return found == _failed.end() ? std::nullopt : std::optional{found->message};
+    }
+
+    /// @brief How many rows are busy.
+    /// @return With no view run in flight, the distinct keys of the key runs; with one, the largest `count` among
+    ///         the view runs plus the distinct keys of key runs that every view run leaves out, which are outside its
+    ///         rows.
+    [[nodiscard]] std::int64_t busyCount() const {
+        std::unordered_set<table::RowId> keys;
+        for (auto const& [run, held] : _keyRuns) {
+            for (table::RowId const& key : held) {
+                auto const leavesOut = [&key](auto const& view) {
+                    return std::ranges::contains(view.second.except, key);
+                };
+                if (std::ranges::all_of(_viewRuns, leavesOut)) {
+                    keys.insert(key);
+                }
+            }
+        }
+        std::int64_t largest = 0;
+        for (auto const& [run, view] : _viewRuns) {
+            largest = std::max(largest, view.count);
+        }
+        return largest + static_cast<std::int64_t>(keys.size());
+    }
+
+    /// @brief The rows marked failed.
+    /// @return Their keys, in the order they failed.
+    [[nodiscard]] std::vector<table::RowId> failedKeys() const {
+        std::vector<table::RowId> out;
+        out.reserve(_failed.size());
+        for (table::FailedRow const& row : _failed) {
+            out.push_back(row.key);
+        }
+        return out;
+    }
+
+private:
+    // A selection of the view a run works on: the keys it leaves out, and the rows it held when the run started.
+    struct ViewRun {
+        std::vector<table::RowId> except;
+        std::int64_t count = 0;
+    };
+
+    std::map<std::uint64_t, std::vector<table::RowId>> _keyRuns;
+    std::map<std::uint64_t, ViewRun> _viewRuns;
+    std::vector<table::FailedRow> _failed;
+};
 
 /// @brief What a table's mount reads, whatever serves the rows.
 ///
@@ -464,6 +626,21 @@ public:
         return fetchRows({}, {});
     }
 
+    /// @brief The rows an action of this session is working on, and those an action could not change.
+    /// @return The rows' states.
+    [[nodiscard]] virtual RowStates& states() = 0;
+
+    /// @brief The rows an action of this session is working on, and those an action could not change.
+    /// @return The rows' states.
+    [[nodiscard]] virtual RowStates const& states() const = 0;
+
+    /// @brief Moves what the rows hold by a row's key to its new key: its place among the retained rows and its
+    ///        states, as `RowStates::move` moves them. An action that gave a row a new key names the old one in a
+    ///        `table::ChangedRow::from`.
+    /// @param from The row's old key.
+    /// @param to   The row's new key.
+    virtual void moveKey(table::RowId const& from, table::RowId const& to) = 0;
+
     /// @brief Sets the one receiver of the view's changes, called after the rows changed with the operations that
     ///        turn the old view into the new one.
     ///
@@ -472,6 +649,31 @@ public:
     /// @param handler The receiver; empty to stop receiving.
     virtual void onChange(std::function<void(table::ViewChange const&)> handler) = 0;
 };
+
+/// @brief Why a row is locked: its `rowLock` companion's text.
+/// @param row         The row.
+/// @param description The table's description; a `rowLock` that is empty locks no row.
+/// @return The companion's text when it is non-empty text, else nothing.
+[[nodiscard]] inline std::optional<std::string> lockText(TableRowRef const& row,
+                                                         table::TableDescription const& description) {
+    if (description.rowLock.empty()) {
+        return std::nullopt;
+    }
+    Value const* const cell = row.row.field(description.rowLock);
+    std::string const* const text = cell == nullptr ? nullptr : cell->asString();
+    return text == nullptr || text->empty() ? std::nullopt : std::optional{*text};
+}
+
+/// @brief Whether a row takes no cell edit: an action of this session is working on it, or it is locked.
+/// @param rows        The rows.
+/// @param index       The row's view index.
+/// @param description The table's description.
+/// @return `true` for a busy or locked row; `false` for a row the rows do not hold.
+[[nodiscard]] inline bool refusesEdit(TableRows const& rows, std::int64_t index,
+                                      table::TableDescription const& description) {
+    std::optional<TableRowRef> const row = rows.row(index);
+    return row && (rows.states().isBusy(row->key) || lockText(*row, description).has_value());
+}
 
 /// @brief A row's key and its record, owned.
 struct RowRecord {
@@ -910,7 +1112,8 @@ public:
                                .pending = _engine->pending(),
                                .awaiting = {},
                                .failed = {},
-                               .retained = retained};
+                               .retained = retained,
+                               .busy = _states.busyCount()};
     }
 
     /// @brief Adds keys to the engine's retained rows, all or none.
@@ -949,6 +1152,38 @@ public:
         return at && _engine->isUnmatched(*at);
     }
 
+    /// @brief The rows an action of this session is working on, and those an action could not change.
+    /// @return The rows' states.
+    [[nodiscard]] RowStates& states() override { return _states; }
+
+    /// @brief The rows an action of this session is working on, and those an action could not change.
+    /// @return The rows' states.
+    [[nodiscard]] RowStates const& states() const override { return _states; }
+
+    /// @brief Moves a row's place among the engine's retained rows and its states to its new key.
+    /// @param from The row's old key.
+    /// @param to   The row's new key.
+    void moveKey(table::RowId const& from, table::RowId const& to) override {
+        _states.move(from, to);
+        auto const held = _engine->retained();
+        if (!std::ranges::contains(held, from)) {
+            return;
+        }
+        std::vector<table::RowId> next;
+        next.reserve(held.size());
+        bool const toHeld = std::ranges::contains(held, to);
+        for (table::RowId const& key : held) {
+            if (key == from) {
+                if (!toHeld) {
+                    next.push_back(to);
+                }
+            } else {
+                next.push_back(key);
+            }
+        }
+        static_cast<void>(_engine->retain(std::move(next)));
+    }
+
     /// @brief Sets the one receiver of the engine's view changes.
     /// @param handler The receiver; empty to stop receiving.
     void onChange(std::function<void(table::ViewChange const&)> handler) override { _onChange = std::move(handler); }
@@ -959,6 +1194,7 @@ private:
         RowRecord record;
         std::vector<std::string> levels;
     };
+    RowStates _states;
 
     // One change of the source: the snapshot it made, and the rows it touched or the whole source.
     struct Logged {
@@ -3209,7 +3445,38 @@ public:
                                .pending = _window.pending() || !_rowsFlights.empty(),
                                .awaiting = {awaiting.begin(), awaiting.end()},
                                .failed = {failed.begin(), failed.end()},
-                               .retained = static_cast<std::int64_t>(_unmatchedHeld.size())};
+                               .retained = static_cast<std::int64_t>(_unmatchedHeld.size()),
+                               .busy = _states.busyCount()};
+    }
+
+    /// @brief The rows an action of this session is working on, and those an action could not change.
+    /// @return The rows' states.
+    [[nodiscard]] RowStates& states() override { return _states; }
+
+    /// @brief The rows an action of this session is working on, and those an action could not change.
+    /// @return The rows' states.
+    [[nodiscard]] RowStates const& states() const override { return _states; }
+
+    /// @brief Moves a row's place among the retained rows and its states to its new key. Nothing is fetched: the
+    ///        change event of the action names both keys.
+    /// @param from The row's old key.
+    /// @param to   The row's new key.
+    void moveKey(table::RowId const& from, table::RowId const& to) override {
+        _states.move(from, to);
+        if (from == to || !_retainedSet.contains(from)) {
+            return;
+        }
+        _retainedSet.erase(from);
+        if (_retainedSet.insert(to).second) {
+            std::ranges::replace(_retained, from, to);
+        } else {
+            std::erase(_retained, from);
+        }
+        _unmatched.erase(from);
+        _unmatchedHeld.erase(from);
+        // The revision held is of the view with the old key retained.
+        ++_retainStamp;
+        _viewRevision.clear();
     }
 
     /// @brief Adds keys to the retained rows, all or none; each query from then on carries the set in `retain`.
@@ -4242,6 +4509,15 @@ private:
                 keys->push_back(std::move(*key));
             }
         }
+        // A change of a row ends its failed mark. An action's own event names the rows it changed and not those it
+        // could not, so it leaves their marks; an event without keys names no row and ends none.
+        if (keys && !_states.failedKeys().empty()) {
+            auto const marked = _states.failedKeys().size();
+            _states.clearFailed(*keys);
+            if (_states.failedKeys().size() != marked) {
+                status();
+            }
+        }
         // While a run holds the refetches, the event only marks what it would fetch.
         if (!_holding.empty()) {
             if (keys) {
@@ -4378,6 +4654,8 @@ private:
     std::vector<table::RowId> _retained;
     std::unordered_set<table::RowId> _retainedSet;
     std::uint64_t _retainStamp = 0;
+    // The rows an action of this session works on, and those one could not change.
+    RowStates _states;
     // Keys the latest reply that supplied them listed as unmatched, and those of them held.
     std::unordered_set<table::RowId> _unmatched;
     std::unordered_set<table::RowId> _unmatchedHeld;

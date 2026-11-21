@@ -43,9 +43,12 @@ constexpr int kFilterMark = 2;
 /// A filter button, empty and filled.
 constexpr std::string_view kFilterEmpty = "\u25BF";
 constexpr std::string_view kFilterFilled = "\u25BE";
-/// What starts the gutter of a row an action is working on, and of a row another user holds.
+/// What the gutter's last cell shows for a row an action is working on, and for a row another user holds.
 constexpr std::string_view kBusyGlyph = "\u2026";
 constexpr std::string_view kLockGlyph = "#";
+/// What a busy or locked row says on hover when its marks carry no text of their own.
+constexpr std::string_view kBusyText = "Saving this row";
+constexpr std::string_view kLockText = "Locked by another user";
 /// The button at the header line's end that opens the table's menu.
 constexpr std::string_view kTableMenu = "\u22EF";
 /// The cells the header line keeps for the table menu: a gap and the button.
@@ -329,7 +332,7 @@ std::size_t TableImpl::dataPlace(std::span<WidgetBase* const> rows, std::size_t 
     return place;
 }
 
-int TableImpl::gutter() const noexcept { return _selectColumn ? kSelectGutter : kGutter; }
+int TableImpl::gutter() const noexcept { return (_selectColumn ? kSelectGutter : kGutter) + (_markGutter ? 1 : 0); }
 
 std::string TableImpl::headerBox() const {
     auto const rows = shownChildren();
@@ -367,7 +370,15 @@ void TableImpl::setRowMarks(ui::Widget& row, ui::RowMarks const& marks) {
         _marks.insert_or_assign(&base, marks);
     }
     base.applyRowMuted(marks.unmatched);
-    base.applyTooltip(marks.tooltip);
+    // The marks' text wins over the row's own tooltip while it lasts; a busy or locked row always says why.
+    std::string_view const said = !marks.tooltip.empty() ? std::string_view{marks.tooltip}
+                                  : marks.locked         ? kLockText
+                                  : marks.busy           ? kBusyText
+                                                         : std::string_view{};
+    base.applyMarksTooltip(said);
+    // The gutter takes a cell for the glyph from the first busy or locked row on, and keeps it, so the columns do not
+    // move as rows start and stop being busy.
+    _markGutter = _markGutter || marks.busy || marks.locked;
     refresh();
 }
 
@@ -1043,9 +1054,12 @@ std::string TableImpl::rowMark(WidgetBase const* row, bool cursor) const {
         mark = isMarked(row) ? "*" : " ";
     }
     mark += cursor ? ">" : " ";
-    // A busy or locked row's gutter starts with its glyph, in place of the selection mark's first character.
-    if (auto const found = _marks.find(row); found != _marks.end() && (found->second.busy || found->second.locked)) {
-        mark = std::string{found->second.busy ? kBusyGlyph : kLockGlyph} + mark.substr(1);
+    // A busy or locked row's glyph takes the gutter's own last cell, after the selection and cursor marks.
+    if (_markGutter) {
+        auto const found = _marks.find(row);
+        bool const busy = found != _marks.end() && found->second.busy;
+        bool const locked = found != _marks.end() && found->second.locked;
+        mark += busy ? kBusyGlyph : locked ? kLockGlyph : " ";
     }
     return mark;
 }

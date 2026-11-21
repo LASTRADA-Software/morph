@@ -858,6 +858,31 @@ TEST_CASE("changed rows: the walk reports the table at its rows member", "[table
     // Mutation: the walker without the heldRecord rule (the registry then refuses EditWideRow's updates).
 }
 
+TEST_CASE("changed rows: a changed key names both keys, and a failed row neither", "[table][registration][keys]") {
+    auto const* const record = morph::effects::recordNamed("WideTableModel.wide");
+    REQUIRE(record != nullptr);
+    CHECK(record->previousKeyField == std::optional<std::string>{"from"});
+    auto const changes = morph::effects::deriveChanges(
+        "EditWideRow",
+        R"({"wide":{"rows":[{"key":10,"from":2},{"key":7}],"failed":[{"key":4,"message":"Locked"}]},)"
+        R"("small":{"rows":[]}})",
+        kRanOn);
+    auto const* const wide = changeOf(changes, "WideTableModel.wide");
+    REQUIRE(wide != nullptr);
+    auto keys = keyTexts(*wide);
+    std::ranges::sort(keys);
+    CHECK(keys == std::vector<std::string>{"10", "2", "7"});
+    morph::table::ChangedRows<&bench::WideTableModel::wide> read;
+    REQUIRE_FALSE(glz::read_json(
+        read, R"({"rows":[{"key":10,"from":2},{"key":7}],"failed":[{"key":4,"message":"Locked"}]})"));
+    REQUIRE(read.rows.size() == 2);
+    CHECK(read.rows[0].from == std::optional<morph::table::RowId>{std::int64_t{2}});
+    CHECK_FALSE(read.rows[1].from.has_value());
+    CHECK(read.failed == std::vector<morph::table::FailedRow>{{.key = std::int64_t{4}, .message = "Locked"}});
+    CHECK(glz::write_json(read.rows[1]).value_or("") == R"({"key":7})");
+}
+// Mutation: the walk ignoring `from`, which leaves the old row's watchers untold (keys {10, 7}).
+
 TEST_CASE("changed rows: updatesTable without its ChangedRows is refused when the registries resolve",
           "[table][registration]") {
     using morph::model::detail::ActionResult;

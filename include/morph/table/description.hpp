@@ -1463,10 +1463,13 @@ inline constexpr std::size_t kMaxSortKeysBound = 32;
 struct ChangedRow {
     /// @brief The row's key.
     RowId key;
+    /// @brief The key the row had before the action gave it `key`, when the action changed it: saving a modified row
+    ///        as a new one. The result walk collects it beside `key`, so the change event names both.
+    std::optional<RowId> from;
 
     /// @brief Member-wise equality.
     /// @param other The row to compare with.
-    /// @return `true` when the keys match.
+    /// @return `true` when the keys and the previous keys match.
     [[nodiscard]] bool operator==(ChangedRow const& other) const = default;
 };
 
@@ -1507,13 +1510,16 @@ struct TableOf {
 
 /// @brief The rows of one table that an action changed: the slot an `updatesTable<Function>` effect reads.
 ///
-/// Its JSON is `{"rows": [{"key": …}, …]}`. The result walk reports `TableOf<Function>` at its `rows` member,
-/// keyed by `key`, so an action's changed rows are collected as any record's are.
+/// Its JSON is `{"rows": [{"key": …, "from": …}, …], "failed": [{"key": …, "message": …}, …]}`. The result walk
+/// reports `TableOf<Function>` at its `rows` member, keyed by `key` and by `from`, so an action's changed rows are
+/// collected as any record's are; a `failed` row is not changed, and is not collected.
 /// @tparam Function The table's function, as `BRIDGE_REGISTER_TABLE` names it.
 template <auto Function>
 struct ChangedRows {
     /// @brief The rows changed, in any order.
     std::vector<ChangedRow> rows;
+    /// @brief The rows the action could not change, each with why.
+    std::vector<FailedRow> failed;
 
     /// @brief The record the rows belong to.
     using heldRecord = TableOf<Function>;

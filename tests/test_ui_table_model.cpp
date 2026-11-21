@@ -5946,3 +5946,485 @@ TEST_CASE("retained rows: rows over the engine retain too", "[ui][table][retain]
     CHECK(rows.counts().retained == 0);
     CHECK(rows.engine().retained().empty());
 }
+
+// ── Key changes, busy, failed and locked rows ─────────────────────────────────────────────────────────────────
+
+namespace {
+
+// The table the acting cases mount: the ten rows, unfiltered.
+inline constexpr std::string_view kActingTable =
+    R"({"kind":"table","id":"t","testId":"t","model":"sample","table":"samples","selectionMode":"multiple"})";
+// The mutations `save`, over the table's selection, and `touch`, over the row the state `picked` names.
+inline constexpr std::string_view kActingMutations = R"({
+    "save":{"model":"sample","action":"Lims_SaveAs","body":{"obj":{"rows":{"ref":"t.selectionSet"}}}},
+    "touch":{"model":"sample","action":"Lims_TouchRow","body":{"obj":{"row":{"ref":"picked"}}}}})";
+// The same, with `save` running in parallel with itself.
+inline constexpr std::string_view kParallelMutations = R"({
+    "save":{"model":"sample","action":"Lims_SaveAs","concurrency":"parallel",
+            "body":{"obj":{"rows":{"ref":"t.selectionSet"}}}},
+    "touch":{"model":"sample","action":"Lims_TouchRow","body":{"obj":{"row":{"ref":"picked"}}}}})";
+inline constexpr std::string_view kLockText = "Being edited by another user";
+
+// The ten rows of selectionDescription(): "open" for 0..5, "closed" for 6..9; row 6 is locked.
+std::vector<SelRow> tenRows() {
+    std::vector<SelRow> rows;
+    for (std::int64_t key = 0; key < 10; ++key) {
+        rows.push_back(SelRow{.key = key, .status = key < 6 ? "open" : "closed",
+                              .lockedBy = key == 6 ? std::string{kLockText} : std::string{}});
+    }
+    return rows;
+}
+
+// tenRows() without @p gone, and with @p added last.
+std::vector<SelRow> tenRowsMoved(std::int64_t gone, std::optional<std::int64_t> added) {
+    std::vector<SelRow> rows = tenRows();
+    std::erase_if(rows, [gone](SelRow const& row) { return row.key == gone; });
+    if (added) {
+        rows.push_back(SelRow{.key = *added});
+    }
+    return rows;
+}
+
+// A keyed reply of selectionDescription() naming each row at the view row given.
+std::string keyedAt(std::vector<std::pair<std::int64_t, SelRow>> const& placed, std::int64_t total,
+                    std::string_view viewRevision) {
+    std::string keys;
+    std::string cells;
+    std::string indices;
+    for (auto const& [at, row] : placed) {
+        std::string const comma = keys.empty() ? "" : ",";
+        keys += comma + std::to_string(row.key);
+        cells += comma + "[" + std::to_string(row.key) + ",\"" + row.status + "\",\"" + row.lockedBy + "\"]";
+        indices += comma + std::to_string(at);
+    }
+    return R"({"revision":")" + selectionDescription().revision +
+           R"(","columns":["id","status","lockedBy"],"keys":[)" + keys + R"(],"rows":[)" + cells + R"(],"total":)" +
+           std::to_string(total) +
+           R"(,"offset":0,"viewRevision":")" + std::string{viewRevision} + R"(","indices":[)" + indices + "]}";
+}
+
+// The document: @p table, a button `run-<name>` for each mutation, and buttons `pick-<key>` setting `picked`.
+std::string actingDoc(TableHarness& h, std::string_view table, std::string_view mutations) {
+    h.mutationActions.insert_or_assign("save", "Lims_SaveAs");
+    h.mutationActions.insert_or_assign("touch", "Lims_TouchRow");
+    std::string children{table};
+    for (std::string const name : {"save", "touch"}) {
+        children += R"(,{"kind":"button","testId":"run-)" + name + R"(","label":")" + name +
+                    R"(","onClick":[{"run":")" + name + R"("}]})";
+    }
+    for (int const key : {2, 4, 5}) {
+        std::string const text = std::to_string(key);
+        children += R"(,{"kind":"button","testId":"pick-)" + text + R"(","label":"pick )" + text +
+                    R"(","onClick":[{"set":"picked","value":{"lit":)" + text + "}}]}";
+    }
+    return R"({"vocab":"ui/1","id":"samples","models":{"sample":{"type":"Lims_SampleModel"}},)"
+           R"("state":{"picked":{"init":{"lit":null}}},"mutations":)" +
+           std::string{mutations} + R"(,"view":{"kind":"column","children":[)" + children + "]}}";
+}
+
+// Mounts @p table with `save` and `touch`, answering the describe request and a first page of the ten rows (or of
+// @p first, total and revision "v1").
+std::unique_ptr<morph::ui::Screen> mountActing(TableHarness& h, std::string_view table = kActingTable,
+                                               std::string_view mutations = kActingMutations,
+                                               std::vector<SelRow> const& first = tenRows()) {
+    addAction(h, "Lims_SaveAs", std::string{kSelectionSchema}, samplesAction());
+    addAction(h, "Lims_TouchRow", std::string{kRowSchema}, samplesAction());
+    auto screen = h.mount(actingDoc(h, table, mutations));
+    replyDescribe(h, describeJson(selectionDescription()));
+    replyPage(h, selectionPage(first, static_cast<std::int64_t>(first.size()), "v1"));
+    return screen;
+}
+
+// Sets `picked` to @p key through its button.
+void pick(TableHarness& h, int key) {
+    h.backend.click(h.byTestId("Button", "pick-" + std::to_string(key)));
+    h.settle();
+}
+
+// Moves focus to view row @p row from the first.
+void focusRow(TableHarness& h, int table, std::size_t row) {
+    h.backend.focusMove(table, morph::ui::FocusMove::First);
+    for (std::size_t at = 0; at < row; ++at) {
+        h.backend.focusMove(table, morph::ui::FocusMove::Down);
+    }
+    h.settle();
+    REQUIRE(h.backend.focusCell(table).first == row);
+}
+
+// The key of the row the mount's focus is on, as the backend was last told it.
+std::optional<morph::table::RowId> focusedKey(morph::ui::Screen& screen, TableHarness& h, int table) {
+    auto const at = static_cast<std::int64_t>(h.backend.focusCell(table).first);
+    auto const row = elementOf(screen, "t").tableRows->row(at);
+    return row ? std::optional{row->key} : std::nullopt;
+}
+
+// Answers every open query of the table from the view @p view: a keyed one with the rows it names at their view rows,
+// a page one with every row.
+void answerView(TableHarness& h, std::vector<SelRow> const& view, std::string_view revision = "v2") {
+    auto const total = static_cast<std::int64_t>(view.size());
+    for (int round = 0; round < 8 && openCalls(h, "Table.samples") > 0; ++round) {
+        std::size_t const index = morph::ui::testing::oldestOpen(h, "Table.samples");
+        table::TableQuery const query = morph::ui::testing::queryOf(h, index);
+        if (!query.keys) {
+            h.reply(index, selectionPage(view, total, revision));
+            continue;
+        }
+        std::vector<std::pair<std::int64_t, SelRow>> placed;
+        for (std::size_t at = 0; at < view.size(); ++at) {
+            if (std::ranges::contains(*query.keys, table::RowId{view.at(at).key})) {
+                placed.emplace_back(static_cast<std::int64_t>(at), view.at(at));
+            }
+        }
+        h.reply(index, keyedAt(placed, total, revision));
+    }
+}
+
+// The JSON of a ChangedRows reply under `rows`.
+std::string savedReply(std::string_view rows, std::string_view failed = "") {
+    return R"({"rows":{"rows":[)" + std::string{rows} + R"(],"failed":[)" + std::string{failed} + "]}}";
+}
+
+morph::table::RowId rid(std::int64_t key) { return morph::table::RowId{key}; }
+
+// The view index of each key in tenRows().
+std::int64_t indexOf(std::int64_t key) { return key; }
+
+}  // namespace
+
+TEST_CASE("key change: the session that ran the action moves what it holds", "[ui][table][keys]") {
+    TableHarness h;
+    auto screen = mountActing(h);
+    int const table = h.byTestId("Table", "t");
+    morph::ui::TableRows& rows = *elementOf(*screen, "t").tableRows;
+    // Rows 2 and 5 selected (keys), focus on row 2, row 2 retained.
+    h.backend.clickRow(table, std::int64_t{2});
+    h.backend.ctrlClickRow(table, std::int64_t{5});
+    h.settle();
+    focusRow(h, table, 2);
+    REQUIRE(elementValue(h, "t", "selectionSet") == value(R"({"keys":[2,5]})"));
+    REQUIRE(rows.retain(idsOf({2})) == morph::ui::RetainResult::Retained);
+    h.settle();
+    answerView(h, tenRows(), "v1");
+    // Row 2 failed from an earlier run: `touch` on row 2 started before `save`, and fails it while `save` runs.
+    pick(h, 2);
+    runMutation(h, "touch");
+    runMutation(h, "save");
+    settleMutation(h, "touch", savedReply("", R"({"key":2,"message":"Locked"})"));
+    REQUIRE(rows.states().failure(rid(2)) == std::optional<std::string>{"Locked"});
+    std::size_t const told = h.backend.focusCells(table).size();
+
+    settleMutation(h, "save", savedReply(R"({"key":10,"from":2})"));
+    CHECK(elementValue(h, "t", "selectionSet") == value(R"({"keys":[10,5]})"));
+    CHECK(rows.states().failure(rid(10)) == std::optional<std::string>{"Locked"});
+    CHECK_FALSE(rows.states().failure(rid(2)).has_value());
+    auto const retained = elementOf(*screen, "t").tableWindow->retained();
+    CHECK(std::ranges::contains(retained, rid(10)));
+    CHECK_FALSE(std::ranges::contains(retained, rid(2)));
+
+    std::size_t const sent = h.dispatcher.count("Table.samples");
+    fireEvent(h, "Lims_SampleModel.samples", {10, 2});
+    REQUIRE(h.dispatcher.count("Table.samples") == sent + 1);
+    REQUIRE(lastQuery(h).keys.has_value());
+    CHECK(std::ranges::contains(*lastQuery(h).keys, rid(10)));
+    CHECK(std::ranges::contains(*lastQuery(h).keys, rid(2)));
+    // Row 2 is gone and row 10 is last.
+    answerView(h, tenRowsMoved(2, 10));
+    CHECK(focusedKey(*screen, h, table) == std::optional{rid(10)});
+    std::vector<std::pair<std::size_t, std::size_t>> const cells = h.backend.focusCells(table);
+    REQUIRE(cells.size() > told);
+    for (std::size_t at = told; at < cells.size(); ++at) {
+        CHECK(cells.at(at).first == 9);  // key 10's view row; no other row was focused meanwhile
+    }
+    CHECK(elementValue(h, "t", "selectionSet") == value(R"({"keys":[10,5]})"));
+}
+// Mutation: the client ignoring `from`, which leaves 2 selected and 10 not.
+
+TEST_CASE("key change: the action's event before its reply", "[ui][table][keys]") {
+    TableHarness h;
+    auto screen = mountActing(h);
+    int const table = h.byTestId("Table", "t");
+    h.backend.clickRow(table, std::int64_t{2});
+    h.backend.ctrlClickRow(table, std::int64_t{5});
+    h.settle();
+    focusRow(h, table, 2);
+    runMutation(h, "save");
+    fireEvent(h, "Lims_SampleModel.samples", {10, 2});
+    answerView(h, tenRowsMoved(2, 10));
+    CHECK(elementValue(h, "t", "selectionSet") == value(R"({"keys":[2,5]})"));
+    SECTION("the reply names 2 as 10's old key") {
+        settleMutation(h, "save", savedReply(R"({"key":10,"from":2})"));
+        CHECK(elementValue(h, "t", "selectionSet") == value(R"({"keys":[10,5]})"));
+        CHECK(focusedKey(*screen, h, table) == std::optional{rid(10)});
+    }
+    SECTION("the reply names no from") {
+        settleMutation(h, "save", savedReply(R"({"key":10})"));
+        CHECK(elementValue(h, "t", "selectionSet") == value(R"({"keys":[5]})"));
+        CHECK(h.backend.focusCell(table).first == 2);
+        CHECK(focusedKey(*screen, h, table) == std::optional{rid(3)});
+    }
+}
+// Mutation: no deferral while the run is in flight, which drops 2 before `from` names it and selects [5].
+
+TEST_CASE("key change: onto a key already held", "[ui][table][keys][review]") {
+    TableHarness h;
+    auto screen = mountActing(h);
+    int const table = h.byTestId("Table", "t");
+    // Rows 3 and 7 held; 7 and 3 selected.
+    h.backend.clickRow(table, std::int64_t{7});
+    h.backend.ctrlClickRow(table, std::int64_t{3});
+    h.settle();
+    REQUIRE(elementValue(h, "t", "selectionSet") == value(R"({"keys":[7,3]})"));
+    runMutation(h, "save");
+    settleMutation(h, "save", savedReply(R"({"key":7,"from":3})"));
+    CHECK(elementValue(h, "t", "selectionSet") == value(R"({"keys":[7]})"));
+    fireEvent(h, "Lims_SampleModel.samples", {7, 3});
+    REQUIRE(lastQuery(h).keys.has_value());
+    CHECK(std::ranges::contains(*lastQuery(h).keys, rid(3)));
+    CHECK(std::ranges::contains(*lastQuery(h).keys, rid(7)));
+}
+// Mutation: a move that appends `to` without checking it is held, which selects 7 twice.
+
+TEST_CASE("key change: a from the client does not hold", "[ui][table][keys]") {
+    TableHarness h;
+    auto screen = mountActing(h);
+    int const table = h.byTestId("Table", "t");
+    morph::ui::TableRows& rows = *elementOf(*screen, "t").tableRows;
+    h.backend.clickRow(table, std::int64_t{2});
+    h.settle();
+    focusRow(h, table, 4);
+    std::size_t const told = h.backend.focusCells(table).size();
+    runMutation(h, "save");
+    settleMutation(h, "save", savedReply(R"({"key":10,"from":99})"));
+    CHECK(elementValue(h, "t", "selectionSet") == value(R"({"keys":[2]})"));
+    CHECK(h.backend.focusCells(table).size() == told);
+    CHECK(h.backend.focusCell(table).first == 4);
+    CHECK_FALSE(rows.states().isBusy(rid(10)));
+    CHECK_FALSE(rows.states().failure(rid(10)).has_value());
+    CHECK(elementOf(*screen, "t").tableWindow->retained().empty());
+    fireEvent(h, "Lims_SampleModel.samples", {10, 99});
+    REQUIRE(lastQuery(h).keys.has_value());
+    CHECK(std::ranges::contains(*lastQuery(h).keys, rid(10)));
+}
+// Mutation: a move that selects `to` whatever `from` was, which adds 10 to the selection.
+
+TEST_CASE("key change: another session's event drops the old key", "[ui][table][keys]") {
+    TableHarness h;
+    auto screen = mountActing(h);
+    int const table = h.byTestId("Table", "t");
+    // Row 2 selected and focused.
+    h.backend.clickRow(table, std::int64_t{2});
+    h.settle();
+    focusRow(h, table, 2);
+    fireEvent(h, "Lims_SampleModel.samples", {10, 2});
+    answerView(h, tenRowsMoved(2, 10));
+    CHECK(elementValue(h, "t", "selectionSet") == value(R"({"keys":[]})"));
+    CHECK(h.backend.focusCell(table).first == 2);
+    CHECK(focusedKey(*screen, h, table) == std::optional{rid(3)});
+}
+// Mutation: a selection kept for keys that left the view, which keeps 2.
+
+TEST_CASE("busy rows: a run's rows are busy until it settles", "[ui][table][busy]") {
+    TableHarness h;
+    morph::ui::RowMarks const busy{.busy = true};
+    SECTION("a selection of keys, then a row") {
+        auto screen = mountActing(h);
+        int const table = h.byTestId("Table", "t");
+        morph::ui::TableRows& rows = *elementOf(*screen, "t").tableRows;
+        table::TableDescription const& description = *elementOf(*screen, "t").tableWindow->description();
+        h.backend.clickRow(table, std::int64_t{1});
+        h.backend.ctrlClickRow(table, std::int64_t{2});
+        h.settle();
+        runMutation(h, "save");
+        CHECK(rowMarks(h, std::int64_t{1}) == busy);
+        CHECK(rowMarks(h, std::int64_t{2}) == busy);
+        CHECK(rowMarks(h, std::int64_t{3}) == morph::ui::RowMarks{});
+        CHECK(elementValue(h, "t", "busyCount") == Value{std::int64_t{2}});
+        CHECK(statusOf(h, table).standing == "Saving 2 rows");
+        CHECK(morph::ui::refusesEdit(rows, indexOf(1), description));
+        CHECK(morph::ui::refusesEdit(rows, indexOf(2), description));
+        CHECK_FALSE(morph::ui::refusesEdit(rows, indexOf(3), description));
+        refuseMutation(h, "save", "lims.rows.denied");
+        CHECK(rowMarks(h, std::int64_t{1}) == morph::ui::RowMarks{});
+        CHECK(rowMarks(h, std::int64_t{2}) == morph::ui::RowMarks{});
+        CHECK(elementValue(h, "t", "busyCount") == Value{std::int64_t{0}});
+        CHECK(statusOf(h, table).standing.empty());
+        CHECK_FALSE(morph::ui::refusesEdit(rows, indexOf(1), description));
+        pick(h, 4);
+        runMutation(h, "touch");
+        CHECK(rowMarks(h, std::int64_t{4}) == busy);
+        CHECK(elementValue(h, "t", "busyCount") == Value{std::int64_t{1}});
+        CHECK(statusOf(h, table).standing == "Saving 1 row");
+    }
+    SECTION("a selection of the view") {
+        // A view selection of 6 rows less 3 held as except.
+        auto screen = mountActing(h, kSelectionTable, kActingMutations, openRows());
+        int const table = h.byTestId("Table", "t");
+        h.backend.selectAll(table);
+        h.settle();
+        h.backend.ctrlClickRow(table, std::int64_t{3});
+        h.settle();
+        runMutation(h, "save");
+        for (std::int64_t const key : {0, 1, 2, 4, 5}) {
+            CHECK(rowMarks(h, key) == busy);
+        }
+        CHECK(rowMarks(h, std::int64_t{3}) == morph::ui::RowMarks{});
+        CHECK(elementValue(h, "t", "busyCount") == Value{std::int64_t{5}});
+    }
+}
+// Mutation: busy state cleared only on success, which leaves rows 1 and 2 busy after the refusal.
+
+TEST_CASE("busy rows: overlapping runs", "[ui][table][busy][review]") {
+    TableHarness h;
+    auto screen = mountActing(h, kActingTable, kParallelMutations);
+    int const table = h.byTestId("Table", "t");
+    morph::ui::RowStates const& states = elementOf(*screen, "t").tableRows->states();
+    // Run A over keys {1, 2}, run B over {2, 3}.
+    h.backend.clickRow(table, std::int64_t{1});
+    h.backend.ctrlClickRow(table, std::int64_t{2});
+    h.settle();
+    runMutation(h, "save");
+    std::size_t const a = mutationCall(h, "save");
+    h.backend.clickRow(table, std::int64_t{2});
+    h.backend.ctrlClickRow(table, std::int64_t{3});
+    h.settle();
+    runMutation(h, "save");
+    std::size_t const b = mutationCall(h, "save");
+    REQUIRE(a != b);
+    CHECK(elementValue(h, "t", "busyCount") == Value{std::int64_t{3}});
+    h.reply(a, savedReply(R"({"key":1},{"key":2})"));
+    CHECK(states.isBusy(rid(2)));
+    CHECK_FALSE(states.isBusy(rid(1)));
+    CHECK(rowMarks(h, std::int64_t{2}) == morph::ui::RowMarks{.busy = true});
+    CHECK(elementValue(h, "t", "busyCount") == Value{std::int64_t{2}});
+    h.reply(b, savedReply(R"({"key":2},{"key":3})"));
+    CHECK(elementValue(h, "t", "busyCount") == Value{std::int64_t{0}});
+    CHECK_FALSE(states.isBusy(rid(2)));
+}
+// Mutation: a busy set keyed by row only, which frees row 2 when A settles.
+
+TEST_CASE("busy rows: two mutations' runs do not share an id", "[ui][table][busy]") {
+    TableHarness h;
+    auto screen = mountActing(h);
+    int const table = h.byTestId("Table", "t");
+    morph::ui::RowStates const& states = elementOf(*screen, "t").tableRows->states();
+    // Mutations `save` and `touch`, each running for the first time: save over {1, 2}, touch {"row": 5}.
+    h.backend.clickRow(table, std::int64_t{1});
+    h.backend.ctrlClickRow(table, std::int64_t{2});
+    h.settle();
+    runMutation(h, "save");
+    pick(h, 5);
+    runMutation(h, "touch");
+    CHECK(elementValue(h, "t", "busyCount") == Value{std::int64_t{3}});
+    settleMutation(h, "touch", savedReply(R"({"key":5})"));
+    CHECK(states.isBusy(rid(1)));
+    CHECK(states.isBusy(rid(2)));
+    CHECK_FALSE(states.isBusy(rid(5)));
+    CHECK(elementValue(h, "t", "busyCount") == Value{std::int64_t{2}});
+    settleMutation(h, "save", savedReply(R"({"key":1},{"key":2})"));
+    CHECK(elementValue(h, "t", "busyCount") == Value{std::int64_t{0}});
+}
+// Mutation: run ids taken from MutationRuntime's own counter, under which settling touch (run 1) frees save's rows.
+
+TEST_CASE("failed rows: marked until the row's next change", "[ui][table][failed]") {
+    TableHarness h;
+    auto screen = mountActing(h);
+    int const table = h.byTestId("Table", "t");
+    morph::ui::RowStates const& states = elementOf(*screen, "t").tableRows->states();
+    std::string const failedReply = savedReply(R"({"key":5})", R"({"key":4,"message":"Locked"})");
+    auto const failAgain = [&] {
+        h.backend.clickRow(table, std::int64_t{4});
+        h.settle();
+        runMutation(h, "save");
+        settleMutation(h, "save", failedReply);
+        REQUIRE(states.failure(rid(4)) == std::optional<std::string>{"Locked"});
+    };
+    // run save over {4, 5}.
+    h.backend.clickRow(table, std::int64_t{4});
+    h.backend.ctrlClickRow(table, std::int64_t{5});
+    h.settle();
+    runMutation(h, "save");
+    settleMutation(h, "save", failedReply);
+    CHECK(rowMarks(h, std::int64_t{4}) == morph::ui::RowMarks{.tooltip = "Locked"});
+    CHECK(h.backend.rowTone(table, std::int64_t{4}) == "Err");
+    CHECK(h.backend.rowTone(table, std::int64_t{5}) == "none");
+    TableStatus const status = statusOf(h, table);
+    CHECK(status.standing == "1 row could not be saved");
+    REQUIRE(status.standingEntries.size() == 2);
+    CHECK(status.standingEntries.at(0).label == "Select them");
+    CHECK(status.standingEntries.at(1).label == "Clear marks");
+    // "Select them".
+    h.backend.chooseStatusEntry(table, status.standingEntries.at(0).id);
+    h.settle();
+    CHECK(elementValue(h, "t", "selectionSet") == value(R"({"keys":[4]})"));
+    // An event naming 5, the action's own: 4 stays marked. One naming 4 after the run settled: the mark goes.
+    fireEvent(h, "Lims_SampleModel.samples", {5});
+    CHECK(states.failure(rid(4)) == std::optional<std::string>{"Locked"});
+    CHECK(rowMarks(h, std::int64_t{4}) == morph::ui::RowMarks{.tooltip = "Locked"});
+    fireEvent(h, "Lims_SampleModel.samples", {4});
+    CHECK_FALSE(states.failure(rid(4)).has_value());
+    CHECK(rowMarks(h, std::int64_t{4}) == morph::ui::RowMarks{});
+    CHECK(h.backend.rowTone(table, std::int64_t{4}) == "none");
+    CHECK(statusOf(h, table).standing.empty());
+    // Again failed; "Clear marks": the mark goes.
+    failAgain();
+    h.backend.chooseStatusEntry(table, statusOf(h, table).standingEntries.at(1).id);
+    h.settle();
+    CHECK_FALSE(states.failure(rid(4)).has_value());
+    CHECK(rowMarks(h, std::int64_t{4}) == morph::ui::RowMarks{});
+    // Again failed; a new run naming row 4: the mark goes when the run starts.
+    failAgain();
+    runMutation(h, "save");
+    CHECK_FALSE(states.failure(rid(4)).has_value());
+    settleMutation(h, "save", savedReply(R"({"key":4})"));
+    // Again failed; an event with no keys, as a row-scoped table's are, leaves the mark.
+    failAgain();
+    fireEvent(h, "Lims_SampleModel.samples", {});
+    CHECK(states.failure(rid(4)) == std::optional<std::string>{"Locked"});
+}
+// Mutation: a failed mark cleared by any event, which clears it on the action's own event.
+
+TEST_CASE("locked rows: a locked row draws locked and refuses an edit", "[ui][table][locked]") {
+    TableHarness h;
+    auto screen = mountActing(h);
+    int const table = h.byTestId("Table", "t");
+    morph::ui::TableRows& rows = *elementOf(*screen, "t").tableRows;
+    table::TableDescription const& description = *elementOf(*screen, "t").tableWindow->description();
+    // Row 6's lockedBy is "Being edited by another user".
+    CHECK(rowMarks(h, std::int64_t{6}) == morph::ui::RowMarks{.locked = true, .tooltip = std::string{kLockText}});
+    std::optional<morph::ui::TableRowRef> const six = rows.row(indexOf(6));
+    REQUIRE(six.has_value());
+    CHECK(morph::ui::lockText(*six, description) == std::optional<std::string>{std::string{kLockText}});
+    CHECK(morph::ui::refusesEdit(rows, indexOf(6), description));
+    // It can be selected and copied.
+    h.backend.clickRow(table, std::int64_t{6});
+    h.settle();
+    CHECK(elementValue(h, "t", "selectionSet") == value(R"({"keys":[6]})"));
+    pressCopy(h, table);
+    CHECK(clipboardText(h) == "6\tclosed");
+    // Row 5's lockedBy is "": not locked.
+    CHECK(rowMarks(h, std::int64_t{5}) == morph::ui::RowMarks{});
+    std::optional<morph::ui::TableRowRef> const five = rows.row(indexOf(5));
+    REQUIRE(five.has_value());
+    CHECK_FALSE(morph::ui::lockText(*five, description).has_value());
+    CHECK_FALSE(morph::ui::refusesEdit(rows, indexOf(5), description));
+}
+// Mutation: lockText reading `rowTone`'s column, which locks no row.
+
+TEST_CASE("row states: a move keeps the new key's own state", "[ui][table][keys]") {
+    morph::ui::RowStates states;
+    states.busyKeys(1, idsOf({2, 7}));
+    states.busyView(2, idsOf({2}), 9);
+    states.fail(std::vector<morph::table::FailedRow>{{.key = rid(2), .message = "two"},
+                                                     {.key = rid(7), .message = "seven"}});
+    states.move(rid(2), rid(7));
+    CHECK(states.failure(rid(7)) == std::optional<std::string>{"seven"});
+    CHECK_FALSE(states.failure(rid(2)).has_value());
+    CHECK(states.failedKeys() == idsOf({7}));
+    CHECK(states.isBusy(rid(7)));
+    CHECK_FALSE(states.isBusy(rid(2)));
+    states.settle(1);
+    states.settle(2);
+    CHECK_FALSE(states.isBusy(rid(7)));
+    CHECK(states.busyCount() == 0);
+}
+// Mutation: a move that overwrites the new key's failed mark with the old key's, which leaves "two" on 7.

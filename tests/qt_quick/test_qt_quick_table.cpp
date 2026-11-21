@@ -636,7 +636,14 @@ TEST_CASE("qt_quick table: a row's marks are drawn", "[qt_quick]") {
     CHECK(muted.property("tooltipText").toString() == QStringLiteral("This row no longer matches the filter"));
     CHECK(markOf(*table.rows.at(1), "busyMark").isVisible());
     CHECK_FALSE(markOf(*table.rows.at(0), "busyMark").isVisible());
-    CHECK(markOf(*table.rows.at(2), "lockedHatch").isVisible());
+    CHECK(markOf(*table.rows.at(2), "lockedWash").isVisible());
+    // The marks draw in the theme's tokens, and the busy bar sits inside the selection's.
+    CHECK(markOf(*table.rows.at(1), "busyMark").property("color").value<QColor>() ==
+          theme->property("tableBusy").value<QColor>());
+    CHECK(markOf(*table.rows.at(1), "busyMark").x() == 3.0);
+    CHECK(markOf(*table.rows.at(2), "lockedWash").property("color").value<QColor>() ==
+          theme->property("tableLocked").value<QColor>());
+    CHECK(Scene::itemOf(*table.rows.at(1)).property("tooltipText").toString() == QStringLiteral("Saving this row"));
     CHECK(Scene::itemOf(*table.rows.at(2)).property("tooltipText").toString() ==
           QStringLiteral("Being edited by another user"));
     for (auto const& row : table.rows) {
@@ -646,7 +653,7 @@ TEST_CASE("qt_quick table: a row's marks are drawn", "[qt_quick]") {
     for (auto const& row : table.rows) {
         CHECK(Scene::itemOf(*row).opacity() == 1.0);
         CHECK_FALSE(markOf(*row, "busyMark").isVisible());
-        CHECK_FALSE(markOf(*row, "lockedHatch").isVisible());
+        CHECK_FALSE(markOf(*row, "lockedWash").isVisible());
         CHECK(Scene::itemOf(*row).property("tooltipText").toString().isEmpty());
     }
 }

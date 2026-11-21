@@ -494,8 +494,10 @@ A row draws its background part (`background`, the `tableRow` part restyle) unde
 position, which C++ writes on every row after each append, destroy and move), `tone` (`setRowTone`: −1 for none,
 else the `ui::Tone` index), `selectColumn` (whether the table's select column shows the selection) and its `scheme`.
 `setRowMarks` writes the row's own `busy`, `locked`, `unmatched` and `marksTooltip`: an unmatched row draws at
-`Theme.mutedOpacity`, a busy one shows `busyMark` (a 3 px bar in the info colour at its leading edge), a locked one
-`lockedHatch` (a muted wash over its cells), and a non-empty `marksTooltip` is the row's `tooltipText`.
+`Theme.mutedOpacity`, a busy one shows `busyMark` (a 3 px bar in `Theme.tableBusy` just inside the selection's bar,
+anchored so that it follows a right-to-left layout), a locked one `lockedWash` (a `Theme.tableLocked` wash over its
+cells), and a non-empty `marksTooltip` is the row's `tooltipText`; without one a locked row says "Locked by another
+user" and a busy one "Saving this row", over the row's own `tooltip`.
 The row's height is the larger of its cells' and the background's `implicitHeight`; the stock background draws
 three marks that compose, then the hairline between rows, and its implicit height is a dense row's,
 `Theme.targetHeight - 8`. A toned row is tinted (`tint`: the tone's `bg` colour at half strength over `scheme.surface`)

@@ -118,6 +118,9 @@ public:
     }
     [[nodiscard]] ui::TableCountsView counts() const override { return ui::TableCountsView{.view = total()}; }
     void onChange(std::function<void(table::ViewChange const&)> handler) override { _handler = std::move(handler); }
+    [[nodiscard]] ui::RowStates& states() override { return _states; }
+    [[nodiscard]] ui::RowStates const& states() const override { return _states; }
+    void moveKey(table::RowId const& from, table::RowId const& to) override { _states.move(from, to); }
 
     // Rows at and after @p index are not fetched until `arrive`.
     void holdFrom(std::int64_t index) { _hold = index; }
@@ -199,6 +202,7 @@ private:
     mutable std::map<std::int64_t, Entry> _records;
     std::map<std::int64_t, Levels> _levels;
     std::function<void(table::ViewChange const&)> _handler;
+    ui::RowStates _states;
     std::function<std::int64_t(std::int64_t)> _keyAt;
 };
 

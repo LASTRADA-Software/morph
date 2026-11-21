@@ -328,6 +328,9 @@ public:
     [[nodiscard]] bool unmatched(table::RowId const& key) const override { return _inner->unmatched(key); }
     void holdRefetches(std::uint64_t run) override { _inner->holdRefetches(run); }
     void releaseRefetches(std::uint64_t run) override { _inner->releaseRefetches(run); }
+    [[nodiscard]] RowStates& states() override { return _inner->states(); }
+    [[nodiscard]] RowStates const& states() const override { return _inner->states(); }
+    void moveKey(table::RowId const& from, table::RowId const& to) override { _inner->moveKey(from, to); }
     async::Completion<std::expected<std::vector<FetchedRow>, table::TableError>> rowsOf(
         std::int64_t first, std::int64_t count, std::span<std::string const> columns) override {
         return _inner->rowsOf(first, count, columns);
@@ -511,6 +514,9 @@ struct TableConfig {
     /// Gathers the rows of the selection of the view, in view order, by the column ids given. Set by each mount of a
     /// model's table.
     std::function<void(std::vector<std::string> const&, CopyDone)> gatherView;
+    /// Selects these keys as a user's selection does: held by the element, or given to `onSelectionChange` where the
+    /// document binds the selection. Set by each mount of a model's table.
+    std::function<void(std::vector<Key> const&)> selectKeys;
     /// The saved view the arrangement was taken from, the state's `view`, and whether it is a shared one applied from
     /// "Shared views"; a stored `view` names one of the user's own.
     std::optional<std::string> savedView;
@@ -553,6 +559,7 @@ struct TableConfig {
                     config->heldCell = {};
                     config->viewSelected = {};
                     config->gatherView = {};
+                    config->selectKeys = {};
                 }
             }
         };
@@ -882,6 +889,7 @@ struct ModelTable {
           entries{runtime, std::vector<StatusEntry>{}},
           viewSelection{runtime, std::nullopt},
           marksRevision{runtime, 0},
+          keyMoves{runtime, KeyMoves{}},
           config{runtime} {}
 
     ModelTable(ModelTable const&) = delete;
@@ -945,6 +953,8 @@ struct ModelTable {
     /// Read first by every row's marks: the rows' retained and unmatched state is not reactive, so this is bumped
     /// after every change of it, and a row that becomes unmatched is drawn again.
     reactive::Signal<std::uint64_t> marksRevision;
+    /// The rows an action of this session gave new keys, for the mount's focus and highlight to follow.
+    reactive::Signal<KeyMoves> keyMoves;
     /// The node's `retainChanged`: the rows an action of this session changed stay in view.
     bool retainChanged = false;
     /// Hears the session's runs while the table lives, to offer a refused selection of the view again.
@@ -1103,6 +1113,9 @@ public:
     /// The engine's counts: the view's rows, not the page's entries, and nothing known while held back.
     [[nodiscard]] TableCountsView counts() const override { return _engine->counts(); }
     void onChange(std::function<void(table::ViewChange const&)> handler) override { _handler = std::move(handler); }
+    [[nodiscard]] RowStates& states() override { return _engine->states(); }
+    [[nodiscard]] RowStates const& states() const override { return _engine->states(); }
+    void moveKey(table::RowId const& from, table::RowId const& to) override { _engine->moveKey(from, to); }
 
 private:
     std::shared_ptr<EngineRows> _engine;
@@ -1160,6 +1173,9 @@ public:
     }
     [[nodiscard]] TableCountsView counts() const override { return _engine->counts(); }
     void onChange(std::function<void(table::ViewChange const&)> handler) override { _handler = std::move(handler); }
+    [[nodiscard]] RowStates& states() override { return _engine->states(); }
+    [[nodiscard]] RowStates const& states() const override { return _engine->states(); }
+    void moveKey(table::RowId const& from, table::RowId const& to) override { _engine->moveKey(from, to); }
 
 private:
     std::shared_ptr<EngineRows> _engine;
@@ -5018,6 +5034,13 @@ Value ScreenCore::elementValue(ElementState const& element, std::string_view nam
                                           : element.modelTable != nullptr ? &element.modelTable->config
                                                                           : nullptr;
         return config == nullptr || !config->filters ? Value{} : filtersValueOf(config->filters());
+    }
+    if (kind == "table" && name == "busyCount") {
+        if (element.modelTable == nullptr || element.modelTable->rows == nullptr) {
+            return Value{std::int64_t{0}};
+        }
+        static_cast<void>(element.modelTable->marksRevision.get());
+        return Value{element.modelTable->rows->states().busyCount()};
     }
     if (kind == "table" && (name == "selectionSet" || name == "selectedCount" || name == "selectedCountKind")) {
         TableSelection const selection = selectionNow(element);
@@ -11136,6 +11159,10 @@ ActionTable actionTableOf(DocNode const& node, Catalog const& catalog) {
 
 /// @brief The id of the status line's "Show only matching rows", which drops the retained rows.
 constexpr std::string_view kShowMatching = "retained.showMatching";
+/// @brief The ids of the status line's "Select them", which selects the rows an action could not change, and "Clear
+///        marks", which drops their marks.
+constexpr std::string_view kSelectFailed = "failed.select";
+constexpr std::string_view kClearMarks = "failed.clear";
 
 /// @brief Keeps a model table's selection of the view true to its rows after they changed: a selection of another
 ///        filter than the rows hold ends, the description's new revision having dropped a filter included, and a
@@ -11167,8 +11194,10 @@ void fitViewSelection(ScreenCore& core, ElementState& element, ModelTable& model
     }
 }
 
-/// @brief A model table's ear on the session's runs: a run refused because the rows of its selection of this table's
-///        view changed is offered again, on the view as it is now, through the status line.
+/// @brief A model table's ear on the session's runs: the rows a run works on are busy until it settles, the rows its
+///        reply could not change are marked failed, a row it gave a new key keeps what this session held by its old
+///        one, and a run refused because the rows of its selection of this table's view changed is offered again, on
+///        the view as it is now, through the status line.
 ///
 /// Holds the table and its element by reference: the table owns it and removes it before either goes. The screen's
 /// scope is held weakly, so the observer keeps nothing of the screen alive.
@@ -11177,31 +11206,79 @@ public:
     TableRuns(ScreenCore& core, ElementState& element, ModelTable& model)
         : _core{&core}, _element{&element}, _model{&model} {}
 
-    // On a table with `retainChanged`, a run of an action that declares an effect on the table's record holds the
-    // refetches its change events cause until it settles.
+    // The rows the run's input names become busy, and their failed marks go. A run of an action that declares an
+    // effect on the table's record defers the drop of selected keys that leave the view until it settles, and on a
+    // table with `retainChanged` holds the refetches its change events cause.
     void started(RunStarted const& run) override {
-        if (!_model->retainChanged || _model->rows == nullptr) {
+        if (_model->rows == nullptr) {
             return;
         }
+        markBusy(run);
         auto const& catalog = _core->session.options().catalog;
         std::optional<ActionInfo> const info = catalog.action ? catalog.action(run.action) : std::nullopt;
         if (!info || !info->effects) {
             return;
         }
-        std::string const record = _model->modelType + "." + _model->id;
-        if (std::ranges::any_of(*info->effects, [&record](ActionEffect const& effect) {
+        std::string const record = recordName();
+        if (std::ranges::none_of(*info->effects, [&record](ActionEffect const& effect) {
                 return effect.record && *effect.record == record;
             })) {
+            return;
+        }
+        _changing.insert(run.run);
+        if (_model->retainChanged) {
             _held.insert(run.run);
             _model->rows->holdRefetches(run.run);
         }
     }
 
+    // A selected key that left the view is dropped from the selection and its failed mark goes; while a run that
+    // changes the table is in flight the drop waits for it to settle, since its reply may name the key as a row's
+    // old key, and its own change event can come before it.
+    void rowsChanged() {
+        if (_model->rows == nullptr || _model->viewSelection.peek()) {
+            return;
+        }
+        std::vector<Key> left;
+        for (Key const& key : selectedKeys()) {
+            if (_model->rows->leftView(key)) {
+                left.push_back(key);
+            }
+        }
+        if (left.empty()) {
+            return;
+        }
+        if (!_changing.empty()) {
+            _deferred.insert(left.begin(), left.end());
+            return;
+        }
+        drop(left);
+    }
+
     void settled(RunSettled const& run) override {
-        if (_held.erase(run.run) > 0 && _model->rows != nullptr) {
-            keepChanged(run);
+        bool const held = _held.erase(run.run) > 0;
+        if (_model->rows != nullptr) {
+            _model->rows->states().settle(run.run);
+            std::vector<Key> moved;
+            if (run.succeeded) {
+                applyReply(run, moved);
+            }
+            if (held) {
+                keepChanged(run);
+            }
+            if (_changing.erase(run.run) > 0 && _changing.empty()) {
+                std::vector<Key> left;
+                for (Key const& key : std::exchange(_deferred, {})) {
+                    if (_model->rows->leftView(key) && !std::ranges::contains(moved, key)) {
+                        left.push_back(key);
+                    }
+                }
+                drop(left);
+            }
             _model->marksRevision.set(_model->marksRevision.peek() + 1);
-            _model->rows->releaseRefetches(run.run);
+            if (held) {
+                _model->rows->releaseRefetches(run.run);
+            }
         }
         if (run.refusalCode != "morph.table.viewChanged" || _model->rows == nullptr) {
             return;
@@ -11290,11 +11367,171 @@ private:
         _core->tableMessage(*_element, "The changed rows are not kept in view: a table keeps at most " + bound);
     }
 
+    [[nodiscard]] std::string recordName() const { return _model->modelType + "." + _model->id; }
+
+    // The selected keys, while the selection is keys.
+    [[nodiscard]] std::vector<Key> selectedKeys() const {
+        std::vector<Key> out;
+        Value const selected = _core->runtime().untracked([&] { return tableSelection(*_element); });
+        if (ValueList const* const items = selected.asList()) {
+            for (Value const& item : *items) {
+                out.push_back(keyOf(item));
+            }
+        }
+        return out;
+    }
+
+    // Selects @p keys as the user's selection does.
+    void select(std::vector<Key> const& keys) {
+        if (_model->config.selectKeys) {
+            _model->config.selectKeys(keys);
+        }
+    }
+
+    // Drops keys that left the view from the selection and from the failed marks.
+    void drop(std::vector<Key> const& left) {
+        if (left.empty()) {
+            return;
+        }
+        _model->rows->states().clearFailed(left);
+        std::vector<Key> kept = selectedKeys();
+        if (std::erase_if(kept, [&left](Key const& key) { return std::ranges::contains(left, key); }) > 0) {
+            select(kept);
+        }
+        _model->marksRevision.set(_model->marksRevision.peek() + 1);
+    }
+
+    // The keys a member of a run's input names, as a key list or a row's key.
+    [[nodiscard]] static std::vector<Key> keysIn(Value const* list) {
+        std::vector<Key> out;
+        if (ValueList const* const items = list == nullptr ? nullptr : list->asList()) {
+            for (Value const& item : *items) {
+                out.push_back(keyOf(item));
+            }
+        }
+        return out;
+    }
+
+    // The rows a run's input names for this table become busy for it: a `RowSelection` member's keys, or every row
+    // of its view but `except`, and a `RowRef` member's row. Their failed marks go.
+    void markBusy(RunStarted const& run) {
+        auto const& catalog = _core->session.options().catalog;
+        std::optional<std::string> const schema = catalog.schema ? catalog.schema(run.action) : std::nullopt;
+        ValueRecord const* const body = run.body.asRecord();
+        if (!schema || body == nullptr) {
+            return;
+        }
+        std::string const record = recordName();
+        RowStates& states = _model->rows->states();
+        bool marked = false;
+        for (TableInput const& input : tableInputsOf(*schema)) {
+            auto const member = body->find(input.member);
+            if (input.record != record || member == body->end() || member->second.isNull()) {
+                continue;
+            }
+            Value const& named = member->second;
+            if (input.kind == TableInputKind::Row) {
+                std::vector<Key> const one{keyOf(named)};
+                states.clearFailed(one);
+                states.busyKeys(run.run, one);
+            } else if (Value const* const view = named.field("view"); view != nullptr && !view->isNull()) {
+                std::vector<Key> except = keysIn(named.field("except"));
+                std::int64_t const count =
+                    _model->rows->selectedCount(TableSelection{.keys = {}, .view = ViewSelection{}, .except = except})
+                        .rows;
+                std::vector<Key> marks = states.failedKeys();
+                std::erase_if(marks, [&except](Key const& key) { return std::ranges::contains(except, key); });
+                states.clearFailed(marks);
+                states.busyView(run.run, std::move(except), count);
+            } else {
+                std::vector<Key> keys = keysIn(named.field("keys"));
+                states.clearFailed(keys);
+                states.busyKeys(run.run, std::move(keys));
+            }
+            marked = true;
+        }
+        if (marked) {
+            _model->marksRevision.set(_model->marksRevision.peek() + 1);
+        }
+    }
+
+    // Whether this session holds anything by a key: the selection, the focus, a retained row, a busy or failed state,
+    // or a drop waiting for the runs to settle.
+    [[nodiscard]] bool holds(Key const& key) const {
+        RowStates const& states = _model->rows->states();
+        std::optional<TableSelection> const& view = _model->viewSelection.peek();
+        bool const selected = view ? std::ranges::contains(view->except, key)
+                                   : std::ranges::contains(selectedKeys(), key);
+        return selected || (_model->config.focused && _model->config.focused->key == key) ||
+               std::ranges::contains(_model->window->retained(), key) || states.isBusy(key) ||
+               states.failure(key).has_value() || _deferred.contains(key);
+    }
+
+    // A reply's failed rows are marked, and each changed row with a `from` this session holds moves what it holds
+    // from that key to the new one: the selection, the retained rows and the states here, the focus and the highlight
+    // in the mount. @p moved gets each old key moved.
+    void applyReply(RunSettled const& run, std::vector<Key>& moved) {
+        auto const& catalog = _core->session.options().catalog;
+        std::optional<ActionInfo> const info = catalog.action ? catalog.action(run.action) : std::nullopt;
+        if (!info) {
+            return;
+        }
+        ChangedRowsValue const changed = changedRowsOf(run.reply, *info, recordName());
+        _model->rows->states().fail(changed.failed);
+        std::vector<std::pair<Key, Key>> moves;
+        for (table::ChangedRow const& row : changed.rows) {
+            if (row.from && *row.from != row.key && holds(*row.from)) {
+                moves.emplace_back(*row.from, row.key);
+            }
+        }
+        if (moves.empty()) {
+            return;
+        }
+        std::optional<TableSelection> view = _model->viewSelection.peek();
+        std::vector<Key> keys = view ? std::vector<Key>{} : selectedKeys();
+        bool reselect = false;
+        for (auto const& [from, to] : moves) {
+            moved.push_back(from);
+            _deferred.erase(from);
+            _model->rows->moveKey(from, to);
+            if (view) {
+                // A key left out of the view's selection leaves its new key out; a selected one selects it.
+                if (auto const out = std::ranges::find(view->except, from); out != view->except.end()) {
+                    if (std::ranges::contains(view->except, to)) {
+                        view->except.erase(out);
+                    } else {
+                        *out = to;
+                    }
+                } else {
+                    std::erase(view->except, to);
+                }
+            } else if (auto const at = std::ranges::find(keys, from); at != keys.end()) {
+                reselect = true;
+                if (std::ranges::contains(keys, to)) {
+                    keys.erase(at);
+                } else {
+                    *at = to;
+                }
+            }
+        }
+        if (view) {
+            _model->viewSelection.set(std::move(view));
+        } else if (reselect) {
+            select(keys);
+        }
+        KeyMoves next{.generation = _model->keyMoves.peek().generation + 1, .moves = std::move(moves)};
+        _model->keyMoves.set(std::move(next));
+    }
+
     ScreenCore* _core;
     ElementState* _element;
     ModelTable* _model;
     // The runs holding the rows' refetches.
     std::set<std::uint64_t> _held;
+    // The runs in flight of actions that change the table's record, and the selected keys that left the view while
+    // one was: dropped when the last settles, unless a reply named them as a row's old key.
+    std::set<std::uint64_t> _changing;
+    std::set<Key> _deferred;
 };
 
 }  // namespace
@@ -11444,6 +11681,9 @@ void ScreenCore::wireModelTable(ElementState& element) {
             model.bump();
             model.marksRevision.set(model.marksRevision.peek() + 1);
             fitViewSelection(*this, element, model);
+            if (model.runs != nullptr) {
+                static_cast<TableRuns&>(*model.runs).rowsChanged();
+            }
         }),
         model.scope.token().guard([this, &element] { tableGesture(element); }),
         model.scope.token().guard([&model] { model.resets.set(model.resets.peek() + 1); }),
@@ -13199,16 +13439,48 @@ Node ScreenCore::modelTableOf(DocNode const& node, LowerCtx const& ctx, ElementS
             status.message = model.message.get();
             status.entries = model.entries.get();
         }
+        // The standing states, in the order saving, failed, unmatched, joined by ". ".
+        static_cast<void>(model.marksRevision.get());
+        auto const grouped = [&scope](std::int64_t number) {
+            return render::formatCanonicalNumber(std::to_string(number), scope->formatting().numeric);
+        };
+        auto const stand = [&status](std::string text) {
+            status.standing += (status.standing.empty() ? "" : ". ") + std::move(text);
+        };
+        if (std::int64_t const busy = model.rows->states().busyCount(); busy > 0) {
+            stand("Saving " + grouped(busy) + (busy == 1 ? " row" : " rows"));
+        }
+        if (auto const failed = static_cast<std::int64_t>(model.rows->states().failedKeys().size()); failed > 0) {
+            stand(grouped(failed) + (failed == 1 ? " row could not be saved" : " rows could not be saved"));
+            status.standingEntries.push_back(StatusEntry{.id = std::string{kSelectFailed}, .label = "Select them"});
+            status.standingEntries.push_back(StatusEntry{.id = std::string{kClearMarks}, .label = "Clear marks"});
+        }
         if (counts.retained > 0) {
-            status.standing =
-                render::formatCanonicalNumber(std::to_string(counts.retained), scope->formatting().numeric) +
-                (counts.retained == 1 ? " row shown that no longer matches" : " rows shown that no longer match");
-            status.standingEntries = {
-                StatusEntry{.id = std::string{kShowMatching}, .label = "Show only matching rows"}};
+            stand(grouped(counts.retained) +
+                  (counts.retained == 1 ? " row shown that no longer matches" : " rows shown that no longer match"));
+            status.standingEntries.push_back(
+                StatusEntry{.id = std::string{kShowMatching}, .label = "Show only matching rows"});
         }
         return status;
     });
     options.onStatusEntry = [this, &element, &model](std::string const& id) {
+        // "Select them" makes the failed rows the selection; "Clear marks" drops their marks.
+        if (id == kSelectFailed || id == kClearMarks) {
+            tableGesture(element);
+            runtime().batch([&] {
+                if (id == kSelectFailed) {
+                    std::vector<Key> const failed = model.rows->states().failedKeys();
+                    model.viewSelection.set(std::nullopt);
+                    if (model.config.selectKeys) {
+                        model.config.selectKeys(failed);
+                    }
+                } else {
+                    model.rows->states().clearFailed();
+                }
+                model.marksRevision.set(model.marksRevision.peek() + 1);
+            });
+            return;
+        }
         // "Show only matching rows": the retained rows go, and with them a selection of the view, which named them.
         if (id == kShowMatching) {
             tableGesture(element);
@@ -13543,7 +13815,9 @@ Node ScreenCore::modelTableOf(DocNode const& node, LowerCtx const& ctx, ElementS
     ExprPtr const toneExpr = node.prop("rowTone");
     ExprPtr const labelExpr = node.prop("rowLabel");
     Commands const* const activateCommands = node.event("onActivate");
-    if (toneExpr || labelExpr || activateCommands != nullptr || model.retainChanged) {
+    // Every row of a model's table has a look: its marks and its tone say whether an action works on it, failed on it
+    // or kept it in view, and whether it is locked.
+    {
         auto const toneReported = std::make_shared<bool>(false);
         source.rowView = [this, ctx, &node, &model, toneExpr, labelExpr, toneReported](
                              reactive::Signal<Value> const& row) {
@@ -13563,27 +13837,48 @@ Node ScreenCore::modelTableOf(DocNode const& node, LowerCtx const& ctx, ElementS
             if (labelExpr) {
                 look.label = bindProp<std::string>(rowCtx, labelExpr, std::string{}, stringOf);
             }
-            if (model.retainChanged) {
-                std::optional<Key> const rowKey = runtime().untracked([&]() -> std::optional<Key> {
-                    Value const* const id = row.peek().field(model.keyColumn);
-                    return id == nullptr ? std::nullopt : std::optional{keyOf(*id)};
-                });
-                look.marks = slotProp<RowMarks>([&model, rowKey] {
-                    static_cast<void>(model.marksRevision.get());
-                    RowMarks marks;
-                    marks.unmatched = rowKey && model.rows->unmatched(*rowKey);
-                    if (marks.unmatched) {
-                        marks.tooltip = "This row no longer matches the filter";
-                    }
+            std::optional<Key> const rowKey = runtime().untracked([&]() -> std::optional<Key> {
+                Value const* const id = row.peek().field(model.keyColumn);
+                return id == nullptr ? std::nullopt : std::optional{keyOf(*id)};
+            });
+            // A locked row's tooltip is why it is locked; else a failed row's is its message, else an unmatched row
+            // says so.
+            look.marks = slotProp<RowMarks>([&model, &row, rowKey] {
+                static_cast<void>(model.marksRevision.get());
+                RowMarks marks;
+                if (!rowKey) {
                     return marks;
+                }
+                Value const& record = row.get();
+                table::TableDescription const* const description = model.window->description();
+                std::optional<std::string> const locked =
+                    description == nullptr ? std::nullopt
+                                           : lockText(TableRowRef{.key = *rowKey, .row = record}, *description);
+                RowStates const& states = model.rows->states();
+                marks.busy = states.isBusy(*rowKey);
+                marks.locked = locked.has_value();
+                marks.unmatched = model.rows->unmatched(*rowKey);
+                if (locked) {
+                    marks.tooltip = *locked;
+                } else if (std::optional<std::string> failure = states.failure(*rowKey)) {
+                    marks.tooltip = std::move(*failure);
+                } else if (marks.unmatched) {
+                    marks.tooltip = "This row no longer matches the filter";
+                }
+                return marks;
+            });
+            // A failed row draws `err`; else the row's own tone.
+            look.tone = slotProp<std::optional<Tone>>(
+                [this, &model, rowKey, scope, bindings = ctx.bindings, toneExpr, toneReported] -> std::optional<Tone> {
+                    static_cast<void>(model.marksRevision.get());
+                    if (rowKey && model.rows->states().failure(*rowKey)) {
+                        return Tone::Err;
+                    }
+                    if (!toneExpr) {
+                        return std::nullopt;
+                    }
+                    return rowToneOf(evalIn(*scope, bindings.get(), toneExpr), toneExpr->path, *toneReported);
                 });
-            }
-            if (toneExpr) {
-                look.tone = slotProp<std::optional<Tone>>(
-                    [this, scope, bindings = ctx.bindings, toneExpr, toneReported] -> std::optional<Tone> {
-                        return rowToneOf(evalIn(*scope, bindings.get(), toneExpr), toneExpr->path, *toneReported);
-                    });
-            }
             return look;
         };
     }
@@ -13634,6 +13929,7 @@ Node ScreenCore::modelTableOf(DocNode const& node, LowerCtx const& ctx, ElementS
     // While the selection is of the view, the backend marks every row but `except`. A `Ctrl`+click reports the keys
     // now selected among the rows it holds: each held key absent from the report is left out, each present one is
     // selected again. A plain click ends the selection of the view.
+    options.keyMoves = slotProp<KeyMoves>([&model] { return model.keyMoves.get(); });
     options.selectionView = slotProp<std::optional<std::vector<Key>>>([&model]() -> std::optional<std::vector<Key>> {
         auto const& view = model.viewSelection.get();
         if (!view) {
@@ -13872,6 +14168,7 @@ Node ScreenCore::modelTableOf(DocNode const& node, LowerCtx const& ctx, ElementS
     for (TableColumn const& column : columns) {
         headers->push_back(headerText(column.label, column.unit));
     }
+    model.config.selectKeys = [select](std::vector<Key> const& keys) { (*select)(keys); };
     model.config.viewSelected = [&model]() -> std::optional<std::int64_t> {
         auto const& view = model.viewSelection.peek();
         if (!view) {

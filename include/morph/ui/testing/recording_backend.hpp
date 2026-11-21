@@ -2385,6 +2385,17 @@ public:
             throw std::logic_error{"RecordingBackend: setRowTone of a widget that is not this table's row"};
         }
         store().set(rowId, "tone", tone ? enumName(*tone) : std::string{"none"});
+        if (auto const key = _rowKeys.find(rowId); key != _rowKeys.end()) {
+            _rowTones.insert_or_assign(key->second, tone ? enumName(*tone) : std::string{"none"});
+        }
+    }
+
+    /// @brief The last tone `setRowTone` set on the row with a key.
+    /// @param key The row's key.
+    /// @return The tone's name, `none` for no tone; empty before any.
+    [[nodiscard]] std::string rowTone(Key const& key) const {
+        auto const found = _rowTones.find(key);
+        return found == _rowTones.end() ? std::string{} : found->second;
     }
 
     /// @brief Records the row's marks by the row's key, which `RecordingBackend::rowMarks` reads.
@@ -2826,12 +2837,14 @@ public:
         _onSelectRange = std::move(handler);
     }
 
-    /// @brief Records property `focusCell` as `<row>:<column>`, which `RecordingBackend::focusCell` reads.
+    /// @brief Records property `focusCell` as `<row>:<column>`, which `RecordingBackend::focusCell` reads, and adds
+    ///        the cell to the ones `RecordingBackend::focusCells` lists.
     /// @param viewRow The row.
     /// @param column  The column.
     void setFocusCell(std::size_t viewRow, std::size_t column) override {
         _focusCell = {viewRow, column};
         _focusSet = true;
+        _focusCells.emplace_back(viewRow, column);
         set("focusCell", std::to_string(viewRow) + ":" + std::to_string(column));
     }
 
@@ -2960,6 +2973,12 @@ public:
     /// @brief The focused cell last set.
     /// @return Its view row and column; `{0, 0}` before any.
     [[nodiscard]] std::pair<std::size_t, std::size_t> focusCell() const noexcept { return _focusCell; }
+
+    /// @brief Every focused cell set, oldest first.
+    /// @return Their view rows and columns.
+    [[nodiscard]] std::vector<std::pair<std::size_t, std::size_t>> const& focusCells() const noexcept {
+        return _focusCells;
+    }
 
     /// @brief The counts last set.
     /// @return The rows (or nothing) and the columns.
@@ -3132,6 +3151,7 @@ private:
     std::optional<std::vector<Key>> _viewExcept;
     // The last marks of each row, by its key.
     std::map<Key, RowMarks> _rowMarks;
+    std::map<Key, std::string> _rowTones;
     std::function<void(std::string)> _onStatusEntry;
     // The row a Shift-click's range starts from: the last row clicked without Shift.
     std::optional<Key> _anchor;
@@ -3164,6 +3184,7 @@ private:
     std::size_t _pinnedShown = 0;
     std::optional<int> _horizontalOffset;
     std::pair<std::size_t, std::size_t> _focusCell;
+    std::vector<std::pair<std::size_t, std::size_t>> _focusCells;
     std::pair<std::optional<std::int64_t>, std::size_t> _counts;
     std::function<void(int, int)> _onHorizontal;
     std::function<void(std::size_t, std::size_t, SelectionChange)> _onSelectRange;
@@ -4211,6 +4232,17 @@ public:
         return table == nullptr ? std::nullopt : table->rowMarks(key);
     }
 
+    /// @brief The last tone the mount set on a table's row, by the row's key.
+    /// @param widgetId The table.
+    /// @param key      The row's key.
+    /// @return The tone's name, `none` for no tone; empty before any `setRowTone` of that row.
+    /// @throws std::logic_error when the widget is not a table.
+    [[nodiscard]] std::string rowTone(int widgetId, Key const& key) {
+        detail::Record const& record = expectKind(widgetId, "rowTone", {"Table"});
+        auto const* const table = dynamic_cast<detail::FakeTable const*>(record.widget);
+        return table == nullptr ? std::string{} : table->rowTone(key);
+    }
+
     /// @brief A table's status line, as the mount last set it.
     /// @param widgetId The table.
     /// @return The status; the default before any `setStatus`.
@@ -4313,6 +4345,14 @@ public:
     /// @throws std::logic_error when the widget is not a table.
     [[nodiscard]] std::pair<std::size_t, std::size_t> focusCell(int widgetId) {
         return fakeTable(widgetId, "focusCell").focusCell();
+    }
+
+    /// @brief Every focused cell the mount set on a table, oldest first.
+    /// @param widgetId The table.
+    /// @return Their view rows and columns.
+    /// @throws std::logic_error when the widget is not a table.
+    [[nodiscard]] std::vector<std::pair<std::size_t, std::size_t>> focusCells(int widgetId) {
+        return fakeTable(widgetId, "focusCells").focusCells();
     }
 
     /// @brief A table's counts, as the mount last set them.
