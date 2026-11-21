@@ -2588,8 +2588,8 @@ TEST_CASE("qt_quick table: a right-click opens the cell menu on that cell and se
     f.scene.key(Qt::Key_Escape);
     f.settle();
     REQUIRE_FALSE(menu->property("opened").toBool());
-    // The menu key on the focused cell opens the same menu.
-    f.item()->forceActiveFocus();
+    // The focus is back on the table, and the menu key on the focused cell opens the same menu.
+    CHECK(f.item()->hasActiveFocus());
     f.scene.key(Qt::Key_Menu);
     f.settle();
     CHECK(menu->property("opened").toBool());

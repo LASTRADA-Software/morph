@@ -3524,10 +3524,6 @@ private:
         if (node.prop("highlightKey") != nullptr) {
             refuse(pointerAppend(node.path, "highlightKey"), "`highlightKey` links a model-backed table to a chart");
         }
-        // A cell's menu reads the cell as the description's column shows it, which a table over `rows` has not.
-        if (!node.partList("cellMenu").empty()) {
-            refuse(pointerAppend(node.path, "cellMenu"), "`cellMenu` belongs to a model-backed table");
-        }
         // Its arrangement is kept under the table's id, so a table with none persists nothing, and says so when it
         // asks to.
         if (ExprPtr const persist = node.prop("persist"); persist != nullptr && node.id.empty()) {

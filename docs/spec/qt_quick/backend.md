@@ -433,9 +433,11 @@ accessible node.
 the row's `cellMenu` with the column, as Shift+F10 or the menu key does on the focused cell of a table over a source.
 `TableImpl::openCellMenu` makes the row the selection alone, reported as `Replace`, when it is not marked, asks for the
 entries, which focuses the cell, and calls `showCellMenu(anchor, entries)` with the cell's item: the same `configMenu`
-opens under the cell, with the column −2, and the choice comes back as `menuChoose` with that column, which C++ routes
-to the cell whose menu is open. Over a source, a key the table leaves is asked of C++ as `cellKey`, which runs the
-focused cell's first enabled entry without a submenu whose chord it is.
+opens under the cell, with the column −2, named `Cell options` for assistive technology, and the choice comes back as
+`menuChoose` with that column, which C++ routes to the cell whose menu is open; closing it gives the focus back to the
+table. Over a source, a key the table leaves is asked of C++ as `cellKey`: one that is none of the chords
+`setCellMenuKeys` gave answers false at once, and one that is runs the focused cell's first enabled entry without a
+submenu whose chord it is.
 
 **The column chooser and the sort dialog.** "Columns…" and "Sort…" in the table's menu open dialogs the interpreter
 builds from widgets the backend already has (`ui/table_dialogs.hpp`), so the backend adds nothing for them: each is a

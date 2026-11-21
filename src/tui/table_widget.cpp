@@ -594,6 +594,9 @@ EventResult TableImpl::cellKey(::core::tui::KeyEvent const& key) {
         openCellMenu(*row, column);
         return EventResult::Handled;
     }
+    if (std::ranges::none_of(_cellMenuKeys, [&key](std::string const& chord) { return matchesChord(chord, key); })) {
+        return EventResult::Ignored;
+    }
     auto const entries = _cellMenu;
     auto const chosen = _cellChosen;
     std::vector<std::size_t> path;

@@ -5133,7 +5133,8 @@ TEST_CASE("table menus: filter by this value", "[ui][table][menu]") {
     }
 }
 
-// Mutation: keys bound only while the menu is open.
+// Mutations: keys bound only while the menu is open; every key the table leaves asking for the entries (no chord
+// check in `RecordingBackend::cellKey`).
 TEST_CASE("table menus: an entry's keys work while the table has focus", "[ui][table][menu]") {
     using namespace morph::ui::testing;
     TableHarness h;
@@ -5152,11 +5153,19 @@ TEST_CASE("table menus: an entry's keys work while the table has focus", "[ui][t
     h.backend.focusMove(table, morph::ui::FocusMove::Down);
     CHECK_FALSE(h.backend.press(h.byTestId("Button", "other"), "Ctrl+O"));
     CHECK(readJson(*screen, R"({"ref":"opened"})") == "null");
+    // A key that is none of the entries' chords asks for no entries, and asking for them moves no focus.
+    std::pair<std::size_t, std::size_t> const focused = h.backend.focusCell(table);
+    CHECK_FALSE(h.backend.press(table, "Down"));
+    CHECK_FALSE(h.backend.press(table, "Ctrl+P"));
+    CHECK(h.backend.cellMenuAsks(table) == 0);
     CHECK(h.backend.press(table, "Ctrl+O"));
     CHECK(readJson(*screen, R"({"ref":"opened"})") == "3");
+    CHECK(h.backend.cellMenuAsks(table) == 1);
+    CHECK(h.backend.focusCell(table) == focused);
 }
 
-// Mutation: headerEnabled read once at mount, which leaves the header enabled after the condition turns false.
+// Mutations: headerEnabled read once at mount, which leaves the header enabled after the condition turns false; the
+// cell menu's filter entries not reading headerEnabled, which leaves them enabled.
 TEST_CASE("table menus: a disabled header", "[ui][table][header]") {
     using namespace morph::ui::testing;
     TableHarness h;
@@ -5200,6 +5209,12 @@ TEST_CASE("table menus: a disabled header", "[ui][table][header]") {
     CHECK(elementValue(*screen, "t", "selection") == "[2]");
     h.backend.pressCopy(table);
     CHECK_FALSE(h.backend.clipboardText().empty());
+    // The cell menu's own filter entries are disabled with the header; its copy entries and the application's stay.
+    std::vector<morph::ui::MenuEntry> const cell = h.backend.rightClickCell(table, menuKey(2), mass);
+    CHECK_FALSE(entryOf(cell, "Filter by this value").enabled);
+    CHECK_FALSE(entryOf(cell, "Exclude this value").enabled);
+    CHECK(entryOf(cell, "Copy").enabled);
+    CHECK(entryOf(cell, "Pick").enabled);
     h.backend.chooseCellMenu(table, menuKey(2), mass, {"Pick"});
     CHECK(readJson(*screen, R"({"ref":"picked"})") == "2");
     // Once the application is idle, a header click sorts.
@@ -5207,4 +5222,39 @@ TEST_CASE("table menus: a disabled header", "[ui][table][header]") {
     h.settle();
     h.backend.clickHeader(table, mass);
     CHECK(elementValue(*screen, "t", "sort") == R"([{"column":"mass","direction":"asc"}])");
+}
+
+// Mutation: a table over `rows` setting no `heldCell`, which leaves its cells without a menu.
+TEST_CASE("table menus: a table over rows takes the cell and header menus and a disabled header", "[ui][table][menu]") {
+    using namespace morph::ui::testing;
+    std::size_t const name = 1;  // the columns are `id`, `name` and `weight`
+    morph::ui::Key const b{std::string{"b"}};
+    {
+        TableHarness h;
+        auto screen = h.mount(rowsDoc(
+            kThree, R"(,"selectionMode":"multiple",)"
+                    R"("cellMenu":[{"label":{"fn":"format","args":["{0} of {1}",{"ref":"column"},{"ref":"row.id"}]}}],)"
+                    R"("headerMenu":[{"label":"About"}])"));
+        REQUIRE(reportsOf(h).empty());
+        int const table = tableOf(h);
+        CHECK(menuLabels(h.backend.rightClickCell(table, b, name)) ==
+              std::vector<std::string>{"Copy", "Copy with headers", "Filter by this value", "Exclude this value", "-",
+                                       "name of b"});
+        CHECK(menuLabels(h.backend.menuOf(table, name)).back() == "About");
+        h.backend.chooseCellMenu(table, b, name, {"Filter by this value"});
+        h.settle();
+        CHECK(filterSpec(elementValue(*screen, "list", "filters")) ==
+              filterSpec(R"({"columns":{"name":{"include":[{"oneOf":["b"]}]}}})"));
+        CHECK(elementValue(*screen, "list", "viewCount") == "1");
+    }
+    {
+        TableHarness h;
+        auto screen = h.mount(rowsDoc(kThree, R"(,"headerEnabled":false)"));
+        int const table = tableOf(h);
+        h.backend.clickHeader(table, name);
+        h.settle();
+        CHECK(statusOf(h).message == "Sorting, filtering and arranging are unavailable right now");
+        CHECK(elementValue(*screen, "list", "sort") == "[]");
+        CHECK_FALSE(entryOf(h.backend.rightClickCell(table, b, name), "Filter by this value").enabled);
+    }
 }

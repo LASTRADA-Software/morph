@@ -119,8 +119,8 @@ TableImpl::TableImpl(Context& context, ui::ContainerWidget* parent)
                     std::move(path));
         }
     });
-    // A key the table leaves, with a cell focused: the focused cell's first enabled entry without a submenu whose chord
-    // it is runs, as if chosen from its menu.
+    // A key the table leaves, with a cell focused, that is one of the entries' chords: the focused cell's first enabled
+    // entry without a submenu whose chord it is runs, as if chosen from its menu.
     relay().answer(QStringLiteral("cellKey"), [this](QVariant const& payload) {
         QVariantList const pressed = payload.toList();
         if (pressed.size() != 2 || !_cellMenu || !_cellChosen || item() == nullptr || !reachable()) {
@@ -128,6 +128,11 @@ TableImpl::TableImpl(Context& context, ui::ContainerWidget* parent)
         }
         int const key = pressed.at(0).toInt();
         auto const modifiers = Qt::KeyboardModifiers::fromInt(pressed.at(1).toUInt());
+        // A key that is none of the entries' chords asks for nothing.
+        if (std::ranges::none_of(_cellMenuKeys,
+                                 [&](std::string const& chord) { return chordMatches(chord, key, modifiers); })) {
+            return false;
+        }
         qlonglong const viewRow = item()->property("focusedRowIndex").toLongLong();
         int const column = item()->property("focusedColumnIndex").toInt();
         std::optional<ui::Key> rowKey;
