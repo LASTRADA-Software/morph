@@ -3,6 +3,7 @@
 // Grids of a form: the focus chain, the cell, the walk, read-only as one rule, per-cell marks and submission
 // (docs/spec/table/editing.md, delivery step 1).
 
+#include <algorithm>
 #include <catch2/catch_test_macros.hpp>
 #include <chrono>
 #include <cstddef>
@@ -601,6 +602,41 @@ constexpr std::string_view kChoicesPerRow = R"({"type":"object","title":"Grades"
     "grade":{"type":["string","null"],"title":"Grade","x-optionsAction":"Lims_ListGrades",
              "x-optionsDependsOn":["material","site"],"x-order":1}}}}}})";
 
+// Rows whose `mass` is a quantity in kg, also entered in g.
+constexpr std::string_view kMassUnits = R"({"type":"object","title":"Masses","properties":{
+  "rows":{"type":"array","title":"Rows","x-order":0,"items":{"type":"object","properties":{
+    "mass":{"type":["object","null"],"title":"Mass","x-decimalPlaces":3,"ExtUnits":{"unitAscii":"kg"},
+            "x-unitAlternatives":[{"id":"g","decimals":0,"num":1,"den":1000}],"x-order":0},
+    "note":{"type":["string","null"],"title":"Note","x-order":1}}}}}})";
+
+// Mutation: the unit overlay re-applied each commit (`changed` always true in FormGridSource::applyUnit): the note's
+// commit puts the row back in kg.
+TEST_CASE("grid: a unit the user picks stays under the unit overlay", "[ui][grid][derive]") {
+    std::vector<ui::GridColumn> columns;
+    columns.push_back(ui::GridColumn{.id = "mass", .label = "Mass", .field = "mass", .value = {}, .fieldOf = {},
+                                     .decimals = {},
+                                     .unit = [](forms::RowState const& row) {
+                                         // Read as a document's overlay reads its row: every commit reruns it.
+                                         static_cast<void>(row.field("note")->encoded().get());
+                                         return std::optional<std::string>{"kg"};
+                                     }});
+    columns.push_back(ui::GridColumn{.id = "note", .label = "Note", .field = "note", .value = {}});
+    GridFixture f{morph::test::grid::GridSpec{.schema = std::string{kMassUnits},
+                                              .body = R"({"rows":[{}]})",
+                                              .array = "rows",
+                                              .columns = std::move(columns),
+                                              .options = {}}};
+    forms::FieldState& mass = f.form->field("rows[0].mass");
+    CHECK(mass.unit().peek() == 0);
+    f.grid->focusCell(at(1, "mass")); f.grid->press("F2");
+    mass.switchUnit(1);                                          // the editor's unit select: g
+    f.grid->type("2000"); f.grid->press("Enter"); f.h.settle();
+    f.grid->focusCell(at(1, "note")); f.grid->type("x"); f.grid->press("Enter"); f.h.settle();
+    CHECK(mass.unit().peek() == 1);
+    CHECK(mass.draft() == "2000");
+    CHECK(f.json("rows[0].mass") == R"({"num":2000,"den":1000,"dp":3})");   // 2 kg
+}
+
 // Mutation: a fetch per row (no shared fetch).
 TEST_CASE("grid: choices per row", "[ui][grid][derive]") {
     GridFixture f{morph::test::grid::GridSpec{
@@ -1018,6 +1054,36 @@ TEST_CASE("grid: a form's derive action and debounce and a column's member and o
     CHECK(ui::testing::cellText(h, 2, "limit") == "5.00");
     CHECK(form.field("specimens[0].note").draft().empty());
     CHECK(ui::testing::diagnosticsMentioning(h, "names `specimens[0].note`, which is not a derived member") == 1);
+}
+
+// Mutation: deriveForm reading `deriveDebounce` only when the form names `derive` (the evaluation goes at 150 ms).
+TEST_CASE("grid: the debounce times the evaluation of a form with no derive action", "[ui][grid][interpreter][derive]") {
+    using namespace std::chrono_literals;
+    ui::testing::TableHarness h;
+    addDeriveActions(h);
+    std::string text{kDeriveDocument};
+    text.replace(text.find(R"("derive":"Lims_DeriveSpecimens",)"),
+                 std::string_view{R"("derive":"Lims_DeriveSpecimens",)"}.size(), "");
+    auto const screen = h.mount(text);
+    ui::testing::elementOf(*screen, "rec").form->prefill(R"({"sampleId":4,"specimens":[{},{}]})");
+    h.settle();
+    auto const evaluations = [&h] {
+        return std::ranges::count_if(h.dispatcher.calls, [](auto const& call) {
+            return call.action == "Lims_RecordSpecimens" && call.options.evaluate;
+        });
+    };
+    int const table = h.byTestId("Table", "t");
+    h.backend.clickCell(table, 0, 0);
+    h.settle();
+    h.backend.typeInto(table, "1.5");
+    h.settle();
+    h.backend.press(table, "Enter");
+    h.settle();
+    h.advance(39ms);
+    CHECK(evaluations() == 0);
+    h.advance(1ms);
+    CHECK(evaluations() == 1);                                 // density is computed: rounds evaluate, at 40 ms
+    CHECK(h.dispatcher.count("Lims_DeriveSpecimens") == 0);
 }
 
 // Mutation: the loader taking any `deriveDebounce` (the computed one loads).

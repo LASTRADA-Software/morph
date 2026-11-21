@@ -2313,7 +2313,7 @@ struct LineItem {
   computedFields`. The framework detects it via the `detail::HasComputedFields<A>`
   concept, mirroring `detail::HasOptionalFields<A>`/`HasFormRules<A>`.
 - **`recomputeAll<A>(action)`** is the single evaluator: it first recomputes
-  every nested aggregate (each element of a `std::vector` member, a nested struct member, an engaged `std::optional` one), recursively, with `recomputeAll` on each, so a top-level entry
+  every nested aggregate (each element of a `std::vector` member, a nested struct member, either inside an engaged `std::optional`), recursively, with `recomputeAll` on each, so a top-level entry
   over the rows (a sum of their totals) reads them recomputed; then it walks
   `A::computedFields` and, for each entry, overwrites the destination member
   with `fn(action)` — or, if any declared input is unengaged (`hasValue() ==
@@ -2357,7 +2357,7 @@ The schema writes `x-derived: true` and `x-readonly: true` on its property and
 leaves it out of `required`. `recomputeAll` does not touch it: the model sets
 it when it executes the action. Every server dispatch path clears it first
 (`forms::clearDerived`, `forms/derive.hpp`: every derived member of the action
-and of every nested aggregate (each element of a `std::vector` member, a nested struct member, an engaged `std::optional` one), recursively, value-initialised)
+and of every nested aggregate (each element of a `std::vector` member, a nested struct member, either inside an engaged `std::optional`), recursively, value-initialised)
 before `recomputeAll`, so neither the model nor a computed field over it reads
 a value the client sent. A form asks for derived values while the user is
 entering through its derive action (`DeriveOf<A>` in, `Derived` out;
@@ -2525,9 +2525,9 @@ for the exhaustive tables and design rationale.
 |---|---|
 | `template <auto Dst, auto... Inputs, typename Fn> auto computed(Fn fn)` | A `detail::ComputedField<Dst, Fn, Inputs...>` value. |
 | `template <typename... Fields> auto computeList(Fields... fields)` | A `detail::ComputeList<Fields...>` value — assign to `static constexpr auto computedFields`. |
-| `template <typename A> void recomputeAll(A& action)` | Overwrites every computed destination in place: those of every nested aggregate (each element of a `std::vector` member, a nested struct member, an engaged `std::optional` one), recursively, then `A::computedFields`'; a no-op when there are none. |
+| `template <typename A> void recomputeAll(A& action)` | Overwrites every computed destination in place: those of every nested aggregate (each element of a `std::vector` member, a nested struct member, either inside an engaged `std::optional`), recursively, then `A::computedFields`'; a no-op when there are none. |
 | `template <auto MemberPtr> FieldMeta derived(label, help)` (`forms/derive.hpp`) | `describe<MemberPtr>(label, help).withDerived()`: a derived member, `x-derived`. |
-| `template <typename A> void clearDerived(A& action)` (`forms/derive.hpp`) | Value-initialises every derived member of `A` and of every nested aggregate (each element of a `std::vector` member, a nested struct member, an engaged `std::optional` one), recursively. |
+| `template <typename A> void clearDerived(A& action)` (`forms/derive.hpp`) | Value-initialises every derived member of `A` and of every nested aggregate (each element of a `std::vector` member, a nested struct member, either inside an engaged `std::optional`), recursively. |
 
 ## Design decisions
 
@@ -2749,8 +2749,8 @@ layout and rules at every level.
 **Computed fields of a nested aggregate are the exception.** A grid enters the
 rows of a `std::vector<R>` member, and a row's own total is a pure function of
 the row. So a nested aggregate type that declares `computedFields` (a
-`std::vector` element, a nested struct member, the value of a `std::optional`
-member, at any depth) has those members written `x-computed`/`x-readonly` and
+`std::vector` element, a nested struct member, either inside a `std::optional`
+member, at any depth; the shapes the schema itself descends into) has those members written `x-computed`/`x-readonly` and
 left out of its `required`, as the top level's are, and `recomputeAll`
 recomputes every such nested value before the action's own entries, on every
 path. A derived member of a nested type (`derived()`, below) is left out of its

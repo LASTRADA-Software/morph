@@ -55,6 +55,7 @@ inline const std::array<morph::forms::FieldMeta, 1> DeriveLid::fieldMetadata{mor
 struct RecordCrate {
     DeriveLid lid;
     std::optional<DeriveLid> spare;
+    std::optional<std::vector<DeriveLid>> extras;
     std::int64_t lidArea = 0;  // computed: the lid's area, read recomputed
     static constexpr auto computedFields = morph::forms::computeList(
         morph::forms::computed<&RecordCrate::lidArea, &RecordCrate::lid>([](auto const& crate) { return crate.lid.area; }));
@@ -93,12 +94,14 @@ TEST_CASE("derive: a row type's schema marks computed and derived members", "[fo
     CHECK(glz::write_json(box["required"]).value() == R"(["count","perBox"])");
 }
 
-// Mutation: detail::forEachNested skipping a plain nested struct member (lid.area stays 999, lid.mark 555, lidArea 999).
+// Mutations: detail::forEachNested skipping a plain nested struct member (lid.area stays 999, lid.mark 555, lidArea
+// 999); skipping the elements of an engaged `std::optional<std::vector>` (extras' area stays 999, mark 555).
 TEST_CASE("derive: the server recomputes and clears a nested struct's members", "[forms][derive]") {
     auto holder = morph::model::detail::defaultRegistry().create("T_DeriveCrates");
     morph::model::detail::defaultDispatcher().dispatch(
         "T_DeriveCrates", "T_RecordCrate", *holder,
-        R"({"lid":{"width":3,"area":999,"mark":555},"spare":{"width":2,"area":999,"mark":555},"lidArea":999})");
+        R"({"lid":{"width":3,"area":999,"mark":555},"spare":{"width":2,"area":999,"mark":555},)"
+        R"("extras":[{"width":5,"area":999,"mark":555}],"lidArea":999})");
     RecordCrate const& kept = DeriveCrateModel::last;
     CHECK(kept.lid.area == 9);
     CHECK(kept.lid.mark == 0);
@@ -106,6 +109,9 @@ TEST_CASE("derive: the server recomputes and clears a nested struct's members", 
     REQUIRE(kept.spare.has_value());
     CHECK(kept.spare->area == 4);
     CHECK(kept.spare->mark == 0);
+    REQUIRE(kept.extras.has_value());
+    CHECK(kept.extras->at(0).area == 25);
+    CHECK(kept.extras->at(0).mark == 0);
 }
 
 // A derive action's input is `{"body": …}`, through the meta its deriving type inherits.

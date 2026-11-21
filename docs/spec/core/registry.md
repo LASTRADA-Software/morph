@@ -647,7 +647,7 @@ class ActionDispatcher {
   and never `Model::execute`: it decodes the body, reconciles `Quantity`
   precision, clears the derived members (`forms::clearDerived`), recomputes the
   computed fields — those of each nested aggregate (a `std::vector` element,
-  a nested struct, an engaged `std::optional`) before the action's — and returns an `Evaluation` — the
+  a nested struct, either inside an engaged `std::optional`) before the action's — and returns an `Evaluation` — the
   recomputed body (`ActionTraits<Action>::toJson`), `forms::fieldErrors` of
   it, and `ready`, whether `dispatch` would execute it (every `Quantity` within
   its unit's bounds, and `ActionValidator<Action>::ready`). No model instance,

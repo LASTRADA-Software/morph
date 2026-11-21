@@ -781,8 +781,9 @@ keeps its operands' 0 places and still fills 0.29 of a bar.
   that is no member is reported once (the cell has no field, so it is read-only); such a column sorts and filters
   its drafts as text. The column's `decimals`, `unit`, `readonly`, `options` (each value's JSON literal kept) and
   `placeholder` become its per-row overlays, read in the same scope; `FormGridSource` applies `decimals`, `unit`,
-  `options` and `placeholder` to each row's member (`FieldState::places`, `unit`, `narrowOptions`,
-  `overridePlaceholder`) in an effect that follows them, and `readonly` is the cell's `CellFacts::overlayReadOnly`.
+  `options` and `placeholder` to each row's member (`FieldState::places`, `switchUnit`, `narrowOptions`,
+  `overridePlaceholder`) in an effect that follows them, a row's `unit` only when it first gives one or gives another
+  (converting the draft), so a unit the user picks in the editor stays, and `readonly` is the cell's `CellFacts::overlayReadOnly`.
   `enterMoves` and `walk` give its `GridOptions`, and `onActivate` runs with `event` the row's key when `Enter` or a
   double click lands on a read-only cell. What a display column and `onActivate` keep holds the scope weakly. Its
   header, menus, cell menu and arrangement are a table's (`configureTable` over a `TableConfig` the grid keeps): an

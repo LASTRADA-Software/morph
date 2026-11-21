@@ -3581,7 +3581,7 @@ template <typename... Fields>
 
 /// @brief Recomputes every entry of `A::computedFields` in place on @p action,
 ///        after every nested aggregate of it (each element of a `std::vector`
-///        member, a nested struct member, an engaged `std::optional` one,
+///        member, a nested struct member, either inside an engaged `std::optional`,
 ///        recursively: `detail::forEachNested`), so an entry over the rows reads
 ///        them recomputed. A derived member (`FieldMeta::derived`) is never touched.
 ///
@@ -3606,9 +3606,10 @@ namespace detail {
 template <typename T>
 concept NestedAggregate = ReflectableAggregate<T> && !EmptyCapableField<T>;
 
-/// @brief Calls @p visit on every nested aggregate directly inside @p object: a member of a `NestedAggregate` type, the
-///        value of such a `std::optional` while engaged, and each element of such a `std::vector`. The walk reads no
-///        member name, so it compiles for a type local to an unnamed namespace.
+/// @brief Calls @p visit on every nested aggregate directly inside @p object: a member of a `NestedAggregate` type, each
+///        element of a `std::vector` of them, and either of those inside an engaged `std::optional`: the shapes the
+///        schema describes a nested aggregate's members in (`recurseIntoNestedAggregateIfAny`). The walk reads no member
+///        name, so it compiles for a type local to an unnamed namespace.
 /// @tparam A     The object's type.
 /// @tparam Visit A callable taking any nested aggregate by reference.
 /// @param object The object whose nested aggregates are visited.
@@ -3635,9 +3636,20 @@ constexpr void forEachNested(A& object, Visit const& visit) {
                         }
                     }
                 } else if constexpr (isStdOptional<Member>) {
-                    if constexpr (NestedAggregate<typename Member::value_type>) {
+                    // The schema decides an engaged value as it decides the member itself: a nested aggregate, or a
+                    // `std::vector` of them.
+                    using Value = typename Member::value_type;
+                    if constexpr (NestedAggregate<Value>) {
                         if (member.has_value()) {
                             visit(*member);
+                        }
+                    } else if constexpr (IsStdVector<Value>::value) {
+                        if constexpr (NestedAggregate<typename IsStdVector<Value>::ValueType>) {
+                            if (member.has_value()) {
+                                for (auto& element : *member) {
+                                    visit(element);
+                                }
+                            }
                         }
                     }
                 } else if constexpr (NestedAggregate<Member>) {
