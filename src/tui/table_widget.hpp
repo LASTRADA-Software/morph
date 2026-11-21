@@ -116,8 +116,8 @@ public:
     void setOnSelectAll(std::function<void()> onSelectAll) override;
     void setSelectionView(std::vector<ui::Key> const& except) override;
     void setOnStatusEntry(std::function<void(std::string id)> onStatusEntry) override;
-    /// An unmatched row's cells draw dim; a busy row shows the busy glyph and a locked row the lock glyph in a gutter
-    /// cell of their own, after the selection and cursor marks; the marks' tooltip, or for a busy or locked row
+    /// An unmatched row's cells draw dim; a busy row shows the busy glyph and a locked row the lock glyph in gutter
+    /// cells of their own (the glyph and a gap), after the selection and cursor marks; the marks' tooltip, or for a busy or locked row
     /// without one a text saying why, is the row's hover text over its own tooltip. Throws std::logic_error when
     /// @p row is not one of this table's rows.
     void setRowMarks(ui::Widget& row, ui::RowMarks const& marks) override;

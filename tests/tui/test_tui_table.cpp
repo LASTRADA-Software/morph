@@ -757,19 +757,19 @@ TEST_CASE("tui table: a row's marks are drawn", "[tui][table]") {
                              ui::RowMarks{.locked = true, .tooltip = "Being edited by another user"});
     auto const lines = harness.draw();
     auto const& buffer = harness.screen().renderedBuffer();
-    // Row 0 is the first data line; its first cell starts after the gutter, two cells and the glyph's own.
-    CHECK(buffer.cellAt({.x = 3, .y = 1})->style.dim);
-    CHECK_FALSE(buffer.cellAt({.x = 3, .y = 2})->style.dim);
-    CHECK(lines.at(2).starts_with("  …"));
-    CHECK(lines.at(3).starts_with("  #"));
-    CHECK(lines.at(1).starts_with("   "));
+    // Row 0 is the first data line; its first cell starts after the gutter, two cells and the glyph's two.
+    CHECK(buffer.cellAt({.x = 4, .y = 1})->style.dim);
+    CHECK_FALSE(buffer.cellAt({.x = 4, .y = 2})->style.dim);
+    CHECK(lines.at(2).starts_with("  … "));
+    CHECK(lines.at(3).starts_with("  # "));
+    CHECK(lines.at(1).starts_with("    "));
     for (auto const& row : fruit.rows) {
         fruit.table->setRowMarks(*row, ui::RowMarks{});
     }
     auto const plain = harness.draw();
-    CHECK_FALSE(harness.screen().renderedBuffer().cellAt({.x = 3, .y = 1})->style.dim);
-    CHECK(plain.at(2).starts_with("   "));
-    CHECK(plain.at(3).starts_with("   "));
+    CHECK_FALSE(harness.screen().renderedBuffer().cellAt({.x = 4, .y = 1})->style.dim);
+    CHECK(plain.at(2).starts_with("    "));
+    CHECK(plain.at(3).starts_with("    "));
     CHECK_THROWS_AS(fruit.table->setRowMarks(*fruit.cells.at(0), ui::RowMarks{}), std::logic_error);
 }
 
@@ -784,12 +784,12 @@ TEST_CASE("tui table: a busy or locked row's glyph hides no mark", "[tui][table]
     fruit.table->setRowMarks(*fruit.rows.at(0), ui::RowMarks{.busy = true});
     fruit.table->setRowMarks(*fruit.rows.at(2), ui::RowMarks{.locked = true});
     auto const lines = harness.draw();
-    // Selection mark, cursor mark, then the glyph's own cell; the cells start one further right.
-    CHECK(lines.at(1).starts_with("* …apple"));
-    CHECK(lines.at(2).starts_with("   kiwi"));
-    CHECK(lines.at(3).starts_with("* #plum"));
+    // Selection mark, cursor mark, then the glyph and a gap; the cells start two further right.
+    CHECK(lines.at(1).starts_with("* … apple"));
+    CHECK(lines.at(2).starts_with("    kiwi"));
+    CHECK(lines.at(3).starts_with("* # plum"));
     fruit.table->setRowMarks(*fruit.rows.at(0), ui::RowMarks{});
-    CHECK(harness.draw().at(1).starts_with("*  apple"));
+    CHECK(harness.draw().at(1).starts_with("*   apple"));
 }
 
 // Mutation: the marks' text written over the row's own tooltip, which leaves the row's hover blank once its marks

@@ -3308,7 +3308,8 @@ private:
 
     // Moves focus and the highlight from a row's old key to its new one, for each new generation of moves. Focus on
     // the old key, or left by it when its row went, goes to the new key: at once when a realized row holds it, else
-    // once one does, the change that removes the old row moving it nowhere meanwhile.
+    // the rows are asked where it is, as after a reset, and the change that removes the old row moves it nowhere
+    // meanwhile; an answer that the view lacks the new key hands focus to the row at its index.
     void applyKeyMoves(SourceTable& table, KeyMoves const& moves) {
         if (moves.generation <= table.keyMovesApplied) {
             return;
@@ -3339,6 +3340,7 @@ private:
                 table.widget->setFocusCell(static_cast<std::size_t>(*now), table.focusColumn);
             } else {
                 table.focusSearching = true;
+                locateFocus(table);
             }
             reportFocus(table);
         }
