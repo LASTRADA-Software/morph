@@ -1184,11 +1184,12 @@ MorphWidget {
                         TapHandler {
                             id: headerLabelSort
                             enabled: headerLabel.modelData.sortable === true
-                            // A Ctrl-click selects the column's cells in a table that selects cells, and sorts nothing.
-                            acceptedModifiers: root.selectsCells ? (Qt.NoModifier | Qt.ShiftModifier)
-                                                                 : Qt.KeyboardModifierMask
                             onTapped: {
                                 if (headerEdge.visible && headerLabelSort.point.position.x >= headerEdge.x)
+                                    return
+                                // In a table that selects cells a Ctrl-click selects the column's cells and sorts
+                                // nothing; a plain click and a Shift-click sort.
+                                if (root.selectsCells && (headerLabelSort.point.modifiers & Qt.ControlModifier) !== 0)
                                     return
                                 root.fire("sort", {"column": headerLabel.index,
                                                    "shift": (headerLabelSort.point.modifiers & Qt.ShiftModifier) !== 0})
@@ -1278,11 +1279,12 @@ MorphWidget {
                     TapHandler {
                         id: windowLabelSort
                         enabled: windowLabel.column.sortable === true
-                        // A Ctrl-click selects the column's cells in a table that selects cells, and sorts nothing.
-                        acceptedModifiers: root.selectsCells ? (Qt.NoModifier | Qt.ShiftModifier)
-                                                             : Qt.KeyboardModifierMask
                         onTapped: {
                             if (windowEdge.visible && windowLabelSort.point.position.x >= windowEdge.x)
+                                return
+                            // In a table that selects cells a Ctrl-click selects the column's cells and sorts nothing;
+                            // a plain click and a Shift-click sort.
+                            if (root.selectsCells && (windowLabelSort.point.modifiers & Qt.ControlModifier) !== 0)
                                 return
                             root.fire("sort", {"column": windowLabel.modelData.column,
                                                "shift": (windowLabelSort.point.modifiers & Qt.ShiftModifier) !== 0})
@@ -1397,12 +1399,14 @@ MorphWidget {
                 width: flick.width
                 height: root.sourceContentHeight
 
-                // A drag from one cell to another selects the rectangle they span, reported on release.
+                // A mouse drag from one cell to another selects the rectangle they span, reported on release. A touch
+                // drag is left to the Flickables, so a long grid still scrolls under a finger.
                 DragHandler {
                     id: cellDrag
                     enabled: root.selectsCells
                     target: null
-                    // The drag is the selection's: the scrolling Flickables around the rows do not take it over.
+                    acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
+                    // The mouse drag is the selection's: the scrolling Flickables around the rows do not take it over.
                     grabPermissions: PointerHandler.CanTakeOverFromItems | PointerHandler.CanTakeOverFromHandlersOfSameType
                                      | PointerHandler.CanTakeOverFromHandlersOfDifferentType
                     onActiveChanged: {

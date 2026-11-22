@@ -890,6 +890,35 @@ TEST_CASE("grid: a paste over maxPasteCells is refused whole", "[ui][grid][cells
     CHECK(ui::GridOptions{}.maxPasteCells == 10'000);
 }
 
+// Mutation: copyRefusal never refusing (a copy of three rows over a bound of two goes ahead).
+TEST_CASE("grid: a copy over maxCopyRows is refused", "[ui][grid][cells]") {
+    GridFixture f{3, ui::GridOptions{.maxCopyRows = 2}};
+    f.grid->focusCell(at(1, "label"));
+    f.grid->press("Shift+Down");
+    CHECK_FALSE(f.grid->copyRefusal().has_value());
+    f.grid->press("Shift+Down");
+    CHECK(f.grid->copyRefusal() == std::optional<std::string>{"A copy holds at most 2 rows"});
+    CHECK(ui::GridOptions{}.maxCopyRows == 10'000);
+}
+
+// Mutation: notice() replacing the entries of a live undo offer (a paste that writes nothing hides "Undo").
+TEST_CASE("grid: a notice that is no change keeps the offer to undo", "[ui][grid][rows]") {
+    GridFixture f{2};
+    f.grid->focusCell(at(1, "label")); f.grid->type("a"); f.grid->press("Enter");
+    f.grid->focusCell(at(1, "label"));
+    f.grid->press("Ctrl+-");
+    REQUIRE(f.grid->messageEntries() == std::vector<ui::StatusEntry>{{"undo", "Undo"}});
+    f.grid->focusCell(at(2, "density"));
+    CHECK(f.grid->paste("5").written == 0);
+    CHECK(f.grid->message() == "Pasted 0 values; 1 on read-only cells were dropped");
+    CHECK(f.grid->messageEntries() == std::vector<ui::StatusEntry>{{"undo", "Undo"}});
+    f.grid->type("x");
+    CHECK(f.grid->message() == "This cell is read-only");
+    CHECK(f.grid->messageEntries() == std::vector<ui::StatusEntry>{{"undo", "Undo"}});
+    f.grid->chooseEntry("undo");
+    CHECK(f.form->field("specimens").rows().size() == 2);
+}
+
 // Mutation: an insertion not checking maxItems (Insert stays offered at the bound).
 TEST_CASE("grid: rows of a grid", "[ui][grid][rows]") {
     std::string schema{kSpecimens};

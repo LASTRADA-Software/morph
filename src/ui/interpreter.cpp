@@ -8595,6 +8595,7 @@ void ScreenCore::gridParts(DocNode const& part, LowerCtx const& ctx, forms::Fiel
     options.appendRows = part.flag("appendRows");
     options.rowsFixed = part.flag("rowsFixed");
     options.maxPasteCells = session.options().maxPasteCells;
+    options.maxCopyRows = session.options().maxCopyRows;
     options.scheduler = session.options().scheduler;
     options.undoHold = kStatusMessageHold;
     if (Commands const* const commands = part.event("onActivate"); commands != nullptr && !commands->empty()) {
@@ -8874,16 +8875,16 @@ Node ScreenCore::gridTableNode(DocNode const& part, LowerCtx const& ctx, Element
             }
             return;
         }
+        std::string const separator{scope->formatting().numeric.groupSeparator};
+        if (std::optional<std::string> refused = grid.copyRefusal(separator)) {
+            tableMessage(element, std::move(*refused));
+            return;
+        }
         std::string const text = grid.copy();
         if (text.empty()) {
             return;
         }
-        std::string const separator{scope->formatting().numeric.groupSeparator};
         std::size_t const lines = static_cast<std::size_t>(std::ranges::count(text, '\n')) + 1;
-        if (std::size_t const bound = session.options().maxCopyRows; lines > bound) {
-            tableMessage(element, tableText::copyBound(bound, separator));
-            return;
-        }
         if (!clipboard || !clipboard(text)) {
             tableMessage(element, "The rows could not be copied: there is no clipboard");
             return;

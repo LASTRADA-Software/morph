@@ -804,7 +804,7 @@ keeps its operands' 0 places and still fills 0.29 of a bar.
   shown through `GridController::select`, and `onSelectionChange` runs with `event` the range after each change of it
   (`GridController::onSelectionChange`); the element value `selection` is the range. `Ctrl+C` on the table copies the
   cell selection (`GridController::copy`) through the backend's clipboard, "Copied 2 rows" in the status line (over
-  `maxCopyRows` rows refused, "A copy holds at most 10,000 rows"), and
+  `maxCopyRows` rows refused, "A copy holds at most 10,000 rows", by `GridController::copyRefusal`), and
   with no cell selection the table's copy runs; `Ctrl+V` pastes the backend's `pasteText` (`GridController::useClipboard`).
   The table menu offers the focused row's `GridController::rowEntries` after its own entries and a separator, and
   `appendRows` draws "Add row" under the table. What a display column and `onActivate` keep holds the scope weakly. Its
