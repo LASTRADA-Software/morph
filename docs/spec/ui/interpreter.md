@@ -843,9 +843,13 @@ keeps its operands' 0 places and still fills 0.29 of a bar.
   element `form` names (none without `form`) and a `GridController`, made when the table is first lowered and kept in
   the table's element as a grid of a form is (`GridTable::fixed`, its controller `GridTable::grid`). Each row part
   becomes a `FixedRow`, its `label` read once, and each block part a `FixedBlock` of them; a cell's `field` and `text`
-  are kept as given, its `rows` and `columns` as counts, and its `value`, `readonly` and `decimals` become functions
-  read in the table's scope, with `row` bound to the block's collection row's record (each member's encoded value)
-  in a block. The source keeps one row per row part and per block row and collection row, in order: a block's rows
+  are kept as given, its `rows` and `columns` as counts, and its `value`, `readonly`, `decimals`, `unit`, `options`
+  (each value's JSON literal kept) and `placeholder` become functions read in the table's scope, with `row` bound to
+  the block's collection row's record (each member's encoded value) in a block. `FixedGridSource` applies
+  `decimals`, `unit`, `options` and `placeholder` to each cell's field in an effect that follows them, as
+  `FormGridSource` applies a grid column's (`detail::applyUnitOverlay` for the unit, given as loaded when first
+  applied, and again after each load of the form, `FormSession::loadGeneration`, to a field the user has not
+  changed), and `readonly` is the cell's `CellFacts::overlayReadOnly`. The source keeps one row per row part and per block row and collection row, in order: a block's rows
   are expanded again on each change of its collection's rows, keyed `"<row key>/<key>"`, so a row's focus, draft and
   marks stay with it while collection rows are added above it. Its view is an `EngineRows` over a `table::VectorSource`
   of the rows' keys, never sorted or filtered. The columns are the column parts, labelled by their `label` read once,

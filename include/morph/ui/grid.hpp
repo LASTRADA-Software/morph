@@ -1289,6 +1289,36 @@ private:
 
 namespace detail {
 
+/// @brief Applies a `unit` overlay to a field: only when it first gives a unit, or gives another one than it last did,
+///        since the overlay is read again on every change and a unit the user then picks in the editor must stay. It
+///        switches as the editor does, converting the draft; no unit, or one the field does not have, after a unit
+///        restores the field's entry unit. The first unit a field is given is part of how it is shown as loaded: it
+///        goes to @p asLoaded, so the cell is not modified by it and a revert returns to it.
+/// @param applied  The unit the overlay last gave each field, by path; updated.
+/// @param state    The field.
+/// @param unit     The unit the overlay gives now, an id of the field's units; nothing for none.
+/// @param asLoaded The fields whose first unit is switched as loaded, with the unit's index, after the caller's walk.
+inline void applyUnitOverlay(std::unordered_map<std::string, std::optional<std::string>>& applied,
+                             forms::FieldState& state, std::optional<std::string> const& unit,
+                             std::vector<std::pair<forms::FieldState*, std::size_t>>& asLoaded) {
+    auto const last = applied.find(state.path());
+    bool const first = last == applied.end() || !last->second.has_value();
+    bool const changed = first ? unit.has_value() : last->second != unit;
+    applied.insert_or_assign(state.path(), unit);
+    if (!changed) {
+        return;
+    }
+    std::vector<forms::UnitOption> const& units = state.spec().units;
+    auto const found = unit ? std::ranges::find(units, *unit, &forms::UnitOption::id) : units.end();
+    std::size_t const index =
+        found != units.end() ? static_cast<std::size_t>(found - units.begin()) : state.spec().entryUnit;
+    if (first) {
+        asLoaded.emplace_back(&state, index);
+    } else {
+        state.switchUnit(index);
+    }
+}
+
 /// @brief A field's cell text as a grid shows it. Tracked.
 /// @param state  The field.
 /// @param column The column's id.
@@ -1887,29 +1917,10 @@ private:
         _form->runtime().untracked([&] { _form->switchUnitsAsLoaded(asLoaded); });
     }
 
-    // A row's `unit` overlay, applied only when it first gives a unit or gives another one than it last did: the effect
-    // reruns on every change of a row, and the unit the user then picks in the editor must stay. It switches the way the
-    // editor does, converting the draft; no unit, or one the field does not have, after a unit restores the field's
-    // entry unit. The first unit a member is given (none remembered yet, or none given so far) is part of how the row
-    // is shown as loaded: it goes to @p asLoaded, so the cell is not modified by it and a revert returns to it.
+    // A row's `unit` overlay onto its member (`detail::applyUnitOverlay`).
     void applyUnit(forms::FieldState& state, std::optional<std::string> const& unit,
                    std::vector<std::pair<forms::FieldState*, std::size_t>>& asLoaded) {
-        auto const applied = _unitApplied.find(state.path());
-        bool const first = applied == _unitApplied.end() || !applied->second.has_value();
-        bool const changed = first ? unit.has_value() : applied->second != unit;
-        _unitApplied.insert_or_assign(state.path(), unit);
-        if (!changed) {
-            return;
-        }
-        std::vector<forms::UnitOption> const& units = state.spec().units;
-        auto const found = unit ? std::ranges::find(units, *unit, &forms::UnitOption::id) : units.end();
-        std::size_t const index =
-            found != units.end() ? static_cast<std::size_t>(found - units.begin()) : state.spec().entryUnit;
-        if (first) {
-            asLoaded.emplace_back(&state, index);
-        } else {
-            state.switchUnit(index);
-        }
+        detail::applyUnitOverlay(_unitApplied, state, unit, asLoaded);
     }
 
     template <typename Test>
@@ -2034,6 +2045,15 @@ struct FixedCell {
     /// @brief The entry places of the cell's field, which are also its wire `dp`, read with the block's row, null
     ///        outside a block; nothing keeps the field's. Tracked.
     std::function<std::optional<std::uint32_t>(forms::RowState const*)> decimals;
+    /// @brief The unit the cell's field is entered in, an id of its `FieldSpec::units`, read with the block's row, null
+    ///        outside a block; applied as a grid column's `unit` overlay is (`GridColumn::unit`). Tracked.
+    std::function<std::optional<std::string>(forms::RowState const*)> unit;
+    /// @brief The options the cell's field offers, as their values' JSON literals, narrowing a choice's, read with the
+    ///        block's row, null outside a block; nothing offers every option. Tracked.
+    std::function<std::optional<std::vector<std::string>>(forms::RowState const*)> options;
+    /// @brief The cell's field's placeholder, read with the block's row, null outside a block; empty keeps the field's.
+    ///        Tracked.
+    std::function<std::string(forms::RowState const*)> placeholder;
 };
 
 /// @brief One row of a fixed grid: its key, its label and its cells by column id.
@@ -2074,8 +2094,8 @@ public:
     /// @param rows    The parts, in order.
     /// @param columns The columns, each id once: only their ids and labels are read.
     /// @param format  How values are shown.
-    /// @throws std::invalid_argument when a key is empty or given twice, a cell names a field with @p form null or a
-    ///         field the form does not have, or a block repeats over no collection of the form.
+    /// @throws std::invalid_argument when a key is empty, holds a `/` or is given twice, a cell names a field with
+    ///         @p form null or a field the form does not have, or a block repeats over no collection of the form.
     FixedGridSource(reactive::Runtime& runtime, forms::FormSession* form, std::vector<Part> rows,
                     std::vector<GridColumn> columns, FormatContext format)
         : _rt{&runtime},
@@ -2112,7 +2132,9 @@ public:
         if (std::ranges::any_of(_parts, [](Part const& part) {
                 return std::ranges::any_of(rowsOf(part), [](FixedRow const& row) {
                     return std::ranges::any_of(row.cells, [](auto const& cell) {
-                        return !cell.second.field.empty() && cell.second.decimals;
+                        FixedCell const& given = cell.second;
+                        return !given.field.empty() &&
+                               (given.decimals || given.unit || given.options || given.placeholder);
                     });
                 });
             })) {
@@ -2521,6 +2543,9 @@ private:
                 members = array->spec().children;
             }
             for (FixedRow const& row : rowsOf(part)) {
+                if (row.key.find('/') != std::string::npos) {
+                    refuse("the key `" + row.key + "` holds a `/`, which joins a block row's keys");
+                }
                 if (row.key.empty() || !keys.insert(row.key).second) {
                     refuse(row.key.empty() ? std::string{"a row has no key"}
                                            : "the key `" + row.key + "` is given twice");
@@ -2655,23 +2680,54 @@ private:
         return {found == row->row->cells.end() ? nullptr : &found->second, row->specimen};
     }
 
-    // Each field cell's `decimals` overlay, onto its field's places. Rerun when a block's rows or an overlay's reads
-    // change.
+    // Each field cell's overlays onto its field: its places, its entry unit, its options and its placeholder. Rerun
+    // when a block's rows, an overlay's reads or the form's loaded values change. A load sets a field's unit afresh,
+    // so the units the overlays gave an unmodified field before it are forgotten and given again as loaded; the
+    // switch that does so moves the count again, and is not taken for a load.
+    // NOLINTNEXTLINE(readability-function-cognitive-complexity): one section per overlay.
     void applyOverlays() {
         sync();
+        if (std::uint64_t const generation = _form->loadGeneration(); generation != _unitGeneration) {
+            // A field the user changed keeps the unit they left it in.
+            _rt->untracked([&] {
+                std::erase_if(_unitApplied, [this](auto const& entry) { return !_form->modified(entry.first); });
+            });
+            _unitGeneration = generation;
+        }
+        std::vector<std::pair<forms::FieldState*, std::size_t>> asLoaded;
         for (Expanded const& row : _expanded) {
             for (auto const& [column, state] : row.fields) {
-                auto const cell = row.row->cells.find(column);
-                if (state == nullptr || cell == row.row->cells.end() || !cell->second.decimals) {
+                auto const found = row.row->cells.find(column);
+                if (state == nullptr || found == row.row->cells.end()) {
                     continue;
                 }
-                std::optional<std::uint32_t> const places = cell->second.decimals(row.specimen);
+                FixedCell const& cell = found->second;
+                std::optional<std::uint32_t> const places = cell.decimals ? cell.decimals(row.specimen) : std::nullopt;
+                std::optional<std::string> const unit = cell.unit ? cell.unit(row.specimen) : std::nullopt;
+                std::optional<std::vector<std::string>> options =
+                    cell.options ? cell.options(row.specimen) : std::nullopt;
+                std::string placeholder = cell.placeholder ? cell.placeholder(row.specimen) : std::string{};
                 _rt->untracked([&] {
-                    if (state->places().peek() != places) {
+                    if (cell.decimals && state->places().peek() != places) {
                         state->places().set(places);
+                    }
+                    if (cell.unit) {
+                        detail::applyUnitOverlay(_unitApplied, *state, unit, asLoaded);
+                    }
+                    if (cell.options) {
+                        state->narrowOptions(std::move(options));
+                    }
+                    if (cell.placeholder) {
+                        state->overridePlaceholder(std::move(placeholder));
                     }
                 });
             }
+        }
+        if (!asLoaded.empty()) {
+            _rt->untracked([&] {
+                _form->switchUnitsAsLoaded(asLoaded);
+                _unitGeneration = _form->loadGeneration();
+            });
         }
     }
 
@@ -2749,6 +2805,9 @@ private:
     mutable std::uint64_t _expansion = 0;
     mutable std::optional<Coverage> _coverage;
     std::optional<std::size_t> _hook;
+    // The unit each field's `unit` overlay last gave, by the field's path, since the form's load count last moved.
+    std::unordered_map<std::string, std::optional<std::string>> _unitApplied;
+    std::uint64_t _unitGeneration = 0;
     bool _watching = false;
     bool _posted = false;
     async::CallbackScope _alive;

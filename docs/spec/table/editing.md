@@ -617,6 +617,11 @@ Every key is optional, and a table that names none of them is what [`table.md`](
 | A band nested past three levels, a band naming no column, a child band over a column its parent lacks, or a column in two bands of one level | Refused where the bands are read. |
 | Two `layoutRows` parts with one key | Refused when the document loads. |
 | `form` and `rows` both on a table, `layoutRows` with `rows` or `field`, or a `{field}` cell in a fixed grid without `form` | Refused when the document loads. |
+| A `layoutRows` key holding a `/`, which joins a block row's keys | Refused when the document loads. |
+| `sort`, `group`, `summaries`, `rowSpans`, `appendRows`, `rowsFixed` or `key` on a fixed grid, or `layoutRows` on a model's table | Refused when the document loads: a fixed grid's rows are its parts, in order. |
+| A fixed-grid cell under an id the column parts lack, naming none or more than one of `field`, `value` and `text`, or giving an overlay with no `field`; a `rows` or `columns` that is not a literal count from 1 | Refused when the document loads. |
+| A block without `form`, a block inside a block, a `forEach` that is no list of records of the form, or a `{field}` that is no field of the form (of the row type, in a block) | Refused when the document loads. |
+| A block row's `label` reading `row` | Refused when the document loads: a row's label is read once, for every collection row. |
 
 ## Neighbouring specs
 

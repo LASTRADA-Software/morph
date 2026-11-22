@@ -405,14 +405,17 @@ constexpr auto kLayoutRowKeys = std::to_array<KeySpec>({{"key", Shape::Text},
                                                     {"forEach", Shape::Text},
                                                     {"rows", Shape::Parts, "layoutRow"}});
 /// @brief The keys of a fixed grid's cell part, by the column id it is given under: the form field it edits, the
-///        expression or the text it shows, the rows and columns it spans, and its overlays.
+///        expression or the text it shows, the rows and columns it spans, and its overlays, a grid column's.
 constexpr auto kLayoutCellKeys = std::to_array<KeySpec>({{"field", Shape::Text},
                                                      {"value", Shape::Expr},
                                                      {"text", Shape::Text},
                                                      {"rows", Shape::Expr},
                                                      {"columns", Shape::Expr},
                                                      {"decimals", Shape::Expr},
-                                                     {"readonly", Shape::Expr}});
+                                                     {"unit", Shape::Expr},
+                                                     {"readonly", Shape::Expr},
+                                                     {"options", Shape::Expr},
+                                                     {"placeholder", Shape::Expr}});
 /// @brief The keys of a `table` group part: the value its rows are grouped by, and the heading drawn before each
 ///        group, both read in the row scope, and the summary rows drawn after each group.
 constexpr auto kTableGroupKeys = std::to_array<KeySpec>({{"by", Shape::Expr, {}, kInner | kRequired},
@@ -2123,6 +2126,8 @@ struct CheckContext {
     std::vector<std::pair<std::string, Type>> bindings;
     /// @brief The column parts of a grid, whose keys take expressions in the row's scope.
     bool gridColumns = false;
+    /// @brief The rows of a fixed grid's block, whose cells are read with `row` the block's collection row.
+    bool layoutBlock = false;
 };
 
 class DocumentValidator;
@@ -3159,8 +3164,12 @@ private:
             if (key == "group" && node.kind == "table" && !node.name("form").empty()) {
                 context.bindings.emplace_back("row", Type::any());
             }
-            // A block's rows read its collection row as `row`, in their cells' `value` and overlays.
+            // A block's rows read its collection row as `row` in their cells' `value` and overlays; a row's `label` is
+            // read once, for every collection row, so it reads none.
             if (key == "rows" && node.kind == "layoutRow") {
+                context.layoutBlock = true;
+            }
+            if (key == "cells" && node.kind == "layoutRow" && context.layoutBlock) {
                 context.bindings.emplace_back("row", Type::any());
             }
             if (key == "columns" && (node.kind == "fieldGrid" || (node.kind == "table" && !node.name("form").empty() &&
@@ -3510,6 +3519,10 @@ private:
         if (!row.partList("rows").empty()) {
             refuse(pointerAppend(row.path, "rows"), "a row's `rows` repeat for each row of a `forEach`; give it one");
         }
+        if (key.find('/') != std::string::npos) {
+            refuse(pointerAppend(row.path, "key"),
+                   "the row key `" + key + "` holds a `/`, which joins a block row's keys; give it another");
+        }
         if (!keys.insert(key).second) {
             refuse(pointerAppend(row.path, "key"), "the row `" + key + "` is declared twice in the grid");
         }
@@ -3546,8 +3559,13 @@ private:
                         }
                     }
                 }
-                if (ExprPtr const decimals = cell->prop("decimals"); decimals != nullptr && field.empty()) {
-                    refuse(decimals->path, "`decimals` are a field's entry places; this cell edits no field");
+                for (std::string_view const overlay :
+                     {std::string_view{"decimals"}, std::string_view{"unit"}, std::string_view{"options"},
+                      std::string_view{"placeholder"}}) {
+                    if (ExprPtr const set = cell->prop(overlay); set != nullptr && field.empty()) {
+                        refuse(set->path, "`" + std::string{overlay} + "` is an overlay of the field a cell edits; "
+                                            "this cell edits no field");
+                    }
                 }
             }
         }

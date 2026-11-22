@@ -1375,6 +1375,11 @@ public:
         return modified(*state);
     }
 
+    /// @brief A count that moves whenever what a field held when the form was loaded is recorded again: a load, a
+    ///        revert, and a switch of units as loaded. Tracked.
+    /// @return The count.
+    [[nodiscard]] std::uint64_t loadGeneration() const { return _loadGeneration.get(); }
+
     /// @brief Whether a row of a collection holds another entry than when the form was last loaded: one of its members
     ///        is modified, or the row was added since. Tracked.
     /// @param arrayPath The collection's path.

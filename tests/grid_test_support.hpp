@@ -166,7 +166,8 @@ inline std::string GridFixture::json(std::string_view path) const {
 }
 
 // A form of limits laid out as a fixed grid: `density` and `moisture` each a minimum and a maximum (three and one
-// places), `method` a choice of A or B, `count` an integer, and `specimens` rows of a `mass` (two places).
+// places), `method` a choice of A or B, `count` an integer, `weight` a quantity in kg or g, and `specimens` rows of a
+// `mass` (two places).
 inline constexpr std::string_view kSetLimits = R"({"type":"object","title":"Limits","properties":{
   "limits":{"type":"object","title":"Limits","x-order":0,"properties":{
     "density":{"type":"object","title":"Density","x-order":0,"properties":{
@@ -176,7 +177,10 @@ inline constexpr std::string_view kSetLimits = R"({"type":"object","title":"Limi
       "min":{"type":["object","null"],"title":"Min","x-decimalPlaces":1,"x-order":0},
       "max":{"type":["object","null"],"title":"Max","x-decimalPlaces":1,"x-order":1}}},
     "method":{"enum":["A","B"],"title":"Method","x-order":2},
-    "count":{"type":["integer","null"],"title":"Count","x-order":3}}},
+    "count":{"type":["integer","null"],"title":"Count","x-order":3},
+    "weight":{"type":["object","null"],"title":"Weight","x-decimalPlaces":3,
+      "ExtUnits":{"unitAscii":"kg","unitUnicode":"kg"},
+      "x-unitAlternatives":[{"id":"g","display":"g","decimals":1,"num":1,"den":1000}],"x-order":4}}},
   "specimens":{"type":"array","title":"Specimens","x-order":1,"items":{"type":"object","properties":{
     "mass":{"type":["object","null"],"title":"Mass","x-decimalPlaces":2,"x-order":0}}}}}})";
 
