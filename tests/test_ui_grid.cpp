@@ -2290,7 +2290,8 @@ TEST_CASE("fixed grid: a document's cells take their overlays, and a block's val
     CHECK(shown.find("2.5") != std::string::npos);
 }
 
-// Mutation: the loader not refusing a `{field}` cell without `form` (the block-less document loads).
+// Mutations, each its own: the loader not refusing a `{field}` cell without `form` (the block-less document loads);
+// `row` bound for the whole of a block's row (its label reading `row` loads).
 TEST_CASE("fixed grid: the loader refuses a field cell without a form, a key with a slash and a block row's label "
           "reading its row",
           "[ui][grid][fixed]") {
@@ -2309,9 +2310,13 @@ TEST_CASE("fixed grid: the loader refuses a field cell without a form, a key wit
               .find("a cell that edits a field names the form's") != std::string::npos);
     CHECK(refusal(replaced(kFixedGridDocument, R"("key":"count")", R"("key":"1/mass")")).find("holds a `/`") !=
           std::string::npos);
-    CHECK(refusal(replaced(kFixedGridDocument, R"({"key":"mass","label":"Mass")",
-                           R"({"key":"mass","label":{"ref":"row.mass"})"))
-              .find("row") != std::string::npos);
+    // The refusal is the label's: `row` is unbound there.
+    auto const labelRow = ui::loadDocumentText(
+        replaced(kFixedGridDocument, R"({"key":"mass","label":"Mass")", R"({"key":"mass","label":{"ref":"row.mass"})"),
+        ui::LoadOptions{.catalog = h.session.options().catalog});
+    REQUIRE_FALSE(labelRow.has_value());
+    CAPTURE(labelRow.error().message());
+    CHECK(labelRow.error().message().find("/layoutRows/3/rows/0/label") != std::string::npos);
     CHECK(refusal(replaced(kFixedGridDocument, R"("max":{"text":"none"})", R"("max":{"text":"none","unit":"g"})"))
               .find("edits no field") != std::string::npos);
 }
@@ -2340,6 +2345,50 @@ TEST_CASE("fixed grid: a grid of values and texts needs no form", "[ui][grid][fi
         texts.push_back(h.backend.prop(cell, "text"));
     }
     CHECK(texts == std::vector<std::string>{"Count", "3"});
+}
+
+// A row whose weight is entered in g.
+std::vector<std::variant<ui::FixedRow, ui::FixedBlock>> weightInGrams() {
+    ui::FixedCell weight = fieldCell("limits.weight");
+    weight.unit = [](forms::RowState const*) { return std::optional<std::string>{"g"}; };
+    return {fixedRow("weight", {{"min", std::move(weight)}})};
+}
+
+// Mutation: the unit given again as loaded whatever unit the field already holds (each grid's switch moves the load
+// count, which the other takes for a load: the count runs away, or the load never returns).
+TEST_CASE("fixed grid: two grids with unit overlays over one form settle after a load", "[ui][grid][fixed]") {
+    FixedGridFixture f{R"({"limits":{}})", weightInGrams(), fixedColumns({"min"})};
+    ui::FixedGridSource const other{f.h.rt, f.form.get(), weightInGrams(), fixedColumns({"min"}), ui::FormatContext{}};
+    f.h.settle();
+    forms::FieldState& weight = f.form->field("limits.weight");
+    CHECK(weight.spec().units.at(weight.unit().peek()).id == "g");
+    std::uint64_t const before = f.form->loadGeneration();
+    f.form->prefill(R"({"limits":{}})");   // the load sets the unit back to kg; one grid gives g again
+    f.h.settle();
+    CHECK(weight.spec().units.at(weight.unit().peek()).id == "g");
+    CHECK(f.form->loadGeneration() - before <= 2);   // the load, and one switch as loaded
+    CHECK_FALSE(f.form->modified("limits.weight"));
+}
+
+// Mutations, each its own: the units forgotten at a move of the load count whether or not the user changed the field
+// (the user's kg is switched back to g); the units never forgotten at a load (the prefill's kg stays).
+TEST_CASE("fixed grid: a unit the user picks survives another field's load, and a load gives the overlay's unit again",
+          "[ui][grid][fixed]") {
+    FixedGridFixture f{R"({"limits":{}})", overlaidCells(), fixedColumns({"min", "max"})};
+    forms::FieldState& weight = f.form->field("limits.weight");
+    REQUIRE(weight.spec().units.at(weight.unit().peek()).id == "g");
+    weight.switchUnit(0);   // the user picks kg
+    f.h.settle();
+    REQUIRE(f.form->modified("limits.weight"));
+    std::uint64_t const before = f.form->loadGeneration();
+    f.form->refill(R"({"specimens":[{}]})");   // loads another field: the load count moves
+    f.h.settle();
+    REQUIRE(f.form->loadGeneration() != before);
+    CHECK(weight.spec().units.at(weight.unit().peek()).id == "kg");
+    f.form->prefill(R"({"limits":{}})");   // a load: the field is the record's again, in the overlay's unit
+    f.h.settle();
+    CHECK(weight.spec().units.at(weight.unit().peek()).id == "g");
+    CHECK_FALSE(f.form->modified("limits.weight"));
 }
 
 }  // namespace

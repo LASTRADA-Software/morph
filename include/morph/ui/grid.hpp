@@ -1293,7 +1293,9 @@ namespace detail {
 ///        since the overlay is read again on every change and a unit the user then picks in the editor must stay. It
 ///        switches as the editor does, converting the draft; no unit, or one the field does not have, after a unit
 ///        restores the field's entry unit. The first unit a field is given is part of how it is shown as loaded: it
-///        goes to @p asLoaded, so the cell is not modified by it and a revert returns to it.
+///        goes to @p asLoaded, so the cell is not modified by it and a revert returns to it. A unit the field already
+///        holds is not switched to: nothing is written, so applying the overlay again after a load writes nothing
+///        and moves no load count that another grid follows.
 /// @param applied  The unit the overlay last gave each field, by path; updated.
 /// @param state    The field.
 /// @param unit     The unit the overlay gives now, an id of the field's units; nothing for none.
@@ -1312,6 +1314,9 @@ inline void applyUnitOverlay(std::unordered_map<std::string, std::optional<std::
     auto const found = unit ? std::ranges::find(units, *unit, &forms::UnitOption::id) : units.end();
     std::size_t const index =
         found != units.end() ? static_cast<std::size_t>(found - units.begin()) : state.spec().entryUnit;
+    if (state.unit().peek() == index) {
+        return;
+    }
     if (first) {
         asLoaded.emplace_back(&state, index);
     } else {

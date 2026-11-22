@@ -1424,7 +1424,8 @@ public:
     }
 
     /// @brief A count that moves whenever what a field held when the form was loaded is recorded again: a load, a
-    ///        revert, and a switch of units as loaded. Tracked.
+    ///        `refill` that loads a field, a submission that ends a field's edit, a switch of units as loaded and a
+    ///        round of derived values. A revert restores the record and does not move it. Tracked.
     /// @return The count.
     [[nodiscard]] std::uint64_t loadGeneration() const { return _loadGeneration.get(); }
 
