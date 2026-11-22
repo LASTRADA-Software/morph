@@ -1192,6 +1192,45 @@ TEST_CASE("grid: the cell menu offers copy and filter before the grid's own entr
     CHECK(g.h.backend.prop(g.table, "filtered") == "[]");
 }
 
+// A grid inside a locale scope bound to state: a change of the locale mounts the scope's children again, the grid's
+// element kept.
+constexpr std::string_view kRemountGridDocument = R"({"vocab":"ui/1","id":"specimens",
+  "models":{"sample":{"type":"Lims_SampleModel"}},
+  "state":{"loc":{"init":"en"}},
+  "view":{"kind":"column","children":[
+    {"kind":"form","id":"rec","model":"sample","action":"Lims_RecordSpecimens","submit":"explicit"},
+    {"kind":"button","testId":"toDe","label":"de","onClick":[{"set":"loc","value":"de"}]},
+    {"kind":"localeScope","locale":{"ref":"loc"},"children":[
+      {"kind":"table","id":"grid","testId":"grid","form":"rec","field":"specimens",
+       "columns":[{"id":"mass","field":"mass"},{"id":"note","field":"note"}]}]}]}})";
+
+// Mutation: gridTableNode not setting the mount's slots again (after the remount the cell menu's copy writes nothing,
+// no column is filterable, and the cell menu offers no filter entries).
+TEST_CASE("grid: copy, the cell menu and the filter buttons outlive a remount", "[ui][grid][interpreter]") {
+    ui::testing::TableHarness h;
+    ui::testing::addAction(h, "Lims_RecordSpecimens", std::string{morph::test::grid::kSpecimens},
+                           ui::ActionInfo{.modelType = "Lims_SampleModel"});
+    auto const screen = h.mount(kRemountGridDocument);
+    forms::FormSession& form = *ui::testing::elementOf(*screen, "rec").form;
+    form.prefill(R"({"sampleId":4,"specimens":[{"note":"a"},{"note":"b"}]})");
+    h.settle();
+    int const before = h.byTestId("Table", "grid");
+    CHECK(h.backend.prop(before, "columns").find("filterable=true") != std::string::npos);
+    h.backend.click(h.byTestId("Button", "toDe"));
+    h.settle();
+    int const table = h.byTestId("Table", "grid");
+    REQUIRE(table != before);   // the table was mounted again
+    CHECK(h.backend.prop(table, "columns").find("filterable=true") != std::string::npos);
+    std::vector<std::string> labels;
+    for (ui::MenuEntry const& shown : h.backend.rightClickCell(table, ui::Key{std::int64_t{1}}, 1)) {
+        labels.push_back(shown.label);
+    }
+    CHECK(std::ranges::find(labels, "Filter by this value") != labels.end());
+    h.backend.chooseCellMenu(table, ui::Key{std::int64_t{1}}, 1, {"Copy with headers"});
+    h.settle();
+    CHECK(h.backend.clipboardText() == "note\na");
+}
+
 constexpr std::string_view kMenuGridDocument = R"({"vocab":"ui/1","id":"specimens",
   "models":{"sample":{"type":"Lims_SampleModel"}},
   "state":{"picked":{"init":null}},
