@@ -2246,3 +2246,51 @@ TEST_CASE("spans: a span across columns refuses a later span over the cells it c
     ui::detail::ResolvedSpans const moved = ui::detail::resolveRowSpans(rows, 4, placeOf);
     CHECK(moved.effective.at(1) == std::vector<ui::RowSpan>{ui::RowSpan{.column = 1, .rows = 2}});
 }
+
+// Mutation: a summary row's slot pooled for the rows that enter (the data row given its stack records summary and is
+// drawn as one).
+TEST_CASE("summary: a data row that enters as a summary row leaves is drawn as a data row", "[ui][mount][summary]") {
+    Owner owner;
+    Runtime runtime{owner};
+    RecordingBackend backend;
+    auto const data = std::make_shared<FakeRows>(200, 1, runtime.owner());
+    auto const decorator = std::make_shared<ui::SummaryRows>(
+        data, std::vector<ui::SummarySpec>{{.key = "head", .top = true}}, std::vector<ui::SummarySpec>{},
+        ui::SummaryRows::Runs{});
+    ui::TableSource mounted;
+    mounted.rows = decorator;
+    mounted.cellView = [](std::size_t, Signal<Value> const& row) {
+        return ui::text({.text = [&row] { return fieldText(row.get(), "c0"); }});
+    };
+    mounted.rowView = [](Signal<Value> const& row) {
+        ui::TableRowLook look;
+        look.summary = row.peek().field(ui::kSummaryField) != nullptr;
+        return look;
+    };
+    std::vector<Key> activated;
+    ui::TableOptions options;
+    options.selectionMode = ui::SelectionMode::Single;
+    options.onActivate = [&activated](Key key) { activated.push_back(std::move(key)); };
+    ui::Mounted const view{runtime, backend,
+                           ui::table({ui::TableColumn{.id = "c0", .label = "C0"}}, std::move(mounted), std::move(options))};
+    owner.runAll();
+    int const table = backend.all("Table").front();
+    backend.scrollTable(table, 0, 30);
+    owner.runAll();
+    REQUIRE(backend.prop(rowWith(backend, table, "\"\x1Fsummary:head\""), "summary") == "true");
+    backend.scrollTable(table, 120, 30);
+    owner.runAll();
+    std::size_t data_rows = 0;
+    for (int const row : backend.children(table)) {
+        std::string const key = backend.prop(row, "rowKey");
+        if (key.empty() || key.front() == '"') {
+            continue;
+        }
+        ++data_rows;
+        CHECK(backend.prop(row, "summary").empty());
+    }
+    CHECK(data_rows > 0);
+    backend.activateRow(table, Key{std::int64_t{125}});
+    owner.runAll();
+    CHECK(activated == std::vector<Key>{Key{std::int64_t{125}}});
+}

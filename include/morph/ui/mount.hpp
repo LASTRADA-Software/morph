@@ -2763,6 +2763,8 @@ private:
             Widget* widget = nullptr;
             reactive::Signal<Value>* row = nullptr;
             bool heading = false;
+            // Whether the row is a summary row (`TableRowLook::summary`).
+            bool summary = false;
             Widget* headingWidget = nullptr;
             // The stack's children in their order, so a reorder knows where each is.
             std::vector<Widget*> children;
@@ -3181,6 +3183,7 @@ private:
             lookScope.make<std::shared_ptr<void const>>(look.keep);
         }
         table.widget->setRowKey(*slot.widget, *slot.key);
+        slot.summary = look.summary;
         if (look.summary) {
             table.widget->setRowSummary(*slot.widget);
         }
@@ -3446,11 +3449,12 @@ private:
             }
         }
         // Slots no row kept, for the rows that enter: keyed ones only for a keyed row, so no stack keeps a key it no
-        // longer shows; a placeholder's for either.
+        // longer shows; a placeholder's for either. A heading's or a summary row's slot is never given another row:
+        // the backend has no call that makes a row a data row again, so it goes, and the entering row gets a new one.
         std::vector<std::size_t> freeKeyed;
         std::vector<std::size_t> freePlain;
         for (std::size_t at = old.size(); at-- > 0;) {
-            if (!taken.at(at)) {
+            if (!taken.at(at) && !old.at(at).heading && !old.at(at).summary) {
                 (old.at(at).key ? freeKeyed : freePlain).push_back(at);
             }
         }
