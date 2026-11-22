@@ -900,12 +900,12 @@ MorphWidget {
         }
     }
 
-    // The data rows the user can see, in order: a heading row is never current, selected or counted.
+    // The data rows the user can see, in order: a heading or summary row is never current, selected or counted.
     function shownRows(): var {
         const shown = []
         for (let i = 0; i < root.rowsHolder.children.length; ++i) {
             const row = root.rowsHolder.children[i]
-            if (row.visible && row.table === root && !row.heading)
+            if (row.visible && row.table === root && !row.heading && !row.summary)
                 shown.push(row)
         }
         return shown

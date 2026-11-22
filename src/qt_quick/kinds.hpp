@@ -811,6 +811,8 @@ public:
     [[nodiscard]] static bool marked(ItemBase const& row);
     /// Whether a row is a group heading.
     [[nodiscard]] static bool heading(ItemBase const& row);
+    /// Whether a row is never current, selected, counted or activated: a heading or a summary row.
+    [[nodiscard]] static bool passive(ItemBase const& row);
 
 protected:
     void adopted(ItemBase& child) override;
@@ -859,6 +861,8 @@ private:
     std::unordered_set<ui::Key> _existingKeys;
     // The same keys, in row order, for a range or Ctrl+A over rows that are not realized.
     std::vector<ui::Key> _existingOrder;
+    // The keys of the summary rows, which no selection, count or Ctrl+A takes in.
+    std::vector<ui::Key> _summaryKeys;
     std::function<void(std::size_t, std::size_t)> _onVisibleRangeChanged;
     std::function<void()> _onRetry;
     std::function<void(std::string)> _onStatusEntry;

@@ -2028,6 +2028,11 @@ first group that holds it, and a group left with fewer than two or more than 16 
 group's id, is dropped, with any filter on it. The column chooser lists the groups a user formed, each with
 "Remove group", which removes the group and any filter on it.
 
+**Drawing a group.** A group draws as a one-level heading on its own line above the column headers and below any
+header bands ([`editing.md`](editing.md#header-bands)), its label over its columns and its filter button at its
+end, while its columns stand together in the layout. It is not a band: a group whose columns the user moved apart
+is not split into runs as a band is.
+
 **The filter.** `GroupFilter` is the engine's filter over several columns, with a name, a quantifier, a mode
 and excludes:
 

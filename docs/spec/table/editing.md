@@ -408,8 +408,10 @@ parent's `columns`. A column belongs to at most one band per level.
   When the user moves or hides columns so that they are not, the band is drawn over each run of its columns that
   stands together, so a band never covers a column that is not its own. A band whose columns straddle the
   pinned edge is drawn as two parts, one pinned, one scrolling.
-- A band with no visible column is not drawn. A user does not form bands; a user-formed column group draws as a
-  band of one level, and so does a declared column group ([`table.md`](table.md#column-groups)).
+- A band with no visible column is not drawn. A user does not form bands. A column group, user-formed or declared
+  ([`table.md`](table.md#column-groups)), draws as a one-level heading on its own line below the bands, with its
+  filter button, over its columns while they stand together; it is not a band, and is not drawn over each run of
+  its columns.
 - A band's accessible name is read before each of its columns' headers: "Mass retained, sieve 4 mm".
 - Bands are windowed with their columns: a band exists for the columns in the column window.
 
