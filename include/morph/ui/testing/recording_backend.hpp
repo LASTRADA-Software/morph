@@ -2143,7 +2143,8 @@ public:
         return row.has_value() && _headings.contains(*row);
     }
 
-    /// @brief Records the row's property `rowSpans`: `column:rows` pairs joined by commas, `none` for an empty list.
+    /// @brief Records the row's property `rowSpans`: `column:rows` pairs joined by commas, a span across columns as
+    ///        `column:rowsxcolumns` (`0:2x3`), `none` for an empty list.
     /// @param row   One of this table's rows.
     /// @param spans The row's effective spans.
     /// @throws std::logic_error when @p row is not this table's child.
@@ -2155,8 +2156,22 @@ public:
         std::string text;
         for (RowSpan const& span : spans) {
             text += (text.empty() ? "" : ",") + std::to_string(span.column) + ":" + std::to_string(span.rows);
+            if (span.columns != 1) {
+                text += "x" + std::to_string(span.columns);
+            }
         }
         store().set(rowId, "rowSpans", text.empty() ? std::string{"none"} : text);
+    }
+
+    /// @brief Records the row's property `summary` (`"true"`).
+    /// @param row One of this table's rows.
+    /// @throws std::logic_error when @p row is not this table's child.
+    void setRowSummary(Widget& row) override {
+        int const rowId = store().idOf(row);
+        if (store().at(rowId).parent != id()) {
+            throw std::logic_error{"RecordingBackend: setRowSummary of a widget that is not this table's row"};
+        }
+        store().set(rowId, "summary", "true");
     }
 
     /// @brief Records the row's property `tone` (`none` for no tone).
@@ -2352,6 +2367,23 @@ public:
                        std::to_string(group.count) + (group.filtered ? ";filtered=true" : "");
             }));
     }
+
+    /// @brief Records the property `bands`: each run as `level:label|unit@first+count`, `;pinned` for a pinned run,
+    ///        joined by commas; `|unit` only for a run with a unit.
+    /// @param runs The runs.
+    void setBands(std::vector<BandRun> const& runs) override {
+        _bands = runs;
+        set("bands", formatList(runs, [](BandRun const& run) {
+                std::string const label =
+                    escape(run.label, [](char character) { return std::string_view{"=,[]:+;@|"}.contains(character); });
+                return std::to_string(run.level) + ":" + label + (run.unit.empty() ? "" : "|" + run.unit) + "@" +
+                       std::to_string(run.first) + "+" + std::to_string(run.count) + (run.pinned ? ";pinned" : "");
+            }));
+    }
+
+    /// @brief The runs `setBands` last gave.
+    /// @return They.
+    [[nodiscard]] std::vector<BandRun> const& bands() const noexcept { return _bands; }
 
     /// @brief Stores the handler `RecordingBackend::clickGroupFilter` calls.
     /// @param handler The handler.
@@ -3069,6 +3101,7 @@ private:
     std::function<void(std::size_t)> _onFilter;
     std::vector<std::size_t> _filtered;
     std::vector<TableColumnGroup> _groups;
+    std::vector<BandRun> _bands;
     std::function<void(std::size_t)> _onGroupFilter;
     std::function<void()> _onCopy;
     TableStatus _status;

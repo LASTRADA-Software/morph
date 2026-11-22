@@ -568,7 +568,7 @@ The headless reference backend and the test double for everything above the cont
   `axis` (Scroll); `tabs`, `selected`, `barShown` (Tabs); `open`, `title`, `description` (Dialog); `active`, `label` (Busy);
   `columns` (each `label:width`, then `;align=` and `;valign=` for a place other than the default),
   `selectionMode`, `selection` (the requested keys it marks, in the order requested),
-  `rowKey`, and `rowSpans` on a row (`column:rows` pairs joined by commas in column order, as `0:2,3:2`, `none` after a call with an empty list, and absent until the first call; Table); `mode`, `offset`, `value`, `pattern` (DateTimeInput); `range`, `value`
+  `rowKey`, and `rowSpans` on a row (`column:rows` pairs joined by commas in column order, as `0:2,3:2`, a span across columns as `column:rowsxcolumns`, as `0:2x3`, `none` after a call with an empty list, and absent until the first call; Table), `summary` (`true`) on a summary row, and `bands` on the table (each run `level:label|unit@first+count`, `;pinned` for a pinned run, `|unit` only with a unit); `mode`, `offset`, `value`, `pattern` (DateTimeInput); `range`, `value`
   (Slider); `mode`, `path` (FilePicker); `tone`, `text`, `spans`, `actionLabel`, `dismissible` (Banner);
   `tone`, `text`, `icon`, `style`, and `removable` (the remove control's name) of a removable one (Badge); `value`, `label` (Progress); `steps`, `current` (Steps); `items`
   `captions` and `captionWidth` (KeyValue); `title`, `text`, `icon`, `actionLabel` (EmptyState); `side`, `open`, `title`, `description` (Drawer);

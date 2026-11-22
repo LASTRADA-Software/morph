@@ -13,6 +13,7 @@
 #include <map>
 #include <memory>
 #include <morph/forms/engine/field_model.hpp>
+#include <morph/table/bands.hpp>
 #include <morph/table/filter.hpp>
 #include <morph/table/query.hpp>
 #include <morph/ui/control_shape.hpp>
@@ -295,7 +296,7 @@ constexpr std::array<KeySpec, 7> kForEachKeys = {{{"rows", Shape::Expr, {}, kReq
                                                   {"divided", Shape::Flag},
                                                   {"children", Shape::Nodes, {}, kInner}}};
 /// @brief The keys of `table`.
-constexpr std::array<KeySpec, 47> kTableKeys = {{{"rows", Shape::Expr},
+constexpr std::array<KeySpec, 49> kTableKeys = {{{"rows", Shape::Expr},
                                                  {"form", Shape::Text},
                                                  {"field", Shape::Text},
                                                  {"enterMoves", Shape::Text},
@@ -341,7 +342,9 @@ constexpr std::array<KeySpec, 47> kTableKeys = {{{"rows", Shape::Expr},
                                                  {"empty", Shape::Nodes},
                                                  {"cellMenu", Shape::Parts, "menuItem", kInner},
                                                  {"headerMenu", Shape::Parts, "menuItem"},
-                                                 {"headerEnabled", Shape::Condition}}};
+                                                 {"headerEnabled", Shape::Condition},
+                                                 {"bands", Shape::Parts, "band"},
+                                                 {"summaries", Shape::Parts, "summary"}}};
 /// @brief The keys of a `table` column part; `tone` and `tooltip` are read in the row's scope.
 constexpr std::array<KeySpec, 29> kColumnKeys = {{{"id", Shape::Name},
                                                   {"field", Shape::Text},
@@ -374,7 +377,7 @@ constexpr std::array<KeySpec, 29> kColumnKeys = {{{"id", Shape::Name},
                                                   {"placeholder", Shape::Expr}}};
 /// @brief The keys of a form field overlay's `grid` part: the keys a `table` over a `form` takes beyond its `form` and
 ///        `field`, its columns, walk and activation, its layout, menus and filters.
-constexpr std::array<KeySpec, 14> kGridPartKeys = {{{"columns", Shape::Parts, "column"},
+constexpr std::array<KeySpec, 16> kGridPartKeys = {{{"columns", Shape::Parts, "column"},
                                                     {"enterMoves", Shape::Text},
                                                     {"walk", Shape::Text},
                                                     {"appendRows", Shape::Flag},
@@ -387,14 +390,29 @@ constexpr std::array<KeySpec, 14> kGridPartKeys = {{{"columns", Shape::Parts, "c
                                                     {"cellMenu", Shape::Parts, "menuItem", kInner},
                                                     {"headerMenu", Shape::Parts, "menuItem"},
                                                     {"headerEnabled", Shape::Condition},
-                                                    {"testId", Shape::Text}}};
+                                                    {"testId", Shape::Text},
+                                                    {"bands", Shape::Parts, "band"},
+                                                    {"summaries", Shape::Parts, "summary"}}};
 /// @brief The keys of a `table` column group part: the group's id, its label and its columns' ids, a literal list.
 constexpr std::array<KeySpec, 3> kColumnGroupKeys = {
     {{"id", Shape::Name, {}, kRequired}, {"label", Shape::Expr}, {"columns", Shape::Expr, {}, kRequired}}};
 /// @brief The keys of a `table` group part: the value its rows are grouped by, and the heading drawn before each
-///        group, both read in the row scope.
-constexpr std::array<KeySpec, 2> kTableGroupKeys = {
-    {{"by", Shape::Expr, {}, kInner | kRequired}, {"heading", Shape::Nodes, {}, kInner | kRequired}}};
+///        group, both read in the row scope, and the summary rows drawn after each group.
+constexpr std::array<KeySpec, 3> kTableGroupKeys = {{{"by", Shape::Expr, {}, kInner | kRequired},
+                                                     {"heading", Shape::Nodes, {}, kInner | kRequired},
+                                                     {"summaries", Shape::Parts, "summary"}}};
+/// @brief The keys of a header band part: its text, its unit, its columns' ids (a literal list) and the bands one
+///        level down.
+constexpr std::array<KeySpec, 4> kBandKeys = {{{"label", Shape::Text},
+                                               {"unit", Shape::Text},
+                                               {"columns", Shape::Expr, {}, kRequired},
+                                               {"bands", Shape::Parts, "band"}}};
+/// @brief The keys of a summary row part: its key, its label, where it is drawn, and its cells' expressions by column
+///        id, read in a scope with `rows` and `column`.
+constexpr std::array<KeySpec, 4> kSummaryKeys = {{{"key", Shape::Text, {}, kRequired},
+                                                  {"label", Shape::Expr},
+                                                  {"position", Shape::Text},
+                                                  {"cells", Shape::ExprRecord}}};
 /// @brief The keys of `dateTimeInput`.
 constexpr std::array<KeySpec, 6> kDateTimeKeys = {{{"value", Shape::Expr},
                                                    {"mode", Shape::Expr},
@@ -566,7 +584,7 @@ constexpr std::array<KeySpec, 1> kDragKeys = {{{"payload", Shape::Expr, {}, kReq
 constexpr std::array<KeySpec, 2> kDropKeys = {{{"accepts", Shape::Expr}, {"onDrop", Shape::Commands}}};
 
 /// @brief The view node kinds of `ui/1` and the part kinds inside them.
-constexpr std::array<KindSpec, 63> kKinds = {{
+constexpr std::array<KindSpec, 65> kKinds = {{
     {"text", kTextKeys, kField},
     {"button", kButtonKeys},
     {"textInput", kTextInputKeys, kField | kWritable, kInputValues},
@@ -617,6 +635,8 @@ constexpr std::array<KindSpec, 63> kKinds = {{
     {"fieldGrid", kGridPartKeys, kPart},
     {"group", kTableGroupKeys, kPart},
     {"columnGroup", kColumnGroupKeys, kPart},
+    {"band", kBandKeys, kPart},
+    {"summary", kSummaryKeys, kPart},
     {"track", kTrackKeys, kPart},
     {"action", kActionKeys, kPart},
     {"a11y", kA11yKeys, kPart},
@@ -3099,8 +3119,18 @@ private:
                     context.bindings.emplace_back("value", Type::any());
                 }
             }
+            // A summary's cells read the records of the rows it summarises as `rows`, and their column's id as
+            // `column`.
+            if (key == "summaries") {
+                context.bindings.emplace_back("rows", Type::any());
+                context.bindings.emplace_back("column", Type::of(TypeKind::String));
+            }
             // A grid's column reads its row's record as `row`: a display column's `value`, and an edit column's `field`
             // expression and overlays.
+            // A grid's group reads its row's record as `row` in its `by`, as its columns do.
+            if (key == "group" && node.kind == "table" && !node.name("form").empty()) {
+                context.bindings.emplace_back("row", Type::any());
+            }
             if (key == "columns" && (node.kind == "fieldGrid" || (node.kind == "table" && !node.name("form").empty()))) {
                 context.bindings.emplace_back("row", Type::any());
                 context.gridColumns = true;
@@ -3283,6 +3313,8 @@ private:
             checkTablePaging(node);
             checkTableSortBound(node);
             checkTableConfigurable(node);
+            checkBandParts(node);
+            checkSummaryParts(node);
             checkTableGroup(node);
             checkColumnGroups(node);
             checkRowsTableKeys(node);
@@ -3342,6 +3374,10 @@ private:
         }
         if (part.flag("appendRows") && part.flag("rowsFixed")) {
             refuse(pointerAppend(part.path, "appendRows"), "a grid with `rowsFixed` adds no rows; drop `appendRows`");
+        }
+        if (part.kind == "fieldGrid") {
+            checkBandParts(part);
+            checkSummaryParts(part);
         }
         for (DocNodePtr const& column : part.partList("columns")) {
             if (column->name("field").empty() && column->prop("field") == nullptr && column->prop("value") == nullptr) {
@@ -3518,6 +3554,102 @@ private:
             if (!named.insert(*columnId).second) {
                 refuse(where, "the sort names `" + *columnId + "` twice");
             }
+        }
+    }
+
+    // A band part as `BandInfo`: its label, unit, literal list of column ids and the bands one level down.
+    // NOLINTNEXTLINE(misc-no-recursion): a band's bands are bands one level down.
+    static table::BandInfo bandOf(DocNode const& part) {
+        table::BandInfo band{.label = std::string{part.name("label")}, .unit = std::string{part.name("unit")},
+                             .columns = {}, .bands = {}};
+        ExprPtr const members = part.prop("columns");
+        ValueList const* const list =
+            members != nullptr && members->kind == ExprKind::Literal ? members->literal.asList() : nullptr;
+        if (list == nullptr) {
+            refuse(pointerAppend(part.path, "columns"), "a band's `columns` is a literal list of its columns' ids");
+        }
+        for (Value const& member : *list) {
+            std::string const* const id = member.asString();
+            if (id == nullptr) {
+                refuse(pointerAppend(part.path, "columns"), "a band's `columns` is a literal list of its columns' ids");
+            }
+            band.columns.push_back(*id);
+        }
+        for (DocNodePtr const& child : part.partList("bands")) {
+            band.bands.push_back(bandOf(*child));
+        }
+        return band;
+    }
+
+    // Header bands: nested at most three levels, each over columns of the table, a child over its parent's columns
+    // and a column in one band per level (`table::bandRefusal`). A model's table names its columns in its
+    // description, so only a table that declares its column parts has its ids checked here.
+    static void checkBandParts(DocNode const& node) {
+        auto const parts = node.partList("bands");
+        if (parts.empty()) {
+            return;
+        }
+        std::vector<table::BandInfo> bands;
+        for (DocNodePtr const& part : parts) {
+            bands.push_back(bandOf(*part));
+        }
+        std::vector<std::string> known;
+        if (node.name("model").empty() && node.prop("columns") == nullptr) {
+            for (DocNodePtr const& column : node.partList("columns")) {
+                known.push_back(column->id);
+            }
+        }
+        if (std::optional<std::string> const refused = table::bandRefusal(bands, known)) {
+            refuse(pointerAppend(node.path, "bands"), *refused);
+        }
+    }
+
+    // Summary rows, on a table and on its group part: a summary is a feature of a table over held rows, so a
+    // model-backed table refuses both. Each has a key, unique in its list, a `position` of `bottom` or `top`, and cells
+    // named by the table's column ids.
+    static void checkSummaryParts(DocNode const& node) {
+        bool const modelBacked = !node.name("model").empty();
+        auto const check = [&node, modelBacked](std::span<DocNodePtr const> summaries, std::string const& where) {
+            if (summaries.empty()) {
+                return;
+            }
+            if (modelBacked) {
+                refuse(where, "a summary row summarises rows the client holds; a model-backed table refuses "
+                              "`summaries`, as it refuses `group`");
+            }
+            if (node.prop("rows") != nullptr) {
+                refuse(where, "`summaries` are drawn on a grid of a form; a table over `rows` draws none yet");
+            }
+            std::set<std::string, std::less<>> keys;
+            auto const columns = node.partList("columns");
+            for (DocNodePtr const& summary : summaries) {
+                std::string const key{summary->name("key")};
+                if (key.empty() || !keys.insert(key).second) {
+                    refuse(pointerAppend(summary->path, "key"),
+                           key.empty() ? std::string{"a summary names its `key`"}
+                                       : "the summary `" + key + "` is declared twice");
+                }
+                std::string_view const position = summary->name("position");
+                if (!position.empty() && position != "bottom" && position != "top") {
+                    refuse(pointerAppend(summary->path, "position"), "a summary's `position` is `bottom` or `top`");
+                }
+                if (node.prop("columns") != nullptr || columns.empty()) {
+                    continue;
+                }
+                for (DocNodePtr const& cells : summary->partList("cells")) {
+                    for (auto const& [column, expr] : cells->props) {
+                        static_cast<void>(expr);
+                        if (std::ranges::none_of(columns, [&column](DocNodePtr const& part) { return part->id == column; })) {
+                            refuse(pointerAppend(cells->path, column),
+                                   "a summary's cells are named by the table's column ids; `" + column + "` is not one");
+                        }
+                    }
+                }
+            }
+        };
+        check(node.partList("summaries"), pointerAppend(node.path, "summaries"));
+        for (DocNodePtr const& group : node.partList("group")) {
+            check(group->partList("summaries"), pointerAppend(group->path, "summaries"));
         }
     }
 

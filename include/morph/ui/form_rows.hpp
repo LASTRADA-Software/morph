@@ -13,6 +13,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <functional>
+#include <map>
 #include <memory>
 #include <optional>
 #include <unordered_map>
@@ -166,10 +167,15 @@ public:
     /// @param keys    The rows' keys.
     /// @param cells   The rows' cells, one vector per row.
     /// @param records The rows' records.
+    /// @param runs    Each run's heading record, in the array's order; none for rows that are not grouped.
     FormRowsSnapshot(std::size_t columns, std::vector<table::RowId> keys, std::vector<std::vector<table::Cell>> cells,
-                     std::vector<Value> records)
+                     std::vector<Value> records, std::vector<Value> runs = {})
         // Parentheses for the records: braces would make a list of one value holding them all.
-        : _columns{columns}, _keys{std::move(keys)}, _cells{std::move(cells)}, _records(std::move(records)) {}
+        : _columns{columns},
+          _keys{std::move(keys)},
+          _cells{std::move(cells)},
+          _records(std::move(records)),
+          _runs(std::move(runs)) {}
 
     /// @brief How many rows.
     /// @return The count.
@@ -205,11 +211,16 @@ public:
     /// @return They, in the array's order.
     [[nodiscard]] std::vector<table::RowId> const& keys() const noexcept { return _keys; }
 
+    /// @brief Each run's heading record.
+    /// @return They, by run index.
+    [[nodiscard]] std::vector<Value> const& runs() const noexcept { return _runs; }
+
 private:
     std::size_t _columns;
     std::vector<table::RowId> _keys;
     std::vector<std::vector<table::Cell>> _cells;
     std::vector<Value> _records;
+    std::vector<Value> _runs;
 };
 
 }  // namespace detail
@@ -346,6 +357,33 @@ public:
         return found == _byKey.end() ? nullptr : found->second;
     }
 
+    /// @brief Groups the rows by @p by: adds the column `kGroupRunColumn` (`Integer`, laid out by no grid), whose cell
+    ///        is a row's run index, runs counted over the array's order, a new run where `by` differs from the
+    ///        previous row's (`detail::sameElement`). Notifies `Reset`.
+    ///
+    /// `by` is read untracked, whenever the rows are taken in.
+    /// @param by A row's group value; empty: no groups, and the column goes.
+    void setGroup(std::function<Value(forms::RowState const&)> by) {
+        bool const listed = _group != nullptr;
+        _group = std::move(by);
+        if (_group && !listed) {
+            _columns.push_back(table::ColumnInfo{.id = std::string{kGroupRunColumn}, .kind = table::ColumnKind::Integer});
+            _members.emplace_back();
+            _perRow.emplace_back();
+        } else if (!_group && listed) {
+            _columns.pop_back();
+            _members.pop_back();
+            _perRow.pop_back();
+        }
+        _held = build();
+        _listeners.notify(table::RowChange{.kind = table::ChangeKind::Reset, .rows = {}});
+    }
+
+    /// @brief Each run's heading record, `{key, count, first, last, items}` with its heading key in
+    ///        `detail::kGroupHeadingField`, by run index, as of the rows last taken in.
+    /// @return They; none while the rows are not grouped.
+    [[nodiscard]] std::span<Value const> runRecords() const noexcept { return _held->runs(); }
+
     /// @brief How many times the rows were read whole into a snapshot: once at construction and once per change taken
     ///        in, whatever reads the rows in between.
     /// @return The count.
@@ -433,11 +471,13 @@ private:
             std::vector<table::RowId> keys;
             std::vector<std::vector<table::Cell>> cells;
             std::vector<Value> records;
+            // The run column, while grouped, is the last; its cell is filled once the runs are known.
+            std::size_t const own = _group ? _columns.size() - 1 : _columns.size();
             for (auto const& row : _array->rows()) {
                 keys.emplace_back(static_cast<std::int64_t>(row->key()));
                 std::vector<table::Cell> rowCells;
                 rowCells.reserve(_columns.size());
-                for (std::size_t at = 0; at < _columns.size(); ++at) {
+                for (std::size_t at = 0; at < own; ++at) {
                     if (_perRow.at(at)) {
                         // A member per row: its kind varies, so the cell is text (`detail::perRowCell`).
                         forms::FieldState const* const member = row->field(_perRow.at(at)(*row));
@@ -459,9 +499,50 @@ private:
                 record.insert_or_assign(std::string{kGridKeyField}, Value{static_cast<std::int64_t>(row->key())});
                 records.emplace_back(std::move(record));
             }
+            std::vector<Value> runs;
+            if (_group) {
+                runs = groupRuns(records, cells);
+            }
             return std::make_shared<detail::FormRowsSnapshot const>(_columns.size(), std::move(keys), std::move(cells),
-                                                                    std::move(records));
+                                                                    std::move(records), std::move(runs));
         });
+    }
+
+    // The runs of the rows in the array's order: each row's run index appended to its cells, and each run's heading
+    // record. A heading's key is its run's key and its ordinal among the runs with an equal key, as a `rows` table's.
+    [[nodiscard]] std::vector<Value> groupRuns(std::vector<Value> const& records,
+                                               std::vector<std::vector<table::Cell>>& cells) const {
+        std::vector<Value> runs;
+        std::map<std::string, std::size_t, std::less<>> ordinals;
+        std::optional<Value> key;
+        ValueList items;
+        auto const close = [&] {
+            if (!key) {
+                return;
+            }
+            std::string const json = ui::detail::canonicalJson(*key);
+            Value const record = runRecord(*key, std::exchange(items, {}));
+            ValueRecord entry = *record.asRecord();
+            entry.insert_or_assign(std::string{detail::kGroupHeadingField},
+                                   Value{"\x1Fgroup:" + json + ":" + std::to_string(ordinals[json]++)});
+            runs.emplace_back(std::move(entry));
+        };
+        std::size_t index = 0;
+        for (auto const& row : _array->rows()) {
+            Value by = _group(*row);
+            if (key && !detail::sameElement(*key, by, UnitTable{})) {
+                close();
+                key.reset();
+            }
+            if (!key) {
+                key = std::move(by);
+            }
+            items.push_back(records.at(index));
+            cells.at(index).emplace_back(static_cast<std::int64_t>(runs.size()));
+            ++index;
+        }
+        close();
+        return runs;
     }
 
     // Tracks the rows and every member's draft; a change is taken in at the owner's next turn.
@@ -480,6 +561,7 @@ private:
     std::vector<table::ColumnInfo> _columns;
     std::vector<std::string> _members;
     std::vector<std::function<std::string(forms::RowState const&)>> _perRow;
+    std::function<Value(forms::RowState const&)> _group;
     std::shared_ptr<detail::FormRowsSnapshot const> _held;
     table::detail::Listeners _listeners;
     bool _watching = false;

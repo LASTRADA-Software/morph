@@ -1913,3 +1913,32 @@ TEST_CASE("tui grid: typing on a focused cell opens its editor, Enter commits an
     g.send(core::tui::test::specialKey(KeyCode::Tab));
     CHECK(g.screen.focusedComponent() == &g.afterInput->view());
 }
+
+// Mutation: the terminal table drawing the band over the declared columns' widths instead of the runs `setBands` gave
+// (the label starts over column 0).
+TEST_CASE("tui table: bands draw above the header", "[tui][table][bands]") {
+    Harness harness{60, 6};
+    auto table = harness.make<TableImpl>(nullptr);
+    table->setColumns({{.label = "Name", .width = ui::Sizing::fixed(6)},
+                       {.label = "M8", .width = ui::Sizing::fixed(8)},
+                       {.label = "M4", .width = ui::Sizing::fixed(8)},
+                       {.label = "M2", .width = ui::Sizing::fixed(8)}});
+    auto row = harness.make<StackImpl>(table.get(), ui::Axis::Horizontal);
+    std::vector<std::unique_ptr<TextImpl>> cells;
+    for (std::string const text : {"a", "1", "2", "3"}) {
+        cells.push_back(harness.make<TextImpl>(row.get()));
+        cells.back()->setText(text);
+    }
+    table->setRowKey(*row, key(1));
+    table->setBands({{.level = 0, .label = "Mass retained", .unit = "g", .first = 1, .count = 3, .pinned = false}});
+    Rows const drawn = harness.draw();
+    REQUIRE(drawn.size() >= 2);
+    std::size_t const m8 = drawn.at(1).find("M8");
+    REQUIRE(m8 != std::string::npos);
+    CHECK(drawn.at(0).find("Mass retained [g]") == m8);   // over columns 1 to 3, not over Name
+    CHECK(drawn.at(1).find("Name") != std::string::npos);
+    table->setBands({});
+    CHECK(harness.draw().at(0).find("Name") != std::string::npos);   // no band line once none is given
+    cells.clear();
+    row.reset();
+}

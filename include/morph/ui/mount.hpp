@@ -258,6 +258,149 @@ struct ColumnWindow {
     window.trailing = extents.totalWidth() - extents.offsetOf(std::max(first, last));
     return window;
 }
+
+namespace detail {
+
+// Appends the runs of @p bands, at @p level, and of their children one level down.
+// NOLINTNEXTLINE(misc-no-recursion): a band's children are bands one level down.
+inline void appendBandRuns(std::span<table::BandInfo const> bands, std::span<std::string const> visible,
+                           std::size_t pinned, std::size_t level, std::vector<BandRun>& out) {
+    for (table::BandInfo const& band : bands) {
+        std::optional<std::size_t> first;
+        std::size_t count = 0;
+        auto const close = [&] {
+            if (first) {
+                out.push_back(BandRun{.level = level,
+                                      .label = band.label,
+                                      .unit = band.unit,
+                                      .first = *first,
+                                      .count = count,
+                                      .pinned = *first < pinned});
+            }
+            first.reset();
+            count = 0;
+        };
+        for (std::size_t at = 0; at < visible.size(); ++at) {
+            bool const own = std::ranges::contains(band.columns, visible[at]);
+            // A run ends at a foreign column, and at the pinned edge.
+            if (!own || (at == pinned && first)) {
+                close();
+            }
+            if (own) {
+                first = first.value_or(at);
+                ++count;
+            }
+        }
+        close();
+        appendBandRuns(band.bands, visible, pinned, level + 1, out);
+    }
+}
+
+// The bands enclosing a column, outermost first.
+// NOLINTNEXTLINE(misc-no-recursion): a band's children are bands one level down.
+inline void enclosingBands(std::span<table::BandInfo const> bands, std::string_view columnId,
+                           std::vector<table::BandInfo const*>& out) {
+    for (table::BandInfo const& band : bands) {
+        if (std::ranges::contains(band.columns, columnId)) {
+            out.push_back(&band);
+            enclosingBands(band.bands, columnId, out);
+            return;
+        }
+    }
+}
+
+}  // namespace detail
+
+/// @brief The parts a table's header bands are drawn as over a layout: one run per maximal run of a band's columns
+///        that stand together, split at the pinned edge.
+///
+/// A band whose columns the layout keeps side by side gives one run; one whose columns were moved apart gives one
+/// per run that stands together, so no run covers a column that is not the band's; a band with no visible column
+/// gives none.
+/// @param bands   The bands, outermost first.
+/// @param visible The visible column ids, in layout order.
+/// @param pinned  How many of the leading visible columns are pinned.
+/// @return The runs, by level from 0 (the outermost), each level left to right; positions are visible places.
+[[nodiscard]] inline std::vector<BandRun> bandRuns(std::span<table::BandInfo const> bands,
+                                                   std::span<std::string const> visible, std::size_t pinned) {
+    std::vector<BandRun> out;
+    detail::appendBandRuns(bands, visible, pinned, 0, out);
+    std::ranges::stable_sort(out, [](BandRun const& left, BandRun const& right) {
+        return left.level != right.level ? left.level < right.level : left.first < right.first;
+    });
+    return out;
+}
+
+/// @brief Whether a column's header shows its unit under the bands: not when a band enclosing it shows the same one.
+/// @param bands    The bands, outermost first.
+/// @param columnId The column's id.
+/// @param unit     The column's unit.
+/// @return `false` when @p unit is not empty and an enclosing band's unit equals it; `true` otherwise.
+[[nodiscard]] inline bool columnUnitShown(std::span<table::BandInfo const> bands, std::string_view columnId,
+                                          std::string_view unit) {
+    if (unit.empty()) {
+        return true;
+    }
+    std::vector<table::BandInfo const*> enclosing;
+    detail::enclosingBands(bands, columnId, enclosing);
+    return std::ranges::none_of(enclosing, [unit](table::BandInfo const* band) { return band->unit == unit; });
+}
+
+/// @brief A column header's accessible name under the bands: each enclosing band's label, outermost first, then the
+///        column's, joined by `", "` ("Mass retained, sieve 4 mm").
+/// @param bands    The bands, outermost first.
+/// @param columnId The column's id.
+/// @param label    The column's own name.
+/// @return The name; @p label alone for a column under no band.
+[[nodiscard]] inline std::string bandedHeaderName(std::span<table::BandInfo const> bands, std::string_view columnId,
+                                                  std::string_view label) {
+    std::vector<table::BandInfo const*> enclosing;
+    detail::enclosingBands(bands, columnId, enclosing);
+    std::string out;
+    for (table::BandInfo const* band : enclosing) {
+        out += band->label + ", ";
+    }
+    return out + std::string{label};
+}
+
+/// @brief A span part as a document or a fixed grid gives it: the cell of `column` covering `rows` rows downwards and
+///        `columns` columns to the right in the layout, itself included.
+struct CellSpan {
+    /// @brief The spanning cell's column id.
+    std::string column;
+    /// @brief How many rows the cell covers, its own included.
+    std::size_t rows = 1;
+    /// @brief How many columns the cell covers, its own included.
+    std::size_t columns = 1;
+};
+
+/// @brief How many visible columns a span covers once the layout is applied: its column, then each next visible column
+///        while it is the next declared one, up to `CellSpan::columns`. A span across a column the user moved away or
+///        hid is cut there.
+/// @param span     The span.
+/// @param declared Every column id, in declared order.
+/// @param visible  The visible column ids, in layout order.
+/// @return The count, from 1; 0 when the span's own column is not visible.
+[[nodiscard]] inline std::size_t cutColumns(CellSpan const& span, std::span<std::string const> declared,
+                                            std::span<std::string const> visible) {
+    auto const shown = std::ranges::find(visible, span.column);
+    if (shown == visible.end()) {
+        return 0;
+    }
+    auto const own = std::ranges::find(declared, span.column);
+    if (own == declared.end()) {
+        return 1;
+    }
+    auto const place = static_cast<std::size_t>(shown - visible.begin());
+    auto const order = static_cast<std::size_t>(own - declared.begin());
+    std::size_t count = 1;
+    while (count < span.columns && place + count < visible.size() && order + count < declared.size() &&
+           visible[place + count] == declared[order + count]) {
+        ++count;
+    }
+    return count;
+}
+
 namespace detail {
 
 /// @brief The site names a misuse in this layer is reported under, through the runtime's owner probe.
@@ -327,7 +470,7 @@ struct SpanRow {
                 out.refused.emplace_back(
                     site, row.name + ": column " + std::to_string(span.column) + " " + std::string{why});
             };
-            if (span.column >= columns || span.rows == 0 || row.heading || named.at(span.column)) {
+            if (span.column >= columns || span.rows == 0 || span.columns == 0 || row.heading || named.at(span.column)) {
                 refuse(site::kRowSpanInvalid, "is not a span of this table");
                 continue;
             }
@@ -336,7 +479,7 @@ struct SpanRow {
                 refuse(site::kRowSpanOverlap, "starts under another span");
                 continue;
             }
-            if (span.rows == 1) {
+            if (span.rows == 1 && span.columns == 1) {
                 continue;
             }
             std::size_t const end = index + span.rows;
@@ -2053,7 +2196,8 @@ private:
         } else if (virtualized) {
             resolved.effective.resize(rows.size());
             if (std::ranges::any_of(rows, [](SpanRow const& row) {
-                    return std::ranges::any_of(row.requested, [](RowSpan const& span) { return span.rows >= 2; });
+                    return std::ranges::any_of(row.requested,
+                                               [](RowSpan const& span) { return span.rows >= 2 || span.columns >= 2; });
                 })) {
                 resolved.refused.emplace_back(site::kRowSpanVirtualized, "the table is virtualized");
             }
@@ -2490,6 +2634,9 @@ private:
         std::size_t depth = 0;
         // The rows' spans, resolved over the realized rows; drawn only while every row is realized.
         SpanTable* spans = nullptr;
+        // The header bands, and the runs the backend was last told of them.
+        std::vector<table::BandInfo> bands;
+        std::optional<std::vector<BandRun>> bandsTold;
         // The rows the backend last reported in view; a count of 0 until it reports.
         VisibleRange range;
         // In view order; each widget is the container's child at its place.
@@ -2715,6 +2862,7 @@ private:
         for (std::size_t const place : places) {
             window.push_back(table.visible.at(place));
         }
+        tellBands(table, places, pinned);
         // The focused column stays realized whatever the scroll.
         if (table.focused && table.focusColumn < table.placeOf.size() && table.placeOf.at(table.focusColumn) &&
             !std::ranges::contains(window, table.focusColumn)) {
@@ -2743,6 +2891,43 @@ private:
                     tellVisible(table);
                 }
             }
+        }
+    }
+
+    // The band runs over the visible columns, cut to the column window's places: a band exists for the columns in the
+    // window. The backend is told only when they change.
+    static void tellBands(SourceTable& table, std::vector<std::size_t> const& places, std::size_t pinned) {
+        if (table.bands.empty()) {
+            return;
+        }
+        std::vector<std::string> ids;
+        ids.reserve(table.visible.size());
+        for (std::size_t const column : table.visible) {
+            ids.push_back(table.columns.at(column).id);
+        }
+        std::vector<bool> inWindow(table.visible.size(), false);
+        for (std::size_t const place : places) {
+            inWindow.at(place) = true;
+        }
+        std::vector<BandRun> runs;
+        for (BandRun const& run : bandRuns(table.bands, ids, pinned)) {
+            std::optional<std::size_t> first;
+            for (std::size_t at = run.first; at <= run.first + run.count; ++at) {
+                bool const shown = at < run.first + run.count && inWindow.at(at);
+                if (shown && !first) {
+                    first = at;
+                } else if (!shown && first) {
+                    BandRun part = run;
+                    part.first = *first;
+                    part.count = at - *first;
+                    runs.push_back(std::move(part));
+                    first.reset();
+                }
+            }
+        }
+        if (!table.bandsTold || *table.bandsTold != runs) {
+            table.widget->setBands(runs);
+            table.bandsTold = std::move(runs);
         }
     }
 
@@ -2832,6 +3017,9 @@ private:
             lookScope.make<std::shared_ptr<void const>>(look.keep);
         }
         table.widget->setRowKey(*slot.widget, *slot.key);
+        if (look.summary) {
+            table.widget->setRowSummary(*slot.widget);
+        }
         slot.heading = look.heading != nullptr;
         if (slot.heading) {
             Node const& heading = lookScope.make<Node>(look.heading);
@@ -3039,7 +3227,7 @@ private:
     // NOLINTNEXTLINE(readability-function-cognitive-complexity): rows, cells, the budget, focus and the reports.
     void realizeWindow(SourceTable& table, std::function<bool(std::int64_t)> const& updated) {
         TableRows& rows = *table.source.rows;
-        TableTotal const total = rows.total();
+        TableTotal const total = rows.mountedTotal();
         auto const count = static_cast<std::size_t>(std::max<std::int64_t>(total.rows, 0));
         refreshColumns(table, count);
         // A short table over a document's rows realizes every row. A windowed one realizes the rows in view and
@@ -3547,7 +3735,7 @@ private:
     // Moves focus as a key asks: by rows or columns, to an end of the row, or to the first or last row of the view.
     // A row not fetched takes focus as a placeholder, and the view scrolls to it.
     void moveFocus(SourceTable& table, FocusMove move) {
-        TableTotal const total = table.source.rows->total();
+        TableTotal const total = table.source.rows->mountedTotal();
         std::int64_t const last = std::max<std::int64_t>(total.rows - 1, 0);
         std::int64_t const page = std::max<std::int64_t>(static_cast<std::int64_t>(focusRangeOf(table).count), 1);
         std::int64_t index = table.focused ? table.focusIndex : 0;
@@ -3609,7 +3797,7 @@ private:
 
     // The view position of a key, scanning the view: a table selects cells only while its rows are all on the client.
     [[nodiscard]] static std::optional<std::size_t> viewRowOf(SourceTable const& table, Key const& key) {
-        TableTotal const total = table.source.rows->total();
+        TableTotal const total = table.source.rows->mountedTotal();
         for (std::int64_t index = 0; index < total.rows; ++index) {
             std::optional<TableRowRef> const ref = table.source.rows->row(index);
             if (ref && ref->key == key) {
@@ -3921,7 +4109,7 @@ private:
             return;
         }
         if (table.focused && !table.focusSearching) {
-            TableTotal const total = table.source.rows->total();
+            TableTotal const total = table.source.rows->mountedTotal();
             // A focused row the change removed leaves focus at its view index, on the row now there, or the last; a
             // count not known yet names no last row.
             std::optional<std::int64_t> const now = followed(table.focusIndex);
@@ -4041,7 +4229,18 @@ private:
         TableWidget& widget = scope.adopt(_backend->createTable(parent));
         applyCommon(scope, widget, spec.common);
         checkNoShare(spec.columns);
-        widget.setColumns(spec.columns);
+        if (spec.bands.empty()) {
+            widget.setColumns(spec.columns);
+        } else {
+            // A column under a band that shows its unit does not repeat it.
+            std::vector<TableColumn> headed = spec.columns;
+            for (TableColumn& column : headed) {
+                if (!columnUnitShown(spec.bands, column.id, column.unit)) {
+                    column.unit.clear();
+                }
+            }
+            widget.setColumns(headed);
+        }
         widget.setShowHeader(spec.showHeader);
         widget.setSelectionMode(spec.selectionMode);
         if (spec.selectColumn) {
@@ -4053,6 +4252,7 @@ private:
             widget.setOnSelectAll(event(spec.onSelectAll));
         }
         auto& table = scope.make<SourceTable>();
+        table.bands = spec.bands;
         if (!spec.source->alwaysWindowed) {
             auto& spans = scope.make<SpanTable>();
             spans.columns = spec.columns.size();

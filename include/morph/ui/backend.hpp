@@ -825,10 +825,18 @@ public:
     ///        past the last row once a change settles), but a backend derives which cells are covered from the rows'
     ///        current order when it lays out or paints, never here, and clips a span that runs past its last row or
     ///        onto a heading row. A spanning cell is drawn once over the rows it covers, in its column, with the
-    ///        look of this row; the covered rows' cells in that column are not shown.
+    ///        look of this row; the covered rows' cells in that column are not shown. A span whose `columns` is above
+    ///        1 also covers that many visible columns from its own, its own included, in each row it covers; the
+    ///        backend clips it at the last visible column.
     /// @param row   One of this table's rows.
     /// @param spans The row's effective spans, by column, each column once.
     virtual void setRowSpans(Widget& row, std::vector<RowSpan> const& spans) = 0;
+
+    /// @brief Makes a row a summary row; called once, right after `setRowKey`, for a summary row. It is drawn on the
+    ///        theme's `cellSummary` surface, never selected, activated, focused for an edit or pasted into, and
+    ///        copied when a copy covers it. Its cells are set as any row's.
+    /// @param row One of this table's rows.
+    virtual void setRowSummary(Widget& row) { static_cast<void>(row); }
 
     /// @brief Requests the rows with these keys, and marks those it has. Never calls the `onSelectionChange` handler.
     /// @param keys The selected keys.
@@ -932,6 +940,13 @@ public:
     ///        names, with its own filter button, filled while it is `filtered`; an empty list draws no group row.
     /// @param groups The groups, in order.
     virtual void setColumnGroups(std::vector<TableColumnGroup> const& groups) { static_cast<void>(groups); }
+
+    /// @brief Draws the header bands above the column headers (and above a group row): each run over the visible
+    ///        columns it names, at its level, its label followed by its unit in brackets when it has one; an empty
+    ///        list draws none. Called once at mount and again whenever the runs change, as the column window or the
+    ///        layout moves.
+    /// @param runs The runs, outermost level first, each level left to right.
+    virtual void setBands(std::vector<BandRun> const& runs) { static_cast<void>(runs); }
 
     /// @brief Sets what a group's filter button calls, with the group's index among those `setColumnGroups` gave.
     /// @param handler The handler; empty does nothing.

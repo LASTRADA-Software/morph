@@ -440,10 +440,14 @@ keeps its operands' 0 places and still fills 0.29 of a bar.
   scope and gives the row its tone: `"neutral"`, `"info"`, `"ok"`, `"warn"`, `"err"`, or `null` for
   none; another value shows no tone and is reported once for the table (`rowTone is <v>; a tone is
   neutral, info, ok, warn or err`). `rowSpans` is evaluated in each row's scope as a slot, like `rowTone`, and gives the
-  row its `TableRowView::spans`: a list of `{column, rows}` records, `column` a column's id (a derived column's too)
-  turned into its index and `rows` an integer from 1. A record that is not of that shape, names an id the table has
-  not, or has a `rows` that is no integer of at least 1 is dropped and reported once for the table (`rowSpans is <v>;
-  a span is {column: a column's id, rows: an integer from 1}`); `null` and `[]` give none. What follows from the rows'
+  row its `TableRowView::spans`: a list of `{column, rows, columns}` records, `column` a column's id (a derived column's
+  too) turned into its index, `rows` and `columns` integers from 1, each 1 when absent. A record that is not of that
+  shape, names an id the table has not, or has a `rows` or `columns` that is no integer of at least 1 is dropped and
+  reported once for the table (`rowSpans is <v>; a span is {column: a column's id, rows: an integer from 1, columns: an
+  integer from 1}`); `null` and `[]` give none. A span's `columns` is cut by the table's layout (`cutColumns`): it covers
+  its column, then each next visible column while that is the next declared one, so a span across a column the user
+  moved away or hid stops there, and a span whose own column is hidden is dropped. The table's `bands` parts become
+  `TableOptions::bands`. What follows from the rows'
   order (a span past the last row, over a group heading, onto a covered column) is the mount's to refuse. The
   pipeline pages before the table sees its rows, so a span reaching past the page's last row is refused and
   reported. The table's sort is the one `options.sort` carries: while it names a column the table draws no spans. The selection the table shows is a slot over the bound `selection`
@@ -793,7 +797,20 @@ keeps its operands' 0 places and still fills 0.29 of a bar.
   `maxCopyRows` rows refused, "A copy holds at most 10,000 rows", by `GridController::copyRefusal`), and
   with no cell selection the table's copy runs; `Ctrl+V` pastes the backend's `pasteText` (`GridController::useClipboard`).
   The table menu offers the focused row's `GridController::rowEntries` after its own entries and a separator, and
-  `appendRows` draws "Add row" under the table. What a display column and `onActivate` keep holds the scope weakly. Its
+  `appendRows` draws "Add row" under the table. What a display column and `onActivate` keep holds the scope weakly.
+  The grid's `bands` parts become `TableOptions::bands`. A `group` part groups the grid's rows by its `by`, read with
+  `row` the row's record, over the array's order (`GridRows::setGroup`, `FormRowsSource::setGroup`): a sort the grid
+  is given is led by `kGroupRunColumn`, so each run keeps its rows, and an empty sort stays empty, since the array's
+  order already keeps a run together. A grid with a `group` or with `summaries` is mounted over a `SummaryRows` built
+  over the grid's rows, which the element keeps: the table's `summaries` before (`position: "top"`) or after its rows,
+  each run's after the run, each run's heading (the group's `heading`, read in the run record's scope, as a `rows`
+  table's) before it. The grid's walk, paste, cell rectangle and copy stay over the grid's own rows; a click or a move
+  that lands on a summary or heading row goes to the nearest data row. A summary cell's text is its part's `cells`
+  expression for the column, read with `rows` the records of the data rows in its scope (`summaryScopeRows` over the
+  grid's view, so a summary follows the filter) and `column` the column's id, shown at its member's places and empty
+  for `null`; a column the part does not name shows an empty cell. A summary cell's test id is `summary_<key>_<column>`,
+  a group's `summary_<run ordinal>_<key>_<column>`. Every column's cells are built per row
+  (`TableSource::rowScopedCells`), so a cell built for a data row is never rebound to a summary row. Its
   header, menus, cell menu and arrangement are a table's (`configureTable` over a `TableConfig` the grid keeps): an
   edit column whose part says `sortable` sorts by its header, and the sort orders the grid's rows; every edit column
   filters unless its part says `filterable: false`, with its header's filter button, its values list, `onFiltersChange`

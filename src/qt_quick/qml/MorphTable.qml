@@ -64,8 +64,20 @@ MorphWidget {
     property var columnGroups: []
     // The column the open menu belongs to, -1 for the table's menu.
     property int menuColumn: -1
-    readonly property real groupRowHeight: root.columnGroups.length > 0 ? headerMetrics.height +
-                                                                           2 * Theme.tableCellPaddingY : 0
+    // The header bands, outermost level first: [{level, text, first, count, pinned}], `first` a visible place.
+    property var bands: []
+    readonly property int bandLevels: {
+        let levels = 0
+        for (let at = 0; at < root.bands.length; ++at)
+            levels = Math.max(levels, root.bands[at].level + 1)
+        return levels
+    }
+    // One line of the header above the column headers: a band level's, or the group line's.
+    readonly property real headerLineHeight: headerMetrics.height + 2 * Theme.tableCellPaddingY
+    readonly property real bandsHeight: root.showHeader ? root.bandLevels * root.headerLineHeight : 0
+    // Everything above the column headers: the band levels, then the group line.
+    readonly property real groupRowHeight: root.bandsHeight + (root.columnGroups.length > 0 ? root.headerLineHeight
+                                                                                            : 0)
     // The width kept at the header's trailing end for the `⋯`, which no column's header or filter button lies under.
     readonly property real menuReserve: root.hasMenu && root.showHeader ? Theme.targetHeight : 0
 
@@ -1020,6 +1032,51 @@ MorphWidget {
                 value: root.scheme
             }
 
+            // The band lines: each run over the columns at the visible places it names, at its level. The mount cut the
+            // runs, so a band never covers a column that is not its own.
+            Repeater {
+                model: root.showHeader ? root.bands : []
+
+                Item {
+                    id: bandCell
+                    required property int index
+                    required property var modelData
+                    objectName: "band" + index
+                    readonly property var span: {
+                        let left = -1
+                        let right = -1
+                        for (let column = 0; column < root.columns.length; ++column) {
+                            const place = root.placeOf(column)
+                            const box = root.columnBox(column)
+                            if (!box || place < bandCell.modelData.first
+                                    || place >= bandCell.modelData.first + bandCell.modelData.count)
+                                continue
+                            left = left < 0 ? box.x : Math.min(left, box.x)
+                            right = Math.max(right, box.x + box.width)
+                        }
+                        return {"left": left, "right": right}
+                    }
+                    visible: span.left >= 0
+                    x: span.left
+                    y: bandCell.modelData.level * root.headerLineHeight
+                    width: Math.max(0, span.right - span.left)
+                    height: root.headerLineHeight
+                    Accessible.role: Accessible.ColumnHeader
+                    Accessible.name: bandCell.modelData.text
+
+                    Label {
+                        anchors.fill: parent
+                        leftPadding: Theme.tableCellPaddingX
+                        verticalAlignment: Text.AlignVCenter
+                        textFormat: Text.PlainText
+                        font: Theme.tableHeaderFont
+                        color: root.scheme.muted
+                        text: bandCell.modelData.text
+                        elide: Text.ElideRight
+                    }
+                }
+            }
+
             // The group line: each group's label over the columns at the visible places it names, ending in its
             // filter button.
             Repeater {
@@ -1045,8 +1102,9 @@ MorphWidget {
                     }
                     visible: span.left >= 0
                     x: span.left
+                    y: root.bandsHeight
                     width: Math.max(0, span.right - span.left)
-                    height: root.groupRowHeight
+                    height: root.headerLineHeight
 
                     Label {
                         anchors.left: parent.left

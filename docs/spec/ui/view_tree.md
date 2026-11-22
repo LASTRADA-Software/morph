@@ -420,6 +420,16 @@ each on `Table` and `TableOptions` alike:
   signal set) evaluates its marks again with its content, and nothing per row holds them. Anywhere but a table cell a
   `MarkedCell` mounts its content and its marks are not read. A row's own mark is `TableRowLook::modified`
   (`std::optional<Prop<bool>>`), bound in the row's scope and told with `setRowModified`.
+- **`bands`** (`std::vector<table::BandInfo>`, set once): header bands over a table over a `TableSource`. The mount
+  computes the runs with `bandRuns` over the visible column ids in layout order and the pinned count, cuts each run to
+  the column window's places, and tells the backend `setBands` at mount and whenever the runs change (a move, a hide,
+  a pin, a scroll of the column window). A run never covers a column that is not its band's, and a band with no
+  visible column gives none. A column under a band whose unit equals its own is given to `setColumns` without its unit
+  (`columnUnitShown`); `bandedHeaderName` is a column header's accessible name under its bands.
+- **`TableRowLook::summary`** (`bool`): a summary row. The mount calls `TableWidget::setRowSummary(row)` once, right
+  after `setRowKey`; its cells are built by `cellView` as any row's. The mount positions rows by
+  `TableRows::mountedTotal()`, which a decorator such as `SummaryRows` makes larger than `total()` with rows outside
+  the count and the selection.
 - **`cellSelection`** (`std::optional<Prop<std::optional<CellRange>>>`) with **`onCellSelect(optional<CellRange>)`**:
   engaged, the table selects cells, not rows. `CellRange{anchor, focus}` is two `CellRef` corners; the rectangle is the
   rows between the corners' keys' view positions and the columns between their ids' places in the layout. The mount
@@ -577,7 +587,8 @@ Effect's reconcile and after a change of one row's `spans`, so a backend can see
 duration of one change (the last covered row removed, the rows moved under an unchanged span). Hence the backends'
 tolerance below. A requested span is refused, and its cell draws in its own row alone, when:
 
-- its `column` is not a column of the table, or its `rows` is 0 (`rows` of 1 is valid and covers nothing);
+- its `column` is not a column of the table, or its `rows` or `columns` is 0 (a span of 1 by 1 is valid and covers
+  nothing);
 - the row is a heading row;
 - it runs past the last row the mount holds (a table paged by the document holds one page, so a span across a page
   boundary runs past the last row), or over a heading row;
@@ -598,6 +609,12 @@ then), so a table with a `sort` and no sortable column keeps its spans; and a so
 still counts as engaged while the rows keep their order. And while the table is above its virtualization threshold,
 where a row's widget may be released while the rows it covers are still shown, spans are refused, and
 `kRowSpanVirtualized` is reported once per table, only when some row requests a span of two or more rows.
+
+A span's `columns` (`RowSpan::columns`) covers that many visible columns from its own, its own included, in every row
+it covers; the giver has already cut it at a column the user moved or hid (`cutColumns`), and the mount passes it on.
+A grid of a form gives its spans through `FormGridSource::setSpans`: `covered` is true for every cell another row's
+span covers, only while the grid is unsorted and under its windowing thresholds, and the walk, a paste and a click pass
+over a covered cell.
 
 **What the backends do** with a row's effective spans, `setRowSpans(row, spans)` (see
 [`backend_contract.md`](backend_contract.md)). A backend derives which cells are covered from the current order of the

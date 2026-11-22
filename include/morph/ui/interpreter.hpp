@@ -2441,6 +2441,10 @@ private:
                        forms::FieldState& array);
     /// The table node of the grid @p element keeps, made anew by each lowering.
     Node gridTableNode(DocNode const& part, LowerCtx const& ctx, ElementState& element);
+    /// The rows a grid with summaries or a group is mounted over: its summary decorator, each data row's cell as the
+    /// grid draws it, each summary row's cells its part's expressions, and each run's heading.
+    TableSource summarySource(DocNode const& part, LowerCtx const& ctx, GridTable& held,
+                              std::vector<TableColumn> const& columns);
     /// What a grid's part (a `table` with a `form`, a field overlay's `grid`) gives beyond its table: its columns and
     /// its options.
     void gridParts(DocNode const& part, LowerCtx const& ctx, forms::FieldState const& array,

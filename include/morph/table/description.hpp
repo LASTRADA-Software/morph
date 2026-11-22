@@ -50,6 +50,7 @@
 #include <morph/core/records.hpp>
 #include <morph/forms/forms.hpp>
 #include <morph/session/session.hpp>
+#include <morph/table/bands.hpp>
 #include <morph/table/data_source.hpp>
 #include <morph/table/level_cache.hpp>
 #include <morph/table/query.hpp>
@@ -255,6 +256,8 @@ struct TableDescription {
     /// @brief The declared column groups, as a client draws them: the source's `groups()`, which the server
     ///        evaluates.
     std::vector<ColumnGroupInfo> groups;
+    /// @brief The header bands over the columns, outermost first (`checkBands` says what a band may be).
+    std::vector<BandInfo> bands;
     /// @brief Every data level a column names, the base level excluded.
     std::vector<std::string> levels;
     /// @brief The units of the dimensions the table's `Measure` columns allow (`unitsFor`): the only place a client
@@ -358,6 +361,27 @@ struct TableDescription {
             return refuse(*named,
                           "the table names `" + *named + "` as a row's companion; a companion is a `Text` column");
         }
+    }
+    return {};
+}
+
+/// @brief Refuses header bands a table cannot draw.
+///
+/// A band nested past `kMaxBandLevels` levels, a band naming no column, a band naming a column id the table does not
+/// have, a child band over a column its parent lacks, and a column in two bands of one level are each refused.
+/// @param bands   The bands, outermost first.
+/// @param columns The table's columns.
+/// @return Nothing, or `SourceContract` whose message names the band's label.
+[[nodiscard]] inline std::expected<void, TableError> checkBands(std::span<BandInfo const> bands,
+                                                                std::span<TableColumn const> columns) {
+    std::vector<std::string> ids;
+    ids.reserve(columns.size());
+    for (TableColumn const& column : columns) {
+        ids.push_back(column.info.id);
+    }
+    if (std::optional<std::string> refused = bandRefusal(bands, ids)) {
+        return std::unexpected(
+            TableError{.code = TableErrorCode::SourceContract, .column = {}, .message = std::move(*refused)});
     }
     return {};
 }

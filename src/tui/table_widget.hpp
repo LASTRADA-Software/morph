@@ -37,7 +37,8 @@ namespace morph::tui::detail {
 /// column's header keeps room for the mark, so the columns do not move when a one-key sort does. A filterable column's
 /// header ends in its filter button, `▿`, drawn `▾` while `setFiltered` names the column, which a click presses
 /// (`setOnFilter`). Groups (`setColumnGroups`) draw a line above the headers: each group's label over the visible
-/// columns it names, ending in its own filter button. With menus (`setMenu`), the header line keeps its last two cells
+/// columns it names, ending in its own filter button. Bands (`setBands`) draw a line per level above that, outermost
+/// first: each run's label, then its unit in brackets, from the run's first drawn column, cut at its last. With menus (`setMenu`), the header line keeps its last two cells
 /// for a `⋯` that opens the table's menu, so no column's header or filter button lies under it; a header's menu opens
 /// on a right click on the header, or with Shift+F10 or the context-menu key on the focused header. A menu is a list
 /// below its header, as a button-style menu's is. The terminal draws no drag or resize handle: a move is
@@ -135,6 +136,7 @@ public:
     void setOnFilter(std::function<void(std::size_t)> handler) override;
     void setFiltered(std::vector<std::size_t> const& columns) override;
     void setColumnGroups(std::vector<ui::TableColumnGroup> const& groups) override;
+    void setBands(std::vector<ui::BandRun> const& runs) override;
     void setOnGroupFilter(std::function<void(std::size_t)> handler) override;
     void setOnCopy(std::function<void()> onCopy) override;
     void closePopup() override { _menuPopup.close(); }
@@ -277,6 +279,8 @@ private:
     /// The lines above the rows: none without a header, else the header line, under the group line when there are
     /// groups.
     [[nodiscard]] int headerLines() const noexcept;
+    // The lines the bands take: one per level.
+    [[nodiscard]] int bandLines() const noexcept;
     /// The sort chain's place of @p index, from 0, or none.
     [[nodiscard]] std::optional<std::size_t> chainPlace(std::size_t index) const;
     /// Acts on a click on the header line at column @p x: the `⋯`, a filter button, or a sortable column's header;
@@ -291,6 +295,7 @@ private:
     void clickGroups(int x);
     /// Draws the group line above the headers.
     void paintGroups(::core::tui::Canvas& canvas, std::vector<DrawnColumn> const& columns) const;
+    void paintBands(::core::tui::Canvas& canvas, std::vector<DrawnColumn> const& columns) const;
     /// The keys of a focused header; Ignored for any other key, which then goes on outwards.
     [[nodiscard]] ::core::tui::EventResult headerKey(::core::tui::KeyEvent const& key);
     /// Focuses the header of the chain's first key, or the first visible column.
@@ -453,6 +458,7 @@ private:
     std::function<void(std::size_t)> _onFilter;
     std::vector<std::size_t> _filtered;
     std::vector<ui::TableColumnGroup> _groups;
+    std::vector<ui::BandRun> _bands;
     std::function<void(std::size_t)> _onGroupFilter;
     std::function<void()> _onCopy;
     std::optional<std::size_t> _headerFocus;  ///< The focused header's column; none while the rows have the focus.
