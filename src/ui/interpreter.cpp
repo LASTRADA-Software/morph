@@ -780,27 +780,7 @@ std::vector<std::string> chordsOf(std::span<DocNodePtr const> parts, std::vector
     return Value{std::move(ids)};
 }
 
-/// The layout of a table inside the column that takes its place, which holds the table's own layout. The table fills
-/// the column across, and along it unless its height is fixed or a stretch: a share of a row is the column's to take
-/// (a column's child takes none), and a row offers to fill its height to the column, not to the table inside it, so a
-/// content height stretches within the column, which is as tall as the table is or as its row makes it. Placement in
-/// the parent (`alignSelf`, `bleed`) is the column's alone.
-[[nodiscard]] LayoutHints wrappedTableLayout(LayoutHints placed) {
-    if (placed.width.kind == Sizing::Kind::Percent) {
-        placed.width = Sizing::stretch(1);
-    }
-    if (placed.height.kind == Sizing::Kind::Content) {
-        placed.height = Sizing::stretch(1);
-    }
-    placed.alignSelf.reset();
-    placed.bleed = false;
-    return placed;
-}
-
-/// A table with the dialogs its menu opens mounted beside it, in a column that takes the table's place: the column
-/// takes the table's visibility and layout, the table `wrappedTableLayout` within it, and every other common property
-/// stays on the table alone, so its test id and the element id `focus` finds name the table. The column has no gap,
-/// so a dialog's placeholder adds no space. Without dialogs, the table alone.
+/// A table with the dialogs its menu opens mounted beside it (`ui::besideTable`); without dialogs, the table alone.
 /// @param placed  The table's common properties; its layout becomes the one inside the column.
 /// @param dialogs The dialogs; null for none.
 /// @param table   Makes the table, after @p placed is changed.
@@ -808,13 +788,9 @@ std::vector<std::string> chordsOf(std::span<DocNodePtr const> parts, std::vector
     if (dialogs == nullptr) {
         return table();
     }
-    Column wrapper;
-    wrapper.common.visible = placed.visible;
-    wrapper.common.layout = placed.layout;
-    placed.layout = wrappedTableLayout(placed.layout);
-    wrapper.children.push_back(table());
-    wrapper.children.push_back(std::move(dialogs));
-    return ui::column(std::move(wrapper));
+    std::vector<Node> beside;
+    beside.push_back(std::move(dialogs));
+    return besideTable(placed, std::move(beside), table);
 }
 
 /// Draws a filter button on each column a filter menu edits.
@@ -8619,6 +8595,8 @@ void ScreenCore::gridParts(DocNode const& part, LowerCtx const& ctx, forms::Fiel
     options.appendRows = part.flag("appendRows");
     options.rowsFixed = part.flag("rowsFixed");
     options.maxPasteCells = session.options().maxPasteCells;
+    options.scheduler = session.options().scheduler;
+    options.undoHold = kStatusMessageHold;
     if (Commands const* const commands = part.event("onActivate"); commands != nullptr && !commands->empty()) {
         options.onActivate = [this, detached, commands](Key const& key) {
             LowerCtx const live = attached(detached);
@@ -8900,12 +8878,17 @@ Node ScreenCore::gridTableNode(DocNode const& part, LowerCtx const& ctx, Element
         if (text.empty()) {
             return;
         }
+        std::string const separator{scope->formatting().numeric.groupSeparator};
+        std::size_t const lines = static_cast<std::size_t>(std::ranges::count(text, '\n')) + 1;
+        if (std::size_t const bound = session.options().maxCopyRows; lines > bound) {
+            tableMessage(element, tableText::copyBound(bound, separator));
+            return;
+        }
         if (!clipboard || !clipboard(text)) {
             tableMessage(element, "The rows could not be copied: there is no clipboard");
             return;
         }
-        std::size_t const lines = static_cast<std::size_t>(std::ranges::count(text, '\n')) + 1;
-        tableMessage(element, tableText::copied(lines, 0, scope->formatting().numeric.groupSeparator));
+        tableMessage(element, tableText::copied(lines, 0, separator));
     };
     // The table's own menu offers the focused row's entries after its own, past a separator.
     if (table.menu && table.onMenu) {

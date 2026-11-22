@@ -10,6 +10,7 @@
 /// Specified in `docs/spec/table/editing.md`.
 
 #include <algorithm>
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <functional>
@@ -28,6 +29,7 @@
 #include "../forms/engine/field_control.hpp"
 #include "../forms/engine/form_session.hpp"
 #include "../reactive/runtime.hpp"
+#include "../reactive/scheduler.hpp"
 #include "../reactive/signal.hpp"
 #include "cell_format.hpp"
 #include "expression.hpp"
@@ -97,6 +99,11 @@ struct GridOptions {
     bool rowsFixed = false;
     /// @brief The most values one paste writes or drops: a larger block is refused whole, and nothing is written.
     std::size_t maxPasteCells = 10'000;
+    /// @brief The timers the offer to undo a deletion ends on; without one it ends only at the grid's next change.
+    reactive::Scheduler* scheduler = nullptr;
+    /// @brief How long the offer to undo a deletion lasts, unless a change of the grid ends it first: a status line
+    ///        notice's hold.
+    std::chrono::milliseconds undoHold{6000};
 };
 
 /// @brief What a paste did with each value of its block.
@@ -310,6 +317,11 @@ public:
 
     /// @brief Makes one more round of derived values. A source with none does nothing.
     virtual void recalculate() {}
+
+    /// @brief Whether the grid's rows are its own to insert, delete and append: a source that is not offers no row
+    ///        operation, as `GridOptions::rowsFixed` does.
+    /// @return `false` unless a source says otherwise.
+    [[nodiscard]] virtual bool rowsEditable() const { return false; }
 
     /// @brief How many rows the record holds, whatever the filter shows: what `bounds` is compared with. Tracked.
     /// @return The count; `rowCount` for a source whose view is its record.
@@ -997,6 +1009,10 @@ public:
     /// @brief Makes one more round of the form's derived values (`forms::FormSession::recalculate`).
     void recalculate() override { _form->recalculate(); }
 
+    /// @brief A form's collection takes rows.
+    /// @return `true`.
+    [[nodiscard]] bool rowsEditable() const override { return true; }
+
     /// @brief How many rows the collection holds. Tracked.
     /// @return The count.
     [[nodiscard]] std::size_t heldRows() const override { return _rowsSource->array().rows().size(); }
@@ -1676,7 +1692,7 @@ public:
     /// @param row The row's key.
     /// @return The entries; none while the rows are fixed.
     [[nodiscard]] std::vector<MenuItem> rowEntries(Key const& row) {
-        if (_options.rowsFixed) {
+        if (fixedRows()) {
             return {};
         }
         GridController* const self = this;
@@ -1764,9 +1780,17 @@ public:
         std::size_t const rows = _source->rowCount();
         std::size_t firstRow = 0;
         std::size_t firstColumn = 0;
-        if (std::optional<CellRef> const focused = _rt->untracked([&] { return focus(); })) {
-            firstRow = _source->positionOf(focused->key).value_or(0);
-            auto const at = std::ranges::find(columns, focused->column);
+        // The focused cell, else the selection's top left corner.
+        std::optional<CellRef> start = _rt->untracked([&] { return focus(); });
+        if (!start) {
+            if (std::optional<Block> const cells = _rt->untracked([&] { return block(); });
+                cells && !cells->keys.empty() && !cells->columns.empty()) {
+                start = CellRef{.key = cells->keys.front(), .column = cells->columns.front()};
+            }
+        }
+        if (start) {
+            firstRow = _source->positionOf(start->key).value_or(0);
+            auto const at = std::ranges::find(columns, start->column);
             firstColumn = at == columns.end() ? 0 : static_cast<std::size_t>(at - columns.begin());
         }
         // The keys each line lands on: the rows there, then the rows appended for the lines past the last.
@@ -1779,7 +1803,7 @@ public:
                 continue;
             }
             std::optional<Key> added;
-            if (_options.appendRows && !_options.rowsFixed && _rt->untracked([&] { return insertRefusal(); }).empty()) {
+            if (_options.appendRows && !fixedRows() && _rt->untracked([&] { return insertRefusal(); }).empty()) {
                 added = _source->appendRow();
             }
             appended = appended || added.has_value();
@@ -1808,8 +1832,8 @@ public:
                 }
             }
         });
-        noteChange();
         if (result.written > 0 || appended) {
+            noteChange();
             _source->committed();
         }
         notice(pasteMessage(result));
@@ -1890,11 +1914,15 @@ public:
         removeKeys(doomed);
     }
 
-    /// @brief Puts back the rows the last deletion removed, each where it stood, as one change, while nothing has
-    ///        changed since; after a change it does nothing.
+    /// @brief Puts back the rows the last deletion removed, each where it stood, as one change, while the offer to undo
+    ///        it stands: until the grid's next change, or `GridOptions::undoHold` after the deletion, whichever comes
+    ///        first. Once the offer ends it does nothing.
     void undo() {
         commit();
         letGo();
+        if (!_undoOffered) {
+            return;
+        }
         std::size_t const before = _rt->untracked([&] { return _source->heldRows(); });
         _source->undoRemove();
         clearUndo();
@@ -1906,7 +1934,7 @@ public:
     /// @brief Which row operations the grid offers now. Tracked.
     /// @return Insert and delete of one row, with the bound that stops one; neither while the rows are fixed.
     [[nodiscard]] RowOps rowOps() const {
-        if (_options.rowsFixed) {
+        if (fixedRows()) {
             return {};
         }
         std::string const insert = insertRefusal();
@@ -1919,7 +1947,7 @@ public:
     void addRow() {
         commit();
         letGo();
-        if (_options.rowsFixed) {
+        if (fixedRows()) {
             return;
         }
         if (std::optional<Key> const key = _source->appendRow()) {
@@ -2048,7 +2076,7 @@ public:
                 options.onStatusEntry = [self](std::string const& id) { self->chooseEntry(id); };
             }
         }
-        if (!_options.appendRows || _options.rowsFixed) {
+        if (!_options.appendRows || fixedRows()) {
             return ui::table(std::move(columns), std::move(made), std::move(options));
         }
         // "Add row" under the grid, disabled at `maxItems` with the bound as its tooltip.
@@ -2058,11 +2086,11 @@ public:
         add.common.testId = options.common.testId.empty() ? std::string{} : options.common.testId + "_addRow";
         add.common.enabled = Prop<bool>{[self] { return self->rowOps().insert; }};
         add.common.tooltip = Prop<std::string>{[self] { return self->insertRefusal(); }};
-        Column holder;
-        holder.common.layout = options.common.layout;
-        holder.children.push_back(ui::table(std::move(columns), std::move(made), std::move(options)));
-        holder.children.push_back(ui::button(std::move(add)));
-        return ui::column(std::move(holder));
+        std::vector<Node> under;
+        under.push_back(ui::button(std::move(add)));
+        return besideTable(options.common, std::move(under), [&] {
+            return ui::table(std::move(columns), std::move(made), std::move(options));
+        });
     }
 
     /// @brief The status line's refusal of typing on a read-only cell.
@@ -2227,7 +2255,7 @@ private:
     void insertAt(Key const& row, bool below) {
         commit();
         letGo();
-        if (_options.rowsFixed || !_rt->untracked([&] { return insertRefusal(); }).empty()) {
+        if (fixedRows() || !_rt->untracked([&] { return insertRefusal(); }).empty()) {
             return;
         }
         std::optional<std::size_t> const at = _source->positionOf(row);
@@ -2245,7 +2273,7 @@ private:
     void removeKeys(std::vector<Key> const& keys) {
         commit();
         letGo();
-        if (_options.rowsFixed || keys.empty() ||
+        if (fixedRows() || keys.empty() ||
             !_rt->untracked([&] { return removeRefusal(keys.size()); }).empty()) {
             return;
         }
@@ -2272,6 +2300,10 @@ private:
             std::size_t const count = keys.size();
             notice("Deleted " + std::to_string(count) + (count == 1 ? " row" : " rows"),
                    {StatusEntry{.id = "undo", .label = "Undo"}});
+            _undoOffered = true;
+            if (_options.scheduler != nullptr) {
+                _undoTimer = _options.scheduler->after(_options.undoHold, [this] { clearUndo(); });
+            }
         }
     }
 
@@ -2311,8 +2343,10 @@ private:
         }
     }
 
-    // Ends a notice that offers a choice.
+    // Ends the offer to undo a deletion, and a notice that offers a choice.
     void clearUndo() {
+        _undoOffered = false;
+        _undoTimer.cancel();
         if (!_messageEntries.peek().empty()) {
             _messageEntries.set({});
             _message.set({});
@@ -2321,6 +2355,9 @@ private:
 
     // A change was made: an earlier deletion is no longer offered for undoing.
     void noteChange() { clearUndo(); }
+
+    // Whether no row operation is offered: the rows are fixed, or not the source's to change.
+    [[nodiscard]] bool fixedRows() const { return _options.rowsFixed || !_source->rowsEditable(); }
 
     // Lets go of the row an editor was open on, once no editor is open: the sort and the filter place it again.
     void letGo() {
@@ -2440,7 +2477,7 @@ private:
     // Tab past the last editable cell with `appendRows`: a row is added, as one change, and focus goes to its first
     // editable cell. Nothing is added at `maxItems`, or while the rows are fixed.
     bool appendOnWalk() {
-        if (!_options.appendRows || _options.rowsFixed || !_rt->untracked([&] { return insertRefusal(); }).empty()) {
+        if (!_options.appendRows || fixedRows() || !_rt->untracked([&] { return insertRefusal(); }).empty()) {
             return false;
         }
         std::optional<Key> const key = _source->appendRow();
@@ -2476,7 +2513,7 @@ private:
                 }
             }
             // Enter down from the last row adds a row with `appendRows`, focused in the same column when it is editable.
-            if (*row + 1 >= rows && _options.appendRows && !_options.rowsFixed &&
+            if (*row + 1 >= rows && _options.appendRows && !fixedRows() &&
                 _rt->untracked([&] { return insertRefusal(); }).empty()) {
                 if (std::optional<Key> const key = _source->appendRow()) {
                     noteChange();
@@ -2516,6 +2553,9 @@ private:
     reactive::Signal<std::optional<CellRange>> _selection;
     std::function<std::optional<std::string>()> _readClipboard;
     std::function<void(std::optional<CellRange> const&)> _selectionObserver;
+    // Whether the last deletion is offered for undoing, and the timer that ends the offer.
+    bool _undoOffered = false;
+    reactive::TimerHandle _undoTimer;
     // The draft the open editor's cell held when it opened.
     std::string _kept;
     std::shared_ptr<void const> _kept_alive;

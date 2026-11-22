@@ -411,8 +411,8 @@ anchorPosition, focusRow, focusPosition)` (the table selects cells: it draws no 
 `(last row, position)`) report the rectangle; `Shift` with an arrow and `Ctrl+A` are the table's own chords, declared
 with `setKeys`). The terminal marks the rows a rectangle spans with `*` in the gutter, as it marks selected rows, and
 draws no column of it; a click in a row's gutter selects the row's cells and a `Ctrl`+click on a header the column's.
-Qt Quick draws the rectangle over the cells it spans; a click beside a row's cells selects the row's cells and a
-`Ctrl`+click on a header the column's. The terminal draws an error mark `!` and a
+Qt Quick draws the rectangle over the cells it spans and gives each row a header, a leading strip before the first
+column, whose click selects the row's cells; a `Ctrl`+click on a header selects the column's and does not sort. The terminal draws an error mark `!` and a
 modified one `+` at a cell's trailing edge, a modified row `+` in its selection mark's cell while it is not selected,
 an open editor in its cell's slot, and reports focus leaving before the frame after the one that found it outside.
 The backend never reorders rows for a sort: it shows `setSort`, and what a click means is the lowering's |
