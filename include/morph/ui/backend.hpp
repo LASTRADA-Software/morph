@@ -834,7 +834,8 @@ public:
 
     /// @brief Makes a row a summary row; called once, right after `setRowKey`, for a summary row. It is drawn on the
     ///        theme's summary surface (`color.table.summary`), never selected, activated or focused for an edit, and
-    ///        its cells are set as any row's. Pasting into it and copying it are the grid's.
+    ///        its cells are set as any row's. Pasting into it and copying it are the grid's. A row made a summary row
+    ///        (or a heading) keeps that role for as long as it lives: the mount never gives it another key.
     /// @param row One of this table's rows.
     virtual void setRowSummary(Widget& row) { static_cast<void>(row); }
 

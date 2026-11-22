@@ -381,7 +381,7 @@ int TableImpl::gutter() const noexcept {
 
 std::string TableImpl::headerBox() const {
     auto const rows = shownChildren();
-    auto const data = std::ranges::count_if(rows, [this](WidgetBase const* row) { return !isHeading(row); });
+    auto const data = std::ranges::count_if(rows, [this](WidgetBase const* row) { return !isPassive(row); });
     auto const marked = std::ranges::count_if(rows, [this](WidgetBase const* row) { return isMarked(row); });
     if (marked == 0) {
         return "[ ]";
@@ -656,7 +656,7 @@ void TableImpl::setCellMenu(std::function<std::vector<ui::MenuEntry>(ui::Key con
 
 void TableImpl::openCellMenu(WidgetBase const& row, std::size_t column) {
     std::optional<ui::Key> const rowKey = keyOf(&row);
-    if (!_cellMenu || !rowKey || isHeading(&row)) {
+    if (!_cellMenu || !rowKey || isPassive(&row)) {
         return;
     }
     // A row already selected keeps the selection, so the menu acts on every selected row.
