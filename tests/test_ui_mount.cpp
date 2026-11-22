@@ -1866,3 +1866,53 @@ TEST_CASE("table window: widths are in the backend's measure", "[ui][mount]") {
     CHECK(extents.widthOf(2) == 64);   // the backend's estimate
     CHECK(extents.widthOf(3) == 45);
 }
+
+// Mutations: the mount sending the rectangle once at its first positions (the sort leaves "r0+2,c0+2" recorded);
+// the mount reading a reported position as a `Table::columns` index (with `a` hidden, position 0 reports column a).
+TEST_CASE("mount: a cell selection is shown by its corners' positions now", "[ui][mount][cells]") {
+    Owner owner;
+    Runtime runtime{owner};
+    RecordingBackend backend;
+    auto rows = std::make_shared<FakeRows>(3, 3, runtime.owner());
+    std::vector<std::int64_t> order{1, 2, 3};
+    rows->reorder([&order](std::int64_t index) { return order.at(static_cast<std::size_t>(index)); });
+    std::vector<ui::TableColumn> columns{{.id = "a", .label = "A"}, {.id = "b", .label = "B"}, {.id = "c", .label = "C"}};
+    ui::TableSource source;
+    source.rows = rows;
+    source.cellView = [](std::size_t column, Signal<Value> const& row) {
+        return ui::text({.text = [&row, column] { return fieldText(row.get(), "c" + std::to_string(column)); }});
+    };
+    auto const cell = [](std::int64_t key, std::string column) { return CellRef{Key{key}, std::move(column)}; };
+    Signal<std::optional<ui::CellRange>> selection{runtime, ui::CellRange{cell(1, "a"), cell(2, "b")}};
+    Signal<TableArrangement> arrangement{runtime, TableArrangement{}};
+    std::vector<std::optional<ui::CellRange>> reported;
+    ui::TableOptions options;
+    options.arrangement = [&arrangement] { return arrangement.get(); };
+    options.cellSelection = ui::Prop<std::optional<ui::CellRange>>{[&selection] { return selection.get(); }};
+    options.onCellSelect = [&reported](std::optional<ui::CellRange> range) { reported.push_back(std::move(range)); };
+    ui::Mounted const view{runtime, backend, ui::table(std::move(columns), std::move(source), std::move(options))};
+    owner.runAll();
+    int const table = backend.all("Table").front();
+    CHECK(backend.prop(table, "cellSelection") == "r0+2,c0+2");
+    order = {3, 1, 2};
+    rows->reorder([&order](std::int64_t index) { return order.at(static_cast<std::size_t>(index)); });
+    owner.runAll();
+    CHECK(backend.prop(table, "cellSelection") == "r1+2,c0+2");
+    backend.selectCells(table, 0, 1, 2, 2);
+    owner.runAll();
+    REQUIRE(reported.size() == 1);
+    CHECK(reported.back() == ui::CellRange{cell(3, "b"), cell(2, "c")});
+    arrangement.set(TableArrangement{.visible = {1, 2}, .pinned = 0, .widths = {}});
+    owner.runAll();
+    CHECK(backend.prop(table, "cellSelection").empty());   // a corner's column is hidden; the range is kept
+    backend.selectCells(table, 0, 0, 0, 1);
+    owner.runAll();
+    REQUIRE(reported.size() == 2);
+    CHECK(reported.back() == ui::CellRange{cell(3, "b"), cell(3, "c")});   // positions, not indices
+    arrangement.set(TableArrangement{});
+    owner.runAll();
+    CHECK(backend.prop(table, "cellSelection") == "r1+2,c0+2");
+    selection.set(std::nullopt);
+    owner.runAll();
+    CHECK(backend.prop(table, "cellSelection").empty());
+}

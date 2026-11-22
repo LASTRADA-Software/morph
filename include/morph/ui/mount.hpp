@@ -2,6 +2,7 @@
 
 #pragma once
 #include <algorithm>
+#include <array>
 #include <bit>
 #include <cmath>
 #include <cstddef>
@@ -2548,6 +2549,12 @@ private:
         // The cell `Table::editing` names, and the editor's builder; the editor is open on a realized row of its key.
         std::optional<CellRef> editWanted;
         std::function<Node(CellRef const&)> editor;
+        // A table that selects cells (`Table::cellSelection`): the range by its corners, and the rectangle the backend
+        // was last told, so a pass that leaves it where it was tells nothing.
+        bool cells = false;
+        std::optional<CellRange> cellRange;
+        std::optional<std::array<std::size_t, 4>> cellRect;
+        bool cellRectTold = false;
         // The highlighted row, followed by key.
         std::optional<Key> highlightKey;
         std::int64_t highlightIndex = 0;
@@ -3600,6 +3607,71 @@ private:
         reportFocus(table);
     }
 
+    // The view position of a key, scanning the view: a table selects cells only while its rows are all on the client.
+    [[nodiscard]] static std::optional<std::size_t> viewRowOf(SourceTable const& table, Key const& key) {
+        TableTotal const total = table.source.rows->total();
+        for (std::int64_t index = 0; index < total.rows; ++index) {
+            std::optional<TableRowRef> const ref = table.source.rows->row(index);
+            if (ref && ref->key == key) {
+                return static_cast<std::size_t>(index);
+            }
+        }
+        return std::nullopt;
+    }
+
+    // Shows a cell range at its corners' view rows and visible places now: a sort or a column move redraws the
+    // rectangle the same corners span. A corner whose row is not in the view, or whose column is hidden, shows none.
+    static void showCells(SourceTable& table) {
+        if (!table.cells) {
+            return;
+        }
+        std::optional<std::array<std::size_t, 4>> rect;
+        if (table.cellRange) {
+            auto const placeOf = [&table](std::string const& id) -> std::optional<std::size_t> {
+                auto const column = std::ranges::find(table.columns, id, &TableColumn::id);
+                auto const index = static_cast<std::size_t>(column - table.columns.begin());
+                return column == table.columns.end() ? std::nullopt : table.placeOf.at(index);
+            };
+            std::optional<std::size_t> const anchorRow = viewRowOf(table, table.cellRange->anchor.key);
+            std::optional<std::size_t> const focusRow = viewRowOf(table, table.cellRange->focus.key);
+            std::optional<std::size_t> const anchorPlace = placeOf(table.cellRange->anchor.column);
+            std::optional<std::size_t> const focusPlace = placeOf(table.cellRange->focus.column);
+            if (anchorRow && focusRow && anchorPlace && focusPlace) {
+                rect = std::array<std::size_t, 4>{std::min(*anchorRow, *focusRow),
+                                                  std::max(*anchorRow, *focusRow) - std::min(*anchorRow, *focusRow) + 1,
+                                                  std::min(*anchorPlace, *focusPlace),
+                                                  std::max(*anchorPlace, *focusPlace) -
+                                                      std::min(*anchorPlace, *focusPlace) + 1};
+            }
+        }
+        if (table.cellRectTold && rect == table.cellRect) {
+            return;
+        }
+        table.cellRectTold = true;
+        table.cellRect = rect;
+        table.widget->setCellSelection(rect);
+    }
+
+    // A rectangle the backend reports, by view rows and visible places, as a range by keys and column ids; a corner
+    // outside the view or the visible columns reports nothing.
+    [[nodiscard]] static std::optional<CellRange> cellsAt(SourceTable const& table, std::size_t anchorRow,
+                                                          std::size_t anchorPlace, std::size_t focusRow,
+                                                          std::size_t focusPlace) {
+        auto const cell = [&table](std::size_t row, std::size_t place) -> std::optional<CellRef> {
+            std::optional<TableRowRef> const ref = table.source.rows->row(static_cast<std::int64_t>(row));
+            if (!ref || place >= table.visible.size() || table.visible.at(place) >= table.columns.size()) {
+                return std::nullopt;
+            }
+            return CellRef{.key = ref->key, .column = table.columns.at(table.visible.at(place)).id};
+        };
+        std::optional<CellRef> anchor = cell(anchorRow, anchorPlace);
+        std::optional<CellRef> focus = cell(focusRow, focusPlace);
+        if (!anchor || !focus) {
+            return std::nullopt;
+        }
+        return CellRange{.anchor = std::move(*anchor), .focus = std::move(*focus)};
+    }
+
     // A grid's focus moves where the grid says: a gesture is handed to it as a cell, a row not fetched yet by its view
     // position alone.
     void handFocus(SourceTable const& table, std::int64_t index, std::size_t column) const {
@@ -4020,6 +4092,7 @@ private:
             if (arrangement != table.arrangement) {
                 arrange(table, arrangement);
                 pass();
+                showCells(table);
             }
         });
         table.source.rows->onChange(
@@ -4035,6 +4108,7 @@ private:
                 static_cast<void>(runCallback(*_rt, [&] {
                     follow(table, change);
                     realizeWindow(table, [&change](std::int64_t index) { return namesUpdated(change, index); });
+                    showCells(table);
                 }));
             });
         widget.setOnVisibleRangeChanged([this, &table](std::size_t first, std::size_t count) {
@@ -4078,6 +4152,26 @@ private:
         if (spec.gridFocus) {
             bind(scope, *spec.gridFocus, [this, &table](std::optional<GridFocus> const& focus) {
                 static_cast<void>(runCallback(*_rt, [&] { gridFocusFrom(table, focus); }));
+            });
+        }
+        if (spec.cellSelection) {
+            table.cells = true;
+            widget.setSelectionMode(SelectionMode::None);
+            widget.setOnCellSelect([this, &table, onSelect = spec.onCellSelect](
+                                       std::size_t anchorRow, std::size_t anchorPlace, std::size_t focusRow,
+                                       std::size_t focusPlace) {
+                static_cast<void>(runCallback(*_rt, [&] {
+                    std::optional<CellRange> range = cellsAt(table, anchorRow, anchorPlace, focusRow, focusPlace);
+                    if (range && onSelect) {
+                        onSelect(std::move(range));
+                    }
+                }));
+            });
+            bind(scope, *spec.cellSelection, [this, &table](std::optional<CellRange> const& range) {
+                static_cast<void>(runCallback(*_rt, [&] {
+                    table.cellRange = range;
+                    showCells(table);
+                }));
             });
         }
         if (spec.editing) {

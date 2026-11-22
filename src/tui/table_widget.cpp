@@ -524,6 +524,15 @@ void TableImpl::clickHeader(int x, ::core::tui::Modifier modifiers) {
         if (x < left || x >= left + drawn.width) {
             continue;
         }
+        if (std::optional<std::size_t> const place = visiblePlace(drawn.column);
+            _onCellSelect && place &&
+            ::core::tui::hasModifier(::core::tui::withoutLockKeys(modifiers), ::core::tui::Modifier::Ctrl)) {
+            if (_total > 0) {
+                auto const handler = _onCellSelect;
+                handler(0, *place, _total - 1, *place);
+            }
+            return;
+        }
         ui::TableColumn const& column = _columns.at(drawn.column);
         if (column.filterable && x == left + drawn.width - 1) {
             if (auto const handler = _onFilter) {
@@ -1071,16 +1080,21 @@ void TableImpl::paintGroups(::core::tui::Canvas& canvas, std::vector<DrawnColumn
 }
 
 std::string TableImpl::rowMark(WidgetBase const* row, bool cursor) const {
-    // With a select column the box shows the mark; without, `*` does.
+    // With a select column the box shows the mark; without, `*` does, for a selected row or a row of the selected
+    // cells.
     std::string mark;
     if (isHeading(row)) {
         mark.assign(static_cast<std::size_t>(gutter()), ' ');
         return mark;
     }
+    bool inCells = false;
+    if (auto const index = _viewRows.find(row); _cellRect && index != _viewRows.end()) {
+        inCells = index->second >= _cellRect->at(0) && index->second < _cellRect->at(0) + _cellRect->at(1);
+    }
     if (_selectColumn) {
         mark = isMarked(row) ? "[x]" : "[ ]";
     } else {
-        mark = isMarked(row) ? "*" : (_modifiedRows.contains(row) ? "+" : " ");
+        mark = isMarked(row) || inCells ? "*" : (_modifiedRows.contains(row) ? "+" : " ");
     }
     mark += cursor ? ">" : " ";
     // A busy or locked row's glyph takes the gutter's own cells, after the selection and cursor marks.
@@ -1414,6 +1428,9 @@ void TableImpl::clickWith(::core::tui::Point cell, ::core::tui::Modifier modifie
         return;
     }
     auto const held = ::core::tui::withoutLockKeys(modifiers);
+    if (_onCellSelect && selectCellsAt(row, cell, held)) {
+        return;
+    }
     ui::RowClick click = ui::RowClick::Only;
     // A row's box is a Ctrl-click on the row.
     if (onBox || ::core::tui::hasModifier(held, ::core::tui::Modifier::Ctrl)) {
@@ -1446,6 +1463,49 @@ void TableImpl::clickWith(::core::tui::Point cell, ::core::tui::Modifier modifie
     if (auto const rowKey = keyOf(row)) {
         activateRow(*rowKey);
     }
+}
+
+bool TableImpl::selectCellsAt(WidgetBase const* row, ::core::tui::Point cell, ::core::tui::Modifier held) {
+    auto const index = _viewRows.find(row);
+    std::size_t const places = visibleOrder().size();
+    if (index == _viewRows.end() || places == 0) {
+        return false;
+    }
+    // A copy: the handler may destroy this table.
+    auto const handler = _onCellSelect;
+    if (cell.x < gutter()) {
+        handler(index->second, 0, index->second, places - 1);
+        return true;
+    }
+    if (!::core::tui::hasModifier(held, ::core::tui::Modifier::Shift) || !_focusCell) {
+        return false;
+    }
+    std::optional<std::size_t> const anchor = visiblePlace(_focusCell->second);
+    int const across = cell.x - gutter();
+    for (DrawnColumn const& column : drawnColumns(_size.width)) {
+        std::optional<std::size_t> const place = visiblePlace(column.column);
+        if (across >= column.x && across <= column.x + column.width && anchor && place) {
+            handler(_focusCell->first, *anchor, index->second, *place);
+            return true;
+        }
+    }
+    return false;
+}
+
+std::optional<std::size_t> TableImpl::visiblePlace(std::size_t column) const {
+    std::vector<std::size_t> const order = visibleOrder();
+    auto const found = std::ranges::find(order, column);
+    return found == order.end() ? std::nullopt : std::optional{static_cast<std::size_t>(found - order.begin())};
+}
+
+void TableImpl::setCellSelection(std::optional<std::array<std::size_t, 4>> rect) {
+    _cellRect = rect;
+    refresh();
+}
+
+void TableImpl::setOnCellSelect(
+    std::function<void(std::size_t, std::size_t, std::size_t, std::size_t)> onSelect) {
+    _onCellSelect = std::move(onSelect);
 }
 
 bool TableImpl::clickCell(WidgetBase const* row, int x, bool twice) {
@@ -1728,7 +1788,7 @@ EventResult TableImpl::sourceKey(::core::tui::KeyEvent const& key) {
         return EventResult::Handled;
     }
     bool const upward = matchesChord("Shift+Up", key);
-    if ((upward || matchesChord("Shift+Down", key)) && _onFocusMove) {
+    if ((upward || matchesChord("Shift+Down", key)) && _onFocusMove && !_onCellSelect) {
         // Without an anchor, the range starts at the row the focus leaves.
         if (!_anchorRow) {
             _anchorRow = _focusCell ? _focusCell->first : 0;

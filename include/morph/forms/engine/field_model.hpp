@@ -234,6 +234,10 @@ struct FieldSpec {
     std::int64_t sliderStep = 1;
     /// @brief An Array's item JSON type (`"string"` when undeclared).
     std::string itemType;
+    /// @brief An Array's or ObjectArray's `minItems`: the fewest rows it holds, which a grid's row deletion keeps.
+    std::optional<std::size_t> minItems;
+    /// @brief An Array's or ObjectArray's `maxItems`: the most rows it holds, which a grid's row insertion keeps.
+    std::optional<std::size_t> maxItems;
     /// @brief An Object's members, or an ObjectArray's element members, in `x-order`.
     std::vector<FieldSpec> children;
     /// @brief An Object or ObjectArray whose members are not described: its `$ref` is already on
@@ -664,6 +668,12 @@ private:
         }
 
         if (hasType("array")) {
+            if (auto const fewest = unsignedOf(member(prop, "minItems"))) {
+                spec.minItems = static_cast<std::size_t>(*fewest);
+            }
+            if (auto const most = unsignedOf(member(prop, "maxItems"))) {
+                spec.maxItems = static_cast<std::size_t>(*most);
+            }
             Json const* const rawItems = member(prop, "items");
             Json const items = rawItems == nullptr ? emptyObject() : resolveProp(*rawItems);
             std::vector<std::string> const itemTypes = jsonTypes(items);

@@ -6,6 +6,8 @@
 #include <QQuickItem>
 #include <morph/qt_quick/backend.hpp>
 #include <morph/qt_quick/components.hpp>
+#include <optional>
+#include <string>
 #include <string_view>
 #include <utility>
 
@@ -31,6 +33,18 @@ bool Backend::copyText(std::string_view text) {
     }
     clipboard->setText(detail::toQString(text));
     return true;
+}
+
+std::optional<std::string> Backend::pasteText() {
+    QClipboard const* const clipboard = QGuiApplication::clipboard();
+    if (clipboard == nullptr) {
+        return std::nullopt;
+    }
+    QString const text = clipboard->text();
+    if (text.isEmpty()) {
+        return std::nullopt;
+    }
+    return text.toStdString();
 }
 
 Backend::~Backend() = default;

@@ -407,6 +407,10 @@ edit, so a round never replaces a draft the user typed.
   not be recalculated" with "Recalculate" follow it, so they stay while the retry runs.
 - **`insertRow(position)`** inserts a blank row before `position` (past the end appends), a user action like
   `addRow`.
+- **`removeRows(keys)`** removes rows by key in one change and returns them as `RemovedRow{position, row}`, each with
+  the position it stood at, ascending; **`restoreRows(rows)`** puts them back, each at its position, in one change, the
+  rows whole (their keys, drafts and units), so a grid's "Undo" of a deletion restores what was typed. An array's
+  `minItems` and `maxItems` are `FieldSpec::minItems` and `maxItems`, the bounds a grid's row operations keep.
 
 ## Collections
 

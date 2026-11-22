@@ -398,7 +398,17 @@ outside the table),
 and null draws the cell again; an editor that holds the focus when it closes gives it back to the table), `setCellMarks(row, column, CellMarks)` (after `setRowKey`, on every change, and
 whenever a cell is attached to a row at a column: `readOnly` the theme's read-only cell surface, `modified` its
 modified mark, `error` its error mark, `stale` and `muted` the stale and muted looks; a cell no call names has none)
-and `setRowModified(row, bool)` (the row header's modified mark). The terminal draws an error mark `!` and a
+and `setRowModified(row, bool)` (the row header's modified mark), `setCellSelection(optional<array<size_t, 4>>)`
+(`{firstRow, rowCount, firstPosition, positionCount}` in view rows and visible places, the places of the layout and
+not indices into the columns; empty draws none; it never calls the handler) and `setOnCellSelect(anchorRow,
+anchorPosition, focusRow, focusPosition)` (the table selects cells: it draws no row selection and reports no
+`onSelectionChange`; a drag from cell to cell, a `Shift`+click from the focused cell, a click on a row's header (anchor
+`(row, 0)`, focus `(row, last position)`) and a column header's selection gesture (anchor `(0, position)`, focus
+`(last row, position)`) report the rectangle; `Shift` with an arrow and `Ctrl+A` are the table's own chords, declared
+with `setKeys`). The terminal marks the rows a rectangle spans with `*` in the gutter, as it marks selected rows, and
+draws no column of it; a click in a row's gutter selects the row's cells and a `Ctrl`+click on a header the column's.
+Qt Quick draws the rectangle over the cells it spans; a click beside a row's cells selects the row's cells and a
+`Ctrl`+click on a header the column's. The terminal draws an error mark `!` and a
 modified one `+` at a cell's trailing edge, a modified row `+` in its selection mark's cell while it is not selected,
 an open editor in its cell's slot, and reports focus leaving before the frame after the one that found it outside.
 The backend never reorders rows for a sort: it shows `setSort`, and what a click means is the lowering's |
@@ -429,7 +439,10 @@ recording backend records `size`, `margins`, `scale` and `displayed` on a `Page`
 **The clipboard.** `IViewBackend::copyText(text)` puts text on the system clipboard and says whether it did: Qt Quick
 through `QGuiApplication::clipboard()`, the terminal through an OSC 52 sequence written to its output (whether the
 terminal honours it cannot be known, so it answers true), and `RecordingBackend` by recording it for `clipboardText()`.
-The default answers false: a backend without a clipboard copies nothing.
+The default answers false: a backend without a clipboard copies nothing. `IViewBackend::pasteText()` reads the
+clipboard's text, what a grid's `Ctrl+V` pastes: Qt Quick from `QGuiApplication::clipboard()`, `RecordingBackend` the
+text `copyText` last recorded, nothing while `setClipboard(false)`; the default, which the terminal keeps, answers
+nothing.
 
 **Column indices.** The `column` of every `TableWidget` call and handler above is an index into the columns
 `setColumns` gave, which hold every column, hidden ones included, and do not change when the layout does. Only a move's

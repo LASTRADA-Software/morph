@@ -32,6 +32,7 @@
 #include "cell_format.hpp"
 #include "expression.hpp"
 #include "form_rows.hpp"
+#include "table_config.hpp"
 #include "table_rows.hpp"
 #include "view.hpp"
 
@@ -89,6 +90,62 @@ struct GridOptions {
     Walk walk = Walk::Rows;
     /// @brief The table's `onActivate`: what `Enter` or a double click on a read-only cell runs, with its row's key.
     std::function<void(Key)> onActivate;
+    /// @brief Whether the walk past the end and `Enter` below the last row add a row, and an "Add row" button under
+    ///        the grid does, up to the field's `maxItems`.
+    bool appendRows = false;
+    /// @brief Whether the rows are the record's: no row is inserted, deleted or appended, and no entry offers it.
+    bool rowsFixed = false;
+    /// @brief The most values one paste writes or drops: a larger block is refused whole, and nothing is written.
+    std::size_t maxPasteCells = 10'000;
+};
+
+/// @brief What a paste did with each value of its block.
+struct PasteResult {
+    /// @brief The values written into editable cells.
+    std::size_t written = 0;
+    /// @brief The values dropped on read-only or covered cells.
+    std::size_t readOnly = 0;
+    /// @brief The values dropped on rows past the last one that could not be added.
+    std::size_t pastRows = 0;
+    /// @brief The values dropped past the last visible column.
+    std::size_t pastColumns = 0;
+};
+
+/// @brief The status line's notice after a paste.
+/// @param result What the paste did.
+/// @return `Pasted {written} values`, then, when anything was dropped, `; `, the parts present joined by ` and ` —
+///         `{readOnly} on read-only cells`, `{pastRows} past the last row`, `{pastColumns} past the last column` —
+///         and ` were dropped`.
+[[nodiscard]] inline std::string pasteMessage(PasteResult const& result) {
+    std::string text = "Pasted " + std::to_string(result.written) + " values";
+    std::vector<std::string> parts;
+    if (result.readOnly > 0) {
+        parts.push_back(std::to_string(result.readOnly) + " on read-only cells");
+    }
+    if (result.pastRows > 0) {
+        parts.push_back(std::to_string(result.pastRows) + " past the last row");
+    }
+    if (result.pastColumns > 0) {
+        parts.push_back(std::to_string(result.pastColumns) + " past the last column");
+    }
+    if (parts.empty()) {
+        return text;
+    }
+    text += "; ";
+    for (std::size_t at = 0; at < parts.size(); ++at) {
+        text += (at == 0 ? "" : " and ") + parts.at(at);
+    }
+    return text + " were dropped";
+}
+
+/// @brief Which row operations a grid offers now.
+struct RowOps {
+    /// @brief Whether a row can be inserted or appended.
+    bool insert = false;
+    /// @brief Whether a row can be deleted.
+    bool remove = false;
+    /// @brief Why one is not: the bound it would pass; empty when both are offered, or the rows are fixed.
+    std::string why;
 };
 
 /// @brief Every fact a cell's read-only state follows from; `cellReadOnly` is the one rule over them.
@@ -253,6 +310,38 @@ public:
 
     /// @brief Makes one more round of derived values. A source with none does nothing.
     virtual void recalculate() {}
+
+    /// @brief How many rows the record holds, whatever the filter shows: what `bounds` is compared with. Tracked.
+    /// @return The count; `rowCount` for a source whose view is its record.
+    [[nodiscard]] virtual std::size_t heldRows() const { return rowCount(); }
+
+    /// @brief The fewest and the most rows the record holds.
+    /// @return `{minItems, maxItems}`; `{0, nothing}` for a source with no bound.
+    [[nodiscard]] virtual std::pair<std::size_t, std::optional<std::size_t>> bounds() const { return {0, std::nullopt}; }
+
+    /// @brief Appends a blank row to the record. A source whose rows are not its own adds none.
+    /// @return The new row's key; nothing when no row was added.
+    virtual std::optional<Key> appendRow() { return std::nullopt; }
+
+    /// @brief Inserts a blank row before the row at a view position. A source whose rows are not its own adds none.
+    /// @param position The view position; `rowCount()` appends.
+    /// @return The new row's key; nothing when no row was added.
+    virtual std::optional<Key> insertRow(std::size_t position) {
+        static_cast<void>(position);
+        return std::nullopt;
+    }
+
+    /// @brief Removes rows from the record in one change, kept so `undoRemove` can put them back.
+    /// @param keys The rows' keys.
+    /// @return `true` when one of them held a value.
+    virtual bool removeRows(std::span<Key const> keys) {
+        static_cast<void>(keys);
+        return false;
+    }
+
+    /// @brief Puts the rows the last `removeRows` took back, each where it stood, in one change, while the record has
+    ///        not changed since; does nothing after a change.
+    virtual void undoRemove() {}
 };
 // NOLINTEND(cppcoreguidelines-special-member-functions)
 
@@ -908,6 +997,85 @@ public:
     /// @brief Makes one more round of the form's derived values (`forms::FormSession::recalculate`).
     void recalculate() override { _form->recalculate(); }
 
+    /// @brief How many rows the collection holds. Tracked.
+    /// @return The count.
+    [[nodiscard]] std::size_t heldRows() const override { return _rowsSource->array().rows().size(); }
+
+    /// @brief The collection's `minItems` and `maxItems`.
+    /// @return `{minItems or 0, maxItems}`.
+    [[nodiscard]] std::pair<std::size_t, std::optional<std::size_t>> bounds() const override {
+        forms::FieldSpec const& spec = _rowsSource->array().spec();
+        return {spec.minItems.value_or(0), spec.maxItems};
+    }
+
+    /// @brief Appends a blank row to the collection (`forms::FieldState::addRow`), below `maxItems`.
+    /// @return The new row's key; nothing at `maxItems`.
+    std::optional<Key> appendRow() override {
+        if (atMost()) {
+            return std::nullopt;
+        }
+        std::uint64_t const key = _rowsSource->array().addRow();
+        _rows->sync();
+        return key == 0 ? std::nullopt : std::optional<Key>{Key{static_cast<std::int64_t>(key)}};
+    }
+
+    /// @brief Inserts a blank row into the collection before the row at a view position, below `maxItems`: at that
+    ///        row's place in the record, which the view shows there while it is neither sorted nor filtered.
+    /// @param position The view position; at or past `rowCount()` the row is appended.
+    /// @return The new row's key; nothing at `maxItems`.
+    std::optional<Key> insertRow(std::size_t position) override {
+        if (atMost()) {
+            return std::nullopt;
+        }
+        forms::FieldState& array = _rowsSource->array();
+        std::size_t place = _form->runtime().untracked([&] { return array.rows().size(); });
+        if (std::optional<Key> const before = keyAt(position)) {
+            std::int64_t const* const number = std::get_if<std::int64_t>(&*before);
+            std::vector<std::shared_ptr<forms::RowState>> const& rows = _form->runtime().untracked([&] -> auto const& {
+                return array.rows();
+            });
+            auto const found = std::ranges::find_if(rows, [number](auto const& row) {
+                return number != nullptr && std::cmp_equal(row->key(), *number);
+            });
+            place = static_cast<std::size_t>(found - rows.begin());
+        }
+        std::uint64_t const key = array.insertRow(place);
+        _rows->sync();
+        return key == 0 ? std::nullopt : std::optional<Key>{Key{static_cast<std::int64_t>(key)}};
+    }
+
+    /// @brief Removes rows from the collection in one change (`forms::FieldState::removeRows`), kept until the next
+    ///        removal for `undoRemove`.
+    /// @param keys The rows' keys.
+    /// @return `true` when one of them was not blank.
+    bool removeRows(std::span<Key const> keys) override {
+        std::vector<std::uint64_t> numbers;
+        for (Key const& key : keys) {
+            if (std::int64_t const* const number = std::get_if<std::int64_t>(&key); number != nullptr && *number > 0) {
+                numbers.push_back(static_cast<std::uint64_t>(*number));
+            }
+        }
+        forms::FieldState& array = _rowsSource->array();
+        _removed = array.removeRows(numbers);
+        _rows->sync();
+        _afterRemove = array.snapshot();
+        return _form->runtime().untracked([&] {
+            return std::ranges::any_of(_removed, [](forms::RemovedRow const& row) { return !row.row->blank(); });
+        });
+    }
+
+    /// @brief Puts the rows the last `removeRows` took back where they stood (`forms::FieldState::restoreRows`), while
+    ///        the collection holds what it held after the removal; after any change it does nothing.
+    void undoRemove() override {
+        forms::FieldState& array = _rowsSource->array();
+        std::vector<forms::RemovedRow> rows = std::exchange(_removed, {});
+        if (rows.empty() || array.snapshot() != _afterRemove) {
+            return;
+        }
+        array.restoreRows(std::move(rows));
+        _rows->sync();
+    }
+
     /// @brief Calls @p observer at the end of each `committed`: a test seam.
     /// @param observer The observer; empty for none.
     void onCommitted(std::function<void()> observer) { _committed = std::move(observer); }
@@ -1030,6 +1198,12 @@ public:
     }
 
 private:
+    // Whether the collection holds `maxItems` rows already.
+    [[nodiscard]] bool atMost() const {
+        std::optional<std::size_t> const most = bounds().second;
+        return most && _form->runtime().untracked([&] { return heldRows(); }) >= *most;
+    }
+
     [[nodiscard]] GridColumn const* columnOf(std::string_view id) const {
         auto const found = std::ranges::find(_columns, id, &GridColumn::id);
         return found == _columns.end() ? nullptr : &*found;
@@ -1142,12 +1316,18 @@ private:
     // The unit each member's `unit` overlay last gave, by the member's path; a member it never reached has none.
     std::unordered_map<std::string, std::optional<std::string>> _unitApplied;
     std::unique_ptr<reactive::Effect> _overlays;
+    // The rows the last removal took, and what the collection held right after it: an undo puts them back only while
+    // it still holds that.
+    std::vector<forms::RemovedRow> _removed;
+    std::string _afterRemove;
 };
 
 /// @brief A grid's focus, its cell editor and its walk over a `GridSource`, and the table node that shows them.
 ///
 /// The editor's text is the cell's draft, live: an opening keeps the draft the cell held, a commit closes the editor
-/// and calls `GridSource::committed` once when the draft changed, and `Escape` writes the kept draft back.
+/// and calls `GridSource::committed` once when the draft changed, and `Escape` writes the kept draft back. A paste, a
+/// fill, a clear and each row operation is one change too: it calls `GridSource::committed` once, however many cells or
+/// rows it touches.
 class GridController : public std::enable_shared_from_this<GridController> {
 public:
     /// @brief A controller over a source.
@@ -1164,7 +1344,8 @@ public:
           _notices{runtime, std::uint64_t{0}},
           _messageEntries{runtime, std::vector<StatusEntry>{}},
           _standing{runtime, std::string{}},
-          _standingEntries{runtime, std::vector<StatusEntry>{}} {}
+          _standingEntries{runtime, std::vector<StatusEntry>{}},
+          _selection{runtime, std::optional<CellRange>{}} {}
 
     GridController(GridController const&) = delete;
     GridController& operator=(GridController const&) = delete;
@@ -1203,12 +1384,13 @@ public:
         commit();
         letGo();
         _place.set(std::move(target));
-        _message.set({});
+        setSelection(std::nullopt);
+        clearNotice();
     }
 
     /// @brief Focuses a cell, as a click or an arrow does; a covered cell, and a key the view does not hold, are
     ///        refused. An open editor on another cell is committed first. The status line shows the cell's error while
-    ///        it has focus.
+    ///        it has focus. A cell outside the cell selection ends it.
     /// @param cell The cell.
     void focusCell(CellRef cell) {
         if (_source->covered(cell.key, cell.column)) {
@@ -1223,7 +1405,10 @@ public:
             return;
         }
         _place.set(GridFocus{.key = cell.key, .viewRow = *at, .column = cell.column});
-        _message.set({});
+        if (_selection.peek() && !inBlock(cell)) {
+            setSelection(std::nullopt);
+        }
+        clearNotice();
     }
 
     /// @brief What `Enter` and `F2` with no editor, and a double click, do: focuses the cell, then opens its editor
@@ -1255,12 +1440,15 @@ public:
 
     /// @brief The chords the table declares, what `Table::keyChords` binds. Tracked.
     /// @return With an editor open exactly `Enter`, `Tab`, `Shift+Tab`, `Escape` and `Ctrl+Enter`, so every other key
-    ///         reaches the editor; with none, also `F2`, `Space` and `Delete`.
+    ///         reaches the editor; with none, also `F2`, `Space`, `Delete`, `Shift` with an arrow, `Ctrl+A`, `Ctrl+V`,
+    ///         `Ctrl+D`, `Ctrl+Shift+=` and `Ctrl+-`. `Ctrl+C` is the table's own copy key, which copies `copy()`.
     [[nodiscard]] std::vector<std::string> keyChords() const {
         if (_editing.get()) {
             return {"Enter", "Tab", "Shift+Tab", "Escape", "Ctrl+Enter"};
         }
-        return {"Tab", "Shift+Tab", "Enter", "F2", "Space", "Delete", "Escape", "Ctrl+Enter"};
+        return {"Tab",         "Shift+Tab", "Enter",  "F2",     "Space",  "Delete",       "Escape",
+                "Ctrl+Enter",  "Shift+Up",  "Shift+Down", "Shift+Left", "Shift+Right", "Ctrl+A", "Ctrl+V",
+                "Ctrl+D",      "Ctrl+Shift+=", "Ctrl+-"};
     }
 
     /// @brief A chord pressed while the table has focus.
@@ -1314,10 +1502,36 @@ public:
             return KeyOutcome::Handled;
         }
         if (chord == "Delete") {
-            if (focused && editable(*focused) && !_source->draft(focused->key, focused->column).empty()) {
-                _source->write(focused->key, focused->column, std::string{});
-                _source->committed();
+            clear();
+            return KeyOutcome::Handled;
+        }
+        if (chord == "Shift+Up" || chord == "Shift+Down" || chord == "Shift+Left" || chord == "Shift+Right") {
+            extend(chord == "Shift+Up" ? -1 : (chord == "Shift+Down" ? 1 : 0),
+                   chord == "Shift+Left" ? -1 : (chord == "Shift+Right" ? 1 : 0));
+            return KeyOutcome::Handled;
+        }
+        if (chord == "Ctrl+A") {
+            selectAll();
+            return KeyOutcome::Handled;
+        }
+        if (chord == "Ctrl+V") {
+            if (_readClipboard) {
+                if (std::optional<std::string> const text = _readClipboard()) {
+                    static_cast<void>(paste(*text));
+                }
             }
+            return KeyOutcome::Handled;
+        }
+        if (chord == "Ctrl+D") {
+            fillDown();
+            return KeyOutcome::Handled;
+        }
+        if (chord == "Ctrl+Shift+=") {
+            insertRow(true);
+            return KeyOutcome::Handled;
+        }
+        if (chord == "Ctrl+-") {
+            deleteRows();
             return KeyOutcome::Handled;
         }
         return KeyOutcome::Ignored;
@@ -1405,38 +1619,325 @@ public:
         return _standingEntries.get();
     }
 
-    /// @brief An entry chosen in the status line: `recalculate` makes one more round of derived values.
+    /// @brief An entry chosen in the status line: `recalculate` makes one more round of derived values, `undo` puts
+    ///        back the rows the last deletion removed (`undo`).
     /// @param id The entry's id; one the grid does not offer is ignored.
     void chooseEntry(std::string_view id) {
         if (id == "recalculate") {
             _source->recalculate();
+        } else if (id == "undo") {
+            undo();
         }
     }
 
     /// @brief The grid's entries of a cell's menu: "Revert cell", enabled while the cell is modified, and "Revert row",
-    ///        enabled while the row is modified, each restoring the loaded value and then committing once.
+    ///        enabled while the row is modified, each restoring the loaded value and then committing once; then, unless
+    ///        the rows are fixed, a separator and the row entries (`rowEntries`).
     /// @param row    The row's key.
     /// @param column The column's id.
     /// @return The entries.
     [[nodiscard]] std::vector<MenuItem> cellEntries(Key const& row, std::string_view column) {
+        GridController* const self = this;
         GridSource* const source = _source;
         std::string const id{column};
         MenuItem cell;
         cell.label = std::string{"Revert cell"};
         cell.enabled = Prop<bool>{[source, row, id] { return source->marks(row, id).modified; }};
-        cell.onSelect = [source, row, id] {
+        cell.onSelect = [self, source, row, id] {
+            self->noteChange();
             source->revertCell(row, id);
             source->committed();
         };
         MenuItem whole;
         whole.label = std::string{"Revert row"};
         whole.enabled = Prop<bool>{[source, row] { return source->rowModified(row); }};
-        whole.onSelect = [source, row] {
+        whole.onSelect = [self, source, row] {
+            self->noteChange();
             source->revertRow(row);
             source->committed();
         };
-        return {std::move(cell), std::move(whole)};
+        std::vector<MenuItem> entries;
+        entries.push_back(std::move(cell));
+        entries.push_back(std::move(whole));
+        std::vector<MenuItem> rows = rowEntries(row);
+        if (!rows.empty()) {
+            MenuItem separator;
+            separator.separator = true;
+            entries.push_back(std::move(separator));
+            std::ranges::move(rows, std::back_inserter(entries));
+        }
+        return entries;
     }
+
+    /// @brief The row entries of a row's menus: "Insert row above", "Insert row below" and "Delete row", or "Delete
+    ///        rows" when the cell selection spans more than one row and @p row is among them, deleting every row it
+    ///        spans. An insertion is disabled at `maxItems` and a deletion where it would leave fewer than `minItems`,
+    ///        each with the bound as its description. Each is one change.
+    /// @param row The row's key.
+    /// @return The entries; none while the rows are fixed.
+    [[nodiscard]] std::vector<MenuItem> rowEntries(Key const& row) {
+        if (_options.rowsFixed) {
+            return {};
+        }
+        GridController* const self = this;
+        std::vector<Key> doomed = _rt->untracked([&] { return selectedRows(); });
+        if (doomed.size() < 2 || !std::ranges::contains(doomed, row)) {
+            doomed = {row};
+        }
+        std::size_t const count = doomed.size();
+        auto const insertEntry = [self, row](std::string label, bool below) {
+            MenuItem item;
+            item.label = std::move(label);
+            item.enabled = Prop<bool>{[self] { return self->rowOps().insert; }};
+            item.description = Prop<std::string>{[self] { return self->insertRefusal(); }};
+            item.onSelect = [self, row, below] { self->insertAt(row, below); };
+            return item;
+        };
+        MenuItem removal;
+        removal.label = std::string{count > 1 ? "Delete rows" : "Delete row"};
+        removal.enabled = Prop<bool>{[self, count] { return self->removeRefusal(count).empty(); }};
+        removal.description = Prop<std::string>{[self, count] { return self->removeRefusal(count); }};
+        removal.onSelect = [self, doomed = std::move(doomed)] { self->removeKeys(doomed); };
+        std::vector<MenuItem> entries;
+        entries.push_back(insertEntry("Insert row above", false));
+        entries.push_back(insertEntry("Insert row below", true));
+        entries.push_back(std::move(removal));
+        return entries;
+    }
+
+    /// @brief The cell selection. Tracked.
+    /// @return The range by its corners; none while no cell range is selected.
+    [[nodiscard]] std::optional<CellRange> selection() const { return _selection.get(); }
+
+    /// @brief Selects a range of cells, or none; focus stays where it is.
+    /// @param range The range by its corners, or nothing.
+    void select(std::optional<CellRange> range) { setSelection(std::move(range)); }
+
+    /// @brief The cells of the selection, else the focused cell, as clipboard text.
+    /// @return Each cell's display text, tab-separated, a line per row in view order and the columns in layout order;
+    ///         a tab or a line break inside a cell written as a space. Empty when no cell is selected or focused.
+    [[nodiscard]] std::string copy() const {
+        return _rt->untracked([&] {
+            std::optional<Block> const cells = block();
+            if (!cells) {
+                return std::string{};
+            }
+            std::vector<std::vector<std::optional<std::string>>> rows;
+            for (Key const& key : cells->keys) {
+                std::vector<std::optional<std::string>> line;
+                for (std::string const& column : cells->columns) {
+                    line.emplace_back(_source->text(key, column));
+                }
+                rows.push_back(std::move(line));
+            }
+            return copyText({}, rows).text;
+        });
+    }
+
+    /// @brief Writes tab-separated text into the grid from the focused cell right and down, the block keeping its
+    ///        shape, as one change; the status line says how many values were written and dropped.
+    ///
+    /// Lines split on a line feed, a trailing carriage return removed from each and a final empty line dropped; values
+    /// split on tabs, each trimmed of spaces. With no focus the block starts at the first row and the first visible
+    /// column, in a grid with no rows at the first row the paste adds. A line past the last row appends a row while
+    /// `appendRows` allows and the record holds fewer than `maxItems`, else each of its values is dropped. A value past
+    /// the last visible column, or on a read-only or covered cell, is dropped. Every other value is written as the
+    /// cell's draft (`GridSource::write`), all in one batch, then `GridSource::committed` is called once. A block of
+    /// more than `GridOptions::maxPasteCells` values is refused whole, and nothing is written.
+    /// @param text The text.
+    /// @return What the paste did with each value.
+    PasteResult paste(std::string_view text) {
+        commit();
+        letGo();
+        std::vector<std::vector<std::string>> const lines = pasteLines(text);
+        std::size_t values = 0;
+        for (std::vector<std::string> const& line : lines) {
+            values += line.size();
+        }
+        if (values > _options.maxPasteCells) {
+            notice("A paste holds at most " + groupedCount(static_cast<std::int64_t>(_options.maxPasteCells)) +
+                   " values");
+            return {};
+        }
+        PasteResult result;
+        std::vector<std::string> const columns = _source->columns();
+        std::size_t const rows = _source->rowCount();
+        std::size_t firstRow = 0;
+        std::size_t firstColumn = 0;
+        if (std::optional<CellRef> const focused = _rt->untracked([&] { return focus(); })) {
+            firstRow = _source->positionOf(focused->key).value_or(0);
+            auto const at = std::ranges::find(columns, focused->column);
+            firstColumn = at == columns.end() ? 0 : static_cast<std::size_t>(at - columns.begin());
+        }
+        // The keys each line lands on: the rows there, then the rows appended for the lines past the last.
+        std::vector<std::optional<Key>> keys;
+        bool appended = false;
+        for (std::size_t line = 0; line < lines.size(); ++line) {
+            std::size_t const viewRow = firstRow + line;
+            if (viewRow < rows) {
+                keys.push_back(_source->keyAt(viewRow));
+                continue;
+            }
+            std::optional<Key> added;
+            if (_options.appendRows && !_options.rowsFixed && _rt->untracked([&] { return insertRefusal(); }).empty()) {
+                added = _source->appendRow();
+            }
+            appended = appended || added.has_value();
+            keys.push_back(std::move(added));
+        }
+        _rt->batch([&] {
+            for (std::size_t line = 0; line < lines.size(); ++line) {
+                std::vector<std::string> const& cells = lines.at(line);
+                if (!keys.at(line)) {
+                    result.pastRows += cells.size();
+                    continue;
+                }
+                for (std::size_t at = 0; at < cells.size(); ++at) {
+                    std::size_t const column = firstColumn + at;
+                    if (column >= columns.size()) {
+                        ++result.pastColumns;
+                        continue;
+                    }
+                    CellRef const cell{.key = *keys.at(line), .column = columns.at(column)};
+                    if (!editable(cell)) {
+                        ++result.readOnly;
+                        continue;
+                    }
+                    _source->write(cell.key, cell.column, cells.at(at));
+                    ++result.written;
+                }
+            }
+        });
+        noteChange();
+        if (result.written > 0 || appended) {
+            _source->committed();
+        }
+        notice(pasteMessage(result));
+        return result;
+    }
+
+    /// @brief Copies the first row of the selection, else of the focused cell, into its other rows, editable cells
+    ///        only, as one change.
+    void fillDown() {
+        commit();
+        letGo();
+        std::optional<Block> const cells = _rt->untracked([&] { return block(); });
+        if (!cells || cells->keys.size() < 2) {
+            return;
+        }
+        bool changed = false;
+        _rt->batch([&] {
+            for (std::string const& column : cells->columns) {
+                std::string const first = _source->draft(cells->keys.front(), column);
+                for (std::size_t row = 1; row < cells->keys.size(); ++row) {
+                    CellRef const cell{.key = cells->keys.at(row), .column = column};
+                    if (editable(cell) && _source->draft(cell.key, column) != first) {
+                        _source->write(cell.key, column, first);
+                        changed = true;
+                    }
+                }
+            }
+        });
+        if (changed) {
+            noteChange();
+            _source->committed();
+        }
+    }
+
+    /// @brief Blanks the editable cells of the selection, else the focused cell, as one change.
+    void clear() {
+        commit();
+        letGo();
+        std::optional<Block> const cells = _rt->untracked([&] { return block(); });
+        if (!cells) {
+            return;
+        }
+        bool changed = false;
+        _rt->batch([&] {
+            for (Key const& key : cells->keys) {
+                for (std::string const& column : cells->columns) {
+                    CellRef const cell{.key = key, .column = column};
+                    if (editable(cell) && !_source->draft(key, column).empty()) {
+                        _source->write(key, column, std::string{});
+                        changed = true;
+                    }
+                }
+            }
+        });
+        if (changed) {
+            noteChange();
+            _source->committed();
+        }
+    }
+
+    /// @brief Inserts a blank row above or below the focused row, as one change; focus stays where it is.
+    /// @param below Whether the row goes below the focused one.
+    void insertRow(bool below) {
+        if (std::optional<CellRef> const focused = _rt->untracked([&] { return focus(); })) {
+            insertAt(focused->key, below);
+        }
+    }
+
+    /// @brief Deletes the rows the cell selection spans, else the focused row, as one change, at once. When one of them
+    ///        held a value the status line says `Deleted {n} rows` (`Deleted 1 row`) with the entry "Undo" (`undo`).
+    void deleteRows() {
+        std::vector<Key> doomed = _rt->untracked([&] { return selectedRows(); });
+        if (doomed.empty()) {
+            if (std::optional<CellRef> const focused = _rt->untracked([&] { return focus(); })) {
+                doomed.push_back(focused->key);
+            }
+        }
+        removeKeys(doomed);
+    }
+
+    /// @brief Puts back the rows the last deletion removed, each where it stood, as one change, while nothing has
+    ///        changed since; after a change it does nothing.
+    void undo() {
+        commit();
+        letGo();
+        std::size_t const before = _rt->untracked([&] { return _source->heldRows(); });
+        _source->undoRemove();
+        clearUndo();
+        if (_rt->untracked([&] { return _source->heldRows(); }) != before) {
+            _source->committed();
+        }
+    }
+
+    /// @brief Which row operations the grid offers now. Tracked.
+    /// @return Insert and delete of one row, with the bound that stops one; neither while the rows are fixed.
+    [[nodiscard]] RowOps rowOps() const {
+        if (_options.rowsFixed) {
+            return {};
+        }
+        std::string const insert = insertRefusal();
+        std::string const remove = removeRefusal(1);
+        bool const anyRow = _source->heldRows() > 0;
+        return RowOps{.insert = insert.empty(), .remove = remove.empty() && anyRow, .why = !insert.empty() ? insert : remove};
+    }
+
+    /// @brief Appends a row and focuses its first editable cell, as one change: what "Add row" under the grid does.
+    void addRow() {
+        commit();
+        letGo();
+        if (_options.rowsFixed) {
+            return;
+        }
+        if (std::optional<Key> const key = _source->appendRow()) {
+            noteChange();
+            _source->committed();
+            focusFirstEditable(*key);
+        }
+    }
+
+    /// @brief Calls @p observer with the cell selection after each change of it, whatever made it.
+    /// @param observer The observer; empty for none.
+    void onSelectionChange(std::function<void(std::optional<CellRange> const&)> observer) {
+        _selectionObserver = std::move(observer);
+    }
+
+    /// @brief Gives the grid the clipboard `Ctrl+V` reads.
+    /// @param read Reads the clipboard's text; nothing when it holds none.
+    void useClipboard(std::function<std::optional<std::string>()> read) { _readClipboard = std::move(read); }
 
     /// @brief Keeps something alive as long as the controller: what a node it built owns through it.
     /// @param kept The thing.
@@ -1521,6 +2022,8 @@ public:
         options.onFocusOut = [self] { self->leave(); };
         options.editing = Prop<std::optional<CellRef>>{[self] { return self->editing(); }};
         options.editor = [source](CellRef const& cell) { return source->editor(cell.key, cell.column); };
+        options.cellSelection = Prop<std::optional<CellRange>>{[self] { return self->selection(); }};
+        options.onCellSelect = [self](std::optional<CellRange> range) { self->select(std::move(range)); };
         options.cellMenu = [self, idOf, outer = std::move(options.cellMenu)](Key const& row, std::size_t column) {
             std::vector<MenuItem> own = self->cellEntries(row, idOf(column));
             if (!outer) {
@@ -1545,7 +2048,21 @@ public:
                 options.onStatusEntry = [self](std::string const& id) { self->chooseEntry(id); };
             }
         }
-        return ui::table(std::move(columns), std::move(made), std::move(options));
+        if (!_options.appendRows || _options.rowsFixed) {
+            return ui::table(std::move(columns), std::move(made), std::move(options));
+        }
+        // "Add row" under the grid, disabled at `maxItems` with the bound as its tooltip.
+        Button add;
+        add.label = std::string{"Add row"};
+        add.onClick = [self, keep] { self->addRow(); };
+        add.common.testId = options.common.testId.empty() ? std::string{} : options.common.testId + "_addRow";
+        add.common.enabled = Prop<bool>{[self] { return self->rowOps().insert; }};
+        add.common.tooltip = Prop<std::string>{[self] { return self->insertRefusal(); }};
+        Column holder;
+        holder.common.layout = options.common.layout;
+        holder.children.push_back(ui::table(std::move(columns), std::move(made), std::move(options)));
+        holder.children.push_back(ui::button(std::move(add)));
+        return ui::column(std::move(holder));
     }
 
     /// @brief The status line's refusal of typing on a read-only cell.
@@ -1554,6 +2071,257 @@ public:
     static constexpr std::string_view kDeriveFailedText = "Derived values could not be recalculated";
 
 private:
+    // The cells a selection, else the focused cell, covers: keys in view order, column ids in layout order.
+    struct Block {
+        std::vector<Key> keys;
+        std::vector<std::string> columns;
+    };
+
+    // The selection's rectangle, else the focused cell; nothing when a corner's row is not in the view or its column
+    // is not visible. Untracked reads of the source.
+    [[nodiscard]] std::optional<Block> block() const {
+        std::optional<CellRange> range = _selection.peek();
+        if (!range) {
+            std::optional<CellRef> const focused = focus();
+            if (!focused) {
+                return std::nullopt;
+            }
+            range = CellRange{.anchor = *focused, .focus = *focused};
+        }
+        std::vector<std::string> const columns = _source->columns();
+        std::optional<std::size_t> const anchorRow = _source->positionOf(range->anchor.key);
+        std::optional<std::size_t> const focusRow = _source->positionOf(range->focus.key);
+        auto const anchorColumn = std::ranges::find(columns, range->anchor.column);
+        auto const focusColumn = std::ranges::find(columns, range->focus.column);
+        if (!anchorRow || !focusRow || anchorColumn == columns.end() || focusColumn == columns.end()) {
+            return std::nullopt;
+        }
+        Block out;
+        for (std::size_t row = std::min(*anchorRow, *focusRow); row <= std::max(*anchorRow, *focusRow); ++row) {
+            if (std::optional<Key> const key = _source->keyAt(row)) {
+                out.keys.push_back(*key);
+            }
+        }
+        out.columns.assign(std::min(anchorColumn, focusColumn), std::max(anchorColumn, focusColumn) + 1);
+        return out;
+    }
+
+    // Whether a cell lies in the selection's rectangle.
+    [[nodiscard]] bool inBlock(CellRef const& cell) const {
+        std::optional<Block> const cells = _rt->untracked([&] { return block(); });
+        return cells && std::ranges::contains(cells->keys, cell.key) && std::ranges::contains(cells->columns, cell.column);
+    }
+
+    // The rows the selection spans, in view order; none without a selection.
+    [[nodiscard]] std::vector<Key> selectedRows() const {
+        if (!_selection.peek()) {
+            return {};
+        }
+        std::optional<Block> const cells = block();
+        return cells ? cells->keys : std::vector<Key>{};
+    }
+
+    // Shift with an arrow: the selection's focus corner moves by a row or a column from where it is, its anchor the
+    // focused cell when nothing was selected.
+    void extend(int rows, int columns) {
+        std::optional<CellRef> const focused = _rt->untracked([&] { return focus(); });
+        if (!focused) {
+            return;
+        }
+        CellRange range = _selection.peek().value_or(CellRange{.anchor = *focused, .focus = *focused});
+        std::vector<std::string> const ids = _source->columns();
+        std::optional<std::size_t> const row = _source->positionOf(range.focus.key);
+        auto const column = std::ranges::find(ids, range.focus.column);
+        std::size_t const count = _source->rowCount();
+        if (!row || column == ids.end() || count == 0) {
+            return;
+        }
+        auto const clamp = [](std::size_t at, int by, std::size_t size) {
+            auto const moved = static_cast<std::int64_t>(at) + by;
+            return static_cast<std::size_t>(std::clamp<std::int64_t>(moved, 0, static_cast<std::int64_t>(size) - 1));
+        };
+        std::optional<Key> const key = _source->keyAt(clamp(*row, rows, count));
+        if (!key) {
+            return;
+        }
+        range.focus = CellRef{.key = *key,
+                              .column = ids.at(clamp(static_cast<std::size_t>(column - ids.begin()), columns, ids.size()))};
+        setSelection(std::move(range));
+    }
+
+    // Ctrl+A: every cell of the view.
+    void selectAll() {
+        std::vector<std::string> const ids = _source->columns();
+        std::size_t const count = _source->rowCount();
+        if (ids.empty() || count == 0) {
+            return;
+        }
+        std::optional<Key> const first = _source->keyAt(0);
+        std::optional<Key> const last = _source->keyAt(count - 1);
+        if (first && last) {
+            setSelection(CellRange{.anchor = CellRef{.key = *first, .column = ids.front()},
+                                     .focus = CellRef{.key = *last, .column = ids.back()}});
+        }
+    }
+
+    // A paste's lines and values: lines split on LF, a trailing CR removed from each, a final empty line dropped;
+    // values split on tabs and trimmed of spaces.
+    [[nodiscard]] static std::vector<std::vector<std::string>> pasteLines(std::string_view text) {
+        std::vector<std::string_view> lines;
+        for (std::size_t start = 0;;) {
+            std::size_t const end = text.find('\n', start);
+            lines.push_back(text.substr(start, end == std::string_view::npos ? std::string_view::npos : end - start));
+            if (end == std::string_view::npos) {
+                break;
+            }
+            start = end + 1;
+        }
+        for (std::string_view& line : lines) {
+            if (line.ends_with('\r')) {
+                line.remove_suffix(1);
+            }
+        }
+        if (!lines.empty() && lines.back().empty()) {
+            lines.pop_back();
+        }
+        std::vector<std::vector<std::string>> out;
+        for (std::string_view const line : lines) {
+            std::vector<std::string> values;
+            for (std::size_t start = 0;;) {
+                std::size_t const end = line.find('\t', start);
+                std::string_view value =
+                    line.substr(start, end == std::string_view::npos ? std::string_view::npos : end - start);
+                value.remove_prefix(std::min(value.find_first_not_of(' '), value.size()));
+                std::size_t const last = value.find_last_not_of(' ');
+                value = last == std::string_view::npos ? std::string_view{} : value.substr(0, last + 1);
+                values.emplace_back(value);
+                if (end == std::string_view::npos) {
+                    break;
+                }
+                start = end + 1;
+            }
+            out.push_back(std::move(values));
+        }
+        return out;
+    }
+
+    // Why no row can be inserted: the record holds `maxItems`. Empty when one can. Tracked.
+    [[nodiscard]] std::string insertRefusal() const {
+        std::optional<std::size_t> const most = _source->bounds().second;
+        if (most && _source->heldRows() >= *most) {
+            return "A grid holds at most " + std::to_string(*most) + " rows";
+        }
+        return {};
+    }
+
+    // Why @p count rows cannot be deleted: fewer than `minItems` would be left. Empty when they can. Tracked.
+    [[nodiscard]] std::string removeRefusal(std::size_t count) const {
+        std::size_t const fewest = _source->bounds().first;
+        if (_source->heldRows() < count + fewest) {
+            return "A grid holds at least " + std::to_string(fewest) + " rows";
+        }
+        return {};
+    }
+
+    // Inserts a blank row above or below a row, as one change.
+    void insertAt(Key const& row, bool below) {
+        commit();
+        letGo();
+        if (_options.rowsFixed || !_rt->untracked([&] { return insertRefusal(); }).empty()) {
+            return;
+        }
+        std::optional<std::size_t> const at = _source->positionOf(row);
+        if (!at) {
+            return;
+        }
+        if (_source->insertRow(below ? *at + 1 : *at)) {
+            noteChange();
+            _source->committed();
+        }
+    }
+
+    // Deletes rows by key, as one change; focus moves to the row now at the focused row's place, and a selection
+    // whose corner is gone ends. Rows that held a value are said in the status line, with "Undo".
+    void removeKeys(std::vector<Key> const& keys) {
+        commit();
+        letGo();
+        if (_options.rowsFixed || keys.empty() ||
+            !_rt->untracked([&] { return removeRefusal(keys.size()); }).empty()) {
+            return;
+        }
+        std::optional<GridFocus> const shown = _rt->untracked([&] { return place(); });
+        std::optional<std::size_t> const at = shown && shown->key ? _source->positionOf(*shown->key) : std::nullopt;
+        noteChange();
+        bool const held = _source->removeRows(keys);
+        _source->committed();
+        if (std::optional<CellRange> const range = _selection.peek();
+            range && (!_source->positionOf(range->anchor.key) || !_source->positionOf(range->focus.key))) {
+            setSelection(std::nullopt);
+        }
+        if (shown && shown->key && !_source->positionOf(*shown->key)) {
+            std::size_t const rows = _source->rowCount();
+            std::optional<Key> const next =
+                rows == 0 ? std::nullopt : _source->keyAt(std::min(at.value_or(0), rows - 1));
+            if (next) {
+                focusCell(CellRef{.key = *next, .column = shown->column});
+            } else {
+                _place.set(std::nullopt);
+            }
+        }
+        if (held) {
+            std::size_t const count = keys.size();
+            notice("Deleted " + std::to_string(count) + (count == 1 ? " row" : " rows"),
+                   {StatusEntry{.id = "undo", .label = "Undo"}});
+        }
+    }
+
+    // Focuses the first editable cell of a row in layout order.
+    void focusFirstEditable(Key const& key) {
+        for (std::string const& column : _source->columns()) {
+            if (editable(CellRef{.key = key, .column = column})) {
+                focusCell(CellRef{.key = key, .column = column});
+                return;
+            }
+        }
+    }
+
+    // Selects a range, and tells the observer when it changed.
+    void setSelection(std::optional<CellRange> range) {
+        if (_selection.peek() == range) {
+            return;
+        }
+        _selection.set(std::move(range));
+        if (_selectionObserver) {
+            std::function<void(std::optional<CellRange> const&)> const observer = _selectionObserver;
+            observer(_selection.peek());
+        }
+    }
+
+    // Posts a transient notice, with the choices it offers.
+    void notice(std::string text, std::vector<StatusEntry> entries = {}) {
+        _message.set(std::move(text));
+        _messageEntries.set(std::move(entries));
+        _notices.set(_notices.peek() + 1);
+    }
+
+    // A focus move clears a notice, but not one that offers a choice, which lasts until the next change.
+    void clearNotice() {
+        if (_messageEntries.peek().empty()) {
+            _message.set({});
+        }
+    }
+
+    // Ends a notice that offers a choice.
+    void clearUndo() {
+        if (!_messageEntries.peek().empty()) {
+            _messageEntries.set({});
+            _message.set({});
+        }
+    }
+
+    // A change was made: an earlier deletion is no longer offered for undoing.
+    void noteChange() { clearUndo(); }
+
     // Lets go of the row an editor was open on, once no editor is open: the sort and the filter place it again.
     void letGo() {
         if (!_editing.peek()) {
@@ -1577,6 +2345,7 @@ private:
         bool const changed = _source->draft(open->key, open->column) != _kept;
         _editing.set(std::nullopt);
         if (changed) {
+            noteChange();
             _source->committed();
         }
     }
@@ -1589,6 +2358,7 @@ private:
         std::string const now = _source->draft(cell.key, cell.column);
         _source->write(cell.key, cell.column,
                        forms::detail::engine::trim(now) == "true" ? std::string{"false"} : std::string{"true"});
+        noteChange();
         _source->committed();
     }
 
@@ -1657,11 +2427,30 @@ private:
         std::optional<CellRef> const from =
             shown ? std::optional<CellRef>{CellRef{.key = *shown->key, .column = shown->column}} : std::nullopt;
         Step const step = next(from, forward);
+        if (step.kind == Step::Kind::None && forward && from && appendOnWalk()) {
+            return KeyOutcome::Handled;
+        }
         if (step.kind == Step::Kind::None) {
             return forward ? KeyOutcome::FocusNext : KeyOutcome::FocusPrevious;
         }
         land(step);
         return KeyOutcome::Handled;
+    }
+
+    // Tab past the last editable cell with `appendRows`: a row is added, as one change, and focus goes to its first
+    // editable cell. Nothing is added at `maxItems`, or while the rows are fixed.
+    bool appendOnWalk() {
+        if (!_options.appendRows || _options.rowsFixed || !_rt->untracked([&] { return insertRefusal(); }).empty()) {
+            return false;
+        }
+        std::optional<Key> const key = _source->appendRow();
+        if (!key) {
+            return false;
+        }
+        noteChange();
+        _source->committed();
+        focusFirstEditable(*key);
+        return true;
     }
 
     // Enter after a commit: down the column, along the row, or nowhere.
@@ -1684,6 +2473,19 @@ private:
                 if (editable(CellRef{.key = *key, .column = from.column})) {
                     focusCell(CellRef{.key = *key, .column = from.column});
                     return;
+                }
+            }
+            // Enter down from the last row adds a row with `appendRows`, focused in the same column when it is editable.
+            if (*row + 1 >= rows && _options.appendRows && !_options.rowsFixed &&
+                _rt->untracked([&] { return insertRefusal(); }).empty()) {
+                if (std::optional<Key> const key = _source->appendRow()) {
+                    noteChange();
+                    _source->committed();
+                    if (editable(CellRef{.key = *key, .column = from.column})) {
+                        focusCell(CellRef{.key = *key, .column = from.column});
+                    } else {
+                        focusFirstEditable(*key);
+                    }
                 }
             }
             return;
@@ -1711,6 +2513,9 @@ private:
     reactive::Signal<std::vector<StatusEntry>> _messageEntries;
     reactive::Signal<std::string> _standing;
     reactive::Signal<std::vector<StatusEntry>> _standingEntries;
+    reactive::Signal<std::optional<CellRange>> _selection;
+    std::function<std::optional<std::string>()> _readClipboard;
+    std::function<void(std::optional<CellRange> const&)> _selectionObserver;
     // The draft the open editor's cell held when it opened.
     std::string _kept;
     std::shared_ptr<void const> _kept_alive;

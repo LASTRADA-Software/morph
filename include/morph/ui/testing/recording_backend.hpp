@@ -2692,6 +2692,35 @@ public:
         store().set(rowId, "editor:" + std::to_string(column), shown);
     }
 
+    /// @brief Records property `cellSelection`: `r<firstRow>+<rowCount>,c<firstPosition>+<positionCount>`, `c` counting
+    ///        visible positions, or empty for none.
+    /// @param rect The rectangle, or nothing.
+    void setCellSelection(std::optional<std::array<std::size_t, 4>> rect) override {
+        set("cellSelection", rect ? "r" + std::to_string(rect->at(0)) + "+" + std::to_string(rect->at(1)) + ",c" +
+                                        std::to_string(rect->at(2)) + "+" + std::to_string(rect->at(3))
+                                  : std::string{});
+    }
+
+    /// @brief Stores the handler `RecordingBackend::selectCells` calls.
+    /// @param onSelect The handler.
+    void setOnCellSelect(
+        std::function<void(std::size_t, std::size_t, std::size_t, std::size_t)> onSelect) override {
+        _onCellSelect = std::move(onSelect);
+    }
+
+    /// @brief Calls the handler `setOnCellSelect` stored, as a drag from cell to cell would.
+    /// @param anchorRow      The anchor's view row.
+    /// @param anchorPosition The anchor's visible position.
+    /// @param focusRow       The focus's view row.
+    /// @param focusPosition  The focus's visible position.
+    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): two corners, each a row and a position.
+    void selectCells(std::size_t anchorRow, std::size_t anchorPosition, std::size_t focusRow, std::size_t focusPosition) {
+        if (_onCellSelect) {
+            auto const handler = _onCellSelect;
+            handler(anchorRow, anchorPosition, focusRow, focusPosition);
+        }
+    }
+
     /// @brief Records the row's property `marks:<column>`: `r`, `m`, `e`, `s` and `u` for the marks set, in that
     ///        order, empty for none.
     /// @param row    One of this table's rows.
@@ -3059,6 +3088,7 @@ private:
     std::function<void(std::size_t, std::size_t, SelectionChange)> _onSelectRange;
     std::function<void(std::size_t, int)> _onMeasured;
     std::function<void(FocusMove)> _onFocusMove;
+    std::function<void(std::size_t, std::size_t, std::size_t, std::size_t)> _onCellSelect;
     std::function<void(std::string)> _onText;
     std::function<void(std::size_t, std::size_t, bool)> _onCellClick;
     std::shared_ptr<TableMeasure const> _measure;
@@ -4059,6 +4089,12 @@ public:
         return true;
     }
 
+    /// @brief The clipboard's text, as `copyText` last recorded it.
+    /// @return The text; nothing while `setClipboard(false)` took the clipboard away.
+    [[nodiscard]] std::optional<std::string> pasteText() override {
+        return _hasClipboard ? std::optional{_clipboard} : std::nullopt;
+    }
+
     /// @brief Gives the backend a clipboard, as it has from the start, or takes it away, as a platform without
     ///        one would: `copyText` then writes nothing and returns false.
     /// @param available Whether there is a clipboard.
@@ -4166,6 +4202,23 @@ public:
         handler(viewRow, column, false);
         if (doubleClick) {
             handler(viewRow, column, true);
+        }
+    }
+
+    /// @brief Selects a rectangle of cells as a drag from one cell to another does: calls the handler
+    ///        `TableWidget::setOnCellSelect` stored, if any.
+    /// @param tableId        The table.
+    /// @param anchorRow      The anchor's view row.
+    /// @param anchorPosition The anchor's place among the visible columns.
+    /// @param focusRow       The focus's view row.
+    /// @param focusPosition  The focus's place among the visible columns.
+    /// @throws std::logic_error when the widget is not a table.
+    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): two corners, each a row and a position.
+    void selectCells(int tableId, std::size_t anchorRow, std::size_t anchorPosition, std::size_t focusRow,
+                     std::size_t focusPosition) {
+        detail::FakeTable& table = fakeTable(tableId, "selectCells");
+        if (reachable(_store->at(tableId))) {
+            table.selectCells(anchorRow, anchorPosition, focusRow, focusPosition);
         }
     }
 

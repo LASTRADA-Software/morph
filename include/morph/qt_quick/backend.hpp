@@ -3,6 +3,7 @@
 #pragma once
 #include <functional>
 #include <memory>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -85,6 +86,10 @@ public:
     /// @param text The text, UTF-8.
     /// @return True when the application has a clipboard.
     bool copyText(std::string_view text) override;
+
+    /// @brief Reads the system clipboard's text, `QGuiApplication::clipboard()`.
+    /// @return The text, UTF-8; nothing when the application has no clipboard or it holds no text.
+    [[nodiscard]] std::optional<std::string> pasteText() override;
 
     /// @copydoc ui::IViewBackend::createText
     [[nodiscard]] std::unique_ptr<ui::TextWidget> createText(ui::ContainerWidget* parent) override;

@@ -784,8 +784,15 @@ keeps its operands' 0 places and still fills 0.29 of a bar.
   `options` and `placeholder` to each row's member (`FieldState::places`, `switchUnit`, `narrowOptions`,
   `overridePlaceholder`) in an effect that follows them, a row's `unit` only when it first gives one or gives another
   (converting the draft), so a unit the user picks in the editor stays, and `readonly` is the cell's `CellFacts::overlayReadOnly`.
-  `enterMoves` and `walk` give its `GridOptions`, and `onActivate` runs with `event` the row's key when `Enter` or a
-  double click lands on a read-only cell. What a display column and `onActivate` keep holds the scope weakly. Its
+  `enterMoves`, `walk`, `appendRows` and `rowsFixed` give its `GridOptions`, with the session's `maxPasteCells`, and
+  `onActivate` runs with `event` the row's key when `Enter` or a double click lands on a read-only cell. The grid
+  selects cells (`Table::cellSelection`, bound to `GridController::selection`); a document's bound `selection` is
+  shown through `GridController::select`, and `onSelectionChange` runs with `event` the range after each change of it
+  (`GridController::onSelectionChange`); the element value `selection` is the range. `Ctrl+C` on the table copies the
+  cell selection (`GridController::copy`) through the backend's clipboard, "Copied 2 rows" in the status line, and
+  with no cell selection the table's copy runs; `Ctrl+V` pastes the backend's `pasteText` (`GridController::useClipboard`).
+  The table menu offers the focused row's `GridController::rowEntries` after its own entries and a separator, and
+  `appendRows` draws "Add row" under the table. What a display column and `onActivate` keep holds the scope weakly. Its
   header, menus, cell menu and arrangement are a table's (`configureTable` over a `TableConfig` the grid keeps): an
   edit column whose part says `sortable` sorts by its header, and the sort orders the grid's rows; every edit column
   filters unless its part says `filterable: false`, with its header's filter button, its values list, `onFiltersChange`
@@ -794,7 +801,8 @@ keeps its operands' 0 places and still fills 0.29 of a bar.
   columns and is fed to `FormGridSource::setLayout`, so the walk follows the visible columns in layout order. The rows'
   columns are the edit columns by their own ids, so a sort and a filter name a column as the table does. The cell menu
   shows "Copy", "Copy with headers", "Filter by this value" and "Exclude this value", then the grid's "Revert cell" and
-  "Revert row", then a separator and the document's `cellMenu` entries, read in a row scope with `row`, `column` and
+  "Revert row", then, unless `rowsFixed`, a separator and "Insert row above", "Insert row below" and "Delete row" (or
+  "Delete rows"), then a separator and the document's `cellMenu` entries, read in a row scope with `row`, `column` and
   `value` bound as a table over `rows` reads them. A copy with no row selected copies the focused cell. The scope's
   formatting is followed (`FormGridSource::setFormat`). The grid's notices are posted through `tableMessage`, held as
   a table's messages are, a repeated one posted again, and what stands while its cause lasts is the status line's

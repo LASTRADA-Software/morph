@@ -926,6 +926,19 @@ MorphWidget {
         if (fromRow && root.inSpannedColumn(x))
             return
         const held = modifiers & (Qt.ControlModifier | Qt.ShiftModifier)
+        // A table that selects cells takes a Shift-click on a cell as a rectangle from its focused cell, and a click
+        // beside the cells (the row's leading edge) as the row's cells; it selects no row.
+        if (root.table && root.table.selectsCells) {
+            const at = root.columnAt(x)
+            if (at < 0) {
+                root.table.selectRowCells(root.viewRow)
+                return
+            }
+            if (held === Qt.ShiftModifier) {
+                root.table.selectCellsTo(root.viewRow, at)
+                return
+            }
+        }
         // A table that takes cell clicks hears every tap on a cell; its second tap of a double tap opens the cell.
         if (root.table && root.table.reportsCellClicks) {
             const column = root.columnAt(x)

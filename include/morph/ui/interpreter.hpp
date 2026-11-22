@@ -434,6 +434,9 @@ struct SessionOptions {
     std::size_t maxRangeRows = 10'000;
     /// @brief The most rows a table's copy puts on the clipboard; a larger copy is refused in the table's status line.
     std::size_t maxCopyRows = 10'000;
+    /// @brief The most values one paste into a grid writes or drops; a larger block is refused in the grid's status
+    ///        line and nothing is written.
+    std::size_t maxPasteCells = 10'000;
     /// @brief The longest a model-backed table with `retainChanged` holds back the refetches its change events cause
     ///        while an action of this session that changes it runs, waited for on `scheduler`: within it a row the
     ///        action changed never leaves the view and comes back, past it other users' changes are not held up.
@@ -2301,6 +2304,9 @@ public:
     /// @brief Puts text on the clipboard through the backend's `IViewBackend::copyText`, returning whether it did;
     ///        empty until the screen is mounted, and again once it is unmounting.
     std::function<bool(std::string_view)> clipboard;
+    /// @brief Reads the clipboard's text through the backend's `IViewBackend::pasteText`; empty until the screen is
+    ///        mounted, and again once it is unmounting.
+    std::function<std::optional<std::string>()> pasteboard;
     /// @brief The models the opener lends.
     std::map<std::string, BorrowedModel, std::less<>> borrowed;
     /// @brief The screen scope's reactive depth.

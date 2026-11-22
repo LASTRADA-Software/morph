@@ -1329,6 +1329,21 @@ struct CellRef {
     [[nodiscard]] bool operator==(CellRef const& other) const = default;
 };
 
+/// @brief A rectangle of cells by its two corners: the rows between the corners' keys' view positions and the columns
+///        between their ids' places in the layout, both ends included. A sort or a column move keeps the corners, so
+///        the rectangle they span may change, as a spreadsheet's does.
+struct CellRange {
+    /// @brief The corner the selection started from.
+    CellRef anchor;
+    /// @brief The corner it was extended to.
+    CellRef focus;
+
+    /// @brief Member-wise equality.
+    /// @param other The range to compare with.
+    /// @return `true` when both corners match.
+    [[nodiscard]] bool operator==(CellRange const& other) const = default;
+};
+
 /// @brief A grid's focused cell as the mount shows it: a row by key, or by view position while the row there is not
 ///        fetched yet, and a column by id.
 struct GridFocus {
@@ -1754,6 +1769,15 @@ struct Table {
     Prop<std::vector<std::string>> keyChords;
     /// @brief Called with printable text typed while a cell has focus and no editor is open.
     std::function<void(std::string)> onText;
+    /// @brief Engaged: the table selects cells, not rows, and this is the selected rectangle, or none. The mount shows
+    ///        it at its corners' view positions and visible places now, so a sort or a column move redraws the
+    ///        rectangle the same corners span; a corner whose row is not in the view, or whose column is hidden, shows
+    ///        none, and the range is kept. The backend draws no row selection and reports no `onSelectionChange`. A
+    ///        table over a `TableSource` only.
+    std::optional<Prop<std::optional<CellRange>>> cellSelection;
+    /// @brief Called, while `cellSelection` is engaged, with the rectangle the user selected: a drag from cell to cell,
+    ///        a `Shift`+click, a row header's click or a column header's selection gesture.
+    std::function<void(std::optional<CellRange>)> onCellSelect;
 };
 
 /// @brief A date, or a date and time, edited in a display zone and reported as an instant.
@@ -2618,6 +2642,10 @@ struct TableOptions {
     Prop<std::vector<std::string>> keyChords;
     /// @brief Called with printable text typed while a cell has focus and no editor is open.
     std::function<void(std::string)> onText;
+    /// @brief Engaged: the table selects cells, and this is the selected rectangle (`Table::cellSelection`).
+    std::optional<Prop<std::optional<CellRange>>> cellSelection;
+    /// @brief Called with the rectangle the user selected (`Table::onCellSelect`).
+    std::function<void(std::optional<CellRange>)> onCellSelect;
 };
 
 /// @brief What a table's row view builds for one row: its cells, one per column, and its tone.
@@ -2753,6 +2781,8 @@ template <typename RowT>
     spec.onKey = std::move(options.onKey);
     spec.keyChords = std::move(options.keyChords);
     spec.onText = std::move(options.onText);
+    spec.cellSelection = std::move(options.cellSelection);
+    spec.onCellSelect = std::move(options.onCellSelect);
     return detail::makeNode(std::move(spec));
 }
 
@@ -2817,6 +2847,8 @@ template <typename RowT>
     spec.onKey = std::move(options.onKey);
     spec.keyChords = std::move(options.keyChords);
     spec.onText = std::move(options.onText);
+    spec.cellSelection = std::move(options.cellSelection);
+    spec.onCellSelect = std::move(options.onCellSelect);
     return detail::makeNode(std::move(spec));
 }
 

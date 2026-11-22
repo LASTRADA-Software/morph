@@ -7,6 +7,7 @@
 #include <QString>
 #include <QStringList>
 #include <QVariantMap>
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <functional>
@@ -711,6 +712,14 @@ public:
     void setCellMarks(ui::Widget& row, std::size_t column, ui::CellMarks const& marks) override;
     /// Throws std::logic_error when @p row is not one of this table's rows.
     void setRowModified(ui::Widget& row, bool modified) override;
+    /// MorphTable draws the rectangle (`cellRect`, `[firstRow, rowCount, firstPosition, positionCount]`, empty for
+    /// none) over the rows it spans and the visible columns at those positions.
+    void setCellSelection(std::optional<std::array<std::size_t, 4>> rect) override;
+    /// MorphTable selects cells (`selectsCells`): a drag from cell to cell, a Shift-click, a click on a row's leading
+    /// edge and a Ctrl-click on a column's header report its `cellSelect` event, and no row is selected.
+    void setOnCellSelect(std::function<void(std::size_t anchorRow, std::size_t anchorPosition, std::size_t focusRow,
+                                            std::size_t focusPosition)>
+                             onSelect) override;
     /// A tap on a row's cell, reported by the row.
     void cellClicked(TableRowImpl const& row, std::size_t column, bool doubleClick) const;
     /// Shift with an arrow, a Shift-click and Ctrl+A over a source go to the handler as view rows.
@@ -800,6 +809,7 @@ private:
     std::function<void(std::size_t, std::size_t, ui::SelectionChange)> _onSelectRange;
     std::function<void(std::string)> _onText;
     std::function<void(std::size_t, std::size_t, bool)> _onCellClick;
+    std::function<void(std::size_t, std::size_t, std::size_t, std::size_t)> _onCellSelect;
     std::function<void()> _onFocusOut;
     /// Each row's open cell editor's item, by row.
     QHash<TableRowImpl const*, QPointer<QQuickItem>> _editors;

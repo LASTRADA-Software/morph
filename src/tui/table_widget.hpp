@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
+#include <array>
 #include <chrono>
 #include <core/tui/Canvas.hpp>
 #include <core/tui/Component.hpp>
@@ -195,6 +196,14 @@ public:
     /// A modified row draws `+` in its selection mark's cell while it is not selected. Throws std::logic_error when
     /// @p row is not one of this table's rows.
     void setRowModified(ui::Widget& row, bool modified) override;
+    /// The rows a rectangle of cells spans draw `*` in the gutter, as selected rows do; the terminal draws no column
+    /// of it.
+    void setCellSelection(std::optional<std::array<std::size_t, 4>> rect) override;
+    /// In cell mode a click in a row's gutter selects the row's cells, a Shift-click the cells from the focused one to
+    /// the one clicked, and a Ctrl-click on a column's header the column's cells.
+    void setOnCellSelect(std::function<void(std::size_t anchorRow, std::size_t anchorPosition, std::size_t focusRow,
+                                            std::size_t focusPosition)>
+                             onSelect) override;
     /// Over a source, Shift with Up or Down, a Shift-click and Ctrl+A (and the header box) go to the handler as view
     /// rows; the mount resolves them over rows not realized.
     void setOnSelectRange(
@@ -270,8 +279,14 @@ private:
     [[nodiscard]] int headerLines() const noexcept;
     /// The sort chain's place of @p index, from 0, or none.
     [[nodiscard]] std::optional<std::size_t> chainPlace(std::size_t index) const;
-    /// Acts on a click on the header line at column @p x: the `⋯`, a filter button, or a sortable column's header.
+    /// Acts on a click on the header line at column @p x: the `⋯`, a filter button, or a sortable column's header;
+    /// in cell mode a Ctrl-click on a column's header selects its cells.
     void clickHeader(int x, ::core::tui::Modifier modifiers);
+    /// In cell mode, a click in @p row's gutter or a Shift-click on one of its cells, reported as a rectangle; whether
+    /// the click was one of those.
+    [[nodiscard]] bool selectCellsAt(WidgetBase const* row, ::core::tui::Point cell, ::core::tui::Modifier held);
+    /// A column's place among the visible columns, or none while it is hidden.
+    [[nodiscard]] std::optional<std::size_t> visiblePlace(std::size_t column) const;
     /// Acts on a click on the group line at column @p x: a group's filter button.
     void clickGroups(int x);
     /// Draws the group line above the headers.
@@ -484,6 +499,10 @@ private:
     std::function<void(std::size_t, std::size_t, ui::SelectionChange)> _onSelectRange;
     std::optional<std::size_t> _anchorRow;  ///< Over a source, where a range starts: a view row.
     std::optional<std::pair<std::size_t, std::size_t>> _focusCell;  ///< The focused cell's view row and column.
+    /// In cell mode, what a gesture that selects cells reports; empty selects rows.
+    std::function<void(std::size_t, std::size_t, std::size_t, std::size_t)> _onCellSelect;
+    /// The rectangle of selected cells, `{firstRow, rowCount, firstPosition, positionCount}`; none while empty.
+    std::optional<std::array<std::size_t, 4>> _cellRect;
     ui::TableStatus _status;
     std::function<void()> _onRetry;
     int _retryX = -1;  ///< Where `[Retry]` starts on the status line; -1 while it is not drawn.

@@ -189,4 +189,7 @@ inline ui::MenuItem const& entry(std::vector<ui::MenuItem> const& items, std::st
 // Whether an entry is enabled, as bound now.
 inline bool enabledOf(ui::MenuItem const& item) { return item.enabled.evaluate(); }
 
+// An entry's description, as bound now.
+inline std::string descriptionOf(ui::MenuItem const& item) { return item.description.evaluate(); }
+
 }  // namespace morph::test::grid

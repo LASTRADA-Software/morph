@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <functional>
@@ -1130,6 +1131,26 @@ public:
         static_cast<void>(editor);
     }
 
+    /// @brief Draws a rectangle of selected cells in place of a row selection, or none. Never calls the handler
+    ///        `setOnCellSelect` gave.
+    /// @param rect `{firstRow, rowCount, firstPosition, positionCount}`: view rows, and places among the visible columns
+    ///        in layout order (a rectangle is of the layout, so these are positions, not indices into the columns
+    ///        `setColumns` gave); empty draws none.
+    virtual void setCellSelection(std::optional<std::array<std::size_t, 4>> rect) { static_cast<void>(rect); }
+
+    /// @brief Makes the table select cells, not rows: it draws no row selection and reports no `onSelectionChange`.
+    ///        It calls the handler with the rectangle a drag from cell to cell or a `Shift`+click selects, a row header's
+    ///        click (anchor `(row, 0)`, focus `(row, last position)`) and a column header's selection gesture (anchor
+    ///        `(0, position)`, focus `(last row, position)`). `Shift` with an arrow and `Ctrl+A` are the table's own
+    ///        chords, declared with `setKeys`, not the backend's.
+    /// @param onSelect The handler, with the anchor's and the focus's view rows and visible positions; empty selects
+    ///        rows again.
+    virtual void setOnCellSelect(std::function<void(std::size_t anchorRow, std::size_t anchorPosition,
+                                                    std::size_t focusRow, std::size_t focusPosition)>
+                                     onSelect) {
+        static_cast<void>(onSelect);
+    }
+
     /// @brief Sets a cell's marks; called after the row's key, on every change, and whenever a cell is attached to a
     ///        row at a column, for a table whose rows come from a `TableSource`. `readOnly` draws the theme's read-only
     ///        cell surface, `modified` the modified mark, `error` the error mark, `stale` and `muted` the stale and
@@ -1839,6 +1860,11 @@ public:
         static_cast<void>(text);
         return false;
     }
+
+    /// @brief Reads the system clipboard's text, what a grid's paste writes into its cells. A backend that cannot
+    ///        read a clipboard keeps this default.
+    /// @return The text, UTF-8; nothing when there is no clipboard or it holds no text.
+    [[nodiscard]] virtual std::optional<std::string> pasteText() { return std::nullopt; }
 };
 
 /// @brief The width, in units, from which a surface is `expanded`: the compact bound, 80, plus the shell's sidebar

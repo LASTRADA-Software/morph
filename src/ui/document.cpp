@@ -295,11 +295,13 @@ constexpr std::array<KeySpec, 7> kForEachKeys = {{{"rows", Shape::Expr, {}, kReq
                                                   {"divided", Shape::Flag},
                                                   {"children", Shape::Nodes, {}, kInner}}};
 /// @brief The keys of `table`.
-constexpr std::array<KeySpec, 45> kTableKeys = {{{"rows", Shape::Expr},
+constexpr std::array<KeySpec, 47> kTableKeys = {{{"rows", Shape::Expr},
                                                  {"form", Shape::Text},
                                                  {"field", Shape::Text},
                                                  {"enterMoves", Shape::Text},
                                                  {"walk", Shape::Text},
+                                                 {"appendRows", Shape::Flag},
+                                                 {"rowsFixed", Shape::Flag},
                                                  {"key", Shape::Expr, {}, kInner},
                                                  {"model", Shape::Name},
                                                  {"table", Shape::Name},
@@ -372,9 +374,11 @@ constexpr std::array<KeySpec, 29> kColumnKeys = {{{"id", Shape::Name},
                                                   {"placeholder", Shape::Expr}}};
 /// @brief The keys of a form field overlay's `grid` part: the keys a `table` over a `form` takes beyond its `form` and
 ///        `field`, its columns, walk and activation, its layout, menus and filters.
-constexpr std::array<KeySpec, 12> kGridPartKeys = {{{"columns", Shape::Parts, "column"},
+constexpr std::array<KeySpec, 14> kGridPartKeys = {{{"columns", Shape::Parts, "column"},
                                                     {"enterMoves", Shape::Text},
                                                     {"walk", Shape::Text},
+                                                    {"appendRows", Shape::Flag},
+                                                    {"rowsFixed", Shape::Flag},
                                                     {"onActivate", Shape::Commands},
                                                     {"layout", Shape::Expr},
                                                     {"onLayoutChange", Shape::Commands},
@@ -3272,6 +3276,7 @@ private:
             refuse(node.path, "a table takes `rows`, or a `model` and `action`");
         }
         if (node.kind == "table") {
+            checkCellSelection(node);
             checkTableSelection(node);
             checkSelectColumn(node);
             checkTableSort(node);
@@ -3334,6 +3339,9 @@ private:
                 refuse(pointerAppend(part.path, key),
                        key == "enterMoves" ? "`enterMoves` is `down`, `right` or `none`" : "`walk` is `rows` or `columns`");
             }
+        }
+        if (part.flag("appendRows") && part.flag("rowsFixed")) {
+            refuse(pointerAppend(part.path, "appendRows"), "a grid with `rowsFixed` adds no rows; drop `appendRows`");
         }
         for (DocNodePtr const& column : part.partList("columns")) {
             if (column->name("field").empty() && column->prop("field") == nullptr && column->prop("value") == nullptr) {
@@ -3697,8 +3705,35 @@ private:
         }
     }
 
+    // `selectionMode: "cells"` selects a rectangle of cells, which a grid of a form does by default and only; a model's
+    // table is in server mode and selects rows. `appendRows` and `rowsFixed` say which row operations a grid offers.
+    static void checkCellSelection(DocNode const& node) {
+        bool const grid = !node.name("form").empty();
+        ExprPtr const mode = node.prop("selectionMode");
+        std::string const* const literal =
+            mode != nullptr && mode->kind == ExprKind::Literal ? mode->literal.asString() : nullptr;
+        std::string const where = pointerAppend(node.path, "selectionMode");
+        if (literal != nullptr && *literal == "cells" && !node.name("model").empty()) {
+            refuse(where, "`selectionMode` `cells` selects cells of a table held on the client; a model's table "
+                          "selects rows");
+        }
+        if (literal != nullptr && *literal == "cells" && !grid) {
+            refuse(where, "`selectionMode` `cells` is a grid's; this table is not a grid of a form");
+        }
+        if (grid && mode != nullptr && (literal == nullptr || *literal != "cells")) {
+            refuse(where, "a grid of a form selects cells: its `selectionMode` is `cells`");
+        }
+        for (std::string_view const key : {std::string_view{"appendRows"}, std::string_view{"rowsFixed"}}) {
+            if (node.flag(key, false) == node.flag(key, true) && !grid) {
+                refuse(pointerAppend(node.path, key),
+                       "`" + std::string{key} + "` is a grid's; this table is not a grid of a form");
+            }
+        }
+    }
+
     // A table's `selection` and `onSelectionChange` need rows the user can select, and rows the document holds: a
-    // model-backed table's engine owns its selection.
+    // model-backed table's engine owns its selection. A grid of a form selects cells, so it takes them without a
+    // `selectionMode`.
     static void checkTableSelection(DocNode const& node) {
         std::string_view key;
         if (node.prop("selection") != nullptr) {
@@ -3712,6 +3747,9 @@ private:
         if (!node.name("model").empty()) {
             refuse(where, "a model-backed table's engine owns its selection; `" + std::string{key} +
                               "` is for a table over `rows`");
+        }
+        if (!node.name("form").empty()) {
+            return;
         }
         ExprPtr const mode = node.prop("selectionMode");
         std::string const* const literal =
