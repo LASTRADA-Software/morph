@@ -19,6 +19,7 @@
 #include <string>
 #include <string_view>
 #include <utility>
+#include <variant>
 #include <vector>
 
 #include "forms_engine_support.hpp"
@@ -162,6 +163,66 @@ inline void GridFixture::enableDerive() {
 inline std::string GridFixture::json(std::string_view path) const {
     forms::Encoding const& encoding = form->field(path).encoded().get();
     return encoding.has_value() && encoding->has_value() ? (*encoding)->json : std::string{};
+}
+
+// A form of limits laid out as a fixed grid: `density` and `moisture` each a minimum and a maximum (three and one
+// places), `method` a choice of A or B, `count` an integer, and `specimens` rows of a `mass` (two places).
+inline constexpr std::string_view kSetLimits = R"({"type":"object","title":"Limits","properties":{
+  "limits":{"type":"object","title":"Limits","x-order":0,"properties":{
+    "density":{"type":"object","title":"Density","x-order":0,"properties":{
+      "min":{"type":["object","null"],"title":"Min","x-decimalPlaces":3,"x-order":0},
+      "max":{"type":["object","null"],"title":"Max","x-decimalPlaces":3,"x-order":1}}},
+    "moisture":{"type":"object","title":"Moisture","x-order":1,"properties":{
+      "min":{"type":["object","null"],"title":"Min","x-decimalPlaces":1,"x-order":0},
+      "max":{"type":["object","null"],"title":"Max","x-decimalPlaces":1,"x-order":1}}},
+    "method":{"enum":["A","B"],"title":"Method","x-order":2},
+    "count":{"type":["integer","null"],"title":"Count","x-order":3}}},
+  "specimens":{"type":"array","title":"Specimens","x-order":1,"items":{"type":"object","properties":{
+    "mass":{"type":["object","null"],"title":"Mass","x-decimalPlaces":2,"x-order":0}}}}}})";
+
+// A fixed grid over the Lims_SetLimits form: columns `min`, `max` (and `v` for the block case), in a comma locale.
+struct FixedGridFixture {
+    morph::test::formsengine::Harness h;
+    std::unique_ptr<forms::FormSession> form;
+    std::unique_ptr<ui::FixedGridSource> source;
+    std::unique_ptr<ui::GridController> grid;
+    // Prefills `body`, builds the source over `rows` and `columns` and the controller with default options.
+    FixedGridFixture(std::string_view body, std::vector<std::variant<ui::FixedRow, ui::FixedBlock>> rows,
+                     std::vector<ui::GridColumn> columns);
+    [[nodiscard]] std::string json(std::string_view path) const;
+};
+
+inline FixedGridFixture::FixedGridFixture(std::string_view body,
+                                          std::vector<std::variant<ui::FixedRow, ui::FixedBlock>> rows,
+                                          std::vector<ui::GridColumn> columns) {
+    form = h.session("Lims_SetLimits", std::string{kSetLimits},
+                     forms::FormSessionOptions{.locale = ui::localeFacts("de").numeric, .bcp47 = "de"});
+    form->prefill(std::string{body});
+    h.settle();
+    source = std::make_unique<ui::FixedGridSource>(
+        h.rt, form.get(), std::move(rows), std::move(columns),
+        ui::FormatContext{.locale = "de", .numeric = ui::withoutGrouping(ui::localeFacts("de").numeric)});
+    grid = std::make_unique<ui::GridController>(h.rt, *source, ui::GridOptions{});
+}
+
+inline std::string FixedGridFixture::json(std::string_view path) const {
+    forms::Encoding const& encoding = form->field(path).encoded().get();
+    return encoding.has_value() && encoding->has_value() ? (*encoding)->json : std::string{};
+}
+
+// A fixed cell editing a field.
+inline ui::FixedCell fieldCell(std::string path, std::size_t columns = 1) {
+    ui::FixedCell cell;
+    cell.field = std::move(path);
+    cell.columns = columns;
+    return cell;
+}
+
+// A fixed cell showing a literal text.
+inline ui::FixedCell textCell(std::string text) {
+    ui::FixedCell cell;
+    cell.text = std::move(text);
+    return cell;
 }
 
 // One table column per member of the row type, in schema order, its id and label the member's name.

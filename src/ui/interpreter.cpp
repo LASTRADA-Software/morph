@@ -1343,8 +1343,11 @@ struct GridTable {
     GridTable& operator=(GridTable&&) = delete;
     ~GridTable() = default;
 
-    /// The grid: its source, its controller and its table node.
+    /// The grid: its source, its controller and its table node. A fixed grid's source is `fixed`, and `grid.source`
+    /// is null.
     FormGrid grid;
+    /// A fixed grid's source; null for a grid of a form.
+    std::shared_ptr<FixedGridSource> fixed;
     /// The summary rows over the grid's rows, which the mount is handed in their place; null for a grid with no
     /// summaries and no group.
     std::shared_ptr<SummaryRows> summaries;
@@ -5164,14 +5167,18 @@ Value ScreenCore::elementValue(ElementState const& element, std::string_view nam
     }
     if (kind == "table" && element.gridTable != nullptr) {
         FormGrid const& grid = element.gridTable->grid;
+        FixedGridSource const* const fixed = element.gridTable->fixed.get();
         if (name == "modifiedCount") {
-            return Value{static_cast<std::int64_t>(grid.source->modifiedCount())};
+            std::size_t const cells = fixed != nullptr ? fixed->modifiedCount() : grid.source->modifiedCount();
+            return Value{static_cast<std::int64_t>(cells)};
         }
         if (name == "modifiedRows") {
-            return Value{static_cast<std::int64_t>(grid.source->modifiedRows())};
+            std::size_t const cells = fixed != nullptr ? fixed->modifiedRows() : grid.source->modifiedRows();
+            return Value{static_cast<std::int64_t>(cells)};
         }
         if (name == "errorCount") {
-            return Value{static_cast<std::int64_t>(grid.source->errorCount())};
+            std::size_t const cells = fixed != nullptr ? fixed->errorCount() : grid.source->errorCount();
+            return Value{static_cast<std::int64_t>(cells)};
         }
         if (name == "editing") {
             std::optional<CellRef> const cell = grid.grid->editing();
@@ -8198,6 +8205,9 @@ Node ScreenCore::lowerKind(DocNode const& node, LowerCtx const& ctx, ElementStat
         commonOf(node, ctx, element, spec.common);
         return ui::busy(std::move(spec));
     }
+    if (kind == "table" && !node.partList("layoutRows").empty()) {
+        return lowerFixedGrid(node, ctx, element);
+    }
     if (kind == "table" && !node.name("form").empty()) {
         return lowerFormGrid(node, ctx, element);
     }
@@ -8669,6 +8679,14 @@ void ScreenCore::gridParts(DocNode const& part, LowerCtx const& ctx, forms::Fiel
             columns.push_back(GridColumn{.id = member.name, .label = member.title, .field = member.name, .value = {}});
         }
     }
+    gridOptions(part, ctx, options);
+}
+
+// What any grid's part gives of its walk and its activation: `enterMoves`, `walk`, `appendRows`, `rowsFixed`, the
+// session's paste and copy bounds and its timers, and `onActivate`, run with the row's key on a read-only cell, which
+// holds the scope weakly.
+void ScreenCore::gridOptions(DocNode const& part, LowerCtx const& ctx, GridOptions& options) {
+    DetachedLower const detached = detachedLower(ctx);
     std::string_view const enter = part.name("enterMoves");
     options.enterMoves = enter == "right" ? EnterMoves::Right : (enter == "none" ? EnterMoves::None : EnterMoves::Down);
     options.walk = part.name("walk") == "columns" ? Walk::Columns : Walk::Rows;
@@ -8704,6 +8722,244 @@ Node ScreenCore::lowerFormGrid(DocNode const& node, LowerCtx const& ctx, Element
         return ui::text(Text{.text = std::string{node.name("field")}, .role = TextRole::Muted});
     }
     return formGridTable(node, ctx, *element, *form, *array);
+}
+
+namespace {
+
+/// A fixed grid's copy and cell menu, set before each mount begins, as a mount's own slots are: a copy writes each
+/// cell's text as the grid shows it under its column's label, and a cell menu opens on the row's record, with no
+/// filter.
+void fixedGridSlots(reactive::Runtime& runtime, GridTable& held) {
+    GridTable* const grid = &held;
+    held.config.gather = [&runtime, grid](std::vector<Key> keys, std::vector<std::string> const& ids, CopyDone done) {
+        CopyGathered gathered;
+        std::vector<std::string> kept;
+        for (std::string const& id : ids) {
+            auto const found = std::ranges::find(grid->config.columns, id, &LayoutColumn::id);
+            if (found != grid->config.columns.end()) {
+                kept.push_back(id);
+                gathered.headers.push_back(found->label);
+            }
+        }
+        FixedGridSource const& source = *grid->fixed;
+        runtime.untracked([&] {
+            for (Key const& key : keys) {
+                std::optional<std::size_t> const at = source.positionOf(key);
+                if (!at) {
+                    continue;
+                }
+                CopyRow row{.viewRow = static_cast<std::int64_t>(*at), .cells = {}};
+                for (std::string const& id : kept) {
+                    row.cells.emplace_back(source.text(key, id));
+                }
+                gathered.rows.push_back(std::move(row));
+            }
+        });
+        done(std::move(gathered));
+    };
+    held.config.heldCell = [grid](Key const& key, std::string const& id) -> std::optional<HeldCell> {
+        static_cast<void>(id);
+        std::optional<std::size_t> const at = grid->fixed->positionOf(key);
+        std::optional<TableRowRef> const ref =
+            at ? grid->fixed->view().row(static_cast<std::int64_t>(*at)) : std::nullopt;
+        if (!ref) {
+            return std::nullopt;
+        }
+        return HeldCell{.record = ref->row, .cell = table::Cell{}, .shown = {}, .units = {}, .keep = nullptr};
+    };
+}
+
+}  // namespace
+
+// A fixed grid, made once per element as a grid of a form is: its rows the table's `layoutRows`, each block's repeated
+// for each row of its collection, and each cell a field of the form `form` names, an expression read in the table's
+// scope (in a block, with `row` its collection row's record), or a text. Its header, its menus and its arrangement are
+// a table's, with no column that sorts or filters. What its cells' expressions keep holds the scope weakly.
+// NOLINTNEXTLINE(readability-function-cognitive-complexity): one section per part of a fixed grid.
+Node ScreenCore::lowerFixedGrid(DocNode const& node, LowerCtx const& ctx, ElementState* element) {
+    auto const muted = [] { return ui::text(Text{.text = std::string{}, .role = TextRole::Muted}); };
+    if (element == nullptr) {
+        return muted();
+    }
+    if (element->gridTable != nullptr) {
+        fixedGridSlots(runtime(), *element->gridTable);
+        return gridTableNode(node, ctx, *element);
+    }
+    forms::FormSession* form = nullptr;
+    if (!node.name("form").empty()) {
+        NameRef const* const named = ctx.scope->find(node.name("form"));
+        form = named != nullptr && named->element != nullptr ? named->element->form.get() : nullptr;
+        if (form == nullptr) {
+            return muted();
+        }
+    }
+    DetachedLower const detached = detachedLower(ctx);
+    // An expression read in the table's scope, `row` the block row's record when there is one; nothing once the scope
+    // is gone. Tracked.
+    auto const reader = [detached](ExprPtr expr) {
+        return [detached, expr](forms::RowState const* row) -> std::optional<std::pair<Value, FormatContext>> {
+            LowerCtx const live = attached(detached);
+            if (live.scope == nullptr) {
+                return std::nullopt;
+            }
+            Bindings bindings = live.bindings != nullptr ? *live.bindings : Bindings{};
+            if (row != nullptr) {
+                Value const record = gridRowRecord(*row);
+                bindings.push_back(Binding{.name = "row", .read = [record] { return record; }});
+            }
+            return std::pair{evalIn(*live.scope, &bindings, expr), live.scope->formatting()};
+        };
+    };
+    auto const count = [](ExprPtr const& expr) {
+        std::int64_t const* const literal =
+            expr != nullptr && expr->kind == ExprKind::Literal ? expr->literal.asInt() : nullptr;
+        return literal != nullptr && *literal > 0 ? static_cast<std::size_t>(*literal) : std::size_t{1};
+    };
+    auto const rowOf = [&](DocNode const& part) {
+        ExprPtr const label = part.prop("label");
+        std::string const key{part.name("key")};
+        FixedRow made{
+            .key = key, .label = label ? textOf(once(ctx, label), ctx.scope->formatting()) : key, .cells = {}};
+        for (DocNodePtr const& record : part.partList("cells")) {
+            for (DocNodePtr const& given : record->partList("cells")) {
+                FixedCell cell;
+                cell.field = std::string{given->name("field")};
+                cell.text = std::string{given->name("text")};
+                cell.rows = count(given->prop("rows"));
+                cell.columns = count(given->prop("columns"));
+                if (ExprPtr const value = given->prop("value")) {
+                    cell.value = [read = reader(value)](forms::RowState const* row) {
+                        auto const read_ = read(row);
+                        return read_ ? textOf(read_->first, read_->second) : std::string{};
+                    };
+                }
+                if (ExprPtr const readonly = given->prop("readonly")) {
+                    cell.readonly = [read = reader(readonly)](forms::RowState const* row) {
+                        auto const read_ = read(row);
+                        bool const* const flag = read_ ? read_->first.asBool() : nullptr;
+                        return flag != nullptr && *flag;
+                    };
+                }
+                if (ExprPtr const decimals = given->prop("decimals")) {
+                    cell.decimals = [read = reader(decimals)](
+                                        forms::RowState const* row) -> std::optional<std::uint32_t> {
+                        auto const read_ = read(row);
+                        int const places = read_ ? placesOf(read_->first, read_->second) : -1;
+                        return places >= 0 ? std::optional{static_cast<std::uint32_t>(places)} : std::nullopt;
+                    };
+                }
+                made.cells.insert_or_assign(given->id, std::move(cell));
+            }
+        }
+        return made;
+    };
+    std::vector<FixedGridSource::Part> parts;
+    for (DocNodePtr const& part : node.partList("layoutRows")) {
+        if (std::string_view const forEach = part->name("forEach"); !forEach.empty()) {
+            FixedBlock block{.forEach = std::string{forEach}, .rows = {}};
+            for (DocNodePtr const& row : part->partList("rows")) {
+                block.rows.push_back(rowOf(*row));
+            }
+            parts.emplace_back(std::move(block));
+        } else {
+            parts.emplace_back(rowOf(*part));
+        }
+    }
+    std::vector<GridColumn> columns;
+    for (DocNodePtr const& column : node.partList("columns")) {
+        ExprPtr const label = column->prop("label");
+        columns.push_back(GridColumn{.id = column->id,
+                                     .label = label ? textOf(once(ctx, label), ctx.scope->formatting()) : column->id,
+                                     .field = {},
+                                     .value = {}});
+    }
+    GridOptions options;
+    gridOptions(node, ctx, options);
+    auto grid = std::make_unique<GridTable>(runtime());
+    GridTable* const held = grid.get();
+    TableConfig& config = held->config;
+    config.element = element;
+    std::tie(config.allowed, config.menus) = configurableOf(node);
+    for (GridColumn const& column : columns) {
+        config.columns.push_back(
+            LayoutColumn{.id = column.id, .label = column.label, .locked = false, .kind = table::ColumnKind::Text});
+        config.sortable.push_back(false);
+        held->shown.push_back(TableColumn{.id = column.id, .label = column.label});
+    }
+    config.maxSortKeys = [] { return std::size_t{8}; };
+    config.message = [this, element](std::string text) { tableMessage(*element, std::move(text)); };
+    config.touch = [this, element] { tableMessage(*element, std::string{}); };
+    config.rows = [held]() -> TableRows* { return held->fixed ? &held->fixed->view() : nullptr; };
+    if (ExprPtr const layout = node.prop("layout");
+        layout && (layout->kind != ExprKind::Literal || !layout->literal.isNull())) {
+        RtScope& scope = *element->scope;
+        config.bound = &scope.nodes.computed(
+            [&scope, bindings = ctx.bindings, layout] { return evalIn(scope, bindings.get(), layout); });
+    }
+    try {
+        held->fixed = std::make_shared<FixedGridSource>(runtime(), form, std::move(parts), std::move(columns),
+                                                        ctx.scope->formatting());
+    } catch (std::invalid_argument const& failure) {
+        report(node.path, failure.what());
+        return muted();
+    }
+    held->grid.grid = std::make_shared<GridController>(runtime(), *held->fixed, std::move(options));
+    held->grid.grid->keepAlive(held->fixed);
+    held->fixed->onBeforeSubmit([weak = std::weak_ptr<GridController>{held->grid.grid}] {
+        if (auto const live = weak.lock()) {
+            live->leave();
+        }
+    });
+    element->gridTable = std::move(grid);
+    held->grid.grid->useClipboard([this] { return pasteboard ? pasteboard() : std::nullopt; });
+    // The cell selection a document binds is shown; each change of it runs `onSelectionChange` with the new range.
+    if (ExprPtr const bound = node.prop("selection");
+        bound && (bound->kind != ExprKind::Literal || !bound->literal.isNull())) {
+        element->scope->nodes.effect([this, held, scope = element->scope, bindings = ctx.bindings, bound] {
+            std::optional<CellRange> const range = cellRangeOf(evalIn(*scope, bindings.get(), bound));
+            runtime().untracked([&] {
+                if (held->grid.grid->selection() != range) {
+                    held->grid.grid->select(range);
+                }
+            });
+        });
+    }
+    if (Commands const* const commands = node.event("onSelectionChange"); commands != nullptr && !commands->empty()) {
+        held->grid.grid->onSelectionChange([this, detached, commands](std::optional<CellRange> const& range) {
+            LowerCtx const live = attached(detached);
+            if (live.scope != nullptr) {
+                runEvent(commands, live, cellRangeValue(range));
+            }
+        });
+    }
+    // The walk follows the visible columns in layout order, and the cells the scope's formatting.
+    RtScope* const scope = element->scope;
+    scope->nodes.effect([this, held, scope] {
+        TableConfig const& arranged = held->config;
+        std::vector<std::string> visible =
+            layoutOver(arranged.columns, arranged.declaredHidden, layoutNow(arranged)).visible();
+        FormatContext format = scope->formatting();
+        std::optional<CellRef> focused = held->grid.grid->focus();
+        runtime().untracked([&] {
+            held->fixed->setLayout(std::move(visible));
+            held->fixed->setFormat(std::move(format));
+            held->config.focused = std::move(focused);
+        });
+    });
+    scope->nodes.effect([this, element, held] {
+        std::string const text = held->grid.grid->message();
+        static_cast<void>(held->grid.grid->notices());
+        std::vector<StatusEntry> const offered = held->grid.grid->messageEntries();
+        runtime().untracked([&] {
+            std::vector<std::pair<StatusEntry, std::function<void()>>> entries;
+            for (StatusEntry const& entry : offered) {
+                entries.emplace_back(entry, [held, id = entry.id] { held->grid.grid->chooseEntry(id); });
+            }
+            tableMessage(*element, text, std::move(entries));
+        });
+    });
+    fixedGridSlots(runtime(), *held);
+    return gridTableNode(node, ctx, *element);
 }
 
 // A grid of a form, made once per element: every mount of the table shows the same grid, so its focus, its open editor,
@@ -9080,6 +9336,21 @@ Node ScreenCore::gridTableNode(DocNode const& part, LowerCtx const& ctx, Element
     std::optional<TableSource> base;
     if (held->summaries != nullptr) {
         base = summarySource(part, ctx, *held, columns);
+    }
+    // A fixed grid's row is named by its label.
+    if (held->fixed != nullptr) {
+        TableSource named;
+        named.rows = std::shared_ptr<TableRows>(held->grid.grid, &held->fixed->view());
+        named.rowView = [fixed = held->fixed](reactive::Signal<Value> const& row) {
+            TableRowLook look;
+            reactive::Signal<Value> const* const record = &row;
+            look.label = Prop<std::string>{[fixed, record] {
+                std::optional<Key> const key = fixed->keyOf(record->get());
+                return key ? fixed->label(*key) : std::string{};
+            }};
+            return look;
+        };
+        base = std::move(named);
     }
     return besideDialogs(table.common, std::move(dialogs), [&] {
         return held->grid.grid->node(std::move(columns), std::move(table), std::move(base));

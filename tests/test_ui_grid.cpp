@@ -9,6 +9,7 @@
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
+#include <map>
 #include <memory>
 #include <morph/core/action_refusal.hpp>
 #include <morph/forms/derive.hpp>
@@ -23,6 +24,7 @@
 #include <string>
 #include <string_view>
 #include <utility>
+#include <variant>
 #include <vector>
 
 #include "grid_test_support.hpp"
@@ -1981,6 +1983,159 @@ TEST_CASE("summary: a table over rows' summary follows the filter", "[ui][summar
     CHECK(h.text("summary_total_mass") == "36");
     filterEquals(h, h.byTestId("Table", "t"), 0, "A");
     CHECK(h.text("summary_total_mass") == "22");
+}
+
+// ── Fixed grids ─────────────────────────────────────────────────────────────
+
+using morph::test::grid::fieldCell;
+using morph::test::grid::FixedGridFixture;
+using morph::test::grid::textCell;
+
+ui::FixedRow fixedRow(std::string key, std::map<std::string, ui::FixedCell, std::less<>> cells) {
+    return ui::FixedRow{.key = key, .label = key, .cells = std::move(cells)};
+}
+
+std::vector<ui::GridColumn> fixedColumns(std::vector<std::string> const& ids) {
+    std::vector<ui::GridColumn> columns;
+    for (std::string const& id : ids) {
+        columns.push_back(ui::GridColumn{.id = id, .label = id, .field = {}, .value = {}});
+    }
+    return columns;
+}
+
+// The four parameters: density and moisture by minimum and maximum, method a choice over both columns, count an integer
+// beside a text.
+std::vector<std::variant<ui::FixedRow, ui::FixedBlock>> fourParameters() {
+    return {fixedRow("density", {{"min", fieldCell("limits.density.min")}, {"max", fieldCell("limits.density.max")}}),
+            fixedRow("moisture",
+                     {{"min", fieldCell("limits.moisture.min")}, {"max", fieldCell("limits.moisture.max")}}),
+            fixedRow("method", {{"min", fieldCell("limits.method", 2)}}),
+            fixedRow("count", {{"min", fieldCell("limits.count")}, {"max", textCell("—")}})};
+}
+
+// A field's forms error code; empty for none.
+std::string errorCode(forms::FormSession const& form, std::string_view path) {
+    std::optional<forms::FieldError> const& error = form.field(path).error().peek();
+    return error ? error->code : std::string{};
+}
+
+// Mutation: the walk asking the field's spec of the column's first row for every row (one kind per column).
+TEST_CASE("fixed grid: four parameters walk, paste and validate per cell", "[ui][grid][fixed]") {
+    FixedGridFixture f{R"({"limits":{}})", fourParameters(), fixedColumns({"min", "max"})};
+    f.grid->focusCell(ui::CellRef{ui::Key{std::string{"density"}}, "min"});
+    std::vector<std::pair<std::string, std::string>> walked;
+    for (int i = 0; i < 5; ++i) {
+        f.grid->press("Tab");
+        REQUIRE(f.grid->focus().has_value());
+        walked.emplace_back(std::get<std::string>(f.grid->focus()->key), f.grid->focus()->column);
+    }
+    CHECK(walked == std::vector<std::pair<std::string, std::string>>{
+        {"density", "max"}, {"moisture", "min"}, {"moisture", "max"}, {"method", "min"}, {"count", "min"}});
+    CHECK(f.grid->press("Tab") == ui::KeyOutcome::FocusNext);          // count.max is text: read-only
+    f.grid->focusCell(ui::CellRef{ui::Key{std::string{"density"}}, "min"});
+    auto const result = f.grid->paste("1,2345\t2\n0,55\tx");
+    CHECK(result.written == 4);
+    CHECK(errorCode(*f.form, "limits.density.min") == "too-precise");   // 3 places
+    CHECK(f.json("limits.density.max") == R"({"num":2000,"den":1000,"dp":3})");
+    CHECK(errorCode(*f.form, "limits.moisture.min") == "too-precise");  // 1 place
+    CHECK(errorCode(*f.form, "limits.moisture.max") == "malformed");
+}
+
+// Mutation: block row keys by position, which move every row's state on insertion.
+TEST_CASE("fixed grid: a forEach block repeats per specimen with stable keys", "[ui][grid][fixed]") {
+    FixedGridFixture f{R"({"limits":{},"specimens":[{},{}]})",
+                       {ui::FixedBlock{.forEach = "specimens", .rows = {fixedRow("mass", {{"v", fieldCell("mass")}})}}},
+                       fixedColumns({"v"})};
+    CHECK(keysOf(*f.source) == std::vector<ui::Key>{ui::Key{std::string{"1/mass"}}, ui::Key{std::string{"2/mass"}}});
+    f.grid->focusCell(ui::CellRef{ui::Key{std::string{"2/mass"}}, "v"});
+    f.grid->type("5");
+    f.grid->press("Enter");
+    std::uint64_t const added = f.form->field("specimens").insertRow(0);
+    CHECK(keysOf(*f.source).front() == ui::Key{std::to_string(added) + "/mass"});
+    CHECK(f.source->draft(ui::Key{std::string{"2/mass"}}, "v") == "5");
+}
+
+// A form of limits and a fixed grid of its density, method and count, and a block of each specimen's mass.
+constexpr std::string_view kFixedGridDocument = R"({"vocab":"ui/1","id":"limits",
+  "models":{"sample":{"type":"Lims_SampleModel"}},
+  "view":{"kind":"column","children":[
+    {"kind":"form","id":"rec","model":"sample","action":"Lims_SetLimits","submit":"explicit"},
+    {"kind":"table","id":"grid","testId":"grid","form":"rec",
+     "columns":[{"id":"min","label":"Min"},{"id":"max","label":"Max"}],
+     "layoutRows":[
+       {"key":"density","label":"Density",
+        "cells":{"min":{"field":"limits.density.min"},"max":{"field":"limits.density.max"}}},
+       {"key":"method","label":"Method","cells":{"min":{"field":"limits.method","columns":2}}},
+       {"key":"count","label":"Count","cells":{"min":{"field":"limits.count"},"max":{"text":"none"}}},
+       {"forEach":"specimens","rows":[{"key":"mass","label":"Mass","cells":{"min":{"field":"mass"}}}]}]}]}})";
+
+void addLimitsAction(ui::testing::TableHarness& h) {
+    ui::testing::addAction(h, "Lims_SetLimits", std::string{morph::test::grid::kSetLimits},
+                           ui::ActionInfo{.modelType = "Lims_SampleModel"});
+}
+
+std::string replaced(std::string_view text, std::string_view from, std::string_view to) {
+    std::string out{text};
+    REQUIRE(out.find(from) != std::string::npos);
+    out.replace(out.find(from), from.size(), to);
+    return out;
+}
+
+// Mutation: the loader's duplicate-key check comparing keys within one block only (two top-level "density" load).
+TEST_CASE("fixed grid: the loader refuses what the spec refuses", "[ui][grid][fixed]") {
+    ui::testing::TableHarness h;
+    addLimitsAction(h);
+    auto const refusal = [&h](std::string const& text) {
+        auto const loaded = ui::loadDocumentText(text, ui::LoadOptions{.catalog = h.session.options().catalog});
+        return loaded.has_value() ? std::string{} : loaded.error().reason;
+    };
+    CHECK(refusal(std::string{kFixedGridDocument}).empty());
+    CHECK(refusal(replaced(kFixedGridDocument, R"("key":"method")", R"("key":"density")")).find("`density`") !=
+          std::string::npos);
+    CHECK(refusal(replaced(kFixedGridDocument, R"("form":"rec",)", R"("form":"rec","rows":{"lit":[]},)"))
+              .find("`rows`") != std::string::npos);
+    CHECK(refusal(replaced(kFixedGridDocument, R"("form":"rec",)", R"("form":"rec","field":"specimens",)"))
+              .find("`field`") != std::string::npos);
+    CHECK(refusal(replaced(kFixedGridDocument, R"("form":"rec",)", "")).find("`form`") != std::string::npos);
+    constexpr std::string_view kFormAndRows = R"({"vocab":"ui/1","id":"limits",
+      "models":{"sample":{"type":"Lims_SampleModel"}},
+      "view":{"kind":"column","children":[
+        {"kind":"form","id":"rec","model":"sample","action":"Lims_SetLimits","submit":"explicit"},
+        {"kind":"table","id":"grid","form":"rec","field":"specimens","rows":{"lit":[]},
+         "columns":[{"id":"mass","field":"mass"}]}]}})";
+    CHECK(refusal(std::string{kFormAndRows}).find("`rows` or a `form`, not both") != std::string::npos);
+    // A key repeated between a block's row and a fixed row is one key twice in the grid.
+    CHECK(refusal(replaced(kFixedGridDocument, R"({"key":"mass")", R"({"key":"count")")).find("`count`") !=
+          std::string::npos);
+    // A cell names a field of the form, and a column of the table.
+    CHECK(refusal(replaced(kFixedGridDocument, "limits.count", "limits.nosuch")).find("limits.nosuch") !=
+          std::string::npos);
+    CHECK(refusal(replaced(kFixedGridDocument, R"("max":{"text":"none"})", R"("other":{"text":"none"})"))
+              .find("`other`") != std::string::npos);
+}
+
+// Mutation: a table with `layoutRows` lowered as a table over `rows` (no row keyed "density" is drawn).
+TEST_CASE("fixed grid: a document's fixed grid edits its form's fields and repeats its block", "[ui][grid][fixed]") {
+    ui::testing::TableHarness h;
+    addLimitsAction(h);
+    auto const screen = h.mount(kFixedGridDocument);
+    forms::FormSession& form = *ui::testing::elementOf(*screen, "rec").form;
+    form.prefill(R"({"limits":{},"specimens":[{},{}]})");
+    h.settle();
+    int const table = h.byTestId("Table", "grid");
+    REQUIRE(h.backend.tableRow(table, ui::Key{std::string{"density"}}).has_value());
+    REQUIRE(h.backend.tableRow(table, ui::Key{std::string{"2/mass"}}).has_value());
+    h.backend.clickCell(table, 0, 1);   // (density, max)
+    h.settle();
+    h.backend.typeInto(table, "4");
+    h.settle();
+    h.backend.press(table, "Enter");
+    h.settle();
+    CHECK(form.field("limits.density.max").draft() == "4");
+    CHECK(ui::testing::elementValue(h, "grid", "modifiedCount") == ui::Value{std::int64_t{1}});
+    form.field("specimens").insertRow(0);
+    h.settle();
+    CHECK(h.backend.tableRow(table, ui::Key{std::string{"3/mass"}}).has_value());
 }
 
 }  // namespace

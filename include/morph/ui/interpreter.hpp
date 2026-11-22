@@ -1524,8 +1524,9 @@ struct MORPH_API ElementState {
     ///        the element is wired; a collection's table: its engine over the session's source, its configuring,
     ///        persisted state and status line. Null for any other element. It outlives every mount of the table.
     std::unique_ptr<RowsTable> rowsTable;
-    /// @brief A grid of a form (a table with `form` and `field`): its grid and its status line, made when the table is
-    ///        first lowered; null for any other element. It outlives every mount of the table.
+    /// @brief A grid of a form (a table with `form` and `field`) or a fixed grid (a table with `layoutRows`): its grid
+    ///        and its status line, made when the table is first lowered; null for any other element. It outlives every
+    ///        mount of the table.
     std::unique_ptr<GridTable> gridTable;
     /// @brief A form's fields drawn as grids through a field overlay's `grid` part, by the field's name: each an element
     ///        of its own, whose node is the part, holding its grid. Empty for any other element.
@@ -2506,6 +2507,11 @@ private:
     /// its options.
     void gridParts(DocNode const& part, LowerCtx const& ctx, forms::FieldState const& array,
                    std::vector<GridColumn>& columns, GridOptions& options);
+    /// What any grid's part gives of its walk and its activation.
+    void gridOptions(DocNode const& part, LowerCtx const& ctx, GridOptions& options);
+    /// A fixed grid: a table whose rows are its `layoutRows`, each cell a field of the form `form` names, an expression
+    /// or a text, kept in @p element as a grid of a form is.
+    Node lowerFixedGrid(DocNode const& node, LowerCtx const& ctx, ElementState* element);
     /// The table a model-backed table shows for the description its rows hold, or the status line alone without one.
     Node modelTableOf(DocNode const& node, LowerCtx const& ctx, ElementState& element);
     /// Makes a model-backed table's rows, its description query and its persisted state's load.

@@ -853,6 +853,23 @@ keeps its operands' 0 places and still fills 0.29 of a bar.
   view; with a `grid` part, through a `forms::Overrides::byField` for the field, the same table a `table` node with
   those keys makes, kept in an element of its own on the form's element (`ElementState::fieldGrids`, by the field's
   name, its node the part) so every mount of the form shows the same grid.
+- **A fixed grid.** A `table` with `layoutRows` lowers to a `ui::FixedGridSource` over the session of the form
+  element `form` names (none without `form`) and a `GridController`, made when the table is first lowered and kept in
+  the table's element as a grid of a form is (`GridTable::fixed`, its controller `GridTable::grid`). Each row part
+  becomes a `FixedRow`, its `label` read once, and each block part a `FixedBlock` of them; a cell's `field` and `text`
+  are kept as given, its `rows` and `columns` as counts, and its `value`, `readonly` and `decimals` become functions
+  read in the table's scope, with `row` bound to the block's collection row's record (each member's encoded value)
+  in a block. The source keeps one row per row part and per block row and collection row, in order: a block's rows
+  are expanded again on each change of its collection's rows, keyed `"<row key>/<key>"`, so a row's focus, draft and
+  marks stay with it while collection rows are added above it. Its view is an `EngineRows` over a `table::VectorSource`
+  of the rows' keys, never sorted or filtered. The columns are the column parts, labelled by their `label` read once,
+  each of `TableColumn` and `LayoutColumn` kind text and not sortable; `layout` and the column chooser arrange them and
+  feed `FixedGridSource::setLayout`, so the walk follows the visible columns and a span is cut where they part. Its
+  walk options, `onActivate`, its cell selection, its copy and paste, its status line and its table menu are a grid of
+  a form's (`gridOptions`, `gridTableNode`); its copy writes each cell's text as shown, and each row's accessible name
+  is its label (`TableRowLook::label`). A grid the source cannot make (a field the form lacks at run time) is
+  reported and drawn as muted text. Element values `modifiedCount`, `modifiedRows`, `errorCount` and `editing` read
+  it as they read a grid of a form.
 - **A form field's component.** A top-level field whose overlay names a `component` is drawn by it: the
   form's view is given a `forms::Overrides::byField` per such field, whose render builds the `custom` node
   `lowerCustom` would, with the field's built-in control as the fallback. The form fills the props it knows:
