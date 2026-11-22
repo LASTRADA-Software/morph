@@ -619,7 +619,9 @@ public:
     }
 
     /// @brief What the field holds, as one string: two snapshots are equal exactly when the field holds the same
-    ///        entry (draft, unit and engagement, and every member's and row's). Untracked.
+    ///        entry (draft, unit and engagement, and every member's and row's). A computed or derived member, which only
+    ///        a round of derived values writes, is no entry and is left out, so a round never makes a field look edited
+    ///        or unsaved. Untracked.
     /// @return The snapshot.
     [[nodiscard]] std::string snapshot() const {
         std::string out;
@@ -767,9 +769,14 @@ public:
     }
 
 private:
-    // Each draft is written with its length first, so no draft can be read as the end of another.
+    // Each draft is written with its length first, so no draft can be read as the end of another. A computed or
+    // derived member writes a fixed mark in its place.
     // NOLINTNEXTLINE(misc-no-recursion): an Object's members and a row's cells are fields.
     void appendSnapshot(std::string& out) const {
+        if (_spec->computed || _spec->derived) {
+            out += "=;";
+            return;
+        }
         std::string const& text = _text.peek();
         out += std::to_string(text.size());
         out += ':';
@@ -1526,8 +1533,10 @@ public:
 
     /// @brief Loads a derive reply's values: each path names a derived member (`x-derived`) of the body @p round sent,
     ///        `rows[i]` resolved through the row keys at sending to the row's current position, so a value lands on the
-    ///        row it was computed for; a value for a row removed since is dropped. Programmatic: nothing is submitted,
-    ///        and no field's loaded snapshot moves. A round older than the last loaded derive reply loads nothing.
+    ///        row it was computed for; a value for a row removed since is dropped. Programmatic, and no edit: nothing is
+    ///        submitted, and a member that held its loaded value holds the new one as loaded. A derived member is in no
+    ///        field's snapshot, so a top-level field that held its loaded value, or what the submission in flight sent,
+    ///        keeps holding it. A round older than the last loaded derive reply loads nothing.
     /// @param round The round the reply answers.
     /// @param reply The reply.
     /// @return How many members were written, and the paths refused: those naming no derived member.
@@ -1537,34 +1546,42 @@ public:
             return load;
         }
         _derivedLoaded = round.sequence;
-        runtime().batch([&] {
-            for (Derived::Value const& value : reply.values) {
-                Resolved const target = resolve(round, value.path);
-                if (target.kind == Resolved::Kind::Dropped) {
-                    continue;
-                }
-                if (target.kind == Resolved::Kind::Missing || !target.field->spec().derived ||
-                    isComposite(target.field->spec())) {
-                    load.refused.push_back(value.path);
-                    continue;
-                }
-                auto const dom = detail::engine::parseJson(value.value.str);
-                if (!dom) {
-                    load.refused.push_back(value.path);
-                    continue;
-                }
-                target.field->load(&*dom);
-                ++load.loaded;
+        std::vector<FieldState*> targets;
+        std::vector<detail::engine::Json> values;
+        for (Derived::Value const& value : reply.values) {
+            Resolved const target = resolve(round, value.path);
+            if (target.kind == Resolved::Kind::Dropped) {
+                continue;
             }
-            _core->markProgrammatic();
-        });
+            if (target.kind == Resolved::Kind::Missing || !target.field->spec().derived ||
+                isComposite(target.field->spec())) {
+                load.refused.push_back(value.path);
+                continue;
+            }
+            auto dom = detail::engine::parseJson(value.value.str);
+            if (!dom) {
+                load.refused.push_back(value.path);
+                continue;
+            }
+            targets.push_back(target.field);
+            values.push_back(*std::move(dom));
+        }
+        writeKeepingLoaded(
+            targets,
+            [&] {
+                for (std::size_t at = 0; at < targets.size(); ++at) {
+                    targets.at(at)->load(&values.at(at));
+                }
+            },
+            false);
+        load.loaded = targets.size();
         return load;
     }
 
     /// @brief Loads an evaluation's recomputed body: every computed member (`x-computed`) of the body @p round sent,
     ///        rows resolved as `loadDerived(round, Derived)` resolves them; a computed member the body leaves out of an
-    ///        object it holds is blank. The reply's `errors` and `ready` are not read. Programmatic, and no loaded
-    ///        snapshot moves. A round older than the last loaded evaluation loads nothing.
+    ///        object it holds is blank. The reply's `errors` and `ready` are not read. Programmatic, and no edit, as
+    ///        `loadDerived(round, Derived)` writes. A round older than the last loaded evaluation loads nothing.
     /// @param round         The round the reply answers.
     /// @param evaluatedBody The recomputed body.
     /// @return How many members were written; nothing is refused, since only computed members are read.
@@ -1578,56 +1595,49 @@ public:
             return load;
         }
         _evaluationLoaded = round.sequence;
-        runtime().batch([&] {
-            runtime().untracked([&] {
-                for (auto const& field : _fields) {
-                    loadComputed(round, *field, *dom, load);
-                }
-            });
-            _core->markProgrammatic();
+        std::vector<std::pair<FieldState*, detail::engine::Json const*>> writes;
+        runtime().untracked([&] {
+            for (auto const& field : _fields) {
+                collectComputed(round, *field, *dom, writes);
+            }
         });
+        std::vector<FieldState*> targets;
+        for (auto const& write : writes) {
+            targets.push_back(write.first);
+        }
+        writeKeepingLoaded(
+            targets,
+            [&] {
+                for (auto const& [field, value] : writes) {
+                    field->load(value);
+                }
+            },
+            false);
+        load.loaded = writes.size();
         return load;
     }
 
-    /// @brief Runs a programmatic change of a field as part of how it was loaded: a scalar that was not modified is
-    ///        recorded as loaded with what it holds after @p change, so the change draws no modified mark and a revert
-    ///        returns to it, and the top-level field holding it counts as loaded when it did before. What a grid's per-row
-    ///        `unit` overlay first gives a loaded row is applied this way. A modified field, and a member of a row added
-    ///        since the load, stay as they are: @p change is then an ordinary programmatic change.
-    /// @param field  The field changed. A member of this session.
-    /// @param change The change; nothing is submitted for it.
-    void changeAsLoaded(FieldState& field, std::function<void()> const& change) {
-        std::optional<std::size_t> top;
-        bool topLoaded = false;
-        bool cellLoaded = false;
-        runtime().untracked([&] {
-            for (std::size_t index = 0; index < _fields.size(); ++index) {
-                std::string const& name = _fields.at(index)->spec().name;
-                std::string const& path = field.path();
-                if (path == name || (path.starts_with(name) && path.size() > name.size() &&
-                                     (path.at(name.size()) == '.' || path.at(name.size()) == '#'))) {
-                    top = index;
-                    topLoaded = _fields.at(index)->snapshot() == _loaded.at(index);
-                }
+    /// @brief Switches units as part of how the fields were loaded: what the first unit a grid's per-row `unit` overlay
+    ///        gives each loaded row is. Each switch converts the draft as `FieldState::switchUnit` does. A cell that held
+    ///        its loaded value is then recorded as loaded with what it holds after the switch, so it draws no modified
+    ///        mark and a revert returns to it; a modified cell, and a member of a row added since the load, stay as they
+    ///        are, the switch an ordinary programmatic change. A top-level field that held its loaded value, or what the
+    ///        submission in flight sent, keeps holding it. Nothing is submitted. All the switches are one batch and one
+    ///        pass over the top-level fields, so a load's rows cost no more than one switch.
+    /// @param switches Each field, a scalar of this session, and the index into its `spec().units` to switch it to.
+    void switchUnitsAsLoaded(std::span<std::pair<FieldState*, std::size_t> const> switches) {
+        if (switches.empty()) {
+            return;
+        }
+        std::vector<FieldState*> targets;
+        for (auto const& entry : switches) {
+            targets.push_back(entry.first);
+        }
+        writeKeepingLoaded(targets, [&] {
+            for (auto const& [field, index] : switches) {
+                field->switchUnit(index);
             }
-            cellLoaded = _loadedCells.contains(field.path()) && !modified(field);
         });
-        runtime().batch([&] {
-            change();
-            _core->markProgrammatic();
-        });
-        if (cellLoaded) {
-            runtime().untracked([&] {
-                _loadedCells.insert_or_assign(
-                    field.path(), LoadedCell{.text = field.draft(), .unit = field.unit().peek()});
-            });
-        }
-        if (top && topLoaded) {
-            _loaded.at(*top) = _fields.at(*top)->snapshot();
-        }
-        if (cellLoaded || topLoaded) {
-            _loadGeneration.set(_loadGeneration.peek() + 1);
-        }
     }
 
     /// @brief Whether a submission is in flight. Tracked.
@@ -2072,19 +2082,12 @@ private:
         });
     }
 
-    // Loads the computed members under one field from the recomputed body's value for it: a scalar's when computed, an
-    // object's members, a collection's rows by the keys they had when the round was sent.
+    // The computed members under one field and their values in the recomputed body: a scalar's when computed, an
+    // object's members, a collection's rows by the keys they had when the round was sent. A computed member the body
+    // leaves out of an object it holds is written blank (a null value).
     // NOLINTNEXTLINE(misc-no-recursion): an Object's members and a row's are fields.
-    static void loadComputedIn(DeriveRound const& round, std::span<std::unique_ptr<FieldState> const> members,
-                               detail::engine::Json const& object, DeriveLoad& load) {
-        for (auto const& member : members) {
-            loadComputed(round, *member, object, load);
-        }
-    }
-
-    // NOLINTNEXTLINE(misc-no-recursion): an Object's members and a row's are fields.
-    static void loadComputed(DeriveRound const& round, FieldState& field, detail::engine::Json const& object,
-                             DeriveLoad& load) {
+    static void collectComputed(DeriveRound const& round, FieldState& field, detail::engine::Json const& object,
+                                std::vector<std::pair<FieldState*, detail::engine::Json const*>>& out) {
         FieldSpec const& spec = field.spec();
         if (spec.truncated) {
             return;
@@ -2092,7 +2095,9 @@ private:
         detail::engine::Json const* const value = detail::engine::member(object, spec.name);
         if (spec.kind == FieldKind::Object) {
             if (value != nullptr && value->is_object()) {
-                loadComputedIn(round, field.members(), *value, load);
+                for (auto const& member : field.members()) {
+                    collectComputed(round, *member, *value, out);
+                }
             }
             return;
         }
@@ -2106,15 +2111,71 @@ private:
             for (std::size_t at = 0; at < elements.size() && at < sent->second.size(); ++at) {
                 auto const row = std::ranges::find(rows, sent->second.at(at), &RowState::key);
                 if (row != rows.end() && elements.at(at).is_object()) {
-                    loadComputedIn(round, (*row)->fields(), elements.at(at), load);
+                    for (auto const& member : (*row)->fields()) {
+                        collectComputed(round, *member, elements.at(at), out);
+                    }
                 }
             }
             return;
         }
         if (spec.computed) {
-            field.load(value);
-            ++load.loaded;
+            out.emplace_back(&field, value);
         }
+    }
+
+    // Whether a scalar holds what the form recorded for it at the last load. A member of a row added since holds no
+    // loaded value.
+    [[nodiscard]] bool holdsLoaded(FieldState const& field) const {
+        auto const found = _loadedCells.find(field.path());
+        return found != _loadedCells.end() && field.draft() == found->second.text &&
+               const_cast<FieldState&>(field).unit().peek() == found->second.unit;  // NOLINT(cppcoreguidelines-pro-type-const-cast)
+    }
+
+    // A programmatic write into @p targets that is no edit: a target that held its loaded value is recorded as loaded
+    // with its new one, a modified target stays modified, and each top-level field that held its loaded value, or what
+    // the submission in flight sent, keeps holding it. Nothing is submitted.
+    // A round writes only computed and derived members, which no snapshot holds, so it passes `keepTop` false: the
+    // top-level fields' loaded and sent snapshots are unchanged by it already.
+    template <typename Write>
+    void writeKeepingLoaded(std::span<FieldState* const> targets, Write const& write, bool keepTop = true) {
+        std::vector<bool> heldLoaded;
+        std::vector<bool> topLoaded(_fields.size(), false);
+        std::vector<bool> topSent(_fields.size(), false);
+        runtime().untracked([&] {
+            for (FieldState const* const target : targets) {
+                heldLoaded.push_back(holdsLoaded(*target));
+            }
+            for (std::size_t index = 0; keepTop && index < _fields.size(); ++index) {
+                std::string const snap = _fields.at(index)->snapshot();
+                topLoaded.at(index) = snap == _loaded.at(index);
+                topSent.at(index) = index < _sent.size() && snap == _sent.at(index);
+            }
+        });
+        runtime().batch([&] {
+            write();
+            _core->markProgrammatic();
+        });
+        runtime().untracked([&] {
+            for (std::size_t at = 0; at < targets.size(); ++at) {
+                if (heldLoaded.at(at)) {
+                    _loadedCells.insert_or_assign(
+                        targets[at]->path(), LoadedCell{.text = targets[at]->draft(), .unit = targets[at]->unit().peek()});
+                }
+            }
+            for (std::size_t index = 0; index < _fields.size(); ++index) {
+                if (!topLoaded.at(index) && !topSent.at(index)) {
+                    continue;
+                }
+                std::string const snap = _fields.at(index)->snapshot();
+                if (topLoaded.at(index)) {
+                    _loaded.at(index) = snap;
+                }
+                if (topSent.at(index)) {
+                    _sent.at(index) = snap;
+                }
+            }
+        });
+        _loadGeneration.set(_loadGeneration.peek() + 1);
     }
 
     // One round in flight: what it sent, which replies settled, whether one failed, and whether a commit came since.

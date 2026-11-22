@@ -398,9 +398,15 @@ edit, so a round never replaces a draft the user typed.
   out of an object it holds is blank; its `errors` and `ready` are not read). Both resolve `name[i]` through
   `round.rowKeys[name][i]` and the row's current position by key, so a value lands on the row it was computed for
   after rows were inserted or removed, and a value for a row removed since is dropped (not refused). A path that
-  names no member of the reply's kind is refused and returned in `DeriveLoad::refused`. A load is programmatic
-  (nothing is submitted) and moves no snapshot: what the user typed stays an edit, and a computed or derived member
-  is never `modified`.
+  names no member of the reply's kind is refused and returned in `DeriveLoad::refused`. A load is programmatic and no
+  edit, as `assign` is: nothing is submitted, what the user typed stays an edit, and a member it writes that held its
+  loaded value holds the new one as loaded. A field's snapshot (`FieldState::snapshot`, what `refill` and a save's
+  settle compare) leaves computed and derived members out, so a round never makes a top-level field look edited or
+  different from what a submission sent: a save the round overlaps still ends the edit of what it sent, and a later
+  `refill` still reaches the collection. A computed or derived member is never `modified`.
+- **`switchUnitsAsLoaded(switches)`** switches units the same way, converting each draft: what the first unit a grid's
+  per-row `unit` overlay gives each loaded row is, so the cell is not modified by it and a revert returns to it. It
+  takes unit switches only, so nothing beyond the cells it names is recorded as loaded.
 - **Order.** Each kind of reply keeps the sequence it last loaded; a reply of an older round loads nothing, so derived
   values never go back to an older result. When both replies of a round settle, `deriveState()` is `Failed` if
   either failed (the values stay as they were), else `Current`; a stale round then starts one more at once, with the

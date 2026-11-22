@@ -665,6 +665,100 @@ TEST_CASE("grid: a unit overlay's first unit is part of the loaded row", "[ui][g
     CHECK_FALSE(f.form->modified("rows#1.mass"));
 }
 
+// Mutation: a remembered "no unit" counting as a unit given (`first` only when nothing is remembered): the g the
+// overlay gives once the note asks for it makes the loaded mass modified.
+TEST_CASE("grid: a unit overlay that first gives no unit applies its first unit as loaded", "[ui][grid][derive]") {
+    std::vector<ui::GridColumn> columns;
+    columns.push_back(ui::GridColumn{.id = "mass", .label = "Mass", .field = "mass", .value = {}, .fieldOf = {},
+                                     .decimals = {},
+                                     .unit = [](forms::RowState const& row) {
+                                         return row.field("note")->draft() == "g" ? std::optional<std::string>{"g"}
+                                                                                  : std::optional<std::string>{};
+                                     }});
+    columns.push_back(ui::GridColumn{.id = "note", .label = "Note", .field = "note", .value = {}});
+    GridFixture f{morph::test::grid::GridSpec{.schema = std::string{kMassUnits},
+                                              .body = R"({"rows":[{"mass":{"num":2,"den":1,"dp":3}}]})",
+                                              .array = "rows",
+                                              .columns = std::move(columns),
+                                              .options = {}}};
+    f.h.settle();
+    forms::FieldState& mass = f.form->field("rows[0].mass");
+    CHECK(mass.unit().peek() == 0);                                // no unit given: kg
+    f.grid->focusCell(at(1, "note")); f.grid->type("g"); f.grid->press("Enter"); f.h.settle();
+    CHECK(mass.unit().peek() == 1);
+    CHECK_FALSE(f.form->modified("rows#1.mass"));
+    f.form->revert("rows#1.mass");
+    CHECK(mass.unit().peek() == 1);
+}
+
+// The specimens form, submitted explicitly.
+std::string explicitSpecimens() {
+    std::string schema{morph::test::grid::kSpecimens};
+    std::string_view const title = R"("title":"Specimens",)";
+    schema.replace(schema.find(title), title.size(), std::string{title} + R"("x-submitMode":"explicit",)");
+    return schema;
+}
+
+// Mutation: a snapshot that counts computed and derived members (the round's limit makes the collection differ from
+// what the save sent: the edited mass stays modified after the save, and the refetch skips the collection).
+TEST_CASE("grid: a save that a derive round overlaps ends the edit", "[ui][grid][derive]") {
+    for (bool const inFlight : {false, true}) {
+        DYNAMIC_SECTION((inFlight ? "a submit while the round is in flight" : "a submit inside the debounce")) {
+            GridFixture f{morph::test::grid::GridSpec{.schema = explicitSpecimens(),
+                                                      .body = morph::test::grid::blankSpecimens(1),
+                                                      .array = "specimens",
+                                                      .columns = {},
+                                                      .options = {}}};
+            f.enableDerive();
+            f.h.server.replyWith([](morph::test::formsengine::Call const&) { return std::optional<std::string>{}; });
+            f.grid->focusCell(at(1, "mass")); f.grid->type("4"); f.grid->press("Enter"); f.h.settle();
+            if (inFlight) {
+                f.scheduler.advance(150ms); f.h.settle();
+            }
+            f.form->submit(); f.h.settle();
+            if (!inFlight) {
+                f.scheduler.advance(150ms); f.h.settle();
+            }
+            REQUIRE(f.derive.submits().size() == 1);
+            REQUIRE(f.h.server.submits().size() == 1);
+            f.derive.resolveSubmit(0, R"({"values":[{"path":"specimens[0].limit","value":{"num":7,"den":1,"dp":2}}]})");
+            f.evaluate.resolveSubmit(0, R"({"errors":{},"ready":true})");
+            f.h.settle();
+            CHECK(f.json("specimens[0].limit") == R"({"num":700,"den":100,"dp":2})");
+            f.h.server.resolveSubmit(0, R"({"ok":true})");
+            f.h.settle();
+            CHECK_FALSE(f.form->modified("specimens#1.mass"));
+            CHECK(f.source->modifiedCount() == 0);
+            f.form->refill(R"({"sampleId":1,"specimens":[{"mass":{"num":9,"den":1,"dp":2}}]})");
+            f.h.settle();
+            CHECK(f.json("specimens[0].mass") == R"({"num":900,"den":100,"dp":2})");
+        }
+    }
+}
+
+// Mutation: as above (a snapshot that counts computed and derived members: once the row is reverted the collection
+// still differs from its loaded snapshot by the round's limit, so the refetch skips it).
+TEST_CASE("grid: a derive round in automatic mode leaves the collection loaded", "[ui][grid][derive]") {
+    GridFixture f{1};                                              // automatic: the commit saves at once
+    f.enableDerive();
+    f.grid->focusCell(at(1, "mass")); f.grid->type("4"); f.grid->press("Enter"); f.h.settle();
+    REQUIRE(f.h.server.submits().size() == 1);
+    f.scheduler.advance(150ms); f.h.settle();
+    f.derive.resolveSubmit(0, R"({"values":[{"path":"specimens[0].limit","value":{"num":7,"den":1,"dp":2}}]})");
+    f.evaluate.resolveSubmit(0, R"({"errors":{},"ready":true})");
+    f.h.settle();
+    // An automatic form's saved collection stays an edit (forms/engine.md): the typed mass is still modified.
+    CHECK(f.form->modified("specimens#1.mass"));
+    CHECK_FALSE(f.form->modified("specimens#1.limit"));
+    f.form->revert("specimens#1");
+    f.h.settle();
+    CHECK(f.source->modifiedCount() == 0);
+    CHECK(f.json("specimens[0].limit") == R"({"num":700,"den":100,"dp":2})");   // loaded with the round's value
+    f.form->refill(R"({"sampleId":1,"specimens":[{"mass":{"num":9,"den":1,"dp":2}}]})");
+    f.h.settle();
+    CHECK(f.json("specimens[0].mass") == R"({"num":900,"den":100,"dp":2})");
+}
+
 // Mutation: a fetch per row (no shared fetch).
 TEST_CASE("grid: choices per row", "[ui][grid][derive]") {
     GridFixture f{morph::test::grid::GridSpec{
