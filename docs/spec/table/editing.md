@@ -623,6 +623,7 @@ Every key is optional, and a table that names none of them is what [`table.md`](
 | A fixed-grid cell under an id the column parts lack, naming none or more than one of `field`, `value` and `text`, or giving `decimals`, `unit`, `options` or `placeholder` with no `field` (`readonly` is taken by any cell); a `rows` or `columns` that is not a literal count from 1; a fixed grid's column part naming a `field` or a `value` | Refused when the document loads. |
 | A block without `form` or a block inside a block | Refused when the document loads. |
 | A `forEach` that is no list of records of the form, or a `{field}` that is no field of the form (of the row type, in a block) | Refused when the document loads while the catalog has the form action's schema; otherwise reported when the grid is lowered, and the grid drawn as muted text. |
+| Two overlays in one document giving one form field different literal units (a fixed-grid cell's `unit`, a grid column's `unit` over the same member) | Refused when the document loads: a field is entered in one unit. A unit an expression gives is not compared. |
 | A block row's `label` reading `row` | Refused when the document loads: a row's label is read once, for every collection row. |
 
 ## Neighbouring specs

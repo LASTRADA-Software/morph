@@ -1063,6 +1063,7 @@ public:
                     [this](std::string body) { return _submit(_core->model().actionType(), std::move(body)); }},
           _attempts{runtime, std::uint64_t{0}},
           _loadGeneration{runtime, std::uint64_t{0}},
+          _loads{runtime, std::uint64_t{0}},
           _refusals{runtime, std::map<std::string, Refused, std::less<>>{}},
           _deriveState{runtime, DeriveState::Current},
           _deriveFailing{runtime, false} {
@@ -1375,11 +1376,12 @@ public:
         return modified(*state);
     }
 
-    /// @brief A count that moves whenever what a field held when the form was loaded is recorded again: a load, a
-    ///        `refill` that loads a field, a submission that ends a field's edit, a switch of units as loaded and a
-    ///        round of derived values. A revert restores the record and does not move it. Tracked.
+    /// @brief A count that moves with each load of a field: construction, `prefill`, `reset`, a `refill` that loads a
+    ///        field, and a submission that ends a field's edit, each of which sets the fields it loads afresh, their
+    ///        units included. A write kept as loaded (a switch of units as loaded, a round of derived values) is no
+    ///        load and does not move it, and nor does a revert. Tracked.
     /// @return The count.
-    [[nodiscard]] std::uint64_t loadGeneration() const { return _loadGeneration.get(); }
+    [[nodiscard]] std::uint64_t loadGeneration() const { return _loads.get(); }
 
     /// @brief Whether a row of a collection holds another entry than when the form was last loaded: one of its members
     ///        is modified, or the row was added since. Tracked.
@@ -1748,6 +1750,7 @@ private:
             recordLoaded(*field);
         }
         _loadGeneration.set(_loadGeneration.peek() + 1);
+        _loads.set(_loads.peek() + 1);
     }
 
     // A field the last submission refused: the message, and the draft the field held then.
@@ -1840,6 +1843,7 @@ private:
         });
         recordLoaded(state);
         _loadGeneration.set(_loadGeneration.peek() + 1);
+        _loads.set(_loads.peek() + 1);
     }
 
     // NOLINTNEXTLINE(misc-no-recursion): an Object's members are fields.
@@ -2275,6 +2279,8 @@ private:
     std::map<std::string, LoadedCell, std::less<>> _loadedCells;
     /// @brief Moves on every change of `_loadedCells`, so what compares against it is evaluated again.
     reactive::Signal<std::uint64_t> _loadGeneration;
+    /// @brief Moves with each load of a field (`loadGeneration`); a write kept as loaded leaves it.
+    reactive::Signal<std::uint64_t> _loads;
     /// @brief What `submit` runs first, by id, in the order added.
     std::vector<std::pair<std::size_t, std::function<void()>>> _beforeSubmit;
     std::size_t _nextHook = 0;

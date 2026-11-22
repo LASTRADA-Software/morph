@@ -1294,8 +1294,7 @@ namespace detail {
 ///        switches as the editor does, converting the draft; no unit, or one the field does not have, after a unit
 ///        restores the field's entry unit. The first unit a field is given is part of how it is shown as loaded: it
 ///        goes to @p asLoaded, so the cell is not modified by it and a revert returns to it. A unit the field already
-///        holds is not switched to: nothing is written, so applying the overlay again after a load writes nothing
-///        and moves no load count that another grid follows.
+///        holds is not switched to, so applying the overlay again writes nothing.
 /// @param applied  The unit the overlay last gave each field, by path; updated.
 /// @param state    The field.
 /// @param unit     The unit the overlay gives now, an id of the field's units; nothing for none.
@@ -2686,9 +2685,10 @@ private:
     }
 
     // Each field cell's overlays onto its field: its places, its entry unit, its options and its placeholder. Rerun
-    // when a block's rows, an overlay's reads or the form's loaded values change. A load sets a field's unit afresh,
-    // so the units the overlays gave an unmodified field before it are forgotten and given again as loaded; the
-    // switch that does so moves the count again, and is not taken for a load.
+    // when a block's rows, an overlay's reads or the form's load count change. A load sets a field's unit afresh, so
+    // the units the overlays gave an unmodified field before it are forgotten and given again as loaded. A switch as
+    // loaded is no load and moves no load count, so no grid takes another grid's switch for a load, whatever units
+    // they give.
     // NOLINTNEXTLINE(readability-function-cognitive-complexity): one section per overlay.
     void applyOverlays() {
         sync();
@@ -2729,10 +2729,7 @@ private:
             }
         }
         if (!asLoaded.empty()) {
-            _rt->untracked([&] {
-                _form->switchUnitsAsLoaded(asLoaded);
-                _unitGeneration = _form->loadGeneration();
-            });
+            _rt->untracked([&] { _form->switchUnitsAsLoaded(asLoaded); });
         }
     }
 
@@ -2810,7 +2807,7 @@ private:
     mutable std::uint64_t _expansion = 0;
     mutable std::optional<Coverage> _coverage;
     std::optional<std::size_t> _hook;
-    // The unit each field's `unit` overlay last gave, by the field's path, since the form's load count last moved.
+    // The unit each field's `unit` overlay last gave, by the field's path, and the form's load count it was given at.
     std::unordered_map<std::string, std::optional<std::string>> _unitApplied;
     std::uint64_t _unitGeneration = 0;
     bool _watching = false;
