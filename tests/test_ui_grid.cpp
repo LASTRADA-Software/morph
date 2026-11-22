@@ -2391,4 +2391,51 @@ TEST_CASE("fixed grid: a unit the user picks survives another field's load, and 
     CHECK_FALSE(f.form->modified("limits.weight"));
 }
 
+// A row whose weight is entered in the given unit.
+std::vector<std::variant<ui::FixedRow, ui::FixedBlock>> weightIn(std::string unit) {
+    ui::FixedCell weight = fieldCell("limits.weight");
+    weight.unit = [unit](forms::RowState const*) { return std::optional<std::string>{unit}; };
+    return {fixedRow("weight", {{"min", std::move(weight)}})};
+}
+
+// Mutation: a switch of units as loaded moving the load count (each grid's switch is a load to the other: the effects
+// rerun until the reactive runtime aborts).
+TEST_CASE("fixed grid: two grids giving one field different units settle", "[ui][grid][fixed]") {
+    FixedGridFixture f{R"({"limits":{}})", weightIn("g"), fixedColumns({"min"})};
+    ui::FixedGridSource const other{f.h.rt, f.form.get(), weightIn("kg"), fixedColumns({"min"}), ui::FormatContext{}};
+    f.h.settle();
+    std::uint64_t const before = f.form->loadGeneration();
+    f.form->prefill(R"({"limits":{}})");
+    f.h.settle();
+    CHECK(f.form->loadGeneration() - before == 1);   // the load alone: no switch moves the count
+    forms::FieldState& weight = f.form->field("limits.weight");
+    std::string const shown = weight.spec().units.at(weight.unit().peek()).id;
+    CHECK((shown == "g" || shown == "kg"));
+    CHECK_FALSE(f.form->modified("limits.weight"));
+}
+
+// Mutation: the loader not comparing the units overlays give one field (the document loads).
+TEST_CASE("fixed grid: the loader refuses two units for one field", "[ui][grid][fixed]") {
+    ui::testing::TableHarness h;
+    addLimitsAction(h);
+    auto const refusal = [&h](std::string const& text) {
+        auto const loaded = ui::loadDocumentText(text, ui::LoadOptions{.catalog = h.session.options().catalog});
+        return loaded.has_value() ? std::string{} : loaded.error().reason;
+    };
+    constexpr std::string_view kTwoGrids = R"({"vocab":"ui/1","id":"limits",
+      "models":{"sample":{"type":"Lims_SampleModel"}},
+      "view":{"kind":"column","children":[
+        {"kind":"form","id":"rec","model":"sample","action":"Lims_SetLimits","submit":"explicit"},
+        {"kind":"table","id":"a","form":"rec","columns":[{"id":"v"}],
+         "layoutRows":[{"key":"w","cells":{"v":{"field":"limits.weight","unit":"g"}}}]},
+        {"kind":"table","id":"b","form":"rec","columns":[{"id":"v"}],
+         "layoutRows":[{"key":"w","cells":{"v":{"field":"limits.weight","unit":"g"}}}]}]}})";
+    CHECK(refusal(std::string{kTwoGrids}).empty());   // one unit, given twice
+    std::string const reason = refusal(replaced(kTwoGrids, R"("id":"b","form":"rec","columns":[{"id":"v"}],
+         "layoutRows":[{"key":"w","cells":{"v":{"field":"limits.weight","unit":"g"}})",
+                                                R"("id":"b","form":"rec","columns":[{"id":"v"}],
+         "layoutRows":[{"key":"w","cells":{"v":{"field":"limits.weight","unit":"kg"}})"));
+    CHECK(reason.find("`limits.weight` is given the units `g` and `kg`") != std::string::npos);
+}
+
 }  // namespace

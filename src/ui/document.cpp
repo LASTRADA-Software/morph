@@ -3661,6 +3661,44 @@ private:
                 checkLayoutRow(*row, columns, form, members, model.has_value(), keys);
             }
         }
+        if (form == nullptr) {
+            return;
+        }
+        for (DocNodePtr const& part : node.partList("layoutRows")) {
+            std::string_view const forEach = part->name("forEach");
+            std::span<DocNodePtr const> const rows = forEach.empty() ? std::span{&part, 1} : part->partList("rows");
+            for (DocNodePtr const& row : rows) {
+                for (DocNodePtr const& cells : row->partList("cells")) {
+                    for (DocNodePtr const& cell : cells->partList("cells")) {
+                        std::string_view const field = cell->name("field");
+                        ExprPtr const unit = cell->prop("unit");
+                        std::string const* const literal =
+                            unit != nullptr && unit->kind == ExprKind::Literal ? unit->literal.asString() : nullptr;
+                        if (!field.empty() && literal != nullptr) {
+                            noteUnit(*form,
+                                     forEach.empty() ? std::string{field}
+                                                     : std::string{forEach} + "." + std::string{field},
+                                     *literal, unit->path);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // A literal `unit` overlay on a field of a form: a field is entered in one unit, so two overlays in the document
+    // that give it different literal units are refused. A unit an expression gives is read when it is shown, and not
+    // compared. A field of a collection's rows is named `<collection>.<member>`.
+    void noteUnit(DocNode const& form, std::string const& field, std::string const& unit,
+                  std::string const& where) const {
+        if (unit.empty()) {
+            return;
+        }
+        auto const [given, added] = _unitsGiven.try_emplace(form.id + "\x1F" + field, unit);
+        if (!added && given->second != unit) {
+            refuse(where, "`" + field + "` is given the units `" + given->second + "` and `" + unit +
+                              "` by two overlays; a field is entered in one unit");
+        }
     }
 
     // The form model a fixed grid's cells are checked against: its form action's schema, when the catalog has it.
@@ -3781,6 +3819,10 @@ private:
         for (DocNodePtr const& column : part.partList("columns")) {
             if (column->name("field").empty() && column->prop("field") == nullptr && column->prop("value") == nullptr) {
                 refuse(column->path, "a grid's column edits the member its `field` names, or shows its `value`");
+            }
+            if (std::string_view const member = column->name("field"); !member.empty()) {
+                noteUnit(form, std::string{field} + "." + std::string{member}, std::string{column->name("unit")},
+                         pointerAppend(column->path, "unit"));
             }
         }
         if (!_options->catalog.schema) {
@@ -5725,6 +5767,8 @@ private:
     std::map<DocNode const*, ScopeInfo*> _innerOf;
     std::map<std::string, QueryDecl const*, std::less<>> _queries;
     std::map<std::string, DocNode const*, std::less<>> _elements;
+    // The literal unit each form field is first given by an overlay, by the form's id and the field's path.
+    mutable std::map<std::string, std::string, std::less<>> _unitsGiven;
     std::vector<std::pair<WatchDecl const*, ScopeInfo*>> _watches;
     std::vector<std::pair<MutationDecl const*, ScopeInfo*>> _mutations;
     std::vector<std::pair<QueryDecl const*, ScopeInfo*>> _queryScopes;
