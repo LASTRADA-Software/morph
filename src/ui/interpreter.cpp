@@ -1421,6 +1421,36 @@ namespace {
 
 namespace {
 
+// A cell range as a document reads it: `{"anchor": {"key", "column"}, "focus": {"key", "column"}}`, `null` for none.
+[[nodiscard]] Value cellRangeValue(std::optional<CellRange> const& range) {
+    if (!range) {
+        return Value{};
+    }
+    auto const corner = [](CellRef const& cell) {
+        return Value{ValueRecord{{"key", valueOfKey(cell.key)}, {"column", Value{cell.column}}}};
+    };
+    return Value{ValueRecord{{"anchor", corner(range->anchor)}, {"focus", corner(range->focus)}}};
+}
+
+// A document's cell range: two corners, each a key and a column id; anything else is none.
+[[nodiscard]] std::optional<CellRange> cellRangeOf(Value const& value) {
+    auto const corner = [&value](std::string_view name) -> std::optional<CellRef> {
+        Value const* const part = value.field(name);
+        Value const* const key = part == nullptr ? nullptr : part->field("key");
+        Value const* const column = part == nullptr ? nullptr : part->field("column");
+        if (key == nullptr || key->isNull() || column == nullptr || column->asString() == nullptr) {
+            return std::nullopt;
+        }
+        return CellRef{.key = keyOf(*key), .column = *column->asString()};
+    };
+    std::optional<CellRef> anchor = corner("anchor");
+    std::optional<CellRef> focus = corner("focus");
+    if (!anchor || !focus) {
+        return std::nullopt;
+    }
+    return CellRange{.anchor = std::move(*anchor), .focus = std::move(*focus)};
+}
+
 /// @brief A list of strings out of a value: a string, a list of strings, or nothing.
 /// @param value The value.
 /// @return The strings.
@@ -2374,6 +2404,7 @@ Screen::~Screen() {
     }
     _core->focusElement = {};
     _core->clipboard = {};
+    _core->pasteboard = {};
     _mounted.reset();
     _headActions.clear();
     _headStatus.clear();
@@ -5092,6 +5123,9 @@ Value ScreenCore::elementValue(ElementState const& element, std::string_view nam
                 return Value{};
             }
             return Value{ValueRecord{{"key", valueOfKey(cell->key)}, {"column", Value{cell->column}}}};
+        }
+        if (name == "selection") {
+            return cellRangeValue(grid.grid->selection());
         }
     }
     if (kind == "table" && (name == "modifiedCount" || name == "modifiedRows" || name == "errorCount")) {
@@ -8582,6 +8616,9 @@ void ScreenCore::gridParts(DocNode const& part, LowerCtx const& ctx, forms::Fiel
     std::string_view const enter = part.name("enterMoves");
     options.enterMoves = enter == "right" ? EnterMoves::Right : (enter == "none" ? EnterMoves::None : EnterMoves::Down);
     options.walk = part.name("walk") == "columns" ? Walk::Columns : Walk::Rows;
+    options.appendRows = part.flag("appendRows");
+    options.rowsFixed = part.flag("rowsFixed");
+    options.maxPasteCells = session.options().maxPasteCells;
     if (Commands const* const commands = part.event("onActivate"); commands != nullptr && !commands->empty()) {
         options.onActivate = [this, detached, commands](Key const& key) {
             LowerCtx const live = attached(detached);
@@ -8750,6 +8787,28 @@ Node ScreenCore::formGridTable(DocNode const& part, LowerCtx const& ctx, Element
     // scope, which holds this element, so the element never holds a node.
     held->grid.node = nullptr;
     element.gridTable = std::move(grid);
+    held->grid.grid->useClipboard([this] { return pasteboard ? pasteboard() : std::nullopt; });
+    // The cell selection a document binds is shown; each change of it runs `onSelectionChange` with the new range.
+    if (ExprPtr const bound = part.prop("selection");
+        bound && (bound->kind != ExprKind::Literal || !bound->literal.isNull())) {
+        element.scope->nodes.effect([this, held, scope = element.scope, bindings = ctx.bindings, bound] {
+            std::optional<CellRange> const range = cellRangeOf(evalIn(*scope, bindings.get(), bound));
+            runtime().untracked([&] {
+                if (held->grid.grid->selection() != range) {
+                    held->grid.grid->select(range);
+                }
+            });
+        });
+    }
+    if (Commands const* const commands = part.event("onSelectionChange"); commands != nullptr && !commands->empty()) {
+        held->grid.grid->onSelectionChange([this, detached = detachedLower(ctx), commands](
+                                               std::optional<CellRange> const& range) {
+            LowerCtx const live = attached(detached);
+            if (live.scope != nullptr) {
+                runEvent(commands, live, cellRangeValue(range));
+            }
+        });
+    }
     // The walk follows the visible columns in layout order, and the cells the scope's formatting; a copy with no row
     // selected copies the focused cell.
     RtScope* const scope = element.scope;
@@ -8828,6 +8887,71 @@ Node ScreenCore::gridTableNode(DocNode const& part, LowerCtx const& ctx, Element
     };
     held->config.beginMount();
     Node dialogs = configureTable(held->config, ctx, table, nullptr);
+    // A copy of a cell selection writes its rectangle; with none the table's copy runs, the focused cell alone.
+    table.onCopy = [this, held, &element, scope = ctx.scope, rows = std::move(table.onCopy)] {
+        GridController& grid = *held->grid.grid;
+        if (!runtime().untracked([&] { return grid.selection().has_value(); })) {
+            if (rows) {
+                rows();
+            }
+            return;
+        }
+        std::string const text = grid.copy();
+        if (text.empty()) {
+            return;
+        }
+        if (!clipboard || !clipboard(text)) {
+            tableMessage(element, "The rows could not be copied: there is no clipboard");
+            return;
+        }
+        std::size_t const lines = static_cast<std::size_t>(std::ranges::count(text, '\n')) + 1;
+        tableMessage(element, tableText::copied(lines, 0, scope->formatting().numeric.groupSeparator));
+    };
+    // The table's own menu offers the focused row's entries after its own, past a separator.
+    if (table.menu && table.onMenu) {
+        auto const rowEntries = [this, held] {
+            return runtime().untracked([&] {
+                std::optional<CellRef> const focused = held->grid.grid->focus();
+                return focused ? held->grid.grid->rowEntries(focused->key) : std::vector<MenuItem>{};
+            });
+        };
+        auto const own = table.menu;
+        table.menu = [this, own, rowEntries](std::optional<std::size_t> column) {
+            std::vector<MenuEntry> entries = own(column);
+            if (column) {
+                return entries;
+            }
+            std::vector<MenuItem> const rows = rowEntries();
+            if (!rows.empty() && !entries.empty()) {
+                entries.push_back(MenuEntry{.separator = true});
+            }
+            runtime().untracked([&] {
+                for (MenuItem const& item : rows) {
+                    entries.push_back(MenuEntry{.label = item.label.evaluate(),
+                                                .enabled = item.enabled.evaluate(),
+                                                .description = item.description.evaluate()});
+                }
+            });
+            return entries;
+        };
+        table.onMenu = [this, own, rowEntries, chosen = std::move(table.onMenu)](std::optional<std::size_t> column,
+                                                                                std::vector<std::size_t> const& path) {
+            if (!column && !path.empty()) {
+                std::size_t const shown = own(column).size();
+                std::size_t const first = shown + (shown > 0 ? 1 : 0);
+                if (path.front() >= first) {
+                    std::vector<MenuItem> const rows = rowEntries();
+                    std::size_t const at = path.front() - first;
+                    if (at < rows.size() && runtime().untracked([&] { return rows.at(at).enabled.evaluate(); }) &&
+                        rows.at(at).onSelect) {
+                        rows.at(at).onSelect();
+                    }
+                    return;
+                }
+            }
+            chosen(column, path);
+        };
+    }
     std::vector<TableColumn> columns = held->shown;
     markFilterable(held->config, columns, table);
     return besideDialogs(table.common, std::move(dialogs),
@@ -15943,6 +16067,7 @@ std::expected<std::unique_ptr<Screen>, Refusal> Interpreter::mount(std::shared_p
         return mounted->focus(element);
     };
     screen->_core->clipboard = [&backend](std::string_view text) { return backend.copyText(text); };
+    screen->_core->pasteboard = [&backend] { return backend.pasteText(); };
     screen->runLifecycle("onMount");
     return screen;
 }

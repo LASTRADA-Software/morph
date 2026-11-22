@@ -291,6 +291,14 @@ private:
     std::vector<std::unique_ptr<FieldState>> _fields;
 };
 
+/// @brief A collection row `FieldState::removeRows` took out, with the position it stood at.
+struct RemovedRow {
+    /// @brief The row's position in the collection when it was removed.
+    std::size_t position = 0;
+    /// @brief The row, kept whole: its key and every member's draft and unit.
+    std::shared_ptr<RowState> row;
+};
+
 /// @brief The reactive state of one field: its draft and everything derived from it.
 class FieldState {
 public:
@@ -616,6 +624,42 @@ public:
     /// @param key The row's key.
     void removeRow(std::uint64_t key) {
         _rows.mutate([&](auto& rows) { std::erase_if(rows, [&](auto const& row) { return row->key() == key; }); });
+    }
+
+    /// @brief Removes collection rows by key, in one change. A user action.
+    /// @param keys The rows' keys; a key the collection does not hold is skipped.
+    /// @return The rows removed, each with the position it stood at, ascending: what `restoreRows` puts back.
+    std::vector<RemovedRow> removeRows(std::span<std::uint64_t const> keys) {
+        std::vector<RemovedRow> removed;
+        std::vector<std::shared_ptr<RowState>> const& rows = _rows.peek();
+        for (std::size_t at = 0; at < rows.size(); ++at) {
+            if (std::ranges::contains(keys, rows.at(at)->key())) {
+                removed.push_back(RemovedRow{.position = at, .row = rows.at(at)});
+            }
+        }
+        if (!removed.empty()) {
+            _rows.mutate([&](auto& held) {
+                std::erase_if(held, [&](auto const& row) { return std::ranges::contains(keys, row->key()); });
+            });
+        }
+        return removed;
+    }
+
+    /// @brief Puts rows `removeRows` took out back, each at the position it stood at, in one change. A user action.
+    /// @param rows The rows, ascending by position, as `removeRows` gave them; a position past the end appends.
+    void restoreRows(std::vector<RemovedRow> rows) {
+        if (rows.empty()) {
+            return;
+        }
+        _core->runtime().batch([&] {
+            _rows.mutate([&](auto& held) {
+                for (RemovedRow& removed : rows) {
+                    auto const at = static_cast<std::ptrdiff_t>(std::min(removed.position, held.size()));
+                    held.insert(held.begin() + at, std::move(removed.row));
+                }
+            });
+            _engaged.set(true);
+        });
     }
 
     /// @brief What the field holds, as one string: two snapshots are equal exactly when the field holds the same

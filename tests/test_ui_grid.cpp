@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 
-// Grids of a form: the focus chain, the cell, the walk, read-only as one rule, per-cell marks and submission
-// (docs/spec/table/editing.md, delivery step 1).
+// Grids of a form: the focus chain, the cell, the walk, read-only as one rule, per-cell marks and submission, derived
+// values, cell selection, paste, fill and clear, and the rows of a grid (docs/spec/table/editing.md, delivery steps 1
+// to 3).
 
 #include <algorithm>
 #include <catch2/catch_test_macros.hpp>
@@ -187,7 +188,8 @@ TEST_CASE("grid: revert cell and revert row from the cell's menu", "[ui][grid]")
     f.grid->focusCell(at(1, "label")); f.grid->type("x"); f.grid->press("Tab");
     f.grid->type("4"); f.grid->press("Enter");                 // (1, mass)
     auto entries = f.grid->cellEntries(ui::Key{std::int64_t{2}}, "mass");
-    CHECK(labelsOf(entries) == std::vector<std::string>{"Revert cell", "Revert row"});
+    CHECK(labelsOf(entries) == std::vector<std::string>{"Revert cell", "Revert row", "", "Insert row above",
+                                                        "Insert row below", "Delete row"});
     CHECK_FALSE(enabledOf(entry(entries, "Revert cell")));       // row 2 holds nothing typed
     entries = f.grid->cellEntries(ui::Key{std::int64_t{1}}, "mass");
     entry(entries, "Revert cell").onSelect();
@@ -779,6 +781,209 @@ TEST_CASE("grid: choices per row", "[ui][grid][derive]") {
     CHECK(f.h.server.fetches().at(2).body == R"({"material":"C","site":"north"})");
 }
 
+// ── Selecting cells, paste and fill, rows of a grid ─────────────────────────
+
+using morph::test::grid::descriptionOf;
+using morph::test::grid::kSpecimens;
+
+// Mutation: CellRange stored as view positions (the sort moves the corners onto other rows).
+TEST_CASE("grid: cell selection", "[ui][grid][cells]") {
+    GridFixture f{3};
+    for (auto const& [key, text] : {std::pair{1, "3"}, {2, "1"}, {3, "2"}}) {
+        f.grid->focusCell(at(key, "mass")); f.grid->type(text); f.grid->press("Enter");
+    }
+    f.grid->focusCell(at(1, "mass"));
+    f.grid->press("Shift+Down"); f.grid->press("Shift+Right");
+    CHECK(f.grid->selection() == ui::CellRange{at(1, "mass"), at(2, "volume")});
+    REQUIRE(f.source->view().setSort({table::SortKey{.column = "mass"}}).has_value());
+    CHECK(f.grid->selection() == ui::CellRange{at(1, "mass"), at(2, "volume")});   // corners kept by key
+    CHECK(f.grid->copy() == "1,00\t\n2,00\t\n3,00\t");    // rows 2, 3, 1 now lie between the corners' positions
+}
+
+// Mutation: the loader accepting selectionMode "cells" on a model-backed table (loadDocumentText succeeds).
+TEST_CASE("grid: cells on a model's table are refused when the document loads", "[ui][grid][cells]") {
+    ui::testing::TableHarness h;
+    std::string const text = ui::testing::withTableKey(ui::testing::kModelTable, R"("selectionMode":"cells")");
+    auto const loaded = ui::loadDocumentText(text, ui::LoadOptions{.catalog = h.session.options().catalog});
+    REQUIRE_FALSE(loaded.has_value());
+    CHECK(loaded.error().reason.find("selectionMode") != std::string::npos);
+}
+
+// Mutation: a paste that shifts a value past a read-only cell into the next editable one.
+TEST_CASE("grid: paste, fill, clear", "[ui][grid][cells]") {
+    std::string schema{kSpecimens};
+    schema.replace(schema.find(R"("maxItems":5)"), 12, R"("maxItems":2)");
+    GridFixture f{1, ui::GridOptions{.appendRows = true}, schema};
+    f.enableDerive();
+    f.grid->focusCell(at(1, "volume"));                       // columns: volume, density (read-only), limit (read-only), note
+    auto const result = f.grid->paste("1\t2\t3\ta\n4\t5\t6\tb\n7\t8\t9\tc");   // 3 rows × 4 columns
+    CHECK(result.written == 4);                                // volume and note of two rows
+    CHECK(result.readOnly == 4);
+    CHECK(result.pastRows == 4);
+    CHECK(f.grid->message() == "Pasted 4 values; 4 on read-only cells and 4 past the last row were dropped");
+    CHECK(f.form->field("specimens[0].note").draft() == "a");  // the block keeps its shape
+    CHECK(f.form->field("specimens[1].volume").draft() == "4");
+    CHECK(f.form->field("specimens").rows().size() == 2);     // one row added, to maxItems
+    f.scheduler.advance(150ms); f.h.settle();
+    CHECK(f.evaluate.submits().size() == 1);                   // one paste, one round
+    f.grid->select(ui::CellRange{at(1, "volume"), at(2, "note")});
+    f.grid->fillDown();
+    CHECK(f.form->field("specimens[1].volume").draft() == "1");
+    CHECK(f.form->field("specimens[1].note").draft() == "a");
+    f.grid->clear();
+    CHECK(f.form->field("specimens[0].volume").draft().empty());
+    CHECK(f.form->field("specimens[1].note").draft().empty());
+    CHECK(f.form->field("specimens[0].density").draft().empty());   // read-only: never written
+}
+
+// Review Focus 1, paste half. Mutation: an empty grid's paste starting nowhere and appending nothing.
+TEST_CASE("grid: paste into an empty grid", "[ui][grid][cells]") {
+    SECTION("with appendRows") {
+        GridFixture f{0, ui::GridOptions{.appendRows = true}};
+        auto const result = f.grid->paste("x\t1\ny\t2\nz\t3");
+        CHECK(result.written == 6);
+        CHECK(f.form->field("specimens").rows().size() == 3);
+        CHECK(f.form->field("specimens[2].label").draft() == "z");
+        CHECK(f.form->field("specimens[2].mass").draft() == "3");
+    }
+    SECTION("without appendRows") {
+        GridFixture f{0};
+        auto const result = f.grid->paste("x\t1\ny\t2");
+        CHECK(result.written == 0);
+        CHECK(result.pastRows == 4);
+        CHECK(f.form->field("specimens").rows().empty());
+        CHECK(f.grid->message() == "Pasted 0 values; 4 past the last row were dropped");
+    }
+}
+
+// Review Focus 3. Mutation: lines split on "\n" only, keeping "\r" and the trailing empty line.
+TEST_CASE("grid: spreadsheet clipboard text pastes as typed values", "[ui][grid][cells]") {
+    GridFixture f{2, ui::GridOptions{.appendRows = true}};
+    f.grid->focusCell(at(1, "mass"));
+    auto const result = f.grid->paste(" 12,5 \t1.234,5\r\n3\t4\r\n");
+    CHECK(result.written == 4);
+    CHECK(result.pastRows == 0);
+    CHECK(f.form->field("specimens").rows().size() == 2);    // no third row from the trailing line break
+    CHECK(f.json("specimens[0].mass") == R"({"num":1250,"den":100,"dp":2})");
+    CHECK(f.json("specimens[0].volume") == R"({"num":12345,"den":10,"dp":1})");
+    CHECK(f.form->field("specimens[1].volume").draft() == "4");
+}
+
+// Mutation: the maxPasteCells check left out (the block is written).
+TEST_CASE("grid: a paste over maxPasteCells is refused whole", "[ui][grid][cells]") {
+    GridFixture f{1, ui::GridOptions{.maxPasteCells = 3}};
+    f.grid->focusCell(at(1, "label"));
+    auto const result = f.grid->paste("a\tb\nc\td");
+    CHECK(result.written == 0);
+    CHECK(f.form->field("specimens[0].label").draft().empty());
+    CHECK(f.grid->message() == "A paste holds at most 3 values");
+    CHECK(ui::GridOptions{}.maxPasteCells == 10'000);
+}
+
+// Mutation: an insertion not checking maxItems (Insert stays offered at the bound).
+TEST_CASE("grid: rows of a grid", "[ui][grid][rows]") {
+    std::string schema{kSpecimens};
+    schema.replace(schema.find(R"("minItems":0)"), 12, R"("minItems":1)");
+    schema.replace(schema.find(R"("maxItems":5)"), 12, R"("maxItems":2)");
+    GridFixture f{1, {}, schema};
+    f.grid->focusCell(at(1, "label"));
+    CHECK_FALSE(f.grid->rowOps().remove);
+    CHECK(f.grid->rowOps().why == "A grid holds at least 1 rows");
+    f.grid->press("Ctrl+Shift+=");
+    CHECK(f.form->field("specimens").rows().size() == 2);
+    CHECK_FALSE(f.grid->rowOps().insert);
+    CHECK(f.grid->rowOps().why == "A grid holds at most 2 rows");
+    f.grid->type("kept"); f.grid->press("Enter");             // (1, label)
+    f.grid->focusCell(at(1, "label"));
+    f.grid->press("Ctrl+-");
+    CHECK(f.form->field("specimens").rows().size() == 1);
+    CHECK(f.grid->message() == "Deleted 1 row");
+    CHECK(f.grid->messageEntries() == std::vector<ui::StatusEntry>{{"undo", "Undo"}});
+    f.grid->chooseEntry("undo");
+    CHECK(f.form->field("specimens[0].label").draft() == "kept");
+    SECTION("rowsFixed offers none") {
+        GridFixture fixed{2, ui::GridOptions{.rowsFixed = true}};
+        CHECK_FALSE(fixed.grid->rowOps().insert);
+        CHECK_FALSE(fixed.grid->rowOps().remove);
+        fixed.grid->focusCell(at(2, "note"));
+        CHECK(fixed.grid->press("Tab") == ui::KeyOutcome::FocusNext);
+    }
+    SECTION("appendRows adds a row on Tab past the end") {
+        GridFixture grow{1, ui::GridOptions{.appendRows = true}};
+        grow.grid->focusCell(at(1, "note"));
+        CHECK(grow.grid->press("Tab") == ui::KeyOutcome::Handled);
+        CHECK(grow.form->field("specimens").rows().size() == 2);
+        CHECK(grow.grid->focus() == at(2, "label"));
+    }
+}
+
+// Mutation: FormGridSource::undoRemove restoring after a change (the row edited since comes back beside its copy).
+TEST_CASE("grid: undo does nothing once a change followed the deletion", "[ui][grid][rows]") {
+    GridFixture f{2};
+    f.grid->focusCell(at(1, "label")); f.grid->type("a"); f.grid->press("Enter");
+    f.grid->focusCell(at(1, "label"));
+    f.grid->press("Ctrl+-");
+    REQUIRE(f.grid->messageEntries() == std::vector<ui::StatusEntry>{{"undo", "Undo"}});
+    f.grid->focusCell(at(2, "label")); f.grid->type("b"); f.grid->press("Enter");
+    CHECK(f.grid->messageEntries().empty());                   // the next change ends the offer
+    f.grid->chooseEntry("undo");
+    CHECK(f.form->field("specimens").rows().size() == 1);
+    CHECK(f.form->field("specimens[0].label").draft() == "b");
+}
+
+// Mutation: the row entries offered with no bound check (Insert enabled at maxItems).
+TEST_CASE("grid: row entries in the cell's menu and Add row", "[ui][grid][rows]") {
+    std::string schema{kSpecimens};
+    schema.replace(schema.find(R"("maxItems":5)"), 12, R"("maxItems":3)");
+    GridFixture f{2, ui::GridOptions{.appendRows = true}, schema};
+    auto entries = f.grid->cellEntries(ui::Key{std::int64_t{1}}, "label");
+    CHECK(labelsOf(entries) == std::vector<std::string>{"Revert cell", "Revert row", "", "Insert row above",
+                                                        "Insert row below", "Delete row"});   // "" the separator
+    entry(entries, "Insert row above").onSelect();
+    CHECK(keysOf(*f.source).size() == 3);
+    CHECK(keysOf(*f.source).at(1) == ui::Key{std::int64_t{1}});   // the new row stands above row 1
+    entries = f.grid->cellEntries(ui::Key{std::int64_t{1}}, "label");
+    CHECK_FALSE(enabledOf(entry(entries, "Insert row below")));
+    CHECK(descriptionOf(entry(entries, "Insert row below")) == "A grid holds at most 3 rows");
+    f.grid->select(ui::CellRange{at(1, "label"), at(2, "mass")});
+    entries = f.grid->cellEntries(ui::Key{std::int64_t{1}}, "label");
+    entry(entries, "Delete rows").onSelect();
+    CHECK(keysOf(*f.source).size() == 1);
+    SECTION("rowsFixed offers no row entry") {
+        GridFixture fixed{2, ui::GridOptions{.rowsFixed = true}};
+        CHECK(labelsOf(fixed.grid->cellEntries(ui::Key{std::int64_t{1}}, "label")) ==
+              std::vector<std::string>{"Revert cell", "Revert row"});
+    }
+}
+
+// Mutation: insertRow calling committed() once per column (several changes for one insertion; the debounce folds
+// their rounds into one, so the changes are counted at FormGridSource::onCommitted).
+TEST_CASE("grid: each row operation is one change", "[ui][grid][rows]") {
+    GridFixture f{3};
+    std::size_t changes = 0;
+    f.source->onCommitted([&changes] { ++changes; });
+    f.enableDerive();
+    f.grid->focusCell(at(1, "label"));
+    f.grid->insertRow(true);
+    CHECK(changes == 1);
+    f.scheduler.advance(150ms); f.h.settle();
+    CHECK(f.evaluate.submits().size() == 1);
+    f.evaluate.resolveSubmit(0, R"({"errors":{},"ready":false})"); f.derive.resolveSubmit(0, kNoValues); f.h.settle();
+    f.grid->focusCell(at(1, "label")); f.grid->type("x"); f.grid->press("Enter");
+    f.scheduler.advance(150ms); f.h.settle();
+    f.evaluate.resolveSubmit(1, R"({"errors":{},"ready":false})"); f.derive.resolveSubmit(1, kNoValues); f.h.settle();
+    f.grid->select(ui::CellRange{at(1, "label"), at(4, "label")});   // view [1, 4, 2, 3]: rows 1 and 4
+    f.grid->deleteRows();                                      // two rows, one holding a value
+    CHECK(changes == 3);
+    f.scheduler.advance(150ms); f.h.settle();
+    CHECK(f.evaluate.submits().size() == 3);
+    f.evaluate.resolveSubmit(2, R"({"errors":{},"ready":false})"); f.derive.resolveSubmit(2, kNoValues); f.h.settle();
+    f.grid->chooseEntry("undo");
+    CHECK(changes == 4);
+    f.scheduler.advance(150ms); f.h.settle();
+    CHECK(f.evaluate.submits().size() == 4);
+}
+
 // ── In a document ───────────────────────────────────────────────────────────
 
 constexpr std::string_view kGridDocument = R"({"vocab":"ui/1","id":"specimens",
@@ -873,7 +1078,8 @@ TEST_CASE("grid: the cell menu offers copy and filter before the grid's own entr
         labels.push_back(shown.label);
     }
     CHECK(labels == std::vector<std::string>{"Copy", "Copy with headers", "Filter by this value", "Exclude this value",
-                                             "Revert cell", "Revert row"});
+                                             "Revert cell", "Revert row", "", "Insert row above", "Insert row below",
+                                             "Delete row"});
     g.h.backend.chooseCellMenu(g.table, ui::Key{std::int64_t{1}}, 1, {"Copy with headers"});
     g.h.settle();
     CHECK(g.h.backend.clipboardText() == "note\na");
@@ -918,7 +1124,8 @@ TEST_CASE("grid: the document's cell menu entries follow a separator after the g
         labels.push_back(shown.separator ? std::string{"--"} : shown.label);
     }
     CHECK(labels == std::vector<std::string>{"Copy", "Copy with headers", "Filter by this value", "Exclude this value",
-                                             "Revert cell", "Revert row", "--", "Pick"});
+                                             "Revert cell", "Revert row", "--", "Insert row above", "Insert row below",
+                                             "Delete row", "--", "Pick"});
     h.backend.chooseCellMenu(table, ui::Key{std::int64_t{1}}, 1, {"Pick"});
     h.settle();
     CHECK(h.text("picked") == "note");
@@ -1048,6 +1255,76 @@ TEST_CASE("grid: a field overlay's grid part needs the grid widget", "[ui][grid]
     auto const loaded = ui::loadDocumentText(text, ui::LoadOptions{.catalog = h.session.options().catalog});
     REQUIRE_FALSE(loaded.has_value());
     CHECK(loaded.error().reason.find("widget") != std::string::npos);
+}
+
+constexpr std::string_view kCellsGridDocument = R"({"vocab":"ui/1","id":"specimens",
+  "models":{"sample":{"type":"Lims_SampleModel"}},
+  "state":{"picked":{"init":null}},
+  "view":{"kind":"column","children":[
+    {"kind":"form","id":"rec","model":"sample","action":"Lims_RecordSpecimens","submit":"explicit"},
+    {"kind":"table","id":"grid","testId":"grid","form":"rec","field":"specimens","selectionMode":"cells",
+     "appendRows":true,"onSelectionChange":[{"set":"picked","value":{"ref":"event"}}],
+     "columns":[{"id":"mass","field":"mass"},{"id":"note","field":"note"}]},
+    {"kind":"text","testId":"picked","text":{"fn":"coalesce","args":[{"ref":"picked.focus.column"},"-"]}}]}})";
+
+// Mutation: the lowering not handing the grid the clipboard (`Ctrl+V` writes nothing).
+TEST_CASE("grid: a document's grid selects cells, copies and pastes them, and adds and deletes rows",
+          "[ui][grid][interpreter][cells]") {
+    ui::testing::TableHarness h;
+    ui::testing::addAction(h, "Lims_RecordSpecimens", std::string{morph::test::grid::kSpecimens},
+                           ui::ActionInfo{.modelType = "Lims_SampleModel"});
+    auto const screen = h.mount(kCellsGridDocument);
+    forms::FormSession& form = *ui::testing::elementOf(*screen, "rec").form;
+    form.prefill(R"({"sampleId":4,"specimens":[{"note":"a"},{"note":"b"}]})");
+    h.settle();
+    int const table = h.byTestId("Table", "grid");
+    h.backend.selectCells(table, 0, 0, 1, 1);
+    h.settle();
+    CHECK(ui::testing::elementValue(h, "grid", "selection") ==
+          ui::testing::value(R"({"anchor":{"key":1,"column":"mass"},"focus":{"key":2,"column":"note"}})"));
+    CHECK(h.backend.prop(table, "cellSelection") == "r0+2,c0+2");
+    CHECK(h.text("picked") == "note");
+    h.backend.press(table, "Ctrl+C");
+    h.settle();
+    CHECK(h.backend.clipboardText() == "\ta\n\tb");
+    h.backend.clickCell(table, 0, 0);   // (1, mass), inside the selection, which stays
+    h.settle();
+    REQUIRE(h.backend.copyText("5\ty"));
+    h.backend.press(table, "Ctrl+V");
+    h.settle();
+    CHECK(form.field("specimens[0].mass").draft() == "5");
+    CHECK(form.field("specimens[0].note").draft() == "y");
+    h.backend.click(h.byTestId("Button", "grid_addRow"));
+    h.settle();
+    CHECK(form.field("specimens").rows().size() == 3);
+    h.backend.clickCell(table, 0, 0);
+    h.settle();
+    h.backend.chooseMenu(table, std::nullopt, {"Delete row"});
+    h.settle();
+    CHECK(form.field("specimens").rows().size() == 2);
+}
+
+// Mutation: the loader taking `appendRows` on a table over rows (it loads).
+TEST_CASE("grid: the loader keeps cells and row operations to grids", "[ui][grid][interpreter][cells]") {
+    ui::testing::TableHarness h;
+    ui::testing::addAction(h, "Lims_RecordSpecimens", std::string{morph::test::grid::kSpecimens},
+                           ui::ActionInfo{.modelType = "Lims_SampleModel"});
+    auto const refusal = [&h](std::string const& text) {
+        auto const loaded = ui::loadDocumentText(text, ui::LoadOptions{.catalog = h.session.options().catalog});
+        return loaded.has_value() ? std::string{} : loaded.error().reason;
+    };
+    CHECK(refusal(std::string{kCellsGridDocument}).empty());
+    std::string single{kCellsGridDocument};
+    single.replace(single.find(R"("selectionMode":"cells")"), std::string_view{R"("selectionMode":"cells")"}.size(),
+                   R"("selectionMode":"single")");
+    CHECK(refusal(single).find("selects cells") != std::string::npos);
+    std::string both{kCellsGridDocument};
+    both.replace(both.find(R"("appendRows":true)"), std::string_view{R"("appendRows":true)"}.size(),
+                 R"("appendRows":true,"rowsFixed":true)");
+    CHECK(refusal(both).find("rowsFixed") != std::string::npos);
+    constexpr std::string_view kRowsTable = R"({"vocab":"ui/1","id":"plain","state":{"items":{"init":{"lit":[]}}},
+      "view":{"kind":"table","id":"t","rows":{"ref":"items"},"appendRows":true,"columns":[{"id":"a"}]}})";
+    CHECK(refusal(std::string{kRowsTable}).find("`appendRows` is a grid's") != std::string::npos);
 }
 
 // Mutation: the mount ignoring KeyOutcome::FocusNext.

@@ -95,6 +95,76 @@ MorphWidget {
         return root.visibleColumns.length > 0 ? root.visibleColumns.indexOf(column) : column
     }
 
+    // The column at a visible place: the inverse of `placeOf`.
+    function columnAtPlace(place: int): int {
+        return root.visibleColumns.length > 0 ? (root.visibleColumns[place] ?? -1) : place
+    }
+
+    // ── Cells selected (`selectsCells`) ──
+
+    // Whether the table selects cells, not rows: C++ sets it with its handler, and `cellRect` is the rectangle it
+    // draws, `[firstRow, rowCount, firstPosition, positionCount]` in view rows and visible places, empty for none.
+    property bool selectsCells: false
+    property var cellRect: []
+
+    // Reports a rectangle by its corners' view rows and visible places.
+    function selectCells(anchorRow: int, anchorPosition: int, focusRow: int, focusPosition: int) {
+        if (anchorRow < 0 || anchorPosition < 0 || focusRow < 0 || focusPosition < 0)
+            return
+        root.fire("cellSelect", {"anchorRow": anchorRow, "anchorPosition": anchorPosition,
+                                 "focusRow": focusRow, "focusPosition": focusPosition})
+    }
+
+    // A Shift-click on a cell: from the focused cell to the one clicked.
+    function selectCellsTo(viewRow: int, column: int) {
+        if (root.focusedRowIndex >= 0 && root.focusedColumnIndex >= 0)
+            root.selectCells(root.focusedRowIndex, root.placeOf(root.focusedColumnIndex), viewRow, root.placeOf(column))
+    }
+
+    // A click on a row's leading edge: every visible cell of the row.
+    function selectRowCells(viewRow: int) {
+        const places = root.visibleColumns.length > 0 ? root.visibleColumns.length : root.columns.length
+        if (places > 0)
+            root.selectCells(viewRow, 0, viewRow, places - 1)
+    }
+
+    // A Ctrl-click on a column's header: every row's cell of the column.
+    function selectColumnCells(column: int) {
+        if (root.totalRows > 0)
+            root.selectCells(0, root.placeOf(column), root.totalRows - 1, root.placeOf(column))
+    }
+
+    // The column whose cells lie under `x`, in the rows' coordinates; -1 for none.
+    function columnAtX(x: real): int {
+        for (let column = 0; column < root.columns.length; ++column) {
+            const box = root.columnBox(column)
+            if (box !== null && root.placeOf(column) >= 0 && x >= box.x && x < box.x + box.width)
+                return column
+        }
+        return -1
+    }
+
+    // The rectangle `cellRect` names, in the rows' coordinates; null while it is empty or none of its columns is
+    // drawn.
+    function cellRectBox(): var {
+        if (root.cellRect.length !== 4)
+            return null
+        let left = Infinity
+        let right = -Infinity
+        for (let place = root.cellRect[2]; place < root.cellRect[2] + root.cellRect[3]; ++place) {
+            const box = root.columnBox(root.columnAtPlace(place))
+            if (box !== null) {
+                left = Math.min(left, box.x)
+                right = Math.max(right, box.x + box.width)
+            }
+        }
+        if (left > right)
+            return null
+        const top = root.rowTop(root.cellRect[0])
+        return {"x": left, "y": top, "width": right - left,
+                "height": root.rowTop(root.cellRect[0] + root.cellRect[1]) - top}
+    }
+
     function sortMarkOf(column: int): string {
         return root.sortMarks[String(column)] ?? ""
     }
@@ -1110,6 +1180,12 @@ MorphWidget {
                             enabled: root.hasMenu
                             onTapped: root.fire("menu", headerLabel.index)
                         }
+                        // In a table that selects cells, a Ctrl-click selects the column's cells.
+                        TapHandler {
+                            enabled: root.selectsCells
+                            acceptedModifiers: Qt.ControlModifier
+                            onTapped: root.selectColumnCells(headerLabel.index)
+                        }
                         DragHandler {
                             id: headerMove
                             enabled: root.movable
@@ -1194,6 +1270,12 @@ MorphWidget {
                         acceptedButtons: Qt.RightButton
                         enabled: root.hasMenu
                         onTapped: root.fire("menu", windowLabel.modelData.column)
+                    }
+                    // In a table that selects cells, a Ctrl-click selects the column's cells.
+                    TapHandler {
+                        enabled: root.selectsCells
+                        acceptedModifiers: Qt.ControlModifier
+                        onTapped: root.selectColumnCells(windowLabel.modelData.column)
                     }
                     DragHandler {
                         enabled: root.movable
@@ -1292,6 +1374,37 @@ MorphWidget {
                 id: rowsPlane
                 width: flick.width
                 height: root.sourceContentHeight
+
+                // A drag from one cell to another selects the rectangle they span, reported on release.
+                DragHandler {
+                    id: cellDrag
+                    enabled: root.selectsCells
+                    target: null
+                    onActiveChanged: {
+                        if (cellDrag.active)
+                            return
+                        const from = cellDrag.centroid.pressPosition
+                        const to = cellDrag.centroid.position
+                        root.selectCells(root.rowAtY(from.y), root.placeOf(root.columnAtX(from.x)),
+                                         root.rowAtY(to.y), root.placeOf(root.columnAtX(to.x)))
+                    }
+                }
+
+                // The selected cells: a wash in the selection's colour with its outline, over the rows they span.
+                Rectangle {
+                    id: cellSelectionBox
+                    objectName: "cellSelection"
+                    readonly property var box: root.cellRectBox()
+                    visible: root.selectsCells && box !== null
+                    z: 2
+                    x: box !== null ? box.x : 0
+                    y: box !== null ? box.y : 0
+                    width: box !== null ? box.width : 0
+                    height: box !== null ? box.height : 0
+                    color: Qt.alpha(Theme.themeScheme.selection, 0.5)
+                    border.width: 2
+                    border.color: Theme.themeScheme.accent
+                }
             }
         }
     }

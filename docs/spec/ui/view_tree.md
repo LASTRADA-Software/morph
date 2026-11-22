@@ -433,6 +433,16 @@ each on `Table` and `TableOptions` alike:
   signal set) evaluates its marks again with its content, and nothing per row holds them. Anywhere but a table cell a
   `MarkedCell` mounts its content and its marks are not read. A row's own mark is `TableRowLook::modified`
   (`std::optional<Prop<bool>>`), bound in the row's scope and told with `setRowModified`.
+- **`cellSelection`** (`std::optional<Prop<std::optional<CellRange>>>`) with **`onCellSelect(optional<CellRange>)`**:
+  engaged, the table selects cells, not rows. `CellRange{anchor, focus}` is two `CellRef` corners; the rectangle is the
+  rows between the corners' keys' view positions and the columns between their ids' places in the layout. The mount
+  tells the backend `setSelectionMode(None)` and `setCellSelection` with the rectangle at the corners' view positions
+  (found by scanning the view, which is whole on the client) and visible places now, again after every change of the
+  rows and of the arrangement, so a sort or a column move redraws the rectangle the same corners span; a corner whose
+  row is not in the view, or whose column is hidden, shows no rectangle and the range is kept. A rectangle the backend
+  reports (`setOnCellSelect`, by view rows and visible places) is turned into a `CellRange` through the rows' keys and
+  the visible columns' ids and handed to `onCellSelect`; a corner outside the view or the visible columns reports
+  nothing. A grid binds it to `GridController::selection` and `select`.
 
 ### Callbacks
 

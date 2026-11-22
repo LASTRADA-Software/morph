@@ -3094,3 +3094,39 @@ TEST_CASE("qt_quick grid: a column's kind follows its row", "[qt_quick][grid]") 
     view.reset();
     grid = {};
 }
+
+// Mutation: the QML table reporting the drag as a row selection (the rectangle is not selected and a row is).
+TEST_CASE("qt_quick grid: a drag selects a rectangle of cells and a row header click its row", "[qt_quick][grid]") {
+    QuickGrid g;
+    QQuickItem& table = g.named(QStringLiteral("grid"));
+    CHECK(table.property("selectsCells").toBool());
+    QPoint const start = Scene::centreOf(g.cellAt(0, 1));   // (1, mass)
+    QPoint const end = Scene::centreOf(g.cellAt(1, 2));     // (2, volume)
+    QTest::mousePress(&g.scene.window(), Qt::LeftButton, {}, start);
+    constexpr int steps = 10;
+    for (int step = 1; step <= steps; ++step) {
+        QTest::mouseMove(&g.scene.window(), start + ((end - start) * step / steps));
+    }
+    QTest::mouseRelease(&g.scene.window(), Qt::LeftButton, {}, end);
+    g.scene.settle();
+    CHECK(g.grid.grid->selection() == ui::CellRange{morph::test::grid::at(1, "mass"), morph::test::grid::at(2, "volume")});
+    QVariantList const rect = table.property("cellRect").toList();
+    REQUIRE(rect.size() == 4);
+    CHECK(rect.at(0).toInt() == 0);
+    CHECK(rect.at(1).toInt() == 2);
+    CHECK(rect.at(2).toInt() == 1);
+    CHECK(rect.at(3).toInt() == 2);
+    QQuickItem& box = g.named(QStringLiteral("cellSelection"));
+    CHECK(box.isVisible());
+    for (QQuickItem* const row : Scene::itemsOf(table, "QQuickItem")) {
+        if (row->property("cellMarks").isValid()) {
+            CHECK_FALSE(row->property("selected").toBool());
+        }
+    }
+    // A click on a row's leading edge, beside its cells, selects the row's cells.
+    QQuickItem& first = g.cellAt(1, 0);
+    QPointF const edge = first.mapToScene(QPointF{-2, first.height() / 2});
+    QTest::mouseClick(&g.scene.window(), Qt::LeftButton, {}, edge.toPoint());
+    g.scene.settle();
+    CHECK(g.grid.grid->selection() == ui::CellRange{morph::test::grid::at(2, "label"), morph::test::grid::at(2, "note")});
+}

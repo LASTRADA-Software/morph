@@ -97,6 +97,19 @@ TableImpl::TableImpl(Context& context, ui::ContainerWidget* parent)
                     map.value(QStringLiteral("shift")).toBool() ? ui::HeaderClick::Shift : ui::HeaderClick::Plain);
         }
     });
+    // A rectangle of cells the user selected, by its corners' view rows and visible positions.
+    relay().on(QStringLiteral("cellSelect"), [this](QVariant const& payload) {
+        QVariantMap const map = payload.toMap();
+        qlonglong const anchorRow = map.value(QStringLiteral("anchorRow")).toLongLong();
+        qlonglong const anchorPosition = map.value(QStringLiteral("anchorPosition")).toLongLong();
+        qlonglong const focusRow = map.value(QStringLiteral("focusRow")).toLongLong();
+        qlonglong const focusPosition = map.value(QStringLiteral("focusPosition")).toLongLong();
+        if (auto const handler = _onCellSelect;
+            handler && anchorRow >= 0 && anchorPosition >= 0 && focusRow >= 0 && focusPosition >= 0) {
+            handler(static_cast<std::size_t>(anchorRow), static_cast<std::size_t>(anchorPosition),
+                    static_cast<std::size_t>(focusRow), static_cast<std::size_t>(focusPosition));
+        }
+    });
     // A menu asked for by its column, -1 for the table's: its entries are read now and shown under its place.
     relay().on(QStringLiteral("menu"), [this](QVariant const& payload) {
         qlonglong const column = payload.toLongLong();
@@ -629,6 +642,21 @@ void TableImpl::setRowModified(ui::Widget& row, bool modified) {
         throw std::logic_error{"morph::qt_quick: setRowModified of a widget that is not this table's row"};
     }
     tableRow->write("modified", modified);
+}
+
+void TableImpl::setCellSelection(std::optional<std::array<std::size_t, 4>> rect) {
+    QVariantList shown;
+    if (rect) {
+        for (std::size_t const part : *rect) {
+            shown.append(static_cast<qlonglong>(part));
+        }
+    }
+    write("cellRect", shown);
+}
+
+void TableImpl::setOnCellSelect(std::function<void(std::size_t, std::size_t, std::size_t, std::size_t)> onSelect) {
+    _onCellSelect = std::move(onSelect);
+    write("selectsCells", static_cast<bool>(_onCellSelect));
 }
 
 void TableImpl::cellClicked(TableRowImpl const& row, std::size_t column, bool doubleClick) const {
