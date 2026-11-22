@@ -8776,7 +8776,8 @@ void fixedGridSlots(reactive::Runtime& runtime, GridTable& held) {
 
 // A fixed grid, made once per element as a grid of a form is: its rows the table's `layoutRows`, each block's repeated
 // for each row of its collection, and each cell a field of the form `form` names, an expression read in the table's
-// scope (in a block, with `row` its collection row's record), or a text. Its header, its menus and its arrangement are
+// scope (in a block, with `row` its collection row's record), or a text, with a grid column's overlays read the same
+// way. A row's `label` is read once. Its header, its menus and its arrangement are
 // a table's, with no column that sorts or filters. What its cells' expressions keep holds the scope weakly.
 // NOLINTNEXTLINE(readability-function-cognitive-complexity): one section per part of a fixed grid.
 Node ScreenCore::lowerFixedGrid(DocNode const& node, LowerCtx const& ctx, ElementState* element) {
@@ -8848,6 +8849,34 @@ Node ScreenCore::lowerFixedGrid(DocNode const& node, LowerCtx const& ctx, Elemen
                         auto const read_ = read(row);
                         int const places = read_ ? placesOf(read_->first, read_->second) : -1;
                         return places >= 0 ? std::optional{static_cast<std::uint32_t>(places)} : std::nullopt;
+                    };
+                }
+                if (ExprPtr const unit = given->prop("unit")) {
+                    cell.unit = [read = reader(unit)](forms::RowState const* row) -> std::optional<std::string> {
+                        auto const read_ = read(row);
+                        std::string const* const id = read_ ? read_->first.asString() : nullptr;
+                        return id != nullptr && !id->empty() ? std::optional{*id} : std::nullopt;
+                    };
+                }
+                if (ExprPtr const offered = given->prop("options")) {
+                    cell.options = [read = reader(offered)](
+                                       forms::RowState const* row) -> std::optional<std::vector<std::string>> {
+                        auto const read_ = read(row);
+                        ValueList const* const items = read_ ? read_->first.asList() : nullptr;
+                        if (items == nullptr) {
+                            return std::nullopt;
+                        }
+                        std::vector<std::string> kept;
+                        for (Value const& item : *items) {
+                            kept.push_back(glz::write_json(valueToJson(item)).value_or(std::string{}));
+                        }
+                        return kept;
+                    };
+                }
+                if (ExprPtr const placeholder = given->prop("placeholder")) {
+                    cell.placeholder = [read = reader(placeholder)](forms::RowState const* row) {
+                        auto const read_ = read(row);
+                        return read_ ? textOf(read_->first, read_->second) : std::string{};
                     };
                 }
                 made.cells.insert_or_assign(given->id, std::move(cell));

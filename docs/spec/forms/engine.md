@@ -354,6 +354,9 @@ field)` in `forms/engine/field_control.hpp`, which a grid's cell editor draws to
   member of a row added since the load. A computed member (`FieldSpec::computed`, from `x-computed`) and a derived
   one (`FieldSpec::derived`, from `x-derived`) are never modified: only a round writes them. Any other member stays modified whatever freezes it after the user typed in it.
   **`rowModified(arrayPath, key)`** is true when a member of the row is modified or the row was added since.
+- **`loadGeneration()`** (tracked) is a count that moves whenever the record is written again: a load, a revert and
+  `switchUnitsAsLoaded`. What follows the record, such as a fixed grid's `unit` overlay giving a field its unit again
+  after a load, reads it.
 - **`revert(path)`** restores the record's draft and unit, programmatically; a row's path (`specimens#3`) reverts
   each member, and reverting a row added since the load removes it.
 - **`field(path)`** takes a row by key too: `rows#<key>.member`, as `FieldState::path()` writes it, beside

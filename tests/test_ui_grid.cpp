@@ -2177,4 +2177,169 @@ TEST_CASE("fixed grid: a document's fixed grid edits its form's fields and repea
     CHECK(h.backend.tableRow(table, ui::Key{std::string{"3/mass"}}).has_value());
 }
 
+// Mutation: the coverage recording no covered cell (method's max is not covered).
+TEST_CASE("fixed grid: a cell's span covers the cells beside it, cut where the layout parts", "[ui][grid][fixed]") {
+    FixedGridFixture f{R"({"limits":{}})", fourParameters(), fixedColumns({"min", "max"})};
+    ui::Key const method{std::string{"method"}};
+    CHECK(f.source->covered(method, "max"));
+    CHECK_FALSE(f.source->covered(method, "min"));
+    CHECK_FALSE(f.source->covered(ui::Key{std::string{"density"}}, "max"));
+    std::vector<ui::CellSpan> spans = f.source->spans(method);
+    REQUIRE(spans.size() == 1);
+    CHECK(spans.front().column == "min");
+    CHECK(spans.front().rows == 1);
+    CHECK(spans.front().columns == 2);
+    f.source->setLayout({"min"});   // max hidden: the span is cut at it
+    CHECK_FALSE(f.source->covered(method, "max"));
+    spans = f.source->spans(method);
+    REQUIRE(spans.size() == 1);
+    CHECK(spans.front().columns == 1);
+}
+
+// The overlays a cell takes, and a cell that shows a value.
+std::vector<std::variant<ui::FixedRow, ui::FixedBlock>> overlaidCells() {
+    ui::FixedCell densityMin = fieldCell("limits.density.min");
+    densityMin.decimals = [](forms::RowState const*) { return std::optional<std::uint32_t>{1}; };
+    ui::FixedCell densityMax = fieldCell("limits.density.max");
+    densityMax.readonly = [](forms::RowState const*) { return true; };
+    ui::FixedCell weight = fieldCell("limits.weight");
+    weight.unit = [](forms::RowState const*) { return std::optional<std::string>{"g"}; };
+    ui::FixedCell method = fieldCell("limits.method");
+    method.options = [](forms::RowState const*) { return std::optional{std::vector<std::string>{R"("A")"}}; };
+    method.placeholder = [](forms::RowState const*) { return std::string{"Pick one"}; };
+    ui::FixedCell shown;
+    shown.value = [](forms::RowState const* row) { return std::string{row == nullptr ? "top" : "block"}; };
+    return {fixedRow("density", {{"min", std::move(densityMin)}, {"max", std::move(densityMax)}}),
+            fixedRow("weight", {{"min", std::move(weight)}}),
+            fixedRow("method", {{"min", std::move(method)}, {"max", std::move(shown)}})};
+}
+
+// Mutations, each its own: the `unit` overlay not applied (the weight stays in kg); the `options` overlay not applied
+// (both options offered); the `placeholder` overlay not applied (the schema's placeholder stays).
+TEST_CASE("fixed grid: a cell takes the column overlays and shows a value", "[ui][grid][fixed]") {
+    FixedGridFixture f{R"({"limits":{}})", overlaidCells(), fixedColumns({"min", "max"})};
+    f.grid->focusCell(ui::CellRef{ui::Key{std::string{"density"}}, "min"});
+    CHECK(f.grid->paste("1,23").written == 1);
+    CHECK(errorCode(*f.form, "limits.density.min") == "too-precise");   // one place, not the field's three
+    CHECK(f.source->readOnly(ui::Key{std::string{"density"}}, "max"));
+    forms::FieldState& weight = f.form->field("limits.weight");
+    REQUIRE(weight.spec().units.size() == 2);
+    CHECK(weight.spec().units.at(weight.unit().peek()).id == "g");
+    CHECK_FALSE(f.form->modified("limits.weight"));   // the first unit is part of the loaded field
+    forms::FieldState const& method = f.form->field("limits.method");
+    REQUIRE(method.options().size() == 1);
+    CHECK(method.options().front().valueJson == R"("A")");
+    CHECK(method.placeholder() == "Pick one");
+    CHECK(f.source->text(ui::Key{std::string{"method"}}, "max") == "top");
+    CHECK(f.source->readOnly(ui::Key{std::string{"method"}}, "max"));
+}
+
+// A form of limits and a fixed grid whose cells take overlays, and a block whose second cell shows its row's mass.
+constexpr std::string_view kOverlaidFixedDocument = R"({"vocab":"ui/1","id":"limits",
+  "models":{"sample":{"type":"Lims_SampleModel"}},
+  "state":{"locked":{"init":true}},
+  "view":{"kind":"column","children":[
+    {"kind":"form","id":"rec","model":"sample","action":"Lims_SetLimits","submit":"explicit"},
+    {"kind":"table","id":"grid","testId":"grid","form":"rec",
+     "columns":[{"id":"min","label":"Min"},{"id":"max","label":"Max"}],
+     "layoutRows":[
+       {"key":"density","label":"Density",
+        "cells":{"min":{"field":"limits.density.min","decimals":1},
+                 "max":{"field":"limits.density.max","readonly":{"ref":"locked"}}}},
+       {"key":"weight","cells":{"min":{"field":"limits.weight","unit":"g"}}},
+       {"key":"method","cells":{"min":{"field":"limits.method","options":{"lit":["A"]},"placeholder":"Pick one"}}},
+       {"forEach":"specimens","rows":[{"key":"mass","label":"Mass","cells":{"min":{"field":"mass"},
+          "max":{"value":{"fn":"coalesce","args":[{"ref":"row.mass"},"none"]}}}}]}]}]}})";
+
+// Mutation: a block's `value` cell read without `row` bound (it shows "none" after the mass is entered).
+TEST_CASE("fixed grid: a document's cells take their overlays, and a block's value reads its row",
+          "[ui][grid][fixed]") {
+    ui::testing::TableHarness h;
+    addLimitsAction(h);
+    auto const screen = h.mount(kOverlaidFixedDocument);
+    forms::FormSession& form = *ui::testing::elementOf(*screen, "rec").form;
+    form.prefill(R"({"limits":{},"specimens":[{}]})");
+    h.settle();
+    int const table = h.byTestId("Table", "grid");
+    h.backend.clickCell(table, 0, 0);   // (density, min)
+    h.settle();
+    h.backend.typeInto(table, "1.23");
+    h.backend.press(table, "Enter");
+    h.settle();
+    CHECK(errorCode(form, "limits.density.min") == "too-precise");
+    h.backend.clickCell(table, 0, 1);   // (density, max): read-only while `locked`
+    h.settle();
+    h.backend.typeInto(table, "4");
+    h.settle();
+    CHECK(ui::testing::elementValue(h, "grid", "editing") == ui::Value{});
+    CHECK(form.field("limits.density.max").draft().empty());
+    forms::FieldState& weight = form.field("limits.weight");
+    CHECK(weight.spec().units.at(weight.unit().peek()).id == "g");
+    REQUIRE(form.field("limits.method").options().size() == 1);
+    CHECK(form.field("limits.method").placeholder() == "Pick one");
+    form.field("specimens[0].mass").text().set("2.5");
+    h.settle();
+    std::optional<int> const mass = h.backend.tableRow(table, ui::Key{std::string{"1/mass"}});
+    REQUIRE(mass.has_value());
+    std::string shown;
+    for (int const cell : h.backend.children(*mass)) {
+        if (h.backend.prop(cell, "column") == "1") {
+            shown = h.backend.prop(cell, "text");
+        }
+    }
+    CHECK(shown.find("2.5") != std::string::npos);
+}
+
+// Mutation: the loader not refusing a `{field}` cell without `form` (the block-less document loads).
+TEST_CASE("fixed grid: the loader refuses a field cell without a form, a key with a slash and a block row's label "
+          "reading its row",
+          "[ui][grid][fixed]") {
+    ui::testing::TableHarness h;
+    addLimitsAction(h);
+    auto const refusal = [&h](std::string const& text) {
+        auto const loaded = ui::loadDocumentText(text, ui::LoadOptions{.catalog = h.session.options().catalog});
+        return loaded.has_value() ? std::string{} : loaded.error().reason;
+    };
+    constexpr std::string_view kTextGrid = R"({"vocab":"ui/1","id":"sheet","state":{"n":{"init":3}},
+      "view":{"kind":"table","id":"grid","testId":"grid",
+       "columns":[{"id":"name","label":"Name"},{"id":"value","label":"Value"}],
+       "layoutRows":[{"key":"count","cells":{"name":{"text":"Count"},"value":{"value":{"ref":"n"}}}}]}})";
+    CHECK(refusal(std::string{kTextGrid}).empty());   // values only: no form needed
+    CHECK(refusal(replaced(kTextGrid, R"({"value":{"ref":"n"}})", R"({"field":"limits.count"})"))
+              .find("a cell that edits a field names the form's") != std::string::npos);
+    CHECK(refusal(replaced(kFixedGridDocument, R"("key":"count")", R"("key":"1/mass")")).find("holds a `/`") !=
+          std::string::npos);
+    CHECK(refusal(replaced(kFixedGridDocument, R"({"key":"mass","label":"Mass")",
+                           R"({"key":"mass","label":{"ref":"row.mass"})"))
+              .find("row") != std::string::npos);
+    CHECK(refusal(replaced(kFixedGridDocument, R"("max":{"text":"none"})", R"("max":{"text":"none","unit":"g"})"))
+              .find("edits no field") != std::string::npos);
+}
+
+// Mutation: the source's key check letting a `/` through (no exception).
+TEST_CASE("fixed grid: a source refuses a key with a slash", "[ui][grid][fixed]") {
+    morph::test::formsengine::Harness h;
+    std::vector<std::variant<ui::FixedRow, ui::FixedBlock>> rows{fixedRow("1/mass", {{"v", textCell("x")}})};
+    CHECK_THROWS_AS(ui::FixedGridSource(h.rt, nullptr, std::move(rows), fixedColumns({"v"}), ui::FormatContext{}),
+                    std::invalid_argument);
+}
+
+// A grid of values only, with no form, mounts.
+TEST_CASE("fixed grid: a grid of values and texts needs no form", "[ui][grid][fixed]") {
+    ui::testing::TableHarness h;
+    auto const screen = h.mount(R"({"vocab":"ui/1","id":"sheet","state":{"n":{"init":3}},
+      "view":{"kind":"table","id":"grid","testId":"grid",
+       "columns":[{"id":"name","label":"Name"},{"id":"value","label":"Value"}],
+       "layoutRows":[{"key":"count","cells":{"name":{"text":"Count"},"value":{"value":{"ref":"n"}}}}]}})");
+    h.settle();
+    int const table = h.byTestId("Table", "grid");
+    std::optional<int> const row = h.backend.tableRow(table, ui::Key{std::string{"count"}});
+    REQUIRE(row.has_value());
+    std::vector<std::string> texts;
+    for (int const cell : h.backend.children(*row)) {
+        texts.push_back(h.backend.prop(cell, "text"));
+    }
+    CHECK(texts == std::vector<std::string>{"Count", "3"});
+}
+
 }  // namespace
