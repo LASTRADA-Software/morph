@@ -464,7 +464,8 @@ edit (absent for a fixed grid that shows values only):
 - **Blocks.** A part `{"forEach": "specimens", "rows": […]}` repeats its rows for each row of that
   `ObjectArray`, in the block's own scope, where `row` is the specimen and a cell's `{field}` path is relative to
   it. A block row's key is the specimen's row key and the part's key joined (`"<row key>/<key>"`), so it is
-  stable while specimens are added and removed. A block of several fixed rows per specimen is one declaration.
+  stable while specimens are added and removed. A block of several fixed rows per specimen is one declaration. A
+  row's `label` is read once for every row of the block, so it does not read `row`; only its cells do.
 
 ## Document vocabulary
 
@@ -619,8 +620,9 @@ Every key is optional, and a table that names none of them is what [`table.md`](
 | `form` and `rows` both on a table, `layoutRows` with `rows` or `field`, or a `{field}` cell in a fixed grid without `form` | Refused when the document loads. |
 | A `layoutRows` key holding a `/`, which joins a block row's keys | Refused when the document loads. |
 | `sort`, `group`, `summaries`, `rowSpans`, `appendRows`, `rowsFixed` or `key` on a fixed grid, or `layoutRows` on a model's table | Refused when the document loads: a fixed grid's rows are its parts, in order. |
-| A fixed-grid cell under an id the column parts lack, naming none or more than one of `field`, `value` and `text`, or giving an overlay with no `field`; a `rows` or `columns` that is not a literal count from 1 | Refused when the document loads. |
-| A block without `form`, a block inside a block, a `forEach` that is no list of records of the form, or a `{field}` that is no field of the form (of the row type, in a block) | Refused when the document loads. |
+| A fixed-grid cell under an id the column parts lack, naming none or more than one of `field`, `value` and `text`, or giving `decimals`, `unit`, `options` or `placeholder` with no `field` (`readonly` is taken by any cell); a `rows` or `columns` that is not a literal count from 1; a fixed grid's column part naming a `field` or a `value` | Refused when the document loads. |
+| A block without `form` or a block inside a block | Refused when the document loads. |
+| A `forEach` that is no list of records of the form, or a `{field}` that is no field of the form (of the row type, in a block) | Refused when the document loads while the catalog has the form action's schema; otherwise reported when the grid is lowered, and the grid drawn as muted text. |
 | A block row's `label` reading `row` | Refused when the document loads: a row's label is read once, for every collection row. |
 
 ## Neighbouring specs
