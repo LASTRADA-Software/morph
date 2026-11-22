@@ -5,7 +5,8 @@
 /// @file ui/grid.hpp
 /// @brief A grid: a table whose cells are edited. `GridController` holds a grid's focus, its cell editor and its walk
 ///        over a `GridSource`; `FormGridSource` is a grid of a form's `ObjectArray` field, and `makeFormGrid` the node
-///        that shows one.
+///        that shows one; `FixedGridSource` is a fixed grid, whose rows a standard fixes and whose cells are each a
+///        field of their own.
 ///
 /// Specified in `docs/spec/table/editing.md`.
 
@@ -14,6 +15,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <functional>
+#include <map>
 #include <memory>
 #include <optional>
 #include <span>
@@ -1285,6 +1287,37 @@ private:
     return format;
 }
 
+namespace detail {
+
+/// @brief A field's cell text as a grid shows it. Tracked.
+/// @param state  The field.
+/// @param column The column's id.
+/// @param format How values are shown.
+/// @return The draft while blank or not encoding, else the value at the places the field takes: its `places()`, its
+///         `x-decimalPlaces`, its display places, or none for an integer.
+[[nodiscard]] inline std::string fieldText(forms::FieldState& state, std::string_view column,
+                                           FormatContext const& format) {
+    forms::Encoding const& encoding = state.encoded().get();
+    if (!encoding.has_value() || !encoding->has_value()) {
+        return state.draft();
+    }
+    forms::FieldSpec const& spec = state.spec();
+    table::TableColumn shown;
+    shown.info = table::ColumnInfo{.id = std::string{column}, .kind = columnKindOf(spec.kind)};
+    if (std::optional<std::uint32_t> const places = state.places().get()) {
+        shown.display.decimals = places;
+    } else if (spec.decimalPlaces) {
+        shown.display.decimals = spec.decimalPlaces;
+    } else if (spec.displayDecimals) {
+        shown.display.decimals = spec.displayDecimals;
+    } else if (spec.kind == forms::FieldKind::Integer) {
+        shown.display.decimals = 0;
+    }
+    return formatCell(memberCell(state, shown.info.kind), shown, format);
+}
+
+}  // namespace detail
+
 /// @brief A grid of a form's `ObjectArray` field: its rows are the field's, and each cell is a member's field.
 ///
 /// Every row of a form is fetched, so `keyAt` is never empty below `rowCount`. A cell's text is its draft while blank or
@@ -1529,24 +1562,8 @@ public:
         if (state == nullptr) {
             return {};
         }
-        forms::Encoding const& encoding = state->encoded().get();
-        if (!encoding.has_value() || !encoding->has_value()) {
-            return state->draft();
-        }
-        forms::FieldSpec const& spec = state->spec();
-        table::TableColumn shown;
-        shown.info = table::ColumnInfo{.id = std::string{column}, .kind = detail::columnKindOf(spec.kind)};
-        if (std::optional<std::uint32_t> const places = state->places().get()) {
-            shown.display.decimals = places;
-        } else if (spec.decimalPlaces) {
-            shown.display.decimals = spec.decimalPlaces;
-        } else if (spec.displayDecimals) {
-            shown.display.decimals = spec.displayDecimals;
-        } else if (spec.kind == forms::FieldKind::Integer) {
-            shown.display.decimals = 0;
-        }
         static_cast<void>(_formatVersion.get());
-        return formatCell(detail::memberCell(*state, shown.info.kind), shown, _format);
+        return detail::fieldText(*state, column, _format);
     }
 
     /// @brief Why the cell's value is refused: its draft does not encode, or the last submission refused it. Tracked.
@@ -1994,6 +2011,749 @@ private:
     // it still holds that.
     std::vector<forms::RemovedRow> _removed;
     std::string _afterRemove;
+};
+
+/// @brief One cell of a fixed grid's row: a field of the form it edits, an expression it shows, or a literal text.
+///
+/// A cell with `field` edits that field; a cell without one is read-only and shows `value`, else `text`.
+struct FixedCell {
+    /// @brief The path of the form field the cell edits (`limits.density.min`); in a block, relative to the block's
+    ///        row, so `mass` is `specimens#<key>.mass`. Empty for a cell that shows `value` or `text`.
+    std::string field;
+    /// @brief What a `{value}` cell shows, read with the block's row, null outside a block. Tracked.
+    std::function<std::string(forms::RowState const*)> value;
+    /// @brief What a `{text}` cell shows.
+    std::string text;
+    /// @brief How many rows the cell covers, its own included, downwards.
+    std::size_t rows = 1;
+    /// @brief How many columns the cell covers, its own included, to the right in the layout.
+    std::size_t columns = 1;
+    /// @brief Whether the cell is read-only beyond its field (`CellFacts::overlayReadOnly`), read with the block's row,
+    ///        null outside a block. Tracked.
+    std::function<bool(forms::RowState const*)> readonly;
+    /// @brief The entry places of the cell's field, which are also its wire `dp`, read with the block's row, null
+    ///        outside a block; nothing keeps the field's. Tracked.
+    std::function<std::optional<std::uint32_t>(forms::RowState const*)> decimals;
+};
+
+/// @brief One row of a fixed grid: its key, its label and its cells by column id.
+struct FixedRow {
+    /// @brief The row's key, unique among the grid's parts.
+    std::string key;
+    /// @brief The row's name: what an assistive technology reads for it.
+    std::string label;
+    /// @brief The row's cells, by column id; a column with no cell here shows nothing and takes no edit.
+    std::map<std::string, FixedCell, std::less<>> cells;
+};
+
+/// @brief Rows of a fixed grid repeated for each row of a form's `ObjectArray` field.
+struct FixedBlock {
+    /// @brief The path of the collection the rows repeat over.
+    std::string forEach;
+    /// @brief The rows repeated for each of its rows, in order; a cell's `field` is relative to that row.
+    std::vector<FixedRow> rows;
+};
+
+/// @brief A fixed grid: rows a standard or a specification fixes, each cell its own field of a form, of its own kind,
+///        places and editor.
+///
+/// Every row is held, so `keyAt` is never empty below `rowCount`. A fixed row's key is its `FixedRow::key`; a block
+/// row's is the collection row's key and the part's joined, `"<row key>/<key>"`, so it stays the same while rows of the
+/// collection are added and removed. The rows are in the parts' order, a block's in its collection's order, and are
+/// never sorted, filtered or rearranged; the columns may be hidden and resized. Spans always apply. A cell with no
+/// field is read-only.
+class FixedGridSource final : public GridSource {
+public:
+    /// @brief A part of a fixed grid: a row, or a block of rows.
+    using Part = std::variant<FixedRow, FixedBlock>;
+
+    /// @brief A fixed grid.
+    /// @param runtime The runtime its state is tracked on, and whose owner its rows are delivered on. Borrowed.
+    /// @param form    The form whose fields the cells edit; null for a grid of `value` and `text` cells only. Borrowed:
+    ///                it must outlive the source.
+    /// @param rows    The parts, in order.
+    /// @param columns The columns, each id once: only their ids and labels are read.
+    /// @param format  How values are shown.
+    /// @throws std::invalid_argument when a key is empty or given twice, a cell names a field with @p form null or a
+    ///         field the form does not have, or a block repeats over no collection of the form.
+    FixedGridSource(reactive::Runtime& runtime, forms::FormSession* form, std::vector<Part> rows,
+                    std::vector<GridColumn> columns, FormatContext format)
+        : _rt{&runtime},
+          _form{form},
+          _formAlive{form != nullptr ? form->alive() : std::weak_ptr<void const>{}},
+          _parts{std::move(rows)},
+          _columns{std::move(columns)},
+          _format{std::move(format)},
+          _formatVersion{runtime, std::uint64_t{0}},
+          _layoutVersion{runtime, std::uint64_t{0}},
+          _data{std::make_shared<table::VectorSource>(
+              std::vector<table::ColumnInfo>{table::ColumnInfo{.id = std::string{kGridKeyField},
+                                                               .kind = table::ColumnKind::Text}})} {
+        for (GridColumn const& column : _columns) {
+            _layout.push_back(column.id);
+        }
+        checkParts();
+        expand();
+        table::EngineOptions options;
+        options.owner = &runtime.owner();
+        _rows = std::make_unique<EngineRows>(
+            _data,
+            [](table::RowSnapshot const& snapshot, std::size_t row) {
+                table::RowId key = snapshot.rowId(row);
+                ValueRecord record;
+                record.insert_or_assign(std::string{kGridKeyField}, Value{std::get<std::string>(key)});
+                return RowRecord{.key = std::move(key), .row = Value{std::move(record)}};
+            },
+            std::move(options));
+        _rows->engine().flush();
+        if (std::ranges::any_of(_parts, [](Part const& part) { return std::holds_alternative<FixedBlock>(part); })) {
+            _watch = std::make_unique<reactive::Effect>(runtime, [this] { watch(); });
+        }
+        if (std::ranges::any_of(_parts, [](Part const& part) {
+                return std::ranges::any_of(rowsOf(part), [](FixedRow const& row) {
+                    return std::ranges::any_of(row.cells, [](auto const& cell) {
+                        return !cell.second.field.empty() && cell.second.decimals;
+                    });
+                });
+            })) {
+            _overlays = std::make_unique<reactive::Effect>(runtime, [this] { applyOverlays(); });
+        }
+    }
+
+    FixedGridSource(FixedGridSource const&) = delete;
+    FixedGridSource& operator=(FixedGridSource const&) = delete;
+    FixedGridSource(FixedGridSource&&) = delete;
+    FixedGridSource& operator=(FixedGridSource&&) = delete;
+
+    /// @brief Stops watching the collections and removes the commit `onBeforeSubmit` registered.
+    ~FixedGridSource() override {
+        _overlays.reset();
+        _watch.reset();
+        if (_hook && _form != nullptr && !_formAlive.expired()) {
+            _form->removeBeforeSubmit(*_hook);
+        }
+    }
+
+    /// @brief The rows; the collections' rows are taken in first.
+    /// @return The count.
+    [[nodiscard]] std::size_t rowCount() const override {
+        sync();
+        return _expanded.size();
+    }
+
+    /// @brief The key at a position; the collections' rows are taken in first.
+    /// @param viewRow The position.
+    /// @return The key; empty past the rows.
+    [[nodiscard]] std::optional<Key> keyAt(std::size_t viewRow) const override {
+        sync();
+        return viewRow < _expanded.size() ? std::optional<Key>{_expanded.at(viewRow).key} : std::nullopt;
+    }
+
+    /// @brief Where a key's row is; the collections' rows are taken in first.
+    /// @param key The key.
+    /// @return The position, or nothing.
+    [[nodiscard]] std::optional<std::size_t> positionOf(Key const& key) const override {
+        sync();
+        auto const found = _index.find(key);
+        return found == _index.end() ? std::nullopt : std::optional{found->second};
+    }
+
+    /// @brief The visible columns in layout order.
+    /// @return The ids, as `setLayout` gave them; every column in declared order before it.
+    [[nodiscard]] std::vector<std::string> columns() const override { return _layout; }
+
+    /// @brief Shows the cells in another formatting from now on: a mounted cell's text follows.
+    /// @param format How values are shown.
+    void setFormat(FormatContext format) {
+        _format = std::move(format);
+        _formatVersion.set(_formatVersion.peek() + 1);
+    }
+
+    /// @brief Sets the visible columns in layout order: what the walk follows, and what a span is cut over.
+    /// @param visible The column ids.
+    void setLayout(std::vector<std::string> visible) {
+        if (visible != _layout) {
+            _layout = std::move(visible);
+            _layoutVersion.set(_layoutVersion.peek() + 1);
+        }
+    }
+
+    /// @brief A cell's field. Tracked through the collections' rows.
+    /// @param key    The row's key.
+    /// @param column The column's id.
+    /// @return The field; null for a cell with none, an unknown row or column, or a block row's field its collection
+    ///         row lacks.
+    [[nodiscard]] forms::FieldState* field(Key const& key, std::string_view column) const {
+        Expanded const* const row = expandedOf(key);
+        if (row == nullptr) {
+            return nullptr;
+        }
+        auto const found = row->fields.find(column);
+        return found == row->fields.end() ? nullptr : found->second;
+    }
+
+    /// @brief A row's label.
+    /// @param key The row's key.
+    /// @return Its `FixedRow::label`; empty for an unknown row.
+    [[nodiscard]] std::string label(Key const& key) const {
+        Expanded const* const row = expandedOf(key);
+        return row == nullptr ? std::string{} : row->row->label;
+    }
+
+    /// @brief The forms control of the cell's field.
+    /// @param key    The row's key.
+    /// @param column The column's id.
+    /// @return The editor; a muted text for a cell with no field.
+    [[nodiscard]] Node editor(Key const& key, std::string_view column) override {
+        forms::FieldState* const state = field(key, column);
+        if (state == nullptr || _form == nullptr) {
+            return ui::text(Text{.text = std::string{}, .role = TextRole::Muted});
+        }
+        return forms::detail::engine::scalarControl(*_form, *state);
+    }
+
+    /// @brief Whether the cell's field is a Boolean.
+    /// @param key    The row's key.
+    /// @param column The column's id.
+    /// @return `true` for a Boolean.
+    [[nodiscard]] bool toggles(Key const& key, std::string_view column) const override {
+        forms::FieldState const* const state = field(key, column);
+        return state != nullptr && state->spec().kind == forms::FieldKind::Boolean;
+    }
+
+    /// @brief `cellReadOnly` over the cell's field and its `readonly` overlay. Tracked.
+    /// @param key    The row's key.
+    /// @param column The column's id.
+    /// @return `true` when read-only: always for a `value` or a `text` cell.
+    [[nodiscard]] bool readOnly(Key const& key, std::string_view column) const override {
+        auto const [cell, specimen] = cellOf(key, column);
+        bool const overlay = cell != nullptr && cell->readonly && cell->readonly(specimen);
+        return cellReadOnly(CellFacts{.field = field(key, column),
+                                      .hasEdit = cell != nullptr && !cell->field.empty(),
+                                      .overlayReadOnly = overlay});
+    }
+
+    /// @brief Whether a span of another cell covers a cell: the rows below the spanning cell's, up to its `rows`, and
+    ///        the columns `cutColumns` gives it over the layout. Untracked.
+    /// @param key    The row's key.
+    /// @param column The column's id.
+    /// @return `true` when covered; the spanning cell itself is not.
+    [[nodiscard]] bool covered(Key const& key, std::string_view column) const override {
+        Coverage const& coverage = coverageNow();
+        auto const found = coverage.covered.find(key);
+        return found != coverage.covered.end() && std::ranges::contains(found->second, column);
+    }
+
+    /// @brief The spans a row's cells give, each cut over the layout.
+    /// @param key The row's key.
+    /// @return The spans.
+    [[nodiscard]] std::vector<CellSpan> spans(Key const& key) const override {
+        static_cast<void>(_layoutVersion.get());
+        Coverage const& coverage = coverageNow();
+        auto const found = coverage.given.find(key);
+        return found == coverage.given.end() ? std::vector<CellSpan>{} : found->second;
+    }
+
+    /// @brief Whether a cell spans more than itself.
+    /// @return `true` when one does.
+    [[nodiscard]] bool spanning() const override {
+        return std::ranges::any_of(_parts, [](Part const& part) {
+            return std::ranges::any_of(rowsOf(part), [](FixedRow const& row) {
+                return std::ranges::any_of(row.cells, [](auto const& cell) {
+                    return cell.second.rows > 1 || cell.second.columns > 1;
+                });
+            });
+        });
+    }
+
+    /// @brief The cell's draft. Untracked.
+    /// @param key    The row's key.
+    /// @param column The column's id.
+    /// @return The draft; empty for a cell with no field.
+    [[nodiscard]] std::string draft(Key const& key, std::string_view column) const override {
+        forms::FieldState const* const state = field(key, column);
+        return state == nullptr ? std::string{} : _rt->untracked([&] { return state->draft(); });
+    }
+
+    /// @brief The cell's text: a `text` cell's text, a `value` cell's value, a field's draft while blank or not
+    ///        encoding, else its value at the field's places. Tracked.
+    /// @param key    The row's key.
+    /// @param column The column's id.
+    /// @return The text.
+    [[nodiscard]] std::string text(Key const& key, std::string_view column) const override {
+        auto const [cell, specimen] = cellOf(key, column);
+        if (cell == nullptr) {
+            return {};
+        }
+        if (cell->field.empty()) {
+            return cell->value ? cell->value(specimen) : cell->text;
+        }
+        forms::FieldState* const state = field(key, column);
+        if (state == nullptr) {
+            return {};
+        }
+        static_cast<void>(_formatVersion.get());
+        return detail::fieldText(*state, column, _format);
+    }
+
+    /// @brief Why the cell's value is refused: its draft does not encode, or the last submission refused it. Tracked.
+    /// @param key    The row's key.
+    /// @param column The column's id.
+    /// @return The forms error's message, else the refusal's; empty for none.
+    [[nodiscard]] std::optional<std::string> error(Key const& key, std::string_view column) const override {
+        forms::FieldState const* const state = field(key, column);
+        if (state == nullptr) {
+            return std::nullopt;
+        }
+        std::optional<forms::FieldError> const& failed = state->error().get();
+        return failed ? std::optional{failed->message} : _form->refusal(state->path());
+    }
+
+    /// @brief Writes a user's draft into the cell's field.
+    /// @param key    The row's key.
+    /// @param column The column's id.
+    /// @param draft  The draft.
+    void write(Key const& key, std::string_view column, std::string draft) override {
+        if (forms::FieldState* const state = field(key, column)) {
+            state->text().set(std::move(draft));
+        }
+    }
+
+    /// @brief An edit is meant: the form's derived values follow (`forms::FormSession::noteCommit`).
+    void committed() override {
+        if (_form != nullptr) {
+            _form->noteCommit();
+        }
+    }
+
+    /// @brief A cell's editor opened: its field fetches its options from now on (`forms::FieldState::openOptions`).
+    /// @param key    The row's key.
+    /// @param column The column's id.
+    void editorOpened(Key const& key, std::string_view column) override {
+        if (forms::FieldState* const state = field(key, column)) {
+            state->openOptions();
+        }
+    }
+
+    /// @brief Whether the form's derived values are the last ones loaded before a failure. Tracked.
+    /// @return `forms::FormSession::deriveFailing`; `false` with no form.
+    [[nodiscard]] bool deriveFailed() const override { return _form != nullptr && _form->deriveFailing(); }
+
+    /// @brief Makes one more round of the form's derived values (`forms::FormSession::recalculate`).
+    void recalculate() override {
+        if (_form != nullptr) {
+            _form->recalculate();
+        }
+    }
+
+    /// @brief The cell's marks: read-only, modified and not encoding; a computed or derived field's cell muted while a
+    ///        round of derived values is in flight, and stale from a failed round until a round succeeds. Tracked.
+    /// @param key    The row's key.
+    /// @param column The column's id.
+    /// @return The marks.
+    [[nodiscard]] CellMarks marks(Key const& key, std::string_view column) const override {
+        forms::FieldState const* const state = field(key, column);
+        bool const derived = state != nullptr && (state->spec().computed || state->spec().derived);
+        return CellMarks{.readOnly = readOnly(key, column),
+                         .modified = state != nullptr && _form->modified(state->path()),
+                         .error = error(key, column).has_value(),
+                         .stale = derived && _form->deriveFailing(),
+                         .muted = derived && _form->deriveState() == forms::DeriveState::Running};
+    }
+
+    /// @brief The key a fixed grid's record holds in `#key`.
+    /// @param record The record.
+    /// @return The key; empty for a record without one.
+    [[nodiscard]] std::optional<Key> keyOf(Value const& record) const override {
+        Value const* const key = record.field(kGridKeyField);
+        std::string const* const text = key == nullptr ? nullptr : key->asString();
+        return text == nullptr ? std::nullopt : std::optional<Key>{Key{*text}};
+    }
+
+    /// @brief Whether a field cell of the row is modified (`forms::FormSession::modified`). Tracked.
+    /// @param key The row's key.
+    /// @return `true` when one is.
+    [[nodiscard]] bool rowModified(Key const& key) const override {
+        Expanded const* const row = expandedOf(key);
+        return row != nullptr && std::ranges::any_of(row->fields, [this](auto const& entry) {
+                   return entry.second != nullptr && _form->modified(entry.second->path());
+               });
+    }
+
+    /// @brief The rows: one per row, in order, with no sort and no filter.
+    /// @return They.
+    [[nodiscard]] EngineRows& view() override {
+        sync();
+        return *_rows;
+    }
+
+    /// @brief Restores the cell's loaded value.
+    /// @param key    The row's key.
+    /// @param column The column's id.
+    void revertCell(Key const& key, std::string_view column) override {
+        if (forms::FieldState const* const state = field(key, column)) {
+            _form->revert(state->path());
+        }
+    }
+
+    /// @brief Restores the loaded values of the row's field cells.
+    /// @param key The row's key.
+    void revertRow(Key const& key) override {
+        Expanded const* const row = expandedOf(key);
+        if (row == nullptr) {
+            return;
+        }
+        std::vector<std::string> paths;
+        for (auto const& [column, state] : row->fields) {
+            if (state != nullptr) {
+                paths.push_back(state->path());
+            }
+        }
+        for (std::string const& path : paths) {
+            _form->revert(path);
+        }
+    }
+
+    /// @brief Registers @p commit with the form's submit for the source's life, so the form's submit ends an open edit
+    ///        first. Does nothing with no form.
+    /// @param commit The commit.
+    void onBeforeSubmit(std::function<void()> commit) {
+        if (_form == nullptr) {
+            return;
+        }
+        if (_hook) {
+            _form->removeBeforeSubmit(*_hook);
+        }
+        _hook = _form->addBeforeSubmit(std::move(commit));
+    }
+
+    /// @brief How many field cells are modified. Tracked.
+    /// @return The count.
+    [[nodiscard]] std::size_t modifiedCount() const {
+        return countCells([this](forms::FieldState const& state) { return _form->modified(state.path()); });
+    }
+
+    /// @brief How many rows have a modified field cell. Tracked.
+    /// @return The count.
+    [[nodiscard]] std::size_t modifiedRows() const {
+        sync();
+        return static_cast<std::size_t>(
+            std::ranges::count_if(_expanded, [this](Expanded const& row) { return rowModified(row.key); }));
+    }
+
+    /// @brief How many field cells do not encode, or were refused. Tracked.
+    /// @return The count.
+    [[nodiscard]] std::size_t errorCount() const {
+        return countCells([this](forms::FieldState const& state) {
+            return state.error().get().has_value() || _form->refusal(state.path()).has_value();
+        });
+    }
+
+private:
+    // A row as shown: its key, its part, the collection row of a block's row, and its cells' fields by column id.
+    struct Expanded {
+        Key key;
+        FixedRow const* row = nullptr;
+        forms::RowState const* specimen = nullptr;
+        std::map<std::string, forms::FieldState*, std::less<>> fields;
+    };
+
+    // The cells the spans cover and the spans each row gives, as of an expansion and a layout.
+    struct Coverage {
+        std::uint64_t expansion = 0;
+        std::vector<std::string> layout;
+        std::unordered_map<Key, std::vector<std::string>> covered;
+        std::unordered_map<Key, std::vector<CellSpan>> given;
+    };
+
+    // Each block's collection rows, by key and identity: a change of either is a change of the block's rows.
+    using BlockRows = std::vector<std::vector<std::pair<std::uint64_t, forms::RowState const*>>>;
+
+    [[nodiscard]] static std::span<FixedRow const> rowsOf(Part const& part) {
+        if (FixedRow const* const row = std::get_if<FixedRow>(&part)) {
+            return {row, 1};
+        }
+        return std::get<FixedBlock>(part).rows;
+    }
+
+    // The field spec at a path below some fields' specs; null for none.
+    [[nodiscard]] static forms::FieldSpec const* specAt(std::span<forms::FieldSpec const> fields,
+                                                        std::string_view path) {
+        forms::FieldSpec const* found = nullptr;
+        while (!path.empty()) {
+            std::size_t const dot = path.find('.');
+            std::string_view const name = path.substr(0, dot);
+            path = dot == std::string_view::npos ? std::string_view{} : path.substr(dot + 1);
+            auto const member = std::ranges::find(fields, name, &forms::FieldSpec::name);
+            if (member == fields.end()) {
+                return nullptr;
+            }
+            found = &*member;
+            fields = member->children;
+        }
+        return found;
+    }
+
+    [[noreturn]] static void refuse(std::string why) {
+        throw std::invalid_argument{"morph::ui::FixedGridSource: " + std::move(why)};
+    }
+
+    // Keys are given once and not empty, and every field a cell names is the form's.
+    // NOLINTNEXTLINE(readability-function-cognitive-complexity): one refusal per rule of a part.
+    void checkParts() const {
+        std::unordered_set<std::string> keys;
+        for (Part const& part : _parts) {
+            FixedBlock const* const block = std::get_if<FixedBlock>(&part);
+            std::span<forms::FieldSpec const> members;
+            if (block != nullptr) {
+                if (_form == nullptr) {
+                    refuse("a block repeats rows of a form's collection, and there is no form");
+                }
+                forms::FieldState const* array = nullptr;
+                try {
+                    array = &_form->field(block->forEach);
+                } catch (std::out_of_range const&) {
+                    refuse("`" + block->forEach + "` is not a field of the form");
+                }
+                if (array->spec().kind != forms::FieldKind::ObjectArray || array->spec().truncated) {
+                    refuse("`" + block->forEach + "` is not a collection");
+                }
+                members = array->spec().children;
+            }
+            for (FixedRow const& row : rowsOf(part)) {
+                if (row.key.empty() || !keys.insert(row.key).second) {
+                    refuse(row.key.empty() ? std::string{"a row has no key"}
+                                           : "the key `" + row.key + "` is given twice");
+                }
+                for (auto const& [column, cell] : row.cells) {
+                    if (cell.field.empty()) {
+                        continue;
+                    }
+                    if (_form == nullptr) {
+                        refuse("the cell `" + row.key + "`, `" + column + "` edits a field, and there is no form");
+                    }
+                    bool const known = block != nullptr ? specAt(members, cell.field) != nullptr : [&] {
+                        try {
+                            static_cast<void>(_form->field(cell.field));
+                            return true;
+                        } catch (std::out_of_range const&) {
+                            return false;
+                        }
+                    }();
+                    if (!known) {
+                        refuse("`" + cell.field + "` is not a field of the form");
+                    }
+                }
+            }
+        }
+    }
+
+    // Each block's collection rows now. Tracked: a reader follows a change of a block's rows.
+    [[nodiscard]] BlockRows blockRows() const {
+        BlockRows out;
+        for (Part const& part : _parts) {
+            if (FixedBlock const* const block = std::get_if<FixedBlock>(&part)) {
+                std::vector<std::pair<std::uint64_t, forms::RowState const*>> rows;
+                for (auto const& row : _form->field(block->forEach).rows()) {
+                    rows.emplace_back(row->key(), row.get());
+                }
+                out.push_back(std::move(rows));
+            }
+        }
+        return out;
+    }
+
+    // The rows from the parts and the collections' rows now, given to the rows' source as one reset.
+    void expand() const {
+        std::vector<Expanded> next;
+        _blockRows = _rt->untracked([&] { return blockRows(); });
+        std::size_t block = 0;
+        for (Part const& part : _parts) {
+            if (FixedRow const* const row = std::get_if<FixedRow>(&part)) {
+                Expanded made{.key = Key{row->key}, .row = row, .specimen = nullptr, .fields = {}};
+                for (auto const& [column, cell] : row->cells) {
+                    if (!cell.field.empty()) {
+                        made.fields.insert_or_assign(column, &_form->field(cell.field));
+                    }
+                }
+                next.push_back(std::move(made));
+                continue;
+            }
+            FixedBlock const& repeated = std::get<FixedBlock>(part);
+            for (auto const& [rowKey, specimen] : _blockRows.at(block)) {
+                for (FixedRow const& row : repeated.rows) {
+                    Expanded made{.key = Key{std::to_string(rowKey) + "/" + row.key},
+                                  .row = &row,
+                                  .specimen = specimen,
+                                  .fields = {}};
+                    for (auto const& [column, cell] : row.cells) {
+                        if (cell.field.empty()) {
+                            continue;
+                        }
+                        std::string const path = repeated.forEach + "#" + std::to_string(rowKey) + "." + cell.field;
+                        try {
+                            made.fields.insert_or_assign(column, &_form->field(path));
+                        } catch (std::out_of_range const&) {
+                            made.fields.insert_or_assign(column, nullptr);
+                        }
+                    }
+                    next.push_back(std::move(made));
+                }
+            }
+            ++block;
+        }
+        _expanded = std::move(next);
+        _index.clear();
+        std::vector<table::RowId> ids;
+        std::vector<std::vector<table::Cell>> cells;
+        for (std::size_t at = 0; at < _expanded.size(); ++at) {
+            Key const& key = _expanded.at(at).key;
+            _index.emplace(key, at);
+            ids.push_back(key);
+            cells.push_back({table::Cell{std::get<std::string>(key)}});
+        }
+        ++_expansion;
+        _data->setRows(std::move(ids), std::move(cells));
+    }
+
+    // Takes in the collections' rows when a block's changed, and the engine the reset at once.
+    void sync() const {
+        if (_blockRows.empty() || blockRows() == _blockRows) {
+            return;
+        }
+        _rt->untracked([&] { expand(); });
+        _rows->engine().flush();
+    }
+
+    // A change of a block's rows is taken in at the next turn of the owner, so the mount hears it without a read.
+    void watch() {
+        static_cast<void>(blockRows());
+        if (_watching && !_posted) {
+            _posted = true;
+            _rt->owner().post(_alive.guard([this] {
+                _posted = false;
+                sync();
+            }));
+        }
+        _watching = true;
+    }
+
+    [[nodiscard]] Expanded const* expandedOf(Key const& key) const {
+        sync();
+        auto const found = _index.find(key);
+        return found == _index.end() ? nullptr : &_expanded.at(found->second);
+    }
+
+    // A cell's part and its block's collection row; null for no cell.
+    [[nodiscard]] std::pair<FixedCell const*, forms::RowState const*> cellOf(Key const& key,
+                                                                            std::string_view column) const {
+        Expanded const* const row = expandedOf(key);
+        if (row == nullptr) {
+            return {nullptr, nullptr};
+        }
+        auto const found = row->row->cells.find(column);
+        return {found == row->row->cells.end() ? nullptr : &found->second, row->specimen};
+    }
+
+    // Each field cell's `decimals` overlay, onto its field's places. Rerun when a block's rows or an overlay's reads
+    // change.
+    void applyOverlays() {
+        sync();
+        for (Expanded const& row : _expanded) {
+            for (auto const& [column, state] : row.fields) {
+                auto const cell = row.row->cells.find(column);
+                if (state == nullptr || cell == row.row->cells.end() || !cell->second.decimals) {
+                    continue;
+                }
+                std::optional<std::uint32_t> const places = cell->second.decimals(row.specimen);
+                _rt->untracked([&] {
+                    if (state->places().peek() != places) {
+                        state->places().set(places);
+                    }
+                });
+            }
+        }
+    }
+
+    template <typename Test>
+    [[nodiscard]] std::size_t countCells(Test test) const {
+        sync();
+        std::size_t count = 0;
+        for (Expanded const& row : _expanded) {
+            for (auto const& [column, state] : row.fields) {
+                count += state != nullptr && test(*state) ? 1 : 0;
+            }
+        }
+        return count;
+    }
+
+    // The coverage of the rows now, computed again once the rows or the layout changed.
+    [[nodiscard]] Coverage const& coverageNow() const {
+        sync();
+        if (_coverage && _coverage->expansion == _expansion && _coverage->layout == _layout) {
+            return *_coverage;
+        }
+        Coverage next{.expansion = _expansion, .layout = _layout, .covered = {}, .given = {}};
+        std::vector<std::string> declared;
+        declared.reserve(_columns.size());
+        for (GridColumn const& column : _columns) {
+            declared.push_back(column.id);
+        }
+        for (std::size_t at = 0; at < _expanded.size(); ++at) {
+            Expanded const& row = _expanded.at(at);
+            for (auto const& [column, cell] : row.row->cells) {
+                if (cell.rows <= 1 && cell.columns <= 1) {
+                    continue;
+                }
+                CellSpan span{.column = column, .rows = cell.rows, .columns = cell.columns};
+                span.columns = cutColumns(span, declared, _layout);
+                auto const place = std::ranges::find(_layout, span.column);
+                // A span past the last row is refused by the mount and drawn as nothing, so it covers nothing here
+                // either.
+                if (span.columns == 0 || span.rows == 0 || place == _layout.end() ||
+                    span.rows > _expanded.size() - at) {
+                    continue;
+                }
+                auto const first = static_cast<std::size_t>(place - _layout.begin());
+                for (std::size_t down = 0; down < span.rows; ++down) {
+                    for (std::size_t right = 0; right < span.columns; ++right) {
+                        if (down != 0 || right != 0) {
+                            next.covered[_expanded.at(at + down).key].push_back(_layout.at(first + right));
+                        }
+                    }
+                }
+                next.given[row.key].push_back(std::move(span));
+            }
+        }
+        _coverage = std::move(next);
+        return *_coverage;
+    }
+
+    reactive::Runtime* _rt;
+    forms::FormSession* _form;
+    std::weak_ptr<void const> _formAlive;
+    std::vector<Part> _parts;
+    std::vector<GridColumn> _columns;
+    FormatContext _format;
+    reactive::Signal<std::uint64_t> _formatVersion;
+    // Moves with each change of `_layout`, which a drawn span's columns follow.
+    reactive::Signal<std::uint64_t> _layoutVersion;
+    std::vector<std::string> _layout;
+    std::shared_ptr<table::VectorSource> _data;
+    std::unique_ptr<EngineRows> _rows;
+    // The rows as shown, their positions by key, the collections' rows they were expanded from, and a count that moves
+    // with each expansion.
+    mutable std::vector<Expanded> _expanded;
+    mutable std::unordered_map<Key, std::size_t> _index;
+    mutable BlockRows _blockRows;
+    mutable std::uint64_t _expansion = 0;
+    mutable std::optional<Coverage> _coverage;
+    std::optional<std::size_t> _hook;
+    bool _watching = false;
+    bool _posted = false;
+    async::CallbackScope _alive;
+    std::unique_ptr<reactive::Effect> _watch;
+    std::unique_ptr<reactive::Effect> _overlays;
 };
 
 /// @brief A grid's focus, its cell editor and its walk over a `GridSource`, and the table node that shows them.

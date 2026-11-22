@@ -344,7 +344,8 @@ constexpr auto kTableKeys = std::to_array<KeySpec>({{"rows", Shape::Expr},
                                                  {"headerMenu", Shape::Parts, "menuItem"},
                                                  {"headerEnabled", Shape::Condition},
                                                  {"bands", Shape::Parts, "band"},
-                                                 {"summaries", Shape::Parts, "summary"}});
+                                                 {"summaries", Shape::Parts, "summary"},
+                                                 {"layoutRows", Shape::Parts, "layoutRow"}});
 /// @brief The keys of a `table` column part; `tone` and `tooltip` are read in the row's scope.
 constexpr std::array<KeySpec, 29> kColumnKeys = {{{"id", Shape::Name},
                                                   {"field", Shape::Text},
@@ -396,6 +397,22 @@ constexpr auto kGridPartKeys = std::to_array<KeySpec>({{"columns", Shape::Parts,
 /// @brief The keys of a `table` column group part: the group's id, its label and its columns' ids, a literal list.
 constexpr std::array<KeySpec, 3> kColumnGroupKeys = {
     {{"id", Shape::Name, {}, kRequired}, {"label", Shape::Expr}, {"columns", Shape::Expr, {}, kRequired}}};
+/// @brief The keys of a fixed grid's `layoutRows` part: a row, `{key, label, cells}`, or a block, `{forEach, rows}`,
+///        whose rows repeat for each row of the form's collection `forEach` names.
+constexpr auto kLayoutRowKeys = std::to_array<KeySpec>({{"key", Shape::Text},
+                                                    {"label", Shape::Expr},
+                                                    {"cells", Shape::ExprRecord, "layoutCells"},
+                                                    {"forEach", Shape::Text},
+                                                    {"rows", Shape::Parts, "layoutRow"}});
+/// @brief The keys of a fixed grid's cell part, by the column id it is given under: the form field it edits, the
+///        expression or the text it shows, the rows and columns it spans, and its overlays.
+constexpr auto kLayoutCellKeys = std::to_array<KeySpec>({{"field", Shape::Text},
+                                                     {"value", Shape::Expr},
+                                                     {"text", Shape::Text},
+                                                     {"rows", Shape::Expr},
+                                                     {"columns", Shape::Expr},
+                                                     {"decimals", Shape::Expr},
+                                                     {"readonly", Shape::Expr}});
 /// @brief The keys of a `table` group part: the value its rows are grouped by, and the heading drawn before each
 ///        group, both read in the row scope, and the summary rows drawn after each group.
 constexpr auto kTableGroupKeys = std::to_array<KeySpec>({{"by", Shape::Expr, {}, kInner | kRequired},
@@ -637,6 +654,9 @@ constexpr auto kKinds = std::to_array<KindSpec>({
     {"columnGroup", kColumnGroupKeys, kPart},
     {"band", kBandKeys, kPart},
     {"summary", kSummaryKeys, kPart},
+    {"layoutRow", kLayoutRowKeys, kPart},
+    {"layoutCells", {}, kPart},
+    {"layoutCell", kLayoutCellKeys, kPart},
     {"track", kTrackKeys, kPart},
     {"action", kActionKeys, kPart},
     {"a11y", kA11yKeys, kPart},
@@ -1858,6 +1878,14 @@ private:
                 made.scope = scope(fields, where);
             } else {
                 made.scope = ScopeDecl{};
+            }
+        }
+        // A fixed grid's cells: one cell part per column id, its id the column's.
+        if (made.kind == "layoutCells") {
+            for (auto const& [column, cell] : object) {
+                auto made_ = std::make_shared<DocNode>(*part(cell, "layoutCell", pointerAppend(path, column)));
+                made_->id = column;
+                made.parts["cells"].push_back(std::move(made_));
             }
         }
         if (made.kind == "fields") {
@@ -3131,7 +3159,12 @@ private:
             if (key == "group" && node.kind == "table" && !node.name("form").empty()) {
                 context.bindings.emplace_back("row", Type::any());
             }
-            if (key == "columns" && (node.kind == "fieldGrid" || (node.kind == "table" && !node.name("form").empty()))) {
+            // A block's rows read its collection row as `row`, in their cells' `value` and overlays.
+            if (key == "rows" && node.kind == "layoutRow") {
+                context.bindings.emplace_back("row", Type::any());
+            }
+            if (key == "columns" && (node.kind == "fieldGrid" || (node.kind == "table" && !node.name("form").empty() &&
+                                                                  node.partList("layoutRows").empty()))) {
                 context.bindings.emplace_back("row", Type::any());
                 context.gridColumns = true;
             }
@@ -3284,6 +3317,11 @@ private:
         checkSheet(node);
         std::string_view const model = node.name("model");
         std::string_view const table = node.kind == "table" ? node.name("table") : std::string_view{};
+        bool const fixedGrid = node.kind == "table" && !node.partList("layoutRows").empty();
+        if (fixedGrid && (!model.empty() || !table.empty())) {
+            refuse(pointerAppend(node.path, "layoutRows"),
+                   "a fixed grid's rows are its `layoutRows`; a model's table takes none");
+        }
         if (!table.empty()) {
             if (model.empty()) {
                 refuse(node.path, "`table` names one of a model's tables; give the table its `model`");
@@ -3300,6 +3338,8 @@ private:
             if (node.kind == "form") {
                 checkFormDerive(context, node);
             }
+        } else if (fixedGrid) {
+            checkFixedGrid(node);
         } else if (node.kind == "table" && !node.name("form").empty()) {
             checkFormGrid(node);
         } else if (node.kind == "table" && !node.prop("rows")) {
@@ -3356,6 +3396,176 @@ private:
             refuse(pointerAppend(node.path, "form"), "`" + std::string{node.name("form")} + "` is not a form of this document");
         }
         checkGridPart(node, *form->second, field, pointerAppend(node.path, "field"));
+    }
+
+    // A fixed grid: a table whose rows are its `layoutRows`, in place of `rows`, each cell a field of the form `form`
+    // names, an expression or a text. Its rows are fixed, so it takes nothing that orders, groups, adds or summarises
+    // rows. Keys are unique in the grid, a block's rows included, since a block row's key joins its collection row's
+    // key and its own, and two collections' row keys may meet. A cell's `field` is a path of the form's fields, or in
+    // a block of the collection's row type, read from the form action's schema when the catalog has it.
+    // NOLINTNEXTLINE(readability-function-cognitive-complexity): one refusal per rule of a fixed grid's parts.
+    void checkFixedGrid(DocNode const& node) const {
+        if (node.prop("rows")) {
+            refuse(pointerAppend(node.path, "layoutRows"),
+                   "a fixed grid's `layoutRows` are in place of `rows`; give it one of them");
+        }
+        if (!node.name("field").empty()) {
+            refuse(pointerAppend(node.path, "field"),
+                   "a fixed grid's cells name their own fields; a table with `layoutRows` takes no `field`");
+        }
+        for (std::string_view const key : {std::string_view{"sort"}, std::string_view{"group"},
+                                           std::string_view{"summaries"}, std::string_view{"rowSpans"},
+                                           std::string_view{"appendRows"}, std::string_view{"rowsFixed"},
+                                           std::string_view{"key"}}) {
+            bool const given = node.prop(key) != nullptr || !node.partList(key).empty() ||
+                               node.flag(key, false) == node.flag(key, true);
+            if (given) {
+                refuse(pointerAppend(node.path, key),
+                       "a fixed grid's rows are fixed, in the order of its `layoutRows`, and its spans are its cells'; "
+                       "it takes no `" + std::string{key} + "`");
+            }
+        }
+        if (node.prop("columns") != nullptr) {
+            refuse(pointerAppend(node.path, "columns"), "a fixed grid's `columns` are a list of column parts");
+        }
+        std::span<DocNodePtr const> const columns = node.partList("columns");
+        for (DocNodePtr const& column : columns) {
+            if (!column->name("field").empty() || column->prop("field") != nullptr ||
+                column->prop("value") != nullptr) {
+                refuse(column->path, "a fixed grid's cells name their fields and values; its columns name neither");
+            }
+        }
+        std::string_view const formId = node.name("form");
+        DocNode const* form = nullptr;
+        if (!formId.empty()) {
+            auto const found = _elements.find(formId);
+            if (found == _elements.end() || found->second->kind != "form") {
+                refuse(pointerAppend(node.path, "form"),
+                       "`" + std::string{formId} + "` is not a form of this document");
+            }
+            form = found->second;
+        }
+        std::optional<forms::FormModel> const model = form != nullptr ? fixedGridModel(*form) : std::nullopt;
+        std::set<std::string, std::less<>> keys;
+        for (DocNodePtr const& part : node.partList("layoutRows")) {
+            std::string_view const forEach = part->name("forEach");
+            if (forEach.empty()) {
+                checkLayoutRow(*part, columns, form,
+                               model ? std::span{model->fields()} : std::span<forms::FieldSpec const>{},
+                               model.has_value(), keys);
+                continue;
+            }
+            if (!part->name("key").empty() || !part->partList("cells").empty() || part->prop("label") != nullptr) {
+                refuse(part->path, "a block's `forEach` repeats its `rows`; it takes no `key`, `label` or `cells`");
+            }
+            if (form == nullptr) {
+                refuse(pointerAppend(part->path, "forEach"),
+                       "a block repeats rows of a form's collection; give the table its `form`");
+            }
+            std::span<forms::FieldSpec const> members;
+            if (model) {
+                auto const array = std::ranges::find(model->fields(), forEach, &forms::FieldSpec::name);
+                if (array == model->fields().end() || array->kind != forms::FieldKind::ObjectArray) {
+                    refuse(pointerAppend(part->path, "forEach"),
+                           "`" + std::string{forEach} + "` is not a list of records of the form");
+                }
+                members = array->children;
+            }
+            if (part->partList("rows").empty()) {
+                refuse(pointerAppend(part->path, "rows"), "a block repeats its `rows`, and gives none");
+            }
+            for (DocNodePtr const& row : part->partList("rows")) {
+                if (!row->name("forEach").empty()) {
+                    refuse(pointerAppend(row->path, "forEach"), "a block's rows are rows; a block holds no block");
+                }
+                checkLayoutRow(*row, columns, form, members, model.has_value(), keys);
+            }
+        }
+    }
+
+    // The form model a fixed grid's cells are checked against: its form action's schema, when the catalog has it.
+    [[nodiscard]] std::optional<forms::FormModel> fixedGridModel(DocNode const& form) const {
+        if (!_options->catalog.schema) {
+            return std::nullopt;
+        }
+        std::string const action{form.name("action")};
+        std::optional<std::string> const schema = _options->catalog.schema(action);
+        if (!schema) {
+            return std::nullopt;
+        }
+        auto model = forms::FormModel::fromSchema(action, *schema);
+        return model ? std::optional<forms::FormModel>{std::move(*model)} : std::nullopt;
+    }
+
+    // One row of a fixed grid: its key, unique in the grid, and its cells, each under a column's id and naming one of
+    // `field`, `value` and `text`; a `field` needs the form, and names a field of @p fields when @p known.
+    // NOLINTNEXTLINE(readability-function-cognitive-complexity): one refusal per rule of a cell.
+    static void checkLayoutRow(DocNode const& row, std::span<DocNodePtr const> columns, DocNode const* form,
+                               std::span<forms::FieldSpec const> fields, bool known,
+                               std::set<std::string, std::less<>>& keys) {
+        std::string const key{row.name("key")};
+        if (key.empty()) {
+            refuse(row.path, "a fixed grid's row names its `key`, or repeats `rows` for each row of a `forEach`");
+        }
+        if (!row.partList("rows").empty()) {
+            refuse(pointerAppend(row.path, "rows"), "a row's `rows` repeat for each row of a `forEach`; give it one");
+        }
+        if (!keys.insert(key).second) {
+            refuse(pointerAppend(row.path, "key"), "the row `" + key + "` is declared twice in the grid");
+        }
+        for (DocNodePtr const& cells : row.partList("cells")) {
+            for (DocNodePtr const& cell : cells->partList("cells")) {
+                if (std::ranges::none_of(columns,
+                                         [&cell](DocNodePtr const& column) { return column->id == cell->id; })) {
+                    refuse(cell->path,
+                           "a fixed grid's cells are named by the table's column ids; `" + cell->id + "` is not one");
+                }
+                std::string_view const field = cell->name("field");
+                int const given = (field.empty() ? 0 : 1) + (cell->prop("value") != nullptr ? 1 : 0) +
+                                  (cell->names.contains("text") ? 1 : 0);
+                if (given != 1) {
+                    refuse(cell->path, "a fixed grid's cell edits its `field`, or shows its `value` or its `text`: "
+                                       "one of them");
+                }
+                if (!field.empty() && form == nullptr) {
+                    refuse(pointerAppend(cell->path, "field"),
+                           "a cell that edits a field names the form's; give the table its `form`");
+                }
+                if (!field.empty() && known && !fieldAt(fields, field)) {
+                    refuse(pointerAppend(cell->path, "field"),
+                           "`" + std::string{field} + "` is not a field of the form of `" +
+                               std::string{form->name("action")} + "`");
+                }
+                for (std::string_view const span : {std::string_view{"rows"}, std::string_view{"columns"}}) {
+                    if (ExprPtr const count = cell->prop(span)) {
+                        std::int64_t const* const literal = count->kind == ExprKind::Literal
+                                                                ? count->literal.asInt()
+                                                                : static_cast<std::int64_t const*>(nullptr);
+                        if (literal == nullptr || *literal < 1) {
+                            refuse(count->path, "a cell's `" + std::string{span} + "` is a literal count, 1 or more");
+                        }
+                    }
+                }
+                if (ExprPtr const decimals = cell->prop("decimals"); decimals != nullptr && field.empty()) {
+                    refuse(decimals->path, "`decimals` are a field's entry places; this cell edits no field");
+                }
+            }
+        }
+    }
+
+    // Whether a dotted path names a field below @p fields.
+    [[nodiscard]] static bool fieldAt(std::span<forms::FieldSpec const> fields, std::string_view path) {
+        while (!path.empty()) {
+            std::size_t const dot = path.find('.');
+            std::string_view const name = path.substr(0, dot);
+            path = dot == std::string_view::npos ? std::string_view{} : path.substr(dot + 1);
+            auto const member = std::ranges::find(fields, name, &forms::FieldSpec::name);
+            if (member == fields.end()) {
+                return false;
+            }
+            fields = member->children;
+        }
+        return true;
     }
 
     // What a grid takes beyond its table, on a `table` over a form or a field overlay's `grid` part: `enterMoves` and
@@ -3837,7 +4047,7 @@ private:
     // `selectionMode: "cells"` selects a rectangle of cells, which a grid of a form does by default and only; a model's
     // table is in server mode and selects rows. `appendRows` and `rowsFixed` say which row operations a grid offers.
     static void checkCellSelection(DocNode const& node) {
-        bool const grid = !node.name("form").empty();
+        bool const grid = !node.name("form").empty() || !node.partList("layoutRows").empty();
         ExprPtr const mode = node.prop("selectionMode");
         std::string const* const literal =
             mode != nullptr && mode->kind == ExprKind::Literal ? mode->literal.asString() : nullptr;
@@ -3877,7 +4087,7 @@ private:
             refuse(where, "a model-backed table's engine owns its selection; `" + std::string{key} +
                               "` is for a table over `rows`");
         }
-        if (!node.name("form").empty()) {
+        if (!node.name("form").empty() || !node.partList("layoutRows").empty()) {
             return;
         }
         ExprPtr const mode = node.prop("selectionMode");
