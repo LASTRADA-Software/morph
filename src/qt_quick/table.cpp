@@ -449,6 +449,18 @@ void TableImpl::setColumnGroups(std::vector<ui::TableColumnGroup> const& groups)
     write("columnGroups", list);
 }
 
+void TableImpl::setBands(std::vector<ui::BandRun> const& runs) {
+    QVariantList list;
+    for (ui::BandRun const& run : runs) {
+        list.append(QVariantMap{{QStringLiteral("level"), static_cast<int>(run.level)},
+                                {QStringLiteral("text"), toQString(ui::headerText(run.label, run.unit))},
+                                {QStringLiteral("first"), static_cast<int>(run.first)},
+                                {QStringLiteral("count"), static_cast<int>(run.count)},
+                                {QStringLiteral("pinned"), run.pinned}});
+    }
+    write("bands", list);
+}
+
 void TableImpl::setOnGroupFilter(std::function<void(std::size_t)> handler) { _onGroupFilter = std::move(handler); }
 
 void TableImpl::setOnCopy(std::function<void()> onCopy) {

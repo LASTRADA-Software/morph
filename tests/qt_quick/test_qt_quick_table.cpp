@@ -3185,3 +3185,29 @@ TEST_CASE("qt_quick grid: a header click sorts, a Shift-click adds, a Ctrl-click
     view.reset();
     grid = {};
 }
+
+// Mutation: the QML band item placed from its first run's x to its last run's end (one item, as wide as columns 1 to 4).
+TEST_CASE("qt_quick table: a band draws over each run of its columns and across the pinned edge", "[qt_quick][bands]") {
+    Scene scene;
+    Rows table = makeTable(scene, {ui::Key{std::int64_t{1}}}, ui::SelectionMode::None);
+    table.table->setColumns({{.label = "Name", .width = ui::Sizing::fixed(8)},
+                             {.label = "M8", .width = ui::Sizing::fixed(8)},
+                             {.label = "M2", .width = ui::Sizing::fixed(8)},
+                             {.label = "Total", .width = ui::Sizing::fixed(8)},
+                             {.label = "M4", .width = ui::Sizing::fixed(8)}});
+    table.table->setBands({{0, "Mass retained", "g", 1, 2, false}, {0, "Mass retained", "g", 4, 1, false}});
+    scene.settle();
+    QQuickItem& tableItem = Scene::itemOf(*table.table);
+    auto* const first = tableItem.findChild<QQuickItem*>(QStringLiteral("band0"));
+    auto* const second = tableItem.findChild<QQuickItem*>(QStringLiteral("band1"));
+    REQUIRE(first != nullptr);
+    REQUIRE(second != nullptr);
+    QQuickItem const& m8 = headerOf(*table.table, 1);
+    QQuickItem const& m2 = headerOf(*table.table, 2);
+    QQuickItem const& m4 = headerOf(*table.table, 4);
+    auto const left = [&first](QQuickItem const& item) { return item.mapToItem(first->parentItem(), QPointF{}).x(); };
+    CHECK(first->x() == Catch::Approx(left(m8)));
+    CHECK(first->x() + first->width() == Catch::Approx(left(m2) + m2.width()));
+    CHECK(second->x() == Catch::Approx(left(m4)));
+    CHECK(second->width() == Catch::Approx(m4.width()));
+}

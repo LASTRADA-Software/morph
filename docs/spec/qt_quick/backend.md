@@ -314,6 +314,12 @@ state, so its look follows the selection alone; its `clicked` fires the row's `t
 rows that have them, as the contract's "Selection by key" says; a user's change reports exactly the existing rows
 selected.
 
+Header bands (`setBands`) are the QML property `bands`, `[{level, text, first, count, pinned}]` with `text` the label
+and its unit (`ui::headerText`): one item per run (`band<index>`), at its level's line above the group line, from the
+left edge of the first column at the visible places it names to the right edge of its last, so a band moved apart is
+two items and never covers a foreign column. `groupRowHeight` is everything above the column headers: the band lines,
+then the group line.
+
 A spanning cell (`setRowSpans`; `TableImpl::planSpans` resolves it against the rows as they stand, each time a row
 comes, goes, moves or is told its spans) stays a cell of its origin row, left out of that row's `tallest` and
 `implicitHeight`, and overflows the row downward: `MorphTableRow.spanPlan` (`[{column, rows}]`, the spans clipped to the

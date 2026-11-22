@@ -456,6 +456,11 @@ void TableImpl::setColumnGroups(std::vector<ui::TableColumnGroup> const& groups)
     refresh();
 }
 
+void TableImpl::setBands(std::vector<ui::BandRun> const& runs) {
+    _bands = runs;
+    refresh();
+}
+
 void TableImpl::setOnGroupFilter(std::function<void(std::size_t)> handler) { _onGroupFilter = std::move(handler); }
 
 void TableImpl::setOnCopy(std::function<void()> onCopy) { _onCopy = std::move(onCopy); }
@@ -502,7 +507,15 @@ int TableImpl::headerLines() const noexcept {
     if (!_showHeader) {
         return 0;
     }
-    return _groups.empty() ? 1 : 2;
+    return bandLines() + (_groups.empty() ? 1 : 2);
+}
+
+int TableImpl::bandLines() const noexcept {
+    std::size_t levels = 0;
+    for (ui::BandRun const& run : _bands) {
+        levels = std::max(levels, run.level + 1);
+    }
+    return static_cast<int>(levels);
 }
 
 std::vector<std::size_t> TableImpl::visibleOrder() const {
@@ -1026,6 +1039,9 @@ std::vector<::core::tui::Rect> TableImpl::childAreas(::core::tui::Size size) con
 void TableImpl::paintHeader(::core::tui::Canvas& canvas, std::vector<DrawnColumn> const& columns) const {
     auto const& theme = canvas.theme();
     int const line = headerLines() - 1;
+    if (!_bands.empty()) {
+        paintBands(canvas, columns);
+    }
     if (!_groups.empty()) {
         paintGroups(canvas, columns);
     }
@@ -1072,10 +1088,36 @@ void TableImpl::paintGroups(::core::tui::Canvas& canvas, std::vector<DrawnColumn
         if (left < 0 || right <= left) {
             continue;
         }
+        int const y = bandLines();
         auto span =
-            canvas.subcanvas({.x = left, .y = 0, .width = std::max(0, right - left - kFilterMark), .height = 1});
+            canvas.subcanvas({.x = left, .y = y, .width = std::max(0, right - left - kFilterMark), .height = 1});
         span.putString(0, 0, group.label, theme.textBold);
-        canvas.putString(0, right - 1, group.filtered ? kFilterFilled : kFilterEmpty, theme.textNormal);
+        canvas.putString(y, right - 1, group.filtered ? kFilterFilled : kFilterEmpty, theme.textNormal);
+    }
+}
+
+// A run spans the drawn columns at the visible places it names, as the mount cut it: a band never covers a column that
+// is not its own.
+void TableImpl::paintBands(::core::tui::Canvas& canvas, std::vector<DrawnColumn> const& columns) const {
+    auto const& theme = canvas.theme();
+    auto const order = visibleOrder();
+    for (ui::BandRun const& run : _bands) {
+        int left = -1;
+        int right = -1;
+        for (DrawnColumn const& drawn : columns) {
+            auto const place = std::ranges::find(order, drawn.column);
+            auto const at = static_cast<std::size_t>(std::distance(order.begin(), place));
+            if (place != order.end() && at >= run.first && at < run.first + run.count) {
+                left = left < 0 ? gutter() + drawn.x : std::min(left, gutter() + drawn.x);
+                right = std::max(right, gutter() + drawn.x + drawn.width);
+            }
+        }
+        if (left < 0 || right <= left) {
+            continue;
+        }
+        auto span = canvas.subcanvas(
+            {.x = left, .y = static_cast<int>(run.level), .width = right - left, .height = 1});
+        span.putString(0, 0, ui::headerText(run.label, run.unit), theme.textBold);
     }
 }
 
@@ -1393,7 +1435,7 @@ void TableImpl::clickWith(::core::tui::Point cell, ::core::tui::Modifier modifie
     bool const onBox = _selectColumn && cell.x < kBoxWidth;
     // The header box is Ctrl+A; it does nothing while the table shows no rows. Over a source it selects the view.
     int const headerLine = headerLines() - 1;
-    if (_showHeader && !_groups.empty() && cell.y == 0) {
+    if (_showHeader && !_groups.empty() && cell.y == bandLines()) {
         clickGroups(cell.x);
         return;
     }

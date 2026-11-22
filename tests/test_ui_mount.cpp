@@ -14,7 +14,9 @@
 #include <morph/reactive/signal.hpp>
 #include <morph/testing/owner_probe_recorder.hpp>
 #include <morph/ui/backend.hpp>
+#include <morph/table/engine.hpp>
 #include <morph/table/view_change.hpp>
+#include <morph/ui/grid.hpp>
 #include <morph/ui/mount.hpp>
 #include <morph/ui/table_rows.hpp>
 #include <morph/ui/testing/recording_backend.hpp>
@@ -1979,4 +1981,237 @@ TEST_CASE("mount: a cell selection is shown by its corners' positions now", "[ui
     selection.set(std::nullopt);
     owner.runAll();
     CHECK(backend.prop(table, "cellSelection").empty());
+}
+
+// ── Bands, spans and summary rows ────────────────────────────────────────────
+
+namespace {
+
+std::vector<table::BandInfo> const kMassBand{{.label = "Mass retained", .unit = "g", .columns = {"m8", "m4", "m2"}, .bands = {}}};
+std::vector<std::string> const kIds{"name", "m8", "m4", "m2", "total"};
+
+// The keys of a table's realized rows in child order, a text key without its quotes.
+std::vector<std::string> childKeys(RecordingBackend const& backend, int table) {
+    std::vector<std::string> out;
+    for (int const row : backend.children(table)) {
+        std::string key = backend.prop(row, "rowKey");
+        if (key.size() >= 2 && key.front() == '"' && key.back() == '"') {
+            key = key.substr(1, key.size() - 2);
+        }
+        if (!key.empty()) {
+            out.push_back(std::move(key));
+        }
+    }
+    return out;
+}
+
+// The realized row with a key, as `rowKey` records it.
+int rowWith(RecordingBackend const& backend, int table, std::string const& key) {
+    for (int const row : backend.children(table)) {
+        if (backend.prop(row, "rowKey") == key) {
+            return row;
+        }
+    }
+    FAIL("no row " << key);
+    return -1;
+}
+
+}  // namespace
+
+// Mutation: a band drawn from its first to its last column's place, which covers a foreign column.
+TEST_CASE("bands: a band follows the layout", "[ui][mount][bands]") {
+    CHECK(ui::bandRuns(kMassBand, kIds, 0) == std::vector<ui::BandRun>{{0, "Mass retained", "g", 1, 3, false}});
+    std::vector<std::string> const moved{"name", "m8", "m2", "total", "m4"};
+    CHECK(ui::bandRuns(kMassBand, moved, 0) ==
+          std::vector<ui::BandRun>{{0, "Mass retained", "g", 1, 2, false}, {0, "Mass retained", "g", 4, 1, false}});
+    CHECK(ui::bandRuns(kMassBand, kIds, 2) ==
+          std::vector<ui::BandRun>{{0, "Mass retained", "g", 1, 1, true}, {0, "Mass retained", "g", 2, 2, false}});
+    CHECK(ui::bandRuns(kMassBand, std::vector<std::string>{"name", "total"}, 0).empty());
+    CHECK_FALSE(ui::columnUnitShown(kMassBand, "m8", "g"));
+    CHECK(ui::columnUnitShown(kMassBand, "total", "g"));
+    CHECK(ui::bandedHeaderName(kMassBand, "m4", "sieve 4 mm") == "Mass retained, sieve 4 mm");
+}
+
+// Review Focus 2. Mutation: bandRuns computed once from the declared order and not from the layout's visible columns.
+TEST_CASE("bands: a stored layout hides then shows a band's column", "[ui][mount][bands]") {
+    table::ColumnLayout layout{kIds};
+    table::ColumnLayout stored{kIds};
+    for (auto const* id : {"m8", "m4", "m2"}) stored.setVisible(id, false);
+    layout.apply(stored.value());
+    CHECK(ui::bandRuns(kMassBand, layout.visible(), layout.pinned()).empty());
+    layout.setVisible("m4", true);
+    CHECK(ui::bandRuns(kMassBand, layout.visible(), layout.pinned()) ==
+          std::vector<ui::BandRun>{{0, "Mass retained", "g", 1, 1, false}});
+    table::ColumnLayout pinnedAll{kIds};
+    pinnedAll.setPinned(4);
+    CHECK(ui::bandRuns(kMassBand, pinnedAll.visible(), pinnedAll.pinned()) ==
+          std::vector<ui::BandRun>{{0, "Mass retained", "g", 1, 3, true}});
+}
+
+// Mutation: the mount telling the backend the runs of the declared order (moving m4 to the end leaves one run).
+TEST_CASE("bands: the mount draws the runs of the arrangement and drops a band's repeated unit", "[ui][mount][bands]") {
+    Owner owner;
+    Runtime runtime{owner};
+    RecordingBackend backend;
+    auto rows = std::make_shared<FakeRows>(3, 5, runtime.owner());
+    std::vector<ui::TableColumn> columns;
+    for (std::string const& id : kIds) {
+        columns.push_back(ui::TableColumn{.id = id, .label = id, .unit = id == "name" ? std::string{} : std::string{"g"}});
+    }
+    ui::TableSource source;
+    source.rows = rows;
+    source.cellView = [](std::size_t column, Signal<Value> const& row) {
+        return ui::text({.text = [&row, column] { return fieldText(row.get(), "c" + std::to_string(column)); }});
+    };
+    Signal<TableArrangement> arrangement{runtime, TableArrangement{}};
+    ui::TableOptions options;
+    options.arrangement = [&arrangement] { return arrangement.get(); };
+    options.bands = kMassBand;
+    ui::Mounted const view{runtime, backend, ui::table(std::move(columns), std::move(source), std::move(options))};
+    owner.runAll();
+    int const table = backend.all("Table").front();
+    CHECK(backend.prop(table, "bands") == "[0:Mass retained|g@1+3]");
+    std::string const headers = backend.prop(table, "columns");
+    std::size_t units = 0;
+    for (auto at = headers.find(";unit=g"); at != std::string::npos; at = headers.find(";unit=g", at + 1)) {
+        ++units;
+    }
+    CHECK(units == 1);   // total's; the band shows the sieves' unit once
+    arrangement.set(TableArrangement{.visible = {0, 1, 3, 4, 2}, .pinned = 0, .widths = {}});
+    owner.runAll();
+    CHECK(backend.prop(table, "bands") == "[0:Mass retained|g@1+2,0:Mass retained|g@4+1]");
+    arrangement.set(TableArrangement{.visible = {0, 4}, .pinned = 0, .widths = {}});
+    owner.runAll();
+    CHECK(backend.prop(table, "bands") == "[]");
+}
+
+// Mutation: covered cells left focusable (the walk lands on one).
+TEST_CASE("spans: a cell spanning rows and columns covers them", "[ui][mount][spans]") {
+    std::vector<std::string> const declared{"a", "b", "c", "d"};
+    CHECK(ui::cutColumns({.column = "a", .rows = 2, .columns = 3}, declared, declared) == 3);
+    CHECK(ui::cutColumns({.column = "a", .rows = 2, .columns = 3}, declared, std::vector<std::string>{"a", "c", "b", "d"}) == 1);
+    CHECK(ui::cutColumns({.column = "a", .rows = 2, .columns = 3}, declared, std::vector<std::string>{"a", "b", "d"}) == 2);
+    CHECK(ui::cutColumns({.column = "a", .rows = 2, .columns = 3}, declared, std::vector<std::string>{"b", "c"}) == 0);
+}
+
+// Mutation: the mount dropping RowSpan::columns before setRowSpans (the row records "0:2").
+TEST_CASE("spans: a span across columns reaches the backend", "[ui][mount][spans]") {
+    Owner owner;
+    Runtime runtime{owner};
+    RecordingBackend backend;
+    auto rows = std::make_shared<FakeRows>(4, 4, runtime.owner());
+    rows->reorder([](std::int64_t index) { return index + 1; });
+    std::vector<ui::TableColumn> columns{{.id = "a", .label = "A"}, {.id = "b", .label = "B"}, {.id = "c", .label = "C"},
+                                         {.id = "d", .label = "D"}};
+    ui::TableSource source;
+    source.rows = rows;
+    source.alwaysWindowed = false;
+    source.cellView = [](std::size_t column, Signal<Value> const& row) {
+        return ui::text({.text = [&row, column] { return fieldText(row.get(), "c" + std::to_string(column)); }});
+    };
+    source.rowView = [](Signal<Value> const& row) {
+        ui::TableRowLook look;
+        std::int64_t const key = *row.peek().field("id")->asInt();
+        if (key == 1) {
+            look.spans = std::vector<ui::RowSpan>{ui::RowSpan{.column = 0, .rows = 2, .columns = 3}};
+        } else if (key == 3) {
+            look.spans = std::vector<ui::RowSpan>{ui::RowSpan{.column = 1, .rows = 2}};
+        }
+        return look;
+    };
+    ui::Mounted const view{runtime, backend, ui::table(std::move(columns), std::move(source))};
+    owner.runAll();
+    int const table = backend.all("Table").front();
+    CHECK(backend.prop(rowWith(backend, table, "1"), "rowSpans") == "0:2x3");
+    CHECK(backend.prop(rowWith(backend, table, "3"), "rowSpans") == "1:2");   // columns 1 keeps the existing format
+}
+
+// Mutations: setRowSummary called for every row (row 1 records summary); summary rows left out of the mount's count
+// (the bottom summary is never realized); the decorator forwarding the data rows' change untranslated (row 1's cell
+// keeps "b" after its row changes).
+TEST_CASE("summary: a summary row is drawn as one, outside the rows", "[ui][mount][summary]") {
+    Owner owner;
+    Runtime runtime{owner};
+    RecordingBackend backend;
+    auto source = std::make_shared<ui::ValueRowsSource>(
+        runtime, std::vector<ui::ValueColumn>{ui::ValueColumn{.id = "name"}},
+        [](Value const& row) { return Key{*row.field("id")->asInt()}; }, nullptr);
+    ui::ValueList records;
+    for (auto const& [id, name] : {std::pair{1, "b"}, {2, "c"}, {3, "a"}}) {
+        ui::ValueRecord record;
+        record.emplace("id", Value{std::int64_t{id}});
+        record.emplace("name", Value{std::string{name}});
+        records.emplace_back(std::move(record));
+    }
+    source->assign(records);
+    auto const data = std::make_shared<ui::EngineRows>(source, source->recordOf(), table::EngineOptions{.owner = &owner});
+    while (owner.runAll() > 0) {
+    }
+    auto const decorator = std::make_shared<ui::SummaryRows>(
+        data, std::vector<ui::SummarySpec>{{.key = "stats", .top = false}, {.key = "head", .top = true}},
+        std::vector<ui::SummarySpec>{}, ui::SummaryRows::Runs{});
+    ui::TableSource mounted;
+    mounted.rows = decorator;
+    mounted.alwaysWindowed = false;
+    mounted.cellView = [](std::size_t, Signal<Value> const& row) {
+        return ui::text({.text = [&row] { return fieldText(row.get(), "name"); }});
+    };
+    mounted.rowView = [](Signal<Value> const& row) {
+        ui::TableRowLook look;
+        look.summary = row.peek().field(ui::kSummaryField) != nullptr;
+        return look;
+    };
+    ui::Mounted const view{runtime, backend,
+                           ui::table({ui::TableColumn{.id = "name", .label = "Name"}}, std::move(mounted))};
+    while (owner.runAll() > 0) {
+    }
+    int const widget = backend.all("Table").front();
+    CHECK(childKeys(backend, widget) == std::vector<std::string>{"\x1Fsummary:head", "1", "2", "3", "\x1Fsummary:stats"});
+    for (std::string const key : {"\"\x1Fsummary:head\"", "\"\x1Fsummary:stats\""}) {
+        int const row = rowWith(backend, widget, key);
+        CHECK(backend.prop(row, "summary") == "true");
+        // set right after the row's key
+        std::vector<std::string> const& log = backend.log();
+        auto const keyed = std::ranges::find_if(log, [&](std::string const& line) {
+            return line.find("rowKey=" + key) != std::string::npos;
+        });
+        REQUIRE(keyed != log.end());
+        // The row's next property after its key, whatever the table logs between.
+        std::string const label = keyed->substr(0, keyed->find(" rowKey="));
+        auto const next = std::find_if(std::next(keyed), log.end(), [&label](std::string const& line) {
+            return line.starts_with(label + " ");
+        });
+        REQUIRE(next != log.end());
+        CHECK(*next == label + " summary=true");
+    }
+    for (std::string const key : {"1", "2", "3"}) {
+        CHECK(backend.prop(rowWith(backend, widget, key), "summary").empty());
+    }
+    CHECK(decorator->total().rows == 3);
+    CHECK(decorator->mounted(0) == std::optional<std::int64_t>{1});
+    CHECK(decorator->data(4) == std::optional<std::int64_t>{2});   // the nearest data row
+    CHECK(decorator->data(0) == std::optional<std::int64_t>{0});
+    std::optional<std::vector<table::RowId>> keys;
+    decorator->keysOf(0, 5).then([&keys](std::expected<std::vector<table::RowId>, table::TableError> const& result) {
+        if (result) {
+            keys = *result;
+        }
+    });
+    while (owner.runAll() > 0) {
+    }
+    CHECK(keys == std::vector<table::RowId>{std::int64_t{1}, std::int64_t{2}, std::int64_t{3}});
+    source->use("name");
+    REQUIRE(decorator->setSort(ui::SortChain{table::SortKey{.column = "name", .dir = table::SortDirection::Ascending}})
+                .has_value());
+    while (owner.runAll() > 0) {
+    }
+    CHECK(childKeys(backend, widget) == std::vector<std::string>{"\x1Fsummary:head", "3", "1", "2", "\x1Fsummary:stats"});
+    // A change of one row reaches that row's cell: the data rows' index is moved past the summary on top.
+    records.at(0) = Value{ui::ValueRecord{{"id", Value{std::int64_t{1}}}, {"name", Value{std::string{"bb"}}}}};
+    source->assign(records);
+    while (owner.runAll() > 0) {
+    }
+    std::vector<int> const cells = backend.children(rowWith(backend, widget, "1"));
+    REQUIRE(cells.size() == 1);
+    CHECK(backend.prop(cells.front(), "text") == "bb");
 }

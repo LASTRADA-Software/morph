@@ -18,6 +18,7 @@
 
 #include "../reactive/runtime.hpp"
 #include "../reactive/signal.hpp"
+#include "../table/bands.hpp"
 #include "../util/datetime.hpp"
 #include "alignment.hpp"
 #include "badge_style.hpp"
@@ -910,13 +911,17 @@ struct Column {
     bool holder = false;
 };
 
-/// @brief A table cell that covers rows below its own: the cell of @ref column in the row that gives it, extended
-///        down over @ref rows rows counting that row.
+/// @brief A table cell that covers cells below and beside its own: the cell of @ref column in the row that gives it,
+///        extended down over @ref rows rows counting that row, and right over @ref columns visible columns counting
+///        its own.
 struct RowSpan {
     /// @brief The column's index in the table's columns; the select column is not one.
     std::size_t column = 0;
     /// @brief How many rows the cell covers, the row that gives it included; 1 covers nothing.
     std::size_t rows = 1;
+    /// @brief How many columns the cell covers by visible position, its own included; 1 covers nothing beside it. The
+    ///        giver cuts it where a column the span names was moved away or hidden (`cutColumns`).
+    std::size_t columns = 1;
 
     /// @brief Whether two spans name the same column and count.
     /// @param other The other span.
@@ -1307,6 +1312,28 @@ struct TableArrangement {
     [[nodiscard]] bool operator==(TableArrangement const& other) const = default;
 };
 
+/// @brief One part of a header band as the backend draws it: a run of the band's columns that stand together in the
+///        layout, on one side of the pinned edge.
+struct BandRun {
+    /// @brief The band's level, 0 for the outermost.
+    std::size_t level = 0;
+    /// @brief The band's text.
+    std::string label;
+    /// @brief The unit shown after the label; empty for none.
+    std::string unit;
+    /// @brief The visible position of the run's first column (not an index into `Table::columns`).
+    std::size_t first = 0;
+    /// @brief How many visible columns the run covers, from `first`.
+    std::size_t count = 0;
+    /// @brief Whether the run lies in the pinned part.
+    bool pinned = false;
+
+    /// @brief Member-wise equality.
+    /// @param other The run to compare with.
+    /// @return `true` when every member matches.
+    [[nodiscard]] bool operator==(BandRun const& other) const = default;
+};
+
 /// @brief The row a linked chart highlights: its key, and the view row the server has it at.
 struct TableHighlight {
     /// @brief The row's key.
@@ -1505,6 +1532,9 @@ struct TableRowLook {
     std::optional<Prop<std::vector<RowSpan>>> spans;
     /// @brief Non-null: the row is a heading, this node its one cell spanning every column; no cell is built for it.
     Node heading;
+    /// @brief Whether the row is a summary row: drawn on the theme's summary surface, never selected, activated,
+    ///        focused for an edit or pasted into (`TableWidget::setRowSummary`). Its cells are built as any row's.
+    bool summary = false;
     /// @brief What the row's parts need kept alive while the row is realized, such as the scope they are bound in;
     ///        the mount holds it with the row.
     std::shared_ptr<void const> keep;
@@ -1688,6 +1718,10 @@ struct Table {
     Prop<std::vector<TableColumnGroup>> columnGroups;
     /// @brief Called with a group's index into `columnGroups` when the user presses its filter button.
     std::function<void(std::size_t group)> onGroupFilter;
+    /// @brief The header bands over the columns, outermost first, nested at most `table::kMaxBandLevels` levels; set
+    ///        once. The mount draws each over the runs of its columns the column window shows (`bandRuns`); empty
+    ///        draws none. A table over a `TableSource` only.
+    std::vector<table::BandInfo> bands;
     /// @brief Called when the user asks to copy (`Ctrl+C` on the focused table).
     std::function<void()> onCopy;
     /// @brief Called with a row's key when the user activates it (Enter or a double click).
@@ -2621,6 +2655,8 @@ struct TableOptions {
     Prop<std::vector<TableColumnGroup>> columnGroups;
     /// @brief Called with a group's index when the user presses its filter button.
     std::function<void(std::size_t group)> onGroupFilter;
+    /// @brief The header bands over the columns (`Table::bands`).
+    std::vector<table::BandInfo> bands;
     /// @brief Called when the user asks to copy (`Ctrl+C` on the focused table).
     std::function<void()> onCopy;
     /// @brief Called with a row's key when the user activates it.
@@ -2795,6 +2831,7 @@ template <typename RowT>
     spec.filtered = std::move(options.filtered);
     spec.columnGroups = std::move(options.columnGroups);
     spec.onGroupFilter = std::move(options.onGroupFilter);
+    spec.bands = std::move(options.bands);
     spec.onCopy = std::move(options.onCopy);
     spec.onActivate = std::move(options.onActivate);
     spec.common = std::move(options.common);
@@ -2861,6 +2898,7 @@ template <typename RowT>
     spec.filtered = std::move(options.filtered);
     spec.columnGroups = std::move(options.columnGroups);
     spec.onGroupFilter = std::move(options.onGroupFilter);
+    spec.bands = std::move(options.bands);
     spec.onCopy = std::move(options.onCopy);
     spec.onActivate = std::move(options.onActivate);
     spec.common = std::move(options.common);

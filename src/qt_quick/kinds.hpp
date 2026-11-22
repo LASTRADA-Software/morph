@@ -725,6 +725,7 @@ public:
     void setOnFilter(std::function<void(std::size_t)> handler) override;
     void setFiltered(std::vector<std::size_t> const& columns) override;
     void setColumnGroups(std::vector<ui::TableColumnGroup> const& groups) override;
+    void setBands(std::vector<ui::BandRun> const& runs) override;
     void setOnGroupFilter(std::function<void(std::size_t)> handler) override;
     void setOnCopy(std::function<void()> onCopy) override;
     void setExistingKeys(std::vector<ui::Key> const& keys) override;

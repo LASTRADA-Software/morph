@@ -34,6 +34,7 @@
 #include "cell_format.hpp"
 #include "expression.hpp"
 #include "form_rows.hpp"
+#include "mount.hpp"
 #include "table_config.hpp"
 #include "table_rows.hpp"
 #include "view.hpp"
@@ -237,6 +238,50 @@ public:
     /// @param column The column's id.
     /// @return `true` when covered.
     [[nodiscard]] virtual bool covered(Key const& key, std::string_view column) const = 0;
+
+    /// @brief The spans a row gives, for the mount to draw, while they apply (`covered` says when).
+    /// @param key The row's key.
+    /// @return Each span as `cutColumns` cuts it over the layout; none by default.
+    [[nodiscard]] virtual std::vector<CellSpan> spans(Key const& key) const {
+        static_cast<void>(key);
+        return {};
+    }
+
+    /// @brief Whether any row may give spans: the mount then resolves them over every realized row.
+    /// @return `false` by default.
+    [[nodiscard]] virtual bool spanning() const { return false; }
+
+    /// @brief A data row's cell content as a grid draws it, before its marks: its text, and its error as an accent.
+    /// @param column The column's id.
+    /// @param row    The signal holding the row's record; it must outlive the node.
+    /// @return The cell's node.
+    [[nodiscard]] Node cellContent(std::string const& column, reactive::Signal<Value> const& row) {
+        reactive::Signal<Value> const* const record = &row;
+        Node content = ui::text(Text{.text = Prop<std::string>{[this, record, column] {
+            std::optional<Key> const key = keyOf(record->get());
+            return key ? text(*key, column) : std::string{};
+        }}});
+        Prop<CellAccent> accent{[this, record, column] {
+            std::optional<Key> const key = keyOf(record->get());
+            std::optional<std::string> const failed = key ? error(*key, column) : std::nullopt;
+            return CellAccent{.tone = std::nullopt, .tooltip = failed.value_or(std::string{}),
+                              .invalid = failed.has_value()};
+        }};
+        return accentedCell(std::move(content), std::move(accent));
+    }
+
+    /// @brief A data row's cell as a grid draws it: `cellContent` with the cell's marks.
+    /// @param column The column's id.
+    /// @param row    The signal holding the row's record; it must outlive the node.
+    /// @return The cell's node.
+    [[nodiscard]] Node cellView(std::string const& column, reactive::Signal<Value> const& row) {
+        reactive::Signal<Value> const* const record = &row;
+        Prop<CellMarks> marked{[this, record, column] {
+            std::optional<Key> const key = keyOf(record->get());
+            return key ? marks(*key, column) : CellMarks{};
+        }};
+        return markedCell(cellContent(column, row), std::move(marked));
+    }
 
     /// @brief A cell's draft, as the user typed it. Untracked.
     /// @param key    The row's key.
@@ -595,6 +640,19 @@ public:
         }
     }
 
+    /// @brief Whether a sort orders the view.
+    /// @return `true` while the sort is not empty.
+    [[nodiscard]] bool sorted() const noexcept { return _sorted; }
+
+    /// @brief Groups the rows (`FormRowsSource::setGroup`) and takes the change in at once, so a sort that names
+    ///        `kGroupRunColumn` is accepted from the next call.
+    /// @param by A row's group value; empty: no groups.
+    void setGroup(std::function<Value(forms::RowState const&)> by) {
+        _source->setGroup(std::move(by));
+        _engine->engine().flush();
+        rebuild();
+    }
+
     /// @brief The row `hold` holds.
     /// @return Its key; nothing while none is held.
     [[nodiscard]] std::optional<table::RowId> const& held() const noexcept { return _held; }
@@ -717,6 +775,499 @@ private:
     std::optional<table::RowId> _held;
     std::size_t _heldAt = 0;
     bool _aligned = true;
+};
+
+/// @brief The record member naming a summary row's spec: its key. A data record never holds it.
+inline constexpr std::string_view kSummaryField = "#summary";
+/// @brief The record member holding the first data row a summary row's scope covers.
+inline constexpr std::string_view kSummaryFirstField = "#first";
+/// @brief The record member holding how many data rows a summary row's scope covers.
+inline constexpr std::string_view kSummaryCountField = "#count";
+/// @brief The record member holding a group summary's run ordinal; absent for a table's own summary.
+inline constexpr std::string_view kSummaryRunField = "#run";
+/// @brief The record member a summary row's record changes in whenever the data rows change, so its cells are
+///        evaluated again.
+inline constexpr std::string_view kSummaryVersionField = "#version";
+
+/// @brief The records of view rows of the data rows, a summary row's `rows` scope.
+/// @param rows  The data rows (a grid's `GridSource::view()`, or a `rows` table's rows), never a `SummaryRows`.
+/// @param first The first view row.
+/// @param count How many view rows.
+/// @return The records, in view order; a row not fetched is left out. A grid row's record holds each member's encoded
+///         value, `null` when blank or not encoding.
+[[nodiscard]] inline ValueList summaryScopeRows(TableRows const& rows, std::int64_t first, std::int64_t count) {
+    ValueList out;
+    std::int64_t const last = std::min(first + std::max<std::int64_t>(count, 0), rows.total().rows);
+    for (std::int64_t at = std::max<std::int64_t>(first, 0); at < last; ++at) {
+        if (std::optional<TableRowRef> const ref = rows.row(at)) {
+            out.push_back(ref->row);
+        }
+    }
+    return out;
+}
+
+/// @brief A summary row a table or a group declares: its key, and whether it is drawn before the rows it summarises.
+struct SummarySpec {
+    /// @brief The summary's key, unique among the table's (or the group's) summaries.
+    std::string key;
+    /// @brief Whether it is drawn before the rows (`position: "top"`); after them otherwise.
+    bool top = false;
+};
+
+/// @brief The rows a mount is handed for a table with summary rows: the data rows, with the table's summaries before
+///        or after them and each run's after (or before) the run, and, once `setHeadings` is given, each run's
+///        heading before it.
+///
+/// A forwarding decorator: it holds the data rows' one change slot and tells the mount each change in its own indices.
+/// Summary and heading rows are outside the count, the selection, the sort and the filter: `total()` and `counts()`
+/// are the data rows', `keysOf` skips them, and `mountedTotal()` is what the mount positions rows by. A summary row's
+/// key is `"\x1Fsummary:" + key` (a group's `"\x1Fsummary:" + run ordinal + "/" + key`) and its record
+/// `{"#summary": key, "#first": first data row, "#count": data rows in scope, "#version": n}`, a group's with
+/// `"#run"` too; `#version` changes whenever the data rows change, so the summary's cells are evaluated again.
+class SummaryRows final : public TableRows {
+public:
+    /// @brief The runs of the data rows, each `{first, count}` in the data rows' view.
+    using Runs = std::function<std::vector<std::pair<std::int64_t, std::int64_t>>()>;
+
+    /// @brief Summary rows over data rows.
+    /// @param data   The data rows. Must not be null.
+    /// @param table  The table's own summaries, in order.
+    /// @param perRun Each run's summaries, in order.
+    /// @param runs   The runs of the data rows' view; empty or answering none for an ungrouped table.
+    /// @throws std::invalid_argument when @p data is null.
+    SummaryRows(std::shared_ptr<TableRows> data, std::vector<SummarySpec> table, std::vector<SummarySpec> perRun,
+                Runs runs)
+        : _data{checked(std::move(data))}, _table{std::move(table)}, _perRun{std::move(perRun)}, _runs{std::move(runs)} {
+        rebuild();
+        _data->onChange([this](table::ViewChange const& change) { heard(change); });
+    }
+
+    SummaryRows(SummaryRows const&) = delete;
+    SummaryRows& operator=(SummaryRows const&) = delete;
+    SummaryRows(SummaryRows&&) = delete;
+    SummaryRows& operator=(SummaryRows&&) = delete;
+
+    /// @brief Gives the data rows' change slot up.
+    ~SummaryRows() override { _data->onChange({}); }
+
+    /// @brief Draws a heading row before each run, from now on.
+    /// @param heading A run's heading row by its index among the runs: its key and record; empty draws none.
+    void setHeadings(std::function<RowRecord(std::size_t run)> heading) {
+        _heading = std::move(heading);
+        relayout();
+    }
+
+    /// @brief Takes the runs and the data rows in again, as a change of the data rows would, and tells the mount.
+    void relayout() {
+        ++_version;
+        rebuild();
+        if (_onChange) {
+            table::ViewChange reset;
+            reset.ops.push_back(table::ViewOp{.kind = table::ViewOp::Kind::Reset, .first = 0, .count = 0, .to = 0});
+            _onChange(reset);
+        }
+    }
+
+    /// @brief The data rows.
+    /// @return They.
+    [[nodiscard]] TableRows& data() const noexcept { return *_data; }
+
+    /// @brief The data rows' total: a summary row is outside the count.
+    /// @return It.
+    [[nodiscard]] TableTotal total() const override { return _data->total(); }
+
+    /// @brief Every row the mount realizes: data, summary and heading rows.
+    /// @return The total.
+    [[nodiscard]] TableTotal mountedTotal() const override {
+        TableTotal out = _data->total();
+        out.rows = static_cast<std::int64_t>(_entries.size());
+        return out;
+    }
+
+    /// @brief The row at a mounted index.
+    /// @param index The index.
+    /// @return A data row as the data rows give it, a summary or heading row as built; nothing past the rows.
+    [[nodiscard]] std::optional<TableRowRef> row(std::int64_t index) const override {
+        if (index < 0 || static_cast<std::size_t>(index) >= _entries.size()) {
+            return std::nullopt;
+        }
+        Entry const& entry = _entries.at(static_cast<std::size_t>(index));
+        if (entry.kind == Entry::Kind::Data) {
+            return _data->row(entry.data);
+        }
+        return TableRowRef{.key = entry.key, .row = entry.record};
+    }
+
+    /// @brief The mounted index of a data row.
+    /// @param dataRow The data row's view index.
+    /// @return Its mounted index; nothing past the data rows.
+    [[nodiscard]] std::optional<std::int64_t> mounted(std::int64_t dataRow) const {
+        if (dataRow < 0 || static_cast<std::size_t>(dataRow) >= _mounted.size()) {
+            return std::nullopt;
+        }
+        return _mounted.at(static_cast<std::size_t>(dataRow));
+    }
+
+    /// @brief The data row at a mounted index, or the nearest one to a summary or heading row (the one above on a
+    ///        tie).
+    /// @param mountedRow The mounted index.
+    /// @return The data row's view index; nothing with no data row or past the rows.
+    [[nodiscard]] std::optional<std::int64_t> data(std::int64_t mountedRow) const {
+        if (mountedRow < 0 || static_cast<std::size_t>(mountedRow) >= _entries.size()) {
+            return std::nullopt;
+        }
+        auto const at = static_cast<std::size_t>(mountedRow);
+        for (std::size_t distance = 0; distance < _entries.size(); ++distance) {
+            if (distance <= at && _entries.at(at - distance).kind == Entry::Kind::Data) {
+                return _entries.at(at - distance).data;
+            }
+            if (at + distance < _entries.size() && _entries.at(at + distance).kind == Entry::Kind::Data) {
+                return _entries.at(at + distance).data;
+            }
+        }
+        return std::nullopt;
+    }
+
+    /// @brief Whether a mounted row is a summary row.
+    /// @param mountedRow The mounted index.
+    /// @return `true` for a summary row.
+    [[nodiscard]] bool summary(std::int64_t mountedRow) const {
+        return mountedRow >= 0 && static_cast<std::size_t>(mountedRow) < _entries.size() &&
+               _entries.at(static_cast<std::size_t>(mountedRow)).kind == Entry::Kind::Summary;
+    }
+
+    /// @brief The data rows' levels of a data row; nothing for a summary or heading row.
+    /// @param index The mounted index.
+    /// @return The levels.
+    [[nodiscard]] table::UnloadedLevels unloadedLevels(std::int64_t index) const override {
+        std::optional<std::int64_t> const at = exact(index);
+        return at ? _data->unloadedLevels(*at) : table::UnloadedLevels{};
+    }
+
+    /// @brief Tells the data rows the data rows of a mounted range.
+    /// @param first   The first mounted row.
+    /// @param count   The rows.
+    /// @param columns The columns.
+    void visible(std::int64_t first, std::int64_t count, std::span<std::string const> columns) override {
+        auto const [from, rows] = dataRange(first, count);
+        _data->visible(from, rows, columns);
+    }
+
+    /// @brief The keys of the data rows of a mounted range: summary and heading rows are outside the selection.
+    /// @param first The first mounted row.
+    /// @param count The rows.
+    /// @return The data rows' answer.
+    async::Completion<std::expected<std::vector<table::RowId>, table::TableError>> keysOf(std::int64_t first,
+                                                                                       std::int64_t count) override {
+        auto const [from, rows] = dataRange(first, count);
+        return _data->keysOf(from, rows);
+    }
+
+    /// @brief Finds a key's mounted index.
+    /// @param key  The key.
+    /// @param stop Once a stop is requested, @p done is not called.
+    /// @param done Called with the mounted index, or nothing.
+    void locateRow(table::RowId key, std::stop_token stop, std::function<void(RowLocation const&)> done) override {
+        _data->locateRow(std::move(key), std::move(stop), [this, done = std::move(done)](RowLocation const& found) {
+            if (found && *found) {
+                done(RowLocation{mounted(**found)});
+                return;
+            }
+            done(found);
+        });
+    }
+
+    /// @brief Rows by key, from the data rows.
+    /// @param keys    The keys.
+    /// @param columns The columns.
+    /// @return The data rows' answer.
+    async::Completion<std::expected<std::vector<FetchedRow>, table::TableError>> fetchRows(
+        std::vector<table::RowId> keys, std::vector<std::string> columns) override {
+        return _data->fetchRows(std::move(keys), std::move(columns));
+    }
+
+    /// @brief Sorts the data rows.
+    /// @param sort The keys.
+    /// @return The data rows' answer.
+    std::expected<void, table::TableError> setSort(SortChain sort) override { return _data->setSort(std::move(sort)); }
+
+    /// @brief Filters the data rows.
+    /// @param filter The filter.
+    /// @return The data rows' answer.
+    std::expected<void, table::TableError> setFilter(table::FilterSpec filter) override {
+        return _data->setFilter(std::move(filter));
+    }
+
+    /// @brief A column's distinct values, from the data rows.
+    /// @param request The request.
+    /// @return The data rows' answer.
+    async::Completion<std::expected<table::DistinctValues, table::TableError>> distinctValues(
+        table::DistinctRequest request) override {
+        return _data->distinctValues(std::move(request));
+    }
+
+    /// @brief The data rows' counts.
+    /// @return They.
+    [[nodiscard]] TableCountsView counts() const override { return _data->counts(); }
+
+    /// @brief The data rows' view as a selection takes it.
+    /// @return Their answer.
+    [[nodiscard]] std::expected<ViewSelection, SelectAllRefusal> selectView() const override {
+        return _data->selectView();
+    }
+
+    /// @brief The data rows' count of a selection.
+    /// @param selection The selection.
+    /// @return Their answer.
+    [[nodiscard]] SelectedCount selectedCount(TableSelection const& selection) const override {
+        return _data->selectedCount(selection);
+    }
+
+    /// @brief Whether the data rows' view left a key.
+    /// @param key The key.
+    /// @return Their answer.
+    [[nodiscard]] bool leftView(table::RowId const& key) const override { return _data->leftView(key); }
+
+    /// @brief Retains data rows.
+    /// @param keys The keys.
+    /// @return Their answer.
+    [[nodiscard]] RetainResult retain(std::span<table::RowId const> keys) override { return _data->retain(keys); }
+
+    /// @brief Drops the data rows' retained rows.
+    void clearRetained() override { _data->clearRetained(); }
+
+    /// @brief Whether a data row is retained and unmatched.
+    /// @param key The key.
+    /// @return Their answer.
+    [[nodiscard]] bool unmatched(table::RowId const& key) const override { return _data->unmatched(key); }
+
+    /// @brief Holds the data rows' refetches.
+    /// @param run The run.
+    void holdRefetches(std::uint64_t run) override { _data->holdRefetches(run); }
+
+    /// @brief Releases the data rows' refetches.
+    /// @param run The run.
+    void releaseRefetches(std::uint64_t run) override { _data->releaseRefetches(run); }
+
+    /// @brief The data rows of a mounted range, with their cells.
+    /// @param first   The first mounted row.
+    /// @param count   The rows.
+    /// @param columns The columns.
+    /// @return The data rows' answer, in their view's indices.
+    async::Completion<std::expected<std::vector<FetchedRow>, table::TableError>> rowsOf(
+        std::int64_t first, std::int64_t count, std::span<std::string const> columns) override {
+        auto const [from, rows] = dataRange(first, count);
+        return _data->rowsOf(from, rows, columns);
+    }
+
+    /// @brief The data rows' states.
+    /// @return They.
+    [[nodiscard]] RowStates& states() override { return _data->states(); }
+
+    /// @brief The data rows' states.
+    /// @return They.
+    [[nodiscard]] RowStates const& states() const override { return _data->states(); }
+
+    /// @brief Moves a data row's key.
+    /// @param from The old key.
+    /// @param to   The new key.
+    void moveKey(table::RowId const& from, table::RowId const& to) override { _data->moveKey(from, to); }
+
+    /// @brief Sets the one receiver of the changes, in mounted indices.
+    /// @param handler The receiver; empty to stop receiving.
+    void onChange(std::function<void(table::ViewChange const&)> handler) override { _onChange = std::move(handler); }
+
+private:
+    struct Entry {
+        enum class Kind : std::uint8_t { Data, Summary, Heading } kind = Kind::Data;
+        std::int64_t data = 0;
+        bool perRun = false;
+        Key key;
+        Value record;
+    };
+
+    [[nodiscard]] static std::shared_ptr<TableRows> checked(std::shared_ptr<TableRows> data) {
+        if (data == nullptr) {
+            throw std::invalid_argument{"morph::ui::SummaryRows: the data rows must not be null"};
+        }
+        return data;
+    }
+
+    // The data row exactly at a mounted index; nothing for a summary or heading row.
+    [[nodiscard]] std::optional<std::int64_t> exact(std::int64_t index) const {
+        if (index < 0 || static_cast<std::size_t>(index) >= _entries.size()) {
+            return std::nullopt;
+        }
+        Entry const& entry = _entries.at(static_cast<std::size_t>(index));
+        return entry.kind == Entry::Kind::Data ? std::optional{entry.data} : std::nullopt;
+    }
+
+    // The data rows of a mounted range: contiguous in the data rows' view, since summary and heading rows only
+    // interleave them. A range of summary rows alone is the empty range at the data row it stands before.
+    [[nodiscard]] std::pair<std::int64_t, std::int64_t> dataRange(std::int64_t first, std::int64_t count) const {
+        std::optional<std::int64_t> low;
+        std::int64_t high = -1;
+        auto const size = static_cast<std::int64_t>(_entries.size());
+        std::int64_t const begin = std::clamp<std::int64_t>(first, 0, size);
+        std::int64_t const end = std::clamp<std::int64_t>(first + std::max<std::int64_t>(count, 0), begin, size);
+        for (std::int64_t at = begin; at < end; ++at) {
+            if (std::optional<std::int64_t> const data = exact(at)) {
+                low = low.value_or(*data);
+                high = *data;
+            }
+        }
+        if (low) {
+            return {*low, high - *low + 1};
+        }
+        std::int64_t before = 0;
+        for (std::int64_t at = 0; at < begin; ++at) {
+            before += exact(at) ? 1 : 0;
+        }
+        return {before, 0};
+    }
+
+    // A summary row of @p spec over the data rows [first, first + count).
+    [[nodiscard]] Entry summaryEntry(SummarySpec const& spec, std::optional<std::size_t> run, std::int64_t first,
+                                     std::int64_t count) const {
+        ValueRecord record;
+        record.insert_or_assign(std::string{kSummaryField}, Value{spec.key});
+        record.insert_or_assign(std::string{kSummaryFirstField}, Value{first});
+        record.insert_or_assign(std::string{kSummaryCountField}, Value{count});
+        record.insert_or_assign(std::string{kSummaryVersionField}, Value{static_cast<std::int64_t>(_version)});
+        std::string key = "\x1Fsummary:";
+        if (run) {
+            record.insert_or_assign(std::string{kSummaryRunField}, Value{static_cast<std::int64_t>(*run)});
+            key += std::to_string(*run) + "/";
+        }
+        key += spec.key;
+        return Entry{.kind = Entry::Kind::Summary,
+                     .data = 0,
+                     .perRun = run.has_value(),
+                     .key = Key{std::move(key)},
+                     .record = Value{std::move(record)}};
+    }
+
+    // The mounted rows, from the data rows' count and runs now.
+    void rebuild() {
+        std::int64_t const total = std::max<std::int64_t>(_data->total().rows, 0);
+        std::vector<std::pair<std::int64_t, std::int64_t>> const runs =
+            _runs ? _runs() : std::vector<std::pair<std::int64_t, std::int64_t>>{};
+        _entries.clear();
+        auto const data = [this](std::int64_t at) {
+            _entries.push_back(Entry{.kind = Entry::Kind::Data, .data = at, .perRun = false, .key = {}, .record = {}});
+        };
+        auto const summaries = [this](std::vector<SummarySpec> const& specs, bool top, std::optional<std::size_t> run,
+                                      std::int64_t first, std::int64_t count) {
+            for (SummarySpec const& spec : specs) {
+                if (spec.top == top) {
+                    _entries.push_back(summaryEntry(spec, run, first, count));
+                }
+            }
+        };
+        summaries(_table, true, std::nullopt, 0, total);
+        std::int64_t next = 0;
+        for (std::size_t run = 0; run < runs.size(); ++run) {
+            std::int64_t const first = std::clamp<std::int64_t>(runs.at(run).first, next, total);
+            std::int64_t const last = std::clamp<std::int64_t>(first + runs.at(run).second, first, total);
+            for (; next < first; ++next) {
+                data(next);
+            }
+            if (_heading) {
+                RowRecord heading = _heading(run);
+                _entries.push_back(Entry{.kind = Entry::Kind::Heading,
+                                         .data = 0,
+                                         .perRun = true,
+                                         .key = std::move(heading.key),
+                                         .record = std::move(heading.row)});
+            }
+            summaries(_perRun, true, run, first, last - first);
+            for (; next < last; ++next) {
+                data(next);
+            }
+            summaries(_perRun, false, run, first, last - first);
+        }
+        for (; next < total; ++next) {
+            data(next);
+        }
+        summaries(_table, false, std::nullopt, 0, total);
+        _mounted.assign(static_cast<std::size_t>(total), std::int64_t{0});
+        for (std::size_t at = 0; at < _entries.size(); ++at) {
+            if (_entries.at(at).kind == Entry::Kind::Data) {
+                _mounted.at(static_cast<std::size_t>(_entries.at(at).data)) = static_cast<std::int64_t>(at);
+            }
+        }
+    }
+
+    // Whether the rows hold a row per run: a heading or a group's summary.
+    [[nodiscard]] static bool perRun(std::vector<Entry> const& entries) {
+        return std::ranges::any_of(entries, &Entry::perRun);
+    }
+
+    // The data rows changed: the layout follows, and the mount hears the change in mounted indices, with every summary
+    // row changed after it. A change whose rows a run's rows move among is a reset.
+    void heard(table::ViewChange const& change) {
+        std::vector<Entry> const before = std::move(_entries);
+        auto const lead = static_cast<std::size_t>(
+            std::ranges::count_if(_table, [](SummarySpec const& spec) { return spec.top; }));
+        ++_version;
+        rebuild();
+        if (!_onChange) {
+            return;
+        }
+        bool const reset = std::ranges::any_of(
+            change.ops, [](table::ViewOp const& op) { return op.kind == table::ViewOp::Kind::Reset; });
+        table::ViewChange out;
+        if (!reset && !perRun(before) && !perRun(_entries)) {
+            // Ungrouped: every data row sits `lead` rows down, before and after.
+            for (table::ViewOp op : change.ops) {
+                op.first += lead;
+                if (op.kind == table::ViewOp::Kind::Moved) {
+                    op.to += lead;
+                }
+                out.ops.push_back(op);
+            }
+        } else {
+            bool const sameShape =
+                !reset && before.size() == _entries.size() &&
+                std::ranges::equal(before, _entries,
+                                   [](Entry const& left, Entry const& right) {
+                                       return left.kind == right.kind && left.data == right.data && left.key == right.key;
+                                   }) &&
+                std::ranges::all_of(change.ops,
+                                    [](table::ViewOp const& op) { return op.kind == table::ViewOp::Kind::Changed; });
+            if (!sameShape) {
+                out.ops.push_back(table::ViewOp{.kind = table::ViewOp::Kind::Reset, .first = 0, .count = 0, .to = 0});
+                _onChange(out);
+                return;
+            }
+            for (table::ViewOp const& op : change.ops) {
+                for (std::size_t at = op.first; at < op.first + op.count; ++at) {
+                    if (std::optional<std::int64_t> const now = mounted(static_cast<std::int64_t>(at))) {
+                        out.ops.push_back(table::ViewOp{.kind = table::ViewOp::Kind::Changed,
+                                                        .first = static_cast<std::size_t>(*now),
+                                                        .count = 1,
+                                                        .to = 0});
+                    }
+                }
+            }
+        }
+        for (std::size_t at = 0; at < _entries.size(); ++at) {
+            if (_entries.at(at).kind == Entry::Kind::Summary) {
+                out.ops.push_back(table::ViewOp{.kind = table::ViewOp::Kind::Changed, .first = at, .count = 1, .to = 0});
+            }
+        }
+        _onChange(out);
+    }
+
+    std::shared_ptr<TableRows> _data;
+    std::vector<SummarySpec> _table;
+    std::vector<SummarySpec> _perRun;
+    Runs _runs;
+    std::function<RowRecord(std::size_t run)> _heading;
+    std::function<void(table::ViewChange const&)> _onChange;
+    std::vector<Entry> _entries;
+    std::vector<std::int64_t> _mounted;
+    std::uint64_t _version = 0;
 };
 
 /// @brief The formatting a form's values are shown in, read from its options when called: a later
@@ -905,14 +1456,42 @@ public:
                                       .overlayReadOnly = overlay});
     }
 
-    /// @brief No cell of a grid of a form is covered.
-    /// @param key    Unused.
-    /// @param column Unused.
-    /// @return `false`.
+    /// @brief Whether another row's span covers a cell: the rows below the spanning cell's, up to its `rows`, and
+    ///        the columns `cutColumns` gives it over the layout. Spans apply only while the grid is unsorted and under
+    ///        its windowing thresholds (`Virtualization`'s defaults). Untracked.
+    /// @param key    The row's key.
+    /// @param column The column's id.
+    /// @return `true` when covered; the spanning cell itself is not.
     [[nodiscard]] bool covered(Key const& key, std::string_view column) const override {
-        static_cast<void>(key);
-        static_cast<void>(column);
-        return false;
+        if (!_spansOf) {
+            return false;
+        }
+        Coverage const& coverage = coverageNow();
+        auto const found = coverage.covered.find(key);
+        return found != coverage.covered.end() && std::ranges::contains(found->second, column);
+    }
+
+    /// @brief The spans a row gives while spans apply, each cut over the layout.
+    /// @param key The row's key.
+    /// @return The spans; none while the grid is sorted or past its thresholds.
+    [[nodiscard]] std::vector<CellSpan> spans(Key const& key) const override {
+        if (!_spansOf) {
+            return {};
+        }
+        Coverage const& coverage = coverageNow();
+        auto const found = coverage.given.find(key);
+        return found == coverage.given.end() ? std::vector<CellSpan>{} : found->second;
+    }
+
+    /// @brief Whether `setSpans` gave spans.
+    /// @return `true` once it did.
+    [[nodiscard]] bool spanning() const override { return static_cast<bool>(_spansOf); }
+
+    /// @brief Gives the rows' spans: each row's cells that cover the cells below and beside them.
+    /// @param spansOf A row's spans, read untracked; empty: no spans.
+    void setSpans(std::function<std::vector<CellSpan>(forms::RowState const&)> spansOf) {
+        _spansOf = std::move(spansOf);
+        _coverage.reset();
     }
 
     /// @brief The cell's draft. Untracked.
@@ -1320,10 +1899,76 @@ private:
         return count;
     }
 
+    // The cells the spans cover and the spans each row gives, as of a snapshot of the rows, the layout and the sort.
+    struct Coverage {
+        std::shared_ptr<table::RowSnapshot const> snapshot;
+        std::vector<std::string> layout;
+        bool sorted = false;
+        std::unordered_map<Key, std::vector<std::string>> covered;
+        std::unordered_map<Key, std::vector<CellSpan>> given;
+    };
+
+    // The coverage of the rows now, computed again once the rows, the layout or the sort changed.
+    // NOLINTNEXTLINE(readability-function-cognitive-complexity): rows, their spans, and the cells each covers.
+    [[nodiscard]] Coverage const& coverageNow() const {
+        _rows->sync();
+        std::shared_ptr<table::RowSnapshot const> const snapshot = _rowsSource->snapshot();
+        bool const sorted = _rows->sorted();
+        if (_coverage && _coverage->snapshot == snapshot && _coverage->layout == _layout && _coverage->sorted == sorted) {
+            return *_coverage;
+        }
+        Coverage next{.snapshot = snapshot, .layout = _layout, .sorted = sorted, .covered = {}, .given = {}};
+        Virtualization const limits{};
+        auto const rows = static_cast<std::size_t>(std::max<std::int64_t>(_rows->total().rows, 0));
+        bool const applies = !sorted && rows < limits.threshold && _layout.size() < limits.columnThreshold &&
+                             rows * _layout.size() < limits.cellThreshold;
+        if (applies) {
+            std::vector<std::string> declared;
+            declared.reserve(_columns.size());
+            for (GridColumn const& column : _columns) {
+                declared.push_back(column.id);
+            }
+            _form->runtime().untracked([&] {
+                for (std::size_t row = 0; row < rows; ++row) {
+                    std::optional<TableRowRef> const ref = _rows->row(static_cast<std::int64_t>(row));
+                    forms::RowState const* const held = ref ? _rowsSource->row(ref->key) : nullptr;
+                    if (held == nullptr) {
+                        continue;
+                    }
+                    for (CellSpan span : _spansOf(*held)) {
+                        span.columns = cutColumns(span, declared, _layout);
+                        auto const place = std::ranges::find(_layout, span.column);
+                        if (span.columns == 0 || span.rows == 0 || place == _layout.end()) {
+                            continue;
+                        }
+                        span.rows = std::min(span.rows, rows - row);
+                        auto const first = static_cast<std::size_t>(place - _layout.begin());
+                        for (std::size_t down = 0; down < span.rows; ++down) {
+                            std::optional<TableRowRef> const below = _rows->row(static_cast<std::int64_t>(row + down));
+                            if (!below) {
+                                continue;
+                            }
+                            for (std::size_t right = 0; right < span.columns; ++right) {
+                                if (down != 0 || right != 0) {
+                                    next.covered[below->key].push_back(_layout.at(first + right));
+                                }
+                            }
+                        }
+                        next.given[ref->key].push_back(std::move(span));
+                    }
+                }
+            });
+        }
+        _coverage = std::move(next);
+        return *_coverage;
+    }
+
     forms::FormSession* _form;
     std::weak_ptr<void const> _formAlive;
     std::string _arrayPath;
     std::vector<GridColumn> _columns;
+    std::function<std::vector<CellSpan>(forms::RowState const&)> _spansOf;
+    mutable std::optional<Coverage> _coverage;
     FormatContext _format;
     reactive::Signal<std::uint64_t> _formatVersion;
     std::vector<std::string> _layout;
@@ -2011,45 +2656,78 @@ public:
             }};
         };
         TableSource made;
-        if (base) {
+        if (base && base->cellView) {
             made = *base;
             made.cellView = [inner = base->cellView, idOf, marksOf](std::size_t column,
                                                                     reactive::Signal<Value> const& row) {
                 return markedCell(inner(column, row), marksOf(&row, idOf(column)));
             };
         } else {
-            made.rows = std::shared_ptr<TableRows>(keep, &source->view());
-            made.cellView = [source, idOf, marksOf](std::size_t column, reactive::Signal<Value> const& row) {
-                reactive::Signal<Value> const* const record = &row;
-                std::string const id = idOf(column);
-                Node content = ui::text(Text{.text = Prop<std::string>{[source, record, id] {
-                    std::optional<Key> const key = source->keyOf(record->get());
-                    return key ? source->text(*key, id) : std::string{};
-                }}});
-                Prop<CellAccent> accent{[source, record, id] {
-                    std::optional<Key> const key = source->keyOf(record->get());
-                    std::optional<std::string> const failed = key ? source->error(*key, id) : std::nullopt;
-                    return CellAccent{.tone = std::nullopt, .tooltip = failed.value_or(std::string{}),
-                                      .invalid = failed.has_value()};
-                }};
-                return markedCell(accentedCell(std::move(content), std::move(accent)), marksOf(record, id));
+            if (base) {
+                made = *base;
+            } else {
+                made.rows = std::shared_ptr<TableRows>(keep, &source->view());
+                made.rowView = {};
+                made.alwaysFetched = {};
+                made.levels = {};
+            }
+            made.cellView = [source, idOf](std::size_t column, reactive::Signal<Value> const& row) {
+                return source->cellView(idOf(column), row);
             };
-            made.rowView = {};
-            made.alwaysFetched = {};
-            made.levels = {};
         }
-        made.rowView = [inner = made.rowView, source](reactive::Signal<Value> const& row) {
+        if (source->spanning()) {
+            // A grid's rows are all on the client: under the threshold every row is realized, and the spans drawn.
+            made.alwaysWindowed = false;
+        }
+        made.rowView = [inner = made.rowView, source, ids](reactive::Signal<Value> const& row) {
             TableRowLook look = inner ? inner(row) : TableRowLook{};
             reactive::Signal<Value> const* const record = &row;
             look.modified = Prop<bool>{[source, record] {
                 std::optional<Key> const key = source->keyOf(record->get());
                 return key.has_value() && source->rowModified(*key);
             }};
+            if (source->spanning() && !look.spans) {
+                look.spans = Prop<std::vector<RowSpan>>{[source, record, ids] {
+                    std::vector<RowSpan> out;
+                    std::optional<Key> const key = source->keyOf(record->get());
+                    if (!key) {
+                        return out;
+                    }
+                    for (CellSpan const& span : source->spans(*key)) {
+                        auto const at = std::ranges::find(*ids, span.column);
+                        if (at != ids->end()) {
+                            out.push_back(RowSpan{.column = static_cast<std::size_t>(at - ids->begin()),
+                                                  .rows = span.rows,
+                                                  .columns = span.columns});
+                        }
+                    }
+                    return out;
+                }};
+            }
             return look;
         };
         options.gridFocus = Prop<std::optional<GridFocus>>{[self] { return self->place(); }};
+        // A click or a move that lands on a summary or heading row goes to the nearest data row.
+        auto const summaries = std::dynamic_pointer_cast<SummaryRows>(made.rows);
         // The table's `onFocusCell` hears where a click or a move put the grid's focus, as a table's does.
-        options.onGridFocus = [self, keep, heard = std::move(options.onFocusCell)](GridFocus target) {
+        options.onGridFocus = [self, keep, source, summaries, heard = std::move(options.onFocusCell)](GridFocus target) {
+            if (summaries != nullptr && target.key && !source->positionOf(*target.key)) {
+                std::int64_t const count = summaries->mountedTotal().rows;
+                for (std::int64_t at = 0; at < count; ++at) {
+                    std::optional<TableRowRef> const ref = summaries->row(at);
+                    if (ref && ref->key == *target.key) {
+                        std::optional<std::int64_t> const data = summaries->data(at);
+                        std::optional<Key> const near =
+                            data ? source->keyAt(static_cast<std::size_t>(*data)) : std::nullopt;
+                        if (!near) {
+                            return;
+                        }
+                        target.key = near;
+                        target.viewRow = static_cast<std::size_t>(*data);
+                        break;
+                    }
+                }
+            }
             self->focusPlace(std::move(target));
             if (heard) {
                 heard(self->_rt->untracked([&] { return self->focus(); }));

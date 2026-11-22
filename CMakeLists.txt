@@ -789,6 +789,7 @@ target_sources(morph
         include/morph/table/query.hpp
         include/morph/table/row_selection.hpp
         include/morph/table/runtime.hpp
+        include/morph/table/bands.hpp
         include/morph/table/description.hpp
         include/morph/table/level_cache.hpp
         include/morph/table/view_cache.hpp

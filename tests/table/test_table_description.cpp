@@ -2488,3 +2488,69 @@ TEST_CASE("description: a column that shows its cells plainly writes no display"
     REQUIRE_FALSE(glz::read_json(back, json));
     CHECK(back == described);
 }
+
+namespace {
+
+std::vector<BandInfo> const kMassBand{{.label = "Mass retained", .unit = "g", .columns = {"m8", "m4", "m2"}, .bands = {}}};
+
+std::vector<TableColumn> bandColumns() {
+    std::vector<TableColumn> columns;
+    for (char const* const id : {"m8", "m4", "m2", "total"}) {
+        columns.push_back(TableColumn{.info = {.id = id, .kind = ColumnKind::Decimal}});
+    }
+    return columns;
+}
+
+void refusedNaming(std::vector<BandInfo> const& bands, std::string_view label) {
+    auto const checked = checkBands(bands, bandColumns());
+    REQUIRE_FALSE(checked.has_value());
+    CHECK(checked.error().code == TableErrorCode::SourceContract);
+    CHECK(checked.error().message.find(label) != std::string::npos);
+}
+
+}  // namespace
+
+// Mutation: checkBands not walking child bands.
+TEST_CASE("description: bands are checked", "[table][description][bands]") {
+    std::vector<TableColumn> const columns = bandColumns();
+    CHECK(checkBands(kMassBand, columns).has_value());
+    SECTION("four levels deep") {
+        BandInfo deepest{.label = "Fourth", .unit = {}, .columns = {"m8"}, .bands = {}};
+        BandInfo third{.label = "Third", .unit = {}, .columns = {"m8"}, .bands = {deepest}};
+        BandInfo second{.label = "Second", .unit = {}, .columns = {"m8"}, .bands = {third}};
+        refusedNaming({BandInfo{.label = "First", .unit = {}, .columns = {"m8"}, .bands = {second}}}, "Fourth");
+        third.bands.clear();
+        second.bands = {third};
+        CHECK(checkBands(std::vector<BandInfo>{BandInfo{.label = "First", .unit = {}, .columns = {"m8"}, .bands = {second}}},
+                         columns)
+                  .has_value());
+    }
+    SECTION("a band over no column") {
+        refusedNaming({BandInfo{.label = "Empty", .unit = {}, .columns = {}, .bands = {}}}, "Empty");
+    }
+    SECTION("a child over a column its parent lacks") {
+        BandInfo parent = kMassBand.front();
+        parent.bands.push_back(BandInfo{.label = "Stray", .unit = {}, .columns = {"m8", "total"}, .bands = {}});
+        refusedNaming({parent}, "Stray");
+    }
+    SECTION("a column in two bands of one level") {
+        refusedNaming({kMassBand.front(), BandInfo{.label = "Again", .unit = {}, .columns = {"m8"}, .bands = {}}}, "Again");
+    }
+    SECTION("a column the table does not have") {
+        refusedNaming({BandInfo{.label = "Unknown", .unit = {}, .columns = {"m16"}, .bands = {}}}, "Unknown");
+    }
+}
+
+TEST_CASE("description: bands cross the wire", "[table][description][bands]") {
+    TableDescription d;
+    d.id = "sieves";
+    d.columns = bandColumns();
+    d.bands = kMassBand;
+    d.bands.front().bands.push_back(BandInfo{.label = "Fine", .unit = {}, .columns = {"m2"}, .bands = {}});
+    auto const described = describe(d);
+    auto const json = glz::write_json(described).value_or(std::string{});
+    TableDescription back;
+    REQUIRE_FALSE(glz::read_json(back, json));
+    CHECK(back == described);
+    CHECK(back.bands.front().bands.front().label == "Fine");
+}

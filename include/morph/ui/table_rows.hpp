@@ -494,6 +494,11 @@ public:
     /// @return The total.
     [[nodiscard]] virtual TableTotal total() const = 0;
 
+    /// @brief The rows a mount realizes: the view's, and the rows a decorator adds outside it, such as summary rows,
+    ///        which no count and no selection takes in.
+    /// @return The total the mount positions rows by; `total()` for rows that add none.
+    [[nodiscard]] virtual TableTotal mountedTotal() const { return total(); }
+
     /// @brief The row at a view index, or nothing while it is not fetched.
     /// @param index The view index.
     /// @return The row; its references hold until the next `onChange`.

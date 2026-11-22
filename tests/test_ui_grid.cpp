@@ -14,6 +14,7 @@
 #include <morph/forms/derive.hpp>
 #include <morph/forms/engine/form_session.hpp>
 #include <morph/ui/document.hpp>
+#include <morph/table/engine.hpp>
 #include <morph/ui/grid.hpp>
 #include <morph/ui/interpreter.hpp>
 #include <morph/ui/mount.hpp>
@@ -1607,6 +1608,263 @@ TEST_CASE("grid: the loader checks a form's derive keys and keeps a grid column'
     std::string const plainReason = refusal(std::string{kRowsTable});
     INFO(plainReason);
     CHECK(plainReason.find("is a grid column's") != std::string::npos);
+}
+
+// ── Spans and summary rows (editing.md delivery step 4) ─────────────────────
+
+// Mutation: a paste writing into a covered cell (the spanning cell's value changes twice, or the covered field is written).
+TEST_CASE("grid: spans pass the walk and drop pasted values", "[ui][grid][spans]") {
+    GridFixture f{3};
+    f.source->setSpans([](forms::RowState const& row) {
+        return row.key() == 1 ? std::vector<ui::CellSpan>{{.column = "mass", .rows = 2, .columns = 2}}
+                              : std::vector<ui::CellSpan>{};
+    });
+    CHECK(f.source->covered(ui::Key{std::int64_t{2}}, "mass"));
+    CHECK(f.source->covered(ui::Key{std::int64_t{1}}, "volume"));
+    CHECK(f.source->covered(ui::Key{std::int64_t{2}}, "volume"));
+    CHECK_FALSE(f.source->covered(ui::Key{std::int64_t{1}}, "mass"));   // the spanning cell itself
+    f.grid->focusCell(at(1, "mass"));
+    f.grid->press("Tab");
+    CHECK(f.grid->focus() == at(1, "note"));            // volume covered, density and limit read-only
+    f.grid->focusCell(at(1, "mass"));
+    f.grid->type("1");
+    f.grid->press("Enter");
+    CHECK(f.grid->focus() == at(3, "mass"));            // (2, mass) is covered
+    f.grid->focusCell(at(1, "mass"));
+    auto const result = f.grid->paste("1\n2\n3");
+    CHECK(result.written == 2);
+    CHECK(result.readOnly == 1);
+    CHECK(f.form->field("specimens[1].mass").draft().empty());
+    table::ColumnLayout layout{{"label", "mass", "volume", "density", "limit", "note"}};
+    // moving volume away cuts the span: with volume after note, (1, volume) is no longer covered
+    REQUIRE(layout.move("volume", 5));
+    f.source->setLayout(layout.visible());              // the grid's visible columns follow the layout
+    CHECK_FALSE(f.source->covered(ui::Key{std::int64_t{1}}, "volume"));
+    CHECK(f.source->covered(ui::Key{std::int64_t{2}}, "mass"));
+    // a sorted grid draws no span, so nothing is covered
+    REQUIRE(f.source->view().setSort(ui::SortChain{table::SortKey{.column = "label", .dir = table::SortDirection::Ascending}})
+                .has_value());
+    CHECK_FALSE(f.source->covered(ui::Key{std::int64_t{2}}, "mass"));
+}
+
+// Mutation: the grid's walk and paste running over the decorator's rows (Tab lands on the summary row; a paste
+// counts it as a read-only row instead of running past the last row).
+TEST_CASE("summary: a grid's walk, paste and scope do not see summary rows", "[ui][grid][summary]") {
+    GridFixture f{2};
+    auto const data = std::shared_ptr<ui::TableRows>{std::shared_ptr<void>{}, &f.source->view()};
+    ui::SummaryRows rows{data, {{.key = "stats", .top = false}}, {},
+                         [] { return std::vector<std::pair<std::int64_t, std::int64_t>>{}; }};
+    CHECK(f.source->rowCount() == 2);
+    f.grid->focusCell(at(2, "note"));
+    CHECK(f.grid->press("Tab") == ui::KeyOutcome::FocusNext);     // nothing below row 2 for the grid
+    f.grid->focusCell(at(2, "label"));
+    auto const result = f.grid->paste("a\nb");
+    CHECK(result.written == 1);
+    CHECK(result.pastRows == 1);
+    CHECK(result.readOnly == 0);
+    CHECK(ui::summaryScopeRows(f.source->view(), 0, 2).size() == 2);
+    CHECK(rows.mounted(1) == std::optional<std::int64_t>{1});
+    REQUIRE(rows.row(2).has_value());
+    CHECK(rows.row(2)->key == ui::Key{std::string{"\x1Fsummary:stats"}});
+    CHECK(rows.mountedTotal().rows == 3);
+    CHECK(rows.total().rows == 2);
+}
+
+// Mutation: summaryScopeRows reading the source's snapshot, which ignores the filter.
+TEST_CASE("summary: rows follow the filter", "[ui][grid][summary]") {
+    GridFixture f{3};
+    for (auto const& [key, text] : {std::pair{1, "10"}, {2, "12"}, {3, "14"}}) {
+        f.grid->focusCell(at(key, "mass"));
+        f.grid->type(text);
+        f.grid->press("Enter");
+    }
+    REQUIRE(f.source->view()
+                .setFilter(table::FilterSpec{.columns = {{"mass", table::ColumnFilter{.include = {table::FilterEntry{.gt = "11"}}}}}})
+                .has_value());
+    ui::ValueList const rows = ui::summaryScopeRows(f.source->view(), 0, f.source->view().total().rows);
+    REQUIRE(rows.size() == 2);
+    CHECK(ui::detail::canonicalJson(*rows.at(0).field("mass")) == R"({"num":12,"den":1,"dp":2})");   // 12.00
+}
+
+// Mutation: FormRowsSource with no run column (every row's run cell is missing, one run).
+TEST_CASE("grid: a form's rows group into runs by the array's order", "[ui][grid][summary]") {
+    GridFixture f{3};
+    for (auto const& [key, text] : {std::pair{1, "A"}, {2, "A"}, {3, "B"}}) {
+        f.grid->focusCell(at(key, "label"));
+        f.grid->type(text);
+        f.grid->press("Enter");
+    }
+    ui::FormRowsSource& source = f.source->view().source();
+    source.setGroup([](forms::RowState const& row) { return ui::Value{row.field("label")->draft()}; });
+    REQUIRE(source.runRecords().size() == 2);
+    CHECK(*source.runRecords()[0].field("count")->asInt() == 2);
+    CHECK(*source.runRecords()[1].field("count")->asInt() == 1);
+    auto const snapshot = source.snapshot();
+    std::size_t const run = source.columns().size() - 1;
+    CHECK(source.columns()[run].id == std::string{ui::kGroupRunColumn});
+    CHECK(std::get<std::int64_t>(snapshot->cell(1, run)) == 0);
+    CHECK(std::get<std::int64_t>(snapshot->cell(2, run)) == 1);
+}
+
+// A grid of specimens with the table's summaries `stats` (count of labels, mean of masses) and `sd` (deviation).
+constexpr std::string_view kSummaryGridDocument = R"({"vocab":"ui/1","id":"specimens",
+  "models":{"sample":{"type":"Lims_SampleModel"}},
+  "view":{"kind":"column","children":[
+    {"kind":"form","id":"rec","model":"sample","action":"Lims_RecordSpecimens","submit":"explicit"},
+    {"kind":"table","id":"grid","testId":"grid","form":"rec","field":"specimens",
+     "columns":[{"id":"label","field":"label"},{"id":"mass","field":"mass","sortable":true}],
+     "summaries":[{"key":"stats","cells":{
+                     "mass":{"fn":"mean","args":[{"map":{"ref":"rows"},"as":"r","to":{"ref":"r.mass"}}]},
+                     "label":{"fn":"count","args":[{"ref":"rows"}]}}},
+                  {"key":"sd","cells":{
+                     "mass":{"fn":"stdev","args":[{"map":{"ref":"rows"},"as":"r","to":{"ref":"r.mass"}},2]}}}]}]}})";
+
+// The grid grouped by label, each run's heading its key and its summary `m` the mean of its masses.
+constexpr std::string_view kGroupSummaryDocument = R"({"vocab":"ui/1","id":"specimens",
+  "models":{"sample":{"type":"Lims_SampleModel"}},
+  "view":{"kind":"column","children":[
+    {"kind":"form","id":"rec","model":"sample","action":"Lims_RecordSpecimens","submit":"explicit"},
+    {"kind":"table","id":"grid","testId":"grid","form":"rec","field":"specimens",
+     "columns":[{"id":"label","field":"label"},{"id":"mass","field":"mass","sortable":true}],
+     "group":{"by":{"ref":"row.label"},"heading":[{"kind":"text","text":{"ref":"row.key"}}],
+              "summaries":[{"key":"m","cells":{
+                 "mass":{"fn":"mean","args":[{"map":{"ref":"rows"},"as":"r","to":{"ref":"r.mass"}}]}}}]}}]}})";
+
+std::string massesBody(std::vector<std::pair<std::string, int>> const& rows) {
+    std::string body = R"({"sampleId":1,"specimens":[)";
+    for (std::size_t at = 0; at < rows.size(); ++at) {
+        body += (at == 0 ? "" : ",") + std::string{R"({"label":")"} + rows.at(at).first + R"(","mass":{"num":)" +
+                std::to_string(rows.at(at).second * 100) + R"(,"den":100,"dp":2}})";
+    }
+    return body + "]}";
+}
+
+void addRecordAction(ui::testing::TableHarness& h) {
+    ui::testing::addAction(h, "Lims_RecordSpecimens", std::string{morph::test::grid::kSpecimens},
+                           ui::ActionInfo{.modelType = "Lims_SampleModel"});
+}
+
+// Mutation: summaries evaluated once at lowering (they do not follow a committed value).
+TEST_CASE("summary: mean and stdev follow every committed value", "[ui][grid][summary][interpreter]") {
+    ui::testing::TableHarness h;
+    addRecordAction(h);
+    auto const screen = h.mount(kSummaryGridDocument);
+    forms::FormSession& form = *ui::testing::elementOf(*screen, "rec").form;
+    form.prefill(massesBody({{"a", 10}, {"b", 12}, {"c", 14}}));
+    h.settle();
+    CHECK(h.text("summary_stats_mass") == "12.00");
+    CHECK(h.text("summary_sd_mass") == "2.00");
+    CHECK(h.text("summary_stats_label") == "3");
+    int const table = h.byTestId("Table", "grid");
+    CHECK(ui::testing::rowKeys(h, table) == std::vector<std::string>{"1", "2", "3", "\x1Fsummary:stats", "\x1Fsummary:sd"});
+    h.backend.clickCell(table, 2, 1);   // (3, mass)
+    h.settle();
+    h.backend.typeInto(table, "16.00");
+    h.settle();
+    h.backend.press(table, "Enter");
+    h.settle();
+    CHECK(form.field("specimens[2].mass").draft() == "16.00");
+    CHECK(h.text("summary_stats_mass") == "12.67");   // 38/3 at the column's 2 places
+}
+
+// Review Focus 1, summary half. Mutation: mean of [] shown as "0" (summaryText formatting null as a number).
+TEST_CASE("summary: over no rows", "[ui][grid][summary][interpreter]") {
+    ui::testing::TableHarness h;
+    addRecordAction(h);
+    auto const screen = h.mount(kSummaryGridDocument);
+    ui::testing::elementOf(*screen, "rec").form->prefill(R"({"sampleId":1,"specimens":[]})");
+    h.settle();
+    CHECK(h.text("summary_stats_label") == "0");
+    CHECK(h.text("summary_stats_mass").empty());
+}
+
+// Mutations: a group's summary evaluated over every row of the table (both runs show 12.00); a sorted grouped grid not
+// led by the run column (A's rows leave their run).
+TEST_CASE("summary: group summaries are per run", "[ui][grid][summary][interpreter]") {
+    ui::testing::TableHarness h;
+    addRecordAction(h);
+    auto const screen = h.mount(kGroupSummaryDocument);
+    forms::FormSession& form = *ui::testing::elementOf(*screen, "rec").form;
+    form.prefill(massesBody({{"A", 10}, {"A", 12}, {"B", 14}}));
+    h.settle();
+    CHECK(h.text("summary_0_m_mass") == "11.00");
+    CHECK(h.text("summary_1_m_mass") == "14.00");
+    int const table = h.byTestId("Table", "grid");
+    CHECK(ui::testing::rowKeys(h, table) == std::vector<std::string>{"\x1Fgroup:\\\"A\\\":0", "1", "2", "\x1Fsummary:0/m",
+                                                        "\x1Fgroup:\\\"B\\\":0", "3", "\x1Fsummary:1/m"});
+    // Enter down from (2, mass) lands on (3, mass): the summary and the heading between are passed over.
+    h.backend.clickCell(table, 2, 1);
+    h.settle();
+    h.backend.typeInto(table, "12.00");
+    h.settle();
+    h.backend.press(table, "Enter");
+    h.settle();
+    CHECK(h.backend.focusCell(table) == std::pair{std::size_t{5}, std::size_t{1}});   // (3, mass), mounted row 5
+    // Sorted by mass descending: each run keeps its rows, A's now 2 then 1, and its summary is still 11.00.
+    h.backend.clickHeader(table, 1);
+    h.settle();
+    h.backend.clickHeader(table, 1);
+    h.settle();
+    CHECK(ui::testing::rowKeys(h, table) == std::vector<std::string>{"\x1Fgroup:\\\"A\\\":0", "2", "1", "\x1Fsummary:0/m",
+                                                        "\x1Fgroup:\\\"B\\\":0", "3", "\x1Fsummary:1/m"});
+    CHECK(h.text("summary_0_m_mass") == "11.00");
+}
+
+// Mutation: the loader checking `summaries` on the table node and not on its group part (the second loads).
+TEST_CASE("summary: a model-backed table refuses summaries", "[ui][summary][interpreter]") {
+    ui::testing::TableHarness h;
+    addRecordAction(h);
+    auto const refusal = [&h](std::string const& text) {
+        auto const loaded = ui::loadDocumentText(text, ui::LoadOptions{.catalog = h.session.options().catalog});
+        return loaded.has_value() ? std::string{} : loaded.error().reason;
+    };
+    constexpr std::string_view kModelTable = R"({"vocab":"ui/1","id":"m","models":{"m":{"type":"Lims_SampleModel"}},
+      "view":{"kind":"table","id":"t","model":"m","table":"samples",SUMMARIES}})";
+    auto const with = [&](std::string_view summaries) {
+        std::string text{kModelTable};
+        text.replace(text.find("SUMMARIES"), std::string_view{"SUMMARIES"}.size(), summaries);
+        return text;
+    };
+    CHECK(refusal(with(R"("summaries":[{"key":"s","cells":{}}])")).find("refuses `summaries`") != std::string::npos);
+    CHECK(refusal(with(R"("group":{"by":{"lit":1},"heading":[{"kind":"text","text":"h"}],"summaries":[{"key":"s","cells":{}}]})"))
+              .find("refuses `summaries`") != std::string::npos);
+    // On a grid, a summary's position is bottom or top, and its cells name the grid's columns.
+    std::string top{kSummaryGridDocument};
+    top.replace(top.find(R"({"key":"sd",)"), std::string_view{R"({"key":"sd",)"}.size(),
+                R"({"key":"sd","position":"middle",)");
+    CHECK(refusal(top).find("`bottom` or `top`") != std::string::npos);
+    CHECK(refusal(std::string{kSummaryGridDocument}).empty());
+}
+
+// Mutation: the loader not walking a band's child bands (the four-level band loads).
+TEST_CASE("bands: the loader refuses bands a table cannot draw", "[ui][bands][interpreter]") {
+    auto const refusal = [](std::string const& bands) {
+        std::string const text = R"({"vocab":"ui/1","id":"b","state":{"items":{"init":{"lit":[]}}},
+          "view":{"kind":"table","id":"t","rows":{"ref":"items"},"columns":[{"id":"a"},{"id":"b"}],"bands":)" +
+                                 bands + "}}";
+        auto const loaded = ui::loadDocumentText(text, ui::LoadOptions{});
+        return loaded.has_value() ? std::string{} : loaded.error().reason;
+    };
+    CHECK(refusal(R"([{"label":"AB","columns":{"lit":["a","b"]}}])").empty());
+    CHECK(refusal(R"([{"label":"Stray","columns":{"lit":["c"]}}])").find("Stray") != std::string::npos);
+    CHECK(refusal(R"([{"label":"One","columns":{"lit":["a"]},"bands":[{"label":"Two","columns":{"lit":["a"]},"bands":[
+                     {"label":"Three","columns":{"lit":["a"]},"bands":[{"label":"Four","columns":{"lit":["a"]}}]}]}]}])")
+              .find("Four") != std::string::npos);
+    CHECK(refusal(R"([{"label":"Parent","columns":{"lit":["a"]},"bands":[{"label":"Child","columns":{"lit":["b"]}}]}])")
+              .find("Child") != std::string::npos);
+}
+
+// Mutation: the lowering leaving a table's `bands` out of the table's options (the backend records no bands).
+TEST_CASE("bands: a document's bands reach the backend over the layout", "[ui][bands][interpreter]") {
+    ui::testing::TableHarness h;
+    addRecordAction(h);
+    std::string text{kSummaryGridDocument};
+    text.replace(text.find(R"("summaries":)"), std::string_view{R"("summaries":)"}.size(),
+                 R"("bands":[{"label":"Specimen","unit":"g","columns":{"lit":["label","mass"]}}],"summaries":)");
+    auto const screen = h.mount(text);
+    h.settle();
+    int const table = h.byTestId("Table", "grid");
+    CHECK(h.backend.prop(table, "bands") == "[0:Specimen|g@0+2]");
 }
 
 }  // namespace
