@@ -637,6 +637,34 @@ TEST_CASE("grid: a unit the user picks stays under the unit overlay", "[ui][grid
     CHECK(f.json("rows[0].mass") == R"({"num":2000,"den":1000,"dp":3})");   // 2 kg
 }
 
+// Mutation: the overlay applied after the loaded value (`state.switchUnit(index)` in place of
+// `FormSession::changeAsLoaded` on the first apply): the loaded row shows modified, and a revert returns to kg.
+TEST_CASE("grid: a unit overlay's first unit is part of the loaded row", "[ui][grid][derive]") {
+    std::vector<ui::GridColumn> columns;
+    columns.push_back(ui::GridColumn{.id = "mass", .label = "Mass", .field = "mass", .value = {}, .fieldOf = {},
+                                     .decimals = {},
+                                     .unit = [](forms::RowState const&) { return std::optional<std::string>{"g"}; }});
+    columns.push_back(ui::GridColumn{.id = "note", .label = "Note", .field = "note", .value = {}});
+    GridFixture f{morph::test::grid::GridSpec{.schema = std::string{kMassUnits},
+                                              .body = R"({"rows":[{"mass":{"num":2,"den":1,"dp":3}}]})",
+                                              .array = "rows",
+                                              .columns = std::move(columns),
+                                              .options = {}}};
+    f.h.settle();
+    forms::FieldState& mass = f.form->field("rows[0].mass");
+    CHECK(mass.unit().peek() == 1);                                // shown in g, converted as the unit select does
+    CHECK(mass.draft() == "2.000");
+    CHECK_FALSE(f.form->modified("rows#1.mass"));
+    CHECK_FALSE(f.source->rowModified(ui::Key{std::int64_t{1}}));
+    CHECK_FALSE(enabledOf(entry(f.grid->cellEntries(ui::Key{std::int64_t{1}}, "mass"), "Revert cell")));
+    mass.switchUnit(0);                                            // the user enters it in kg
+    CHECK(f.form->modified("rows#1.mass"));
+    f.form->revert("rows#1.mass");
+    CHECK(mass.unit().peek() == 1);                                // back to the overlay's g
+    CHECK(mass.draft() == "2.000");
+    CHECK_FALSE(f.form->modified("rows#1.mass"));
+}
+
 // Mutation: a fetch per row (no shared fetch).
 TEST_CASE("grid: choices per row", "[ui][grid][derive]") {
     GridFixture f{morph::test::grid::GridSpec{

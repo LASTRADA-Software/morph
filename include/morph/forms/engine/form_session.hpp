@@ -1541,6 +1541,47 @@ public:
         return load;
     }
 
+    /// @brief Runs a programmatic change of a field as part of how it was loaded: a scalar that was not modified is
+    ///        recorded as loaded with what it holds after @p change, so the change draws no modified mark and a revert
+    ///        returns to it, and the top-level field holding it counts as loaded when it did before. What a grid's per-row
+    ///        `unit` overlay first gives a loaded row is applied this way. A modified field, and a member of a row added
+    ///        since the load, stay as they are: @p change is then an ordinary programmatic change.
+    /// @param field  The field changed. A member of this session.
+    /// @param change The change; nothing is submitted for it.
+    void changeAsLoaded(FieldState& field, std::function<void()> const& change) {
+        std::optional<std::size_t> top;
+        bool topLoaded = false;
+        bool cellLoaded = false;
+        runtime().untracked([&] {
+            for (std::size_t index = 0; index < _fields.size(); ++index) {
+                std::string const& name = _fields.at(index)->spec().name;
+                std::string const& path = field.path();
+                if (path == name || (path.starts_with(name) && path.size() > name.size() &&
+                                     (path.at(name.size()) == '.' || path.at(name.size()) == '#'))) {
+                    top = index;
+                    topLoaded = _fields.at(index)->snapshot() == _loaded.at(index);
+                }
+            }
+            cellLoaded = _loadedCells.contains(field.path()) && !modified(field);
+        });
+        runtime().batch([&] {
+            change();
+            _core->markProgrammatic();
+        });
+        if (cellLoaded) {
+            runtime().untracked([&] {
+                _loadedCells.insert_or_assign(
+                    field.path(), LoadedCell{.text = field.draft(), .unit = field.unit().peek()});
+            });
+        }
+        if (top && topLoaded) {
+            _loaded.at(*top) = _fields.at(*top)->snapshot();
+        }
+        if (cellLoaded || topLoaded) {
+            _loadGeneration.set(_loadGeneration.peek() + 1);
+        }
+    }
+
     /// @brief Whether a submission is in flight. Tracked.
     /// @return `true` while one is.
     [[nodiscard]] bool pending() const { return _mutation.pending(); }
