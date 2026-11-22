@@ -198,7 +198,7 @@ MorphWidget {
     // A right click or a long press at `x`: the menu of the cell there. The table takes the focus over a source, as a
     // click does.
     function openCellMenu(x: real) {
-        if (!root.table || !root.table.hasCellMenu || root.heading)
+        if (!root.table || !root.table.hasCellMenu || root.heading || root.summary)
             return
         const column = root.columnAt(x)
         if (column < 0)
@@ -592,11 +592,11 @@ MorphWidget {
 
     // A chord the table declares comes before the row's activation.
     Keys.onReturnPressed: event => {
-        if (!root.heading && !(root.table && root.table.takeOwnChord(event)))
+        if (!root.heading && !root.summary && !(root.table && root.table.takeOwnChord(event)))
             root.fire("activate", undefined)
     }
     Keys.onEnterPressed: event => {
-        if (!root.heading && !(root.table && root.table.takeOwnChord(event)))
+        if (!root.heading && !root.summary && !(root.table && root.table.takeOwnChord(event)))
             root.fire("activate", undefined)
     }
 
@@ -946,7 +946,7 @@ MorphWidget {
     // A click, as the row takes it: by the row's own handler, or by a spanning cell's backdrop, which passes its point
     // in the row's coordinates (a point past the row's bottom).
     function tapped(modifiers: int, tapCount: int, x: real, y: real, fromRow: bool) {
-        if (root.heading)
+        if (root.heading || root.summary)
             return
         // The backdrop takes a tap in a spanning or covered column; the row's own handler leaves it.
         if (fromRow && root.inSpannedColumn(x))

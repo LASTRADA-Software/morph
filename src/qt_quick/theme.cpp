@@ -33,7 +33,7 @@ namespace morph::qt_quick {
 namespace {
 
 /// The `Theme` property each colour token of the set sets.
-constexpr std::array<std::pair<std::string_view, char const*>, 47> kColorProperties = {{
+constexpr auto kColorProperties = std::to_array<std::pair<std::string_view, char const*>>({
     {"color.text", "text"},
     {"color.muted", "muted"},
     {"color.err", "error"},
@@ -82,7 +82,21 @@ constexpr std::array<std::pair<std::string_view, char const*>, 47> kColorPropert
     {"color.disabled.text", "disabledText"},
     {"color.disabled.bg", "disabledFill"},
     {"color.disabled.border", "disabledBorder"},
-}};
+});
+
+/// How many colour tokens the theme defines.
+/// @return The count.
+[[nodiscard]] consteval std::size_t colorTokenCount() {
+    std::size_t count = 0;
+    for (ui::ThemeTokenSpec const& token : ui::kThemeTokens) {
+        count += token.kind == ui::ThemeTokenKind::Color ? 1 : 0;
+    }
+    return count;
+}
+
+// Every colour token reaches a `Theme` property: all but `color.background`, which `applyTheme` sets on its own.
+static_assert(kColorProperties.size() + 1 == colorTokenCount(),
+              "a colour token is missing from kColorProperties, or one is listed that the theme does not define");
 
 /// The colour tokens that have no default, with the `Theme` flag that tells whether the theme sets each.
 constexpr std::array<std::pair<std::string_view, char const*>, 3> kOptionalColors = {{

@@ -310,6 +310,10 @@ void TableImpl::setRowSummary(ui::Widget& row) {
         throw std::logic_error{"morph::qt_quick: setRowSummary of a widget that is not this table's row"};
     }
     tableRow->write("summary", true);
+    if (tableRow->key() && !std::ranges::contains(_summaryKeys, *tableRow->key())) {
+        _summaryKeys.push_back(*tableRow->key());
+    }
+    mark();
 }
 
 void TableImpl::setRowSpans(ui::Widget& row, std::vector<ui::RowSpan> const& spans) {
@@ -390,7 +394,7 @@ void TableImpl::setCellMenu(std::function<std::vector<ui::MenuEntry>(ui::Key con
 }
 
 void TableImpl::openCellMenu(TableRowImpl const& row, std::size_t column) {
-    if (!_cellMenu || !row.key() || !row.reachable() || heading(row) || item() == nullptr) {
+    if (!_cellMenu || !row.key() || !row.reachable() || passive(row) || item() == nullptr) {
         return;
     }
     ui::Key const key = *row.key();
@@ -868,6 +872,8 @@ bool TableImpl::marked(ItemBase const& row) { return row.read("selected").toBool
 
 bool TableImpl::heading(ItemBase const& row) { return row.read("heading").toBool(); }
 
+bool TableImpl::passive(ItemBase const& row) { return heading(row) || row.read("summary").toBool(); }
+
 void TableImpl::mark() const {
     // Every child of a table is one of its rows; the mount makes nothing else in one.
     for (ItemBase const* const child : children()) {
@@ -876,7 +882,7 @@ void TableImpl::mark() const {
             continue;
         }
         bool const selected =
-            row->key() && !heading(*row) &&
+            row->key() && !passive(*row) &&
             (_viewExcept ? !std::ranges::contains(*_viewExcept, *row->key())
                          : std::ranges::find(_requested, *row->key()) != _requested.end());
         row->write("selected", selected);
@@ -904,14 +910,20 @@ std::vector<ui::Key> TableImpl::existingSelection() const {
 }
 
 std::vector<ui::Key> TableImpl::rowKeys() const {
-    // Below a virtualized table's threshold every row is realized, in row order.
+    // Below a virtualized table's threshold every row is realized, in row order. A summary row is never selected.
     if (!_existingOrder.empty()) {
-        return _existingOrder;
+        std::vector<ui::Key> keys;
+        for (ui::Key const& key : _existingOrder) {
+            if (!std::ranges::contains(_summaryKeys, key)) {
+                keys.push_back(key);
+            }
+        }
+        return keys;
     }
     std::vector<ui::Key> keys;
     for (ItemBase const* const child : children()) {
         auto const* const row = dynamic_cast<TableRowImpl const*>(child);
-        if (row != nullptr && row->key() && !heading(*row)) {
+        if (row != nullptr && row->key() && !passive(*row)) {
             keys.push_back(*row->key());
         }
     }
@@ -919,7 +931,7 @@ std::vector<ui::Key> TableImpl::rowKeys() const {
 }
 
 void TableImpl::tapped(TableRowImpl const& row, ui::RowClick click) {
-    if (_mode == ui::SelectionMode::None || !row.key() || !row.reachable() || heading(row)) {
+    if (_mode == ui::SelectionMode::None || !row.key() || !row.reachable() || passive(row)) {
         return;
     }
     ui::Key const key = *row.key();
@@ -1009,7 +1021,7 @@ void TableImpl::select(std::vector<ui::Key> next, ui::SelectionChange change) {
 }
 
 void TableImpl::activated(TableRowImpl const& row) const {
-    if (!row.key() || !row.reachable() || !_onActivate || heading(row)) {
+    if (!row.key() || !row.reachable() || !_onActivate || passive(row)) {
         return;
     }
     auto const handler = _onActivate;

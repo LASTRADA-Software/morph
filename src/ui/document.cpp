@@ -296,7 +296,7 @@ constexpr std::array<KeySpec, 7> kForEachKeys = {{{"rows", Shape::Expr, {}, kReq
                                                   {"divided", Shape::Flag},
                                                   {"children", Shape::Nodes, {}, kInner}}};
 /// @brief The keys of `table`.
-constexpr std::array<KeySpec, 49> kTableKeys = {{{"rows", Shape::Expr},
+constexpr auto kTableKeys = std::to_array<KeySpec>({{"rows", Shape::Expr},
                                                  {"form", Shape::Text},
                                                  {"field", Shape::Text},
                                                  {"enterMoves", Shape::Text},
@@ -344,7 +344,7 @@ constexpr std::array<KeySpec, 49> kTableKeys = {{{"rows", Shape::Expr},
                                                  {"headerMenu", Shape::Parts, "menuItem"},
                                                  {"headerEnabled", Shape::Condition},
                                                  {"bands", Shape::Parts, "band"},
-                                                 {"summaries", Shape::Parts, "summary"}}};
+                                                 {"summaries", Shape::Parts, "summary"}});
 /// @brief The keys of a `table` column part; `tone` and `tooltip` are read in the row's scope.
 constexpr std::array<KeySpec, 29> kColumnKeys = {{{"id", Shape::Name},
                                                   {"field", Shape::Text},
@@ -377,7 +377,7 @@ constexpr std::array<KeySpec, 29> kColumnKeys = {{{"id", Shape::Name},
                                                   {"placeholder", Shape::Expr}}};
 /// @brief The keys of a form field overlay's `grid` part: the keys a `table` over a `form` takes beyond its `form` and
 ///        `field`, its columns, walk and activation, its layout, menus and filters.
-constexpr std::array<KeySpec, 16> kGridPartKeys = {{{"columns", Shape::Parts, "column"},
+constexpr auto kGridPartKeys = std::to_array<KeySpec>({{"columns", Shape::Parts, "column"},
                                                     {"enterMoves", Shape::Text},
                                                     {"walk", Shape::Text},
                                                     {"appendRows", Shape::Flag},
@@ -392,27 +392,27 @@ constexpr std::array<KeySpec, 16> kGridPartKeys = {{{"columns", Shape::Parts, "c
                                                     {"headerEnabled", Shape::Condition},
                                                     {"testId", Shape::Text},
                                                     {"bands", Shape::Parts, "band"},
-                                                    {"summaries", Shape::Parts, "summary"}}};
+                                                    {"summaries", Shape::Parts, "summary"}});
 /// @brief The keys of a `table` column group part: the group's id, its label and its columns' ids, a literal list.
 constexpr std::array<KeySpec, 3> kColumnGroupKeys = {
     {{"id", Shape::Name, {}, kRequired}, {"label", Shape::Expr}, {"columns", Shape::Expr, {}, kRequired}}};
 /// @brief The keys of a `table` group part: the value its rows are grouped by, and the heading drawn before each
 ///        group, both read in the row scope, and the summary rows drawn after each group.
-constexpr std::array<KeySpec, 3> kTableGroupKeys = {{{"by", Shape::Expr, {}, kInner | kRequired},
+constexpr auto kTableGroupKeys = std::to_array<KeySpec>({{"by", Shape::Expr, {}, kInner | kRequired},
                                                      {"heading", Shape::Nodes, {}, kInner | kRequired},
-                                                     {"summaries", Shape::Parts, "summary"}}};
+                                                     {"summaries", Shape::Parts, "summary"}});
 /// @brief The keys of a header band part: its text, its unit, its columns' ids (a literal list) and the bands one
 ///        level down.
-constexpr std::array<KeySpec, 4> kBandKeys = {{{"label", Shape::Text},
+constexpr auto kBandKeys = std::to_array<KeySpec>({{"label", Shape::Text},
                                                {"unit", Shape::Text},
                                                {"columns", Shape::Expr, {}, kRequired},
-                                               {"bands", Shape::Parts, "band"}}};
+                                               {"bands", Shape::Parts, "band"}});
 /// @brief The keys of a summary row part: its key, its label, where it is drawn, and its cells' expressions by column
 ///        id, read in a scope with `rows` and `column`.
-constexpr std::array<KeySpec, 4> kSummaryKeys = {{{"key", Shape::Text, {}, kRequired},
+constexpr auto kSummaryKeys = std::to_array<KeySpec>({{"key", Shape::Text, {}, kRequired},
                                                   {"label", Shape::Expr},
                                                   {"position", Shape::Text},
-                                                  {"cells", Shape::ExprRecord}}};
+                                                  {"cells", Shape::ExprRecord}});
 /// @brief The keys of `dateTimeInput`.
 constexpr std::array<KeySpec, 6> kDateTimeKeys = {{{"value", Shape::Expr},
                                                    {"mode", Shape::Expr},
@@ -584,7 +584,7 @@ constexpr std::array<KeySpec, 1> kDragKeys = {{{"payload", Shape::Expr, {}, kReq
 constexpr std::array<KeySpec, 2> kDropKeys = {{{"accepts", Shape::Expr}, {"onDrop", Shape::Commands}}};
 
 /// @brief The view node kinds of `ui/1` and the part kinds inside them.
-constexpr std::array<KindSpec, 65> kKinds = {{
+constexpr auto kKinds = std::to_array<KindSpec>({
     {"text", kTextKeys, kField},
     {"button", kButtonKeys},
     {"textInput", kTextInputKeys, kField | kWritable, kInputValues},
@@ -650,7 +650,7 @@ constexpr std::array<KindSpec, 65> kKinds = {{
     {"fields", {}, kPart},
     {"series", kSeriesKeys, kPart | kRowScope},
     {"line", kLineKeys, kPart},
-}};
+});
 // NOLINTEND(modernize-use-designated-initializers,readability-trailing-comma)
 
 /// @brief A literal length of a page node: an integer count of micrometres.

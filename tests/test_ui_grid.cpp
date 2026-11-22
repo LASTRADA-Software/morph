@@ -1940,4 +1940,47 @@ TEST_CASE("summary: a table over rows draws its summaries and its runs'", "[ui][
     }
 }
 
+// Filters a table's column `equals` a text through its filter menu, then closes the menu.
+void filterEquals(ui::testing::TableHarness& h, int table, std::size_t column, std::string_view text) {
+    using namespace std::chrono_literals;
+    ui::testing::clickFilter(h, table, column);
+    h.backend.choose(h.byTestId("Select", "table_filter_op_1"), ui::Key{std::string{"equals"}});
+    h.settle();
+    h.backend.edit(h.byTestId("TextInput", "table_filter_operand_1"), std::string{text});
+    h.settle();
+    h.advance(250ms);
+    h.backend.dismiss(h.byTestId("Dialog", "table_filter"));
+    h.settle();
+}
+
+// Mutation: a grid's summary read over the source's rows, which ignore the filter (the mean stays 12.00).
+TEST_CASE("summary: a grid's summary follows the filter", "[ui][grid][summary][interpreter]") {
+    ui::testing::TableHarness h;
+    addRecordAction(h);
+    auto const screen = h.mount(kSummaryGridDocument);
+    ui::testing::elementOf(*screen, "rec").form->prefill(massesBody({{"A", 10}, {"A", 12}, {"B", 14}}));
+    h.settle();
+    CHECK(h.text("summary_stats_mass") == "12.00");
+    filterEquals(h, h.byTestId("Table", "grid"), 0, "A");
+    CHECK(h.text("summary_stats_mass") == "11.00");
+    CHECK(h.text("summary_stats_label") == "2");
+}
+
+// A table over rows whose summary `total` is the sum of `mass`.
+constexpr std::string_view kRowsFilterDocument = R"({"vocab":"ui/1","id":"lots",
+  "state":{"items":{"init":{"lit":[{"id":1,"g":"A","mass":10},{"id":2,"g":"A","mass":12},{"id":3,"g":"B","mass":14}]}}},
+  "view":{"kind":"table","id":"t","testId":"t","rows":{"ref":"items"},"columns":[{"id":"g"},{"id":"mass"}],
+          "summaries":[{"key":"total","cells":{"mass":{"fn":"sum","args":[
+             {"map":{"ref":"rows"},"as":"r","to":{"ref":"r.mass"}}]}}}]}})";
+
+// Mutation: a rows table's summary read over the rows the document gives, which ignore the filter (the total stays 36).
+TEST_CASE("summary: a table over rows' summary follows the filter", "[ui][summary][interpreter]") {
+    ui::testing::TableHarness h;
+    auto const screen = h.mount(kRowsFilterDocument);
+    h.settle();
+    CHECK(h.text("summary_total_mass") == "36");
+    filterEquals(h, h.byTestId("Table", "t"), 0, "A");
+    CHECK(h.text("summary_total_mass") == "22");
+}
+
 }  // namespace
