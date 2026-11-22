@@ -446,7 +446,12 @@ keeps its operands' 0 places and still fills 0.29 of a bar.
   reported once for the table (`rowSpans is <v>; a span is {column: a column's id, rows: an integer from 1, columns: an
   integer from 1}`); `null` and `[]` give none. A span's `columns` is cut by the table's layout (`cutColumns`): it covers
   its column, then each next visible column while that is the next declared one, so a span across a column the user
-  moved away or hid stops there, and a span whose own column is hidden is dropped. The table's `bands` parts become
+  moved away or hid stops there, and a span whose own column is hidden is dropped. A table over `rows` with
+  `summaries`, or with a `group` part that has them, is mounted over a `SummaryRows` it keeps over its page's entries:
+  the table's summaries before or after the page's rows and each run's after the run. A summary reads `rows` as every
+  row of the view in view order (a paged table's summary is the same on every page), a run's summary its run's rows,
+  and `column` the column's id; its cell shows the value by the column's display parts, as a default cell does, and
+  its part's `label` names its row. The table's `bands` parts become
   `TableOptions::bands`. What follows from the rows'
   order (a span past the last row, over a group heading, onto a covered column) is the mount's to refuse. The
   pipeline pages before the table sees its rows, so a span reaching past the page's last row is refused and
@@ -804,8 +809,11 @@ keeps its operands' 0 places and still fills 0.29 of a bar.
   order already keeps a run together. A grid with a `group` or with `summaries` is mounted over a `SummaryRows` built
   over the grid's rows, which the element keeps: the table's `summaries` before (`position: "top"`) or after its rows,
   each run's after the run, each run's heading (the group's `heading`, read in the run record's scope, as a `rows`
-  table's) before it. The grid's walk, paste, cell rectangle and copy stay over the grid's own rows; a click or a move
-  that lands on a summary or heading row goes to the nearest data row. A summary cell's text is its part's `cells`
+  table's) before it. The grid's walk, paste and cell rectangle stay over the grid's own rows: a click, a move or a
+  rectangle's corner that lands on a summary or heading row goes to the nearest data row (`SummaryRows::data`), and
+  the grid's focus is shown at its row's mounted index (`SummaryRows::mounted`). A copy of a rectangle copies the rows
+  between its corners as they are drawn, a summary row's cells as their text (`GridController::copySummaries`), a
+  heading row not at all. A summary cell's text is its part's `cells`
   expression for the column, read with `rows` the records of the data rows in its scope (`summaryScopeRows` over the
   grid's view, so a summary follows the filter) and `column` the column's id, shown at its member's places and empty
   for `null`; a column the part does not name shows an empty cell. A summary cell's test id is `summary_<key>_<column>`,

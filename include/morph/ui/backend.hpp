@@ -833,8 +833,8 @@ public:
     virtual void setRowSpans(Widget& row, std::vector<RowSpan> const& spans) = 0;
 
     /// @brief Makes a row a summary row; called once, right after `setRowKey`, for a summary row. It is drawn on the
-    ///        theme's `cellSummary` surface, never selected, activated, focused for an edit or pasted into, and
-    ///        copied when a copy covers it. Its cells are set as any row's.
+    ///        theme's summary surface (`color.table.summary`), never selected, activated or focused for an edit, and
+    ///        its cells are set as any row's. Pasting into it and copying it are the grid's.
     /// @param row One of this table's rows.
     virtual void setRowSummary(Widget& row) { static_cast<void>(row); }
 

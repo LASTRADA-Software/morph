@@ -38,8 +38,9 @@ namespace morph::tui::detail {
 /// header ends in its filter button, `▿`, drawn `▾` while `setFiltered` names the column, which a click presses
 /// (`setOnFilter`). Groups (`setColumnGroups`) draw a line above the headers: each group's label over the visible
 /// columns it names, ending in its own filter button. Bands (`setBands`) draw a line per level above that, outermost
-/// first: each run's label, then its unit in brackets, from the run's first drawn column, cut at its last. With menus (`setMenu`), the header line keeps its last two cells
-/// for a `⋯` that opens the table's menu, so no column's header or filter button lies under it; a header's menu opens
+/// first: each run's label, then its unit in brackets, from the run's first drawn column, cut at its last. With menus
+/// (`setMenu`), the header line keeps its last two cells for a `⋯` that opens the table's menu, so no column's header or
+/// filter button lies under it; a header's menu opens
 /// on a right click on the header, or with Shift+F10 or the context-menu key on the focused header. A menu is a list
 /// below its header, as a button-style menu's is. The terminal draws no drag or resize handle: a move is
 /// Ctrl+Shift+Left and Ctrl+Shift+Right on the focused header, and nothing resizes a column. With a cell menu
@@ -55,7 +56,8 @@ namespace morph::tui::detail {
 /// its menu, and Down returns to the rows. Ctrl+C on the table asks to copy (`setOnCopy`) wherever its focus is. A
 /// heading row
 /// (`setRowHeading`) is one cell across every column; it draws no mark or box, the cursor passes over it, a click on
-/// it does nothing, and Ctrl+A, a range and the header box leave it out.
+/// it does nothing, and Ctrl+A, a range and the header box leave it out. A summary row (`setRowSummary`) draws its
+/// cells as any row does and `Σ` in its gutter; like a heading, it is never selected, activated or the cursor's.
 ///
 /// Up, Down, Home and End move the cursor, and PageUp and PageDown by as many rows as fill the room below the header;
 /// Space selects the cursor row (Single) or toggles it and makes it the anchor (Multiple); Enter selects it in Single
@@ -110,6 +112,7 @@ public:
     void setRowLabel(ui::Widget& row, std::string_view label) override;
     /// Throws std::logic_error when @p row is not one of this table's rows.
     void setRowHeading(ui::Widget& row) override;
+    void setRowSummary(ui::Widget& row) override;
     /// Throws std::logic_error when @p row is not one of this table's rows.
     void setRowSpans(ui::Widget& row, std::vector<ui::RowSpan> const& spans) override;
     void setSelection(std::vector<ui::Key> const& selection) override;
@@ -257,6 +260,7 @@ private:
         WidgetBase* origin = nullptr;  ///< The row that gives the span.
         WidgetBase* cell = nullptr;    ///< The spanning cell, a child of the table's view while the plan holds it.
         std::size_t column = 0;
+        std::size_t columns = 1;  ///< How many columns it covers from `column`, its own included.
         std::size_t first = 0;  ///< The origin's place among the shown rows.
         std::size_t last = 0;   ///< The last covered row's place.
     };
@@ -279,7 +283,7 @@ private:
     /// The lines above the rows: none without a header, else the header line, under the group line when there are
     /// groups.
     [[nodiscard]] int headerLines() const noexcept;
-    // The lines the bands take: one per level.
+    /// The lines the bands take: one per level.
     [[nodiscard]] int bandLines() const noexcept;
     /// The sort chain's place of @p index, from 0, or none.
     [[nodiscard]] std::optional<std::size_t> chainPlace(std::size_t index) const;
@@ -295,6 +299,7 @@ private:
     void clickGroups(int x);
     /// Draws the group line above the headers.
     void paintGroups(::core::tui::Canvas& canvas, std::vector<DrawnColumn> const& columns) const;
+    /// Draws each band run on its level's line, over the drawn columns at the visible places it names.
     void paintBands(::core::tui::Canvas& canvas, std::vector<DrawnColumn> const& columns) const;
     /// The keys of a focused header; Ignored for any other key, which then goes on outwards.
     [[nodiscard]] ::core::tui::EventResult headerKey(::core::tui::KeyEvent const& key);
@@ -327,6 +332,10 @@ private:
     [[nodiscard]] WidgetBase* rowWith(ui::Key const& key) const;
     [[nodiscard]] bool isMarked(WidgetBase const* row) const;
     [[nodiscard]] bool isHeading(WidgetBase const* row) const { return _headings.contains(row); }
+    /// Whether a row is never selected, activated or the cursor's: a heading or a summary row.
+    [[nodiscard]] bool isPassive(WidgetBase const* row) const {
+        return _headings.contains(row) || _summaries.contains(row);
+    }
     /// The first place from @p place among @p rows, toward the end (or the start when there is none there), that is
     /// not a heading; @p place itself when every row is one.
     [[nodiscard]] std::size_t dataPlace(std::span<WidgetBase* const> rows, std::size_t place,
@@ -417,6 +426,7 @@ private:
     ui::SelectionMode _mode = ui::SelectionMode::None;
     std::unordered_map<WidgetBase const*, ui::Key> _keys;
     std::unordered_set<WidgetBase const*> _headings;
+    std::unordered_set<WidgetBase const*> _summaries;
     // The marks of each row that has any, and whether the gutter holds a cell for a busy or locked glyph.
     std::unordered_map<WidgetBase const*, ui::RowMarks> _marks;
     bool _markGutter = false;

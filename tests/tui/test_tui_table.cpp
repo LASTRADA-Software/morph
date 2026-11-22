@@ -1942,3 +1942,37 @@ TEST_CASE("tui table: bands draw above the header", "[tui][table][bands]") {
     cells.clear();
     row.reset();
 }
+
+// Mutations: the terminal table covering only a span's own column (B1 and C1 still drawn); a summary row drawn with a
+// data row's gutter (no `Σ`).
+TEST_CASE("tui table: a span across columns and a summary row", "[tui][table][spans][summary]") {
+    Harness harness{60, 6};
+    auto table = harness.make<TableImpl>(nullptr);
+    table->setColumns({{.label = "A", .width = ui::Sizing::fixed(6)},
+                       {.label = "B", .width = ui::Sizing::fixed(6)},
+                       {.label = "C", .width = ui::Sizing::fixed(6)},
+                       {.label = "D", .width = ui::Sizing::fixed(6)}});
+    std::vector<std::unique_ptr<StackImpl>> rows;
+    std::vector<std::unique_ptr<TextImpl>> cells;
+    std::vector<std::vector<std::string>> const texts{{"wide text here", "B1", "C1", "D1"}, {"A2", "B2", "C2", "D2"}};
+    for (std::size_t at = 0; at < texts.size(); ++at) {
+        rows.push_back(harness.make<StackImpl>(table.get(), ui::Axis::Horizontal));
+        for (std::string const& text : texts.at(at)) {
+            cells.push_back(harness.make<TextImpl>(rows.back().get()));
+            cells.back()->setText(text);
+        }
+        table->setRowKey(*rows.back(), key(static_cast<std::int64_t>(at) + 1));
+    }
+    table->setRowSummary(*rows.at(1));
+    table->setRowSpans(*rows.at(0), {ui::RowSpan{.column = 0, .rows = 1, .columns = 3}});
+    Rows const drawn = harness.draw();
+    REQUIRE(drawn.size() >= 3);
+    CHECK(drawn.at(1).find("wide text here") != std::string::npos);
+    CHECK(drawn.at(1).find("B1") == std::string::npos);
+    CHECK(drawn.at(1).find("C1") == std::string::npos);
+    CHECK(drawn.at(1).find("D1") != std::string::npos);
+    CHECK(drawn.at(2).starts_with("\u03A3"));
+    CHECK(drawn.at(2).find("A2") != std::string::npos);
+    cells.clear();
+    rows.clear();
+}

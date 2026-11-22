@@ -3617,9 +3617,6 @@ private:
                 refuse(where, "a summary row summarises rows the client holds; a model-backed table refuses "
                               "`summaries`, as it refuses `group`");
             }
-            if (node.prop("rows") != nullptr) {
-                refuse(where, "`summaries` are drawn on a grid of a form; a table over `rows` draws none yet");
-            }
             std::set<std::string, std::less<>> keys;
             auto const columns = node.partList("columns");
             for (DocNodePtr const& summary : summaries) {

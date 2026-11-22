@@ -2962,7 +2962,7 @@ TEST_CASE("qt_quick grid: a header click sorts, a Shift-click adds, a Ctrl-click
 }
 
 // Mutation: the QML band item placed from its first run's x to its last run's end (one item, as wide as columns 1 to 4).
-TEST_CASE("qt_quick table: a band draws over each run of its columns and across the pinned edge", "[qt_quick][bands]") {
+TEST_CASE("qt_quick table: a band draws over each run of its columns", "[qt_quick][bands]") {
     Scene scene;
     Rows table = makeTable(scene, {ui::Key{std::int64_t{1}}}, ui::SelectionMode::None);
     table.table->setColumns({{.label = "Name", .width = ui::Sizing::fixed(8)},
@@ -2985,4 +2985,18 @@ TEST_CASE("qt_quick table: a band draws over each run of its columns and across 
     CHECK(first->x() + first->width() == Catch::Approx(left(m2) + m2.width()));
     CHECK(second->x() == Catch::Approx(left(m4)));
     CHECK(second->width() == Catch::Approx(m4.width()));
+}
+
+// Mutation: `setRowSummary` writing nothing (the row's summary surface stays hidden).
+TEST_CASE("qt_quick table: a summary row is drawn on the summary surface", "[qt_quick][summary]") {
+    Scene scene;
+    Rows table = makeTable(scene, {ui::Key{std::int64_t{1}}, ui::Key{std::int64_t{2}}}, ui::SelectionMode::Single);
+    table.table->setRowSummary(*table.rows.at(1));
+    scene.settle();
+    auto const fill = [](ui::Widget& row) {
+        return Scene::itemOf(row).findChild<QQuickItem*>(QStringLiteral("summaryFill"));
+    };
+    REQUIRE(fill(*table.rows.at(1)) != nullptr);
+    CHECK(fill(*table.rows.at(1))->isVisible());
+    CHECK_FALSE(fill(*table.rows.at(0))->isVisible());
 }

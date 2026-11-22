@@ -919,7 +919,7 @@ struct RowSpan {
     ///        giver cuts it where a column the span names was moved away or hidden (`cutColumns`).
     std::size_t columns = 1;
 
-    /// @brief Whether two spans name the same column and count.
+    /// @brief Whether two spans name the same column and counts of rows and columns.
     /// @param other The other span.
     /// @return True when equal.
     [[nodiscard]] bool operator==(RowSpan const& other) const noexcept = default;

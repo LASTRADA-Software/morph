@@ -153,6 +153,15 @@ void TableImpl::setRowHeading(ui::Widget& row) {
     refresh();
 }
 
+void TableImpl::setRowSummary(ui::Widget& row) {
+    auto& base = WidgetBase::of(row);
+    if (base.container() != this) {
+        throw std::logic_error{"morph::tui: setRowSummary of a widget that is not this table's row"};
+    }
+    _summaries.insert(&base);
+    refresh();
+}
+
 void TableImpl::setRowSpans(ui::Widget& row, std::vector<ui::RowSpan> const& spans) {
     auto& base = WidgetBase::of(row);
     if (base.container() != this) {
@@ -200,10 +209,12 @@ void TableImpl::planSpans() {
         }
         auto const cells = cellsOf(rows.at(index));
         for (ui::RowSpan const& span : found->second) {
-            if (span.column >= _columns.size() || span.column >= cells.size() || span.rows < 2 ||
+            if (span.column >= _columns.size() || span.column >= cells.size() || span.rows == 0 ||
                 coveredUntil.at(span.column) > index) {
                 continue;
             }
+            // The columns it covers, its own and the next ones, clipped at the last column.
+            std::size_t const wide = std::max<std::size_t>(1, std::min(span.columns, _columns.size() - span.column));
             std::size_t last = std::min(index + span.rows, rows.size()) - 1;
             for (std::size_t between = index + 1; between <= last; ++between) {
                 if (isHeading(rows.at(between))) {
@@ -211,19 +222,24 @@ void TableImpl::planSpans() {
                     break;
                 }
             }
-            if (last == index) {
+            if (last == index && wide == 1) {
                 continue;
             }
-            coveredUntil.at(span.column) = last + 1;
+            for (std::size_t column = span.column; column < span.column + wide; ++column) {
+                coveredUntil.at(column) = last + 1;
+            }
             plan.push_back({.origin = rows.at(index),
                             .cell = cells.at(span.column),
                             .column = span.column,
+                            .columns = wide,
                             .first = index,
                             .last = last});
-            for (std::size_t between = index + 1; between <= last; ++between) {
+            for (std::size_t between = index; between <= last; ++between) {
                 auto const coveredCells = cellsOf(rows.at(between));
-                if (span.column < coveredCells.size()) {
-                    covered.insert(coveredCells.at(span.column));
+                for (std::size_t column = span.column; column < span.column + wide; ++column) {
+                    if ((between != index || column != span.column) && column < coveredCells.size()) {
+                        covered.insert(coveredCells.at(column));
+                    }
                 }
             }
         }
@@ -309,11 +325,14 @@ std::vector<::core::tui::Rect> TableImpl::spanAreas(::core::tui::Size size,
         ui::Align const down = _columns.at(place.column).valign;
         int const space = bottom - top;
         int const height = down == ui::Align::Stretch ? space : std::min(requestedSize(*place.cell).height, space);
-        area = {.x = left,
-                .y = top + alignedOffset(down, height, space),
-                .width = widths.at(place.column),
-                .height = height};
-        lines = {.x = left, .y = top, .width = widths.at(place.column), .height = space};
+        // Across the columns it covers and the gaps between them.
+        int across = widths.at(place.column);
+        for (std::size_t index = place.column + 1; index < place.column + place.columns && index < widths.size();
+             ++index) {
+            across += kColumnGap + widths.at(index);
+        }
+        area = {.x = left, .y = top + alignedOffset(down, height, space), .width = across, .height = height};
+        lines = {.x = left, .y = top, .width = across, .height = space};
     }
     return areas;
 }
@@ -334,7 +353,7 @@ WidgetBase* TableImpl::spanOriginAt(::core::tui::Point cell) const {
 
 std::size_t TableImpl::dataPlace(std::span<WidgetBase* const> rows, std::size_t place, Direction direction) const {
     auto const data = [&](std::size_t candidate) {
-        return candidate < rows.size() && !isHeading(rows.subspan(candidate).front());
+        return candidate < rows.size() && !isPassive(rows.subspan(candidate).front());
     };
     for (std::size_t index = place; index < rows.size(); direction == Direction::Forward ? ++index : --index) {
         if (data(index)) {
@@ -759,6 +778,7 @@ EventResult TableImpl::headerKey(::core::tui::KeyEvent const& key) {
 void TableImpl::childForgotten(WidgetBase& child) {
     _keys.erase(&child);
     _headings.erase(&child);
+    _summaries.erase(&child);
     _marks.erase(&child);
     _spans.erase(&child);
     _extraLines.erase(&child);
@@ -903,7 +923,7 @@ WidgetBase* TableImpl::rowWith(ui::Key const& key) const {
 }
 
 bool TableImpl::isMarked(WidgetBase const* row) const {
-    if (isHeading(row)) {
+    if (isPassive(row)) {
         return false;
     }
     auto const rowKey = keyOf(row);
@@ -1127,6 +1147,11 @@ std::string TableImpl::rowMark(WidgetBase const* row, bool cursor) const {
     std::string mark;
     if (isHeading(row)) {
         mark.assign(static_cast<std::size_t>(gutter()), ' ');
+        return mark;
+    }
+    if (_summaries.contains(row)) {
+        mark = "\u03A3";
+        mark.append(static_cast<std::size_t>(std::max(0, gutter() - 1)), ' ');
         return mark;
     }
     bool inCells = false;
@@ -1466,7 +1491,7 @@ void TableImpl::clickWith(::core::tui::Point cell, ::core::tui::Modifier modifie
     // A spanning cell drawn over a covered row's line is its origin row's.
     auto* const spanning = spanOriginAt(cell);
     auto* const row = spanning != nullptr ? spanning : rowAtLine(cell.y);
-    if (row == nullptr || isHeading(row)) {
+    if (row == nullptr || isPassive(row)) {
         return;
     }
     auto const held = ::core::tui::withoutLockKeys(modifiers);
@@ -1603,7 +1628,7 @@ bool TableImpl::pick(WidgetBase const& row) {
 
 bool TableImpl::choose(WidgetBase const& row, ui::RowClick click) {
     auto const rowKey = keyOf(&row);
-    if (_mode == ui::SelectionMode::None || !rowKey || !row.actionable() || isHeading(&row)) {
+    if (_mode == ui::SelectionMode::None || !rowKey || !row.actionable() || isPassive(&row)) {
         return true;
     }
     if (_mode == ui::SelectionMode::Single || click == ui::RowClick::Only) {
@@ -1618,7 +1643,7 @@ bool TableImpl::choose(WidgetBase const& row, ui::RowClick click) {
         std::vector<ui::Key> next;
         for (WidgetBase const* const shown : shownChildren()) {
             auto const key = keyOf(shown);
-            if (key && !isHeading(shown) && !std::ranges::contains(*_viewExcept, *key) && *key != *rowKey) {
+            if (key && !isPassive(shown) && !std::ranges::contains(*_viewExcept, *key) && *key != *rowKey) {
                 next.push_back(*key);
             }
         }
@@ -1662,7 +1687,7 @@ std::vector<ui::Key> TableImpl::rangeTo(WidgetBase const& row) const {
     auto const [low, high] = std::minmax(from, target);
     std::vector<ui::Key> keys;
     for (auto const* const between : std::ranges::subrange(low, std::next(high))) {
-        if (auto const betweenKey = keyOf(between); betweenKey && between->actionable() && !isHeading(between)) {
+        if (auto const betweenKey = keyOf(between); betweenKey && between->actionable() && !isPassive(between)) {
             keys.push_back(*betweenKey);
         }
     }
@@ -1672,7 +1697,7 @@ std::vector<ui::Key> TableImpl::rangeTo(WidgetBase const& row) const {
 std::vector<ui::Key> TableImpl::allOrNone() const {
     std::vector<ui::Key> keys;
     for (auto const* const row : shownChildren()) {
-        if (auto const rowKey = keyOf(row); rowKey && row->actionable() && !isHeading(row)) {
+        if (auto const rowKey = keyOf(row); rowKey && row->actionable() && !isPassive(row)) {
             keys.push_back(*rowKey);
         }
     }
@@ -1705,7 +1730,7 @@ bool TableImpl::report(std::vector<ui::Key> keys, ui::SelectionChange change) {
 
 void TableImpl::activateRow(ui::Key const& key) {
     auto const* const row = rowWith(key);
-    if (row == nullptr || !row->actionable() || isHeading(row)) {
+    if (row == nullptr || !row->actionable() || isPassive(row)) {
         return;
     }
     auto const handler = _onActivate;

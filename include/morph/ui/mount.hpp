@@ -261,7 +261,13 @@ struct ColumnWindow {
 
 namespace detail {
 
-// Appends the runs of @p bands, at @p level, and of their children one level down.
+/// @brief Appends the runs of @p bands, at @p level, and of their children one level down: one run per maximal run of
+///        a band's columns that stand together in @p visible, split at the pinned edge.
+/// @param bands   The bands of one level.
+/// @param visible The visible column ids, in layout order.
+/// @param pinned  How many of the leading visible columns are pinned.
+/// @param level   The level of @p bands, 0 for the outermost.
+/// @param out     The runs found so far; the new ones are appended.
 // NOLINTNEXTLINE(misc-no-recursion): a band's children are bands one level down.
 inline void appendBandRuns(std::span<table::BandInfo const> bands, std::span<std::string const> visible,
                            std::size_t pinned, std::size_t level, std::vector<BandRun>& out) {
@@ -296,7 +302,11 @@ inline void appendBandRuns(std::span<table::BandInfo const> bands, std::span<std
     }
 }
 
-// The bands enclosing a column, outermost first.
+/// @brief Appends the bands that enclose a column, outermost first: the band of @p bands that names it, then the one
+///        of that band's children that does, and so on.
+/// @param bands    The bands of one level.
+/// @param columnId The column's id.
+/// @param out      The bands found so far; the enclosing ones are appended.
 // NOLINTNEXTLINE(misc-no-recursion): a band's children are bands one level down.
 inline void enclosingBands(std::span<table::BandInfo const> bands, std::string_view columnId,
                            std::vector<table::BandInfo const*>& out) {
@@ -452,15 +462,27 @@ struct SpanRow {
 
 /// @brief Resolves the requested spans of a table's rows, top to bottom, one column at a time.
 ///
-/// A span is refused, alone, when it names no column, covers 0 rows, belongs to a heading row, repeats a column of
-/// its row, starts in a column an earlier span covers, or runs past the last row or over a heading row. The earlier
-/// span wins an overlap.
-/// @param rows The rows in order.
+/// A span is refused, alone, when it names no column, covers 0 rows or 0 columns, belongs to a heading row, repeats a
+/// column of its row, starts in or covers a cell an earlier span covers, or runs past the last row or over a heading
+/// row. The earlier span wins an overlap. A span covers `rows` rows from its own and `columns` visible places from its
+/// column's, clipped at the last place; a span whose column is hidden covers nothing and is not refused.
+/// @param rows    The rows in order.
 /// @param columns How many columns the table has.
+/// @param placeOf Each column's visible place, by index into the table's columns, none for a hidden column; empty: every
+///                column at the place of its index.
 /// @return The effective spans per row and the refusals.
-[[nodiscard]] inline ResolvedSpans resolveRowSpans(std::vector<SpanRow> const& rows, std::size_t columns) {
+// NOLINTNEXTLINE(readability-function-cognitive-complexity): one refusal per rule of a span.
+[[nodiscard]] inline ResolvedSpans resolveRowSpans(std::vector<SpanRow> const& rows, std::size_t columns,
+                                                   std::span<std::optional<std::size_t> const> placeOf = {}) {
     ResolvedSpans out;
     out.effective.resize(rows.size());
+    auto const placeOfColumn = [&placeOf](std::size_t column) -> std::optional<std::size_t> {
+        if (placeOf.empty()) {
+            return column;
+        }
+        return column < placeOf.size() ? placeOf[column] : std::nullopt;
+    };
+    // Until which row each visible place is covered.
     std::vector<std::size_t> coveredUntil(columns, 0);
     for (std::size_t index = 0; index < rows.size(); ++index) {
         SpanRow const& row = rows.at(index);
@@ -475,11 +497,22 @@ struct SpanRow {
                 continue;
             }
             named.at(span.column) = true;
-            if (coveredUntil.at(span.column) > index) {
+            std::optional<std::size_t> const place = placeOfColumn(span.column);
+            if (!place || *place >= columns) {
+                continue;
+            }
+            std::size_t const wide = std::min(span.columns, columns - *place);
+            if (coveredUntil.at(*place) > index) {
                 refuse(site::kRowSpanOverlap, "starts under another span");
                 continue;
             }
-            if (span.rows == 1 && span.columns == 1) {
+            if (span.rows == 1 && wide == 1) {
+                continue;
+            }
+            if (std::any_of(coveredUntil.begin() + static_cast<std::ptrdiff_t>(*place),
+                            coveredUntil.begin() + static_cast<std::ptrdiff_t>(*place + wide),
+                            [index](std::size_t until) { return until > index; })) {
+                refuse(site::kRowSpanOverlap, "covers a cell another span covers");
                 continue;
             }
             std::size_t const end = index + span.rows;
@@ -492,7 +525,8 @@ struct SpanRow {
                 continue;
             }
             out.effective.at(index).push_back(span);
-            coveredUntil.at(span.column) = end;
+            std::fill(coveredUntil.begin() + static_cast<std::ptrdiff_t>(*place),
+                      coveredUntil.begin() + static_cast<std::ptrdiff_t>(*place + wide), end);
         }
         std::ranges::sort(out.effective.at(index), {}, &RowSpan::column);
     }
@@ -2163,6 +2197,8 @@ private:
         std::vector<Placed> order;
         std::size_t columns = 0;
         std::size_t threshold = 0;
+        // Each column's visible place, from the arrangement; empty before the first.
+        std::vector<std::optional<std::size_t>> placeOf;
         std::size_t reconciling = 0;
         bool sorted = false;
         bool anyAsked = false;
@@ -2202,7 +2238,7 @@ private:
                 resolved.refused.emplace_back(site::kRowSpanVirtualized, "the table is virtualized");
             }
         } else {
-            resolved = resolveRowSpans(rows, table.columns);
+            resolved = resolveRowSpans(rows, table.columns, table.placeOf);
         }
         std::set<std::string> refused;
         for (auto const& [reason, text] : resolved.refused) {
@@ -2781,6 +2817,9 @@ private:
                                                                 : measure.contentEstimate);
         }
         table.extents->assign(widths);
+        if (table.spans != nullptr) {
+            table.spans->placeOf = table.placeOf;
+        }
         for (auto const& [column, width] : table.arrangement.widths) {
             if (column < table.placeOf.size() && table.placeOf.at(column)) {
                 table.extents->set(*table.placeOf.at(column), scaled(column, width));

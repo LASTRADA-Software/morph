@@ -495,7 +495,8 @@ public:
     [[nodiscard]] virtual TableTotal total() const = 0;
 
     /// @brief The rows a mount realizes: the view's, and the rows a decorator adds outside it, such as summary rows,
-    ///        which no count and no selection takes in.
+    ///        which no count and no selection takes in. A decorator over such rows forwards this too, or the rows they
+    ///        add are dropped.
     /// @return The total the mount positions rows by; `total()` for rows that add none.
     [[nodiscard]] virtual TableTotal mountedTotal() const { return total(); }
 

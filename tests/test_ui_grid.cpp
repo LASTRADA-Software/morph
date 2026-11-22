@@ -1867,4 +1867,77 @@ TEST_CASE("bands: a document's bands reach the backend over the layout", "[ui][b
     CHECK(h.backend.prop(table, "bands") == "[0:Specimen|g@0+2]");
 }
 
+// Mutation: the grid's focus shown at its data position, not mapped through `SummaryRows::mounted` (focus on key 25
+// lands on mounted row 24, key 24's, since key 25's row is not realized).
+TEST_CASE("summary: a grid's focus is shown at its mounted row", "[ui][grid][summary]") {
+    std::string schema{morph::test::grid::kSpecimens};
+    schema.replace(schema.find(R"("maxItems":5)"), std::string_view{R"("maxItems":5)"}.size(), R"("maxItems":50)");
+    GridFixture f{morph::test::grid::GridSpec{.schema = schema, .body = morph::test::grid::blankSpecimens(30),
+                                              .array = "specimens", .columns = {}, .options = {}}};
+    auto const data = std::shared_ptr<ui::TableRows>{std::shared_ptr<void>{}, &f.source->view()};
+    auto const rows = std::make_shared<ui::SummaryRows>(data, std::vector<ui::SummarySpec>{{.key = "head", .top = true}},
+                                                        std::vector<ui::SummarySpec>{}, ui::SummaryRows::Runs{});
+    ui::testing::RecordingBackend backend;
+    ui::TableSource base;
+    base.rows = rows;
+    ui::TableOptions options;
+    options.common.testId = "grid";
+    std::optional<ui::Mounted> view;
+    view.emplace(f.h.rt, backend, f.grid->node(columnsOf(f), std::move(options), base));
+    f.h.settle();
+    int const table = backend.find("Table", "testId", "grid").value_or(0);
+    REQUIRE(table != 0);
+    f.grid->focusCell(at(25, "mass"));
+    f.h.settle();
+    CHECK(backend.focusCell(table) == std::pair{std::size_t{25}, std::size_t{1}});   // data row 24, below the summary
+    view.reset();
+}
+
+// Mutations: the lowering not handing the grid its summary rows for a copy (the summary line is missing); a
+// rectangle's corner on a summary row kept as given (nothing is copied).
+TEST_CASE("summary: a rectangle across a summary row copies it", "[ui][grid][summary][interpreter]") {
+    ui::testing::TableHarness h;
+    addRecordAction(h);
+    auto const screen = h.mount(kGroupSummaryDocument);
+    ui::testing::elementOf(*screen, "rec").form->prefill(massesBody({{"A", 10}, {"A", 12}, {"B", 14}}));
+    h.settle();
+    int const table = h.byTestId("Table", "grid");
+    h.backend.selectCells(table, 1, 0, 6, 1);   // from (1, label) to the second run's summary, under (3, mass)
+    h.settle();
+    CHECK(ui::testing::elementValue(h, "grid", "selection") ==
+          ui::testing::value(R"({"anchor":{"key":1,"column":"label"},"focus":{"key":3,"column":"mass"}})"));
+    h.backend.press(table, "Ctrl+C");
+    h.settle();
+    CHECK(h.backend.clipboardText() == "A\t10.00\nA\t12.00\n\t11.00\nB\t14.00");
+}
+
+// A table over rows grouped by `g`, each run's summary `n` its rows' count and the table's `total` the sum of `mass`
+// over every row of the view.
+constexpr std::string_view kRowsSummaryDocument = R"({"vocab":"ui/1","id":"lots",
+  "state":{"items":{"init":{"lit":[{"id":1,"g":"A","mass":10},{"id":2,"g":"A","mass":12},{"id":3,"g":"B","mass":14}]}}},
+  "view":{"kind":"table","id":"t","testId":"t","rows":{"ref":"items"},"pageSize":2,
+          "columns":[{"id":"g"},{"id":"mass"}],
+          "group":{"by":{"row":"g"},"heading":[{"kind":"text","text":{"row":"key"}}],
+                   "summaries":[{"key":"n","label":"Count","cells":{"mass":{"fn":"count","args":[{"ref":"rows"}]}}}]},
+          "summaries":[{"key":"total","cells":{"mass":{"fn":"sum","args":[
+             {"map":{"ref":"rows"},"as":"r","to":{"ref":"r.mass"}}]}}}]}})";
+
+// Mutations: a run's summary read over every row of the view (run A counts 3); the table's summary read over the
+// page's rows only (total 22, not 36).
+TEST_CASE("summary: a table over rows draws its summaries and its runs'", "[ui][summary][interpreter]") {
+    ui::testing::TableHarness h;
+    auto const screen = h.mount(kRowsSummaryDocument);
+    h.settle();
+    int const table = h.byTestId("Table", "t");
+    CHECK(ui::testing::rowKeys(h, table) ==
+          std::vector<std::string>{"\x1Fgroup:\\\"A\\\":0", "1", "2", "\x1Fsummary:0/n", "\x1Fsummary:total"});
+    CHECK(h.text("summary_0_n_mass") == "2");
+    CHECK(h.text("summary_total_mass") == "36");
+    for (int const row : h.backend.children(table)) {
+        if (h.backend.prop(row, "rowKey") == "\"\x1Fsummary:0/n\"") {
+            CHECK(h.backend.prop(row, "summary") == "true");
+        }
+    }
+}
+
 }  // namespace
