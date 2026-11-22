@@ -2438,4 +2438,23 @@ TEST_CASE("fixed grid: the loader refuses two units for one field", "[ui][grid][
     CHECK(reason.find("`limits.weight` is given the units `g` and `kg`") != std::string::npos);
 }
 
+// Mutation: a derive round not moving the load count (the round loads the field in kg, and the overlay's g is not given
+// again).
+TEST_CASE("fixed grid: a derived field keeps its unit overlay after a derive round", "[ui][grid][fixed]") {
+    ui::FixedCell limit = fieldCell("limits.limit");
+    limit.unit = [](forms::RowState const*) { return std::optional<std::string>{"g"}; };
+    FixedGridFixture f{R"({"limits":{}})", {fixedRow("limit", {{"min", std::move(limit)}})}, fixedColumns({"min"})};
+    f.h.settle();
+    forms::FieldState& field = f.form->field("limits.limit");
+    REQUIRE(field.spec().units.at(field.unit().peek()).id == "g");
+    std::uint64_t const before = f.form->loadGeneration();
+    auto const round = f.form->captureRound();
+    forms::Derived const reply{.values = {{"limits.limit", glz::raw_json{R"({"num":2,"den":1,"dp":3})"}}}};
+    REQUIRE(f.form->loadDerived(round, reply).loaded == 1);
+    f.h.settle();
+    CHECK(f.form->loadGeneration() - before == 1);   // the round is a load; the switch that follows is none
+    CHECK(field.spec().units.at(field.unit().peek()).id == "g");
+    CHECK_FALSE(f.form->modified("limits.limit"));
+}
+
 }  // namespace

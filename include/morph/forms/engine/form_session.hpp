@@ -1376,10 +1376,10 @@ public:
         return modified(*state);
     }
 
-    /// @brief A count that moves with each load of a field: construction, `prefill`, `reset`, a `refill` that loads a
-    ///        field, and a submission that ends a field's edit, each of which sets the fields it loads afresh, their
-    ///        units included. A write kept as loaded (a switch of units as loaded, a round of derived values) is no
-    ///        load and does not move it, and nor does a revert. Tracked.
+    /// @brief A count that moves with each load: each write through `FieldState::load`, which sets the fields it
+    ///        writes afresh, their units included. Construction, `prefill`, `reset`, a `refill` that loads a field, a
+    ///        submission that ends a field's edit and a round of derived values that writes a member are loads; a
+    ///        switch of units as loaded alone is not, and nor is a revert. Tracked.
     /// @return The count.
     [[nodiscard]] std::uint64_t loadGeneration() const { return _loads.get(); }
 
@@ -1578,6 +1578,7 @@ public:
                 }
             },
             false);
+        noteLoads(targets.size());
         load.loaded = targets.size();
         return load;
     }
@@ -1617,6 +1618,7 @@ public:
                 }
             },
             false);
+        noteLoads(writes.size());
         load.loaded = writes.size();
         return load;
     }
@@ -1831,6 +1833,14 @@ private:
                     LoadedCell{.text = state.draft(), .unit = const_cast<FieldState&>(state).unit().get()});
             }
         });
+    }
+
+    // A round of derived values loads its targets (`FieldState::load` sets each afresh, its unit included): the load
+    // count moves when it wrote any.
+    void noteLoads(std::size_t written) {
+        if (written > 0) {
+            _loads.set(_loads.peek() + 1);
+        }
     }
 
     // Records a top-level field as loaded again, forgetting what it held before.
@@ -2279,7 +2289,7 @@ private:
     std::map<std::string, LoadedCell, std::less<>> _loadedCells;
     /// @brief Moves on every change of `_loadedCells`, so what compares against it is evaluated again.
     reactive::Signal<std::uint64_t> _loadGeneration;
-    /// @brief Moves with each load of a field (`loadGeneration`); a write kept as loaded leaves it.
+    /// @brief Moves with each load (`loadGeneration`); a switch of units as loaded leaves it.
     reactive::Signal<std::uint64_t> _loads;
     /// @brief What `submit` runs first, by id, in the order added.
     std::vector<std::pair<std::size_t, std::function<void()>>> _beforeSubmit;
