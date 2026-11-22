@@ -68,8 +68,9 @@ struct GridColumn {
     /// @brief The unit the row's member is entered in, an id of its `FieldSpec::units`: applied, converting the draft as the
     ///        editor's unit select does, when it first gives a unit for the row or gives another one, so a unit the user
     ///        picks afterwards stays; nothing, or an id the field does not have, after a unit restores the field's entry
-    ///        unit. The first unit a loaded row's member takes counts as loaded (`forms::FormSession::changeAsLoaded`):
-    ///        the cell is not modified by it, and a revert returns to it. Tracked.
+    ///        unit. The first unit a loaded row's member takes, while the overlay had given none before, counts as loaded
+    ///        (`forms::FormSession::switchUnitsAsLoaded`): the cell is not modified by it, and a revert returns to it.
+    ///        Tracked.
     std::function<std::optional<std::string>(forms::RowState const&)> unit;
     /// @brief Whether the row's cell is read-only beyond its field (`CellFacts::overlayReadOnly`). Tracked.
     std::function<bool(forms::RowState const&)> readonly;
@@ -1058,6 +1059,8 @@ private:
             }
             std::erase_if(_unitApplied, [&present](auto const& entry) { return !present.contains(entry.first); });
         }
+        // The first units a load's rows take, switched together after the walk (one batch, one pass over the form).
+        std::vector<std::pair<forms::FieldState*, std::size_t>> asLoaded;
         for (auto const& row : _rowsSource->array().rows()) {
             for (GridColumn const& column : _columns) {
                 forms::FieldState* const state = memberOf(column, *row);
@@ -1074,7 +1077,7 @@ private:
                         state->places().set(places);
                     }
                     if (column.unit) {
-                        applyUnit(*state, unit);
+                        applyUnit(*state, unit, asLoaded);
                     }
                     if (column.options) {
                         state->narrowOptions(std::move(options));
@@ -1085,15 +1088,18 @@ private:
                 });
             }
         }
+        _form->runtime().untracked([&] { _form->switchUnitsAsLoaded(asLoaded); });
     }
 
     // A row's `unit` overlay, applied only when it first gives a unit or gives another one than it last did: the effect
     // reruns on every change of a row, and the unit the user then picks in the editor must stay. It switches the way the
     // editor does, converting the draft; no unit, or one the field does not have, after a unit restores the field's
-    // entry unit.
-    void applyUnit(forms::FieldState& state, std::optional<std::string> const& unit) {
+    // entry unit. The first unit a member is given (none remembered yet, or none given so far) is part of how the row
+    // is shown as loaded: it goes to @p asLoaded, so the cell is not modified by it and a revert returns to it.
+    void applyUnit(forms::FieldState& state, std::optional<std::string> const& unit,
+                   std::vector<std::pair<forms::FieldState*, std::size_t>>& asLoaded) {
         auto const applied = _unitApplied.find(state.path());
-        bool const first = applied == _unitApplied.end();
+        bool const first = applied == _unitApplied.end() || !applied->second.has_value();
         bool const changed = first ? unit.has_value() : applied->second != unit;
         _unitApplied.insert_or_assign(state.path(), unit);
         if (!changed) {
@@ -1103,10 +1109,8 @@ private:
         auto const found = unit ? std::ranges::find(units, *unit, &forms::UnitOption::id) : units.end();
         std::size_t const index =
             found != units.end() ? static_cast<std::size_t>(found - units.begin()) : state.spec().entryUnit;
-        // The first unit is part of how the row is shown as loaded: the cell is not modified by it, and a revert
-        // returns to it.
         if (first) {
-            _form->changeAsLoaded(state, [&state, index] { state.switchUnit(index); });
+            asLoaded.emplace_back(&state, index);
         } else {
             state.switchUnit(index);
         }
