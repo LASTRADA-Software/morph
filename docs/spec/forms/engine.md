@@ -354,12 +354,12 @@ field)` in `forms/engine/field_control.hpp`, which a grid's cell editor draws to
   member of a row added since the load. A computed member (`FieldSpec::computed`, from `x-computed`) and a derived
   one (`FieldSpec::derived`, from `x-derived`) are never modified: only a round writes them. Any other member stays modified whatever freezes it after the user typed in it.
   **`rowModified(arrayPath, key)`** is true when a member of the row is modified or the row was added since.
-- **`loadGeneration()`** (tracked) is a count that moves with each load of a field: construction, `prefill`,
-  `reset`, a `refill` that loads a field, and a successful submission that ends a field's edit, each of which sets
-  the fields it loads afresh, their units included. A write kept as loaded (`switchUnitsAsLoaded`, a round of
-  derived values) is no load and does not move it, and nor does a `revert`. What follows loads, such as a fixed
-  grid's `unit` overlay giving a field its unit again after a load, reads it; since a switch as loaded moves it not,
-  one grid's switch is never another's load.
+- **`loadGeneration()`** (tracked) is a count that moves with each load: each write through `FieldState::load`,
+  which sets the fields it writes afresh, their units included. Construction, `prefill`, `reset`, a `refill` that
+  loads a field, a successful submission that ends a field's edit and a round of derived values (`loadDerived`)
+  that writes a member are loads. A switch of units as loaded alone (`switchUnitsAsLoaded`) is not, and nor is a
+  `revert`. What follows loads, such as a fixed grid's `unit` overlay giving a field its unit again after a load,
+  reads it; since a switch as loaded moves it not, one grid's switch is never another's load.
 - **`revert(path)`** restores the record's draft and unit, programmatically; a row's path (`specimens#3`) reverts
   each member, and reverting a row added since the load removes it.
 - **`field(path)`** takes a row by key too: `rows#<key>.member`, as `FieldState::path()` writes it, beside
