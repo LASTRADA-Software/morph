@@ -99,6 +99,8 @@ struct GridOptions {
     bool rowsFixed = false;
     /// @brief The most values one paste writes or drops: a larger block is refused whole, and nothing is written.
     std::size_t maxPasteCells = 10'000;
+    /// @brief The most rows one copy puts on the clipboard (`GridController::copyRefusal`).
+    std::size_t maxCopyRows = 10'000;
     /// @brief The timers the offer to undo a deletion ends on; without one it ends only at the grid's next change.
     reactive::Scheduler* scheduler = nullptr;
     /// @brief How long the offer to undo a deletion lasts, unless a change of the grid ends it first: a status line
@@ -1567,8 +1569,7 @@ public:
             return;
         }
         if (_rt->untracked([&] { return _source->readOnly(focused->key, focused->column); })) {
-            _message.set(std::string{kReadOnlyText});
-            _notices.set(_notices.peek() + 1);
+            notice(std::string{kReadOnlyText});
             return;
         }
         if (_source->toggles(focused->key, focused->column)) {
@@ -1748,6 +1749,18 @@ public:
             }
             return copyText({}, rows).text;
         });
+    }
+
+    /// @brief Why a copy of the selection, else of the focused cell, is refused: it spans more than
+    ///        `GridOptions::maxCopyRows` rows.
+    /// @param separator The grouping separator the bound is written with.
+    /// @return `A copy holds at most {maxCopyRows} rows`; nothing when the copy may go ahead.
+    [[nodiscard]] std::optional<std::string> copyRefusal(std::string_view separator = ",") const {
+        std::optional<Block> const cells = _rt->untracked([&] { return block(); });
+        if (cells && cells->keys.size() > _options.maxCopyRows) {
+            return tableText::copyBound(_options.maxCopyRows, separator);
+        }
+        return std::nullopt;
     }
 
     /// @brief Writes tab-separated text into the grid from the focused cell right and down, the block keeping its
@@ -2329,8 +2342,12 @@ private:
         }
     }
 
-    // Posts a transient notice, with the choices it offers.
+    // Posts a transient notice, with the choices it offers. One that offers none keeps a live offer to undo a
+    // deletion: such a notice (a refusal, a paste that wrote nothing) is no change, so the offer still stands.
     void notice(std::string text, std::vector<StatusEntry> entries = {}) {
+        if (entries.empty() && _undoOffered) {
+            entries.push_back(StatusEntry{.id = "undo", .label = "Undo"});
+        }
         _message.set(std::move(text));
         _messageEntries.set(std::move(entries));
         _notices.set(_notices.peek() + 1);

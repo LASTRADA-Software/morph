@@ -2918,3 +2918,45 @@ TEST_CASE("qt_quick grid: a drag selects a rectangle of cells and a row header c
     g.scene.settle();
     CHECK(g.grid.grid->selection() == ui::CellRange{morph::test::grid::at(2, "label"), morph::test::grid::at(2, "note")});
 }
+
+// Mutation: the header's sort handler taking only a Shift-click in a table that selects cells (the plain click reports
+// no sort).
+TEST_CASE("qt_quick grid: a header click sorts, a Shift-click adds, a Ctrl-click selects the column", "[qt_quick][grid]") {
+    Scene scene;
+    morph::test::formsengine::FakeServer server{scene.owner()};
+    auto form = std::make_unique<morph::forms::FormSession>(
+        scene.runtime(), morph::test::formsengine::modelOf("Lims_RecordSpecimens", morph::test::grid::kSpecimens),
+        server.submitter(), server.fetcher(),
+        morph::forms::FormSessionOptions{.locale = ui::localeFacts("de").numeric, .bcp47 = "de"});
+    form->prefill(R"({"sampleId":1,"specimens":[{},{}]})");
+    std::vector<ui::GridColumn> columns;
+    std::vector<ui::TableColumn> shown;
+    for (morph::forms::FieldSpec const& member : form->field("specimens").spec().children) {
+        columns.push_back(ui::GridColumn{.id = member.name, .label = member.name, .field = member.name, .value = {}});
+        shown.push_back(ui::TableColumn{.id = member.name, .label = member.name, .sortable = member.name == "mass"});
+    }
+    std::vector<std::pair<std::size_t, ui::HeaderClick>> sorts;
+    ui::TableOptions options;
+    options.common.testId = "grid";
+    options.onSort = [&sorts](std::size_t column, ui::HeaderClick click) { sorts.emplace_back(column, click); };
+    ui::FormGrid grid = ui::makeFormGrid(*form, form->field("specimens"), std::move(columns), {}, ui::formatOf(*form),
+                                         std::move(options), std::move(shown));
+    std::optional<ui::Mounted> view;
+    view.emplace(scene.runtime(), scene.backend(), grid.node);
+    scene.settle();
+    QQuickItem* const table = itemNamed(*scene.window().contentItem(), QStringLiteral("grid"));
+    REQUIRE(table != nullptr);
+    QQuickItem* const header = itemNamed(*table, QStringLiteral("header1"));   // mass
+    REQUIRE(header != nullptr);
+    scene.click(*header);
+    REQUIRE(sorts.size() == 1);
+    CHECK(sorts.back() == std::pair{std::size_t{1}, ui::HeaderClick::Plain});
+    scene.click(*header, Qt::ShiftModifier);
+    REQUIRE(sorts.size() == 2);
+    CHECK(sorts.back() == std::pair{std::size_t{1}, ui::HeaderClick::Shift});
+    scene.click(*header, Qt::ControlModifier);
+    CHECK(sorts.size() == 2);   // a Ctrl-click sorts nothing
+    CHECK(grid.grid->selection() == ui::CellRange{morph::test::grid::at(1, "mass"), morph::test::grid::at(2, "mass")});
+    view.reset();
+    grid = {};
+}
