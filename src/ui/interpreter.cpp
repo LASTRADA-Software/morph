@@ -1221,6 +1221,10 @@ struct RowsTable {
     std::shared_ptr<ValueRowsSource> source;
     std::shared_ptr<EngineRows> engine;
     std::shared_ptr<PageRows> rows;
+    /// The summary rows over the page's entries, which the mount is handed in their place; null with no summaries.
+    std::shared_ptr<SummaryRows> summaries;
+    /// Each run of the page by ordinal: its heading's key, by which its rows are found in the view.
+    std::vector<std::string> runHeadings;
     /// Bumped on every change of the engine's view.
     reactive::Signal<std::uint64_t> version;
     /// The rows in view order and the page shown.
@@ -1373,6 +1377,16 @@ namespace {
 std::vector<std::pair<std::int64_t, std::int64_t>> gridRuns(GridTable& held);
 /// The heading row of a grouped grid's run, by its ordinal in the view: its key and its run record.
 RowRecord gridHeading(GridTable& held, std::size_t ordinal);
+/// The runs of a grouped table over `rows` as its page holds them, each `{first, count}` from its heading entry,
+/// recording each one's heading key in `RowsTable::runHeadings`.
+std::vector<std::pair<std::int64_t, std::int64_t>> rowsRuns(RowsTable& table);
+/// The records a summary row of a table over `rows` summarises: every row of the view, in view order, or a run's.
+/// Tracked: a change of the view evaluates the summary again.
+ValueList rowsSummaryScope(RowsTable const& table, Value const& record);
+/// The summary part a summary row's record names: one of the table's `summaries`, or of its group's.
+DocNode const* summaryPartOf(DocNode const& table, Value const& record);
+/// A summary cell's test id: `summary_<key>_<column>`, a group's `summary_<run ordinal>_<key>_<column>`.
+std::string summaryTestId(Value const& record, std::string const& column);
 
 }  // namespace
 
@@ -8877,6 +8891,13 @@ Node ScreenCore::formGridTable(DocNode const& part, LowerCtx const& ctx, Element
         if (group != nullptr) {
             held->summaries->setHeadings([held](std::size_t run) { return gridHeading(*held, run); });
         }
+        // A copy that spans a summary row writes its cells as they are drawn; the scope is held weakly.
+        held->grid.grid->copySummaries(
+            held->summaries, [this, &part, held, detached = detachedLower(ctx)](Value const& record,
+                                                                               std::string const& column) {
+                LowerCtx const live = attached(detached);
+                return live.scope == nullptr ? std::string{} : gridSummaryText(part, live, *held, record, column);
+            });
     }
     // The cell selection a document binds is shown; each change of it runs `onSelectionChange` with the new range.
     if (ExprPtr const bound = part.prop("selection");
@@ -10156,6 +10177,48 @@ Node ScreenCore::lowerRows(DocNode const& node, LowerCtx const& ctx, ElementStat
             std::make_shared<std::pair<Node, std::shared_ptr<RtScope>> const>(lowerAll(nodes, rowCtx), scope);
         return Node{owner, owner->first.get()};
     };
+    // Summary rows: the table's `summaries` before or after its page's rows and each run's after the run, rows of a
+    // decorator the table keeps over the page's entries. A summary reads every row of the view, or its run's, not
+    // the page's alone. Every column's cells are built per row, so a data cell is never rebound to a summary row.
+    std::vector<SummarySpec> tableSummaries = summarySpecsOf(node.partList("summaries"));
+    std::span<DocNodePtr const> const groupParts = node.partList("group");
+    std::vector<SummarySpec> runSummaries =
+        groupParts.empty() ? std::vector<SummarySpec>{} : summarySpecsOf(groupParts.front()->partList("summaries"));
+    if (!tableSummaries.empty() || !runSummaries.empty()) {
+        if (table->summaries == nullptr) {
+            SummaryRows::Runs runs;
+            if (!groupParts.empty()) {
+                runs = [table] { return rowsRuns(*table); };
+            }
+            table->summaries = std::make_shared<SummaryRows>(table->rows, std::move(tableSummaries),
+                                                             std::move(runSummaries), std::move(runs));
+        }
+        source.rows = table->summaries;
+        source.rowScopedCells.assign(fields.size(), true);
+        source.cellView = [this, ctx, &node, table, fields, displays, plainText,
+                           inner = source.cellView](std::size_t column, reactive::Signal<Value> const& row) -> Node {
+            Value const& record = row.peek();
+            if (record.field(kSummaryField) == nullptr) {
+                return inner(column, row);
+            }
+            std::string const id = column < fields.size() ? fields.at(column) : std::string{};
+            Text text;
+            text.common.testId = summaryTestId(record, id);
+            text.text = slotProp<std::string>(
+                [this, &node, ctx, table, record = &row, id, display = displays.at(column), plainText] {
+                    Value const& now = record->get();
+                    std::optional<Value> const value = summaryValue(node, now, id, ctx, rowsSummaryScope(*table, now));
+                    return value ? plainText(&*value, display, ctx.scope->formatting()) : std::string{};
+                });
+            return ui::text(std::move(text));
+        };
+        source.rowView = [this, ctx, &node, inner = source.rowView](reactive::Signal<Value> const& row) -> TableRowLook {
+            if (row.peek().field(kSummaryField) != nullptr) {
+                return summaryLook(node, ctx, row.peek());
+            }
+            return inner(row);
+        };
+    }
     TableOptions options;
     options.showHeader = node.flag("showHeader", true);
     options.bands = bandsOf(node.partList("bands"));
@@ -15647,77 +15710,159 @@ RowRecord gridHeading(GridTable& held, std::size_t ordinal) {
 // a summary row's cell its part's expression for the column read with `rows` the records of the data rows in its
 // scope and `column` the column's id, shown at the column's places, and a heading row its group's heading. Every
 // column's cells are built per row, so a cell built for a data row is never rebound to a summary row.
+namespace {
+
+std::vector<std::pair<std::int64_t, std::int64_t>> rowsRuns(RowsTable& table) {
+    std::vector<std::pair<std::int64_t, std::int64_t>> runs;
+    table.runHeadings.clear();
+    std::int64_t const total = table.rows->total().rows;
+    for (std::int64_t index = 0; index < total; ++index) {
+        std::optional<TableRowRef> const ref = table.rows->row(index);
+        Value const* const heading = ref ? ref->row.field(kGroupHeadingField) : nullptr;
+        if (heading != nullptr && heading->asString() != nullptr) {
+            runs.emplace_back(index, 0);
+            table.runHeadings.push_back(*heading->asString());
+        }
+        if (!runs.empty()) {
+            ++runs.back().second;
+        }
+    }
+    return runs;
+}
+
+ValueList rowsSummaryScope(RowsTable const& table, Value const& record) {
+    TableView const& view = table.view->get();
+    Value const* const run = record.field(kSummaryRunField);
+    if (run == nullptr || run->asInt() == nullptr) {
+        return ValueList(view.rows.begin(), view.rows.end());
+    }
+    auto const ordinal = static_cast<std::size_t>(std::max<std::int64_t>(*run->asInt(), 0));
+    if (ordinal >= table.runHeadings.size()) {
+        return {};
+    }
+    std::string const& heading = table.runHeadings.at(ordinal);
+    std::optional<std::size_t> runIndex;
+    for (std::size_t at = 0; at < view.runs.size(); ++at) {
+        Value const* const key = view.runs.at(at).field(kGroupHeadingField);
+        if (key != nullptr && key->asString() != nullptr && *key->asString() == heading) {
+            runIndex = at;
+        }
+    }
+    ValueList rows;
+    for (std::size_t at = 0; runIndex && at < view.rows.size() && at < view.runOf.size(); ++at) {
+        if (view.runOf.at(at) == *runIndex) {
+            rows.push_back(view.rows.at(at));
+        }
+    }
+    return rows;
+}
+
+DocNode const* summaryPartOf(DocNode const& table, Value const& record) {
+    Value const* const key = record.field(kSummaryField);
+    if (key == nullptr || key->asString() == nullptr) {
+        return nullptr;
+    }
+    std::span<DocNodePtr const> parts = table.partList("summaries");
+    if (record.field(kSummaryRunField) != nullptr) {
+        std::span<DocNodePtr const> const groups = table.partList("group");
+        parts = groups.empty() ? std::span<DocNodePtr const>{} : groups.front()->partList("summaries");
+    }
+    for (DocNodePtr const& part : parts) {
+        if (part->name("key") == *key->asString()) {
+            return part.get();
+        }
+    }
+    return nullptr;
+}
+
+std::string summaryTestId(Value const& record, std::string const& column) {
+    Value const* const key = record.field(kSummaryField);
+    Value const* const run = record.field(kSummaryRunField);
+    std::int64_t const* const ordinal = run != nullptr ? run->asInt() : nullptr;
+    return "summary_" + (ordinal != nullptr ? std::to_string(*ordinal) + "_" : std::string{}) +
+           (key != nullptr && key->asString() != nullptr ? *key->asString() : std::string{}) + "_" + column;
+}
+
+}  // namespace
+
+std::optional<Value> ScreenCore::summaryValue(DocNode const& table, Value const& record, std::string const& column,
+                                              LowerCtx const& ctx, ValueList rows) {
+    DocNode const* const part = summaryPartOf(table, record);
+    if (part == nullptr) {
+        return std::nullopt;
+    }
+    ExprPtr expr;
+    for (DocNodePtr const& cells : part->partList("cells")) {
+        if (ExprPtr const cell = cells->prop(column)) {
+            expr = cell;
+        }
+    }
+    if (!expr) {
+        return std::nullopt;
+    }
+    Bindings scoped = ctx.bindings != nullptr ? *ctx.bindings : Bindings{};
+    scoped.push_back(Binding{.name = "rows", .read = [rows = std::move(rows)] { return Value{rows}; }});
+    scoped.push_back(Binding{.name = "column", .read = [column] { return Value{column}; }});
+    return evalIn(*ctx.scope, &scoped, expr);
+}
+
+TableRowLook ScreenCore::summaryLook(DocNode const& table, LowerCtx const& ctx, Value const& record) {
+    TableRowLook look;
+    look.summary = true;
+    // The part's label names the row; a row with none is named by its key.
+    if (DocNode const* const part = summaryPartOf(table, record)) {
+        if (ExprPtr const label = part->prop("label")) {
+            look.label = Prop<std::string>{textOf(once(ctx, label), ctx.scope->formatting())};
+        }
+    }
+    return look;
+}
+
+std::string ScreenCore::gridSummaryText(DocNode const& part, LowerCtx const& ctx, GridTable& held, Value const& record,
+                                        std::string const& column) {
+    Value const* const first = record.field(kSummaryFirstField);
+    Value const* const count = record.field(kSummaryCountField);
+    ValueList rows = summaryScopeRows(held.grid.source->view(),
+                                      first != nullptr && first->asInt() != nullptr ? *first->asInt() : 0,
+                                      count != nullptr && count->asInt() != nullptr ? *count->asInt() : 0);
+    std::optional<Value> const value = summaryValue(part, record, column, ctx, std::move(rows));
+    if (!value) {
+        return {};
+    }
+    auto const places = held.places.find(column);
+    return summaryText(*value, places == held.places.end() ? std::nullopt : places->second, ctx.scope->formatting());
+}
+
+// The rows a grid with summaries or a group is mounted over: the decorator's, a data row's cell as the grid draws it,
+// a summary row's cell its part's expression for the column (`gridSummaryText`), and a heading row its group's
+// heading. Every column's cells are built per row, so a cell built for a data row is never rebound to a summary row.
 TableSource ScreenCore::summarySource(DocNode const& part, LowerCtx const& ctx, GridTable& held,
                                       std::vector<TableColumn> const& columns) {
     auto const ids = std::make_shared<std::vector<std::string>>();
     for (TableColumn const& column : columns) {
         ids->push_back(column.id);
     }
-    auto const partsOf = [](std::span<DocNodePtr const> parts) {
-        std::map<std::string, DocNode const*, std::less<>> byKey;
-        for (DocNodePtr const& summary : parts) {
-            byKey.emplace(std::string{summary->name("key")}, summary.get());
-        }
-        return byKey;
-    };
-    std::span<DocNodePtr const> const groups = part.partList("group");
-    auto const tableParts = partsOf(part.partList("summaries"));
-    auto const runParts =
-        partsOf(groups.empty() ? std::span<DocNodePtr const>{} : groups.front()->partList("summaries"));
     GridTable* const grid = &held;
     TableSource made;
     made.rows = held.summaries;
     made.rowScopedCells.assign(columns.size(), true);
-    made.cellView = [this, ctx, grid, ids, tableParts, runParts](std::size_t column,
-                                                                 reactive::Signal<Value> const& row) -> Node {
+    made.cellView = [this, ctx, &part, grid, ids](std::size_t column, reactive::Signal<Value> const& row) -> Node {
         std::string const id = column < ids->size() ? ids->at(column) : std::string{};
         Value const& record = row.peek();
-        Value const* const key = record.field(kSummaryField);
-        if (key == nullptr || key->asString() == nullptr) {
+        if (record.field(kSummaryField) == nullptr) {
             return grid->grid.source->cellContent(id, row);
         }
-        Value const* const run = record.field(kSummaryRunField);
-        auto const& parts = run != nullptr ? runParts : tableParts;
-        auto const found = parts.find(*key->asString());
-        ExprPtr expr;
-        if (found != parts.end()) {
-            for (DocNodePtr const& cells : found->second->partList("cells")) {
-                if (ExprPtr const cell = cells->prop(id)) {
-                    expr = cell;
-                }
-            }
-        }
         Text text;
-        std::int64_t const* const ordinal = run != nullptr ? run->asInt() : nullptr;
-        text.common.testId = "summary_" + (ordinal != nullptr ? std::to_string(*ordinal) + "_" : std::string{}) +
-                             *key->asString() + "_" + id;
-        if (!expr) {
-            text.text = std::string{};
-            return ui::text(std::move(text));
-        }
-        auto const places = grid->places.find(id);
-        std::optional<std::uint32_t> const shownPlaces = places == grid->places.end() ? std::nullopt : places->second;
-        text.text = slotProp<std::string>([scope = ctx.scope, bindings = ctx.bindings, record = &row, grid, id, expr,
-                                           shownPlaces] {
-            Value const& now = record->get();
-            Value const* const first = now.field(kSummaryFirstField);
-            Value const* const count = now.field(kSummaryCountField);
-            ValueList rows = summaryScopeRows(grid->grid.source->view(),
-                                              first != nullptr && first->asInt() != nullptr ? *first->asInt() : 0,
-                                              count != nullptr && count->asInt() != nullptr ? *count->asInt() : 0);
-            Bindings scoped = bindings != nullptr ? *bindings : Bindings{};
-            scoped.push_back(Binding{.name = "rows", .read = [rows = std::move(rows)] { return Value{rows}; }});
-            scoped.push_back(Binding{.name = "column", .read = [id] { return Value{id}; }});
-            return summaryText(evalIn(*scope, &scoped, expr), shownPlaces, scope->formatting());
+        text.common.testId = summaryTestId(record, id);
+        text.text = slotProp<std::string>([this, ctx, &part, grid, id, record = &row] {
+            return gridSummaryText(part, ctx, *grid, record->get(), id);
         });
         return ui::text(std::move(text));
     };
     made.rowView = [this, ctx, &part](reactive::Signal<Value> const& row) -> TableRowLook {
         Value const& record = row.peek();
         if (record.field(kSummaryField) != nullptr) {
-            TableRowLook look;
-            look.summary = true;
-            return look;
+            return summaryLook(part, ctx, record);
         }
         if (Value const* const heading = record.field(kGroupHeadingField); heading != nullptr && heading->asString()) {
             return headingRow(part, ctx, row, *heading->asString());

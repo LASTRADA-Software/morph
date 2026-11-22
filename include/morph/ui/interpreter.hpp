@@ -2493,6 +2493,15 @@ private:
     /// grid draws it, each summary row's cells its part's expressions, and each run's heading.
     TableSource summarySource(DocNode const& part, LowerCtx const& ctx, GridTable& held,
                               std::vector<TableColumn> const& columns);
+    /// A summary cell's value: the expression the summary row's part gives the column, read with `rows` and `column`;
+    /// none when the part gives the column none.
+    std::optional<Value> summaryValue(DocNode const& table, Value const& record, std::string const& column,
+                                      LowerCtx const& ctx, ValueList rows);
+    /// A summary row's own parts: the summary flag, and its part's `label` as the row's name.
+    TableRowLook summaryLook(DocNode const& table, LowerCtx const& ctx, Value const& record);
+    /// A grid's summary cell text: its value over the data rows in its scope, at the column's member's places.
+    std::string gridSummaryText(DocNode const& part, LowerCtx const& ctx, GridTable& held, Value const& record,
+                                std::string const& column);
     /// What a grid's part (a `table` with a `form`, a field overlay's `grid`) gives beyond its table: its columns and
     /// its options.
     void gridParts(DocNode const& part, LowerCtx const& ctx, forms::FieldState const& array,

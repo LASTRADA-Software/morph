@@ -606,7 +606,9 @@ tolerance below. A requested span is refused, and its cell draws in its own row 
 - it runs past the last row the mount holds (a table paged by the document holds one page, so a span across a page
   boundary runs past the last row), or over a heading row;
 - the row's column is covered by an earlier row's effective span, whether or not this row has a span of its own
-  there; the earlier span wins, so the later one never overlaps it;
+  there, or the span would cover a cell an earlier span (of this row or one above) covers: a span covers its rows and
+  `columns` visible places from its column's place in the arrangement; the earlier span wins, so the later one never
+  overlaps it;
 - the row repeats a column its earlier `RowSpan` already named (the first wins).
 
 Only the bad span is refused; the row's other spans and every other row's stay. Each refusal is reported, not ignored:
@@ -625,6 +627,8 @@ where a row's widget may be released while the rows it covers are still shown, s
 
 A span's `columns` (`RowSpan::columns`) covers that many visible columns from its own, its own included, in every row
 it covers; the giver has already cut it at a column the user moved or hid (`cutColumns`), and the mount passes it on.
+A span whose own column is hidden covers nothing and is not sent. Both backends draw a span across columns over the
+columns from its own by index, clipped at the last, and hide the cells it covers in its own row and the rows below.
 A grid of a form gives its spans through `FormGridSource::setSpans`: `covered` is true for every cell another row's
 span covers, only while the grid is unsorted and under its windowing thresholds, and the walk, a paste and a click pass
 over a covered cell.

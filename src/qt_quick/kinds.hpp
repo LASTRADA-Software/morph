@@ -696,6 +696,7 @@ public:
     /// Throws std::logic_error when @p row is not one of this table's rows.
     void setRowMarks(ui::Widget& row, ui::RowMarks const& marks) override;
     void setRowHeading(ui::Widget& row) override;
+    void setRowSummary(ui::Widget& row) override;
     /// Throws std::logic_error when @p row is not one of this table's rows.
     void setRowSpans(ui::Widget& row, std::vector<ui::RowSpan> const& spans) override;
     void setSelection(std::vector<ui::Key> const& keys) override;

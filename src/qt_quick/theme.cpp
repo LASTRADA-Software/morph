@@ -70,6 +70,7 @@ constexpr std::array<std::pair<std::string_view, char const*>, 47> kColorPropert
     {"color.table.headerRule", "tableHeaderRule"},
     {"color.table.busy", "tableBusy"},
     {"color.table.locked", "tableLocked"},
+    {"color.table.summary", "tableSummary"},
     {"color.chart.1", "chart1"},
     {"color.chart.2", "chart2"},
     {"color.chart.3", "chart3"},

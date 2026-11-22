@@ -823,7 +823,8 @@ struct SummarySpec {
 /// are the data rows', `keysOf` skips them, and `mountedTotal()` is what the mount positions rows by. A summary row's
 /// key is `"\x1Fsummary:" + key` (a group's `"\x1Fsummary:" + run ordinal + "/" + key`) and its record
 /// `{"#summary": key, "#first": first data row, "#count": data rows in scope, "#version": n}`, a group's with
-/// `"#run"` too; `#version` changes whenever the data rows change, so the summary's cells are evaluated again.
+/// `"#run"` too; `#version` changes whenever the data rows change, so the summary's cells are evaluated again. A data
+/// change the layout keeps is told as its own operations and a change of every summary and heading row.
 class SummaryRows final : public TableRows {
 public:
     /// @brief The runs of the data rows, each `{first, count}` in the data rows' view.
@@ -1252,7 +1253,7 @@ private:
             }
         }
         for (std::size_t at = 0; at < _entries.size(); ++at) {
-            if (_entries.at(at).kind == Entry::Kind::Summary) {
+            if (_entries.at(at).kind != Entry::Kind::Data) {
                 out.ops.push_back(table::ViewOp{.kind = table::ViewOp::Kind::Changed, .first = at, .count = 1, .to = 0});
             }
         }
@@ -1304,7 +1305,8 @@ public:
           _arrayPath{std::move(arrayPath)},
           _columns{std::move(columns)},
           _format{std::move(format)},
-          _formatVersion{form.runtime(), std::uint64_t{0}} {
+          _formatVersion{form.runtime(), std::uint64_t{0}},
+          _layoutVersion{form.runtime(), std::uint64_t{0}} {
         forms::FieldState const& array = form.field(_arrayPath);
         if (array.spec().kind != forms::FieldKind::ObjectArray || array.spec().truncated) {
             throw std::invalid_argument{"morph::ui::FormGridSource: `" + _arrayPath + "` is not a collection"};
@@ -1397,7 +1399,12 @@ public:
 
     /// @brief Sets the visible columns in layout order: what the walk follows.
     /// @param visible The column ids.
-    void setLayout(std::vector<std::string> visible) { _layout = std::move(visible); }
+    void setLayout(std::vector<std::string> visible) {
+        if (visible != _layout) {
+            _layout = std::move(visible);
+            _layoutVersion.set(_layoutVersion.peek() + 1);
+        }
+    }
 
     /// @brief A cell's field: the member its column names, or the one `GridColumn::fieldOf` names for the row.
     ///        Tracked through `fieldOf`.
@@ -1478,6 +1485,7 @@ public:
         if (!_spansOf) {
             return {};
         }
+        static_cast<void>(_layoutVersion.get());
         Coverage const& coverage = coverageNow();
         auto const found = coverage.given.find(key);
         return found == coverage.given.end() ? std::vector<CellSpan>{} : found->second;
@@ -1938,10 +1946,11 @@ private:
                     for (CellSpan span : _spansOf(*held)) {
                         span.columns = cutColumns(span, declared, _layout);
                         auto const place = std::ranges::find(_layout, span.column);
-                        if (span.columns == 0 || span.rows == 0 || place == _layout.end()) {
+                        // A span past the last row is refused by the mount and drawn as nothing, so it covers
+                        // nothing here either.
+                        if (span.columns == 0 || span.rows == 0 || place == _layout.end() || span.rows > rows - row) {
                             continue;
                         }
-                        span.rows = std::min(span.rows, rows - row);
                         auto const first = static_cast<std::size_t>(place - _layout.begin());
                         for (std::size_t down = 0; down < span.rows; ++down) {
                             std::optional<TableRowRef> const below = _rows->row(static_cast<std::int64_t>(row + down));
@@ -1971,6 +1980,8 @@ private:
     mutable std::optional<Coverage> _coverage;
     FormatContext _format;
     reactive::Signal<std::uint64_t> _formatVersion;
+    // Moves with each change of `_layout`, which a drawn span's columns follow.
+    reactive::Signal<std::uint64_t> _layoutVersion;
     std::vector<std::string> _layout;
     std::shared_ptr<FormRowsSource> _rowsSource;
     std::unique_ptr<GridRows> _rows;
@@ -2371,6 +2382,16 @@ public:
     /// @return The range by its corners; none while no cell range is selected.
     [[nodiscard]] std::optional<CellRange> selection() const { return _selection.get(); }
 
+    /// @brief Copies the summary rows a rectangle spans with the data rows (`copy`): the rows the grid is mounted over,
+    ///        and a summary cell's text.
+    /// @param rows The summary rows over this grid's rows; null copies data rows only.
+    /// @param text A summary row's cell text, by its record and its column's id.
+    void copySummaries(std::shared_ptr<SummaryRows> rows,
+                       std::function<std::string(Value const& record, std::string const& column)> text) {
+        _summaries = std::move(rows);
+        _summaryText = std::move(text);
+    }
+
     /// @brief Selects a range of cells, or none; focus stays where it is.
     /// @param range The range by its corners, or nothing.
     void select(std::optional<CellRange> range) { setSelection(std::move(range)); }
@@ -2385,6 +2406,38 @@ public:
                 return std::string{};
             }
             std::vector<std::vector<std::optional<std::string>>> rows;
+            if (_summaries != nullptr && _summaryText && !cells->keys.empty()) {
+                std::optional<std::size_t> const first = _source->positionOf(cells->keys.front());
+                std::optional<std::size_t> const last = _source->positionOf(cells->keys.back());
+                std::optional<std::int64_t> const from =
+                    first ? _summaries->mounted(static_cast<std::int64_t>(*first)) : std::nullopt;
+                std::optional<std::int64_t> const to =
+                    last ? _summaries->mounted(static_cast<std::int64_t>(*last)) : std::nullopt;
+                if (from && to) {
+                    // The rectangle's rows as the table draws them: a summary row between its corners is copied with
+                    // its cells' text, a heading row is not a row of cells.
+                    for (std::int64_t at = *from; at <= *to; ++at) {
+                        std::optional<TableRowRef> const ref = _summaries->row(at);
+                        if (!ref) {
+                            continue;
+                        }
+                        std::vector<std::optional<std::string>> line;
+                        if (_summaries->summary(at)) {
+                            for (std::string const& column : cells->columns) {
+                                line.emplace_back(_summaryText(ref->row, column));
+                            }
+                        } else if (_source->positionOf(ref->key)) {
+                            for (std::string const& column : cells->columns) {
+                                line.emplace_back(_source->text(ref->key, column));
+                            }
+                        } else {
+                            continue;
+                        }
+                        rows.push_back(std::move(line));
+                    }
+                    return copyText({}, rows).text;
+                }
+            }
             for (Key const& key : cells->keys) {
                 std::vector<std::optional<std::string>> line;
                 for (std::string const& column : cells->columns) {
@@ -2706,26 +2759,48 @@ public:
             }
             return look;
         };
-        options.gridFocus = Prop<std::optional<GridFocus>>{[self] { return self->place(); }};
-        // A click or a move that lands on a summary or heading row goes to the nearest data row.
+        // Over summary rows the mount counts mounted rows and the grid data rows: a focus's view row is mapped
+        // between the two, and a click, a move or a rectangle's corner that lands on a summary or heading row goes to
+        // the nearest data row.
         auto const summaries = std::dynamic_pointer_cast<SummaryRows>(made.rows);
+        options.gridFocus = Prop<std::optional<GridFocus>>{[self, summaries] {
+            std::optional<GridFocus> shown = self->place();
+            if (shown && summaries != nullptr) {
+                if (std::optional<std::int64_t> const mounted =
+                        summaries->mounted(static_cast<std::int64_t>(shown->viewRow))) {
+                    shown->viewRow = static_cast<std::size_t>(*mounted);
+                }
+            }
+            return shown;
+        }};
+        auto const toData = [source, summaries](Key const& key) -> std::optional<Key> {
+            if (summaries == nullptr || source->positionOf(key)) {
+                return key;
+            }
+            std::int64_t const count = summaries->mountedTotal().rows;
+            for (std::int64_t at = 0; at < count; ++at) {
+                std::optional<TableRowRef> const ref = summaries->row(at);
+                if (ref && ref->key == key) {
+                    std::optional<std::int64_t> const data = summaries->data(at);
+                    return data ? source->keyAt(static_cast<std::size_t>(*data)) : std::nullopt;
+                }
+            }
+            return std::nullopt;
+        };
         // The table's `onFocusCell` hears where a click or a move put the grid's focus, as a table's does.
-        options.onGridFocus = [self, keep, source, summaries, heard = std::move(options.onFocusCell)](GridFocus target) {
-            if (summaries != nullptr && target.key && !source->positionOf(*target.key)) {
-                std::int64_t const count = summaries->mountedTotal().rows;
-                for (std::int64_t at = 0; at < count; ++at) {
-                    std::optional<TableRowRef> const ref = summaries->row(at);
-                    if (ref && ref->key == *target.key) {
-                        std::optional<std::int64_t> const data = summaries->data(at);
-                        std::optional<Key> const near =
-                            data ? source->keyAt(static_cast<std::size_t>(*data)) : std::nullopt;
-                        if (!near) {
-                            return;
-                        }
-                        target.key = near;
-                        target.viewRow = static_cast<std::size_t>(*data);
-                        break;
+        options.onGridFocus = [self, keep, source, summaries, toData,
+                               heard = std::move(options.onFocusCell)](GridFocus target) {
+            if (summaries != nullptr) {
+                if (target.key) {
+                    target.key = toData(*target.key);
+                    if (!target.key) {
+                        return;
                     }
+                }
+                std::optional<std::int64_t> const data = summaries->data(static_cast<std::int64_t>(target.viewRow));
+                target.viewRow = data ? static_cast<std::size_t>(*data) : target.viewRow;
+                if (target.key) {
+                    target.viewRow = source->positionOf(*target.key).value_or(target.viewRow);
                 }
             }
             self->focusPlace(std::move(target));
@@ -2737,12 +2812,27 @@ public:
         options.keyChords = Prop<std::vector<std::string>>{[self] { return self->keyChords(); }};
         options.onText = [self](std::string text) { self->type(text); };
         options.onActivateCell = [self](CellRef cell) { self->activate(std::move(cell)); };
-        options.onClickCell = [self](CellRef cell) { self->click(std::move(cell)); };
+        options.onClickCell = [self, toData](CellRef cell) {
+            if (std::optional<Key> const key = toData(cell.key)) {
+                self->click(CellRef{.key = *key, .column = std::move(cell.column)});
+            }
+        };
         options.onFocusOut = [self] { self->leave(); };
         options.editing = Prop<std::optional<CellRef>>{[self] { return self->editing(); }};
         options.editor = [source](CellRef const& cell) { return source->editor(cell.key, cell.column); };
         options.cellSelection = Prop<std::optional<CellRange>>{[self] { return self->selection(); }};
-        options.onCellSelect = [self](std::optional<CellRange> range) { self->select(std::move(range)); };
+        options.onCellSelect = [self, toData](std::optional<CellRange> range) {
+            if (range) {
+                std::optional<Key> const anchor = toData(range->anchor.key);
+                std::optional<Key> const focus = toData(range->focus.key);
+                if (!anchor || !focus) {
+                    return;
+                }
+                range->anchor.key = *anchor;
+                range->focus.key = *focus;
+            }
+            self->select(std::move(range));
+        };
         options.cellMenu = [self, idOf, outer = std::move(options.cellMenu)](Key const& row, std::size_t column) {
             std::vector<MenuItem> own = self->cellEntries(row, idOf(column));
             if (!outer) {
@@ -3247,6 +3337,9 @@ private:
     reactive::Signal<std::vector<StatusEntry>> _standingEntries;
     reactive::Signal<std::optional<CellRange>> _selection;
     std::function<std::optional<std::string>()> _readClipboard;
+    // The summary rows a copy draws its rows from, and a summary cell's text; empty copies data rows only.
+    std::shared_ptr<SummaryRows> _summaries;
+    std::function<std::string(Value const& record, std::string const& column)> _summaryText;
     std::function<void(std::optional<CellRange> const&)> _selectionObserver;
     // Whether the last deletion is offered for undoing, and the timer that ends the offer.
     bool _undoOffered = false;

@@ -314,6 +314,12 @@ state, so its look follows the selection alone; its `clicked` fires the row's `t
 rows that have them, as the contract's "Selection by key" says; a user's change reports exactly the existing rows
 selected.
 
+A summary row (`setRowSummary`) is `MorphTableRow.summary`: a `summaryFill` rectangle in `Theme.tableSummary`
+(`color.table.summary`) over its background, and its tap, context and long-press handlers off, so it is never
+selected, activated or given a cell menu. A span across columns (`RowSpan::columns`) is a `spanPlan` entry's
+`columns`: the spanning cell and its backdrop are laid out across that many columns from its own
+(`MorphTableRow.spanWidth`), and the cells it covers in its row and the rows below are hidden.
+
 Header bands (`setBands`) are the QML property `bands`, `[{level, text, first, count, pinned}]` with `text` the label
 and its unit (`ui::headerText`): one item per run (`band<index>`), at its level's line above the group line, from the
 left edge of the first column at the visible places it names to the right edge of its last, so a band moved apart is

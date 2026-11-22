@@ -358,7 +358,7 @@ struct ThemeTokenSpec {
 /// @brief The closed `ui-theme/1` token set, with the `MorphUi` defaults: the colour roles, the opacity and the
 ///        spacing scale (`space.0` to `space.5`, one per spacing step) the built-in components read, and the semantic
 ///        sets (`ok`, `warn`, `err`, `info` with `bg`, `border` and `dot`).
-inline constexpr std::array<ThemeTokenSpec, 91> kThemeTokens = {{
+inline constexpr std::array<ThemeTokenSpec, 92> kThemeTokens = {{
     {.path = "color.surface", .kind = ThemeTokenKind::Color, .color = "#ffffff", .number = 0.0},
     {.path = "color.text", .kind = ThemeTokenKind::Color, .color = "#1d1d1f", .number = 0.0},
     {.path = "color.muted", .kind = ThemeTokenKind::Color, .color = "#6e6e73", .number = 0.0},
@@ -494,6 +494,8 @@ inline constexpr std::array<ThemeTokenSpec, 91> kThemeTokens = {{
     {.path = "color.table.busy", .kind = ThemeTokenKind::Color, .color = "#1565c0", .number = 0.0},
     // A table row another user holds: the wash over its cells, translucent so the cells read through it.
     {.path = "color.table.locked", .kind = ThemeTokenKind::Color, .color = "#8e8e9338", .number = 0.0},
+    // A table's summary row: the surface it is drawn on, translucent so the row's own background reads through it.
+    {.path = "color.table.summary", .kind = ThemeTokenKind::Color, .color = "#8e8e931f", .number = 0.0},
     // The opacity of a table row kept in view although it no longer matches the filter, from 0 to 1.
     {.path = "opacity.muted", .kind = ThemeTokenKind::Number, .color = "", .number = 0.55},
     // How the outline of a button, a badge and an input is stroked on a surface: solid, or dashed. Read per surface.

@@ -2085,7 +2085,7 @@ TEST_CASE("bands: the mount draws the runs of the arrangement and drops a band's
     CHECK(backend.prop(table, "bands") == "[]");
 }
 
-// Mutation: covered cells left focusable (the walk lands on one).
+// Mutation: cutColumns not stopping at a moved column (the second line answers 3).
 TEST_CASE("spans: a cell spanning rows and columns covers them", "[ui][mount][spans]") {
     std::vector<std::string> const declared{"a", "b", "c", "d"};
     CHECK(ui::cutColumns({.column = "a", .rows = 2, .columns = 3}, declared, declared) == 3);
@@ -2214,4 +2214,35 @@ TEST_CASE("summary: a summary row is drawn as one, outside the rows", "[ui][moun
     std::vector<int> const cells = backend.children(rowWith(backend, widget, "1"));
     REQUIRE(cells.size() == 1);
     CHECK(backend.prop(cells.front(), "text") == "bb");
+}
+
+// Mutations: the resolve tracking cover in the span's own place only (row 2's span over a covered place is kept); the
+// resolve checking only where a span starts (row 2's wide span over a covered place is kept in the second table).
+TEST_CASE("spans: a span across columns refuses a later span over the cells it covers", "[ui][mount][spans]") {
+    using ui::detail::SpanRow;
+    std::vector<SpanRow> const rows{
+        SpanRow{.name = "row 1", .heading = false, .requested = {ui::RowSpan{.column = 0, .rows = 2, .columns = 3}}},
+        SpanRow{.name = "row 2", .heading = false, .requested = {ui::RowSpan{.column = 1, .rows = 2}}},
+        SpanRow{.name = "row 3", .heading = false, .requested = {ui::RowSpan{.column = 2, .rows = 1, .columns = 2}}},
+    };
+    ui::detail::ResolvedSpans const resolved = ui::detail::resolveRowSpans(rows, 4);
+    CHECK(resolved.effective.at(0) == std::vector<ui::RowSpan>{ui::RowSpan{.column = 0, .rows = 2, .columns = 3}});
+    CHECK(resolved.effective.at(1).empty());
+    CHECK(resolved.effective.at(2) == std::vector<ui::RowSpan>{ui::RowSpan{.column = 2, .rows = 1, .columns = 2}});
+    REQUIRE(resolved.refused.size() == 1);
+    CHECK(std::string_view{resolved.refused.front().first} == ui::detail::site::kRowSpanOverlap);
+    // A span that starts beside a covered cell and runs over it is refused too.
+    std::vector<SpanRow> const across{
+        SpanRow{.name = "row 1", .heading = false, .requested = {ui::RowSpan{.column = 2, .rows = 2}}},
+        SpanRow{.name = "row 2", .heading = false, .requested = {ui::RowSpan{.column = 0, .rows = 1, .columns = 3}}},
+    };
+    ui::detail::ResolvedSpans const wide = ui::detail::resolveRowSpans(across, 4);
+    CHECK(wide.effective.at(0) == std::vector<ui::RowSpan>{ui::RowSpan{.column = 2, .rows = 2}});
+    CHECK(wide.effective.at(1).empty());
+    REQUIRE(wide.refused.size() == 1);
+    CHECK(std::string_view{wide.refused.front().first} == ui::detail::site::kRowSpanOverlap);
+    // With column 0 moved to the last place, the wide span covers that place alone and row 2's span stands.
+    std::vector<std::optional<std::size_t>> const placeOf{3, 0, 1, 2};
+    ui::detail::ResolvedSpans const moved = ui::detail::resolveRowSpans(rows, 4, placeOf);
+    CHECK(moved.effective.at(1) == std::vector<ui::RowSpan>{ui::RowSpan{.column = 1, .rows = 2}});
 }

@@ -109,6 +109,9 @@ MorphWidget {
     property int tone: -1
     // Whether the row is a group heading; C++ sets it once, right after the row's key.
     property bool heading: false
+    // Whether the row is a summary row, drawn on `Theme.tableSummary` and never selected, activated or edited; C++
+    // sets it once, right after the row's key.
+    property bool summary: false
     // The row's marks (`setRowMarks`): an action is working on it, another user holds it, it no longer matches the
     // filter, and what its tooltip says of them. An unmatched row draws at the theme's muted opacity.
     property bool busy: false
@@ -221,6 +224,20 @@ MorphWidget {
         return false
     }
 
+    // The width the spanning cell of column `index` is laid out across: its column's and the next ones' it covers,
+    // else its column's alone.
+    function spanWidth(index: int): real {
+        let columns = 1
+        for (const span of root.spanPlan) {
+            if (span.column === index && span.columns !== undefined)
+                columns = span.columns
+        }
+        let width = 0
+        for (let i = index; i < index + columns && i < root.widths.length; ++i)
+            width += root.widths[i]
+        return width
+    }
+
     // Each cell sits inset by `table.cellPaddingX` and `table.cellPaddingY`, as the header label is (MorphTable.qml),
     // so its text lines up under its header, and a row is as tall as its tallest cell plus twice the vertical inset.
     // A cell fills its column's width, except a kind whose width is its label (`fillsAcross`
@@ -302,7 +319,8 @@ MorphWidget {
         for (let i = 0; i < cells.children.length; ++i) {
             const cell = cells.children[i]
             const w = i < root.widths.length ? root.widths[i] : cell.implicitWidth
-            const room = Math.max(0, w - 2 * inset)
+            // A cell spanning columns is laid out across them; the columns after it keep their places.
+            const room = Math.max(0, (root.isSpanning(i) ? root.spanWidth(i) : w) - 2 * inset)
             const across = i < root.columns.length ? root.columns[i].align : 1
             if ((cell as MorphWidget)?.fillsAcross === false) {
                 cell.width = Math.min(cell.implicitWidth, room)
@@ -656,6 +674,14 @@ MorphWidget {
         z: 3
         color: Theme.tableLocked
     }
+    // A summary row's surface, over its background and under nothing it draws: translucent, so cells read through.
+    Rectangle {
+        objectName: "summaryFill"
+        visible: root.summary
+        anchors.fill: parent
+        z: 3
+        color: Theme.tableSummary
+    }
 
     // Hover is delivered only to an item whose bounds hold the pointer, so the part of a spanning cell below the row
     // is part of the row for it: the row's own rectangle and the blocks of its spanning cells.
@@ -665,7 +691,7 @@ MorphWidget {
                 return true
             for (const span of root.spanPlan) {
                 const left = root.columnLeft(span.column)
-                if (span.column < root.widths.length && point.x >= left && point.x < left + root.widths[span.column] &&
+                if (span.column < root.widths.length && point.x >= left && point.x < left + root.spanWidth(span.column) &&
                         point.y >= 0 && point.y < root.blockHeight(span.column))
                     return true
             }
@@ -681,7 +707,7 @@ MorphWidget {
             objectName: "spanBackdrop"
             x: root.columnLeft(modelData.column)
             y: 0
-            width: modelData.column < root.widths.length ? root.widths[modelData.column] : 0
+            width: modelData.column < root.widths.length ? root.spanWidth(modelData.column) : 0
             height: root.blockHeight(modelData.column)
             clip: true
             Rectangle {
@@ -980,13 +1006,13 @@ MorphWidget {
 
     TapHandler {
         id: tap
-        enabled: !root.heading
+        enabled: !root.heading && !root.summary
         onTapped: root.tapped(tap.point.modifiers, tap.tapCount, tap.point.position.x, tap.point.position.y, true)
     }
 
     TapHandler {
         id: contextTap
-        enabled: !root.heading && root.table !== null && root.table.hasCellMenu
+        enabled: !root.heading && !root.summary && root.table !== null && root.table.hasCellMenu
         acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
         acceptedButtons: Qt.RightButton
         onTapped: root.openCellMenu(contextTap.point.position.x)
@@ -994,7 +1020,7 @@ MorphWidget {
 
     TapHandler {
         id: pressTap
-        enabled: !root.heading && root.table !== null && root.table.hasCellMenu
+        enabled: !root.heading && !root.summary && root.table !== null && root.table.hasCellMenu
         acceptedDevices: PointerDevice.TouchScreen
         onLongPressed: root.openCellMenu(pressTap.point.position.x)
     }

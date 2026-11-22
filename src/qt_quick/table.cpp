@@ -304,6 +304,14 @@ void TableImpl::setRowHeading(ui::Widget& row) {
     mark();
 }
 
+void TableImpl::setRowSummary(ui::Widget& row) {
+    auto const* const tableRow = dynamic_cast<TableRowImpl const*>(&row);
+    if (tableRow == nullptr || tableRow->container() != this) {
+        throw std::logic_error{"morph::qt_quick: setRowSummary of a widget that is not this table's row"};
+    }
+    tableRow->write("summary", true);
+}
+
 void TableImpl::setRowSpans(ui::Widget& row, std::vector<ui::RowSpan> const& spans) {
     auto const* const tableRow = dynamic_cast<TableRowImpl const*>(&row);
     if (tableRow == nullptr || tableRow->container() != this) {
@@ -787,9 +795,11 @@ void TableImpl::planSpans(ItemBase const* leaving) {
         std::size_t const cells = rows.at(index)->children().size();
         coveredUntil.resize(std::max(coveredUntil.size(), cells), 0);
         for (ui::RowSpan const& span : found->second) {
-            if (span.column >= cells || span.rows < 2 || coveredUntil.at(span.column) > index) {
+            if (span.column >= cells || span.rows == 0 || coveredUntil.at(span.column) > index) {
                 continue;
             }
+            // The columns it covers, its own and the next ones, clipped at the row's last cell.
+            std::size_t const wide = std::max<std::size_t>(1, std::min(span.columns, cells - span.column));
             std::size_t last = std::min(index + span.rows, rows.size()) - 1;
             for (std::size_t between = index + 1; between <= last; ++between) {
                 if (heading(*rows.at(between))) {
@@ -797,16 +807,21 @@ void TableImpl::planSpans(ItemBase const* leaving) {
                     break;
                 }
             }
-            if (last == index) {
+            if (last == index && wide == 1) {
                 continue;
             }
-            coveredUntil.at(span.column) = last + 1;
+            for (std::size_t column = span.column; column < span.column + wide; ++column) {
+                coveredUntil.at(column) = last + 1;
+            }
             plans.at(index).append(QVariantMap{{QStringLiteral("column"), static_cast<qulonglong>(span.column)},
-                                               {QStringLiteral("rows"), static_cast<qulonglong>(last - index + 1)}});
-            for (std::size_t between = index + 1; between <= last; ++between) {
-                if (span.column < covered.at(between).size()) {
-                    covered.at(between).at(span.column) = true;
-                    coveredColumns.at(between).append(static_cast<qulonglong>(span.column));
+                                               {QStringLiteral("rows"), static_cast<qulonglong>(last - index + 1)},
+                                               {QStringLiteral("columns"), static_cast<qulonglong>(wide)}});
+            for (std::size_t between = index; between <= last; ++between) {
+                for (std::size_t column = span.column; column < span.column + wide; ++column) {
+                    if ((between != index || column != span.column) && column < covered.at(between).size()) {
+                        covered.at(between).at(column) = true;
+                        coveredColumns.at(between).append(static_cast<qulonglong>(column));
+                    }
                 }
             }
         }
