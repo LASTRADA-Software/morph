@@ -68,7 +68,8 @@ struct GridColumn {
     /// @brief The unit the row's member is entered in, an id of its `FieldSpec::units`: applied, converting the draft as the
     ///        editor's unit select does, when it first gives a unit for the row or gives another one, so a unit the user
     ///        picks afterwards stays; nothing, or an id the field does not have, after a unit restores the field's entry
-    ///        unit. Tracked.
+    ///        unit. The first unit a loaded row's member takes counts as loaded (`forms::FormSession::changeAsLoaded`):
+    ///        the cell is not modified by it, and a revert returns to it. Tracked.
     std::function<std::optional<std::string>(forms::RowState const&)> unit;
     /// @brief Whether the row's cell is read-only beyond its field (`CellFacts::overlayReadOnly`). Tracked.
     std::function<bool(forms::RowState const&)> readonly;
@@ -1047,6 +1048,16 @@ private:
     // The columns' overlays per row, onto each row's member: its places, its entry unit, its options and its
     // placeholder. Rerun when a row, an overlay's reads or the member a row's column edits changes.
     void applyOverlays() {
+        // Forget the units applied to members of rows that are gone: a reload builds every row anew.
+        if (!_unitApplied.empty()) {
+            std::unordered_set<std::string> present;
+            for (auto const& row : _rowsSource->array().rows()) {
+                for (auto const& member : row->fields()) {
+                    present.insert(member->path());
+                }
+            }
+            std::erase_if(_unitApplied, [&present](auto const& entry) { return !present.contains(entry.first); });
+        }
         for (auto const& row : _rowsSource->array().rows()) {
             for (GridColumn const& column : _columns) {
                 forms::FieldState* const state = memberOf(column, *row);
@@ -1082,7 +1093,8 @@ private:
     // entry unit.
     void applyUnit(forms::FieldState& state, std::optional<std::string> const& unit) {
         auto const applied = _unitApplied.find(state.path());
-        bool const changed = applied == _unitApplied.end() ? unit.has_value() : applied->second != unit;
+        bool const first = applied == _unitApplied.end();
+        bool const changed = first ? unit.has_value() : applied->second != unit;
         _unitApplied.insert_or_assign(state.path(), unit);
         if (!changed) {
             return;
@@ -1091,7 +1103,13 @@ private:
         auto const found = unit ? std::ranges::find(units, *unit, &forms::UnitOption::id) : units.end();
         std::size_t const index =
             found != units.end() ? static_cast<std::size_t>(found - units.begin()) : state.spec().entryUnit;
-        state.switchUnit(index);
+        // The first unit is part of how the row is shown as loaded: the cell is not modified by it, and a revert
+        // returns to it.
+        if (first) {
+            _form->changeAsLoaded(state, [&state, index] { state.switchUnit(index); });
+        } else {
+            state.switchUnit(index);
+        }
     }
 
     template <typename Test>
