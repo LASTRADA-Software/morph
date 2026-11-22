@@ -1360,6 +1360,9 @@ struct GridTable {
     std::vector<TableColumn> shown;
     /// The table's configuring: its columns, layout, menus and filters.
     TableConfig config;
+    /// Sets the slots of `config` a mount owns (`filterTarget`, `heldCell`, `gather`); run before each mount begins,
+    /// so a mount after an unmount has them again.
+    std::function<void()> setMountSlots;
     /// The filters the user set, and a count that moves with each.
     table::FilterSpec filter;
     reactive::Signal<std::uint64_t> filterVersion;
@@ -8707,7 +8710,6 @@ Node ScreenCore::lowerFixedGrid(DocNode const& node, LowerCtx const& ctx, Elemen
         return muted();
     }
     if (element->gridTable != nullptr) {
-        fixedGridSlots(runtime(), *element->gridTable);
         return gridTableNode(node, ctx, *element);
     }
     forms::FormSession* form = nullptr;
@@ -8883,7 +8885,7 @@ Node ScreenCore::lowerFixedGrid(DocNode const& node, LowerCtx const& ctx, Elemen
             tableMessage(*element, text, std::move(entries));
         });
     });
-    fixedGridSlots(runtime(), *held);
+    held->setMountSlots = [this, held] { fixedGridSlots(runtime(), *held); };
     return gridTableNode(node, ctx, *element);
 }
 
@@ -8953,69 +8955,77 @@ Node ScreenCore::formGridTable(DocNode const& part, LowerCtx const& ctx, Element
         config.bound = &scope.nodes.computed(
             [&scope, bindings = ctx.bindings, layout] { return evalIn(scope, bindings.get(), layout); });
     }
-    config.filterTarget = [held, filterable](std::string const& id) -> std::optional<FilterTarget> {
-        auto const found = std::ranges::find(held->config.columns, id, &LayoutColumn::id);
-        auto const at = static_cast<std::size_t>(found - held->config.columns.begin());
-        if (held->grid.source == nullptr || found == held->config.columns.end() || !filterable.at(at)) {
-            return std::nullopt;
-        }
-        std::span<table::ColumnInfo const> const infos = held->grid.source->view().source().columns();
-        auto const info = std::ranges::find(infos, id, &table::ColumnInfo::id);
-        if (info == infos.end()) {
-            return std::nullopt;
-        }
-        FilterTarget target;
-        target.column = id;
-        target.label = found->label;
-        target.shown = table::TableColumn{.info = *info};
-        target.listed = true;
-        return target;
-    };
-    // A cell a menu opens on: the member as its column's filter reads it, and the row's record.
-    config.heldCell = [held](Key const& key, std::string const& id) -> std::optional<HeldCell> {
-        FormGridSource const* const source = held->grid.source.get();
-        if (source == nullptr) {
-            return std::nullopt;
-        }
-        std::optional<std::size_t> const at = source->positionOf(key);
-        std::optional<TableRowRef> const ref =
-            at ? held->grid.source->view().row(static_cast<std::int64_t>(*at)) : std::nullopt;
-        if (!ref) {
-            return std::nullopt;
-        }
-        std::optional<std::pair<table::Cell, table::TableColumn>> cell = source->filterCell(key, id);
-        if (!cell) {
-            return HeldCell{.record = ref->row, .cell = table::Cell{}, .shown = {}, .units = {}, .keep = nullptr};
-        }
-        return HeldCell{
-            .record = ref->row, .cell = std::move(cell->first), .shown = std::move(cell->second), .units = {}, .keep = nullptr};
-    };
-    // A copy: each cell's text as the grid shows it, under its column's label.
-    config.gather = [this, held](std::vector<Key> keys, std::vector<std::string> const& ids, CopyDone done) {
-        CopyGathered gathered;
-        std::vector<std::string> kept;
-        for (std::string const& id : ids) {
+    // The slots a mount owns, set again before each mount begins: a mount that ends while it is the latest clears
+    // them, and a later lowering of the same grid must find them set.
+    held->setMountSlots = [this, held, filterable] {
+        TableConfig& slots = held->config;
+        slots.filterTarget = [held, filterable](std::string const& id) -> std::optional<FilterTarget> {
             auto const found = std::ranges::find(held->config.columns, id, &LayoutColumn::id);
-            if (found != held->config.columns.end()) {
-                kept.push_back(id);
-                gathered.headers.push_back(found->label);
+            auto const at = static_cast<std::size_t>(found - held->config.columns.begin());
+            if (held->grid.source == nullptr || found == held->config.columns.end() || !filterable.at(at)) {
+                return std::nullopt;
             }
-        }
-        FormGridSource const& source = *held->grid.source;
-        runtime().untracked([&] {
-            for (Key const& key : keys) {
-                std::optional<std::size_t> const at = source.positionOf(key);
-                if (!at) {
-                    continue;
-                }
-                CopyRow row{.viewRow = static_cast<std::int64_t>(*at), .cells = {}};
-                for (std::string const& id : kept) {
-                    row.cells.emplace_back(source.text(key, id));
-                }
-                gathered.rows.push_back(std::move(row));
+            std::span<table::ColumnInfo const> const infos = held->grid.source->view().source().columns();
+            auto const info = std::ranges::find(infos, id, &table::ColumnInfo::id);
+            if (info == infos.end()) {
+                return std::nullopt;
             }
-        });
-        done(std::move(gathered));
+            FilterTarget target;
+            target.column = id;
+            target.label = found->label;
+            target.shown = table::TableColumn{.info = *info};
+            target.listed = true;
+            return target;
+        };
+        // A cell a menu opens on: the member as its column's filter reads it, and the row's record.
+        slots.heldCell = [held](Key const& key, std::string const& id) -> std::optional<HeldCell> {
+            FormGridSource const* const source = held->grid.source.get();
+            if (source == nullptr) {
+                return std::nullopt;
+            }
+            std::optional<std::size_t> const at = source->positionOf(key);
+            std::optional<TableRowRef> const ref =
+                at ? held->grid.source->view().row(static_cast<std::int64_t>(*at)) : std::nullopt;
+            if (!ref) {
+                return std::nullopt;
+            }
+            std::optional<std::pair<table::Cell, table::TableColumn>> cell = source->filterCell(key, id);
+            if (!cell) {
+                return HeldCell{.record = ref->row, .cell = table::Cell{}, .shown = {}, .units = {}, .keep = nullptr};
+            }
+            return HeldCell{.record = ref->row,
+                            .cell = std::move(cell->first),
+                            .shown = std::move(cell->second),
+                            .units = {},
+                            .keep = nullptr};
+        };
+        // A copy: each cell's text as the grid shows it, under its column's label.
+        slots.gather = [this, held](std::vector<Key> keys, std::vector<std::string> const& ids, CopyDone done) {
+            CopyGathered gathered;
+            std::vector<std::string> kept;
+            for (std::string const& id : ids) {
+                auto const found = std::ranges::find(held->config.columns, id, &LayoutColumn::id);
+                if (found != held->config.columns.end()) {
+                    kept.push_back(id);
+                    gathered.headers.push_back(found->label);
+                }
+            }
+            FormGridSource const& source = *held->grid.source;
+            runtime().untracked([&] {
+                for (Key const& key : keys) {
+                    std::optional<std::size_t> const at = source.positionOf(key);
+                    if (!at) {
+                        continue;
+                    }
+                    CopyRow row{.viewRow = static_cast<std::int64_t>(*at), .cells = {}};
+                    for (std::string const& id : kept) {
+                        row.cells.emplace_back(source.text(key, id));
+                    }
+                    gathered.rows.push_back(std::move(row));
+                }
+            });
+            done(std::move(gathered));
+        };
     };
     for (GridColumn const& column : columns) {
         auto const member = std::ranges::find(array.spec().children, column.field, &forms::FieldSpec::name);
@@ -9183,6 +9193,9 @@ Node ScreenCore::gridTableNode(DocNode const& part, LowerCtx const& ctx, Element
         }
         held->grid.grid->chooseEntry(id);
     };
+    if (held->setMountSlots) {
+        held->setMountSlots();
+    }
     held->config.beginMount();
     Node dialogs = configureTable(held->config, ctx, table, nullptr);
     // A copy of a cell selection writes its rectangle; with none the table's copy runs, the focused cell alone.
