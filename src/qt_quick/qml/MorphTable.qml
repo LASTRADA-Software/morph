@@ -144,6 +144,19 @@ MorphWidget {
         return -1
     }
 
+    // The visible place under `x`, a point before the first column taking the first and one past the last the last:
+    // a drag that ends beside the cells selects up to the edge.
+    function placeAtX(x: real): int {
+        const column = root.columnAtX(x)
+        if (column >= 0)
+            return root.placeOf(column)
+        const places = root.visibleColumns.length > 0 ? root.visibleColumns.length : root.columns.length
+        if (places === 0)
+            return -1
+        const first = root.columnBox(root.columnAtPlace(0))
+        return first !== null && x < first.x ? 0 : places - 1
+    }
+
     // The rectangle `cellRect` names, in the rows' coordinates; null while it is empty or none of its columns is
     // drawn.
     function cellRectBox(): var {
@@ -293,7 +306,9 @@ MorphWidget {
     // The select-all box's accessible name.
     property string selectAllLabel: "Select all"
     // The width the select column takes before the first column: a touch target.
-    readonly property real lead: root.selectColumn ? Theme.targetHeight : 0
+    // The leading strip before the first column: the select column's boxes, or in a table that selects cells the row
+    // headers, a click on which selects the row's cells.
+    readonly property real lead: root.selectColumn || root.selectsCells ? Theme.targetHeight : 0
     // How many of the shown rows are selected, for the select-all box.
     readonly property int selectedShown: {
         let count = 0
@@ -1079,13 +1094,14 @@ MorphWidget {
                 // The select-all box: checked while every shown row is selected, partly while some are. It shows the
                 // selection and never changes its own state, so a selection the document refuses leaves it as it was.
                 Item {
-                    visible: root.selectColumn
+                    visible: root.selectColumn || root.selectsCells
                     width: root.lead
                     height: parent.height
 
                     CheckBox {
                         id: selectAllBox
                         objectName: "selectAll"
+                        visible: root.selectColumn
                         anchors.centerIn: parent
                         padding: 0
                         indicator: MorphCheckIndicator {
@@ -1150,6 +1166,9 @@ MorphWidget {
                         TapHandler {
                             id: headerLabelSort
                             enabled: headerLabel.modelData.sortable === true
+                            // A Ctrl-click selects the column's cells in a table that selects cells, and sorts nothing.
+                            acceptedModifiers: root.selectsCells ? (Qt.NoModifier | Qt.ShiftModifier)
+                                                                 : Qt.KeyboardModifierMask
                             onTapped: {
                                 if (headerEdge.visible && headerLabelSort.point.position.x >= headerEdge.x)
                                     return
@@ -1241,6 +1260,9 @@ MorphWidget {
                     TapHandler {
                         id: windowLabelSort
                         enabled: windowLabel.column.sortable === true
+                        // A Ctrl-click selects the column's cells in a table that selects cells, and sorts nothing.
+                        acceptedModifiers: root.selectsCells ? (Qt.NoModifier | Qt.ShiftModifier)
+                                                             : Qt.KeyboardModifierMask
                         onTapped: {
                             if (windowEdge.visible && windowLabelSort.point.position.x >= windowEdge.x)
                                 return
@@ -1354,13 +1376,16 @@ MorphWidget {
                     id: cellDrag
                     enabled: root.selectsCells
                     target: null
+                    // The drag is the selection's: the scrolling Flickables around the rows do not take it over.
+                    grabPermissions: PointerHandler.CanTakeOverFromItems | PointerHandler.CanTakeOverFromHandlersOfSameType
+                                     | PointerHandler.CanTakeOverFromHandlersOfDifferentType
                     onActiveChanged: {
                         if (cellDrag.active)
                             return
                         const from = cellDrag.centroid.pressPosition
                         const to = cellDrag.centroid.position
-                        root.selectCells(root.rowAtY(from.y), root.placeOf(root.columnAtX(from.x)),
-                                         root.rowAtY(to.y), root.placeOf(root.columnAtX(to.x)))
+                        root.selectCells(root.rowAtY(from.y), root.placeAtX(from.x),
+                                         root.rowAtY(to.y), root.placeAtX(to.x))
                     }
                 }
 

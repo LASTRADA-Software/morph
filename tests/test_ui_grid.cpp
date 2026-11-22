@@ -809,7 +809,8 @@ TEST_CASE("grid: cells on a model's table are refused when the document loads", 
     CHECK(loaded.error().reason.find("selectionMode") != std::string::npos);
 }
 
-// Mutation: a paste that shifts a value past a read-only cell into the next editable one.
+// Mutations, each with its own build: a paste that shifts a value past a read-only cell into the next editable one;
+// fill writes read-only cells (row 2's limit takes row 1's); clear writes read-only cells (the limits are blanked).
 TEST_CASE("grid: paste, fill, clear", "[ui][grid][cells]") {
     std::string schema{kSpecimens};
     schema.replace(schema.find(R"("maxItems":5)"), 12, R"("maxItems":2)");
@@ -826,14 +827,23 @@ TEST_CASE("grid: paste, fill, clear", "[ui][grid][cells]") {
     CHECK(f.form->field("specimens").rows().size() == 2);     // one row added, to maxItems
     f.scheduler.advance(150ms); f.h.settle();
     CHECK(f.evaluate.submits().size() == 1);                   // one paste, one round
+    // The round gives each row's read-only limit a value of its own.
+    f.derive.resolveSubmit(0, R"({"values":[{"path":"specimens[0].limit","value":{"num":7,"den":1,"dp":2}},
+                                            {"path":"specimens[1].limit","value":{"num":8,"den":1,"dp":2}}]})");
+    f.evaluate.resolveSubmit(0, R"({"errors":{},"ready":false})");
+    f.h.settle();
+    REQUIRE(f.json("specimens[0].limit") == R"({"num":700,"den":100,"dp":2})");
+    REQUIRE(f.json("specimens[1].limit") == R"({"num":800,"den":100,"dp":2})");
     f.grid->select(ui::CellRange{at(1, "volume"), at(2, "note")});
     f.grid->fillDown();
     CHECK(f.form->field("specimens[1].volume").draft() == "1");
     CHECK(f.form->field("specimens[1].note").draft() == "a");
+    CHECK(f.json("specimens[1].limit") == R"({"num":800,"den":100,"dp":2})");   // read-only: not filled
     f.grid->clear();
     CHECK(f.form->field("specimens[0].volume").draft().empty());
     CHECK(f.form->field("specimens[1].note").draft().empty());
-    CHECK(f.form->field("specimens[0].density").draft().empty());   // read-only: never written
+    CHECK(f.json("specimens[0].limit") == R"({"num":700,"den":100,"dp":2})");   // read-only: not cleared
+    CHECK(f.json("specimens[1].limit") == R"({"num":800,"den":100,"dp":2})");
 }
 
 // Review Focus 1, paste half. Mutation: an empty grid's paste starting nowhere and appending nothing.
@@ -889,10 +899,15 @@ TEST_CASE("grid: rows of a grid", "[ui][grid][rows]") {
     f.grid->focusCell(at(1, "label"));
     CHECK_FALSE(f.grid->rowOps().remove);
     CHECK(f.grid->rowOps().why == "A grid holds at least 1 rows");
+    CHECK_FALSE(enabledOf(entry(f.grid->cellEntries(ui::Key{std::int64_t{1}}, "label"), "Delete row")));
+    f.grid->press("Ctrl+-");                                   // refused at minItems
+    CHECK(f.form->field("specimens").rows().size() == 1);
     f.grid->press("Ctrl+Shift+=");
     CHECK(f.form->field("specimens").rows().size() == 2);
     CHECK_FALSE(f.grid->rowOps().insert);
     CHECK(f.grid->rowOps().why == "A grid holds at most 2 rows");
+    f.grid->press("Ctrl+Shift+=");                             // refused at maxItems
+    CHECK(f.form->field("specimens").rows().size() == 2);
     f.grid->type("kept"); f.grid->press("Enter");             // (1, label)
     f.grid->focusCell(at(1, "label"));
     f.grid->press("Ctrl+-");
@@ -915,6 +930,53 @@ TEST_CASE("grid: rows of a grid", "[ui][grid][rows]") {
         CHECK(grow.form->field("specimens").rows().size() == 2);
         CHECK(grow.grid->focus() == at(2, "label"));
     }
+    SECTION("appendRows adds a row on Enter below the last row") {
+        GridFixture grow{1, ui::GridOptions{.appendRows = true}};
+        grow.grid->focusCell(at(1, "mass"));
+        grow.grid->type("1"); grow.grid->press("Enter");
+        CHECK(grow.form->field("specimens").rows().size() == 2);
+        CHECK(grow.grid->focus() == at(2, "mass"));
+    }
+}
+
+// Mutation: the undo offer's timer never armed (Undo still restores the row 6 s after the deletion).
+TEST_CASE("grid: the undo offer ends after 6 s", "[ui][grid][rows]") {
+    GridFixture f{2};
+    f.grid->focusCell(at(1, "label")); f.grid->type("a"); f.grid->press("Enter");
+    f.grid->focusCell(at(1, "label"));
+    f.grid->press("Ctrl+-");
+    REQUIRE(f.grid->messageEntries() == std::vector<ui::StatusEntry>{{"undo", "Undo"}});
+    f.scheduler.advance(5999ms); f.h.settle();
+    CHECK(f.grid->messageEntries() == std::vector<ui::StatusEntry>{{"undo", "Undo"}});
+    f.scheduler.advance(1ms); f.h.settle();
+    CHECK(f.grid->messageEntries().empty());
+    CHECK(f.grid->message().empty());
+    f.grid->chooseEntry("undo");
+    CHECK(f.form->field("specimens").rows().size() == 1);
+}
+
+// Mutation: besideTable leaving the table's visibility off the column (the hidden grid's "Add row" adds a row).
+TEST_CASE("grid: a hidden grid shows no Add row", "[ui][grid][rows]") {
+    GridFixture f{1, ui::GridOptions{.appendRows = true}};
+    ui::testing::RecordingBackend backend;
+    reactive::Signal<bool> shown{f.h.rt, false};
+    ui::TableOptions options;
+    options.common.testId = "grid";
+    options.common.visible = ui::Prop<bool>{[&shown] { return shown.get(); }};
+    std::optional<ui::Mounted> view;
+    view.emplace(f.h.rt, backend, f.grid->node(columnsOf(f), std::move(options)));
+    f.h.settle();
+    int const add = backend.find("Button", "testId", "grid_addRow").value_or(0);
+    REQUIRE(add != 0);
+    backend.click(add);
+    f.h.settle();
+    CHECK(f.form->field("specimens").rows().size() == 1);
+    shown.set(true);
+    f.h.settle();
+    backend.click(add);
+    f.h.settle();
+    CHECK(f.form->field("specimens").rows().size() == 2);
+    view.reset();
 }
 
 // Mutation: FormGridSource::undoRemove restoring after a change (the row edited since comes back beside its copy).

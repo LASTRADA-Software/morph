@@ -143,6 +143,9 @@ inline GridFixture::GridFixture(GridSpec spec) {
     source = std::make_unique<ui::FormGridSource>(
         *form, spec.array, std::move(columns),
         ui::FormatContext{.locale = "de", .numeric = ui::withoutGrouping(ui::localeFacts("de").numeric)});
+    if (spec.options.scheduler == nullptr) {
+        spec.options.scheduler = &scheduler;   // the undo offer's hold
+    }
     grid = std::make_unique<ui::GridController>(h.rt, *source, std::move(spec.options));
     source->onBeforeSubmit([controller = grid.get()] { controller->leave(); });
 }

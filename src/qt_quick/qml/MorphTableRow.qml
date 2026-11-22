@@ -926,15 +926,15 @@ MorphWidget {
         if (fromRow && root.inSpannedColumn(x))
             return
         const held = modifiers & (Qt.ControlModifier | Qt.ShiftModifier)
-        // A table that selects cells takes a Shift-click on a cell as a rectangle from its focused cell, and a click
-        // beside the cells (the row's leading edge) as the row's cells; it selects no row.
+        // A table that selects cells takes a click on the row's header, the leading strip before the first column, as
+        // the row's cells, and a Shift-click on a cell as a rectangle from its focused cell; it selects no row.
         if (root.table && root.table.selectsCells) {
-            const at = root.columnAt(x)
-            if (at < 0) {
+            if (x < root.table.lead) {
                 root.table.selectRowCells(root.viewRow)
                 return
             }
-            if (held === Qt.ShiftModifier) {
+            const at = root.columnAt(x)
+            if (held === Qt.ShiftModifier && at >= 0) {
                 root.table.selectCellsTo(root.viewRow, at)
                 return
             }

@@ -2320,6 +2320,45 @@ template <typename Kind>
 /// @return The node.
 [[nodiscard]] inline Node column(Column spec) { return detail::makeNode(std::move(spec)); }
 
+/// @brief The layout of a table inside the column that takes its place, which holds the table's own layout. The table
+///        fills the column across, and along it unless its height is fixed or a stretch: a share of a row is the
+///        column's to take (a column's child takes none), and a row offers to fill its height to the column, not to
+///        the table inside it, so a content height stretches within the column, which is as tall as the table is or as
+///        its row makes it. Placement in the parent (`alignSelf`, `bleed`) is the column's alone.
+/// @param placed The table's own layout.
+/// @return The layout the table takes inside the column.
+[[nodiscard]] inline LayoutHints wrappedTableLayout(LayoutHints placed) {
+    if (placed.width.kind == Sizing::Kind::Percent) {
+        placed.width = Sizing::stretch(1);
+    }
+    if (placed.height.kind == Sizing::Kind::Content) {
+        placed.height = Sizing::stretch(1);
+    }
+    placed.alignSelf.reset();
+    placed.bleed = false;
+    return placed;
+}
+
+/// @brief A table with other nodes under it, in a column that takes the table's place: the column takes the table's
+///        visibility and layout, the table `wrappedTableLayout` within it, and every other common property stays on
+///        the table alone, so its test id and the element id a focus request finds name the table. The column has no
+///        gap, so a node that draws nothing in place (a dialog) adds no space.
+/// @param placed The table's common properties; its layout becomes the one inside the column.
+/// @param beside The nodes under the table, in order.
+/// @param table  Makes the table, after @p placed is changed.
+/// @return The column.
+[[nodiscard]] inline Node besideTable(Common& placed, std::vector<Node> beside, std::function<Node()> const& table) {
+    Column wrapper;
+    wrapper.common.visible = placed.visible;
+    wrapper.common.layout = placed.layout;
+    placed.layout = wrappedTableLayout(placed.layout);
+    wrapper.children.push_back(table());
+    for (Node& node : beside) {
+        wrapper.children.push_back(std::move(node));
+    }
+    return column(std::move(wrapper));
+}
+
 /// @brief Children laid out left to right.
 /// @param spec The node.
 /// @return The node.

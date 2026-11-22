@@ -344,8 +344,10 @@ step 1 of this design lands it.
 
 A grid selects **cells**: `selectionMode: "cells"` is a rectangle of the view, extended with `Shift` and the
 arrows or a drag, and the whole grid with `Ctrl+A`. A row header click selects its row, a column header's
-selection gesture its column. It is the default for a grid of a form and allowed on any table held whole on the
-client; a model's table, which is in server mode, selects rows, and refuses `cells`.
+selection gesture its column. It is the default for a grid of a form, and the design allows it on any table held
+whole on the client; a model's table, which is in server mode, selects rows, and refuses `cells`. The code lowers
+`cells` for a grid of a form only: on a table over `rows` it is refused when the document loads, and lowering it there
+is deferred work.
 
 - **Its value.** `selection` and `onSelectionChange`'s `event` are `{"anchor": {"key", "column"}, "focus":
   {"key", "column"}}`, the rectangle's two corners by row key and column id; the rectangle is the rows between
@@ -370,8 +372,10 @@ A grid of a form adds and removes rows of its field.
 - `appendRows` (a literal flag) adds a row by the walk past the end, and offers "Add row" under the grid.
 - The cell's and the table's menus offer "Insert row above", "Insert row below" and "Delete row" (or "Delete
   rows" for a selection); `Ctrl+Shift+=` inserts below and `Ctrl+-` deletes, as in a spreadsheet. A deletion
-  happens at once, with no question first: the status line says "Deleted {n} rows" with "Undo" until the next
-  change.
+  happens at once, with no question first: the status line says "Deleted {n} rows" with "Undo". The offer ends at
+  the grid's next change (an edit, a paste, a fill, a clear, a revert or a row operation of the grid), or 6 s after
+  the deletion, the hold of a status-line notice, whichever comes first; once it ends, "Undo" restores nothing. A
+  derive round, which writes only computed and derived members, is no change of the grid's.
 - The field's `minItems` and `maxItems` bound them: the entries are disabled at a bound, and say why.
 - `rowsFixed` (a literal flag) offers none of them: the rows are the record's, such as one per sieve of a
   standard series.

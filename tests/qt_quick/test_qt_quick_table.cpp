@@ -2771,6 +2771,17 @@ struct QuickGrid {
         return *found;
     }
 
+    // The row item of view row @p viewRow.
+    [[nodiscard]] QQuickItem& rowAt(int viewRow) {
+        for (QQuickItem* const row : Scene::itemsOf(named(QStringLiteral("grid")), "QQuickItem")) {
+            if (row->property("viewRow").toInt() == viewRow && row->property("cellMarks").isValid()) {
+                return *row;
+            }
+        }
+        FAIL("no row at " << viewRow);
+        throw std::logic_error{"unreachable"};
+    }
+
     // The cell of view row @p viewRow in column @p column.
     [[nodiscard]] QQuickItem& cellAt(int viewRow, int column) {
         for (QQuickItem* const row : Scene::itemsOf(named(QStringLiteral("grid")), "QQuickItem")) {
@@ -2898,10 +2909,12 @@ TEST_CASE("qt_quick grid: a drag selects a rectangle of cells and a row header c
             CHECK_FALSE(row->property("selected").toBool());
         }
     }
-    // A click on a row's leading edge, beside its cells, selects the row's cells.
-    QQuickItem& first = g.cellAt(1, 0);
-    QPointF const edge = first.mapToScene(QPointF{-2, first.height() / 2});
-    QTest::mouseClick(&g.scene.window(), Qt::LeftButton, {}, edge.toPoint());
+    // A click on a row's header, the leading strip before its first cell, selects the row's cells.
+    qreal const lead = table.property("lead").toReal();
+    REQUIRE(lead > 0);
+    QQuickItem& row = g.rowAt(1);
+    QPointF const header = row.mapToScene(QPointF{lead / 2, row.height() / 2});
+    QTest::mouseClick(&g.scene.window(), Qt::LeftButton, {}, header.toPoint());
     g.scene.settle();
     CHECK(g.grid.grid->selection() == ui::CellRange{morph::test::grid::at(2, "label"), morph::test::grid::at(2, "note")});
 }
