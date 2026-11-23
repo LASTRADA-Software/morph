@@ -212,7 +212,7 @@ them. The shell builds it with each frame.
 | Event | What happens |
 |---|---|
 | `start(id)` | Ends any running tour. If the tour has a `screen` and the active tab is not showing it, opens that screen. Then shows step 0 |
-| Showing step *n* | 1. If the step names a `screen` the active tab is not showing, calls `Workspace::open`. If that answers a `MountError` (the screen is unavailable to this person, say), the tour ends and the shell shows a toast naming the screen. 2. Prepares a shell target (below). 3. Sets the host values and points the spotlight at `target` |
+| Showing step *n* | 1. If the step names a `screen` the active tab is not showing (a custom screen based on it counts as showing it, so a tour never moves someone off their own version), calls `Workspace::open`. If that answers a `MountError` (the screen is unavailable to this person, say), the tour ends and the shell shows a toast naming the screen. 2. Prepares a shell target (below). 3. Sets the host values and points the spotlight at `target` |
 | `next` | Shows step *n*+1. On the last step the card's button is captioned Done and ends the tour |
 | `back` | Shows step *n*−1. Back does not undo a screen the tour opened; the earlier step's own `screen` reopens it if it named one |
 | A waiting step appears while its screen is already active | It shows as an ordinary step, with Next: there is nothing left to wait for, and its explanation still applies |
@@ -286,7 +286,7 @@ It picks again on every index change and on every visibility change of its candi
 
 The card is `kTourCardDocument`, with id `morph.tour`. The server may never serve that id. Today the chat panel's id is
 reserved by hand in two places, `servedScreenRefusal` and `UiRegistry::checkNewEntry`. Both move to one set of
-reserved client ids holding both ids, and `host_vocabulary.md` is updated to match. The card is mounted into `SpotlightWidget::card()` with `DocumentScreenHost::mountInto`. Its
+reserved client ids holding both ids, and `host_vocabulary.md` is updated to match. The card is mounted into the spotlight itself, which is a container, with `DocumentScreenHost::mountInto`. Its
 host vocabulary is scoped to `morph.tour`:
 
 | Values | Commands |
@@ -304,7 +304,10 @@ host vocabulary is scoped to `morph.tour`:
 | `tour_end` | End tour |
 
 Keys: Escape runs `tour.end`, Right runs `tour.next` (except on a waiting step), and Left runs `tour.back`. The card's
-document declares them as its `keys`, and the backend delivers these three before the focused button sees them.
+document declares them as its `keys`. While focus is inside the card, the backend delivers these three before the
+focused button sees them. While focus is on the ringed target, or on a popup the target opened (a waiting step's menu),
+that control handles the key first and the card's chord runs only if it does not, so Escape closes the menu rather than
+the tour.
 Enter and Space stay with the focused button, so Enter on Back or End does what the button says. When the card opens,
 it focuses its first shown button: Next on an ordinary step, End tour on a waiting one.
 
