@@ -228,10 +228,13 @@ struct TableColumn {
   any action that changes a table does ([`table.md`](table.md#a-models-tables)). A `FailedRow` for the row, or a
   `FieldError` naming `value`, settles the cell with that message. A row's commit may carry several cells: a
   `FieldError` naming a cell's member (`value` for a `CellEdit`, the `EditInfo::member` for a `RowEdit`) is that
-  cell's, one that names no cell of the commit, a `FailedRow` included, is every other cell's, and a cell no error
-  reached keeps its draft and takes no error.
+  cell's; one that names no cell of the commit, a `FailedRow` included, is the error of every cell of the commit
+  that no named error reached; and a cell no error reached keeps its draft and takes no error. A commit that one
+  call cannot carry (a `CellEdit` cell beside `RowEdit` cells in `row` mode) is one call per action, and an error one
+  of them gives that names no cell is that call's cells'.
 - **Committing** is `CellEdits`: edits to one row run one at a time, in order. A cell is stale from its commit
-  until the action replies. Then it shows the committed value, marked modified, until the window next fetches
+  until the action replies. Then it shows the committed value (a column's own `cell` template shows the row's
+  value, which it reads from the record), marked modified, until the window next fetches
   the row, which shows the row as the server has it; an edit that changes nothing, or that moves the row out of
   the view, leaves nothing waiting. A draft that does not encode, or one waiting to be committed, is held by row
   key and column, not by the window, so a row that scrolls out of the window and back finds its draft and its

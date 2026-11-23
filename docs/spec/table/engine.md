@@ -379,8 +379,9 @@ drops the drafts that success sent; a cell still stale keeps its marks, since
 the row fetched does not hold its edit yet. A refusal is a list of
 `FieldError`s: one whose `column` is a cell's `EditCell::member` (its column
 when the member is empty) lands on that cell, one that names no cell of the
-request, or nothing, on every other cell of the request, and a cell no error
-reached takes none.
+request, or nothing, on every cell of the request that no named error reached,
+and a cell no error reached takes none. A success settles a cell's draft only
+while it is the draft the request was made with: one typed since stays.
 
 Drafts and their errors are held by row key and column (`setDraft`, `draft`,
 `clearDraft`), not by the window: a row that scrolls out and back finds them.

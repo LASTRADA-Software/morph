@@ -309,8 +309,13 @@ public:
     /// @param request The row and its cells.
     void commitRow(RowEditRequest request) {
         RowId const row = request.row;
+        std::vector<std::optional<std::string>> drafts;
+        for (EditCell const& cell : request.cells) {
+            drafts.push_back(draft(row, cell.column));
+        }
         auto& queue = _rowQueues[row];
-        queue.push_back(RowFlight{.id = ++_nextFlight, .request = std::move(request), .sent = false, .discard = false});
+        queue.push_back(RowFlight{
+            .id = ++_nextFlight, .request = std::move(request), .sent = false, .discard = false, .drafts = std::move(drafts)});
         if (queue.size() == 1) {
             startRow(row);
         }
@@ -622,6 +627,9 @@ private:
         RowEditRequest request;
         bool sent = false;
         bool discard = false;
+        // Each cell's draft when the commit was made, in the request's order: a success settles a cell's draft only
+        // while it is still this one, so a draft typed after the commit outlives the next fetch.
+        std::vector<std::optional<std::string>> drafts;
     };
 
     // A cell of a model's table: its draft; whether its row commit succeeded and the row was not fetched since; and
@@ -719,11 +727,13 @@ private:
         }
         if (!settled.discard) {
             if (outcome) {
-                for (EditCell const& cell : settled.request.cells) {
+                for (std::size_t at = 0; at < settled.request.cells.size(); ++at) {
+                    EditCell const& cell = settled.request.cells.at(at);
                     eraseError(row, cell.column);
                     CellState& state = _cells[row][cell.column];
                     state.modified = true;
-                    state.settled = state.draft.has_value();
+                    state.settled = state.draft.has_value() && at < settled.drafts.size() &&
+                                    state.draft == settled.drafts.at(at);
                 }
             } else {
                 RowEditRequest landing = settled.request;
