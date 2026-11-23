@@ -386,7 +386,12 @@ EventResult WidgetBase::dispatch(::core::tui::InputEvent const& event) {
                 return result;
             }
         }
-        return key(*pressed);
+        EventResult const own = key(*pressed);
+        if (own != EventResult::Ignored || isActivation(*pressed)) {
+            return own;
+        }
+        // The focus is on an open spotlight's target: the card's chords run only for a key the target did not take.
+        return targetChord(*pressed);
     }
     return EventResult::Ignored;
 }
@@ -412,8 +417,8 @@ EventResult WidgetBase::chord(::core::tui::KeyEvent const& key) {
     return EventResult::Handled;
 }
 
-// The focus is on an open spotlight's target, outside its box: the card's keys still come first, so the spotlight and
-// every container inside it are tried, outermost first.
+// The focus is on an open spotlight's target, outside its box, and the target did not take the key: the card's chords
+// run, so the spotlight and every container inside it are tried, outermost first.
 EventResult WidgetBase::targetChord(::core::tui::KeyEvent const& key) {
     for (WidgetBase* const candidate : std::vector<WidgetBase*>{_context->spotlights}) {
         auto* const spotlight = dynamic_cast<ContainerBase*>(candidate);
@@ -450,7 +455,7 @@ EventResult WidgetBase::spotlightChord(::core::tui::KeyEvent const& key) {
         }
     }
     if (spotlight == nullptr) {
-        return targetChord(key);
+        return EventResult::Ignored;
     }
     for (ContainerBase* outer = _container; outer != nullptr; outer = outer->container()) {
         bool const last = outer == spotlight;

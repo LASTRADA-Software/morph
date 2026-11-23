@@ -137,8 +137,10 @@ never serve it). The shell mounts it into the frame's spotlight with `DocumentSc
 
 The captions are `t` messages (`morph.tour.*`) with English fallbacks, so a bundle's catalogue translates them. The
 document's `keys` are Esc (`tour.end`), Enter and Right (`tour.next`) and Left (`tour.back`); a waiting step ignores
-`tour.next`. The spotlight delivers the card's chords before a focused control's own keys, Enter and Space excepted, so
-Enter on a focused button activates that button. Opening the spotlight focuses the card's first shown button.
+`tour.next`. While focus is in the card, the spotlight delivers the card's chords before a focused control's own keys, Enter and
+Space excepted, so Enter on a focused button activates that button. While focus is on the ringed target, or on a popup
+it opened (the navigation menu a compact waiting step rings), that control handles the key first and the card's chord
+runs only for a key it left alone: Escape closes an open menu, and ends the tour once it is closed. Opening the spotlight focuses the card's first shown button.
 
 `tour.start` is registered for every document and is safe for an untrusted connection: it changes nothing on the
 server and shows only what the application declared. An id the app does not declare is refused through the command's

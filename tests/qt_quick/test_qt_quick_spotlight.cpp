@@ -415,3 +415,50 @@ TEST_CASE("qt_quick spotlight: the scrim reaches the target's box, so the ring's
     CHECK(sceneBox(*left).right() == cutout.left());
     CHECK(sceneBox(*top).bottom() == cutout.top());
 }
+
+namespace {
+
+/// The popup of a button-style menu: the popup directly under the menu, not a tooltip under its trigger.
+QObject* popupOf(QQuickItem& menu) {
+    for (QObject* const child : menu.children()) {
+        if (child->inherits("QQuickPopup")) {
+            return child;
+        }
+    }
+    return nullptr;
+}
+
+}  // namespace
+
+// Mutation: drop the `takenByControl` offer in `SpotlightImpl::filterKey` (Escape ends the tour while the target's
+// menu is open, instead of closing the menu).
+TEST_CASE("qt_quick spotlight: Escape closes the target's open menu first, then ends the tour", "[qt_quick][tours]") {
+    Scene scene;
+    scene.window().resize(1280, 800);
+    auto root = scene.backend().createStack(nullptr, ui::Axis::Vertical);
+    auto menu = scene.backend().createMenu(root.get(), ui::MenuStyle::Button);
+    menu->setTestId("target");
+    menu->setTrigger(ui::MenuTrigger{.label = "Menu"});
+    menu->setItems({ui::MenuEntry{.label = "First"}, ui::MenuEntry{.label = "Second"}});
+    Card const card{scene};
+    std::vector<std::string> chords;
+    card.next->setKeys({"Escape"}, [&chords](std::string const& chord) { chords.push_back(chord); });
+    card.spotlight->setTargetFocusable(true);
+    QQuickItem& item = Scene::itemOf(*menu);
+    QObject* const popup = popupOf(item);
+    REQUIRE(popup != nullptr);
+    QMetaObject::invokeMethod(&item, "openFromTrigger");
+    scene.settle();
+    REQUIRE(popup->property("visible").toBool());
+    scene.key(Qt::Key_Escape);
+    scene.settle();
+    CHECK_FALSE(popup->property("visible").toBool());
+    CHECK(chords.empty());
+    // With the menu closed the target ignores Escape, and the card's chord runs.
+    scene.key(Qt::Key_Tab);
+    scene.key(Qt::Key_Tab);
+    scene.key(Qt::Key_Tab);
+    REQUIRE(item.window()->activeFocusItem() != nullptr);
+    scene.key(Qt::Key_Escape);
+    CHECK(chords == std::vector<std::string>{"Escape"});
+}

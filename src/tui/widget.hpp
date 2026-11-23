@@ -108,10 +108,10 @@ public:
     /// The widget outside this open overlay that still takes presses and keys, or null: a spotlight's target.
     [[nodiscard]] virtual WidgetBase const* passesThrough() const { return nullptr; }
     /// Runs the chord @p key is when a container between this widget and the open spotlight around it declares it:
-    /// inside a spotlight the card's chords come before the focused widget's own keys. The same holds for the widget
-    /// an open spotlight rings, which sits outside its box.
+    /// inside a spotlight the card's chords come before the focused widget's own keys. The widget an open spotlight
+    /// rings sits outside its box and gets its own key first: the card's chords run only for a key it ignored.
     /// @param key The key pressed.
-    /// @return Handled when one did; Ignored for a widget that is neither inside a spotlight nor its target.
+    /// @return Handled when one did; Ignored for a widget that is not inside a spotlight.
     [[nodiscard]] ::core::tui::EventResult spotlightChord(::core::tui::KeyEvent const& key);
     /// Whether this is an open spotlight whose box stands where its target is no longer drawn.
     [[nodiscard]] virtual bool placementStale() const { return false; }

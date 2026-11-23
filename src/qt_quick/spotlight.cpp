@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
+#include <QCoreApplication>
 #include <QDebug>
 #include <QEvent>
 #include <QKeyEvent>
@@ -77,6 +78,21 @@ void collectItems(QQuickItem const& item, std::vector<QQuickItem*>& out) {
         out.push_back(child);
         collectItems(*child, out);
     }
+}
+
+// Offers @p event to @p focused and then to each ancestor, as the window would, and says whether one took it. The
+// event is delivered as a copy that starts accepted, which is how an item's `keyPressEvent` is entered: it ignores the
+// copy when the key means nothing to it.
+bool takenByControl(QQuickItem* focused, QKeyEvent const& event) {
+    for (QQuickItem* at = focused; at != nullptr; at = at->parentItem()) {
+        QKeyEvent offered{event.type(), event.key(),          event.modifiers(),
+                          event.text(), event.isAutoRepeat(), static_cast<ushort>(event.count())};
+        QCoreApplication::sendEvent(at, &offered);
+        if (offered.isAccepted()) {
+            return true;
+        }
+    }
+    return false;
 }
 
 }  // namespace
@@ -259,9 +275,15 @@ bool SpotlightImpl::filterKey(QKeyEvent const& event) {
     if (key == Qt::Key_Return || key == Qt::Key_Enter || key == Qt::Key_Space) {
         return false;
     }
-    // The card's widgets, the one holding focus and its ancestors first, then the rest, then the spotlight itself:
-    // its chords reach the card whatever has focus, the target included.
+    // Focus outside the card is on the ringed target or on a popup it opened: that control takes the key first, so
+    // Escape closes an open menu, and the card's chords run only for a key it left alone.
     QQuickItem* const focused = _window != nullptr ? _window->activeFocusItem() : nullptr;
+    if (focused != nullptr && focused != content && !content->isAncestorOf(focused) &&
+        takenByControl(focused, event)) {
+        return true;
+    }
+    // The card's widgets, the one holding focus and its ancestors first, then the rest, then the spotlight itself:
+    // its chords reach the card whatever has focus.
     std::vector<QQuickItem*> candidates;
     for (QQuickItem* at = focused; at != nullptr && at != content->parentItem(); at = at->parentItem()) {
         if (content->isAncestorOf(at)) {

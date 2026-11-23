@@ -320,5 +320,6 @@ The box is modal and takes the focus when it opens, as a dialog's does, with thr
 takes presses and keys (`passesThrough`); on a waiting step (`setTargetFocusable(true)`) Tab reaches the ringed widget
 after the card's widgets (`tabTarget`); and Esc is not the box's, the card declares it. Inside the box, a chord that a
 container between the focused widget and the box declares is delivered before the focused widget's own key handling,
-Enter and Space excepted (`WidgetBase::spotlightChord`). The ringed widget outside the box gets the same: while it has
-the focus, the card's chords, on the spotlight or any container inside it, come before its own keys.
+Enter and Space excepted (`WidgetBase::spotlightChord`). The ringed widget outside the box is the reverse: while it has
+the focus it handles the key first, and the card's chords, on the spotlight or any container inside it, run only for a
+key it ignored (`WidgetBase::targetChord`). A list it opened is a focused component of its own and takes Escape itself.

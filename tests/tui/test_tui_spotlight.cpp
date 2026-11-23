@@ -8,6 +8,7 @@
 #include <core/tui/InputEvent.hpp>
 #include <core/tui/KeyCode.hpp>
 #include <cstddef>
+#include <cstdint>
 #include <memory>
 #include <morph/ui/backend.hpp>
 #include <string>
@@ -16,6 +17,7 @@
 
 #include "tui/container_widgets.hpp"
 #include "tui/leaf_widgets.hpp"
+#include "tui/list_widgets.hpp"
 #include "tui/widget.hpp"
 #include "tui_harness.hpp"
 
@@ -221,4 +223,64 @@ TEST_CASE("tui spotlight: a press on the target reaches it, and one on anything 
     rig.other->setOnClick([&otherClicks] { ++otherClicks; });
     static_cast<void>(rig.harness.click({.x = 2, .y = static_cast<int>(otherRow)}));
     CHECK(otherClicks == 0);
+}
+
+// The control for the list the target opens: the list is its own focused component, so it takes Escape before any
+// chord. Mutation: drop `Escape` from the popup list's `onEvent` (the key then reaches the card and ends the tour).
+TEST_CASE("tui spotlight: a key the target's list takes does not reach the card", "[tui][tours]") {
+    Harness harness{40, 12};
+    auto column = harness.make<detail::StackImpl>(nullptr, ui::Axis::Vertical);
+    auto menu = harness.make<detail::MenuButtonImpl>(column.get());
+    menu->setTestId("target");
+    menu->setTrigger(ui::MenuTrigger{.label = "TARGET"});
+    menu->setItems({ui::MenuEntry{.label = "First"}, ui::MenuEntry{.label = "Second"}});
+    auto spotlight = harness.make<detail::SpotlightImpl>(nullptr);
+    int ended = 0;
+    spotlight->setKeys({"Escape"}, [&ended](std::string const&) { ++ended; });
+    auto card = harness.make<detail::StackImpl>(spotlight.get(), ui::Axis::Vertical);
+    auto next = harness.make<detail::ButtonImpl>(card.get());
+    next->setLabel("NEXT");
+    spotlight->setTarget(std::string{"target"});
+    spotlight->setOpen(true);
+    static_cast<void>(harness.draw());
+    harness.focus(*menu);
+    static_cast<void>(harness.key(core::tui::KeyCode::Enter));
+    REQUIRE(menu->isOpen());
+    static_cast<void>(harness.key(core::tui::KeyCode::Escape));
+    CHECK_FALSE(menu->isOpen());
+    CHECK(ended == 0);
+    // With the list closed the target ignores Escape, and the card's chord runs.
+    harness.focus(*menu);
+    static_cast<void>(harness.key(core::tui::KeyCode::Escape));
+    CHECK(ended == 1);
+}
+
+// Mutation: make `WidgetBase::handle` ask `targetChord` before the target's own `key` (Right moves the card on
+// instead of the slider's knob).
+TEST_CASE("tui spotlight: a key the target's slider takes does not reach the card", "[tui][tours]") {
+    Harness harness{40, 12};
+    auto column = harness.make<detail::StackImpl>(nullptr, ui::Axis::Vertical);
+    auto slider = harness.make<detail::SliderImpl>(column.get());
+    slider->setTestId("target");
+    slider->setRange(0, 10, 1);
+    std::int64_t value = 0;
+    slider->setOnChange([&value](std::int64_t changed) { value = changed; });
+    auto spotlight = harness.make<detail::SpotlightImpl>(nullptr);
+    int advanced = 0;
+    int ended = 0;
+    spotlight->setKeys({"Right", "Escape"},
+                       [&advanced, &ended](std::string const& chord) { (chord == "Right" ? advanced : ended)++; });
+    auto card = harness.make<detail::StackImpl>(spotlight.get(), ui::Axis::Vertical);
+    auto next = harness.make<detail::ButtonImpl>(card.get());
+    next->setLabel("NEXT");
+    spotlight->setTarget(std::string{"target"});
+    spotlight->setOpen(true);
+    static_cast<void>(harness.draw());
+    harness.focus(*slider);
+    static_cast<void>(harness.key(core::tui::KeyCode::Right));
+    CHECK(value == 1);
+    CHECK(advanced == 0);
+    // Escape is nothing to the slider, so the card's chord runs.
+    static_cast<void>(harness.key(core::tui::KeyCode::Escape));
+    CHECK(ended == 1);
 }

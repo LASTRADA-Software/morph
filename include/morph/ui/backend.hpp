@@ -1221,8 +1221,9 @@ public:
 /// spotlight itself), and closing it hands focus back to the widget that had it when it opened. Tab stays among its
 /// children, unless `setTargetFocusable(true)` adds the ringed widget after them. A chord a widget inside it declares
 /// is delivered before the focused widget's own keys, except Enter and Space, which the focused widget takes first as
-/// it always does. A pointer press outside the ringed widget's box and the card reaches nothing; one inside the ringed
-/// widget's box reaches the ringed widget.
+/// it always does; while focus is on the ringed widget or a popup it opened, that control takes the key first and the
+/// chord runs only for a key it left alone. A pointer press outside the ringed widget's box and the card reaches
+/// nothing; one inside the ringed widget's box reaches the ringed widget.
 class SpotlightWidget : public ContainerWidget {
 public:
     /// @brief Shows or hides the spotlight.

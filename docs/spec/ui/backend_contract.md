@@ -518,7 +518,9 @@ is closed and names no target.
   be finished from the keyboard.
 - **Keys.** A chord a widget inside the spotlight declares is delivered before the focused widget's own keys (so a
   focused segmented select or row cannot take Left and Right from the card), except Enter and Space, which the
-  focused widget takes first as it always does.
+  focused widget takes first as it always does. The exception is focus outside the card: on the ringed widget, or on a
+  popup it opened (a menu's list), that control takes the key first and the card's chords run only for a key it left
+  alone, so Escape closes an open menu and ends the tour only once it is closed.
 - **Pointer.** A press on the dimmed area reaches nothing; a press inside the ringed widget's box reaches it.
 
 Qt Quick dims the window with four scrim rectangles and rings the target in the focus colour; the terminal places the
@@ -563,7 +565,8 @@ The headless reference backend and the test double for everything above the cont
   `axis`, `sizes` (Splitter); `title`, `header` (the header child's id), `open` (Collapsible);
   `open`, `target` (`none` for none), `targetFocusable`, `targetShown`, `ringed` (Spotlight; the store tells listeners of
   every change that can move a spotlight's target, and `press` delivers the chords of an open spotlight's content
-  before the focused widget's own keys except Enter and Space);
+  before the focused widget's own keys except Enter and Space, and, while the focus is outside the card, after the ringed
+  widget's own handling of the key);
   `accept`, `multiple` (DropZone); `component`, `minVersion` and each prop as `prop.<name>` (Custom);
   `yRange`, `xRange`, `barSlot`, `yLabel`, `yTicks`, `lines`, `series`, `summary` (Chart, each set only when its text
   changed, so a test sees which parts of the data moved).
