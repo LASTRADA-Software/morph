@@ -90,9 +90,10 @@ belongs to (`Session::setHostScopes`, `Session::hostNameIn`); a command's `run` 
 
 The scope is keyed on the id a mounted document carries, so the client guarantees that id is its own. The shell
 refuses, with a reported problem, a server document whose `id` differs from its catalog entry's, and a catalog entry
-whose id is the chat panel's, `morph.chat`; the panel's document is resolved from the client's own generated documents
-only, never from the server's. `UiRegistry` also refuses the id for an application's screen, but that is the server's
-check and a client does not rely on it. A name limited to the panel therefore reaches the client's own panel document
+whose id is one the client reserves for its own documents (`kReservedClientIds` in `client_ids.hpp`: the chat
+panel's `morph.chat` and the tour card's `morph.tour`); those documents are resolved from the client's own generated
+documents only, never from the server's. `UiRegistry` also refuses the id for an application's screen, but that is the server's
+check and a client does not rely on it. A name limited to one of them therefore reaches the client's own document
 and nothing else, among the documents loaded through the three paths that apply the check: the shell's own load
 (start-up, sign-in and sign-out), `reloadDocuments` (a development reload) and `client::Source::documents`.
 `servedScreenRefusal` and `servedDocumentRefusal` (`served_document.hpp`) are the one check they share. A refused

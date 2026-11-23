@@ -480,6 +480,7 @@ add_library(morph ${_morph_library_type}
     src/ui/interpreter.cpp
     src/ui/library.cpp
     src/ui/service.cpp
+    src/ui/tour_checks.cpp
     src/ui/custom_screen_checks.cpp
     src/ui/custom_screens.cpp
     src/ui/json_source.cpp
@@ -676,6 +677,7 @@ target_sources(morph
         include/morph/ui/route.hpp
         include/morph/ui/route_history.hpp
         include/morph/ui/served_document.hpp
+        include/morph/ui/client_ids.hpp
         include/morph/ui/service_client.hpp
         include/morph/ui/shell_frame.hpp
         include/morph/ui/shell_parts.hpp

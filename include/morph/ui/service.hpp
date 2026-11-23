@@ -273,7 +273,9 @@ public:
     ///
     /// Refused when a screen names a delivered component (`qml`) whose hash no `component` file has, when the
     /// bundle holds more than `kMaxBundleFiles` files or entries, and when it needs more than `kMaxListItems`
-    /// vocabularies or a vocabulary name longer than `kMaxNameBytes`. A theme file's token that nothing reads is
+    /// vocabularies or a vocabulary name longer than `kMaxNameBytes`, when a tour names a screen that is not
+    /// registered or a target nothing the window can show carries, and when a literal `tour.start` names a tour the
+    /// app document does not declare (`docs/spec/ui/tours.md`, "Checks"). A theme file's token that nothing reads is
     /// logged at warn and does not refuse the build.
     /// @return The bundle, or the refusal.
     [[nodiscard]] std::expected<std::shared_ptr<ServedBundle const>, Refusal> build() const;
@@ -367,6 +369,11 @@ private:
     /// An action a part names is checked by the app document's load, against the catalog.
     /// @return The refusal for the first name no screen has, or nothing.
     [[nodiscard]] std::optional<Refusal> checkShellNames() const;
+
+    /// @brief Checks every name the app document's tours use, and every literal `tour.start`, against the registered
+    ///        screens and the declared tours.
+    /// @return The first refusal, or nothing.
+    [[nodiscard]] std::optional<Refusal> checkTourReferences() const;
 
     /// @brief What `build` refuses: a delivered component missing from the bundle, a theme some combination of which
     ///        does not resolve, and the bounds.
