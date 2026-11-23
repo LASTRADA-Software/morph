@@ -4,7 +4,11 @@
 
 #include <expected>
 #include <memory>
+#include <morph/core/registry.hpp>
+#include <morph/session/session.hpp>
 #include <morph/ui/service.hpp>
+#include <morph/ui/tour_registry.hpp>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -112,6 +116,23 @@ std::expected<std::shared_ptr<morph::ui::ServedBundle const>, morph::ui::Refusal
 
 std::expected<std::shared_ptr<morph::ui::ServedBundle const>, morph::ui::Refusal> noToursBundle() {
     return build(kPlainHome, {});
+}
+
+std::shared_ptr<morph::ui::TourRegistry> toursRegistry() {
+    auto built = toursBundle();
+    if (!built) {
+        throw std::runtime_error{built.error().message()};
+    }
+    auto registry = std::make_shared<morph::ui::TourRegistry>([held = *built] { return held; });
+    morph::ui::registerTours(registry, morph::session::allowAllAuthorizer(), morph::model::detail::defaultDispatcher(),
+                             morph::model::detail::defaultRegistry());
+    return registry;
+}
+
+std::string runtimeTour(std::string const& id, std::string const& stepTitle) {
+    return R"({"id":")" + id +
+           R"(","title":"What's new","summary":"Added while the server runs","steps":[{"title":")" + stepTitle +
+           R"("},{"title":"And more"}]})";
 }
 
 }  // namespace tours

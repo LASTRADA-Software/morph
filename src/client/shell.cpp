@@ -42,6 +42,7 @@
 #include <morph/ui/shell_parts_binding.hpp>
 #include <morph/ui/shell_parts_model.hpp>
 #include <morph/ui/tour_card.hpp>
+#include <morph/ui/tour_sync.hpp>
 #include <morph/ui/tours.hpp>
 #include <morph/ui/view.hpp>
 #include <morph/ui/workspace.hpp>
@@ -177,6 +178,9 @@ public:
             _customChrome->attach(nullptr);
         }
         _workspace.reset();
+        if (_tourSync) {
+            _tourSync->setOnListed({});
+        }
         _appRoot.reset();
         _frame.reset();
     }
@@ -202,6 +206,9 @@ public:
             if (auto const live = alive.lock(); live != nullptr && *live && _customSync) {
                 _customSync->reconnected();
             }
+            if (auto const live = alive.lock(); live != nullptr && *live && _tourSync) {
+                _tourSync->reconnected();
+            }
         });
         source.onEvent([this, alive = std::weak_ptr<bool>{_alive}](wire::EventBody const& event) {
             if (auto const live = alive.lock(); live != nullptr && *live && _session) {
@@ -212,6 +219,9 @@ public:
             }
             if (auto const live = alive.lock(); live != nullptr && *live && _customSync) {
                 _customSync->deliverEvent(event);
+            }
+            if (auto const live = alive.lock(); live != nullptr && *live && _tourSync) {
+                _tourSync->deliverEvent(event);
             }
         });
     }
@@ -238,6 +248,13 @@ public:
         followWidthClass();
         followConnection(source);
         listen(source);
+        // Made before the first frame, which lists the runtime tours; it goes through the screens' own dispatcher.
+        _tourSync = std::make_unique<ui::TourSync>(source.dispatcher(), _session.get());
+        _tourSync->setOnListed([this](std::vector<ui::TourDecl> const& listed) {
+            if (_appRoot != nullptr) {
+                _appRoot->setRuntimeTours(listed);
+            }
+        });
         showPermitted();
         // Through the screens' own dispatcher, so its calls carry their session and go where their models go; the
         // session carries its watch.
@@ -684,6 +701,11 @@ private:
         followParts();
         buildChat();
         buildTours();
+        // A new frame is a new session's: its runtime tours are listed again, into the new app root.
+        if (_tourSync) {
+            _tourSync->reset();
+            _tourSync->list();
+        }
     }
 
     // Asks the server whether it offers custom screens, for the session the frame was built for.
@@ -1756,6 +1778,9 @@ private:
     // the chrome mounts drafts through, so they go before it; the frame and the workspace go before them.
     std::unique_ptr<ui::CustomScreenSync> _customSync;
     std::unique_ptr<ui::CustomScreenChrome> _customChrome;
+    // The client of the server's runtime tours, over the screens' own dispatcher; it outlives frames and is reset with
+    // each one, since what it listed is the old session's.
+    std::unique_ptr<ui::TourSync> _tourSync;
     // Counts the workspaces built, so a turn's tab is told from a tab of a later workspace with the same number.
     std::uint64_t _workspaceNumber = 0;
     // What the chat panel dictates with; made once, before the binding, which goes first.

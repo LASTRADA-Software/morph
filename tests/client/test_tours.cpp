@@ -421,3 +421,24 @@ TEST_CASE("Client shell tours: a sign-out whose reload fails closes the spotligh
     }
     source.close();
 }
+
+// Mutation: drop the `_tourSync->list()` call from `buildFrame` (the runtime tour never reaches the menu).
+TEST_CASE("Client shell tours: a runtime tour registered on the server is offered after the app document's",
+          "[client][tours][runtime]") {
+    std::shared_ptr<ui::TourRegistry> const registry = tours::toursRegistry();
+    REQUIRE(registry->add(tours::runtimeTour("whats-new")).has_value());
+    Window window;
+    REQUIRE(window.wait([&window] { return window.prop("Menu", "shell_tours", "items").contains("What's new"); }));
+    std::string const items = window.prop("Menu", "shell_tours", "items");
+    CHECK(items.find("Locked away") < items.find("What's new"));
+    REQUIRE(window.shell->startTour("whats-new").has_value());
+    REQUIRE(window.wait([&window] { return window.text("tour_title") == "News"; }));
+}
+
+// The control: a server that never registered `morph.tours` offers the app document's tours, and nothing is reported.
+TEST_CASE("Client shell tours: without the runtime tours model the app document's tours are offered alone",
+          "[client][tours][runtime]") {
+    Window window;
+    CHECK(window.prop("Menu", "shell_tours", "items").contains("Getting started"));
+    CHECK_FALSE(window.reported("morph.tours"));
+}

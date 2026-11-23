@@ -383,6 +383,12 @@ The shell runs the app document's guided tours ([`../ui/tours.md`](../ui/tours.m
   general ones under the built-in text `morph.shell.toursGeneral`; the button's caption and tooltip are
   `morph.shell.tours` and `morph.shell.toursName`, drawn again on a change of locale. With any tour declared, the
   screens' heads are in the page, as they are with a declared top-bar part. Choosing a tour starts it, posted.
+- **Runtime tours.** One `TourSync` over the source's dispatcher outlives frames; each frame resets it and lists
+  `morph.tours` again, and each list goes to the frame's app root (`AppRoot::setRuntimeTours`), so the Tours menu and
+  the controller see the app document's tours and then the runtime ones. The source's connect listener and event
+  listener reach it, so a `changes` event naming `morph.tours`, a `resync` and a reconnect list again. A running
+  runtime tour that is replaced or removed ends with a toast. A server without the model offers the app document's
+  tours alone.
 - **The card.** `kTourCardDocument` is resolved from the client's own generated documents only (its id `morph.tour` is
   reserved, and a route or a navigation to it opens nothing) and mounted into the frame's spotlight. One
   `TourCardBinding`, made once on the shell's host vocabulary, connects it and `tour.start` to the frame's controller;

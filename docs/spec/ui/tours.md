@@ -150,7 +150,8 @@ inside one of its widgets' handlers.
 
 The generic client builds a controller and the Tours menu with each frame and mounts the card into the frame's
 spotlight; see [client.md](../client/client.md#tours). `MountedShell::startTour(id)` starts a tour from client code;
-its default refuses.
+its default refuses. Its `TourSync` lists the runtime tours at each frame and keeps them current
+([client.md](../client/client.md#tours)).
 
 ## Design decisions
 
