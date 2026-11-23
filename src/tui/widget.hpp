@@ -93,10 +93,25 @@ public:
     /// a probe finds the widget.
     void applyAccessibleName(std::string_view name) { _accessibleName = name; }
     void applyAccessibleRole(std::string_view role) { _accessibleRole = role; }
-    void applyTestId(std::string_view testId) { _testId = testId; }
+    void applyTestId(std::string_view testId);
     [[nodiscard]] std::string const& accessibleName() const noexcept { return _accessibleName; }
     [[nodiscard]] std::string const& accessibleRole() const noexcept { return _accessibleRole; }
     [[nodiscard]] std::string const& testId() const noexcept { return _testId; }
+    /// The order the widget was made in, among this context's widgets.
+    [[nodiscard]] std::uint64_t sequence() const noexcept { return _sequence; }
+    /// Picks a spotlight's target again; every other widget ignores it.
+    virtual void targetsChanged() {}
+    /// Whether this is a spotlight that is open: the card's chords then come before the focused widget's own keys.
+    [[nodiscard]] virtual bool isOpenSpotlight() const { return false; }
+    /// The widget Tab reaches after this open overlay's own, or null: a spotlight's target on a waiting step.
+    [[nodiscard]] virtual WidgetBase* tabTarget() const { return nullptr; }
+    /// The widget outside this open overlay that still takes presses and keys, or null: a spotlight's target.
+    [[nodiscard]] virtual WidgetBase const* passesThrough() const { return nullptr; }
+    /// Runs the chord @p key is when a container between this widget and the open spotlight around it declares it:
+    /// inside a spotlight the card's chords come before the focused widget's own keys.
+    /// @param key The key pressed.
+    /// @return Handled when one did; Ignored outside a spotlight.
+    [[nodiscard]] ::core::tui::EventResult spotlightChord(::core::tui::KeyEvent const& key);
     /// Keeps the surface by name: the token set that styles the widget and everything inside it.
     void applySurface(std::string_view surface) { _surface = surface; }
     [[nodiscard]] std::string const& surface() const noexcept { return _surface; }
@@ -243,6 +258,7 @@ private:
     std::string _accessibleName;
     std::string _accessibleRole;
     std::string _testId;
+    std::uint64_t _sequence;
     std::string _surface;
     std::optional<ui::Tone> _rowTone;
     std::string _tooltip;
@@ -647,6 +663,9 @@ void paintRuns(::core::tui::Canvas& canvas, std::vector<ui::TextSpan> const& run
 [[nodiscard]] bool isActivation(::core::tui::KeyEvent const& key) noexcept;
 /// Appends the view of every focusable widget at or below @p root, depth first in `children()` order: Tab order.
 void collectFocusable(WidgetBase& root, std::vector<::core::tui::Component*>& out);
+
+/// The live widgets of @p context that carry @p testId, in creation order.
+[[nodiscard]] std::vector<WidgetBase*> carrying(Context const& context, std::string_view testId);
 /// Empties the screen bounds of every component below @p top, which a drawn tree's top component (a root widget's
 /// view) calls as it renders, before its descendants render.
 ///

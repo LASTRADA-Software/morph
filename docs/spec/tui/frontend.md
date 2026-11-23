@@ -19,6 +19,7 @@ desktop and web; the terminal is best effort.
 - [Field state](#field-state)
 - [The conformance probe](#the-conformance-probe)
 - [Design decisions](#design-decisions)
+- [The spotlight](#the-spotlight)
 
 ## Packaging
 
@@ -303,3 +304,17 @@ at the end of the last row of a clipped rectangle. See [`ui/document_page.md`](.
 takes no room while it is closed: the terminal has no floating layer. It takes no focus; Escape is the widgets' own (the
 search field handles it), so the popover never reports a dismissal. A button menu's trigger with a `detail` writes the
 detail after the label, joined by a dot, on its one row; a menu entry with `heading` is drawn disabled.
+
+## The spotlight
+
+`SpotlightImpl` shows a tour's card as a bordered box, an `OverlayCore` like a dialog's, placed under the target's drawn
+rectangle, or over it when there is no room below, clamped inside the screen. The rectangle is the one the target was
+last drawn in, so the box is centred until the target has been drawn once, and with no target shown it stays centred.
+Nothing is dimmed: the ringed widget is drawn in reverse video (`Context::spotlit`). The target is the first widget, in
+creation order, whose stored test id matches and that is displayed and outside the card; the spotlight picks again
+whenever a test id is set, a widget is made, destroyed, shown or hidden, and at every frame (`Context::targetsChanged`).
+The box is modal and takes the focus when it opens, as a dialog's does, with three differences: the ringed widget still
+takes presses and keys (`passesThrough`); on a waiting step (`setTargetFocusable(true)`) Tab reaches the ringed widget
+after the card's widgets (`tabTarget`); and Esc is not the box's, the card declares it. Inside the box, a chord that a
+container between the focused widget and the box declares is delivered before the focused widget's own key handling,
+Enter and Space excepted (`WidgetBase::spotlightChord`).

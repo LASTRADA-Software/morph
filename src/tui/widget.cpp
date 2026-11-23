@@ -54,7 +54,12 @@ public:
 
 std::unique_ptr<::core::tui::Component> makeView(WidgetBase& owner) { return std::make_unique<View>(owner); }
 
-WidgetBase::WidgetBase(Context& context) noexcept : _context{&context} {}
+WidgetBase::WidgetBase(Context& context) noexcept : _context{&context}, _sequence{++context.nextSequence} {}
+
+void WidgetBase::applyTestId(std::string_view testId) {
+    _testId = testId;
+    _context->targetsChanged();
+}
 
 // The view is unregistered before the focus is cleared: clearing it calls the view's onBlur, which runs while the
 // widget's own class is already destroyed and tells that apart by the view having no owner.
@@ -116,6 +121,7 @@ void WidgetBase::syncVisible() {
     refresh();
     closeUnreachablePopups(*_context);
     countSpinners(*_context);
+    _context->targetsChanged();
 }
 
 void WidgetBase::applyEnabled(bool enabled) {
@@ -263,6 +269,10 @@ void WidgetBase::render(::core::tui::Canvas& canvas) {
     if (invertsSurface(effectiveSurface())) {
         invert(canvas.buffer(), drawn);
     }
+    // The widget an open spotlight rings: the terminal dims nothing, so the target is marked instead.
+    if (_context->spotlit == this) {
+        invert(canvas.buffer(), drawn);
+    }
 }
 
 // The scratch buffer spans the drawn rows, and the columns from the laid-out left edge to the drawn right one: a
@@ -356,6 +366,12 @@ EventResult WidgetBase::dispatch(::core::tui::InputEvent const& event) {
         if (EventResult const result = chord(*pressed); result != EventResult::Ignored) {
             return result;
         }
+        // Inside a spotlight the card's chords come before this widget's own keys; Enter and Space stay its own.
+        if (!isActivation(*pressed)) {
+            if (EventResult const result = spotlightChord(*pressed); result != EventResult::Ignored) {
+                return result;
+            }
+        }
         return key(*pressed);
     }
     return EventResult::Ignored;
@@ -380,6 +396,41 @@ EventResult WidgetBase::chord(::core::tui::KeyEvent const& key) {
         handler(*declared);
     }
     return EventResult::Handled;
+}
+
+EventResult WidgetBase::spotlightChord(::core::tui::KeyEvent const& key) {
+    ContainerBase const* spotlight = nullptr;
+    for (ContainerBase const* outer = _container; outer != nullptr; outer = outer->container()) {
+        if (outer->isOpenSpotlight()) {
+            spotlight = outer;
+            break;
+        }
+    }
+    if (spotlight == nullptr) {
+        return EventResult::Ignored;
+    }
+    for (ContainerBase* outer = _container; outer != nullptr; outer = outer->container()) {
+        bool const last = outer == spotlight;
+        if (EventResult const result = outer->chord(key); result != EventResult::Ignored) {
+            return result;
+        }
+        if (last) {
+            break;
+        }
+    }
+    return EventResult::Ignored;
+}
+
+std::vector<WidgetBase*> carrying(Context const& context, std::string_view testId) {
+    std::vector<WidgetBase*> out;
+    for (auto const& [view, widget] : context.owners) {
+        static_cast<void>(view);
+        if (widget->testId() == testId) {
+            out.push_back(widget);
+        }
+    }
+    std::ranges::sort(out, {}, &WidgetBase::sequence);
+    return out;
 }
 
 void WidgetBase::takeFocus() { static_cast<void>(focusWidget(*_context, this)); }
@@ -540,7 +591,11 @@ void WidgetBase::refresh() const { _context->screen->invalidate(); }
 
 bool WidgetBase::blockedByDialog() const {
     auto* const dialog = activeDialog(*_context);
-    return dialog != nullptr && !isWithin(_view.get(), dialog->host());
+    if (dialog == nullptr || isWithin(_view.get(), dialog->host())) {
+        return false;
+    }
+    WidgetBase const* const through = dialog->passesThrough();
+    return through == nullptr || !isWithin(_view.get(), through->view());
 }
 
 ContainerBase::~ContainerBase() {
@@ -1102,6 +1157,7 @@ void fit(Context& context) {
         screen.positionOverlay(
             frame, overlay != nullptr ? overlay->framePosition() : centredIn(screen, frame.preferredSize()));
     }
+    context.targetsChanged();
 }
 
 void countSpinners(Context& context) {
@@ -1125,6 +1181,9 @@ void moveFocus(Context& context, Direction direction) {
     std::vector<::core::tui::Component*> order;
     if (dialog != nullptr) {
         collectFocusable(*dialog, order);
+        if (WidgetBase* const target = dialog->tabTarget()) {
+            collectFocusable(*target, order);
+        }
     } else {
         for (auto* root : context.roots) {
             collectFocusable(*root, order);

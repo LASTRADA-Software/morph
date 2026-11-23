@@ -57,6 +57,12 @@ struct Context {
     /// Tables holding row spans (or cells they lifted), whose spans `fit` plans before any size is asked: a lifted
     /// cell leaves its row's natural height, and the table is sized by its rows.
     std::vector<TableImpl*> spanTables;
+    /// Numbers each widget as it is made, so the widgets carrying one test id are found in creation order.
+    std::uint64_t nextSequence = 0;
+    /// The live spotlights, which pick their target again whenever `targetsChanged` runs.
+    std::vector<WidgetBase*> spotlights;
+    /// The widget an open spotlight rings, drawn in reverse video; null for none.
+    WidgetBase const* spotlit = nullptr;
     /// The clock every widget reads the time from (a table telling a double click from two clicks); a test may
     /// replace it.
     std::function<std::chrono::steady_clock::time_point()> now = [] { return std::chrono::steady_clock::now(); };
@@ -70,6 +76,9 @@ struct Context {
     /// Ends the press waiting for its release, if any, and the drag it started: nothing of that gesture happens
     /// afterwards. A new press calls it, as does a press whose pointer capture ended without its release.
     void endPress();
+    /// Tells every live spotlight that a test id, a widget's visibility or the set of widgets changed: each picks its
+    /// target again. A widget made or destroyed, a test id set, a widget shown or hidden, and every frame call it.
+    void targetsChanged();
 };
 
 }  // namespace morph::tui::detail
