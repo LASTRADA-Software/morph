@@ -84,6 +84,11 @@ public:
     /// @param text The message.
     /// @param tone Its tone.
     virtual void notify(std::string const& text, Tone tone) = 0;
+
+    /// @brief One of the shell's own texts in the person's language: the controller's toasts come from here.
+    /// @param key A `morph.shell.*` message key.
+    /// @return The pattern, with `{title}` where a tour's or screen's title goes; the key when it names none.
+    [[nodiscard]] virtual std::string text(std::string_view key) const = 0;
 };
 
 /// @brief What the card shows of the running step.

@@ -91,7 +91,7 @@ sign-in or a sign-out, which rebuild the frame, end a running tour; a reconnect 
 reaches the shell through `TourShell`: open a screen (`openScreen`, as a navigator click does, focusing a tab that
 already shows it), whether the active tab shows a screen with given params (`shows`, by identity; a custom screen counts as the screen it is based on, so a step naming that screen leaves the person on their own custom screen), the active screen
 (`activeScreen`, a custom screen named by the screen it is based on), a screen's title, whether the frame is compact,
-`revealNavEntry`, the spotlight, and a toast.
+`revealNavEntry`, the spotlight, a toast, and the shell's own texts (`text`): the two toasts below are the built-in `morph.shell.tourChanged` and `morph.shell.tourScreenFailed` messages, English and German, which an application's translations may override like every `morph.shell.*` key; `{title}` in them is the tour's or screen's title.
 
 | Event | What happens |
 |---|---|
@@ -100,7 +100,7 @@ already shows it), whether the active tab shows a screen with given params (`sho
 | `next()` | Shows step *n*+1, or ends the tour on the last step. A waiting step ignores it |
 | `back()` | Shows step *n*-1. A screen an earlier step opened is not closed |
 | `activeChanged()` | When the step waits for a screen (`advanceOn`) and the active screen is it, the tour moves on. A screen the controller is opening itself does not count |
-| The running tour changes | The controller follows `AppRoot::tours()` while a tour runs. A tour that is gone, whose `revision` differs from the one it started with (replaced on the server), or that no longer has the step on show ends, and the shell shows the toast "The tour <title> changed, so it ended": its steps may no longer match the one shown. A change of locale, a change of another tour, and a runtime update that leaves an app-document tour alone keep it running; the texts are re-evaluated |
+| The running tour changes | The controller follows `AppRoot::tours()` while a tour runs. A tour that is gone, whose `revision` differs from the one it started with (replaced on the server), or that no longer has the step on show ends, and the shell shows the toast "The tour <title> changed, so it ended" (in the person's language): its steps may no longer match the one shown. A change of locale, a change of another tour, and a runtime update that leaves an app-document tour alone keep it running; the texts are re-evaluated |
 | `end()` | The spotlight's target is cleared and it closes, which hands focus back to where it was when it opened; the view empties |
 
 `view()` is what the card shows: the tour's title, the step's title and body, its position and the count, whether it

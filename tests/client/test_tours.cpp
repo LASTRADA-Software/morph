@@ -194,6 +194,17 @@ TEST_CASE("Client shell tours: a step whose screen cannot be opened ends the tou
     CHECK(window.spotlight("open") != "true");
 }
 
+// Mutation: show the controller's English text whatever the locale (`TourShell::text` ignores the session's format).
+TEST_CASE("Client shell tours: the toast of a tour that stopped is in the person's language", "[client][tours]") {
+    Window window{&tours::toursBundle, "de"};
+    window.backend.chooseMenuEntry(*window.find("Menu", "shell_tours"), {2});
+    REQUIRE(window.wait([&window] {
+        std::vector<int> const toasts = window.backend.all("Toast");
+        return !toasts.empty() && window.backend.prop(toasts.front(), "text").contains("Die Tour wurde beendet");
+    }));
+    CHECK(window.backend.prop(window.backend.all("Toast").front(), "text").contains("konnte nicht geöffnet werden"));
+}
+
 // Mutation: ignore the frame's form in the shell's `TourShell::compact` (the navigator entry is rung as itself).
 TEST_CASE("Client shell tours: compact, the Tours entries join the navigation menu and a navigator target is the menu",
           "[client][tours]") {

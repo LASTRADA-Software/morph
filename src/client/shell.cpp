@@ -913,6 +913,10 @@ private:
                 _shell->_frame->showToast(text, tone);
             }
         }
+        [[nodiscard]] std::string text(std::string_view key) const override {
+            return ui::shellText(
+                key, _shell->_session != nullptr ? _shell->_session->formattingNow() : ui::FormatContext{});
+        }
 
     private:
         Shell* _shell;

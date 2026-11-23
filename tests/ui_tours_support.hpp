@@ -6,6 +6,7 @@
 #include <memory>
 #include <morph/ui/backend.hpp>
 #include <morph/ui/host.hpp>
+#include <morph/ui/shell_parts_model.hpp>
 #include <morph/ui/testing/recording_backend.hpp>
 #include <morph/ui/tours.hpp>
 #include <set>
@@ -55,6 +56,7 @@ public:
         return *_spotlight;
     }
     void notify(std::string const& text, Tone tone) override { notices.emplace_back(text, tone); }
+    [[nodiscard]] std::string text(std::string_view key) const override { return shellText(key, FormatContext{}); }
     void afterCardUpdated(std::function<void()> then) override {
         if (deferCard) {
             pending.push_back(std::move(then));

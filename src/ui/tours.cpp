@@ -19,6 +19,17 @@
 #include <vector>
 
 namespace morph::ui {
+namespace {
+
+// @p pattern with its `{title}` replaced by @p title.
+std::string withTitle(std::string pattern, std::string_view title) {
+    if (auto const at = pattern.find("{title}"); at != std::string::npos) {
+        pattern.replace(at, 7, title);
+    }
+    return pattern;
+}
+
+}  // namespace
 
 OfferedTours offeredTours(std::vector<Tour> const& tours, std::string_view screenId) {
     OfferedTours offered;
@@ -113,7 +124,7 @@ std::expected<void, Refusal> TourController::start(std::string_view tourId) {
             if (now == nullptr || now->revision != _startedRevision || _step >= now->steps.size()) {
                 std::string const title = _view ? _view->title : _tourId;
                 end();
-                _shell->notify("The tour " + title + " changed, so it ended", Tone::Info);
+                _shell->notify(withTitle(_shell->text("morph.shell.tourChanged"), title), Tone::Info);
                 return;
             }
             std::optional<TourView> const before = _view;
@@ -251,7 +262,7 @@ void TourController::fail(std::string const& screenId, MountError const& error) 
     std::string const title = _shell->screenTitle(screenId);
     std::string const endedId = _tourId;
     end();
-    _shell->notify("The tour stopped: " + title + " could not be opened", Tone::Warn);
+    _shell->notify(withTitle(_shell->text("morph.shell.tourScreenFailed"), title), Tone::Warn);
     warn("the tour `" + endedId + "` stopped: `" + screenId + "` could not be opened: " + error.reason);
 }
 
