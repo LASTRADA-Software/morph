@@ -349,6 +349,7 @@ TEST_CASE("host vocabulary: publishing the same scopes again does not re-run wha
     h.settle();
     CHECK(reads == afterFirst + 1);
 }
+
 // Mutation: skip `refusal` in `HostVocabulary::run` (the refused id runs).
 TEST_CASE("host vocabulary: a command's refusal check refuses it with its reason, and run is not called",
           "[ui][host]") {

@@ -44,6 +44,9 @@ constexpr std::string_view kStarter = R"({
     { "kind": "button", "testId": "bad_tour", "label": "Bad",
       "onClick": [ { "host": "tour.start", "args": { "obj": { "id": { "ref": "which" } } } } ] },
     { "kind": "text", "testId": "can_tour", "text": { "fn": "format", "args": [ "{0}", { "can": "host:tour.start" } ] } },
+    { "kind": "text", "testId": "can_next", "text": { "fn": "format", "args": [ "{0}", { "can": "host:tour.next" } ] } },
+    { "kind": "text", "testId": "can_back", "text": { "fn": "format", "args": [ "{0}", { "can": "host:tour.back" } ] } },
+    { "kind": "text", "testId": "can_end", "text": { "fn": "format", "args": [ "{0}", { "can": "host:tour.end" } ] } },
     { "kind": "text", "testId": "peek", "text": { "fn": "coalesce", "args": [ { "host": "tour.title" }, "-" ] } } ] } })";
 
 constexpr std::string_view kOtherApp =
@@ -235,4 +238,15 @@ TEST_CASE("tour card: a posted tour.start that finds no controller or a refusing
     CHECK(c.reports.front().contains("declares no tour `basics`"));
     // Before the harness and the root the controller reads go.
     c.controller.reset();
+}
+
+// Mutation: drop `documents` from the `tour.next`, `tour.back` and `tour.end` commands (every document can run them).
+TEST_CASE("tour card: tour.next, tour.back and tour.end are not available to a document other than the card",
+          "[ui][tours]") {
+    Card c;
+    auto const starter = c.h.mount(kStarter);
+    CHECK(c.h.text("can_tour") == "true");
+    CHECK(c.h.text("can_next") == "false");
+    CHECK(c.h.text("can_back") == "false");
+    CHECK(c.h.text("can_end") == "false");
 }
