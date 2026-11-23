@@ -436,6 +436,17 @@ public:
     /// @brief `Ctrl+Enter`: commits what the source holds back. A source that holds nothing does nothing.
     virtual void commitHeld() {}
 
+    /// @brief Whether a cell's draft was committed and refused before it was sent, so committing it again sends it
+    ///        even though the user did not change it.
+    /// @param key    The row's key.
+    /// @param column The column's id.
+    /// @return `false` unless a source holds such a draft.
+    [[nodiscard]] virtual bool resends(Key const& key, std::string_view column) const {
+        static_cast<void>(key);
+        static_cast<void>(column);
+        return false;
+    }
+
     /// @brief Whether the grid selects rectangles of cells, and so takes a paste and a fill: a source whose rows are
     ///        selected as rows takes neither, and its `Shift`+arrows and `Ctrl+A` are the table's row selection. `Delete`
     ///        on the focused cell blanks it either way.
@@ -2957,6 +2968,8 @@ public:
     /// @param description The description.
     void setDescription(table::TableDescription const& description) {
         _description = description;
+        auto units = table::registryOf(description);
+        _units = units ? *std::move(units) : nullptr;
         std::vector<std::string> ids;
         for (table::TableColumn const& column : description.columns) {
             ids.push_back(column.info.id);
@@ -3010,9 +3023,18 @@ public:
         }
         _rows->moveKey(from, to);
         _edits->moveRow(from, to);
-        if (auto held = _held.extract(from); !held.empty() && !_held.contains(to)) {
-            held.key() = to;
-            _held.insert(std::move(held));
+        if (auto held = _held.extract(from); !held.empty()) {
+            std::vector<table::EditCell>& target = _held[to];
+            for (table::EditCell& cell : held.mapped()) {
+                if (!std::ranges::contains(target, cell.column, &table::EditCell::column)) {
+                    target.push_back(std::move(cell));
+                }
+            }
+        }
+        for (CellRef& cell : _resend) {
+            if (cell.key == from) {
+                cell.key = to;
+            }
         }
         _positionsVersion.reset();
         bump();
@@ -3331,6 +3353,16 @@ public:
     /// @param refocus Focuses a cell while the table has focus.
     void refocusWith(std::function<void(CellRef const&)> refocus) override { _refocus = std::move(refocus); }
 
+    /// @brief Whether a cell's draft was refused when its row's held cells were sent, so its next commit sends it.
+    /// @param key    The row's key.
+    /// @param column The column's id.
+    /// @return `true` until the cell is committed again.
+    [[nodiscard]] bool resends(Key const& key, std::string_view column) const override {
+        return std::ranges::any_of(_resend, [&](CellRef const& cell) { return cell.key == key && cell.column == column; });
+    }
+
+    /// @brief A held cell's refusal when its row became read-only for no reason the cell can name.
+    static constexpr std::string_view kReadOnlyText = "This cell is read-only";
     /// @brief The status line's refusal of typing on a cell not loaded yet.
     static constexpr std::string_view kUnloadedText = "This value is not loaded yet";
     /// @brief The status line's refusal of typing in a row another run is saving.
@@ -3429,11 +3461,15 @@ private:
             }
             ++_source->_rowsVersion;
             _source->bump();
+            // The mount's handler may end the mount that owns this source.
+            auto const alive = _source->_alive.token();
             if (_handler) {
                 std::function<void(table::ViewChange const&)> const handler = _handler;
                 handler(change);
             }
-            _source->locateFocus();
+            if (!alive.expired()) {
+                _source->locateFocus();
+            }
         }
 
         ModelGridSource* _source;
@@ -3569,7 +3605,7 @@ private:
             std::optional<Located> const row = locate(key);
             Value const* const value = row ? row->record.field(std::string{column}) : nullptr;
             std::string const json =
-                value == nullptr ? std::string{"null"} : wireOf(*value, fieldOf(column)->spec().kind);
+                value == nullptr ? std::string{"null"} : wireOf(*value, fieldOf(column)->spec());
             std::string const body = described->edit->member.empty()
                                          ? R"({"value":)" + json + "}"
                                          : R"({"values":{")" + described->edit->member + R"(":)" + json + "}}";
@@ -3612,9 +3648,16 @@ private:
         if (loaded(key, column) == nullptr) {
             return std::nullopt;
         }
+        std::erase_if(_resend, [&](CellRef const& cell) { return cell.key == key && cell.column == column; });
         hold(key, column);
-        if (!_edits->draft(key, column) || _edits->error(key, column) ||
-            _rt->untracked([&] { return readOnly(key, column); })) {
+        if (!_edits->draft(key, column) || _edits->error(key, column)) {
+            return std::nullopt;
+        }
+        if (_rt->untracked([&] { return readOnly(key, column); })) {
+            // Refused at the cell, as a held cell is: the draft keeps why, and its next commit sends it.
+            std::optional<std::string> const why = _rt->untracked([&] { return refusal(key, column); });
+            _edits->setDraft(key, column, *_edits->draft(key, column), why.value_or(std::string{kReadOnlyText}));
+            _resend.push_back(CellRef{.key = key, .column = column});
             return std::nullopt;
         }
         forms::Encoding const encoding = _rt->untracked([&] { return fieldOf(column)->encoded().get(); });
@@ -3634,9 +3677,24 @@ private:
         }
         std::vector<table::EditCell> cells = std::move(found->second);
         _held.erase(found);
-        std::erase_if(cells, [this, &row](table::EditCell const& cell) {
-            return _rt->untracked([&] { return readOnly(row, cell.column); });
+        std::vector<std::string> refused;
+        std::erase_if(cells, [this, &row, &refused](table::EditCell const& cell) {
+            bool const readOnlyNow = _rt->untracked([&] { return readOnly(row, cell.column); });
+            if (readOnlyNow) {
+                refused.push_back(cell.column);
+            }
+            return readOnlyNow;
         });
+        // Refused at the cell: the draft stays, with why as its error, until a commit of the cell sends it.
+        for (std::string const& column : refused) {
+            std::optional<std::string> const why = _rt->untracked([&] { return refusal(row, column); });
+            _edits->setDraft(row, column, _edits->draft(row, column).value_or(std::string{}),
+                             why.value_or(std::string{kReadOnlyText}));
+            CellRef cell{.key = row, .column = column};
+            if (!std::ranges::contains(_resend, cell)) {
+                _resend.push_back(std::move(cell));
+            }
+        }
         if (!cells.empty()) {
             _edits->commitRow(table::RowEditRequest{.row = row, .cells = std::move(cells)});
         }
@@ -3651,8 +3709,13 @@ private:
         }
         std::optional<Key> const key = _focus.focused();
         if (!key || positionOf(*key)) {
+            _searched.reset();
             return;
         }
+        if (_searched == key) {
+            return;
+        }
+        _searched = key;
         _locating.request_stop();
         _locating = std::stop_source{};
         _rows->locateRow(*key, _locating.get_token(),
@@ -3682,8 +3745,25 @@ private:
 
     // A record's value as its field's wire form. A `Date` cell is `YYYY-MM-DD` text and a `DateTime` cell a timestamp,
     // which a `Date` or `DateTime` field reads as it is; an `EpochDate` field reads days and an `EpochDateTime` field
-    // seconds, so those are counted from the epoch.
-    [[nodiscard]] static std::string wireOf(Value const& value, forms::FieldKind kind) {
+    // seconds, so those are counted from the epoch. A measure is an amount in its own unit and a `Quantity` field's
+    // value an amount in its canonical unit: the amount is converted through the description's units, and one the
+    // units cannot convert opens blank rather than as a figure in the wrong unit.
+    [[nodiscard]] std::string wireOf(Value const& value, forms::FieldSpec const& spec) const {
+        forms::FieldKind const kind = spec.kind;
+        if (Quantity const* const measure = value.asQuantity();
+            measure != nullptr && kind == forms::FieldKind::Quantity) {
+            std::optional<table::UnitId> const from = _units ? _units->find(measure->unit) : std::nullopt;
+            std::optional<table::UnitId> const to = _units ? _units->find(spec.unitAscii) : std::nullopt;
+            if (!from || !to || _units->info(*from).dimension != _units->info(*to).dimension) {
+                return "null";
+            }
+            auto const factor = math::checkedDiv(_units->info(*from).toBase, _units->info(*to).toBase);
+            if (!factor) {
+                return "null";
+            }
+            auto const amount = math::checkedMul(measure->value, *factor);
+            return amount ? glz::write_json(valueToJson(Value{Decimal{*amount}})).value_or("null") : std::string{"null"};
+        }
         if (kind == forms::FieldKind::EpochDate) {
             std::string const* const text = value.asString();
             if (text != nullptr && text->size() == 10 && (*text)[4] == '-' && (*text)[7] == '-') {
@@ -3751,6 +3831,12 @@ private:
     std::function<void(CellRef const&)> _refocus;
     FocusLink _focus;
     std::stop_source _locating;
+    // The focused key the rows were last asked to locate: asked once per time the key leaves the rows held.
+    std::optional<Key> _searched;
+    // Cells refused when their row's held cells were sent, which their next commit sends.
+    std::vector<CellRef> _resend;
+    // The description's units, through which a measure is converted into its field's unit.
+    std::shared_ptr<table::UnitRegistry const> _units;
     // The held rows' view indices by key, as of a count of the rows' changes: the cells' own changes do not move rows.
     std::uint64_t _rowsVersion = 0;
     mutable std::unordered_map<Key, std::size_t> _positions;
@@ -5003,7 +5089,8 @@ private:
         if (!open) {
             return;
         }
-        bool const changed = _source->draft(open->key, open->column) != _kept;
+        bool const changed =
+            _source->draft(open->key, open->column) != _kept || _source->resends(open->key, open->column);
         _editing.set(std::nullopt);
         if (changed) {
             noteChange();
