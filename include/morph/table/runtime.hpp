@@ -21,6 +21,8 @@
 #include <cstddef>
 #include <functional>
 #include <memory>
+#include <string>
+#include <string_view>
 #include <morph/attributes.hpp>
 #include <morph/core/executor.hpp>
 #include <morph/export.hpp>
@@ -78,6 +80,10 @@ struct TableRuntime {
     /// @brief Keeps `settle` alive while a `resolve`'s work is queued on `work`, which may outlive the server; the
     ///        server closes `settle` when it goes, so a delivery that comes later is dropped. Null when nothing does.
     std::shared_ptr<void const> settleKeep;
+    /// @brief An action's input schema by its id, as the server serves it: what a table's description checks its
+    ///        columns' edit actions against. Empty when the server offers none; an action it does not know answers
+    ///        an empty text.
+    std::function<std::string(std::string_view action)> schemaOf;
 };
 
 namespace detail {

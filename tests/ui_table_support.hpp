@@ -1507,6 +1507,20 @@ inline std::string cellText(TableHarness& h, std::int64_t key, std::string_view 
     return {};
 }
 
+/// @brief The marks the cell of the row with @p key in @p column draws, in the table `t`: the letters the recording
+///        backend writes for them, empty for none.
+/// @param h      The harness.
+/// @param key    The row's key.
+/// @param column The column's id.
+/// @return The marks.
+inline std::string cellMarks(TableHarness& h, std::int64_t key, std::string_view column) {
+    std::optional<int> const row = h.backend.tableRow(h.byTestId("Table", "t"), Key{key});
+    if (!row) {
+        FAIL("the table has no row " << key);
+    }
+    return h.backend.prop(*row, "marks:" + std::to_string(columnIndex(h, column)));
+}
+
 /// @brief The accent the cell of the row with @p key in @p column was last given, in the table `t`.
 /// @param h      The harness.
 /// @param key    The row's key.

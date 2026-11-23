@@ -969,6 +969,14 @@ struct ModelTable {
     std::map<std::string, std::weak_ptr<RtScope>, std::less<>> rowScopes;
     /// The table's saved views; none without persistence.
     std::unique_ptr<TableViews> views;
+    /// The calls of the table's model alias: what the table's own edits are sent through, and a choice's options
+    /// fetched with.
+    forms::Submitter calls;
+    /// The drafts, errors, marks and commits of the table's editable cells, held by row key for as long as the table:
+    /// a new description's mount finds them where they were.
+    std::unique_ptr<table::CellEdits> edits;
+    /// The mounted table's cells as a grid, while an editable table is mounted.
+    std::weak_ptr<ModelGridSource> editGrid;
     /// Last, so it is the first to go: no load, timer or post reaches a half-destroyed table.
     async::CallbackScope scope;
 };
@@ -3926,6 +3934,14 @@ std::vector<TableInput> tableInputsOf(std::string_view schemaJson) {
         return out;
     }
     auto const& members = schema.get_object();
+    // An edit action is itself the marked type: its keyword sits at the root, and its row is its `key`.
+    for (std::string_view const keyword : {std::string_view{"x-cellEditOf"}, std::string_view{"x-rowEditOf"}}) {
+        auto const found = members.find(std::string{keyword});
+        if (found != members.end() && found->second.is_string()) {
+            out.push_back(
+                TableInput{.member = "key", .record = found->second.get_string(), .kind = TableInputKind::CellEdit});
+        }
+    }
     auto const properties = members.find("properties");
     if (properties == members.end() || !properties->second.is_object()) {
         return out;
@@ -12476,7 +12492,7 @@ private:
                 continue;
             }
             Value const& named = member->second;
-            if (input.kind == TableInputKind::Row) {
+            if (input.kind == TableInputKind::Row || input.kind == TableInputKind::CellEdit) {
                 std::vector<Key> const one{keyOf(named)};
                 states.clearFailed(one);
                 states.busyKeys(run.run, one);
@@ -12510,7 +12526,8 @@ private:
                                    : std::ranges::contains(selectedKeys(), key);
         return selected || (_model->config.focused && _model->config.focused->key == key) ||
                std::ranges::contains(_model->window->retained(), key) || states.isBusy(key) ||
-               states.failure(key).has_value() || _deferred.contains(key);
+               states.failure(key).has_value() || _deferred.contains(key) ||
+               (_model->edits != nullptr && _model->edits->rowEdited(key));
     }
 
     // A reply's failed rows are marked, and each changed row with a `from` this session holds moves what it holds
@@ -12554,6 +12571,9 @@ private:
             moved.push_back(from);
             _deferred.erase(from);
             _model->rows->moveKey(from, to);
+            if (_model->edits != nullptr) {
+                _model->edits->moveRow(from, to);
+            }
             if (view) {
                 // A key left out of the view's selection leaves its new key out; a selected one selects it.
                 if (auto const out = std::ranges::find(view->except, from); out != view->except.end()) {
@@ -12592,6 +12612,167 @@ private:
     std::set<std::uint64_t> _changing;
     std::set<Key> _deferred;
 };
+
+// The field errors a reply names in its reserved `errors` member: the first message of each entry, by the name the
+// action's input gives the field, `value`, or a member of `values` without its prefix.
+std::vector<table::FieldError> editErrorsOf(Value const& reply) {
+    std::vector<table::FieldError> out;
+    ValueRecord const* const errors = reply.field("errors") != nullptr ? reply.field("errors")->asRecord() : nullptr;
+    if (errors == nullptr) {
+        return out;
+    }
+    for (auto const& [path, entry] : *errors) {
+        std::string message;
+        if (std::string const* const text = entry.asString()) {
+            message = *text;
+        } else if (ValueList const* const list = entry.asList();
+                   list != nullptr && !list->empty() && list->front().asString() != nullptr) {
+            message = *list->front().asString();
+        }
+        if (message.empty()) {
+            continue;
+        }
+        constexpr std::string_view kValues = "values.";
+        std::string name = path.starts_with(kValues) ? path.substr(kValues.size()) : path;
+        out.push_back(table::FieldError{.column = std::move(name), .message = std::move(message)});
+    }
+    return out;
+}
+
+// What a refused or failed call of an edit action says: its sentence.
+std::string editFailureOf(std::exception_ptr const& error) {
+    try {
+        std::rethrow_exception(error);
+    } catch (std::exception const& failed) {
+        return failed.what();
+    } catch (...) {
+        return "The edit could not be saved";
+    }
+}
+
+// Sends a row commit of a model's table through the table's alias, not as a run of the session, so no row is busy for
+// it: a call per `CellEdit` cell, and one per `RowEdit` action with every cell of the request it edits. The commit
+// settles once every call has: refused with each call's field errors, a failed row or a failure's sentence, else
+// succeeded. A changed row with a `from` moves what the table holds by key. A success whose replies name the row as
+// changed waits for the change event's refetch; one that names it nowhere changed nothing the window would fetch, so
+// the row counts as fetched at once.
+void sendRowEdit(ScreenCore& core, ModelTable& model, table::RowEditRequest const& request, table::RowEditDone done) {
+    table::TableDescription const* const description = model.window->description();
+    std::string const key = std::visit(
+        [](auto const& value) -> std::string {
+            if constexpr (std::is_same_v<std::decay_t<decltype(value)>, std::string>) {
+                return glz::write_json(value).value_or("\"\"");
+            } else {
+                return std::to_string(value);
+            }
+        },
+        request.row);
+    struct Call {
+        std::string action;
+        std::string body;
+    };
+    std::vector<Call> calls;
+    std::vector<table::FieldError> refused;
+    std::map<std::string, std::string, std::less<>> rowEdits;
+    for (table::EditCell const& cell : request.cells) {
+        table::EditInfo const* edit = nullptr;
+        if (description != nullptr) {
+            auto const found = std::ranges::find_if(description->columns, [&](table::TableColumn const& column) {
+                return column.info.id == cell.column;
+            });
+            edit = found != description->columns.end() && found->edit ? &*found->edit : nullptr;
+        }
+        if (edit == nullptr) {
+            refused.push_back(table::FieldError{.column = cell.member.empty() ? cell.column : cell.member,
+                                                .message = "This column is not edited here any more"});
+        } else if (edit->member.empty()) {
+            calls.push_back(Call{.action = edit->action, .body = R"({"key":)" + key + R"(,"value":)" + cell.json + "}"});
+        } else {
+            std::string& values = rowEdits[edit->action];
+            values += (values.empty() ? "" : ",") + glz::write_json(edit->member).value_or("\"\"") + ":" + cell.json;
+        }
+    }
+    for (auto const& [action, values] : rowEdits) {
+        calls.push_back(Call{.action = action, .body = R"({"key":)" + key + R"(,"values":{)" + values + "}}"});
+    }
+    if (calls.empty() || !model.calls) {
+        done(refused.empty() ? std::expected<void, std::vector<table::FieldError>>{} : std::unexpected(refused));
+        return;
+    }
+    struct Settling {
+        std::size_t remaining = 0;
+        std::vector<table::FieldError> errors;
+        bool named = false;
+        table::RowId row;
+        table::RowEditDone done;
+    };
+    auto const settling = std::make_shared<Settling>(Settling{
+        .remaining = calls.size(), .errors = std::move(refused), .named = false, .row = request.row, .done = std::move(done)});
+    auto const finish = [&model, settling] {
+        if (--settling->remaining > 0) {
+            return;
+        }
+        table::RowEditDone const settle = std::move(settling->done);
+        if (!settling->errors.empty()) {
+            settle(std::unexpected(std::move(settling->errors)));
+            return;
+        }
+        settle({});
+        if (!settling->named && model.edits != nullptr) {
+            model.edits->rowFetched(settling->row);
+            if (std::shared_ptr<ModelGridSource> const grid = model.editGrid.lock()) {
+                grid->touch();
+            }
+        }
+    };
+    std::string const record = model.modelType + "." + model.id;
+    for (Call const& call : calls) {
+        model.calls(call.action, call.body)
+            .then(model.scope,
+                  [&core, &model, settling, finish, record, action = call.action](std::string const& text) {
+                      auto const json = parseJson(text);
+                      Value const reply = json ? valueFromJson(*json).value_or(Value{}) : Value{};
+                      std::vector<table::FieldError> errors = editErrorsOf(reply);
+                      if (!errors.empty()) {
+                          std::ranges::move(errors, std::back_inserter(settling->errors));
+                          finish();
+                          return;
+                      }
+                      Catalog const& catalog = core.session.options().catalog;
+                      std::optional<ActionInfo> const info = catalog.action ? catalog.action(action) : std::nullopt;
+                      if (info) {
+                          ChangedRowsValue const changed = changedRowsOf(reply, *info, record);
+                          for (table::FailedRow const& failed : changed.failed) {
+                              if (failed.key == settling->row) {
+                                  settling->errors.push_back(table::FieldError{.column = {}, .message = failed.message});
+                              }
+                          }
+                          std::vector<std::pair<Key, Key>> moves;
+                          for (table::ChangedRow const& row : changed.rows) {
+                              bool const moved = row.from && *row.from == settling->row && row.key != settling->row;
+                              settling->named = settling->named || row.key == settling->row || moved;
+                              if (moved) {
+                                  moves.emplace_back(*row.from, row.key);
+                              }
+                          }
+                          for (auto const& [from, to] : moves) {
+                              model.rows->moveKey(from, to);
+                              model.edits->moveRow(from, to);
+                              settling->row = to;
+                          }
+                          if (!moves.empty()) {
+                              model.keyMoves.set(KeyMoves{.generation = model.keyMoves.peek().generation + 1,
+                                                          .moves = std::move(moves)});
+                          }
+                      }
+                      finish();
+                  })
+            .onError(model.scope, [settling, finish](std::exception_ptr const& error) {
+                settling->errors.push_back(table::FieldError{.column = {}, .message = editFailureOf(error)});
+                finish();
+            });
+    }
+}
 
 }  // namespace
 
@@ -12751,6 +12932,21 @@ void ScreenCore::wireModelTable(ElementState& element) {
             tableGesture(element);
         }));
     element.tableRows = model.rows;
+    model.calls = aliasCalls(alias);
+    model.edits = std::make_unique<table::CellEdits>(
+        [this, &model](table::RowEditRequest const& request, table::RowEditDone done) {
+            sendRowEdit(*this, model, request, std::move(done));
+        });
+    // A keyed refetch that found no row for a key: the row was deleted or left the filter, and its drafts go.
+    model.window->onRowsAbsent(model.scope.token().guard([&model](std::span<table::RowId const> keys) {
+        if (std::shared_ptr<ModelGridSource> const grid = model.editGrid.lock()) {
+            grid->rowsAbsent(keys);
+            return;
+        }
+        for (table::RowId const& key : keys) {
+            model.edits->rowAbsent(key);
+        }
+    }));
     model.runs = std::make_unique<TableRuns>(*this, element, model);
     session.addRunObserver(model.runs.get());
     if (model.describe != nullptr) {
@@ -14856,8 +15052,10 @@ Node ScreenCore::modelTableOf(DocNode const& node, LowerCtx const& ctx, ElementS
                             }));
     };
     source.rows = model.rows;
-    source.cellView = [this, ctx, &node, &model, parts, roles, textOfCell, accentOf, cellExprs, exprScope](
-                          std::size_t column, reactive::Signal<Value> const& row) -> Node {
+    // The cells' drafts, once an editable table's grid is made below: a plain cell shows its draft while one is held.
+    auto const drafts = std::make_shared<std::weak_ptr<ModelGridSource>>();
+    source.cellView = [this, ctx, &node, &model, parts, roles, textOfCell, accentOf, cellExprs, exprScope, drafts,
+                       shown](std::size_t column, reactive::Signal<Value> const& row) -> Node {
         DocNode const* const part = column < parts.size() ? parts.at(column) : nullptr;
         std::span<DocNodePtr const> const cell = part != nullptr ? part->nodes("cell") : std::span<DocNodePtr const>{};
         if (!cell.empty()) {
@@ -14890,7 +15088,14 @@ Node ScreenCore::modelTableOf(DocNode const& node, LowerCtx const& ctx, ElementS
         std::shared_ptr<RtScope const> const cellScope =
             exprs.tone != nullptr || exprs.tooltip != nullptr ? exprScope(row) : nullptr;
         Node text = ui::text(Text{
-            .text = slotProp<std::string>([scope = ctx.scope, &row, column, textOfCell] {
+            .text = slotProp<std::string>([scope = ctx.scope, &row, &model, column, textOfCell, drafts, shown] {
+                if (std::shared_ptr<ModelGridSource> const grid = drafts->lock()) {
+                    if (Value const* const id = row.get().field(model.keyColumn); id != nullptr) {
+                        if (std::optional<std::string> held = grid->heldDraft(keyOf(*id), shown->at(column).info.id)) {
+                            return std::move(*held);
+                        }
+                    }
+                }
                 return textOfCell(column, row.get(), scope->formatting());
             }),
             .role = roles.at(column),
@@ -15418,9 +15623,122 @@ Node ScreenCore::modelTableOf(DocNode const& node, LowerCtx const& ctx, ElementS
         runEvent(commands, rowCtx, activated);
     };
     model.rows->mounting();
+    if (std::shared_ptr<GridController> const grid =
+            editableModelTable(node, ctx, element, *description, *shown, source, options, drafts)) {
+        return besideDialogs(options.common, std::move(dialogs), [&] {
+            return grid->node(std::move(columns), std::move(options), std::move(source));
+        });
+    }
     return besideDialogs(options.common, std::move(dialogs), [&] {
         return ui::table(std::move(columns), std::move(source), std::move(options));
     });
+}
+
+// A model's table with a column its description edits is mounted as a grid over its cells: each editable column's
+// cells the field of its edit action, read from the catalog's schema, read-only where the principal may not run it.
+// The grid's controller owns its source and what follows the table for it: the status line's notices, the rows'
+// busy and failed states, and the layout the walk follows. Null for a table with no editable column.
+std::shared_ptr<GridController> ScreenCore::editableModelTable(
+    DocNode const& node, LowerCtx const& ctx, ElementState& element, table::TableDescription const& description,
+    std::vector<table::TableColumn> const& shown, TableSource& source, TableOptions const& options,
+    std::shared_ptr<std::weak_ptr<ModelGridSource>> const& drafts) {
+    ModelTable& model = *element.modelTable;
+    if (model.edits == nullptr) {
+        return nullptr;
+    }
+    Catalog const& catalog = session.options().catalog;
+    std::vector<ModelColumn> columns;
+    bool editable = false;
+    for (table::TableColumn const& described : shown) {
+        ModelColumn column{.id = described.info.id, .edit = described.edit, .model = nullptr, .path = {}};
+        if (described.edit) {
+            std::optional<std::string> const schema =
+                catalog.schema ? catalog.schema(described.edit->action) : std::nullopt;
+            if (schema) {
+                if (auto made = forms::FormModel::fromSchema(described.edit->action, *schema)) {
+                    column.model = std::make_shared<forms::FormModel const>(std::move(*made));
+                    column.path = described.edit->member.empty() ? std::string{"value"}
+                                                                 : "values." + described.edit->member;
+                    editable = true;
+                } else {
+                    report(node.path, "`" + described.info.id + "` is edited by `" + described.edit->action +
+                                          "`, whose input schema does not read: " + made.error().message);
+                }
+            }
+        }
+        columns.push_back(std::move(column));
+    }
+    if (!editable) {
+        return nullptr;
+    }
+    EditMode const mode = node.name("editMode") == "row" ? EditMode::Row : EditMode::Cell;
+    // The edit sessions' number locale holds views into the formatting it was given, which the grid keeps.
+    std::shared_ptr<FormatContext const> const formatting = session.formattingHandle();
+    auto const grid = std::make_shared<ModelGridSource>(
+        model.rows, *model.edits, std::move(columns), mode,
+        ModelGridContext{.runtime = &runtime(),
+                         .choices = model.calls,
+                         .session = engineOptions(),
+                         .format = ctx.scope->formatting(),
+                         .may = [this](std::string_view action) { return session.can(action); }});
+    grid->setDescription(description);
+    *drafts = grid;
+    model.editGrid = grid;
+    GridOptions walk{};
+    gridOptions(node, ctx, walk);
+    walk.appendRows = false;
+    walk.rowsFixed = true;
+    walk.onActivate = options.onActivate;
+    auto controller = std::make_shared<GridController>(runtime(), *grid, std::move(walk));
+    // What the mounted grid holds while it lives: its source, the formatting its sessions read, and its effects.
+    struct Held {
+        std::shared_ptr<ModelGridSource> grid;
+        std::shared_ptr<FormatContext const> formatting;
+        std::vector<std::unique_ptr<reactive::Effect>> effects;
+    };
+    auto held = std::make_shared<Held>(Held{.grid = grid, .formatting = formatting, .effects = {}});
+    std::weak_ptr<GridController> const weak = controller;
+    ModelGridSource* const cells = grid.get();
+    // The grid's refusals and notices go to the status line as the table's messages, each once.
+    auto const posted = std::make_shared<std::uint64_t>(0);
+    held->effects.push_back(std::make_unique<reactive::Effect>(runtime(), [this, &element, weak, posted] {
+        std::shared_ptr<GridController> const live = weak.lock();
+        if (live == nullptr) {
+            return;
+        }
+        std::string text = live->message();
+        std::uint64_t const notices = live->notices();
+        runtime().untracked([&] {
+            if (notices != *posted) {
+                *posted = notices;
+                tableMessage(element, std::move(text));
+            }
+        });
+    }));
+    // The rows' busy and failed states are not reactive: their revision tells the cells.
+    held->effects.push_back(std::make_unique<reactive::Effect>(runtime(), [this, &model, cells] {
+        static_cast<void>(model.marksRevision.get());
+        runtime().untracked([cells] { cells->touch(); });
+    }));
+    // The walk follows the visible columns in layout order, and the cells the scope's formatting.
+    held->effects.push_back(
+        std::make_unique<reactive::Effect>(runtime(), [this, &model, cells, scope = ctx.scope] {
+            TableConfig const& arranged = model.config;
+            std::vector<std::string> visible =
+                layoutOver(arranged.columns, arranged.declaredHidden, layoutNow(arranged)).visible();
+            FormatContext format = scope->formatting();
+            runtime().untracked([&] {
+                if (!visible.empty()) {
+                    cells->setLayout(std::move(visible));
+                }
+                cells->setFormat(std::move(format));
+            });
+        }));
+    controller->keepAlive(held);
+    source.rows = std::shared_ptr<TableRows>(grid, &grid->view());
+    // Every cell is the column's own, so each draws its marks: no default cell is shared across columns.
+    source.defaultCellView = {};
+    return controller;
 }
 
 TableRowLook ScreenCore::headingRow(DocNode const& node, LowerCtx const& ctx, reactive::Signal<Value> const& row,

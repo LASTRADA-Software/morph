@@ -860,6 +860,26 @@ keeps its operands' 0 places and still fills 0.29 of a bar.
   is its label (`TableRowLook::label`). A grid the source cannot make (a field the form lacks at run time) is
   reported and drawn as muted text. Element values `modifiedCount`, `modifiedRows`, `errorCount` and `editing` read
   it as they read a grid of a form.
+- **An editable model column.** A model's table whose description gives a shown column an `EditInfo` mounts through
+  `GridController::node(columns, options, base)` over a `ModelGridSource`, `base` the `TableSource` the lowering
+  builds for any model table, so every column keeps its `cell`, tone, tooltip and accent, and each cell draws its
+  marks from its own row (`markedCell`). No default cell is shared across columns, and a plain cell shows the cell's
+  draft while one is held. Each editable column's field is `forms::FormModel::fromSchema` over
+  `Catalog::schema(action)`, `value` of a `CellEdit` and `values.<member>` of a `RowEdit`; a column whose action the
+  catalog has no schema for has no field, so it is read-only, and one whose schema does not read is reported. A
+  column is read-only where `Session::can(action)` does not hold, so a principal the server refuses the action sees
+  it read-only. The rows the mount reads are the source's decorator over the table's rows, which ends a row's
+  modified marks when the window fetches it. The drafts and commits are the element's `table::CellEdits`, made with
+  the table: its commit sends through the model alias's calls, never as a run of the session, so the table's own
+  edits make no row busy, one call per `CellEdit` cell and one per `RowEdit` action with every cell of the request
+  it edits; a reply's `errors` member, a `FailedRow` of the row or a failure's sentence refuses the cells it names,
+  and a success whose `ChangedRows` does not name the row counts the row as fetched at once. A changed row's `from`
+  moves the rows' and the drafts' keys, as a mutation's does, and a keyed refetch that finds a row gone drops its
+  drafts (`WindowRows::onRowsAbsent`). `editMode` (`cell`, the default, or `row`) chooses when a row's edits are sent;
+  `enterMoves` and `walk` give the walk, which follows the layout's visible columns. The grid's refusals reach the
+  status line through `tableMessage` ("This value is not loaded yet", "This row is being saved", a locked row's lock
+  text, "This cell is read-only"), and the rows' busy and failed states, which are not reactive, reach the cells
+  through the table's marks revision. A table with no editable column is lowered as before.
 - **A form field's component.** A top-level field whose overlay names a `component` is drawn by it: the
   form's view is given a `forms::Overrides::byField` per such field, whose render builds the `custom` node
   `lowerCustom` would, with the field's built-in control as the fallback. The form fills the props it knows:

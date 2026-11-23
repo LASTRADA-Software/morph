@@ -2554,3 +2554,170 @@ TEST_CASE("description: bands cross the wire", "[table][description][bands]") {
     CHECK(back == described);
     CHECK(back.bands.front().bands.front().label == "Fine");
 }
+
+namespace {
+
+// The input schemas `checkEdits` reads in the cases below, by action id.
+std::function<std::optional<std::string>(std::string_view)> editSchemas(std::string countValue) {
+    return [countValue = std::move(countValue)](std::string_view action) -> std::optional<std::string> {
+        if (action == "Lims_EditSpecimenCount") {
+            return R"({"type":"object","properties":{"key":{"type":"integer"},"value":)" + countValue +
+                   R"(},"required":["key","value"]})";
+        }
+        if (action == "Lims_EditSpecimenRow") {
+            return std::string{R"({"type":"object","properties":{"key":{"type":"integer"},"values":{"type":"object",)"
+                               R"("properties":{"label":{"type":["string","null"]}}}},"required":["key"]})"};
+        }
+        return std::nullopt;
+    };
+}
+
+TableColumn editedColumn(std::string id, ColumnKind kind, EditInfo edit) {
+    TableColumn out = column(std::move(id), kind);
+    out.edit = std::move(edit);
+    return out;
+}
+
+}  // namespace
+
+// Mutation: checkEdits not comparing kinds.
+TEST_CASE("description: an edit whose field does not fit its column is a source contract",
+          "[table][description][edits]") {
+    auto const count = describedOf({column("id", ColumnKind::Integer),
+                                    editedColumn("count", ColumnKind::Integer, {.action = "Lims_EditSpecimenCount"})});
+    auto const refused = checkEdits(count, editSchemas(R"({"type":"string"})"));
+    REQUIRE_FALSE(refused.has_value());
+    CHECK(refused.error().code == TableErrorCode::SourceContract);
+    CHECK(refused.error().column == "count");
+    CHECK(checkEdits(count, editSchemas(R"({"type":"integer","maximum":10})")).has_value());
+
+    auto const missing = describedOf(
+        {column("id", ColumnKind::Integer),
+         editedColumn("label", ColumnKind::Text, {.action = "Lims_EditSpecimenRow", .member = "nosuch"})});
+    auto const lacking = checkEdits(missing, editSchemas(R"({"type":"integer"})"));
+    REQUIRE_FALSE(lacking.has_value());
+    CHECK(lacking.error().code == TableErrorCode::SourceContract);
+    CHECK(lacking.error().message.find("nosuch") != std::string::npos);
+
+    auto const fits = describedOf(
+        {column("id", ColumnKind::Integer),
+         editedColumn("count", ColumnKind::Integer, {.action = "Lims_EditSpecimenCount"}),
+         editedColumn("label", ColumnKind::Text, {.action = "Lims_EditSpecimenRow", .member = "label"})});
+    CHECK(checkEdits(fits, editSchemas(R"({"type":"integer"})")).has_value());
+    // An action the server does not know cannot edit a column.
+    auto const unknown =
+        describedOf({column("id", ColumnKind::Integer), editedColumn("count", ColumnKind::Integer, {.action = "Nope"})});
+    CHECK_FALSE(checkEdits(unknown, editSchemas(R"({"type":"integer"})")).has_value());
+}
+
+// Mutation: the TableColumn meta leaving `edit` out (the read column has none).
+TEST_CASE("description: a column's edit is on the wire, and absent when it has none", "[table][description][edits]") {
+    auto const described = describedOf(
+        {column("id", ColumnKind::Integer),
+         editedColumn("label", ColumnKind::Text,
+                      {.action = "Lims_EditSpecimenRow", .member = "label", .readonly = "frozen"})});
+    std::string const json = glz::write_json(described).value_or("");
+    CHECK(json.find(R"("edit":{"action":"Lims_EditSpecimenRow","member":"label","readonly":"frozen"})") !=
+          std::string::npos);
+    TableDescription read;
+    REQUIRE_FALSE(glz::read_json(read, json));
+    CHECK(read == described);
+    CHECK(glz::write_json(describedOf({column("id", ColumnKind::Integer)})).value_or("").find("edit") ==
+          std::string::npos);
+}
+
+// NOLINTBEGIN(misc-use-internal-linkage): registered types must have external linkage.
+namespace descedit {
+
+struct FitsEdit;
+struct MisfitsEdit;
+
+// Two tables whose `count` column (Integer) names an edit action: `fits` one taking an integer, `misfits` one taking
+// text.
+class EditsModel {
+public:
+    morph::table::ServedTable fits(morph::table::TableContext const& context);
+    morph::table::ServedTable misfits(morph::table::TableContext const& context);
+    morph::table::ChangedRows<&EditsModel::fits> execute(FitsEdit const& action);
+    morph::table::ChangedRows<&EditsModel::misfits> execute(MisfitsEdit const& action);
+};
+
+struct FitsEdit : morph::table::CellEdit<&EditsModel::fits, std::int64_t> {};
+struct MisfitsEdit : morph::table::CellEdit<&EditsModel::misfits, std::string> {};
+
+}  // namespace descedit
+// NOLINTEND(misc-use-internal-linkage)
+
+BRIDGE_REGISTER_MODEL(descedit::EditsModel, "EditsModel")
+BRIDGE_REGISTER_TABLE(descedit::EditsModel, "fits", &descedit::EditsModel::fits)
+BRIDGE_REGISTER_TABLE(descedit::EditsModel, "misfits", &descedit::EditsModel::misfits)
+BRIDGE_REGISTER_ACTION(descedit::EditsModel, descedit::FitsEdit, "FitsEdit")
+BRIDGE_REGISTER_ACTION(descedit::EditsModel, descedit::MisfitsEdit, "MisfitsEdit")
+
+namespace descedit {
+
+namespace {
+
+morph::table::ServedTable editedTable(std::string id, std::string action) {
+    morph::table::ServedTable served;
+    served.description.id = id;
+    served.description.label = id;
+    served.description.key = "id";
+    served.description.columns = {column("id", ColumnKind::Integer),
+                                  editedColumn("count", ColumnKind::Integer, {.action = std::move(action)})};
+    auto source = std::make_shared<VectorSource>(columnInfos(served.description));
+    source->setRows({RowId{std::int64_t{1}}}, {{Cell{std::int64_t{1}}, Cell{std::int64_t{1}}}});
+    served.source = std::move(source);
+    return served;
+}
+
+}  // namespace
+
+morph::table::ServedTable EditsModel::fits(morph::table::TableContext const& /*context*/) {
+    return editedTable("fits", "FitsEdit");
+}
+
+morph::table::ServedTable EditsModel::misfits(morph::table::TableContext const& /*context*/) {
+    return editedTable("misfits", "MisfitsEdit");
+}
+
+morph::table::ChangedRows<&EditsModel::fits> EditsModel::execute(FitsEdit const& action) {
+    return {.rows = {ChangedRow{.key = action.key}}};
+}
+
+morph::table::ChangedRows<&EditsModel::misfits> EditsModel::execute(MisfitsEdit const& action) {
+    return {.rows = {ChangedRow{.key = action.key}}};
+}
+
+}  // namespace descedit
+
+// Mutation: DescribeTable not calling checkEdits (the misfitting description is served).
+TEST_CASE("description: a server refuses to describe a table whose edit does not fit its column",
+          "[table][description][edits]") {
+    morph::exec::ThreadPoolExecutor pool{2};
+    auto const server = std::make_shared<morph::backend::RemoteServer>(pool, morph::backend::ServerConfig{});
+    auto const registered =
+        morph::wire::decode(server->handleInline(morph::wire::encode(morph::wire::makeRegister("EditsModel"))));
+    REQUIRE(registered.kind == "ok");
+    auto const describe = [&](std::string const& action) {
+        morph::wire::Envelope execute;
+        execute.kind = "execute";
+        execute.callId = 9;
+        execute.modelId = registered.modelId;
+        execute.modelType = "EditsModel";
+        execute.actionType = action;
+        execute.body = "{}";
+        auto const waiter = std::make_shared<morph::testing::WaitReply>();
+        server->handle(morph::wire::encode(execute), [waiter](std::string const& reply) { (*waiter)(reply); });
+        REQUIRE(waiter->await(std::chrono::seconds{30}));
+        return waiter->env;
+    };
+    auto const fits = describe("Table.fits.describe");
+    CHECK(fits.kind == "ok");
+    CHECK(fits.body.find(R"("edit":{"action":"FitsEdit")") != std::string::npos);
+    auto const misfits = describe("Table.misfits.describe");
+    CHECK(misfits.kind == "err");
+    INFO(misfits.message);
+    REQUIRE(misfits.refusal.has_value());
+    CHECK(misfits.refusal->code == "table.sourceContract");
+}

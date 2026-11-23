@@ -301,6 +301,7 @@ constexpr auto kTableKeys = std::to_array<KeySpec>({{"rows", Shape::Expr},
                                                  {"field", Shape::Text},
                                                  {"enterMoves", Shape::Text},
                                                  {"walk", Shape::Text},
+                                                 {"editMode", Shape::Text},
                                                  {"appendRows", Shape::Flag},
                                                  {"rowsFixed", Shape::Flag},
                                                  {"key", Shape::Expr, {}, kInner},
@@ -3365,6 +3366,7 @@ private:
             checkBandParts(node);
             checkSummaryParts(node);
             checkTableGroup(node);
+            checkEditMode(node);
             checkColumnGroups(node);
             checkRowsTableKeys(node);
             checkColumnKinds(node);
@@ -3925,6 +3927,21 @@ private:
         if (!node.name("model").empty() && !node.partList("group").empty()) {
             refuse(pointerAppend(node.path, "group"),
                    "a model-backed table's engine shapes its rows; `group` is for a table over `rows`");
+        }
+    }
+
+    // When a model's table commits its cells' edits: `cell` or `row`. Only a model's table commits through edit actions.
+    static void checkEditMode(DocNode const& node) {
+        std::string_view const mode = node.name("editMode");
+        if (mode.empty()) {
+            return;
+        }
+        if (node.name("model").empty() || node.name("table").empty()) {
+            refuse(pointerAppend(node.path, "editMode"),
+                   "`editMode` chooses how a model's table commits its cells; this table is not a model's table");
+        } else if (mode != "cell" && mode != "row") {
+            refuse(pointerAppend(node.path, "editMode"),
+                   "`editMode` is `cell` or `row`, not `" + std::string{mode} + "`");
         }
     }
 

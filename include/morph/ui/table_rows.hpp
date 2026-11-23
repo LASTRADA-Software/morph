@@ -2984,6 +2984,12 @@ public:
     /// @param handler The receiver; empty to stop receiving.
     void onStaleDescription(std::function<void()> handler) { _onStale = std::move(handler); }
 
+    /// @brief Sets what hears the rows a keyed fetch named and its reply holds none of: a change event's refetch of a
+    ///        row that was deleted or no longer matches the filter. Called once per such reply, after the rows took
+    ///        it, with those keys; a reply that holds every key it named is not reported.
+    /// @param handler The receiver; empty to stop receiving.
+    void onRowsAbsent(std::function<void(std::span<table::RowId const>)> handler) { _onRowsAbsent = std::move(handler); }
+
     /// @brief Sets what hears that `error()` or `counts()` may have changed: a fetch was sent, answered or failed,
     ///        or a reply or a description did not read. A failed fetch changes no row, so the view's `onChange` says
     ///        nothing of it; this is how a status line learns of it. Called after the rows took the event.
@@ -4409,6 +4415,8 @@ private:
             return;
         }
         heardRevision(page->revision);
+        // Only a reply under the query the window holds says a row left: under another, the key may be in the view.
+        std::vector<table::RowId> absent;
         if (fetch.query == _window.query()) {
             if (stamp == _retainStamp) {
                 if (!page->viewRevision.empty()) {
@@ -4422,6 +4430,7 @@ private:
                     _outOfView.erase(key);
                 } else {
                     _outOfView.insert(key);
+                    absent.push_back(key);
                 }
             }
         }
@@ -4441,6 +4450,10 @@ private:
             }
         }
         announce(change);
+        if (!absent.empty() && _onRowsAbsent) {
+            std::function<void(std::span<table::RowId const>)> const heard = _onRowsAbsent;
+            heard(absent);
+        }
         if (_window.revision() != revision) {
             pump();
         }
@@ -4672,6 +4685,7 @@ private:
     bool _markedAll = false;
     std::set<std::string, std::less<>> _staleRevisions;
     std::function<void()> _onStale;
+    std::function<void(std::span<table::RowId const>)> _onRowsAbsent;
     std::function<void(table::ViewChange const&)> _onChange;
     std::function<void()> _onStatus;
     mutable std::unordered_map<table::RowId, Entry> _memo;

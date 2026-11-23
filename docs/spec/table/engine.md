@@ -51,7 +51,7 @@ or the reactive runtime.
 | `engine.hpp` | `Engine`, `EngineOptions`, `EngineStats`, `ReorderPolicy`, `ColumnLayout` |
 | `query.hpp` | `PageRequest`, `TableQuery`, `Page<Row>`, `TotalKind`, `QueryLimits`, `validate`, `ApplyOptions`, `PageRows`, `apply`, `RowsSource<Row>`, `PageWindow<Row>` |
 | `selection.hpp` | `TableMode`, `SelectionMode`, `Selection`, `TableCounts`, `counts` |
-| `edits.hpp` | `EditRequest`, `FieldError`, `EditCommit`, `CellEdits` |
+| `edits.hpp` | `EditRequest`, `FieldError`, `EditCommit`, `CellEdits`; a model's table's `CellEdit`, `RowEdit`, `EditCell`, `RowEditRequest`, `RowEditCommit`, `checkEdits` |
 
 ## Rows: sources and snapshots
 
@@ -369,6 +369,35 @@ patches the row through the `RowPatcher`. With an engine, a row is held
 (`beginEdit`) from its first commit until its last edit settles. A completion
 after the `CellEdits` is destroyed is ignored.
 
+`CellEdits(RowEditCommit)` is a model's table's committer, with no patcher and
+no engine (`editing.md`, "Cells of a model's table"). `commitRow` sends a
+`RowEditRequest`, the cells of one row, through the injected commit; a row's
+requests run one at a time in order, and a cell is `stale` while a request
+naming it is queued or out. A success marks each cell of the request
+`modified` until `rowFetched` says the window fetched the row again, which also
+drops the drafts that success sent; a cell still stale keeps its marks, since
+the row fetched does not hold its edit yet. A refusal is a list of
+`FieldError`s: one whose `column` is a cell's `EditCell::member` (its column
+when the member is empty) lands on that cell, one that names no cell of the
+request, or nothing, on every other cell of the request, and a cell no error
+reached takes none.
+
+Drafts and their errors are held by row key and column (`setDraft`, `draft`,
+`clearDraft`), not by the window: a row that scrolls out and back finds them.
+`moveRow` moves a row's drafts, errors, marks and queued requests to its new
+key; `rowAbsent` drops them, and the requests not yet sent, for a row a keyed
+refetch found gone, while the one out settles unheard; `keepColumns` drops
+every column a new description lacks. `errorCount` and `modifiedCount` count
+across rows. `onRowSettled` hears each settled request with the row's key and
+whether it was refused.
+
+`checkEdits(description, schemaOf)` checks each column's `EditInfo` against its
+action's input schema: the field (`value` of a `CellEdit`, the member of a
+`RowEdit`'s `values`) must exist and be of a kind the column's kind is edited
+with. `Table.<id>.describe` runs it over the schemas the server serves
+(`TableRuntime::schemaOf`), and refuses a description that does not pass with
+`SourceContract`.
+
 ## Schema integration
 
 - A member type with `static constexpr std::string_view schemaMarker() noexcept`
@@ -453,6 +482,8 @@ against `wire::decode` both ways.
 | A reset that removes a sorted or filtered column | That sort key or filter entry is dropped. |
 | A server query over a bound | `LimitExceeded` (the limit itself is clamped). |
 | A commit's completion after its `CellEdits` is gone | Ignored; the destructor ended the row's engine edit. |
+| A row commit's completion after its row went absent | Settles unheard: no mark, error or draft is left. |
+| A column's edit field missing, or of a kind its column is not edited with | `SourceContract` from `checkEdits`; `describe` is refused. |
 
 ## Design decisions
 

@@ -226,14 +226,18 @@ struct TableColumn {
   field's kind differ, or a `member` that `values` does not have, is `SourceContract`.
 - **The action is the application's.** It declares `updatesTable` and returns the `ChangedRows` of the row, as
   any action that changes a table does ([`table.md`](table.md#a-models-tables)). A `FailedRow` for the row, or a
-  `FieldError` naming `value`, settles the cell with that message.
+  `FieldError` naming `value`, settles the cell with that message. A row's commit may carry several cells: a
+  `FieldError` naming a cell's member (`value` for a `CellEdit`, the `EditInfo::member` for a `RowEdit`) is that
+  cell's, one that names no cell of the commit, a `FailedRow` included, is every other cell's, and a cell no error
+  reached keeps its draft and takes no error.
 - **Committing** is `CellEdits`: edits to one row run one at a time, in order. A cell is stale from its commit
   until the action replies. Then it shows the committed value, marked modified, until the window next fetches
   the row, which shows the row as the server has it; an edit that changes nothing, or that moves the row out of
   the view, leaves nothing waiting. A draft that does not encode, or one waiting to be committed, is held by row
   key and column, not by the window, so a row that scrolls out of the window and back finds its draft and its
   error where they were, and a key change by `from` moves them ([`table.md`](table.md#rows-an-action-changed)).
-  `errorCount` counts them wherever the row is.
+  `errorCount` counts them wherever the row is. A keyed refetch that names a row and returns none means the row
+  was deleted or left the filter: its drafts, errors and marks go, and so do its edits not yet sent.
 - **A row at once.** A column whose `EditInfo` names a `RowEdit` collects the row's edits while focus stays in the
   row and commits them together when focus leaves it, or on `Ctrl+Enter`. A refusal puts each `FieldError` on
   its cell and, while the table has focus, moves focus back to the first refused cell: focus has left the row
@@ -512,8 +516,8 @@ Every key is optional, and a table that names none of them is what [`table.md`](
 
 | Header | Holds |
 |---|---|
-| `table/edits.hpp` | `CellEdit<fn, T>` and `x-cellEditOf`, `RowEdit<fn, Values>` and `x-rowEditOf`, `EditInfo`; `CellEdits` committing a `RowEdit` per row in `row` mode, and holding drafts by row key and column, moved by a key change. |
-| `table/description.hpp` | `TableColumn::edit`; `TableDescription::bands` and `BandInfo` ([`table.md`](table.md#api-surface)). |
+| `table/edits.hpp` | `CellEdit<fn, T>` and `x-cellEditOf`, `RowEdit<fn, Values>` and `x-rowEditOf`; `checkEdits`; `CellEdits` committing a row's cells as one request in `row` mode, and holding drafts by row key and column, moved by a key change. |
+| `table/description.hpp` | `EditInfo` and `TableColumn::edit` (`edits.hpp` includes this header, so `EditInfo` is declared here); `TableDescription::bands` and `BandInfo` ([`table.md`](table.md#api-surface)). |
 | `forms/derive.hpp` (new) | `DeriveOf<Action>`, `Derived`; the `derived()` field metadata and `x-derived`. |
 | `forms/engine` | `FormSession::loadDerived`, the round's debounce, sequence and row-key mapping, over `evaluate` and the derive action; per-cell snapshots of `ObjectArray` rows, `modified(path)`, `revert(path)`; `computedFields` on a row type, recomputed by `recomputeAll`; options of a `Choice` depending on its row. |
 | `ui/form_rows.hpp` (new) | `FormRowsSource`: a `DataSource` over an `ObjectArray` field's rows. |

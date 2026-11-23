@@ -3,17 +3,23 @@
 #pragma once
 
 /// @file grid_test_support.hpp
-/// @brief The grids' fixtures: a form whose `specimens` rows are entered in a grid, and helpers over a cell's menu.
+/// @brief The grids' fixtures: a form whose `specimens` rows are entered in a grid, helpers over a cell's menu, and a
+///        model's table as a grid over rows the test holds.
 
 #include <catch2/catch_test_macros.hpp>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
+#include <expected>
+#include <functional>
 #include <memory>
 #include <optional>
+#include <set>
+#include <span>
 #include <morph/forms/derive.hpp>
 #include <morph/forms/engine/form_session.hpp>
 #include <morph/reactive/testing/manual_scheduler.hpp>
+#include <morph/table/edits.hpp>
 #include <morph/ui/grid.hpp>
 #include <morph/ui/locale_table.hpp>
 #include <string>
@@ -23,6 +29,7 @@
 #include <vector>
 
 #include "forms_engine_support.hpp"
+#include "table/row_commits.hpp"
 
 namespace morph::test::grid {
 
@@ -262,5 +269,237 @@ inline bool enabledOf(ui::MenuItem const& item) { return item.enabled.evaluate()
 
 // An entry's description, as bound now.
 inline std::string descriptionOf(ui::MenuItem const& item) { return item.description.evaluate(); }
+
+// ── Cells of a model's table ────────────────────────────────────────────────
+
+// Rows of a model's table held by the test: a view of keys, some not fetched, with states, locks and unloaded levels.
+class FakeRows final : public ui::TableRows {
+public:
+    struct Row {
+        table::RowId key;
+        ui::Value record;
+        bool fetched = true;
+        std::set<std::string> unloaded;   // the levels the row has not loaded
+    };
+    std::vector<Row> view;                                     // in view order
+    ui::RowStates rowStates;
+    std::vector<std::pair<table::RowId, table::RowId>> moved;  // moveKey's calls
+
+    // Marks the row fetched; reports it changed.
+    void deliver(std::size_t index) {
+        view.at(index).fetched = true;
+        announce({table::ViewOp{.kind = table::ViewOp::Kind::Changed, .first = index, .count = 1, .to = 0}});
+    }
+    // The view in this order; reports the moves.
+    void reorder(std::vector<table::RowId> const& keys) {
+        std::vector<table::ViewOp> ops;
+        for (std::size_t to = 0; to < keys.size(); ++to) {
+            auto const at = std::ranges::find(view, keys.at(to), &Row::key);
+            auto const from = static_cast<std::size_t>(at - view.begin());
+            if (from == to) continue;
+            Row row = std::move(*at);
+            view.erase(at);
+            view.insert(view.begin() + static_cast<std::ptrdiff_t>(to), std::move(row));
+            ops.push_back(table::ViewOp{.kind = table::ViewOp::Kind::Moved, .first = from, .count = 1, .to = to});
+        }
+        announce(std::move(ops));
+    }
+    // Out of the view; `restore` puts it back.
+    Row drop(table::RowId const& key) {
+        auto const at = std::ranges::find(view, key, &Row::key);
+        auto const index = static_cast<std::size_t>(at - view.begin());
+        Row row = std::move(*at);
+        view.erase(at);
+        announce({table::ViewOp{.kind = table::ViewOp::Kind::Removed, .first = index, .count = 1, .to = 0}});
+        return row;
+    }
+    void restore(Row row, std::size_t index) {
+        view.insert(view.begin() + static_cast<std::ptrdiff_t>(index), std::move(row));
+        announce({table::ViewOp{.kind = table::ViewOp::Kind::Inserted, .first = index, .count = 1, .to = 0}});
+    }
+    // Replaces the record; reports it changed.
+    void refetch(table::RowId const& key, ui::Value record) {
+        auto const at = std::ranges::find(view, key, &Row::key);
+        at->record = std::move(record);
+        at->fetched = true;
+        auto const index = static_cast<std::size_t>(at - view.begin());
+        announce({table::ViewOp{.kind = table::ViewOp::Kind::Changed, .first = index, .count = 1, .to = 0}});
+    }
+    [[nodiscard]] std::size_t handlers() const { return _handlerSets; }   // how often onChange was set
+
+    [[nodiscard]] ui::TableTotal total() const override {
+        return {.rows = static_cast<std::int64_t>(view.size()), .kind = table::TotalKind::Exact, .known = true};
+    }
+    [[nodiscard]] std::optional<ui::TableRowRef> row(std::int64_t index) const override {
+        if (index < 0 || static_cast<std::size_t>(index) >= view.size()) return std::nullopt;
+        Row const& held = view.at(static_cast<std::size_t>(index));
+        if (!held.fetched) return std::nullopt;
+        return ui::TableRowRef{.key = held.key, .row = held.record};
+    }
+    [[nodiscard]] table::UnloadedLevels unloadedLevels(std::int64_t index) const override {
+        if (index < 0 || static_cast<std::size_t>(index) >= view.size()) return {};
+        _levels.assign(view.at(static_cast<std::size_t>(index)).unloaded.begin(),
+                       view.at(static_cast<std::size_t>(index)).unloaded.end());
+        return table::UnloadedLevels{.levels = _levels, .failed = {}};
+    }
+    void visible(std::int64_t, std::int64_t, std::span<std::string const>) override {}
+    async::Completion<std::expected<std::vector<table::RowId>, table::TableError>> keysOf(std::int64_t,
+                                                                                       std::int64_t) override {
+        return async::Completion<std::expected<std::vector<table::RowId>, table::TableError>>::makeSettleable(nullptr)
+            .first;
+    }
+    void locateRow(table::RowId, std::stop_token, std::function<void(ui::RowLocation const&)>) override {}
+    async::Completion<std::expected<std::vector<ui::FetchedRow>, table::TableError>> fetchRows(
+        std::vector<table::RowId>, std::vector<std::string>) override {
+        return async::Completion<std::expected<std::vector<ui::FetchedRow>, table::TableError>>::makeSettleable(nullptr)
+            .first;
+    }
+    std::expected<void, table::TableError> setSort(ui::SortChain) override { return {}; }
+    std::expected<void, table::TableError> setFilter(table::FilterSpec) override { return {}; }
+    async::Completion<std::expected<table::DistinctValues, table::TableError>> distinctValues(
+        table::DistinctRequest) override {
+        return async::Completion<std::expected<table::DistinctValues, table::TableError>>::makeSettleable(nullptr).first;
+    }
+    [[nodiscard]] ui::TableCountsView counts() const override { return ui::TableCountsView{.view = total()}; }
+    [[nodiscard]] ui::RowStates& states() override { return rowStates; }
+    [[nodiscard]] ui::RowStates const& states() const override { return rowStates; }
+    void moveKey(table::RowId const& from, table::RowId const& to) override { moved.emplace_back(from, to); }
+    void onChange(std::function<void(table::ViewChange const&)> handler) override {
+        _handler = std::move(handler);
+        ++_handlerSets;
+    }
+
+private:
+    void announce(std::vector<table::ViewOp> ops) {
+        if (_handler && !ops.empty()) _handler(table::ViewChange{.ops = std::move(ops)});
+    }
+    std::function<void(table::ViewChange const&)> _handler;
+    std::size_t _handlerSets = 0;
+    mutable std::vector<std::string> _levels;
+};
+
+// The edit actions of the model table's cases: a count by `CellEdit`, a label and a remark by `RowEdit`.
+inline constexpr std::string_view kEditSpecimenCount =
+    R"({"type":"object","x-cellEditOf":"Lims_SampleModel.samples","properties":{"key":{"type":"integer"},)"
+    R"("value":{"type":"integer","maximum":10}},"required":["key","value"]})";
+inline constexpr std::string_view kEditSpecimenRow =
+    R"({"type":"object","x-rowEditOf":"Lims_SampleModel.samples","properties":{"key":{"type":"integer"},)"
+    R"("values":{"type":"object","properties":{"label":{"type":["string","null"]},)"
+    R"("remarkText":{"type":["string","null"]}}}},"required":["key"]})";
+
+// The description of the model table's cases: `key` (the key), `label` and `remark` (Text, `Lims_EditSpecimenRow`'s
+// `label` and `remarkText`), `count` (Integer of level `counts`, `Lims_EditSpecimenCount`, frozen by `countFrozen`),
+// `note` (Text, no edit), and the companions `countFrozen` and `lockedBy`, the row's lock.
+inline table::TableDescription specimenTableDescription() {
+    table::TableDescription d;
+    d.id = "samples";
+    d.label = "Samples";
+    d.key = "key";
+    auto const add = [&d](std::string id, table::ColumnKind kind, std::optional<table::EditInfo> edit = {},
+                          std::string level = {}) {
+        table::TableColumn column;
+        column.info = table::ColumnInfo{.id = std::move(id), .kind = kind};
+        column.info.level = std::move(level);
+        column.label = column.info.id;
+        column.edit = std::move(edit);
+        d.columns.push_back(std::move(column));
+    };
+    add("key", table::ColumnKind::Integer);
+    add("label", table::ColumnKind::Text, table::EditInfo{.action = "Lims_EditSpecimenRow", .member = "label"});
+    add("remark", table::ColumnKind::Text, table::EditInfo{.action = "Lims_EditSpecimenRow", .member = "remarkText"});
+    add("count", table::ColumnKind::Integer,
+        table::EditInfo{.action = "Lims_EditSpecimenCount", .member = {}, .readonly = "countFrozen"}, "counts");
+    add("note", table::ColumnKind::Text);
+    add("countFrozen", table::ColumnKind::Bool);
+    add("lockedBy", table::ColumnKind::Text);
+    d.rowLock = "lockedBy";
+    return table::describe(std::move(d));
+}
+
+// A row of the model table's cases: label `L<key>`, remark `R<key>`, count the key, note `n`, not frozen, not locked.
+inline ui::Value specimenRecord(std::int64_t key, std::int64_t count = -1) {
+    ui::ValueRecord record;
+    record.insert_or_assign("key", ui::Value{key});
+    record.insert_or_assign("label", ui::Value{"L" + std::to_string(key)});
+    record.insert_or_assign("remark", ui::Value{"R" + std::to_string(key)});
+    record.insert_or_assign("count", ui::Value{count < 0 ? key : count});
+    record.insert_or_assign("note", ui::Value{std::string{"n"}});
+    record.insert_or_assign("countFrozen", ui::Value{false});
+    record.insert_or_assign("lockedBy", ui::Value{std::string{}});
+    return ui::Value{std::move(record)};
+}
+
+// Sets a field of a held row's record.
+inline void setField(FakeRows& rows, std::int64_t key, std::string const& field, ui::Value value) {
+    auto const at = std::ranges::find(rows.view, table::RowId{key}, &FakeRows::Row::key);
+    REQUIRE(at != rows.view.end());
+    ui::ValueRecord record = *at->record.asRecord();
+    record.insert_or_assign(field, std::move(value));
+    at->record = ui::Value{std::move(record)};
+}
+
+// A model's table as a grid over `FakeRows`: its columns `label`, `remark`, `count` and `note`, its edits sent to
+// `commits`, its actions permitted while `permitted` names them.
+struct ModelGridFixture {
+    morph::test::formsengine::Harness h;
+    std::shared_ptr<FakeRows> rows = std::make_shared<FakeRows>();
+    RowCommits commits;
+    table::CellEdits edits{commits.commit()};
+    std::set<std::string, std::less<>> permitted{"Lims_EditSpecimenCount", "Lims_EditSpecimenRow"};
+    std::unique_ptr<ui::ModelGridSource> source;
+    std::unique_ptr<ui::GridController> grid;
+    // One fetched row per key, in that order. In `EditMode::Row` Enter moves along the row, so a row's cells are
+    // entered with Enter as with Tab.
+    explicit ModelGridFixture(std::vector<std::int64_t> keys, ui::EditMode mode = ui::EditMode::Cell);
+    // The table columns the grid shows, for a mount: one per grid column.
+    [[nodiscard]] static std::vector<ui::TableColumn> tableColumns();
+};
+
+inline ModelGridFixture::ModelGridFixture(std::vector<std::int64_t> keys, ui::EditMode mode) {
+    for (std::int64_t const key : keys) {
+        rows->view.push_back(FakeRows::Row{.key = table::RowId{key}, .record = specimenRecord(key), .fetched = true,
+                                           .unloaded = {}});
+    }
+    auto const count = std::make_shared<forms::FormModel const>(
+        morph::test::formsengine::modelOf("Lims_EditSpecimenCount", kEditSpecimenCount));
+    auto const row = std::make_shared<forms::FormModel const>(
+        morph::test::formsengine::modelOf("Lims_EditSpecimenRow", kEditSpecimenRow));
+    table::TableDescription const description = specimenTableDescription();
+    auto const editOf = [&description](std::string_view id) {
+        auto const found = std::ranges::find_if(description.columns,
+                                                [id](table::TableColumn const& column) { return column.info.id == id; });
+        return found->edit;
+    };
+    std::vector<ui::ModelColumn> columns;
+    columns.push_back(ui::ModelColumn{.id = "label", .edit = editOf("label"), .model = row, .path = "values.label"});
+    columns.push_back(
+        ui::ModelColumn{.id = "remark", .edit = editOf("remark"), .model = row, .path = "values.remarkText"});
+    columns.push_back(ui::ModelColumn{.id = "count", .edit = editOf("count"), .model = count, .path = "value"});
+    columns.push_back(ui::ModelColumn{.id = "note", .edit = std::nullopt, .model = nullptr, .path = {}});
+    source = std::make_unique<ui::ModelGridSource>(
+        rows, edits, std::move(columns), mode,
+        ui::ModelGridContext{.runtime = &h.rt,
+                             .choices = h.server.fetcher(),
+                             .session = {},
+                             .format = ui::FormatContext{},
+                             .may = [this](std::string_view action) { return permitted.contains(action); }});
+    source->setDescription(description);
+    ui::GridOptions options;
+    if (mode == ui::EditMode::Row) {
+        options.enterMoves = ui::EnterMoves::Right;
+    }
+    grid = std::make_unique<ui::GridController>(h.rt, *source, std::move(options));
+}
+
+inline std::vector<ui::TableColumn> ModelGridFixture::tableColumns() {
+    return {ui::TableColumn{.id = "label", .label = "label"}, ui::TableColumn{.id = "remark", .label = "remark"},
+            ui::TableColumn{.id = "count", .label = "count"}, ui::TableColumn{.id = "note", .label = "note"}};
+}
+
+// The value of a settled success, and of a refusal naming fields.
+inline std::expected<void, std::vector<table::FieldError>> committedOk() { return {}; }
+inline std::expected<void, std::vector<table::FieldError>> refusedWith(std::vector<table::FieldError> errors) {
+    return std::unexpected(std::move(errors));
+}
 
 }  // namespace morph::test::grid
