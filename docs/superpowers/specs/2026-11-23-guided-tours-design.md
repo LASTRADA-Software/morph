@@ -132,11 +132,12 @@ server builds once. It has no lifecycle.
 document's `tours` stay where they are, and the registry adds to them.
 
 ```cpp
-morph::ui::TourRegistry tours{registry};                 // checks against this UiRegistry's bundle
-morph::ui::registerTours(models, tours);                 // serves morph.tours: the read action `list`
-auto added = tours.add(tourJson);                        // std::expected<void, TourRefusal>
-auto again = tours.replace(tourJson);                    // the same id, new content
-auto gone  = tours.remove("whats-new-2026-12");
+auto tours = std::make_shared<morph::ui::TourRegistry>(servedBundle);   // a getter: a reload swaps the bundle
+morph::ui::registerTours(tours, authorizer, dispatcher, registry);      // serves morph.tours: the read action `list`
+morph::ui::publishTourChanges(*tours, server);                          // once the server exists
+auto added = tours->add(tourJsonText);                   // std::expected<void, TourRefusal>
+auto again = tours->replace(tourJsonText);                    // the same id, new content
+auto gone  = tours->remove("whats-new-2026-12");
 ```
 
 - **Same format, same checks.** A runtime tour is the same JSON as one entry of the app document's `tours`, built the
@@ -150,17 +151,25 @@ auto gone  = tours.remove("whats-new-2026-12");
 - **Who sees which tour.** `list` answers the runtime tours in registration order, leaving out any tour whose `screen`,
   or any step's `screen`, the asking person may not open (`screenAdmitted`). The tour is not cut short: it is either
   offered whole or not offered at all.
-- **Keeping clients current.** Every `add`, `replace` and `remove` touches the record `morph.tours`, and its effects
-  reach every client watching it. On the client, `TourSync` (`include/morph/ui/tour_sync.hpp`) lists at each frame
+- **Keeping clients current.** A change made through the C++ API is not an action, so no declared effect carries it.
+  `publishTourChanges(tours, server)` connects the registry to the server, which then posts a change of the record
+  `morph.tours` on its strand after every `add`, `replace`, `remove` and drop. `registerTours` runs before the server
+  exists, which is why this is a second call. A registry that changes with no publisher connected logs a warning
+  once, so a server that forgot the call hears about it. Each listed tour carries a `revision`. A client ends a
+  running tour when its revision changes or it disappears; comparing content instead would end a tour on every locale
+  change. On the client, `TourSync` (`include/morph/ui/tour_sync.hpp`) lists at each frame
   build. It adds `morph.tours` to the session's extra watches, as `CustomScreenSync` does, and lists again on each
   `changes` event naming the record, after a reconnect and after a `resync`. An in-process source sends no events, so
   its list refreshes at a frame and a reconnect.
-- **Merging.** The controller's tours are the app document's, then the runtime ones, each group in its own order. The
+- **A literal `tour.start` names an app-document tour.** Runtime tours do not exist when the bundle is built, so a
+  document that starts one computes the id, and the id is checked when the command runs.
+- **Merging.** `AppRoot::tours()` merges them, so the controller, the Tours menu and `tour.start` read one value: the
+  app document's tours, then the runtime ones, each group in its own order. The
   Tours menu shows them that way within each screen group. When a running tour is replaced or removed, it ends and the
   shell shows a toast saying the tour changed. It is not swapped mid-way, because its step positions may no longer
   correspond.
-- **Bundle reload.** When the server's bundle changes (a development reload), the registry checks every runtime tour
-  again. A tour that no longer passes is removed, logged at error with its refusal, and reported through
+- **Bundle reload.** The registry compares the bundle's digest on every call and, when it has changed (a development
+  reload), checks every runtime tour again. `recheck()` does it at once for an application that swaps its bundle. A tour that no longer passes is removed, logged at error with its refusal, and reported through
   `TourRegistry::onDropped`. It is never kept and left to fail on a client.
 - **Lifetime.** The registry keeps its tours in memory. An application that wants them to survive a restart stores
   them itself and adds them again at start-up. A store seam would only matter once tours are written by people,
