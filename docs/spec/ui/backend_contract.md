@@ -659,7 +659,7 @@ backend's test suite runs every case on a fresh probe. `RecordingBackend` passes
 `spotlightConformanceCases()` holds five more, for the spotlight: its card takes input only while open; it finds a target
 made after it was named; hiding the target, hiding a container around it and destroying it flip `targetShown` and reach
 the handler; of two widgets with one id it rings the first shown; inside it the content's chords come before the
-focused widget's own keys, Enter excepted. They read the ringed widget through `ConformanceProbe::targetOf`, whose
+focused widget's own keys, Enter and Space excepted. They read the ringed widget through `ConformanceProbe::targetOf`, whose
 default reads none, so a probe that does not implement it fails them. A backend runs them once it draws a spotlight.
 
 `layoutConformanceCases()` are the cases of where a backend that lays widgets out draws them, read through the
