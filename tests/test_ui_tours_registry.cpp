@@ -20,6 +20,9 @@ namespace ui = morph::ui;
 
 namespace {
 
+/// The id of the tour `home` starts and the valid tours declare; a test that wants it undeclared names another.
+constexpr std::string_view kTourId = "getting-started";
+
 // A screen with a literal test id in its view, one inside a component's fallback, and a head action.
 constexpr std::string_view kSamples = R"({"vocab":"ui/1","id":"lims.samples","title":"Samples",
   "state":{"n":{"init":0}},
@@ -30,14 +33,19 @@ constexpr std::string_view kSamples = R"({"vocab":"ui/1","id":"lims.samples","ti
 
 /// A screen whose button runs `tour.start` with @p args.
 std::string home(std::string_view args) {
-    return R"({"vocab":"ui/1","id":"lims.home","title":"Home","state":{"which":{"init":"getting-started"}},
+    return R"({"vocab":"ui/1","id":"lims.home","title":"Home","state":{"which":{"init":")" + std::string{kTourId} +
+           R"("}},
       "view":{"kind":"button","testId":"take_tour","label":"Take the tour",
               "onClick":[{"host":"tour.start","args":)" +
            std::string{args} + "}]}}";
 }
 
-constexpr std::string_view kValidTours = R"([
-  {"id":"getting-started","title":"Getting started","steps":[
+/// The tours of the control bundle: @c kTourId, and one that belongs to a screen.
+std::string validTours() {
+    return R"([
+  {"id":")" +
+           std::string{kTourId} +
+           R"(","title":"Getting started","steps":[
     {"target":"shell_tours","title":"Tours"},
     {"target":"nav_lims.samples","advanceOn":{"screen":"lims.samples"},"title":"Open Samples"},
     {"target":"samples_table","title":"The table"},
@@ -46,10 +54,13 @@ constexpr std::string_view kValidTours = R"([
     {"target":"chat_input","title":"Ask"},
     {"screen":"lims.home","target":"take_tour","title":"Again"}]},
   {"id":"register","screen":"lims.samples","title":"Register","steps":[{"target":"samples_table","title":"Here"}]}])";
+}
 
 struct Bundle {
-    std::string tours{kValidTours};
-    std::string homeArgs = R"({"obj":{"id":"getting-started"}})";
+    std::string tours = validTours();
+    std::string homeArgs = R"({"obj":{"id":")" + std::string{kTourId} + R"("}})";
+    /// Members added to the app document beside `tours`, each preceded by a comma.
+    std::string appMembers;
     std::optional<ui::ShellParts> parts;
 };
 
@@ -66,13 +77,22 @@ std::expected<std::shared_ptr<ui::ServedBundle const>, ui::Refusal> build(Bundle
     };
     add("lims.samples", std::string{kSamples});
     add("lims.home", home(bundle.homeArgs));
+    ui::CatalogEntry login;
+    login.id = "lims.login";
+    login.title = "Sign in";
+    login.isPublic = true;
+    REQUIRE(
+        registry.addScreen(std::move(login), R"({"vocab":"ui/1","id":"lims.login","view":{"kind":"text","text":"x"}})")
+            .has_value());
     ui::CatalogEntry explorer;
     explorer.id = "explorer";
     explorer.title = "Explorer";
     explorer.host = std::string{"explorer"};
     REQUIRE(registry.addEntry(std::move(explorer)).has_value());
-    auto const app = registry.addFile(ui::BundleFile{
-        .kind = "app", .id = "app", .bytes = R"({"vocab":"ui/1","id":"app","tours":)" + bundle.tours + "}"});
+    auto const app = registry.addFile(
+        ui::BundleFile{.kind = "app",
+                       .id = "app",
+                       .bytes = R"({"vocab":"ui/1","id":"app","tours":)" + bundle.tours + bundle.appMembers + "}"});
     REQUIRE(app.has_value());
     if (bundle.parts) {
         REQUIRE(registry.setShellParts(*bundle.parts).has_value());
@@ -90,7 +110,7 @@ ui::Refusal refusalOf(Bundle const& bundle) {
 /// A one-tour list whose only tour is general, with @p steps.
 std::string oneTour(std::string_view steps) {
     // Named as `home`'s literal `tour.start` names its tour, so only the name a test wants refused is in doubt.
-    return R"([{"id":"getting-started","title":"T","steps":)" + std::string{steps} + "}]";
+    return R"([{"id":")" + std::string{kTourId} + R"(","title":"T","steps":)" + std::string{steps} + "}]";
 }
 
 }  // namespace
@@ -115,10 +135,9 @@ TEST_CASE("tours registry: a target nothing carries is refused, naming the tour 
 
 // Mutation: skip the registered-screen check of the tour's `screen`, the step's `screen` or `advanceOn.screen`.
 TEST_CASE("tours registry: a screen a tour names that is not registered is refused", "[ui][tours][service]") {
-    CHECK(
-        refusalOf(
-            Bundle{.tours = R"([{"id":"getting-started","screen":"lims.nope","title":"T","steps":[{"title":"S"}]}])"})
-            .path == "/tours/0/screen");
+    CHECK(refusalOf(Bundle{.tours = R"([{"id":")" + std::string{kTourId} +
+                                    R"(","screen":"lims.nope","title":"T","steps":[{"title":"S"}]}])"})
+              .path == "/tours/0/screen");
     CHECK(refusalOf(Bundle{.tours = oneTour(R"([{"screen":"lims.nope","title":"S"}])")}).path ==
           "/tours/0/steps/0/screen");
     CHECK(refusalOf(Bundle{.tours = oneTour(R"([{"advanceOn":{"screen":"lims.nope"},"title":"S"}])")}).path ==
@@ -170,6 +189,39 @@ TEST_CASE("tours registry: a literal tour.start naming an undeclared tour is ref
     CHECK(refused.path == "/view/onClick/0");
     CHECK(refused.reason.contains("`nope`"));
     CHECK(build(Bundle{.homeArgs = R"({"obj":{"id":{"ref":"which"}}})"}).has_value());
+}
+
+// Mutation: read only the `obj` form of `args` in `literalTourId` (the `lit` form builds).
+TEST_CASE("tours registry: a literal tour.start written as a lit record is checked too", "[ui][tours][service]") {
+    ui::Refusal const refused = refusalOf(Bundle{.homeArgs = R"({"lit":{"id":"nope"}})"});
+    CHECK(refused.document == "lims.home");
+    CHECK(refused.reason.contains("`nope`"));
+    CHECK(build(Bundle{.homeArgs = R"({"lit":{"id":")" + std::string{kTourId} + R"("}})"}).has_value());
+}
+
+// Mutation: skip the app document's own text in `checkTours` (a start inside it builds).
+TEST_CASE("tours registry: a literal tour.start inside the app document naming an undeclared tour is refused",
+          "[ui][tours][service]") {
+    std::string const start = R"(,"note":{"host":"tour.start","args":{"obj":{"id":"nope"}}})";
+    ui::Refusal const refused = refusalOf(Bundle{.appMembers = start});
+    CHECK(refused.document == "app");
+    CHECK(refused.path == "/note");
+    CHECK(refused.reason.contains("`nope`"));
+    CHECK(build(Bundle{.appMembers = std::string{R"(,"note":{"host":"tour.start","args":{"obj":{"id":")"} +
+                                     std::string{kTourId} + R"("}}})"})
+              .has_value());
+}
+
+// Mutation: accept every `nav_` id in `shellTarget` (a public or a host screen's entry builds).
+TEST_CASE("tours registry: a nav target of a public screen or a host screen is refused", "[ui][tours][service]") {
+    for (std::string_view const screen : {"lims.login", "explorer"}) {
+        INFO(screen);
+        ui::Refusal const refused =
+            refusalOf(Bundle{.tours = oneTour(R"([{"target":"nav_)" + std::string{screen} + R"(","title":"S"}])")});
+        CHECK(refused.path == "/tours/0/steps/0/target");
+        CHECK(refused.reason.contains("nav_" + std::string{screen}));
+    }
+    CHECK(build(Bundle{.tours = oneTour(R"([{"target":"nav_lims.samples","title":"S"}])")}).has_value());
 }
 
 // Mutation: drop `morph.tour` from `kReservedClientIds` (the screen registers, and no refusal names it).
