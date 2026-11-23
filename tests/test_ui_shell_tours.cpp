@@ -144,19 +144,27 @@ TEST_CASE("shell tours: the Tours texts are built in, in English and German", "[
 }
 
 // Mutation: hand the handler a reference into the frame's entry map (`_onTour(*_tourMap.at(entry))`); the handler's
-// `setTours` rebuilds the map and the id it reads afterwards is a dead string.
+// `setTours` rebuilds the map and the id it reads afterwards is a dead string. The id is longer than any small-string
+// buffer, so it lives on the heap and the dead string is no longer readable by luck.
 TEST_CASE("shell tours: a handler that replaces the tours still reads the id it was given", "[ui][shell][tours]") {
+    std::string const longId = "a-guided-tour-whose-id-is-far-longer-than-a-small-string-buffer-holds";
+    REQUIRE(longId.size() > 32);
+    auto const toursWithLongId = [&longId] {
+        ui::ShellToursView view = samplesTours();
+        view.groups.front().tours.front().id = longId;
+        return view;
+    };
     RecordingBackend backend;
     ui::ShellFrame frame{backend, nullptr, options()};
     std::string seen;
     frame.setOnTour([&](std::string const& id) {
         frame.setTours(ui::ShellToursView{});
-        frame.setTours(samplesTours());
+        frame.setTours(toursWithLongId());
         seen = id;
     });
-    frame.setTours(samplesTours());
+    frame.setTours(toursWithLongId());
     backend.chooseMenuEntry(backend.find("Menu", "testId", "shell_tours").value(), {1});
-    CHECK(seen == "register");
+    CHECK(seen == longId);
 }
 
 // Mutation: leave out `setTooltip` (the button has no tooltip).
