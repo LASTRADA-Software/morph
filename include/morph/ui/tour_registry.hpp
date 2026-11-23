@@ -45,7 +45,7 @@ struct TourRefusal {
     std::string reason;
 
     /// @brief The refusal as one line.
-    /// @return `the tour `<id>` at <path>: <reason>`.
+    /// @return The text "the tour `ID` at PATH: REASON", with the three members in place of the capitals.
     [[nodiscard]] std::string message() const {
         return "the tour `" + tourId + "` at " + (path.empty() ? std::string{"/"} : path) + ": " + reason;
     }
