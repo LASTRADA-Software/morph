@@ -214,14 +214,7 @@ void TourController::show(std::size_t step) {
             return;
         }
     }
-    std::string target = shown.target;
-    if (!target.empty()) {
-        bool const compact = _shell->compact();
-        if (!compact && target.starts_with("nav_")) {
-            _shell->revealNavEntry(target.substr(4));
-        }
-        target = tourTargetFor(target, compact);
-    }
+    std::string const target = ringedTarget(shown);
     _step = step;
     // A step whose screen is already active has nothing to wait for: it is shown as an ordinary step, since no change
     // of the active screen would ever move it on.
@@ -235,6 +228,27 @@ void TourController::show(std::size_t step) {
     }
     refresh();
     changed();
+}
+
+std::string TourController::ringedTarget(TourStep const& step) {
+    std::string target = step.target;
+    if (target.empty()) {
+        return target;
+    }
+    bool const compact = _shell->compact();
+    if (!compact && target.starts_with("nav_")) {
+        _shell->revealNavEntry(target.substr(4));
+    }
+    return tourTargetFor(target, compact);
+}
+
+void TourController::formChanged() {
+    Tour const* const tour = current();
+    if (tour == nullptr || _step >= tour->steps.size()) {
+        return;
+    }
+    std::string const target = ringedTarget(tour->steps.at(_step));
+    _shell->spotlight().setTarget(target.empty() ? std::nullopt : std::optional<std::string>{target});
 }
 
 void TourController::refresh() {

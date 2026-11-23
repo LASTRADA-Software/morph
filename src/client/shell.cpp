@@ -468,6 +468,9 @@ public:
                 }
                 if (_frame) {
                     _frame->setCompact(compactFrame(widthClass));
+                    if (_tours) {
+                        _tours->formChanged();
+                    }
                     if (_chatBinding) {
                         _chatBinding->refresh();
                     }

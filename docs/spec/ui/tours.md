@@ -111,7 +111,8 @@ tour runs.
 **Preparing a shell target.** In the wide form a `nav_<id>` target is revealed first: the navigator's search is emptied
 and the module holding the entry opened (`Navigator::reveal`). In the compact form `tourTargetFor` rings what the frame
 draws instead: `nav_<id>`, `shell_context`, `shell_help`, `shell_principal_menu` and `shell_tours` as `shell_nav_menu`,
-which holds them; `shell_search` as `shell_search_open`.
+which holds them; `shell_search` as `shell_search_open`. When the frame goes between its forms while a step shows, the shell
+calls `formChanged()`, which rings the step's target again in the new form without opening or moving anything.
 
 ## The card
 

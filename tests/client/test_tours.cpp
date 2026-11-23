@@ -217,6 +217,20 @@ TEST_CASE("Client shell tours: compact, the Tours entries join the navigation me
     REQUIRE(window.wait([&window] { return window.spotlight("target") == "shell_nav_menu"; }));
 }
 
+// Mutation: drop the `formChanged` call from `followWidthClass` (the ring stays where the old form put it).
+TEST_CASE("Client shell tours: a change of width mid-step moves the ring between the navigator entry and the menu",
+          "[client][tours]") {
+    Window window;
+    REQUIRE(window.shell->startTour("getting-started").has_value());
+    REQUIRE(window.wait([&window] { return window.spotlight("open") == "true"; }));
+    window.click("tour_next");
+    REQUIRE(window.wait([&window] { return window.spotlight("target") == "nav_tours.samples"; }));
+    window.backend.setWidthClass("medium");
+    REQUIRE(window.wait([&window] { return window.spotlight("target") == "shell_nav_menu"; }));
+    window.backend.setWidthClass("expanded");
+    REQUIRE(window.wait([&window] { return window.spotlight("target") == "nav_tours.samples"; }));
+}
+
 // Mutation: make the frame's spotlight a backend root (`createSpotlight(nullptr)`), so it outlives the frame.
 TEST_CASE("Client shell tours: signing out ends a running tour", "[client][tours]") {
     Window window;

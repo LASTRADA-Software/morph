@@ -194,6 +194,11 @@ public:
     /// @brief Tells the controller the active tab changed: a step waiting for the screen now active moves on.
     void activeChanged();
 
+    /// @brief Tells the controller the frame went between its wide and compact forms: the running step's target is
+    ///        rung again in the new form, a navigator entry as itself or as the navigation menu. Nothing opens or
+    ///        moves on.
+    void formChanged();
+
     /// @brief Whether a tour runs.
     /// @return It.
     [[nodiscard]] bool running() const noexcept { return !_tourId.empty(); }
@@ -210,6 +215,7 @@ public:
 private:
     [[nodiscard]] Tour const* current() const;
     void show(std::size_t step);
+    [[nodiscard]] std::string ringedTarget(TourStep const& step);
     void refresh();
     void fail(std::string const& screenId, MountError const& error);
     void warn(std::string const& text) const;
