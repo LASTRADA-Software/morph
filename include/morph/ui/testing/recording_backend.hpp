@@ -653,6 +653,7 @@ public:
         siblingsOf(parentId).push_back(widgetId);
         _ids.insert_or_assign(&widget, widgetId);
         _records.insert_or_assign(widgetId, std::move(record));
+        tellListeners();
         return widgetId;
     }
 
@@ -664,6 +665,9 @@ public:
         Record& record = at(widgetId);
         _log.push_back("set " + label(record) + " " + std::string{name} + "=" + value);
         record.props.insert_or_assign(std::string{name}, std::move(value));
+        if (movesTargets(name)) {
+            tellListeners();
+        }
     }
 
     /// @brief Sets a property the user changed through the widget itself; no setter ran, so nothing is logged.
@@ -672,6 +676,9 @@ public:
     /// @param value Its formatted value.
     void setByUser(int widgetId, std::string_view name, std::string value) {
         at(widgetId).props.insert_or_assign(std::string{name}, std::move(value));
+        if (movesTargets(name)) {
+            tellListeners();
+        }
     }
 
     /// @brief Moves a widget among its siblings, as `ContainerWidget::moveChild` defines it, and logs it.
@@ -686,6 +693,7 @@ public:
         auto const position = static_cast<std::ptrdiff_t>(std::min(index, siblings.size()));
         siblings.insert(siblings.begin() + position, widgetId);
         _log.push_back("move " + label(record) + " to " + std::to_string(index));
+        tellListeners();
     }
 
     /// @brief Forgets a destroyed widget and logs it. Its remaining children become roots.
@@ -715,6 +723,7 @@ public:
                 notify(widgetId);
             }
         }
+        tellListeners();
     }
 
     /// @brief A widget's record.
@@ -764,6 +773,20 @@ public:
     /// @brief Empties the operation log.
     void clearLog() noexcept { _log.clear(); }
 
+    /// @brief Registers a listener told after each change that can move a spotlight's target: a widget made, moved or
+    ///        destroyed, and a `testId`, `visible`, `open` or `collapsed` property set by a setter or the user.
+    /// @param listener The listener; it may change properties, and a change it makes is told after it returns.
+    /// @return Its key, for `unlisten`.
+    int listen(std::function<void()> listener) {
+        int const key = ++_nextListener;
+        _listeners.insert_or_assign(key, std::move(listener));
+        return key;
+    }
+
+    /// @brief Stops telling a listener.
+    /// @param key What `listen` returned.
+    void unlisten(int key) { _listeners.erase(key); }
+
     /// @brief Records that keyboard focus moved to a widget, and logs `focus`.
     /// @param widgetId The widget that took focus.
     /// @throws std::out_of_range for an id that names no live widget.
@@ -787,6 +810,41 @@ public:
     }
 
 private:
+    [[nodiscard]] static bool movesTargets(std::string_view name) noexcept {
+        return name == "testId" || name == "visible" || name == "open" || name == "collapsed";
+    }
+
+    // Tells every listener. A change a listener makes while it is told is told once more after the round, not inside
+    // it, so a listener never runs inside itself.
+    void tellListeners() {
+        if (_notifying) {
+            _again = true;
+            return;
+        }
+        _notifying = true;
+        do {
+            _again = false;
+            std::vector<int> keys;
+            keys.reserve(_listeners.size());
+            for (auto const& [key, listener] : _listeners) {
+                static_cast<void>(listener);
+                keys.push_back(key);
+            }
+            for (int const key : keys) {
+                if (auto const found = _listeners.find(key); found != _listeners.end()) {
+                    auto const listener = found->second;
+                    listener();
+                }
+            }
+        } while (_again);
+        _notifying = false;
+    }
+
+    std::map<int, std::function<void()>> _listeners;
+    int _nextListener = 0;
+    bool _notifying = false;
+    bool _again = false;
+
     [[nodiscard]] static std::string label(Record const& record) {
         return record.kind + "#" + std::to_string(record.id);
     }
@@ -1717,6 +1775,159 @@ public:
     void setOnDismiss(Action onDismiss) override { callbacks().dismiss = std::move(onDismiss); }
 };
 
+/// @brief Whether a widget is effectively shown: it and every container around it visible, every dialog, drawer,
+///        popover and spotlight around it open, no panel around it collapsed, and no closed collapsible around it
+///        unless it is that section's header.
+/// @param store  The records.
+/// @param record The widget.
+/// @return Whether a user could see it.
+[[nodiscard]] inline bool shownInStore(RecordStore const& store, Record const& record) {
+    auto const flag = [](Record const& of, std::string_view name, bool value) {
+        auto const found = of.props.find(name);
+        return found != of.props.end() && found->second == formatBool(value);
+    };
+    auto const closedOverlay = [&flag](Record const& of) {
+        return (of.kind == "Dialog" || of.kind == "Drawer" || of.kind == "Popover" || of.kind == "Spotlight") &&
+               !flag(of, "open", true);
+    };
+    if (flag(record, "visible", false) || closedOverlay(record)) {
+        return false;
+    }
+    for (int inner = record.id, outer = record.parent; outer != 0;) {
+        Record const& around = store.at(outer);
+        if (flag(around, "visible", false) || flag(around, "collapsed", true) || closedOverlay(around)) {
+            return false;
+        }
+        if (around.kind == "Collapsible" && flag(around, "open", false)) {
+            auto const header = around.props.find("header");
+            if (header == around.props.end() || header->second != std::to_string(inner)) {
+                return false;
+            }
+        }
+        inner = outer;
+        outer = around.parent;
+    }
+    return true;
+}
+
+/// @brief A fake `SpotlightWidget`: properties `open`, `target` (`none` for none) and `targetFocusable`, and, as it
+///        resolves its target against the backend's live widgets on every change the store tells, `targetShown` and
+///        `ringed` (the id of the widget it rings, `0` for none). Opening moves the recorded focus to its first shown
+///        `Button`, or to itself; closing moves it back to the widget that had it.
+class FakeSpotlight final : public FakeContainer<SpotlightWidget> {
+public:
+    /// @brief Records the spotlight and starts following the store.
+    /// @param store  Where the widget records itself.
+    /// @param parent The container it is appended to, or null for a root.
+    FakeSpotlight(std::shared_ptr<RecordStore> store, Widget const* parent)
+        : FakeContainer<SpotlightWidget>{std::move(store), "Spotlight", parent},
+          _listener{this->store().listen([this] { resolve(); })} {
+        set("targetShown", formatBool(false));
+        set("ringed", "0");
+    }
+
+    /// @brief Stops following the store.
+    ~FakeSpotlight() override { this->store().unlisten(_listener); }
+
+    FakeSpotlight(FakeSpotlight const&) = delete;
+    FakeSpotlight& operator=(FakeSpotlight const&) = delete;
+    FakeSpotlight(FakeSpotlight&&) = delete;
+    FakeSpotlight& operator=(FakeSpotlight&&) = delete;
+
+    void setOpen(bool open) override {
+        if (open == _open) {
+            return;
+        }
+        _open = open;
+        if (open) {
+            _restore = store().focused();
+        }
+        set("open", formatBool(open));
+        if (open) {
+            focusInside();
+            return;
+        }
+        int const restore = std::exchange(_restore, 0);
+        if (restore != 0 && store().records().contains(restore)) {
+            store().focus(restore);
+        }
+    }
+    void setTarget(std::optional<std::string> testId) override {
+        _target = std::move(testId);
+        set("target", _target ? formatText(*_target) : std::string{"none"});
+        resolve();
+    }
+    [[nodiscard]] bool targetShown() const override { return _ringed != 0; }
+    void setOnTargetShownChanged(std::function<void(bool)> handler) override { _onChanged = std::move(handler); }
+    void setTargetFocusable(bool focusable) override { set("targetFocusable", formatBool(focusable)); }
+
+    /// @brief The widget it rings.
+    /// @return Its id, or 0 for none.
+    [[nodiscard]] int ringed() const noexcept { return _ringed; }
+
+private:
+    // Whether @p record is inside this spotlight.
+    [[nodiscard]] bool within(Record const& record) const {
+        for (int outer = record.parent; outer != 0; outer = store().at(outer).parent) {
+            if (outer == id()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    void focusInside() {
+        for (auto const& [candidateId, record] : store().records()) {
+            if (record.kind == "Button" && within(record) && shownInStore(store(), record)) {
+                store().focus(candidateId);
+                return;
+            }
+        }
+        store().focus(id());
+    }
+
+    void resolve() {
+        if (_resolving) {
+            return;
+        }
+        _resolving = true;
+        int found = 0;
+        if (_target) {
+            std::string const wanted = formatText(*_target);
+            for (auto const& [candidateId, record] : store().records()) {
+                auto const testId = record.props.find("testId");
+                if (testId != record.props.end() && testId->second == wanted && candidateId != id() &&
+                    !within(record) && shownInStore(store(), record)) {
+                    found = candidateId;
+                    break;
+                }
+            }
+        }
+        bool const was = _ringed != 0;
+        if (found != _ringed) {
+            _ringed = found;
+            set("ringed", std::to_string(found));
+        }
+        bool const shown = found != 0;
+        if (shown != was) {
+            set("targetShown", formatBool(shown));
+        }
+        _resolving = false;
+        if (shown != was && _onChanged) {
+            auto const handler = _onChanged;
+            handler(shown);
+        }
+    }
+
+    int _listener;
+    std::optional<std::string> _target;
+    int _ringed = 0;
+    int _restore = 0;
+    bool _open = false;
+    bool _resolving = false;
+    std::function<void(bool)> _onChanged;
+};
+
 /// @brief A fake `SplitterWidget`: properties `axis`, `sizes` (`[n,…]`).
 class FakeSplitter final : public FakeContainer<SplitterWidget> {
 public:
@@ -2409,6 +2620,12 @@ public:
     [[nodiscard]] std::unique_ptr<PopoverWidget> createPopover(ContainerWidget* parent) override {
         return std::make_unique<detail::FakePopover>(_store, "Popover", parent);
     }
+    /// @brief A fake spotlight (`detail::FakeSpotlight`), resolving its target against this backend's live widgets.
+    /// @param parent The container to append to, or null for a root.
+    /// @return The widget.
+    [[nodiscard]] std::unique_ptr<SpotlightWidget> createSpotlight(ContainerWidget* parent) override {
+        return std::make_unique<detail::FakeSpotlight>(_store, parent);
+    }
     [[nodiscard]] std::unique_ptr<BusyWidget> createBusy(ContainerWidget* parent) override {
         return std::make_unique<detail::FakeBusy>(_store, "Busy", parent);
     }
@@ -2660,11 +2877,12 @@ public:
 
     /// @brief Presses a keyboard chord with focus on a widget, in the key order every backend follows.
     ///
-    /// First a chord @p widgetId declares itself through `setKeys`. Then the built-in keys of its kind: a `Button`'s
-    /// `Enter` or `Space` clicks it; a single-line or password `TextInput`'s `Enter` commits, then submits and stops
-    /// when the field has a submit handler, and goes on after the commit when it has none; a `Checkbox`'s `Space`
-    /// toggles it; a segmented `Select`'s `Left` and `Right` choose the previous or the next option, stopping at the
-    /// ends; a `Table`'s `Enter` activates its first marked row, and stops whether or not one is marked; a
+    /// First a chord @p widgetId declares itself through `setKeys`. Then, inside an open spotlight and except for
+    /// Enter and Space, the chords of its ancestors up to the spotlight. Then the built-in keys of its kind: a
+    /// `Button`'s `Enter` or `Space` clicks it; a single-line or password `TextInput`'s `Enter` commits, then submits
+    /// and stops when the field has a submit handler, and goes on after the commit when it has none; a `Checkbox`'s
+    /// `Space` toggles it; a segmented `Select`'s `Left` and `Right` choose the previous or the next option, stopping
+    /// at the ends; a `Table`'s `Enter` activates its first marked row, and stops whether or not one is marked; a
     /// `Multiple` table's `Ctrl+A` selects every row, or clears them when every row is selected, as `Extend`. Then
     /// the chords of its ancestors, innermost first. A handler that destroys the focused widget stops the key there.
     /// Like every helper it acts only when a user could reach @p widgetId.
@@ -2680,6 +2898,23 @@ public:
         if (std::ranges::find(focused.chords, chord) != focused.chords.end()) {
             invoke(focused.callbacks.chord, chord);
             return true;
+        }
+        // Inside an open spotlight the card's chords come before the focused widget's own keys, but Enter and Space
+        // stay the focused widget's.
+        if (chord != "Enter" && chord != "Space") {
+            if (int const spotlight = openSpotlightAround(widgetId); spotlight != 0) {
+                for (int candidate = parent; candidate != 0;) {
+                    detail::Record const& record = _store->at(candidate);
+                    if (std::ranges::find(record.chords, chord) != record.chords.end()) {
+                        invoke(record.callbacks.chord, chord);
+                        return true;
+                    }
+                    if (candidate == spotlight) {
+                        break;
+                    }
+                    candidate = record.parent;
+                }
+            }
         }
         if (ownKey(widgetId, chord) || !exists(widgetId)) {
             return true;
@@ -3258,9 +3493,21 @@ private:
         return true;
     }
 
-    // A dialog or drawer shows nothing until it is opened.
+    // The open spotlight @p widgetId is inside, or 0.
+    [[nodiscard]] int openSpotlightAround(int widgetId) const {
+        for (int outer = _store->at(widgetId).parent; outer != 0; outer = _store->at(outer).parent) {
+            detail::Record const& record = _store->at(outer);
+            if (record.kind == "Spotlight" && flagIs(record, "open", true)) {
+                return outer;
+            }
+        }
+        return 0;
+    }
+
+    // A dialog, drawer, popover or spotlight shows nothing until it is opened.
     [[nodiscard]] static bool isClosedDialog(detail::Record const& record) {
-        return (record.kind == "Dialog" || record.kind == "Drawer" || record.kind == "Popover") &&
+        return (record.kind == "Dialog" || record.kind == "Drawer" || record.kind == "Popover" ||
+                record.kind == "Spotlight") &&
                !flagIs(record, "open", true);
     }
 

@@ -8,6 +8,7 @@
 #include <morph/ui/view.hpp>
 #include <morph/util/datetime.hpp>
 #include <optional>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -25,6 +26,11 @@ std::unique_ptr<CustomWidget> IViewBackend::createCustom(ContainerWidget* parent
     static_cast<void>(parent);
     static_cast<void>(request);
     return nullptr;
+}
+
+std::unique_ptr<SpotlightWidget> IViewBackend::createSpotlight(ContainerWidget* parent) {
+    static_cast<void>(parent);
+    throw std::logic_error{"morph::ui: this backend draws no spotlight, so it runs no guided tour"};
 }
 
 // NOLINTNEXTLINE(modernize-use-string-view): the declaration returns std::string.

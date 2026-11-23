@@ -214,6 +214,7 @@ add_executable(morph_tests
     bench_mount.cpp
     test_ui_frontend.cpp
     test_ui_conformance.cpp
+    test_ui_spotlight_recording.cpp
     test_ui_common.cpp
     test_ui_custom.cpp
     test_ui_shell_frame.cpp
