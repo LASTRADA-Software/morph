@@ -19,6 +19,7 @@
 #include <morph/ui/tour_registry.hpp>
 #include <mutex>
 #include <optional>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -142,7 +143,7 @@ TEST_CASE("tour registry: an id the app document or another runtime tour uses is
     auto const clash = withAppTour.add(resultsTour("basics"));
     REQUIRE_FALSE(clash.has_value());
     CHECK(clash.error().path == "/id");
-    CHECK(clash.error().reason.contains("twice"));
+    CHECK(clash.error().reason.contains("the app document already declares a tour with the id `basics`"));
 }
 
 // Mutation: accept a `t` key in no catalogue in `missingTextKey` (the tour is added).
@@ -233,6 +234,30 @@ TEST_CASE("tour registry: a change made while nothing publishes it logs one warn
     REQUIRE(heard.add(resultsTour("one")).has_value());
     CHECK(told == 1);
     CHECK(warnings.empty());
+}
+
+// Mutation: make `recheck` do nothing (the tour on the vanished screen stays, and nothing is told).
+TEST_CASE("tour registry: recheck drops a tour the swapped bundle refuses, without a call that reads the bundle",
+          "[ui][tours][runtime]") {
+    Rig r;
+    REQUIRE(r.tours->add(verifyTour("verify")).has_value());
+    REQUIRE(r.tours->add(resultsTour("results")).has_value());
+    CHECK(r.dropped.empty());
+    ui::UiRegistry smaller{ui::ApplicationInfo{.id = "lims", .version = "2"}, uiservice::facts()};
+    REQUIRE(smaller.addScreen(uiservice::entry("lims.results"), std::string{uiservice::kResults}).has_value());
+    REQUIRE(smaller.addFile(uiservice::file("app", "app", std::string{uiservice::kApp})).has_value());
+    auto built = smaller.build();
+    REQUIRE(built.has_value());
+    r.bundle = *built;
+    int const before = r.changes;
+    r.tours->recheck();
+    REQUIRE(r.dropped.size() == 1);
+    CHECK(r.dropped.front().tourId == "verify");
+    CHECK(r.changes == before + 1);
+    CHECK(r.listedIds("ann") == std::vector<std::string>{"results"});
+    CHECK(r.dropped.size() == 1);
+    r.bundle = nullptr;
+    CHECK_THROWS_AS(r.tours->recheck(), std::logic_error);
 }
 
 namespace {

@@ -168,7 +168,11 @@ std::expected<TourRegistry::Held, TourRefusal> TourRegistry::checked(std::string
     auto const loaded =
         loadDocumentText(glz::write_json(*app).value_or(std::string{}), LoadOptions{.catalog = bundle.catalog});
     if (!loaded) {
-        return refuse(local(loaded.error().path), loaded.error().reason);
+        std::string const path = local(loaded.error().path);
+        if (path == "/id" && loaded.error().reason.contains("declared twice")) {
+            return refuse(path, "the app document already declares a tour with the id `" + id + "`");
+        }
+        return refuse(path, loaded.error().reason);
     }
     TourDecl const& decl = loaded->tours.at(index);
     std::vector<detail::TourScreen> const screens = detail::tourScreensOf(bundle);
@@ -308,9 +312,10 @@ void TourRegistry::recheck() {
     {
         std::scoped_lock const lock{_mutex};
         std::shared_ptr<ServedBundle const> const bundle = _bundle();
-        if (bundle != nullptr) {
-            dropped = recheckLocked(*bundle);
+        if (bundle == nullptr) {
+            throw std::logic_error{"TourRegistry: the bundle getter answered no bundle"};
         }
+        dropped = recheckLocked(*bundle);
     }
     tell(false, dropped);
 }

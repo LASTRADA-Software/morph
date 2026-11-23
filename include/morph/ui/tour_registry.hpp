@@ -87,6 +87,10 @@ struct ToursListed {
 /// warning, so a server that never called `publishTourChanges` hears of it. A refusal names the runtime tour by its id
 /// and points into the submitted tour's JSON, never into the app document. The tours are kept in memory only. Safe to
 /// call from any thread.
+///
+/// The bundle getter, the server's texts (`ServedBundle::fieldTexts`) and the authoriser passed to `listFor` are
+/// called with the registry's lock held, so none of them may call back into the registry or hold a lock around a call
+/// into it. The two handlers are called after the lock is released.
 class MORPH_API TourRegistry {
 public:
     /// @brief A registry with no tour.
@@ -95,9 +99,8 @@ public:
 
     /// @brief Adds a tour.
     /// @param tour The tour's JSON text.
-    /// @return Nothing, or the refusal: a malformed tour, a name the bundle does not have, a text key nobody has, an
-    /// id
-    ///         the app document or another runtime tour uses, or a bundle with no app document.
+    /// @return Nothing, or the refusal: a malformed tour, a name the bundle does not have, a text key nobody has,
+    ///         an id the app document or another runtime tour uses, or a bundle with no app document.
     std::expected<void, TourRefusal> add(std::string_view tour);
 
     /// @brief Replaces a runtime tour with new content under the same id.
@@ -119,8 +122,8 @@ public:
                                       ::morph::session::IAuthorizer const& authorizer);
 
     /// @brief Checks every held tour against the bundle served now, dropping those that fail, whether or not its
-    /// digest
-    ///        changed: what an application calls right after it swaps the bundle.
+    ///        digest changed: what an application calls right after it swaps the bundle.
+    /// @throws std::logic_error when the bundle getter answers no bundle.
     void recheck();
 
     /// @brief Sets what is told after every change.
