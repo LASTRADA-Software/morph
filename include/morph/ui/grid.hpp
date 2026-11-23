@@ -11,6 +11,7 @@
 /// Specified in `docs/spec/table/editing.md`.
 
 #include <algorithm>
+#include <charconv>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
@@ -20,6 +21,7 @@
 #include <optional>
 #include <span>
 #include <stdexcept>
+#include <stop_token>
 #include <string>
 #include <string_view>
 #include <unordered_map>
@@ -191,6 +193,17 @@ struct CellFacts {
     return facts.field->readonly().get() || facts.overlayReadOnly || facts.companionReadOnly || facts.busy ||
            facts.locked || facts.unloaded;
 }
+
+/// @brief What a grid's controller gives its source to keep the focus on its row's key.
+struct FocusLink {
+    /// @brief A row's key changed from the first to the second: the focus and an open editor on it follow.
+    std::function<void(Key const&, Key const&)> moved;
+    /// @brief The key of the row focus is on; nothing when it is on none.
+    std::function<std::optional<Key>()> focused;
+    /// @brief The row with the key is at that view position now, as the rows located it: the focus there is shown
+    ///        there.
+    std::function<void(Key const&, std::size_t)> located;
+};
 
 /// @brief What a grid edits: its rows by view index, which a model's table holds only a window of, and its cells by
 ///        row key and column id.
@@ -423,10 +436,16 @@ public:
     /// @brief `Ctrl+Enter`: commits what the source holds back. A source that holds nothing does nothing.
     virtual void commitHeld() {}
 
-    /// @brief Whether a paste, a fill and a clear write into the cells: a source whose rows are selected as rows, not
-    ///        as cells, takes none.
+    /// @brief Whether the grid selects rectangles of cells, and so takes a paste and a fill: a source whose rows are
+    ///        selected as rows takes neither, and its `Shift`+arrows and `Ctrl+A` are the table's row selection. `Delete`
+    ///        on the focused cell blanks it either way.
     /// @return `true` unless a source says otherwise.
-    [[nodiscard]] virtual bool takesBlocks() const { return true; }
+    [[nodiscard]] virtual bool selectsCells() const { return true; }
+
+    /// @brief Gives the source what follows the focused row's key: a key that changed, and where a row the source no
+    ///        longer holds is in the view now. A source whose keys never change and whose rows are all held ignores it.
+    /// @param link The controller's side; empty members when the controller goes.
+    virtual void followFocusWith(FocusLink link) { static_cast<void>(link); }
 
     /// @brief Gives the source what moves focus to a cell while the table has focus: how a refusal that arrives after
     ///        focus left its row brings focus back. A source that never moves focus ignores it.
@@ -2943,6 +2962,9 @@ public:
             ids.push_back(column.info.id);
         }
         _edits->keepColumns(ids);
+        for (auto& [row, cells] : _held) {
+            std::erase_if(cells, [&ids](table::EditCell const& cell) { return !std::ranges::contains(ids, cell.column); });
+        }
         _positionsVersion.reset();
         bump();
     }
@@ -2973,18 +2995,31 @@ public:
     void rowsAbsent(std::span<table::RowId const> keys) {
         for (table::RowId const& key : keys) {
             _edits->rowAbsent(key);
+            _held.erase(key);
         }
         bump();
     }
 
-    /// @brief A row's key changed: the rows and the drafts move what they hold by it.
+    /// @brief A row's key changed: the rows, the drafts, the cells held for the row's request and the focus move
+    ///        what they hold by it.
     /// @param from The row's old key.
     /// @param to   The row's new key.
     void moveKey(Key const& from, Key const& to) {
+        if (from == to) {
+            return;
+        }
         _rows->moveKey(from, to);
         _edits->moveRow(from, to);
+        if (auto held = _held.extract(from); !held.empty() && !_held.contains(to)) {
+            held.key() = to;
+            _held.insert(std::move(held));
+        }
         _positionsVersion.reset();
         bump();
+        if (_focus.moved) {
+            std::function<void(Key const&, Key const&)> const moved = _focus.moved;
+            moved(from, to);
+        }
     }
 
     /// @brief A cell's draft while one is held, for a cell view that shows it in place of the row's value. Tracked.
@@ -3017,19 +3052,21 @@ public:
         return row ? std::optional<Key>{row->key} : std::nullopt;
     }
 
-    /// @brief Where a key's row is in the view among the rows held.
+    /// @brief Where a key's row is in the view among the rows held. The index is read from the rows' held ranges, a
+    ///        bounded window of a model's table, once per change of the rows.
     /// @param key The key.
     /// @return The position; empty when no held row has the key.
     [[nodiscard]] std::optional<std::size_t> positionOf(Key const& key) const override {
-        if (_positionsVersion != _version.peek()) {
+        if (_positionsVersion != _rowsVersion) {
             _positions.clear();
-            std::int64_t const total = _rows->total().rows;
-            for (std::int64_t at = 0; at < total; ++at) {
-                if (std::optional<TableRowRef> const row = _rows->row(at)) {
-                    _positions.insert_or_assign(row->key, static_cast<std::size_t>(at));
+            for (auto const& [first, count] : _rows->heldRanges()) {
+                for (std::int64_t at = first; at < first + count; ++at) {
+                    if (std::optional<TableRowRef> const row = _rows->row(at)) {
+                        _positions.insert_or_assign(row->key, static_cast<std::size_t>(at));
+                    }
                 }
             }
-            _positionsVersion = _version.peek();
+            _positionsVersion = _rowsVersion;
         }
         auto const found = _positions.find(key);
         return found == _positions.end() ? std::nullopt : std::optional{found->second};
@@ -3090,6 +3127,10 @@ public:
         return _rt->untracked([&] {
             if (std::optional<std::string> held = heldDraft(key, column)) {
                 return std::move(*held);
+            }
+            // The column's one session holds an open editor's cell: another cell of the column is read as it shows.
+            if (std::optional<CellRef> const open = _open.peek(); open && open->column == column && open->key != key) {
+                return text(key, column);
             }
             // With no draft held the cell is the row's value now: a session still holding an earlier edit of the
             // cell, whose draft a fetch since ended, is loaded again.
@@ -3278,9 +3319,13 @@ public:
         }
     }
 
-    /// @brief A model's table selects rows: it takes no paste, fill or clear.
+    /// @brief A model's table selects rows, not rectangles of cells: it takes no paste and no fill.
     /// @return `false`.
-    [[nodiscard]] bool takesBlocks() const override { return false; }
+    [[nodiscard]] bool selectsCells() const override { return false; }
+
+    /// @brief Keeps what moves the focus with a row's key and shows it where the rows located its row.
+    /// @param link The controller's side.
+    void followFocusWith(FocusLink link) override { _focus = std::move(link); }
 
     /// @brief Keeps what brings focus back to the first refused cell of a row commit in `EditMode::Row`.
     /// @param refocus Focuses a cell while the table has focus.
@@ -3367,6 +3412,9 @@ private:
         }
         [[nodiscard]] RowStates& states() override { return _inner->states(); }
         [[nodiscard]] RowStates const& states() const override { return _inner->states(); }
+        [[nodiscard]] std::vector<std::pair<std::int64_t, std::int64_t>> heldRanges() const override {
+            return _inner->heldRanges();
+        }
         void moveKey(table::RowId const& from, table::RowId const& to) override { _source->moveKey(from, to); }
         void onChange(std::function<void(table::ViewChange const&)> handler) override { _handler = std::move(handler); }
 
@@ -3379,11 +3427,13 @@ private:
                     _source->_edits->rowFetched(row->key);
                 }
             }
+            ++_source->_rowsVersion;
             _source->bump();
             if (_handler) {
                 std::function<void(table::ViewChange const&)> const handler = _handler;
                 handler(change);
             }
+            _source->locateFocus();
         }
 
         ModelGridSource* _source;
@@ -3518,8 +3568,8 @@ private:
         _rt->untracked([&] {
             std::optional<Located> const row = locate(key);
             Value const* const value = row ? row->record.field(std::string{column}) : nullptr;
-            std::string const json = value == nullptr ? std::string{"null"}
-                                                      : glz::write_json(valueToJson(*value)).value_or("null");
+            std::string const json =
+                value == nullptr ? std::string{"null"} : wireOf(*value, fieldOf(column)->spec().kind);
             std::string const body = described->edit->member.empty()
                                          ? R"({"value":)" + json + "}"
                                          : R"({"values":{")" + described->edit->member + R"(":)" + json + "}}";
@@ -3575,7 +3625,8 @@ private:
                                                                          : described->edit->member};
     }
 
-    // Sends a row's held cells as one request.
+    // Sends a row's held cells as one request. A cell that became read-only since it was held (its row busy with
+    // another run, locked, or not loaded) is not sent: it keeps its draft, as an edit refused at the cell does.
     void send(Key const& row) {
         auto const found = _held.find(row);
         if (found == _held.end()) {
@@ -3583,10 +3634,34 @@ private:
         }
         std::vector<table::EditCell> cells = std::move(found->second);
         _held.erase(found);
+        std::erase_if(cells, [this, &row](table::EditCell const& cell) {
+            return _rt->untracked([&] { return readOnly(row, cell.column); });
+        });
         if (!cells.empty()) {
             _edits->commitRow(table::RowEditRequest{.row = row, .cells = std::move(cells)});
         }
         bump();
+    }
+
+    // The focused row is not among the rows held: the rows locate it in the view, and the focus is shown where they
+    // found it. A later change asks again; the answer to an earlier ask is dropped.
+    void locateFocus() {
+        if (!_focus.focused || !_focus.located) {
+            return;
+        }
+        std::optional<Key> const key = _focus.focused();
+        if (!key || positionOf(*key)) {
+            return;
+        }
+        _locating.request_stop();
+        _locating = std::stop_source{};
+        _rows->locateRow(*key, _locating.get_token(),
+                         _alive.guard([this, found = *key](RowLocation const& location) {
+                             if (location && *location && _focus.located) {
+                                 std::function<void(Key const&, std::size_t)> const located = _focus.located;
+                                 located(found, static_cast<std::size_t>(**location));
+                             }
+                         }));
     }
 
     // A row commit settled: the cells follow, and in `EditMode::Row` a refusal brings focus back to the row's first
@@ -3603,6 +3678,36 @@ private:
                 return;
             }
         }
+    }
+
+    // A record's value as its field's wire form. A `Date` cell is `YYYY-MM-DD` text and a `DateTime` cell a timestamp,
+    // which a `Date` or `DateTime` field reads as it is; an `EpochDate` field reads days and an `EpochDateTime` field
+    // seconds, so those are counted from the epoch.
+    [[nodiscard]] static std::string wireOf(Value const& value, forms::FieldKind kind) {
+        if (kind == forms::FieldKind::EpochDate) {
+            std::string const* const text = value.asString();
+            if (text != nullptr && text->size() == 10 && (*text)[4] == '-' && (*text)[7] == '-') {
+                int year = 0;
+                unsigned month = 0;
+                unsigned day = 0;
+                char const* const at = text->data();
+                bool const read = std::from_chars(at, at + 4, year).ec == std::errc{} &&
+                                  std::from_chars(at + 5, at + 7, month).ec == std::errc{} &&
+                                  std::from_chars(at + 8, at + 10, day).ec == std::errc{};
+                std::chrono::year_month_day const date{std::chrono::year{year}, std::chrono::month{month},
+                                                       std::chrono::day{day}};
+                if (read && date.ok()) {
+                    return std::to_string(std::chrono::sys_days{date}.time_since_epoch().count());
+                }
+            }
+        }
+        if (kind == forms::FieldKind::EpochDateTime) {
+            if (time::DateTime const* const instant = value.asTimestamp()) {
+                return std::to_string(
+                    std::chrono::duration_cast<std::chrono::seconds>(instant->value.time_since_epoch()).count());
+            }
+        }
+        return glz::write_json(valueToJson(value)).value_or("null");
     }
 
     // A record's value as a cell of its column.
@@ -3644,7 +3749,10 @@ private:
     std::vector<CellRef> _dirty;
     std::map<Key, std::vector<table::EditCell>> _held;
     std::function<void(CellRef const&)> _refocus;
-    // The held rows' view indices by key, as of a version.
+    FocusLink _focus;
+    std::stop_source _locating;
+    // The held rows' view indices by key, as of a count of the rows' changes: the cells' own changes do not move rows.
+    std::uint64_t _rowsVersion = 0;
     mutable std::unordered_map<Key, std::size_t> _positions;
     mutable std::optional<std::uint64_t> _positionsVersion;
     async::CallbackScope _alive;
@@ -3680,6 +3788,13 @@ public:
                 focusCell(cell);
             }
         });
+        _source->followFocusWith(FocusLink{
+            .moved = [this](Key const& from, Key const& to) { keyMoved(from, to); },
+            .focused = [this]() -> std::optional<Key> {
+                std::optional<GridFocus> const shown = _place.peek();
+                return shown ? shown->key : std::nullopt;
+            },
+            .located = [this](Key const& key, std::size_t viewRow) { located(key, viewRow); }});
     }
 
     GridController(GridController const&) = delete;
@@ -3687,7 +3802,10 @@ public:
     GridController(GridController&&) = delete;
     GridController& operator=(GridController&&) = delete;
     /// @brief Takes back what the source was given to move focus with.
-    ~GridController() { _source->refocusWith({}); }
+    ~GridController() {
+        _source->refocusWith({});
+        _source->followFocusWith({});
+    }
 
     /// @brief The focused cell. Tracked.
     /// @return The cell when its row is fetched; empty when nothing has focus or focus stands on a placeholder.
@@ -3784,6 +3902,9 @@ public:
     [[nodiscard]] std::vector<std::string> keyChords() const {
         if (_editing.get()) {
             return {"Enter", "Tab", "Shift+Tab", "Escape", "Ctrl+Enter"};
+        }
+        if (!_source->selectsCells()) {
+            return {"Tab", "Shift+Tab", "Enter", "F2", "Space", "Delete", "Escape", "Ctrl+Enter", "Ctrl+Shift+=", "Ctrl+-"};
         }
         return {"Tab",         "Shift+Tab", "Enter",  "F2",     "Space",  "Delete",       "Escape",
                 "Ctrl+Enter",  "Shift+Up",  "Shift+Down", "Shift+Left", "Shift+Right", "Ctrl+A", "Ctrl+V",
@@ -4148,7 +4269,7 @@ public:
     PasteResult paste(std::string_view text) {
         commit();
         letGo();
-        if (!_source->takesBlocks()) {
+        if (!_source->selectsCells()) {
             return {};
         }
         std::vector<std::vector<std::string>> const lines = pasteLines(text);
@@ -4231,7 +4352,7 @@ public:
     void fillDown() {
         commit();
         letGo();
-        if (!_source->takesBlocks()) {
+        if (!_source->selectsCells()) {
             return;
         }
         std::optional<Block> const cells = _rt->untracked([&] { return block(); });
@@ -4261,9 +4382,6 @@ public:
     void clear() {
         commit();
         letGo();
-        if (!_source->takesBlocks()) {
-            return;
-        }
         std::optional<Block> const cells = _rt->untracked([&] { return block(); });
         if (!cells) {
             return;
@@ -4501,19 +4619,22 @@ public:
         options.onFocusOut = [self] { self->leave(); };
         options.editing = Prop<std::optional<CellRef>>{[self] { return self->editing(); }};
         options.editor = [source](CellRef const& cell) { return source->editor(cell.key, cell.column); };
-        options.cellSelection = Prop<std::optional<CellRange>>{[self] { return self->selection(); }};
-        options.onCellSelect = [self, toData](std::optional<CellRange> range) {
-            if (range) {
-                std::optional<Key> const anchor = toData(range->anchor.key);
-                std::optional<Key> const focus = toData(range->focus.key);
-                if (!anchor || !focus) {
-                    return;
+        // A model's table selects rows: its selection gestures stay the table's own.
+        if (source->selectsCells()) {
+            options.cellSelection = Prop<std::optional<CellRange>>{[self] { return self->selection(); }};
+            options.onCellSelect = [self, toData](std::optional<CellRange> range) {
+                if (range) {
+                    std::optional<Key> const anchor = toData(range->anchor.key);
+                    std::optional<Key> const focus = toData(range->focus.key);
+                    if (!anchor || !focus) {
+                        return;
+                    }
+                    range->anchor.key = *anchor;
+                    range->focus.key = *focus;
                 }
-                range->anchor.key = *anchor;
-                range->focus.key = *focus;
-            }
-            self->select(std::move(range));
-        };
+                self->select(std::move(range));
+            };
+        }
         options.cellMenu = [self, idOf, outer = std::move(options.cellMenu)](Key const& row, std::size_t column) {
             std::vector<MenuItem> own = self->cellEntries(row, idOf(column));
             if (!outer) {
@@ -4614,6 +4735,9 @@ private:
     // Shift with an arrow: the selection's focus corner moves by a row or a column from where it is, its anchor the
     // focused cell when nothing was selected.
     void extend(int rows, int columns) {
+        if (!_source->selectsCells()) {
+            return;
+        }
         std::optional<CellRef> const focused = _rt->untracked([&] { return focus(); });
         if (!focused) {
             return;
@@ -4641,6 +4765,9 @@ private:
 
     // Ctrl+A: every cell of the view.
     void selectAll() {
+        if (!_source->selectsCells()) {
+            return;
+        }
         std::vector<std::string> const ids = _source->columns();
         std::size_t const count = _source->rowCount();
         if (ids.empty() || count == 0) {
@@ -4824,6 +4951,27 @@ private:
 
     // Whether no row operation is offered: the rows are fixed, or not the source's to change.
     [[nodiscard]] bool fixedRows() const { return _options.rowsFixed || !_source->rowsEditable(); }
+
+    // A row's key changed: the focus and an open editor on it take the new key, at the row's place now.
+    void keyMoved(Key const& from, Key const& to) {
+        if (std::optional<CellRef> const open = _editing.peek(); open && open->key == from) {
+            _editing.set(CellRef{.key = to, .column = open->column});
+        }
+        std::optional<GridFocus> const shown = _place.peek();
+        if (!shown || shown->key != from) {
+            return;
+        }
+        _focusedRow = to;
+        _place.set(GridFocus{.key = to, .viewRow = _source->positionOf(to).value_or(shown->viewRow), .column = shown->column});
+    }
+
+    // The rows located the focused row, which they do not hold, at a view position: the focus is shown there.
+    void located(Key const& key, std::size_t viewRow) {
+        std::optional<GridFocus> const shown = _place.peek();
+        if (shown && shown->key == key && shown->viewRow != viewRow) {
+            _place.set(GridFocus{.key = key, .viewRow = viewRow, .column = shown->column});
+        }
+    }
 
     // Moves the focus, and tells the source when the row it is on changed.
     void setPlace(std::optional<GridFocus> place) {

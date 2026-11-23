@@ -332,6 +332,9 @@ public:
     [[nodiscard]] RowStates& states() override { return _inner->states(); }
     [[nodiscard]] RowStates const& states() const override { return _inner->states(); }
     void moveKey(table::RowId const& from, table::RowId const& to) override { _inner->moveKey(from, to); }
+    [[nodiscard]] std::vector<std::pair<std::int64_t, std::int64_t>> heldRanges() const override {
+        return _inner->heldRanges();
+    }
     async::Completion<std::expected<std::vector<FetchedRow>, table::TableError>> rowsOf(
         std::int64_t first, std::int64_t count, std::span<std::string const> columns) override {
         return _inner->rowsOf(first, count, columns);
@@ -12342,6 +12345,19 @@ void fitViewSelection(ScreenCore& core, ElementState& element, ModelTable& model
 ///
 /// Holds the table and its element by reference: the table owns it and removes it before either goes. The screen's
 /// scope is held weakly, so the observer keeps nothing of the screen alive.
+// A row's key changed: the rows, the drafts and, while an editable table is mounted, its held cells and its focus
+// move what they hold by it.
+void moveRowKey(ModelTable& model, Key const& from, Key const& to) {
+    if (std::shared_ptr<ModelGridSource> const grid = model.editGrid.lock()) {
+        grid->moveKey(from, to);
+        return;
+    }
+    model.rows->moveKey(from, to);
+    if (model.edits != nullptr) {
+        model.edits->moveRow(from, to);
+    }
+}
+
 class TableRuns final : public RunObserver {
 public:
     TableRuns(ScreenCore& core, ElementState& element, ModelTable& model)
@@ -12649,10 +12665,7 @@ private:
         for (auto const& [from, to] : moves) {
             moved.push_back(from);
             _deferred.erase(from);
-            _model->rows->moveKey(from, to);
-            if (_model->edits != nullptr) {
-                _model->edits->moveRow(from, to);
-            }
+            moveRowKey(*_model, from, to);
             if (view) {
                 // A key left out of the view's selection leaves its new key out; a selected one selects it.
                 if (auto const out = std::ranges::find(view->except, from); out != view->except.end()) {
@@ -12749,10 +12762,12 @@ void sendRowEdit(ScreenCore& core, ModelTable& model, table::RowEditRequest cons
     struct Call {
         std::string action;
         std::string body;
+        std::vector<std::string> names;
     };
     std::vector<Call> calls;
     std::vector<table::FieldError> refused;
     std::map<std::string, std::string, std::less<>> rowEdits;
+    std::map<std::string, std::vector<std::string>, std::less<>> rowNames;
     for (table::EditCell const& cell : request.cells) {
         table::EditInfo const* edit = nullptr;
         if (description != nullptr) {
@@ -12765,14 +12780,22 @@ void sendRowEdit(ScreenCore& core, ModelTable& model, table::RowEditRequest cons
             refused.push_back(table::FieldError{.column = cell.member.empty() ? cell.column : cell.member,
                                                 .message = "This column is not edited here any more"});
         } else if (edit->member.empty()) {
-            calls.push_back(Call{.action = edit->action, .body = R"({"key":)" + key + R"(,"value":)" + cell.json + "}"});
+            calls.push_back(Call{.action = edit->action,
+                                 .body = R"({"key":)" + key + R"(,"value":)" + cell.json + "}",
+                                 .names = {cell.member.empty() ? cell.column : cell.member}});
         } else {
+            rowNames[edit->action].push_back(cell.member.empty() ? cell.column : cell.member);
             std::string& values = rowEdits[edit->action];
             values += (values.empty() ? "" : ",") + glz::write_json(edit->member).value_or("\"\"") + ":" + cell.json;
         }
     }
     for (auto const& [action, values] : rowEdits) {
-        calls.push_back(Call{.action = action, .body = R"({"key":)" + key + R"(,"values":{)" + values + "}}"});
+        calls.push_back(Call{.action = action,
+                             .body = R"({"key":)" + key + R"(,"values":{)" + values + "}}",
+                             .names = rowNames[action]});
+    }
+    if (!calls.empty() && !model.calls) {
+        refused.push_back(table::FieldError{.column = {}, .message = "This table cannot save edits"});
     }
     if (calls.empty() || !model.calls) {
         done(refused.empty() ? std::expected<void, std::vector<table::FieldError>>{} : std::unexpected(refused));
@@ -12806,9 +12829,20 @@ void sendRowEdit(ScreenCore& core, ModelTable& model, table::RowEditRequest cons
     };
     std::string const record = model.modelType + "." + model.id;
     for (Call const& call : calls) {
+        // A refusal that names no cell is this call's cells': a request of several calls settles as one, and another
+        // call's cells may have been saved.
+        auto const unnamed = [settling, names = calls.size() > 1 ? call.names : std::vector<std::string>{}](
+                                 std::string const& message) {
+            if (names.empty()) {
+                settling->errors.push_back(table::FieldError{.column = {}, .message = message});
+            }
+            for (std::string const& name : names) {
+                settling->errors.push_back(table::FieldError{.column = name, .message = message});
+            }
+        };
         model.calls(call.action, call.body)
             .then(model.scope,
-                  [&core, &model, settling, finish, record, action = call.action](std::string const& text) {
+                  [&core, &model, settling, finish, unnamed, record, action = call.action](std::string const& text) {
                       auto const json = parseJson(text);
                       Value const reply = json ? valueFromJson(*json).value_or(Value{}) : Value{};
                       std::vector<table::FieldError> errors = editErrorsOf(reply);
@@ -12823,7 +12857,7 @@ void sendRowEdit(ScreenCore& core, ModelTable& model, table::RowEditRequest cons
                           ChangedRowsValue const changed = changedRowsOf(reply, *info, record);
                           for (table::FailedRow const& failed : changed.failed) {
                               if (failed.key == settling->row) {
-                                  settling->errors.push_back(table::FieldError{.column = {}, .message = failed.message});
+                                  unnamed(failed.message);
                               }
                           }
                           std::vector<std::pair<Key, Key>> moves;
@@ -12835,8 +12869,7 @@ void sendRowEdit(ScreenCore& core, ModelTable& model, table::RowEditRequest cons
                               }
                           }
                           for (auto const& [from, to] : moves) {
-                              model.rows->moveKey(from, to);
-                              model.edits->moveRow(from, to);
+                              moveRowKey(model, from, to);
                               settling->row = to;
                           }
                           if (!moves.empty()) {
@@ -12846,8 +12879,8 @@ void sendRowEdit(ScreenCore& core, ModelTable& model, table::RowEditRequest cons
                       }
                       finish();
                   })
-            .onError(model.scope, [settling, finish](std::exception_ptr const& error) {
-                settling->errors.push_back(table::FieldError{.column = {}, .message = editFailureOf(error)});
+            .onError(model.scope, [finish, unnamed](std::exception_ptr const& error) {
+                unnamed(editFailureOf(error));
                 finish();
             });
     }

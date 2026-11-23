@@ -326,11 +326,41 @@ public:
         announce({table::ViewOp{.kind = table::ViewOp::Kind::Changed, .first = index, .count = 1, .to = 0}});
     }
     [[nodiscard]] std::size_t handlers() const { return _handlerSets; }   // how often onChange was set
+    // Gives a row a new key; reports it changed.
+    void rekey(table::RowId const& from, table::RowId const& to) {
+        auto const at = std::ranges::find(view, from, &Row::key);
+        at->key = to;
+        ui::ValueRecord record = *at->record.asRecord();
+        record.insert_or_assign("key", std::visit([](auto const& value) { return ui::Value{value}; }, to));
+        at->record = ui::Value{std::move(record)};
+        auto const index = static_cast<std::size_t>(at - view.begin());
+        announce({table::ViewOp{.kind = table::ViewOp::Kind::Changed, .first = index, .count = 1, .to = 0}});
+    }
+    // Reports the whole view replaced, as a new query does.
+    void reset() { announce({table::ViewOp{.kind = table::ViewOp::Kind::Reset, .first = 0, .count = 0, .to = 0}}); }
+    // Answers every `locateRow` asked so far with the key's place in `view`, fetched or not.
+    void answerLocates() {
+        auto asked = std::exchange(_locates, {});
+        for (auto& [key, done] : asked) {
+            auto const at = std::ranges::find(view, key, &Row::key);
+            done(at == view.end() ? ui::RowLocation{std::nullopt}
+                                  : ui::RowLocation{static_cast<std::int64_t>(at - view.begin())});
+        }
+    }
+    [[nodiscard]] std::size_t locatesAsked() const { return _locates.size(); }
+    // Rows past `view` the total counts and nothing holds: a large view's window.
+    std::int64_t unheld = 0;
+    // How often `row` was read.
+    mutable std::size_t rowReads = 0;
 
     [[nodiscard]] ui::TableTotal total() const override {
-        return {.rows = static_cast<std::int64_t>(view.size()), .kind = table::TotalKind::Exact, .known = true};
+        return {.rows = static_cast<std::int64_t>(view.size()) + unheld, .kind = table::TotalKind::Exact, .known = true};
+    }
+    [[nodiscard]] std::vector<std::pair<std::int64_t, std::int64_t>> heldRanges() const override {
+        return {{0, static_cast<std::int64_t>(view.size())}};
     }
     [[nodiscard]] std::optional<ui::TableRowRef> row(std::int64_t index) const override {
+        ++rowReads;
         if (index < 0 || static_cast<std::size_t>(index) >= view.size()) return std::nullopt;
         Row const& held = view.at(static_cast<std::size_t>(index));
         if (!held.fetched) return std::nullopt;
@@ -348,7 +378,9 @@ public:
         return async::Completion<std::expected<std::vector<table::RowId>, table::TableError>>::makeSettleable(nullptr)
             .first;
     }
-    void locateRow(table::RowId, std::stop_token, std::function<void(ui::RowLocation const&)>) override {}
+    void locateRow(table::RowId key, std::stop_token, std::function<void(ui::RowLocation const&)> done) override {
+        _locates.emplace_back(std::move(key), std::move(done));
+    }
     async::Completion<std::expected<std::vector<ui::FetchedRow>, table::TableError>> fetchRows(
         std::vector<table::RowId>, std::vector<std::string>) override {
         return async::Completion<std::expected<std::vector<ui::FetchedRow>, table::TableError>>::makeSettleable(nullptr)
@@ -376,6 +408,7 @@ private:
     std::function<void(table::ViewChange const&)> _handler;
     std::size_t _handlerSets = 0;
     mutable std::vector<std::string> _levels;
+    std::vector<std::pair<table::RowId, std::function<void(ui::RowLocation const&)>>> _locates;
 };
 
 // The edit actions of the model table's cases: a count by `CellEdit`, a label and a remark by `RowEdit`.
@@ -385,7 +418,11 @@ inline constexpr std::string_view kEditSpecimenCount =
 inline constexpr std::string_view kEditSpecimenRow =
     R"({"type":"object","x-rowEditOf":"Lims_SampleModel.samples","properties":{"key":{"type":"integer"},)"
     R"("values":{"type":"object","properties":{"label":{"type":["string","null"]},)"
-    R"("remarkText":{"type":["string","null"]}}}},"required":["key"]})";
+    R"("remarkText":{"type":["string","null"]},"sampled":{"type":["string","null"],"format":"date"},)"
+    R"("taken":{"type":["string","null"],"format":"date-time"},)"
+    R"("day":{"type":["integer","null"],"x-widget":"epochDays"},)"
+    R"("at":{"type":["integer","null"],"x-widget":"epochSeconds"},)"
+    R"("mass":{"type":["object","null"],"x-decimalPlaces":2}}}},"required":["key"]})";
 
 // The description of the model table's cases: `key` (the key), `label` and `remark` (Text, `Lims_EditSpecimenRow`'s
 // `label` and `remarkText`), `count` (Integer of level `counts`, `Lims_EditSpecimenCount`, frozen by `countFrozen`),
@@ -412,6 +449,13 @@ inline table::TableDescription specimenTableDescription() {
     add("note", table::ColumnKind::Text);
     add("countFrozen", table::ColumnKind::Bool);
     add("lockedBy", table::ColumnKind::Text);
+    // One column per kind a row's member edits: a date and a date-time as the forms' own fields and as epoch counts,
+    // and a decimal.
+    add("sampled", table::ColumnKind::Date, table::EditInfo{.action = "Lims_EditSpecimenRow", .member = "sampled"});
+    add("taken", table::ColumnKind::DateTime, table::EditInfo{.action = "Lims_EditSpecimenRow", .member = "taken"});
+    add("day", table::ColumnKind::Date, table::EditInfo{.action = "Lims_EditSpecimenRow", .member = "day"});
+    add("at", table::ColumnKind::DateTime, table::EditInfo{.action = "Lims_EditSpecimenRow", .member = "at"});
+    add("mass", table::ColumnKind::Decimal, table::EditInfo{.action = "Lims_EditSpecimenRow", .member = "mass"});
     d.rowLock = "lockedBy";
     return table::describe(std::move(d));
 }
@@ -426,6 +470,13 @@ inline ui::Value specimenRecord(std::int64_t key, std::int64_t count = -1) {
     record.insert_or_assign("note", ui::Value{std::string{"n"}});
     record.insert_or_assign("countFrozen", ui::Value{false});
     record.insert_or_assign("lockedBy", ui::Value{std::string{}});
+    // As the window holds them: a `Date` cell as `YYYY-MM-DD`, a `DateTime` cell as a timestamp, a decimal exact.
+    ui::Value const instant{morph::time::DateTime::fromIso8601("2026-11-20T10:30:00Z").value()};
+    record.insert_or_assign("sampled", ui::Value{std::string{"2026-11-20"}});
+    record.insert_or_assign("taken", instant);
+    record.insert_or_assign("day", ui::Value{std::string{"2026-11-20"}});
+    record.insert_or_assign("at", instant);
+    record.insert_or_assign("mass", ui::Value{ui::Decimal{table::parseDecimal("12.50").value()}});
     return ui::Value{std::move(record)};
 }
 
@@ -476,6 +527,9 @@ inline ModelGridFixture::ModelGridFixture(std::vector<std::int64_t> keys, ui::Ed
         ui::ModelColumn{.id = "remark", .edit = editOf("remark"), .model = row, .path = "values.remarkText"});
     columns.push_back(ui::ModelColumn{.id = "count", .edit = editOf("count"), .model = count, .path = "value"});
     columns.push_back(ui::ModelColumn{.id = "note", .edit = std::nullopt, .model = nullptr, .path = {}});
+    for (std::string const member : {"sampled", "taken", "day", "at", "mass"}) {
+        columns.push_back(ui::ModelColumn{.id = member, .edit = editOf(member), .model = row, .path = "values." + member});
+    }
     source = std::make_unique<ui::ModelGridSource>(
         rows, edits, std::move(columns), mode,
         ui::ModelGridContext{.runtime = &h.rt,
@@ -493,7 +547,10 @@ inline ModelGridFixture::ModelGridFixture(std::vector<std::int64_t> keys, ui::Ed
 
 inline std::vector<ui::TableColumn> ModelGridFixture::tableColumns() {
     return {ui::TableColumn{.id = "label", .label = "label"}, ui::TableColumn{.id = "remark", .label = "remark"},
-            ui::TableColumn{.id = "count", .label = "count"}, ui::TableColumn{.id = "note", .label = "note"}};
+            ui::TableColumn{.id = "count", .label = "count"}, ui::TableColumn{.id = "note", .label = "note"},
+            ui::TableColumn{.id = "sampled", .label = "sampled"}, ui::TableColumn{.id = "taken", .label = "taken"},
+            ui::TableColumn{.id = "day", .label = "day"},         ui::TableColumn{.id = "at", .label = "at"},
+            ui::TableColumn{.id = "mass", .label = "mass"}};
 }
 
 // The value of a settled success, and of a refusal naming fields.

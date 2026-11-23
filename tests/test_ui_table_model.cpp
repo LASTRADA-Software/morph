@@ -6695,7 +6695,9 @@ TEST_CASE("model table: the mount and the drafts share the rows' one change slot
     morph::ui::TableSource base;
     base.rows = std::shared_ptr<morph::ui::TableRows>(f.rows, &f.source->view());
     base.cellView = [](std::size_t column, morph::reactive::Signal<Value> const& record) {
-        std::string const id = std::vector<std::string>{"label", "remark", "count", "note"}.at(column);
+        std::string const id =
+            std::vector<std::string>{"label", "remark", "count", "note", "sampled", "taken", "day", "at", "mass"}.at(
+                column);
         return morph::ui::text(morph::ui::Text{.text = morph::ui::Prop<std::string>{[&record, id] {
             Value const* const value = record.get().field(id);
             if (value == nullptr) return std::string{};
@@ -6800,6 +6802,110 @@ TEST_CASE("model table: cells of a model's table", "[ui][table][edit]") {
         CHECK(f.commits.sent.at(1).row == row(2));
         CHECK(f.grid->focus() == at(2, "label"));
     }
+}
+
+// Mutation: send() not checking read-only again (the held cell is sent into a row another run is saving).
+TEST_CASE("model table: a held cell whose row became busy is not sent", "[ui][table][edit]") {
+    ModelGridFixture f{{1, 2}, morph::ui::EditMode::Row};
+    f.grid->focusCell(at(1, "label"));  f.grid->type("a");  f.grid->press("Tab");
+    f.rows->rowStates.busyKeys(7, {row(1)});                                    // a document mutation's edit of row 1
+    f.source->touch();
+    f.grid->focusCell(at(2, "label"));                                          // focus leaves row 1
+    CHECK(f.commits.sent.empty());
+    CHECK(f.source->draft(key(1), "label") == "a");                             // the draft stays
+}
+
+// Mutation: rowsAbsent leaving the row's held cells (they are sent when focus leaves the row).
+TEST_CASE("model table: a held cell of a row gone from the view is not sent", "[ui][table][edit]") {
+    ModelGridFixture f{{1, 2}, morph::ui::EditMode::Row};
+    f.grid->focusCell(at(1, "label"));  f.grid->type("a");  f.grid->press("Tab");
+    std::vector<table::RowId> const gone{row(1)};
+    f.source->rowsAbsent(gone);
+    f.grid->focusCell(at(2, "label"));
+    CHECK(f.commits.sent.empty());
+}
+
+// Mutation: the record's value loaded into an epoch field as it is (a `YYYY-MM-DD` text, a timestamp), which the field
+// reads as blank.
+TEST_CASE("model table: an editor opens holding the cell's value, whatever its kind", "[ui][table][edit]") {
+    ModelGridFixture f{{1}};
+    auto const opened = [&f](std::string const& column) {
+        f.grid->focusCell(at(1, column));
+        f.grid->press("F2");
+        std::string draft = f.source->draft(key(1), column);
+        f.grid->press("Escape");
+        return draft;
+    };
+    std::string const sampled = opened("sampled");
+    std::string const taken = opened("taken");
+    CHECK_FALSE(sampled.empty());
+    CHECK_FALSE(taken.empty());
+    CHECK(opened("day") == sampled);                                            // an EpochDate field of a Date cell
+    CHECK(opened("at") == taken);                                               // an EpochDateTime field of a DateTime cell
+    CHECK(opened("mass") == "12.50");
+    CHECK(f.commits.sent.empty());
+}
+
+// Mutations: ModelGridSource::moveKey not telling the controller (focus stays on key 5); the decorator not locating a
+// focused row it no longer holds (focus is shown at its old place).
+TEST_CASE("model table: focus follows its row's key, and is located off the window", "[ui][table][edit]") {
+    ModelGridFixture f{{1, 2, 3, 4, 5}};
+    f.grid->focusCell(at(5, "count"));
+    f.source->moveKey(key(5), key(9));
+    f.rows->rekey(row(5), row(9));
+    CHECK(f.grid->focus() == at(9, "count"));
+    CHECK(f.grid->place() == morph::ui::GridFocus{key(9), 4, "count"});
+    f.grid->focusCell(at(3, "count"));
+    // A new order puts row 3 last, where the window does not hold it.
+    f.rows->view = {f.rows->view.at(0), f.rows->view.at(1), f.rows->view.at(3), f.rows->view.at(4), f.rows->view.at(2)};
+    f.rows->view.at(4).fetched = false;
+    f.rows->reset();
+    REQUIRE(f.rows->locatesAsked() == 1);
+    f.rows->answerLocates();
+    CHECK(f.grid->place() == morph::ui::GridFocus{key(3), 4, "count"});
+}
+
+// Mutation: ModelGridSource selecting cells (Shift+Down makes a rectangle; the chords are claimed from the table).
+TEST_CASE("model table: the table keeps its row selection, and Delete blanks a cell", "[ui][table][edit]") {
+    ModelGridFixture f{{1, 2}};
+    f.grid->focusCell(at(1, "sampled"));
+    std::vector<std::string> const chords = f.grid->keyChords();
+    CHECK_FALSE(std::ranges::contains(chords, std::string{"Shift+Down"}));
+    CHECK_FALSE(std::ranges::contains(chords, std::string{"Ctrl+A"}));
+    CHECK(std::ranges::contains(chords, std::string{"Delete"}));
+    f.grid->press("Shift+Down");
+    CHECK_FALSE(f.grid->selection().has_value());
+    f.grid->press("Delete");
+    REQUIRE(f.commits.sent.size() == 1);
+    CHECK(f.commits.sent.at(0).cells.at(0).column == "sampled");
+    CHECK(f.commits.sent.at(0).cells.at(0).json == "null");
+}
+
+// Mutation: positionOf scanning the whole view total, and rebuilding its index on each change of a cell's draft.
+TEST_CASE("model table: finding a row by key reads only the rows held", "[ui][table][edit]") {
+    ModelGridFixture f{{1, 2, 3}};
+    f.rows->unheld = 1'000'000;                                                 // a large view, three rows held
+    f.rows->rowReads = 0;
+    CHECK(f.source->positionOf(key(3)) == std::size_t{2});
+    std::size_t const first = f.rows->rowReads;
+    CHECK(first <= 3);
+    f.grid->focusCell(at(1, "label"));
+    for (std::string const text : {"a", "ab", "abc"}) {
+        f.grid->type(text);                                                     // each keystroke a draft
+    }
+    f.rows->rowReads = 0;
+    CHECK(f.source->positionOf(key(3)) == std::size_t{2});
+    CHECK(f.rows->rowReads <= 1);                                               // no rebuild for a draft
+}
+
+// Mutation: draft() loading the column's session for another row while an editor of the column is open (the open
+// editor's field is reloaded with row 2's value).
+TEST_CASE("model table: reading another cell of the column leaves an open editor as it is", "[ui][table][edit]") {
+    ModelGridFixture f{{1, 2}};
+    f.grid->focusCell(at(1, "count"));  f.grid->type("5");
+    CHECK(f.source->draft(key(2), "count") == "2");
+    CHECK(f.source->draft(key(1), "count") == "5");
+    CHECK(f.grid->editing() == at(1, "count"));
 }
 
 // ── Cells of a model's table, lowered from a document ───────────────────────
@@ -6976,4 +7082,91 @@ TEST_CASE("model table: editMode is refused on a table that is not a model's", "
     REQUIRE(h.dispatcher.count("Lims_EditSpecimenRow") == 1);
     CHECK(h.dispatcher.calls.at(h.dispatcher.last("Lims_EditSpecimenRow")).body ==
           R"({"key":1,"values":{"label":"a","remarkText":"b"}})");
+}
+
+namespace {
+
+// Types @p text into the cell of view row @p viewRow in @p column of the table `t`, then leaves the cell with Tab.
+void typeCell(TableHarness& h, std::size_t viewRow, std::string_view column, std::string const& text) {
+    int const table = h.byTestId("Table", "t");
+    h.backend.clickCell(table, viewRow, morph::ui::testing::columnIndex(h, column));
+    h.settle();
+    h.backend.typeInto(table, text);
+    h.settle();
+    h.backend.press(table, "Tab");
+    h.settle();
+}
+
+}  // namespace
+
+// Mutation: editErrorsOf reading no `errors` member (the refused cell shows no error).
+TEST_CASE("model table: a reply's field errors land on the cells they name", "[ui][table][edit][interpreter]") {
+    using namespace morph::ui::testing;
+    TableHarness h;
+    addEditActions(h);
+    auto const screen = mountEdits(h, editDoc(R"(,"editMode":"row")"));
+    typeCell(h, 0, "label", "a");
+    typeCell(h, 0, "remark", "b");
+    h.backend.clickCell(h.byTestId("Table", "t"), 1, columnIndex(h, "label"));   // focus leaves row 1
+    h.settle();
+    REQUIRE(h.dispatcher.count("Lims_EditSpecimenRow") == 1);
+    h.reply(h.dispatcher.last("Lims_EditSpecimenRow"), R"({"errors":{"values.remarkText":["too long"]}})");
+    CHECK(cellMarks(h, 1, "remark").find('e') != std::string::npos);
+    CHECK(cellMarks(h, 1, "label").find('e') == std::string::npos);
+}
+
+// Mutation: sendRowEdit ignoring the reply's failed rows (the cell is marked modified instead).
+TEST_CASE("model table: a failed row refuses its cells", "[ui][table][edit][interpreter]") {
+    using namespace morph::ui::testing;
+    TableHarness h;
+    addEditActions(h);
+    auto const screen = mountEdits(h, editDoc());
+    int const table = h.byTestId("Table", "t");
+    h.backend.clickCell(table, 0, columnIndex(h, "count"));
+    h.settle();
+    h.backend.typeInto(table, "4");
+    h.settle();
+    h.backend.press(table, "Enter");
+    h.settle();
+    h.reply(h.dispatcher.last("Lims_EditSpecimenCount"),
+            R"({"rows":{"rows":[],"failed":[{"key":1,"message":"Locked by Ann"}]}})");
+    CHECK(cellMarks(h, 1, "count") == "e");
+}
+
+// Mutation: a success whose rows do not name the row waiting for a fetch (the cell stays modified).
+TEST_CASE("model table: an edit that changes no row leaves nothing waiting", "[ui][table][edit][interpreter]") {
+    using namespace morph::ui::testing;
+    TableHarness h;
+    addEditActions(h);
+    auto const screen = mountEdits(h, editDoc());
+    int const table = h.byTestId("Table", "t");
+    h.backend.clickCell(table, 0, columnIndex(h, "count"));
+    h.settle();
+    h.backend.typeInto(table, "1");                                             // the value it holds
+    h.settle();
+    h.backend.typeInto(table, "4");
+    h.settle();
+    h.backend.press(table, "Enter");
+    h.settle();
+    h.reply(h.dispatcher.last("Lims_EditSpecimenCount"), R"({"rows":{"rows":[]}})");
+    CHECK(cellMarks(h, 1, "count").empty());                                    // with no page since
+}
+
+// Mutation: an unnamed refusal of one call landing on every cell of the request (the label, saved by its own call,
+// shows the count's error).
+TEST_CASE("model table: a refusal of one call of a row lands on that call's cells", "[ui][table][edit][interpreter]") {
+    using namespace morph::ui::testing;
+    TableHarness h;
+    addEditActions(h);
+    auto const screen = mountEdits(h, editDoc(R"(,"editMode":"row")"));
+    typeCell(h, 0, "count", "4");
+    typeCell(h, 0, "label", "a");
+    h.backend.clickCell(h.byTestId("Table", "t"), 1, columnIndex(h, "label"));
+    h.settle();
+    REQUIRE(h.dispatcher.count("Lims_EditSpecimenCount") == 1);
+    REQUIRE(h.dispatcher.count("Lims_EditSpecimenRow") == 1);
+    h.fail(h.dispatcher.last("Lims_EditSpecimenCount"));
+    h.reply(h.dispatcher.last("Lims_EditSpecimenRow"), R"({"rows":{"rows":[{"key":1}]}})");
+    CHECK(cellMarks(h, 1, "count").find('e') != std::string::npos);
+    CHECK(cellMarks(h, 1, "label").find('e') == std::string::npos);
 }

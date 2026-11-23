@@ -36,6 +36,8 @@
 #include <morph/table/level_cache.hpp>
 #include <morph/ui/interpreter.hpp>
 #include <morph/ui/preferences.hpp>
+#include <morph/ui/author.hpp>
+#include <morph/ui/service.hpp>
 #include <morph/ui/service_client.hpp>
 #include <morph/ui/table_rows.hpp>
 #include <morph/ui/table_state_model.hpp>
@@ -1551,14 +1553,41 @@ TEST_CASE("push tables: a cell edit reaches the model and the change event refet
 // Mutation: the client sending {"key":…, "value":…} under the wrong action id (the model never sees it).
 
 TEST_CASE("push tables: a principal refused the edit action sees the column read-only", "[net][tables][edit]") {
-    Server server;
-    Client viewer{server.url, "viewer"};
-    auto const model = viewer.create("editnet::Specimens");
-    CHECK(viewer.execute(model, "editnet::Specimens", "Table.specimens", "{}").kind == "ok");
-    CHECK(viewer.execute(model, "editnet::Specimens", "Lims_EditSpecimenCount", R"({"key":1,"value":4})").kind ==
-          "err");
-    // The client learns the refusal from the catalog's permitted actions, which lack the action for this principal;
-    // the lowering's read-only column for such a principal is "model table: a column whose action is not permitted is
-    // read-only" in tests/test_ui_table_model.cpp.
+    // A bundle of one screen whose mutation runs the edit action, so the catalog lists it.
+    morph::ui::author::CatalogFacts facts;
+    facts.model<editnet::Specimens>();
+    facts.action<editnet::Specimens, editnet::EditSpecimenCount>();
+    morph::ui::UiRegistry registry{morph::ui::ApplicationInfo{.id = "lims", .version = "1.0.0"}, facts.catalog()};
+    morph::ui::CatalogEntry entry;
+    entry.id = "lims.edits";
+    REQUIRE(registry.addScreen(entry, R"({"vocab":"ui/1","id":"edits",)"
+                                      R"("models":{"s":{"type":"editnet::Specimens"}},)"
+                                      R"("mutations":{"edit":{"model":"s","action":"Lims_EditSpecimenCount",)"
+                                      R"("body":{"lit":{"key":1,"value":4}}}},)"
+                                      R"("view":{"kind":"button","label":"Edit","onClick":[{"run":"edit"}]}})"));
+    auto const bundle = registry.build();
+    REQUIRE(bundle);
+    morph::exec::ThreadPoolExecutor pool{2};
+    morph::backend::ServerConfig config;
+    config.services.push_back(std::make_shared<morph::ui::UiService>(*bundle));
+    auto const server =
+        std::make_shared<morph::backend::RemoteServer>(pool, std::make_shared<TablesAuthorizer>(), std::move(config));
+    auto const permitted = [&server](std::string principal) {
+        morph::wire::Envelope request;
+        request.kind = std::string{morph::ui::kCatalogKind};
+        request.callId = 1;
+        request.body = "{}";
+        request.session.principal = std::move(principal);
+        morph::wire::Envelope const reply = morph::wire::decode(server->handleInline(morph::wire::encode(request)));
+        REQUIRE(reply.kind == "ok");
+        auto const parsed = morph::ui::parseCatalogReply(reply.body);
+        REQUIRE(parsed);
+        return parsed->permitted;
+    };
+    // The catalog's permitted actions are what the client lowers the column by: the viewer's lack the edit action,
+    // so its column is read-only ("model table: a column whose action is not permitted is read-only" in
+    // tests/test_ui_table_model.cpp lowers that), and alice's have it.
+    CHECK_FALSE(std::ranges::contains(permitted("viewer"), std::string{"Lims_EditSpecimenCount"}));
+    CHECK(std::ranges::contains(permitted("alice"), std::string{"Lims_EditSpecimenCount"}));
 }
-// Mutation: the server's authorizer letting every principal run every action (the viewer's edit is ok).
+// Mutation: the server's catalog listing every action as permitted (the viewer's column stays editable).

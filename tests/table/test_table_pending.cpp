@@ -980,3 +980,18 @@ TEST_CASE("cell edits: a row absent while an edit is in flight sends nothing mor
     CHECK_FALSE(edits.stale(k1, "count"));
     CHECK_FALSE(edits.draft(k1, "count").has_value());
 }
+
+// Mutation: a success settling whatever draft the cell holds (the draft typed after the commit is dropped by the
+// next fetch).
+TEST_CASE("cell edits: a draft typed after the commit outlives the commit's fetch", "[table][edits]") {
+    RowCommits c;
+    table::CellEdits edits{c.commit()};
+    edits.setDraft(k1, "count", "9", std::nullopt);
+    edits.commitRow({k1, {{"count", "9"}}});
+    edits.setDraft(k1, "count", "7", std::nullopt);
+    c.done.at(0)(std::expected<void, std::vector<table::FieldError>>{});
+    CHECK(edits.modified(k1, "count"));
+    edits.rowFetched(k1);
+    CHECK_FALSE(edits.modified(k1, "count"));
+    CHECK(edits.draft(k1, "count") == "7");
+}
