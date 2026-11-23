@@ -55,6 +55,13 @@ public:
         return *_spotlight;
     }
     void notify(std::string const& text, Tone tone) override { notices.emplace_back(text, tone); }
+    void afterCardUpdated(std::function<void()> then) override {
+        if (deferCard) {
+            pending.push_back(std::move(then));
+            return;
+        }
+        then();
+    }
 
     /// The spotlight's widget id; 0 before the first tour.
     [[nodiscard]] int spotlightId() const { return _spotlight == nullptr ? 0 : _backend->idOf(*_spotlight); }
@@ -68,6 +75,9 @@ public:
     std::vector<std::string> revealed;
     std::vector<std::pair<std::string, Tone>> notices;
     std::function<void()> onActive;
+    /// Holds what `afterCardUpdated` is given until a test runs it, as a shell whose card updates later does.
+    bool deferCard = false;
+    std::vector<std::function<void()>> pending;
     std::function<void(SpotlightWidget&)> onSpotlight;
     // NOLINTEND(cppcoreguidelines-non-private-member-variables-in-classes)
 

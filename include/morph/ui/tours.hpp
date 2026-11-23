@@ -71,6 +71,15 @@ public:
     /// @return It.
     virtual SpotlightWidget& spotlight() = 0;
 
+    /// @brief Runs @p then once the card shows the step the controller has just set. The controller opens the
+    /// spotlight
+    ///        from it: opening moves focus to the card's first shown button, which is only the right one (Next, or
+    ///        End tour on a waiting step) when the card has caught up with the step. The default runs it at once, for
+    ///        a shell whose card is current as soon as the view changes; a shell whose card updates after the current
+    ///        turn runs it after that update. It may be dropped unrun when the shell goes away.
+    /// @param then What to run.
+    virtual void afterCardUpdated(std::function<void()> then) { then(); }
+
     /// @brief Tells the person something, as a toast.
     /// @param text The message.
     /// @param tone Its tone.
@@ -215,6 +224,10 @@ private:
     std::optional<TourView> _view;
     bool _showing = false;
     bool _waiting = false;
+    // Whether the controller is alive, for a callback the shell runs after it is gone; and which start the pending
+    // open belongs to.
+    std::shared_ptr<bool> _alive = std::make_shared<bool>(true);
+    std::uint64_t _run = 0;
 };
 
 }  // namespace morph::ui

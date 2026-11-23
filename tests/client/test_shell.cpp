@@ -37,6 +37,7 @@
 #include <vector>
 
 #include "probe_app.hpp"
+#include "tours_app.hpp"
 
 namespace client = morph::client;
 namespace ui = morph::ui;
@@ -532,6 +533,37 @@ TEST_CASE("Client shell: env online follows the transport's drop and reconnect",
         CHECK_FALSE(source.online());
         (*source.connectHook)();
         REQUIRE(pumpUntil(context.owner(), [&backend] { return shown(backend, "online") == "on"; }));
+    }
+    source.close();
+}
+
+// Mutation: call `buildFrame` from the source's connect listener (the running tour's spotlight goes with the frame).
+TEST_CASE("Client shell: a reconnect leaves a running tour running", "[client][shell][tours]") {
+    FakeAppContext context;
+    ui::testing::RecordingBackend backend;
+    DroppingSource source{&tours::toursBundle};
+    std::optional<std::expected<ui::Bundle, ui::ConnectError>> opened;
+    source.open(context,
+                [&opened](std::expected<ui::Bundle, ui::ConnectError> result) { opened = std::move(result); });
+    REQUIRE(pumpUntil(context.owner(), [&opened] { return opened.has_value(); }));
+    REQUIRE(opened->has_value());
+    {
+        auto const shell = client::mountShell(context, backend, std::move(*opened), source,
+                                              client::ShellOptions{.startScreen = "tours.home"});
+        REQUIRE(pumpUntil(context.owner(),
+                          [&backend] { return backend.find("Menu", "testId", "shell_tours").has_value(); }));
+        REQUIRE(shell->startTour("getting-started").has_value());
+        auto const spotlight = [&backend] { return backend.find("Spotlight", "testId", "shell_spotlight"); };
+        REQUIRE(pumpUntil(context.owner(),
+                          [&] { return spotlight().has_value() && backend.prop(*spotlight(), "open") == "true"; }));
+        int const before = *spotlight();
+        (*source.disconnectHook)();
+        REQUIRE(pumpUntil(context.owner(), [&source] { return !source.online(); }));
+        (*source.connectHook)();
+        REQUIRE(pumpUntil(context.owner(), [&source] { return source.online(); }));
+        REQUIRE(spotlight().has_value());
+        CHECK(*spotlight() == before);
+        CHECK(backend.prop(before, "open") == "true");
     }
     source.close();
 }

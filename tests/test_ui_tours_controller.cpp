@@ -265,7 +265,7 @@ TEST_CASE("tours controller: a screen that fails to open ends the tour with a no
     REQUIRE(r.shell.notices.size() == 1);
     CHECK(r.shell.notices.front().first.contains("Title of locked"));
     CHECK(r.shell.notices.front().second == ui::Tone::Warn);
-    CHECK(r.spot("open") == "false");
+    CHECK(r.spot("open") != "true");
 }
 
 // Mutation: keep the running tour when another starts (the second's title does not show).
@@ -305,6 +305,35 @@ TEST_CASE("tours controller: a change of locale re-evaluates the running step's 
     CHECK(r.controller->view()->title == "Grundlagen");
     CHECK(r.controller->view()->stepTitle == "Suche");
     CHECK(r.changes > before);
+}
+
+// Mutation: ignore the run number in the deferred open (the replaced tour's open also fires), ignore `running()` (a
+// tour that ended is opened), or open at once whatever `afterCardUpdated` was given (open before the card shows it).
+TEST_CASE("tours controller: the spotlight opens once the card shows the step, for the tour still running",
+          "[ui][tours]") {
+    Rig r;
+    r.shell.deferCard = true;
+    REQUIRE(r.controller->start("basics").has_value());
+    CHECK(r.spot("open") != "true");
+    REQUIRE(r.shell.pending.size() == 1);
+    r.shell.pending.front()();
+    CHECK(r.spot("open") == "true");
+    r.controller->end();
+    CHECK(r.spot("open") == "false");
+    r.shell.pending.clear();
+    REQUIRE(r.controller->start("basics").has_value());
+    REQUIRE(r.controller->start("basics").has_value());
+    REQUIRE(r.shell.pending.size() == 2);
+    r.shell.pending.front()();
+    CHECK(r.spot("open") == "false");
+    r.shell.pending.back()();
+    CHECK(r.spot("open") == "true");
+    r.controller->end();
+    r.shell.pending.clear();
+    REQUIRE(r.controller->start("basics").has_value());
+    r.controller->end();
+    r.shell.pending.back()();
+    CHECK(r.spot("open") == "false");
 }
 
 // Mutation: list general tours before the screen's in `offeredTours` (the screen's come second).

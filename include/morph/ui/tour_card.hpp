@@ -11,6 +11,7 @@
 #include <string_view>
 #include <utility>
 
+#include "../core/logger.hpp"
 #include "client_ids.hpp"
 #include "document.hpp"
 #include "host_vocabulary.hpp"
@@ -88,17 +89,21 @@ inline constexpr std::string_view kTourCardDocument = R"json({
 /// refused, and reported by the interpreter, for an id the app document does not declare. Every command is safe for an
 /// untrusted connection: it changes nothing on the server and shows only what the application declared. The commands'
 /// work is posted, since a step can open a screen and a screen must not be replaced inside one of its widgets'
-/// handlers. A shell makes one binding, which outlives frames, and calls `refresh` after each change of the
-/// controller's view. Neither copyable nor movable; on the runtime's owner.
+/// handlers; when the posted `tour.start` finds no controller or a controller that refuses the id (the frame was
+/// rebuilt after the refusal check), that is reported too. A shell makes one binding, which outlives frames, and calls
+/// `refresh` after each change of the controller's view. Neither copyable nor movable; on the runtime's owner.
 class TourCardBinding {
 public:
     /// @brief Registers the values and the commands.
     /// @param host       The vocabulary. Borrowed: it outlives this binding.
     /// @param controller The frame's controller, read at each command and each `refresh`; null between frames.
     /// @param post       Runs a command's work after the handler that asked returns; empty runs it at once.
+    /// @param report     Called with the sentence for the developer when a posted `tour.start` could not start its
+    ///                   tour; empty logs it at warn.
     TourCardBinding(HostVocabulary& host, std::function<TourController*()> controller,
-                    std::function<void(std::function<void()>)> post = {})
-        : _host{&host}, _controller{std::move(controller)}, _post{std::move(post)} {
+                    std::function<void(std::function<void()>)> post = {},
+                    std::function<void(std::string const&)> report = {})
+        : _host{&host}, _controller{std::move(controller)}, _post{std::move(post)}, _report{std::move(report)} {
         std::set<std::string, std::less<>> const card{std::string{kTourCardId}};
         for (std::string_view const name : {"tour.title", "tour.stepTitle", "tour.body", "tour.waitingFor"}) {
             host.add(HostValue{.name = std::string{name},
@@ -127,27 +132,34 @@ public:
         host.add(command("tour.next", [](TourController& tours) { tours.next(); }));
         host.add(command("tour.back", [](TourController& tours) { tours.back(); }));
         host.add(command("tour.end", [](TourController& tours) { tours.end(); }));
-        host.add(HostCommand{.name = "tour.start",
-                             .version = 1,
-                             .args = {HostArg{.name = "id", .type = "string"}},
-                             .safeForUntrusted = true,
-                             .run =
-                                 [this](ValueRecord const& args) {
-                                     std::string const id = *args.at("id").asString();
-                                     later([id](TourController& tours) { static_cast<void>(tours.start(id)); });
-                                 },
-                             .documents = {},
-                             .refusal = [this](ValueRecord const& args) -> std::optional<std::string> {
-                                 TourController const* const tours = _controller ? _controller() : nullptr;
-                                 std::string const& id = *args.at("id").asString();
-                                 if (tours == nullptr) {
-                                     return std::string{"no tour can start now: no frame is shown"};
-                                 }
-                                 if (!tours->declares(id)) {
-                                     return "the app document declares no tour `" + id + "`";
-                                 }
-                                 return std::nullopt;
-                             }});
+        host.add(
+            HostCommand{.name = "tour.start",
+                        .version = 1,
+                        .args = {HostArg{.name = "id", .type = "string"}},
+                        .safeForUntrusted = true,
+                        .run =
+                            [this](ValueRecord const& args) {
+                                std::string const id = *args.at("id").asString();
+                                later(
+                                    [this, id](TourController& tours) {
+                                        if (auto const started = tours.start(id); !started) {
+                                            tell(started.error().message());
+                                        }
+                                    },
+                                    [this, id] { tell("the tour `" + id + "` did not start: no frame is shown"); });
+                            },
+                        .documents = {},
+                        .refusal = [this](ValueRecord const& args) -> std::optional<std::string> {
+                            TourController const* const tours = _controller ? _controller() : nullptr;
+                            std::string const& id = *args.at("id").asString();
+                            if (tours == nullptr) {
+                                return std::string{"no tour can start now: no frame is shown"};
+                            }
+                            if (!tours->declares(id)) {
+                                return "the app document declares no tour `" + id + "`";
+                            }
+                            return std::nullopt;
+                        }});
         refresh();
     }
 
@@ -174,11 +186,14 @@ public:
     }
 
 private:
-    // Runs @p work on the controller of the moment it runs, posted when a post was given.
-    void later(std::function<void(TourController&)> work) {
-        auto run = [this, work = std::move(work)] {
+    // Runs @p work on the controller of the moment it runs, posted when a post was given; @p missing runs instead when
+    // there is none then.
+    void later(std::function<void(TourController&)> work, std::function<void()> missing = {}) {
+        auto run = [this, work = std::move(work), missing = std::move(missing)] {
             if (TourController* const tours = _controller ? _controller() : nullptr) {
                 work(*tours);
+            } else if (missing) {
+                missing();
             }
         };
         if (_post) {
@@ -188,9 +203,18 @@ private:
         }
     }
 
+    void tell(std::string const& text) const {
+        if (_report) {
+            _report(text);
+        } else {
+            morph::log::logWarn("[tours] {}", text);
+        }
+    }
+
     HostVocabulary* _host;
     std::function<TourController*()> _controller;
     std::function<void(std::function<void()>)> _post;
+    std::function<void(std::string const&)> _report;
 };
 
 }  // namespace morph::ui

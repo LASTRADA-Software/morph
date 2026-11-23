@@ -94,7 +94,9 @@ calls it:
 2. `ready`, whenever it comes, calls `mountShell(context, opened)` with the bundle or the connect error, and keeps
    the `MountedShell` it returns (null mounts nothing). In a build with the development tools, a shell overrides
    `MountedShell::inspectFocused(visit)` to hand the inspector over its focused screen to a frontend's inspector
-   window ([`inspector.md`](inspector.md)); the default has no screen and calls nothing. A local source delivers during `open`; a remote one
+   window ([`inspector.md`](inspector.md)); the default has no screen and calls nothing. `MountedShell::startTour(id)`
+   starts one of the application's guided tours and answers why not as text, so the frontend seam stays free of the
+   document model; the default refuses. A local source delivers during `open`; a remote one
    delivers later, from the loop.
 3. It calls `loop`, which runs the frontend's event loop and returns the exit code once `AppContext::quit` ends
    it.

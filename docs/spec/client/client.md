@@ -18,6 +18,7 @@ application host.
 - [Tests](#tests)
 - [Chat](#chat)
 - [Custom screens](#custom-screens)
+- [Tours](#tours)
 
 ## Packaging
 
@@ -366,3 +367,28 @@ The shell offers a person's custom screens when the server does ([`../ui/custom_
 - **Signing in or out.** The frame is rebuilt for the new session, so every open tab closes without asking and a
   draft is discarded with it, as an unsaved form is.
 - **The navigator.** The chrome's `navigatorEntries` fill the navigator's Custom section after each list.
+
+## Tours
+
+The shell runs the app document's guided tours ([`../ui/tours.md`](../ui/tours.md)).
+
+- **Per frame.** Each frame builds a `TourController` over the shell (its `TourShell`: `openScreen` is the shell's own
+  tab opening, `shows` compares the active tab's identity, `activeScreen` maps a custom screen to the screen it is
+  based on through the custom-screens list, `revealNavEntry` is `Navigator::reveal`, `spotlight` is the frame's with the
+  card mounted the first time, `notify` the frame's toast, `afterCardUpdated` a post to the owner, which runs after the
+  flush that updates the card). A sign-in or a sign-out builds a new frame, which ends a running tour; a reconnect keeps
+  the frame, and the tour. A changed app document takes effect at the next frame, as every app-document member does.
+- **The Tours menu.** An effect over `AppRoot::tours()` and the workspace's change callback keep `ShellFrame::setTours`
+  current: the active screen's tours (a custom screen offers its base's) under the screen's navigator title, then the
+  general ones under the built-in text `morph.shell.toursGeneral`; the button's caption and tooltip are
+  `morph.shell.tours` and `morph.shell.toursName`, drawn again on a change of locale. With any tour declared, the
+  screens' heads are in the page, as they are with a declared top-bar part. Choosing a tour starts it, posted.
+- **The card.** `kTourCardDocument` is resolved from the client's own generated documents only (its id `morph.tour` is
+  reserved, and a route or a navigation to it opens nothing) and mounted into the frame's spotlight. One
+  `TourCardBinding`, made once on the shell's host vocabulary, connects it and `tour.start` to the frame's controller;
+  its commands' work is posted, and a posted `tour.start` that finds no controller or one that refuses the id is
+  reported through the shell's problem callback.
+- **From client code.** `MountedShell::startTour(id)` starts a tour, or answers why not: an id the app document does
+  not declare, or no frame with an app document.
+- **Reports.** A step whose target is not shown is reported once per step and run through the shell's problem
+  callback; a screen a step cannot open ends the tour with a toast naming it.

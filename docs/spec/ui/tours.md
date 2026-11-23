@@ -13,6 +13,7 @@ workflow. Specified across `include/morph/ui/tours.hpp` (the controller), `tour_
 - [The tours of a session](#the-tours-of-a-session)
 - [The controller](#the-controller)
 - [The card](#the-card)
+- [The generic client](#the-generic-client)
 - [Design decisions](#design-decisions)
 - [Not yet](#not-yet)
 
@@ -82,13 +83,13 @@ already shows it), whether the active tab shows a screen with given params (`sho
 
 | Event | What happens |
 |---|---|
-| `start(id)` | An id the app does not declare is refused and starts nothing. Otherwise a running tour ends; the tour's `screen`, when the active screen is not it, is opened; the spotlight opens; step 0 shows |
+| `start(id)` | An id the app does not declare is refused and starts nothing. Otherwise a running tour ends; the tour's `screen`, when the active screen is not it, is opened; step 0 shows; the spotlight opens once the card shows that step (`TourShell::afterCardUpdated`: at once by default, after the card's next update in the generic client), so focus moves to the card's first shown button of that step; a tour that ended or was replaced in between opens nothing |
 | Showing step *n* | The step's `screen`, when the active tab does not show it with those params, is opened; a refusal ends the tour and the shell shows a toast naming the screen. A shell target is prepared (below). The spotlight's target is set, and `setTargetFocusable` is true on a waiting step. A step whose `advanceOn` screen is already active is shown as an ordinary step, not waiting: no change of the active screen would move it on, so Next does. A target not shown leaves the card centred and is reported once per step and tour run through `TourControllerOptions::warn` |
 | `next()` | Shows step *n*+1, or ends the tour on the last step. A waiting step ignores it |
 | `back()` | Shows step *n*-1. A screen an earlier step opened is not closed |
 | `activeChanged()` | When the step waits for a screen (`advanceOn`) and the active screen is it, the tour moves on. A screen the controller is opening itself does not count |
 | The running tour changes | The controller follows `AppRoot::tours()` while a tour runs. A tour that is gone, whose `revision` differs from the one it started with (replaced on the server), or that no longer has the step on show ends, and the shell shows the toast "The tour <title> changed, so it ended": its steps may no longer match the one shown. A change of locale, a change of another tour, and a runtime update that leaves an app-document tour alone keep it running; the texts are re-evaluated |
-| `end()` | The spotlight's target is cleared and it closes, which hands focus back to where it was when the tour started; the view empties |
+| `end()` | The spotlight's target is cleared and it closes, which hands focus back to where it was when it opened; the view empties |
 
 `view()` is what the card shows: the tour's title, the step's title and body, its position and the count, whether it
 waits and for which screen's title, whether Back is possible, and whether it is the last step. `onChanged` is called
@@ -132,6 +133,12 @@ server and shows only what the application declared. An id the app does not decl
 already refuses a literal one. `{"can": "host:tour.start"}` is true on a client that runs tours, so a screen can hide
 its button on one that does not. The commands' work is posted: a step can open a screen, which must not be replaced
 inside one of its widgets' handlers.
+
+## The generic client
+
+The generic client builds a controller and the Tours menu with each frame and mounts the card into the frame's
+spotlight; see [client.md](../client/client.md#tours). `MountedShell::startTour(id)` starts a tour from client code;
+its default refuses.
 
 ## Design decisions
 

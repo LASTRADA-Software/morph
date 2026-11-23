@@ -87,11 +87,19 @@ std::expected<void, Refusal> TourController::start(std::string_view tourId) {
             return {};
         }
     }
-    _shell->spotlight().setOpen(true);
     show(0);
     if (!running()) {
         return {};
     }
+    // Opened once the card shows the first step: opening moves focus to the card's first shown button, and which one
+    // that is (Next, or End tour on a waiting step) is decided by what the card shows by then. A tour that ended or
+    // was replaced in between opens nothing.
+    std::uint64_t const run = ++_run;
+    _shell->afterCardUpdated([this, run, alive = std::weak_ptr<bool>{_alive}] {
+        if (auto const live = alive.lock(); live != nullptr && running() && run == _run) {
+            _shell->spotlight().setOpen(true);
+        }
+    });
     // The texts follow the locale and the app state while the tour runs. The steps do not: a tour that is gone, was
     // replaced (its revision changed) or lost the step on show ends, since its steps may no longer match the one
     // shown. A change of locale keeps the revision and the steps, and only re-evaluates the texts.

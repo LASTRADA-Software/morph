@@ -4,6 +4,7 @@
 // values and commands, its keys, and `tour.start` from any document.
 
 #include <catch2/catch_test_macros.hpp>
+#include <functional>
 #include <memory>
 #include <morph/ui/backend.hpp>
 #include <morph/ui/host_vocabulary.hpp>
@@ -45,13 +46,25 @@ constexpr std::string_view kStarter = R"({
     { "kind": "text", "testId": "can_tour", "text": { "fn": "format", "args": [ "{0}", { "can": "host:tour.start" } ] } },
     { "kind": "text", "testId": "peek", "text": { "fn": "coalesce", "args": [ { "host": "tour.title" }, "-" ] } } ] } })";
 
+constexpr std::string_view kOtherApp =
+    R"({ "vocab": "ui/1", "id": "app", "tours": [ { "id": "elsewhere", "title": "E", "steps": [ { "title": "x" } ] } ] })";
+
 struct Card {
     Card() {
         auto mounted = h.interpreter.mountApp(ui::testing::loadOrFail(kApp));
         REQUIRE(mounted.has_value());
         root = std::move(*mounted);
         host.connect(h.session);
-        binding = std::make_unique<ui::TourCardBinding>(host, [this] { return controller.get(); });
+        binding = std::make_unique<ui::TourCardBinding>(
+            host, [this] { return controller.get(); },
+            [this](std::function<void()> work) {
+                if (deferred) {
+                    posted.push_back(std::move(work));
+                } else {
+                    work();
+                }
+            },
+            [this](std::string const& text) { reports.push_back(text); });
         controller = std::make_unique<ui::TourController>(
             h.runtime, *root, shell,
             ui::TourControllerOptions{.warn = {}, .onChanged = [this] { binding->refresh(); }});
@@ -76,6 +89,10 @@ struct Card {
     }
 
     ui::HostVocabulary host;
+    // Holds the commands' work until a test runs it, as a shell that posts it does; and what the binding reported.
+    bool deferred = false;
+    std::vector<std::function<void()>> posted;
+    std::vector<std::string> reports;
     ui::testing::Harness h;
     ui::testing::FakeTourShell shell{h.backend};
     std::unique_ptr<ui::AppRoot> root;
@@ -185,4 +202,37 @@ TEST_CASE("tour card: tour.start from a document starts the tour, an undeclared 
     CHECK(c.controller->view()->tourId == "basics");
     // The card's values are the card's: another document reads none of them.
     CHECK(c.h.text("peek") == "-");
+}
+
+// Mutation: drop the report of a refused or unrun posted `tour.start` (the tour silently does not start).
+TEST_CASE("tour card: a posted tour.start that finds no controller or a refusing one is reported", "[ui][tours]") {
+    Card c;
+    auto const starter = c.h.mount(kStarter);
+    c.deferred = true;
+    // The frame goes away between the click and the posted run.
+    c.h.backend.click(c.button("take_tour"));
+    REQUIRE(c.posted.size() == 1);
+    auto gone = std::move(c.controller);
+    c.posted.front()();
+    CHECK_FALSE(gone->running());
+    REQUIRE(c.reports.size() == 1);
+    CHECK(c.reports.front().contains("`basics`"));
+    // A controller that no longer declares the tour: the command is refused when it runs.
+    c.posted.clear();
+    c.reports.clear();
+    c.controller = std::move(gone);
+    c.h.backend.click(c.button("take_tour"));
+    REQUIRE(c.posted.size() == 1);
+    ui::testing::Harness elsewhere;
+    auto other = elsewhere.interpreter.mountApp(ui::testing::loadOrFail(kOtherApp));
+    REQUIRE(other.has_value());
+    c.controller.reset();
+    c.controller =
+        std::make_unique<ui::TourController>(elsewhere.runtime, **other, c.shell, ui::TourControllerOptions{});
+    c.posted.front()();
+    CHECK_FALSE(c.controller->running());
+    REQUIRE(c.reports.size() == 1);
+    CHECK(c.reports.front().contains("declares no tour `basics`"));
+    // Before the harness and the root the controller reads go.
+    c.controller.reset();
 }
