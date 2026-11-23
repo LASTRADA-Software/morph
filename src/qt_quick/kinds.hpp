@@ -1,6 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
+#include <QKeyEvent>
+#include <QMetaObject>
+#include <QPointer>
+#include <QQuickWindow>
 #include <QString>
 #include <QStringList>
 #include <cstddef>
@@ -517,6 +521,58 @@ public:
 protected:
     /// Drawn as the theme's card whatever surface encloses it.
     [[nodiscard]] QObject* scheme() const override { return context().themeObject("cardScheme"); }
+};
+
+/// A guided tour's spotlight (`MorphSpotlight`): it finds its target in its own context's index, follows the
+/// target's box each frame, scrolls a clipped target into view, and while open filters the window's keys so the card's
+/// chords come first and Tab stays in the card.
+class SpotlightImpl final : public ContainerItemWidget<ui::SpotlightWidget> {
+public:
+    SpotlightImpl(Context& context, ui::ContainerWidget* parent);
+    ~SpotlightImpl() override;
+    SpotlightImpl(SpotlightImpl const&) = delete;
+    SpotlightImpl& operator=(SpotlightImpl const&) = delete;
+    SpotlightImpl(SpotlightImpl&&) = delete;
+    SpotlightImpl& operator=(SpotlightImpl&&) = delete;
+
+    void setOpen(bool open) override;
+    void setTarget(std::optional<std::string> testId) override;
+    [[nodiscard]] bool targetShown() const override { return _ringed != nullptr; }
+    void setOnTargetShownChanged(std::function<void(bool)> handler) override { _onChanged = std::move(handler); }
+    void setTargetFocusable(bool focusable) override { _targetFocusable = focusable; }
+
+    /// The widget it rings now, or null.
+    [[nodiscard]] ItemBase const* ringed() const noexcept { return _ringed; }
+    /// Reads the target's box again, scrolls a clipped target into view and writes the cut-out: what each frame runs.
+    void track();
+    /// Picks the target again from the context's index, and hears its candidates' visibility.
+    void resolve();
+    /// A key pressed while it is open, before the focused item has it: true when it took the key.
+    bool filterKey(QKeyEvent const& event);
+
+protected:
+    /// The card draws as the theme's card, whatever surface encloses the spotlight.
+    [[nodiscard]] QObject* scheme() const override { return context().themeObject("cardScheme"); }
+
+private:
+    class Filter;
+    // The card's items that Tab stops at, then the target while it is focusable.
+    [[nodiscard]] std::vector<QQuickItem*> tabChain() const;
+    void cycleFocus(bool forward);
+    void focusCard();
+
+    std::unique_ptr<Filter> _filter;
+    std::optional<QString> _target;
+    ItemBase* _ringed = nullptr;
+    std::vector<QMetaObject::Connection> _watching;
+    QMetaObject::Connection _frames;
+    QPointer<QQuickItem> _restore;
+    QPointer<QQuickWindow> _window;
+    int _listener = 0;
+    bool _open = false;
+    bool _targetFocusable = false;
+    bool _resolving = false;
+    std::function<void(bool)> _onChanged;
 };
 
 class SplitterImpl final : public ContainerItemWidget<ui::SplitterWidget> {

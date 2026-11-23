@@ -191,10 +191,11 @@ private:
     int _crossAlign = 0;
 };
 
-/// Every live widget of every backend in the process, in creation order.
-[[nodiscard]] std::vector<ItemBase*> const& liveWidgets() noexcept;
+/// Every live widget of every context, contexts and widgets in creation order: for tests and tools.
+[[nodiscard]] std::vector<ItemBase*> liveWidgets();
 
-/// The first live widget, in creation order, whose test id is @p testId; null when there is none.
+/// The first live widget, contexts and widgets in creation order, whose test id is @p testId; null when there is
+/// none. A test helper: a spotlight reads its own context's index, never this.
 [[nodiscard]] ItemBase* findWidget(QString const& testId) noexcept;
 
 /// The `ItemBase` behind a widget of this backend, or null.

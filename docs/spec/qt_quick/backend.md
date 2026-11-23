@@ -19,6 +19,7 @@ the frontend around it is [`frontend.md`](frontend.md).
 - [Kinds](#kinds)
 - [Containers and lists](#containers-and-lists)
 - [Keys](#keys)
+- [The spotlight](#the-spotlight)
 - [Layout and theme](#layout-and-theme)
 - [Components](#components)
 - [Tests](#tests)
@@ -111,7 +112,8 @@ Each widget class (`src/qt_quick/kinds.hpp`) owns one item made from its kind's 
   value interface and its focus live there; the widget's item names it in `accessibleItem` and is
   `Accessible.ignored`. The control binds the item's `accessibleName`, `accessibleRole` and its messages as
   `Accessible.description`, and `showTestId` writes the test id onto it as well as onto the item, whose
-  `objectName` `findWidget` matches. So `(name, role)` and the test id resolve to the same single node. Kinds' own
+  `objectName`, which each context's `WidgetIndex` files the widget under (a test's `findWidget` reads every context's
+  index; a spotlight reads only its own, so the inspector window's items are never its target). So `(name, role)` and the test id resolve to the same single node. Kinds' own
   roles are EditableText for the text kinds and the file picker's path, ComboBox for a drop-down select, Grouping
   for a radio select, CheckBox and Slider. A drop-down the document names no name reads the option it shows. A
   ComboBox node has no value of its own, so the option a drop-down shows is the value of its one child, the style's
@@ -410,6 +412,28 @@ first declared chord they press runs. A chord is modifiers (`Ctrl`, `Shift`, `Al
 `Left`, `Right`, `Space`, `Delete`. Letters match without regard to case; the modifiers must be exactly those
 pressed. A key press propagates from the focused item outwards, so the innermost widget declaring the chord takes
 it; a widget out of reach takes none.
+
+## The spotlight
+
+`SpotlightImpl` (`MorphSpotlight.qml`) draws a tour's spotlight over the window's content item at `z` 10000, not as a
+popup: a popup's item takes every press inside it, and a press inside the cut-out must reach the target. It takes no
+room in its parent's layout.
+
+- **Target.** It reads its own context's `WidgetIndex` and rings the first widget carrying the test id whose item is
+  visible (`QQuickItem::isVisible`, which is false inside a hidden container or an unselected tab page). It hears the
+  index and each candidate's `visibleChanged`.
+- **Drawing.** Four `Theme.scrim` rectangles around the cut-out dim everything else; a ring in `Theme.focus`,
+  `Theme.spaceOf(1)` outside the target's box, surrounds it. The card is a `Theme.cardScheme` rectangle, at most 40
+  units wide, on the side of the target with the most room, clamped a step 2 gap inside the window; with no target it
+  is centred and nothing is cut out.
+- **Geometry.** Each frame (`QQuickWindow::afterAnimating`) it reads the target's scene box, so it follows resizes,
+  layout passes and scrolling; a target clipped by the nearest flickable (a `ScrollWidget`) is scrolled into view.
+- **Pointer.** The scrim and the card's own area take presses; the cut-out has no item, so a press there reaches the
+  target.
+- **Keys.** While open it filters the window's key presses. Tab and Shift+Tab cycle through the card's tab stops, then
+  the target's focus item while `setTargetFocusable(true)`. Any other key but Enter and Space goes first to the card's
+  widgets from the focused item up (`MorphWidget.takeChord`), so the card's chords come before a control's own keys.
+  Opening focuses the card's first tab stop; closing hands focus back to the item that had it.
 
 ## Layout and theme
 

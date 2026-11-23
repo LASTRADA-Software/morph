@@ -15,10 +15,12 @@
 #include <string>
 #include <string_view>
 #include <utility>
+#include <vector>
 
 namespace morph::qt_quick::detail {
 
 class ContainerCore;
+class ItemBase;
 class Relay;
 class TextMeasure;
 
@@ -39,6 +41,37 @@ std::vector<int> uprightWeightsOf(QStringList const& families);
 /// Writes the text glyph of each framework icon name that has one as @p theme's `iconGlyphs`, the glyphs the terminal
 /// draws; whether the property took them.
 bool writeIconGlyphs(QObject& theme);
+
+/// The live widgets of one context, in creation order, by test id, and what wants to hear when that changes. A
+/// spotlight finds its target here, so a widget of another window (the inspector's) is never one.
+class WidgetIndex {
+public:
+    /// Adds a widget just made.
+    void add(ItemBase& widget);
+    /// Forgets a widget being destroyed, and tells the listeners.
+    void remove(ItemBase const& widget);
+    /// Files a widget under its new test id, and tells the listeners.
+    void retag(ItemBase const& widget, QString const& testId);
+    /// The live widgets that carry @p testId, in creation order.
+    [[nodiscard]] std::vector<ItemBase*> carrying(QString const& testId) const;
+    /// Every live widget, in creation order.
+    [[nodiscard]] std::vector<ItemBase*> const& all() const noexcept { return _widgets; }
+    /// Registers a listener told after each retag and removal; returns its key.
+    int listen(std::function<void()> listener);
+    /// Stops telling a listener.
+    void unlisten(int key) noexcept { _listeners.erase(key); }
+
+private:
+    // Tells every listener once; a change a listener makes is told after the round, never inside it.
+    void changed();
+
+    std::vector<ItemBase*> _widgets;
+    std::map<ItemBase const*, QString> _tags;
+    std::map<int, std::function<void()>> _listeners;
+    int _nextListener = 0;
+    bool _telling = false;
+    bool _again = false;
+};
 
 /// What every widget of one backend shares: the engine, the compiled components, the column the roots go in, and
 /// the restyle map.
@@ -99,6 +132,12 @@ public:
     /// Without a declared set nothing is reported: every icon is drawn as text or as MorphUi's own.
     void checkIcon(std::string_view icon);
 
+    /// The live widgets of this context, by test id.
+    [[nodiscard]] WidgetIndex& widgets() noexcept { return _widgets; }
+
+    /// Every live context, in creation order: what a test's `findWidget` reads.
+    [[nodiscard]] static std::vector<Context*> const& all() noexcept;
+
 private:
     // The host's width in units changed: re-classes it, and tells the listener of a new class.
     void widthChanged(double units);
@@ -107,6 +146,8 @@ private:
 
     QQmlEngine* _engine;
     BackendOptions _options;
+    // Declared before the roots, whose widgets leave the index as they go: the roots are destroyed first.
+    WidgetIndex _widgets;
     QPointer<QQuickItem> _holder;
     std::unique_ptr<ContainerCore> _roots;
     // What `Theme.textMeasure` is told to measure the pieces of a wrapping text with.

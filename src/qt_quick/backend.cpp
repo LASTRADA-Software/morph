@@ -128,6 +128,10 @@ std::unique_ptr<ui::PopoverWidget> Backend::createPopover(ui::ContainerWidget* p
     return std::make_unique<detail::PopoverImpl>(*_context, parent);
 }
 
+std::unique_ptr<ui::SpotlightWidget> Backend::createSpotlight(ui::ContainerWidget* parent) {
+    return std::make_unique<detail::SpotlightImpl>(*_context, parent);
+}
+
 std::unique_ptr<ui::ToastWidget> Backend::createToast(ui::ContainerWidget* parent) {
     return std::make_unique<detail::ToastImpl>(*_context, parent);
 }

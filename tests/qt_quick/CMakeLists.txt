@@ -16,6 +16,7 @@ add_executable(morph_qt_quick_tests
     test_qt_quick_conformance.cpp
     test_qt_quick_containers.cpp
     test_qt_quick_overlays.cpp
+    test_qt_quick_spotlight.cpp
     test_qt_quick_table.cpp
     test_qt_quick_interpreter.cpp
     test_qt_quick_components.cpp

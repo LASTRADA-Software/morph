@@ -37,6 +37,7 @@ qt_add_qml_module(morph_qt_quick_qml
         qml/MorphButtonBackground.qml
         qml/MorphPlainContent.qml
         qml/MorphPopover.qml
+        qml/MorphSpotlight.qml
         qml/MorphWidget.qml
         qml/MorphField.qml
         qml/MorphRoots.qml
@@ -115,6 +116,7 @@ add_library(morph_qt_quick STATIC
     relay.cpp
     relay.hpp
     scheduler.cpp
+    spotlight.cpp
     table.cpp
     text_measure.cpp
     text_measure.hpp
