@@ -564,6 +564,14 @@ TEST_CASE("Client shell: a reconnect leaves a running tour running", "[client][s
         REQUIRE(spotlight().has_value());
         CHECK(*spotlight() == before);
         CHECK(backend.prop(before, "open") == "true");
+        // The controller survived too: Next still moves the running tour on.
+        auto const next = backend.find("Button", "testId", "tour_next");
+        REQUIRE(next.has_value());
+        backend.click(*next);
+        REQUIRE(pumpUntil(context.owner(), [&backend] {
+            auto const title = backend.find("Text", "testId", "tour_title");
+            return title.has_value() && backend.prop(*title, "text") == "Open Samples";
+        }));
     }
     source.close();
 }
