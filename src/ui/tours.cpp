@@ -23,8 +23,8 @@ namespace {
 
 // @p pattern with its `{title}` replaced by @p title.
 std::string withTitle(std::string pattern, std::string_view title) {
-    if (auto const at = pattern.find("{title}"); at != std::string::npos) {
-        pattern.replace(at, 7, title);
+    if (auto const where = pattern.find("{title}"); where != std::string::npos) {
+        pattern.replace(where, 7, title);
     }
     return pattern;
 }

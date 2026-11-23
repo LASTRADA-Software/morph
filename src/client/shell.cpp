@@ -708,7 +708,7 @@ private:
         buildTours();
         // A new frame is a new session's: its runtime tours are listed again, into the new app root.
         if (_tourSync) {
-            _tourSync->reset();
+            (*_tourSync).reset();
             _tourSync->list();
         }
     }
@@ -885,7 +885,7 @@ private:
             return {};
         }
         [[nodiscard]] bool shows(std::string const& screenId, ui::ParamMap const& params) const override {
-            ui::ScreenHandle* const handle = _shell->_workspace ? _shell->_workspace->activeHandle() : nullptr;
+            ui::ScreenHandle const* const handle = _shell->_workspace ? _shell->_workspace->activeHandle() : nullptr;
             if (handle == nullptr || _shell->activeBaseScreen() != screenId) {
                 return false;
             }
@@ -927,7 +927,7 @@ private:
 
     // The screen the active tab shows, a custom screen named by the screen it is based on, as a tour compares it.
     [[nodiscard]] std::string activeBaseScreen() const {
-        std::string const screenId = activeScreen();
+        std::string screenId = activeScreen();
         if (ui::isCustomScreenId(screenId) && _customChrome != nullptr) {
             return _customChrome->controller().baseOf(screenId);
         }
@@ -973,13 +973,13 @@ private:
         _frame->setOnTour([this](std::string const& tourId) {
             // Posted: the menu is a widget of the frame, and the tour may open a screen. The id is copied, since the
             // menu's entries are rebuilt while the tour starts.
-            _context->executor().post([this, alive = std::weak_ptr<bool>{_alive}, id = std::string{tourId}] {
+            _context->executor().post([this, alive = std::weak_ptr<bool>{_alive}, chosen = std::string{tourId}] {
                 if (auto const live = alive.lock(); live == nullptr || !*live) {
                     return;
                 }
                 if (!_tours) {
-                    problem("the tour `" + id + "` cannot start: this window runs no tours");
-                } else if (auto const started = _tours->start(id); !started) {
+                    problem("the tour `" + chosen + "` cannot start: this window runs no tours");
+                } else if (auto const started = _tours->start(chosen); !started) {
                     problem(started.error().message());
                 }
             });
