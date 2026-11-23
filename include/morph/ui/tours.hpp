@@ -91,7 +91,9 @@ struct TourView {
     std::int64_t position = 0;
     /// @brief How many steps the tour has.
     std::int64_t count = 0;
-    /// @brief Whether the step waits for a screen to become active rather than for Next.
+    /// @brief Whether the step waits for a screen to become active rather than for Next. A step whose screen is
+    /// already
+    ///        active when it is shown does not wait.
     bool waiting = false;
     /// @brief The title of the screen a waiting step waits for; empty otherwise.
     std::string waitingFor;
@@ -211,6 +213,7 @@ private:
     std::set<std::size_t> _warned;
     std::optional<TourView> _view;
     bool _showing = false;
+    bool _waiting = false;
 };
 
 }  // namespace morph::ui

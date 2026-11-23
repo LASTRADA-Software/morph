@@ -75,6 +75,7 @@ std::expected<void, Refusal> TourController::start(std::string_view tourId) {
     _tourId = id;
     _step = 0;
     _warned.clear();
+    _waiting = false;
     if (!screen.empty() && _shell->activeScreen() != screen) {
         _showing = true;
         auto const opened = _shell->openScreen(screen, {});
@@ -95,8 +96,12 @@ std::expected<void, Refusal> TourController::start(std::string_view tourId) {
         std::vector<Tour> const& latest = _root->tours().get();
         _runtime->untracked([this, &latest] {
             _tours = latest;
+            std::optional<TourView> const before = _view;
             refresh();
-            changed();
+            // The first run follows the view start() just showed, which has been reported already.
+            if (_view != before) {
+                changed();
+            }
         });
     });
     return {};
@@ -104,7 +109,7 @@ std::expected<void, Refusal> TourController::start(std::string_view tourId) {
 
 void TourController::next() {
     Tour const* const tour = current();
-    if (tour == nullptr || !tour->steps.at(_step).advanceOn.empty()) {
+    if (tour == nullptr || _waiting) {
         return;
     }
     if (_step + 1 >= tour->steps.size()) {
@@ -128,6 +133,7 @@ void TourController::end() {
     _follow.reset();
     _tourId.clear();
     _step = 0;
+    _waiting = false;
     _view.reset();
     SpotlightWidget& spotlight = _shell->spotlight();
     spotlight.setTarget(std::nullopt);
@@ -143,7 +149,7 @@ void TourController::activeChanged() {
         return;
     }
     std::string const& waitsFor = tour->steps.at(_step).advanceOn;
-    if (waitsFor.empty() || _shell->activeScreen() != waitsFor) {
+    if (!_waiting || _shell->activeScreen() != waitsFor) {
         return;
     }
     if (_step + 1 >= tour->steps.size()) {
@@ -186,8 +192,11 @@ void TourController::show(std::size_t step) {
         target = tourTargetFor(target, compact);
     }
     _step = step;
+    // A step whose screen is already active has nothing to wait for: it is shown as an ordinary step, since no change
+    // of the active screen would ever move it on.
+    _waiting = !shown.advanceOn.empty() && _shell->activeScreen() != shown.advanceOn;
     SpotlightWidget& spotlight = _shell->spotlight();
-    spotlight.setTargetFocusable(!shown.advanceOn.empty());
+    spotlight.setTargetFocusable(_waiting);
     spotlight.setTarget(target.empty() ? std::nullopt : std::optional<std::string>{target});
     if (!target.empty() && !spotlight.targetShown() && _warned.insert(step).second) {
         warn("the tour `" + _tourId + "`, step " + std::to_string(step + 1) + ": nothing shown carries the test id `" +
@@ -211,8 +220,8 @@ void TourController::refresh() {
         .body = step.body,
         .position = static_cast<std::int64_t>(_step + 1),
         .count = static_cast<std::int64_t>(tour->steps.size()),
-        .waiting = !step.advanceOn.empty(),
-        .waitingFor = step.advanceOn.empty() ? std::string{} : _shell->screenTitle(step.advanceOn),
+        .waiting = _waiting,
+        .waitingFor = _waiting ? _shell->screenTitle(step.advanceOn) : std::string{},
         .canBack = _step > 0,
         .last = _step + 1 == tour->steps.size(),
     };

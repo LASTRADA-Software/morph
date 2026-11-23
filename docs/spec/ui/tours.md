@@ -40,7 +40,7 @@ already shows it), whether the active tab shows a screen with given params (`sho
 | Event | What happens |
 |---|---|
 | `start(id)` | An id the app does not declare is refused and starts nothing. Otherwise a running tour ends; the tour's `screen`, when the active screen is not it, is opened; the spotlight opens; step 0 shows |
-| Showing step *n* | The step's `screen`, when the active tab does not show it with those params, is opened; a refusal ends the tour and the shell shows a toast naming the screen. A shell target is prepared (below). The spotlight's target is set, and `setTargetFocusable` is true on a waiting step. A target not shown leaves the card centred and is reported once per step and tour run through `TourControllerOptions::warn` |
+| Showing step *n* | The step's `screen`, when the active tab does not show it with those params, is opened; a refusal ends the tour and the shell shows a toast naming the screen. A shell target is prepared (below). The spotlight's target is set, and `setTargetFocusable` is true on a waiting step. A step whose `advanceOn` screen is already active is shown as an ordinary step, not waiting: no change of the active screen would move it on, so Next does. A target not shown leaves the card centred and is reported once per step and tour run through `TourControllerOptions::warn` |
 | `next()` | Shows step *n*+1, or ends the tour on the last step. A waiting step ignores it |
 | `back()` | Shows step *n*-1. A screen an earlier step opened is not closed |
 | `activeChanged()` | When the step waits for a screen (`advanceOn`) and the active screen is it, the tour moves on. A screen the controller is opening itself does not count |

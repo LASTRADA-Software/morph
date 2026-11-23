@@ -39,6 +39,10 @@ constexpr std::string_view kApp = R"({
     { "id": "register", "screen": "samples", "title": "Register",
       "steps": [ { "target": "action_new", "title": "New" },
                  { "screen": "home", "params": { "page": 2 }, "title": "Home" } ] },
+    { "id": "bounce", "title": "Bounce",
+      "steps": [ { "screen": "samples", "title": "A" },
+                 { "advanceOn": { "screen": "samples" }, "title": "B" },
+                 { "title": "C" } ] },
     { "id": "find", "screen": "samples", "title": "Find", "steps": [ { "title": "Filter" } ] },
     { "id": "lost", "title": "Lost", "steps": [ { "screen": "locked", "title": "Locked" } ] } ] })";
 
@@ -164,6 +168,45 @@ TEST_CASE("tours controller: advanceOn moves on when its screen becomes active a
     CHECK(r.shell.opened.empty());
 }
 
+// Mutation: set `_waiting` from `!advanceOn.empty()` alone in `show` (the first step waits for a screen already
+// active, and Next is ignored).
+TEST_CASE("tours controller: a step whose screen is already active is shown as an ordinary step", "[ui][tours]") {
+    Rig r;
+    r.carry("nav_samples");
+    r.shell.active = "samples";
+    REQUIRE(r.controller->start("getting-started").has_value());
+    CHECK_FALSE(r.controller->view()->waiting);
+    CHECK(r.controller->view()->waitingFor.empty());
+    CHECK(r.spot("targetFocusable") == "false");
+    r.controller->next();
+    CHECK(r.controller->view()->position == 2);
+}
+
+// Mutation: drop the `_showing` guard from `activeChanged` (Back to a step that opens the awaited screen first shows
+// the step after the waiting one).
+TEST_CASE("tours controller: a screen the tour opens itself does not move a waiting step on", "[ui][tours]") {
+    Rig r;
+    REQUIRE(r.controller->start("bounce").has_value());
+    r.shell.active = "home";
+    r.controller->next();
+    REQUIRE(r.controller->view()->position == 2);
+    REQUIRE(r.controller->view()->waiting);
+    int const before = r.changes;
+    r.controller->back();
+    CHECK(r.shell.active == "samples");
+    CHECK(r.controller->view()->position == 1);
+    // One change: the step shown. The step the open would have moved on to is never shown.
+    CHECK(r.changes == before + 1);
+}
+
+// Mutation: report the view from `start` and again from the following effect's first run (one change becomes two).
+TEST_CASE("tours controller: start reports one change", "[ui][tours]") {
+    Rig r;
+    r.carry("shell_search");
+    REQUIRE(r.controller->start("basics").has_value());
+    CHECK(r.changes == 1);
+}
+
 // Mutation: warn at every showing of a step (Next then Back warns twice).
 TEST_CASE("tours controller: a target that is not shown leaves the card centred and warns once per step",
           "[ui][tours]") {
@@ -271,7 +314,7 @@ TEST_CASE("tours controller: offeredTours lists the screen's tours in order, the
     REQUIRE(offered.screen.size() == 2);
     CHECK(offered.screen.at(0).id == "register");
     CHECK(offered.screen.at(1).id == "find");
-    REQUIRE(offered.general.size() == 3);
+    REQUIRE(offered.general.size() == 4);
     CHECK(offered.general.at(0).id == "basics");
     CHECK(ui::offeredTours(r.root->tours().get(), "home").screen.empty());
     CHECK(ui::offeredTours({}, "home").general.empty());
