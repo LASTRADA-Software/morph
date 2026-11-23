@@ -1775,6 +1775,26 @@ public:
     void setOnDismiss(Action onDismiss) override { callbacks().dismiss = std::move(onDismiss); }
 };
 
+/// @brief Whether a record's property holds a boolean value.
+/// @param record The record.
+/// @param name   The property.
+/// @param value  The value asked about.
+/// @return True when the property is set and equals @p value.
+[[nodiscard]] inline bool propIs(Record const& record, std::string_view name, bool value) {
+    auto const found = record.props.find(name);
+    return found != record.props.end() && found->second == formatBool(value);
+}
+
+/// @brief Whether a record is an overlay that is not open: a dialog, drawer, popover or spotlight shows nothing,
+///        itself included, until it is opened. A new overlay kind is added here, once.
+/// @param record The widget's record.
+/// @return True for a closed overlay.
+[[nodiscard]] inline bool isClosedOverlay(Record const& record) {
+    return (record.kind == "Dialog" || record.kind == "Drawer" || record.kind == "Popover" ||
+            record.kind == "Spotlight") &&
+           !propIs(record, "open", true);
+}
+
 /// @brief Whether a widget is effectively shown: it and every container around it visible, every dialog, drawer,
 ///        popover and spotlight around it open, no panel around it collapsed, and no closed collapsible around it
 ///        unless it is that section's header.
@@ -1782,23 +1802,15 @@ public:
 /// @param record The widget.
 /// @return Whether a user could see it.
 [[nodiscard]] inline bool shownInStore(RecordStore const& store, Record const& record) {
-    auto const flag = [](Record const& of, std::string_view name, bool value) {
-        auto const found = of.props.find(name);
-        return found != of.props.end() && found->second == formatBool(value);
-    };
-    auto const closedOverlay = [&flag](Record const& of) {
-        return (of.kind == "Dialog" || of.kind == "Drawer" || of.kind == "Popover" || of.kind == "Spotlight") &&
-               !flag(of, "open", true);
-    };
-    if (flag(record, "visible", false) || closedOverlay(record)) {
+    if (propIs(record, "visible", false) || isClosedOverlay(record)) {
         return false;
     }
     for (int inner = record.id, outer = record.parent; outer != 0;) {
         Record const& around = store.at(outer);
-        if (flag(around, "visible", false) || flag(around, "collapsed", true) || closedOverlay(around)) {
+        if (propIs(around, "visible", false) || propIs(around, "collapsed", true) || isClosedOverlay(around)) {
             return false;
         }
-        if (around.kind == "Collapsible" && flag(around, "open", false)) {
+        if (around.kind == "Collapsible" && propIs(around, "open", false)) {
             auto const header = around.props.find("header");
             if (header == around.props.end() || header->second != std::to_string(inner)) {
                 return false;
@@ -3478,13 +3490,13 @@ private:
     // collapsed. A collapsed panel's own collapse control stays reachable, so only an outer panel's state counts. A
     // dialog shows nothing, itself included, until it is opened.
     [[nodiscard]] bool reachable(detail::Record const& record) const {
-        if (flagIs(record, "visible", false) || flagIs(record, "enabled", false) || isClosedDialog(record)) {
+        if (flagIs(record, "visible", false) || flagIs(record, "enabled", false) || detail::isClosedOverlay(record)) {
             return false;
         }
         for (int innerId = record.id, outerId = record.parent; outerId != 0;) {
             detail::Record const& outer = _store->at(outerId);
             if (flagIs(outer, "visible", false) || flagIs(outer, "enabled", false) ||
-                flagIs(outer, "collapsed", true) || isClosedDialog(outer) || closedAround(outer, innerId)) {
+                flagIs(outer, "collapsed", true) || detail::isClosedOverlay(outer) || closedAround(outer, innerId)) {
                 return false;
             }
             innerId = outerId;
@@ -3502,13 +3514,6 @@ private:
             }
         }
         return 0;
-    }
-
-    // A dialog, drawer, popover or spotlight shows nothing until it is opened.
-    [[nodiscard]] static bool isClosedDialog(detail::Record const& record) {
-        return (record.kind == "Dialog" || record.kind == "Drawer" || record.kind == "Popover" ||
-                record.kind == "Spotlight") &&
-               !flagIs(record, "open", true);
     }
 
     // A closed collapsible section hides its content, the child on the way in, unless that child is its header.
