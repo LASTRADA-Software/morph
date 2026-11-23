@@ -108,10 +108,13 @@ public:
     /// The widget outside this open overlay that still takes presses and keys, or null: a spotlight's target.
     [[nodiscard]] virtual WidgetBase const* passesThrough() const { return nullptr; }
     /// Runs the chord @p key is when a container between this widget and the open spotlight around it declares it:
-    /// inside a spotlight the card's chords come before the focused widget's own keys.
+    /// inside a spotlight the card's chords come before the focused widget's own keys. The same holds for the widget
+    /// an open spotlight rings, which sits outside its box.
     /// @param key The key pressed.
-    /// @return Handled when one did; Ignored outside a spotlight.
+    /// @return Handled when one did; Ignored for a widget that is neither inside a spotlight nor its target.
     [[nodiscard]] ::core::tui::EventResult spotlightChord(::core::tui::KeyEvent const& key);
+    /// Whether this is an open spotlight whose box stands where its target is no longer drawn.
+    [[nodiscard]] virtual bool placementStale() const { return false; }
     /// Keeps the surface by name: the token set that styles the widget and everything inside it.
     void applySurface(std::string_view surface) { _surface = surface; }
     [[nodiscard]] std::string const& surface() const noexcept { return _surface; }
@@ -234,6 +237,7 @@ protected:
     }
 
 private:
+    [[nodiscard]] ::core::tui::EventResult targetChord(::core::tui::KeyEvent const& key);
     void syncVisible();
     void paintClipped(::core::tui::Canvas& canvas, ::core::tui::Size laidOut);
     [[nodiscard]] ::core::tui::EventResult press(::core::tui::MouseEvent const& mouse);
@@ -663,9 +667,6 @@ void paintRuns(::core::tui::Canvas& canvas, std::vector<ui::TextSpan> const& run
 [[nodiscard]] bool isActivation(::core::tui::KeyEvent const& key) noexcept;
 /// Appends the view of every focusable widget at or below @p root, depth first in `children()` order: Tab order.
 void collectFocusable(WidgetBase& root, std::vector<::core::tui::Component*>& out);
-
-/// The live widgets of @p context that carry @p testId, in creation order.
-[[nodiscard]] std::vector<WidgetBase*> carrying(Context const& context, std::string_view testId);
 /// Empties the screen bounds of every component below @p top, which a drawn tree's top component (a root widget's
 /// view) calls as it renders, before its descendants render.
 ///

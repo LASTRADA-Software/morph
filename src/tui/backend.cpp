@@ -199,6 +199,8 @@ std::unique_ptr<ui::PageRegionWidget> Backend::createPageRegion(ui::ContainerWid
 
 void Backend::fit() { detail::fit(_impl->context); }
 
+bool Backend::spotlightMisplaced() const { return _impl->context.spotlightMisplaced(); }
+
 std::string Backend::widthClass() const { return ui::widthClassOf(_impl->context.screen->viewportArea().width); }
 
 void Backend::setOnWidthClass(std::function<void(std::string const&)> onWidthClass) {

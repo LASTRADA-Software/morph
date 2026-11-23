@@ -237,6 +237,17 @@ void invert(::core::tui::Buffer& buffer, ::core::tui::Rect area) {
     }
 }
 
+/// Flips every cell of @p area between reverse and normal video.
+void flipInverse(::core::tui::Buffer& buffer, ::core::tui::Rect area) {
+    for (int row = area.y; row < area.y + area.height; ++row) {
+        for (int col = area.x; col < area.x + area.width; ++col) {
+            if (auto* const cell = buffer.cellAt({.x = col, .y = row})) {
+                cell->style.inverse = !cell->style.inverse;
+            }
+        }
+    }
+}
+
 /// Draws every cell of @p area in @p foreground: what a toned table row does to what its cells painted. A selected
 /// row's inverse, and every other attribute, stays.
 void colour(::core::tui::Buffer& buffer, ::core::tui::Rect area, ::core::tui::Color foreground) {
@@ -269,9 +280,12 @@ void WidgetBase::render(::core::tui::Canvas& canvas) {
     if (invertsSurface(effectiveSurface())) {
         invert(canvas.buffer(), drawn);
     }
-    // The widget an open spotlight rings: the terminal dims nothing, so the target is marked instead.
+    // The widget an open spotlight rings: the terminal dims nothing, so the target is marked instead. The mark flips
+    // each cell's reverse video rather than setting it: a target already drawn inverse (a focused button, an entry
+    // on an inverted surface) would show no change if it were set, and flipped it reads as the opposite of what the
+    // widget normally looks like.
     if (_context->spotlit == this) {
-        invert(canvas.buffer(), drawn);
+        flipInverse(canvas.buffer(), drawn);
     }
 }
 
@@ -398,6 +412,34 @@ EventResult WidgetBase::chord(::core::tui::KeyEvent const& key) {
     return EventResult::Handled;
 }
 
+// The focus is on an open spotlight's target, outside its box: the card's keys still come first, so the spotlight and
+// every container inside it are tried, outermost first.
+EventResult WidgetBase::targetChord(::core::tui::KeyEvent const& key) {
+    for (WidgetBase* const candidate : std::vector<WidgetBase*>{_context->spotlights}) {
+        auto* const spotlight = dynamic_cast<ContainerBase*>(candidate);
+        WidgetBase const* const target = spotlight == nullptr ? nullptr : spotlight->passesThrough();
+        if (target == nullptr || !spotlight->isOpenSpotlight() || !isWithin(_view.get(), target->view())) {
+            continue;
+        }
+        auto const walk = [&key](auto const& self, WidgetBase& node) -> EventResult {
+            if (EventResult const result = node.chord(key); result != EventResult::Ignored) {
+                return result;
+            }
+            if (auto* const container = dynamic_cast<ContainerBase*>(&node)) {
+                for (WidgetBase* const child :
+                     std::vector<WidgetBase*>{container->children().begin(), container->children().end()}) {
+                    if (EventResult const result = self(self, *child); result != EventResult::Ignored) {
+                        return result;
+                    }
+                }
+            }
+            return EventResult::Ignored;
+        };
+        return walk(walk, *spotlight);
+    }
+    return EventResult::Ignored;
+}
+
 EventResult WidgetBase::spotlightChord(::core::tui::KeyEvent const& key) {
     ContainerBase const* spotlight = nullptr;
     for (ContainerBase const* outer = _container; outer != nullptr; outer = outer->container()) {
@@ -407,7 +449,7 @@ EventResult WidgetBase::spotlightChord(::core::tui::KeyEvent const& key) {
         }
     }
     if (spotlight == nullptr) {
-        return EventResult::Ignored;
+        return targetChord(key);
     }
     for (ContainerBase* outer = _container; outer != nullptr; outer = outer->container()) {
         bool const last = outer == spotlight;
@@ -419,18 +461,6 @@ EventResult WidgetBase::spotlightChord(::core::tui::KeyEvent const& key) {
         }
     }
     return EventResult::Ignored;
-}
-
-std::vector<WidgetBase*> carrying(Context const& context, std::string_view testId) {
-    std::vector<WidgetBase*> out;
-    for (auto const& [view, widget] : context.owners) {
-        static_cast<void>(view);
-        if (widget->testId() == testId) {
-            out.push_back(widget);
-        }
-    }
-    std::ranges::sort(out, {}, &WidgetBase::sequence);
-    return out;
 }
 
 void WidgetBase::takeFocus() { static_cast<void>(focusWidget(*_context, this)); }

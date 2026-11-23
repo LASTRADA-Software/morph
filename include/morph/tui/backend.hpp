@@ -95,6 +95,12 @@ public:
     ///        `Screen::draw()`, which is how a resize reaches the tree.
     void fit();
 
+    /// @brief Whether an open spotlight's box stands where its target is no longer drawn: the frame just drawn
+    ///        moved the target or showed it for the first time, so the box is placed by a stale rectangle. Call after
+    ///        `Screen::draw()`; when true, `fit()` and draw once more.
+    /// @return True while an open spotlight's box needs placing again.
+    [[nodiscard]] bool spotlightMisplaced() const;
+
     /// @brief Moves keyboard focus to the next focusable widget — inside the innermost open dialog when one is
     ///        open, because `Screen::focusNext` does not know overlays.
     void focusNext();

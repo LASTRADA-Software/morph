@@ -28,6 +28,9 @@ namespace {
 /// How often a spinning Busy advances.
 constexpr std::chrono::milliseconds kAnimationPeriod{100};
 
+/// How many more frames one draw may spend placing a spotlight box beside a target it has just moved.
+constexpr int kPlacementPasses = 2;
+
 /// Resumes the awaiting coroutine in a later turn of the loop, after every task posted to the executor before it.
 ///
 /// The frame is borrowed: the coroutine must stay alive until it resumes, which `whenAny` guarantees for the pump,
@@ -216,6 +219,13 @@ void Session::draw() {
     _backend.fit();
     _backend.focusFirst();
     _screen->draw();
+    // A spotlight's box is placed by where its target was last drawn, which only this frame may have settled: place
+    // it again now rather than leave it where it was until the next input. The passes are bounded so a target that
+    // keeps moving cannot hold the loop.
+    for (int pass = 0; pass < kPlacementPasses && _backend.spotlightMisplaced(); ++pass) {
+        _backend.fit();
+        _screen->draw();
+    }
     if (_backend.animating()) {
         if (!_animation.active()) {
             _animation = _scheduler.every(kAnimationPeriod, [this] {

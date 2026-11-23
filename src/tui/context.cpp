@@ -2,6 +2,7 @@
 
 #include "tui/context.hpp"
 
+#include <algorithm>
 #include <memory>
 #include <vector>
 
@@ -39,6 +40,10 @@ void Context::forget(WidgetBase& widget) {
     }
     drag->forget(widget);
     targetsChanged();
+}
+
+bool Context::spotlightMisplaced() const {
+    return std::ranges::any_of(spotlights, [](WidgetBase const* spotlight) { return spotlight->placementStale(); });
 }
 
 void Context::targetsChanged() {

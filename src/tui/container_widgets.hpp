@@ -569,6 +569,7 @@ public:
     [[nodiscard]] bool isOpenSpotlight() const override { return _overlay.isOpen(); }
     [[nodiscard]] WidgetBase* tabTarget() const override { return _targetFocusable ? _ringed : nullptr; }
     [[nodiscard]] WidgetBase const* passesThrough() const override { return _ringed; }
+    [[nodiscard]] bool placementStale() const override { return _overlay.isOpen() && anchorRect() != _placedBy; }
     /// The widget it rings now, or null.
     [[nodiscard]] WidgetBase const* ringed() const noexcept { return _ringed; }
     [[nodiscard]] ::core::tui::Size naturalSize() const override { return {.width = 0, .height = 0}; }
@@ -583,8 +584,12 @@ private:
     // Picks the target again: the first widget carrying the test id, in creation order, that is displayed and is not
     // inside the card.
     void resolve();
+    // The rectangle the target is drawn in, or nothing while none is shown or it has not been drawn yet.
+    [[nodiscard]] std::optional<::core::tui::Rect> anchorRect() const;
 
     OverlayCore _overlay;
+    // The rectangle the box was last placed by; `placementStale` compares it with where the target is drawn now.
+    std::optional<::core::tui::Rect> _placedBy;
     std::optional<std::string> _target;
     WidgetBase* _ringed = nullptr;
     bool _targetFocusable = false;

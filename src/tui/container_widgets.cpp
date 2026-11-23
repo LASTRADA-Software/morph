@@ -1366,11 +1366,8 @@ SpotlightImpl::SpotlightImpl(Context& context) : TuiContainer{context}, _overlay
     adopt(makeView(*this));
     _overlay.setDismissible(false);
     _overlay.setAnchor([this]() -> std::optional<::core::tui::Rect> {
-        if (_ringed == nullptr) {
-            return std::nullopt;
-        }
-        auto const bounds = _ringed->view().screenBounds();
-        return bounds.width > 0 && bounds.height > 0 ? std::optional<::core::tui::Rect>{bounds} : std::nullopt;
+        _placedBy = anchorRect();
+        return _placedBy;
     });
     context.spotlights.push_back(this);
 }
@@ -1381,6 +1378,14 @@ SpotlightImpl::~SpotlightImpl() {
         context().spotlit = nullptr;
     }
     _overlay.setOpen(false);
+}
+
+std::optional<::core::tui::Rect> SpotlightImpl::anchorRect() const {
+    if (_ringed == nullptr) {
+        return std::nullopt;
+    }
+    auto const bounds = _ringed->view().screenBounds();
+    return bounds.width > 0 && bounds.height > 0 ? std::optional<::core::tui::Rect>{bounds} : std::nullopt;
 }
 
 void SpotlightImpl::setOpen(bool open) {
@@ -1402,10 +1407,12 @@ void SpotlightImpl::resolve() {
     _resolving = true;
     WidgetBase* found = nullptr;
     if (_target) {
-        for (WidgetBase* const candidate : carrying(context(), *_target)) {
-            if (candidate != this && !isWithin(&candidate->view(), _overlay.frame()) && candidate->displayed()) {
+        for (auto const& [view, candidate] : context().owners) {
+            static_cast<void>(view);
+            bool const better = found == nullptr || candidate->sequence() < found->sequence();
+            if (better && candidate->testId() == *_target && candidate != this &&
+                !isWithin(&candidate->view(), _overlay.frame()) && candidate->displayed()) {
                 found = candidate;
-                break;
             }
         }
     }
