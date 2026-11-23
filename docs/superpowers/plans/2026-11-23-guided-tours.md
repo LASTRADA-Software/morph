@@ -6,7 +6,9 @@
 and every client shows them with no per-application code: a **Tours** button lists the active screen's tours before
 the general ones, a document can start one with the host command `tour.start`, and a running tour opens each step's
 screen, dims the window around the step's target (Qt Quick) or marks it (terminal), and shows a card with Back, Next
-and End. A tour that names something the bundle does not have is refused when the bundle is built.
+and End. A tour that names something the bundle does not have is refused when the bundle is built. A server can also add,
+replace and remove tours while it runs (`TourRegistry`, served as the model `morph.tours`), checked the same way, and
+connected clients pick the change up through a record watch.
 
 **Architecture:** Data first, then the seam, then the drivers. The app document gains a `tours` member, lowered by
 `AppRoot::tours()` into one computed value whose texts follow the locale; the author API writes it; `UiRegistry::build`
@@ -32,7 +34,7 @@ listed in "Deviations from the design" at the end of this plan). Scope: the fram
 - Comments and docs state what the code does now and why. No history, no issue numbers, no commit hashes (AGENTS.md).
   Every `docs/spec` page a task changes is updated in that task, in the present tense.
 - Never use `slots`, `signals` or `emit` as identifiers under `include/morph`: they break only Qt translation units.
-  Task 10 greps the added lines; every target, Qt Quick included, is built.
+  Task 14 greps the added lines; every target, Qt Quick included, is built.
 - A dependent default template argument needs `typename` (MSVC C4346). This plan adds none; keep it that way.
 - No `auto*` or `std::expected` fix-its from clang-tidy accepted as offered: write the types out.
 - Format every changed C++ file with the repository's `.clang-format` (120 columns) before each commit:
@@ -65,10 +67,15 @@ listed in "Deviations from the design" at the end of this plan). Scope: the fram
 |---|---|---|
 | 1 | Task 1 (tours in the app document) · Task 3 (spotlight in the backend contract) | Task 0 |
 | 2 | Task 2 (registry checks) · Task 4 (Qt Quick spotlight) · Task 5 (terminal spotlight) | 2 needs 1; 4 and 5 need 3 |
-| 3 | Task 6 (controller) · Task 8 (shell frame: Tours button, spotlight slot) | 6 needs 1 and 3; 8 needs 3 |
-| 4 | Task 7 (card and `tour.*` vocabulary) | 6 |
-| 5 | Task 9 (generic client wiring) | 1, 2, 6, 7, 8 |
-| 6 | Task 10 (spec index, changelog, sweeps) | all |
+| 3 | Task 6 (controller) · Task 8 (shell frame: Tours button, spotlight slot) · Task 10 (`TourRegistry`, `morph.tours`, server) | 6 needs 1 and 3; 8 needs 3; 10 needs 1 and 2 |
+| 4 | Task 7 (card and `tour.*` vocabulary) · Task 11 (runtime tours in the app root, ending a changed tour) | 6 |
+| 5 | Task 9 (generic client wiring) · Task 12 (`TourSync`) | 9 needs 1, 2, 6, 7, 8; 12 needs 10 and 11 |
+| 6 | Task 13 (runtime tours in the generic client) | 9 and 12 |
+| 7 | Task 14 (spec index, changelog, sweeps) | all |
+
+`docs/spec/ui/tours.md` is created by Task 6 and extended by Tasks 7, 9, 10, 11, 12 and 13, each with a section of its
+own: a lane that runs beside another rebases and keeps both sections. Task 10 adds its section once Task 6 has landed
+on the branch.
 
 Run at most three lanes at once.
 
@@ -104,8 +111,12 @@ Run at most three lanes at once.
 | `src/ui/shell_parts_model.cpp` (modify) | built-in texts `morph.shell.tours`, `morph.shell.toursName`, `morph.shell.toursGeneral` |
 | `include/morph/ui/frontend.hpp` (modify) | `MountedShell::startTour` |
 | `src/client/shell.cpp` (modify) | the generic client's wiring |
-| `CMakeLists.txt` (modify) | `src/ui/tour_checks.cpp`, `src/ui/tours.cpp`; headers `client_ids.hpp`, `tours.hpp`, `tour_card.hpp` |
-| `tests/test_ui_tours_document.cpp`, `tests/test_ui_tours_registry.cpp`, `tests/test_ui_spotlight_recording.cpp`, `tests/test_ui_tours_controller.cpp`, `tests/test_ui_tour_card.cpp`, `tests/test_ui_shell_tours.cpp`, `tests/ui_tours_support.hpp` (create) | headless tests |
+| `include/morph/ui/tour_registry.hpp`, `src/ui/tour_registry.cpp` (create) | `TourRegistry`, `TourRefusal`, the `morph.tours` model (`ToursList`, `ListedTour`, `ToursListed`, `ToursModel`), `registerTours`, `toursChanged`, `publishTourChanges` |
+| `include/morph/ui/tour_sync.hpp`, `src/ui/tour_sync.cpp` (create) | `TourSync`, the client of `morph.tours` |
+| `src/ui/tour_checks.hpp`, `src/ui/tour_checks.cpp` (modify, Task 10) | `tourScreensOf`, `appTextOf`: a served bundle read as the checks read the registry |
+| `include/morph/ui/document.hpp`, `src/ui/document.cpp`, `include/morph/ui/interpreter.hpp`, `src/ui/interpreter.cpp`, `include/morph/ui/tours.hpp`, `src/ui/tours.cpp` (modify, Task 11) | `loadTourText`, `TourDecl::revision`, `Tour::revision`, `AppRoot::setRuntimeTours`, ending a tour that changed |
+| `CMakeLists.txt` (modify) | `src/ui/tour_checks.cpp`, `src/ui/tours.cpp`, `src/ui/tour_registry.cpp`, `src/ui/tour_sync.cpp`; headers `client_ids.hpp`, `tours.hpp`, `tour_card.hpp`, `tour_registry.hpp`, `tour_sync.hpp` |
+| `tests/test_ui_tours_document.cpp`, `tests/test_ui_tours_registry.cpp`, `tests/test_ui_spotlight_recording.cpp`, `tests/test_ui_tours_controller.cpp`, `tests/test_ui_tour_card.cpp`, `tests/test_ui_shell_tours.cpp`, `tests/test_ui_tour_registry.cpp`, `tests/test_ui_tours_runtime.cpp`, `tests/test_ui_tour_sync.cpp`, `tests/ui_tours_support.hpp` (create) | headless tests |
 | `tests/test_ui_conformance.cpp` (modify) | the recording probe's `targetOf`; the spotlight cases |
 | `tests/qt_quick/test_qt_quick_spotlight.cpp` (create), `tests/qt_quick/test_qt_quick_conformance.cpp`, `tests/qt_quick/CMakeLists.txt` (modify) | Qt Quick |
 | `tests/tui/test_tui_spotlight.cpp` (create), `tests/tui/test_tui_conformance.cpp`, `tests/tui/CMakeLists.txt` (modify) | terminal |
@@ -869,6 +880,11 @@ git commit -m "Read guided tours from the app document"
   - `[[nodiscard]] constexpr ReservedClientId const* ui::reservedClientId(std::string_view id) noexcept;`
   - `[[nodiscard]] std::optional<Refusal> ui::detail::checkTours(Document const* app, std::string_view appText,
     std::span<TourScreen const> screens);` (private to `src/ui`)
+  - `ui::detail::TourTarget`, `ui::detail::TourTargets`, `[[nodiscard]] TourTargets indexTourScreens(std::span<TourScreen
+    const>);`, `[[nodiscard]] std::optional<Refusal> checkTour(TourDecl const&, std::optional<ShellParts> const&,
+    TourTargets const&);`, `[[nodiscard]] std::optional<Refusal> checkTourStarts(std::string const&, std::string_view,
+    std::set<std::string, std::less<>> const&);` — the per-tour check that `checkTours` (the build) and Task 10's
+    `TourRegistry::add` both call, so a runtime tour meets exactly the bundle's checks.
   - `UiRegistry::build()` now also refuses a bundle whose tours name what it does not hold.
 
 - [ ] **Step 1: Write the failing tests** (`tests/test_ui_tours_registry.cpp`)
@@ -1156,9 +1172,12 @@ inline constexpr std::array<ReservedClientId, 2> kReservedClientIds = {{
 // SPDX-License-Identifier: Apache-2.0
 #pragma once
 
+#include <map>
 #include <morph/ui/document.hpp>
+#include <morph/ui/shell_parts.hpp>
 #include <morph/ui/value.hpp>
 #include <optional>
+#include <set>
 #include <span>
 #include <string>
 #include <string_view>
@@ -1181,6 +1200,40 @@ struct TourScreen {
 /// @param appText The app document's JSON text; empty with none.
 /// @param screens The registered screens.
 /// @return The first refusal, naming the tour and the step or the document and the command, or nothing.
+/// What one registered screen offers a step's target: whether it has a document, whether a signed-in navigator lists
+/// it, and the test ids its document carries (its literal `testId`s, its components' fallbacks' included, and
+/// `action_<id>` for each head action).
+struct TourTarget {
+    bool listed = true;
+    bool hasDocument = false;
+    std::set<std::string, std::less<>> ids;
+};
+
+/// The registered screens as the checks read them, by screen id.
+using TourTargets = std::map<std::string, TourTarget, std::less<>>;
+
+/// Reads every screen's targets once, for any number of `checkTour` calls.
+/// @param screens The registered screens.
+/// @return Their targets, by id.
+[[nodiscard]] TourTargets indexTourScreens(std::span<TourScreen const> screens);
+
+/// Checks what one tour names (its screen, each step's screen, `advanceOn` and target) against the registered screens:
+/// the one check the bundle's build and a runtime registration (`TourRegistry`) share.
+/// @param tour    The tour, as the loader read it.
+/// @param parts   The shell's declared parts, which produce the accepted shell ids.
+/// @param targets The registered screens' targets.
+/// @return The refusal, naming the tour and the step, or nothing.
+[[nodiscard]] std::optional<Refusal> checkTour(TourDecl const& tour, std::optional<ShellParts> const& parts,
+                                               TourTargets const& targets);
+
+/// Checks every `tour.start` in a document whose `args` names a tour as a literal.
+/// @param document The document's id, for the refusal.
+/// @param text     Its JSON text.
+/// @param declared The tours that may be named.
+/// @return The refusal of the first literal id not in @p declared, or nothing.
+[[nodiscard]] std::optional<Refusal> checkTourStarts(std::string const& document, std::string_view text,
+                                                     std::set<std::string, std::less<>> const& declared);
+
 [[nodiscard]] std::optional<Refusal> checkTours(Document const* app, std::string_view appText,
                                                 std::span<TourScreen const> screens);
 
@@ -1212,16 +1265,6 @@ namespace morph::ui::detail {
 namespace {
 
 using Names = std::set<std::string, std::less<>>;
-
-// What a registered screen offers a step: whether it has a document, whether the navigator lists it, and the test ids
-// its document carries.
-struct ScreenInfo {
-    bool listed = true;
-    bool hasDocument = false;
-    Names ids;
-};
-
-using Screens = std::map<std::string, ScreenInfo, std::less<>>;
 
 // Every literal `testId` in a document's JSON, the components' fallbacks included.
 // NOLINTNEXTLINE(misc-no-recursion): a document is a tree, walked down.
@@ -1318,7 +1361,7 @@ void collectTourStarts(Json const& json, std::string const& path, std::vector<To
 
 // Whether the shell draws @p target for this bundle: the Tours button (a tour is declared), the chat's input, a
 // navigator entry of a listed screen with a document, or a part the app document declares.
-bool shellTarget(std::string_view target, std::optional<ShellParts> const& parts, Screens const& screens) {
+bool shellTarget(std::string_view target, std::optional<ShellParts> const& parts, TourTargets const& screens) {
     if (target == "shell_tours" || target == "chat_input") {
         return true;
     }
@@ -1358,10 +1401,12 @@ std::string stepName(TourDecl const& tour, std::size_t index) {
     return "the tour `" + tour.id + "`, step " + std::to_string(index + 1);
 }
 
+}  // namespace
+
 // One tour. The effective screen of a step is the screen the active tab shows when the step shows: its own `screen`,
 // else the latest of an earlier step's `screen` and the `advanceOn` of an earlier step, else the tour's `screen`.
 std::optional<Refusal> checkTour(TourDecl const& tour, std::optional<ShellParts> const& parts,
-                                 Screens const& screens) {
+                                 TourTargets const& screens) {
     if (!tour.screen.empty() && !screens.contains(tour.screen)) {
         return refusal(pointerAppend(tour.path, "screen"),
                        "the tour `" + tour.id + "` belongs to `" + tour.screen + "`, which is not a registered screen");
@@ -1403,8 +1448,7 @@ std::optional<Refusal> checkTour(TourDecl const& tour, std::optional<ShellParts>
     return std::nullopt;
 }
 
-// The first literal `tour.start` in @p text that names a tour not in @p declared.
-std::optional<Refusal> checkStarts(std::string const& document, std::string_view text, Names const& declared) {
+std::optional<Refusal> checkTourStarts(std::string const& document, std::string_view text, Names const& declared) {
     auto const json = parseJson(text);
     if (!json) {
         return std::nullopt;
@@ -1422,13 +1466,10 @@ std::optional<Refusal> checkStarts(std::string const& document, std::string_view
     return std::nullopt;
 }
 
-}  // namespace
-
-std::optional<Refusal> checkTours(Document const* app, std::string_view appText,
-                                  std::span<TourScreen const> screens) {
-    Screens known;
+TourTargets indexTourScreens(std::span<TourScreen const> screens) {
+    TourTargets known;
     for (TourScreen const& screen : screens) {
-        ScreenInfo info{.listed = screen.listed, .hasDocument = !screen.text.empty(), .ids = {}};
+        TourTarget info{.listed = screen.listed, .hasDocument = !screen.text.empty(), .ids = {}};
         if (info.hasDocument) {
             if (auto const json = parseJson(screen.text)) {
                 collectTestIds(*json, info.ids);
@@ -1437,6 +1478,12 @@ std::optional<Refusal> checkTours(Document const* app, std::string_view appText,
         }
         known.insert_or_assign(screen.id, std::move(info));
     }
+    return known;
+}
+
+std::optional<Refusal> checkTours(Document const* app, std::string_view appText,
+                                  std::span<TourScreen const> screens) {
+    TourTargets const known = indexTourScreens(screens);
     Names declared;
     if (app != nullptr) {
         for (TourDecl const& tour : app->tours) {
@@ -1447,12 +1494,12 @@ std::optional<Refusal> checkTours(Document const* app, std::string_view appText,
         }
     }
     for (TourScreen const& screen : screens) {
-        if (auto refused = checkStarts(screen.id, screen.text, declared)) {
+        if (auto refused = checkTourStarts(screen.id, screen.text, declared)) {
             return refused;
         }
     }
     if (!appText.empty()) {
-        if (auto refused = checkStarts(std::string{kAppFile}, appText, declared)) {
+        if (auto refused = checkTourStarts(std::string{kAppFile}, appText, declared)) {
             return refused;
         }
     }
@@ -6714,7 +6761,2216 @@ git commit -m "Run guided tours in the generic client"
 ```
 
 ---
-### Task 10: Spec index, changelog, and the whole-branch sweeps
+### Task 10: `TourRegistry`, the `morph.tours` model, and publishing its changes (server)
+
+**Lane:** wave 3, after Tasks 1 and 2; parallel with Tasks 6 and 8 (disjoint files; `CMakeLists.txt` and
+`tests/CMakeLists.txt` at their own anchors). `docs/spec/ui/tours.md` is created by Task 6: write Step 8's section
+once Task 6 is on the branch.
+
+**Files:**
+- Create: `include/morph/ui/tour_registry.hpp`, `src/ui/tour_registry.cpp`
+- Modify: `src/ui/tour_checks.hpp`, `src/ui/tour_checks.cpp` (`tourScreensOf`, `appTextOf`, after `checkTours`)
+- Modify: `CMakeLists.txt` (`src/ui/tour_registry.cpp` after `src/ui/tour_checks.cpp`;
+  `include/morph/ui/tour_registry.hpp` after `include/morph/ui/client_ids.hpp`)
+- Test: `tests/test_ui_tour_registry.cpp` (create); `tests/CMakeLists.txt` (after `test_ui_tours_registry.cpp`)
+- Docs: `docs/spec/ui/tours.md` (section "Registering tours at runtime"), `docs/spec/ui/service.md` ("The registry": one
+  bullet)
+
+**Interfaces:**
+- Consumes: Task 1 `loadDocumentText`, `TourDecl`, `TourStepDecl`; Task 2 `detail::indexTourScreens`,
+  `detail::checkTour`, `detail::TourScreen`; `ServedBundle` (`files`, `screens`, `digest`, `catalog`, `fieldTexts`),
+  `screenAdmitted`, `parseCatalogue`, `catalogueLocale`, `session::current()`, `RemoteServer::strand()`,
+  `RemoteServer::fanOut(effects::Changes, ConnectionId, std::string_view)`, `ActionDispatcher::registerAction`,
+  `ModelRegistryFactory::registerModel`, `model::detail::ModelHolder`, the `BRIDGE_DETAIL_*_TRAITS_ONLY_BODY` and
+  `BRIDGE_REGISTER_RECORD` macros as `custom_screens.hpp`/`.cpp` use them.
+- Produces:
+  - `inline constexpr std::string_view ui::kToursModel = "morph.tours";`, `ui::kToursList = "morph.tours.list";`,
+    `ui::kTourRecord = "morph.tours";`
+  - `struct ui::TourRefusal { std::string tourId; std::string path; std::string reason; std::string message() const; };`
+  - `struct ui::ToursList {};`, `struct ui::ListedTour { std::string id; std::uint64_t revision = 0; std::string tour; };`,
+    `struct ui::ToursListed { std::vector<ListedTour> tours; };`
+  - `class ui::TourRegistry { explicit TourRegistry(std::function<std::shared_ptr<ServedBundle const>()> bundle);
+    std::expected<void, TourRefusal> add(std::string_view tour); std::expected<void, TourRefusal> replace(std::string_view
+    tour); std::expected<void, TourRefusal> remove(std::string_view tourId); ToursListed listFor(session::Context const&,
+    session::IAuthorizer const&); void recheck(); void setOnChanged(std::function<void()>); void
+    setOnDropped(std::function<void(TourRefusal const&)>); };`
+  - `class ui::ToursModel { ToursModel(std::shared_ptr<TourRegistry>, std::shared_ptr<session::IAuthorizer const>);
+    ::core::async::Task<ToursListed> execute(ToursList); };`
+  - `MORPH_API void ui::registerTours(std::shared_ptr<TourRegistry>, std::shared_ptr<session::IAuthorizer const>,
+    model::detail::ActionDispatcher&, model::detail::ModelRegistryFactory&);`
+  - `[[nodiscard]] MORPH_API effects::Changes ui::toursChanged();`
+  - `MORPH_API void ui::publishTourChanges(TourRegistry&, std::weak_ptr<backend::RemoteServer>);`
+  - `std::vector<TourScreen> detail::tourScreensOf(ServedBundle const&);`, `std::string detail::appTextOf(ServedBundle
+    const&);` (private to `src/ui`)
+
+- [ ] **Step 1: Write the failing tests** (`tests/test_ui_tour_registry.cpp`)
+
+```cpp
+// SPDX-License-Identifier: Apache-2.0
+//
+// Runtime tours on the server (docs/spec/ui/tours.md, "Registering tours at runtime"): `TourRegistry` runs the bundle's
+// checks on each tour it is given, `list` answers the tours a person may open in registration order, every change is
+// told and fans out as a change of the record `morph.tours`, and a bundle change drops a tour that no longer passes.
+
+#include <algorithm>
+#include <catch2/catch_test_macros.hpp>
+#include <chrono>
+#include <expected>
+#include <memory>
+#include <morph/core/registry.hpp>
+#include <morph/core/remote.hpp>
+#include <morph/core/wire.hpp>
+#include <morph/session/session.hpp>
+#include <morph/ui/service.hpp>
+#include <morph/ui/tour_registry.hpp>
+#include <mutex>
+#include <optional>
+#include <string>
+#include <string_view>
+#include <vector>
+
+#include "test_support.hpp"
+#include "ui_service_support.hpp"
+
+namespace ui = morph::ui;
+
+namespace {
+
+/// The service fixture's bundle, with a message catalogue that has the key `tours.new.title`.
+std::shared_ptr<ui::ServedBundle const> served() {
+    ui::UiRegistry registry = uiservice::registry();
+    auto const added = registry.addFile(uiservice::file("messages", "i18n/en.json", R"({"tours.new.title":"New"})"));
+    REQUIRE(added.has_value());
+    auto built = registry.build();
+    REQUIRE(built.has_value());
+    return *built;
+}
+
+/// A tour on `lims.results` (every principal may open it) whose one step rings nothing.
+std::string resultsTour(std::string const& id, std::string const& title = R"("Results")") {
+    return R"({"id":")" + id + R"(","screen":"lims.results","title":)" + title + R"(,"steps":[{"title":"Here"}]})";
+}
+
+/// A general tour whose one step opens `lims.verify`, which only a verifier opens.
+std::string verifyTour(std::string const& id) {
+    return R"({"id":")" + id + R"(","title":"Verify","steps":[{"screen":"lims.verify","title":"Check"}]})";
+}
+
+struct Rig {
+    std::shared_ptr<ui::ServedBundle const> bundle = served();
+    std::shared_ptr<ui::TourRegistry> tours =
+        std::make_shared<ui::TourRegistry>([this] { return std::shared_ptr<ui::ServedBundle const>{bundle}; });
+    std::shared_ptr<uiservice::RuleAuthorizer> authorizer = std::make_shared<uiservice::RuleAuthorizer>();
+    int changes = 0;
+    std::vector<ui::TourRefusal> dropped;
+    Rig() {
+        tours->setOnChanged([this] { ++changes; });
+        tours->setOnDropped([this](ui::TourRefusal const& refusal) { dropped.push_back(refusal); });
+    }
+    [[nodiscard]] std::vector<std::string> listedIds(std::string const& person) {
+        morph::session::Context session;
+        session.principal = person;
+        std::vector<std::string> ids;
+        for (ui::ListedTour const& listed : tours->listFor(session, *authorizer).tours) {
+            ids.push_back(listed.id);
+        }
+        return ids;
+    }
+};
+
+}  // namespace
+
+// Mutation: skip `detail::checkTour` in `TourRegistry::checked` (the unknown target is added).
+TEST_CASE("tour registry: add runs the bundle's checks and refuses with the tour and the step", "[ui][tours][runtime]") {
+    Rig r;
+    CHECK(r.tours->add(resultsTour("whats-new")).has_value());
+    CHECK(r.changes == 1);
+    auto const unknownScreen =
+        r.tours->add(R"({"id":"a","screen":"lims.nope","title":"A","steps":[{"title":"S"}]})");
+    REQUIRE_FALSE(unknownScreen.has_value());
+    CHECK(unknownScreen.error().tourId == "a");
+    CHECK(unknownScreen.error().path == "/screen");
+    auto const unknownTarget = r.tours->add(
+        R"({"id":"b","screen":"lims.results","title":"B","steps":[{"title":"S"},{"target":"nothing_here","title":"T"}]})");
+    REQUIRE_FALSE(unknownTarget.has_value());
+    CHECK(unknownTarget.error().path == "/steps/1/target");
+    CHECK(unknownTarget.error().reason.contains("step 2"));
+    auto const malformed = r.tours->add(R"({"id":"Bad Id","title":"C","steps":[{"title":"S"}]})");
+    REQUIRE_FALSE(malformed.has_value());
+    CHECK(malformed.error().path == "/id");
+    CHECK(r.changes == 1);
+}
+
+// Mutation: drop the id check against the registry's own tours in `add` (the second add succeeds).
+TEST_CASE("tour registry: an id the app document or another runtime tour uses is refused by add",
+          "[ui][tours][runtime]") {
+    Rig r;
+    REQUIRE(r.tours->add(resultsTour("whats-new")).has_value());
+    auto const again = r.tours->add(resultsTour("whats-new"));
+    REQUIRE_FALSE(again.has_value());
+    CHECK(again.error().path == "/id");
+    // A bundle whose app document declares the tour `basics`.
+    auto const appBundle = [] {
+        ui::UiRegistry made{ui::ApplicationInfo{.id = "lims", .version = "1"}, uiservice::facts()};
+        REQUIRE(made.addScreen(uiservice::entry("lims.results"), std::string{uiservice::kResults}).has_value());
+        REQUIRE(made.addFile(uiservice::file("app", "app",
+                                             R"({"vocab":"ui/1","id":"app","tours":[{"id":"basics","title":"B",)"
+                                             R"("steps":[{"title":"S"}]}]})"))
+                    .has_value());
+        auto built = made.build();
+        REQUIRE(built.has_value());
+        return *built;
+    }();
+    ui::TourRegistry withAppTour{[appBundle] { return appBundle; }};
+    auto const clash = withAppTour.add(resultsTour("basics"));
+    REQUIRE_FALSE(clash.has_value());
+    CHECK(clash.error().path == "/id");
+    CHECK(clash.error().reason.contains("twice"));
+}
+
+// Mutation: accept a `t` key in no catalogue in `missingTextKey` (the tour is added).
+TEST_CASE("tour registry: a text key in neither the catalogues nor the server's texts is refused",
+          "[ui][tours][runtime]") {
+    Rig r;
+    CHECK(r.tours->add(resultsTour("known", R"({"t":"tours.new.title","fallback":"New"})")).has_value());
+    auto const unknown = r.tours->add(resultsTour("unknown", R"({"t":"tours.nowhere","fallback":"Nowhere"})"));
+    REQUIRE_FALSE(unknown.has_value());
+    CHECK(unknown.error().path == "/title");
+    CHECK(unknown.error().reason.contains("tours.nowhere"));
+}
+
+// Mutation: let `replace` add an id it does not hold (the unknown replace succeeds).
+TEST_CASE("tour registry: replace and remove refuse an id the registry does not hold, and each change is told",
+          "[ui][tours][runtime]") {
+    Rig r;
+    CHECK_FALSE(r.tours->replace(resultsTour("missing")).has_value());
+    CHECK_FALSE(r.tours->remove("missing").has_value());
+    REQUIRE(r.tours->add(resultsTour("whats-new")).has_value());
+    morph::session::Context anyone;
+    std::uint64_t const first = r.tours->listFor(anyone, *r.authorizer).tours.front().revision;
+    REQUIRE(r.tours->replace(resultsTour("whats-new", R"("Results, again")")).has_value());
+    ui::ToursListed const listed = r.tours->listFor(anyone, *r.authorizer);
+    REQUIRE(listed.tours.size() == 1);
+    CHECK(listed.tours.front().revision > first);
+    CHECK(listed.tours.front().tour.contains("Results, again"));
+    REQUIRE(r.tours->remove("whats-new").has_value());
+    CHECK(r.tours->listFor(anyone, *r.authorizer).tours.empty());
+    CHECK(r.changes == 3);
+}
+
+// Mutation: list every tour whatever `screenAdmitted` says (bob sees the verifier's tour).
+TEST_CASE("tour registry: list answers registration order, leaving out a tour whose screens the person may not open",
+          "[ui][tours][runtime]") {
+    Rig r;
+    REQUIRE(r.tours->add(resultsTour("first")).has_value());
+    REQUIRE(r.tours->add(verifyTour("second")).has_value());
+    REQUIRE(r.tours->add(resultsTour("third")).has_value());
+    r.authorizer->denied["bob"].insert({"Lims_Sample", "Lims_Pending"});
+    CHECK(r.listedIds("ann") == std::vector<std::string>{"first", "second", "third"});
+    CHECK(r.listedIds("bob") == std::vector<std::string>{"first", "third"});
+}
+
+// Mutation: skip the digest comparison in `TourRegistry` (the tour on the vanished screen stays listed).
+TEST_CASE("tour registry: a bundle change drops a tour that no longer passes, logs it and tells onDropped",
+          "[ui][tours][runtime]") {
+    Rig r;
+    REQUIRE(r.tours->add(verifyTour("verify")).has_value());
+    REQUIRE(r.tours->add(resultsTour("results")).has_value());
+    // A bundle without `lims.verify`.
+    ui::UiRegistry smaller{ui::ApplicationInfo{.id = "lims", .version = "2"}, uiservice::facts()};
+    REQUIRE(smaller.addScreen(uiservice::entry("lims.results"), std::string{uiservice::kResults}).has_value());
+    REQUIRE(smaller.addFile(uiservice::file("app", "app", std::string{uiservice::kApp})).has_value());
+    REQUIRE(smaller.addFile(uiservice::file("messages", "i18n/en.json", R"({"tours.new.title":"New"})")).has_value());
+    auto built = smaller.build();
+    REQUIRE(built.has_value());
+    r.bundle = *built;
+    CHECK(r.listedIds("ann") == std::vector<std::string>{"results"});
+    REQUIRE(r.dropped.size() == 1);
+    CHECK(r.dropped.front().tourId == "verify");
+    CHECK(r.dropped.front().reason.contains("lims.verify"));
+}
+
+namespace {
+
+/// Negotiates events for the connection it arrives on, as the UI service's `ui-hello` does.
+class EventsHello final : public morph::backend::IEnvelopeService {
+public:
+    using IEnvelopeService::handle;
+    [[nodiscard]] bool serves(std::string_view kind) const override { return kind == "t-tours-hello"; }
+    [[nodiscard]] std::string handle(morph::wire::Envelope const& request,
+                                     morph::session::IAuthorizer const& /*authorizer*/) override {
+        return morph::wire::encode(morph::wire::makeOk(request.callId));
+    }
+    [[nodiscard]] std::string handle(morph::wire::Envelope const& request, morph::session::IAuthorizer const& authorizer,
+                                     morph::backend::ConnectionFacts& facts) override {
+        facts.events = true;
+        return handle(request, authorizer);
+    }
+};
+
+}  // namespace
+
+// Mutation: leave `publishTourChanges` with no handler (the connection receives no `changes`).
+TEST_CASE("tour registry: published changes reach a connection watching morph.tours", "[ui][tours][runtime]") {
+    Rig r;
+    morph::model::detail::ActionDispatcher dispatcher;
+    morph::model::detail::ModelRegistryFactory registry;
+    ui::registerTours(r.tours, r.authorizer, dispatcher, registry);
+    morph::exec::ThreadPoolExecutor pool{2};
+    morph::backend::ServerConfig config;
+    config.coalesceWindow = std::chrono::milliseconds{0};
+    config.services.push_back(std::make_shared<EventsHello>());
+    auto const server = std::make_shared<morph::backend::RemoteServer>(pool, r.authorizer, config, dispatcher, registry);
+    ui::publishTourChanges(*r.tours, server);
+    std::mutex mutex;
+    std::vector<std::string> frames;
+    auto const cid = server->openConnection();
+    server->setConnectionWriter(cid, {.write =
+                                          [&](std::string frame) {
+                                              std::scoped_lock const lock{mutex};
+                                              frames.push_back(std::move(frame));
+                                          },
+                                      .backlog = [] { return std::size_t{0}; }});
+    morph::wire::Envelope hello;
+    hello.kind = "t-tours-hello";
+    hello.callId = 1;
+    REQUIRE(morph::wire::decode(server->handleInline(morph::wire::encode(hello), cid)).kind == "ok");
+    morph::wire::Envelope watch;
+    watch.kind = std::string{morph::wire::kWatchKind};
+    watch.callId = 2;
+    watch.session.token = "ann";
+    watch.body = glz::write_json(morph::wire::WatchBody{.records = {std::string{ui::kTourRecord}}, .instances = {},
+                                                        .replace = false})
+                     .value_or(std::string{});
+    auto const watched = morph::wire::readWatchReply(
+        morph::wire::decode(server->handleInline(morph::wire::encode(watch), cid)).body);
+    REQUIRE(watched.has_value());
+    REQUIRE(watched->refusedRecords.empty());
+    REQUIRE(r.tours->add(resultsTour("whats-new")).has_value());
+    REQUIRE(morph::testing::waitUntil([&] {
+        std::scoped_lock const lock{mutex};
+        return std::ranges::any_of(frames, [](std::string const& frame) {
+            return frame.contains(morph::wire::kChangesTopic) && frame.contains("morph.tours");
+        });
+    }));
+}
+```
+
+Add `test_ui_tour_registry.cpp` to `tests/CMakeLists.txt` after `test_ui_tours_registry.cpp`.
+
+- [ ] **Step 2: Run the tests to verify they fail**
+
+Run: `flock /tmp/morph-build.lock cmake --build build/clang-debug -j5 --target morph_tests`
+Expected: compile error — `morph/ui/tour_registry.hpp: No such file or directory`.
+
+- [ ] **Step 3: Read a served bundle as the checks read the registry** (`src/ui/tour_checks.hpp`, `.cpp`)
+
+Header, after `checkTours`:
+
+```cpp
+/// The screens of a served bundle as the checks read them: each screen's document text from the bundle's files.
+/// @param bundle The bundle.
+/// @return Its screens, in catalog order.
+[[nodiscard]] std::vector<TourScreen> tourScreensOf(ServedBundle const& bundle);
+
+/// The app document's text in a served bundle.
+/// @param bundle The bundle.
+/// @return It; empty when the bundle has none.
+[[nodiscard]] std::string appTextOf(ServedBundle const& bundle);
+```
+
+(add `#include <morph/ui/service.hpp>` and `#include <vector>`). In `tour_checks.cpp`, after `checkTours`:
+
+```cpp
+std::vector<TourScreen> tourScreensOf(ServedBundle const& bundle) {
+    std::vector<TourScreen> screens;
+    screens.reserve(bundle.screens.size());
+    for (ServedScreen const& screen : bundle.screens) {
+        std::string text;
+        if (!screen.hash.empty()) {
+            if (auto const file = bundle.files.find(screen.hash); file != bundle.files.end()) {
+                text = file->second.bytes;
+            }
+        }
+        screens.push_back(TourScreen{.id = screen.entry.id, .text = std::move(text), .listed = !screen.entry.isPublic});
+    }
+    return screens;
+}
+
+std::string appTextOf(ServedBundle const& bundle) {
+    for (auto const& [hash, file] : bundle.files) {
+        static_cast<void>(hash);
+        if (std::ranges::any_of(file.holders, [](ServedFile::Holder const& holder) { return holder.kind == kAppFile; })) {
+            return file.bytes;
+        }
+    }
+    return {};
+}
+```
+
+- [ ] **Step 4: The header** (`include/morph/ui/tour_registry.hpp`)
+
+```cpp
+// SPDX-License-Identifier: Apache-2.0
+#pragma once
+
+#include <cstdint>
+#include <expected>
+#include <functional>
+#include <memory>
+#include <morph/export.hpp>
+#include <mutex>
+#include <string>
+#include <string_view>
+#include <vector>
+
+#include "../core/change_types.hpp"
+#include "../core/coroutine.hpp"
+#include "../core/model.hpp"
+#include "../core/registry.hpp"
+#include "../session/session.hpp"
+#include "service.hpp"
+
+/// @file
+/// @brief Guided tours registered while the server runs: `TourRegistry`, the `morph.tours` model that lists them, and
+///        the wiring that tells watching clients when they change. Specified in `docs/spec/ui/tours.md`.
+
+namespace morph::backend {
+class RemoteServer;
+}  // namespace morph::backend
+
+namespace morph::ui {
+
+/// @brief The runtime tours model's type id.
+inline constexpr std::string_view kToursModel = "morph.tours";
+/// @brief Its one action, `list`.
+inline constexpr std::string_view kToursList = "morph.tours.list";
+/// @brief The record every change of the runtime tours touches.
+inline constexpr std::string_view kTourRecord = "morph.tours";
+
+/// @brief Why a runtime tour was refused or dropped.
+struct TourRefusal {
+    /// @brief The tour's id, as far as it could be read; empty when it could not.
+    std::string tourId;
+    /// @brief A JSON Pointer into the tour, such as `/steps/2/target`; empty for the whole tour.
+    std::string path;
+    /// @brief The reason, in one sentence, naming the step where there is one.
+    std::string reason;
+
+    /// @brief The refusal as one line.
+    /// @return `the tour `<id>` at <path>: <reason>`.
+    [[nodiscard]] std::string message() const {
+        return "the tour `" + tourId + "` at " + (path.empty() ? std::string{"/"} : path) + ": " + reason;
+    }
+
+    /// @brief Memberwise equality.
+    /// @return Whether every member matches.
+    bool operator==(TourRefusal const&) const = default;
+};
+
+/// @brief `list`: the runtime tours the caller may see. It names nothing: a server has one registry.
+struct ToursList {};
+
+/// @brief One runtime tour as `list` answers it: the record `morph.tours`.
+struct ListedTour {
+    /// @brief The tour's id, the record's key.
+    std::string id;
+    /// @brief Grows by one with each `add` and `replace` on the server, so a client tells a replaced tour from a
+    ///        running one with new texts.
+    std::uint64_t revision = 0;
+    /// @brief The tour's JSON text, one entry of the app document's `tours` in form.
+    std::string tour;
+};
+
+/// @brief What `list` answers.
+struct ToursListed {
+    /// @brief The tours, in registration order.
+    std::vector<ListedTour> tours;
+};
+
+/// @brief The tours added while the server runs, beside the app document's own.
+///
+/// `add` and `replace` take one tour's JSON, the form of an entry of the app document's `tours` (`author::tourJson`
+/// writes it), and check it against the bundle served now exactly as the bundle's build checks the app document's
+/// tours, and that its `t` keys are in a catalogue of the bundle or among the server's texts. The bundle is read through
+/// the getter at every call; when its digest differs from the one last checked, every held tour is checked again first,
+/// and one that fails is dropped: logged at error and told to `setOnDropped`'s handler. Every change, a drop included,
+/// is told to `setOnChanged`'s handler after the registry's lock is released (`publishTourChanges` turns it into a
+/// change of the record `morph.tours`). The tours are kept in memory only. Safe to call from any thread.
+class MORPH_API TourRegistry {
+public:
+    /// @brief A registry with no tour.
+    /// @param bundle The bundle served now; called at every use, from any thread, so a development reload is seen.
+    explicit TourRegistry(std::function<std::shared_ptr<ServedBundle const>()> bundle);
+
+    /// @brief Adds a tour.
+    /// @param tour The tour's JSON text.
+    /// @return Nothing, or the refusal: a malformed tour, a name the bundle does not have, a text key nobody has, an id
+    ///         the app document or another runtime tour uses, or a bundle with no app document.
+    std::expected<void, TourRefusal> add(std::string_view tour);
+
+    /// @brief Replaces a runtime tour with new content under the same id.
+    /// @param tour The tour's JSON text.
+    /// @return Nothing, or the refusal: `add`'s, or an id the registry does not hold.
+    std::expected<void, TourRefusal> replace(std::string_view tour);
+
+    /// @brief Removes a runtime tour.
+    /// @param tourId Its id.
+    /// @return Nothing, or the refusal of an id the registry does not hold.
+    std::expected<void, TourRefusal> remove(std::string_view tourId);
+
+    /// @brief The runtime tours a person may see, in registration order: those whose `screen` and every step's
+    ///        `screen` the person may open (`screenAdmitted`). A tour is offered whole or not at all.
+    /// @param session    The caller's session.
+    /// @param authorizer The server's authoriser.
+    /// @return The tours.
+    [[nodiscard]] ToursListed listFor(::morph::session::Context const& session,
+                                      ::morph::session::IAuthorizer const& authorizer);
+
+    /// @brief Checks every held tour against the bundle served now, dropping those that fail, whether or not its digest
+    ///        changed: what an application calls right after it swaps the bundle.
+    void recheck();
+
+    /// @brief Sets what is told after every change.
+    /// @param onChanged The handler; empty tells nothing.
+    void setOnChanged(std::function<void()> onChanged);
+
+    /// @brief Sets what is told of each tour a bundle change dropped.
+    /// @param onDropped The handler, given the refusal; empty tells nothing.
+    void setOnDropped(std::function<void(TourRefusal const&)> onDropped);
+
+private:
+    struct Held {
+        std::string id;
+        std::uint64_t revision = 0;
+        std::string text;
+        std::vector<std::string> screens;
+    };
+
+    [[nodiscard]] std::expected<Held, TourRefusal> checked(std::string_view tour, ServedBundle const& bundle) const;
+    // Checks every held tour against @p bundle and drops those that fail; answers the drops. Under the lock.
+    [[nodiscard]] std::vector<TourRefusal> recheckLocked(ServedBundle const& bundle);
+    // The bundle now, every held tour checked against it; drops into @p dropped. Under the lock.
+    [[nodiscard]] std::shared_ptr<ServedBundle const> currentLocked(std::vector<TourRefusal>& dropped);
+    void tell(bool changed, std::vector<TourRefusal> const& dropped) const;
+
+    std::function<std::shared_ptr<ServedBundle const>()> _bundle;
+    mutable std::mutex _mutex;
+    std::vector<Held> _tours;
+    std::string _checkedDigest;
+    std::uint64_t _revisions = 0;
+    std::function<void()> _onChanged;
+    std::function<void(TourRefusal const&)> _onDropped;
+};
+
+/// @brief The runtime tours model: `list`, for the caller's session.
+class MORPH_API ToursModel {
+public:
+    /// @brief A model over the registry.
+    /// @param tours      The registry; never null.
+    /// @param authorizer The server's authoriser, for `screenAdmitted`; never null.
+    ToursModel(std::shared_ptr<TourRegistry> tours, std::shared_ptr<::morph::session::IAuthorizer const> authorizer);
+
+    /// @brief The runtime tours the caller may see.
+    /// @param request Nothing.
+    /// @return The tours.
+    ::core::async::Task<ToursListed> execute(ToursList request);
+
+private:
+    std::shared_ptr<TourRegistry> _tours;
+    std::shared_ptr<::morph::session::IAuthorizer const> _authorizer;
+};
+
+}  // namespace morph::ui
+
+/// @cond detail
+// The traits the registration macros write, without their static-init registrars: registerTours registers the model
+// and its action; the record and the result slot are registered in tour_registry.cpp.
+// NOLINTBEGIN(misc-const-correctness): inside the macros' codec bodies.
+BRIDGE_DETAIL_MODEL_TRAITS_ONLY_BODY(morph::ui::ToursModel, "morph.tours")
+BRIDGE_DETAIL_ACTION_TRAITS_ONLY_BODY(morph::ui::ToursModel, morph::ui::ToursList, morph::ui::ToursListed,
+                                      "morph.tours.list", ::morph::model::Loggable::No)
+// NOLINTEND(misc-const-correctness)
+/// @endcond
+
+namespace morph::ui {
+
+/// @brief Registers the runtime tours model and its `list` action, with a factory that gives every instance the one
+///        registry. A server calls it once, before it serves. A server that does not answers `list` with the
+///        dispatcher's unknown-model error, which a client reads as "the app document's tours alone".
+/// @param tours      The registry.
+/// @param authorizer The server's authoriser.
+/// @param dispatcher The server's action dispatcher.
+/// @param registry   The server's model registry.
+/// @throws std::invalid_argument for a null registry or authoriser.
+MORPH_API void registerTours(std::shared_ptr<TourRegistry> tours,
+                             std::shared_ptr<::morph::session::IAuthorizer const> authorizer,
+                             model::detail::ActionDispatcher& dispatcher,
+                             model::detail::ModelRegistryFactory& registry);
+
+/// @brief The change every add, replace, remove and drop makes: the record `morph.tours` as a whole.
+/// @return It.
+[[nodiscard]] MORPH_API ::morph::effects::Changes toursChanged();
+
+/// @brief Fans each change of @p tours out to every connection of @p server watching `morph.tours`, from a task on the
+///        server's strand. Replaces the registry's `setOnChanged` handler.
+/// @param tours  The registry.
+/// @param server The server; a change after it is gone is not sent.
+MORPH_API void publishTourChanges(TourRegistry& tours, std::weak_ptr<::morph::backend::RemoteServer> server);
+
+}  // namespace morph::ui
+```
+
+(glaze writes and reads the empty aggregate `ToursList` as `{}`.)
+
+- [ ] **Step 5: The implementation** (`src/ui/tour_registry.cpp`)
+
+```cpp
+// SPDX-License-Identifier: Apache-2.0
+
+#include <algorithm>
+#include <cstddef>
+#include <cstdint>
+#include <expected>
+#include <functional>
+#include <glaze/glaze.hpp>
+#include <memory>
+#include <morph/core/logger.hpp>
+#include <morph/core/records.hpp>
+#include <morph/core/remote.hpp>
+#include <morph/session/session.hpp>
+#include <morph/ui/bundle.hpp>
+#include <morph/ui/catalogue.hpp>
+#include <morph/ui/document.hpp>
+#include <morph/ui/service.hpp>
+#include <morph/ui/tour_registry.hpp>
+#include <mutex>
+#include <optional>
+#include <set>
+#include <stdexcept>
+#include <string>
+#include <string_view>
+#include <utility>
+#include <vector>
+
+#include "tour_checks.hpp"
+
+namespace morph::ui {
+namespace {
+
+// The keys of the `{"t": key}` texts of a tour: its title and summary, each step's title and body; with their pointers.
+std::vector<std::pair<std::string, std::string>> textKeys(Json const& tour) {
+    std::vector<std::pair<std::string, std::string>> keys;
+    auto const keyOf = [&keys](Json const* text, std::string path) {
+        auto const* const object = text == nullptr ? nullptr : std::get_if<Json::object_t>(&text->data);
+        if (object == nullptr) {
+            return;
+        }
+        if (auto const found = object->find("t"); found != object->end()) {
+            if (auto const* const key = std::get_if<std::string>(&found->second.data)) {
+                keys.emplace_back(std::move(path), *key);
+            }
+        }
+    };
+    auto const member = [](Json::object_t const& object, std::string_view key) -> Json const* {
+        auto const found = object.find(key);
+        return found == object.end() ? nullptr : &found->second;
+    };
+    auto const& fields = std::get<Json::object_t>(tour.data);
+    keyOf(member(fields, "title"), "/title");
+    keyOf(member(fields, "summary"), "/summary");
+    if (Json const* const steps = member(fields, "steps")) {
+        if (auto const* const list = std::get_if<Json::array_t>(&steps->data)) {
+            for (std::size_t index = 0; index < list->size(); ++index) {
+                if (auto const* const step = std::get_if<Json::object_t>(&list->at(index).data)) {
+                    std::string const path = pointerAppend("/steps", index);
+                    keyOf(member(*step, "title"), pointerAppend(path, "title"));
+                    keyOf(member(*step, "body"), pointerAppend(path, "body"));
+                }
+            }
+        }
+    }
+    return keys;
+}
+
+// The first `t` key of @p tour that no catalogue of @p bundle has and the server's texts do not answer in any of the
+// bundle's locales (English when it has no catalogue), with its pointer.
+std::optional<std::pair<std::string, std::string>> missingTextKey(Json const& tour, ServedBundle const& bundle) {
+    std::vector<std::pair<std::string, std::string>> const keys = textKeys(tour);
+    if (keys.empty()) {
+        return std::nullopt;
+    }
+    std::set<std::string, std::less<>> known;
+    std::set<std::string, std::less<>> locales;
+    for (auto const& [hash, file] : bundle.files) {
+        static_cast<void>(hash);
+        for (ServedFile::Holder const& holder : file.holders) {
+            if (holder.kind != kMessagesFile) {
+                continue;
+            }
+            if (std::optional<std::string> locale = catalogueLocale(holder.id)) {
+                locales.insert(std::move(*locale));
+            }
+            if (auto catalogue = parseCatalogue(file.bytes)) {
+                for (auto const& [key, message] : catalogue->messages) {
+                    static_cast<void>(message);
+                    known.insert(key);
+                }
+            }
+        }
+    }
+    if (bundle.fieldTexts) {
+        if (locales.empty()) {
+            locales.insert("en");
+        }
+        for (std::string const& locale : locales) {
+            try {
+                for (auto const& [key, text] : bundle.fieldTexts(locale)) {
+                    static_cast<void>(text);
+                    known.insert(key);
+                }
+            } catch (std::exception const& error) {
+                ::morph::log::logWarn("[tours] the server's texts for `{}` could not be read: {}", locale, error.what());
+            }
+        }
+    }
+    for (auto const& entry : keys) {
+        if (!known.contains(entry.second)) {
+            return entry;
+        }
+    }
+    return std::nullopt;
+}
+
+}  // namespace
+
+TourRegistry::TourRegistry(std::function<std::shared_ptr<ServedBundle const>()> bundle) : _bundle{std::move(bundle)} {
+    if (!_bundle) {
+        throw std::invalid_argument{"TourRegistry: the bundle getter is empty"};
+    }
+}
+
+std::expected<TourRegistry::Held, TourRefusal> TourRegistry::checked(std::string_view tour,
+                                                                     ServedBundle const& bundle) const {
+    auto json = parseJson(tour);
+    auto const* const object = json ? std::get_if<Json::object_t>(&json->data) : nullptr;
+    std::string id;
+    if (object != nullptr) {
+        if (auto const found = object->find("id"); found != object->end()) {
+            if (auto const* const text = std::get_if<std::string>(&found->second.data)) {
+                id = *text;
+            }
+        }
+    }
+    auto const refuse = [&id](std::string path, std::string reason) {
+        return std::unexpected(TourRefusal{.tourId = id, .path = std::move(path), .reason = std::move(reason)});
+    };
+    if (object == nullptr) {
+        return refuse({}, "a tour is a JSON object, as one entry of the app document's `tours`");
+    }
+    std::string const appText = detail::appTextOf(bundle);
+    auto app = parseJson(appText);
+    auto* const appObject = app ? std::get_if<Json::object_t>(&app->data) : nullptr;
+    if (appObject == nullptr) {
+        return refuse({}, "the bundle has no app document, and a runtime tour's texts are read in the app scope");
+    }
+    // The app document with this tour appended: the loader checks the tour's shape, its texts in the app scope, and
+    // that its id is none of the app document's tours, with the same words as for the app document's own.
+    auto const [tours, created] = appObject->try_emplace("tours", Json::array_t{});
+    static_cast<void>(created);
+    auto* const list = std::get_if<Json::array_t>(&tours->second.data);
+    if (list == nullptr) {
+        return refuse({}, "the app document's `tours` is not an array");
+    }
+    std::size_t const index = list->size();
+    list->push_back(*json);
+    std::string const prefix = pointerAppend("/tours", index);
+    auto const local = [&prefix](std::string const& path) {
+        return path.starts_with(prefix) ? path.substr(prefix.size()) : path;
+    };
+    auto const loaded =
+        loadDocumentText(glz::write_json(*app).value_or(std::string{}), LoadOptions{.catalog = bundle.catalog});
+    if (!loaded) {
+        return refuse(local(loaded.error().path), loaded.error().reason);
+    }
+    TourDecl const& decl = loaded->tours.at(index);
+    std::vector<detail::TourScreen> const screens = detail::tourScreensOf(bundle);
+    if (auto refused = detail::checkTour(decl, loaded->shell, detail::indexTourScreens(screens))) {
+        return refuse(local(refused->path), refused->reason);
+    }
+    if (auto const missing = missingTextKey(*json, bundle)) {
+        return refuse(missing->first, "the text key `" + missing->second +
+                                          "` is in no message catalogue of the bundle and not among the server's texts");
+    }
+    Held held{.id = decl.id, .revision = 0, .text = std::string{tour}, .screens = {}};
+    if (!decl.screen.empty()) {
+        held.screens.push_back(decl.screen);
+    }
+    for (TourStepDecl const& step : decl.steps) {
+        if (!step.screen.empty()) {
+            held.screens.push_back(step.screen);
+        }
+    }
+    return held;
+}
+
+std::vector<TourRefusal> TourRegistry::recheckLocked(ServedBundle const& bundle) {
+    std::vector<TourRefusal> dropped;
+    std::erase_if(_tours, [&](Held const& held) {
+        auto const again = checked(held.text, bundle);
+        if (again) {
+            return false;
+        }
+        ::morph::log::logError("[tours] dropped the runtime tour `{}`, which the bundle now served refuses: {}",
+                               held.id, again.error().message());
+        dropped.push_back(again.error());
+        return true;
+    });
+    _checkedDigest = bundle.digest;
+    return dropped;
+}
+
+std::shared_ptr<ServedBundle const> TourRegistry::currentLocked(std::vector<TourRefusal>& dropped) {
+    std::shared_ptr<ServedBundle const> bundle = _bundle();
+    if (bundle == nullptr) {
+        throw std::logic_error{"TourRegistry: the bundle getter answered no bundle"};
+    }
+    if (bundle->digest != _checkedDigest) {
+        dropped = recheckLocked(*bundle);
+    }
+    return bundle;
+}
+
+std::expected<void, TourRefusal> TourRegistry::add(std::string_view tour) {
+    std::vector<TourRefusal> dropped;
+    std::expected<void, TourRefusal> result;
+    {
+        std::scoped_lock const lock{_mutex};
+        std::shared_ptr<ServedBundle const> const bundle = currentLocked(dropped);
+        auto held = checked(tour, *bundle);
+        if (!held) {
+            result = std::unexpected(std::move(held.error()));
+        } else if (std::ranges::any_of(_tours, [&held](Held const& kept) { return kept.id == held->id; })) {
+            result = std::unexpected(TourRefusal{
+                .tourId = held->id, .path = "/id", .reason = "a runtime tour with this id is registered; replace it"});
+        } else {
+            held->revision = ++_revisions;
+            _tours.push_back(std::move(*held));
+        }
+    }
+    tell(result.has_value(), dropped);
+    return result;
+}
+
+std::expected<void, TourRefusal> TourRegistry::replace(std::string_view tour) {
+    std::vector<TourRefusal> dropped;
+    std::expected<void, TourRefusal> result;
+    {
+        std::scoped_lock const lock{_mutex};
+        std::shared_ptr<ServedBundle const> const bundle = currentLocked(dropped);
+        auto held = checked(tour, *bundle);
+        if (!held) {
+            result = std::unexpected(std::move(held.error()));
+        } else if (auto const kept = std::ranges::find(_tours, held->id, &Held::id); kept == _tours.end()) {
+            result = std::unexpected(TourRefusal{
+                .tourId = held->id,
+                .path = "/id",
+                .reason = "no runtime tour has this id; an app document's tour changes in the app document"});
+        } else {
+            held->revision = ++_revisions;
+            *kept = std::move(*held);
+        }
+    }
+    tell(result.has_value(), dropped);
+    return result;
+}
+
+std::expected<void, TourRefusal> TourRegistry::remove(std::string_view tourId) {
+    std::vector<TourRefusal> dropped;
+    std::expected<void, TourRefusal> result;
+    {
+        std::scoped_lock const lock{_mutex};
+        static_cast<void>(currentLocked(dropped));
+        auto const kept = std::ranges::find(_tours, tourId, &Held::id);
+        if (kept == _tours.end()) {
+            result = std::unexpected(TourRefusal{.tourId = std::string{tourId},
+                                                 .path = "/id",
+                                                 .reason = "no runtime tour has this id"});
+        } else {
+            _tours.erase(kept);
+        }
+    }
+    tell(result.has_value(), dropped);
+    return result;
+}
+
+ToursListed TourRegistry::listFor(::morph::session::Context const& session,
+                                  ::morph::session::IAuthorizer const& authorizer) {
+    std::vector<TourRefusal> dropped;
+    ToursListed listed;
+    {
+        std::scoped_lock const lock{_mutex};
+        std::shared_ptr<ServedBundle const> const bundle = currentLocked(dropped);
+        auto const admitted = [&](std::string const& screenId) {
+            auto const screen = std::ranges::find(bundle->screens, screenId,
+                                                  [](ServedScreen const& served) { return served.entry.id; });
+            return screen != bundle->screens.end() && screenAdmitted(*screen, session, authorizer);
+        };
+        for (Held const& held : _tours) {
+            if (std::ranges::all_of(held.screens, admitted)) {
+                listed.tours.push_back(ListedTour{.id = held.id, .revision = held.revision, .tour = held.text});
+            }
+        }
+    }
+    tell(false, dropped);
+    return listed;
+}
+
+void TourRegistry::recheck() {
+    std::vector<TourRefusal> dropped;
+    {
+        std::scoped_lock const lock{_mutex};
+        std::shared_ptr<ServedBundle const> const bundle = _bundle();
+        if (bundle != nullptr) {
+            dropped = recheckLocked(*bundle);
+        }
+    }
+    tell(false, dropped);
+}
+
+void TourRegistry::setOnChanged(std::function<void()> onChanged) {
+    std::scoped_lock const lock{_mutex};
+    _onChanged = std::move(onChanged);
+}
+
+void TourRegistry::setOnDropped(std::function<void(TourRefusal const&)> onDropped) {
+    std::scoped_lock const lock{_mutex};
+    _onDropped = std::move(onDropped);
+}
+
+void TourRegistry::tell(bool changed, std::vector<TourRefusal> const& dropped) const {
+    std::function<void()> onChanged;
+    std::function<void(TourRefusal const&)> onDropped;
+    {
+        std::scoped_lock const lock{_mutex};
+        onChanged = _onChanged;
+        onDropped = _onDropped;
+    }
+    if (onDropped) {
+        for (TourRefusal const& refusal : dropped) {
+            onDropped(refusal);
+        }
+    }
+    if ((changed || !dropped.empty()) && onChanged) {
+        onChanged();
+    }
+}
+
+ToursModel::ToursModel(std::shared_ptr<TourRegistry> tours,
+                       std::shared_ptr<::morph::session::IAuthorizer const> authorizer)
+    : _tours{std::move(tours)}, _authorizer{std::move(authorizer)} {}
+
+::core::async::Task<ToursListed> ToursModel::execute(ToursList /*request*/) {
+    ::morph::session::Context const* const current = ::morph::session::current();
+    ::morph::session::Context const session = current == nullptr ? ::morph::session::Context{} : *current;
+    co_return _tours->listFor(session, *_authorizer);
+}
+
+void registerTours(std::shared_ptr<TourRegistry> tours, std::shared_ptr<::morph::session::IAuthorizer const> authorizer,
+                   model::detail::ActionDispatcher& dispatcher, model::detail::ModelRegistryFactory& registry) {
+    if (tours == nullptr || authorizer == nullptr) {
+        throw std::invalid_argument{"registerTours: a null registry or authorizer"};
+    }
+    registry.registerModel<ToursModel>(kToursModel, [tours, authorizer] {
+        return std::make_unique<model::detail::ModelHolder<ToursModel>>(tours, authorizer);
+    });
+    dispatcher.registerAction<ToursModel, ToursList>(kToursModel, kToursList);
+}
+
+::morph::effects::Changes toursChanged() {
+    ::morph::effects::Changes changes;
+    changes.records.push_back(::morph::effects::RecordChange{.record = std::string{kTourRecord}, .keys = std::nullopt});
+    return changes;
+}
+
+void publishTourChanges(TourRegistry& tours, std::weak_ptr<::morph::backend::RemoteServer> server) {
+    tours.setOnChanged([server = std::move(server)] {
+        std::shared_ptr<::morph::backend::RemoteServer> const live = server.lock();
+        if (live == nullptr) {
+            return;
+        }
+        live->strand().post([weak = std::weak_ptr<::morph::backend::RemoteServer>{live}] {
+            if (std::shared_ptr<::morph::backend::RemoteServer> const held = weak.lock()) {
+                held->fanOut(toursChanged(), 0, {});
+            }
+        });
+    });
+}
+
+}  // namespace morph::ui
+
+// The record and the result slot that lets `list` be found holding it are registered here, at static initialisation,
+// in the translation unit a server links by calling registerTours.
+BRIDGE_REGISTER_RECORD(morph::ui::ListedTour, "morph.tours")
+#ifndef MORPH_CLIENT_ONLY
+namespace {
+// NOLINTNEXTLINE(cert-err58-cpp): the registrar is noexcept.
+[[maybe_unused]] bool const tourResults =
+    morph::model::detail::registerActionResultOnce<morph::ui::ToursList>(morph::ui::kToursList);
+}  // namespace
+#endif
+```
+
+`CMakeLists.txt`: add `src/ui/tour_registry.cpp` after `src/ui/tour_checks.cpp`, and `include/morph/ui/tour_registry.hpp`
+after `include/morph/ui/client_ids.hpp`. If `MORPH_CLIENT_ONLY` leaves `src/ui/custom_screens.cpp`'s server parts out
+by a file list rather than the `#ifndef`, put `src/ui/tour_registry.cpp` in the same list.
+
+- [ ] **Step 6: Run the tests to verify they pass**
+
+Run:
+```bash
+flock /tmp/morph-build.lock cmake --build build/clang-debug -j5 --target morph_tests
+ctest --test-dir build/clang-debug -R '^tour registry:|^tours registry:|^ui service:' --output-on-failure
+```
+Expected: `100% tests passed`.
+
+- [ ] **Step 7: Mutation check**
+
+Apply each test's mutation, rebuild, see that test fail, restore, `touch`, rebuild.
+
+- [ ] **Step 8: Update the specs**
+
+`docs/spec/ui/tours.md`: add "- [Registering tours at runtime](#registering-tours-at-runtime)" to the contents after
+"The declaration", and the section:
+
+```markdown
+## Registering tours at runtime
+
+`TourRegistry` (`tour_registry.hpp`) holds the tours a server adds while it runs, beside the app document's. It reads
+the bundle served now through a getter, as `CustomScreens` does, so a development reload is seen.
+
+- **Same form, same checks.** `add(json)` and `replace(json)` take one tour in the form of an entry of the app
+  document's `tours` (`author::tourJson` writes it). The tour is checked as if appended to the served app document's
+  `tours`: the loader checks its shape and its texts in the app scope and refuses an id the app document uses, and
+  `checkTour`, the check the bundle's build runs, checks its screens and targets. A `{"t": key}` whose key is in no
+  message catalogue of the bundle and not among the server's texts (`UiRegistry::setFieldTexts`) is refused. A refusal
+  is a `TourRefusal{tourId, path, reason}`, its path a pointer into the tour. `add` refuses an id another runtime tour
+  holds; `replace` and `remove` refuse one the registry does not hold, so neither touches an app-document tour. A
+  bundle with no app document is refused: a runtime tour's texts are read in the app scope.
+- **`list`.** `registerTours(tours, authorizer, dispatcher, registry)` serves the model `morph.tours` with one read
+  action, `morph.tours.list`, which answers the runtime tours in registration order as `ListedTour{id, revision,
+  tour}`, leaving out a tour whose `screen` or any step's `screen` the caller may not open (`screenAdmitted`): a tour
+  is offered whole or not at all. `revision` grows with each `add` and `replace`. There is no write action: who may
+  add a tour is the application's policy, and an application that offers an editor exposes its own action and calls
+  the registry.
+- **Changes.** Every change, a drop included, is told to `setOnChanged`'s handler outside the registry's lock;
+  `publishTourChanges(tours, server)` makes it a whole-type change of the record `morph.tours` (`toursChanged()`)
+  fanned out from the server's strand to every connection watching it. A server that does not call it sends no event,
+  and its clients see runtime tours change at their next frame or reconnect.
+- **Bundle reload.** Every call compares the served bundle's digest with the one last checked; when it differs, every
+  runtime tour is checked again first, and one that fails is dropped, logged at error with its refusal and told to
+  `setOnDropped`'s handler. `recheck()` does it at once, for an application that swaps its bundle.
+- **Lifetime.** In memory only. An application that wants its runtime tours to survive a restart stores them and adds
+  them again at start-up.
+```
+
+`docs/spec/ui/service.md`, "The registry", add a bullet: "- **Runtime tours.** `TourRegistry` checks a tour added while
+the server runs with the same per-tour check (`detail::checkTour`) the build runs, against the bundle served then
+([tours.md](tours.md#registering-tours-at-runtime))."
+
+- [ ] **Step 9: Commit**
+
+```bash
+git add include/morph/ui/tour_registry.hpp src/ui/tour_registry.cpp src/ui/tour_checks.hpp src/ui/tour_checks.cpp \
+  CMakeLists.txt tests/test_ui_tour_registry.cpp tests/CMakeLists.txt docs/spec/ui/tours.md docs/spec/ui/service.md
+git commit -m "Register guided tours while the server runs"
+```
+
+---
+### Task 11: Runtime tours in the app root, and ending a tour that changed (client, headless)
+
+**Lane:** wave 4, after Task 6; parallel with Task 7 (disjoint files).
+
+**Files:**
+- Modify: `include/morph/ui/document.hpp` (`TourDecl::revision`; `loadTourText` after `loadDocumentText` ~line 773),
+  `src/ui/document.cpp` (a public static `DocumentParser::tour`; `loadTourText` after `loadDocumentText` ~line 5023)
+- Modify: `include/morph/ui/interpreter.hpp` (`Tour::revision`; `AppRoot::setRuntimeTours`; member `_runtimeTours`),
+  `src/ui/interpreter.cpp` (`mountApp`'s tours computed, `~AppRoot`, `setRuntimeTours`)
+- Modify: `include/morph/ui/tours.hpp` (member `_startedRevision`), `src/ui/tours.cpp` (`start`, `end`, the follow effect)
+- Test: `tests/test_ui_tours_runtime.cpp` (create); `tests/CMakeLists.txt` (after `test_ui_tour_card.cpp`)
+- Docs: `docs/spec/ui/tours.md` ("The tours of a session", "The controller"), `docs/spec/ui/interpreter.md` ("The app root
+  scope")
+
+**Interfaces:**
+- Consumes: Task 1's parser (`DocumentParser::tourOf`), `AppRoot::tours()`; Task 6's `TourController`, `TourShell`,
+  `testing::FakeTourShell`.
+- Produces:
+  - `std::uint64_t TourDecl::revision = 0;` and `std::uint64_t Tour::revision = 0;` (0 for an app-document tour)
+  - `[[nodiscard]] MORPH_API std::expected<TourDecl, Refusal> ui::loadTourText(std::string_view text);`
+  - `void ui::AppRoot::setRuntimeTours(std::vector<TourDecl> tours);`
+  - `TourController`: a running tour whose id is gone, or whose revision changed, ends with the toast "The tour <title>
+    changed, so it ended".
+
+- [ ] **Step 1: Write the failing tests** (`tests/test_ui_tours_runtime.cpp`)
+
+```cpp
+// SPDX-License-Identifier: Apache-2.0
+//
+// Runtime tours on the client (docs/spec/ui/tours.md, "The tours of a session"): a listed tour's text loads as a tour,
+// `AppRoot::tours()` lists the app document's tours and then the runtime ones, and a running tour that is replaced or
+// removed ends with a toast, while a change of locale does not end it.
+
+#include <catch2/catch_test_macros.hpp>
+#include <memory>
+#include <morph/ui/document.hpp>
+#include <morph/ui/interpreter.hpp>
+#include <morph/ui/tours.hpp>
+#include <optional>
+#include <string>
+#include <string_view>
+#include <utility>
+#include <vector>
+
+#include "ui_interpreter_support.hpp"
+#include "ui_tours_support.hpp"
+
+namespace ui = morph::ui;
+
+namespace {
+
+constexpr std::string_view kApp = R"({"vocab":"ui/1","id":"app",
+  "tours":[{"id":"basics","title":"Basics","steps":[{"title":"One"},{"title":"Two"}]}]})";
+
+/// A runtime tour @p id at @p revision, its title a translated text.
+ui::TourDecl runtimeTour(std::string const& id, std::uint64_t revision, std::string const& stepTitle = "Look") {
+    auto loaded = ui::loadTourText(R"({"id":")" + id + R"(","title":{"t":"tours.new","fallback":"What's new"},)" +
+                                   R"("steps":[{"title":")" + stepTitle + R"("},{"title":"More"}]})");
+    REQUIRE(loaded.has_value());
+    loaded->revision = revision;
+    return std::move(*loaded);
+}
+
+struct Rig {
+    Rig() {
+        h.session.setTranslations([](std::string_view key, std::string_view locale) -> std::optional<std::string> {
+            if (key == "tours.new" && locale.starts_with("de")) {
+                return std::string{"Neu"};
+            }
+            return std::nullopt;
+        });
+        auto mounted = h.interpreter.mountApp(ui::testing::loadOrFail(kApp));
+        REQUIRE(mounted.has_value());
+        root = std::move(*mounted);
+        controller = std::make_unique<ui::TourController>(h.runtime, *root, shell);
+    }
+    [[nodiscard]] std::vector<std::string> ids() const {
+        std::vector<std::string> out;
+        for (ui::Tour const& tour : root->tours().get()) {
+            out.push_back(tour.id);
+        }
+        return out;
+    }
+    ui::testing::Harness h;
+    ui::testing::FakeTourShell shell{h.backend};
+    std::unique_ptr<ui::AppRoot> root;
+    std::unique_ptr<ui::TourController> controller;
+};
+
+}  // namespace
+
+// Mutation: make `loadTourText` skip the shape checks (the malformed tour loads).
+TEST_CASE("tours runtime: loadTourText reads one tour and refuses a malformed one", "[ui][tours][runtime]") {
+    auto const loaded = ui::loadTourText(R"({"id":"a","title":"A","steps":[{"title":"S","target":"x"}]})");
+    REQUIRE(loaded.has_value());
+    CHECK(loaded->id == "a");
+    CHECK(loaded->steps.front().target == "x");
+    auto const refused = ui::loadTourText(R"({"id":"a","title":"A","steps":[]})");
+    REQUIRE_FALSE(refused.has_value());
+    CHECK(refused.error().path == "/steps");
+    CHECK_FALSE(ui::loadTourText("not json").has_value());
+}
+
+// Mutation: put the runtime tours before the app document's in the computed value (`whats-new` comes first).
+TEST_CASE("tours runtime: AppRoot::tours lists the app document's tours, then the runtime ones, texts translated",
+          "[ui][tours][runtime]") {
+    Rig r;
+    CHECK(r.ids() == std::vector<std::string>{"basics"});
+    r.root->setRuntimeTours({runtimeTour("whats-new", 1), runtimeTour("basics", 2)});
+    r.h.settle();
+    // A runtime tour with an app tour's id is left out: the app document's wins.
+    CHECK(r.ids() == std::vector<std::string>{"basics", "whats-new"});
+    ui::Tour const& added = r.root->tours().get().at(1);
+    CHECK(added.revision == 1);
+    CHECK(added.title == "What's new");
+    CHECK(r.root->tours().get().front().revision == 0);
+    r.h.session.setLocale("de");
+    r.h.settle();
+    CHECK(r.root->tours().get().at(1).title == "Neu");
+}
+
+// Mutation: compare only the ids in the controller's follow effect (the replaced tour keeps running).
+TEST_CASE("tours runtime: a running tour that is replaced ends with a toast saying it changed",
+          "[ui][tours][runtime]") {
+    Rig r;
+    r.root->setRuntimeTours({runtimeTour("whats-new", 1)});
+    r.h.settle();
+    REQUIRE(r.controller->start("whats-new").has_value());
+    r.root->setRuntimeTours({runtimeTour("whats-new", 2, "Look again")});
+    r.h.settle();
+    CHECK_FALSE(r.controller->running());
+    REQUIRE(r.shell.notices.size() == 1);
+    CHECK(r.shell.notices.front().first.contains("changed"));
+    CHECK(r.shell.notices.front().first.contains("What's new"));
+}
+
+// Mutation: skip the missing-tour branch of the follow effect (the removed tour keeps running).
+TEST_CASE("tours runtime: a running tour that is removed ends with a toast", "[ui][tours][runtime]") {
+    Rig r;
+    r.root->setRuntimeTours({runtimeTour("whats-new", 1)});
+    r.h.settle();
+    REQUIRE(r.controller->start("whats-new").has_value());
+    r.root->setRuntimeTours({});
+    r.h.settle();
+    CHECK_FALSE(r.controller->running());
+    CHECK(r.shell.notices.size() == 1);
+}
+
+// Mutation: end on any change of the tours in the follow effect (a locale change ends the tour).
+TEST_CASE("tours runtime: a change of locale or of another tour leaves a running tour running", "[ui][tours][runtime]") {
+    Rig r;
+    r.root->setRuntimeTours({runtimeTour("whats-new", 1)});
+    r.h.settle();
+    REQUIRE(r.controller->start("whats-new").has_value());
+    r.h.session.setLocale("de");
+    r.h.settle();
+    r.root->setRuntimeTours({runtimeTour("whats-new", 1), runtimeTour("other", 2)});
+    r.h.settle();
+    REQUIRE(r.controller->running());
+    CHECK(r.controller->view()->title == "Neu");
+    CHECK(r.shell.notices.empty());
+}
+```
+
+Add `test_ui_tours_runtime.cpp` to `tests/CMakeLists.txt` after `test_ui_tour_card.cpp`.
+
+- [ ] **Step 2: Run the tests to verify they fail**
+
+Run: `flock /tmp/morph-build.lock cmake --build build/clang-debug -j5 --target morph_tests`
+Expected: compile errors — `loadTourText` is not declared; `AppRoot` has no member `setRuntimeTours`.
+
+- [ ] **Step 3: One tour's text** (`document.hpp`, `document.cpp`)
+
+In `struct TourDecl`, after `steps`:
+
+```cpp
+    /// @brief A runtime tour's revision on the server (`ListedTour::revision`), so a client tells a replaced tour from
+    ///        one whose texts changed; 0 for an app-document tour.
+    std::uint64_t revision = 0;
+```
+
+After `loadDocumentText`'s declaration:
+
+```cpp
+/// @brief Loads one tour's JSON text, as one entry of the app document's `tours` is read: what a client makes of a
+///        runtime tour that `morph.tours.list` answers. Its shape is checked; its texts are parsed, not checked against
+///        the app scope, which the server did when the tour was added.
+/// @param text The tour's JSON text.
+/// @return The tour, or the refusal, its path a pointer into the tour.
+[[nodiscard]] MORPH_API std::expected<TourDecl, Refusal> loadTourText(std::string_view text);
+```
+
+In `DocumentParser` (public), after `parse`:
+
+```cpp
+    /// @brief Parses one tour, as an entry of `tours` is parsed.
+    /// @param json The tour.
+    /// @param path Its JSON Pointer.
+    /// @return The tour.
+    [[nodiscard]] static TourDecl tour(Json const& json, std::string const& path) { return tourOf(json, path); }
+```
+
+After `loadDocumentText`:
+
+```cpp
+std::expected<TourDecl, Refusal> loadTourText(std::string_view text) {
+    auto json = parseJson(text);
+    if (!json) {
+        return std::unexpected(Refusal{.document = {}, .path = "", .reason = std::move(json.error())});
+    }
+    try {
+        return detail::DocumentParser::tour(*json, "");
+    } catch (detail::DocumentRefused const& refused) {
+        return std::unexpected(refused.refusal());
+    }
+}
+```
+
+- [ ] **Step 4: Merge them in the app root** (`interpreter.hpp`, `interpreter.cpp`)
+
+In `struct Tour`, after `steps`:
+
+```cpp
+    /// @brief A runtime tour's revision on the server; 0 for an app-document tour.
+    std::uint64_t revision = 0;
+```
+
+In `class AppRoot`, after `tours()` (and change `tours()`'s brief to "The app document's guided tours in declaration
+order, then the runtime tours `setRuntimeTours` gave, each text evaluated in the app scope …"):
+
+```cpp
+    /// @brief Gives the runtime tours, as the server listed them: `tours()` lists them after the app document's, in
+    ///        this order, leaving out one whose id an app-document tour has.
+    /// @param tours The tours, loaded with `loadTourText`.
+    void setRuntimeTours(std::vector<TourDecl> tours);
+```
+
+member, before `_tours`:
+
+```cpp
+    std::unique_ptr<reactive::Signal<std::shared_ptr<std::vector<TourDecl> const>>> _runtimeTours;
+```
+
+`~AppRoot`: after `_tours.reset();`, `_runtimeTours.reset();`. In `mountApp`, before the `_tours` computed:
+
+```cpp
+    root->_runtimeTours = std::make_unique<reactive::Signal<std::shared_ptr<std::vector<TourDecl> const>>>(
+        _session->runtime(), std::make_shared<std::vector<TourDecl> const>());
+```
+
+and the computed becomes (the lambda also captures `runtime = root->_runtimeTours.get()`; the loop over
+`doc->tours` moves into a local `lower`):
+
+```cpp
+    root->_tours = std::make_unique<reactive::Computed<std::vector<Tour>>>(
+        _session->runtime(), [doc, scope = root->_scope.get(), runtime = root->_runtimeTours.get()] {
+            auto const textOf = [scope](ExprPtr const& expr) {
+                return expr == nullptr ? std::string{}
+                                       : detail::textOf(detail::evalIn(*scope, nullptr, expr), scope->formatting());
+            };
+            auto const lower = [&textOf](TourDecl const& declared) {
+                Tour tour{.id = declared.id,
+                          .screen = declared.screen,
+                          .title = textOf(declared.title),
+                          .summary = textOf(declared.summary),
+                          .steps = {},
+                          .revision = declared.revision};
+                for (TourStepDecl const& step : declared.steps) {
+                    tour.steps.push_back(TourStep{.title = textOf(step.title),
+                                                  .body = textOf(step.body),
+                                                  .screen = step.screen,
+                                                  .params = step.params,
+                                                  .target = step.target,
+                                                  .advanceOn = step.advanceOn});
+                }
+                return tour;
+            };
+            std::vector<Tour> out;
+            for (TourDecl const& declared : doc->tours) {
+                out.push_back(lower(declared));
+            }
+            // The app document's tours come first; a runtime tour with one of their ids is left out, since the server
+            // refuses one and an old list may still hold it.
+            for (TourDecl const& declared : *runtime->get()) {
+                if (std::ranges::none_of(out, [&declared](Tour const& kept) { return kept.id == declared.id; })) {
+                    out.push_back(lower(declared));
+                }
+            }
+            return out;
+        });
+```
+
+After `AppRoot::tours()`:
+
+```cpp
+void AppRoot::setRuntimeTours(std::vector<TourDecl> tours) {
+    _runtimeTours->set(std::make_shared<std::vector<TourDecl> const>(std::move(tours)));
+}
+```
+
+- [ ] **Step 5: End a tour that changed** (`tours.hpp`, `tours.cpp`)
+
+`TourController` private member, after `_step`: `std::uint64_t _startedRevision = 0;`. In `start`, after
+`std::string const screen = found->screen;`: `std::uint64_t const revision = found->revision;` and after `_tourId = id;`:
+`_startedRevision = revision;`.
+
+`end()` no longer resets `_follow`: delete `_follow.reset();` from it. The effect is replaced by the next `start` and
+destroyed with the controller, and it does nothing while no tour runs — so `end` may run inside the effect's own body.
+The follow effect in `start` becomes:
+
+```cpp
+    _follow = std::make_unique<reactive::Effect>(*_runtime, [this] {
+        std::vector<Tour> const& latest = _root->tours().get();
+        _runtime->untracked([this, &latest] {
+            if (!running()) {
+                return;
+            }
+            _tours = latest;
+            Tour const* const now = current();
+            // A runtime tour replaced on the server or removed: its steps may no longer match the one shown, so it
+            // ends rather than being swapped mid-way. A change of locale keeps the revision.
+            if (now == nullptr || now->revision != _startedRevision) {
+                std::string const title = _view ? _view->title : _tourId;
+                end();
+                _shell->notify("The tour " + title + " changed, so it ended", Tone::Info);
+                return;
+            }
+            refresh();
+            changed();
+        });
+    });
+```
+
+- [ ] **Step 6: Run the tests to verify they pass**
+
+Run:
+```bash
+flock /tmp/morph-build.lock cmake --build build/clang-debug -j5 --target morph_tests
+ctest --test-dir build/clang-debug -R '^tours runtime:|^tours controller:|^tour card:|^tours document:' --output-on-failure
+```
+Expected: `100% tests passed`, Task 6's and Task 7's cases among them.
+
+- [ ] **Step 7: Mutation check**
+
+Apply each test's mutation, rebuild, see that test fail, restore, `touch`, rebuild.
+
+- [ ] **Step 8: Update the specs**
+
+`docs/spec/ui/tours.md`, "The tours of a session": append "Runtime tours ([Registering tours at
+runtime](#registering-tours-at-runtime)) reach the client as `TourSync`'s list (below); each listed text is loaded with
+`loadTourText` and given to `AppRoot::setRuntimeTours`, and `tours()` then lists the app document's tours and after them
+the runtime ones, each group in its own order, a runtime tour with an app tour's id left out. Each `Tour` carries the
+server's `revision`, 0 for an app tour." In "The controller", add a table row: "| The running tour changes | The
+controller follows `AppRoot::tours()` while a tour runs. A runtime tour that is gone, or whose `revision` changed
+(replaced on the server), ends, and the shell shows the toast \"The tour <title> changed, so it ended\": its steps may
+no longer match the one shown. A change of locale keeps the revision and only re-evaluates the texts |".
+
+`docs/spec/ui/interpreter.md`, "The app root scope", append to the `tours()` paragraph: "`setRuntimeTours(tours)` gives
+it the runtime tours a client listed; they follow the app document's tours, a runtime tour with one of their ids left
+out, and their texts are evaluated in the same scope."
+
+- [ ] **Step 9: Commit**
+
+```bash
+git add include/morph/ui/document.hpp src/ui/document.cpp include/morph/ui/interpreter.hpp src/ui/interpreter.cpp \
+  include/morph/ui/tours.hpp src/ui/tours.cpp tests/test_ui_tours_runtime.cpp tests/CMakeLists.txt \
+  docs/spec/ui/tours.md docs/spec/ui/interpreter.md
+git commit -m "Merge runtime tours into the app root and end a tour that changed"
+```
+
+---
+### Task 12: `TourSync`, the client of `morph.tours`
+
+**Lane:** wave 5, after Tasks 10 and 11; parallel with Task 9 (disjoint files; `CMakeLists.txt` and
+`tests/CMakeLists.txt` at their own anchors).
+
+**Files:**
+- Create: `include/morph/ui/tour_sync.hpp`, `src/ui/tour_sync.cpp`
+- Modify: `CMakeLists.txt` (`src/ui/tour_sync.cpp` after `src/ui/tour_registry.cpp`; `include/morph/ui/tour_sync.hpp`
+  after `include/morph/ui/tour_registry.hpp`)
+- Test: `tests/test_ui_tour_sync.cpp` (create); `tests/CMakeLists.txt` (after `test_ui_tours_runtime.cpp`)
+- Docs: `docs/spec/ui/tours.md` (section "Runtime tours on the client")
+
+**Interfaces:**
+- Consumes: Task 10's `kToursModel`, `kToursList`, `kTourRecord`, `ToursList`, `ToursListed`, `ListedTour`,
+  `registerTours`, `TourRegistry`; Task 11's `loadTourText`, `TourDecl::revision`; `Dispatcher::bind`,
+  `ModelChannel::execute`, `Session::addExtraWatch/removeExtraWatch`, `wire::readChangesBody`, `async::CallbackScope`,
+  `detail::failureText`, `model::ActionTraits<ToursList>` — as `CustomScreenSync` uses them.
+- Produces:
+  - ```cpp
+    class MORPH_API TourSync {
+    public:
+        explicit TourSync(Dispatcher& dispatcher, Session* session = nullptr);
+        void list(std::function<void(bool offered)> done = {});
+        void relist(std::function<void()> done = {});
+        void reconnected();
+        void deliverEvent(wire::EventBody const& event);
+        void reset();
+        [[nodiscard]] bool offered() const noexcept;
+        [[nodiscard]] std::vector<TourDecl> const& tours() const noexcept;
+        void setOnListed(std::function<void(std::vector<TourDecl> const&)> onListed);
+    };
+    ```
+
+- [ ] **Step 1: Write the failing tests** (`tests/test_ui_tour_sync.cpp`)
+
+```cpp
+// SPDX-License-Identifier: Apache-2.0
+//
+// The client of the runtime tours (docs/spec/ui/tours.md, "Runtime tours on the client"): it lists over a simulated
+// connection, watches `morph.tours` once offered, lists again on a `changes` event naming it, after a reconnect and
+// after a `resync`, and reads a server without the model as "the app document's tours alone", logged once at debug.
+
+#include <algorithm>
+#include <catch2/catch_test_macros.hpp>
+#include <memory>
+#include <morph/core/bridge.hpp>
+#include <morph/core/logger.hpp>
+#include <morph/core/registry.hpp>
+#include <morph/core/remote.hpp>
+#include <morph/core/wire.hpp>
+#include <morph/session/session.hpp>
+#include <morph/testing/step_executor.hpp>
+#include <morph/ui/interpreter.hpp>
+#include <morph/ui/tour_registry.hpp>
+#include <morph/ui/tour_sync.hpp>
+#include <optional>
+#include <string>
+#include <string_view>
+#include <vector>
+
+#include "test_support.hpp"
+#include "ui_custom_client_support.hpp"
+#include "ui_service_support.hpp"
+
+namespace ui = morph::ui;
+
+namespace {
+
+std::shared_ptr<ui::ServedBundle const> served() {
+    auto built = uiservice::registry().build();
+    REQUIRE(built.has_value());
+    return *built;
+}
+
+std::string resultsTour(std::string const& id) {
+    return R"({"id":")" + id + R"(","screen":"lims.results","title":"Results","steps":[{"title":"Here"}]})";
+}
+
+/// A server whose registry offers runtime tours, or not.
+struct ToursServer {
+    explicit ToursServer(bool offer = true) {
+        if (offer) {
+            ui::registerTours(tours, authorizer, dispatcher, registry);
+        }
+        server = std::make_shared<morph::backend::RemoteServer>(pool, authorizer, dispatcher, registry);
+    }
+    morph::model::detail::ActionDispatcher dispatcher;
+    morph::model::detail::ModelRegistryFactory registry;
+    morph::exec::ThreadPoolExecutor pool{2};
+    std::shared_ptr<uiservice::RuleAuthorizer> authorizer = std::make_shared<uiservice::RuleAuthorizer>();
+    std::shared_ptr<ui::ServedBundle const> bundle = served();
+    std::shared_ptr<ui::TourRegistry> tours = std::make_shared<ui::TourRegistry>([this] { return bundle; });
+    std::shared_ptr<morph::backend::RemoteServer> server;
+};
+
+/// One client of @p server signed in as @p person, with a recording watcher, and a sync.
+struct ToursClient {
+    ToursClient(morph::backend::RemoteServer& server, std::string person)
+        : session{runtime, ui::SessionOptions{.watcher = watcher()}},
+          bridge{std::make_unique<morph::backend::SimulatedRemoteBackend>(server), owner},
+          sync{dispatcher, &session} {
+        morph::session::Context signedIn;
+        signedIn.token = std::move(person);
+        bridge.setDefaultSession(std::move(signedIn));
+        sync.setOnListed([this](std::vector<ui::TourDecl> const&) { ++listings; });
+    }
+    template <typename Pred>
+    bool pump(Pred done) {
+        return morph::testing::waitUntil([&] {
+            owner.runAll();
+            return done();
+        });
+    }
+    bool list() {
+        std::optional<bool> offered;
+        sync.list([&offered](bool answer) { offered = answer; });
+        REQUIRE(pump([&offered] { return offered.has_value(); }));
+        return *offered;
+    }
+    /// Lists again and waits for that list: every list asked before it has then arrived, since one channel carries all.
+    void barrier() {
+        bool done = false;
+        sync.relist([&done] { done = true; });
+        REQUIRE(pump([&done] { return done; }));
+    }
+    ui::Watcher watcher() {
+        return [this](std::string const& kind, std::string const& body) {
+            watches.push_back(kind + " " + body);
+            auto [completion, promise] = morph::async::Completion<std::string>::makeSettleable(&owner);
+            promise.resolve(std::string{R"({"refusedRecords":[],"refusedInstances":[]})"});
+            return std::move(completion);
+        };
+    }
+    std::vector<std::string> watches;
+    int listings = 0;
+    morph::testing::StepExecutor owner;
+    morph::reactive::Runtime runtime{owner};
+    ui::Session session;
+    morph::bridge::Bridge bridge;
+    ui::BridgeDispatcher dispatcher{bridge, &owner};
+    ui::TourSync sync;
+};
+
+morph::wire::EventBody changesOf(std::string_view record) {
+    return morph::wire::EventBody{
+        .topic = std::string{morph::wire::kChangesTopic},
+        .payload = glz::raw_json{R"({"records":[{"record":")" + std::string{record} + R"("}],"instances":[]})"}};
+}
+
+}  // namespace
+
+// Mutation: skip `loadTourText` and keep every listed tour unparsed (the sync's tours are empty).
+TEST_CASE("tour sync: list answers the runtime tours in order, loaded as tours, and watches morph.tours",
+          "[ui][tours][runtime][sync]") {
+    ToursServer const server;
+    REQUIRE(server.tours->add(resultsTour("first")).has_value());
+    REQUIRE(server.tours->add(resultsTour("second")).has_value());
+    ToursClient client{*server.server, "ann"};
+    REQUIRE(client.list());
+    CHECK(client.sync.offered());
+    REQUIRE(client.sync.tours().size() == 2);
+    CHECK(client.sync.tours().at(0).id == "first");
+    CHECK(client.sync.tours().at(1).id == "second");
+    CHECK(client.sync.tours().at(0).revision > 0);
+    REQUIRE(client.watches.size() == 1);
+    CHECK(client.watches.front().contains(R"("records":["morph.tours"])"));
+}
+
+// Mutation: log the absent model at warn in `TourSync` (a warning is captured).
+TEST_CASE("tour sync: a server without the model offers none, logged once at debug and never at warn",
+          "[ui][tours][runtime][sync]") {
+    // Debug lines are dropped below the default level, warn: lower it for this case and restore it after.
+    struct LevelGuard {
+        morph::log::LogLevel previous = morph::log::getLogLevel();
+        LevelGuard() { morph::log::setLogLevel(morph::log::LogLevel::debug); }
+        ~LevelGuard() { morph::log::setLogLevel(previous); }
+        LevelGuard(LevelGuard const&) = delete;
+        LevelGuard& operator=(LevelGuard const&) = delete;
+        LevelGuard(LevelGuard&&) = delete;
+        LevelGuard& operator=(LevelGuard&&) = delete;
+    } const level;
+    std::vector<std::string> warnings;
+    std::vector<std::string> debug;
+    morph::log::ScopedLoggerOverride const guard{[&](morph::log::LogLevel level, std::string_view message) {
+        if (level == morph::log::LogLevel::warn) {
+            warnings.emplace_back(message);
+        } else if (level == morph::log::LogLevel::debug && message.find("runtime tours") != std::string_view::npos) {
+            debug.emplace_back(message);
+        }
+    }};
+    ToursServer const server{false};
+    ToursClient client{*server.server, "ann"};
+    CHECK_FALSE(client.list());
+    CHECK_FALSE(client.list());
+    CHECK(client.sync.tours().empty());
+    CHECK(client.watches.empty());
+    CHECK(std::ranges::none_of(warnings, [](std::string const& line) { return line.contains("runtime tours"); }));
+    CHECK(debug.size() == 1);
+}
+
+// Mutation: relist on every `changes` event in `deliverEvent` (the event naming another record relists too).
+TEST_CASE("tour sync: a changes event naming morph.tours lists again, one naming another record does not",
+          "[ui][tours][runtime][sync]") {
+    ToursServer const server;
+    ToursClient client{*server.server, "ann"};
+    REQUIRE(client.list());
+    REQUIRE(client.sync.tours().empty());
+    REQUIRE(server.tours->add(resultsTour("added")).has_value());
+    int const before = client.listings;
+    client.sync.deliverEvent(changesOf("SomethingElse"));
+    client.sync.deliverEvent(changesOf(ui::kTourRecord));
+    client.barrier();
+    CHECK(client.listings == before + 2);
+    REQUIRE(client.sync.tours().size() == 1);
+    CHECK(client.sync.tours().front().id == "added");
+    REQUIRE(server.tours->remove("added").has_value());
+    client.sync.deliverEvent(changesOf(ui::kTourRecord));
+    client.barrier();
+    CHECK(client.sync.tours().empty());
+}
+
+// Mutation: do nothing in `reconnected` (the tour added while away is not listed).
+TEST_CASE("tour sync: a reconnect and a resync list again", "[ui][tours][runtime][sync]") {
+    ToursServer const server;
+    ToursClient client{*server.server, "ann"};
+    REQUIRE(client.list());
+    REQUIRE(server.tours->add(resultsTour("away")).has_value());
+    int const before = client.listings;
+    client.sync.reconnected();
+    REQUIRE(client.pump([&] { return client.listings > before; }));
+    CHECK(client.sync.tours().size() == 1);
+    morph::wire::EventBody const resync{.topic = std::string{morph::wire::kResyncTopic}, .payload = glz::raw_json{"null"}};
+    int const again = client.listings;
+    client.sync.deliverEvent(resync);
+    REQUIRE(client.pump([&] { return client.listings > again; }));
+}
+
+// Mutation: keep the list in `reset` (the tours survive it).
+TEST_CASE("tour sync: reset forgets the list and stops the watch", "[ui][tours][runtime][sync]") {
+    ToursServer const server;
+    REQUIRE(server.tours->add(resultsTour("kept")).has_value());
+    ToursClient client{*server.server, "ann"};
+    REQUIRE(client.list());
+    REQUIRE(client.sync.tours().size() == 1);
+    client.sync.reset();
+    CHECK(client.sync.tours().empty());
+    CHECK_FALSE(client.sync.offered());
+    REQUIRE(client.watches.size() == 2);
+    CHECK(client.watches.back().starts_with("unwatch "));
+}
+```
+
+Add `test_ui_tour_sync.cpp` to `tests/CMakeLists.txt` after `test_ui_tours_runtime.cpp`. (`SimulatedRemoteBackend`,
+`BridgeDispatcher` and `waitUntil` come in through `ui_custom_client_support.hpp`'s includes, as its `SyncClient` uses
+them.)
+
+- [ ] **Step 2: Run the tests to verify they fail**
+
+Run: `flock /tmp/morph-build.lock cmake --build build/clang-debug -j5 --target morph_tests`
+Expected: compile error — `morph/ui/tour_sync.hpp: No such file or directory`.
+
+- [ ] **Step 3: The header** (`include/morph/ui/tour_sync.hpp`)
+
+```cpp
+// SPDX-License-Identifier: Apache-2.0
+#pragma once
+
+#include <functional>
+#include <memory>
+#include <morph/export.hpp>
+#include <string>
+#include <vector>
+
+#include "../attributes.hpp"
+#include "../core/callback_scope.hpp"
+#include "../core/wire.hpp"
+#include "document.hpp"
+#include "interpreter.hpp"
+
+/// @file
+/// @brief The client of the runtime tours model, `morph.tours`: the list, kept current through the record watch.
+///        Specified in `docs/spec/ui/tours.md`.
+
+namespace morph::ui {
+
+/// @brief Lists the runtime tours a server offers and keeps the list current.
+///
+/// `list` asks `morph.tours.list`. An answer makes the tours offered, loads each listed tour with `loadTourText` (one
+/// that does not load is logged at warn and left out), tells `setOnListed`'s handler, and has the session watch the record
+/// `morph.tours`. A server that never registered the model answers `unknown model type: morph.tours`: the sync then offers
+/// none, which is logged once per sync at debug, since a server without runtime tours is ordinary. Any other failure is
+/// logged at warn and keeps the last list. While offered, a `changes` event naming the record, a `resync` and a reconnect
+/// list again. Neither copyable nor movable; on the runtime's owner.
+class MORPH_API TourSync {
+public:
+    /// @brief A sync that has not listed yet.
+    /// @param dispatcher Where model calls go: the interpreter's own. Borrowed: it must outlive the sync.
+    /// @param session    The session whose watch set carries `morph.tours` once offered; null for a source whose server
+    ///                   sends no events, such as an in-process one. Borrowed: it must outlive the sync.
+    explicit TourSync(Dispatcher& dispatcher MORPH_LIFETIMEBOUND, Session* session = nullptr);
+    TourSync(TourSync const&) = delete;
+    TourSync& operator=(TourSync const&) = delete;
+    TourSync(TourSync&&) = delete;
+    TourSync& operator=(TourSync&&) = delete;
+    /// @brief Stops the watch.
+    ~TourSync();
+
+    /// @brief Asks for the list, and learns whether the server offers runtime tours.
+    /// @param done Called once with whether they are offered; may be empty.
+    void list(std::function<void(bool offered)> done = {});
+
+    /// @brief Asks for the list again while offered; the replies of one sync arrive in call order.
+    /// @param done Called once this list's reply was handled, whatever it held; may be empty.
+    void relist(std::function<void()> done = {});
+
+    /// @brief The connection was made again: lists again while offered; probes again when the last failure was not the
+    ///        absent model. The session sends the watch itself.
+    void reconnected();
+
+    /// @brief A server event: a `changes` naming `morph.tours`, or a `resync`, lists again while offered.
+    /// @param event The event.
+    void deliverEvent(wire::EventBody const& event);
+
+    /// @brief Forgets the list and the offer, stops the watch, and drops replies still in flight: a new frame's session.
+    void reset();
+
+    /// @brief Whether the server offers runtime tours, as the last list found.
+    /// @return It.
+    [[nodiscard]] bool offered() const noexcept { return _offered; }
+
+    /// @brief The tours the last list held, loaded, in the server's order.
+    /// @return They; empty before the first list and without the model.
+    [[nodiscard]] std::vector<TourDecl> const& tours() const noexcept { return _tours; }
+
+    /// @brief Sets what is told after each list that answered.
+    /// @param onListed The handler, given the tours; empty tells nothing.
+    void setOnListed(std::function<void(std::vector<TourDecl> const&)> onListed) { _onListed = std::move(onListed); }
+
+private:
+    void call(std::function<void(std::string const&)> onReply,
+              std::function<void(std::string const&, std::string const&)> const& failed);
+    void listed(std::string const& reply);
+
+    Dispatcher* _dispatcher;
+    Session* _session;
+    std::shared_ptr<ModelChannel> _channel;
+    std::vector<TourDecl> _tours;
+    std::function<void(std::vector<TourDecl> const&)> _onListed;
+    bool _offered = false;
+    bool _absent = false;
+    bool _absentLogged = false;
+    // Last, so it stops every delivery before anything a reply would touch goes; `reset` replaces it.
+    std::unique_ptr<async::CallbackScope> _scope = std::make_unique<async::CallbackScope>();
+};
+
+}  // namespace morph::ui
+```
+
+- [ ] **Step 4: The implementation** (`src/ui/tour_sync.cpp`)
+
+```cpp
+// SPDX-License-Identifier: Apache-2.0
+
+#include <algorithm>
+#include <exception>
+#include <functional>
+#include <memory>
+#include <morph/core/bridge.hpp>
+#include <morph/core/logger.hpp>
+#include <morph/core/wire.hpp>
+#include <morph/ui/document.hpp>
+#include <morph/ui/tour_registry.hpp>
+#include <morph/ui/tour_sync.hpp>
+#include <string>
+#include <utility>
+#include <vector>
+
+namespace morph::ui {
+
+TourSync::TourSync(Dispatcher& dispatcher, Session* session) : _dispatcher{&dispatcher}, _session{session} {}
+
+TourSync::~TourSync() {
+    if (_offered && _session != nullptr) {
+        _session->removeExtraWatch(std::string{kTourRecord});
+    }
+}
+
+void TourSync::call(std::function<void(std::string const&)> onReply,
+                    std::function<void(std::string const&, std::string const&)> const& failed) {
+    try {
+        if (_channel == nullptr) {
+            _channel = _dispatcher->bind(std::string{kToursModel}, bridge::BindSharing::Private, {});
+        }
+        _channel->execute(std::string{kToursList}, model::ActionTraits<ToursList>::toJson(ToursList{}), CallOptions{})
+            .then(*_scope, [onReply = std::move(onReply)](std::string const& reply) { onReply(reply); })
+            .onError(*_scope, [failed](std::exception_ptr const& error) {
+                failed(detail::failureText(error), detail::defaultErrorKind(error));
+            });
+    } catch (std::exception const& error) {
+        failed(error.what(), "error");
+    }
+}  // NOLINT(clang-analyzer-cplusplus.NewDeleteLeaks): the continuations the chain registers are owned by the scope.
+
+void TourSync::listed(std::string const& reply) {
+    ToursListed answer;
+    try {
+        answer = model::ActionTraits<ToursList>::resultFromJson(reply);
+    } catch (std::exception const& error) {
+        ::morph::log::logWarn("runtime tours: the reply to `{}` is not a tour list: {}", kToursList, error.what());
+        return;
+    }
+    std::vector<TourDecl> tours;
+    for (ListedTour const& listedTour : answer.tours) {
+        auto loaded = loadTourText(listedTour.tour);
+        if (!loaded) {
+            ::morph::log::logWarn("runtime tours: `{}` does not load in this client, so it is left out: {}",
+                                  listedTour.id, loaded.error().message());
+            continue;
+        }
+        loaded->revision = listedTour.revision;
+        tours.push_back(std::move(*loaded));
+    }
+    _tours = std::move(tours);
+    if (_onListed) {
+        _onListed(_tours);
+    }
+}
+
+void TourSync::list(std::function<void(bool offered)> done) {
+    auto const shared = std::make_shared<std::function<void(bool)>>(std::move(done));
+    call(
+        [this, shared](std::string const& reply) {
+            if (!_offered) {
+                _offered = true;
+                _absent = false;
+                if (_session != nullptr) {
+                    _session->addExtraWatch(std::string{kTourRecord});
+                }
+            }
+            listed(reply);
+            if (*shared) {
+                (*shared)(true);
+            }
+        },
+        [this, shared](std::string const& reason, std::string const& /*kind*/) {
+            _absent = reason.contains("unknown model type: " + std::string{kToursModel});
+            if (_absent) {
+                // A server without runtime tours is ordinary: the app document's tours are offered alone.
+                if (!_absentLogged) {
+                    _absentLogged = true;
+                    ::morph::log::logDebug("runtime tours: the server offers none ({})", reason);
+                }
+            } else {
+                ::morph::log::logWarn("runtime tours: `{}` failed, the last list is kept: {}", kToursList, reason);
+            }
+            if (*shared) {
+                (*shared)(false);
+            }
+        });
+}
+
+void TourSync::relist(std::function<void()> done) {
+    auto const shared = std::make_shared<std::function<void()>>(std::move(done));
+    if (!_offered) {
+        if (*shared) {
+            (*shared)();
+        }
+        return;
+    }
+    call(
+        [this, shared](std::string const& reply) {
+            listed(reply);
+            if (*shared) {
+                (*shared)();
+            }
+        },
+        [shared](std::string const& reason, std::string const& /*kind*/) {
+            ::morph::log::logWarn("runtime tours: `{}` failed, the last list is kept: {}", kToursList, reason);
+            if (*shared) {
+                (*shared)();
+            }
+        });
+}
+
+void TourSync::reconnected() {
+    if (_offered) {
+        relist();
+    } else if (!_absent) {
+        list();
+    }
+}
+
+void TourSync::deliverEvent(wire::EventBody const& event) {
+    if (!_offered) {
+        return;
+    }
+    if (event.topic == wire::kResyncTopic) {
+        relist();
+        return;
+    }
+    if (event.topic != wire::kChangesTopic) {
+        return;
+    }
+    auto const changes = wire::readChangesBody(event.payload.str);
+    if (changes &&
+        std::ranges::any_of(changes->records, [](auto const& change) { return change.record == kTourRecord; })) {
+        relist();
+    }
+}
+
+void TourSync::reset() {
+    if (_offered && _session != nullptr) {
+        _session->removeExtraWatch(std::string{kTourRecord});
+    }
+    _scope = std::make_unique<async::CallbackScope>();
+    _channel.reset();
+    _offered = false;
+    _absent = false;
+    _tours.clear();
+}
+
+}  // namespace morph::ui
+```
+
+(`logDebug` has the same two forms as `logWarn` in `logger.hpp`.) `CMakeLists.txt`: add `src/ui/tour_sync.cpp` after
+`src/ui/tour_registry.cpp` and `include/morph/ui/tour_sync.hpp` after `include/morph/ui/tour_registry.hpp`.
+
+- [ ] **Step 5: Run the tests to verify they pass**
+
+Run:
+```bash
+flock /tmp/morph-build.lock cmake --build build/clang-debug -j5 --target morph_tests
+ctest --test-dir build/clang-debug -R '^tour sync:|^custom screen sync:' --output-on-failure
+```
+Expected: `100% tests passed`.
+
+- [ ] **Step 6: Mutation check**
+
+Apply each test's mutation, rebuild, see that test fail, restore, `touch`, rebuild.
+
+- [ ] **Step 7: Update the spec** (`docs/spec/ui/tours.md`)
+
+Add "- [Runtime tours on the client](#runtime-tours-on-the-client)" to the contents after "Registering tours at
+runtime", and the section:
+
+```markdown
+## Runtime tours on the client
+
+`TourSync` (`tour_sync.hpp`) is the client of `morph.tours`, shaped like `CustomScreenSync`. `list` asks
+`morph.tours.list`; an answer makes the tours offered, loads each listed tour with `loadTourText` (one that does not
+load is logged at warn and left out) with its `revision`, tells `setOnListed`, and adds `morph.tours` to the session's
+extra watches. While offered, a `changes` event naming the record, a `resync` and a reconnect list again; `relist(done)`
+calls back once its own reply was handled, and one private channel carries every call, so replies arrive in order. A
+server that never called `registerTours` answers `unknown model type: morph.tours`: the sync offers no runtime tours and
+logs that once at debug; any other failure is logged at warn and keeps the last list. `reset` forgets the list, stops
+the watch and drops replies in flight.
+```
+
+- [ ] **Step 8: Commit**
+
+```bash
+git add include/morph/ui/tour_sync.hpp src/ui/tour_sync.cpp CMakeLists.txt tests/test_ui_tour_sync.cpp \
+  tests/CMakeLists.txt docs/spec/ui/tours.md
+git commit -m "List runtime tours on the client and keep them current"
+```
+
+---
+### Task 13: Runtime tours in the generic client
+
+**Lane:** wave 6, after Tasks 9 and 12.
+
+**Files:**
+- Modify: `src/client/shell.cpp` (`listen`, `start`, `buildFrame`, `mountApp`, members)
+- Modify: `tests/client/tours_app.hpp`, `tests/client/tours_app.cpp` (`toursRegistry()`, `runtimeTour()`)
+- Test: `tests/client/test_tours.cpp` (two cases), `tests/client/test_shell.cpp` (two cases)
+- Docs: `docs/spec/client/client.md` ("Tours"), `docs/spec/ui/tours.md` ("The generic client")
+
+**Interfaces:**
+- Consumes: Task 9's `Shell` wiring (`_tours`, `showToursMenu`, `buildTours`, `listen`); Task 10's `TourRegistry`,
+  `registerTours`; Task 11's `AppRoot::setRuntimeTours`; Task 12's `TourSync`.
+- Produces:
+  - `std::shared_ptr<morph::ui::TourRegistry> tours::toursRegistry();` — a registry over `toursBundle()`, registered on
+    the process's default dispatcher and registry (tests only)
+  - `std::string tours::runtimeTour(std::string const& id, std::string const& stepTitle = "News");` (tests only)
+
+- [ ] **Step 1: The test helpers** (`tests/client/tours_app.hpp`, `.cpp`)
+
+Header, after `toursBundle`:
+
+```cpp
+/// @brief A runtime tour registry over `toursBundle()`, its model registered on the process's default dispatcher and
+///        registry, where an in-process source's and a local backend's model calls run. ctest runs each case in a process
+///        of its own, so the registration reaches no other case.
+/// @return The registry.
+[[nodiscard]] std::shared_ptr<morph::ui::TourRegistry> toursRegistry();
+
+/// @brief A general runtime tour @p id with one step titled @p stepTitle.
+/// @param id        The tour's id.
+/// @param stepTitle Its one step's title.
+/// @return Its JSON text.
+[[nodiscard]] std::string runtimeTour(std::string const& id, std::string const& stepTitle = "News");
+```
+
+(add `#include <morph/ui/tour_registry.hpp>` and `<string>`). In `tours_app.cpp` (add `#include <morph/core/registry.hpp>`,
+`#include <morph/session/session.hpp>`, `#include <morph/ui/tour_registry.hpp>`):
+
+```cpp
+std::shared_ptr<morph::ui::TourRegistry> toursRegistry() {
+    auto built = toursBundle();
+    if (!built) {
+        throw std::runtime_error{built.error().message()};
+    }
+    auto registry = std::make_shared<morph::ui::TourRegistry>([held = *built] { return held; });
+    morph::ui::registerTours(registry, morph::session::allowAllAuthorizer(), morph::model::detail::defaultDispatcher(),
+                             morph::model::detail::defaultRegistry());
+    return registry;
+}
+
+std::string runtimeTour(std::string const& id, std::string const& stepTitle) {
+    return R"({"id":")" + id + R"(","title":"What's new","summary":"Added while the server runs","steps":[{"title":")" +
+           stepTitle + R"("},{"title":"And more"}]})";
+}
+```
+
+- [ ] **Step 2: Write the failing tests**
+
+`tests/client/test_tours.cpp`, at the end:
+
+```cpp
+// Mutation: drop the `_tourSync->list()` call from `buildFrame` (the runtime tour never reaches the menu).
+TEST_CASE("Client shell tours: a runtime tour registered on the server is offered after the app document's",
+          "[client][tours][runtime]") {
+    std::shared_ptr<ui::TourRegistry> const registry = tours::toursRegistry();
+    REQUIRE(registry->add(tours::runtimeTour("whats-new")).has_value());
+    Window window;
+    REQUIRE(window.wait([&window] { return window.prop("Menu", "shell_tours", "items").contains("What's new"); }));
+    std::string const items = window.prop("Menu", "shell_tours", "items");
+    CHECK(items.find("Locked away") < items.find("What's new"));
+    REQUIRE(window.shell->startTour("whats-new").has_value());
+    REQUIRE(window.wait([&window] { return window.text("tour_title") == "News"; }));
+}
+
+// The control: a server that never registered `morph.tours` offers the app document's tours, and nothing is reported.
+TEST_CASE("Client shell tours: without the runtime tours model the app document's tours are offered alone",
+          "[client][tours][runtime]") {
+    Window window;
+    CHECK(window.prop("Menu", "shell_tours", "items").contains("Getting started"));
+    CHECK_FALSE(window.reported("morph.tours"));
+}
+```
+
+`tests/client/test_shell.cpp`, after "a reconnect leaves a running tour running":
+
+```cpp
+// Mutation: drop `_tourSync->reconnected()` from the source's connect listener (the tour added while away never shows).
+TEST_CASE("Client shell: a runtime tour added while the client was away is offered after the reconnect",
+          "[client][shell][tours]") {
+    std::shared_ptr<ui::TourRegistry> const registry = tours::toursRegistry();
+    FakeAppContext context;
+    ui::testing::RecordingBackend backend;
+    DroppingSource source{&tours::toursBundle};
+    std::optional<std::expected<ui::Bundle, ui::ConnectError>> opened;
+    source.open(context,
+                [&opened](std::expected<ui::Bundle, ui::ConnectError> result) { opened = std::move(result); });
+    REQUIRE(pumpUntil(context.owner(), [&opened] { return opened.has_value(); }));
+    REQUIRE(opened->has_value());
+    {
+        auto const shell = client::mountShell(context, backend, std::move(*opened), source,
+                                              client::ShellOptions{.startScreen = "tours.home"});
+        auto const items = [&backend] {
+            std::optional<int> const menu = backend.find("Menu", "testId", "shell_tours");
+            return menu ? backend.prop(*menu, "items") : std::string{};
+        };
+        REQUIRE(pumpUntil(context.owner(), [&] { return items().contains("Getting started"); }));
+        REQUIRE(registry->add(tours::runtimeTour("whats-new")).has_value());
+        (*source.disconnectHook)();
+        REQUIRE(pumpUntil(context.owner(), [&source] { return !source.online(); }));
+        (*source.connectHook)();
+        REQUIRE(pumpUntil(context.owner(), [&] { return items().contains("What's new"); }));
+    }
+    source.close();
+}
+
+// Mutation: skip `setRuntimeTours` in the sync's list handler (the replaced tour keeps running).
+TEST_CASE("Client shell: a running runtime tour replaced on the server ends with a toast", "[client][shell][tours]") {
+    std::shared_ptr<ui::TourRegistry> const registry = tours::toursRegistry();
+    REQUIRE(registry->add(tours::runtimeTour("whats-new")).has_value());
+    FakeAppContext context;
+    ui::testing::RecordingBackend backend;
+    DroppingSource source{&tours::toursBundle};
+    std::optional<std::expected<ui::Bundle, ui::ConnectError>> opened;
+    source.open(context,
+                [&opened](std::expected<ui::Bundle, ui::ConnectError> result) { opened = std::move(result); });
+    REQUIRE(pumpUntil(context.owner(), [&opened] { return opened.has_value(); }));
+    REQUIRE(opened->has_value());
+    {
+        auto const shell = client::mountShell(context, backend, std::move(*opened), source,
+                                              client::ShellOptions{.startScreen = "tours.home"});
+        REQUIRE(pumpUntil(context.owner(), [&backend] {
+            std::optional<int> const menu = backend.find("Menu", "testId", "shell_tours");
+            return menu && backend.prop(*menu, "items").contains("What's new");
+        }));
+        REQUIRE(shell->startTour("whats-new").has_value());
+        REQUIRE(registry->replace(tours::runtimeTour("whats-new", "Fresh news")).has_value());
+        (*source.disconnectHook)();
+        REQUIRE(pumpUntil(context.owner(), [&source] { return !source.online(); }));
+        (*source.connectHook)();
+        REQUIRE(pumpUntil(context.owner(), [&backend] {
+            std::vector<int> const toasts = backend.all("Toast");
+            return !toasts.empty() && backend.prop(toasts.front(), "text").contains("changed");
+        }));
+        std::optional<int> const spotlight = backend.find("Spotlight", "testId", "shell_spotlight");
+        REQUIRE(spotlight.has_value());
+        CHECK(backend.prop(*spotlight, "open") == "false");
+    }
+    source.close();
+}
+```
+
+- [ ] **Step 3: Run the tests to verify they fail**
+
+Run:
+```bash
+flock /tmp/morph-build.lock cmake --build build/clang-debug -j5 --target morph_client_tests
+ctest --test-dir build/clang-debug -R 'runtime tour|without the runtime tours' --output-on-failure
+```
+Expected: the build succeeds and the three runtime cases fail (the menu never lists "What's new"); the control passes.
+
+- [ ] **Step 4: Wire the sync** (`src/client/shell.cpp`)
+
+Include `<morph/ui/tour_sync.hpp>`. Member, after `_customChrome`:
+
+```cpp
+    // The client of the server's runtime tours, over the screens' own dispatcher; it outlives frames and is reset with
+    // each one, since what it listed is the old session's.
+    std::unique_ptr<ui::TourSync> _tourSync;
+```
+
+In `start`, after `_customSync = …;`:
+
+```cpp
+        _tourSync = std::make_unique<ui::TourSync>(source.dispatcher(), _session.get());
+        _tourSync->setOnListed([this](std::vector<ui::TourDecl> const& listed) {
+            if (_appRoot != nullptr) {
+                _appRoot->setRuntimeTours(listed);
+            }
+        });
+```
+
+In `listen`, inside the connect listener after the custom sync's line:
+
+```cpp
+            if (auto const live = alive.lock(); live != nullptr && *live && _tourSync) {
+                _tourSync->reconnected();
+            }
+```
+
+and inside the event listener after the custom sync's line:
+
+```cpp
+            if (auto const live = alive.lock(); live != nullptr && *live && _tourSync) {
+                _tourSync->deliverEvent(event);
+            }
+```
+
+In `buildFrame`, after `buildTours();`:
+
+```cpp
+        // A new frame is a new session's: its runtime tours are listed again, into the new app root.
+        if (_tourSync) {
+            _tourSync->reset();
+            _tourSync->list();
+        }
+```
+
+In the shell's destructor, before `_appRoot.reset();`: `if (_tourSync) { _tourSync->setOnListed({}); }` — a reply
+arriving during teardown then reaches no app root.
+
+- [ ] **Step 5: Run the tests to verify they pass**
+
+Run:
+```bash
+flock /tmp/morph-build.lock cmake --build build/clang-debug -j5 --target morph_client_tests
+ctest --test-dir build/clang-debug -R '^Client shell|^the_shell|chat|custom' --output-on-failure
+```
+Expected: `100% tests passed`.
+
+- [ ] **Step 6: Mutation check**
+
+Apply each test's mutation, rebuild, see that test fail, restore, `touch`, rebuild.
+
+- [ ] **Step 7: Update the specs**
+
+`docs/spec/client/client.md`, "Tours", add a bullet: "- **Runtime tours.** One `TourSync` over the source's dispatcher
+outlives frames; each frame resets it and lists `morph.tours` again, and each list goes to the frame's app root
+(`AppRoot::setRuntimeTours`), so the Tours menu and the controller see the app document's tours and then the runtime
+ones. The source's connect listener and event listener reach it, so a `changes` event naming `morph.tours`, a `resync`
+and a reconnect list again. A running runtime tour that is replaced or removed ends with a toast. A server without the
+model offers the app document's tours alone."
+
+`docs/spec/ui/tours.md`, "The generic client": append "Its `TourSync` lists the runtime tours at each frame and keeps
+them current ([client.md](../client/client.md#tours))."
+
+- [ ] **Step 8: Commit**
+
+```bash
+git add src/client/shell.cpp tests/client/tours_app.hpp tests/client/tours_app.cpp tests/client/test_tours.cpp \
+  tests/client/test_shell.cpp docs/spec/client/client.md docs/spec/ui/tours.md
+git commit -m "Offer runtime tours in the generic client"
+```
+
+---
+### Task 14: Spec index, changelog, and the whole-branch sweeps
 
 **Lane:** last, after every other task.
 
@@ -6728,8 +8984,9 @@ git commit -m "Run guided tours in the generic client"
 After the `ui/shell_parts.md` entry:
 
 ```markdown
-[`ui/tours.md`](ui/tours.md) — guided tours: the app document's `tours`, the controller that runs one at a time, the
-card and its `tour.*` host vocabulary, the spotlight each backend draws, and the Tours menu ·
+[`ui/tours.md`](ui/tours.md) — guided tours: the app document's `tours`, tours registered at runtime (`morph.tours`), the
+controller that runs one at a time, the card and its `tour.*` host vocabulary, the spotlight each backend draws, and the
+Tours menu ·
 ```
 
 - [ ] **Step 2: The changelog** (`CHANGELOG.md`, under `## [Unreleased]`, in `### Added`, creating the heading if absent)
@@ -6740,8 +8997,11 @@ card and its `tour.*` host vocabulary, the spotlight each backend draws, and the
   person to open a screen. The shell's **Tours** button lists the active screen's tours before the general ones; a
   document starts one with the host command `tour.start`; client code with `MountedShell::startTour`. Qt Quick dims the
   window around the target and rings it; the terminal places the card beside the target and draws it in reverse video.
-  `UiRegistry::build` refuses a tour that names a screen, a target or a tour the bundle does not have. The backend
-  contract gains `SpotlightWidget` (`createSpotlight`), and the id `morph.tour` is reserved for the client's card.
+  `UiRegistry::build` refuses a tour that names a screen, a target or a tour the bundle does not have. A server adds,
+  replaces and removes tours while it runs with `TourRegistry`, checked the same way and served as the model
+  `morph.tours` (`registerTours`, `publishTourChanges`); the client's `TourSync` keeps them current through a record
+  watch. The backend contract gains `SpotlightWidget` (`createSpotlight`), and the id `morph.tour` is reserved for the
+  client's card.
 ```
 
 - [ ] **Step 3: Build every target**
@@ -6773,8 +9033,8 @@ Expected: the three `echo` lines. Fix anything else they print.
 - [ ] **Step 6: The GCC sweep** (local builds are clang, and miss `-Wrange-loop-construct` and GCC's other warnings)
 
 Run, for each changed translation unit (`src/ui/document.cpp src/ui/interpreter.cpp src/ui/service.cpp
-src/ui/tour_checks.cpp src/ui/tours.cpp src/ui/shell_frame.cpp src/ui/navigator.cpp src/ui/shell_parts_model.cpp
-src/client/shell.cpp`), the command `compile_commands.json` gives it with `clang++` replaced by `g++` and
+src/ui/tour_checks.cpp src/ui/tours.cpp src/ui/tour_registry.cpp src/ui/tour_sync.cpp src/ui/shell_frame.cpp
+src/ui/navigator.cpp src/ui/shell_parts_model.cpp src/client/shell.cpp`), the command `compile_commands.json` gives it with `clang++` replaced by `g++` and
 `-fsyntax-only` added, under the lock, never with `-w`:
 
 ```bash
@@ -6797,12 +9057,14 @@ flock /tmp/morph-build.lock cmake -S . -B build/docs -G Ninja -DMORPH_BUILD_DOCU
 flock /tmp/morph-build.lock cmake --build build/docs --target doc
 ```
 Expected: ends without a warning (`WARN_AS_ERROR = FAIL_ON_WARNINGS`). A missing `@param`/`@return` on a new public
-symbol (`SpotlightWidget`, `TourController`, `TourCardBinding`, `ShellToursView`, `author::withTours`, …) fails here.
+symbol (`SpotlightWidget`, `TourController`, `TourCardBinding`, `ShellToursView`, `author::withTours`,
+`TourRegistry`, `ListedTour`, `TourSync`, `loadTourText`, …) fails here.
 
 - [ ] **Step 8: clang-tidy on the new files** (at most three at a time, no lock)
 
 Run: `clang-tidy -p build/clang-debug src/ui/tours.cpp src/ui/tour_checks.cpp src/ui/shell_frame.cpp`, then the same
-for `src/client/shell.cpp src/qt_quick/spotlight.cpp src/tui/container_widgets.cpp`.
+for `src/client/shell.cpp src/qt_quick/spotlight.cpp src/tui/container_widgets.cpp`, then for
+`src/ui/tour_registry.cpp src/ui/tour_sync.cpp`.
 Expected: no diagnostics. Do not accept an `auto*` or `std::expected` fix-it as offered; write the types out.
 
 - [ ] **Step 9: Commit**
@@ -6882,6 +9144,46 @@ Where the code forced a different choice than `2026-11-23-guided-tours-design.md
     the chat panel's literals are client-owned; the Tours button's texts are built-in shell texts with German
     (`morph.shell.tours`, `morph.shell.toursName`, `morph.shell.toursGeneral`).
 
+### Further deviations: registering tours at runtime
+
+Against the design's "Registering tours at runtime" section (commit 0aa065099):
+
+19. **`TourRegistry` takes a bundle getter, not a `UiRegistry`.** `UiRegistry` does not hold the served bundle (`build`
+    returns it, and a development reload swaps it); the registry reads it through
+    `std::function<std::shared_ptr<ServedBundle const>()>`, as `CustomScreens` does.
+20. **A bundle change is seen at the next call, or at `recheck()`.** The registry compares the served bundle's digest at
+    every `add`, `replace`, `remove` and `list` and checks every runtime tour again when it changed; an application that
+    swaps its bundle calls `recheck()` to drop failing tours at once. Nothing tells the registry of a swap by itself.
+21. **Publishing is wired separately: `publishTourChanges(tours, server)`.** `registerTours` runs before the
+    `RemoteServer` exists (as `registerCustomScreens` does), and a change made through the C++ API is no action
+    execute, so no declared effect carries it. The registry tells `setOnChanged`; `publishTourChanges` posts
+    `RemoteServer::fanOut(toursChanged())` on the server's strand. A server that does not call it sends no event, and its
+    clients see changes at a frame or a reconnect.
+22. **`registerTours` signature.** `registerTours(std::shared_ptr<TourRegistry>, authorizer, dispatcher, registry)`, not
+    `registerTours(models, tours)`: the model needs the authoriser for `screenAdmitted`, and registration follows
+    `registerCustomScreens`.
+23. **`add` and `replace` take JSON text.** `TourRegistry` stays free of the author headers, as `UiRegistry` does; a server
+    using the builders writes `glz::write_json(author::tourJson(tour))`.
+24. **Runtime checks run by appending the tour to the served app document.** The loader then checks the tour's shape, its
+    texts in the app scope, and an id clash with an app-document tour with the bundle's own words, and `detail::checkTour`
+    (now shared with the build, Task 2) checks its names. A bundle with no app document is refused: the client evaluates
+    a runtime tour's texts in the app scope, so there is nowhere to read them without one.
+25. **A `t` key's presence** is checked against every message catalogue of the bundle and against the server's texts
+    (`fieldTexts`) for every locale those catalogues name, English when there is none. A `t` with a `fallback` is still
+    refused when the key is in neither, as the design says.
+26. **`ListedTour` carries a `revision`,** and `TourDecl`/`Tour` carry it on the client (0 for an app tour). The
+    controller ends a running tour when its revision changes or it disappears: comparing content would also end a tour
+    whose texts changed with the locale, and a replace that changes only texts would be missed.
+27. **The merge lives in `AppRoot::tours()`.** `AppRoot::setRuntimeTours` takes the listed tours; `tours()` lists the app
+    document's and then the runtime ones (a runtime tour with an app tour's id is left out), with every text evaluated in
+    the app scope. The controller, the Tours menu and `tour.start` all read that one value, so none of them merges on
+    its own. A client therefore offers runtime tours only with an app document — which the server's check requires.
+28. **`relist(done)`.** `TourSync::relist` takes an optional callback, run once its own reply was handled, so a test and a
+    caller can wait for one list rather than for a time.
+29. **A literal `tour.start` can name only an app-document tour.** The bundle check (Task 2) refuses a literal id the app
+    document does not declare, and runtime tours do not exist at build time. A document that starts a runtime tour
+    computes the id; it is checked at run time like any computed id.
+
 ---
 
 ## Self-review
@@ -6919,6 +9221,12 @@ Where the code forced a different choice than `2026-11-23-guided-tours-design.md
 | Testing — Qt Quick offscreen (cut-out, placement, pointer, scroll) | 4 |
 | Testing — terminal (card box, reverse video, Tab to target) | 5 |
 | Testing — host command (`tour.start`, unknown id, `can`) | 7, 9 |
+| Registering tours at runtime — `TourRegistry` add/replace/remove, same checks, duplicate ids, missing keys | 2 (shared `checkTour`), 10 |
+| Registering tours at runtime — `list` order and `screenAdmitted`; touching `morph.tours` | 10 (`listFor`, `publishTourChanges`) |
+| Registering tours at runtime — `TourSync` list, watch, relist on changes/reconnect/resync, absent model logged once at debug | 12, 13 |
+| Registering tours at runtime — merge (app then runtime), replaced or removed running tour ends with a toast | 11, 13 |
+| Registering tours at runtime — bundle reload drops failing tours, logs at error, `onDropped` | 10 |
+| Testing — runtime registration, server and client | 10, 11, 12, 13 |
 | Proof in lims | follow-up note only |
 | Out of scope | `tours.md` "Not yet" (6) |
 
@@ -6943,3 +9251,10 @@ step names the command and the expected result. One step names a conditional inc
 - `kTourCardId` (Task 2) is the card document's `id` (Task 7) and the id the shell mounts and reserves (Task 9).
 - `HostCommand::refusal` is declared after `documents` (Task 7), so the existing designated initializers, which end at
   `documents`, still compile.
+- `kToursModel`, `kToursList`, `kTourRecord`, `ToursList`, `ListedTour` (Task 10) are what `TourSync` (Task 12) binds,
+  executes, watches and reads; `ListedTour::revision` becomes `TourDecl::revision` (Task 11, set by `TourSync`) and then
+  `Tour::revision`, which `TourController` compares.
+- `detail::checkTour`/`indexTourScreens` (Task 2) are called by `checkTours` (the build) and by
+  `TourRegistry::checked` (Task 10) with the same arguments.
+- `Tour` gains `revision` as its last member (Task 11); the only designated initializer of `Tour` is `mountApp`'s, which
+  Task 11 rewrites.
