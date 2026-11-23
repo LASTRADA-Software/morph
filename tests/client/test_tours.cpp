@@ -20,9 +20,11 @@
 #include <morph/client/source.hpp>
 #include <morph/core/backend.hpp>
 #include <morph/core/executor.hpp>
+#include <morph/core/logger.hpp>
 #include <morph/core/wire.hpp>
 #include <morph/session/session.hpp>
 #include <morph/ui/testing/recording_backend.hpp>
+#include <mutex>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -379,8 +381,8 @@ TEST_CASE("Client shell tours: opening the spotlight on a waiting step focuses E
 }
 
 // Mutation: drop `_tours->end()` from `resetTours` (the controller goes but the spotlight stays open over an emptied
-// card), drop `resetTours` from `finishSignOut` (the controller keeps running with no screens), or let
-// `showToursMenu` build the menu without a controller (the Tours button stays visible).
+// card), drop `resetTours` from `finishSignOut` (the controller keeps running with no screens), or drop the frame's
+// `setTours({})` after it (the Tours button stays visible).
 TEST_CASE("Client shell tours: a sign-out whose reload fails closes the spotlight and leaves no focus in it",
           "[client][tours]") {
     FakeAppContext context;
@@ -439,10 +441,26 @@ TEST_CASE("Client shell tours: a runtime tour registered on the server is offere
     REQUIRE(window.wait([&window] { return window.text("tour_title") == "News"; }));
 }
 
-// The control: a server that never registered `morph.tours` offers the app document's tours, and nothing is reported.
+// The control: a server that never registered `morph.tours` offers the app document's tours and nothing else. The sync
+// logs the absent model once, which is how the test knows the failed list has answered before it reads the menu.
+// Mutation: make a failed list drop the app's tours, or add the registry's tour to the menu without the model.
 TEST_CASE("Client shell tours: without the runtime tours model the app document's tours are offered alone",
           "[client][tours][runtime]") {
+    std::mutex logMutex;
+    std::vector<std::string> logged;
+    morph::log::ScopedLoggerOverride const guard{[&logMutex, &logged](morph::log::LogLevel, std::string_view message) {
+                                                     std::scoped_lock const lock{logMutex};
+                                                     logged.emplace_back(message);
+                                                 },
+                                                 morph::log::LogLevel::debug};
     Window window;
-    CHECK(window.prop("Menu", "shell_tours", "items").contains("Getting started"));
+    REQUIRE(window.wait([&logMutex, &logged] {
+        std::scoped_lock const lock{logMutex};
+        return std::ranges::any_of(
+            logged, [](std::string const& line) { return line.contains("runtime tours: the server offers none"); });
+    }));
+    std::string const items = window.prop("Menu", "shell_tours", "items");
+    CHECK(items.contains("Getting started"));
+    CHECK_FALSE(items.contains("What's new"));
     CHECK_FALSE(window.reported("morph.tours"));
 }
