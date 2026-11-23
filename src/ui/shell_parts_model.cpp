@@ -33,7 +33,7 @@ std::string builtinShellText(std::string_view key, std::string_view locale) {
         std::string_view en;
         std::string_view de;
     };
-    static constexpr std::array<Entry, 27> kRows = {{
+    static constexpr std::array<Entry, 30> kRows = {{
         // NOLINTBEGIN(modernize-use-designated-initializers): the columns are key, English, German.
         {"morph.shell.context", "Scope", "Bereich"},
         {"morph.shell.search", "Search", "Suche"},
@@ -59,6 +59,9 @@ std::string builtinShellText(std::string_view key, std::string_view locale) {
         {"morph.shell.navigation", "Navigation", "Navigation"},
         {"morph.shell.signOut", "Sign out", "Abmelden"},
         {"morph.shell.help", "Help", "Hilfe"},
+        {"morph.shell.tours", "Tours", "Touren"},
+        {"morph.shell.toursName", "Guided tours", "Geführte Touren"},
+        {"morph.shell.toursGeneral", "General", "Allgemein"},
         {"morph.shell.loading", "Loading…", "Lädt…"},
         {"morph.shell.connected", "Connected", "Verbunden"},
         {"morph.shell.reconnecting", "Reconnecting…", "Verbindung wird wiederhergestellt…"},

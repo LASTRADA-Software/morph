@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 #pragma once
 
+#include <algorithm>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
@@ -198,6 +199,52 @@ struct ShellHelpView {
     /// @brief Memberwise equality.
     /// @return Whether every member matches.
     bool operator==(ShellHelpView const&) const = default;
+};
+
+/// @brief One tour the Tours menu offers.
+struct ShellTourView {
+    /// @brief The tour's id, what choosing it reports.
+    std::string id;
+    /// @brief Its title, the entry's caption.
+    std::string title;
+    /// @brief Its summary, the entry's description; empty for none.
+    std::string summary;
+
+    /// @brief Memberwise equality.
+    /// @return Whether every member matches.
+    bool operator==(ShellTourView const&) const = default;
+};
+
+/// @brief A group of the Tours menu, under a heading: the active screen's tours under its title, or the general ones.
+struct ShellTourGroup {
+    /// @brief The heading.
+    std::string heading;
+    /// @brief The tours, in order.
+    std::vector<ShellTourView> tours;
+
+    /// @brief Memberwise equality.
+    /// @return Whether every member matches.
+    bool operator==(ShellTourGroup const&) const = default;
+};
+
+/// @brief What the Tours button draws: shown while any group holds a tour.
+struct ShellToursView {
+    /// @brief The groups, in order: the active screen's tours, then the general ones.
+    std::vector<ShellTourGroup> groups;
+    /// @brief The button's caption, and the compact submenu's.
+    std::string caption = "Tours";
+    /// @brief The button's accessible name and tooltip.
+    std::string name = "Guided tours";
+
+    /// @brief Whether there is a tour to offer.
+    /// @return True when a group holds a tour.
+    [[nodiscard]] bool shown() const noexcept {
+        return std::ranges::any_of(groups, [](ShellTourGroup const& group) { return !group.tours.empty(); });
+    }
+
+    /// @brief Memberwise equality.
+    /// @return Whether every member matches.
+    bool operator==(ShellToursView const&) const = default;
 };
 
 /// @brief The texts the frame draws that are not data.
