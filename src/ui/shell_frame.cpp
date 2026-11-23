@@ -381,8 +381,10 @@ std::vector<MenuEntry> ShellFrame::tourEntries() {
 
 void ShellFrame::chooseTour(std::size_t entry) {
     if (entry < _tourMap.size() && _tourMap.at(entry) && _onTour) {
+        // A copy: the handler may call `setTours` or `setCompact`, which rebuild `_tourMap` under it.
         // NOLINTNEXTLINE(bugprone-unchecked-optional-access): the condition above checked this slot.
-        _onTour(*_tourMap.at(entry));
+        std::string const id = *_tourMap.at(entry);
+        _onTour(id);
     }
 }
 

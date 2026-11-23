@@ -142,3 +142,39 @@ TEST_CASE("shell tours: the Tours texts are built in, in English and German", "[
     CHECK(ui::shellText("morph.shell.toursName", english) == "Guided tours");
     CHECK(ui::shellText("morph.shell.toursGeneral", german) == "Allgemein");
 }
+
+// Mutation: hand the handler a reference into the frame's entry map (`_onTour(*_tourMap.at(entry))`); the handler's
+// `setTours` rebuilds the map and the id it reads afterwards is a dead string.
+TEST_CASE("shell tours: a handler that replaces the tours still reads the id it was given", "[ui][shell][tours]") {
+    RecordingBackend backend;
+    ui::ShellFrame frame{backend, nullptr, options()};
+    std::string seen;
+    frame.setOnTour([&](std::string const& id) {
+        frame.setTours(ui::ShellToursView{});
+        frame.setTours(samplesTours());
+        seen = id;
+    });
+    frame.setTours(samplesTours());
+    backend.chooseMenuEntry(backend.find("Menu", "testId", "shell_tours").value(), {1});
+    CHECK(seen == "register");
+}
+
+// Mutation: leave out `setTooltip` (the button has no tooltip).
+TEST_CASE("shell tours: the Tours button's tooltip is its name", "[ui][shell][tours]") {
+    RecordingBackend backend;
+    ui::ShellFrame frame{backend, nullptr, options()};
+    frame.setTours(samplesTours());
+    CHECK(backend.prop(backend.find("Menu", "testId", "shell_tours").value(), "tooltip") == "Guided tours");
+}
+
+// Mutation: hide the button for good once compact (`setVisible(tours && !_compact)` becomes `tours && !_everCompact`).
+TEST_CASE("shell tours: leaving the compact form shows the Tours button again", "[ui][shell][tours]") {
+    RecordingBackend backend;
+    ui::ShellFrame frame{backend, nullptr, options()};
+    frame.setTours(samplesTours());
+    frame.setCompact(true);
+    int const menu = backend.find("Menu", "testId", "shell_tours").value();
+    CHECK(backend.prop(menu, "visible") == "false");
+    frame.setCompact(false);
+    CHECK(backend.prop(menu, "visible") != "false");
+}

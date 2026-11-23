@@ -222,8 +222,8 @@ the same one for the command and the switcher, and a tab that is not dirty is ne
 
 ## Where each part is drawn
 
-The screen's head is in the page: a bundle that declares `search`, `inbox`, `help` or `principal`, or any tour, mounts its workspace
-with `HeadPlacement::InPage`, so the top bar holds no title or head actions and the parts, in this order:
+The screen's head is in the page: a bundle that declares `search`, `inbox`, `help` or `principal`, or any tour, mounts
+its workspace with `HeadPlacement::InPage`, so the top bar holds no title or head actions and the parts, in this order:
 
 | Part | Expanded `ShellFrame` |
 |---|---|
@@ -259,8 +259,8 @@ sidebar's principal text and sign-out button are hidden (sign-out is in the menu
 own search field is hidden (the global search replaces it); the pins stay at the top of the navigator. The top bar's
 line wraps as it does today when the window is narrow.
 
-**Focus order** is the switcher, the module rows, the search, the inbox, the help button, the Tours menu, the principal menu, then the
-page.
+**Focus order** is the switcher, the module rows, the search, the inbox, the help button, the Tours menu, the principal
+menu, then the page.
 
 **Module groups.** A module's row label is the group heading of its first entry, through the navigator's `label`; the
 entries' own groups show as section headings inside the open module. Opening a module closes the one open before it. The
@@ -288,9 +288,8 @@ Below `expanded` the sidebar is gone and the parts move:
 - the navigation menu (`shell_nav_menu`) lists, in order: the switcher as a submenu titled with the chosen label,
   holding the options as radio-checked items; a separator; the modules as submenus, the count after the label, each
   submenu holding its sections as headings and its screens; a separator and the help entry; a separator and the
-  Tours submenu when there are tours; a separator; the
-  principal's menu as a submenu (the entries of the expanded menu); the sign-out entry when a handler exists and there
-  is no principal part; and last, after a separator, a heading entry with the foot's words ("Connected · v4.2"), since
+  Tours submenu when there are tours; a separator; the principal's menu as a submenu (the entries of the expanded menu);
+  the sign-out entry when a handler exists and there is no principal part; and last, after a separator, a heading entry with the foot's words ("Connected · v4.2"), since
   the compact frame has no sidebar. Choosing an entry is mapped by its path through the entry list the frame built,
   not by a position;
 - the search and the inbox stay in the bar as icon buttons (`shell_search_open`, `shell_inbox`) with the count in the
