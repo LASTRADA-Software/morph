@@ -179,6 +179,9 @@ struct CellFacts {
     bool locked = false;
     /// @brief The cell's value is not loaded.
     bool unloaded = false;
+    /// @brief The cell's value is in a unit its field cannot hold: a measure the table's units cannot convert into its
+    ///        field's unit.
+    bool foreignUnit = false;
 };
 
 /// @brief Whether a cell is read-only: what the walk skips, what refuses an edit, a paste and a fill, and what draws
@@ -191,18 +194,14 @@ struct CellFacts {
         return true;
     }
     return facts.field->readonly().get() || facts.overlayReadOnly || facts.companionReadOnly || facts.busy ||
-           facts.locked || facts.unloaded;
+           facts.locked || facts.unloaded || facts.foreignUnit;
 }
 
-/// @brief What a grid's controller gives its source to keep the focus on its row's key.
+/// @brief What a grid's controller gives its source to keep the focus on its row's key. Where the focused row is in
+///        the view, and the row that takes focus when it leaves, are the mount's, as for any table.
 struct FocusLink {
     /// @brief A row's key changed from the first to the second: the focus and an open editor on it follow.
     std::function<void(Key const&, Key const&)> moved;
-    /// @brief The key of the row focus is on; nothing when it is on none.
-    std::function<std::optional<Key>()> focused;
-    /// @brief The row with the key is at that view position now, as the rows located it: the focus there is shown
-    ///        there.
-    std::function<void(Key const&, std::size_t)> located;
 };
 
 /// @brief What a grid edits: its rows by view index, which a model's table holds only a window of, and its cells by
@@ -453,8 +452,8 @@ public:
     /// @return `true` unless a source says otherwise.
     [[nodiscard]] virtual bool selectsCells() const { return true; }
 
-    /// @brief Gives the source what follows the focused row's key: a key that changed, and where a row the source no
-    ///        longer holds is in the view now. A source whose keys never change and whose rows are all held ignores it.
+    /// @brief Gives the source what follows the focused row's key when the key changes. A source whose keys never
+    ///        change ignores it.
     /// @param link The controller's side; empty members when the controller goes.
     virtual void followFocusWith(FocusLink link) { static_cast<void>(link); }
 
@@ -2978,6 +2977,7 @@ public:
         for (auto& [row, cells] : _held) {
             std::erase_if(cells, [&ids](table::EditCell const& cell) { return !std::ranges::contains(ids, cell.column); });
         }
+        std::erase_if(_resend, [&ids](CellRef const& cell) { return !std::ranges::contains(ids, cell.column); });
         _positionsVersion.reset();
         bump();
     }
@@ -3009,6 +3009,7 @@ public:
         for (table::RowId const& key : keys) {
             _edits->rowAbsent(key);
             _held.erase(key);
+            std::erase_if(_resend, [&key](CellRef const& cell) { return cell.key == key; });
         }
         bump();
     }
@@ -3056,6 +3057,22 @@ public:
             }
         }
         return _edits->draft(key, column);
+    }
+
+    /// @brief A cell's held draft as its cell shows it: a `Measure` column's with its field's unit, since the column's
+    ///        other cells name their own. Tracked.
+    /// @param key    The row's key.
+    /// @param column The column's id.
+    /// @return The text; nothing while no draft is held.
+    [[nodiscard]] std::optional<std::string> heldText(Key const& key, std::string_view column) const {
+        std::optional<std::string> held = heldDraft(key, column);
+        table::TableColumn const* const shown = describedColumn(column);
+        forms::FieldState const* const field = fieldOf(column);
+        if (held && !held->empty() && shown != nullptr && shown->info.kind == table::ColumnKind::Measure &&
+            field != nullptr && !field->spec().unit.empty()) {
+            *held += " " + field->spec().unit;
+        }
+        return held;
     }
 
     /// @brief The view's rows, fetched or not.
@@ -3170,7 +3187,7 @@ public:
     /// @param column The column's id.
     /// @return The text.
     [[nodiscard]] std::string text(Key const& key, std::string_view column) const override {
-        if (std::optional<std::string> held = heldDraft(key, column)) {
+        if (std::optional<std::string> held = heldText(key, column)) {
             return std::move(*held);
         }
         table::TableColumn const* const described = describedColumn(column);
@@ -3301,6 +3318,9 @@ public:
         if (facts.unloaded) {
             return std::string{kUnloadedText};
         }
+        if (facts.foreignUnit) {
+            return std::string{kForeignUnitText};
+        }
         if (facts.busy) {
             return std::string{kBusyText};
         }
@@ -3345,7 +3365,7 @@ public:
     /// @return `false`.
     [[nodiscard]] bool selectsCells() const override { return false; }
 
-    /// @brief Keeps what moves the focus with a row's key and shows it where the rows located its row.
+    /// @brief Keeps what moves the focus with a row's key.
     /// @param link The controller's side.
     void followFocusWith(FocusLink link) override { _focus = std::move(link); }
 
@@ -3365,6 +3385,8 @@ public:
     static constexpr std::string_view kReadOnlyText = "This cell is read-only";
     /// @brief The status line's refusal of typing on a cell not loaded yet.
     static constexpr std::string_view kUnloadedText = "This value is not loaded yet";
+    /// @brief The status line's refusal of typing on a measure in a unit its field cannot hold.
+    static constexpr std::string_view kForeignUnitText = "This value's unit cannot be edited here";
     /// @brief The status line's refusal of typing in a row another run is saving.
     static constexpr std::string_view kBusyText = "This row is being saved";
 
@@ -3461,14 +3483,10 @@ private:
             }
             ++_source->_rowsVersion;
             _source->bump();
-            // The mount's handler may end the mount that owns this source.
-            auto const alive = _source->_alive.token();
+            // Last: the mount's handler may end the mount that owns this source.
             if (_handler) {
                 std::function<void(table::ViewChange const&)> const handler = _handler;
                 handler(change);
-            }
-            if (!alive.expired()) {
-                _source->locateFocus();
             }
         }
 
@@ -3583,9 +3601,13 @@ private:
         facts.locked = _description && lockText(TableRowRef{.key = key, .row = row->record}, *_description).has_value();
         table::TableColumn const* const shown = describedColumn(column);
         table::UnloadedLevels const levels = _rows->unloadedLevels(row->index);
-        facts.unloaded = row->record.field(std::string{column}) == nullptr ||
-                         (shown != nullptr && !shown->info.level.empty() &&
-                          std::ranges::contains(levels.levels, shown->info.level));
+        Value const* const value = row->record.field(std::string{column});
+        facts.unloaded = value == nullptr || (shown != nullptr && !shown->info.level.empty() &&
+                                              std::ranges::contains(levels.levels, shown->info.level));
+        if (Quantity const* const measure = value == nullptr ? nullptr : value->asQuantity();
+            measure != nullptr && facts.field != nullptr && facts.field->spec().kind == forms::FieldKind::Quantity) {
+            facts.foreignUnit = !inFieldUnit(*measure, facts.field->spec());
+        }
         return facts;
     }
 
@@ -3701,32 +3723,6 @@ private:
         bump();
     }
 
-    // The focused row is not among the rows held: the rows locate it in the view, and the focus is shown where they
-    // found it. A later change asks again; the answer to an earlier ask is dropped.
-    void locateFocus() {
-        if (!_focus.focused || !_focus.located) {
-            return;
-        }
-        std::optional<Key> const key = _focus.focused();
-        if (!key || positionOf(*key)) {
-            _searched.reset();
-            return;
-        }
-        if (_searched == key) {
-            return;
-        }
-        _searched = key;
-        _locating.request_stop();
-        _locating = std::stop_source{};
-        _rows->locateRow(*key, _locating.get_token(),
-                         _alive.guard([this, found = *key](RowLocation const& location) {
-                             if (location && *location && _focus.located) {
-                                 std::function<void(Key const&, std::size_t)> const located = _focus.located;
-                                 located(found, static_cast<std::size_t>(**location));
-                             }
-                         }));
-    }
-
     // A row commit settled: the cells follow, and in `EditMode::Row` a refusal brings focus back to the row's first
     // refused cell in layout order.
     void rowSettled(table::RowId const& row, bool refused) {
@@ -3752,16 +3748,7 @@ private:
         forms::FieldKind const kind = spec.kind;
         if (Quantity const* const measure = value.asQuantity();
             measure != nullptr && kind == forms::FieldKind::Quantity) {
-            std::optional<table::UnitId> const from = _units ? _units->find(measure->unit) : std::nullopt;
-            std::optional<table::UnitId> const to = _units ? _units->find(spec.unitAscii) : std::nullopt;
-            if (!from || !to || _units->info(*from).dimension != _units->info(*to).dimension) {
-                return "null";
-            }
-            auto const factor = math::checkedDiv(_units->info(*from).toBase, _units->info(*to).toBase);
-            if (!factor) {
-                return "null";
-            }
-            auto const amount = math::checkedMul(measure->value, *factor);
+            std::optional<math::Rational> const amount = inFieldUnit(*measure, spec);
             return amount ? glz::write_json(valueToJson(Value{Decimal{*amount}})).value_or("null") : std::string{"null"};
         }
         if (kind == forms::FieldKind::EpochDate) {
@@ -3788,6 +3775,19 @@ private:
             }
         }
         return glz::write_json(valueToJson(value)).value_or("null");
+    }
+
+    // A measure's amount in its `Quantity` field's canonical unit, through the description's units; nothing when they
+    // cannot convert it (a unit they lack, another dimension), so the cell is read-only.
+    [[nodiscard]] std::optional<math::Rational> inFieldUnit(Quantity const& measure, forms::FieldSpec const& spec) const {
+        std::optional<table::UnitId> const from = _units ? _units->find(measure.unit) : std::nullopt;
+        std::optional<table::UnitId> const to = _units ? _units->find(spec.unitAscii) : std::nullopt;
+        if (!from || !to || _units->info(*from).dimension != _units->info(*to).dimension) {
+            return std::nullopt;
+        }
+        auto const factor = math::checkedDiv(_units->info(*from).toBase, _units->info(*to).toBase);
+        auto const amount = factor ? math::checkedMul(measure.value, *factor) : std::unexpected(factor.error());
+        return amount ? std::optional{*amount} : std::nullopt;
     }
 
     // A record's value as a cell of its column.
@@ -3830,9 +3830,6 @@ private:
     std::map<Key, std::vector<table::EditCell>> _held;
     std::function<void(CellRef const&)> _refocus;
     FocusLink _focus;
-    std::stop_source _locating;
-    // The focused key the rows were last asked to locate: asked once per time the key leaves the rows held.
-    std::optional<Key> _searched;
     // Cells refused when their row's held cells were sent, which their next commit sends.
     std::vector<CellRef> _resend;
     // The description's units, through which a measure is converted into its field's unit.
@@ -3874,13 +3871,7 @@ public:
                 focusCell(cell);
             }
         });
-        _source->followFocusWith(FocusLink{
-            .moved = [this](Key const& from, Key const& to) { keyMoved(from, to); },
-            .focused = [this]() -> std::optional<Key> {
-                std::optional<GridFocus> const shown = _place.peek();
-                return shown ? shown->key : std::nullopt;
-            },
-            .located = [this](Key const& key, std::size_t viewRow) { located(key, viewRow); }});
+        _source->followFocusWith(FocusLink{.moved = [this](Key const& from, Key const& to) { keyMoved(from, to); }});
     }
 
     GridController(GridController const&) = delete;
@@ -5049,14 +5040,6 @@ private:
         }
         _focusedRow = to;
         _place.set(GridFocus{.key = to, .viewRow = _source->positionOf(to).value_or(shown->viewRow), .column = shown->column});
-    }
-
-    // The rows located the focused row, which they do not hold, at a view position: the focus is shown there.
-    void located(Key const& key, std::size_t viewRow) {
-        std::optional<GridFocus> const shown = _place.peek();
-        if (shown && shown->key == key && shown->viewRow != viewRow) {
-            _place.set(GridFocus{.key = key, .viewRow = viewRow, .column = shown->column});
-        }
     }
 
     // Moves the focus, and tells the source when the row it is on changed.

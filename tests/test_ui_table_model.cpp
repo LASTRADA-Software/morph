@@ -12,6 +12,7 @@
 #include <chrono>
 #include <cstdint>
 #include <format>
+#include <functional>
 #include <initializer_list>
 #include <iterator>
 #include <map>
@@ -6864,23 +6865,31 @@ TEST_CASE("model table: an editor opens holding the cell's value, whatever its k
     CHECK(f.commits.sent.empty());
 }
 
-// Mutations: ModelGridSource::moveKey not telling the controller (focus stays on key 5); the decorator not locating a
-// focused row it no longer holds (focus is shown at its old place).
-TEST_CASE("model table: focus follows its row's key, and is located off the window", "[ui][table][edit]") {
+// Mutation: ModelGridSource::moveKey not telling the controller (focus stays on key 5). Where a focused row the window
+// no longer holds is, and which row takes focus when it leaves, are the mount's: the TableHarness cases below.
+TEST_CASE("model table: focus follows its row's key", "[ui][table][edit]") {
     ModelGridFixture f{{1, 2, 3, 4, 5}};
     f.grid->focusCell(at(5, "count"));
     f.source->moveKey(key(5), key(9));
     f.rows->rekey(row(5), row(9));
     CHECK(f.grid->focus() == at(9, "count"));
     CHECK(f.grid->place() == morph::ui::GridFocus{key(9), 4, "count"});
-    f.grid->focusCell(at(3, "count"));
-    // A new order puts row 3 last, where the window does not hold it.
-    f.rows->view = {f.rows->view.at(0), f.rows->view.at(1), f.rows->view.at(3), f.rows->view.at(4), f.rows->view.at(2)};
-    f.rows->view.at(4).fetched = false;
-    f.rows->reset();
-    REQUIRE(f.rows->locatesAsked() == 1);
-    f.rows->answerLocates();
-    CHECK(f.grid->place() == morph::ui::GridFocus{key(3), 4, "count"});
+}
+
+// Mutation: the foreign-unit fact left out of ModelGridSource's facts (the 0.3 % cell opens blank in the kg field and
+// takes "5", sent as 5 kg).
+TEST_CASE("model table: a measure its field's unit cannot hold is read-only", "[ui][table][edit]") {
+    ModelGridFixture f{{1, 2}};
+    morph::test::grid::setField(*f.rows, 2, "weight",
+                                Value{morph::ui::Quantity{.value = table::parseDecimal("0.3").value(), .unit = "percent"}});
+    CHECK_FALSE(f.source->readOnly(key(1), "weight"));                          // 200 g converts into kg
+    CHECK(f.source->readOnly(key(2), "weight"));
+    CHECK(f.source->marks(key(2), "weight").readOnly);
+    f.grid->focusCell(at(2, "weight"));
+    f.grid->type("5");
+    CHECK(f.grid->message() == "This value's unit cannot be edited here");
+    f.grid->press("Enter");
+    CHECK(f.commits.sent.empty());
 }
 
 // Mutation: ModelGridSource selecting cells (Shift+Down makes a rectangle; the chords are claimed from the table).
@@ -7262,4 +7271,120 @@ TEST_CASE("model table: focus follows a key an edit changed, in the mount", "[ui
     h.settle();
     REQUIRE(h.dispatcher.count("Lims_EditSpecimenCount") == 2);
     CHECK(h.dispatcher.calls.at(h.dispatcher.last("Lims_EditSpecimenCount")).body == R"({"key":9,"value":5})");
+}
+
+namespace {
+
+// Answers the open `Table.samples` calls of the edit table that @p keyed selects (keyed fetches, or page fetches),
+// each with the columns it names: a page's rows keyed `keyAt(viewRow)`, a keyed fetch's the rows @p found gives as
+// key and view row.
+void answerEdits(TableHarness& h, bool keyed, std::function<std::int64_t(std::int64_t)> const& keyAt,
+                 std::vector<std::pair<std::int64_t, std::int64_t>> const& found, std::int64_t total) {
+    for (int round = 0; round < 32; ++round) {
+        std::optional<std::size_t> call;
+        for (std::size_t index = 0; index < h.dispatcher.calls.size(); ++index) {
+            auto const& made = h.dispatcher.calls[index];
+            if (made.action == "Table.samples" && !made.answered && !made.options.stop.stop_requested() &&
+                morph::ui::testing::queryOf(h, index).keys.has_value() == keyed) {
+                call = index;
+                break;
+            }
+        }
+        if (!call) {
+            return;
+        }
+        table::TableQuery const query = morph::ui::testing::queryOf(h, *call);
+        table::GenericPage page;
+        page.revision = editDescription().revision;
+        page.columns = query.columns.value_or(std::vector<std::string>{});
+        page.total = total;
+        page.totalKind = table::TotalKind::Exact;
+        std::vector<std::pair<std::int64_t, std::int64_t>> rows = found;
+        if (!keyed) {
+            page.offset = query.page.offset;
+            rows.clear();
+            for (std::int64_t at = query.page.offset; at < std::min(total, query.page.offset + query.page.limit); ++at) {
+                rows.emplace_back(keyAt(at), at);
+            }
+        }
+        for (auto const& [key, viewRow] : rows) {
+            page.keys.emplace_back(key);
+            if (keyed) {
+                page.indices.push_back(viewRow);
+            }
+            CompanionRow const row = editRow(key);
+            table::GenericRow cells;
+            for (std::string const& column : page.columns) {
+                auto const cell = row.find(column);
+                cells.push_back(cell == row.end() ? table::Cell{} : cell->second);
+            }
+            page.rows.push_back(std::move(cells));
+        }
+        h.reply(*call, glz::write_json(page).value_or(""));
+    }
+}
+
+// Mounts the edit table over 9,093 rows keyed by view row + 1, thirty in view, and focuses (8, count) at view row 7.
+int mountLargeAndFocus(TableHarness& h, std::unique_ptr<morph::ui::Screen>& screen) {
+    screen = h.mount(editDoc());
+    morph::ui::testing::replyDescribe(h, describeJson(editDescription()));
+    int const table = h.byTestId("Table", "t");
+    h.backend.scrollTable(table, 0, 30);
+    h.settle();
+    answerEdits(h, false, [](std::int64_t at) { return at + 1; }, {}, 9'093);
+    h.backend.clickCell(table, 7, morph::ui::testing::columnIndex(h, "count"));
+    h.settle();
+    REQUIRE(h.backend.focusCell(table).first == 7);
+    return table;
+}
+
+}  // namespace
+
+// Mutation: the mount's focusLocated ignoring the located index (focus stays at view row 7, which another key now
+// holds, and typing edits nothing there).
+TEST_CASE("model table: a focused row a new order moves off the window is located, in the mount",
+          "[ui][table][edit][interpreter]") {
+    using namespace morph::ui::testing;
+    TableHarness h;
+    addEditActions(h);
+    std::unique_ptr<morph::ui::Screen> screen;
+    int const table = mountLargeAndFocus(h, screen);
+    h.backend.clickHeader(table, 1);                                            // a new order: the window resets
+    h.settle();
+    auto const reordered = [](std::int64_t at) { return at == 7 ? std::int64_t{10'000} : (at == 5'000 ? 8 : at + 1); };
+    answerEdits(h, false, reordered, {}, 9'093);
+    answerEdits(h, true, reordered, {{8, 5'000}}, 9'093);                       // the mount's locate: row 8 is at 5,000
+    CHECK(h.backend.focusCell(table).first == 5'000);
+    h.advance(80ms);                                                            // the window's settle after a scroll
+    answerEdits(h, false, reordered, {}, 9'093);
+    CHECK(h.backend.focusCell(table).first == 5'000);
+    h.backend.typeInto(table, "3");
+    h.settle();
+    h.backend.press(table, "Enter");
+    h.settle();
+    REQUIRE(h.dispatcher.count("Lims_EditSpecimenCount") == 1);
+    CHECK(h.dispatcher.calls.at(h.dispatcher.last("Lims_EditSpecimenCount")).body == R"({"key":8,"value":3})");
+}
+
+// Mutation: the mount's reportFocus not handing a grid the row that took focus (the grid keeps the gone key: typing
+// posts "This value is not loaded yet" and nothing is sent).
+TEST_CASE("model table: when the focused row leaves the view, focus moves to the row now at its place",
+          "[ui][table][edit][interpreter]") {
+    using namespace morph::ui::testing;
+    TableHarness h;
+    addEditActions(h);
+    std::unique_ptr<morph::ui::Screen> screen;
+    int const table = mountLargeAndFocus(h, screen);
+    h.backend.clickHeader(table, 1);
+    h.settle();
+    auto const without = [](std::int64_t at) { return at == 7 ? std::int64_t{10'000} : at + 1; };   // row 8 is gone
+    answerEdits(h, false, without, {}, 9'093);
+    answerEdits(h, true, without, {}, 9'093);                                   // the locate: the view lacks row 8
+    CHECK(h.backend.focusCell(table).first == 7);
+    h.backend.typeInto(table, "3");
+    h.settle();
+    h.backend.press(table, "Enter");
+    h.settle();
+    REQUIRE(h.dispatcher.count("Lims_EditSpecimenCount") == 1);
+    CHECK(h.dispatcher.calls.at(h.dispatcher.last("Lims_EditSpecimenCount")).body == R"({"key":10000,"value":3})");
 }

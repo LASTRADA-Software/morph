@@ -3730,6 +3730,15 @@ private:
     }
 
     void reportFocus(SourceTable const& table) {
+        // A grid holds its own focus: the key that took focus is handed to it, as a gesture's cell is.
+        if (table.grid) {
+            if (table.onGridFocus && table.focusColumn < table.columns.size()) {
+                table.onGridFocus(GridFocus{.key = table.focusKey,
+                                            .viewRow = static_cast<std::size_t>(std::max<std::int64_t>(table.focusIndex, 0)),
+                                            .column = table.columns.at(table.focusColumn).id});
+            }
+            return;
+        }
         if (!table.onFocusCell || !table.focusKey) {
             return;
         }

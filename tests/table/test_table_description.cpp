@@ -2610,6 +2610,35 @@ TEST_CASE("description: an edit whose field does not fit its column is a source 
     CHECK_FALSE(checkEdits(unknown, editSchemas(R"({"type":"integer"})")).has_value());
 }
 
+// Mutation: checkEdits not checking a measure field's unit against the table's units (every cell would open in a unit
+// the table cannot convert into).
+TEST_CASE("description: a measure edited in a unit the table lacks is a source contract", "[table][description][edits]") {
+    auto const schemas = [](std::string_view action) -> std::optional<std::string> {
+        if (action != "Lims_EditWeight") {
+            return std::nullopt;
+        }
+        return std::string{R"({"type":"object","properties":{"key":{"type":"integer"},"value":{"type":["object","null"],)"
+                           R"("x-decimalPlaces":3,"ExtUnits":{"unitAscii":"kg","unitUnicode":"kg"}}},"required":["key"]})"};
+    };
+    auto const measured = [](std::vector<UnitInfo> units) {
+        TableDescription description{.id = "t", .label = "T",
+                                     .columns = {column("id", ColumnKind::Integer),
+                                                 editedColumn("weight", ColumnKind::Measure, {.action = "Lims_EditWeight"})},
+                                     .key = "id"};
+        description.units = std::move(units);
+        return describe(std::move(description));
+    };
+    UnitInfo const gram{.id = "g", .symbol = "g", .dimension = "mass",
+                        .toBase = Rational{Numerator{1}, Denominator{1000}, DecimalPlaces{3}}, .decimals = 1};
+    UnitInfo const kilogram{.id = "kg", .symbol = "kg", .dimension = "mass",
+                            .toBase = Rational{Numerator{1}, Denominator{1}, DecimalPlaces{0}}, .decimals = 3};
+    auto const lacking = checkEdits(measured({gram}), schemas);
+    REQUIRE_FALSE(lacking.has_value());
+    CHECK(lacking.error().code == TableErrorCode::SourceContract);
+    CHECK(lacking.error().message.find("kg") != std::string::npos);
+    CHECK(checkEdits(measured({gram, kilogram}), schemas).has_value());
+}
+
 // Mutation: the TableColumn meta leaving `edit` out (the read column has none).
 TEST_CASE("description: a column's edit is on the wire, and absent when it has none", "[table][description][edits]") {
     auto const described = describedOf(

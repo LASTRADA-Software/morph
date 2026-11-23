@@ -15124,7 +15124,7 @@ Node ScreenCore::modelTableOf(DocNode const& node, LowerCtx const& ctx, ElementS
             .text = slotProp<std::string>([scope = ctx.scope, &row, &model, column, textOfCell, drafts, shown] {
                 if (std::shared_ptr<ModelGridSource> const grid = drafts->lock()) {
                     if (Value const* const id = row.get().field(model.keyColumn); id != nullptr) {
-                        if (std::optional<std::string> held = grid->heldDraft(keyOf(*id), shown->at(column).info.id)) {
+                        if (std::optional<std::string> held = grid->heldText(keyOf(*id), shown->at(column).info.id)) {
                             return std::move(*held);
                         }
                     }
