@@ -32,8 +32,7 @@ public:
     /// @brief A sync that has not listed yet.
     /// @param dispatcher Where model calls go: the interpreter's own. Borrowed: it must outlive the sync.
     /// @param session    The session whose watch set carries `morph.tours` once offered; null for a source whose
-    /// server
-    ///                   sends no events, such as an in-process one. Borrowed: it must outlive the sync.
+    ///                   server sends no events, such as an in-process one. Borrowed: it must outlive the sync.
     explicit TourSync(Dispatcher& dispatcher MORPH_LIFETIMEBOUND, Session* session = nullptr);
     TourSync(TourSync const&) = delete;
     TourSync& operator=(TourSync const&) = delete;
@@ -59,7 +58,7 @@ public:
     void deliverEvent(wire::EventBody const& event);
 
     /// @brief Forgets the list and the offer, stops the watch, and drops replies still in flight: a new frame's
-    /// session.
+    ///        session.
     void reset();
 
     /// @brief Whether the server offers runtime tours, as the last list found.

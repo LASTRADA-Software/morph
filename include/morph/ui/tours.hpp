@@ -101,8 +101,7 @@ struct TourView {
     /// @brief How many steps the tour has.
     std::int64_t count = 0;
     /// @brief Whether the step waits for a screen to become active rather than for Next. A step whose screen is
-    /// already
-    ///        active when it is shown does not wait.
+    ///        already active when it is shown does not wait.
     bool waiting = false;
     /// @brief The title of the screen a waiting step waits for; empty otherwise.
     std::string waitingFor;
