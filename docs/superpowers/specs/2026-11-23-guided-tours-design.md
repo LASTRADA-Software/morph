@@ -6,6 +6,10 @@ for. The person starts a tour, moves through it with Next and Back, and can end 
 for the person to do something, such as open a screen from the navigator, so the tour teaches the move rather than
 making it for them.
 
+Tours belong to a screen or to the whole application. A screen can have several tours, one per workflow: a samples
+list might have "Register a sample", "Find a sample" and "Release results". While a screen is shown, the shell's
+**Tours** button lists that screen's tours, followed by the application's general ones.
+
 ## Contents
 
 - [Goals](#goals)
@@ -26,6 +30,8 @@ making it for them.
   connects to and needs no per-application code.
 - Tours are translated like every other text: a tour's texts are expressions in the app scope, so a change of locale
   re-evaluates them while a tour runs.
+- A screen can carry several tours, one per workflow, and the person finds them on that screen without the screen
+  author adding any buttons.
 - A step can point at the shell (search, navigator entry, help button, chat) or at an element of a screen.
 - It works on every frontend. Qt Quick (desktop and WASM) dims the window and rings the target. The terminal shows the
   card beside the target and marks the target, without dimming.
@@ -42,7 +48,9 @@ Each decision is listed with the obvious alternative that was rejected.
 | A step names its target by **`testId`** | Shell and chrome ids are documented and stable already (`shell_search`, `nav_<screenId>`, `chat_input`). Screen authors set `testId` deliberately. A JSON Pointer would break whenever a screen is edited, and an element `id` is scoped, so it is not unique in a window. |
 | The **backend** resolves the target and tracks its geometry | Geometry belongs to the toolkit. The generic layer has no geometry API, and adding one would put a frame-by-frame layout question on the seam. The backend already holds a registry from `testId` to item (Qt Quick's `findWidget`). |
 | The card is a **client-generated ui/1 document** that reads a `tour.*` host vocabulary | This is the chat panel's pattern. The card is themed, translated, keyboard-reachable and testable like any screen, and its layout needs no new widget code. |
-| A tour starts from a ui/1 command, **`startTour`** | Any screen can start a tour: the app's help screen, an empty state, a welcome banner. The help button keeps opening one destination, as its spec requires. |
+| A tour may name the **screen it belongs to** (`screen` on the tour), and a screen may have any number of tours | Workflows are per screen: one screen supports several tasks, and each task is its own short tour. Long tours that cover everything are hard to follow and are rarely finished. A tour with no `screen` is general and is offered on every screen. |
+| The shell shows a **Tours button** whenever the active screen has tours or the app has general ones | The person discovers a screen's workflows where they need them, and a screen author does not have to add a button to each screen. The button is a client part, like the toast. It is not a declared shell part, because declaring a tour already says that it should be offered. |
+| A tour can also start from a ui/1 command, **`startTour`** | A screen can offer a tour in context: an empty state ("New here? Take the tour"), a welcome banner, a help screen. The help button keeps opening one destination, as its spec requires. |
 | A waiting step advances when **a screen becomes active** (`advanceOn: {screen}`) | Every frontend observes that event the same way, through the workspace's active tab. "Advance when this element is clicked" would need click observation in every backend, and with clicks the tour cannot tell an accidental press from a deliberate one. |
 | A target that is not on screen shows the card **centred, without a ring**, and logs a warning | Checking at build time catches misspelt ids. What remains at run time is an element hidden by state (a collapsed panel, an empty table). The card text still helps, and ending the tour would strand the person mid-way. The warning keeps the miss visible to the developer. |
 | One tour runs at a time | Starting a tour ends the one that is running. Two spotlights cannot share one window. |
@@ -65,9 +73,31 @@ Each decision is listed with the obvious alternative that was rejected.
         "title": {"t": "tours.start.table.title"},  "body": {"t": "tours.start.table.body"} },
       { "title": {"t": "tours.start.done.title"},   "body": {"t": "tours.start.done.body"} }
     ]
+  },
+  {
+    "id": "register-sample",
+    "screen": "samples",
+    "title":   {"t": "tours.register.title"},
+    "summary": {"t": "tours.register.summary"},
+    "steps": [
+      { "target": "action_new",
+        "title": {"t": "tours.register.new.title"},  "body": {"t": "tours.register.new.body"} },
+      { "target": "samples_filter",
+        "title": {"t": "tours.register.find.title"}, "body": {"t": "tours.register.find.body"} }
+    ]
+  },
+  {
+    "id": "release-results",
+    "screen": "samples",
+    "title":   {"t": "tours.release.title"},
+    "summary": {"t": "tours.release.summary"},
+    "steps": [ ... ]
   }
 ]
 ```
+
+In this example, `getting-started` is general. `register-sample` and `release-results` both belong to `samples`, so
+the samples screen offers both of them as well as `getting-started`.
 
 The JSON above writes a text as `{"t": key}` for brevity. In the document, a text is written exactly as a screen's
 `title` is written.
@@ -75,7 +105,8 @@ The JSON above writes a text as `{"t": key}` for brevity. In the document, a tex
 | Member | Required | Meaning |
 |---|---|---|
 | `id` | yes | Unique among the app's tours: `[a-z0-9-]+`, at most 64 characters |
-| `title`, `summary` | `title` | Text expressions in the app scope. The card shows `title` as its eyebrow on every step |
+| `screen` | no | The screen the tour belongs to. The tour is offered while that screen is active, and starting it opens that screen first. Without `screen`, the tour is general and is offered on every screen |
+| `title`, `summary` | `title` | Text expressions in the app scope. The Tours list shows both. The card shows `title` as its eyebrow on every step |
 | `steps` | yes | One step or more, and at most 50 |
 
 | Step member | Required | Meaning |
@@ -90,6 +121,18 @@ is data the server builds once. It has no lifecycle.
 
 ## Starting a tour
 
+- **From the Tours button:** the shell's top bar has a button, `shell_tours`, captioned "Tours", just before the help
+  button. It is shown whenever the active screen has tours or the app has general ones, and hidden otherwise. It opens
+  a popover (`PopoverWidget`, as search does) with these entries:
+  - the active screen's tours first, under the screen's title as a heading;
+  - then the general tours, under "General";
+  - each tour as an entry `tour_<id>`, showing its title with its summary as the second line;
+  - tours in declaration order within each group.
+
+  Choosing an entry closes the popover and starts the tour. On a custom screen, the button lists the tours of the
+  screen it is based on. Their targets may be missing there, and a missing target falls back as
+  [Running a tour](#running-a-tour) describes. In the compact form, the button moves into the overflow menu as a
+  "Tours" submenu.
 - **From a document:** `{"startTour": "getting-started"}` is a command with a literal tour id. The shell handles it
   itself, as it handles `setContext`. No owner round trip is needed, because starting a tour changes nothing on the
   server.
@@ -103,7 +146,7 @@ at most one tour.
 
 | Event | What happens |
 |---|---|
-| `start(id)` | Ends any running tour, then shows step 0 |
+| `start(id)` | Ends any running tour. If the tour has a `screen` and the active tab is not showing it, opens that screen. Then shows step 0 |
 | Showing step *n* | If the step names a `screen` and the active tab is not showing it with those params, it calls `Workspace::open`. It sets the host values and points the spotlight at `target` |
 | `next` | Shows step *n*+1. On the last step the card's button is captioned Done and ends the tour |
 | `back` | Shows step *n*−1. Back does not undo a screen the tour opened; the earlier step's own `screen` reopens it if it named one |
@@ -179,10 +222,11 @@ these:
 
 - A tour id that is empty, malformed or repeated.
 - A tour with no steps, or more than 50.
-- A `screen` or `advanceOn.screen` that is not a registered screen.
+- A tour's `screen`, or a step's `screen` or `advanceOn.screen`, that is not a registered screen.
 - `params` that are not a literal record.
 - A `target` that names nothing the window can show. The step's *effective screen* is its own `screen`, or failing
-  that the last `screen` named by an earlier step, or failing that the `advanceOn.screen` of the step just before it.
+  that the last `screen` named by an earlier step, or failing that the `advanceOn.screen` of the step just before it,
+  or failing that the tour's `screen`.
   A target is accepted when it is one of these:
   - a documented shell id (the frame's fixed ids, or `nav_<id>` for a registered screen);
   - a `testId` set in the effective screen's document;
@@ -195,6 +239,9 @@ are must-understand, as everywhere else in ui/1.
 
 ## Testing
 
+- **Tours list, headless:** a screen with two tours lists both, in order, before the general ones; a screen with none
+  lists only the general ones; with no tours anywhere the button is hidden; switching tabs refreshes the list; starting
+  a screen's tour from another screen opens that screen first.
 - **Controller, headless:** start, next, back, Done; a step that opens its screen; `advanceOn` on a navigator open;
   `advanceOn` ignoring a non-matching screen; a missing target (card centred, one warning per step); Escape; reload
   and disconnect ending the tour; a new tour replacing a running one; a locale change re-evaluating the texts while a
@@ -213,11 +260,14 @@ are must-understand, as everywhere else in ui/1.
 
 The framework ships first as its own pull request. The lims proof follows in a separate change.
 
-- lims declares a "Getting started" tour covering the navigator, search, the samples list (with a waiting step that
-  asks the person to open it), a sample record, the inbox and the assistant. It also declares a shorter "Billing"
-  tour. Both are in English and German.
-- lims's About screen gains a "Guided tours" section with one button per tour, each running `startTour`.
-- A lims GUI test runs "Getting started" end to end in the headless shell. A render-smoke test captures the
+- **A general tour,** "Getting started", covering the navigator, search, the inbox and the assistant. It has a
+  waiting step that asks the person to open Samples.
+- **Several tours on the samples screen,** one per workflow: "Register a sample", "Find a sample" and "Release
+  results". One billing screen also gets its own workflow tour, "Issue an invoice".
+- All tours are in English and German.
+- **Starting from a screen:** the samples list's empty state runs `startTour` as well.
+- **A lims GUI test** opens the samples screen, checks that the Tours list shows its three workflows before
+  "Getting started", and runs "Register a sample" end to end in the headless shell. A render-smoke test captures the
   spotlight over the samples table.
 
 ## Out of scope
