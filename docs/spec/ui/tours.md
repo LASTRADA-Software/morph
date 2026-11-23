@@ -145,7 +145,8 @@ server and shows only what the application declared. An id the app does not decl
 `refusal` check, so it answers as a command that did not succeed and the interpreter reports it; the bundle check
 already refuses a literal one. `{"can": "host:tour.start"}` is true on a client that runs tours, so a screen can hide
 its button on one that does not. The commands' work is posted: a step can open a screen, which must not be replaced
-inside one of its widgets' handlers.
+inside one of its widgets' handlers. The commands outlive the binding in the vocabulary, so they and the work they posted check a token
+the binding's destructor clears: after it, a command does nothing, its posted work is dropped, and `tour.start` is refused.
 
 ## The generic client
 

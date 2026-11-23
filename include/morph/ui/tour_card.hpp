@@ -90,11 +90,15 @@ inline constexpr std::string_view kTourCardDocument = R"json({
 /// work is posted, since a step can open a screen and a screen must not be replaced inside one of its widgets'
 /// handlers; when the posted `tour.start` finds no controller or a controller that refuses the id (the frame was
 /// rebuilt after the refusal check), that is reported too. A shell makes one binding, which outlives frames, and calls
-/// `refresh` after each change of the controller's view. Neither copyable nor movable; on the runtime's owner.
+/// `refresh` after each change of the controller's view. The registered commands stay in the host vocabulary after the
+/// binding is gone, and posted work may still be queued: both check a token the destructor clears, so after
+/// destruction a command does nothing and a posted command's work is dropped, and a refusal check allows nothing.
+/// Neither copyable nor movable; on the runtime's owner.
 class TourCardBinding {
 public:
     /// @brief Registers the values and the commands.
-    /// @param host       The vocabulary. Borrowed: it outlives this binding.
+    /// @param host       The vocabulary. Borrowed: it must outlive this binding's constructor and `refresh` calls; its
+    ///                   commands may outlive the binding.
     /// @param controller The frame's controller, read at each command and each `refresh`; null between frames.
     /// @param post       Runs a command's work after the handler that asked returns; empty runs it at once.
     /// @param report     Called with the sentence for the developer when a posted `tour.start` could not start its
@@ -125,10 +129,14 @@ public:
                 .version = 1,
                 .args = {},
                 .safeForUntrusted = true,
-                .run = [this, work = std::move(work)](ValueRecord const& /*args*/) { later(work); },
+                .run =
+                    [this, token = std::weak_ptr<bool>{_alive}, work = std::move(work)](ValueRecord const& /*args*/) {
+                        if (auto const live = token.lock(); live != nullptr && *live) {
+                            later(work);
+                        }
+                    },
                 .documents = card,
-                .refusal = {},
-            };
+                .refusal = {}};
         };
         host.add(command("tour.next", [](TourController& tours) { tours.next(); }));
         host.add(command("tour.back", [](TourController& tours) { tours.back(); }));
@@ -141,7 +149,8 @@ public:
     TourCardBinding& operator=(TourCardBinding const&) = delete;
     TourCardBinding(TourCardBinding&&) = delete;
     TourCardBinding& operator=(TourCardBinding&&) = delete;
-    ~TourCardBinding() = default;
+    /// @brief Makes the commands it registered, and work it posted, do nothing from now on.
+    ~TourCardBinding() { *_alive = false; }
 
     /// @brief Copies the controller's view into the values; with no tour running, every value is back to its initial
     ///        one.
@@ -163,7 +172,10 @@ private:
     // Runs @p work on the controller of the moment it runs, posted when a post was given; @p missing runs instead when
     // there is none then.
     void later(std::function<void(TourController&)> work, std::function<void()> missing = {}) {
-        auto run = [this, work = std::move(work), missing = std::move(missing)] {
+        auto run = [this, token = std::weak_ptr<bool>{_alive}, work = std::move(work), missing = std::move(missing)] {
+            if (auto const live = token.lock(); live == nullptr || !*live) {
+                return;
+            }
             if (TourController* const tours = _controller ? _controller() : nullptr) {
                 work(*tours);
             } else if (missing) {
@@ -179,7 +191,10 @@ private:
 
     // `tour.start`: every document may use it, with the id of a tour of the app document.
     [[nodiscard]] HostCommand startCommand() {
-        auto const run = [this](ValueRecord const& args) {
+        auto const run = [this, token = std::weak_ptr<bool>{_alive}](ValueRecord const& args) {
+            if (auto const live = token.lock(); live == nullptr || !*live) {
+                return;
+            }
             std::string const tourId = *args.at("id").asString();
             std::function<void(TourController&)> work = [this, tourId](TourController& tours) {
                 if (auto const started = tours.start(tourId); !started) {
@@ -192,7 +207,11 @@ private:
             later(std::move(work), std::move(missing));
             // NOLINTNEXTLINE(clang-analyzer-cplusplus.NewDeleteLeaks): the analyzer loses the std::function blocks.
         };
-        auto const refusal = [this](ValueRecord const& args) -> std::optional<std::string> {
+        auto const refusal =
+            [this, token = std::weak_ptr<bool>{_alive}](ValueRecord const& args) -> std::optional<std::string> {
+            if (auto const live = token.lock(); live == nullptr || !*live) {
+                return std::string{"no tour can start now: the window is gone"};
+            }
             TourController const* const tours = _controller ? _controller() : nullptr;
             std::string const& tourId = *args.at("id").asString();
             if (tours == nullptr) {
@@ -227,6 +246,8 @@ private:
     std::function<TourController*()> _controller;
     std::function<void(std::function<void()>)> _post;
     std::function<void(std::string const&)> _report;
+    // Cleared by the destructor; the commands and posted work hold it weakly.
+    std::shared_ptr<bool> _alive = std::make_shared<bool>(true);
 };
 
 }  // namespace morph::ui

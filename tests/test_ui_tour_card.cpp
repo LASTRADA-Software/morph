@@ -250,3 +250,20 @@ TEST_CASE("tour card: tour.next, tour.back and tour.end are not available to a d
     CHECK(c.h.text("can_back") == "false");
     CHECK(c.h.text("can_end") == "false");
 }
+
+// Mutation: drop the token check from `TourCardBinding::later`'s posted work, or from the commands' `run` (the
+// destroyed binding's commands and posts then run against freed memory; the post below starts the tour).
+TEST_CASE("tour card: after the binding is gone its commands do nothing and its posted work is dropped",
+          "[ui][tours]") {
+    Card c;
+    auto const starter = c.h.mount(kStarter);
+    c.deferred = true;
+    c.h.backend.click(c.button("take_tour"));
+    REQUIRE(c.posted.size() == 1);
+    c.binding.reset();
+    c.posted.front()();
+    CHECK_FALSE(c.controller->running());
+    c.h.backend.click(c.button("take_tour"));
+    CHECK(c.posted.size() == 1);
+    c.controller.reset();
+}
