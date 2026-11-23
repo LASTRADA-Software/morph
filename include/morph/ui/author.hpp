@@ -6061,7 +6061,7 @@ struct Tour {
     for (std::size_t index = 0; index < tour.steps.size(); ++index) {
         TourStep const& step = tour.steps.at(index);
         if (!step.title.present()) {
-            throw AuthoringError{"step " + std::to_string(index) + " of the tour `" + tour.id + "` has no title"};
+            throw AuthoringError{"step " + std::to_string(index + 1) + " of the tour `" + tour.id + "` has no title"};
         }
         Json out = Json::object_t{};
         detail::put(out, "title", step.title.json());
@@ -6095,8 +6095,8 @@ struct Tour {
 /// @brief The app document's text with @p tours as its `tours` member, for `UiRegistry::addFile`.
 /// @param appDocument The app document's JSON text.
 /// @param tours       The tours, in the order the Tours menu lists them.
-/// @return The text, or why it cannot be written: the document is not a JSON object, it declares `tours` already, or a
-///         title is absent.
+/// @return The text, or why it cannot be written: the document is not a JSON object, it declares `tours` already, a
+///         title is absent, or the result cannot be serialised.
 [[nodiscard]] inline std::expected<std::string, Refusal> withTours(std::string_view appDocument,
                                                                    std::vector<Tour> const& tours) {
     auto document = parseJson(appDocument);
@@ -6117,7 +6117,11 @@ struct Tour {
         return std::unexpected(Refusal{.document = "app", .path = "/tours", .reason = error.what()});
     }
     object->insert_or_assign("tours", std::move(list));
-    return glz::write_json(*document).value_or(std::string{});
+    auto text = glz::write_json(*document);
+    if (!text) {
+        return std::unexpected(Refusal{.document = "app", .path = {}, .reason = "the app document cannot be written"});
+    }
+    return *std::move(text);
 }
 
 // ── Screens and registration ─────────────────────────────────────────────────────────────────────────────────────

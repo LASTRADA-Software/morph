@@ -204,7 +204,8 @@ TEST_CASE("tours document: author::withTours writes a tours member the loader re
     CHECK_FALSE(author::withTours("[]", tours).has_value());
 }
 
-// Mutation: skip the title checks in `author::tourJson` (the missing title throws a generic operand error).
+// Mutation: number the step from 0 in `author::tourJson`'s message, or skip the title checks (the missing title throws
+// a generic operand error).
 TEST_CASE("tours document: an absent title is refused naming the tour and the step", "[ui][tours][author]") {
     namespace author = ui::author;
     auto const refusalOf = [](std::vector<author::Tour> const& tours) {
@@ -216,5 +217,6 @@ TEST_CASE("tours document: an absent title is refused naming the tour and the st
     std::string const step = refusalOf(
         {author::Tour{.id = "gap", .title = "T", .steps = {author::TourStep{.title = "S"}, author::TourStep{}}}});
     CHECK(step.contains("`gap`"));
-    CHECK(step.contains("step 1"));
+    // The second step is "step 2": steps are numbered from 1, like every other message.
+    CHECK(step.contains("step 2 of"));
 }
