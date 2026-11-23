@@ -85,7 +85,7 @@ inline constexpr std::string_view kTourCardDocument = R"json({
 /// For the card document alone (`kTourCardId`): the values `tour.title`, `tour.stepTitle`, `tour.body`,
 /// `tour.waitingFor` (strings), `tour.position`, `tour.count` (ints), `tour.waiting`, `tour.canBack`, `tour.last`
 /// (flags), and the commands `tour.next`, `tour.back` and `tour.end`. For every document: `tour.start` with `{id}`,
-/// refused, and reported by the interpreter, for an id the app document does not declare. Every command is safe for an
+/// refused, and reported by the interpreter, for an id the app offers no tour for. Every command is safe for an
 /// untrusted connection: it changes nothing on the server and shows only what the application declared. The commands'
 /// work is posted, since a step can open a screen and a screen must not be replaced inside one of its widgets'
 /// handlers; when the posted `tour.start` finds no controller or a controller that refuses the id (the frame was
@@ -199,7 +199,7 @@ private:
                 return std::string{"no tour can start now: no frame is shown"};
             }
             if (!tours->declares(tourId)) {
-                return "the app document declares no tour `" + tourId + "`";
+                return "the app offers no tour `" + tourId + "`";
             }
             return std::nullopt;
         };

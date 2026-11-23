@@ -21,7 +21,7 @@
 #include "interpreter.hpp"
 
 /// @file
-/// @brief Guided tours on the client: `TourController` runs one of the app document's tours at a time over a
+/// @brief Guided tours on the client: `TourController` runs one of the app's tours at a time over a
 ///        `TourShell`, the little it needs of the shell it runs in. Specified in `docs/spec/ui/tours.md`.
 
 namespace morph::ui {
@@ -133,7 +133,7 @@ struct OfferedTours {
     std::vector<Tour> general;
 };
 
-/// @brief Splits the app document's tours into those a screen offers and the general ones.
+/// @brief Splits the app's tours into those a screen offers and the general ones.
 /// @param tours    The tours, as `AppRoot::tours` answers them.
 /// @param screenId The active screen, a custom screen named by its base; empty for none, which offers only the
 ///                 general tours.
@@ -147,12 +147,12 @@ struct OfferedTours {
 /// @return The id to ring.
 [[nodiscard]] MORPH_API std::string tourTargetFor(std::string_view target, bool compact);
 
-/// @brief Runs at most one of the app document's tours: opens each step's screen, prepares a shell target, points the
+/// @brief Runs at most one of the app's tours: opens each step's screen, prepares a shell target, points the
 ///        spotlight at the step's target, and moves on with Next, Back, a waiting step's screen, or End.
 ///
 /// A shell makes one with each frame and destroys it with the frame, which ends a running tour. It reads the tours
-/// from `AppRoot::tours()` and follows them while a tour runs, so a change of locale re-evaluates the card's texts.
-/// Neither copyable nor movable; on the runtime's owner.
+/// from `AppRoot::tours()`, runtime tours included, and follows them while a tour runs, so a change of locale
+/// re-evaluates the card's texts. Neither copyable nor movable; on the runtime's owner.
 class MORPH_API TourController {
 public:
     /// @brief A controller with no tour running.
@@ -174,7 +174,7 @@ public:
     /// @brief Ends a running tour, opens the tour's screen when it names one the active tab does not show, opens the
     ///        spotlight and shows the first step. A screen that cannot be opened ends the tour with a toast.
     /// @param tourId The tour.
-    /// @return Nothing, or the refusal of an id the app document does not declare, which starts nothing.
+    /// @return Nothing, or the refusal of an id the app offers no tour for, which starts nothing.
     std::expected<void, Refusal> start(std::string_view tourId);
 
     /// @brief Shows the next step, or ends the tour on the last one. A step that waits for a screen ignores it.
@@ -194,7 +194,7 @@ public:
     /// @return It.
     [[nodiscard]] bool running() const noexcept { return !_tourId.empty(); }
 
-    /// @brief Whether the app document declares a tour.
+    /// @brief Whether the app offers a tour.
     /// @param tourId The tour.
     /// @return It.
     [[nodiscard]] bool declares(std::string_view tourId) const;

@@ -196,7 +196,7 @@ TEST_CASE("tour card: tour.start from a document starts the tour, an undeclared 
     CHECK_FALSE(c.controller->running());
     bool reported = false;
     for (ui::Refusal const& refusal : c.h.diagnostics) {
-        reported = reported || refusal.reason.contains("declares no tour `nope`");
+        reported = reported || refusal.reason.contains("offers no tour `nope`");
     }
     CHECK(reported);
     c.h.backend.click(c.button("take_tour"));
@@ -235,7 +235,7 @@ TEST_CASE("tour card: a posted tour.start that finds no controller or a refusing
     c.posted.front()();
     CHECK_FALSE(c.controller->running());
     REQUIRE(c.reports.size() == 1);
-    CHECK(c.reports.front().contains("declares no tour `basics`"));
+    CHECK(c.reports.front().contains("offers no tour `basics`"));
     // Before the harness and the root the controller reads go.
     c.controller.reset();
 }

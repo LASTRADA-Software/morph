@@ -177,7 +177,7 @@ TEST_CASE("Client shell tours: tour.start from a document starts the tour, and c
 TEST_CASE("Client shell tours: tour.start naming a tour the app does not declare is reported", "[client][tours]") {
     Window window;
     window.click("bad_tour");
-    REQUIRE(window.wait([&window] { return window.reported("declares no tour `nope`"); }));
+    REQUIRE(window.wait([&window] { return window.reported("offers no tour `nope`"); }));
     CHECK(window.spotlight("open") != "true");
 }
 

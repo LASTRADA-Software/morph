@@ -64,7 +64,7 @@ std::expected<void, Refusal> TourController::start(std::string_view tourId) {
     std::vector<Tour> const& tours = _root->tours().peek();
     auto const found = std::ranges::find(tours, tourId, &Tour::id);
     if (found == tours.end()) {
-        std::string reason = "the app document declares no tour `" + std::string{tourId} + "`";
+        std::string reason = "the app offers no tour `" + std::string{tourId} + "`";
         return std::unexpected(Refusal{.document = "app", .path = "/tours", .reason = std::move(reason)});
     }
     std::string const startedId = found->id;
