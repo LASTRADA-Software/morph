@@ -117,8 +117,9 @@ the samples screen offers both of them as well as `getting-started`.
 Texts are written `{"t": key}`, the catalogue's translation form. The `AppRoot` lowers them as it lowers the
 navigation badges, into one `AppRoot::tours()` computed value that re-evaluates on a locale change.
 
-The author API adds `author::Tour` and `author::TourStep`, plus `AppDocument::tour(...)`, beside `ShellParts`. A tour
-is data the server builds once. It has no lifecycle.
+The app document is written as JSON, so the author API adds `author::Tour`, `author::TourStep` and
+`author::withTours(appText, tours)`, which returns the app document's text with `tours` filled in. A tour is data the
+server builds once. It has no lifecycle.
 
 ## Starting a tour
 
@@ -140,10 +141,12 @@ is data the server builds once. It has no lifecycle.
   "Tours" submenu with the same entries joins `shell_nav_menu`, after the help entry.
 - **From a document.** `{"host": "tour.start", "args": {"obj": {"id": "getting-started"}}}`. The shell registers the
   command for every document. It is safe for untrusted connections, because it changes nothing on the server and
-  shows only what the app declared. An id the app does not declare answers as a command that did not succeed, and the
-  interpreter reports it.
-- **From client code.** `ui::MountedShell` gains `virtual std::expected<void, Refusal> startTour(std::string_view id)`.
-  Its default refuses, and the generic shell implements it.
+  shows only what the app declared. An id the app does not declare is refused before the command runs, through a new
+  `HostCommand::refusal` check, because `run` has no way to answer that it did not succeed. The interpreter reports the
+  refusal like any other.
+- **From client code.** `ui::MountedShell` gains `virtual std::expected<void, std::string> startTour(std::string_view
+  id)`. The error is a plain message, so `frontend.hpp` stays free of the document model. Its default refuses, and the
+  generic shell implements it.
 
 ## Running a tour
 
@@ -177,7 +180,10 @@ test app document, and `RecordingBackend`, with no shell.
 
 `IViewBackend::createSpotlight(ContainerWidget* parent)` returns a `SpotlightWidget`. Like dialogs, popovers and
 drawers, it is a container: its children are the card's content. The shell frame creates it on the first tour, as a
-child of the frame's root, so that it covers the sidebar, the top bar and the page. It is destroyed with the frame.
+child of the main column (a child of the root row would become a third column, which is why the toast lives there too).
+Every backend draws it in a window-level layer, so it still covers the sidebar, the top bar and the page. It is
+destroyed with the frame. `createSpotlight` has a default that throws, so a third-party backend keeps compiling and a
+tour on it fails loudly.
 
 ```cpp
 class SpotlightWidget : public ContainerWidget {
@@ -186,6 +192,7 @@ public:
     virtual void setTarget(std::optional<std::string> testId) = 0;
     [[nodiscard]] virtual bool targetShown() const = 0;
     virtual void setOnTargetShownChanged(std::function<void(bool)> handler) = 0;
+    virtual void setTargetFocusable(bool focusable) = 0;   // a waiting step: the target joins the Tab order
 };
 ```
 
@@ -227,7 +234,7 @@ host vocabulary is scoped to `morph.tour`:
 
 | Values | Commands |
 |---|---|
-| `tour.title`, `tour.stepTitle`, `tour.body` (string), `tour.position`, `tour.count` (int), `tour.waiting`, `tour.canBack` (bool) | `tour.next`, `tour.back`, `tour.end` |
+| `tour.title`, `tour.stepTitle`, `tour.body`, `tour.waitingFor` (string: the awaited screen's title), `tour.position`, `tour.count` (int), `tour.waiting`, `tour.canBack`, `tour.last` (bool) | `tour.next`, `tour.back`, `tour.end` |
 
 | testId | What it is |
 |---|---|
@@ -239,20 +246,24 @@ host vocabulary is scoped to `morph.tour`:
 | `tour_next` | Next, or Done on the last step. On a waiting step it is replaced by a muted hint, such as "Open Samples to continue" |
 | `tour_end` | End tour |
 
-Keys: Escape runs `tour.end`. Enter and Right run `tour.next`, except on a waiting step. Left runs `tour.back`. The
-card's document declares them as its `keys`, and the backend delivers a card's keys before its buttons see them, so
-a focused button cannot consume Left or Right. The card takes focus when it opens.
+Keys: Escape runs `tour.end`, Right runs `tour.next` (except on a waiting step), and Left runs `tour.back`. The card's
+document declares them as its `keys`, and the backend delivers these three before the focused button sees them.
+Enter and Space stay with the focused button, so Enter on Back or End does what the button says. When the card opens,
+it focuses its first shown button: Next on an ordinary step, End tour on a waiting one.
 
 Focus is trapped in the card on ordinary steps: Tab cycles through its buttons and never reaches the page under the
 scrim. On a waiting step, the focus chain is the card's buttons followed by the target. The person can then finish
 the step from the keyboard (Tab to the ringed navigator entry, then Enter) on every frontend. Accessibility: the card is
-a dialog named after the step title, and its body is the description. The captions come from the client's own
+a dialog named after the step title. ui/1 has no accessible description on a column, so the body follows the title
+as text. The captions come from the client's own
 catalogue, as the chat panel's captions do.
 
 ## Checks
 
-`UiRegistry::build` parses each registered screen document (it keeps their text today) and refuses the bundle, with
-an error naming the tour and step, for any of these:
+Tours are checked in two places. Adding the app document (`addFile`) refuses malformed tours: an empty, malformed or
+repeated id, a step count out of range, and `params` that are not a literal record. `UiRegistry::build` then parses
+each registered screen document (it keeps their text today) and refuses the bundle for the cross-references. Every
+error names the tour and the step. The full list:
 
 - A tour id that is empty, malformed or repeated.
 - A tour with no steps, or more than 50.
@@ -260,13 +271,15 @@ an error naming the tour and step, for any of these:
 - `params` that are not a literal record.
 - A `target` that names nothing the window can show.
 
-  The step's *effective screen* is the first of these that exists: its own `screen`; the last `screen` named by an
-  earlier step; the `advanceOn.screen` of the step just before it; the tour's `screen`.
+  The step's *effective screen* is the screen the active tab shows when the step appears: its own `screen`, else the
+  most recent earlier `screen` or `advanceOn.screen`, else the tour's `screen`.
 
   A target is accepted when it is one of these:
-  - a shell id the declared parts produce: `shell_search`, `shell_inbox`, `shell_help`, `shell_principal`,
-    `shell_brand_title` and `shell_scope` when declared; `shell_tours`, always (a tour is declared); `nav_<id>` for a
-    registered screen's entry; `chat_input` when the bundle offers chat;
+  - a shell id the declared parts produce: `shell_search`, `shell_inbox`, `shell_help`, `shell_principal_menu`,
+    `shell_brand_title` and `shell_context` when declared; `shell_tours`, always (a tour is declared); `nav_<id>` for
+    a registered screen that has a document and is not public, since only those appear in the navigator;
+    `chat_input`, always: whether chat is offered belongs to the chat service, which the registry cannot see, so a
+    server without chat shows that step's card centred, with the warning;
   - a literal `testId` anywhere in the effective screen's document, including inside its `components`;
   - `action_<id>` for an action in the effective screen's head `actions`, which is the id the interpreter generates for
     it.
