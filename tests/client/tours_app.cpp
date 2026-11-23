@@ -23,6 +23,11 @@ constexpr std::string_view kHome = R"({"vocab":"ui/1","id":"tours.home","title":
      "onClick":[{"host":"tour.start","args":{"obj":{"id":{"ref":"missing"}}}}]},
     {"kind":"text","testId":"can_tour","text":{"fn":"format","args":["{0}",{"can":"host:tour.start"}]}}]}})";
 
+/// A screen that signs the person out as it opens, as a session-expired screen does.
+constexpr std::string_view kExpired = R"({"vocab":"ui/1","id":"tours.expired","title":"Expired",
+  "onMount":[{"signOut":true}],
+  "view":{"kind":"text","testId":"expired_text","text":"Expired"}})";
+
 /// The home screen of the variants that declare fewer tours: the registry refuses a `tour.start` of a tour the app
 /// document does not declare.
 constexpr std::string_view kPlainHome = R"({"vocab":"ui/1","id":"tours.home","title":"Home",
@@ -45,6 +50,9 @@ constexpr std::string_view kTours = R"([
    "steps":[{"target":"samples_filter","title":"Filter"}]},
   {"id":"locked","title":"Locked away",
    "steps":[{"screen":"tours.closed","target":"shell_tours","title":"Closed"}]},
+  {"id":"expires","title":"Expires",
+   "steps":[{"target":"shell_tours","title":"First"},
+            {"screen":"tours.expired","target":"shell_tours","title":"Second"}]},
   {"id":"waits","title":"Waits first",
    "steps":[{"target":"nav_tours.samples","advanceOn":{"screen":"tours.samples"},"title":"Open Samples"},
             {"target":"samples_table","title":"The table"}]}])";
@@ -68,6 +76,9 @@ std::expected<std::shared_ptr<morph::ui::ServedBundle const>, morph::ui::Refusal
         return std::unexpected(std::move(added.error()));
     }
     if (auto added = add("tours.samples", "Samples", kSamples); !added) {
+        return std::unexpected(std::move(added.error()));
+    }
+    if (auto added = add("tours.expired", "Expired", kExpired); !added) {
         return std::unexpected(std::move(added.error()));
     }
     morph::ui::CatalogEntry closed;

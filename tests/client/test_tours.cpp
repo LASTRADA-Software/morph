@@ -207,9 +207,11 @@ TEST_CASE("Client shell tours: compact, the Tours entries join the navigation me
 // Mutation: make the frame's spotlight a backend root (`createSpotlight(nullptr)`), so it outlives the frame.
 TEST_CASE("Client shell tours: signing out ends a running tour", "[client][tours]") {
     Window window;
-    REQUIRE(window.shell->startTour("getting-started").has_value());
+    // A tour step opens a screen that signs the person out as it mounts: the sign-out arrives from a document's
+    // `signOut` command while the spotlight is open, not from a press through the scrim.
+    REQUIRE(window.shell->startTour("expires").has_value());
     REQUIRE(window.wait([&window] { return window.spotlight("open") == "true"; }));
-    window.click("shell_signOut");
+    window.click("tour_next");
     REQUIRE(window.wait([&window] {
         std::vector<int> const spotlights = window.backend.all("Spotlight");
         return std::ranges::none_of(spotlights,
@@ -399,15 +401,16 @@ TEST_CASE("Client shell tours: a sign-out whose reload fails closes the spotligh
         };
         REQUIRE(pumpUntil(context.owner(), [&find] { return find("Button", "take_tour").has_value(); }));
         backend.widget(*find("Button", "take_tour"))->focus();
-        REQUIRE(shell->startTour("getting-started").has_value());
+        REQUIRE(shell->startTour("expires").has_value());
         REQUIRE(pumpUntil(context.owner(), [&] {
             return find("Spotlight", "shell_spotlight") &&
                    backend.prop(*find("Spotlight", "shell_spotlight"), "open") == "true";
         }));
         int const spotlight = *find("Spotlight", "shell_spotlight");
         source.breakExchange();
-        REQUIRE(pumpUntil(context.owner(), [&find] { return find("Button", "shell_signOut").has_value(); }));
-        backend.click(*find("Button", "shell_signOut"));
+        // The next step opens the screen that signs out as it mounts; the card's own button is not behind the scrim.
+        REQUIRE(pumpUntil(context.owner(), [&find] { return find("Button", "tour_next").has_value(); }));
+        backend.click(*find("Button", "tour_next"));
         REQUIRE(pumpUntil(context.owner(), [&problems] {
             return std::ranges::any_of(problems,
                                        [](std::string const& line) { return line.contains("could not be loaded"); });
