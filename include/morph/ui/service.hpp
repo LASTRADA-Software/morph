@@ -376,7 +376,7 @@ private:
     [[nodiscard]] std::optional<Refusal> checkTourReferences() const;
 
     /// @brief What `build` refuses: a delivered component missing from the bundle, a theme some combination of which
-    ///        does not resolve, and the bounds.
+    ///        does not resolve, a tour that names something the bundle lacks (`checkTourReferences`), and the bounds.
     /// @return The refusal, or nothing.
     [[nodiscard]] std::optional<Refusal> checkBuildable() const;
 

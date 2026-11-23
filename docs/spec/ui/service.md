@@ -220,7 +220,9 @@ server, never a surprise on a client.
   (`{"obj": {"id": "..."}}` or `{"lit": {...}}`) in any registered document or the app document must name a declared
   tour; a computed id is reported at run time. The checks of one tour are `detail::checkTour` (`src/ui/tour_checks.hpp`),
   the same function a runtime registration of a tour calls. The shape of `tours` is checked when the app document is
-  added ([document.md](document.md#the-app-documents-tours)).
+  added ([document.md](document.md#the-app-documents-tours)). An app document that no longer loads at build, because
+  the catalog changed after it was added, refuses the build, naming the app document and the load error: its tours
+  cannot be checked.
 - **Runtime tours.** `TourRegistry` checks a tour added while the server runs with the same per-tour check
   (`detail::checkTour`) the build runs, against the bundle served then
   ([tours.md](tours.md#registering-tours-at-runtime)).

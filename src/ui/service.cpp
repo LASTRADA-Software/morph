@@ -564,11 +564,17 @@ std::optional<Refusal> UiRegistry::checkTourReferences() const {
         if (file.kind != kAppFile) {
             continue;
         }
-        // It loaded when it was added; a load that fails now names nothing to check.
-        if (auto loaded = loadDocumentText(file.bytes, LoadOptions{.catalog = _catalog})) {
-            app = std::move(*loaded);
-            appText = file.bytes;
+        // It loaded when it was added; the catalog can have changed since, and a document that no longer loads
+        // cannot have its tours checked, so the build is refused rather than letting them through unchecked.
+        auto loaded = loadDocumentText(file.bytes, LoadOptions{.catalog = _catalog});
+        if (!loaded) {
+            return Refusal{
+                .document = std::string{kAppFile},
+                .path = loaded.error().path,
+                .reason = "the app document does not load, so its tours cannot be checked: " + loaded.error().reason};
         }
+        app = std::move(*loaded);
+        appText = file.bytes;
     }
     std::vector<detail::TourScreen> screens;
     screens.reserve(_screens.size());

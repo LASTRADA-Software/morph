@@ -224,6 +224,33 @@ TEST_CASE("tours registry: a nav target of a public screen or a host screen is r
     CHECK(build(Bundle{.tours = oneTour(R"([{"target":"nav_lims.samples","title":"S"}])")}).has_value());
 }
 
+// Mutation: skip the load error in `checkTourReferences` (the tours are not checked and the bundle builds).
+TEST_CASE("tours registry: an app document that no longer loads refuses the build", "[ui][tours][service]") {
+    auto open = std::make_shared<bool>(true);
+    ui::Catalog catalog;
+    catalog.model = [](std::string_view) -> std::optional<ui::ModelInfo> { return ui::ModelInfo{}; };
+    catalog.action = [open](std::string_view) -> std::optional<ui::ActionInfo> {
+        if (!*open) {
+            return std::nullopt;
+        }
+        return ui::ActionInfo{.modelType = "Prefs"};
+    };
+    ui::UiRegistry registry{ui::ApplicationInfo{.id = "lims", .version = "1"}, catalog};
+    auto const app =
+        registry.addFile(ui::BundleFile{.kind = "app",
+                                        .id = "app",
+                                        .bytes = R"({"vocab":"ui/1","id":"app","models":{"prefs":{"type":"Prefs"}},)"
+                                                 R"("queries":{"settings":{"model":"prefs","action":"Prefs_Get"}},)"
+                                                 R"("tours":[{"id":"a","title":"T","steps":[{"title":"S"}]}]})"});
+    REQUIRE(app.has_value());
+    CHECK(registry.build().has_value());
+    *open = false;
+    auto const refused = registry.build();
+    REQUIRE_FALSE(refused.has_value());
+    CHECK(refused.error().document == "app");
+    CHECK(refused.error().reason.contains("the app document does not load"));
+}
+
 // Mutation: drop `morph.tour` from `kReservedClientIds` (the screen registers, and no refusal names it).
 TEST_CASE("tours registry: the tour card's id is the client's own", "[ui][tours][service]") {
     ui::UiRegistry registry{ui::ApplicationInfo{.id = "lims", .version = "1"}};
