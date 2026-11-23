@@ -6059,7 +6059,7 @@ struct Tour {
     }
     Json steps = Json::array_t{};
     for (std::size_t index = 0; index < tour.steps.size(); ++index) {
-        TourStep const& step = tour.steps[index];
+        TourStep const& step = tour.steps.at(index);
         if (!step.title.present()) {
             throw AuthoringError{"step " + std::to_string(index) + " of the tour `" + tour.id + "` has no title"};
         }

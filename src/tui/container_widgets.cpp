@@ -1365,7 +1365,7 @@ void OverlayCore::closeFrame() {
 SpotlightImpl::SpotlightImpl(Context& context) : TuiContainer{context}, _overlay{*this, std::nullopt} {
     adopt(makeView(*this));
     _overlay.setDismissible(false);
-    _overlay.setAnchor([this]() -> std::optional<::core::tui::Rect> {
+    _overlay.setAnchor([this] -> std::optional<::core::tui::Rect> {
         _placedBy = anchorRect();
         return _placedBy;
     });

@@ -421,11 +421,12 @@ EventResult WidgetBase::targetChord(::core::tui::KeyEvent const& key) {
         if (target == nullptr || !spotlight->isOpenSpotlight() || !isWithin(_view.get(), target->view())) {
             continue;
         }
+        // NOLINTNEXTLINE(misc-no-recursion): the widget tree is walked down.
         auto const walk = [&key](auto const& self, WidgetBase& node) -> EventResult {
             if (EventResult const result = node.chord(key); result != EventResult::Ignored) {
                 return result;
             }
-            if (auto* const container = dynamic_cast<ContainerBase*>(&node)) {
+            if (auto const* const container = dynamic_cast<ContainerBase*>(&node)) {
                 for (WidgetBase* const child :
                      std::vector<WidgetBase*>{container->children().begin(), container->children().end()}) {
                     if (EventResult const result = self(self, *child); result != EventResult::Ignored) {

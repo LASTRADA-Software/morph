@@ -77,6 +77,7 @@ public:
     ///        once, for a shell whose card is current as soon as the view changes; a shell whose card updates after
     ///        the current turn runs it after that update. It may be dropped unrun when the shell goes away.
     /// @param then What to run.
+    // NOLINTNEXTLINE(performance-unnecessary-value-param): an override may keep the callback to run it later.
     virtual void afterCardUpdated(std::function<void()> then) { then(); }
 
     /// @brief Tells the person something, as a toast.

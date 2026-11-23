@@ -27,7 +27,7 @@ namespace {
 
 // Depth first: the items Tab stops at, shown and enabled.
 // NOLINTNEXTLINE(misc-no-recursion): an item tree, walked down.
-void collectTabStops(QQuickItem& item, std::vector<QQuickItem*>& out) {
+void collectTabStops(QQuickItem const& item, std::vector<QQuickItem*>& out) {
     for (QQuickItem* const child : item.childItems()) {
         if (!child->isVisible() || !child->isEnabled()) {
             continue;
@@ -41,12 +41,12 @@ void collectTabStops(QQuickItem& item, std::vector<QQuickItem*>& out) {
 
 // Scrolls the nearest flickable around @p target until the target's box is inside its viewport. A box taller (or
 // wider) than the viewport shows its top (left) edge: scrolling to its far edge would leave the near one out of view.
-void scrollIntoView(QQuickItem& target) {
+void scrollIntoView(QQuickItem const& target) {
     for (QQuickItem* outer = target.parentItem(); outer != nullptr; outer = outer->parentItem()) {
         if (!outer->inherits("QQuickFlickable")) {
             continue;
         }
-        auto* const content = outer->property("contentItem").value<QQuickItem*>();
+        QQuickItem const* const content = outer->property("contentItem").value<QQuickItem*>();
         if (content == nullptr) {
             return;
         }
@@ -72,7 +72,7 @@ bool declaresChords(QQuickItem const& item) { return item.metaObject()->indexOfP
 
 // Depth first: every item under @p item.
 // NOLINTNEXTLINE(misc-no-recursion): an item tree, walked down.
-void collectItems(QQuickItem& item, std::vector<QQuickItem*>& out) {
+void collectItems(QQuickItem const& item, std::vector<QQuickItem*>& out) {
     for (QQuickItem* const child : item.childItems()) {
         out.push_back(child);
         collectItems(*child, out);
@@ -104,7 +104,7 @@ SpotlightImpl::SpotlightImpl(Context& context, ui::ContainerWidget* parent)
       _listener{context.widgets().listen([this] {
           resolve();
           track();
-      })} {}
+      })} {}  // NOLINT(readability-trailing-comma)
 
 SpotlightImpl::~SpotlightImpl() {
     context().widgets().unlisten(_listener);
@@ -166,16 +166,16 @@ void SpotlightImpl::resolve() {
     auto const* const card = qobject_cast<QQuickItem*>(part("card"));
     if (_target) {
         for (ItemBase* const candidate : context().widgets().carrying(*_target)) {
-            QQuickItem* const at = candidate->item();
-            if (at == nullptr || candidate == this || (card != nullptr && card->isAncestorOf(at))) {
+            QQuickItem const* const hit = candidate->item();
+            if (hit == nullptr || candidate == this || (card != nullptr && card->isAncestorOf(hit))) {
                 continue;
             }
             // Its effective visibility: a hidden container around it, or a tab page not selected, hides it too.
-            _watching.push_back(QObject::connect(at, &QQuickItem::visibleChanged, _filter.get(), [this] {
+            _watching.push_back(QObject::connect(hit, &QQuickItem::visibleChanged, _filter.get(), [this] {
                 resolve();
                 track();
             }));
-            if (found == nullptr && at->isVisible()) {
+            if (found == nullptr && hit->isVisible()) {
                 found = candidate;
             }
         }
@@ -197,7 +197,7 @@ void SpotlightImpl::track() {
     if (!_open || _ringed == nullptr || _ringed->item() == nullptr) {
         return;
     }
-    QQuickItem& target = *_ringed->item();
+    QQuickItem const& target = *_ringed->item();
     // Once per target, when it has a box: a frame-by-frame scroll would fight the person scrolling the page.
     if (_scrollPending && target.height() > 0 && target.width() > 0) {
         _scrollPending = false;
@@ -208,7 +208,7 @@ void SpotlightImpl::track() {
 
 std::vector<QQuickItem*> SpotlightImpl::tabChain() const {
     std::vector<QQuickItem*> chain;
-    if (auto* const content = qobject_cast<QQuickItem*>(part("content"))) {
+    if (auto const* const content = qobject_cast<QQuickItem*>(part("content"))) {
         collectTabStops(*content, chain);
     }
     if (_targetFocusable && _ringed != nullptr && _ringed->focusTarget() != nullptr) {
@@ -232,20 +232,20 @@ void SpotlightImpl::cycleFocus(bool forward) {
         return;
     }
     QQuickItem const* const focused = _window->activeFocusItem();
-    auto const at = std::ranges::find_if(chain, [focused](QQuickItem const* item) {
+    auto const inChain = std::ranges::find_if(chain, [focused](QQuickItem const* item) {
         return focused != nullptr && (item == focused || item->isAncestorOf(focused));
     });
     std::size_t const count = chain.size();
     std::size_t next = forward ? 0 : count - 1;
-    if (at != chain.end()) {
-        auto const index = static_cast<std::size_t>(std::distance(chain.begin(), at));
+    if (inChain != chain.end()) {
+        auto const index = static_cast<std::size_t>(std::distance(chain.begin(), inChain));
         next = forward ? (index + 1) % count : (index + count - 1) % count;
     }
     chain.at(next)->forceActiveFocus(forward ? Qt::TabFocusReason : Qt::BacktabFocusReason);
 }
 
 bool SpotlightImpl::filterKey(QKeyEvent const& event) {
-    auto* const content = qobject_cast<QQuickItem*>(part("content"));
+    auto const* const content = qobject_cast<QQuickItem*>(part("content"));
     if (content == nullptr) {
         return false;
     }
@@ -273,17 +273,17 @@ bool SpotlightImpl::filterKey(QKeyEvent const& event) {
     candidates.insert(candidates.end(), everything.begin(), everything.end());
     candidates.push_back(item());
     std::vector<QQuickItem*> seen;
-    for (QQuickItem* const at : candidates) {
-        if (at == nullptr || std::ranges::find(seen, at) != seen.end() || !declaresChords(*at)) {
+    for (QQuickItem* const widget : candidates) {
+        if (widget == nullptr || std::ranges::find(seen, widget) != seen.end() || !declaresChords(*widget)) {
             continue;
         }
-        seen.push_back(at);
-        if (at->metaObject()->indexOfMethod("takeChord(int,int)") < 0) {
+        seen.push_back(widget);
+        if (widget->metaObject()->indexOfMethod("takeChord(int,int)") < 0) {
             qCritical("morph::qt_quick: a MorphWidget in a spotlight has no takeChord(int,int): its chords never run");
             continue;
         }
         bool taken = false;
-        QMetaObject::invokeMethod(at, "takeChord", Qt::DirectConnection, qReturnArg(taken), key,
+        QMetaObject::invokeMethod(widget, "takeChord", Qt::DirectConnection, qReturnArg(taken), key,
                                   static_cast<int>(event.modifiers().toInt()));
         if (taken) {
             return true;

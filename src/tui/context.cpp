@@ -46,7 +46,7 @@ bool Context::spotlightMisplaced() const {
     return std::ranges::any_of(spotlights, [](WidgetBase const* spotlight) { return spotlight->placementStale(); });
 }
 
-void Context::targetsChanged() {
+void Context::targetsChanged() const {
     for (WidgetBase* const spotlight : std::vector<WidgetBase*>{spotlights}) {
         spotlight->targetsChanged();
     }

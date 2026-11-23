@@ -969,8 +969,8 @@ private:
     }
 
     // A tour id: lower-case letters, digits and dashes, at most `kMaxTourIdBytes`.
-    [[nodiscard]] static bool isTourId(std::string_view id) {
-        return !id.empty() && id.size() <= kMaxTourIdBytes && std::ranges::all_of(id, [](char chr) {
+    [[nodiscard]] static bool isTourId(std::string_view text) {
+        return !text.empty() && text.size() <= kMaxTourIdBytes && std::ranges::all_of(text, [](char chr) {
             return (chr >= 'a' && chr <= 'z') || (chr >= '0' && chr <= '9') || chr == '-';
         });
     }
@@ -1027,23 +1027,23 @@ private:
         if (Json const* const params = member(fields, "params")) {
             std::string const where = pointerAppend(path, "params");
             for (auto const& [name, value] : objectOf(*params, where, "`params` is a record of literal values")) {
-                std::string const at = pointerAppend(where, name);
+                std::string const paramPath = pointerAppend(where, name);
                 if (std::holds_alternative<Json::object_t>(value.data) ||
                     std::holds_alternative<Json::array_t>(value.data)) {
-                    refuse(at, "a tour step's param is a literal: a string, a whole number, a flag or null");
+                    refuse(paramPath, "a tour step's param is a literal: a string, a whole number, a flag or null");
                 }
                 auto converted = valueFromJson(value);
                 if (!converted) {
-                    refuse(at, "a tour step's param is a literal: " + converted.error());
+                    refuse(paramPath, "a tour step's param is a literal: " + converted.error());
                 }
                 step.params.insert_or_assign(name, std::move(*converted));
             }
         }
         if (Json const* const advance = member(fields, "advanceOn")) {
             std::string const where = pointerAppend(path, "advanceOn");
-            auto const& on = objectOf(*advance, where, R"(`advanceOn` is a record: {"screen": id})");
-            refuseMustUnderstand(on, where);
-            step.advanceOn = text(on, "screen", where, true);
+            auto const& record = objectOf(*advance, where, R"(`advanceOn` is a record: {"screen": id})");
+            refuseMustUnderstand(record, where);
+            step.advanceOn = text(record, "screen", where, true);
         }
         return step;
     }
@@ -2219,6 +2219,22 @@ public:
     DocumentValidator(Document const& doc, LoadOptions const& options) : _doc{&doc}, _options{&options} {}
 
     /// @brief Runs every rule; throws `DocumentRefused` on the first refusal.
+    // A tour's texts are read in the app scope, as the navigation badges are.
+    void checkTourTexts(CheckContext const& root) {
+        for (TourDecl const& tour : _doc->tours) {
+            checkExpr(*tour.title, root);
+            if (tour.summary) {
+                checkExpr(*tour.summary, root);
+            }
+            for (TourStepDecl const& step : tour.steps) {
+                checkExpr(*step.title, root);
+                if (step.body) {
+                    checkExpr(*step.body, root);
+                }
+            }
+        }
+    }
+
     void run() {
         ScopeInfo& screen = newScope(nullptr, false);
         screen.screen = true;
@@ -2303,19 +2319,7 @@ public:
             checkExpr(*_doc->menuLabel, root);
         }
 
-        // A tour's texts are read in the app scope, as the navigation badges are.
-        for (TourDecl const& tour : _doc->tours) {
-            checkExpr(*tour.title, root);
-            if (tour.summary) {
-                checkExpr(*tour.summary, root);
-            }
-            for (TourStepDecl const& step : tour.steps) {
-                checkExpr(*step.title, root);
-                if (step.body) {
-                    checkExpr(*step.body, root);
-                }
-            }
-        }
+        checkTourTexts(root);
         for (DocNodePtr const& part : headParts()) {
             checkElement(*part, root, true);
         }

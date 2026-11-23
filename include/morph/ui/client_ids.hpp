@@ -28,14 +28,14 @@ struct ReservedClientId {
 inline constexpr std::array<ReservedClientId, 2> kReservedClientIds = {{
     {.id = chat::kChatPanelId, .owner = "the chat panel"},
     {.id = kTourCardId, .owner = "the tour card"},
-}};
+}};  // NOLINT(readability-trailing-comma)
 
 /// @brief The reservation of an id, when it is one the client keeps for itself.
-/// @param id The document or catalog entry id.
+/// @param entryId The document or catalog entry id.
 /// @return The reservation, or null for an id a server may use.
-[[nodiscard]] constexpr ReservedClientId const* reservedClientId(std::string_view id) noexcept {
+[[nodiscard]] constexpr ReservedClientId const* reservedClientId(std::string_view entryId) noexcept {
     // NOLINTNEXTLINE(readability-qualified-auto): an array iterator is a pointer on some standard libraries only.
-    auto const found = std::ranges::find(kReservedClientIds, id, &ReservedClientId::id);
+    auto const found = std::ranges::find(kReservedClientIds, entryId, &ReservedClientId::id);
     return found == kReservedClientIds.end() ? nullptr : &*found;
 }
 

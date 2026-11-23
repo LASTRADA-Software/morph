@@ -574,6 +574,8 @@ private:
 };
 
 /// Implements the Common setters and `moveChild` of container interface @p Interface over ContainerBase.
+// NOLINTBEGIN(portability-template-virtual-member-function): every container implementation derives from this
+// template, and a translation unit that includes a widget header without using its vtable instantiates none of these.
 template <class Interface>
 class TuiContainer : public Interface, public ContainerBase {
 public:
@@ -597,6 +599,7 @@ public:
     void moveChild(ui::Widget& child, std::size_t index) override { move(WidgetBase::of(child), index); }
     [[nodiscard]] ui::Widget const& asWidget() const noexcept override { return *this; }
 };
+// NOLINTEND(portability-template-virtual-member-function)
 
 /// Where a table cell sits in its slot: across its column and down its row.
 struct CellPlace {

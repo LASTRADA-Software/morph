@@ -49,10 +49,10 @@ using TourTargets = std::map<std::string, TourTarget, std::less<>>;
 /// the one check the bundle's build and a runtime registration (`TourRegistry`) share.
 /// @param tour    The tour, as the loader read it.
 /// @param parts   The shell's declared parts, which produce the accepted shell ids.
-/// @param targets The registered screens' targets.
+/// @param screens The registered screens' targets.
 /// @return The refusal, naming the tour and the step, or nothing.
 [[nodiscard]] std::optional<Refusal> checkTour(TourDecl const& tour, std::optional<ShellParts> const& parts,
-                                               TourTargets const& targets);
+                                               TourTargets const& screens);
 
 /// Checks every `tour.start` in a document whose `args` names a tour as a literal.
 /// @param document The document's id, for the refusal.

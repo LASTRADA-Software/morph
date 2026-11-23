@@ -490,9 +490,8 @@ std::optional<Refusal> UiRegistry::checkNewEntry(CatalogEntry const& entry) cons
         return Refusal{.document = entry.id, .path = {}, .reason = std::move(*reason)};
     }
     if (ReservedClientId const* const reserved = reservedClientId(entry.id)) {
-        return Refusal{.document = entry.id,
-                       .path = {},
-                       .reason = "the id `" + entry.id + "` is " + std::string{reserved->owner} + "'s"};
+        std::string reason = "the id `" + entry.id + "` is " + std::string{reserved->owner} + "'s";
+        return Refusal{.document = entry.id, .path = {}, .reason = std::move(reason)};
     }
     if (std::ranges::any_of(_screens, [&](Screen const& screen) { return screen.served.entry.id == entry.id; })) {
         return Refusal{.document = entry.id, .path = {}, .reason = "a catalog entry with this id is registered"};
@@ -568,10 +567,10 @@ std::optional<Refusal> UiRegistry::checkTourReferences() const {
         // cannot have its tours checked, so the build is refused rather than letting them through unchecked.
         auto loaded = loadDocumentText(file.bytes, LoadOptions{.catalog = _catalog});
         if (!loaded) {
-            return Refusal{
-                .document = std::string{kAppFile},
-                .path = loaded.error().path,
-                .reason = "the app document does not load, so its tours cannot be checked: " + loaded.error().reason};
+            std::string reason =
+                "the app document does not load, so its tours cannot be checked: " + loaded.error().reason;
+            std::string path = loaded.error().path;
+            return Refusal{.document = std::string{kAppFile}, .path = std::move(path), .reason = std::move(reason)};
         }
         app = std::move(*loaded);
         appText = file.bytes;
@@ -579,8 +578,8 @@ std::optional<Refusal> UiRegistry::checkTourReferences() const {
     std::vector<detail::TourScreen> screens;
     screens.reserve(_screens.size());
     for (Screen const& screen : _screens) {
-        screens.push_back(detail::TourScreen{
-            .id = screen.served.entry.id, .text = screen.text, .listed = !screen.served.entry.isPublic});
+        bool const listed = !screen.served.entry.isPublic;
+        screens.push_back(detail::TourScreen{.id = screen.served.entry.id, .text = screen.text, .listed = listed});
     }
     return detail::checkTours(app ? &*app : nullptr, appText, screens);
 }

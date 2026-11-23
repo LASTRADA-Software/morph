@@ -30,6 +30,8 @@
 namespace morph::ui {
 namespace {
 
+using Names = std::set<std::string, std::less<>>;
+
 // The keys of the `{"t": key}` texts of a tour: its title and summary, each step's title and body; with their
 // pointers.
 std::vector<std::pair<std::string, std::string>> textKeys(Json const& tour) {
@@ -39,14 +41,14 @@ std::vector<std::pair<std::string, std::string>> textKeys(Json const& tour) {
         if (object == nullptr) {
             return;
         }
-        if (auto const found = object->find("t"); found != object->end()) {
+        if (Json::object_t::const_iterator const found = object->find("t"); found != object->end()) {
             if (auto const* const key = std::get_if<std::string>(&found->second.data)) {
                 keys.emplace_back(std::move(path), *key);
             }
         }
     };
     auto const member = [](Json::object_t const& object, std::string_view key) -> Json const* {
-        auto const found = object.find(key);
+        Json::object_t::const_iterator const found = object.find(key);
         return found == object.end() ? nullptr : &found->second;
     };
     auto const& fields = std::get<Json::object_t>(tour.data);
@@ -66,15 +68,14 @@ std::vector<std::pair<std::string, std::string>> textKeys(Json const& tour) {
     return keys;
 }
 
-// The first `t` key of @p tour that no catalogue of @p bundle has and the server's texts do not answer in any of the
-// bundle's locales (English when it has no catalogue), with its pointer.
-std::optional<std::pair<std::string, std::string>> missingTextKey(Json const& tour, ServedBundle const& bundle) {
-    std::vector<std::pair<std::string, std::string>> const keys = textKeys(tour);
-    if (keys.empty()) {
-        return std::nullopt;
-    }
-    std::set<std::string, std::less<>> known;
-    std::set<std::string, std::less<>> locales;
+struct CatalogueKeys {
+    Names known;
+    Names locales;
+};
+
+// Every message key the bundle's catalogues have, and the locales they are for.
+CatalogueKeys catalogueKeys(ServedBundle const& bundle) {
+    CatalogueKeys result;
     for (auto const& [hash, file] : bundle.files) {
         static_cast<void>(hash);
         for (ServedFile::Holder const& holder : file.holders) {
@@ -82,31 +83,46 @@ std::optional<std::pair<std::string, std::string>> missingTextKey(Json const& to
                 continue;
             }
             if (std::optional<std::string> locale = catalogueLocale(holder.id)) {
-                locales.insert(std::move(*locale));
+                result.locales.insert(std::move(*locale));
             }
             if (auto catalogue = parseCatalogue(file.bytes)) {
                 for (auto const& [key, message] : catalogue->messages) {
                     static_cast<void>(message);
-                    known.insert(key);
+                    result.known.insert(key);
                 }
             }
         }
     }
+    return result;
+}
+
+// Every key the server's texts answer in any of @p locales into @p known.
+void collectServerKeys(ServedBundle const& bundle, Names const& locales, Names& known) {
+    for (std::string const& locale : locales) {
+        try {
+            for (auto const& [key, text] : bundle.fieldTexts(locale)) {
+                static_cast<void>(text);
+                known.insert(key);
+            }
+        } catch (std::exception const& error) {
+            ::morph::log::logWarn("[tours] the server's texts for `{}` could not be read: {}", locale, error.what());
+        }
+    }
+}
+
+// The first `t` key of @p tour that no catalogue of @p bundle has and the server's texts do not answer in any of the
+// bundle's locales (English when it has no catalogue), with its pointer.
+std::optional<std::pair<std::string, std::string>> missingTextKey(Json const& tour, ServedBundle const& bundle) {
+    std::vector<std::pair<std::string, std::string>> const keys = textKeys(tour);
+    if (keys.empty()) {
+        return std::nullopt;
+    }
+    auto [known, locales] = catalogueKeys(bundle);
     if (bundle.fieldTexts) {
         if (locales.empty()) {
             locales.insert("en");
         }
-        for (std::string const& locale : locales) {
-            try {
-                for (auto const& [key, text] : bundle.fieldTexts(locale)) {
-                    static_cast<void>(text);
-                    known.insert(key);
-                }
-            } catch (std::exception const& error) {
-                ::morph::log::logWarn("[tours] the server's texts for `{}` could not be read: {}", locale,
-                                      error.what());
-            }
-        }
+        collectServerKeys(bundle, locales, known);
     }
     for (auto const& entry : keys) {
         if (!known.contains(entry.second)) {
@@ -125,19 +141,19 @@ TourRegistry::TourRegistry(std::function<std::shared_ptr<ServedBundle const>()> 
 }
 
 std::expected<TourRegistry::Held, TourRefusal> TourRegistry::checked(std::string_view tour,
-                                                                     ServedBundle const& bundle) const {
+                                                                     ServedBundle const& bundle) {
     auto json = parseJson(tour);
     auto const* const object = json ? std::get_if<Json::object_t>(&json->data) : nullptr;
-    std::string id;
+    std::string tourId;
     if (object != nullptr) {
-        if (auto const found = object->find("id"); found != object->end()) {
+        if (Json::object_t::const_iterator const found = object->find("id"); found != object->end()) {
             if (auto const* const text = std::get_if<std::string>(&found->second.data)) {
-                id = *text;
+                tourId = *text;
             }
         }
     }
-    auto const refuse = [&id](std::string path, std::string reason) {
-        return std::unexpected(TourRefusal{.tourId = id, .path = std::move(path), .reason = std::move(reason)});
+    auto const refuse = [&tourId](std::string path, std::string reason) {
+        return std::unexpected(TourRefusal{.tourId = tourId, .path = std::move(path), .reason = std::move(reason)});
     };
     if (object == nullptr) {
         return refuse({}, "a tour is a JSON object, as one entry of the app document's `tours`");
@@ -162,7 +178,8 @@ std::expected<TourRegistry::Held, TourRefusal> TourRegistry::checked(std::string
     // A refusal's path as a pointer into the submitted tour: the part after this tour's place in the app document. A
     // path outside the tour (the bundle's own app document is at fault) is the whole tour.
     auto const local = [&prefix](std::string const& path) {
-        bool const inside = path.starts_with(prefix) && (path.size() == prefix.size() || path[prefix.size()] == '/');
+        bool const inside =
+            path.starts_with(prefix) && (path.size() == prefix.size() || path.at(prefix.size()) == '/');
         return inside ? path.substr(prefix.size()) : std::string{};
     };
     auto const loaded =
@@ -170,7 +187,7 @@ std::expected<TourRegistry::Held, TourRefusal> TourRegistry::checked(std::string
     if (!loaded) {
         std::string const path = local(loaded.error().path);
         if (path == "/id" && loaded.error().reason.contains("declared twice")) {
-            return refuse(path, "the app document already declares a tour with the id `" + id + "`");
+            return refuse(path, "the app document already declares a tour with the id `" + tourId + "`");
         }
         return refuse(path, loaded.error().reason);
     }
@@ -233,8 +250,8 @@ std::expected<void, TourRefusal> TourRegistry::add(std::string_view tour) {
         if (!held) {
             result = std::unexpected(std::move(held.error()));
         } else if (std::ranges::any_of(_tours, [&held](Held const& kept) { return kept.id == held->id; })) {
-            result = std::unexpected(TourRefusal{
-                .tourId = held->id, .path = "/id", .reason = "a runtime tour with this id is registered; replace it"});
+            std::string reason = "a runtime tour with this id is registered; replace it";
+            result = std::unexpected(TourRefusal{.tourId = held->id, .path = "/id", .reason = std::move(reason)});
         } else {
             held->revision = ++_revisions;
             _tours.push_back(std::move(*held));
@@ -254,10 +271,8 @@ std::expected<void, TourRefusal> TourRegistry::replace(std::string_view tour) {
         if (!held) {
             result = std::unexpected(std::move(held.error()));
         } else if (auto const kept = std::ranges::find(_tours, held->id, &Held::id); kept == _tours.end()) {
-            result = std::unexpected(TourRefusal{
-                .tourId = held->id,
-                .path = "/id",
-                .reason = "no runtime tour has this id; an app document's tour changes in the app document"});
+            std::string reason = "no runtime tour has this id; an app document's tour changes in the app document";
+            result = std::unexpected(TourRefusal{.tourId = held->id, .path = "/id", .reason = std::move(reason)});
         } else {
             held->revision = ++_revisions;
             *kept = std::move(*held);
@@ -373,7 +388,7 @@ void registerTours(std::shared_ptr<TourRegistry> tours,
     if (tours == nullptr || authorizer == nullptr) {
         throw std::invalid_argument{"registerTours: a null registry or authorizer"};
     }
-    registry.registerModel<ToursModel>(kToursModel, [tours, authorizer] {
+    registry.registerModel<ToursModel>(kToursModel, [tours = std::move(tours), authorizer = std::move(authorizer)] {
         return std::make_unique<model::detail::ModelHolder<ToursModel>>(tours, authorizer);
     });
     dispatcher.registerAction<ToursModel, ToursList>(kToursModel, kToursList);

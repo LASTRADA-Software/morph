@@ -827,12 +827,17 @@ private:
         }
         // A listener that throws must not leave the store deaf, so the flag is cleared on every way out of the round.
         struct Round {
-            bool& notifying;
-            ~Round() { notifying = false; }
+            explicit Round(bool& flag) : notifying{&flag} { *notifying = true; }
+            Round(Round const&) = delete;
+            Round& operator=(Round const&) = delete;
+            Round(Round&&) = delete;
+            Round& operator=(Round&&) = delete;
+            ~Round() { *notifying = false; }
+            bool* notifying;
         };
-        _notifying = true;
         Round const round{_notifying};
-        do {
+        _again = true;
+        while (_again) {
             _again = false;
             std::vector<int> keys;
             keys.reserve(_listeners.size());
@@ -846,7 +851,7 @@ private:
                     listener();
                 }
             }
-        } while (_again);
+        }
     }
 
     std::map<int, std::function<void()>> _listeners;
@@ -3535,7 +3540,7 @@ private:
             }
             int ringed = 0;
             if (auto const found = spotlight.props.find("ringed"); found != spotlight.props.end()) {
-                std::from_chars(found->second.data(), found->second.data() + found->second.size(), ringed);
+                std::from_chars(std::to_address(found->second.begin()), std::to_address(found->second.end()), ringed);
             }
             bool reaches = false;
             for (int at = record.id; at != 0 && !reaches; at = _store->at(at).parent) {

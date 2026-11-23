@@ -78,7 +78,7 @@ struct Context {
     void endPress();
     /// Tells every live spotlight that a test id, a widget's visibility or the set of widgets changed: each picks its
     /// target again. A widget made or destroyed, a test id set, a widget shown or hidden, and every frame call it.
-    void targetsChanged();
+    void targetsChanged() const;
     /// Whether an open spotlight's box stands where its target is no longer drawn: the frame just drawn moved or
     /// showed the target, so one more `fit` and draw puts the box beside it.
     [[nodiscard]] bool spotlightMisplaced() const;

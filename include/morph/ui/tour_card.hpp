@@ -104,61 +104,36 @@ public:
                     std::function<void(std::string const&)> report = {})
         : _host{&host}, _controller{std::move(controller)}, _post{std::move(post)}, _report{std::move(report)} {
         std::set<std::string, std::less<>> const card{std::string{kTourCardId}};
-        for (std::string_view const name : {"tour.title", "tour.stepTitle", "tour.body", "tour.waitingFor"}) {
-            host.add(HostValue{.name = std::string{name},
-                               .version = 1,
-                               .type = "string",
-                               .initial = Value{std::string{}},
-                               .documents = card});
-        }
-        for (std::string_view const name : {"tour.position", "tour.count"}) {
-            host.add(HostValue{
-                .name = std::string{name}, .version = 1, .type = "int", .initial = Value{0}, .documents = card});
-        }
-        for (std::string_view const name : {"tour.waiting", "tour.canBack", "tour.last"}) {
-            host.add(HostValue{
-                .name = std::string{name}, .version = 1, .type = "bool", .initial = Value{false}, .documents = card});
-        }
+        auto const addValues = [&host, &card](std::initializer_list<std::string_view> names, std::string const& type,
+                                              Value const& initial) {
+            for (std::string_view const name : names) {
+                host.add(HostValue{
+                    .name = std::string{name},
+                    .version = 1,
+                    .type = type,
+                    .initial = initial,
+                    .documents = card,
+                });
+            }
+        };
+        addValues({"tour.title", "tour.stepTitle", "tour.body", "tour.waitingFor"}, "string", Value{std::string{}});
+        addValues({"tour.position", "tour.count"}, "int", Value{0});
+        addValues({"tour.waiting", "tour.canBack", "tour.last"}, "bool", Value{false});
         auto const command = [this, &card](std::string name, std::function<void(TourController&)> work) {
-            return HostCommand{.name = std::move(name),
-                               .version = 1,
-                               .args = {},
-                               .safeForUntrusted = true,
-                               .run = [this, work = std::move(work)](ValueRecord const& /*args*/) { later(work); },
-                               .documents = card,
-                               .refusal = {}};
+            return HostCommand{
+                .name = std::move(name),
+                .version = 1,
+                .args = {},
+                .safeForUntrusted = true,
+                .run = [this, work = std::move(work)](ValueRecord const& /*args*/) { later(work); },
+                .documents = card,
+                .refusal = {},
+            };
         };
         host.add(command("tour.next", [](TourController& tours) { tours.next(); }));
         host.add(command("tour.back", [](TourController& tours) { tours.back(); }));
         host.add(command("tour.end", [](TourController& tours) { tours.end(); }));
-        host.add(
-            HostCommand{.name = "tour.start",
-                        .version = 1,
-                        .args = {HostArg{.name = "id", .type = "string"}},
-                        .safeForUntrusted = true,
-                        .run =
-                            [this](ValueRecord const& args) {
-                                std::string const id = *args.at("id").asString();
-                                later(
-                                    [this, id](TourController& tours) {
-                                        if (auto const started = tours.start(id); !started) {
-                                            tell(started.error().message());
-                                        }
-                                    },
-                                    [this, id] { tell("the tour `" + id + "` did not start: no frame is shown"); });
-                            },
-                        .documents = {},
-                        .refusal = [this](ValueRecord const& args) -> std::optional<std::string> {
-                            TourController const* const tours = _controller ? _controller() : nullptr;
-                            std::string const& id = *args.at("id").asString();
-                            if (tours == nullptr) {
-                                return std::string{"no tour can start now: no frame is shown"};
-                            }
-                            if (!tours->declares(id)) {
-                                return "the app document declares no tour `" + id + "`";
-                            }
-                            return std::nullopt;
-                        }});
+        host.add(startCommand());
         refresh();
     }
 
@@ -200,6 +175,43 @@ private:
         } else {
             run();
         }
+    }
+
+    // `tour.start`: every document may use it, with the id of a tour of the app document.
+    [[nodiscard]] HostCommand startCommand() {
+        auto const run = [this](ValueRecord const& args) {
+            std::string const tourId = *args.at("id").asString();
+            std::function<void(TourController&)> work = [this, tourId](TourController& tours) {
+                if (auto const started = tours.start(tourId); !started) {
+                    tell(started.error().message());
+                }
+            };
+            std::function<void()> missing = [this, tourId] {
+                tell("the tour `" + tourId + "` did not start: no frame is shown");
+            };
+            later(std::move(work), std::move(missing));
+            // NOLINTNEXTLINE(clang-analyzer-cplusplus.NewDeleteLeaks): the analyzer loses the std::function blocks.
+        };
+        auto const refusal = [this](ValueRecord const& args) -> std::optional<std::string> {
+            TourController const* const tours = _controller ? _controller() : nullptr;
+            std::string const& tourId = *args.at("id").asString();
+            if (tours == nullptr) {
+                return std::string{"no tour can start now: no frame is shown"};
+            }
+            if (!tours->declares(tourId)) {
+                return "the app document declares no tour `" + tourId + "`";
+            }
+            return std::nullopt;
+        };
+        return HostCommand{
+            .name = "tour.start",
+            .version = 1,
+            .args = {HostArg{.name = "id", .type = "string"}},
+            .safeForUntrusted = true,
+            .run = run,
+            .documents = {},
+            .refusal = refusal,
+        };
     }
 
     // Reports a posted `tour.start` that could not start its tour: to the shell's callback, or at warn without one.

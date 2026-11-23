@@ -8888,6 +8888,49 @@ std::expected<std::unique_ptr<Screen>, Refusal> Interpreter::mount(std::shared_p
     return screen;
 }
 
+namespace {
+
+// The texts of a tour evaluated in the app scope.
+Tour lowerTour(detail::RtScope& scope, TourDecl const& declared) {
+    auto const textOf = [&scope](ExprPtr const& expr) {
+        return expr == nullptr ? std::string{}
+                               : detail::textOf(detail::evalIn(scope, nullptr, expr), scope.formatting());
+    };
+    Tour tour{.id = declared.id,
+              .screen = declared.screen,
+              .title = textOf(declared.title),
+              .summary = textOf(declared.summary),
+              .steps = {},
+              .revision = declared.revision};
+    for (TourStepDecl const& step : declared.steps) {
+        tour.steps.push_back(TourStep{.title = textOf(step.title),
+                                      .body = textOf(step.body),
+                                      .screen = step.screen,
+                                      .params = step.params,
+                                      .target = step.target,
+                                      .advanceOn = step.advanceOn});
+    }
+    return tour;
+}
+
+// The app document's tours, then the runtime ones. A runtime tour with one of the app document's ids is left out,
+// since the server refuses one and an old list may still hold it.
+std::vector<Tour> lowerTours(Document const& doc, detail::RtScope& scope, std::vector<TourDecl> const& runtime) {
+    std::vector<Tour> out;
+    out.reserve(doc.tours.size());
+    for (TourDecl const& declared : doc.tours) {
+        out.push_back(lowerTour(scope, declared));
+    }
+    for (TourDecl const& declared : runtime) {
+        if (std::ranges::none_of(out, [&declared](Tour const& kept) { return kept.id == declared.id; })) {
+            out.push_back(lowerTour(scope, declared));
+        }
+    }
+    return out;
+}
+
+}  // namespace
+
 std::expected<std::unique_ptr<AppRoot>, Refusal> Interpreter::mountApp(std::shared_ptr<Document const> doc) {
     if (doc->id != "app") {
         return std::unexpected(
@@ -8941,40 +8984,7 @@ std::expected<std::unique_ptr<AppRoot>, Refusal> Interpreter::mountApp(std::shar
         _session->runtime(), std::make_shared<std::vector<TourDecl> const>());
     root->_tours = std::make_unique<reactive::Computed<std::vector<Tour>>>(
         _session->runtime(), [doc, scope = root->_scope.get(), runtime = root->_runtimeTours.get()] {
-            auto const textOf = [scope](ExprPtr const& expr) {
-                return expr == nullptr ? std::string{}
-                                       : detail::textOf(detail::evalIn(*scope, nullptr, expr), scope->formatting());
-            };
-            auto const lower = [&textOf](TourDecl const& declared) {
-                Tour tour{.id = declared.id,
-                          .screen = declared.screen,
-                          .title = textOf(declared.title),
-                          .summary = textOf(declared.summary),
-                          .steps = {},
-                          .revision = declared.revision};
-                for (TourStepDecl const& step : declared.steps) {
-                    tour.steps.push_back(TourStep{.title = textOf(step.title),
-                                                  .body = textOf(step.body),
-                                                  .screen = step.screen,
-                                                  .params = step.params,
-                                                  .target = step.target,
-                                                  .advanceOn = step.advanceOn});
-                }
-                return tour;
-            };
-            std::vector<Tour> out;
-            out.reserve(doc->tours.size());
-            for (TourDecl const& declared : doc->tours) {
-                out.push_back(lower(declared));
-            }
-            // The app document's tours come first; a runtime tour with one of their ids is left out, since the server
-            // refuses one and an old list may still hold it.
-            for (TourDecl const& declared : *runtime->get()) {
-                if (std::ranges::none_of(out, [&declared](Tour const& kept) { return kept.id == declared.id; })) {
-                    out.push_back(lower(declared));
-                }
-            }
-            return out;
+            return lowerTours(*doc, *scope, *runtime->get());
         });
     // The app document's date patterns are the application's: every screen of the bundle shows and reads dates so.
     if (!doc->datePattern.empty() || !doc->dateTimePattern.empty()) {

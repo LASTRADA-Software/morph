@@ -109,7 +109,8 @@ void WidgetIndex::changed() {
         return;
     }
     _telling = true;
-    do {
+    _again = true;
+    while (_again) {
         _again = false;
         std::vector<int> keys;
         for (auto const& [key, listener] : _listeners) {
@@ -122,7 +123,7 @@ void WidgetIndex::changed() {
                 listener();
             }
         }
-    } while (_again);
+    }
     _telling = false;
 }
 

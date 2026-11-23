@@ -64,16 +64,15 @@ std::expected<void, Refusal> TourController::start(std::string_view tourId) {
     std::vector<Tour> const& tours = _root->tours().peek();
     auto const found = std::ranges::find(tours, tourId, &Tour::id);
     if (found == tours.end()) {
-        return std::unexpected(Refusal{.document = "app",
-                                       .path = "/tours",
-                                       .reason = "the app document declares no tour `" + std::string{tourId} + "`"});
+        std::string reason = "the app document declares no tour `" + std::string{tourId} + "`";
+        return std::unexpected(Refusal{.document = "app", .path = "/tours", .reason = std::move(reason)});
     }
-    std::string const id = found->id;
+    std::string const startedId = found->id;
     std::string const screen = found->screen;
     std::uint64_t const revision = found->revision;
     end();
     _tours = _root->tours().peek();
-    _tourId = id;
+    _tourId = startedId;
     _startedRevision = revision;
     _step = 0;
     _warned.clear();
@@ -250,10 +249,10 @@ void TourController::refresh() {
 
 void TourController::fail(std::string const& screenId, MountError const& error) {
     std::string const title = _shell->screenTitle(screenId);
-    std::string const id = _tourId;
+    std::string const endedId = _tourId;
     end();
     _shell->notify("The tour stopped: " + title + " could not be opened", Tone::Warn);
-    warn("the tour `" + id + "` stopped: `" + screenId + "` could not be opened: " + error.reason);
+    warn("the tour `" + endedId + "` stopped: `" + screenId + "` could not be opened: " + error.reason);
 }
 
 void TourController::warn(std::string const& text) const {

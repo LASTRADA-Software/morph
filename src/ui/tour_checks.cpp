@@ -26,9 +26,9 @@ using Names = std::set<std::string, std::less<>>;
 // NOLINTNEXTLINE(misc-no-recursion): a document is a tree, walked down.
 void collectTestIds(Json const& json, Names& out) {
     if (auto const* const object = std::get_if<Json::object_t>(&json.data)) {
-        if (auto const found = object->find("testId"); found != object->end()) {
-            if (auto const* const id = std::get_if<std::string>(&found->second.data)) {
-                out.insert(*id);
+        if (Json::object_t::const_iterator const found = object->find("testId"); found != object->end()) {
+            if (auto const* const testId = std::get_if<std::string>(&found->second.data)) {
+                out.insert(*testId);
             }
         }
         for (auto const& [key, value] : *object) {
@@ -48,7 +48,7 @@ void collectHeadActions(Json const& json, Names& out) {
     if (object == nullptr) {
         return;
     }
-    auto const actions = object->find("actions");
+    Json::object_t::const_iterator const actions = object->find("actions");
     auto const* const list = actions == object->end() ? nullptr : std::get_if<Json::array_t>(&actions->second.data);
     if (list == nullptr) {
         return;
@@ -58,8 +58,8 @@ void collectHeadActions(Json const& json, Names& out) {
         if (fields == nullptr) {
             continue;
         }
-        if (auto const id = fields->find("id"); id != fields->end()) {
-            if (auto const* const text = std::get_if<std::string>(&id->second.data)) {
+        if (Json::object_t::const_iterator const idField = fields->find("id"); idField != fields->end()) {
+            if (auto const* const text = std::get_if<std::string>(&idField->second.data)) {
                 out.insert("action_" + *text);
             }
         }
@@ -81,8 +81,8 @@ std::optional<std::string> literalTourId(Json const& args) {
     if (fields == nullptr) {
         return std::nullopt;
     }
-    auto const id = fields->find("id");
-    auto const* const text = id == fields->end() ? nullptr : std::get_if<std::string>(&id->second.data);
+    Json::object_t::const_iterator const idField = fields->find("id");
+    auto const* const text = idField == fields->end() ? nullptr : std::get_if<std::string>(&idField->second.data);
     return text == nullptr ? std::nullopt : std::optional<std::string>{*text};
 }
 
@@ -95,13 +95,13 @@ struct TourStart {
 // NOLINTNEXTLINE(misc-no-recursion): a document is a tree, walked down.
 void collectTourStarts(Json const& json, std::string const& path, std::vector<TourStart>& out) {
     if (auto const* const object = std::get_if<Json::object_t>(&json.data)) {
-        auto const host = object->find("host");
-        auto const args = object->find("args");
+        Json::object_t::const_iterator const host = object->find("host");
+        Json::object_t::const_iterator const args = object->find("args");
         if (host != object->end() && args != object->end()) {
             auto const* const name = std::get_if<std::string>(&host->second.data);
             if (name != nullptr && *name == "tour.start") {
-                if (std::optional<std::string> id = literalTourId(args->second)) {
-                    out.push_back(TourStart{.path = path, .id = std::move(*id)});
+                if (std::optional<std::string> tourId = literalTourId(args->second)) {
+                    out.push_back(TourStart{.path = path, .id = std::move(*tourId)});
                 }
             }
         }
@@ -157,6 +157,28 @@ std::string stepName(TourDecl const& tour, std::size_t index) {
     return "the tour `" + tour.id + "`, step " + std::to_string(index + 1);
 }
 
+// A step's `target`, which the shell or the screen the step shows must carry.
+std::optional<Refusal> checkStepTarget(TourDecl const& tour, std::size_t index, std::string const& current,
+                                       std::optional<ShellParts> const& parts, TourTargets const& screens) {
+    TourStepDecl const& step = tour.steps.at(index);
+    if (step.target.empty() || shellTarget(step.target, parts, screens)) {
+        return std::nullopt;
+    }
+    auto const found = current.empty() ? screens.end() : screens.find(current);
+    bool const onScreen = found != screens.end() && found->second.ids.contains(step.target);
+    if (onScreen) {
+        return std::nullopt;
+    }
+    std::string where = "the shell";
+    if (found != screens.end() && !found->second.hasDocument) {
+        where = "the shell (`" + current + "` is a host screen, whose parts the server cannot see)";
+    } else if (found != screens.end()) {
+        where = "`" + current + "` or the shell";
+    }
+    return refusal(pointerAppend(step.path, "target"),
+                   stepName(tour, index) + " rings `" + step.target + "`, which nothing on " + where + " carries");
+}
+
 }  // namespace
 
 // One tour. The effective screen of a step is the screen the active tab shows when the step shows: its own `screen`,
@@ -182,19 +204,8 @@ std::optional<Refusal> checkTour(TourDecl const& tour, std::optional<ShellParts>
                 pointerAppend(pointerAppend(step.path, "advanceOn"), "screen"),
                 stepName(tour, index) + " waits for `" + step.advanceOn + "`, which is not a registered screen");
         }
-        if (!step.target.empty() && !shellTarget(step.target, parts, screens)) {
-            auto const found = current.empty() ? screens.end() : screens.find(current);
-            bool const onScreen = found != screens.end() && found->second.ids.contains(step.target);
-            if (!onScreen) {
-                std::string where = "the shell";
-                if (found != screens.end() && !found->second.hasDocument) {
-                    where = "the shell (`" + current + "` is a host screen, whose parts the server cannot see)";
-                } else if (found != screens.end()) {
-                    where = "`" + current + "` or the shell";
-                }
-                return refusal(pointerAppend(step.path, "target"), stepName(tour, index) + " rings `" + step.target +
-                                                                       "`, which nothing on " + where + " carries");
-            }
+        if (std::optional<Refusal> bad = checkStepTarget(tour, index, current, parts, screens)) {
+            return bad;
         }
         if (!step.advanceOn.empty()) {
             current = step.advanceOn;
@@ -212,10 +223,9 @@ std::optional<Refusal> checkTourStarts(std::string const& document, std::string_
     collectTourStarts(*json, "", starts);
     for (TourStart const& start : starts) {
         if (!declared.contains(start.id)) {
-            return Refusal{
-                .document = document,
-                .path = start.path,
-                .reason = "`tour.start` names the tour `" + start.id + "`, which the app document does not declare"};
+            std::string reason =
+                "`tour.start` names the tour `" + start.id + "`, which the app document does not declare";
+            return Refusal{.document = document, .path = start.path, .reason = std::move(reason)};
         }
     }
     return std::nullopt;

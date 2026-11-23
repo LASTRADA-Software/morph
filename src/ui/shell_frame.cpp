@@ -383,8 +383,8 @@ void ShellFrame::chooseTour(std::size_t entry) {
     if (entry < _tourMap.size() && _tourMap.at(entry) && _onTour) {
         // A copy: the handler may call `setTours` or `setCompact`, which rebuild `_tourMap` under it.
         // NOLINTNEXTLINE(bugprone-unchecked-optional-access): the condition above checked this slot.
-        std::string const id = *_tourMap.at(entry);
-        _onTour(id);
+        std::string const tourId = *_tourMap.at(entry);
+        _onTour(tourId);
     }
 }
 
@@ -831,7 +831,7 @@ void ShellFrame::showParts() {
                                        .emphasis = ButtonEmphasis::Ghost,
                                        .detail = {},
                                        .avatar = {},
-                                       .caret = MenuCaret::Down});
+                                       .caret = MenuCaret::Down});  // NOLINT(readability-trailing-comma)
         _tours->setAccessibleName(_toursView.name);
         _tours->setTooltip(_toursView.name);
     }

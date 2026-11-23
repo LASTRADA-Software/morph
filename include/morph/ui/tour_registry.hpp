@@ -142,7 +142,7 @@ private:
         std::vector<std::string> screens;
     };
 
-    [[nodiscard]] std::expected<Held, TourRefusal> checked(std::string_view tour, ServedBundle const& bundle) const;
+    [[nodiscard]] static std::expected<Held, TourRefusal> checked(std::string_view tour, ServedBundle const& bundle);
     // Checks every held tour against @p bundle and drops those that fail; answers the drops. Under the lock.
     [[nodiscard]] std::vector<TourRefusal> recheckLocked(ServedBundle const& bundle);
     // The bundle now, every held tour checked against it; drops into @p dropped. Under the lock.
