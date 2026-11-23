@@ -65,6 +65,12 @@ them ([interpreter.md](interpreter.md#the-app-root-scope)). `offeredTours(tours,
 of a screen (those whose `screen` is it, in declaration order) and the general ones (no `screen`, in declaration
 order): what the Tours menu lists, the screen's first.
 
+Runtime tours (a server registers them while it runs) reach the client as a list of texts. Each is loaded with
+`loadTourText`, which reads one tour as an entry of `tours` is read and checks its shape, and the list is given to
+`AppRoot::setRuntimeTours`. `tours()` then lists the app document's tours and after them the runtime ones, each group in
+its own order; a runtime tour with an app tour's id is left out, so a literal `tour.start` names the app document's tour.
+Each `Tour` carries the server's `revision`, 0 for an app tour.
+
 ## The controller
 
 `TourController` runs at most one tour. A shell builds one with each frame and destroys it with the frame, so a
@@ -81,6 +87,7 @@ already shows it), whether the active tab shows a screen with given params (`sho
 | `next()` | Shows step *n*+1, or ends the tour on the last step. A waiting step ignores it |
 | `back()` | Shows step *n*-1. A screen an earlier step opened is not closed |
 | `activeChanged()` | When the step waits for a screen (`advanceOn`) and the active screen is it, the tour moves on. A screen the controller is opening itself does not count |
+| The running tour changes | The controller follows `AppRoot::tours()` while a tour runs. A tour that is gone, whose `revision` differs from the one it started with (replaced on the server), or that no longer has the step on show ends, and the shell shows the toast "The tour <title> changed, so it ended": its steps may no longer match the one shown. A change of locale, a change of another tour, and a runtime update that leaves an app-document tour alone keep it running; the texts are re-evaluated |
 | `end()` | The spotlight's target is cleared and it closes, which hands focus back to where it was when the tour started; the view empties |
 
 `view()` is what the card shows: the tour's title, the step's title and body, its position and the count, whether it

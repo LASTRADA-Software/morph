@@ -591,6 +591,9 @@ struct TourDecl {
     ExprPtr summary;
     /// @brief Its steps, one or more and at most `kMaxTourSteps`.
     std::vector<TourStepDecl> steps;
+    /// @brief A runtime tour's revision on the server (`ListedTour::revision`), so a client tells a replaced tour from
+    ///        one whose texts changed; 0 for an app-document tour.
+    std::uint64_t revision = 0;
 };
 
 /// @brief A loaded and validated UI document: a screen, or the app document (id `app`, spec 6 §5).
@@ -813,6 +816,13 @@ enum class NameCategory : std::uint8_t {
 /// @return The document, or the refusal; text that is not JSON is refused at the root.
 [[nodiscard]] MORPH_API std::expected<Document, Refusal> loadDocumentText(std::string_view text,
                                                                           LoadOptions const& options = {});
+
+/// @brief Loads one tour's JSON text, as one entry of the app document's `tours` is read: what a client makes of a
+///        runtime tour that `morph.tours.list` answers. Its shape is checked; its texts are parsed, not checked
+///        against the app scope, which the server did when the tour was added.
+/// @param text The tour's JSON text.
+/// @return The tour, or the refusal, its path a pointer into the tour.
+[[nodiscard]] MORPH_API std::expected<TourDecl, Refusal> loadTourText(std::string_view text);
 
 /// @brief The view node kinds of `ui/1`.
 /// @return Their `kind` spellings.

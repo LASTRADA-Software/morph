@@ -75,7 +75,9 @@ before its scope. A shell copies it onto its navigator ([client.md](../client/cl
 title, summary, steps}` whose steps are `TourStep{title, body, screen, params, target, advanceOn}`. The texts are
 evaluated in the app scope inside the computed value, so a change of locale, or of the app state a text reads,
 re-evaluates them; it is one value for every tour, since the texts are few and a locale change changes all of them.
-It goes with the root, before its scope.
+It goes with the root, before its scope. `setRuntimeTours(tours)` gives it the runtime tours a client listed; they follow
+the app document's tours, a runtime tour with one of their ids is left out, their texts are evaluated in the same
+scope, and each `Tour` carries the `revision` of its runtime tour (0 for an app-document tour).
 
 ## Mounting
 

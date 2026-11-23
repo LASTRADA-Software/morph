@@ -731,6 +731,12 @@ public:
         return doc;
     }
 
+    /// @brief Parses one tour, as an entry of `tours` is parsed.
+    /// @param json The tour.
+    /// @param path Its JSON Pointer.
+    /// @return The tour.
+    [[nodiscard]] static TourDecl tour(Json const& json, std::string const& path) { return tourOf(json, path); }
+
 private:
     // The app document's `formatting`: a record of the date pattern and the date-and-time pattern, each checked.
     static void datePatterns(Json::object_t const& object, Document& doc) {
@@ -5142,6 +5148,18 @@ std::expected<Document, Refusal> loadDocumentText(std::string_view text, LoadOpt
         return std::unexpected(Refusal{.document = {}, .path = "", .reason = std::move(json.error())});
     }
     return loadDocument(*json, options);
+}
+
+std::expected<TourDecl, Refusal> loadTourText(std::string_view text) {
+    auto json = parseJson(text);
+    if (!json) {
+        return std::unexpected(Refusal{.document = {}, .path = "", .reason = std::move(json.error())});
+    }
+    try {
+        return detail::DocumentParser::tour(*json, "");
+    } catch (detail::DocumentRefused const& refused) {
+        return std::unexpected(refused.refusal());
+    }
 }
 
 std::vector<std::string_view> nodeKinds() {

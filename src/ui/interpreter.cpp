@@ -1378,6 +1378,7 @@ AppRoot::~AppRoot() {
     }
     // The counts read the scope, so they go before it.
     _tours.reset();
+    _runtimeTours.reset();
     _navigationBadges.reset();
     _navigation.clear();
     _core->session.setAppScope(nullptr);
@@ -1389,6 +1390,10 @@ reactive::Computed<std::vector<NavigationBadge>> const& AppRoot::navigationBadge
 }
 
 reactive::Computed<std::vector<Tour>> const& AppRoot::tours() const { return *_tours; }
+
+void AppRoot::setRuntimeTours(std::vector<TourDecl> tours) {
+    _runtimeTours->set(std::make_shared<std::vector<TourDecl> const>(std::move(tours)));
+}
 
 PrincipalPlacement AppRoot::principalPlacement() const noexcept {
     return _core->doc().principalPlacement == "head" ? PrincipalPlacement::Head : PrincipalPlacement::Sidebar;
@@ -8932,20 +8937,21 @@ std::expected<std::unique_ptr<AppRoot>, Refusal> Interpreter::mountApp(std::shar
             return shown;
         });
     // One computed value for every tour: the texts are few, and a change of locale changes all of them at once.
+    root->_runtimeTours = std::make_unique<reactive::Signal<std::shared_ptr<std::vector<TourDecl> const>>>(
+        _session->runtime(), std::make_shared<std::vector<TourDecl> const>());
     root->_tours = std::make_unique<reactive::Computed<std::vector<Tour>>>(
-        _session->runtime(), [doc, scope = root->_scope.get()] {
+        _session->runtime(), [doc, scope = root->_scope.get(), runtime = root->_runtimeTours.get()] {
             auto const textOf = [scope](ExprPtr const& expr) {
                 return expr == nullptr ? std::string{}
                                        : detail::textOf(detail::evalIn(*scope, nullptr, expr), scope->formatting());
             };
-            std::vector<Tour> out;
-            out.reserve(doc->tours.size());
-            for (TourDecl const& declared : doc->tours) {
+            auto const lower = [&textOf](TourDecl const& declared) {
                 Tour tour{.id = declared.id,
                           .screen = declared.screen,
                           .title = textOf(declared.title),
                           .summary = textOf(declared.summary),
-                          .steps = {}};
+                          .steps = {},
+                          .revision = declared.revision};
                 for (TourStepDecl const& step : declared.steps) {
                     tour.steps.push_back(TourStep{.title = textOf(step.title),
                                                   .body = textOf(step.body),
@@ -8954,7 +8960,19 @@ std::expected<std::unique_ptr<AppRoot>, Refusal> Interpreter::mountApp(std::shar
                                                   .target = step.target,
                                                   .advanceOn = step.advanceOn});
                 }
-                out.push_back(std::move(tour));
+                return tour;
+            };
+            std::vector<Tour> out;
+            out.reserve(doc->tours.size());
+            for (TourDecl const& declared : doc->tours) {
+                out.push_back(lower(declared));
+            }
+            // The app document's tours come first; a runtime tour with one of their ids is left out, since the server
+            // refuses one and an old list may still hold it.
+            for (TourDecl const& declared : *runtime->get()) {
+                if (std::ranges::none_of(out, [&declared](Tour const& kept) { return kept.id == declared.id; })) {
+                    out.push_back(lower(declared));
+                }
             }
             return out;
         });

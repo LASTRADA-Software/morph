@@ -210,6 +210,7 @@ private:
     std::unique_ptr<reactive::Effect> _follow;
     std::string _tourId;
     std::size_t _step = 0;
+    std::uint64_t _startedRevision = 0;
     std::set<std::size_t> _warned;
     std::optional<TourView> _view;
     bool _showing = false;

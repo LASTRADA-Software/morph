@@ -70,9 +70,11 @@ std::expected<void, Refusal> TourController::start(std::string_view tourId) {
     }
     std::string const id = found->id;
     std::string const screen = found->screen;
+    std::uint64_t const revision = found->revision;
     end();
     _tours = _root->tours().peek();
     _tourId = id;
+    _startedRevision = revision;
     _step = 0;
     _warned.clear();
     _waiting = false;
@@ -90,12 +92,23 @@ std::expected<void, Refusal> TourController::start(std::string_view tourId) {
     if (!running()) {
         return {};
     }
-    // The texts follow the locale and the app state while the tour runs; the steps' structure is fixed for the
-    // frame, since a reloaded app document takes effect at the next one.
+    // The texts follow the locale and the app state while the tour runs. The steps do not: a tour that is gone, was
+    // replaced (its revision changed) or lost the step on show ends, since its steps may no longer match the one
+    // shown. A change of locale keeps the revision and the steps, and only re-evaluates the texts.
     _follow = std::make_unique<reactive::Effect>(*_runtime, [this] {
         std::vector<Tour> const& latest = _root->tours().get();
         _runtime->untracked([this, &latest] {
+            if (!running()) {
+                return;
+            }
             _tours = latest;
+            Tour const* const now = current();
+            if (now == nullptr || now->revision != _startedRevision || _step >= now->steps.size()) {
+                std::string const title = _view ? _view->title : _tourId;
+                end();
+                _shell->notify("The tour " + title + " changed, so it ended", Tone::Info);
+                return;
+            }
             std::optional<TourView> const before = _view;
             refresh();
             // The first run follows the view start() just showed, which has been reported already.
@@ -130,7 +143,8 @@ void TourController::end() {
     if (!running()) {
         return;
     }
-    _follow.reset();
+    // `_follow` stays: it is replaced by the next `start`, does nothing while no tour runs, and `end` may be running
+    // inside its own body.
     _tourId.clear();
     _step = 0;
     _waiting = false;
@@ -148,8 +162,7 @@ void TourController::activeChanged() {
     if (_showing || tour == nullptr) {
         return;
     }
-    std::string const& waitsFor = tour->steps.at(_step).advanceOn;
-    if (!_waiting || _shell->activeScreen() != waitsFor) {
+    if (!_waiting || _step >= tour->steps.size() || _shell->activeScreen() != tour->steps.at(_step).advanceOn) {
         return;
     }
     if (_step + 1 >= tour->steps.size()) {
