@@ -6043,8 +6043,11 @@ struct Tour {
 /// @brief One tour as the app document's `tours` holds it.
 /// @param tour The tour.
 /// @return Its JSON.
-/// @throws AuthoringError when the tour's or a step's title is absent.
+/// @throws AuthoringError naming the tour, and the step when it is one, whose title is absent.
 [[nodiscard]] inline Json tourJson(Tour const& tour) {
+    if (!tour.title.present()) {
+        throw AuthoringError{"the tour `" + tour.id + "` has no title"};
+    }
     Json json = Json::object_t{};
     detail::put(json, "id", tour.id);
     if (!tour.screen.empty()) {
@@ -6055,7 +6058,11 @@ struct Tour {
         detail::put(json, "summary", tour.summary.json());
     }
     Json steps = Json::array_t{};
-    for (TourStep const& step : tour.steps) {
+    for (std::size_t index = 0; index < tour.steps.size(); ++index) {
+        TourStep const& step = tour.steps[index];
+        if (!step.title.present()) {
+            throw AuthoringError{"step " + std::to_string(index) + " of the tour `" + tour.id + "` has no title"};
+        }
         Json out = Json::object_t{};
         detail::put(out, "title", step.title.json());
         if (step.body.present()) {

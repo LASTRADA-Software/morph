@@ -650,7 +650,6 @@ struct Document {
     /// @brief The app document's counts on the navigator's entries: `navigationBadge` parts, in order; empty for a
     ///        screen, which declares none.
     std::vector<DocNodePtr> navigation;
-
     /// @brief The app document's guided tours, in declaration order; empty for a screen, which declares none.
     std::vector<TourDecl> tours;
     /// @brief The typed params, in declaration order.

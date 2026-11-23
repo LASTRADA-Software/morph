@@ -98,6 +98,18 @@ TEST_CASE("tours document: a malformed tour is refused where it is malformed", "
         {"no steps", appWith(R"([{"id":"a","title":"T","steps":[]}])"), "/tours/0/steps", "one step or more"},
         {"too many steps", appWith(R"([{"id":"a","title":"T","steps":[)" + manySteps(51) + "]}]"), "/tours/0/steps",
          "at most 50"},
+        {"no steps member", appWith(R"([{"id":"a","title":"T"}])"), "/tours/0", "`steps` is required"},
+        {"steps that are not an array", appWith(R"([{"id":"a","title":"T","steps":{}}])"), "/tours/0/steps",
+         "an array of steps"},
+        {"a tour that is not a record", appWith(R"(["a"])"), "/tours/0", "a tour is a record"},
+        {"params that are not a record", appWith(R"([{"id":"a","title":"T","steps":[{"title":"S","params":[1]}]}])"),
+         "/tours/0/steps/0/params", "a record of literal values"},
+        {"an advanceOn that is not a record",
+         appWith(R"([{"id":"a","title":"T","steps":[{"title":"S","advanceOn":"samples"}]}])"),
+         "/tours/0/steps/0/advanceOn", "`advanceOn` is a record"},
+        {"a tour-level must-understand member",
+         appWith(R"([{"id":"a","title":"T","!pause":1,"steps":[{"title":"S"}]}])"), "/tours/0/!pause",
+         "must-understand"},
         {"a step without a title", appWith(R"([{"id":"a","title":"T","steps":[{"body":"B"}]}])"), "/tours/0/steps/0",
          "`title` is required"},
         {"a computed param",
@@ -118,6 +130,15 @@ TEST_CASE("tours document: a malformed tour is refused where it is malformed", "
         CHECK(loaded.error().path == row.path);
         CHECK(loaded.error().reason.contains(row.reason));
     }
+}
+
+// Mutation: refuse an unknown tour-level member in `tourOf` (the tour no longer loads).
+TEST_CASE("tours document: an unknown tour-level member is ignored", "[ui][tours]") {
+    auto const loaded =
+        ui::loadDocumentText(appWith(R"([{"id":"a","title":"T","later":true,"steps":[{"title":"S"}]}])"));
+    REQUIRE(loaded.has_value());
+    REQUIRE(loaded->tours.size() == 1);
+    CHECK(loaded->tours.front().id == "a");
 }
 
 // Mutation: evaluate each text once in `mountApp`, outside the computed value (the German title never shows).
@@ -181,4 +202,19 @@ TEST_CASE("tours document: author::withTours writes a tours member the loader re
     // A document that declares tours already, and one that is not an object, are refused.
     CHECK_FALSE(author::withTours(*written, tours).has_value());
     CHECK_FALSE(author::withTours("[]", tours).has_value());
+}
+
+// Mutation: skip the title checks in `author::tourJson` (the missing title throws a generic operand error).
+TEST_CASE("tours document: an absent title is refused naming the tour and the step", "[ui][tours][author]") {
+    namespace author = ui::author;
+    auto const refusalOf = [](std::vector<author::Tour> const& tours) {
+        auto const written = author::withTours(R"({"vocab":"ui/1","id":"app"})", tours);
+        REQUIRE_FALSE(written.has_value());
+        return written.error().reason;
+    };
+    CHECK(refusalOf({author::Tour{.id = "lost", .steps = {author::TourStep{.title = "S"}}}}).contains("`lost`"));
+    std::string const step = refusalOf(
+        {author::Tour{.id = "gap", .title = "T", .steps = {author::TourStep{.title = "S"}, author::TourStep{}}}});
+    CHECK(step.contains("`gap`"));
+    CHECK(step.contains("step 1"));
 }
