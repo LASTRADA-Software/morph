@@ -12,6 +12,7 @@
 #include <QString>
 #include <QTest>
 #include <catch2/catch_test_macros.hpp>
+#include <cmath>
 #include <cstdlib>
 #include <memory>
 #include <morph/qt_quick/backend.hpp>
@@ -215,4 +216,202 @@ TEST_CASE("qt_quick spotlight: a widget of another window is never the target", 
     spotlight->setOpen(true);
     scene.settle();
     CHECK_FALSE(spotlight->targetShown());
+}
+
+// Mutation: start the chord walk at the focused item only, as a card key while the target has focus is lost.
+TEST_CASE(
+    "qt_quick spotlight: Escape and the arrows reach the card whatever has focus, Enter and Space stay with the "
+    "focused button",
+    "[qt_quick][tours]") {
+    Scene scene;
+    scene.window().resize(1280, 800);
+    Page const page{scene};
+    Card const card{scene};
+    std::vector<std::string> chords;
+    auto const hear = [&chords](std::string const& chord) { chords.push_back(chord); };
+    card.back->setKeys({"Left"}, hear);
+    card.next->setKeys({"Right", "Escape", "Space", "Enter"}, hear);
+    int backClicks = 0;
+    int nextClicks = 0;
+    card.back->setOnClick([&backClicks] { ++backClicks; });
+    card.next->setOnClick([&nextClicks] { ++nextClicks; });
+    QQuickItem const& back = focusItemOf(*card.back);
+    REQUIRE(back.hasActiveFocus());
+
+    scene.key(Qt::Key_Right);
+    CHECK(chords == std::vector<std::string>{"Right"});
+    scene.key(Qt::Key_Escape);
+    CHECK(chords == std::vector<std::string>{"Right", "Escape"});
+
+    card.spotlight->setTargetFocusable(true);
+    scene.key(Qt::Key_Tab);
+    scene.key(Qt::Key_Tab);
+    REQUIRE(focusItemOf(*page.target).hasActiveFocus());
+    chords.clear();
+    scene.key(Qt::Key_Escape);
+    scene.key(Qt::Key_Left);
+    CHECK(chords == std::vector<std::string>{"Escape", "Left"});
+
+    scene.key(Qt::Key_Tab);
+    REQUIRE(back.hasActiveFocus());
+    chords.clear();
+    scene.key(Qt::Key_Space);
+    CHECK(chords.empty());
+    CHECK(backClicks == 1);
+    scene.key(Qt::Key_Return);
+    CHECK(chords.empty());
+    CHECK(backClicks == 2);
+}
+
+// Mutation: let go of Tab when focus is outside the card (a card button that hid takes the trap with it).
+TEST_CASE("qt_quick spotlight: Tab keeps cycling the card after its focused button hides", "[qt_quick][tours]") {
+    Scene scene;
+    scene.window().resize(1280, 800);
+    Page const page{scene};
+    Card const card{scene};
+    REQUIRE(focusItemOf(*card.back).hasActiveFocus());
+    card.back->setVisible(false);
+    scene.settle();
+    scene.key(Qt::Key_Tab);
+    CHECK(focusItemOf(*card.next).hasActiveFocus());
+    scene.key(Qt::Key_Tab);
+    CHECK(focusItemOf(*card.next).hasActiveFocus());
+    CHECK_FALSE(focusItemOf(*page.before).hasActiveFocus());
+}
+
+namespace {
+
+/// A tall target in a short ScrollWidget, below lines of text.
+struct Tall {
+    explicit Tall(Scene& scene) {
+        root = scene.backend().createStack(nullptr, ui::Axis::Vertical);
+        scroll = scene.backend().createScroll(root.get(), ui::Axis::Vertical);
+        scroll->setLayout({.width = ui::Sizing::stretch(), .height = ui::Sizing::fixed(6)});
+        for (int index = 0; index < 10; ++index) {
+            lines.push_back(scene.backend().createText(scroll.get()));
+            lines.back()->setText("Line " + std::to_string(index));
+        }
+        tall = scene.backend().createStack(scroll.get(), ui::Axis::Vertical);
+        tall->setLayout({.width = ui::Sizing::stretch(), .height = ui::Sizing::fixed(30)});
+        tall->setTestId("target");
+        scene.settle();
+    }
+    [[nodiscard]] QQuickItem& flickable() const { return Scene::itemOf(*scroll); }
+    std::unique_ptr<ui::StackWidget> root;
+    std::unique_ptr<ui::ScrollWidget> scroll;
+    std::vector<std::unique_ptr<ui::TextWidget>> lines;
+    std::unique_ptr<ui::StackWidget> tall;
+};
+
+/// The scrolling item inside a ScrollWidget's item.
+QQuickItem* flickableIn(QQuickItem& item) {
+    if (item.inherits("QQuickFlickable")) {
+        return &item;
+    }
+    for (QQuickItem* const child : item.childItems()) {
+        if (QQuickItem* const found = flickableIn(*child)) {
+            return found;
+        }
+    }
+    return nullptr;
+}
+
+}  // namespace
+
+// Mutation: scroll to the far edge of a target taller than the viewport (contentY flips each frame), or scroll on
+// every frame (the person's own scrolling is undone).
+TEST_CASE("qt_quick spotlight: a target taller than its viewport shows its top and stays put", "[qt_quick][tours]") {
+    Scene scene;
+    scene.window().resize(800, 600);
+    Tall const page{scene};
+    QQuickItem* const flick = flickableIn(page.flickable());
+    REQUIRE(flick != nullptr);
+    auto const spotlight = scene.backend().createSpotlight(nullptr);
+    auto& impl = dynamic_cast<detail::SpotlightImpl&>(*spotlight);
+    spotlight->setTarget(std::string{"target"});
+    spotlight->setOpen(true);
+    scene.settle();
+    QQuickItem const& target = Scene::itemOf(*page.tall);
+    REQUIRE(target.height() > flick->height());
+    qreal const settled = flick->property("contentY").toReal();
+    CHECK(settled > 0);
+    CHECK(sceneBox(target).top() == sceneBox(*flick).top());
+    for (int frame = 0; frame < 5; ++frame) {
+        impl.track();
+        scene.settle();
+        CHECK(flick->property("contentY").toReal() == settled);
+    }
+    flick->setProperty("contentY", 0.0);
+    impl.track();
+    scene.settle();
+    CHECK(flick->property("contentY").toReal() == 0.0);
+}
+
+// Mutation: let `track` scroll while the spotlight is closed.
+TEST_CASE("qt_quick spotlight: a closed spotlight never scrolls the page", "[qt_quick][tours]") {
+    Scene scene;
+    scene.window().resize(800, 600);
+    Tall const page{scene};
+    QQuickItem* const flick = flickableIn(page.flickable());
+    REQUIRE(flick != nullptr);
+    auto const spotlight = scene.backend().createSpotlight(nullptr);
+    spotlight->setTarget(std::string{"target"});
+    scene.settle();
+    dynamic_cast<detail::SpotlightImpl&>(*spotlight).track();
+    scene.settle();
+    CHECK(flick->property("contentY").toReal() == 0.0);
+}
+
+// Mutation: centre on the ring rectangle even with no target (the card sits at the corner).
+TEST_CASE("qt_quick spotlight: a missing target rings nothing and centres the card", "[qt_quick][tours]") {
+    Scene scene;
+    scene.window().resize(1280, 800);
+    Page const page{scene};
+    auto const spotlight = scene.backend().createSpotlight(nullptr);
+    auto const button = scene.backend().createButton(spotlight.get());
+    button->setLabel("Next");
+    spotlight->setTarget(std::string{"nowhere"});
+    spotlight->setOpen(true);
+    scene.settle();
+    CHECK_FALSE(spotlight->targetShown());
+    QQuickItem& item = Scene::itemOf(*spotlight);
+    CHECK_FALSE(item.property("ringed").toBool());
+    auto const* const box = item.property("card").value<QQuickItem*>();
+    REQUIRE(box != nullptr);
+    QRectF const placed = sceneBox(*box);
+    CHECK(std::abs(placed.center().x() - scene.window().width() / 2.0) <= 1.0);
+    CHECK(std::abs(placed.center().y() - scene.window().height() / 2.0) <= 1.0);
+}
+
+// Mutation: bind the layer's visibility to `open` alone (a hidden spotlight item leaves its layer showing).
+TEST_CASE("qt_quick spotlight: hiding the spotlight hides its layer", "[qt_quick][tours]") {
+    Scene scene;
+    scene.window().resize(1280, 800);
+    Page const page{scene};
+    Card const card{scene};
+    auto const* const box = card.item().property("card").value<QQuickItem*>();
+    REQUIRE(box != nullptr);
+    REQUIRE(box->isVisible());
+    card.spotlight->setVisible(false);
+    scene.settle();
+    CHECK_FALSE(box->isVisible());
+}
+
+// Mutation: make the cut-out the ring's box (the band between the target and the ring takes presses meant for
+// the scrim).
+TEST_CASE("qt_quick spotlight: the scrim reaches the target's box, so the ring's band is covered",
+          "[qt_quick][tours]") {
+    Scene scene;
+    scene.window().resize(1280, 800);
+    Page const page{scene};
+    Card const card{scene};
+    QRectF const cutout = card.item().property("cutout").toRectF();
+    auto const* const left =
+        scene.window().contentItem()->findChild<QQuickItem*>(QStringLiteral("spotlight_scrim_left"));
+    auto const* const top =
+        scene.window().contentItem()->findChild<QQuickItem*>(QStringLiteral("spotlight_scrim_top"));
+    REQUIRE(left != nullptr);
+    REQUIRE(top != nullptr);
+    CHECK(sceneBox(*left).right() == cutout.left());
+    CHECK(sceneBox(*top).bottom() == cutout.top());
 }

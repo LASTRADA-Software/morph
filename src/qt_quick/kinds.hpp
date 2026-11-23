@@ -572,6 +572,7 @@ private:
     bool _open = false;
     bool _targetFocusable = false;
     bool _resolving = false;
+    bool _scrollPending = false;
     std::function<void(bool)> _onChanged;
 };
 

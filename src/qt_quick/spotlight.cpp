@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
+#include <QDebug>
 #include <QEvent>
 #include <QKeyEvent>
 #include <QMetaObject>
@@ -38,7 +39,8 @@ void collectTabStops(QQuickItem& item, std::vector<QQuickItem*>& out) {
     }
 }
 
-// Scrolls the nearest flickable around @p target until the target's box is inside its viewport.
+// Scrolls the nearest flickable around @p target until the target's box is inside its viewport. A box taller (or
+// wider) than the viewport shows its top (left) edge: scrolling to its far edge would leave the near one out of view.
 void scrollIntoView(QQuickItem& target) {
     for (QQuickItem* outer = target.parentItem(); outer != nullptr; outer = outer->parentItem()) {
         if (!outer->inherits("QQuickFlickable")) {
@@ -51,17 +53,29 @@ void scrollIntoView(QQuickItem& target) {
         QRectF const box = target.mapRectToItem(content, QRectF{0, 0, target.width(), target.height()});
         qreal const top = outer->property("contentY").toReal();
         qreal const left = outer->property("contentX").toReal();
-        if (box.top() < top) {
+        if (box.top() < top || box.height() > outer->height()) {
             outer->setProperty("contentY", box.top());
         } else if (box.bottom() > top + outer->height()) {
             outer->setProperty("contentY", box.bottom() - outer->height());
         }
-        if (box.left() < left) {
+        if (box.left() < left || box.width() > outer->width()) {
             outer->setProperty("contentX", box.left());
         } else if (box.right() > left + outer->width()) {
             outer->setProperty("contentX", box.right() - outer->width());
         }
         return;
+    }
+}
+
+// Whether @p item is a MorphWidget, which declares `chords`.
+bool declaresChords(QQuickItem const& item) { return item.metaObject()->indexOfProperty("chords") >= 0; }
+
+// Depth first: every item under @p item.
+// NOLINTNEXTLINE(misc-no-recursion): an item tree, walked down.
+void collectItems(QQuickItem& item, std::vector<QQuickItem*>& out) {
+    for (QQuickItem* const child : item.childItems()) {
+        out.push_back(child);
+        collectItems(*child, out);
     }
 }
 
@@ -116,6 +130,7 @@ void SpotlightImpl::setOpen(bool open) {
             _window->installEventFilter(_filter.get());
             _frames = QObject::connect(_window, &QQuickWindow::afterAnimating, _filter.get(), [this] { track(); });
         }
+        _scrollPending = true;
         resolve();
         track();
         focusCard();
@@ -166,6 +181,9 @@ void SpotlightImpl::resolve() {
         }
     }
     bool const was = _ringed != nullptr;
+    if (found != _ringed) {
+        _scrollPending = true;
+    }
     _ringed = found;
     write("ringed", found != nullptr);
     _resolving = false;
@@ -176,11 +194,15 @@ void SpotlightImpl::resolve() {
 }
 
 void SpotlightImpl::track() {
-    if (_ringed == nullptr || _ringed->item() == nullptr) {
+    if (!_open || _ringed == nullptr || _ringed->item() == nullptr) {
         return;
     }
     QQuickItem& target = *_ringed->item();
-    scrollIntoView(target);
+    // Once per target, when it has a box: a frame-by-frame scroll would fight the person scrolling the page.
+    if (_scrollPending && target.height() > 0 && target.width() > 0) {
+        _scrollPending = false;
+        scrollIntoView(target);
+    }
     write("cutout", target.mapRectToScene(QRectF{0, 0, target.width(), target.height()}));
 }
 
@@ -224,26 +246,40 @@ void SpotlightImpl::cycleFocus(bool forward) {
 
 bool SpotlightImpl::filterKey(QKeyEvent const& event) {
     auto* const content = qobject_cast<QQuickItem*>(part("content"));
-    QQuickItem* const focused = _window != nullptr ? _window->activeFocusItem() : nullptr;
-    if (content == nullptr || focused == nullptr) {
+    if (content == nullptr) {
         return false;
     }
-    bool const inside = content->isAncestorOf(focused);
     int const key = event.key();
     if (key == Qt::Key_Tab || key == Qt::Key_Backtab) {
-        QQuickItem const* const target = _ringed != nullptr ? _ringed->item() : nullptr;
-        bool const onTarget = target != nullptr && (target == focused || target->isAncestorOf(focused));
-        if (!inside && !onTarget) {
-            return false;
-        }
+        // The trap holds wherever focus is: a card button that hid, or a click on the page, leaves it elsewhere.
         cycleFocus(key == Qt::Key_Tab && !event.modifiers().testFlag(Qt::ShiftModifier));
         return true;
     }
-    if (!inside || key == Qt::Key_Return || key == Qt::Key_Enter || key == Qt::Key_Space) {
+    // Enter and Space belong to the focused control, whichever it is.
+    if (key == Qt::Key_Return || key == Qt::Key_Enter || key == Qt::Key_Space) {
         return false;
     }
+    // The card's widgets, the one holding focus and its ancestors first, then the rest, then the spotlight itself:
+    // its chords reach the card whatever has focus, the target included.
+    QQuickItem* const focused = _window != nullptr ? _window->activeFocusItem() : nullptr;
+    std::vector<QQuickItem*> candidates;
     for (QQuickItem* at = focused; at != nullptr && at != content->parentItem(); at = at->parentItem()) {
+        if (content->isAncestorOf(at)) {
+            candidates.push_back(at);
+        }
+    }
+    std::vector<QQuickItem*> everything;
+    collectItems(*content, everything);
+    candidates.insert(candidates.end(), everything.begin(), everything.end());
+    candidates.push_back(item());
+    std::vector<QQuickItem*> seen;
+    for (QQuickItem* const at : candidates) {
+        if (at == nullptr || std::ranges::find(seen, at) != seen.end() || !declaresChords(*at)) {
+            continue;
+        }
+        seen.push_back(at);
         if (at->metaObject()->indexOfMethod("takeChord(int,int)") < 0) {
+            qCritical("morph::qt_quick: a MorphWidget in a spotlight has no takeChord(int,int): its chords never run");
             continue;
         }
         bool taken = false;

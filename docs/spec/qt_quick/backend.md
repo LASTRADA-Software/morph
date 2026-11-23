@@ -422,18 +422,24 @@ room in its parent's layout.
 - **Target.** It reads its own context's `WidgetIndex` and rings the first widget carrying the test id whose item is
   visible (`QQuickItem::isVisible`, which is false inside a hidden container or an unselected tab page). It hears the
   index and each candidate's `visibleChanged`.
-- **Drawing.** Four `Theme.scrim` rectangles around the cut-out dim everything else; a ring in `Theme.focus`,
-  `Theme.spaceOf(1)` outside the target's box, surrounds it. The card is a `Theme.cardScheme` rectangle, at most 40
+- **Drawing.** Four `Theme.scrim` rectangles around the cut-out, which is exactly the target's box, dim everything
+  else, the ring's band included, so a press there reaches the scrim; a ring in `Theme.focus`, `Theme.spaceOf(1)`
+  outside the target's box, surrounds it. The layer shows while the spotlight is open and its item is visible. The card is a `Theme.cardScheme` rectangle, at most 40
   units wide, on the side of the target with the most room, clamped a step 2 gap inside the window; with no target it
   is centred and nothing is cut out.
 - **Geometry.** Each frame (`QQuickWindow::afterAnimating`) it reads the target's scene box, so it follows resizes,
-  layout passes and scrolling; a target clipped by the nearest flickable (a `ScrollWidget`) is scrolled into view.
+  layout passes and scrolling. A closed spotlight tracks nothing. A target clipped by the nearest flickable (a
+  `ScrollWidget`) is scrolled into view once, when it becomes the ringed target (or the spotlight opens), never on
+  later frames, so the person can scroll away; a box taller or wider than the viewport shows its top or left edge.
 - **Pointer.** The scrim and the card's own area take presses; the cut-out has no item, so a press there reaches the
   target.
-- **Keys.** While open it filters the window's key presses. Tab and Shift+Tab cycle through the card's tab stops, then
-  the target's focus item while `setTargetFocusable(true)`. Any other key but Enter and Space goes first to the card's
-  widgets from the focused item up (`MorphWidget.takeChord`), so the card's chords come before a control's own keys.
-  Opening focuses the card's first tab stop; closing hands focus back to the item that had it.
+- **Keys.** While open it filters the window's key presses. Tab and Shift+Tab always cycle through the card's tab
+  stops, then the target's focus item while `setTargetFocusable(true)`, wherever focus is, so the trap survives a card
+  button that hides. Enter and Space belong to the focused control. Every other key goes to the card's widgets
+  (`MorphWidget.takeChord`) whatever has focus, the target included: the focused widget and its ancestors in the card
+  first, then the rest of the card, then the spotlight's own chords; so the card's chords come before a control's own
+  keys. A card widget without `takeChord` is logged at error. Opening focuses the card's first tab stop; closing hands
+  focus back to the item that had it.
 
 ## Layout and theme
 

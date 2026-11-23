@@ -33,12 +33,16 @@ MorphWidget {
         parent: root.Window.window ? root.Window.window.contentItem : root
         anchors.fill: parent
         z: 10000
-        visible: root.open
+        // A hidden spotlight item, or a hidden ancestor of it, hides the layer reparented out of it.
+        visible: root.open && root.visible
 
-        readonly property rect hole: root.ringed
+        // The cut-out is exactly the target's box, so a press in the ring's band around it reaches the scrim, not
+        // whatever lies under the band. `ringRect` is the box the ring surrounds.
+        readonly property rect hole: root.ringed ? root.cutout : Qt.rect(width / 2, height / 2, 0, 0)
+        readonly property rect ringRect: root.ringed
             ? Qt.rect(root.cutout.x - root.ringPad, root.cutout.y - root.ringPad,
                       root.cutout.width + 2 * root.ringPad, root.cutout.height + 2 * root.ringPad)
-            : Qt.rect(width / 2, height / 2, 0, 0)
+            : hole
 
         component Scrim: Rectangle {
             color: Theme.scrim
@@ -83,10 +87,10 @@ MorphWidget {
             id: ring
             objectName: "spotlight_ring"
             visible: root.ringed
-            x: layer.hole.x
-            y: layer.hole.y
-            width: layer.hole.width
-            height: layer.hole.height
+            x: layer.ringRect.x
+            y: layer.ringRect.y
+            width: layer.ringRect.width
+            height: layer.ringRect.height
             color: "transparent"
             border.color: Theme.focus
             border.width: 2
@@ -100,10 +104,10 @@ MorphWidget {
             readonly property real pad: Theme.spaceOf(4)
             // The room on each side of the hole, less the card: the side with the most is where the card goes.
             readonly property var rooms: [
-                layer.height - (layer.hole.y + layer.hole.height) - gap - height,
-                layer.hole.y - gap - height,
-                layer.width - (layer.hole.x + layer.hole.width) - gap - width,
-                layer.hole.x - gap - width
+                layer.height - (layer.ringRect.y + layer.ringRect.height) - gap - height,
+                layer.ringRect.y - gap - height,
+                layer.width - (layer.ringRect.x + layer.ringRect.width) - gap - width,
+                layer.ringRect.x - gap - width
             ]
             readonly property int side: {
                 if (!root.ringed)
@@ -123,13 +127,13 @@ MorphWidget {
             width: Math.min(column.implicitWidth + 2 * pad, Theme.unitWidth * 40, layer.width - 2 * gap)
             height: column.implicitHeight + 2 * pad
             x: clamp(side === -1 ? (layer.width - width) / 2
-                     : side === 2 ? layer.hole.x + layer.hole.width + gap
-                     : side === 3 ? layer.hole.x - gap - width
-                     : layer.hole.x, gap, layer.width - width - gap)
+                     : side === 2 ? layer.ringRect.x + layer.ringRect.width + gap
+                     : side === 3 ? layer.ringRect.x - gap - width
+                     : layer.ringRect.x, gap, layer.width - width - gap)
             y: clamp(side === -1 ? (layer.height - height) / 2
-                     : side === 0 ? layer.hole.y + layer.hole.height + gap
-                     : side === 1 ? layer.hole.y - gap - height
-                     : layer.hole.y, gap, layer.height - height - gap)
+                     : side === 0 ? layer.ringRect.y + layer.ringRect.height + gap
+                     : side === 1 ? layer.ringRect.y - gap - height
+                     : layer.ringRect.y, gap, layer.height - height - gap)
             color: Theme.cardScheme.surface
             border.color: Theme.border
             radius: Theme.radiusCard
