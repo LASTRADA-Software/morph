@@ -2746,6 +2746,10 @@ private:
 
         bool mounted = false;
         bool continuing = false;
+        // A window pass is running: one asked for inside it is posted (`continueLater`), with the view rows it
+        // names updated kept for it in `updatedLater`.
+        bool passing = false;
+        std::set<std::int64_t> updatedLater;
         // Expires with the table, so a change the rows deliver after it is gone does nothing.
         std::shared_ptr<bool> alive = std::make_shared<bool>(true);
     };
@@ -3267,10 +3271,42 @@ private:
     // of its pool. Binding a cell to another row or column, and building one, are counted against
     // `realizePerFrame`, nearest the viewport's centre first; the rest wait, drawn blank, for the next turn.
     // NOLINTNEXTLINE(readability-function-cognitive-complexity): rows, cells, the budget, focus and the reports.
+    //
+    // A pass calls out to the backend and to a grid's source (`afterPass` hands a grid its focus), and a source that
+    // emits a change from there would ask for a pass inside this one, over the realized rows this one is rebuilding.
+    // Such a pass is posted instead, with the rows it names updated within the window kept for it.
     void realizeWindow(SourceTable& table, std::function<bool(std::int64_t)> const& updated) {
         TableRows& rows = *table.source.rows;
         TableTotal const total = rows.mountedTotal();
         auto const count = static_cast<std::size_t>(std::max<std::int64_t>(total.rows, 0));
+        if (table.passing) {
+            bool const everyRow = !table.source.alwaysWindowed && count < table.virtualize.threshold;
+            VisibleRange const shown = shownOf(table);
+            std::size_t const overscan = table.virtualize.overscan;
+            std::size_t const lo = everyRow || shown.first <= overscan ? 0 : shown.first - overscan;
+            std::size_t const hi = everyRow ? count : std::min(count, shown.first + shown.count + overscan);
+            for (std::size_t at = lo; at < hi; ++at) {
+                if (updated(static_cast<std::int64_t>(at))) {
+                    table.updatedLater.insert(static_cast<std::int64_t>(at));
+                }
+            }
+            if (table.focusIndex >= 0 && updated(table.focusIndex)) {
+                table.updatedLater.insert(table.focusIndex);
+            }
+            table.windowDirty = true;
+            continueLater(table);
+            return;
+        }
+        table.passing = true;
+        struct EndPass {
+            bool& passing;
+            explicit EndPass(bool& flag) : passing{flag} {}
+            EndPass(EndPass const&) = delete;
+            EndPass& operator=(EndPass const&) = delete;
+            EndPass(EndPass&&) = delete;
+            EndPass& operator=(EndPass&&) = delete;
+            ~EndPass() { passing = false; }
+        } const endPass{table.passing};
         refreshColumns(table, count);
         // A short table over a document's rows realizes every row. A windowed one realizes the rows in view and
         // `overscan` either side.
@@ -3606,7 +3642,10 @@ private:
                     return;
                 }
                 table.continuing = false;
-                static_cast<void>(runCallback(*_rt, [&] { realizeWindow(table, [](std::int64_t) { return false; }); }));
+                std::set<std::int64_t> const updated = std::exchange(table.updatedLater, {});
+                static_cast<void>(runCallback(*_rt, [&] {
+                    realizeWindow(table, [&updated](std::int64_t index) { return updated.contains(index); });
+                }));
             });
         } catch (...) {
             table.continuing = false;
@@ -3924,8 +3963,9 @@ private:
                                     .column = table.columns.at(column).id});
     }
 
-    // Shows the focus a grid holds: its key's row where a realized row holds it, else the view position it gives, and
-    // its column by id.
+    // Shows the focus a grid holds, its column by id: its key's row where a realized row holds it; a key no realized
+    // row holds is looked for, as a key move's is, and the grid's view position, which may be of the view before the
+    // change that moved the key, is not taken; a grid's focus with no key is at the view position it gives.
     void gridFocusFrom(SourceTable& table, std::optional<GridFocus> const& focus) {
         if (!focus) {
             return;
@@ -3934,14 +3974,38 @@ private:
         if (column == table.columns.end()) {
             return;
         }
+        auto const at = static_cast<std::size_t>(column - table.columns.begin());
         auto index = static_cast<std::int64_t>(focus->viewRow);
         if (focus->key) {
             std::optional<TableRowRef> const ref = table.source.rows->row(index);
             if (!ref || ref->key != *focus->key) {
-                index = placeOfKey(table, *focus->key, index).value_or(index);
+                std::optional<std::int64_t> const found = placeOfKey(table, *focus->key, index);
+                if (!found) {
+                    lookForGridKey(table, *focus->key, index, at);
+                    return;
+                }
+                index = *found;
             }
         }
-        placeFocus(table, index, static_cast<std::size_t>(column - table.columns.begin()));
+        placeFocus(table, index, at);
+    }
+
+    // Focus on a key a grid holds that no realized row holds: the rows are asked where it is, unless that is already
+    // being asked. Focus stays on the key meanwhile.
+    void lookForGridKey(SourceTable& table, Key const& key, std::int64_t index, std::size_t column) {
+        table.focusColumn = column;
+        if (table.focused && table.focusSearching && table.focusKey == key) {
+            return;
+        }
+        table.focused = true;
+        table.focusKey = key;
+        table.focusIndex = index;
+        table.focusSearching = true;
+        table.focusUnconfirmed = false;
+        table.focusLeft = false;
+        table.focusUntold = false;
+        table.focusWas.reset();
+        locateFocus(table);
     }
 
     // Puts focus on a cell by view row and column: the row is kept realized, scrolled to when it is outside the rows

@@ -714,6 +714,9 @@ public:
     void setCellMarks(ui::Widget& row, std::size_t column, ui::CellMarks const& marks) override;
     /// Throws std::logic_error when @p row is not one of this table's rows.
     void setRowModified(ui::Widget& row, bool modified) override;
+    /// MorphTable's `highlightedRow`, -1 for none: the row whose `viewRow` it is draws an outline in `Theme.accent`
+    /// (`highlightMark`), beside the selection's fill and the focus.
+    void setHighlightedRow(std::optional<std::size_t> viewRow) override;
     /// MorphTable draws the rectangle (`cellRect`, `[firstRow, rowCount, firstPosition, positionCount]`, empty for
     /// none) over the rows it spans and the visible columns at those positions.
     void setCellSelection(std::optional<std::array<std::size_t, 4>> rect) override;

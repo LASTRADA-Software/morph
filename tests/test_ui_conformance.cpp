@@ -352,6 +352,19 @@ public:
     [[nodiscard]] std::string clipboardText() override {
         return _fault == Fault::SilentClipboard ? std::string{} : _backend.clipboardText();
     }
+    // The rows whose view row is the one the table was told to highlight.
+    [[nodiscard]] std::vector<std::size_t> highlightedRows(ui::Widget const& table) override {
+        int const tableId = _backend.idOf(table);
+        std::string const highlighted = _backend.prop(tableId, "highlightedRow");
+        std::vector<int> const children = _backend.children(tableId);
+        std::vector<std::size_t> rows;
+        for (std::size_t i = 0; i < children.size(); ++i) {
+            if (!highlighted.empty() && highlighted != "none" && _backend.prop(children.at(i), "viewRow") == highlighted) {
+                rows.push_back(i);
+            }
+        }
+        return rows;
+    }
     [[nodiscard]] std::vector<std::size_t> selectedRows(ui::Widget const& table) override {
         int const tableId = _backend.idOf(table);
         std::vector<std::string> const marked = listItems(_backend.prop(tableId, "selection"));
@@ -503,7 +516,7 @@ std::set<std::string_view> failingCases(Fault fault) {
 
 TEST_CASE("ui conformance: RecordingBackend passes every case", "[ui][conformance]") {
     auto const cases = ui::testing::conformanceCases();
-    REQUIRE(cases.size() == 66);
+    REQUIRE(cases.size() == 67);
     std::set<std::string_view> names;
     for (auto const& testCase : cases) {
         CHECK(names.insert(testCase.name).second);

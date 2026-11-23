@@ -525,6 +525,7 @@ public:
           _views{::morph::table::makeViewCache(_config.views)},
           _tableRuntime{.work = _config.tableWork != nullptr ? _config.tableWork.get() : &workerPool,
                         .views = _views.get(),
+                        .viewsKeep = _views,
                         .settle = _settle.get(),
                         .settleKeep = _settle,
                         .schemaOf = [&dispatcher](std::string_view action) {
@@ -3100,9 +3101,10 @@ private:
     // Fixed at construction, so a model strand's finish can cancel through it
     // without a lock.
     std::unique_ptr<::morph::async::detail::TimeoutScheduler> const _executeTimeouts;
-    // The server's one view cache, made from `ServerConfig::views`. Its type stays incomplete here.
     // The owner of a `resolve`'s completion: shared, so the work queued on `tableWork` keeps it alive.
     std::shared_ptr<::morph::exec::OwnerStrand> const _settle;
+    // The server's one view cache, made from `ServerConfig::views`. Its type stays incomplete here. Shared, so the work
+    // queued on `tableWork` that reads it keeps it alive.
     std::shared_ptr<::morph::table::ViewCache> const _views;
     // What a table's action reads during a dispatch: `tableWork`, or the worker pool, the view cache, and the owner of
     // a `resolve`'s completion. Fixed at construction.

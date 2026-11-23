@@ -216,6 +216,15 @@ MorphWidget {
         return false
     }
 
+    // The span this row's cell in column `index` gives, or null.
+    function spanOf(index: int): var {
+        for (const span of root.spanPlan) {
+            if (span.column === index)
+                return span
+        }
+        return null
+    }
+
     function isSpanning(index: int): bool {
         for (const span of root.spanPlan) {
             if (span.column === index)
@@ -377,7 +386,19 @@ MorphWidget {
                 continue
             const pinned = slot.pinned
             const left = table.lead + slot.offset + (pinned ? table.scrollX : 0)
-            const room = Math.max(0, slot.width - 2 * inset)
+            // A spanning cell is laid across the slots of the columns it covers (`covers`, by visible place) that
+            // share its pinning; a covered column outside the window takes no room.
+            let right = left + slot.width
+            const span = root.spanOf(column)
+            if (span !== null && span.covers !== undefined) {
+                for (const other of span.covers) {
+                    const otherSlot = table.columnSlot(other)
+                    if (otherSlot && otherSlot.pinned === pinned)
+                        right = Math.max(right, table.lead + otherSlot.offset + (pinned ? table.scrollX : 0) +
+                                                otherSlot.width)
+                }
+            }
+            const room = Math.max(0, right - left - 2 * inset)
             const spec = column < root.columns.length ? root.columns[column] : null
             const across = spec ? spec.align : 1
             if ((cell as MorphWidget)?.fillsAcross === false) {
@@ -673,6 +694,19 @@ MorphWidget {
         anchors.fill: parent
         z: 3
         color: Theme.tableLocked
+    }
+    // The row a linked view highlights: an outline in `Theme.accent` over its cells, beside the selection's fill and
+    // the focus. A heading or a summary row is never highlighted.
+    readonly property bool highlighted: root.table !== null && root.viewRow >= 0 && !root.heading && !root.summary &&
+                                        root.viewRow === root.table.highlightedRow
+    Rectangle {
+        objectName: "highlightMark"
+        visible: root.highlighted
+        anchors.fill: parent
+        z: 3
+        color: "transparent"
+        border.width: 2
+        border.color: Theme.accent
     }
     // A summary row's surface, over its background and under nothing it draws: translucent, so cells read through.
     Rectangle {

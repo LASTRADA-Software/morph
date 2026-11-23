@@ -1376,7 +1376,7 @@ struct CellRange {
 struct GridFocus {
     /// @brief The row's key; empty while the row at `viewRow` is not fetched yet (a placeholder).
     std::optional<Key> key;
-    /// @brief The row's view position: read only while `key` is empty.
+    /// @brief The row's view position: where the row is while `key` is empty; with a key, where to look for it first.
     std::size_t viewRow = 0;
     /// @brief The column's id (`TableColumn::id`).
     std::string column;

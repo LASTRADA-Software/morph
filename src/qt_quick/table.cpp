@@ -10,12 +10,16 @@
 #include <QVariantMap>
 #include <algorithm>
 #include <cmath>
+#include <cstddef>
 #include <cstdint>
+#include <numeric>
+#include <optional>
 #include <ranges>
 #include <span>
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <unordered_map>
 #include <utility>
 #include <variant>
 
@@ -668,6 +672,10 @@ void TableImpl::setRowModified(ui::Widget& row, bool modified) {
     tableRow->write("modified", modified);
 }
 
+void TableImpl::setHighlightedRow(std::optional<std::size_t> viewRow) {
+    write("highlightedRow", viewRow ? static_cast<qlonglong>(*viewRow) : qlonglong{-1});
+}
+
 void TableImpl::setCellSelection(std::optional<std::array<std::size_t, 4>> rect) {
     QVariantList shown;
     if (rect) {
@@ -758,6 +766,10 @@ void TableImpl::releasing(ItemBase& child) noexcept {
     stripe(&child);
     _spans.erase(&child);
     _editors.remove(dynamic_cast<TableRowImpl const*>(&child));
+    // A summary row's key goes with the row: the key may come back as a data row's.
+    if (auto const* const row = dynamic_cast<TableRowImpl const*>(&child); row != nullptr && row->key()) {
+        std::erase(_summaryKeys, *row->key());
+    }
     planSpans(&child);
     // `child`'s item is still parented into the QML body (ItemBase's own destructor calls release() -- which calls
     // this -- before it hides and reparents the item away), so a QML-side rescan of body.children would still see
@@ -784,10 +796,45 @@ void TableImpl::planSpans(ItemBase const* leaving) {
             rows.push_back(row);
         }
     }
+    // A span names a column and covers visible places from that column's, in the order `setVisibleColumns` gave
+    // (every column in index order when it gave none), so a moved or hidden column moves what a span covers.
+    std::vector<std::size_t> order;
+    for (QVariant const& entry : read("visibleColumns").toList()) {
+        order.push_back(static_cast<std::size_t>(entry.toULongLong()));
+    }
+    if (order.empty()) {
+        order.resize(static_cast<std::size_t>(read("columns").toList().size()));
+        std::iota(order.begin(), order.end(), std::size_t{0});
+    }
+    std::unordered_map<std::size_t, std::size_t> placeOf;
+    for (std::size_t place = 0; place < order.size(); ++place) {
+        placeOf.emplace(order.at(place), place);
+    }
+    // A cell's column: the one `setCellColumn` placed it in (`measuredIndex`, -1 for a pooled cell), so a pooled or
+    // reused cell is found wherever it sits among its row's children; a cell whose item takes no column is at its
+    // position.
+    auto const columnOf = [](ItemBase const& cell, std::size_t position) -> std::optional<std::size_t> {
+        QQuickItem const* const shown = cell.item();
+        QVariant const index = shown != nullptr ? shown->property("measuredIndex") : QVariant{};
+        if (!index.isValid()) {
+            return position;
+        }
+        int const at = index.toInt();
+        return at >= 0 ? std::optional{static_cast<std::size_t>(at)} : std::nullopt;
+    };
+    auto const cellOf = [&columnOf](TableRowImpl const& row, std::size_t column) -> std::optional<std::size_t> {
+        auto const& cells = row.children();
+        for (std::size_t position = 0; position < cells.size(); ++position) {
+            if (columnOf(*cells.at(position), position) == column) {
+                return position;
+            }
+        }
+        return std::nullopt;
+    };
     std::vector<QVariantList> plans(rows.size());
     std::vector<QVariantList> coveredColumns(rows.size());
     std::vector<std::vector<bool>> covered(rows.size());
-    std::vector<std::size_t> coveredUntil;
+    std::vector<std::size_t> coveredUntil(order.size(), 0);
     for (std::size_t index = 0; index < rows.size(); ++index) {
         covered.at(index).assign(rows.at(index)->children().size(), false);
     }
@@ -796,14 +843,15 @@ void TableImpl::planSpans(ItemBase const* leaving) {
         if (found == _spans.end() || heading(*rows.at(index))) {
             continue;
         }
-        std::size_t const cells = rows.at(index)->children().size();
-        coveredUntil.resize(std::max(coveredUntil.size(), cells), 0);
         for (ui::RowSpan const& span : found->second) {
-            if (span.column >= cells || span.rows == 0 || coveredUntil.at(span.column) > index) {
+            auto const place = placeOf.find(span.column);
+            if (place == placeOf.end() || !cellOf(*rows.at(index), span.column) || span.rows == 0 ||
+                coveredUntil.at(place->second) > index) {
                 continue;
             }
-            // The columns it covers, its own and the next ones, clipped at the row's last cell.
-            std::size_t const wide = std::max<std::size_t>(1, std::min(span.columns, cells - span.column));
+            // The places it covers, its own and the next ones, clipped at the last visible place.
+            std::size_t const first = place->second;
+            std::size_t const wide = std::max<std::size_t>(1, std::min(span.columns, order.size() - first));
             std::size_t last = std::min(index + span.rows, rows.size()) - 1;
             for (std::size_t between = index + 1; between <= last; ++between) {
                 if (heading(*rows.at(between))) {
@@ -814,16 +862,23 @@ void TableImpl::planSpans(ItemBase const* leaving) {
             if (last == index && wide == 1) {
                 continue;
             }
-            for (std::size_t column = span.column; column < span.column + wide; ++column) {
-                coveredUntil.at(column) = last + 1;
+            QVariantList covers;
+            for (std::size_t at = first; at < first + wide; ++at) {
+                coveredUntil.at(at) = last + 1;
+                covers.append(static_cast<qulonglong>(order.at(at)));
             }
             plans.at(index).append(QVariantMap{{QStringLiteral("column"), static_cast<qulonglong>(span.column)},
                                                {QStringLiteral("rows"), static_cast<qulonglong>(last - index + 1)},
-                                               {QStringLiteral("columns"), static_cast<qulonglong>(wide)}});
+                                               {QStringLiteral("columns"), static_cast<qulonglong>(wide)},
+                                               {QStringLiteral("covers"), covers}});
             for (std::size_t between = index; between <= last; ++between) {
-                for (std::size_t column = span.column; column < span.column + wide; ++column) {
-                    if ((between != index || column != span.column) && column < covered.at(between).size()) {
-                        covered.at(between).at(column) = true;
+                for (std::size_t at = first; at < first + wide; ++at) {
+                    std::size_t const column = order.at(at);
+                    if (between == index && column == span.column) {
+                        continue;
+                    }
+                    if (std::optional<std::size_t> const position = cellOf(*rows.at(between), column)) {
+                        covered.at(between).at(*position) = true;
                         coveredColumns.at(between).append(static_cast<qulonglong>(column));
                     }
                 }
@@ -841,9 +896,10 @@ void TableImpl::planSpans(ItemBase const* leaving) {
         if (QQuickItem* const rowItem = row.item(); rowItem != nullptr) {
             rowItem->setZ(origin ? static_cast<qreal>(rows.size() - index) : 0.0);
         }
+        // A pooled cell stays hidden whatever covers it.
         auto const& cells = row.children();
-        for (std::size_t column = 0; column < cells.size(); ++column) {
-            cells.at(column)->cover(covered.at(index).at(column));
+        for (std::size_t position = 0; position < cells.size(); ++position) {
+            cells.at(position)->cover(covered.at(index).at(position) || !columnOf(*cells.at(position), position));
         }
     }
     _planned = any;

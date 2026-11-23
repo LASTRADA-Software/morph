@@ -265,12 +265,16 @@ struct Membership {
     };
     std::shared_ptr<ViewEntry const> entry;
     // A filter that reads a level is computed here: a cached entry of it also holds what its levels want, which
-    // only a page query computes.
+    // only a page query computes. A description the server would not answer with has no revision to key a view by.
     auto const viewQuery = views != nullptr && !record.empty() && needed.order.empty() ? viewQueryOf(*checked)
                                                                                          : std::nullopt;
-    if (viewQuery) {
+    auto const described = viewQuery ? servedDescription(served) : std::unexpected(TableError{});
+    if (viewQuery && described) {
         auto const* const pinnedSource = dynamic_cast<PinnedSource const*>(served.source.get());
-        auto found = views->find(ViewKey{.record = std::string{record}, .scope = served.scope, .query = *viewQuery},
+        auto found = views->find(ViewKey{.record = std::string{record},
+                                         .scope = served.scope,
+                                         .query = *viewQuery,
+                                         .revision = described->revision},
                                  served.source->snapshot(), {}, compute,
                                  pinnedSource != nullptr ? pinnedSource->pinnedAt() : 0);
         if (!found) {
@@ -457,8 +461,10 @@ template <auto Function, typename Model>
     // A posted task is a `std::function`, which copies: the promise is shared.
     auto shared = std::make_shared<typename async::Completion<Result>::Promise>(std::move(promise));
     runtime->work->post([shared, served = std::move(served), plain = std::move(plain), policy, rowScoped,
-                         views = runtime->views, record = std::move(record), keep = runtime->settleKeep] {
+                         views = runtime->views, record = std::move(record), keep = runtime->settleKeep,
+                         viewsKeep = runtime->viewsKeep] {
         static_cast<void>(keep);
+        static_cast<void>(viewsKeep);
         try {
             shared->resolve(detail::resolveSelection(served, plain, policy, views, record, rowScoped));
         } catch (...) {

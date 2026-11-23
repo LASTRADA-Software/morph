@@ -23,7 +23,9 @@
 
 #include <algorithm>
 #include <catch2/catch_test_macros.hpp>
+#include <chrono>
 #include <cmath>
+#include <cstddef>
 #include <cstdint>
 #include <format>
 #include <functional>
@@ -1161,6 +1163,89 @@ TEST_CASE("table action: a server builds a table's reply on tableWork", "[table]
     CHECK_FALSE(reads.contains(tabledesc::workThreads().served));
     // The in-process twin of the socket case "tables: a table's reply is built on tableWork".
     // Mutation: RemoteServer not installing the TableRuntimeScope (answerQuery runs inline on the strand).
+}
+
+namespace {
+
+// A table executor that holds what is posted to it until the case runs it.
+class HeldWork final : public morph::exec::IExecutor {
+public:
+    void post(std::function<void()> task) override {
+        std::scoped_lock const lock{_mutex};
+        _tasks.push_back(std::move(task));
+    }
+
+    [[nodiscard]] bool isSerial() const noexcept override { return false; }
+
+    [[nodiscard]] std::size_t held() {
+        std::scoped_lock const lock{_mutex};
+        return _tasks.size();
+    }
+
+    void runAll() {
+        std::vector<std::function<void()>> tasks;
+        {
+            std::scoped_lock const lock{_mutex};
+            tasks.swap(_tasks);
+        }
+        for (auto& task : tasks) {
+            task();
+        }
+    }
+
+private:
+    std::mutex _mutex;
+    std::vector<std::function<void()>> _tasks;
+};
+
+// Waits up to 30 s for @p done.
+bool waitFor(std::function<bool()> const& done) {
+    auto const deadline = std::chrono::steady_clock::now() + std::chrono::seconds{30};
+    while (!done()) {
+        if (std::chrono::steady_clock::now() > deadline) {
+            return false;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds{1});
+    }
+    return true;
+}
+
+}  // namespace
+
+// The view cache's life is seen through a token its options hold, which the server's configuration and the cache
+// itself keep. Mutation: the posted answer holding the server's view cache by its raw pointer alone (the cache goes
+// with the server while the work still names it: the token expires before the work runs).
+TEST_CASE("table action: a query's work queued on tableWork keeps the view cache after the server is gone",
+          "[table][registration]") {
+    auto const held = std::make_shared<HeldWork>();
+    morph::exec::ThreadPoolExecutor pool{2};
+    std::weak_ptr<int> cacheAlive;
+    std::weak_ptr<morph::backend::RemoteServer> serverAlive;
+    {
+        auto token = std::make_shared<int>(0);
+        cacheAlive = token;
+        morph::backend::ServerConfig config;
+        config.tableWork = held;
+        config.views.onCompute = [token = std::move(token)] { static_cast<void>(token); };
+        auto server = std::make_shared<morph::backend::RemoteServer>(pool, std::move(config));
+        serverAlive = server;
+        auto const registered =
+            morph::wire::decode(server->handleInline(morph::wire::encode(morph::wire::makeRegister("WorkModel"))));
+        REQUIRE(registered.kind == "ok");
+        morph::wire::Envelope execute;
+        execute.kind = "execute";
+        execute.callId = 7;
+        execute.modelId = registered.modelId;
+        execute.modelType = "WorkModel";
+        execute.actionType = "Table.work";
+        execute.body = R"({"sort":[{"column":"v","dir":"desc"}],"page":{"offset":0,"limit":4}})";
+        server->handle(morph::wire::encode(execute), [](std::string const&) {});
+        REQUIRE(waitFor([&held] { return held->held() > 0; }));
+    }
+    REQUIRE(waitFor([&serverAlive] { return serverAlive.expired(); }));
+    REQUIRE_FALSE(cacheAlive.expired());
+    held->runAll();
+    CHECK(cacheAlive.expired());   // the work done, nothing holds the cache
 }
 
 namespace {

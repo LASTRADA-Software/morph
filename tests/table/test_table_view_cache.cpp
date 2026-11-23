@@ -164,7 +164,9 @@ TableQuery validated(TableQuery const& query) {
     return *checked;
 }
 
-ViewKey keyOf(std::string query) { return ViewKey{.record = "T.rows", .scope = {}, .query = std::move(query)}; }
+ViewKey keyOf(std::string query) {
+    return ViewKey{.record = "T.rows", .scope = {}, .query = std::move(query), .revision = {}};
+}
 
 }  // namespace
 

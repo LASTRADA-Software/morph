@@ -201,6 +201,9 @@ public:
     /// A modified row draws `+` in its selection mark's cell while it is not selected. Throws std::logic_error when
     /// @p row is not one of this table's rows.
     void setRowModified(ui::Widget& row, bool modified) override;
+    /// The highlighted row draws `»` in the cursor mark's cell, in the accent style, while the cursor is not on it:
+    /// a mark beside the selection's and the cursor's, which the gutter keeps for every data row.
+    void setHighlightedRow(std::optional<std::size_t> viewRow) override;
     /// The rows a rectangle of cells spans draw `*` in the gutter, as selected rows do; the terminal draws no column
     /// of it.
     void setCellSelection(std::optional<std::array<std::size_t, 4>> rect) override;
@@ -259,8 +262,7 @@ private:
     struct SpanPlace {
         WidgetBase* origin = nullptr;  ///< The row that gives the span.
         WidgetBase* cell = nullptr;    ///< The spanning cell, a child of the table's view while the plan holds it.
-        std::size_t column = 0;
-        std::size_t columns = 1;  ///< How many columns it covers from `column`, its own included.
+        std::vector<std::size_t> columns;  ///< The columns it covers in visible order, its own first.
         std::size_t first = 0;  ///< The origin's place among the shown rows.
         std::size_t last = 0;   ///< The last covered row's place.
     };
@@ -317,8 +319,11 @@ private:
     void paintHeader(::core::tui::Canvas& canvas, std::vector<DrawnColumn> const& columns) const;
     /// Gives each row its column layout.
     void arrangeRows(std::vector<int> const& widths);
-    /// The gutter of @p row: its selection mark, or its box, then the cursor mark when @p cursor.
-    [[nodiscard]] std::string rowMark(WidgetBase const* row, bool cursor) const;
+    /// The gutter of @p row: its selection mark, or its box, then the cursor mark when @p cursor, else the
+    /// highlight's when @p highlighted.
+    [[nodiscard]] std::string rowMark(WidgetBase const* row, bool cursor, bool highlighted) const;
+    /// Whether @p row is the highlighted one: by its view index over a source, else by its place among @p rows.
+    [[nodiscard]] bool isHighlighted(WidgetBase const* row, std::span<WidgetBase* const> rows) const;
     /// Each column's content width: its label's, or its widest shown cell's.
     [[nodiscard]] std::vector<int> naturalWidths() const;
     /// Each column's least width: for a column that wraps, the widest of its header and its shown cells' least
@@ -512,6 +517,7 @@ private:
     /// Each row's cells' marks, by column; a cell with none has no entry.
     std::unordered_map<WidgetBase const*, std::unordered_map<std::size_t, ui::CellMarks>> _cellMarks;
     std::unordered_set<WidgetBase const*> _modifiedRows;
+    std::optional<std::size_t> _highlighted;  ///< The view row `setHighlightedRow` marks, if any.
     std::function<void(std::size_t, std::size_t, ui::SelectionChange)> _onSelectRange;
     std::optional<std::size_t> _anchorRow;  ///< Over a source, where a range starts: a view row.
     std::optional<std::pair<std::size_t, std::size_t>> _focusCell;  ///< The focused cell's view row and column.

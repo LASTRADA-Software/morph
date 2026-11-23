@@ -306,6 +306,15 @@ public:
     /// @brief What the backend's `copyText` last put on the clipboard, read back from where it wrote it.
     /// @return The text; empty before any, or when the probe reads none.
     [[nodiscard]] virtual std::string clipboardText() { return {}; }
+
+    /// @brief The rows a table draws as the one a linked view highlights (`setHighlightedRow`), read from what the
+    ///        backend drew.
+    /// @param table The table.
+    /// @return Their positions among the table's rows; empty when none is drawn so, or when the probe reads none.
+    [[nodiscard]] virtual std::vector<std::size_t> highlightedRows(Widget const& table) {
+        static_cast<void>(table);
+        return {};
+    }
 };
 
 /// @brief One scripted case.
@@ -4554,13 +4563,100 @@ struct MinColumnGridSpec {
     return checks.result();
 }
 
+/// @brief Case: the row a linked view highlights is drawn so, and no row is once the highlight is gone.
+/// @param probe The backend under test.
+/// @return `nullopt`, or what went wrong.
+[[nodiscard]] inline std::optional<std::string> highlightedRowIsDrawn(ConformanceProbe& probe) {
+    reactive::Signal<std::vector<Entry>> const rows{probe.runtime(), fourEntries()};
+    reactive::Signal<std::optional<TableHighlight>> highlight{probe.runtime(),
+                                                              TableHighlight{.key = Key{std::int64_t{2}}, .row = 1}};
+    Mounted const view{probe.runtime(), probe.backend(),
+                       columnsTable(rows, {{.label = "Name"}}, {.highlight = [&highlight] { return highlight.get(); }})};
+    probe.settle();
+    Checks checks;
+    checks.text("the rows drawn highlighted", "1", rowTexts(probe.highlightedRows(view.root())));
+    highlight.set(std::nullopt);
+    probe.settle();
+    checks.text("the rows drawn highlighted once the highlight is gone", "",
+                rowTexts(probe.highlightedRows(view.root())));
+    return checks.result();
+}
+
+/// @brief Case: under columns shown in the order C, A, B, the first row's cell in C spans two places. It covers the
+///        cell at the next visible place, A's, which has no bounds, reaches across A's place, and leaves B's cell, two
+///        places on, drawn: a span covers visible places, not the columns that follow its own by index.
+/// @param probe The backend under test.
+/// @return `nullopt`, or what went wrong.
+[[nodiscard]] inline std::optional<std::string> spanCoversVisiblePlaces(ConformanceProbe& probe) {
+    reactive::Signal<std::vector<Entry>> const rows{probe.runtime(), {{.id = 1, .label = "a"}, {.id = 2, .label = "b"}}};
+    auto const filled = [](std::string text) {
+        return ui::column({.children = {ui::text({.text = std::move(text)})}});
+    };
+    TableOptions options;
+    options.arrangement = TableArrangement{.visible = {2, 0, 1}, .pinned = 0, .widths = {}};
+    Mounted const view{
+        probe.runtime(), probe.backend(),
+        insideColumn(ui::table<Entry>(
+            {{.label = "A", .width = Sizing::fixed(8)},
+             {.label = "B", .width = Sizing::fixed(8)},
+             {.label = "C", .width = Sizing::fixed(8)}},
+            [&rows] { return rows.get(); }, [](Entry const& entry) { return Key{entry.id}; },
+            std::function<TableRowView(reactive::Signal<Entry> const&)>{[filled](reactive::Signal<Entry> const& entry) {
+                std::string const row = std::to_string(entry.peek().id);
+                TableRowView view{.cells = {filled("a" + row), filled("b" + row), filled("c" + row)}};
+                if (entry.peek().id == 1) {
+                    view.spans =
+                        Prop<std::vector<RowSpan>>{std::vector<RowSpan>{{.column = 2, .rows = 1, .columns = 2}}};
+                }
+                return view;
+            }},
+            std::move(options)))};
+    probe.settle();
+    Checks checks;
+    Geometry geometry{probe, checks};
+    Widget const* const table = probe.childAt(rootContainer(view), 0);
+    // A row's cell by the text it shows: a backend may hold a row's cells in any order.
+    auto const cellOf = [&probe, table](std::size_t row, std::string_view text) -> Widget* {
+        if (table == nullptr) {
+            return nullptr;
+        }
+        for (Widget* const cell : rowCells(probe, *table, row)) {
+            Widget const* const inner = cell == nullptr ? nullptr : childOf(probe, cell, 0);
+            if (inner != nullptr && probe.textOf(*inner) == text) {
+                return cell;
+            }
+        }
+        return nullptr;
+    };
+    Widget* const spanning = cellOf(0, "c1");
+    Widget* const covered = cellOf(0, "a1");
+    Widget* const after = cellOf(0, "b1");
+    Widget* const under = cellOf(1, "a2");
+    checks.that(spanning != nullptr && covered != nullptr && after != nullptr && under != nullptr,
+                "the first row holds the cells c1, a1 and b1, and the second a2");
+    if (spanning != nullptr && covered != nullptr && after != nullptr && under != nullptr) {
+        WidgetBounds const span = geometry.of(*spanning);
+        WidgetBounds const hidden = geometry.of(*covered);
+        WidgetBounds const shown = geometry.of(*after);
+        WidgetBounds const below = geometry.of(*under);
+        checks.that(hidden.width <= 0 || hidden.height <= 0,
+                    "a1, at the place after c1's, is covered: " + std::to_string(hidden.width) + " by " +
+                        std::to_string(hidden.height));
+        checks.that(shown.width > 0 && shown.height > 0, "b1, two places after c1's, is drawn");
+        checks.that(span.x + span.width >= below.x + below.width - 1.0,
+                    "c1 reaches across A's place: it ends at " + std::to_string(span.x + span.width) + ", A's at " +
+                        std::to_string(below.x + below.width));
+    }
+    return checks.result();
+}
+
 }  // namespace detail
 
 /// @brief The layout cases: where a backend that lays widgets out draws them. Run each on a fresh probe whose
 ///        `boundsOf` reads geometry; a probe that reads none fails every one.
 /// @return The cases.
 [[nodiscard]] inline std::span<ConformanceCase const> layoutConformanceCases() {
-    static std::array<ConformanceCase, 62> const cases{{
+    static std::array<ConformanceCase, 63> const cases{{
         {.name = "a stretch child's maximum caps its share along a row, and its sibling takes the rest",
          .run = detail::maximumCapsStretchShare},
         {.name = "a content child is at least its minimum wide along a row", .run = detail::minimumWidensContent},
@@ -4578,6 +4674,8 @@ struct MinColumnGridSpec {
          .run = detail::spanningCellCoversItsRows},
         {.name = "a click on a spanning cell's covered part selects the row that gives the span",
          .run = detail::clickOnSpanningCellSelectsItsRow},
+        {.name = "a table cell spanning two places under moved columns covers the next visible place",
+         .run = detail::spanCoversVisiblePlaces},
         {.name = "a stretching scroll above a bar keeps the bar at its column's end",
          .run = detail::stretchingScrollKeepsBarAtEnd},
         {.name = "a scrollable slot scrolls a content-height child and fills with a stretching one",
@@ -4675,7 +4773,7 @@ struct MinColumnGridSpec {
 /// loops over these with its own `ConformanceProbe`.
 /// @return The cases.
 [[nodiscard]] inline std::span<ConformanceCase const> conformanceCases() {
-    static std::array<ConformanceCase, 66> const cases{{
+    static std::array<ConformanceCase, 67> const cases{{
         {.name = "a Text shows its constant text", .run = detail::textShowsItsText},
         {.name = "a bound Text updates once per batch and not for an equal write",
          .run = detail::boundTextUpdatesOncePerChange},
@@ -4772,6 +4870,7 @@ struct MinColumnGridSpec {
         {.name = "table: a filterable header's filter button reports its column",
          .run = detail::filterButtonReportsColumn},
         {.name = "table: a group's filter button reports the group", .run = detail::groupFilterButtonReportsGroup},
+        {.name = "table: the row a linked view highlights is drawn highlighted", .run = detail::highlightedRowIsDrawn},
     }};
     return cases;
 }

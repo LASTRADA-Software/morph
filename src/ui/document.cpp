@@ -3332,6 +3332,15 @@ private:
             refuse(pointerAppend(node.path, "layoutRows"),
                    "a fixed grid's rows are its `layoutRows`; a model's table takes none");
         }
+        // A model's table reads its rows from the model: a second source would be wired or drawn, never both.
+        if (node.kind == "table" && !model.empty()) {
+            if (!node.name("form").empty()) {
+                refuse(pointerAppend(node.path, "form"), "a model's table takes its rows from its `model`, not a `form`");
+            }
+            if (node.prop("rows")) {
+                refuse(pointerAppend(node.path, "rows"), "a model's table takes its rows from its `model`, not `rows`");
+            }
+        }
         if (!table.empty()) {
             if (model.empty()) {
                 refuse(node.path, "`table` names one of a model's tables; give the table its `model`");
@@ -3353,9 +3362,11 @@ private:
         } else if (node.kind == "table" && !node.name("form").empty()) {
             checkFormGrid(node);
         } else if (node.kind == "table" && !node.prop("rows")) {
-            refuse(node.path, "a table takes `rows`, or a `model` and `action`");
+            refuse(node.path, "a table takes `rows`, a `model` with its `table` or `action`, a `form` with its `field`, "
+                              "or `layoutRows`");
         }
         if (node.kind == "table") {
+            checkWalk(node);
             checkCellSelection(node);
             checkTableSelection(node);
             checkSelectColumn(node);
@@ -3626,10 +3637,8 @@ private:
         return true;
     }
 
-    // What a grid takes beyond its table, on a `table` over a form or a field overlay's `grid` part: `enterMoves` and
-    // `walk` by name, and columns that each edit a member, named by `field`, or show a `value`. A `field` must name a
-    // member of the collection's row type, read from the form action's schema when the catalog has it.
-    void checkGridPart(DocNode const& part, DocNode const& form, std::string_view field, std::string const& where) const {
+    // `enterMoves` and `walk` by name, on every table and grid part that takes them.
+    static void checkWalk(DocNode const& part) {
         for (std::string_view const key : {std::string_view{"enterMoves"}, std::string_view{"walk"}}) {
             std::string_view const given = part.name(key);
             bool const known = given.empty() ||
@@ -3640,6 +3649,12 @@ private:
                        key == "enterMoves" ? "`enterMoves` is `down`, `right` or `none`" : "`walk` is `rows` or `columns`");
             }
         }
+    }
+
+    // What a grid takes beyond its table, on a `table` over a form or a field overlay's `grid` part: columns that each
+    // edit a member, named by `field`, or show a `value`. A `field` must name a member of the collection's row type,
+    // read from the form action's schema when the catalog has it.
+    void checkGridPart(DocNode const& part, DocNode const& form, std::string_view field, std::string const& where) const {
         if (part.flag("appendRows") && part.flag("rowsFixed")) {
             refuse(pointerAppend(part.path, "appendRows"), "a grid with `rowsFixed` adds no rows; drop `appendRows`");
         }
@@ -3954,7 +3969,8 @@ private:
         }
         if (!node.prop("rows")) {
             refuse(pointerAppend(node.path, "groups"),
-                   "a model's table declares its column groups in its description; `groups` is for a table over `rows`");
+                   "`groups` is for a table over `rows`: a model's table declares its column groups in its "
+                   "description");
         }
         auto const columns = node.partList("columns");
         std::set<std::string, std::less<>> grouped;
@@ -4372,6 +4388,7 @@ private:
                     if (named == nullptr || *named != "grid") {
                         refuse(grid.front()->path, "a field's `grid` gives a grid widget its columns; give it `widget: \"grid\"`");
                     }
+                    checkWalk(*grid.front());
                     checkGridPart(*grid.front(), form, field->id, field->path);
                     checkTableConfigurable(*grid.front());
                 }

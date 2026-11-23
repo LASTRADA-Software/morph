@@ -279,6 +279,22 @@ public:
     }
     std::string clipboardText() override { return detail::toUtf8(QGuiApplication::clipboard()->text()); }
 
+    // The rows whose highlight mark is drawn.
+    std::vector<std::size_t> highlightedRows(ui::Widget const& table) override {
+        settle();
+        std::vector<std::size_t> rows;
+        auto const& children = core(dynamic_cast<ui::ContainerWidget const&>(table)).children();
+        for (std::size_t index = 0; index < children.size(); ++index) {
+            QQuickItem const* const row = children.at(index)->item();
+            auto const* const mark =
+                row == nullptr ? nullptr : row->findChild<QQuickItem*>(QStringLiteral("highlightMark"));
+            if (mark != nullptr && mark->isVisible()) {
+                rows.push_back(index);
+            }
+        }
+        return rows;
+    }
+
     std::vector<std::size_t> selectedRows(ui::Widget const& table) override {
         settle();
         std::vector<std::size_t> rows;

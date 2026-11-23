@@ -48,10 +48,14 @@ or the reactive runtime.
 | `sort.hpp` | `SortKey`, `SortChain`, `CellState`, `KeyColumn`, `buildKeys`, `compareKeys`, `RowOrder`, `ChunkedMergeSort`, `sortRows` |
 | `filter.hpp` | `FilterEntry`, `Combine`, `ColumnFilter`, `GroupFilter`, `FilterSpec`, `CompiledFilter`, `compileFilter`, `compileFilterGuarded`, `FilterRun` |
 | `view_change.hpp` | `ViewOp`, `ViewChange`, `diffViews`, `applyViewChange` |
-| `engine.hpp` | `Engine`, `EngineOptions`, `EngineStats`, `ReorderPolicy`, `ColumnLayout` |
+| `engine.hpp` | `Engine` (with `retain`, `isUnmatched`, `undecidedRowCount`, `onUndecidedChange`, `distinctValues` and `flush`; `setSort` and `setFilter` refuse a chain or filter the source's contract does not allow, `SourceContract`), `EngineOptions`, `EngineStats`, `ReorderPolicy`, `ColumnLayout`, `ColumnLayoutValue` |
 | `query.hpp` | `PageRequest`, `TableQuery`, `Page<Row>`, `TotalKind`, `QueryLimits`, `validate`, `ApplyOptions`, `PageRows`, `apply`, `RowsSource<Row>`, `PageWindow<Row>` |
 | `selection.hpp` | `TableMode`, `SelectionMode`, `Selection`, `TableCounts`, `counts` |
 | `edits.hpp` | `EditRequest`, `FieldError`, `EditCommit`, `CellEdits`; a model's table's `CellEdit`, `RowEdit`, `EditCell`, `RowEditRequest`, `RowEditCommit`, `checkEdits` |
+
+The served table's headers are specified in [table.md](table.md), which lists their API: `description.hpp` (the
+description, pages and `answerQuery`), `level_cache.hpp`, `view_cache.hpp`, `state_store.hpp`, `row_selection.hpp`,
+`runtime.hpp` and `bands.hpp`.
 
 ## Rows: sources and snapshots
 

@@ -1119,8 +1119,8 @@ namespace morph::table {
 ///         description lacks, or `InvalidValue` when the text is not a page, a
 ///         row's length differs from `columns`, `keys` and `rows` differ in
 ///         length, an `unloadedRows` index is outside the rows or not above the
-///         one before it, `indices` is neither empty nor one non-negative
-///         view row per row, or what `registryOf` refuses.
+///         one before it, so is an `unmatched` index, `indices` is neither empty
+///         nor one non-negative view row per row, or what `registryOf` refuses.
 [[nodiscard]] inline std::expected<GenericPage, TableError> readGenericPage(std::string_view json,
                                                                             TableDescription const& description,
                                                                             UnitRegistry const* units = nullptr) {
@@ -1152,8 +1152,8 @@ namespace morph::table {
                            " cells under " + std::to_string(kinds.size()) + " columns");
         }
     }
-    // A window looks a row's levels up by binary search and places a keyed row by its index, so both lists are
-    // checked against the rows here rather than trusted by every reader after.
+    // A window looks a row's levels and its unmatched mark up by binary search and places a keyed row by its index, so
+    // these lists are checked against the rows here rather than trusted by every reader after.
     auto const rowCount = static_cast<std::int64_t>(page.rows.size());
     std::int64_t previous = -1;
     for (auto const& unloaded : page.unloadedRows) {
@@ -1162,6 +1162,14 @@ namespace morph::table {
                            std::to_string(rowCount) + " rows, or out of order");
         }
         previous = unloaded.index;
+    }
+    previous = -1;
+    for (std::int64_t const index : page.unmatched) {
+        if (index <= previous || index >= rowCount) {
+            return invalid("an unmatched row at " + std::to_string(index) + " in a page of " +
+                           std::to_string(rowCount) + " rows, or out of order");
+        }
+        previous = index;
     }
     if (!page.indices.empty() && page.indices.size() != page.rows.size()) {
         return invalid("a page of " + std::to_string(page.indices.size()) + " indices and " +
@@ -1967,7 +1975,10 @@ struct AnswerContext {
             if (context.views != nullptr && !context.record.empty()) {
                 auto const* const pinned = dynamic_cast<PinnedSource const*>(served.source.get());
                 auto found = context.views->find(
-                    ViewKey{.record = std::string{context.record}, .scope = served.scope, .query = "every row"},
+                    ViewKey{.record = std::string{context.record},
+                            .scope = served.scope,
+                            .query = "every row",
+                            .revision = described->revision},
                     served.source->snapshot(), {}, everyRow, pinned != nullptr ? pinned->pinnedAt() : 0);
                 if (!found) {
                     return std::unexpected(std::move(found.error()));
@@ -2091,7 +2102,10 @@ struct AnswerContext {
         }
         auto const* const pinned = dynamic_cast<PinnedSource const*>(served.source.get());
         auto found = context.views->find(
-            ViewKey{.record = std::string{context.record}, .scope = served.scope, .query = *viewQuery},
+            ViewKey{.record = std::string{context.record},
+                    .scope = served.scope,
+                    .query = *viewQuery,
+                    .revision = described->revision},
             served.source->snapshot(), generations, compute, pinned != nullptr ? pinned->pinnedAt() : 0);
         if (!found) {
             return std::unexpected(std::move(found.error()));
@@ -2415,12 +2429,15 @@ public:
     /// @param served  The table, its source pinned.
     /// @param query   The query.
     /// @param context What the reply is built with.
+    /// @param keep    Keeps what @p context points to (the view cache) alive until the work has run; null when the
+    ///                caller outlives the work.
     AnswerAwaiter(exec::IExecutor& work MORPH_LIFETIMEBOUND, ServedTable served, TableQuery query,
-                  AnswerContext context)
+                  AnswerContext context, std::shared_ptr<void const> keep = {})
         : _work{&work},
           _served{std::move(served)},
           _query{std::move(query)},
           _context{context},
+          _keep{std::move(keep)},
           _shared{std::make_shared<Shared>()} {}
 
     /// @return Always false: the answer is built elsewhere.
@@ -2437,7 +2454,9 @@ public:
         // Nothing of this awaiter is touched after the post: the work may resume the coroutine, and free the
         // awaiter with its frame, before `post` returns.
         auto* const work = _work;
-        work->post([shared, served = std::move(_served), query = std::move(_query), context = _context] {
+        work->post([shared, served = std::move(_served), query = std::move(_query), context = _context,
+                    keep = std::move(_keep)] {
+            static_cast<void>(keep);
             try {
                 shared->answer = answerQuery(served, query, context);
             } catch (...) {
@@ -2465,6 +2484,7 @@ private:
     ServedTable _served;
     TableQuery _query;
     AnswerContext _context;
+    std::shared_ptr<void const> _keep;
     std::shared_ptr<Shared> _shared;
 };
 
@@ -2562,7 +2582,8 @@ template <typename Model>
         answer = detail::answerQuery(served, action.query, context);
     } else {
         // Its own statement: MSVC cannot tail-call a call that shares a full-expression with a `co_await`.
-        auto awaited = co_await detail::AnswerAwaiter{*work, std::move(served), action.query, context};
+        auto awaited = co_await detail::AnswerAwaiter{*work, std::move(served), action.query, context,
+                                                      runtime != nullptr ? runtime->viewsKeep : nullptr};
         answer = std::move(awaited);
     }
     if (!answer) {

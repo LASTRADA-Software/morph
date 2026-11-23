@@ -46,6 +46,8 @@ constexpr std::string_view kFilterFilled = "\u25BE";
 /// What the gutter's last cell shows for a row an action is working on, and for a row another user holds.
 constexpr std::string_view kBusyGlyph = "\u2026";
 constexpr std::string_view kLockGlyph = "#";
+/// What the cursor mark's cell shows for the row a linked view highlights.
+constexpr std::string_view kHighlightGlyph = "\u00BB";
 /// The gutter cells a busy or locked glyph takes: the glyph, and a gap, so the ellipsis is not read as the first
 /// cell's truncation.
 constexpr int kMarkCells = 2;
@@ -199,22 +201,46 @@ void TableImpl::planSpans() {
         return stack == nullptr ? std::vector<WidgetBase*>{}
                                 : std::vector<WidgetBase*>{stack->children().begin(), stack->children().end()};
     };
+    // A span names a column and covers visible places from that column's: the places are the order
+    // `setVisibleColumns` gave, so a moved or hidden column moves what a span covers.
+    auto const order = visibleOrder();
+    std::vector<std::optional<std::size_t>> placeOf(_columns.size());
+    for (std::size_t place = 0; place < order.size(); ++place) {
+        if (order.at(place) < placeOf.size()) {
+            placeOf.at(order.at(place)) = place;
+        }
+    }
+    // A row's cell of a column: the one `setCellColumn` placed there, so a pooled or reused cell is found wherever it
+    // sits among the row's children; in a row whose cells are not placed, the child at the column's index.
+    auto const cellOf = [this, &cellsOf](WidgetBase* row, std::size_t column) -> WidgetBase* {
+        auto const cells = cellsOf(row);
+        if (auto const placed = _cellColumns.find(row); placed != _cellColumns.end()) {
+            for (WidgetBase* const cell : cells) {
+                auto const found = placed->second.find(cell);
+                if (found != placed->second.end() && found->second == column) {
+                    return cell;
+                }
+            }
+            return nullptr;
+        }
+        return column < cells.size() ? cells.at(column) : nullptr;
+    };
     std::vector<SpanPlace> plan;
     std::unordered_set<WidgetBase const*> covered;
-    std::vector<std::size_t> coveredUntil(_columns.size(), 0);
+    std::vector<std::size_t> coveredUntil(order.size(), 0);
     for (std::size_t index = 0; index < rows.size() && !_spans.empty(); ++index) {
         auto const found = _spans.find(rows.at(index));
         if (found == _spans.end() || isHeading(rows.at(index))) {
             continue;
         }
-        auto const cells = cellsOf(rows.at(index));
         for (ui::RowSpan const& span : found->second) {
-            if (span.column >= _columns.size() || span.column >= cells.size() || span.rows == 0 ||
-                coveredUntil.at(span.column) > index) {
+            std::optional<std::size_t> const place = span.column < placeOf.size() ? placeOf.at(span.column) : std::nullopt;
+            WidgetBase* const cell = place ? cellOf(rows.at(index), span.column) : nullptr;
+            if (cell == nullptr || span.rows == 0 || coveredUntil.at(*place) > index) {
                 continue;
             }
-            // The columns it covers, its own and the next ones, clipped at the last column.
-            std::size_t const wide = std::max<std::size_t>(1, std::min(span.columns, _columns.size() - span.column));
+            // The places it covers, its own and the next ones, clipped at the last visible place.
+            std::size_t const wide = std::max<std::size_t>(1, std::min(span.columns, order.size() - *place));
             std::size_t last = std::min(index + span.rows, rows.size()) - 1;
             for (std::size_t between = index + 1; between <= last; ++between) {
                 if (isHeading(rows.at(between))) {
@@ -225,20 +251,19 @@ void TableImpl::planSpans() {
             if (last == index && wide == 1) {
                 continue;
             }
-            for (std::size_t column = span.column; column < span.column + wide; ++column) {
-                coveredUntil.at(column) = last + 1;
+            std::vector<std::size_t> const spanned(order.begin() + static_cast<std::ptrdiff_t>(*place),
+                                                   order.begin() + static_cast<std::ptrdiff_t>(*place + wide));
+            for (std::size_t at = *place; at < *place + wide; ++at) {
+                coveredUntil.at(at) = last + 1;
             }
-            plan.push_back({.origin = rows.at(index),
-                            .cell = cells.at(span.column),
-                            .column = span.column,
-                            .columns = wide,
-                            .first = index,
-                            .last = last});
+            plan.push_back({.origin = rows.at(index), .cell = cell, .columns = spanned, .first = index, .last = last});
             for (std::size_t between = index; between <= last; ++between) {
-                auto const coveredCells = cellsOf(rows.at(between));
-                for (std::size_t column = span.column; column < span.column + wide; ++column) {
-                    if ((between != index || column != span.column) && column < coveredCells.size()) {
-                        covered.insert(coveredCells.at(column));
+                for (std::size_t const column : spanned) {
+                    if (between == index && column == span.column) {
+                        continue;
+                    }
+                    if (WidgetBase const* const hidden = cellOf(rows.at(between), column)) {
+                        covered.insert(hidden);
                     }
                 }
             }
@@ -293,7 +318,7 @@ std::vector<::core::tui::Rect> TableImpl::spanAreas(::core::tui::Size size,
     std::vector<::core::tui::Rect>& block = blocks != nullptr ? *blocks : unused;
     block.assign(_plan.size(), {});
     auto const rows = shownChildren();
-    auto const widths = columnWidths(size.width - menuRoom());
+    auto const drawn = drawnColumns(size.width);
     int const header = headerLines();
     // The line of each row as if every row were drawn: the first one drawn starts under the header, the ones above it
     // before that.
@@ -309,7 +334,7 @@ std::vector<::core::tui::Rect> TableImpl::spanAreas(::core::tui::Size size,
         start.at(index - 1) = line;
     }
     for (auto const [place, area, lines] : std::views::zip(_plan, areas, block)) {
-        if (place.column >= widths.size() || place.last >= rows.size()) {
+        if (place.columns.empty() || place.last >= rows.size()) {
             continue;
         }
         int const top = std::max(start.at(place.first), header);
@@ -317,20 +342,25 @@ std::vector<::core::tui::Rect> TableImpl::spanAreas(::core::tui::Size size,
         if (bottom <= top) {
             continue;
         }
-        int left = gutter();
-        for (std::size_t index = 0; index < place.column; ++index) {
-            left += widths.at(index) + kColumnGap;
+        // Across the drawn columns it covers and the gaps between them: they are adjacent places, and one the column
+        // window leaves out, or the pinned columns hide, takes no room.
+        int from = std::numeric_limits<int>::max();
+        int to = std::numeric_limits<int>::min();
+        for (DrawnColumn const& column : drawn) {
+            if (std::ranges::contains(place.columns, column.column)) {
+                from = std::min(from, column.x);
+                to = std::max(to, column.x + column.width);
+            }
         }
+        if (to <= from) {
+            continue;
+        }
+        int const left = gutter() + from;
+        int const across = to - from;
         // Placed down the lines it covers by its column's `valign`, as a cell is down its row.
-        ui::Align const down = _columns.at(place.column).valign;
+        ui::Align const down = _columns.at(place.columns.front()).valign;
         int const space = bottom - top;
         int const height = down == ui::Align::Stretch ? space : std::min(requestedSize(*place.cell).height, space);
-        // Across the columns it covers and the gaps between them.
-        int across = widths.at(place.column);
-        for (std::size_t index = place.column + 1; index < place.column + place.columns && index < widths.size();
-             ++index) {
-            across += kColumnGap + widths.at(index);
-        }
         area = {.x = left, .y = top + alignedOffset(down, height, space), .width = across, .height = height};
         lines = {.x = left, .y = top, .width = across, .height = space};
     }
@@ -1141,7 +1171,7 @@ void TableImpl::paintBands(::core::tui::Canvas& canvas, std::vector<DrawnColumn>
     }
 }
 
-std::string TableImpl::rowMark(WidgetBase const* row, bool cursor) const {
+std::string TableImpl::rowMark(WidgetBase const* row, bool cursor, bool highlighted) const {
     // With a select column the box shows the mark; without, `*` does, for a selected row or a row of the selected
     // cells.
     std::string mark;
@@ -1163,7 +1193,7 @@ std::string TableImpl::rowMark(WidgetBase const* row, bool cursor) const {
     } else {
         mark = isMarked(row) || inCells ? "*" : (_modifiedRows.contains(row) ? "+" : " ");
     }
-    mark += cursor ? ">" : " ";
+    mark += cursor ? ">" : (highlighted ? kHighlightGlyph : " ");
     // A busy or locked row's glyph takes the gutter's own cells, after the selection and cursor marks.
     if (_markGutter) {
         auto const found = _marks.find(row);
@@ -1264,7 +1294,9 @@ void TableImpl::paint(::core::tui::Canvas& canvas) {
         } else {
             cursor = focused && row == rows.at(_cursorPlace);
         }
-        canvas.putString(area.y, 0, rowMark(row, cursor), cursor ? theme.listItemSelected : theme.textNormal);
+        bool const highlighted = !cursor && isHighlighted(row, rows);
+        canvas.putString(area.y, 0, rowMark(row, cursor, highlighted),
+                         cursor ? theme.listItemSelected : (highlighted ? theme.textAccent : theme.textNormal));
     }
     if (_source) {
         paintLoads(canvas, drawn, areas);
@@ -1963,6 +1995,27 @@ void TableImpl::setCellMarks(ui::Widget& row, std::size_t column, ui::CellMarks 
         _cellMarks[&base].insert_or_assign(column, marks);
     }
     refresh();
+}
+
+void TableImpl::setHighlightedRow(std::optional<std::size_t> viewRow) {
+    if (_highlighted != viewRow) {
+        _highlighted = viewRow;
+        refresh();
+    }
+}
+
+bool TableImpl::isHighlighted(WidgetBase const* row, std::span<WidgetBase* const> rows) const {
+    if (!_highlighted || isPassive(row)) {
+        return false;
+    }
+    if (auto const index = _viewRows.find(row); index != _viewRows.end()) {
+        return index->second == *_highlighted;
+    }
+    if (_source) {
+        return false;
+    }
+    auto const place = std::ranges::find(rows, row);
+    return place != rows.end() && static_cast<std::size_t>(std::distance(rows.begin(), place)) == *_highlighted;
 }
 
 void TableImpl::setRowModified(ui::Widget& row, bool modified) {

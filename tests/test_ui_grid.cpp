@@ -2414,6 +2414,33 @@ TEST_CASE("fixed grid: two grids giving one field different units settle", "[ui]
     CHECK_FALSE(f.form->modified("limits.weight"));
 }
 
+// Mutation: a save that ends a field's edit moving the load count (the overlay gives the saved field its g again, and
+// the user's kg is lost).
+TEST_CASE("fixed grid: an explicit save keeps the unit the user picked", "[ui][grid][fixed]") {
+    morph::test::formsengine::Harness h;
+    std::string schema{morph::test::grid::kSetLimits};
+    schema.insert(schema.rfind('}'), R"(,"x-submitMode":"explicit")");
+    auto const form = h.session("Lims_SetLimits", schema,
+                                forms::FormSessionOptions{.locale = ui::localeFacts("de").numeric, .bcp47 = "de"});
+    form->prefill(R"({"limits":{}})");
+    h.settle();
+    ui::FixedGridSource const source{h.rt, form.get(), weightInGrams(), fixedColumns({"min"}), ui::FormatContext{}};
+    h.settle();
+    forms::FieldState& weight = form->field("limits.weight");
+    REQUIRE(weight.spec().units.at(weight.unit().peek()).id == "g");
+    weight.switchUnit(0);   // the user picks kg
+    h.type(*form, "limits.weight", "0,25");
+    REQUIRE(form->modified("limits.weight"));
+    std::uint64_t const before = form->loadGeneration();
+    REQUIRE(form->ready());
+    form->submit();
+    h.settle();
+    REQUIRE(form->successCount() == 1);
+    CHECK(form->loadGeneration() == before);
+    CHECK(weight.spec().units.at(weight.unit().peek()).id == "kg");
+    CHECK_FALSE(form->modified("limits.weight"));
+}
+
 // Mutation: the loader not comparing the units overlays give one field (the document loads).
 TEST_CASE("fixed grid: the loader refuses two units for one field", "[ui][grid][fixed]") {
     ui::testing::TableHarness h;

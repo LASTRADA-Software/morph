@@ -142,6 +142,46 @@ TEST_CASE("FormSession: refill keeps the fields the user changed since the last 
     CHECK(harness.server.submits().size() == 1);  // the typed "8" on a ready form; no load submitted
 }
 
+// Mutation: "not saved" decided from the errors the form shows (`fieldErrorsOf` not empty) -> a reply whose errors
+// name no field of the form counts as a save, and the record's 5 replaces the unsaved "9".
+TEST_CASE("FormSession: a reply with errors no field shows did not save", "[forms-engine][session]") {
+    Harness harness;
+    auto const form =
+        harness.session("TestAction",
+                        R"({"properties":{"a":{"type":"integer","x-order":0},"b":{"type":"integer","x-order":1}},
+            "required":["a","b"],"x-submitMode":"explicit"})");
+    harness.type(*form, "a", "9");
+    harness.type(*form, "b", "2");
+    harness.server.replyWith([](auto const&) { return std::optional<std::string>{R"({"errors":{"nope":"bad"}})"}; });
+    form->submit();
+    harness.settle();
+    REQUIRE(form->successCount() == 1);
+    CHECK_FALSE(form->refusal("a").has_value());   // no field shows it
+    CHECK(form->modified("a"));
+    form->refill(R"({"a":5,"b":6})");
+    harness.settle();
+    CHECK(form->field("a").text().peek() == "9");   // still an edit: the refill leaves it
+    // An empty `errors` names nothing and refuses nothing: the save ends the edit.
+    harness.server.replyWith([](auto const&) { return std::optional<std::string>{R"({"errors":{}})"}; });
+    form->submit();
+    harness.settle();
+    REQUIRE(form->successCount() == 2);
+    CHECK_FALSE(form->modified("a"));
+    form->refill(R"({"a":5,"b":6})");
+    harness.settle();
+    CHECK(form->field("a").text().peek() == "5");
+}
+
+// Mutation: assign not moving the load count (loadGeneration stays).
+TEST_CASE("FormSession: assign is a load", "[forms-engine][session]") {
+    Harness harness;
+    auto const form = harness.session("TestAction", kTwoInts);
+    std::uint64_t const before = form->loadGeneration();
+    form->assign("a", "4");
+    harness.settle();
+    CHECK(form->loadGeneration() == before + 1);
+}
+
 // Mutation: leave the baseline where the last load put it -> the saved "9" counts as an edit and the record's 5 is
 // lost.
 TEST_CASE("FormSession: a field saved by explicit submit takes the record's later value", "[forms-engine][session]") {

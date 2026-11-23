@@ -1588,8 +1588,9 @@ recently its snapshot was pinned and the generation of each order level it read.
 at least as new in every part; a request that is older in any part computes its view without displacing the entry,
 so a straggler never undoes a newer view.
 
-- **Key.** The table's record, `ServedTable::scope`, and the validated query's sort and filter in canonical
-  form. `page`, `columns`, `keys`, `distinct` and `retain` are not in it: every page, every column set and every
+- **Key.** The table's record, `ServedTable::scope`, the validated query's sort and filter in canonical form,
+  and the description's revision (`servedDescription`): a successor unit registry gives the same rows another
+  revision, and a measure sorts and filters by the registry it is read under. `page`, `columns`, `keys`, `distinct` and `retain` are not in it: every page, every column set and every
   keyed fetch of one sort and filter read one entry. A query with `retain` merges its retained rows into the
   entry's view per request ([Rows an action changed](#rows-an-action-changed)), so sessions that retain
   different rows still share one sort.
@@ -2720,8 +2721,8 @@ struct Measure {
 - **Changing the units.** The application builds the successor and swaps it in; requests in flight finish on
   the one they started with. Every description that lists units takes a new `revision`, so each client fetches
   the description again and resets its window, which re-reads its rows and redraws them. Key columns built
-  with the previous registry are dropped with the snapshot they belong to, and the view cache's entries with
-  them. A level cache holds amounts and unit numbers, not base amounts, and remembers the lineage they are
+  with the previous registry are dropped with the snapshot they belong to, and the view cache's entries, keyed by
+  the old revision, are no longer found and leave as the bound evicts them. A level cache holds amounts and unit numbers, not base amounts, and remembers the lineage they are
   of: under a successor its values stay, and under a registry of another lineage, built from nothing, the
   cache invalidates the level when it is next read, because its numbers mean nothing there. A stored display
   unit or filter operand names a unit by its string id, and one naming a removed unit is dropped when it is

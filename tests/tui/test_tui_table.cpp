@@ -1976,3 +1976,87 @@ TEST_CASE("tui table: a span across columns and a summary row", "[tui][table][sp
     cells.clear();
     rows.clear();
 }
+
+namespace {
+
+// The first row line of a terminal table over a source of one row, its columns A to D drawn in @p order, 12 wide, with
+// a cell for each visible column only, placed by `setCellColumn`, and the row given @p span. Column 0's cell holds
+// "wide text here", the others "B1", "C1" and "D1".
+std::string spannedLine(std::vector<std::size_t> const& order, ui::RowSpan const& span) {
+    Harness harness{80, 6};
+    auto table = harness.make<TableImpl>(nullptr);
+    table->setOnHorizontalRange([](int, int) {});
+    table->setColumns({{.label = "A", .width = ui::Sizing::fixed(12)},
+                       {.label = "B", .width = ui::Sizing::fixed(12)},
+                       {.label = "C", .width = ui::Sizing::fixed(12)},
+                       {.label = "D", .width = ui::Sizing::fixed(12)}});
+    table->setVisibleColumns(order);
+    std::vector<int> offsets;
+    std::vector<int> widths;
+    for (std::size_t at = 0; at < order.size(); ++at) {
+        offsets.push_back(static_cast<int>(at) * 13);
+        widths.push_back(13);
+    }
+    table->setColumnWindow(order, offsets, widths, static_cast<int>(order.size()) * 13, 0);
+    auto row = harness.make<StackImpl>(table.get(), ui::Axis::Horizontal);
+    std::vector<std::unique_ptr<TextImpl>> cells;
+    std::vector<std::string> const texts{"wide text here", "B1", "C1", "D1"};
+    for (std::size_t const column : order) {
+        cells.push_back(harness.make<TextImpl>(row.get()));
+        cells.back()->setText(texts.at(column));
+        table->setCellColumn(*row, *cells.back(), column);
+    }
+    table->setRowKey(*row, key(1));
+    table->setRowIndex(*row, 0);
+    table->setRealizedWindow(0, 1, 1);
+    table->setRowSpans(*row, {span});
+    Rows const drawn = harness.draw();
+    REQUIRE(drawn.size() >= 2);
+    std::string line = drawn.at(1);
+    cells.clear();
+    row.reset();
+    return line;
+}
+
+}  // namespace
+
+// Mutation: the terminal table's span plan reading a span's column as a child position and its `columns` as the next
+// column indices (with C moved before B, B1 is hidden and C1 drawn; with B hidden, D1 is lifted and drawn).
+TEST_CASE("tui table: a span covers visible places under moved and hidden columns", "[tui][table][spans]") {
+    std::string const moved = spannedLine({0, 2, 1, 3}, ui::RowSpan{.column = 0, .rows = 1, .columns = 2});
+    CAPTURE(moved);
+    CHECK(moved.find("wide text here") != std::string::npos);
+    CHECK(moved.find("C1") == std::string::npos);
+    CHECK(moved.find("B1") != std::string::npos);
+    CHECK(moved.find("D1") != std::string::npos);
+    std::string const hidden = spannedLine({0, 2, 3}, ui::RowSpan{.column = 2, .rows = 1, .columns = 2});
+    CAPTURE(hidden);
+    CHECK(hidden.find("C1") != std::string::npos);
+    CHECK(hidden.find("D1") == std::string::npos);
+}
+
+// Mutation: the terminal table ignoring setHighlightedRow (no line shows the highlight's mark).
+TEST_CASE("tui table: the highlighted row is marked in the gutter", "[tui][table]") {
+    Harness harness{40, 6};
+    auto table = harness.make<TableImpl>(nullptr);
+    table->setColumns({{.label = "A", .width = ui::Sizing::fixed(6)}});
+    std::vector<std::unique_ptr<StackImpl>> rows;
+    std::vector<std::unique_ptr<TextImpl>> cells;
+    for (std::int64_t at = 1; at <= 3; ++at) {
+        rows.push_back(harness.make<StackImpl>(table.get(), ui::Axis::Horizontal));
+        cells.push_back(harness.make<TextImpl>(rows.back().get()));
+        cells.back()->setText("a" + std::to_string(at));
+        table->setRowKey(*rows.back(), key(at));
+    }
+    table->setHighlightedRow(1);
+    Rows drawn = harness.draw();
+    REQUIRE(drawn.size() >= 4);
+    CHECK(drawn.at(2).find("\u00BB") != std::string::npos);
+    CHECK(drawn.at(1).find("\u00BB") == std::string::npos);
+    CHECK(drawn.at(3).find("\u00BB") == std::string::npos);
+    table->setHighlightedRow(std::nullopt);
+    drawn = harness.draw();
+    CHECK(drawn.at(2).find("\u00BB") == std::string::npos);
+    cells.clear();
+    rows.clear();
+}

@@ -395,9 +395,13 @@ each on `Table` and `TableOptions` alike:
   `GridFocus{key, viewRow, column}` names a row by key, or by view position while the row there is not fetched yet
   (`key` empty), and a column by id. The mount shows it with `setFocusCell` at the key's view position, found among
   the realized rows when the given position holds another key, or at `viewRow` while it names no key, and keeps that
-  row realized, so the window fetches a placeholder. A click or a `FocusMove` is resolved to a cell and handed to
+  row realized, so the window fetches a placeholder. A key no realized row holds is looked for as a moved key is
+  (`locateRow`), and focus stays on it meanwhile: the given position, which may be of the view before the change
+  that moved the key, does not take it. A click or a `FocusMove` is resolved to a cell and handed to
   **`onGridFocus`** (its key empty when that row is not fetched), and does not move the mount's own focus; the
-  focused cell's menu opening does the same. `GridController::node` passes the cell its focus then names to the
+  focused cell's menu opening does the same. The mount also hands `onGridFocus` the key that takes focus when a
+  placeholder's row arrives at the focused position, when the focused row leaves the view and the row now at its
+  place takes focus, and when the focused row's key moves. `GridController::node` passes the cell its focus then names to the
   table's `onFocusCell`, so what a table's focus feeds (a copy of the focused cell) follows a grid's.
 - **`onActivateCell(CellRef)`**: a double click on a cell. **`onClickCell(CellRef)`**: a single click on a fetched
   row's cell, after the click moved focus (a grid toggles a Boolean cell with it). **`onFocusOut()`**: focus left

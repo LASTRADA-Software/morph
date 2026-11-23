@@ -240,7 +240,7 @@ TEST_CASE("wide table: a text edit shifts the rows after it and copies the colum
     Cell const oldSix = before->cell(6, t001);
     Cell const oldLast = before->cell(999, t001);
     // A text of another length than the one it replaces, so every later row's offset moves.
-    std::string const replacement = "ÃditÃ©";
+    std::string const replacement = "Édité";
     REQUIRE(std::get<std::string>(oldFive).size() != replacement.size());
     source.setCell(5, "t001", Cell{replacement});
     auto const after = source.snapshot();

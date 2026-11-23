@@ -1062,7 +1062,7 @@ public:
           _mutation{runtime,
                     [this](std::string body) { return _submit(_core->model().actionType(), std::move(body)); }},
           _attempts{runtime, std::uint64_t{0}},
-          _loadGeneration{runtime, std::uint64_t{0}},
+          _loadedVersion{runtime, std::uint64_t{0}},
           _loads{runtime, std::uint64_t{0}},
           _refusals{runtime, std::map<std::string, Refused, std::less<>>{}},
           _deriveState{runtime, DeriveState::Current},
@@ -1302,6 +1302,9 @@ public:
             _loaded.at(index) = _fields.at(index)->snapshot();
             reloaded(*_fields.at(index));
         }
+        if (!loaded.empty()) {
+            _loads.set(_loads.peek() + 1);
+        }
     }
 
     /// @brief Sets one field from a JSON value, programmatically (nothing is submitted).
@@ -1319,6 +1322,7 @@ public:
             target.load(&*dom);
             _core->markProgrammatic();
         });
+        _loads.set(_loads.peek() + 1);
         // A programmatic value is not an edit: the top-level field holding the target counts as loaded.
         for (std::size_t index = 0; index < _fields.size(); ++index) {
             std::string const& name = _fields.at(index)->spec().name;
@@ -1377,9 +1381,10 @@ public:
     }
 
     /// @brief A count that moves with each load: each write through `FieldState::load`, which sets the fields it
-    ///        writes afresh, their units included. Construction, `prefill`, `reset`, a `refill` that loads a field, a
-    ///        submission that ends a field's edit and a round of derived values that writes a member are loads; a
-    ///        switch of units as loaded alone is not, and nor is a revert. Tracked.
+    ///        writes afresh, their units included. Construction, `prefill`, `reset`, a `refill` that loads a field,
+    ///        `assign` and a round of derived values that writes a member are loads; a submission that ends a field's
+    ///        edit records what the field holds, its unit included, and is not, nor is a switch of units as loaded
+    ///        alone or a revert. Tracked.
     /// @return The count.
     [[nodiscard]] std::uint64_t loadGeneration() const { return _loads.get(); }
 
@@ -1393,7 +1398,7 @@ public:
         if (row == nullptr) {
             return false;
         }
-        static_cast<void>(_loadGeneration.get());
+        static_cast<void>(_loadedVersion.get());
         if (addedSinceLoad(*row)) {
             return true;
         }
@@ -1728,15 +1733,16 @@ private:
             return;
         }
         _acceptedSuccesses = successes;
-        // A reply that names field errors did not save the record: what was sent stays an edit.
-        if (!fieldErrorsOf(_mutation.lastResult()).empty()) {
+        // A reply that carries field errors did not save the record: what was sent stays an edit, whether or not the
+        // form has a field for the paths they name.
+        if (refusesSave(_mutation.lastResult())) {
             _sent.clear();
             return;
         }
         for (std::size_t index = 0; index < _sent.size(); ++index) {
             if (_fields.at(index)->snapshot() == _sent.at(index) && endsEditOnSave(*_fields.at(index))) {
                 _loaded.at(index) = _sent.at(index);
-                reloaded(*_fields.at(index));
+                reloaded(*_fields.at(index));   // what the field holds, its unit included: not a load
             }
         }
         _sent.clear();
@@ -1751,8 +1757,19 @@ private:
         for (auto const& field : _fields) {
             recordLoaded(*field);
         }
-        _loadGeneration.set(_loadGeneration.peek() + 1);
+        _loadedVersion.set(_loadedVersion.peek() + 1);
         _loads.set(_loads.peek() + 1);
+    }
+
+    // Whether a reply refuses its record: its `errors` member is there and is not null or an empty object. Decided
+    // from the member as it is, before `fieldErrorsOf` leaves out what no field of the form shows.
+    [[nodiscard]] static bool refusesSave(std::optional<std::string> const& reply) {
+        auto const dom = reply ? detail::engine::parseJson(*reply) : std::nullopt;
+        detail::engine::Json const* const errors = dom ? detail::engine::member(*dom, "errors") : nullptr;
+        if (errors == nullptr || errors->is_null()) {
+            return false;
+        }
+        return !errors->is_object() || !errors->get_object().empty();
     }
 
     // A field the last submission refused: the message, and the draft the field held then.
@@ -1843,7 +1860,8 @@ private:
         }
     }
 
-    // Records a top-level field as loaded again, forgetting what it held before.
+    // Records a top-level field as loaded again, forgetting what it held before. The load count is its caller's: a
+    // save records what the field holds without loading it.
     void reloaded(FieldState const& state) {
         std::string const& name = state.path();
         std::erase_if(_loadedCells, [&name](auto const& entry) {
@@ -1852,8 +1870,7 @@ private:
                                     (path.at(name.size()) == '.' || path.at(name.size()) == '#'));
         });
         recordLoaded(state);
-        _loadGeneration.set(_loadGeneration.peek() + 1);
-        _loads.set(_loads.peek() + 1);
+        _loadedVersion.set(_loadedVersion.peek() + 1);
     }
 
     // NOLINTNEXTLINE(misc-no-recursion): an Object's members are fields.
@@ -1863,7 +1880,7 @@ private:
             spec.computed || spec.derived) {
             return false;
         }
-        static_cast<void>(_loadGeneration.get());
+        static_cast<void>(_loadedVersion.get());
         auto const found = _loadedCells.find(state.path());
         // A member of a row added since the load.
         if (found == _loadedCells.end()) {
@@ -2190,7 +2207,7 @@ private:
                 }
             }
         });
-        _loadGeneration.set(_loadGeneration.peek() + 1);
+        _loadedVersion.set(_loadedVersion.peek() + 1);
     }
 
     // One round in flight: what it sent, which replies settled, whether one failed, and whether a commit came since.
@@ -2288,7 +2305,7 @@ private:
     /// @brief What each scalar held when the form was last loaded, by its path, and each row of a collection then.
     std::map<std::string, LoadedCell, std::less<>> _loadedCells;
     /// @brief Moves on every change of `_loadedCells`, so what compares against it is evaluated again.
-    reactive::Signal<std::uint64_t> _loadGeneration;
+    reactive::Signal<std::uint64_t> _loadedVersion;
     /// @brief Moves with each load (`loadGeneration`); a switch of units as loaded leaves it.
     reactive::Signal<std::uint64_t> _loads;
     /// @brief What `submit` runs first, by id, in the order added.

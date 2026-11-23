@@ -74,6 +74,9 @@ struct TableRuntime {
     exec::IExecutor* work = nullptr;
     /// @brief The server's view cache; null computes every view for its request.
     ViewCache* views = nullptr;
+    /// @brief Keeps `views` alive while work that reads it is queued on `work`, which may outlive the server. Null
+    ///        when nothing does.
+    std::shared_ptr<void const> viewsKeep;
     /// @brief A serial executor a `resolve`'s completion belongs to: where it settles and its handlers run, so a
     ///        Task handler awaiting it from any strand finds one owner. Null runs `resolve` where it is called.
     exec::IExecutor* settle = nullptr;

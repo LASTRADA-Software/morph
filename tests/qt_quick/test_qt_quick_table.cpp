@@ -3000,3 +3000,49 @@ TEST_CASE("qt_quick table: a summary row is drawn on the summary surface", "[qt_
     CHECK(fill(*table.rows.at(1))->isVisible());
     CHECK_FALSE(fill(*table.rows.at(0))->isVisible());
 }
+
+// Mutation: `setHighlightedRow` writing nothing (no row's highlight mark shows).
+TEST_CASE("qt_quick table: the highlighted row draws its mark", "[qt_quick][highlight]") {
+    Scene scene;
+    Rows table = makeTable(scene, {ui::Key{std::int64_t{1}}, ui::Key{std::int64_t{2}}, ui::Key{std::int64_t{3}}},
+                           ui::SelectionMode::Single);
+    for (std::size_t at = 0; at < table.rows.size(); ++at) {
+        table.table->setRowIndex(*table.rows.at(at), at);
+    }
+    table.table->setHighlightedRow(1);
+    scene.settle();
+    auto const mark = [](ui::Widget& row) {
+        return Scene::itemOf(row).findChild<QQuickItem*>(QStringLiteral("highlightMark"));
+    };
+    REQUIRE(mark(*table.rows.at(1)) != nullptr);
+    CHECK(mark(*table.rows.at(1))->isVisible());
+    CHECK_FALSE(mark(*table.rows.at(0))->isVisible());
+    CHECK_FALSE(mark(*table.rows.at(2))->isVisible());
+    table.table->setHighlightedRow(std::nullopt);
+    scene.settle();
+    CHECK_FALSE(mark(*table.rows.at(1))->isVisible());
+}
+
+// Mutation: the span plan reading a span's column as a child position and its `columns` as the next column indices
+// (with three columns shown as C, A, B, a span from C two places wide hides B's cell instead of A's).
+TEST_CASE("qt_quick table: a span covers visible places under moved columns", "[qt_quick][span]") {
+    Scene scene;
+    auto table = scene.backend().createTable(nullptr);
+    table->setColumns({{.label = "A"}, {.label = "B"}, {.label = "C"}});
+    table->setVisibleColumns({2, 0, 1});
+    auto row = scene.backend().createStack(table.get(), ui::Axis::Horizontal);
+    table->setRowKey(*row, ui::Key{std::int64_t{1}});
+    std::vector<std::unique_ptr<ui::TextWidget>> cells;
+    for (std::size_t column = 0; column < 3; ++column) {
+        cells.push_back(scene.backend().createText(row.get()));
+        cells.back()->setText("cell");
+        table->setCellColumn(*row, *cells.back(), column);
+    }
+    table->setRowSpans(*row, {ui::RowSpan{.column = 2, .rows = 1, .columns = 2}});
+    scene.settle();
+    CHECK(Scene::itemOf(*cells.at(2)).isVisible());
+    CHECK_FALSE(Scene::itemOf(*cells.at(0)).isVisible());
+    CHECK(Scene::itemOf(*cells.at(1)).isVisible());
+    cells.clear();
+    row.reset();
+}

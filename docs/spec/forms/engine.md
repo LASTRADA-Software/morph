@@ -348,9 +348,10 @@ field)` in `forms/engine/field_control.hpp`, which a grid's cell editor draws to
   **`rowModified(arrayPath, key)`** is true when a member of the row is modified or the row was added since.
 - **`loadGeneration()`** (tracked) is a count that moves with each load: each write through `FieldState::load`,
   which sets the fields it writes afresh, their units included. Construction, `prefill`, `reset`, a `refill` that
-  loads a field, a successful submission that ends a field's edit and a round of derived values (`loadDerived`)
-  that writes a member are loads. A switch of units as loaded alone (`switchUnitsAsLoaded`) is not, and nor is a
-  `revert`. What follows loads, such as a fixed grid's `unit` overlay giving a field its unit again after a load,
+  loads a field, `assign`, and a round of derived values (`loadDerived`) that writes a member are loads. A
+  successful submission that ends a field's edit is not: it records what the field holds, the unit the user picked
+  included, as the record's, so a grid's overlay does not give the field its unit again. Nor is a switch of units as
+  loaded alone (`switchUnitsAsLoaded`), or a `revert`. What follows loads, such as a fixed grid's `unit` overlay giving a field its unit again after a load,
   reads it; since a switch as loaded moves it not, one grid's switch is never another's load.
 - **`revert(path)`** restores the record's draft and unit, programmatically; a row's path (`specimens#3`) reverts
   each member, and reverting a row added since the load removes it.
@@ -362,8 +363,9 @@ field)` in `forms/engine/field_control.hpp`, which a grid's cell editor draws to
 - **A refused submission's fields.** A reply's `errors` member names them: an object from a field's path
   (`specimens[1].mass`, read as `field(path)` reads it) to a message, or to a list of messages of which the first is
   shown. Each is that field's refusal: `refusal(path)` (tracked) gives it while the field keeps the draft it had then;
-  a path the form has no field for is not shown. Such a reply did not save the record, so what it sent stays an
-  edit. The next reply replaces them, and a failure clears them. A failure names no field: a
+  a path the form has no field for is not shown. A reply whose `errors` member is there and is not `null` or an
+  empty object did not save the record, so what it sent stays an edit, whether or not the form has a field for any
+  path it names; `"errors": {}` names none and refuses nothing. The next reply replaces them, and a failure clears them. A failure names no field: a
   `model::ActionRefusal`'s arguments fill its sentence, and an argument whose name happens to be a field's path is
   not that field's error. A reply member named `errors` is reserved for field errors: an action whose reply carries
   a domain member of that name has it read as field errors, and the record taken as not saved.

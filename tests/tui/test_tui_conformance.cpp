@@ -350,6 +350,28 @@ public:
     [[nodiscard]] std::vector<std::size_t> selectedRows(ui::Widget const& table) override {
         return tableOf(table).markedRows();
     }
+    // The rows whose gutter the last frame drew with the highlight's mark.
+    [[nodiscard]] std::vector<std::size_t> highlightedRows(ui::Widget const& table) override {
+        settle();
+        std::vector<std::string> const lines = morph::tui::testing::rowsOf(_screen);
+        auto const& tableBase = WidgetBase::of(table);
+        int const left = tableBase.view().screenBounds().x;
+        std::vector<std::size_t> rows;
+        std::size_t index = 0;
+        for (WidgetBase const* const row : tableOf(table).children()) {
+            auto const bounds = row->view().screenBounds();
+            if (bounds.height > 0 && bounds.y >= 0 && std::cmp_less(bounds.y, lines.size())) {
+                std::string const& line = lines.at(static_cast<std::size_t>(bounds.y));
+                // The gutter's first cells; the line is UTF-8, so a few bytes more than its cells.
+                std::size_t const from = std::min(line.size(), static_cast<std::size_t>(std::max(left, 0)));
+                if (line.substr(from, 12).find("»") != std::string::npos) {
+                    rows.push_back(index);
+                }
+            }
+            ++index;
+        }
+        return rows;
+    }
 
     // Ctrl+Home, then Right once per character before the position.
     void moveCursor(ui::Widget& field, std::size_t position) override {

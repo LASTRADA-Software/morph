@@ -46,10 +46,13 @@ struct ViewKey {
     std::string scope;
     /// @brief The canonical JSON of the validated query's `sort` and `filters`.
     std::string query;
+    /// @brief The revision of the description the view was computed under (`servedDescription`): a new unit registry
+    ///        gives the same rows another revision, under which a measure's order and filter are computed again.
+    std::string revision;
 
     /// @brief Member-wise ordering.
     /// @param other The key to compare with.
-    /// @return The order of `(record, scope, query)`.
+    /// @return The order of `(record, scope, query, revision)`.
     [[nodiscard]] auto operator<=>(ViewKey const& other) const = default;
 };
 

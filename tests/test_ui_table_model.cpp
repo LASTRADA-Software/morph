@@ -4275,6 +4275,24 @@ TEST_CASE("filter menu: a user-formed group of a model's table sends no values r
     CHECK(lastQuery(h).distinct->search == "x");
 }
 
+// Mutations, each its own: the loader letting a model's table take `rows` (the document loads, and `rows` is never
+// read), or a `form` (it loads, wired as a model's table and drawn as a grid); the `enterMoves` and `walk` values
+// checked on a grid of a form alone (a model's table loads with `rigth`).
+TEST_CASE("ui document: a model's table takes no other row source, and its walk keys are checked",
+          "[ui][document]") {
+    using morph::ui::testing::kConfigModelTable;
+    using morph::ui::testing::refusalOf;
+    using morph::ui::testing::withTableKey;
+    CHECK(refusalOf(withTableKey(kConfigModelTable, R"("rows":{"lit":[]})")) ==
+          "a model's table takes its rows from its `model`, not `rows`");
+    CHECK(refusalOf(withTableKey(kConfigModelTable, R"("form":"t")")) ==
+          "a model's table takes its rows from its `model`, not a `form`");
+    CHECK(refusalOf(withTableKey(kConfigModelTable, R"("enterMoves":"rigth")")) ==
+          "`enterMoves` is `down`, `right` or `none`");
+    CHECK(refusalOf(withTableKey(kConfigModelTable, R"("walk":"diagonal")")) == "`walk` is `rows` or `columns`");
+    CHECK(refusalOf(withTableKey(kConfigModelTable, R"("enterMoves":"right","walk":"columns")")).empty());
+}
+
 // Mutation: the one-kind refusal dropped (a group of a text and an integer column loads).
 TEST_CASE("ui document: a rows table's groups are 2 to 16 of its column parts, of one kind, each in one group",
           "[ui][document]") {
@@ -4282,7 +4300,7 @@ TEST_CASE("ui document: a rows table's groups are 2 to 16 of its column parts, o
     CHECK(loads(with(R"([{"id":"g","label":"G","columns":{"lit":["a","b"]}}])"), morph::ui::testing::tableCatalog()));
     CHECK(refusalOf(withTableKey(morph::ui::testing::kConfigModelTable,
                                  R"("groups":[{"id":"g","columns":{"lit":["a","b"]}}])")) ==
-          "a model's table declares its column groups in its description; `groups` is for a table over `rows`");
+          "`groups` is for a table over `rows`: a model's table declares its column groups in its description");
     CHECK(refusalOf(with(R"([{"id":"g","columns":{"lit":["a","b"]}},{"id":"g","columns":{"lit":["c","n"]}}])")) ==
           "the group `g` is declared twice");
     CHECK(refusalOf(with(R"([{"id":"g","columns":{"ref":"items"}}])")) ==

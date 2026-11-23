@@ -25,6 +25,7 @@
 #include <morph/forms/forms.hpp>
 #include <morph/forms/views.hpp>
 #include <morph/table/data_source.hpp>
+#include <morph/table/description.hpp>
 #include <morph/table/filter.hpp>
 #include <morph/table/level_cache.hpp>
 #include <morph/table/query.hpp>
@@ -575,6 +576,47 @@ TEST_CASE("units: a load under another lineage drops the values of the old one f
     REQUIRE(rig.cache.want(std::vector<RowId>{RowId{std::int64_t{2}}}, LevelUse::Display));
     CHECK(rig.read(2) == LevelRead::Loaded);
     CHECK(rig.read(1) == LevelRead::Unloaded);
+}
+
+// Mutation: the description's revision left out of the view cache's key (the second request is a hit, answered
+// with the order computed while `g` was a unit).
+TEST_CASE("units: a successor registry over the same rows computes the view again", "[table][measure][views]") {
+    // id 0: 300 g   1: 0.2 kg   2: 0.5 kg
+    auto const source = tabletest::makeSource(
+        {col("id", ColumnKind::Integer), measureCol("w")},
+        {{Cell{std::int64_t{0}}, m("300", "g")}, {Cell{std::int64_t{1}}, m("0.2", "kg")},
+         {Cell{std::int64_t{2}}, m("0.5", "kg")}});
+    auto const before = detail::pinned(ServedTable{
+        .description = describe(TableDescription{
+            .id = "t",
+            .label = "T",
+            .columns = {TableColumn{.info = col("id", ColumnKind::Integer), .label = "id", .group = {}},
+                        TableColumn{.info = measureCol("w"), .label = "w", .group = {}}},
+            .key = "id"}),
+        .source = source,
+        .levels = {},
+        .mayRead = {},
+        .scope = {},
+        .services = withUnits(),
+        .limits = {}});
+    UnitRegistryBuilder next{registry()};
+    REQUIRE(next.remove("g"));
+    auto after = before;  // the same pinned source: one snapshot, one identity
+    after.services.units = std::move(next).build();
+    ViewCache views;
+    detail::AnswerContext const context{.views = &views, .record = "T.rows", .rowScoped = false};
+    auto const query = sortBy("w");
+    auto const first = detail::answerQuery(before, query, context);
+    REQUIRE(first.has_value());
+    CHECK(first->keys == std::vector<RowId>{RowId{std::int64_t{1}}, RowId{std::int64_t{0}}, RowId{std::int64_t{2}}});
+    auto const second = detail::answerQuery(after, query, context);
+    REQUIRE(second.has_value());
+    CHECK(second->revision != first->revision);
+    auto const fresh = detail::answerQuery(after, query);  // no cache: the order under the successor
+    REQUIRE(fresh.has_value());
+    CHECK(fresh->keys != first->keys);
+    CHECK(second->keys == fresh->keys);
+    CHECK(views.stats().computations == 2);
 }
 
 TEST_CASE("units: addUnitsOf reads a unit enum", "[table][measure]") {

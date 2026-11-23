@@ -13171,10 +13171,12 @@ void ScreenCore::storedTableState(ElementState& element, std::optional<std::stri
     }
     table::StateDocument document = std::move(*start);
     // Kinds still to be inferred are placeholders: the stored filters are fitted to the kinds the first reply gives.
+    bool heldNow = false;
     if (model.window->inferring()) {
         if (!model.filtersBound && document.filters) {
             model.heldFilter = std::exchange(document.filters, std::nullopt);
             model.heldStored = true;
+            heldNow = true;
         }
     }
     if (table::TableDescription const* const description = model.window->description()) {
@@ -13187,9 +13189,13 @@ void ScreenCore::storedTableState(ElementState& element, std::optional<std::stri
         }
     }
     // A table started from the default view, with nothing stored, holds it as its state: the next change saves on
-    // top of it rather than over nothing.
+    // top of it rather than over nothing. Filters held for an inferring table are the state's all the same.
     if (!json) {
-        model.states->start(*model.stateKey, document);
+        table::StateDocument started = document;
+        if (heldNow) {
+            started.filters = model.heldFilter;
+        }
+        model.states->start(*model.stateKey, std::move(started));
     }
     if (element.sortBound == nullptr && document.sort) {
         if (model.window->setSort(*document.sort)) {

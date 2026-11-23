@@ -42,6 +42,7 @@
 #include <morph/table/engine.hpp>
 #include <optional>
 #include <span>
+#include <stdexcept>
 #include <typeindex>
 #include <string>
 #include <string_view>
@@ -266,7 +267,7 @@ public:
         : _patcher{&patcher}, _commit{std::move(commit)}, _engine{engine} {}
 
     /// @brief Builds the committer of a model's table: no patcher and no engine, its rows' commits sent through
-    ///        @p commit.
+    ///        @p commit. Such a committer takes row commits only (`commitRow`): `commit` throws.
     /// @param commit Runs a row commit.
     explicit CellEdits(RowEditCommit commit) : _patcher{nullptr}, _engine{nullptr}, _rowCommit{std::move(commit)} {}
 
@@ -299,7 +300,11 @@ public:
     /// committed: the cell's error becomes "not loaded yet" and the commit
     /// function is not called. Without an engine nothing is checked.
     /// @param request The edit.
+    /// @throws std::logic_error on a committer of a model's table, which has no patcher to settle a cell edit with.
     void commit(EditRequest request) {
+        if (_patcher == nullptr) {
+            throw std::logic_error{"morph::table::CellEdits: a model's table commits its rows by commitRow"};
+        }
         if (unloadedInView(request)) {
             _errors[request.row].insert_or_assign(request.column, "not loaded yet");
             return;
@@ -471,9 +476,28 @@ public:
     }
 
     /// @brief Keeps the drafts, errors and modified marks of these columns only: a new description dropped the others.
+    ///        A row commit not sent yet leaves the dropped columns' cells out too, and one left with none is dropped:
+    ///        no request names a column the description no longer has.
     /// @param columns The ids of the columns kept.
     void keepColumns(std::span<std::string const> columns) {
         auto const gone = [columns](std::string const& column) { return !std::ranges::contains(columns, column); };
+        for (auto queue = _rowQueues.begin(); queue != _rowQueues.end();) {
+            for (RowFlight& flight : queue->second) {
+                if (flight.sent) {
+                    continue;
+                }
+                for (std::size_t at = flight.request.cells.size(); at > 0; --at) {
+                    if (gone(flight.request.cells.at(at - 1).column)) {
+                        flight.request.cells.erase(flight.request.cells.begin() + static_cast<std::ptrdiff_t>(at - 1));
+                        if (at - 1 < flight.drafts.size()) {
+                            flight.drafts.erase(flight.drafts.begin() + static_cast<std::ptrdiff_t>(at - 1));
+                        }
+                    }
+                }
+            }
+            std::erase_if(queue->second, [](RowFlight const& flight) { return !flight.sent && flight.request.cells.empty(); });
+            queue = queue->second.empty() ? _rowQueues.erase(queue) : std::next(queue);
+        }
         for (auto row = _cells.begin(); row != _cells.end();) {
             std::erase_if(row->second, [&gone](auto const& entry) { return gone(entry.first); });
             row = row->second.empty() ? _cells.erase(row) : std::next(row);
@@ -542,12 +566,16 @@ public:
         return cell == found->second.end() ? std::nullopt : std::optional{cell->second};
     }
 
-    /// @brief Edits committed and not yet settled, across rows.
+    /// @brief Edits committed and not yet settled, across rows: cell edits (`commit`), and row commits (`commitRow`)
+    ///        whose outcome will still be taken.
     /// @return The count.
     [[nodiscard]] std::size_t unsettled() const {
         std::size_t out = 0;
         for (auto const& [row, queue] : _queues) {
             out += queue.size();
+        }
+        for (auto const& [row, queue] : _rowQueues) {
+            out += static_cast<std::size_t>(std::ranges::count_if(queue, [](RowFlight const& flight) { return !flight.discard; }));
         }
         return out;
     }

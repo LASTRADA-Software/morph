@@ -469,6 +469,8 @@ MorphWidget {
             height += root.rowHeights[key] - root.meanRowHeight
         return Math.max(0, height)
     }
+    // The view row a linked view highlights, which C++ writes; -1 for none.
+    property int highlightedRow: -1
     // The focused cell, which C++ writes; -1 before any.
     property int focusedRowIndex: -1
     property int focusedColumnIndex: -1
