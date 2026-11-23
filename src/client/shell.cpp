@@ -883,7 +883,7 @@ private:
         }
         [[nodiscard]] bool shows(std::string const& screenId, ui::ParamMap const& params) const override {
             ui::ScreenHandle* const handle = _shell->_workspace ? _shell->_workspace->activeHandle() : nullptr;
-            if (handle == nullptr || _shell->activeScreen() != screenId) {
+            if (handle == nullptr || _shell->activeBaseScreen() != screenId) {
                 return false;
             }
             std::optional<std::string> const wanted = _shell->_host->identityOf(screenId, params);

@@ -89,7 +89,7 @@ Each `Tour` carries the server's `revision`, 0 for an app tour.
 `TourController` runs at most one tour. A shell builds one with each frame and destroys it with the frame, so a
 sign-in or a sign-out, which rebuild the frame, end a running tour; a reconnect leaves the frame and the tour. It
 reaches the shell through `TourShell`: open a screen (`openScreen`, as a navigator click does, focusing a tab that
-already shows it), whether the active tab shows a screen with given params (`shows`, by identity), the active screen
+already shows it), whether the active tab shows a screen with given params (`shows`, by identity; a custom screen counts as the screen it is based on, so a step naming that screen leaves the person on their own custom screen), the active screen
 (`activeScreen`, a custom screen named by the screen it is based on), a screen's title, whether the frame is compact,
 `revealNavEntry`, the spotlight, and a toast.
 

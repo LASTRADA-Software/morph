@@ -86,7 +86,8 @@ std::expected<std::shared_ptr<ui::ServedBundle const>, ui::Refusal> customsTours
             .kind = "app",
             .id = "app",
             .bytes = R"({"vocab":"ui/1","id":"app","tours":[{"id":"to-home","title":"To home","steps":[)"
-                     R"({"advanceOn":{"screen":"customs.home"},"title":"Open home"},{"title":"Arrived"}]}]})"});
+                     R"({"advanceOn":{"screen":"customs.home"},"title":"Open home"},{"title":"Arrived"}]},)"
+                     R"({"id":"at-home","title":"At home","steps":[{"screen":"customs.home","title":"Here"}]}]})"});
         !added) {
         return std::unexpected(std::move(added.error()));
     }
@@ -863,4 +864,24 @@ TEST_CASE("Client shell: a tour's waiting step moves on when a custom screen bas
         std::optional<int> const title = window.find("Text", "tour_title");
         return title && window.backend.prop(*title, "text") == "Arrived";
     }));
+}
+
+// Mutation: compare the active tab's raw id in `Tours::shows` (a step naming the screen opens a second tab and moves
+// the person off their own custom screen).
+TEST_CASE("Client shell: a tour step naming a screen leaves a custom screen based on it where it is",
+          "[client][custom-screens][tours]") {
+    Offered const offered{&customsToursBundle};
+    Window window{offered, "customs.other", nullptr, &customsToursBundle};
+    window.click("nav_" + window.mineId);
+    REQUIRE(window.wait([&window] { return window.shown("Button", "source_button_" + window.mineId); }));
+    std::vector<int> const bars = window.backend.all("Tabs");
+    REQUIRE(bars.size() == 1);
+    std::string const before = window.backend.prop(bars.front(), "tabs");
+    REQUIRE(window.shell->startTour("at-home").has_value());
+    REQUIRE(window.wait([&window] {
+        std::optional<int> const title = window.find("Text", "tour_title");
+        return title && window.backend.prop(*title, "text") == "Here";
+    }));
+    CHECK(window.backend.prop(bars.front(), "tabs") == before);
+    CHECK(window.shown("Button", "source_button_" + window.mineId));
 }
