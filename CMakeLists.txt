@@ -686,6 +686,7 @@ target_sources(morph
         include/morph/ui/shell_parts_model.hpp
         include/morph/ui/shell_parts_view.hpp
         include/morph/ui/tours.hpp
+        include/morph/ui/tour_card.hpp
         include/morph/ui/explorer.hpp
         include/morph/ui/agent.hpp
         include/morph/ui/chat/client.hpp

@@ -11,6 +11,7 @@ workflow. Specified across `include/morph/ui/tours.hpp` (the controller), `tour_
 - [The declaration](#the-declaration)
 - [The tours of a session](#the-tours-of-a-session)
 - [The controller](#the-controller)
+- [The card](#the-card)
 - [Design decisions](#design-decisions)
 - [Not yet](#not-yet)
 
@@ -55,6 +56,39 @@ tour runs.
 and the module holding the entry opened (`Navigator::reveal`). In the compact form `tourTargetFor` rings what the frame
 draws instead: `nav_<id>`, `shell_context`, `shell_help`, `shell_principal_menu` and `shell_tours` as `shell_nav_menu`,
 which holds them; `shell_search` as `shell_search_open`.
+
+## The card
+
+`kTourCardDocument` (`tour_card.hpp`), id `morph.tour` (`kTourCardId`, reserved like the chat panel's: a server may
+never serve it). The shell mounts it into the frame's spotlight with `DocumentScreenHost::mountInto`. A
+`TourCardBinding` connects it to the frame's controller through the shell's `HostVocabulary`:
+
+| Values (the card only) | Commands |
+|---|---|
+| `tour.title`, `tour.stepTitle`, `tour.body`, `tour.waitingFor` (string), `tour.position`, `tour.count` (int), `tour.waiting`, `tour.canBack`, `tour.last` (bool) | `tour.next`, `tour.back`, `tour.end` (the card only); `tour.start` with `{id}` (every document) |
+
+| testId | What it is |
+|---|---|
+| `tour_card` | the card: a column named after the step's title, role `dialog` |
+| `tour_eyebrow` | the tour's title |
+| `tour_title`, `tour_body` | the step's texts; the body hides while empty |
+| `tour_progress` | "2 of 5" (`morph.tour.progress`) |
+| `tour_back` | Back; hidden on the first step |
+| `tour_next` | Next, or Done on the last step; hidden on a waiting step |
+| `tour_waiting` | on a waiting step, "Open Samples to continue" (`morph.tour.waiting`) |
+| `tour_end` | End tour |
+
+The captions are `t` messages (`morph.tour.*`) with English fallbacks, so a bundle's catalogue translates them. The
+document's `keys` are Esc (`tour.end`), Enter and Right (`tour.next`) and Left (`tour.back`); a waiting step ignores
+`tour.next`. The spotlight delivers the card's chords before a focused control's own keys, Enter and Space excepted, so
+Enter on a focused button activates that button. Opening the spotlight focuses the card's first shown button.
+
+`tour.start` is registered for every document and is safe for an untrusted connection: it changes nothing on the
+server and shows only what the application declared. An id the app does not declare is refused through the command's
+`refusal` check, so it answers as a command that did not succeed and the interpreter reports it; the bundle check
+already refuses a literal one. `{"can": "host:tour.start"}` is true on a client that runs tours, so a screen can hide
+its button on one that does not. The commands' work is posted: a step can open a screen, which must not be replaced
+inside one of its widgets' handlers.
 
 ## Design decisions
 

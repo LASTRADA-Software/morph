@@ -51,7 +51,10 @@ it evaluates to a record, or to `null` when the document gives none.
 3. Every declared argument is checked with `Type::admits`. An absent argument is `null`, which only an optional type
    admits; an argument the command does not declare, or `args` that is not a record, is refused. The refusal names
    the argument and the type.
-4. Only then does `run` get the checked record, every declared argument present (`null` for an absent optional one).
+4. A command with a `refusal` check is given the checked record; a reason it answers refuses the command, which does
+   not run and answers as one that did not succeed, and the interpreter reports the reason. `tour.start` uses it for an
+   id the app document does not declare.
+5. Only then does `run` get the checked record, every declared argument present (`null` for an absent optional one).
 
 A refusal is reported and the command does not run; the command answers as one that did not succeed. The
 application's `InterpreterHost::hostCommand` is not asked: a session with a runner
