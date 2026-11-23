@@ -179,6 +179,9 @@ placeholder tabs, closing tab by tab until a veto, and the most-recently-used wa
 [`ui/shell_frame.md`](ui/shell_frame.md) — the frame screens are shown in: sidebar with the navigator, top bar, page ·
 [`ui/shell_parts.md`](ui/shell_parts.md) — the shell's declared parts: a scope switcher, module counts, one search,
 an inbox button and the principal's menu, each a model action an application names, and the `context` every screen reads ·
+[`ui/tours.md`](ui/tours.md) — guided tours: the app document's `tours`, tours registered at runtime (`morph.tours`), the
+controller that runs one at a time, the card and its `tour.*` host vocabulary, the spotlight each backend draws, and the
+Tours menu ·
 [`ui/document_page.md`](ui/document_page.md) — a fixed-size document page laid out in millimetres and scaled to the width,
 its regions pinned to the margins or placed at an offset, and `localeScope`: a subtree formatted in another locale ·
 [`ui/explorer.md`](ui/explorer.md) — the app explorer: an application's screens, models and actions, with a live form

@@ -42,6 +42,16 @@ API surface).
 
 ### Added
 
+- **Guided tours.** An application declares tours in its app document's `tours` member — general ones, and any number
+  per screen, one per workflow — with steps that open a screen, ring a part by its `testId`, and can wait for the
+  person to open a screen. The shell's **Tours** button lists the active screen's tours before the general ones; a
+  document starts one with the host command `tour.start`; client code with `MountedShell::startTour`. Qt Quick dims the
+  window around the target and rings it; the terminal places the card beside the target and draws it in reverse video.
+  `UiRegistry::build` refuses a tour that names a screen, a target or a tour the bundle does not have. A server adds,
+  replaces and removes tours while it runs with `TourRegistry`, checked the same way and served as the model
+  `morph.tours` (`registerTours`, `publishTourChanges`); the client's `TourSync` keeps them current through a record
+  watch. The backend contract gains `SpotlightWidget` (`createSpotlight`), and the id `morph.tour` is reserved for the
+  client's card.
 - **Custom screens in the generic client.** A server that registers `morph.customScreens` gets, in the generic client:
   **Source** on each document screen (its `ui/1` JSON, pretty-printed), **Preview** through the client's load and the
   server's check into a draft mounted in place, a draft bar with Save, Save as…, Source and Discard, the navigator's
