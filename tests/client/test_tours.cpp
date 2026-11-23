@@ -379,7 +379,8 @@ TEST_CASE("Client shell tours: opening the spotlight on a waiting step focuses E
 }
 
 // Mutation: drop `_tours->end()` from `resetTours` (the controller goes but the spotlight stays open over an emptied
-// card), or drop `resetTours` from `finishSignOut` (the controller keeps running with no screens).
+// card), drop `resetTours` from `finishSignOut` (the controller keeps running with no screens), or let
+// `showToursMenu` build the menu without a controller (the Tours button stays visible).
 TEST_CASE("Client shell tours: a sign-out whose reload fails closes the spotlight and leaves no focus in it",
           "[client][tours]") {
     FakeAppContext context;
@@ -418,6 +419,9 @@ TEST_CASE("Client shell tours: a sign-out whose reload fails closes the spotligh
         REQUIRE(find("Spotlight", "shell_spotlight") == spotlight);
         CHECK(backend.prop(spotlight, "open") == "false");
         CHECK_FALSE(descendsFrom(backend, spotlight, backend.focused()));
+        // The frame stays, and its Tours button goes: its choices would start nothing.
+        REQUIRE(find("Menu", "shell_tours").has_value());
+        CHECK(backend.prop(*find("Menu", "shell_tours"), "visible") == "false");
     }
     source.close();
 }

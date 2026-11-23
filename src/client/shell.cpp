@@ -565,6 +565,8 @@ private:
             _context->executor().post([this, alive = std::weak_ptr<bool>{_alive}, done = std::move(done)] {
                 if (auto const live = alive.lock(); live != nullptr && *live) {
                     resetTours();
+                    // A failed reload keeps the frame, so its Tours menu goes now.
+                    showToursMenu();
                     unmount();
                     // After the screens that read it, and before the session changes hands; its counts go first.
                     resetParts();
@@ -965,10 +967,13 @@ private:
             // Posted: the menu is a widget of the frame, and the tour may open a screen. The id is copied, since the
             // menu's entries are rebuilt while the tour starts.
             _context->executor().post([this, alive = std::weak_ptr<bool>{_alive}, id = std::string{tourId}] {
-                if (auto const live = alive.lock(); live != nullptr && *live && _tours) {
-                    if (auto const started = _tours->start(id); !started) {
-                        problem(started.error().message());
-                    }
+                if (auto const live = alive.lock(); live == nullptr || !*live) {
+                    return;
+                }
+                if (!_tours) {
+                    problem("the tour `" + id + "` cannot start: this window runs no tours");
+                } else if (auto const started = _tours->start(id); !started) {
+                    problem(started.error().message());
                 }
             });
         });
@@ -1001,6 +1006,11 @@ private:
     // The Tours menu for the active tab: its screen's tours under its title, then the general ones.
     void showToursMenu() {
         if (_frame == nullptr || _appRoot == nullptr || _session == nullptr) {
+            return;
+        }
+        if (_tours == nullptr) {
+            // No controller, so no choice could start a tour.
+            _frame->setTours(ui::ShellToursView{});
             return;
         }
         std::string const screen = activeBaseScreen();
