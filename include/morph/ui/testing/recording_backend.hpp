@@ -817,11 +817,20 @@ private:
     // Tells every listener. A change a listener makes while it is told is told once more after the round, not inside
     // it, so a listener never runs inside itself.
     void tellListeners() {
+        if (_listeners.empty()) {
+            return;
+        }
         if (_notifying) {
             _again = true;
             return;
         }
+        // A listener that throws must not leave the store deaf, so the flag is cleared on every way out of the round.
+        struct Round {
+            bool& notifying;
+            ~Round() { notifying = false; }
+        };
         _notifying = true;
+        Round const round{_notifying};
         do {
             _again = false;
             std::vector<int> keys;
@@ -837,7 +846,6 @@ private:
                 }
             }
         } while (_again);
-        _notifying = false;
     }
 
     std::map<int, std::function<void()>> _listeners;

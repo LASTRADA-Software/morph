@@ -8,7 +8,9 @@
 #include <morph/ui/backend.hpp>
 #include <morph/ui/testing/recording_backend.hpp>
 #include <optional>
+#include <stdexcept>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace ui = morph::ui;
@@ -54,4 +56,22 @@ TEST_CASE("spotlight: the recorded target follows the live widgets", "[ui][tours
     CHECK(heard == std::vector<bool>{true, false, true, false});
     spotlight->setTarget(std::nullopt);
     CHECK(backend.prop(spotlightId, "target") == "none");
+}
+
+// Mutation: leave `_notifying` set when a listener throws (the guard removed): the next change tells nobody.
+TEST_CASE("spotlight: a listener that throws once does not leave the store deaf", "[ui][tours]") {
+    auto const store = std::make_shared<ui::testing::detail::RecordStore>();
+    ui::testing::detail::FakeButton button{store, "Button", nullptr};
+    int heard = 0;
+    bool throwNext = true;
+    store->listen([&] {
+        ++heard;
+        if (std::exchange(throwNext, false)) {
+            throw std::runtime_error{"listener"};
+        }
+    });
+    CHECK_THROWS_AS(button.setVisible(false), std::runtime_error);
+    int const afterThrow = heard;
+    button.setVisible(true);
+    CHECK(heard == afterThrow + 1);
 }
