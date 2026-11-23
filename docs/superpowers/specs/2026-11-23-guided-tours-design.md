@@ -215,6 +215,7 @@ them. The shell builds it with each frame.
 | Showing step *n* | 1. If the step names a `screen` the active tab is not showing, calls `Workspace::open`. If that answers a `MountError` (the screen is unavailable to this person, say), the tour ends and the shell shows a toast naming the screen. 2. Prepares a shell target (below). 3. Sets the host values and points the spotlight at `target` |
 | `next` | Shows step *n*+1. On the last step the card's button is captioned Done and ends the tour |
 | `back` | Shows step *n*−1. Back does not undo a screen the tour opened; the earlier step's own `screen` reopens it if it named one |
+| A waiting step appears while its screen is already active | It shows as an ordinary step, with Next: there is nothing left to wait for, and its explanation still applies |
 | Active tab changes | If the step has `advanceOn` and the new screen matches it, or is a custom screen based on it, the tour moves to the next step. The shell maps a custom screen to its base through the custom-screens list it already holds |
 | `end`, Escape, Done | Closes the spotlight, clears the host values, and returns focus to where it was when the tour started |
 | Frame rebuilt (sign-in, sign-out) or shell torn down | The controller goes with the frame, so the tour ends |
