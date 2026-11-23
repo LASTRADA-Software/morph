@@ -6,7 +6,7 @@
 /// @brief A grid: a table whose cells are edited. `GridController` holds a grid's focus, its cell editor and its walk
 ///        over a `GridSource`; `FormGridSource` is a grid of a form's `ObjectArray` field, and `makeFormGrid` the node
 ///        that shows one; `FixedGridSource` is a fixed grid, whose rows a standard fixes and whose cells are each a
-///        field of their own.
+///        field of their own; `ModelGridSource` is the cells of a model's table, edited through its edit actions.
 ///
 /// Specified in `docs/spec/table/editing.md`.
 
@@ -33,6 +33,7 @@
 #include "../reactive/runtime.hpp"
 #include "../reactive/scheduler.hpp"
 #include "../reactive/signal.hpp"
+#include "../table/edits.hpp"
 #include "cell_format.hpp"
 #include "expression.hpp"
 #include "form_rows.hpp"
@@ -403,6 +404,34 @@ public:
     /// @brief Puts the rows the last `removeRows` took back, each where it stood, in one change, while the record has
     ///        not changed since; does nothing after a change.
     virtual void undoRemove() {}
+
+    /// @brief Why typing on a read-only cell is refused, where the source can say more than that it is read-only.
+    /// @param key    The row's key.
+    /// @param column The column's id.
+    /// @return The status line's text; nothing for the plain refusal.
+    [[nodiscard]] virtual std::optional<std::string> refusal(Key const& key, std::string_view column) const {
+        static_cast<void>(key);
+        static_cast<void>(column);
+        return std::nullopt;
+    }
+
+    /// @brief Focus moved: to a row, or onto no fetched row or out of the table. A source that holds a row's edits
+    ///        back until focus leaves the row commits them here.
+    /// @param key The row focus is on now; nothing when it is on none.
+    virtual void focusRow(std::optional<Key> const& key) { static_cast<void>(key); }
+
+    /// @brief `Ctrl+Enter`: commits what the source holds back. A source that holds nothing does nothing.
+    virtual void commitHeld() {}
+
+    /// @brief Whether a paste, a fill and a clear write into the cells: a source whose rows are selected as rows, not
+    ///        as cells, takes none.
+    /// @return `true` unless a source says otherwise.
+    [[nodiscard]] virtual bool takesBlocks() const { return true; }
+
+    /// @brief Gives the source what moves focus to a cell while the table has focus: how a refusal that arrives after
+    ///        focus left its row brings focus back. A source that never moves focus ignores it.
+    /// @param refocus Focuses a cell while the table has focus; empty when the controller goes.
+    virtual void refocusWith(std::function<void(CellRef const&)> refocus) { static_cast<void>(refocus); }
 };
 // NOLINTEND(cppcoreguidelines-special-member-functions)
 
@@ -2817,6 +2846,811 @@ private:
     std::unique_ptr<reactive::Effect> _overlays;
 };
 
+/// @brief One column of a model's table as a grid edits it.
+struct ModelColumn {
+    /// @brief The column's id.
+    std::string id;
+    /// @brief The action that edits the column's cells; none leaves the column read-only.
+    std::optional<table::EditInfo> edit;
+    /// @brief The edit action's form, `forms::FormModel::fromSchema` over the action's input schema; null for a
+    ///        column with no edit.
+    std::shared_ptr<forms::FormModel const> model;
+    /// @brief The field of `model` the column's cells are: `value` for a `CellEdit`, `values.<member>` for a
+    ///        `RowEdit`; empty for a column with no edit.
+    std::string path;
+};
+
+/// @brief When a model's table commits its edits.
+enum class EditMode : std::uint8_t {
+    Cell,  ///< Each committed cell is its own request.
+    Row,   ///< A row's committed cells are collected while focus stays in the row, and sent as one request.
+};
+
+/// @brief What a model's table's cells are edited and shown with.
+struct ModelGridContext {
+    /// @brief The runtime the source's state and its edit sessions are tracked on. Borrowed.
+    reactive::Runtime* runtime = nullptr;
+    /// @brief Fetches a choice field's options.
+    forms::ChoiceFetcher choices;
+    /// @brief The edit sessions' locale and patterns.
+    forms::FormSessionOptions session;
+    /// @brief How a cell's value is shown.
+    FormatContext format;
+    /// @brief Whether the principal may run an action: an edit action it may not run leaves its column read-only.
+    ///        Tracked.
+    std::function<bool(std::string_view action)> may;
+};
+
+/// @brief The cells of a model's table as a grid edits them: rows the window holds, each editable column's cells the
+///        field of its edit action, drafts and their errors held by `table::CellEdits` by row key and column.
+///
+/// The rows are the window's view: `keyAt` is empty for a row not fetched yet, which stops a walk there. `view()` is a
+/// decorator over the rows that sets their one change slot itself: on each change it first ends the modified marks of
+/// every row the change brought (`table::CellEdits::rowFetched`), then calls the handler the mount set on it. The
+/// table's own edits are sent through the `CellEdits`' commit function, never as runs of the session, so they make no
+/// row busy: a cell being saved is stale, and its row takes further edits, queued behind it.
+class ModelGridSource final : public GridSource {
+public:
+    /// @brief A model's table as a grid.
+    /// @param rows    The window's rows; the decorator `view()` owns their change slot from now on.
+    /// @param edits   The table's drafts and commits. Borrowed: it must outlive the source.
+    /// @param columns Every column the table shows, each with its id; an editable one with its form and field.
+    /// @param mode    When a row's edits are sent.
+    /// @param context What the cells are edited and shown with.
+    ModelGridSource(std::shared_ptr<TableRows> rows, table::CellEdits& edits, std::vector<ModelColumn> columns,
+                    EditMode mode, ModelGridContext context)
+        : _rows{std::move(rows)},
+          _edits{&edits},
+          _columns{std::move(columns)},
+          _mode{mode},
+          _context{std::move(context)},
+          _rt{_context.runtime},
+          _version{*_context.runtime, std::uint64_t{0}},
+          _open{*_context.runtime, std::optional<CellRef>{}} {
+        for (ModelColumn const& column : _columns) {
+            _layout.push_back(column.id);
+            if (column.edit && column.model != nullptr && !column.path.empty()) {
+                // The submitter is never called: an edit is sent as a row commit, by the table's own `CellEdits`.
+                exec::IExecutor* const owner = &_rt->owner();
+                auto session = std::make_unique<forms::FormSession>(
+                    *_rt, *column.model,
+                    [owner](std::string_view, std::string) {
+                        return async::Completion<std::string>::makeSettleable(owner).first;
+                    },
+                    _context.choices, _context.session);
+                _sessions.insert_or_assign(column.id, Session{.form = std::move(session), .loadedFor = {}, .base = {}});
+            }
+        }
+        _view = std::make_unique<Rows>(*this);
+        _edits->onRowSettled(_alive.guard([this](table::RowId const& row, bool refused) { rowSettled(row, refused); }));
+    }
+
+    ModelGridSource(ModelGridSource const&) = delete;
+    ModelGridSource& operator=(ModelGridSource const&) = delete;
+    ModelGridSource(ModelGridSource&&) = delete;
+    ModelGridSource& operator=(ModelGridSource&&) = delete;
+    /// @brief Leaves the rows' change slot and the edits' receiver to whatever set them last: a source mounted after
+    ///        this one may hold them already, and what this one set is refused once it is gone.
+    ~ModelGridSource() override = default;
+
+    /// @brief The description the rows follow: its key names a record's key, its columns are shown and edited, and
+    ///        the drafts of a column it no longer has are dropped (`table::CellEdits::keepColumns`).
+    /// @param description The description.
+    void setDescription(table::TableDescription const& description) {
+        _description = description;
+        std::vector<std::string> ids;
+        for (table::TableColumn const& column : description.columns) {
+            ids.push_back(column.info.id);
+        }
+        _edits->keepColumns(ids);
+        _positionsVersion.reset();
+        bump();
+    }
+
+    /// @brief Sets the visible columns in layout order: what the walk follows.
+    /// @param visible The column ids.
+    void setLayout(std::vector<std::string> visible) {
+        if (visible != _layout) {
+            _layout = std::move(visible);
+            bump();
+        }
+    }
+
+    /// @brief Shows the cells in another formatting from now on.
+    /// @param format How values are shown.
+    void setFormat(FormatContext format) {
+        _context.format = std::move(format);
+        bump();
+    }
+
+    /// @brief Tells every reader of the cells that something they depend on and cannot track changed: the rows' busy
+    ///        and failed states.
+    void touch() { bump(); }
+
+    /// @brief Rows a keyed fetch named and found none of: their drafts, errors and marks go
+    ///        (`table::CellEdits::rowAbsent`).
+    /// @param keys The rows' keys.
+    void rowsAbsent(std::span<table::RowId const> keys) {
+        for (table::RowId const& key : keys) {
+            _edits->rowAbsent(key);
+        }
+        bump();
+    }
+
+    /// @brief A row's key changed: the rows and the drafts move what they hold by it.
+    /// @param from The row's old key.
+    /// @param to   The row's new key.
+    void moveKey(Key const& from, Key const& to) {
+        _rows->moveKey(from, to);
+        _edits->moveRow(from, to);
+        _positionsVersion.reset();
+        bump();
+    }
+
+    /// @brief A cell's draft while one is held, for a cell view that shows it in place of the row's value. Tracked.
+    /// @param key    The row's key.
+    /// @param column The column's id.
+    /// @return The draft; nothing while none is held.
+    [[nodiscard]] std::optional<std::string> heldDraft(Key const& key, std::string_view column) const {
+        static_cast<void>(_version.get());
+        if (std::optional<CellRef> const open = _open.get(); open && open->key == key && open->column == column) {
+            if (Session const* const session = sessionOf(column); session != nullptr && session->loadedFor == key) {
+                return fieldOf(column)->text().get();
+            }
+        }
+        return _edits->draft(key, column);
+    }
+
+    /// @brief The view's rows, fetched or not.
+    /// @return `TableRows::total().rows`. Tracked.
+    [[nodiscard]] std::size_t rowCount() const override {
+        static_cast<void>(_version.get());
+        return static_cast<std::size_t>(std::max<std::int64_t>(_rows->total().rows, 0));
+    }
+
+    /// @brief The key of the row at a view position. Tracked: it answers once the row arrives.
+    /// @param viewRow The position.
+    /// @return The key; empty while the row is not fetched.
+    [[nodiscard]] std::optional<Key> keyAt(std::size_t viewRow) const override {
+        static_cast<void>(_version.get());
+        std::optional<TableRowRef> const row = _rows->row(static_cast<std::int64_t>(viewRow));
+        return row ? std::optional<Key>{row->key} : std::nullopt;
+    }
+
+    /// @brief Where a key's row is in the view among the rows held.
+    /// @param key The key.
+    /// @return The position; empty when no held row has the key.
+    [[nodiscard]] std::optional<std::size_t> positionOf(Key const& key) const override {
+        if (_positionsVersion != _version.peek()) {
+            _positions.clear();
+            std::int64_t const total = _rows->total().rows;
+            for (std::int64_t at = 0; at < total; ++at) {
+                if (std::optional<TableRowRef> const row = _rows->row(at)) {
+                    _positions.insert_or_assign(row->key, static_cast<std::size_t>(at));
+                }
+            }
+            _positionsVersion = _version.peek();
+        }
+        auto const found = _positions.find(key);
+        return found == _positions.end() ? std::nullopt : std::optional{found->second};
+    }
+
+    /// @brief The visible columns in layout order.
+    /// @return The ids.
+    [[nodiscard]] std::vector<std::string> columns() const override { return _layout; }
+
+    /// @brief The forms control of the cell's field, its session loaded with the cell's draft or the row's value.
+    /// @param key    The row's key.
+    /// @param column The column's id.
+    /// @return The editor; a muted text for a column with no edit.
+    [[nodiscard]] Node editor(Key const& key, std::string_view column) override {
+        Session* const session = loaded(key, column);
+        if (session == nullptr) {
+            return ui::text(Text{.text = std::string{}, .role = TextRole::Muted});
+        }
+        return forms::detail::engine::scalarControl(*session->form, *fieldOf(column));
+    }
+
+    /// @brief Whether the cell's field is a Boolean.
+    /// @param key    The row's key.
+    /// @param column The column's id.
+    /// @return `true` for a Boolean.
+    [[nodiscard]] bool toggles(Key const& key, std::string_view column) const override {
+        static_cast<void>(key);
+        forms::FieldState const* const field = fieldOf(column);
+        return field != nullptr && field->spec().kind == forms::FieldKind::Boolean;
+    }
+
+    /// @brief `cellReadOnly` over the cell's field, whether the principal may run its edit action, its
+    ///        `EditInfo::readonly` companion, the row's busy and locked states and whether the cell is loaded.
+    ///        Tracked.
+    /// @param key    The row's key.
+    /// @param column The column's id.
+    /// @return `true` when read-only.
+    [[nodiscard]] bool readOnly(Key const& key, std::string_view column) const override {
+        return cellReadOnly(factsOf(key, column));
+    }
+
+    /// @brief No cell of a model's table is covered.
+    /// @param key    Unused.
+    /// @param column Unused.
+    /// @return `false`.
+    [[nodiscard]] bool covered(Key const& key, std::string_view column) const override {
+        static_cast<void>(key);
+        static_cast<void>(column);
+        return false;
+    }
+
+    /// @brief The cell's draft: the open editor's text, else the draft held, else the row's value as its field shows
+    ///        it for editing. Untracked.
+    /// @param key    The row's key.
+    /// @param column The column's id.
+    /// @return The draft; empty for a column with no edit.
+    [[nodiscard]] std::string draft(Key const& key, std::string_view column) const override {
+        return _rt->untracked([&] {
+            if (std::optional<std::string> held = heldDraft(key, column)) {
+                return std::move(*held);
+            }
+            // With no draft held the cell is the row's value now: a session still holding an earlier edit of the
+            // cell, whose draft a fetch since ended, is loaded again.
+            auto* const self = const_cast<ModelGridSource*>(this);
+            if (auto const found = self->_sessions.find(column); found != self->_sessions.end()) {
+                found->second.loadedFor.reset();
+            }
+            Session* const session = self->loaded(key, column);
+            return session == nullptr ? std::string{} : fieldOf(column)->draft();
+        });
+    }
+
+    /// @brief The cell's text: its draft while one is held, else the row's value as the column shows it. Tracked.
+    /// @param key    The row's key.
+    /// @param column The column's id.
+    /// @return The text.
+    [[nodiscard]] std::string text(Key const& key, std::string_view column) const override {
+        if (std::optional<std::string> held = heldDraft(key, column)) {
+            return std::move(*held);
+        }
+        table::TableColumn const* const described = describedColumn(column);
+        std::optional<Located> const row = locate(key);
+        if (described == nullptr || !row) {
+            return {};
+        }
+        return formatCell(cellOf(row->record.field(std::string{column})), *described, _context.format);
+    }
+
+    /// @brief Why the cell's value is refused: its draft does not encode, or the edit action refused it. Tracked.
+    /// @param key    The row's key.
+    /// @param column The column's id.
+    /// @return The message; empty for none.
+    [[nodiscard]] std::optional<std::string> error(Key const& key, std::string_view column) const override {
+        static_cast<void>(_version.get());
+        return _edits->error(key, column);
+    }
+
+    /// @brief Writes a user's draft into the cell: its field takes it, and the draft is held with the field's error.
+    ///        A draft that is the row's own value again is no draft.
+    /// @param key    The row's key.
+    /// @param column The column's id.
+    /// @param draft  The draft.
+    void write(Key const& key, std::string_view column, std::string draft) override {
+        Session* const session = loaded(key, column);
+        if (session == nullptr) {
+            return;
+        }
+        _open.set(CellRef{.key = key, .column = std::string{column}});
+        fieldOf(column)->text().set(std::move(draft));
+        CellRef const cell{.key = key, .column = std::string{column}};
+        if (!std::ranges::contains(_dirty, cell)) {
+            _dirty.push_back(cell);
+        }
+        hold(key, column);
+    }
+
+    /// @brief An edit is meant: each cell written since the last commit is held with its encoding and, when it
+    ///        encodes and the cell takes edits, sent as its own request (`EditMode::Cell`) or kept for its row's
+    ///        request (`EditMode::Row`).
+    void committed() override {
+        std::vector<CellRef> cells = std::exchange(_dirty, {});
+        // An editor's input writes its field without `write`: the open cell is committed too.
+        if (std::optional<CellRef> const open = _open.peek(); open && !std::ranges::contains(cells, *open)) {
+            cells.push_back(*open);
+        }
+        for (CellRef const& cell : cells) {
+            std::optional<table::EditCell> const made = encode(cell.key, cell.column);
+            if (!made) {
+                continue;
+            }
+            if (_mode == EditMode::Cell) {
+                _edits->commitRow(table::RowEditRequest{.row = cell.key, .cells = {*made}});
+                continue;
+            }
+            std::vector<table::EditCell>& held = _held[cell.key];
+            std::erase_if(held, [&](table::EditCell const& other) { return other.column == made->column; });
+            held.push_back(*made);
+        }
+        _open.set(std::nullopt);
+        bump();
+    }
+
+    /// @brief A cell's editor opened: its session is loaded with the cell, and a choice fetches its options.
+    /// @param key    The row's key.
+    /// @param column The column's id.
+    void editorOpened(Key const& key, std::string_view column) override {
+        if (loaded(key, column) == nullptr) {
+            return;
+        }
+        _open.set(CellRef{.key = key, .column = std::string{column}});
+        fieldOf(column)->openOptions();
+    }
+
+    /// @brief The cell's marks: read-only, modified from its commit's success until its row's next fetch, refused,
+    ///        and stale while its commit is out. Tracked.
+    /// @param key    The row's key.
+    /// @param column The column's id.
+    /// @return The marks.
+    [[nodiscard]] CellMarks marks(Key const& key, std::string_view column) const override {
+        static_cast<void>(_version.get());
+        return CellMarks{.readOnly = readOnly(key, column),
+                         .modified = _edits->modified(key, column),
+                         .error = _edits->error(key, column).has_value(),
+                         .stale = _edits->stale(key, column)};
+    }
+
+    /// @brief The key a record holds in the description's key column.
+    /// @param record The record.
+    /// @return The key; empty for a record without one, or before a description.
+    [[nodiscard]] std::optional<Key> keyOf(Value const& record) const override {
+        if (!_description) {
+            return std::nullopt;
+        }
+        Value const* const key = record.field(_description->key);
+        if (key == nullptr) {
+            return std::nullopt;
+        }
+        if (std::int64_t const* const number = key->asInt()) {
+            return Key{*number};
+        }
+        if (std::string const* const text = key->asString()) {
+            return Key{*text};
+        }
+        return std::nullopt;
+    }
+
+    /// @brief Whether some cell of the row is modified or holds a draft. Tracked.
+    /// @param key The row's key.
+    /// @return `true` when one does.
+    [[nodiscard]] bool rowModified(Key const& key) const override {
+        static_cast<void>(_version.get());
+        return _edits->rowEdited(key);
+    }
+
+    /// @brief The decorator over the rows the mount is handed.
+    /// @return It.
+    [[nodiscard]] TableRows& view() override { return *_view; }
+
+    /// @brief Why typing on a read-only cell is refused: the cell is not loaded, the row is being saved, or the row
+    ///        is locked, in that order.
+    /// @param key    The row's key.
+    /// @param column The column's id.
+    /// @return The status line's text; nothing for any other read-only cell.
+    [[nodiscard]] std::optional<std::string> refusal(Key const& key, std::string_view column) const override {
+        CellFacts const facts = factsOf(key, column);
+        if (facts.unloaded) {
+            return std::string{kUnloadedText};
+        }
+        if (facts.busy) {
+            return std::string{kBusyText};
+        }
+        if (facts.locked) {
+            std::optional<Located> const row = locate(key);
+            if (row && _description) {
+                return lockText(TableRowRef{.key = key, .row = row->record}, *_description);
+            }
+        }
+        return std::nullopt;
+    }
+
+    /// @brief Focus moved: in `EditMode::Row` the cells held for every other row are sent, a request per row.
+    /// @param key The row focus is on now; nothing when it is on none.
+    void focusRow(std::optional<Key> const& key) override {
+        if (_mode != EditMode::Row) {
+            return;
+        }
+        std::vector<Key> leaving;
+        for (auto const& [row, cells] : _held) {
+            if (!key || row != *key) {
+                leaving.push_back(row);
+            }
+        }
+        for (Key const& row : leaving) {
+            send(row);
+        }
+    }
+
+    /// @brief `Ctrl+Enter`: every row's held cells are sent.
+    void commitHeld() override {
+        std::vector<Key> rows;
+        for (auto const& [row, cells] : _held) {
+            rows.push_back(row);
+        }
+        for (Key const& row : rows) {
+            send(row);
+        }
+    }
+
+    /// @brief A model's table selects rows: it takes no paste, fill or clear.
+    /// @return `false`.
+    [[nodiscard]] bool takesBlocks() const override { return false; }
+
+    /// @brief Keeps what brings focus back to the first refused cell of a row commit in `EditMode::Row`.
+    /// @param refocus Focuses a cell while the table has focus.
+    void refocusWith(std::function<void(CellRef const&)> refocus) override { _refocus = std::move(refocus); }
+
+    /// @brief The status line's refusal of typing on a cell not loaded yet.
+    static constexpr std::string_view kUnloadedText = "This value is not loaded yet";
+    /// @brief The status line's refusal of typing in a row another run is saving.
+    static constexpr std::string_view kBusyText = "This row is being saved";
+
+private:
+    // An editable column's form: its session, the row it is loaded with, and its field's text for that row's value.
+    struct Session {
+        std::unique_ptr<forms::FormSession> form;
+        std::optional<Key> loadedFor;
+        std::string base;
+    };
+
+    // A held row: its view index and its record, valid until the rows' next change.
+    struct Located {
+        std::int64_t index = 0;
+        Value const& record;
+    };
+
+    // The rows the mount reads: the window's, with their one change slot set here.
+    class Rows final : public TableRows {
+    public:
+        explicit Rows(ModelGridSource& source) : _source{&source}, _inner{source._rows.get()} {
+            _inner->onChange(source._alive.guard([this](table::ViewChange const& change) { changed(change); }));
+        }
+
+        Rows(Rows const&) = delete;
+        Rows& operator=(Rows const&) = delete;
+        Rows(Rows&&) = delete;
+        Rows& operator=(Rows&&) = delete;
+        ~Rows() override = default;
+
+        [[nodiscard]] TableTotal total() const override { return _inner->total(); }
+        [[nodiscard]] TableTotal mountedTotal() const override { return _inner->mountedTotal(); }
+        [[nodiscard]] std::optional<TableRowRef> row(std::int64_t index) const override { return _inner->row(index); }
+        [[nodiscard]] table::UnloadedLevels unloadedLevels(std::int64_t index) const override {
+            return _inner->unloadedLevels(index);
+        }
+        void visible(std::int64_t first, std::int64_t count, std::span<std::string const> columns) override {
+            _inner->visible(first, count, columns);
+        }
+        async::Completion<std::expected<std::vector<table::RowId>, table::TableError>> keysOf(
+            std::int64_t first, std::int64_t count) override {
+            return _inner->keysOf(first, count);
+        }
+        void locateRow(table::RowId key, std::stop_token stop, std::function<void(RowLocation const&)> done) override {
+            _inner->locateRow(std::move(key), std::move(stop), std::move(done));
+        }
+        async::Completion<std::expected<std::vector<FetchedRow>, table::TableError>> fetchRows(
+            std::vector<table::RowId> keys, std::vector<std::string> columns) override {
+            return _inner->fetchRows(std::move(keys), std::move(columns));
+        }
+        std::expected<void, table::TableError> setSort(SortChain sort) override {
+            return _inner->setSort(std::move(sort));
+        }
+        std::expected<void, table::TableError> setFilter(table::FilterSpec filter) override {
+            return _inner->setFilter(std::move(filter));
+        }
+        async::Completion<std::expected<table::DistinctValues, table::TableError>> distinctValues(
+            table::DistinctRequest request) override {
+            return _inner->distinctValues(std::move(request));
+        }
+        [[nodiscard]] TableCountsView counts() const override { return _inner->counts(); }
+        [[nodiscard]] std::expected<ViewSelection, SelectAllRefusal> selectView() const override {
+            return _inner->selectView();
+        }
+        [[nodiscard]] SelectedCount selectedCount(TableSelection const& selection) const override {
+            return _inner->selectedCount(selection);
+        }
+        [[nodiscard]] bool leftView(table::RowId const& key) const override { return _inner->leftView(key); }
+        [[nodiscard]] RetainResult retain(std::span<table::RowId const> keys) override { return _inner->retain(keys); }
+        void clearRetained() override { _inner->clearRetained(); }
+        [[nodiscard]] bool unmatched(table::RowId const& key) const override { return _inner->unmatched(key); }
+        void holdRefetches(std::uint64_t run) override { _inner->holdRefetches(run); }
+        void releaseRefetches(std::uint64_t run) override { _inner->releaseRefetches(run); }
+        async::Completion<std::expected<std::vector<FetchedRow>, table::TableError>> rowsOf(
+            std::int64_t first, std::int64_t count, std::span<std::string const> columns) override {
+            return _inner->rowsOf(first, count, columns);
+        }
+        [[nodiscard]] RowStates& states() override { return _inner->states(); }
+        [[nodiscard]] RowStates const& states() const override { return _inner->states(); }
+        void moveKey(table::RowId const& from, table::RowId const& to) override { _source->moveKey(from, to); }
+        void onChange(std::function<void(table::ViewChange const&)> handler) override { _handler = std::move(handler); }
+
+    private:
+        // The rows a change brought are fetched: their modified marks end before anything reads the rows, then the
+        // mount hears the change.
+        void changed(table::ViewChange const& change) {
+            for (std::size_t const index : broughtRows(change)) {
+                if (std::optional<TableRowRef> const row = _inner->row(static_cast<std::int64_t>(index))) {
+                    _source->_edits->rowFetched(row->key);
+                }
+            }
+            _source->bump();
+            if (_handler) {
+                std::function<void(table::ViewChange const&)> const handler = _handler;
+                handler(change);
+            }
+        }
+
+        ModelGridSource* _source;
+        TableRows* _inner;
+        std::function<void(table::ViewChange const&)> _handler;
+    };
+
+    // The view indices, after the whole change, of the rows its `Inserted` and `Changed` operations brought.
+    [[nodiscard]] static std::vector<std::size_t> broughtRows(table::ViewChange const& change) {
+        std::vector<std::size_t> out;
+        for (table::ViewOp const& op : change.ops) {
+            switch (op.kind) {
+                case table::ViewOp::Kind::Reset:
+                    out.clear();
+                    break;
+                case table::ViewOp::Kind::Removed:
+                    std::erase_if(out, [&op](std::size_t at) { return at >= op.first && at < op.first + op.count; });
+                    for (std::size_t& at : out) {
+                        at -= at >= op.first + op.count ? op.count : 0;
+                    }
+                    break;
+                case table::ViewOp::Kind::Inserted:
+                    for (std::size_t& at : out) {
+                        at += at >= op.first ? op.count : 0;
+                    }
+                    for (std::size_t at = op.first; at < op.first + op.count; ++at) {
+                        out.push_back(at);
+                    }
+                    break;
+                case table::ViewOp::Kind::Changed:
+                    for (std::size_t at = op.first; at < op.first + op.count; ++at) {
+                        if (!std::ranges::contains(out, at)) {
+                            out.push_back(at);
+                        }
+                    }
+                    break;
+                case table::ViewOp::Kind::Moved:
+                    for (std::size_t& at : out) {
+                        if (at == op.first) {
+                            at = op.to;
+                            continue;
+                        }
+                        std::size_t const removed = at > op.first ? at - 1 : at;
+                        at = removed >= op.to ? removed + 1 : removed;
+                    }
+                    break;
+            }
+        }
+        return out;
+    }
+
+    void bump() { _version.set(_version.peek() + 1); }
+
+    [[nodiscard]] ModelColumn const* columnOf(std::string_view id) const {
+        auto const found = std::ranges::find(_columns, id, &ModelColumn::id);
+        return found == _columns.end() ? nullptr : &*found;
+    }
+
+    [[nodiscard]] table::TableColumn const* describedColumn(std::string_view id) const {
+        if (!_description) {
+            return nullptr;
+        }
+        auto const found = std::ranges::find_if(_description->columns,
+                                                [id](table::TableColumn const& column) { return column.info.id == id; });
+        return found == _description->columns.end() ? nullptr : &*found;
+    }
+
+    [[nodiscard]] Session const* sessionOf(std::string_view column) const {
+        auto const found = _sessions.find(column);
+        return found == _sessions.end() ? nullptr : &found->second;
+    }
+
+    [[nodiscard]] forms::FieldState* fieldOf(std::string_view column) const {
+        Session const* const session = sessionOf(column);
+        ModelColumn const* const described = columnOf(column);
+        return session == nullptr || described == nullptr ? nullptr : &session->form->field(described->path);
+    }
+
+    // The held row with a key: its view index and record. Tracked through the source's version.
+    [[nodiscard]] std::optional<Located> locate(Key const& key) const {
+        static_cast<void>(_version.get());
+        std::optional<std::size_t> const index = positionOf(key);
+        if (!index) {
+            return std::nullopt;
+        }
+        std::optional<TableRowRef> const row = _rows->row(static_cast<std::int64_t>(*index));
+        if (!row || row->key != key) {
+            return std::nullopt;
+        }
+        return Located{.index = static_cast<std::int64_t>(*index), .record = row->row};
+    }
+
+    // Every fact the cell's read-only state follows from. Tracked.
+    [[nodiscard]] CellFacts factsOf(Key const& key, std::string_view column) const {
+        static_cast<void>(_version.get());
+        ModelColumn const* const described = columnOf(column);
+        CellFacts facts;
+        facts.field = fieldOf(column);
+        facts.hasEdit = described != nullptr && described->edit && (!_context.may || _context.may(described->edit->action));
+        std::optional<Located> const row = locate(key);
+        if (!row) {
+            facts.unloaded = true;
+            return facts;
+        }
+        if (described != nullptr && described->edit && !described->edit->readonly.empty()) {
+            Value const* const companion = row->record.field(described->edit->readonly);
+            bool const* const frozen = companion == nullptr ? nullptr : companion->asBool();
+            facts.companionReadOnly = frozen != nullptr && *frozen;
+        }
+        facts.busy = _rows->states().isBusy(key);
+        facts.locked = _description && lockText(TableRowRef{.key = key, .row = row->record}, *_description).has_value();
+        table::TableColumn const* const shown = describedColumn(column);
+        table::UnloadedLevels const levels = _rows->unloadedLevels(row->index);
+        facts.unloaded = row->record.field(std::string{column}) == nullptr ||
+                         (shown != nullptr && !shown->info.level.empty() &&
+                          std::ranges::contains(levels.levels, shown->info.level));
+        return facts;
+    }
+
+    // The column's session loaded with the cell: with the row's value, and then the draft held, unless it holds the
+    // cell already. Null for a column with no edit.
+    Session* loaded(Key const& key, std::string_view column) {
+        auto const found = _sessions.find(column);
+        ModelColumn const* const described = columnOf(column);
+        if (found == _sessions.end() || described == nullptr) {
+            return nullptr;
+        }
+        Session& session = found->second;
+        if (session.loadedFor == key) {
+            return &session;
+        }
+        _rt->untracked([&] {
+            std::optional<Located> const row = locate(key);
+            Value const* const value = row ? row->record.field(std::string{column}) : nullptr;
+            std::string const json = value == nullptr ? std::string{"null"}
+                                                      : glz::write_json(valueToJson(*value)).value_or("null");
+            std::string const body = described->edit->member.empty()
+                                         ? R"({"value":)" + json + "}"
+                                         : R"({"values":{")" + described->edit->member + R"(":)" + json + "}}";
+            _rt->batch([&] {
+                session.form->prefill(body);
+                forms::FieldState& field = *fieldOf(column);
+                session.base = field.draft();
+                if (std::optional<std::string> held = _edits->draft(key, column)) {
+                    field.text().set(std::move(*held));
+                }
+            });
+        });
+        session.loadedFor = key;
+        return &session;
+    }
+
+    // Holds the field's text as the cell's draft, with the field's error; the row's own value again is no draft.
+    void hold(Key const& key, std::string_view column) {
+        Session const* const session = sessionOf(column);
+        forms::FieldState const* const field = fieldOf(column);
+        if (session == nullptr || field == nullptr) {
+            return;
+        }
+        _rt->untracked([&] {
+            std::string const text = field->draft();
+            if (text == session->base && !_edits->stale(key, column) && !_edits->modified(key, column)) {
+                _edits->clearDraft(key, column);
+                return;
+            }
+            std::optional<forms::FieldError> const& failed = field->error().get();
+            _edits->setDraft(key, column, text, failed ? std::optional{failed->message} : std::nullopt);
+        });
+        bump();
+    }
+
+    // The cell's draft, held, and its cell of a request when it encodes and the cell takes edits. A cell that became
+    // read-only while it was edited is not sent: an edit of a value the user has not seen, or of a row another run is
+    // saving, would overwrite what arrives.
+    std::optional<table::EditCell> encode(Key const& key, std::string const& column) {
+        if (loaded(key, column) == nullptr) {
+            return std::nullopt;
+        }
+        hold(key, column);
+        if (!_edits->draft(key, column) || _edits->error(key, column) ||
+            _rt->untracked([&] { return readOnly(key, column); })) {
+            return std::nullopt;
+        }
+        forms::Encoding const encoding = _rt->untracked([&] { return fieldOf(column)->encoded().get(); });
+        ModelColumn const* const described = columnOf(column);
+        return table::EditCell{.column = column,
+                               .json = encoding && encoding->has_value() ? (*encoding)->json : std::string{"null"},
+                               .member = described->edit->member.empty() ? std::string{"value"}
+                                                                         : described->edit->member};
+    }
+
+    // Sends a row's held cells as one request.
+    void send(Key const& row) {
+        auto const found = _held.find(row);
+        if (found == _held.end()) {
+            return;
+        }
+        std::vector<table::EditCell> cells = std::move(found->second);
+        _held.erase(found);
+        if (!cells.empty()) {
+            _edits->commitRow(table::RowEditRequest{.row = row, .cells = std::move(cells)});
+        }
+        bump();
+    }
+
+    // A row commit settled: the cells follow, and in `EditMode::Row` a refusal brings focus back to the row's first
+    // refused cell in layout order.
+    void rowSettled(table::RowId const& row, bool refused) {
+        bump();
+        if (_mode != EditMode::Row || !refused || !_refocus) {
+            return;
+        }
+        for (std::string const& column : _layout) {
+            if (_edits->error(row, column)) {
+                std::function<void(CellRef const&)> const refocus = _refocus;
+                refocus(CellRef{.key = row, .column = column});
+                return;
+            }
+        }
+    }
+
+    // A record's value as a cell of its column.
+    [[nodiscard]] static table::Cell cellOf(Value const* value) {
+        if (value == nullptr || value->isNull()) {
+            return std::monostate{};
+        }
+        if (std::int64_t const* const integer = value->asInt()) {
+            return *integer;
+        }
+        if (Decimal const* const decimal = value->asDecimal()) {
+            return decimal->value;
+        }
+        if (bool const* const flag = value->asBool()) {
+            return *flag;
+        }
+        if (Quantity const* const quantity = value->asQuantity()) {
+            return quantity->value;
+        }
+        if (std::string const* const text = value->asString()) {
+            return *text;
+        }
+        return std::monostate{};
+    }
+
+    std::shared_ptr<TableRows> _rows;
+    table::CellEdits* _edits;
+    std::vector<ModelColumn> _columns;
+    EditMode _mode;
+    ModelGridContext _context;
+    reactive::Runtime* _rt;
+    reactive::Signal<std::uint64_t> _version;
+    // The cell whose editor is open, or whose text was written last: its field holds its text.
+    reactive::Signal<std::optional<CellRef>> _open;
+    std::vector<std::string> _layout;
+    std::optional<table::TableDescription> _description;
+    std::map<std::string, Session, std::less<>> _sessions;
+    // Cells written since the last commit, and the cells each row holds for its request in `EditMode::Row`.
+    std::vector<CellRef> _dirty;
+    std::map<Key, std::vector<table::EditCell>> _held;
+    std::function<void(CellRef const&)> _refocus;
+    // The held rows' view indices by key, as of a version.
+    mutable std::unordered_map<Key, std::size_t> _positions;
+    mutable std::optional<std::uint64_t> _positionsVersion;
+    async::CallbackScope _alive;
+    std::unique_ptr<Rows> _view;
+};
+
 /// @brief A grid's focus, its cell editor and its walk over a `GridSource`, and the table node that shows them.
 ///
 /// The editor's text is the cell's draft, live: an opening keeps the draft the cell held, a commit closes the editor
@@ -2840,13 +3674,20 @@ public:
           _messageEntries{runtime, std::vector<StatusEntry>{}},
           _standing{runtime, std::string{}},
           _standingEntries{runtime, std::vector<StatusEntry>{}},
-          _selection{runtime, std::optional<CellRange>{}} {}
+          _selection{runtime, std::optional<CellRange>{}} {
+        _source->refocusWith([this](CellRef const& cell) {
+            if (_hasFocus) {
+                focusCell(cell);
+            }
+        });
+    }
 
     GridController(GridController const&) = delete;
     GridController& operator=(GridController const&) = delete;
     GridController(GridController&&) = delete;
     GridController& operator=(GridController&&) = delete;
-    ~GridController() = default;
+    /// @brief Takes back what the source was given to move focus with.
+    ~GridController() { _source->refocusWith({}); }
 
     /// @brief The focused cell. Tracked.
     /// @return The cell when its row is fetched; empty when nothing has focus or focus stands on a placeholder.
@@ -2864,7 +3705,8 @@ public:
     [[nodiscard]] std::optional<GridFocus> place() const {
         std::optional<GridFocus> shown = _place.get();
         if (shown && !shown->key) {
-            shown->key = _rt->untracked([&] { return _source->keyAt(shown->viewRow); });
+            // Tracked: a binding over the place runs again when the row arrives, and names its key.
+            shown->key = _source->keyAt(shown->viewRow);
         }
         return shown;
     }
@@ -2872,13 +3714,14 @@ public:
     /// @brief Takes the cell a click or a key resolved to: `focusCell` for a fetched row, else the placeholder focus.
     /// @param target The cell.
     void focusPlace(GridFocus target) {
+        _hasFocus = true;
         if (target.key) {
             focusCell(CellRef{.key = *target.key, .column = target.column});
             return;
         }
         commit();
         letGo();
-        _place.set(std::move(target));
+        setPlace(std::move(target));
         setSelection(std::nullopt);
         clearNotice();
     }
@@ -2888,6 +3731,7 @@ public:
     ///        it has focus. A cell outside the cell selection ends it.
     /// @param cell The cell.
     void focusCell(CellRef cell) {
+        _hasFocus = true;
         if (_source->covered(cell.key, cell.column)) {
             return;
         }
@@ -2899,7 +3743,7 @@ public:
         if (!at) {
             return;
         }
-        _place.set(GridFocus{.key = cell.key, .viewRow = *at, .column = cell.column});
+        setPlace(GridFocus{.key = cell.key, .viewRow = *at, .column = cell.column});
         if (_selection.peek() && !inBlock(cell)) {
             setSelection(std::nullopt);
         }
@@ -2962,6 +3806,7 @@ public:
             LetGo& operator=(LetGo&&) = delete;
             ~LetGo() { grid->letGo(); }
         } const letting{this};
+        _hasFocus = true;
         std::optional<CellRef> const open = _editing.peek();
         if (chord == "Tab" || chord == "Shift+Tab") {
             commit();
@@ -2976,6 +3821,7 @@ public:
         }
         if (chord == "Ctrl+Enter") {
             commit();
+            _source->commitHeld();
             return KeyOutcome::Handled;
         }
         if (chord == "Enter" && open) {
@@ -3037,6 +3883,7 @@ public:
     ///        read-only cell refuses it in the status line.
     /// @param text The text.
     void type(std::string_view text) {
+        _hasFocus = true;
         if (std::optional<CellRef> const open = _editing.peek()) {
             _source->write(open->key, open->column, std::string{text});
             return;
@@ -3046,7 +3893,8 @@ public:
             return;
         }
         if (_rt->untracked([&] { return _source->readOnly(focused->key, focused->column); })) {
-            notice(std::string{kReadOnlyText});
+            notice(_rt->untracked([&] { return _source->refusal(focused->key, focused->column); })
+                       .value_or(std::string{kReadOnlyText}));
             return;
         }
         if (_source->toggles(focused->key, focused->column)) {
@@ -3059,10 +3907,13 @@ public:
         _source->editorOpened(focused->key, focused->column);
     }
 
-    /// @brief Focus left the table: an open editor is committed.
+    /// @brief Focus left the table: an open editor is committed, and the source hears that focus is on no row.
     void leave() {
         commit();
         letGo();
+        _hasFocus = false;
+        _focusedRow.reset();
+        _source->focusRow(std::nullopt);
     }
 
     /// @brief The latest transient refusal or notice, else the focused cell's error while it has one. Tracked.
@@ -3297,6 +4148,9 @@ public:
     PasteResult paste(std::string_view text) {
         commit();
         letGo();
+        if (!_source->takesBlocks()) {
+            return {};
+        }
         std::vector<std::vector<std::string>> const lines = pasteLines(text);
         std::size_t values = 0;
         for (std::vector<std::string> const& line : lines) {
@@ -3377,6 +4231,9 @@ public:
     void fillDown() {
         commit();
         letGo();
+        if (!_source->takesBlocks()) {
+            return;
+        }
         std::optional<Block> const cells = _rt->untracked([&] { return block(); });
         if (!cells || cells->keys.size() < 2) {
             return;
@@ -3404,6 +4261,9 @@ public:
     void clear() {
         commit();
         letGo();
+        if (!_source->takesBlocks()) {
+            return;
+        }
         std::optional<Block> const cells = _rt->untracked([&] { return block(); });
         if (!cells) {
             return;
@@ -3895,7 +4755,7 @@ private:
             if (next) {
                 focusCell(CellRef{.key = *next, .column = shown->column});
             } else {
-                _place.set(std::nullopt);
+                setPlace(std::nullopt);
             }
         }
         if (held) {
@@ -3964,6 +4824,16 @@ private:
 
     // Whether no row operation is offered: the rows are fixed, or not the source's to change.
     [[nodiscard]] bool fixedRows() const { return _options.rowsFixed || !_source->rowsEditable(); }
+
+    // Moves the focus, and tells the source when the row it is on changed.
+    void setPlace(std::optional<GridFocus> place) {
+        std::optional<Key> const row = place ? place->key : std::nullopt;
+        _place.set(std::move(place));
+        if (row != _focusedRow) {
+            _focusedRow = row;
+            _source->focusRow(row);
+        }
+    }
 
     // Lets go of the row an editor was open on, once no editor is open: the sort and the filter place it again.
     void letGo() {
@@ -4055,7 +4925,7 @@ private:
         if (step.kind == Step::Kind::Found) {
             focusCell(CellRef{.key = *step.key, .column = step.column});
         } else if (step.kind == Step::Kind::Stop) {
-            _place.set(GridFocus{.key = std::nullopt, .viewRow = step.row, .column = step.column});
+            setPlace(GridFocus{.key = std::nullopt, .viewRow = step.row, .column = step.column});
             _message.set({});
         }
     }
@@ -4167,6 +5037,10 @@ private:
     reactive::TimerHandle _undoTimer;
     // The draft the open editor's cell held when it opened.
     std::string _kept;
+    // Whether the table has focus: since a click, a key or a move inside it, until focus left it.
+    bool _hasFocus = false;
+    // The row the source last heard focus is on.
+    std::optional<Key> _focusedRow;
     std::shared_ptr<void const> _kept_alive;
 };
 

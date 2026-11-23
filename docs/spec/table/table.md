@@ -96,6 +96,7 @@ struct TableColumn {
     ColumnDisplay display;                 // how a cell's value becomes its text; see "How a column shows its cells"
     std::string tone;                      // the id of a companion column holding this cell's tone, or empty
     std::string tooltip;                   // the id of a companion column holding this cell's tooltip, or empty
+    std::optional<EditInfo> edit;          // the action that edits its cells on a model's table; see editing.md
 };
 
 struct ColumnGroupInfo {

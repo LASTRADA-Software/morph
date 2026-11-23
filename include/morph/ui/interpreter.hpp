@@ -78,6 +78,8 @@ struct FormViewOptions;
 namespace table {
 class ITableStateStore;
 struct SaveResult;
+struct TableColumn;
+struct TableDescription;
 struct TableStateKey;
 }  // namespace table
 
@@ -88,6 +90,8 @@ namespace morph::ui {
 class TableStates;
 
 class Mounted;
+class GridController;
+class ModelGridSource;
 struct GridColumn;
 struct GridOptions;
 struct ChartRange;
@@ -713,10 +717,13 @@ struct RunSettled {
     std::function<void(Value body)> rerun;
 };
 
-/// @brief Whether an action's input names rows of a table as a selection or as one row.
+/// @brief Whether an action's input names rows of a table as a selection, as one row, or as the row a cell edit
+///        changes.
 enum class TableInputKind : std::uint8_t {
     Selection,  ///< A `table::RowSelection`: its schema property carries `x-selectionOf`.
     Row,        ///< A `table::RowRef`: its schema property carries `x-rowOf`.
+    CellEdit,   ///< A `table::CellEdit` or `table::RowEdit` action: its schema root carries `x-cellEditOf` or
+                ///< `x-rowEditOf`, and its member `key` names the row.
 };
 
 /// @brief A top-level member of an action's input that names rows of a table.
@@ -731,8 +738,8 @@ struct TableInput {
 
 /// @brief The members of an action's input schema that name rows of a table.
 /// @param schemaJson The action's input schema.
-/// @return Each top-level property carrying `x-selectionOf` or `x-rowOf`, by member name; none for a schema that
-///         does not read.
+/// @return Each top-level property carrying `x-selectionOf` or `x-rowOf`, by member name, and the member `key` of an
+///         edit action whose root carries `x-cellEditOf` or `x-rowEditOf`; none for a schema that does not read.
 [[nodiscard]] MORPH_API std::vector<TableInput> tableInputsOf(std::string_view schemaJson);
 
 /// @brief Hears every mutation run of a session: what a model-backed table marks its rows by, and offers again.
@@ -2514,6 +2521,13 @@ private:
     Node lowerFixedGrid(DocNode const& node, LowerCtx const& ctx, ElementState* element);
     /// The table a model-backed table shows for the description its rows hold, or the status line alone without one.
     Node modelTableOf(DocNode const& node, LowerCtx const& ctx, ElementState& element);
+    /// A model-backed table with a column its description edits, as a grid over its cells: the grid's controller, its
+    /// rows handed to @p source; null for a table with no editable column.
+    std::shared_ptr<GridController> editableModelTable(DocNode const& node, LowerCtx const& ctx, ElementState& element,
+                                                       table::TableDescription const& description,
+                                                       std::vector<table::TableColumn> const& shown,
+                                                       TableSource& source, TableOptions const& options,
+                                                       std::shared_ptr<std::weak_ptr<ModelGridSource>> const& drafts);
     /// Makes a model-backed table's rows, its description query and its persisted state's load.
     void wireModelTable(ElementState& element);
     /// Takes the description its query holds now: reports the filters a new revision drops, then hands it to the rows.

@@ -546,7 +546,13 @@ public:
           _tableRuntime{.work = _config.tableWork != nullptr ? _config.tableWork.get() : &workerPool,
                         .views = _views.get(),
                         .settle = _settle.get(),
-                        .settleKeep = _settle} {
+                        .settleKeep = _settle,
+                        .schemaOf = [&dispatcher](std::string_view action) {
+                            // A description names an edit action by its id alone: the first model registering the id
+                            // serves its schema.
+                            std::vector<std::string> const models = dispatcher.modelsOf(action);
+                            return models.empty() ? std::string{} : dispatcher.actionSchema(models.front(), action);
+                        }} {
         // The first read of the record and effects registries: an invalid
         // declaration fails the server's construction rather than its first
         // successful execute, whose changes are derived from them.

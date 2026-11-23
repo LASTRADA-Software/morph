@@ -134,6 +134,22 @@ struct ColumnDisplay {
     [[nodiscard]] bool operator==(ColumnDisplay const& other) const = default;
 };
 
+/// @brief The action that edits a column's cells, on a model's table (`docs/spec/table/editing.md`, "Cells of a model's
+///        table").
+struct EditInfo {
+    /// @brief The action's id: it takes a `CellEdit` or a `RowEdit` of the column's table.
+    std::string action;
+    /// @brief For a `RowEdit`, the member of its `values` the column edits; empty for a `CellEdit`.
+    std::string member;
+    /// @brief The id of a companion column whose `true` makes the row's cell read-only; empty for none.
+    std::string readonly;
+
+    /// @brief Member-wise equality.
+    /// @param other The edit to compare with.
+    /// @return `true` when every member matches.
+    [[nodiscard]] bool operator==(EditInfo const& other) const = default;
+};
+
 /// @brief One column of a table's description.
 struct TableColumn {
     /// @brief The column's id and kind, as the engine reads them.
@@ -155,6 +171,8 @@ struct TableColumn {
     std::string tone;
     /// @brief The id of the `Text` column whose cell is this column's cell's tooltip; empty for none.
     std::string tooltip;
+    /// @brief The action that edits the column's cells on a model's table; none leaves the column read-only.
+    std::optional<EditInfo> edit;
 
     /// @brief Member-wise equality.
     /// @param other The column to compare with.
@@ -164,8 +182,8 @@ struct TableColumn {
 
 }  // namespace morph::table
 
-/// @brief The JSON of `morph::table::TableColumn`: every member by its name, `display`, `tone` and `tooltip` left out
-///        while they hold their defaults, so a column that shows its cells plainly costs nothing for them. A reader
+/// @brief The JSON of `morph::table::TableColumn`: every member by its name, `display`, `tone`, `tooltip` and `edit` left
+///        out while they hold their defaults, so a column that shows its cells plainly costs nothing for them. A reader
 ///        restores a member left out to its default.
 template <>
 struct glz::meta<morph::table::TableColumn> {
@@ -176,7 +194,7 @@ struct glz::meta<morph::table::TableColumn> {
     /// @param member  The member.
     /// @param key     Its JSON name.
     /// @param context Unused.
-    /// @return `true` for a default `display` and an empty `tone` or `tooltip`.
+    /// @return `true` for a default `display`, an empty `tone` or `tooltip`, and no `edit`.
     template <typename V>
     static constexpr bool skip_if(V const& member, std::string_view key, glz::meta_context const& context) {
         static_cast<void>(context);
@@ -184,6 +202,8 @@ struct glz::meta<morph::table::TableColumn> {
             return key == "display" && member == morph::table::ColumnDisplay{};
         } else if constexpr (std::is_same_v<V, std::string>) {
             return (key == "tone" || key == "tooltip") && member.empty();
+        } else if constexpr (std::is_same_v<V, std::optional<morph::table::EditInfo>>) {
+            return !member.has_value();
         } else {
             return false;
         }
@@ -192,7 +212,7 @@ struct glz::meta<morph::table::TableColumn> {
     static constexpr auto value =
         glz::object("info", &T::info, "label", &T::label, "group", &T::group, "sortable", &T::sortable, "filterable",
                     &T::filterable, "shown", &T::shown, "display", &T::display, "tone", &T::tone, "tooltip",
-                    &T::tooltip);
+                    &T::tooltip, "edit", &T::edit);
 };
 
 namespace morph::table::detail {
@@ -221,7 +241,7 @@ template <typename T, typename... Args>
 }  // namespace morph::table::detail
 
 // The JSON above names each member: a member added to `TableColumn` and not listed there would never reach the wire.
-static_assert(morph::table::detail::memberCount<morph::table::TableColumn>() == 9,
+static_assert(morph::table::detail::memberCount<morph::table::TableColumn>() == 10,
               "a TableColumn member is missing from glz::meta<morph::table::TableColumn>: list it there, then update "
               "this count");
 
@@ -2473,6 +2493,23 @@ struct QueryTable {
     static ::core::async::Task<GenericPage> invoke(Model& model, QueryTable& action);
 };
 
+/// @brief Checks every editable column of a description against its edit action's input: the field it edits must
+///        exist and be of a kind the column's kind is edited with. Defined in `table/edits.hpp`, which this header
+///        includes at its end.
+///
+/// A column's field is the `value` member of a `CellEdit` action (an `EditInfo` with no `member`), or the named member
+/// of a `RowEdit` action's `values`. The fits are `Integer` with an integer, slider, enum or choice field; `Key` with
+/// an integer or choice; `Decimal` with a decimal; `Quantity` and `Measure` with a quantity; `Number` with a number or
+/// slider; `Text` with a text, multiline, enum or choice; `Date` with a date or epoch date; `DateTime` with a date-time
+/// or epoch date-time; `Bool` with a Boolean; `Custom` with a text, enum or choice.
+/// @param description The description.
+/// @param schemaOf    An action's input schema by its id; nothing for an action that is not known.
+/// @return `SourceContract` naming the first column whose action is unknown or does not read, whose field is missing,
+///         or whose field's kind does not fit the column's; nothing when every edit fits.
+[[nodiscard]] inline std::expected<void, TableError> checkEdits(
+    TableDescription const& description,
+    std::function<std::optional<std::string>(std::string_view action)> const& schemaOf);
+
 /// @brief The action `Table.<id>.describe`: the table's description as the caller sees it.
 ///
 /// It runs on the model's strand and reads neither the source nor a snapshot.
@@ -2484,7 +2521,8 @@ struct DescribeTable {
     /// @param model  The model instance.
     /// @param action The action.
     /// @return `servedDescription` of the served table: its sort bound from `limits`, its revision set.
-    /// @throws model::ActionRefusal when `servedDescription` answers `SourceContract`.
+    /// @throws model::ActionRefusal when `servedDescription` answers `SourceContract`, or when a column's edit does
+    ///         not fit its action's input (`checkEdits`, over the schemas the server serves).
     template <typename Model>
     static TableDescription invoke(Model& model, DescribeTable& action) {
         static_cast<void>(action);
@@ -2495,6 +2533,15 @@ struct DescribeTable {
         auto described = servedDescription(served);
         if (!described) {
             throw detail::refusalOf(described.error());
+        }
+        if (auto const* const runtime = currentTableRuntime(); runtime != nullptr && runtime->schemaOf) {
+            auto const edits = checkEdits(*described, [runtime](std::string_view id) -> std::optional<std::string> {
+                std::string schema = runtime->schemaOf(id);
+                return schema.empty() ? std::nullopt : std::optional{std::move(schema)};
+            });
+            if (!edits) {
+                throw detail::refusalOf(edits.error());
+            }
         }
         return std::move(*described);
     }
@@ -2540,3 +2587,6 @@ struct glz::meta<morph::table::QueryTable<Function>> {
 
 // The selection types `BRIDGE_REGISTER_TABLE` registers `Table.<id>.resolve` with; they build on this header.
 #include <morph/table/row_selection.hpp>
+
+// The commits of edited cells and the edit actions of a model's table; `checkEdits` above is defined there.
+#include <morph/table/edits.hpp>

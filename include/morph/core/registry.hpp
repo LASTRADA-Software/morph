@@ -1347,6 +1347,22 @@ public:
         }
     }
 
+    /// @brief The schema `(modelId, actionId)` serves, as `schemasJson` lists it.
+    /// @param modelId  Model type-id.
+    /// @param actionId Action type-id.
+    /// @return The schema's JSON text; empty when the pair is unregistered or its description cannot be produced.
+    [[nodiscard]] std::string actionSchema(std::string_view modelId, std::string_view actionId) const {
+        auto iter = _actions.find(detail::PairKeyView{modelId, actionId});
+        if (iter == _actions.end()) {
+            return {};
+        }
+        try {
+            return iter->second.describe().schema;
+        } catch (const std::exception&) {
+            return {};
+        }
+    }
+
     /// @brief The model type-ids @p actionId is registered under.
     ///
     /// An action id names one action, but the pair registered is

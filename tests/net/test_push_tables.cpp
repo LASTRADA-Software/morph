@@ -247,11 +247,15 @@ public:
     }
 };
 
-// Takes the principal a client names as verified, and refuses `bob` every action holding `PtModel.second`.
+// Takes the principal a client names as verified, refuses `bob` every action holding `PtModel.second`, and refuses
+// `viewer` the edit action of `editnet::Specimens`.
 class TablesAuthorizer final : public morph::session::IAuthorizer {
 public:
     [[nodiscard]] bool authorize(morph::session::Context const& ctx, std::string_view /*modelType*/,
                                  std::string_view actionType) const override {
+        if (ctx.principal == "viewer") {
+            return actionType != "Lims_EditSpecimenCount";
+        }
         if (ctx.principal != "bob") {
             return true;
         }
@@ -1445,3 +1449,116 @@ TEST_CASE("tables: a changed key's event names both keys", "[net][tables][keys]"
     CHECK(keys == std::vector<std::string>{"10", "2"});
 }
 // Mutation: the walk ignoring `from`, which leaves the old row's watchers untold (keys {10}).
+
+// ── Cells of a model's table over a socket ──────────────────────────────────
+
+// NOLINTBEGIN(misc-use-internal-linkage): registered types must have external linkage.
+namespace editnet {
+
+struct EditSpecimenCount;
+
+// Three specimens keyed 1..3, each with a `count` equal to its key, which `Lims_EditSpecimenCount` changes.
+class Specimens {
+public:
+    Specimens();
+    morph::table::ServedTable specimens(morph::table::TableContext const& context);
+    morph::table::ChangedRows<&Specimens::specimens> execute(EditSpecimenCount const& action);
+
+private:
+    std::shared_ptr<morph::table::VectorSource> _source;
+};
+
+struct EditSpecimenCount : morph::table::CellEdit<&Specimens::specimens, std::int64_t> {};
+
+}  // namespace editnet
+
+BRIDGE_REGISTER_MODEL(editnet::Specimens, "editnet::Specimens")
+BRIDGE_REGISTER_TABLE(editnet::Specimens, "specimens", &editnet::Specimens::specimens)
+BRIDGE_REGISTER_ACTION(editnet::Specimens, editnet::EditSpecimenCount, "Lims_EditSpecimenCount")
+BRIDGE_REGISTER_EFFECTS(editnet::EditSpecimenCount, morph::effects::updatesTable<&editnet::Specimens::specimens>)
+
+namespace editnet {
+
+namespace {
+
+// `key` (the key) and `count`, edited by `Lims_EditSpecimenCount`.
+std::vector<morph::table::TableColumn> specimenColumns() {
+    return {morph::table::TableColumn{.info = {.id = "key", .kind = morph::table::ColumnKind::Integer}, .label = "Key"},
+            morph::table::TableColumn{.info = {.id = "count", .kind = morph::table::ColumnKind::Integer},
+                                      .label = "Count",
+                                      .edit = morph::table::EditInfo{.action = "Lims_EditSpecimenCount"}}};
+}
+
+}  // namespace
+
+Specimens::Specimens() {
+    morph::table::TableDescription description;
+    description.columns = specimenColumns();
+    _source = std::make_shared<morph::table::VectorSource>(morph::table::columnInfos(description));
+    std::vector<morph::table::RowId> keys;
+    std::vector<std::vector<morph::table::Cell>> cells;
+    for (std::int64_t row = 1; row <= 3; ++row) {
+        keys.emplace_back(row);
+        cells.push_back({morph::table::Cell{row}, morph::table::Cell{row}});
+    }
+    _source->setRows(std::move(keys), std::move(cells));
+}
+
+morph::table::ServedTable Specimens::specimens(morph::table::TableContext const& /*context*/) {
+    morph::table::ServedTable served;
+    served.description.id = "specimens";
+    served.description.key = "key";
+    served.description.columns = specimenColumns();
+    served.description.capabilities.keys = true;
+    served.source = _source;
+    return served;
+}
+
+morph::table::ChangedRows<&Specimens::specimens> Specimens::execute(EditSpecimenCount const& action) {
+    auto const key = std::get<std::int64_t>(action.key);
+    _source->patchRow(action.key, {morph::table::Cell{key}, morph::table::Cell{action.value}});
+    return {.rows = {morph::table::ChangedRow{.key = action.key}}};
+}
+
+}  // namespace editnet
+// NOLINTEND(misc-use-internal-linkage)
+
+TEST_CASE("push tables: a cell edit reaches the model and the change event refetches the row", "[net][tables][edit]") {
+    glz::generic_u64 schema;
+    REQUIRE_FALSE(glz::read_json(schema, morph::forms::schemaJson<editnet::EditSpecimenCount>()));
+    CHECK(schema["x-cellEditOf"].get_string() == "editnet::Specimens.specimens");
+    Server server;
+    Client alice{server.url, "alice"};
+    REQUIRE(alice.watch({"editnet::Specimens.specimens"}).empty());
+    auto const model = alice.create("editnet::Specimens");
+    // The description is checked against the action's input on the server: the count column's field fits it.
+    auto const described = alice.execute(model, "editnet::Specimens", "Table.specimens.describe", "{}");
+    REQUIRE(described.kind == "ok");
+    CHECK(described.body.find(R"("edit":{"action":"Lims_EditSpecimenCount")") != std::string::npos);
+    auto const edited =
+        alice.execute(model, "editnet::Specimens", "Lims_EditSpecimenCount", R"({"key":1,"value":4})");
+    REQUIRE(edited.kind == "ok");
+    REQUIRE(alice.pumpUntil([&] { return !alice.changes.empty(); }));
+    CHECK(alice.keysOf("editnet::Specimens.specimens") == std::vector<std::string>{"1"});
+    // The refetch the change event causes: a keyed query of row 1 holds the count the model now has.
+    auto const page = pageOf(alice.execute(model, "editnet::Specimens", "Table.specimens", R"({"keys":[1]})"));
+    REQUIRE(page.rows.size() == 1);
+    auto const at = std::ranges::find(page.columns, std::string{"count"});
+    REQUIRE(at != page.columns.end());
+    CHECK(page.rows.at(0).at(static_cast<std::size_t>(at - page.columns.begin())) ==
+          morph::table::Cell{std::int64_t{4}});
+}
+// Mutation: the client sending {"key":…, "value":…} under the wrong action id (the model never sees it).
+
+TEST_CASE("push tables: a principal refused the edit action sees the column read-only", "[net][tables][edit]") {
+    Server server;
+    Client viewer{server.url, "viewer"};
+    auto const model = viewer.create("editnet::Specimens");
+    CHECK(viewer.execute(model, "editnet::Specimens", "Table.specimens", "{}").kind == "ok");
+    CHECK(viewer.execute(model, "editnet::Specimens", "Lims_EditSpecimenCount", R"({"key":1,"value":4})").kind ==
+          "err");
+    // The client learns the refusal from the catalog's permitted actions, which lack the action for this principal;
+    // the lowering's read-only column for such a principal is "model table: a column whose action is not permitted is
+    // read-only" in tests/test_ui_table_model.cpp.
+}
+// Mutation: the server's authorizer letting every principal run every action (the viewer's edit is ok).

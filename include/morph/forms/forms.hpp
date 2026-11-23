@@ -3361,6 +3361,21 @@ void annotateSubmitMode(glz::generic_u64& dom) {
         }
     }
 }
+
+/// @brief Writes the keyword and value an action type declares with `schemaValue()` at its schema's root: a table's
+///        `CellEdit` or `RowEdit` action is itself the marked type, so its keyword has no property to sit on, unlike a
+///        member's (`annotateSchemaMarker`). Does nothing for any other type.
+/// @tparam A Action type whose schema is being annotated.
+/// @param dom Schema DOM to stamp in place.
+template <typename A>
+void annotateSchemaRoot(glz::generic_u64& dom) {
+    if constexpr (DeclaresSchemaValue<A>) {
+        auto [keyword, value] = A::schemaValue();
+        dom[std::string{keyword}] = std::move(value);
+    } else {
+        static_cast<void>(dom);
+    }
+}
 // NOLINTEND(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access)
 
 /// @brief A row type that declares the data levels of its columns, as
@@ -3618,6 +3633,7 @@ template <typename A>
     }
 
     annotateSubmitMode<A>(dom);
+    annotateSchemaRoot<A>(dom);
 
     // Exact companions for any bound a double cannot hold. Last, so it also
     // covers nodes added by the passes above.
