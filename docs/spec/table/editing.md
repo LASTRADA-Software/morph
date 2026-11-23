@@ -222,7 +222,9 @@ struct TableColumn {
 ```
 
 - The cell's field is the `value` member of a `CellEdit` action's input schema, or the named member of a
-  `RowEdit`'s `values`, so its kind, places, bounds and options are the action's. A column whose kind and whose
+  `RowEdit`'s `values`, so its kind, places, bounds and options are the action's. A `Measure` cell, in its own
+  unit, opens in its `Quantity` field's canonical unit, converted through the description's units; a cell the units
+  cannot convert opens blank rather than as a figure in the wrong unit. A column whose kind and whose
   field's kind differ, or a `member` that `values` does not have, is `SourceContract`.
 - **The action is the application's.** It declares `updatesTable` and returns the `ChangedRows` of the row, as
   any action that changes a table does ([`table.md`](table.md#a-models-tables)). A `FailedRow` for the row, or a
@@ -244,7 +246,9 @@ struct TableColumn {
 - **A row at once.** A column whose `EditInfo` names a `RowEdit` collects the row's edits while focus stays in the
   row and commits them together when focus leaves it, or on `Ctrl+Enter`. A refusal puts each `FieldError` on
   its cell and, while the table has focus, moves focus back to the first refused cell: focus has left the row
-  by the time the reply arrives. This is for a record whose members are checked together, and
+  by the time the reply arrives. A held cell whose row has become busy or locked, or whose value is no longer loaded,
+  when the row is sent is refused at the cell: it keeps its draft with the refusal as its error, and its next commit,
+  changed or not, sends it. This is for a record whose members are checked together, and
   `editMode: "row"` on the table chooses it for all its columns.
 - **Who may edit.** The action's authorisation is the rule: a principal the authoriser refuses for the action
   sees the column read-only, which the client learns from the catalog's permitted actions. A row is read-only

@@ -422,7 +422,9 @@ inline constexpr std::string_view kEditSpecimenRow =
     R"("taken":{"type":["string","null"],"format":"date-time"},)"
     R"("day":{"type":["integer","null"],"x-widget":"epochDays"},)"
     R"("at":{"type":["integer","null"],"x-widget":"epochSeconds"},)"
-    R"("mass":{"type":["object","null"],"x-decimalPlaces":2}}}},"required":["key"]})";
+    R"("mass":{"type":["object","null"],"x-decimalPlaces":2},)"
+    R"("weight":{"type":["object","null"],"x-decimalPlaces":3,"ExtUnits":{"unitAscii":"kg","unitUnicode":"kg"},)"
+    R"("x-unitAlternatives":[{"id":"g","display":"g","decimals":1,"num":1,"den":1000}]}}}},"required":["key"]})";
 
 // The description of the model table's cases: `key` (the key), `label` and `remark` (Text, `Lims_EditSpecimenRow`'s
 // `label` and `remarkText`), `count` (Integer of level `counts`, `Lims_EditSpecimenCount`, frozen by `countFrozen`),
@@ -456,6 +458,16 @@ inline table::TableDescription specimenTableDescription() {
     add("day", table::ColumnKind::Date, table::EditInfo{.action = "Lims_EditSpecimenRow", .member = "day"});
     add("at", table::ColumnKind::DateTime, table::EditInfo{.action = "Lims_EditSpecimenRow", .member = "at"});
     add("mass", table::ColumnKind::Decimal, table::EditInfo{.action = "Lims_EditSpecimenRow", .member = "mass"});
+    // A measure, each cell in its own unit of mass: the field's value is in kg.
+    add("weight", table::ColumnKind::Measure, table::EditInfo{.action = "Lims_EditSpecimenRow", .member = "weight"});
+    d.units = {table::UnitInfo{.id = "kg", .symbol = "kg", .dimension = "mass",
+                               .toBase = morph::math::Rational{morph::math::Numerator{1}, morph::math::Denominator{1},
+                                                               morph::math::DecimalPlaces{0}},
+                               .decimals = 3},
+               table::UnitInfo{.id = "g", .symbol = "g", .dimension = "mass",
+                               .toBase = morph::math::Rational{morph::math::Numerator{1}, morph::math::Denominator{1000},
+                                                               morph::math::DecimalPlaces{3}},
+                               .decimals = 1}};
     d.rowLock = "lockedBy";
     return table::describe(std::move(d));
 }
@@ -477,6 +489,7 @@ inline ui::Value specimenRecord(std::int64_t key, std::int64_t count = -1) {
     record.insert_or_assign("day", ui::Value{std::string{"2026-11-20"}});
     record.insert_or_assign("at", instant);
     record.insert_or_assign("mass", ui::Value{ui::Decimal{table::parseDecimal("12.50").value()}});
+    record.insert_or_assign("weight", ui::Value{ui::Quantity{.value = table::parseDecimal("200").value(), .unit = "g"}});
     return ui::Value{std::move(record)};
 }
 
@@ -527,7 +540,7 @@ inline ModelGridFixture::ModelGridFixture(std::vector<std::int64_t> keys, ui::Ed
         ui::ModelColumn{.id = "remark", .edit = editOf("remark"), .model = row, .path = "values.remarkText"});
     columns.push_back(ui::ModelColumn{.id = "count", .edit = editOf("count"), .model = count, .path = "value"});
     columns.push_back(ui::ModelColumn{.id = "note", .edit = std::nullopt, .model = nullptr, .path = {}});
-    for (std::string const member : {"sampled", "taken", "day", "at", "mass"}) {
+    for (std::string const member : {"sampled", "taken", "day", "at", "mass", "weight"}) {
         columns.push_back(ui::ModelColumn{.id = member, .edit = editOf(member), .model = row, .path = "values." + member});
     }
     source = std::make_unique<ui::ModelGridSource>(
@@ -550,7 +563,7 @@ inline std::vector<ui::TableColumn> ModelGridFixture::tableColumns() {
             ui::TableColumn{.id = "count", .label = "count"}, ui::TableColumn{.id = "note", .label = "note"},
             ui::TableColumn{.id = "sampled", .label = "sampled"}, ui::TableColumn{.id = "taken", .label = "taken"},
             ui::TableColumn{.id = "day", .label = "day"},         ui::TableColumn{.id = "at", .label = "at"},
-            ui::TableColumn{.id = "mass", .label = "mass"}};
+            ui::TableColumn{.id = "mass", .label = "mass"},       ui::TableColumn{.id = "weight", .label = "weight"}};
 }
 
 // The value of a settled success, and of a refusal naming fields.
