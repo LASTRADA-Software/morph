@@ -3,6 +3,7 @@
 
 #include <map>
 #include <morph/ui/document.hpp>
+#include <morph/ui/service.hpp>
 #include <morph/ui/shell_parts.hpp>
 #include <morph/ui/value.hpp>
 #include <optional>
@@ -10,6 +11,7 @@
 #include <span>
 #include <string>
 #include <string_view>
+#include <vector>
 
 namespace morph::ui::detail {
 
@@ -68,5 +70,15 @@ using TourTargets = std::map<std::string, TourTarget, std::less<>>;
 /// @return The first refusal, naming the tour and the step or the document and the command, or nothing.
 [[nodiscard]] std::optional<Refusal> checkTours(Document const* app, std::string_view appText,
                                                 std::span<TourScreen const> screens);
+
+/// The screens of a served bundle as the checks read them: each screen's document text from the bundle's files.
+/// @param bundle The bundle.
+/// @return Its screens, in catalog order.
+[[nodiscard]] std::vector<TourScreen> tourScreensOf(ServedBundle const& bundle);
+
+/// The app document's text in a served bundle.
+/// @param bundle The bundle.
+/// @return It; empty when the bundle has none.
+[[nodiscard]] std::string appTextOf(ServedBundle const& bundle);
 
 }  // namespace morph::ui::detail

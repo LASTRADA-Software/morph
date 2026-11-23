@@ -2,6 +2,7 @@
 
 #include "tour_checks.hpp"
 
+#include <algorithm>
 #include <cstddef>
 #include <map>
 #include <morph/ui/bundle.hpp>
@@ -257,6 +258,33 @@ std::optional<Refusal> checkTours(Document const* app, std::string_view appText,
         }
     }
     return std::nullopt;
+}
+
+std::vector<TourScreen> tourScreensOf(ServedBundle const& bundle) {
+    std::vector<TourScreen> screens;
+    screens.reserve(bundle.screens.size());
+    for (ServedScreen const& screen : bundle.screens) {
+        std::string text;
+        if (!screen.hash.empty()) {
+            if (auto const file = bundle.files.find(screen.hash); file != bundle.files.end()) {
+                text = file->second.bytes;
+            }
+        }
+        screens.push_back(
+            TourScreen{.id = screen.entry.id, .text = std::move(text), .listed = !screen.entry.isPublic});
+    }
+    return screens;
+}
+
+std::string appTextOf(ServedBundle const& bundle) {
+    for (auto const& [hash, file] : bundle.files) {
+        static_cast<void>(hash);
+        if (std::ranges::any_of(file.holders,
+                                [](ServedFile::Holder const& holder) { return holder.kind == kAppFile; })) {
+            return file.bytes;
+        }
+    }
+    return {};
 }
 
 }  // namespace morph::ui::detail

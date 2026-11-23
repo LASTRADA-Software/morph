@@ -221,6 +221,9 @@ server, never a surprise on a client.
   tour; a computed id is reported at run time. The checks of one tour are `detail::checkTour` (`src/ui/tour_checks.hpp`),
   the same function a runtime registration of a tour calls. The shape of `tours` is checked when the app document is
   added ([document.md](document.md#the-app-documents-tours)).
+- **Runtime tours.** `TourRegistry` checks a tour added while the server runs with the same per-tour check
+  (`detail::checkTour`) the build runs, against the bundle served then
+  ([tours.md](tours.md#registering-tours-at-runtime)).
 - **The client's own ids are reserved.** An entry id that is one of `kReservedClientIds` (`client_ids.hpp`: the chat
   panel's `morph.chat`, the tour card's `morph.tour`) is refused: `the id `morph.tour` is the tour card's`.
 - **`custom:` is reserved.** An entry id that starts with `custom:` (`kCustomScreenIdPrefix`) is refused, by
