@@ -15,6 +15,7 @@ list might have "Register a sample", "Find a sample" and "Release results". Whil
 - [Goals](#goals)
 - [Decisions](#decisions)
 - [Authoring a tour](#authoring-a-tour)
+- [Registering tours at runtime](#registering-tours-at-runtime)
 - [Starting a tour](#starting-a-tour)
 - [Running a tour](#running-a-tour)
 - [The spotlight widget](#the-spotlight-widget)
@@ -26,6 +27,8 @@ list might have "Register a sample", "Find a sample" and "Release results". Whil
 
 ## Goals
 
+- Tours can also be registered and removed while the server runs, and connected clients pick up the change without
+  reconnecting.
 - The application's server writes tours, as it writes screens. A client shows the tours of whatever application it
   connects to and needs no per-application code.
 - Tours are translated like every other text: a tour's texts are expressions in the app scope, so a change of locale
@@ -53,6 +56,8 @@ Each decision is listed with the obvious alternative that was rejected.
 | A tour can also start from a document, through the **host command `tour.start`** | A screen can offer a tour in context: an empty state ("New here? Take the tour"), a welcome banner, a help screen. A host command, rather than a new ui/1 command, keeps clients and servers independently releasable. An older client reports a missing host command and keeps the screen, and `{"can": "host:tour.start"}` lets the author hide the button there. A new built-in command would make every older client refuse the whole screen. The help button keeps opening one destination, as its spec requires. |
 | A waiting step advances when **a screen becomes active** (`advanceOn: {screen}`) | Every frontend observes that event the same way, through the workspace's active tab. "Advance when this element is clicked" would need click observation in every backend, and with clicks the tour cannot tell an accidental press from a deliberate one. |
 | A target that is not on screen shows the card **centred, without a ring**, and logs a warning | Checking at build time catches misspelt ids. What remains at run time is an element hidden by state (a collapsed panel, an empty table). The card text still helps, and ending the tour would strand the person mid-way. The warning keeps the miss visible to the developer. |
+| Runtime tours live in a framework model, **`morph.tours`**, beside the app document's static ones | Some tours are not known when the bundle is built: a module enabled later, a tour an administrator writes, a release note's "what's new" walk. `morph.customScreens` already shows how a server-side list reaches every client and stays current through a record watch, so tours reuse that shape rather than reloading the app document, which only takes effect at the next sign-in. |
+| Runtime registration is a **server C++ API**; the wire offers only `list` | Who may add a tour is application policy. An application that wants an editor or an admin screen exposes its own action, checks its own permission, and calls the registry. The framework adds no write action whose authorisation it would have to guess. |
 | One tour runs at a time | Starting a tour ends the one that is running. Two spotlights cannot share one window. |
 | The tour belongs to the **frame** | The frame is rebuilt on sign-in and sign-out, and the controller and spotlight are rebuilt with it. That is what ends a tour then. A reconnect is transient and leaves the screens mounted, so a tour survives it. A reloaded app document takes effect at the next frame build, like every other app-document member. |
 | No "already seen" state, and no auto-start | The generic client does not wire preferences yet. Auto-start needs per-person state, so it waits for that work rather than adding a second store just for tours. |
@@ -120,6 +125,48 @@ navigation badges, into one `AppRoot::tours()` computed value that re-evaluates 
 The app document is written as JSON, so the author API adds `author::Tour`, `author::TourStep` and
 `author::withTours(appText, tours)`, which returns the app document's text with `tours` filled in. A tour is data the
 server builds once. It has no lifecycle.
+
+## Registering tours at runtime
+
+`ui::TourRegistry` (`include/morph/ui/tour_registry.hpp`) holds the tours added while the server runs. The app
+document's `tours` stay where they are, and the registry adds to them.
+
+```cpp
+morph::ui::TourRegistry tours{registry};                 // checks against this UiRegistry's bundle
+morph::ui::registerTours(models, tours);                 // serves morph.tours: the read action `list`
+auto added = tours.add(tourJson);                        // std::expected<void, TourRefusal>
+auto again = tours.replace(tourJson);                    // the same id, new content
+auto gone  = tours.remove("whats-new-2026-12");
+```
+
+- **Same format, same checks.** A runtime tour is the same JSON as one entry of the app document's `tours`, built the
+  same way with `author::Tour`. `add` and `replace` run every check in [Checks](#checks) against the bundle being
+  served, and refuse with a `TourRefusal` that names the tour and the step. An id already used by the app document or
+  by another runtime tour is refused by `add`. `replace` and `remove` refuse an id the registry does not hold, and
+  neither can touch an app-document tour.
+- **Translations.** A runtime tour's texts use the same `{"t": key}` form. Its keys resolve through the client's layered
+  provider, so a tour whose keys are not in the bundle's catalogues ships them with
+  `UiRegistry::setFieldTexts`, as server-sent texts are shipped today. A key found in neither is reported by `add`.
+- **Who sees which tour.** `list` answers the runtime tours in registration order, leaving out any tour whose `screen`,
+  or any step's `screen`, the asking person may not open (`screenAdmitted`). The tour is not cut short: it is either
+  offered whole or not offered at all.
+- **Keeping clients current.** Every `add`, `replace` and `remove` touches the record `morph.tours`, and its effects
+  reach every client watching it. On the client, `TourSync` (`include/morph/ui/tour_sync.hpp`) lists at each frame
+  build. It adds `morph.tours` to the session's extra watches, as `CustomScreenSync` does, and lists again on each
+  `changes` event naming the record, after a reconnect and after a `resync`. An in-process source sends no events, so
+  its list refreshes at a frame and a reconnect.
+- **Merging.** The controller's tours are the app document's, then the runtime ones, each group in its own order. The
+  Tours menu shows them that way within each screen group. When a running tour is replaced or removed, it ends and the
+  shell shows a toast saying the tour changed. It is not swapped mid-way, because its step positions may no longer
+  correspond.
+- **Bundle reload.** When the server's bundle changes (a development reload), the registry checks every runtime tour
+  again. A tour that no longer passes is removed, logged at error with its refusal, and reported through
+  `TourRegistry::onDropped`. It is never kept and left to fail on a client.
+- **Lifetime.** The registry keeps its tours in memory. An application that wants them to survive a restart stores
+  them itself and adds them again at start-up. A store seam would only matter once tours are written by people,
+  which is out of scope.
+- **A client without the model.** A server that never calls `registerTours` answers `list` as an unknown model. The
+  sync logs that once at debug and offers the app document's tours alone.
 
 ## Starting a tour
 
@@ -316,6 +363,13 @@ are must-understand, as everywhere else in ui/1.
   - a target inside a scrolled-away `ScrollWidget` is scrolled into view.
 - **Terminal:** a render test of the card box and of the target in reverse video, and Tab reaching the target on a
   waiting step.
+- **Runtime registration, server:** `add` with each refusal (unknown screen, unknown target, duplicate id against the
+  app document and against another runtime tour, missing text key); `replace` and `remove` of an unknown id; `list`
+  in order and filtered by `screenAdmitted`; each change touching `morph.tours`; a bundle reload dropping a tour that
+  no longer passes and calling `onDropped`.
+- **Runtime registration, client:** a tour added on the server appears in the Tours menu after the `changes` event;
+  a removed one disappears; a running tour that is replaced ends with a toast; the list is fetched again after a
+  reconnect; a server without the model offers the app document's tours alone.
 - **Host command:** `tour.start` from a document starts the tour; an unknown id is reported; `{"can":
   "host:tour.start"}` is true on this client.
 
@@ -328,6 +382,8 @@ The framework ships first as its own pull request. The lims proof follows in a s
 - **Several tours on the samples screen,** one per workflow: "Register a sample", "Find a sample" and "Release
   results". One billing screen also gets its own workflow tour, "Issue an invoice".
 - All tours are in English and German.
+- **Runtime:** the lims server registers a "What's new" tour at start-up through `TourRegistry`, and a GUI test adds
+  and removes a tour while a client is connected.
 - **Starting from a screen:** the samples list's empty state runs `tour.start` as well.
 - **A lims GUI test** opens the samples screen, checks that the Tours list shows its three workflows before
   "Getting started", and runs "Register a sample" end to end in the headless shell. A render-smoke test captures the
