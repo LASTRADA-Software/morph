@@ -10,6 +10,7 @@ workflow. Specified across `include/morph/ui/tours.hpp` (the controller), `tour_
 
 - [The declaration](#the-declaration)
 - [Registering tours at runtime](#registering-tours-at-runtime)
+- [Runtime tours on the client](#runtime-tours-on-the-client)
 - [The tours of a session](#the-tours-of-a-session)
 - [The controller](#the-controller)
 - [The card](#the-card)
@@ -58,6 +59,17 @@ the bundle served now through a getter, as `CustomScreens` does, so a developmen
   getter that answers no bundle throws `std::logic_error`, as every other call does.
 - **Lifetime.** In memory only. An application that wants its runtime tours to survive a restart stores them and adds
   them again at start-up.
+
+## Runtime tours on the client
+
+`TourSync` (`tour_sync.hpp`) is the client of `morph.tours`, shaped like `CustomScreenSync`. `list` asks
+`morph.tours.list`; an answer makes the tours offered, loads each listed tour with `loadTourText` (one that does not
+load is logged at warn and left out) with its `revision`, tells `setOnListed`, and adds `morph.tours` to the session's
+extra watches. While offered, a `changes` event naming the record, a `resync` and a reconnect list again; `relist(done)`
+calls back once its own reply was handled, and one private channel carries every call, so replies arrive in order. A
+server that never called `registerTours` answers `unknown model type: morph.tours`: the sync offers no runtime tours and
+logs that once at debug; any other failure is logged at warn and keeps the last list. `reset` forgets the list, stops
+the watch and drops replies in flight.
 
 ## The tours of a session
 
