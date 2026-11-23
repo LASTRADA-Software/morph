@@ -1377,6 +1377,7 @@ AppRoot::~AppRoot() {
     } catch (...) {  // NOLINT(bugprone-empty-catch): a destructor has no one to report to.
     }
     // The counts read the scope, so they go before it.
+    _tours.reset();
     _navigationBadges.reset();
     _navigation.clear();
     _core->session.setAppScope(nullptr);
@@ -1386,6 +1387,8 @@ AppRoot::~AppRoot() {
 reactive::Computed<std::vector<NavigationBadge>> const& AppRoot::navigationBadges() const {
     return *_navigationBadges;
 }
+
+reactive::Computed<std::vector<Tour>> const& AppRoot::tours() const { return *_tours; }
 
 PrincipalPlacement AppRoot::principalPlacement() const noexcept {
     return _core->doc().principalPlacement == "head" ? PrincipalPlacement::Head : PrincipalPlacement::Sidebar;
@@ -8927,6 +8930,33 @@ std::expected<std::unique_ptr<AppRoot>, Refusal> Interpreter::mountApp(std::shar
                 }
             }
             return shown;
+        });
+    // One computed value for every tour: the texts are few, and a change of locale changes all of them at once.
+    root->_tours = std::make_unique<reactive::Computed<std::vector<Tour>>>(
+        _session->runtime(), [doc, scope = root->_scope.get()] {
+            auto const textOf = [scope](ExprPtr const& expr) {
+                return expr == nullptr ? std::string{}
+                                       : detail::textOf(detail::evalIn(*scope, nullptr, expr), scope->formatting());
+            };
+            std::vector<Tour> out;
+            out.reserve(doc->tours.size());
+            for (TourDecl const& declared : doc->tours) {
+                Tour tour{.id = declared.id,
+                          .screen = declared.screen,
+                          .title = textOf(declared.title),
+                          .summary = textOf(declared.summary),
+                          .steps = {}};
+                for (TourStepDecl const& step : declared.steps) {
+                    tour.steps.push_back(TourStep{.title = textOf(step.title),
+                                                  .body = textOf(step.body),
+                                                  .screen = step.screen,
+                                                  .params = step.params,
+                                                  .target = step.target,
+                                                  .advanceOn = step.advanceOn});
+                }
+                out.push_back(std::move(tour));
+            }
+            return out;
         });
     // The app document's date patterns are the application's: every screen of the bundle shows and reads dates so.
     if (!doc->datePattern.empty() || !doc->dateTimePattern.empty()) {

@@ -6008,6 +6008,111 @@ inline std::optional<Refusal> accessibilityOf(DocNode const& node, std::string c
     return std::nullopt;
 }
 
+// ── Guided tours ─────────────────────────────────────────────────────────────────────────────────────────────────
+
+/// @brief One step of a guided tour (`docs/spec/ui/tours.md`).
+struct TourStep {
+    /// @brief The step's title.
+    Handle<std::string> title;
+    /// @brief Its body; absent for none.
+    Handle<std::string> body;
+    /// @brief The screen it opens first; empty for none.
+    std::string screen;
+    /// @brief The params it opens that screen with: literal values.
+    ValueRecord params;
+    /// @brief The test id it rings; empty for a card with nothing ringed.
+    std::string target;
+    /// @brief The screen whose opening moves the tour on; empty for a step that waits for Next.
+    std::string advanceOn;
+};
+
+/// @brief A guided tour: data the server builds once, with no lifecycle.
+struct Tour {
+    /// @brief Its id: `[a-z0-9-]+`, at most 64 characters.
+    std::string id;
+    /// @brief The screen it belongs to; empty for a general tour.
+    std::string screen;
+    /// @brief Its title.
+    Handle<std::string> title;
+    /// @brief Its summary; absent for none.
+    Handle<std::string> summary;
+    /// @brief Its steps.
+    std::vector<TourStep> steps;
+};
+
+/// @brief One tour as the app document's `tours` holds it.
+/// @param tour The tour.
+/// @return Its JSON.
+/// @throws AuthoringError when the tour's or a step's title is absent.
+[[nodiscard]] inline Json tourJson(Tour const& tour) {
+    Json json = Json::object_t{};
+    detail::put(json, "id", tour.id);
+    if (!tour.screen.empty()) {
+        detail::put(json, "screen", tour.screen);
+    }
+    detail::put(json, "title", tour.title.json());
+    if (tour.summary.present()) {
+        detail::put(json, "summary", tour.summary.json());
+    }
+    Json steps = Json::array_t{};
+    for (TourStep const& step : tour.steps) {
+        Json out = Json::object_t{};
+        detail::put(out, "title", step.title.json());
+        if (step.body.present()) {
+            detail::put(out, "body", step.body.json());
+        }
+        if (!step.screen.empty()) {
+            detail::put(out, "screen", step.screen);
+        }
+        if (!step.params.empty()) {
+            Json params = Json::object_t{};
+            for (auto const& [name, value] : step.params) {
+                detail::put(params, name, valueToJson(value));
+            }
+            detail::put(out, "params", std::move(params));
+        }
+        if (!step.target.empty()) {
+            detail::put(out, "target", step.target);
+        }
+        if (!step.advanceOn.empty()) {
+            Json advance = Json::object_t{};
+            detail::put(advance, "screen", step.advanceOn);
+            detail::put(out, "advanceOn", std::move(advance));
+        }
+        std::get<Json::array_t>(steps.data).push_back(std::move(out));
+    }
+    detail::put(json, "steps", std::move(steps));
+    return json;
+}
+
+/// @brief The app document's text with @p tours as its `tours` member, for `UiRegistry::addFile`.
+/// @param appDocument The app document's JSON text.
+/// @param tours       The tours, in the order the Tours menu lists them.
+/// @return The text, or why it cannot be written: the document is not a JSON object, it declares `tours` already, or a
+///         title is absent.
+[[nodiscard]] inline std::expected<std::string, Refusal> withTours(std::string_view appDocument,
+                                                                   std::vector<Tour> const& tours) {
+    auto document = parseJson(appDocument);
+    auto* const object = document ? std::get_if<Json::object_t>(&document->data) : nullptr;
+    if (object == nullptr) {
+        return std::unexpected(Refusal{.document = "app", .path = {}, .reason = "the app document is a JSON object"});
+    }
+    if (object->contains("tours")) {
+        return std::unexpected(
+            Refusal{.document = "app", .path = "/tours", .reason = "the app document declares its own `tours`"});
+    }
+    Json list = Json::array_t{};
+    try {
+        for (Tour const& tour : tours) {
+            std::get<Json::array_t>(list.data).push_back(tourJson(tour));
+        }
+    } catch (AuthoringError const& error) {
+        return std::unexpected(Refusal{.document = "app", .path = "/tours", .reason = error.what()});
+    }
+    object->insert_or_assign("tours", std::move(list));
+    return glz::write_json(*document).value_or(std::string{});
+}
+
 // ── Screens and registration ─────────────────────────────────────────────────────────────────────────────────────
 
 /// @brief A screen's emitted document: its JSON, the text that is served, and the catalog facts of its types.

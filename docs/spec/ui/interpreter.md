@@ -71,6 +71,12 @@ order, each a `NavigationBadge{screen, text, tone}`: the parts are lowered once 
 mounts, so a count follows the state it reads. It is empty when the document declares none, and goes with the root,
 before its scope. A shell copies it onto its navigator ([client.md](../client/client.md#the-shell)).
 
+`AppRoot::tours()` is a `reactive::Computed` of the document's tours, in declaration order, each a `Tour{id, screen,
+title, summary, steps}` whose steps are `TourStep{title, body, screen, params, target, advanceOn}`. The texts are
+evaluated in the app scope inside the computed value, so a change of locale, or of the app state a text reads,
+re-evaluates them; it is one value for every tour, since the texts are few and a locale change changes all of them.
+It goes with the root, before its scope.
+
 ## Mounting
 
 `mount` refuses, with a `Refusal`, what only the opener can get wrong: a param missing or of the wrong
