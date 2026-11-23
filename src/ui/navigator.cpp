@@ -170,6 +170,26 @@ bool Navigator::setOpenModule(std::string_view module) {
     return true;
 }
 
+bool Navigator::reveal(std::string_view screenId) {
+    CatalogEntry const* found = nullptr;
+    for (Group const& group : _groups) {
+        for (Item const& item : group.items) {
+            if (item.entry->id == screenId) {
+                found = item.entry;
+            }
+        }
+    }
+    if (found == nullptr) {
+        return false;
+    }
+    _search->setText({});
+    filter(std::string{});
+    if (_moduleGroups) {
+        static_cast<void>(setOpenModule(found->module));
+    }
+    return true;
+}
+
 void Navigator::setModuleTexts(std::string closed, std::string open, std::string countFailed) {
     _closedWord = std::move(closed);
     _openWord = std::move(open);

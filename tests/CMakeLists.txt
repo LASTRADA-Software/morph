@@ -293,6 +293,7 @@ add_executable(morph_tests
     test_ui_host_vocabulary.cpp
     test_ui_tours_document.cpp
     test_ui_tours_registry.cpp
+    test_ui_tours_controller.cpp
     test_ui_catalogue.cpp
     test_ui_texts.cpp
     test_ui_locale_table.cpp

@@ -180,6 +180,9 @@ current screen and `setOpenModule` keeps the person's choice until the next `set
 with one entry is that entry's row. A row's accessible name carries its count and whether it is open. Pins stay above the
 modules. `setSearchShown(false)` hides the navigator's own search.
 
+`reveal(screenId)` empties the navigator's search and, with module groups, opens the module holding the entry, so a
+guided tour can ring an entry that a search or a closed module hides.
+
 `menuEntries()` changes with module groups: one submenu per module whose label carries the count after it, holding the
 module's groups as heading entries and its screens, and no submenu for a one-entry module (that entry is a plain item).
 Without module groups it is what it was.

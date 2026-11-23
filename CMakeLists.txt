@@ -499,6 +499,7 @@ add_library(morph ${_morph_library_type}
     src/ui/theme.cpp
     src/ui/shell_frame.cpp
     src/ui/shell_parts_model.cpp
+    src/ui/tours.cpp
     src/ui/workspace.cpp
 )
 add_library(morph::morph ALIAS morph)
@@ -684,6 +685,7 @@ target_sources(morph
         include/morph/ui/shell_parts_binding.hpp
         include/morph/ui/shell_parts_model.hpp
         include/morph/ui/shell_parts_view.hpp
+        include/morph/ui/tours.hpp
         include/morph/ui/explorer.hpp
         include/morph/ui/agent.hpp
         include/morph/ui/chat/client.hpp
