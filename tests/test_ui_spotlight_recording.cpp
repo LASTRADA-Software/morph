@@ -58,6 +58,37 @@ TEST_CASE("spotlight: the recorded target follows the live widgets", "[ui][tours
     CHECK(backend.prop(spotlightId, "target") == "none");
 }
 
+// Mutation: drop `dimmed` from `RecordingBackend::reachable` (a click on the page widget behind the dimmed area runs).
+TEST_CASE("spotlight: an open spotlight takes presses only on its card and on the widget it rings", "[ui][tours]") {
+    ui::testing::RecordingBackend backend;
+    auto const page = backend.createStack(nullptr, ui::Axis::Vertical);
+    auto const ringed = backend.createButton(page.get());
+    ringed->setTestId("ringed");
+    auto const other = backend.createButton(page.get());
+    auto const spotlight = backend.createSpotlight(nullptr);
+    auto const card = backend.createButton(spotlight.get());
+    int ringedClicks = 0;
+    int otherClicks = 0;
+    int cardClicks = 0;
+    ringed->setOnClick([&ringedClicks] { ++ringedClicks; });
+    other->setOnClick([&otherClicks] { ++otherClicks; });
+    card->setOnClick([&cardClicks] { ++cardClicks; });
+    spotlight->setTarget(std::string{"ringed"});
+    // Closed, the spotlight dims nothing: the page takes presses, and its card shows nothing.
+    backend.click(backend.idOf(*other));
+    CHECK(otherClicks == 1);
+    spotlight->setOpen(true);
+    backend.click(backend.idOf(*other));
+    CHECK(otherClicks == 1);
+    backend.click(backend.idOf(*ringed));
+    CHECK(ringedClicks == 1);
+    backend.click(backend.idOf(*card));
+    CHECK(cardClicks == 1);
+    spotlight->setOpen(false);
+    backend.click(backend.idOf(*other));
+    CHECK(otherClicks == 2);
+}
+
 // Mutation: leave `_notifying` set when a listener throws (the guard removed): the next change tells nobody.
 TEST_CASE("spotlight: a listener that throws once does not leave the store deaf", "[ui][tours]") {
     auto const store = std::make_shared<ui::testing::detail::RecordStore>();

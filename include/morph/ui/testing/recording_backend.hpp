@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <array>
 #include <cctype>
+#include <charconv>
 #include <cstddef>
 #include <cstdint>
 #include <format>
@@ -3498,7 +3499,8 @@ private:
     // collapsed. A collapsed panel's own collapse control stays reachable, so only an outer panel's state counts. A
     // dialog shows nothing, itself included, until it is opened.
     [[nodiscard]] bool reachable(detail::Record const& record) const {
-        if (flagIs(record, "visible", false) || flagIs(record, "enabled", false) || detail::isClosedOverlay(record)) {
+        if (flagIs(record, "visible", false) || flagIs(record, "enabled", false) || detail::isClosedOverlay(record) ||
+            dimmed(record)) {
             return false;
         }
         for (int innerId = record.id, outerId = record.parent; outerId != 0;) {
@@ -3522,6 +3524,28 @@ private:
             }
         }
         return 0;
+    }
+
+    // Whether an open spotlight dims @p record: its dimmed area takes no press, so only its card and the widget it
+    // rings, with what is inside that widget, take one.
+    [[nodiscard]] bool dimmed(detail::Record const& record) const {
+        for (auto const& [spotlightId, spotlight] : _store->records()) {
+            if (spotlight.kind != "Spotlight" || !flagIs(spotlight, "open", true)) {
+                continue;
+            }
+            int ringed = 0;
+            if (auto const found = spotlight.props.find("ringed"); found != spotlight.props.end()) {
+                std::from_chars(found->second.data(), found->second.data() + found->second.size(), ringed);
+            }
+            bool reaches = false;
+            for (int at = record.id; at != 0 && !reaches; at = _store->at(at).parent) {
+                reaches = at == spotlightId || (ringed != 0 && at == ringed);
+            }
+            if (!reaches) {
+                return true;
+            }
+        }
+        return false;
     }
 
     // A closed collapsible section hides its content, the child on the way in, unless that child is its header.
