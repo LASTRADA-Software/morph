@@ -1003,10 +1003,16 @@ private:
         _frame->setTours(std::move(view));
     }
 
-    // Drops the frame's tour, its card and its menu: before the frame, the workspace and the app root they read. The
-    // card's values go back to their initial ones.
+    // Ends a running tour, then drops the frame's controller, its card and its menu: before the frame, the workspace
+    // and the app root they read. The tour is ended here, not left to the frame's destruction, because a sign-out
+    // whose reload fails keeps the frame: its spotlight would stay open over an emptied card, with nothing to close it
+    // and the focus trapped inside. The controller's destructor stays inert since the spotlight belongs to the frame,
+    // which may be gone by then. The card's values go back to their initial ones.
     void resetTours() {
         _toursMenu.reset();
+        if (_tours) {
+            _tours->end();
+        }
         _tours.reset();
         _tourCard.reset();
         if (_tourBinding) {

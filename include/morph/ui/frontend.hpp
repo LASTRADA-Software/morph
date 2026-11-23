@@ -400,7 +400,8 @@ public:
     virtual void inspectFocused(std::function<void(Inspector& inspector)> const& visit) { static_cast<void>(visit); }
 
     /// @brief Starts one of the application's guided tours, as its Tours menu or a document's `tour.start` does. The
-    ///        reason comes back as text, so this header stays free of the document model. The default runs no tours.
+    ///        reason comes back as text, so this header stays free of the document model. The default runs no tours. A
+    ///        shell that runs tours starts the tour before this returns, so the screen the tour opens is open by then.
     /// @param tourId The tour's id, as the app document declares it.
     /// @return Nothing, or why it did not start: an id the app document does not declare, or a shell that runs none.
     virtual std::expected<void, std::string> startTour(std::string_view tourId) {

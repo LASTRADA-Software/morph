@@ -72,11 +72,10 @@ public:
     virtual SpotlightWidget& spotlight() = 0;
 
     /// @brief Runs @p then once the card shows the step the controller has just set. The controller opens the
-    /// spotlight
-    ///        from it: opening moves focus to the card's first shown button, which is only the right one (Next, or
-    ///        End tour on a waiting step) when the card has caught up with the step. The default runs it at once, for
-    ///        a shell whose card is current as soon as the view changes; a shell whose card updates after the current
-    ///        turn runs it after that update. It may be dropped unrun when the shell goes away.
+    ///        spotlight from it: opening moves focus to the card's first shown button, which is only the right one
+    ///        (Next, or End tour on a waiting step) when the card has caught up with the step. The default runs it at
+    ///        once, for a shell whose card is current as soon as the view changes; a shell whose card updates after
+    ///        the current turn runs it after that update. It may be dropped unrun when the shell goes away.
     /// @param then What to run.
     virtual void afterCardUpdated(std::function<void()> then) { then(); }
 

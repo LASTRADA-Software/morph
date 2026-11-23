@@ -203,6 +203,7 @@ private:
         }
     }
 
+    // Reports a posted `tour.start` that could not start its tour: to the shell's callback, or at warn without one.
     void tell(std::string const& text) const {
         if (_report) {
             _report(text);

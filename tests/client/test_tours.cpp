@@ -11,12 +11,17 @@
 // clang-format on
 
 #include <algorithm>
+#include <atomic>
 #include <catch2/catch_test_macros.hpp>
 #include <chrono>
 #include <expected>
 #include <memory>
 #include <morph/client/shell.hpp>
 #include <morph/client/source.hpp>
+#include <morph/core/backend.hpp>
+#include <morph/core/executor.hpp>
+#include <morph/core/wire.hpp>
+#include <morph/session/session.hpp>
 #include <morph/ui/testing/recording_backend.hpp>
 #include <optional>
 #include <string>
@@ -257,6 +262,52 @@ TEST_CASE("Client shell tours: the frame's texts reach the button's caption, its
     CHECK(german.prop("Menu", "shell_tours", "items").contains("Allgemein;enabled=false;heading"));
 }
 
+namespace {
+
+/// The tours application over an in-process service, whose answers the test can stop: the reload after a sign-out then
+/// fails.
+class FlakySource final : public client::Source {
+public:
+    FlakySource() = default;
+    ~FlakySource() override { close(); }
+    FlakySource(FlakySource const&) = delete;
+    FlakySource& operator=(FlakySource const&) = delete;
+    FlakySource(FlakySource&&) = delete;
+    FlakySource& operator=(FlakySource&&) = delete;
+
+    /// Makes every later exchange fail.
+    void breakExchange() { _broken = true; }
+
+protected:
+    [[nodiscard]] std::expected<Transport, ui::ConnectError> connect(ui::AppContext& /*context*/) override {
+        auto served = tours::toursBundle();
+        REQUIRE(served.has_value());
+        _service = std::make_shared<ui::UiService>(std::move(*served), morph::model::detail::defaultDispatcher());
+        _workers = std::make_unique<morph::exec::ThreadPoolExecutor>(1);
+        return Transport{
+            .backend = std::make_unique<morph::backend::LocalBackend>(*_workers),
+            .exchange = [this](morph::wire::Envelope const& request,
+                               std::function<void(ui::ExchangeReply)> const& done) {
+                if (_broken) {
+                    done(std::unexpected(std::string{"the test broke the exchange"}));
+                    return;
+                }
+                done(morph::wire::decode(_service->handle(request, *morph::session::allowAllAuthorizer())));
+            }};
+    }
+    void disconnect() override {
+        _workers.reset();
+        _service.reset();
+    }
+
+private:
+    std::atomic<bool> _broken{false};
+    std::shared_ptr<ui::UiService> _service;
+    std::unique_ptr<morph::exec::ThreadPoolExecutor> _workers;
+};
+
+}  // namespace
+
 /// The ids of the screen's `refresh` head action, after the shell has had time to mount every head it makes.
 std::vector<int> headActions(Window& window) {
     window.wait(
@@ -323,4 +374,47 @@ TEST_CASE("Client shell tours: opening the spotlight on a waiting step focuses E
     window.click("tour_end");
     REQUIRE(window.wait([&window] { return window.spotlight("open") == "false"; }));
     CHECK(window.backend.focused() == origin);
+}
+
+// Mutation: drop `_tours->end()` from `resetTours` (the controller goes but the spotlight stays open over an emptied
+// card), or drop `resetTours` from `finishSignOut` (the controller keeps running with no screens).
+TEST_CASE("Client shell tours: a sign-out whose reload fails closes the spotlight and leaves no focus in it",
+          "[client][tours]") {
+    FakeAppContext context;
+    ui::testing::RecordingBackend backend;
+    FlakySource source;
+    std::vector<std::string> problems;
+    std::optional<std::expected<ui::Bundle, ui::ConnectError>> opened;
+    source.open(context,
+                [&opened](std::expected<ui::Bundle, ui::ConnectError> result) { opened = std::move(result); });
+    REQUIRE(pumpUntil(context.owner(), [&opened] { return opened.has_value(); }));
+    REQUIRE(opened->has_value());
+    {
+        auto const shell = client::mountShell(
+            context, backend, std::move(*opened), source,
+            client::ShellOptions{.startScreen = "tours.home",
+                                 .onProblem = [&problems](std::string const& text) { problems.push_back(text); }});
+        auto const find = [&backend](std::string_view kind, std::string_view testId) {
+            return backend.find(kind, "testId", std::string{testId});
+        };
+        REQUIRE(pumpUntil(context.owner(), [&find] { return find("Button", "take_tour").has_value(); }));
+        backend.widget(*find("Button", "take_tour"))->focus();
+        REQUIRE(shell->startTour("getting-started").has_value());
+        REQUIRE(pumpUntil(context.owner(), [&] {
+            return find("Spotlight", "shell_spotlight") &&
+                   backend.prop(*find("Spotlight", "shell_spotlight"), "open") == "true";
+        }));
+        int const spotlight = *find("Spotlight", "shell_spotlight");
+        source.breakExchange();
+        REQUIRE(pumpUntil(context.owner(), [&find] { return find("Button", "shell_signOut").has_value(); }));
+        backend.click(*find("Button", "shell_signOut"));
+        REQUIRE(pumpUntil(context.owner(), [&problems] {
+            return std::ranges::any_of(problems,
+                                       [](std::string const& line) { return line.contains("could not be loaded"); });
+        }));
+        REQUIRE(find("Spotlight", "shell_spotlight") == spotlight);
+        CHECK(backend.prop(spotlight, "open") == "false");
+        CHECK_FALSE(descendsFrom(backend, spotlight, backend.focused()));
+    }
+    source.close();
 }
