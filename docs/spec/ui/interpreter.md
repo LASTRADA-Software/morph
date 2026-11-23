@@ -895,8 +895,9 @@ keeps its operands' 0 places and still fills 0.29 of a bar.
   text, "This cell is read-only"), and the rows' busy and failed states, which are not reactive, reach the cells
   through the table's marks revision. The table keeps its row selection: the grid takes no
   rectangle of cells, no paste and no fill, and `Delete` blanks the focused cell. Focus follows its row's key through
-  a key change, and a focused row the window no longer holds is located (`TableRows::locateRow`) and shown where it
-  is. Row mode sends no held cell that became read-only meanwhile. A table with no editable column is lowered as a plain model table.
+  a key change. Where a focused row the window no longer holds is, and which row takes focus when the focused row
+  leaves the view, are the mount's, as for any table: the mount locates the row, and hands the grid the key that
+  took focus. Row mode sends no held cell that became read-only meanwhile. A table with no editable column is lowered as a plain model table.
 - **A form field's component.** A top-level field whose overlay names a `component` is drawn by it: the
   form's view is given a `forms::Overrides::byField` per such field, whose render builds the `custom` node
   `lowerCustom` would, with the field's built-in control as the fallback. The form fills the props it knows:

@@ -210,6 +210,12 @@ inline std::expected<void, TableError> checkEdits(
                                   : "column `" + id + "`'s edit action `" + edit.action + "` has no member `" +
                                         edit.member + "` in its `values`");
         }
+        // A measure is edited in its field's unit: one the table's units lack could hold none of its cells.
+        if (column.info.kind == ColumnKind::Measure &&
+            !std::ranges::contains(description.units, field->unitAscii, &UnitInfo::id)) {
+            return refuse(id, "column `" + id + "` is a measure edited in `" + field->unitAscii +
+                                  "`, which is not one of the table's units");
+        }
         if (!detail::editFits(column.info.kind, field->kind)) {
             return refuse(id, "column `" + id + "` cannot be edited by `" + edit.action + "`'s field of kind `" +
                                   std::string{forms::fieldKindName(field->kind)} + "`");

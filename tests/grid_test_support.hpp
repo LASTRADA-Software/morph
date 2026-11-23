@@ -467,6 +467,10 @@ inline table::TableDescription specimenTableDescription() {
                table::UnitInfo{.id = "g", .symbol = "g", .dimension = "mass",
                                .toBase = morph::math::Rational{morph::math::Numerator{1}, morph::math::Denominator{1000},
                                                                morph::math::DecimalPlaces{3}},
+                               .decimals = 1},
+               table::UnitInfo{.id = "percent", .symbol = "%", .dimension = "ratio",
+                               .toBase = morph::math::Rational{morph::math::Numerator{1}, morph::math::Denominator{100},
+                                                               morph::math::DecimalPlaces{2}},
                                .decimals = 1}};
     d.rowLock = "lockedBy";
     return table::describe(std::move(d));

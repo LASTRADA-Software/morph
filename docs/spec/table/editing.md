@@ -224,7 +224,9 @@ struct TableColumn {
 - The cell's field is the `value` member of a `CellEdit` action's input schema, or the named member of a
   `RowEdit`'s `values`, so its kind, places, bounds and options are the action's. A `Measure` cell, in its own
   unit, opens in its `Quantity` field's canonical unit, converted through the description's units; a cell the units
-  cannot convert opens blank rather than as a figure in the wrong unit. A column whose kind and whose
+  cannot convert (a unit they lack, another dimension) is read-only, as its value could not be shown in the unit it
+  would be written in. A `Measure` column whose field's canonical unit is not one of the description's units is
+  `SourceContract`. A column whose kind and whose
   field's kind differ, or a `member` that `values` does not have, is `SourceContract`.
 - **The action is the application's.** It declares `updatesTable` and returns the `ChangedRows` of the row, as
   any action that changes a table does ([`table.md`](table.md#a-models-tables)). A `FailedRow` for the row, or a
