@@ -365,6 +365,10 @@ Classes</h2></td></tr>
 <tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">Options of <span class="tt"><a class="el" href="#af020b669d18373ffc0f3b8e69f0f28b4" title="A form node: a schema form of the forms engine over an action (spec 2); each field takes its label fr...">form</a></span>.  <a href="../../d8/dbb/structmorph_1_1ui_1_1author_1_1FormOptions.html#details">More...</a><br /></td></tr>
 <tr class="memitem:morph_3A_3Aui_3A_3Aauthor_3A_3ACustomOptions" id="r_morph_3A_3Aui_3A_3Aauthor_3A_3ACustomOptions"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../d1/de9/structmorph_1_1ui_1_1author_1_1CustomOptions.html">morph::ui::author::CustomOptions</a></td></tr>
 <tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">Options of <span class="tt"><a class="el" href="#ac93e3947a3cefa2b9125d623d0f1293a" title="A custom node: a declared component with its props and events.">custom</a></span>.  <a href="../../d1/de9/structmorph_1_1ui_1_1author_1_1CustomOptions.html#details">More...</a><br /></td></tr>
+<tr class="memitem:morph_3A_3Aui_3A_3Aauthor_3A_3ATourStep" id="r_morph_3A_3Aui_3A_3Aauthor_3A_3ATourStep"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../de/dbc/structmorph_1_1ui_1_1author_1_1TourStep.html">morph::ui::author::TourStep</a></td></tr>
+<tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">One step of a guided tour (<span class="tt">docs/spec/ui/tours.md</span>).  <a href="../../de/dbc/structmorph_1_1ui_1_1author_1_1TourStep.html#details">More...</a><br /></td></tr>
+<tr class="memitem:morph_3A_3Aui_3A_3Aauthor_3A_3ATour" id="r_morph_3A_3Aui_3A_3Aauthor_3A_3ATour"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../da/d79/structmorph_1_1ui_1_1author_1_1Tour.html">morph::ui::author::Tour</a></td></tr>
+<tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">A guided tour: data the server builds once, with no lifecycle.  <a href="../../da/d79/structmorph_1_1ui_1_1author_1_1Tour.html#details">More...</a><br /></td></tr>
 <tr class="memitem:morph_3A_3Aui_3A_3Aauthor_3A_3AEmitted" id="r_morph_3A_3Aui_3A_3Aauthor_3A_3AEmitted"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../df/dd2/structmorph_1_1ui_1_1author_1_1Emitted.html">morph::ui::author::Emitted</a></td></tr>
 <tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">A screen's emitted document: its JSON, the text that is served, and the catalog facts of its types.  <a href="../../df/dd2/structmorph_1_1ui_1_1author_1_1Emitted.html#details">More...</a><br /></td></tr>
 <tr class="memitem:morph_3A_3Aui_3A_3Aauthor_3A_3AScreen" id="r_morph_3A_3Aui_3A_3Aauthor_3A_3AScreen"><td class="memItemLeft">class &#160;</td><td class="memItemRight"><a class="el" href="../../d4/d0c/classmorph_1_1ui_1_1author_1_1Screen.html">morph::ui::author::Screen</a></td></tr>
@@ -985,6 +989,10 @@ requires Runs&lt;Model, <a class="el" href="../../d8/d11/view_8hpp.html#a27496ba
 <tr class="memdesc:af1a38f1570fded3b365c7e820ae814ab"><td class="mdescLeft">&#160;</td><td class="mdescRight">The first accessibility rule the nodes of a list break.  <br /></td></tr>
 <tr class="memitem:a627ec0d99a753bf37dfe8004117530bc" id="r_a627ec0d99a753bf37dfe8004117530bc"><td class="memItemLeft">std::optional&lt; <a class="el" href="../../de/d52/structmorph_1_1ui_1_1Refusal.html">Refusal</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a627ec0d99a753bf37dfe8004117530bc">morph::ui::author::checkAccessibility</a> (<a class="el" href="../../d4/d02/structmorph_1_1ui_1_1Document.html">Document</a> const &amp;document)</td></tr>
 <tr class="memdesc:a627ec0d99a753bf37dfe8004117530bc"><td class="mdescLeft">&#160;</td><td class="mdescRight">The accessibility rules of spec 5 §11, which registration runs after the load-time validation.  <br /></td></tr>
+<tr class="memitem:aea94cf0583a41f9fe18509b9bd671e13" id="r_aea94cf0583a41f9fe18509b9bd671e13"><td class="memItemLeft"><a class="el" href="../../d6/dda/value_8hpp.html#a289786f075a2eb48cac06ad898fc421b">Json</a>&#160;</td><td class="memItemRight"><a class="el" href="#aea94cf0583a41f9fe18509b9bd671e13">morph::ui::author::tourJson</a> (<a class="el" href="../../da/d79/structmorph_1_1ui_1_1author_1_1Tour.html">Tour</a> const &amp;tour)</td></tr>
+<tr class="memdesc:aea94cf0583a41f9fe18509b9bd671e13"><td class="mdescLeft">&#160;</td><td class="mdescRight">One tour as the app document's <span class="tt">tours</span> holds it.  <br /></td></tr>
+<tr class="memitem:a3e1da28fe4c0cb085f2c04db89b5d24e" id="r_a3e1da28fe4c0cb085f2c04db89b5d24e"><td class="memItemLeft">std::expected&lt; std::string, <a class="el" href="../../de/d52/structmorph_1_1ui_1_1Refusal.html">Refusal</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a3e1da28fe4c0cb085f2c04db89b5d24e">morph::ui::author::withTours</a> (std::string_view appDocument, std::vector&lt; <a class="el" href="../../da/d79/structmorph_1_1ui_1_1author_1_1Tour.html">Tour</a> &gt; const &amp;tours)</td></tr>
+<tr class="memdesc:a3e1da28fe4c0cb085f2c04db89b5d24e"><td class="mdescLeft">&#160;</td><td class="mdescRight">The app document's text with <code class="param">tours</code> as its <span class="tt">tours</span> member, for <span class="tt"><a class="el" href="../../d0/dc8/classmorph_1_1ui_1_1UiRegistry.html#a2128f6b54dd36ef1e0e80b7090359c22" title="Adds a file that is not a screen: the app document (app, whose id is app), a theme (theme),...">UiRegistry::addFile</a></span>.  <br /></td></tr>
 <tr class="memitem:a2e1cb09bc3d7c742207a232250e9d9d4" id="r_a2e1cb09bc3d7c742207a232250e9d9d4"><td class="memTemplParams" colspan="2">template&lt;<a class="el" href="../../df/d52/structmorph_1_1detail_1_1FixedString.html">morph::detail::FixedString</a> Id&gt; </td></tr>
 <tr class="memitem:a2e1cb09bc3d7c742207a232250e9d9d4 template"><td class="memItemLeft"><a class="el" href="../../d4/d0c/classmorph_1_1ui_1_1author_1_1Screen.html">Screen</a>&#160;</td><td class="memItemRight"><a class="el" href="#a2e1cb09bc3d7c742207a232250e9d9d4">morph::ui::author::screen</a> (<a class="el" href="../../d4/d0c/classmorph_1_1ui_1_1author_1_1Screen.html#a1f013f8364bc93bca3e4d406ebed195c">Screen::Builder</a> builder)</td></tr>
 <tr class="memdesc:a2e1cb09bc3d7c742207a232250e9d9d4"><td class="mdescLeft">&#160;</td><td class="mdescRight">A screen with its id as a template argument, as spec 5 §11 writes it.  <br /></td></tr>
@@ -1029,7 +1037,7 @@ Variables</h2></td></tr>
 </div><!-- fragment -->
 <p>Concatenates two tokens after expanding them. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l06213">6213</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l06329">6329</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -1052,11 +1060,11 @@ Variables</h2></td></tr>
       </table>
 </div><div class="memdoc">
 <b>Value:</b><div class="fragment"><div class="line"><a class="code hl_define" href="#ab847b5f6a52c9cf4dd6bb4c20fbdd15d">MORPH_UI_AUTHOR_CAT_</a>(a, b)</div>
-<div class="ttc" id="aauthor_8hpp_html_ab847b5f6a52c9cf4dd6bb4c20fbdd15d"><div class="ttname"><a href="#ab847b5f6a52c9cf4dd6bb4c20fbdd15d">MORPH_UI_AUTHOR_CAT_</a></div><div class="ttdeci">#define MORPH_UI_AUTHOR_CAT_(a, b)</div><div class="ttdoc">Concatenates two tokens after expanding them.</div><div class="ttdef"><b>Definition</b> <a href="../../d1/dc0/author_8hpp_source.html#l06213">author.hpp:6213</a></div></div>
+<div class="ttc" id="aauthor_8hpp_html_ab847b5f6a52c9cf4dd6bb4c20fbdd15d"><div class="ttname"><a href="#ab847b5f6a52c9cf4dd6bb4c20fbdd15d">MORPH_UI_AUTHOR_CAT_</a></div><div class="ttdeci">#define MORPH_UI_AUTHOR_CAT_(a, b)</div><div class="ttdoc">Concatenates two tokens after expanding them.</div><div class="ttdef"><b>Definition</b> <a href="../../d1/dc0/author_8hpp_source.html#l06329">author.hpp:6329</a></div></div>
 </div><!-- fragment -->
 <p>Concatenates two tokens after expanding them. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l06215">6215</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l06331">6331</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -1080,8 +1088,8 @@ Variables</h2></td></tr>
 <div class="line">    return (SCREEN);                                                                                  \</div>
 <div class="line">});                                                                                                   \</div>
 <div class="line">}</div>
-<div class="ttc" id="aauthor_8hpp_html_a45697032040d625f96390dfced787014"><div class="ttname"><a href="#a45697032040d625f96390dfced787014">morph::ui::author::enrollScreen</a></div><div class="ttdeci">bool enrollScreen(Make const &amp;make) noexcept</div><div class="ttdoc">Enrols a screen into the process&#39;s registry; what MORPH_REGISTER_SCREEN runs.</div><div class="ttdef"><b>Definition</b> <a href="../../d1/dc0/author_8hpp_source.html#l06202">author.hpp:6202</a></div></div>
-<div class="ttc" id="aauthor_8hpp_html_ad7886260d9645c4b05d54647934ef523"><div class="ttname"><a href="#ad7886260d9645c4b05d54647934ef523">MORPH_UI_AUTHOR_CAT</a></div><div class="ttdeci">#define MORPH_UI_AUTHOR_CAT(a, b)</div><div class="ttdoc">Concatenates two tokens after expanding them.</div><div class="ttdef"><b>Definition</b> <a href="../../d1/dc0/author_8hpp_source.html#l06215">author.hpp:6215</a></div></div>
+<div class="ttc" id="aauthor_8hpp_html_a45697032040d625f96390dfced787014"><div class="ttname"><a href="#a45697032040d625f96390dfced787014">morph::ui::author::enrollScreen</a></div><div class="ttdeci">bool enrollScreen(Make const &amp;make) noexcept</div><div class="ttdoc">Enrols a screen into the process&#39;s registry; what MORPH_REGISTER_SCREEN runs.</div><div class="ttdef"><b>Definition</b> <a href="../../d1/dc0/author_8hpp_source.html#l06318">author.hpp:6318</a></div></div>
+<div class="ttc" id="aauthor_8hpp_html_ad7886260d9645c4b05d54647934ef523"><div class="ttname"><a href="#ad7886260d9645c4b05d54647934ef523">MORPH_UI_AUTHOR_CAT</a></div><div class="ttdeci">#define MORPH_UI_AUTHOR_CAT(a, b)</div><div class="ttdoc">Concatenates two tokens after expanding them.</div><div class="ttdef"><b>Definition</b> <a href="../../d1/dc0/author_8hpp_source.html#l06331">author.hpp:6331</a></div></div>
 </div><!-- fragment -->
 <p>Enrols a screen into the process's registry at static initialisation. A refusal is kept in <span class="tt">screenRegistry().refusals()</span>, which a server's test asserts is empty. </p>
 <dl class="params"><dt>Parameters</dt><dd>
@@ -1091,7 +1099,7 @@ Variables</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l06225">6225</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l06341">6341</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -10399,6 +10407,89 @@ requires Runs&lt;Model, Action&gt;</div>
 
 </div>
 </div>
+<a id="aea94cf0583a41f9fe18509b9bd671e13" name="aea94cf0583a41f9fe18509b9bd671e13"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#aea94cf0583a41f9fe18509b9bd671e13">&#9670;&#160;</a></span>tourJson()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">Json morph::ui::author::tourJson </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="../../da/d79/structmorph_1_1ui_1_1author_1_1Tour.html">Tour</a> const &amp;</td>          <td class="paramname"><span class="paramname"><em>tour</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>One tour as the app document's <span class="tt">tours</span> holds it. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">tour</td><td>The tour. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>Its JSON. </dd></dl>
+<dl class="exception"><dt>Exceptions</dt><dd>
+  <table class="exception">
+    <tr><td class="paramname">AuthoringError</td><td>naming the tour, and the step when it is one, whose title is absent. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l06047">6047</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a3e1da28fe4c0cb085f2c04db89b5d24e" name="a3e1da28fe4c0cb085f2c04db89b5d24e"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a3e1da28fe4c0cb085f2c04db89b5d24e">&#9670;&#160;</a></span>withTours()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::expected&lt; std::string, Refusal &gt; morph::ui::author::withTours </td>
+          <td>(</td>
+          <td class="paramtype">std::string_view</td>          <td class="paramname"><span class="paramname"><em>appDocument</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">std::vector&lt; <a class="el" href="../../da/d79/structmorph_1_1ui_1_1author_1_1Tour.html">Tour</a> &gt; const &amp;</td>          <td class="paramname"><span class="paramname"><em>tours</em></span>&#160;)</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>The app document's text with <code class="param">tours</code> as its <span class="tt">tours</span> member, for <span class="tt">UiRegistry::addFile</span>. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">appDocument</td><td>The app document's JSON text. </td></tr>
+    <tr><td class="paramname">tours</td><td>The tours, in the order the Tours menu lists them. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>The text, or why it cannot be written: the document is not a JSON object, it declares <span class="tt">tours</span> already, a title is absent, or the result cannot be serialised. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l06100">6100</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+
+</div>
+</div>
 <a id="a2e1cb09bc3d7c742207a232250e9d9d4" name="a2e1cb09bc3d7c742207a232250e9d9d4"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a2e1cb09bc3d7c742207a232250e9d9d4">&#9670;&#160;</a></span>screen() <span class="overload">[1/2]</span></h2>
 
@@ -10439,7 +10530,7 @@ template&lt;<a class="el" href="../../df/d52/structmorph_1_1detail_1_1FixedStrin
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The screen. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l06071">6071</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l06187">6187</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -10480,7 +10571,7 @@ template&lt;<a class="el" href="../../df/d52/structmorph_1_1detail_1_1FixedStrin
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The screen. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l06079">6079</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l06195">6195</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -10552,7 +10643,7 @@ template&lt;std::invocable Make&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">true</span>, for the static initialiser that runs it. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l06202">6202</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l06318">6318</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>

@@ -164,6 +164,12 @@ var backend__conformance_8hpp =
     [ "morph::ui::testing::detail::tabPageStretchHeightsShareByWeight", "d8/d3e/backend__conformance_8hpp.html#a946368079d3b1854ad9d5cfd4ebffc3f", null ],
     [ "morph::ui::testing::detail::horizontalScrollStretchHeightsShareByWeight", "d8/d3e/backend__conformance_8hpp.html#ac6491c3f5d69e2674d294ec9b1f9c8d5", null ],
     [ "morph::ui::testing::detail::stretchButtonKeepsItsLabel", "d8/d3e/backend__conformance_8hpp.html#a9c60bc5637967524d558fd736c0d6cc4", null ],
+    [ "morph::ui::testing::detail::spotlightCardOnlyWhileOpen", "d8/d3e/backend__conformance_8hpp.html#acd905dd93e6a9eecbd74582b090c56dd", null ],
+    [ "morph::ui::testing::detail::spotlightFindsLateTarget", "d8/d3e/backend__conformance_8hpp.html#a976d2d7274a91a5b6d94f00cd4f8cf2b", null ],
+    [ "morph::ui::testing::detail::spotlightFollowsItsTarget", "d8/d3e/backend__conformance_8hpp.html#add8d73d9b1d130357d1df7e86d7e0fc2", null ],
+    [ "morph::ui::testing::detail::spotlightRingsFirstShown", "d8/d3e/backend__conformance_8hpp.html#a95c3e885b56f4a2aedbdaa27b0282b8b", null ],
+    [ "morph::ui::testing::detail::spotlightContentKeysFirst", "d8/d3e/backend__conformance_8hpp.html#a2741ca38b776ca2e024cdd8c55581985", null ],
+    [ "morph::ui::testing::spotlightConformanceCases", "d8/d3e/backend__conformance_8hpp.html#a9af71d53ec8ba762ed204ded1ffdc171", null ],
     [ "morph::ui::testing::layoutConformanceCases", "d8/d3e/backend__conformance_8hpp.html#aecf398a21dce6aeb7feecf89f6d25313", null ],
     [ "morph::ui::testing::conformanceCases", "d8/d3e/backend__conformance_8hpp.html#a40f3611811880916195ad1becfbe3d46", null ]
 ];

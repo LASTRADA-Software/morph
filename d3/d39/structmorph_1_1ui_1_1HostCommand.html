@@ -140,11 +140,13 @@ Public Attributes</h2></td></tr>
 <tr class="memdesc:a674b32f6984e947adfc7559de9002522"><td class="mdescLeft">&#160;</td><td class="mdescRight">Runs the command with its checked arguments, by name; an absent optional argument is <span class="tt">null</span>.  <br /></td></tr>
 <tr class="memitem:af66c73d35bdca3f119ebf806d9f15d59" id="r_af66c73d35bdca3f119ebf806d9f15d59"><td class="memItemLeft">std::set&lt; std::string, std::less&lt;&gt; &gt;&#160;</td><td class="memItemRight"><a class="el" href="#af66c73d35bdca3f119ebf806d9f15d59">documents</a></td></tr>
 <tr class="memdesc:af66c73d35bdca3f119ebf806d9f15d59"><td class="mdescLeft">&#160;</td><td class="mdescRight">The ids of the documents that may name it; empty for every document. In any other document <span class="tt">{"host": <a class="el" href="#a20e5ad9c69d62482f8ee457b3150ecab" title="The command&#39;s name, as {&quot;host&quot;: name} gives it.">name</a>}</span> finds no such command: it is reported missing and nothing runs, and <span class="tt">{"can": "host:<a class="el" href="#a20e5ad9c69d62482f8ee457b3150ecab" title="The command&#39;s name, as {&quot;host&quot;: name} gives it.">name</a>"}</span> is false.  <br /></td></tr>
+<tr class="memitem:a428ebed0d05f71c29961227cfc4be9af" id="r_a428ebed0d05f71c29961227cfc4be9af"><td class="memItemLeft">std::function&lt; std::optional&lt; std::string &gt;(<a class="el" href="../../d6/dda/value_8hpp.html#ade1dc8b22e49b1bbed77487cdc498767">ValueRecord</a> const  &amp;)&gt;&#160;</td><td class="memItemRight"><a class="el" href="#a428ebed0d05f71c29961227cfc4be9af">refusal</a></td></tr>
+<tr class="memdesc:a428ebed0d05f71c29961227cfc4be9af"><td class="mdescLeft">&#160;</td><td class="mdescRight">Checks the arguments beyond their types, after they are checked and before <span class="tt"><a class="el" href="#a674b32f6984e947adfc7559de9002522" title="Runs the command with its checked arguments, by name; an absent optional argument is null.">run</a></span>: a reason refuses the command, which then does not run and answers as one that did not succeed, and the interpreter reports the reason. Empty checks nothing more.  <br /></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>A command the application registers, such as <span class="tt">restartApp</span> or <span class="tt">openPath</span>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d16/host__vocabulary_8hpp_source.html#l00036">36</a> of file <a class="el" href="../../d4/d16/host__vocabulary_8hpp_source.html">host_vocabulary.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d16/host__vocabulary_8hpp_source.html#l00037">37</a> of file <a class="el" href="../../d4/d16/host__vocabulary_8hpp_source.html">host_vocabulary.hpp</a>.</p>
 </div><a name="doc-variable-members" id="doc-variable-members"></a><h2 id="header-doc-variable-members" class="groupheader">Member Data Documentation</h2>
 <a id="a20e5ad9c69d62482f8ee457b3150ecab" name="a20e5ad9c69d62482f8ee457b3150ecab"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a20e5ad9c69d62482f8ee457b3150ecab">&#9670;&#160;</a></span>name</h2>
@@ -160,7 +162,7 @@ Public Attributes</h2></td></tr>
 
 <p>The command's name, as <span class="tt">{"host": <a class="el" href="#a20e5ad9c69d62482f8ee457b3150ecab" title="The command&#39;s name, as {&quot;host&quot;: name} gives it.">name</a>}</span> gives it. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d16/host__vocabulary_8hpp_source.html#l00038">38</a> of file <a class="el" href="../../d4/d16/host__vocabulary_8hpp_source.html">host_vocabulary.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d16/host__vocabulary_8hpp_source.html#l00039">39</a> of file <a class="el" href="../../d4/d16/host__vocabulary_8hpp_source.html">host_vocabulary.hpp</a>.</p>
 
 </div>
 </div>
@@ -178,7 +180,7 @@ Public Attributes</h2></td></tr>
 
 <p>Its version, declared in <span class="tt">ui-hello</span>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d16/host__vocabulary_8hpp_source.html#l00040">40</a> of file <a class="el" href="../../d4/d16/host__vocabulary_8hpp_source.html">host_vocabulary.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d16/host__vocabulary_8hpp_source.html#l00041">41</a> of file <a class="el" href="../../d4/d16/host__vocabulary_8hpp_source.html">host_vocabulary.hpp</a>.</p>
 
 </div>
 </div>
@@ -196,7 +198,7 @@ Public Attributes</h2></td></tr>
 
 <p>Its arguments. An optional type makes the argument optional. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d16/host__vocabulary_8hpp_source.html#l00042">42</a> of file <a class="el" href="../../d4/d16/host__vocabulary_8hpp_source.html">host_vocabulary.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d16/host__vocabulary_8hpp_source.html#l00043">43</a> of file <a class="el" href="../../d4/d16/host__vocabulary_8hpp_source.html">host_vocabulary.hpp</a>.</p>
 
 </div>
 </div>
@@ -214,7 +216,7 @@ Public Attributes</h2></td></tr>
 
 <p>Whether a document that came over a connection that is not verified may run it. A command that opens files, reaches the network or touches the host is not. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d16/host__vocabulary_8hpp_source.html#l00045">45</a> of file <a class="el" href="../../d4/d16/host__vocabulary_8hpp_source.html">host_vocabulary.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d16/host__vocabulary_8hpp_source.html#l00046">46</a> of file <a class="el" href="../../d4/d16/host__vocabulary_8hpp_source.html">host_vocabulary.hpp</a>.</p>
 
 </div>
 </div>
@@ -232,7 +234,7 @@ Public Attributes</h2></td></tr>
 
 <p>Runs the command with its checked arguments, by name; an absent optional argument is <span class="tt">null</span>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d16/host__vocabulary_8hpp_source.html#l00047">47</a> of file <a class="el" href="../../d4/d16/host__vocabulary_8hpp_source.html">host_vocabulary.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d16/host__vocabulary_8hpp_source.html#l00048">48</a> of file <a class="el" href="../../d4/d16/host__vocabulary_8hpp_source.html">host_vocabulary.hpp</a>.</p>
 
 </div>
 </div>
@@ -250,7 +252,25 @@ Public Attributes</h2></td></tr>
 
 <p>The ids of the documents that may name it; empty for every document. In any other document <span class="tt">{"host": <a class="el" href="#a20e5ad9c69d62482f8ee457b3150ecab" title="The command&#39;s name, as {&quot;host&quot;: name} gives it.">name</a>}</span> finds no such command: it is reported missing and nothing runs, and <span class="tt">{"can": "host:<a class="el" href="#a20e5ad9c69d62482f8ee457b3150ecab" title="The command&#39;s name, as {&quot;host&quot;: name} gives it.">name</a>"}</span> is false. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d16/host__vocabulary_8hpp_source.html#l00051">51</a> of file <a class="el" href="../../d4/d16/host__vocabulary_8hpp_source.html">host_vocabulary.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d16/host__vocabulary_8hpp_source.html#l00052">52</a> of file <a class="el" href="../../d4/d16/host__vocabulary_8hpp_source.html">host_vocabulary.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a428ebed0d05f71c29961227cfc4be9af" name="a428ebed0d05f71c29961227cfc4be9af"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a428ebed0d05f71c29961227cfc4be9af">&#9670;&#160;</a></span>refusal</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::function&lt;std::optional&lt;std::string&gt;(<a class="el" href="../../d6/dda/value_8hpp.html#ade1dc8b22e49b1bbed77487cdc498767">ValueRecord</a> const&amp;)&gt; morph::ui::HostCommand::refusal</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>Checks the arguments beyond their types, after they are checked and before <span class="tt"><a class="el" href="#a674b32f6984e947adfc7559de9002522" title="Runs the command with its checked arguments, by name; an absent optional argument is null.">run</a></span>: a reason refuses the command, which then does not run and answers as one that did not succeed, and the interpreter reports the reason. Empty checks nothing more. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d4/d16/host__vocabulary_8hpp_source.html#l00056">56</a> of file <a class="el" href="../../d4/d16/host__vocabulary_8hpp_source.html">host_vocabulary.hpp</a>.</p>
 
 </div>
 </div>

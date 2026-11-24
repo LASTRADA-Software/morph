@@ -186,6 +186,8 @@ Public Member Functions</h2></td></tr>
 <tr class="memdesc:ae18258859251e90901570e773d3e39e5"><td class="mdescLeft">&#160;</td><td class="mdescRight">Makes a transient message.  <br /></td></tr>
 <tr class="memitem:a8d2e284cb62c955da33d8e3c9b2b1dd3" id="r_a8d2e284cb62c955da33d8e3c9b2b1dd3"><td class="memItemLeft">std::unique_ptr&lt; <a class="el" href="../../d6/d93/classmorph_1_1ui_1_1PopoverWidget.html">ui::PopoverWidget</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a8d2e284cb62c955da33d8e3c9b2b1dd3">createPopover</a> (<a class="el" href="../../d4/d3a/classmorph_1_1ui_1_1ContainerWidget.html">ui::ContainerWidget</a> *parent) override</td></tr>
 <tr class="memdesc:a8d2e284cb62c955da33d8e3c9b2b1dd3"><td class="mdescLeft">&#160;</td><td class="mdescRight">Makes a non-modal panel anchored under <code class="param">parent</code> (see <span class="tt">PopoverWidget</span>), closed.     <br /></td></tr>
+<tr class="memitem:a0921aa0037e3aa2d6a2594b6dd3706df" id="r_a0921aa0037e3aa2d6a2594b6dd3706df"><td class="memItemLeft">std::unique_ptr&lt; <a class="el" href="../../d0/d56/classmorph_1_1ui_1_1SpotlightWidget.html">ui::SpotlightWidget</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a0921aa0037e3aa2d6a2594b6dd3706df">createSpotlight</a> (<a class="el" href="../../d4/d3a/classmorph_1_1ui_1_1ContainerWidget.html">ui::ContainerWidget</a> *parent) override</td></tr>
+<tr class="memdesc:a0921aa0037e3aa2d6a2594b6dd3706df"><td class="mdescLeft">&#160;</td><td class="mdescRight">Makes a spotlight. A backend that draws none keeps this default, which throws: a tour on it cannot run, and that is said rather than hidden.     <br /></td></tr>
 <tr class="memitem:a031b6e0b1fed07fb3b547d0489f48a10" id="r_a031b6e0b1fed07fb3b547d0489f48a10"><td class="memItemLeft">std::unique_ptr&lt; <a class="el" href="../../d3/d98/classmorph_1_1ui_1_1BusyWidget.html">ui::BusyWidget</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a031b6e0b1fed07fb3b547d0489f48a10">createBusy</a> (<a class="el" href="../../d4/d3a/classmorph_1_1ui_1_1ContainerWidget.html">ui::ContainerWidget</a> *parent) override</td></tr>
 <tr class="memdesc:a031b6e0b1fed07fb3b547d0489f48a10"><td class="mdescLeft">&#160;</td><td class="mdescRight">Makes a progress indicator.  <br /></td></tr>
 <tr class="memitem:a0b40e012891c8da5d07825a61cac5e55" id="r_a0b40e012891c8da5d07825a61cac5e55"><td class="memItemLeft">std::unique_ptr&lt; <a class="el" href="../../d7/d70/classmorph_1_1ui_1_1TableWidget.html">ui::TableWidget</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a0b40e012891c8da5d07825a61cac5e55">createTable</a> (<a class="el" href="../../d4/d3a/classmorph_1_1ui_1_1ContainerWidget.html">ui::ContainerWidget</a> *parent) override</td></tr>
@@ -225,6 +227,8 @@ Public Member Functions</h2></td></tr>
 <tr class="memitem:a10f5d5b78fc051d72244075a35946f4a" id="r_a10f5d5b78fc051d72244075a35946f4a"><td class="memItemLeft"><a id="a10f5d5b78fc051d72244075a35946f4a" name="a10f5d5b78fc051d72244075a35946f4a"></a>
 void&#160;</td><td class="memItemRight"><b>fit</b> ()</td></tr>
 <tr class="memdesc:a10f5d5b78fc051d72244075a35946f4a"><td class="mdescLeft">&#160;</td><td class="mdescRight">Sizes every root widget to the screen's viewport and centres every open dialog; call before each <span class="tt">Screen::draw()</span>, which is how a resize reaches the tree. <br /></td></tr>
+<tr class="memitem:abb2b71828a81b11f7308b0e875cfb2e2" id="r_abb2b71828a81b11f7308b0e875cfb2e2"><td class="memItemLeft">bool&#160;</td><td class="memItemRight"><a class="el" href="#abb2b71828a81b11f7308b0e875cfb2e2">spotlightMisplaced</a> () const</td></tr>
+<tr class="memdesc:abb2b71828a81b11f7308b0e875cfb2e2"><td class="mdescLeft">&#160;</td><td class="mdescRight">Whether an open spotlight's box stands where its target is no longer drawn: the frame just drawn moved the target or showed it for the first time, so the box is placed by a stale rectangle. Call after <span class="tt">Screen::draw()</span>; when true, <span class="tt"><a class="el" href="#a10f5d5b78fc051d72244075a35946f4a" title="Sizes every root widget to the screen&#39;s viewport and centres every open dialog; call before each Scre...">fit()</a></span> and draw once more.  <br /></td></tr>
 <tr class="memitem:a72d683776543bc6e1d97fc0fb736f26b" id="r_a72d683776543bc6e1d97fc0fb736f26b"><td class="memItemLeft"><a id="a72d683776543bc6e1d97fc0fb736f26b" name="a72d683776543bc6e1d97fc0fb736f26b"></a>
 void&#160;</td><td class="memItemRight"><b>focusNext</b> ()</td></tr>
 <tr class="memdesc:a72d683776543bc6e1d97fc0fb736f26b"><td class="mdescLeft">&#160;</td><td class="mdescRight">Moves keyboard focus to the next focusable widget — inside the innermost open dialog when one is open, because <span class="tt">Screen::focusNext</span> does not know overlays. <br /></td></tr>
@@ -924,6 +928,48 @@ IViewBackend &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (IViewBac
 
 </div>
 </div>
+<a id="a0921aa0037e3aa2d6a2594b6dd3706df" name="a0921aa0037e3aa2d6a2594b6dd3706df"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a0921aa0037e3aa2d6a2594b6dd3706df">&#9670;&#160;</a></span>createSpotlight()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::unique_ptr&lt; <a class="el" href="../../d0/d56/classmorph_1_1ui_1_1SpotlightWidget.html">ui::SpotlightWidget</a> &gt; morph::tui::Backend::createSpotlight </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="../../d4/d3a/classmorph_1_1ui_1_1ContainerWidget.html">ui::ContainerWidget</a> *</td>          <td class="paramname"><span class="paramname"><em>parent</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel nodiscard">nodiscard</span><span class="mlabel override">override</span><span class="mlabel virtual">virtual</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Makes a spotlight. A backend that draws none keeps this default, which throws: a tour on it cannot run, and that is said rather than hidden.    </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">parent</td><td>The container to append it to; null makes a root. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>The widget. </dd></dl>
+<dl class="exception"><dt>Exceptions</dt><dd>
+  <table class="exception">
+    <tr><td class="paramname">std::logic_error</td><td>from the default.    </td></tr>
+  </table>
+  </dd>
+</dl>
+
+<p>Reimplemented from <a class="el" href="../../df/dae/classmorph_1_1ui_1_1IViewBackend.html#a9cae3374c4a41f05731e8ac3378a63d7">morph::ui::IViewBackend</a>.</p>
+
+</div>
+</div>
 <a id="a031b6e0b1fed07fb3b547d0489f48a10" name="a031b6e0b1fed07fb3b547d0489f48a10"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a031b6e0b1fed07fb3b547d0489f48a10">&#9670;&#160;</a></span>createBusy()</h2>
 
@@ -1605,6 +1651,34 @@ IViewBackend &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (IViewBac
 <dl class="section return"><dt>Returns</dt><dd>The widget.    </dd></dl>
 
 <p>Implements <a class="el" href="../../df/dae/classmorph_1_1ui_1_1IViewBackend.html#a3a863d33e9484a1377ef94b95e00ebf4">morph::ui::IViewBackend</a>.</p>
+
+</div>
+</div>
+<a id="abb2b71828a81b11f7308b0e875cfb2e2" name="abb2b71828a81b11f7308b0e875cfb2e2"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#abb2b71828a81b11f7308b0e875cfb2e2">&#9670;&#160;</a></span>spotlightMisplaced()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">bool morph::tui::Backend::spotlightMisplaced </td>
+          <td>(</td>
+          <td class="paramname"><span class="paramname"><em></em></span></td><td>)</td>
+          <td> const</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Whether an open spotlight's box stands where its target is no longer drawn: the frame just drawn moved the target or showed it for the first time, so the box is placed by a stale rectangle. Call after <span class="tt">Screen::draw()</span>; when true, <span class="tt"><a class="el" href="#a10f5d5b78fc051d72244075a35946f4a" title="Sizes every root widget to the screen&#39;s viewport and centres every open dialog; call before each Scre...">fit()</a></span> and draw once more. </p>
+<dl class="section return"><dt>Returns</dt><dd>True while an open spotlight's box needs placing again. </dd></dl>
 
 </div>
 </div>

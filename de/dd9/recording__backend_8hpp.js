@@ -33,6 +33,7 @@ var recording__backend_8hpp =
     [ "morph::ui::testing::detail::FakeEmptyState", "d5/d33/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeEmptyState.html", "d5/d33/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeEmptyState" ],
     [ "morph::ui::testing::detail::FakeDrawer", "d7/d5a/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeDrawer.html", "d7/d5a/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeDrawer" ],
     [ "morph::ui::testing::detail::FakePopover", "d5/d60/classmorph_1_1ui_1_1testing_1_1detail_1_1FakePopover.html", "d5/d60/classmorph_1_1ui_1_1testing_1_1detail_1_1FakePopover" ],
+    [ "morph::ui::testing::detail::FakeSpotlight", "db/d47/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeSpotlight.html", "db/d47/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeSpotlight" ],
     [ "morph::ui::testing::detail::FakeSplitter", "d5/d19/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeSplitter.html", "d5/d19/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeSplitter" ],
     [ "morph::ui::testing::detail::FakeCollapsible", "d2/d72/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeCollapsible.html", "d2/d72/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeCollapsible" ],
     [ "morph::ui::testing::detail::FakePage", "d6/de9/classmorph_1_1ui_1_1testing_1_1detail_1_1FakePage.html", "d6/de9/classmorph_1_1ui_1_1testing_1_1detail_1_1FakePage" ],
@@ -77,5 +78,8 @@ var recording__backend_8hpp =
     [ "morph::ui::testing::detail::chartToneName", "de/dd9/recording__backend_8hpp.html#a914bf6ca7c25e257230867516dcfb362", null ],
     [ "morph::ui::testing::detail::chartStyleName", "de/dd9/recording__backend_8hpp.html#a84c1a42768915278e4aa1112e89d14d9", null ],
     [ "morph::ui::testing::detail::formatChartValue", "de/dd9/recording__backend_8hpp.html#ab03ab6aafd186aa317eae78cf0b49b6c", null ],
-    [ "morph::ui::testing::detail::formatChartSeries", "de/dd9/recording__backend_8hpp.html#a2b063262c5c80dca38e266cdfcaf9f9b", null ]
+    [ "morph::ui::testing::detail::formatChartSeries", "de/dd9/recording__backend_8hpp.html#a2b063262c5c80dca38e266cdfcaf9f9b", null ],
+    [ "morph::ui::testing::detail::propIs", "de/dd9/recording__backend_8hpp.html#a3bd34baf96e738a881563dda7cb56e52", null ],
+    [ "morph::ui::testing::detail::isClosedOverlay", "de/dd9/recording__backend_8hpp.html#acf8ebdf5dee5c7d538497bea2dc05265", null ],
+    [ "morph::ui::testing::detail::shownInStore", "de/dd9/recording__backend_8hpp.html#ab30a0caf0cde813d96294f40c1747869", null ]
 ];

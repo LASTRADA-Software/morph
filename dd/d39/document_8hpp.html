@@ -190,6 +190,10 @@ Classes</h2></td></tr>
 <tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">A declaration a <span class="tt">focus</span> command may reach: an element's node, and how many row keys key it.  <a href="../../dc/dc6/structmorph_1_1ui_1_1FocusCandidate.html#details">More...</a><br /></td></tr>
 <tr class="memitem:morph_3A_3Aui_3A_3AFocusTarget" id="r_morph_3A_3Aui_3A_3AFocusTarget"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../dc/d1c/structmorph_1_1ui_1_1FocusTarget.html">morph::ui::FocusTarget</a></td></tr>
 <tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">Where a <span class="tt">focus</span> command's target resolved: the declarations of that name it may reach. At most one of them is mounted at a time; the command focuses the one that is.  <a href="../../dc/d1c/structmorph_1_1ui_1_1FocusTarget.html#details">More...</a><br /></td></tr>
+<tr class="memitem:morph_3A_3Aui_3A_3ATourStepDecl" id="r_morph_3A_3Aui_3A_3ATourStepDecl"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../d9/dc8/structmorph_1_1ui_1_1TourStepDecl.html">morph::ui::TourStepDecl</a></td></tr>
+<tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">One step of a guided tour, as the app document declares it (<span class="tt">docs/spec/ui/tours.md</span>).  <a href="../../d9/dc8/structmorph_1_1ui_1_1TourStepDecl.html#details">More...</a><br /></td></tr>
+<tr class="memitem:morph_3A_3Aui_3A_3ATourDecl" id="r_morph_3A_3Aui_3A_3ATourDecl"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../db/d37/structmorph_1_1ui_1_1TourDecl.html">morph::ui::TourDecl</a></td></tr>
+<tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">A guided tour, as the app document declares it.  <a href="../../db/d37/structmorph_1_1ui_1_1TourDecl.html#details">More...</a><br /></td></tr>
 <tr class="memitem:morph_3A_3Aui_3A_3ADocument" id="r_morph_3A_3Aui_3A_3ADocument"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../d4/d02/structmorph_1_1ui_1_1Document.html">morph::ui::Document</a></td></tr>
 <tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">A loaded and validated UI document: a screen, or the app document (id <span class="tt">app</span>, spec 6 §5).  <a href="../../d4/d02/structmorph_1_1ui_1_1Document.html#details">More...</a><br /></td></tr>
 <tr class="memitem:morph_3A_3Aui_3A_3Adetail_3A_3AKeySpec" id="r_morph_3A_3Aui_3A_3Adetail_3A_3AKeySpec"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../dc/d8d/structmorph_1_1ui_1_1detail_1_1KeySpec.html">morph::ui::detail::KeySpec</a></td></tr>
@@ -313,6 +317,8 @@ Functions</h2></td></tr>
 <tr class="memdesc:ad7dcdfd8c1f620ee9e35f6741b497aad"><td class="mdescLeft">&#160;</td><td class="mdescRight">Parses a UI document and runs its load-time validation (spec 5 §3).  <br /></td></tr>
 <tr class="memitem:a76e8aa9369b168da3613fafebbc10f81" id="r_a76e8aa9369b168da3613fafebbc10f81"><td class="memItemLeft">MORPH_API std::expected&lt; <a class="el" href="../../d4/d02/structmorph_1_1ui_1_1Document.html">Document</a>, <a class="el" href="../../de/d52/structmorph_1_1ui_1_1Refusal.html">Refusal</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a76e8aa9369b168da3613fafebbc10f81">morph::ui::loadDocumentText</a> (std::string_view text, <a class="el" href="../../d8/dc0/structmorph_1_1ui_1_1LoadOptions.html">LoadOptions</a> const &amp;options={})</td></tr>
 <tr class="memdesc:a76e8aa9369b168da3613fafebbc10f81"><td class="mdescLeft">&#160;</td><td class="mdescRight">Parses JSON text as a UI document and runs its load-time validation.  <br /></td></tr>
+<tr class="memitem:aee00cff5c35c6c3b55e61074fd37eae2" id="r_aee00cff5c35c6c3b55e61074fd37eae2"><td class="memItemLeft">MORPH_API std::expected&lt; <a class="el" href="../../db/d37/structmorph_1_1ui_1_1TourDecl.html">TourDecl</a>, <a class="el" href="../../de/d52/structmorph_1_1ui_1_1Refusal.html">Refusal</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#aee00cff5c35c6c3b55e61074fd37eae2">morph::ui::loadTourText</a> (std::string_view text)</td></tr>
+<tr class="memdesc:aee00cff5c35c6c3b55e61074fd37eae2"><td class="mdescLeft">&#160;</td><td class="mdescRight">Loads one tour's JSON text, as one entry of the app document's <span class="tt">tours</span> is read: what a client makes of a runtime tour that <span class="tt">morph.tours.list</span> answers. Its shape is checked; its texts are parsed, not checked against the app scope, which the server did when the tour was added.  <br /></td></tr>
 <tr class="memitem:ad0aab0ab19d43a29248e8a7a68ddd7ce" id="r_ad0aab0ab19d43a29248e8a7a68ddd7ce"><td class="memItemLeft">MORPH_API std::vector&lt; std::string_view &gt;&#160;</td><td class="memItemRight"><a class="el" href="#ad0aab0ab19d43a29248e8a7a68ddd7ce">morph::ui::nodeKinds</a> ()</td></tr>
 <tr class="memdesc:ad0aab0ab19d43a29248e8a7a68ddd7ce"><td class="mdescLeft">&#160;</td><td class="mdescRight">The view node kinds of <span class="tt">ui/1</span>.  <br /></td></tr>
 <tr class="memitem:a4f06dbb7d6745e43eefd397f9bbd474e" id="r_a4f06dbb7d6745e43eefd397f9bbd474e"><td class="memItemLeft">MORPH_API std::vector&lt; std::string_view &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a4f06dbb7d6745e43eefd397f9bbd474e">morph::ui::partKinds</a> ()</td></tr>
@@ -322,6 +328,10 @@ Functions</h2></td></tr>
 Variables</h2></td></tr>
 <tr class="memitem:a3dad84fd95ceb27c0a93bd2c55fa5c4b" id="r_a3dad84fd95ceb27c0a93bd2c55fa5c4b"><td class="memItemLeft">constexpr std::string_view&#160;</td><td class="memItemRight"><a class="el" href="#a3dad84fd95ceb27c0a93bd2c55fa5c4b">morph::ui::kVocabulary</a> = &quot;ui/1&quot;</td></tr>
 <tr class="memdesc:a3dad84fd95ceb27c0a93bd2c55fa5c4b"><td class="mdescLeft">&#160;</td><td class="mdescRight">The vocabulary a document declares; the only one this client reads.  <br /></td></tr>
+<tr class="memitem:a0d4b56803ae17034305199c53d88bd25" id="r_a0d4b56803ae17034305199c53d88bd25"><td class="memItemLeft">constexpr std::size_t&#160;</td><td class="memItemRight"><a class="el" href="#a0d4b56803ae17034305199c53d88bd25">morph::ui::kMaxTourSteps</a> = 50</td></tr>
+<tr class="memdesc:a0d4b56803ae17034305199c53d88bd25"><td class="mdescLeft">&#160;</td><td class="mdescRight">The most steps a guided tour has.  <br /></td></tr>
+<tr class="memitem:aca4fda2222b079a283e804bb92f542d6" id="r_aca4fda2222b079a283e804bb92f542d6"><td class="memItemLeft">constexpr std::size_t&#160;</td><td class="memItemRight"><a class="el" href="#aca4fda2222b079a283e804bb92f542d6">morph::ui::kMaxTourIdBytes</a> = 64</td></tr>
+<tr class="memdesc:aca4fda2222b079a283e804bb92f542d6"><td class="mdescLeft">&#160;</td><td class="mdescRight">The longest a guided tour's id is, in characters (<span class="tt">[a-z0-9-]</span>, so bytes too).  <br /></td></tr>
 <tr class="memitem:ad41f9407453271cdbf6f401957387c74" id="r_ad41f9407453271cdbf6f401957387c74"><td class="memItemLeft">constexpr std::uint8_t&#160;</td><td class="memItemRight"><a class="el" href="#ad41f9407453271cdbf6f401957387c74">morph::ui::detail::kInner</a> = 1U</td></tr>
 <tr class="memdesc:ad41f9407453271cdbf6f401957387c74"><td class="mdescLeft">&#160;</td><td class="mdescRight">The key is evaluated in the node's own scope (a dialog's, a row's), not the scope around it.  <br /></td></tr>
 <tr class="memitem:ae45f8af84d5bf653404e5b226dee105f" id="r_ae45f8af84d5bf653404e5b226dee105f"><td class="memItemLeft">constexpr std::uint8_t&#160;</td><td class="memItemRight"><a class="el" href="#ae45f8af84d5bf653404e5b226dee105f">morph::ui::detail::kRequired</a> = 2U</td></tr>
@@ -650,7 +660,7 @@ Variables</h2></td></tr>
 </td></tr>
 </table>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00646">646</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00691">691</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
 
 </div>
 </div>
@@ -694,7 +704,7 @@ Variables</h2></td></tr>
 </td></tr>
 </table>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00712">712</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00757">757</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
 
 </div>
 </div>
@@ -770,7 +780,7 @@ Variables</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Whether <code class="param">name</code> is in <code class="param">names</code>. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00727">727</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00772">772</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
 
 </div>
 </div>
@@ -976,6 +986,40 @@ Variables</h2></td></tr>
 
 </div>
 </div>
+<a id="aee00cff5c35c6c3b55e61074fd37eae2" name="aee00cff5c35c6c3b55e61074fd37eae2"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#aee00cff5c35c6c3b55e61074fd37eae2">&#9670;&#160;</a></span>loadTourText()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">MORPH_API std::expected&lt; TourDecl, Refusal &gt; morph::ui::loadTourText </td>
+          <td>(</td>
+          <td class="paramtype">std::string_view</td>          <td class="paramname"><span class="paramname"><em>text</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Loads one tour's JSON text, as one entry of the app document's <span class="tt">tours</span> is read: what a client makes of a runtime tour that <span class="tt">morph.tours.list</span> answers. Its shape is checked; its texts are parsed, not checked against the app scope, which the server did when the tour was added. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">text</td><td>The tour's JSON text. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>The tour, or the refusal, its path a pointer into the tour. </dd></dl>
+
+</div>
+</div>
 <a id="ad0aab0ab19d43a29248e8a7a68ddd7ce" name="ad0aab0ab19d43a29248e8a7a68ddd7ce"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#ad0aab0ab19d43a29248e8a7a68ddd7ce">&#9670;&#160;</a></span>nodeKinds()</h2>
 
@@ -1059,6 +1103,58 @@ Variables</h2></td></tr>
 
 </div>
 </div>
+<a id="a0d4b56803ae17034305199c53d88bd25" name="a0d4b56803ae17034305199c53d88bd25"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a0d4b56803ae17034305199c53d88bd25">&#9670;&#160;</a></span>kMaxTourSteps</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::size_t morph::ui::kMaxTourSteps = 50</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel constexpr">constexpr</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>The most steps a guided tour has. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00557">557</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+
+</div>
+</div>
+<a id="aca4fda2222b079a283e804bb92f542d6" name="aca4fda2222b079a283e804bb92f542d6"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#aca4fda2222b079a283e804bb92f542d6">&#9670;&#160;</a></span>kMaxTourIdBytes</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::size_t morph::ui::kMaxTourIdBytes = 64</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel constexpr">constexpr</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>The longest a guided tour's id is, in characters (<span class="tt">[a-z0-9-]</span>, so bytes too). </p>
+
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00560">560</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+
+</div>
+</div>
 <a id="ad41f9407453271cdbf6f401957387c74" name="ad41f9407453271cdbf6f401957387c74"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#ad41f9407453271cdbf6f401957387c74">&#9670;&#160;</a></span>kInner</h2>
 
@@ -1081,7 +1177,7 @@ Variables</h2></td></tr>
 
 <p>The key is evaluated in the node's own scope (a dialog's, a row's), not the scope around it. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00663">663</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00708">708</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
 
 </div>
 </div>
@@ -1107,7 +1203,7 @@ Variables</h2></td></tr>
 
 <p>The key is required. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00665">665</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00710">710</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
 
 </div>
 </div>
@@ -1133,7 +1229,7 @@ Variables</h2></td></tr>
 
 <p>The key's content is a boundary's <span class="tt">error</span>, where <span class="tt">boundary.error</span> and <span class="tt">retry</span> are valid. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00667">667</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00712">712</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
 
 </div>
 </div>
@@ -1159,7 +1255,7 @@ Variables</h2></td></tr>
 
 <p>The node or part creates a scope. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00682">682</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00727">727</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
 
 </div>
 </div>
@@ -1185,7 +1281,7 @@ Variables</h2></td></tr>
 
 <p>The scope it creates is a row scope, where <span class="tt">row</span> is valid. On a part without <span class="tt">kScope</span>, the part's inner keys are read in a row scope of their own that declares nothing: a chart series' per-point keys. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00685">685</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00730">730</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
 
 </div>
 </div>
@@ -1211,7 +1307,7 @@ Variables</h2></td></tr>
 
 <p>It carries the input decorations <span class="tt">readonly</span>, <span class="tt">required</span>, <span class="tt">errors</span> and <span class="tt">stale</span>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00687">687</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00732">732</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
 
 </div>
 </div>
@@ -1237,7 +1333,7 @@ Variables</h2></td></tr>
 
 <p>It is a part, not a node: it has no common properties. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00689">689</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00734">734</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
 
 </div>
 </div>
@@ -1263,7 +1359,7 @@ Variables</h2></td></tr>
 
 <p>A command may write its draft with <span class="tt">set</span>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00691">691</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00736">736</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
 
 </div>
 </div>
@@ -1289,7 +1385,7 @@ Variables</h2></td></tr>
 
 <p>Any path below its id is an element value (a form's fields). </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00693">693</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00738">738</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
 
 </div>
 </div>
@@ -1317,7 +1413,7 @@ Variables</h2></td></tr>
 </div><!-- fragment -->
 <p>Why an action bar takes no <span class="tt">gap</span>, and a horizontal <span class="tt">forEach</span> directly in it takes none either. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00708">708</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00753">753</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
 
 </div>
 </div>

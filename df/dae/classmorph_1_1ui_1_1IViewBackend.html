@@ -179,6 +179,8 @@ IViewBackend &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (IViewBac
 <tr class="memdesc:a08377c1b28b1da169e43f158ad210cd3"><td class="mdescLeft">&#160;</td><td class="mdescRight">Makes a transient message.  <br /></td></tr>
 <tr class="memitem:a2abd3f6c42479af0ea20c52d365d1fd8" id="r_a2abd3f6c42479af0ea20c52d365d1fd8"><td class="memItemLeft">virtual std::unique_ptr&lt; <a class="el" href="../../d6/d93/classmorph_1_1ui_1_1PopoverWidget.html">PopoverWidget</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a2abd3f6c42479af0ea20c52d365d1fd8">createPopover</a> (<a class="el" href="../../d4/d3a/classmorph_1_1ui_1_1ContainerWidget.html">ContainerWidget</a> *parent)=0</td></tr>
 <tr class="memdesc:a2abd3f6c42479af0ea20c52d365d1fd8"><td class="mdescLeft">&#160;</td><td class="mdescRight">Makes a non-modal panel anchored under <code class="param">parent</code> (see <span class="tt"><a class="el" href="../../d6/d93/classmorph_1_1ui_1_1PopoverWidget.html" title="A non-modal panel that belongs to another widget: the results of a search under its field....">PopoverWidget</a></span>), closed.  <br /></td></tr>
+<tr class="memitem:a9cae3374c4a41f05731e8ac3378a63d7" id="r_a9cae3374c4a41f05731e8ac3378a63d7"><td class="memItemLeft">virtual std::unique_ptr&lt; <a class="el" href="../../d0/d56/classmorph_1_1ui_1_1SpotlightWidget.html">SpotlightWidget</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a9cae3374c4a41f05731e8ac3378a63d7">createSpotlight</a> (<a class="el" href="../../d4/d3a/classmorph_1_1ui_1_1ContainerWidget.html">ContainerWidget</a> *parent)</td></tr>
+<tr class="memdesc:a9cae3374c4a41f05731e8ac3378a63d7"><td class="mdescLeft">&#160;</td><td class="mdescRight">Makes a spotlight. A backend that draws none keeps this default, which throws: a tour on it cannot run, and that is said rather than hidden.  <br /></td></tr>
 <tr class="memitem:aa00c2863b5fcbe9b0ed205a043ec60a0" id="r_aa00c2863b5fcbe9b0ed205a043ec60a0"><td class="memItemLeft">virtual std::unique_ptr&lt; <a class="el" href="../../d3/d98/classmorph_1_1ui_1_1BusyWidget.html">BusyWidget</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#aa00c2863b5fcbe9b0ed205a043ec60a0">createBusy</a> (<a class="el" href="../../d4/d3a/classmorph_1_1ui_1_1ContainerWidget.html">ContainerWidget</a> *parent)=0</td></tr>
 <tr class="memdesc:aa00c2863b5fcbe9b0ed205a043ec60a0"><td class="mdescLeft">&#160;</td><td class="mdescRight">Makes a progress indicator.  <br /></td></tr>
 <tr class="memitem:a4472eb65b0ce59376d2bc47c48e76d29" id="r_a4472eb65b0ce59376d2bc47c48e76d29"><td class="memItemLeft">virtual std::unique_ptr&lt; <a class="el" href="../../d7/d70/classmorph_1_1ui_1_1TableWidget.html">TableWidget</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a4472eb65b0ce59376d2bc47c48e76d29">createTable</a> (<a class="el" href="../../d4/d3a/classmorph_1_1ui_1_1ContainerWidget.html">ContainerWidget</a> *parent)=0</td></tr>
@@ -225,7 +227,7 @@ IViewBackend &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (IViewBac
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>Makes widgets. Each factory appends the new widget to <code class="param">parent</code>, or makes a root when it is null, and never returns null, except <span class="tt"><a class="el" href="#a6528c7bb0bdc2531fe0d2349859a11b8" title="Loads the component a custom node names, if this backend can. The only factory that may return null: ...">createCustom</a></span>, whose null shows a custom node's fallback. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dc2/ui_2backend_8hpp_source.html#l01311">1311</a> of file <a class="el" href="../../d0/dc2/ui_2backend_8hpp_source.html">backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dc2/ui_2backend_8hpp_source.html#l01353">1353</a> of file <a class="el" href="../../d0/dc2/ui_2backend_8hpp_source.html">backend.hpp</a>.</p>
 </div><a name="doc-func-members" id="doc-func-members"></a><h2 id="header-doc-func-members" class="groupheader">Member Function Documentation</h2>
 <a id="a277c320382211edad7639e600c070e76" name="a277c320382211edad7639e600c070e76"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a277c320382211edad7639e600c070e76">&#9670;&#160;</a></span>createText()</h2>
@@ -825,6 +827,48 @@ IViewBackend &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (IViewBac
 <dl class="section return"><dt>Returns</dt><dd>The widget. </dd></dl>
 
 <p>Implemented in <a class="el" href="../../d5/df0/classmorph_1_1qt__quick_1_1Backend.html#ad549aa97a679d4163885808cbd96cd27">morph::qt_quick::Backend</a>, <a class="el" href="../../d2/d8e/classmorph_1_1tui_1_1Backend.html#a8d2e284cb62c955da33d8e3c9b2b1dd3">morph::tui::Backend</a>, and <a class="el" href="../../dd/db4/classmorph_1_1ui_1_1testing_1_1RecordingBackend.html#af83c1bad11971d8f2d052ab53bcb0031">morph::ui::testing::RecordingBackend</a>.</p>
+
+</div>
+</div>
+<a id="a9cae3374c4a41f05731e8ac3378a63d7" name="a9cae3374c4a41f05731e8ac3378a63d7"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a9cae3374c4a41f05731e8ac3378a63d7">&#9670;&#160;</a></span>createSpotlight()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">virtual std::unique_ptr&lt; <a class="el" href="../../d0/d56/classmorph_1_1ui_1_1SpotlightWidget.html">SpotlightWidget</a> &gt; morph::ui::IViewBackend::createSpotlight </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="../../d4/d3a/classmorph_1_1ui_1_1ContainerWidget.html">ContainerWidget</a> *</td>          <td class="paramname"><span class="paramname"><em>parent</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel nodiscard">nodiscard</span><span class="mlabel virtual">virtual</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Makes a spotlight. A backend that draws none keeps this default, which throws: a tour on it cannot run, and that is said rather than hidden. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">parent</td><td>The container to append it to; null makes a root. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>The widget. </dd></dl>
+<dl class="exception"><dt>Exceptions</dt><dd>
+  <table class="exception">
+    <tr><td class="paramname">std::logic_error</td><td>from the default. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+<p>Reimplemented in <a class="el" href="../../d5/df0/classmorph_1_1qt__quick_1_1Backend.html#aea6b9400cd74071c05ea66877151fdc4">morph::qt_quick::Backend</a>, <a class="el" href="../../d2/d8e/classmorph_1_1tui_1_1Backend.html#a0921aa0037e3aa2d6a2594b6dd3706df">morph::tui::Backend</a>, and <a class="el" href="../../dd/db4/classmorph_1_1ui_1_1testing_1_1RecordingBackend.html#a51b1b98883843c8197abdd7e55cda97c">morph::ui::testing::RecordingBackend</a>.</p>
 
 </div>
 </div>

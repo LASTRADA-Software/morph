@@ -166,6 +166,8 @@ Public Member Functions</h2></td></tr>
 <tr class="memdesc:a5a2d1f376b92db771fb5384f8aa232c2"><td class="mdescLeft">&#160;</td><td class="mdescRight">Whether modules are collapsed.  <br /></td></tr>
 <tr class="memitem:a3cf6674f5209944f3b7a674ae2b51e42" id="r_a3cf6674f5209944f3b7a674ae2b51e42"><td class="memItemLeft">bool&#160;</td><td class="memItemRight"><a class="el" href="#a3cf6674f5209944f3b7a674ae2b51e42">setOpenModule</a> (std::string_view module)</td></tr>
 <tr class="memdesc:a3cf6674f5209944f3b7a674ae2b51e42"><td class="mdescLeft">&#160;</td><td class="mdescRight">Opens a module's entries and closes the one open before.  <br /></td></tr>
+<tr class="memitem:a03c6b26165907bcf56d8d855dc998330" id="r_a03c6b26165907bcf56d8d855dc998330"><td class="memItemLeft">bool&#160;</td><td class="memItemRight"><a class="el" href="#a03c6b26165907bcf56d8d855dc998330">reveal</a> (std::string_view screenId)</td></tr>
+<tr class="memdesc:a03c6b26165907bcf56d8d855dc998330"><td class="mdescLeft">&#160;</td><td class="mdescRight">Makes a screen's entry drawable: empties the search, which may be hiding it, and, while modules are collapsed, opens the module that holds it.  <br /></td></tr>
 <tr class="memitem:a3a396f560b48bec7ce04c125404e1966" id="r_a3a396f560b48bec7ce04c125404e1966"><td class="memItemLeft">std::string const &amp;&#160;</td><td class="memItemRight"><a class="el" href="#a3a396f560b48bec7ce04c125404e1966">openModule</a> () const noexcept</td></tr>
 <tr class="memdesc:a3a396f560b48bec7ce04c125404e1966"><td class="mdescLeft">&#160;</td><td class="mdescRight">The module whose entries are listed.  <br /></td></tr>
 <tr class="memitem:a79dbcbdc7a9aba0a8ef4cac7cbdbd068" id="r_a79dbcbdc7a9aba0a8ef4cac7cbdbd068"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a79dbcbdc7a9aba0a8ef4cac7cbdbd068">setModuleTexts</a> (std::string closed, std::string open, std::string countFailed)</td></tr>
@@ -628,6 +630,32 @@ void&#160;</td><td class="memItemRight"><b>relabel</b> ()</td></tr>
 
 </div>
 </div>
+<a id="a03c6b26165907bcf56d8d855dc998330" name="a03c6b26165907bcf56d8d855dc998330"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a03c6b26165907bcf56d8d855dc998330">&#9670;&#160;</a></span>reveal()</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">bool morph::ui::Navigator::reveal </td>
+          <td>(</td>
+          <td class="paramtype">std::string_view</td>          <td class="paramname"><span class="paramname"><em>screenId</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>Makes a screen's entry drawable: empties the search, which may be hiding it, and, while modules are collapsed, opens the module that holds it. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">screenId</td><td>The entry's screen. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>Whether the navigator lists the screen; <span class="tt">false</span> changes nothing. </dd></dl>
+
+</div>
+</div>
 <a id="a3a396f560b48bec7ce04c125404e1966" name="a3a396f560b48bec7ce04c125404e1966"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a3a396f560b48bec7ce04c125404e1966">&#9670;&#160;</a></span>openModule()</h2>
 
@@ -654,7 +682,7 @@ void&#160;</td><td class="memItemRight"><b>relabel</b> ()</td></tr>
 <p>The module whose entries are listed. </p>
 <dl class="section return"><dt>Returns</dt><dd>It; empty when none is open. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../da/d0b/navigator_8hpp_source.html#l00195">195</a> of file <a class="el" href="../../da/d0b/navigator_8hpp_source.html">navigator.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../da/d0b/navigator_8hpp_source.html#l00201">201</a> of file <a class="el" href="../../da/d0b/navigator_8hpp_source.html">navigator.hpp</a>.</p>
 
 </div>
 </div>
@@ -821,7 +849,7 @@ void&#160;</td><td class="memItemRight"><b>relabel</b> ()</td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../da/d0b/navigator_8hpp_source.html#l00226">226</a> of file <a class="el" href="../../da/d0b/navigator_8hpp_source.html">navigator.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../da/d0b/navigator_8hpp_source.html#l00232">232</a> of file <a class="el" href="../../da/d0b/navigator_8hpp_source.html">navigator.hpp</a>.</p>
 
 </div>
 </div>
@@ -876,7 +904,7 @@ void&#160;</td><td class="memItemRight"><b>relabel</b> ()</td></tr>
 <p>The custom screens the <a class="el" href="../../db/d27/structmorph_1_1ui_1_1Custom.html" title="A component the backend may load (spec 5 §10), with the built-in nodes shown when it does not.">Custom</a> section lists. </p>
 <dl class="section return"><dt>Returns</dt><dd>They, in order. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../da/d0b/navigator_8hpp_source.html#l00244">244</a> of file <a class="el" href="../../da/d0b/navigator_8hpp_source.html">navigator.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../da/d0b/navigator_8hpp_source.html#l00250">250</a> of file <a class="el" href="../../da/d0b/navigator_8hpp_source.html">navigator.hpp</a>.</p>
 
 </div>
 </div>

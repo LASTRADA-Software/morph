@@ -15,6 +15,7 @@ var classmorph_1_1ui_1_1Navigator =
     [ "setModuleGroups", "d6/d15/classmorph_1_1ui_1_1Navigator.html#a9e2f7d541d6796702128d76fd30fa2e7", null ],
     [ "moduleGroups", "d6/d15/classmorph_1_1ui_1_1Navigator.html#a5a2d1f376b92db771fb5384f8aa232c2", null ],
     [ "setOpenModule", "d6/d15/classmorph_1_1ui_1_1Navigator.html#a3cf6674f5209944f3b7a674ae2b51e42", null ],
+    [ "reveal", "d6/d15/classmorph_1_1ui_1_1Navigator.html#a03c6b26165907bcf56d8d855dc998330", null ],
     [ "openModule", "d6/d15/classmorph_1_1ui_1_1Navigator.html#a3a396f560b48bec7ce04c125404e1966", null ],
     [ "setModuleTexts", "d6/d15/classmorph_1_1ui_1_1Navigator.html#a79dbcbdc7a9aba0a8ef4cac7cbdbd068", null ],
     [ "setModuleBadge", "d6/d15/classmorph_1_1ui_1_1Navigator.html#a0608b099f7779d38ed329f68fec13a46", null ],

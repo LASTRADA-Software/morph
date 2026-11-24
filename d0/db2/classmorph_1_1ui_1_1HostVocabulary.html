@@ -147,7 +147,7 @@ Public Member Functions</h2></td></tr>
 <div class="textblock"><p>The client's host vocabulary: what it registered, and whether its documents came over a verified connection. </p>
 <p>An application builds one at start-up, registers its commands and values, connects it to the interpreter's <span class="tt"><a class="el" href="../../df/d20/classmorph_1_1ui_1_1Session.html" title="What screens of one client session share (spec 5 §5, §12b): the query cache, the mounted queries,...">Session</a></span>, and tells it when the connection is verified (spec 5 §13: a verified TLS connection, or loopback with the development flag). Until then a command not marked <span class="tt">safeForUntrusted</span> is refused. It lives on the runtime's owner, like the session, and outlives the session it is connected to. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d16/host__vocabulary_8hpp_source.html#l00076">76</a> of file <a class="el" href="../../d4/d16/host__vocabulary_8hpp_source.html">host_vocabulary.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d16/host__vocabulary_8hpp_source.html#l00081">81</a> of file <a class="el" href="../../d4/d16/host__vocabulary_8hpp_source.html">host_vocabulary.hpp</a>.</p>
 </div><a name="doc-func-members" id="doc-func-members"></a><h2 id="header-doc-func-members" class="groupheader">Member Function Documentation</h2>
 <a id="a1c24beb123d910c84b88d9f88053f39e" name="a1c24beb123d910c84b88d9f88053f39e"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a1c24beb123d910c84b88d9f88053f39e">&#9670;&#160;</a></span>add() <span class="overload">[1/2]</span></h2>
@@ -180,7 +180,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d16/host__vocabulary_8hpp_source.html#l00081">81</a> of file <a class="el" href="../../d4/d16/host__vocabulary_8hpp_source.html">host_vocabulary.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d16/host__vocabulary_8hpp_source.html#l00086">86</a> of file <a class="el" href="../../d4/d16/host__vocabulary_8hpp_source.html">host_vocabulary.hpp</a>.</p>
 
 </div>
 </div>
@@ -215,7 +215,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d16/host__vocabulary_8hpp_source.html#l00105">105</a> of file <a class="el" href="../../d4/d16/host__vocabulary_8hpp_source.html">host_vocabulary.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d16/host__vocabulary_8hpp_source.html#l00110">110</a> of file <a class="el" href="../../d4/d16/host__vocabulary_8hpp_source.html">host_vocabulary.hpp</a>.</p>
 
 </div>
 </div>
@@ -256,7 +256,7 @@ Public Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Whether the value is registered and <code class="param">value</code> has its type; otherwise nothing changes. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d16/host__vocabulary_8hpp_source.html#l00125">125</a> of file <a class="el" href="../../d4/d16/host__vocabulary_8hpp_source.html">host_vocabulary.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d16/host__vocabulary_8hpp_source.html#l00130">130</a> of file <a class="el" href="../../d4/d16/host__vocabulary_8hpp_source.html">host_vocabulary.hpp</a>.</p>
 
 </div>
 </div>
@@ -291,7 +291,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d16/host__vocabulary_8hpp_source.html#l00140">140</a> of file <a class="el" href="../../d4/d16/host__vocabulary_8hpp_source.html">host_vocabulary.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d16/host__vocabulary_8hpp_source.html#l00145">145</a> of file <a class="el" href="../../d4/d16/host__vocabulary_8hpp_source.html">host_vocabulary.hpp</a>.</p>
 
 </div>
 </div>
@@ -326,7 +326,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d16/host__vocabulary_8hpp_source.html#l00148">148</a> of file <a class="el" href="../../d4/d16/host__vocabulary_8hpp_source.html">host_vocabulary.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d16/host__vocabulary_8hpp_source.html#l00153">153</a> of file <a class="el" href="../../d4/d16/host__vocabulary_8hpp_source.html">host_vocabulary.hpp</a>.</p>
 
 </div>
 </div>
@@ -361,7 +361,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d16/host__vocabulary_8hpp_source.html#l00156">156</a> of file <a class="el" href="../../d4/d16/host__vocabulary_8hpp_source.html">host_vocabulary.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d16/host__vocabulary_8hpp_source.html#l00161">161</a> of file <a class="el" href="../../d4/d16/host__vocabulary_8hpp_source.html">host_vocabulary.hpp</a>.</p>
 
 </div>
 </div>
@@ -400,9 +400,9 @@ Public Member Functions</h2></td></tr>
   </table>
   </dd>
 </dl>
-<dl class="section return"><dt>Returns</dt><dd><span class="tt">Ran</span>; <span class="tt">Missing</span> for a command nobody registered; <span class="tt">Refused</span>, with the reason, for an argument that is missing, of the wrong type or not declared, or for an unsafe command on an unverified connection. </dd></dl>
+<dl class="section return"><dt>Returns</dt><dd><span class="tt">Ran</span>; <span class="tt">Missing</span> for a command nobody registered; <span class="tt">Refused</span>, with the reason, for an argument that is missing, of the wrong type or not declared, for an unsafe command on an unverified connection, or for arguments the command's <span class="tt">refusal</span> check refuses. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d16/host__vocabulary_8hpp_source.html#l00170">170</a> of file <a class="el" href="../../d4/d16/host__vocabulary_8hpp_source.html">host_vocabulary.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d16/host__vocabulary_8hpp_source.html#l00176">176</a> of file <a class="el" href="../../d4/d16/host__vocabulary_8hpp_source.html">host_vocabulary.hpp</a>.</p>
 
 </div>
 </div>

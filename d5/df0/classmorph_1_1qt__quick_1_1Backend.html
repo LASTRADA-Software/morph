@@ -188,6 +188,8 @@ Public Member Functions</h2></td></tr>
 <tr class="memdesc:a8ba0912762478e81bf26c407bc3cf18a"><td class="mdescLeft">&#160;</td><td class="mdescRight">Makes a transient message.     <br /></td></tr>
 <tr class="memitem:ad549aa97a679d4163885808cbd96cd27" id="r_ad549aa97a679d4163885808cbd96cd27"><td class="memItemLeft">std::unique_ptr&lt; <a class="el" href="../../d6/d93/classmorph_1_1ui_1_1PopoverWidget.html">ui::PopoverWidget</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#ad549aa97a679d4163885808cbd96cd27">createPopover</a> (<a class="el" href="../../d4/d3a/classmorph_1_1ui_1_1ContainerWidget.html">ui::ContainerWidget</a> *parent) override</td></tr>
 <tr class="memdesc:ad549aa97a679d4163885808cbd96cd27"><td class="mdescLeft">&#160;</td><td class="mdescRight">Makes a non-modal panel anchored under <code class="param">parent</code> (see <span class="tt">PopoverWidget</span>), closed.     <br /></td></tr>
+<tr class="memitem:aea6b9400cd74071c05ea66877151fdc4" id="r_aea6b9400cd74071c05ea66877151fdc4"><td class="memItemLeft">std::unique_ptr&lt; <a class="el" href="../../d0/d56/classmorph_1_1ui_1_1SpotlightWidget.html">ui::SpotlightWidget</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#aea6b9400cd74071c05ea66877151fdc4">createSpotlight</a> (<a class="el" href="../../d4/d3a/classmorph_1_1ui_1_1ContainerWidget.html">ui::ContainerWidget</a> *parent) override</td></tr>
+<tr class="memdesc:aea6b9400cd74071c05ea66877151fdc4"><td class="mdescLeft">&#160;</td><td class="mdescRight">Makes a spotlight. A backend that draws none keeps this default, which throws: a tour on it cannot run, and that is said rather than hidden.     <br /></td></tr>
 <tr class="memitem:aa3ae9cc2dec13254fba4f8a8f2842940" id="r_aa3ae9cc2dec13254fba4f8a8f2842940"><td class="memItemLeft">std::unique_ptr&lt; <a class="el" href="../../d3/d98/classmorph_1_1ui_1_1BusyWidget.html">ui::BusyWidget</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#aa3ae9cc2dec13254fba4f8a8f2842940">createBusy</a> (<a class="el" href="../../d4/d3a/classmorph_1_1ui_1_1ContainerWidget.html">ui::ContainerWidget</a> *parent) override</td></tr>
 <tr class="memdesc:aa3ae9cc2dec13254fba4f8a8f2842940"><td class="mdescLeft">&#160;</td><td class="mdescRight">Makes a progress indicator.     <br /></td></tr>
 <tr class="memitem:ae9c1165ae4d8eb745e3249c6dccde6f4" id="r_ae9c1165ae4d8eb745e3249c6dccde6f4"><td class="memItemLeft">std::unique_ptr&lt; <a class="el" href="../../d7/d70/classmorph_1_1ui_1_1TableWidget.html">ui::TableWidget</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#ae9c1165ae4d8eb745e3249c6dccde6f4">createTable</a> (<a class="el" href="../../d4/d3a/classmorph_1_1ui_1_1ContainerWidget.html">ui::ContainerWidget</a> *parent) override</td></tr>
@@ -1020,6 +1022,48 @@ Static Public Member Functions</h2></td></tr>
 <dl class="section return"><dt>Returns</dt><dd>The widget.    </dd></dl>
 
 <p>Implements <a class="el" href="../../df/dae/classmorph_1_1ui_1_1IViewBackend.html#a2abd3f6c42479af0ea20c52d365d1fd8">morph::ui::IViewBackend</a>.</p>
+
+</div>
+</div>
+<a id="aea6b9400cd74071c05ea66877151fdc4" name="aea6b9400cd74071c05ea66877151fdc4"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#aea6b9400cd74071c05ea66877151fdc4">&#9670;&#160;</a></span>createSpotlight()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::unique_ptr&lt; <a class="el" href="../../d0/d56/classmorph_1_1ui_1_1SpotlightWidget.html">ui::SpotlightWidget</a> &gt; morph::qt_quick::Backend::createSpotlight </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="../../d4/d3a/classmorph_1_1ui_1_1ContainerWidget.html">ui::ContainerWidget</a> *</td>          <td class="paramname"><span class="paramname"><em>parent</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel nodiscard">nodiscard</span><span class="mlabel override">override</span><span class="mlabel virtual">virtual</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Makes a spotlight. A backend that draws none keeps this default, which throws: a tour on it cannot run, and that is said rather than hidden.    </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">parent</td><td>The container to append it to; null makes a root. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>The widget. </dd></dl>
+<dl class="exception"><dt>Exceptions</dt><dd>
+  <table class="exception">
+    <tr><td class="paramname">std::logic_error</td><td>from the default.    </td></tr>
+  </table>
+  </dd>
+</dl>
+
+<p>Reimplemented from <a class="el" href="../../df/dae/classmorph_1_1ui_1_1IViewBackend.html#a9cae3374c4a41f05731e8ac3378a63d7">morph::ui::IViewBackend</a>.</p>
 
 </div>
 </div>

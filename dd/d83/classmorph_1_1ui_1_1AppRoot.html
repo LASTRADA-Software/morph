@@ -146,6 +146,10 @@ AppRoot &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (AppRoot &amp;
 <tr class="memdesc:a2dce5dfc7a952c55087cd60b5627f81c"><td class="mdescLeft">&#160;</td><td class="mdescRight">Runs <span class="tt">onUnmount</span>, takes the scope off the session, and releases everything. <br /></td></tr>
 <tr class="memitem:ad23e05084187ca064dbb30469cbf9a8b" id="r_ad23e05084187ca064dbb30469cbf9a8b"><td class="memItemLeft"><a class="el" href="../../d4/d6f/classmorph_1_1reactive_1_1Computed.html">reactive::Computed</a>&lt; std::vector&lt; <a class="el" href="../../dc/d39/structmorph_1_1ui_1_1NavigationBadge.html">NavigationBadge</a> &gt; &gt; const &amp;&#160;</td><td class="memItemRight"><a class="el" href="#ad23e05084187ca064dbb30469cbf9a8b">navigationBadges</a> () const</td></tr>
 <tr class="memdesc:ad23e05084187ca064dbb30469cbf9a8b"><td class="mdescLeft">&#160;</td><td class="mdescRight">The app document's <span class="tt">navigation</span> badges that are visible now, in order, each with the screen whose navigator entry it goes on, and following the app state they read.  <br /></td></tr>
+<tr class="memitem:ae557998f7ac1192ff8b3f89f965d12ca" id="r_ae557998f7ac1192ff8b3f89f965d12ca"><td class="memItemLeft"><a class="el" href="../../d4/d6f/classmorph_1_1reactive_1_1Computed.html">reactive::Computed</a>&lt; std::vector&lt; <a class="el" href="../../d2/d28/structmorph_1_1ui_1_1Tour.html">Tour</a> &gt; &gt; const &amp;&#160;</td><td class="memItemRight"><a class="el" href="#ae557998f7ac1192ff8b3f89f965d12ca">tours</a> () const</td></tr>
+<tr class="memdesc:ae557998f7ac1192ff8b3f89f965d12ca"><td class="mdescLeft">&#160;</td><td class="mdescRight">The app document's guided tours in declaration order, then the runtime tours <span class="tt"><a class="el" href="#a964bebf1125b44cae43bf9c4f579464f" title="Gives the runtime tours, as the server listed them: tours() lists them after the app document&#39;s,...">setRuntimeTours</a></span> gave, each text evaluated in the app scope and again when what it reads changes, a change of locale included.  <br /></td></tr>
+<tr class="memitem:a964bebf1125b44cae43bf9c4f579464f" id="r_a964bebf1125b44cae43bf9c4f579464f"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a964bebf1125b44cae43bf9c4f579464f">setRuntimeTours</a> (std::vector&lt; <a class="el" href="../../db/d37/structmorph_1_1ui_1_1TourDecl.html">TourDecl</a> &gt; tours)</td></tr>
+<tr class="memdesc:a964bebf1125b44cae43bf9c4f579464f"><td class="mdescLeft">&#160;</td><td class="mdescRight">Gives the runtime tours, as the server listed them: <span class="tt"><a class="el" href="#ae557998f7ac1192ff8b3f89f965d12ca" title="The app document&#39;s guided tours in declaration order, then the runtime tours setRuntimeTours gave,...">tours()</a></span> lists them after the app document's, in this order, leaving out one whose id an app-document tour has.  <br /></td></tr>
 <tr class="memitem:ab80cd610eac226fb172ede2cd9cd220b" id="r_ab80cd610eac226fb172ede2cd9cd220b"><td class="memItemLeft"><a class="el" href="../../db/d42/interpreter_8hpp.html#ad1f86635e63aa55142345f7729ffd972">PrincipalPlacement</a>&#160;</td><td class="memItemRight"><a class="el" href="#ab80cd610eac226fb172ede2cd9cd220b">principalPlacement</a> () const noexcept</td></tr>
 <tr class="memdesc:ab80cd610eac226fb172ede2cd9cd220b"><td class="mdescLeft">&#160;</td><td class="mdescRight">Where a shell shows who is signed in: the document's <span class="tt"><a class="el" href="#ab80cd610eac226fb172ede2cd9cd220b" title="Where a shell shows who is signed in: the document&#39;s principalPlacement.">principalPlacement</a></span>.  <br /></td></tr>
 <tr class="memitem:aaabff20b045f242eb34be0dc4116bce0" id="r_aaabff20b045f242eb34be0dc4116bce0"><td class="memItemLeft"><a class="el" href="../../da/d54/classmorph_1_1ui_1_1Value.html">Value</a>&#160;</td><td class="memItemRight"><a class="el" href="#aaabff20b045f242eb34be0dc4116bce0">read</a> (<a class="el" href="../../d6/dda/value_8hpp.html#a289786f075a2eb48cac06ad898fc421b">Json</a> const &amp;expression) const</td></tr>
@@ -163,7 +167,7 @@ AppRoot &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (AppRoot &amp;
 <div class="textblock"><p>The app document mounted as the root scope every screen of the session shares (spec 6 §5). </p>
 <p>Its state, lets, queries and mutations live once for the session. A screen reads them as <span class="tt">{"ref": "app.name"}</span>, a binding on one updates, and <span class="tt">{"set": "app.name", …}</span> writes the app document's state. A query of the app document runs once however many screens read it. Destroying the root runs its <span class="tt">onUnmount</span>, takes its scope off the session and releases its model instances; a host does that before it clears the session on sign-out. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02680">2680</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02720">2720</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 </div><a name="doc-func-members" id="doc-func-members"></a><h2 id="header-doc-func-members" class="groupheader">Member Function Documentation</h2>
 <a id="ad23e05084187ca064dbb30469cbf9a8b" name="ad23e05084187ca064dbb30469cbf9a8b"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#ad23e05084187ca064dbb30469cbf9a8b">&#9670;&#160;</a></span>navigationBadges()</h2>
@@ -190,6 +194,59 @@ AppRoot &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (AppRoot &amp;
 
 <p>The app document's <span class="tt">navigation</span> badges that are visible now, in order, each with the screen whose navigator entry it goes on, and following the app state they read. </p>
 <dl class="section return"><dt>Returns</dt><dd>They, valid as long as the root; empty when the document declares no <span class="tt">navigation</span>. </dd></dl>
+
+</div>
+</div>
+<a id="ae557998f7ac1192ff8b3f89f965d12ca" name="ae557998f7ac1192ff8b3f89f965d12ca"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ae557998f7ac1192ff8b3f89f965d12ca">&#9670;&#160;</a></span>tours()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="../../d4/d6f/classmorph_1_1reactive_1_1Computed.html">reactive::Computed</a>&lt; std::vector&lt; <a class="el" href="../../d2/d28/structmorph_1_1ui_1_1Tour.html">Tour</a> &gt; &gt; const  &amp; morph::ui::AppRoot::tours </td>
+          <td>(</td>
+          <td class="paramname"><span class="paramname"><em></em></span></td><td>)</td>
+          <td> const</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>The app document's guided tours in declaration order, then the runtime tours <span class="tt"><a class="el" href="#a964bebf1125b44cae43bf9c4f579464f" title="Gives the runtime tours, as the server listed them: tours() lists them after the app document&#39;s,...">setRuntimeTours</a></span> gave, each text evaluated in the app scope and again when what it reads changes, a change of locale included. </p>
+<dl class="section return"><dt>Returns</dt><dd>They, valid as long as the root; empty when the document declares none. </dd></dl>
+
+</div>
+</div>
+<a id="a964bebf1125b44cae43bf9c4f579464f" name="a964bebf1125b44cae43bf9c4f579464f"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a964bebf1125b44cae43bf9c4f579464f">&#9670;&#160;</a></span>setRuntimeTours()</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">void morph::ui::AppRoot::setRuntimeTours </td>
+          <td>(</td>
+          <td class="paramtype">std::vector&lt; <a class="el" href="../../db/d37/structmorph_1_1ui_1_1TourDecl.html">TourDecl</a> &gt;</td>          <td class="paramname"><span class="paramname"><em>tours</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>Gives the runtime tours, as the server listed them: <span class="tt"><a class="el" href="#ae557998f7ac1192ff8b3f89f965d12ca" title="The app document&#39;s guided tours in declaration order, then the runtime tours setRuntimeTours gave,...">tours()</a></span> lists them after the app document's, in this order, leaving out one whose id an app-document tour has. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">tours</td><td>The tours, loaded with <span class="tt"><a class="el" href="../../dd/d39/document_8hpp.html#aee00cff5c35c6c3b55e61074fd37eae2" title="Loads one tour&#39;s JSON text, as one entry of the app document&#39;s tours is read: what a client makes of ...">loadTourText</a></span>. </td></tr>
+  </table>
+  </dd>
+</dl>
 
 </div>
 </div>
@@ -383,7 +440,7 @@ AppRoot &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (AppRoot &amp;
 <p>The diagnostics reported so far. </p>
 <dl class="section return"><dt>Returns</dt><dd>They. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02738">2738</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02788">2788</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>

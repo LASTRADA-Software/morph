@@ -22,6 +22,7 @@ var structmorph_1_1ui_1_1Document =
     [ "menuLabel", "d4/d02/structmorph_1_1ui_1_1Document.html#aea7de60aa6f0be7b4de0847b596e78e6", null ],
     [ "tools", "d4/d02/structmorph_1_1ui_1_1Document.html#a225cd5cd3500c0e03da2bf92f75c4b2b", null ],
     [ "navigation", "d4/d02/structmorph_1_1ui_1_1Document.html#a5f096d1ed6702556f69e0d069d5ffe8c", null ],
+    [ "tours", "d4/d02/structmorph_1_1ui_1_1Document.html#a9b2c38fb26ee7420a8b69fb02ede8096", null ],
     [ "params", "d4/d02/structmorph_1_1ui_1_1Document.html#aca7c64f365769f307753d894ed71ae62", null ],
     [ "scope", "d4/d02/structmorph_1_1ui_1_1Document.html#a79dcd16d9c0eda06bcaf3dfe5e1ef986", null ],
     [ "lifecycle", "d4/d02/structmorph_1_1ui_1_1Document.html#a22cbfed8c01a1b01af73d857f4974976", null ],

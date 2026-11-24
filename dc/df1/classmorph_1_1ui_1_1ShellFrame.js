@@ -32,5 +32,8 @@ var classmorph_1_1ui_1_1ShellFrame =
     [ "setSearchText", "dc/df1/classmorph_1_1ui_1_1ShellFrame.html#a7027cf2c10b23841418e407eeea50de0", null ],
     [ "labels", "dc/df1/classmorph_1_1ui_1_1ShellFrame.html#ad93e706a7f912d90cc912e6f3561772d", null ],
     [ "confirm", "dc/df1/classmorph_1_1ui_1_1ShellFrame.html#aec9dc6d7031f47a392e3ddafe656f988", null ],
-    [ "showToast", "dc/df1/classmorph_1_1ui_1_1ShellFrame.html#a55cbb1a55d1a868699f768dbbe70153c", null ]
+    [ "showToast", "dc/df1/classmorph_1_1ui_1_1ShellFrame.html#a55cbb1a55d1a868699f768dbbe70153c", null ],
+    [ "setTours", "dc/df1/classmorph_1_1ui_1_1ShellFrame.html#ae04e7660e0d210cff9aaf2bdac5152ab", null ],
+    [ "setOnTour", "dc/df1/classmorph_1_1ui_1_1ShellFrame.html#a386b78dec0267401bcb51f48c74a938d", null ],
+    [ "spotlight", "dc/df1/classmorph_1_1ui_1_1ShellFrame.html#a212c26812893cf8b0498069cecd55384", null ]
 ];

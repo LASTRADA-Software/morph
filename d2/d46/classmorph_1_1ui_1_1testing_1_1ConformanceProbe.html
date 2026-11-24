@@ -191,6 +191,8 @@ virtual void&#160;</td><td class="memItemRight"><b>settle</b> ()=0</td></tr>
 <tr class="memdesc:a26efd279f0b1470fd1bbef23b136afe3"><td class="mdescLeft">&#160;</td><td class="mdescRight">Where a widget is drawn, for the layout cases (<span class="tt"><a class="el" href="../../d8/d3e/backend__conformance_8hpp.html#aecf398a21dce6aeb7feecf89f6d25313" title="The layout cases: where a backend that lays widgets out draws them. Run each on a fresh probe whose b...">layoutConformanceCases</a></span>). A backend that lays nothing out, such as <span class="tt"><a class="el" href="../../dd/db4/classmorph_1_1ui_1_1testing_1_1RecordingBackend.html" title="A headless IViewBackend: fake widgets that record every operation, a golden dump of the live tree,...">RecordingBackend</a></span>, answers none and runs only <span class="tt"><a class="el" href="../../d8/d3e/backend__conformance_8hpp.html#a40f3611811880916195ad1becfbe3d46" title="Every conformance case, in a fixed order.">conformanceCases</a></span>; a layout case run on it fails.  <br /></td></tr>
 <tr class="memitem:ac650420799b6f5ca1ce254a3140c0ab3" id="r_ac650420799b6f5ca1ce254a3140c0ab3"><td class="memItemLeft">virtual std::optional&lt; <a class="el" href="../../d4/dd8/structmorph_1_1ui_1_1testing_1_1WidgetBounds.html">WidgetBounds</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#ac650420799b6f5ca1ce254a3140c0ab3">textExtentOf</a> (<a class="el" href="../../dc/dcb/classmorph_1_1ui_1_1Widget.html">Widget</a> const &amp;widget)</td></tr>
 <tr class="memdesc:ac650420799b6f5ca1ce254a3140c0ab3"><td class="mdescLeft">&#160;</td><td class="mdescRight">Where a text's lines are drawn: the box around them, in the units <span class="tt"><a class="el" href="#a26efd279f0b1470fd1bbef23b136afe3" title="Where a widget is drawn, for the layout cases (layoutConformanceCases). A backend that lays nothing o...">boundsOf</a></span> uses, from the top left of the window or screen. For the layout cases that place a text within its own width.  <br /></td></tr>
+<tr class="memitem:aaf2bed3dfcba29648bd8f5e1b6935d17" id="r_aaf2bed3dfcba29648bd8f5e1b6935d17"><td class="memItemLeft">virtual <a class="el" href="../../dc/dcb/classmorph_1_1ui_1_1Widget.html">Widget</a> const *&#160;</td><td class="memItemRight"><a class="el" href="#aaf2bed3dfcba29648bd8f5e1b6935d17">targetOf</a> (<a class="el" href="../../d0/d56/classmorph_1_1ui_1_1SpotlightWidget.html">SpotlightWidget</a> const &amp;spotlight)</td></tr>
+<tr class="memdesc:aaf2bed3dfcba29648bd8f5e1b6935d17"><td class="mdescLeft">&#160;</td><td class="mdescRight">The widget a spotlight rings now, for the spotlight cases (<span class="tt"><a class="el" href="../../d8/d3e/backend__conformance_8hpp.html#a9af71d53ec8ba762ed204ded1ffdc171" title="The spotlight&#39;s cases, which every backend that runs guided tours passes. They are their own list,...">spotlightConformanceCases</a></span>).  <br /></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>How the conformance cases read and drive one backend under test. </p>
@@ -1129,6 +1131,42 @@ virtual void&#160;</td><td class="memItemRight"><b>settle</b> ()=0</td></tr>
 <dl class="section return"><dt>Returns</dt><dd>The box; <span class="tt">nullopt</span> when the probe reads none. </dd></dl>
 
 <p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l00220">220</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
+
+</div>
+</div>
+<a id="aaf2bed3dfcba29648bd8f5e1b6935d17" name="aaf2bed3dfcba29648bd8f5e1b6935d17"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#aaf2bed3dfcba29648bd8f5e1b6935d17">&#9670;&#160;</a></span>targetOf()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">virtual <a class="el" href="../../dc/dcb/classmorph_1_1ui_1_1Widget.html">Widget</a> const  * morph::ui::testing::ConformanceProbe::targetOf </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="../../d0/d56/classmorph_1_1ui_1_1SpotlightWidget.html">SpotlightWidget</a> const &amp;</td>          <td class="paramname"><span class="paramname"><em>spotlight</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span><span class="mlabel virtual">virtual</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>The widget a spotlight rings now, for the spotlight cases (<span class="tt"><a class="el" href="../../d8/d3e/backend__conformance_8hpp.html#a9af71d53ec8ba762ed204ded1ffdc171" title="The spotlight&#39;s cases, which every backend that runs guided tours passes. They are their own list,...">spotlightConformanceCases</a></span>). </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">spotlight</td><td>The spotlight. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>The widget, or null when it rings none or the probe reads none. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l00228">228</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
 
 </div>
 </div>

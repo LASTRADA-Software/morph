@@ -34,6 +34,7 @@ var ui_2backend_8hpp =
     [ "morph::ui::EmptyStateWidget", "de/d82/classmorph_1_1ui_1_1EmptyStateWidget.html", "de/d82/classmorph_1_1ui_1_1EmptyStateWidget" ],
     [ "morph::ui::DrawerWidget", "de/d3c/classmorph_1_1ui_1_1DrawerWidget.html", "de/d3c/classmorph_1_1ui_1_1DrawerWidget" ],
     [ "morph::ui::PopoverWidget", "d6/d93/classmorph_1_1ui_1_1PopoverWidget.html", "d6/d93/classmorph_1_1ui_1_1PopoverWidget" ],
+    [ "morph::ui::SpotlightWidget", "d0/d56/classmorph_1_1ui_1_1SpotlightWidget.html", "d0/d56/classmorph_1_1ui_1_1SpotlightWidget" ],
     [ "morph::ui::SplitterWidget", "d7/d2a/classmorph_1_1ui_1_1SplitterWidget.html", "d7/d2a/classmorph_1_1ui_1_1SplitterWidget" ],
     [ "morph::ui::CollapsibleWidget", "d7/d62/classmorph_1_1ui_1_1CollapsibleWidget.html", "d7/d62/classmorph_1_1ui_1_1CollapsibleWidget" ],
     [ "morph::ui::PageWidget", "dd/dfb/classmorph_1_1ui_1_1PageWidget.html", null ],

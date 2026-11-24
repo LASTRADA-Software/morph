@@ -26,5 +26,6 @@ var classmorph_1_1ui_1_1testing_1_1ConformanceProbe =
     [ "dropFiles", "d2/d46/classmorph_1_1ui_1_1testing_1_1ConformanceProbe.html#ac5fc06f5c06036f4aed7c62881e2332e", null ],
     [ "descriptionOf", "d2/d46/classmorph_1_1ui_1_1testing_1_1ConformanceProbe.html#abda4835f07425d40af80a100aec47714", null ],
     [ "boundsOf", "d2/d46/classmorph_1_1ui_1_1testing_1_1ConformanceProbe.html#a26efd279f0b1470fd1bbef23b136afe3", null ],
-    [ "textExtentOf", "d2/d46/classmorph_1_1ui_1_1testing_1_1ConformanceProbe.html#ac650420799b6f5ca1ce254a3140c0ab3", null ]
+    [ "textExtentOf", "d2/d46/classmorph_1_1ui_1_1testing_1_1ConformanceProbe.html#ac650420799b6f5ca1ce254a3140c0ab3", null ],
+    [ "targetOf", "d2/d46/classmorph_1_1ui_1_1testing_1_1ConformanceProbe.html#aaf2bed3dfcba29648bd8f5e1b6935d17", null ]
 ];

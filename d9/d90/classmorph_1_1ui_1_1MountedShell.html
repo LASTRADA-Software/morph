@@ -138,6 +138,8 @@ MountedShell &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (MountedS
 MountedShell &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (MountedShell &amp;&amp;)=delete</td></tr>
 <tr class="memitem:a28752287fc9967690fdf37d50ec7753a" id="r_a28752287fc9967690fdf37d50ec7753a"><td class="memItemLeft">virtual void&#160;</td><td class="memItemRight"><a class="el" href="#a28752287fc9967690fdf37d50ec7753a">inspectFocused</a> (std::function&lt; void(<a class="el" href="../../dd/db3/classmorph_1_1ui_1_1Inspector.html">Inspector</a> &amp;inspector)&gt; const &amp;visit)</td></tr>
 <tr class="memdesc:a28752287fc9967690fdf37d50ec7753a"><td class="mdescLeft">&#160;</td><td class="mdescRight">Hands the development inspector over the focused screen to <code class="param">visit</code>, before returning (spec 6 §21). A frontend's inspector window calls it each time it shows the screen. The default has no screen to inspect and calls nothing.  <br /></td></tr>
+<tr class="memitem:abd982d600ffa9804fc8764c68aa42b42" id="r_abd982d600ffa9804fc8764c68aa42b42"><td class="memItemLeft">virtual std::expected&lt; void, std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="#abd982d600ffa9804fc8764c68aa42b42">startTour</a> (std::string_view tourId)</td></tr>
+<tr class="memdesc:abd982d600ffa9804fc8764c68aa42b42"><td class="mdescLeft">&#160;</td><td class="mdescRight">Starts one of the application's guided tours, as its Tours menu or a document's <span class="tt">tour.start</span> does. The reason comes back as text, so this header stays free of the document model. The default runs no tours. A shell that runs tours starts the tour before this returns, so the screen the tour opens is open by then.  <br /></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>What a frontend mounts once its source is open: the app shell and its screens, or a view of why the source did not open. Destroying it unmounts all of it. </p>
@@ -176,6 +178,42 @@ MountedShell &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (MountedS
 </dl>
 
 <p class="definition">Definition at line <a class="el" href="../../de/df6/ui_2frontend_8hpp_source.html#l00400">400</a> of file <a class="el" href="../../de/df6/ui_2frontend_8hpp_source.html">frontend.hpp</a>.</p>
+
+</div>
+</div>
+<a id="abd982d600ffa9804fc8764c68aa42b42" name="abd982d600ffa9804fc8764c68aa42b42"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#abd982d600ffa9804fc8764c68aa42b42">&#9670;&#160;</a></span>startTour()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">virtual std::expected&lt; void, std::string &gt; morph::ui::MountedShell::startTour </td>
+          <td>(</td>
+          <td class="paramtype">std::string_view</td>          <td class="paramname"><span class="paramname"><em>tourId</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel virtual">virtual</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Starts one of the application's guided tours, as its Tours menu or a document's <span class="tt">tour.start</span> does. The reason comes back as text, so this header stays free of the document model. The default runs no tours. A shell that runs tours starts the tour before this returns, so the screen the tour opens is open by then. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">tourId</td><td>The tour's id, as the app document declares it. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>Nothing, or why it did not start: an id the app document does not declare, or a shell that runs none. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../de/df6/ui_2frontend_8hpp_source.html#l00407">407</a> of file <a class="el" href="../../de/df6/ui_2frontend_8hpp_source.html">frontend.hpp</a>.</p>
 
 </div>
 </div>

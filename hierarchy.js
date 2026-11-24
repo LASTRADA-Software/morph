@@ -231,6 +231,7 @@ var hierarchy =
       [ "morph::reactive::Computed< std::optional< Result > >", "d4/d6f/classmorph_1_1reactive_1_1Computed.html", null ],
       [ "morph::reactive::Computed< std::optional< std::string > >", "d4/d6f/classmorph_1_1reactive_1_1Computed.html", null ],
       [ "morph::reactive::Computed< std::vector< morph::ui::NavigationBadge > >", "d4/d6f/classmorph_1_1reactive_1_1Computed.html", null ],
+      [ "morph::reactive::Computed< std::vector< morph::ui::Tour > >", "d4/d6f/classmorph_1_1reactive_1_1Computed.html", null ],
       [ "morph::reactive::Computed< std::string >", "d4/d6f/classmorph_1_1reactive_1_1Computed.html", null ],
       [ "morph::reactive::Computed< morph::ui::Value >", "d4/d6f/classmorph_1_1reactive_1_1Computed.html", null ],
       [ "morph::reactive::Computed< std::vector< morph::ui::TextSpan > >", "d4/d6f/classmorph_1_1reactive_1_1Computed.html", null ],
@@ -256,6 +257,7 @@ var hierarchy =
       [ "morph::reactive::Signal< std::vector< std::shared_ptr< morph::forms::RowState > > >", "dc/d97/classmorph_1_1reactive_1_1Signal.html", null ],
       [ "morph::reactive::Signal< std::optional< typename model::ActionTraits< A >::Result > >", "dc/d97/classmorph_1_1reactive_1_1Signal.html", null ],
       [ "morph::reactive::Signal< std::optional< R > >", "dc/d97/classmorph_1_1reactive_1_1Signal.html", null ],
+      [ "morph::reactive::Signal< std::shared_ptr< std::vector< morph::ui::TourDecl > const > >", "dc/d97/classmorph_1_1reactive_1_1Signal.html", null ],
       [ "morph::reactive::Signal< std::optional< ShownRefusal > >", "dc/d97/classmorph_1_1reactive_1_1Signal.html", null ],
       [ "morph::reactive::Signal< int >", "dc/d97/classmorph_1_1reactive_1_1Signal.html", null ],
       [ "morph::reactive::Signal< std::set< std::string, std::less<> > >", "dc/d97/classmorph_1_1reactive_1_1Signal.html", null ],
@@ -526,6 +528,8 @@ var hierarchy =
     [ "morph::ui::author::TabsOptions", "dc/dd4/structmorph_1_1ui_1_1author_1_1TabsOptions.html", null ],
     [ "morph::ui::author::TextInputOptions", "d3/d49/structmorph_1_1ui_1_1author_1_1TextInputOptions.html", null ],
     [ "morph::ui::author::TextOptions", "d8/dde/structmorph_1_1ui_1_1author_1_1TextOptions.html", null ],
+    [ "morph::ui::author::Tour", "da/d79/structmorph_1_1ui_1_1author_1_1Tour.html", null ],
+    [ "morph::ui::author::TourStep", "de/dbc/structmorph_1_1ui_1_1author_1_1TourStep.html", null ],
     [ "morph::ui::author::UploadOptions", "db/db5/structmorph_1_1ui_1_1author_1_1UploadOptions.html", null ],
     [ "morph::ui::Backend", "d3/d00/structmorph_1_1ui_1_1Backend.html", null ],
     [ "morph::ui::Badge", "d1/df1/structmorph_1_1ui_1_1Badge.html", null ],
@@ -809,6 +813,7 @@ var hierarchy =
     [ "morph::ui::LayoutPlace", "d5/dce/structmorph_1_1ui_1_1LayoutPlace.html", null ],
     [ "morph::ui::LayoutRemoval", "d7/dce/structmorph_1_1ui_1_1LayoutRemoval.html", null ],
     [ "morph::ui::LetDecl", "d4/dfe/structmorph_1_1ui_1_1LetDecl.html", null ],
+    [ "morph::ui::ListedTour", "d8/dca/structmorph_1_1ui_1_1ListedTour.html", null ],
     [ "morph::ui::LoadedBundle", "db/d4f/structmorph_1_1ui_1_1LoadedBundle.html", null ],
     [ "morph::ui::LoadOptions", "d8/dc0/structmorph_1_1ui_1_1LoadOptions.html", null ],
     [ "morph::ui::LoadWarning", "d7/d8c/structmorph_1_1ui_1_1LoadWarning.html", null ],
@@ -849,6 +854,7 @@ var hierarchy =
     [ "morph::ui::NavigatorCustomEntry", "db/dc6/structmorph_1_1ui_1_1NavigatorCustomEntry.html", null ],
     [ "morph::ui::NavigatorOptions", "db/d8f/structmorph_1_1ui_1_1NavigatorOptions.html", null ],
     [ "morph::ui::NodeData", "d9/d5b/structmorph_1_1ui_1_1NodeData.html", null ],
+    [ "morph::ui::OfferedTours", "d9/d35/structmorph_1_1ui_1_1OfferedTours.html", null ],
     [ "morph::ui::OptimisticDecl", "dd/d13/structmorph_1_1ui_1_1OptimisticDecl.html", null ],
     [ "morph::ui::Padding", "d7/d65/structmorph_1_1ui_1_1Padding.html", null ],
     [ "morph::ui::Page", "d4/d59/structmorph_1_1ui_1_1Page.html", null ],
@@ -879,6 +885,7 @@ var hierarchy =
     [ "morph::ui::RegionLayout", "d2/d80/structmorph_1_1ui_1_1RegionLayout.html", null ],
     [ "morph::ui::RegionSpec", "dc/dfd/structmorph_1_1ui_1_1RegionSpec.html", null ],
     [ "morph::ui::ReloadOutcome", "d1/d20/structmorph_1_1ui_1_1ReloadOutcome.html", null ],
+    [ "morph::ui::ReservedClientId", "da/dbf/structmorph_1_1ui_1_1ReservedClientId.html", null ],
     [ "morph::ui::Rgba", "d9/d7c/structmorph_1_1ui_1_1Rgba.html", null ],
     [ "morph::ui::Route", "de/d2f/structmorph_1_1ui_1_1Route.html", null ],
     [ "morph::ui::RouteHistory", "d2/d82/classmorph_1_1ui_1_1RouteHistory.html", null ],
@@ -928,6 +935,9 @@ var hierarchy =
     [ "morph::ui::ShellRoleView", "da/d3f/structmorph_1_1ui_1_1ShellRoleView.html", null ],
     [ "morph::ui::ShellSearchView", "d8/d5f/structmorph_1_1ui_1_1ShellSearchView.html", null ],
     [ "morph::ui::ShellSourceView", "d3/da8/structmorph_1_1ui_1_1ShellSourceView.html", null ],
+    [ "morph::ui::ShellTourGroup", "d0/d19/structmorph_1_1ui_1_1ShellTourGroup.html", null ],
+    [ "morph::ui::ShellToursView", "da/d53/structmorph_1_1ui_1_1ShellToursView.html", null ],
+    [ "morph::ui::ShellTourView", "df/dd5/structmorph_1_1ui_1_1ShellTourView.html", null ],
     [ "morph::ui::Sizing", "d1/d89/structmorph_1_1ui_1_1Sizing.html", null ],
     [ "morph::ui::Slider", "dc/d36/structmorph_1_1ui_1_1Slider.html", null ],
     [ "morph::ui::SlotBinding&lt; F &gt;", "d7/d69/structmorph_1_1ui_1_1SlotBinding.html", null ],
@@ -977,6 +987,21 @@ var hierarchy =
     [ "morph::ui::ThemeTokenSpec", "dc/dca/structmorph_1_1ui_1_1ThemeTokenSpec.html", null ],
     [ "morph::ui::ThemeValues", "da/d96/structmorph_1_1ui_1_1ThemeValues.html", null ],
     [ "morph::ui::Token", "d8/dc6/structmorph_1_1ui_1_1Token.html", null ],
+    [ "morph::ui::Tour", "d2/d28/structmorph_1_1ui_1_1Tour.html", null ],
+    [ "morph::ui::TourCardBinding", "d4/d81/classmorph_1_1ui_1_1TourCardBinding.html", null ],
+    [ "morph::ui::TourController", "d6/d9c/classmorph_1_1ui_1_1TourController.html", null ],
+    [ "morph::ui::TourControllerOptions", "d8/d49/structmorph_1_1ui_1_1TourControllerOptions.html", null ],
+    [ "morph::ui::TourDecl", "db/d37/structmorph_1_1ui_1_1TourDecl.html", null ],
+    [ "morph::ui::TourRefusal", "d2/de4/structmorph_1_1ui_1_1TourRefusal.html", null ],
+    [ "morph::ui::TourRegistry", "d0/d9c/classmorph_1_1ui_1_1TourRegistry.html", null ],
+    [ "morph::ui::TourShell", "db/de0/classmorph_1_1ui_1_1TourShell.html", null ],
+    [ "morph::ui::ToursList", "d5/dcd/structmorph_1_1ui_1_1ToursList.html", null ],
+    [ "morph::ui::ToursListed", "dc/d3a/structmorph_1_1ui_1_1ToursListed.html", null ],
+    [ "morph::ui::ToursModel", "dc/da6/classmorph_1_1ui_1_1ToursModel.html", null ],
+    [ "morph::ui::TourStep", "d9/d26/structmorph_1_1ui_1_1TourStep.html", null ],
+    [ "morph::ui::TourStepDecl", "d9/dc8/structmorph_1_1ui_1_1TourStepDecl.html", null ],
+    [ "morph::ui::TourSync", "db/d6a/classmorph_1_1ui_1_1TourSync.html", null ],
+    [ "morph::ui::TourView", "d5/d65/structmorph_1_1ui_1_1TourView.html", null ],
     [ "morph::ui::Type", "df/d58/structmorph_1_1ui_1_1Type.html", null ],
     [ "morph::ui::UiClient", "d1/d97/classmorph_1_1ui_1_1UiClient.html", null ],
     [ "morph::ui::UiRegistry", "d0/dc8/classmorph_1_1ui_1_1UiRegistry.html", null ],
@@ -1094,6 +1119,13 @@ var hierarchy =
           [ "morph::ui::testing::detail::FakeLeaf< SplitterWidget >", "df/d10/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf.html", [
             [ "morph::ui::testing::detail::FakeContainer< SplitterWidget >", "d1/dfd/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeContainer.html", [
               [ "morph::ui::testing::detail::FakeSplitter", "d5/d19/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeSplitter.html", null ]
+            ] ]
+          ] ]
+        ] ],
+        [ "morph::ui::SpotlightWidget", "d0/d56/classmorph_1_1ui_1_1SpotlightWidget.html", [
+          [ "morph::ui::testing::detail::FakeLeaf< SpotlightWidget >", "df/d10/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf.html", [
+            [ "morph::ui::testing::detail::FakeContainer< SpotlightWidget >", "d1/dfd/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeContainer.html", [
+              [ "morph::ui::testing::detail::FakeSpotlight", "db/d47/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeSpotlight.html", null ]
             ] ]
           ] ]
         ] ],

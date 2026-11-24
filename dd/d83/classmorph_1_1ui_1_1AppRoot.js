@@ -3,6 +3,8 @@ var classmorph_1_1ui_1_1AppRoot =
     [ "QueryRead", "d8/d7e/structmorph_1_1ui_1_1AppRoot_1_1QueryRead.html", "d8/d7e/structmorph_1_1ui_1_1AppRoot_1_1QueryRead" ],
     [ "~AppRoot", "dd/d83/classmorph_1_1ui_1_1AppRoot.html#a2dce5dfc7a952c55087cd60b5627f81c", null ],
     [ "navigationBadges", "dd/d83/classmorph_1_1ui_1_1AppRoot.html#ad23e05084187ca064dbb30469cbf9a8b", null ],
+    [ "tours", "dd/d83/classmorph_1_1ui_1_1AppRoot.html#ae557998f7ac1192ff8b3f89f965d12ca", null ],
+    [ "setRuntimeTours", "dd/d83/classmorph_1_1ui_1_1AppRoot.html#a964bebf1125b44cae43bf9c4f579464f", null ],
     [ "principalPlacement", "dd/d83/classmorph_1_1ui_1_1AppRoot.html#ab80cd610eac226fb172ede2cd9cd220b", null ],
     [ "read", "dd/d83/classmorph_1_1ui_1_1AppRoot.html#aaabff20b045f242eb34be0dc4116bce0", null ],
     [ "query", "dd/d83/classmorph_1_1ui_1_1AppRoot.html#a07cd7dc813f6a9298c1936cf0f46a02b", null ],

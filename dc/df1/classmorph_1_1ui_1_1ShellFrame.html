@@ -203,6 +203,12 @@ void&#160;</td><td class="memItemRight"><b>focusSearch</b> ()</td></tr>
 <tr class="memdesc:aec9dc6d7031f47a392e3ddafe656f988"><td class="mdescLeft">&#160;</td><td class="mdescRight">Asks a yes-or-no question in a dialog over the frame and calls <code class="param">done</code> with the answer, once. Escape and the cancel button answer no.  <br /></td></tr>
 <tr class="memitem:a55cbb1a55d1a868699f768dbbe70153c" id="r_a55cbb1a55d1a868699f768dbbe70153c"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a55cbb1a55d1a868699f768dbbe70153c">showToast</a> (std::string_view text, <a class="el" href="../../d8/d11/view_8hpp.html#a04ef0c7765638a62e529da8ba75fdf4a">Tone</a> tone)</td></tr>
 <tr class="memdesc:a55cbb1a55d1a868699f768dbbe70153c"><td class="mdescLeft">&#160;</td><td class="mdescRight">Shows a passive, transient message over the frame's main content area. Made the first time it is asked for; a later call replaces its text and tone and restarts its dismiss interval, whether or not it is still showing.  <br /></td></tr>
+<tr class="memitem:ae04e7660e0d210cff9aaf2bdac5152ab" id="r_ae04e7660e0d210cff9aaf2bdac5152ab"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#ae04e7660e0d210cff9aaf2bdac5152ab">setTours</a> (<a class="el" href="../../da/d53/structmorph_1_1ui_1_1ShellToursView.html">ShellToursView</a> view)</td></tr>
+<tr class="memdesc:ae04e7660e0d210cff9aaf2bdac5152ab"><td class="mdescLeft">&#160;</td><td class="mdescRight">Installs the Tours button (<span class="tt">shell_tours</span>): a button-style menu after the help button and before the person's menu, listing each group's heading and its tours (the title, the summary as the entry's description). Shown while the view holds a tour; it counts as a part of the top bar, so the top bar's tools show for it alone. Compact, it hides and a submenu with the same entries joins the navigation menu after the help entry.  <br /></td></tr>
+<tr class="memitem:a386b78dec0267401bcb51f48c74a938d" id="r_a386b78dec0267401bcb51f48c74a938d"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a386b78dec0267401bcb51f48c74a938d">setOnTour</a> (std::function&lt; void(std::string const &amp;)&gt; onTour)</td></tr>
+<tr class="memdesc:a386b78dec0267401bcb51f48c74a938d"><td class="mdescLeft">&#160;</td><td class="mdescRight">Sets what choosing a tour, from the button or the compact submenu, calls.  <br /></td></tr>
+<tr class="memitem:a212c26812893cf8b0498069cecd55384" id="r_a212c26812893cf8b0498069cecd55384"><td class="memItemLeft"><a class="el" href="../../d0/d56/classmorph_1_1ui_1_1SpotlightWidget.html">SpotlightWidget</a> &amp;&#160;</td><td class="memItemRight"><a class="el" href="#a212c26812893cf8b0498069cecd55384">spotlight</a> ()</td></tr>
+<tr class="memdesc:a212c26812893cf8b0498069cecd55384"><td class="mdescLeft">&#160;</td><td class="mdescRight">The spotlight a guided tour is shown in: made the first time it is asked for (<span class="tt">shell_spotlight</span>), as the last child of the main column, where it takes no room and covers the whole window, and kept as long as the frame.  <br /></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>The frame around a client's screens. </p>
@@ -1121,6 +1127,94 @@ void&#160;</td><td class="memItemRight"><b>focusSearch</b> ()</td></tr>
   </table>
   </dd>
 </dl>
+
+</div>
+</div>
+<a id="ae04e7660e0d210cff9aaf2bdac5152ab" name="ae04e7660e0d210cff9aaf2bdac5152ab"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ae04e7660e0d210cff9aaf2bdac5152ab">&#9670;&#160;</a></span>setTours()</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">void morph::ui::ShellFrame::setTours </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="../../da/d53/structmorph_1_1ui_1_1ShellToursView.html">ShellToursView</a></td>          <td class="paramname"><span class="paramname"><em>view</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>Installs the Tours button (<span class="tt">shell_tours</span>): a button-style menu after the help button and before the person's menu, listing each group's heading and its tours (the title, the summary as the entry's description). Shown while the view holds a tour; it counts as a part of the top bar, so the top bar's tools show for it alone. Compact, it hides and a submenu with the same entries joins the navigation menu after the help entry. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">view</td><td>What to draw. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+</div>
+</div>
+<a id="a386b78dec0267401bcb51f48c74a938d" name="a386b78dec0267401bcb51f48c74a938d"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a386b78dec0267401bcb51f48c74a938d">&#9670;&#160;</a></span>setOnTour()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">void morph::ui::ShellFrame::setOnTour </td>
+          <td>(</td>
+          <td class="paramtype">std::function&lt; void(std::string const &amp;)&gt;</td>          <td class="paramname"><span class="paramname"><em>onTour</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Sets what choosing a tour, from the button or the compact submenu, calls. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">onTour</td><td>The handler, given the tour's id; empty does nothing. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+<p class="definition">Definition at line <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html#l00268">268</a> of file <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html">shell_frame.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a212c26812893cf8b0498069cecd55384" name="a212c26812893cf8b0498069cecd55384"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a212c26812893cf8b0498069cecd55384">&#9670;&#160;</a></span>spotlight()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="../../d0/d56/classmorph_1_1ui_1_1SpotlightWidget.html">SpotlightWidget</a> &amp; morph::ui::ShellFrame::spotlight </td>
+          <td>(</td>
+          <td class="paramname"><span class="paramname"><em></em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>The spotlight a guided tour is shown in: made the first time it is asked for (<span class="tt">shell_spotlight</span>), as the last child of the main column, where it takes no room and covers the whole window, and kept as long as the frame. </p>
+<dl class="section return"><dt>Returns</dt><dd>It. </dd></dl>
 
 </div>
 </div>

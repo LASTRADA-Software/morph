@@ -48,6 +48,8 @@ var interpreter_8hpp =
     [ "morph::ui::detail::ScreenCore::LoweredNode", "dd/d69/structmorph_1_1ui_1_1detail_1_1ScreenCore_1_1LoweredNode.html", "dd/d69/structmorph_1_1ui_1_1detail_1_1ScreenCore_1_1LoweredNode" ],
     [ "morph::ui::HeadBadge", "dd/d2f/structmorph_1_1ui_1_1HeadBadge.html", "dd/d2f/structmorph_1_1ui_1_1HeadBadge" ],
     [ "morph::ui::NavigationBadge", "dc/d39/structmorph_1_1ui_1_1NavigationBadge.html", "dc/d39/structmorph_1_1ui_1_1NavigationBadge" ],
+    [ "morph::ui::TourStep", "d9/d26/structmorph_1_1ui_1_1TourStep.html", "d9/d26/structmorph_1_1ui_1_1TourStep" ],
+    [ "morph::ui::Tour", "d2/d28/structmorph_1_1ui_1_1Tour.html", "d2/d28/structmorph_1_1ui_1_1Tour" ],
     [ "morph::ui::HeadAction", "d3/d86/structmorph_1_1ui_1_1HeadAction.html", "d3/d86/structmorph_1_1ui_1_1HeadAction" ],
     [ "morph::ui::HeadMenuEntry", "d8/d69/structmorph_1_1ui_1_1HeadMenuEntry.html", "d8/d69/structmorph_1_1ui_1_1HeadMenuEntry" ],
     [ "morph::ui::HeadTool", "dd/d27/structmorph_1_1ui_1_1HeadTool.html", "dd/d27/structmorph_1_1ui_1_1HeadTool" ],

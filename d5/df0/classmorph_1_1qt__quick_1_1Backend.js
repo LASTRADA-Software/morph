@@ -21,6 +21,7 @@ var classmorph_1_1qt__quick_1_1Backend =
     [ "createDialog", "d5/df0/classmorph_1_1qt__quick_1_1Backend.html#ab7329e576ff9fa9ef8c576b453f0e53f", null ],
     [ "createToast", "d5/df0/classmorph_1_1qt__quick_1_1Backend.html#a8ba0912762478e81bf26c407bc3cf18a", null ],
     [ "createPopover", "d5/df0/classmorph_1_1qt__quick_1_1Backend.html#ad549aa97a679d4163885808cbd96cd27", null ],
+    [ "createSpotlight", "d5/df0/classmorph_1_1qt__quick_1_1Backend.html#aea6b9400cd74071c05ea66877151fdc4", null ],
     [ "createBusy", "d5/df0/classmorph_1_1qt__quick_1_1Backend.html#aa3ae9cc2dec13254fba4f8a8f2842940", null ],
     [ "createTable", "d5/df0/classmorph_1_1qt__quick_1_1Backend.html#ae9c1165ae4d8eb745e3249c6dccde6f4", null ],
     [ "createDateTimeInput", "d5/df0/classmorph_1_1qt__quick_1_1Backend.html#a650329bb17e64202b4d899ccc47ce87e", null ],
