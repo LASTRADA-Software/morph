@@ -85,7 +85,9 @@ MorphField {
         Keys.onEnterPressed: event => root.enterPressed(event)
         // Every other key: the widget's own chords come before the field's handling of it.
         Keys.onPressed: event => {
-            if (event.key !== Qt.Key_Return && event.key !== Qt.Key_Enter)
+            if (event.key === Qt.Key_Tab || event.key === Qt.Key_Backtab)
+                event.accepted = root.takeOwnChord(event) || root.takeAncestorChord(event)
+            else if (event.key !== Qt.Key_Return && event.key !== Qt.Key_Enter)
                 event.accepted = root.takeOwnChord(event)
         }
         // The elided copy draws the text in its place while it shows.
