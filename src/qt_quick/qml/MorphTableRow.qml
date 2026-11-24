@@ -802,7 +802,7 @@ MorphWidget {
                 id: accentHover
             }
             ToolTip.visible: accentMark.modelData.tooltip !== "" && (accentHover.hovered || accentMark.focusedCell)
-            ToolTip.delay: accentMark.focusedCell ? 0 : Qt.styleHints.mousePressAndHoldInterval
+            ToolTip.delay: accentMark.focusedCell ? 0 : Application.styleHints.mousePressAndHoldInterval
             ToolTip.text: accentMark.modelData.tooltip
             // The cell names itself; its slot carries only the tooltip, and only when there is one.
             Accessible.role: Accessible.ToolTip
