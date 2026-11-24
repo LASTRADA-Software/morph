@@ -491,7 +491,7 @@ struct ResolveTable {
     /// @param model  The model instance.
     /// @param action The action.
     /// @return The keys.
-    /// @throws morph::model::ActionRefusal `table.<code>` with the argument `column`, as `Table.<id>` refuses.
+    /// @throws morph::model::ActionRefusal `table.<reason>` with the argument `column`, as `Table.<id>` refuses.
     template <typename Model>
     static ::core::async::Task<SelectedRows> invoke(Model& model, ResolveTable& action) {
         auto const context = detail::callerContext();

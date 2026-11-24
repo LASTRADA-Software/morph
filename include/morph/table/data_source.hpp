@@ -1244,8 +1244,9 @@ struct ColumnGroupInfo {
 
 /// @brief One group of a typed row's `columnGroups()`: how a row type declares its groups, at compile time.
 ///
-/// A row type declares its groups once, as `static constexpr std::array<table::ColumnGroup, N> columnGroups()
-/// noexcept`; each group's `columns` views an array of static storage duration.
+/// A row type declares its groups once, as
+/// `static constexpr std::array<morph::table::ColumnGroup, N> columnGroups() noexcept`; each group's `columns` views
+/// an array of static storage duration.
 struct ColumnGroup {
     /// @brief The group's id.
     std::string_view id;

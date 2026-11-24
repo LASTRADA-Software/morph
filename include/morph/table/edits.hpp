@@ -164,8 +164,9 @@ namespace detail {
             return among({FieldKind::Boolean});
         case ColumnKind::Custom:
             return among({FieldKind::Text, FieldKind::Enum, FieldKind::Choice});
+        default:
+            return false;
     }
-    return false;
 }
 
 }  // namespace detail

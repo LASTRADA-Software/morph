@@ -3534,6 +3534,8 @@ private:
                         at = removed >= op.to ? removed + 1 : removed;
                     }
                     break;
+                default:
+                    break;
             }
         }
         return out;

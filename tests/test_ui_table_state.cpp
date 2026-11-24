@@ -474,7 +474,7 @@ TEST_CASE("table state: a change during a held load keeps the stored parts", "[u
 
 // Review Focus 3, the store's half. Mutation: merging the change into the stored text (the save still holds "junk").
 TEST_CASE("table state: a change over a stored document that does not read replaces it", "[ui][state]") {
-    for (std::string const stored : {std::string{"{not json"}, std::string{R"({"version":2,"junk":true})"}}) {
+    for (std::string const& stored : {std::string{"{not json"}, std::string{R"({"version":2,"junk":true})"}}) {
         CAPTURE(stored);
         RowsFixture h;
         GatedTableStateStore gated{h.owner, stored};
@@ -783,7 +783,7 @@ TEST_CASE(
     full.filters = filters;
     std::string const fullText = table::writeState(full);
     std::string const ticked = stateWithOneOfValues(20'000);
-    for (std::string const part : {std::string{"state"}, std::string{"views"}}) {
+    for (std::string const& part : {std::string{"state"}, std::string{"views"}}) {
         CAPTURE(part);
         StoreFixture h;
         auto const key = partOf(part);

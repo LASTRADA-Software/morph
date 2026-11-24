@@ -2934,7 +2934,8 @@ private:
         auto const scaled = [&measure, &table](std::size_t column, int units) {
             bool const mono = table.columns.at(column).role == TextRole::Mono;
             double const content = units * (mono ? measure.monoUnit : measure.unit);
-            return static_cast<int>(mono ? std::ceil(content) : std::lround(content)) + measure.padding;
+            return (mono ? static_cast<int>(std::ceil(content)) : static_cast<int>(std::lround(content))) +
+                   measure.padding;
         };
         std::vector<int> widths;
         widths.reserve(table.visible.size());

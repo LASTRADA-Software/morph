@@ -491,9 +491,9 @@ struct SortDialogView {
 
 /// @brief The sort dialog: a dialog, test id `table_sort`, titled "Sort".
 ///
-/// Per key `i` from 0: a select `table_sort_column_<i>` (the sortable columns no other key holds), a select
-/// `table_sort_direction_<i>` (`ascending`, `descending`), and the buttons `table_sort_up_<i>`, `table_sort_down_<i>`
-/// and `table_sort_remove_<i>`. Then "Add key" (`table_sort_add`), enabled while a sortable column is not in the
+/// Per key `i` from 0: a select `table_sort_column_{i}` (the sortable columns no other key holds), a select
+/// `table_sort_direction_{i}` (`ascending`, `descending`), and the buttons `table_sort_up_{i}`, `table_sort_down_{i}`
+/// and `table_sort_remove_{i}`. Then "Add key" (`table_sort_add`), enabled while a sortable column is not in the
 /// chain, and "Done" (`table_sort_done`); a dismissal closes it too.
 /// @param view What it reads and calls; every member must be set.
 /// @return The dialog's node.

@@ -1840,7 +1840,7 @@ MorphWidget {
             root.fire("text", event.text)
             return true
         }
-        const row = root.rowAt(root.focusedRowIndex)
+        const row = root.realizedRow(root.focusedRowIndex)
         if (row && root.hasCellMenu
                 && ((event.key === Qt.Key_F10 && mods === Qt.ShiftModifier) || event.key === Qt.Key_Menu)) {
             row.fire("cellMenu", {"column": root.focusedColumnIndex})
@@ -1881,7 +1881,7 @@ MorphWidget {
     }
 
     // The realized row at view row `viewRow`, or null.
-    function rowAt(viewRow: int): var {
+    function realizedRow(viewRow: int): var {
         for (let i = 0; i < rowsPlane.children.length; ++i) {
             const row = rowsPlane.children[i]
             if (row.table === root && row.viewRow === viewRow && row.visible)
@@ -1899,7 +1899,7 @@ MorphWidget {
         return root.focusedColumnIndex
     }
     function cellRealized(viewRow: int, column: int): bool {
-        const row = root.rowAt(viewRow)
+        const row = root.realizedRow(viewRow)
         if (!row)
             return false
         for (let i = 0; i < row.content.children.length; ++i) {
@@ -1924,11 +1924,11 @@ MorphWidget {
     }
     // The accent of a realized row's cell: {tone, tooltip, invalid}, or null for none.
     function cellAccentAt(viewRow: int, column: int): var {
-        const row = root.rowAt(viewRow)
+        const row = root.realizedRow(viewRow)
         return row ? row.accentOf(column) : null
     }
     function cellLoadAt(viewRow: int, column: int): int {
-        const row = root.rowAt(viewRow)
+        const row = root.realizedRow(viewRow)
         return row ? row.loadOf(column) : 0
     }
 

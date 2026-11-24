@@ -282,6 +282,8 @@ struct SortChange {
             std::erase_if(out, [&](table::SortKey const& key) { return key.column == column; });
             return {.chain = std::move(out), .refusal = std::nullopt};
         }
+        default:
+            break;
     }
     return {.chain = chain, .refusal = std::nullopt};
 }
@@ -928,6 +930,8 @@ namespace detail {
         case ColumnKind::Bool:
         case ColumnKind::Custom:
             return std::string{typed};
+        default:
+            break;
     }
     return std::string{typed};
 }
@@ -991,6 +995,8 @@ enum class GroupMatch : std::uint8_t {
                             .n = n};
             break;
         case GroupMatch::Together:
+            break;
+        default:
             break;
     }
     bool const withBlanks = match == GroupMatch::AnyColumn && blanks == true;
@@ -1058,6 +1064,8 @@ enum class ConditionOp : std::uint8_t {
             return {};
         case ColumnKind::Custom:
             return {IsEmpty, IsNotEmpty};
+        default:
+            break;
     }
     return {};
 }
@@ -1097,6 +1105,8 @@ enum class ConditionOp : std::uint8_t {
             return "is empty";
         case ConditionOp::IsNotEmpty:
             return "is not empty";
+        default:
+            break;
     }
     return {};
 }
@@ -1152,6 +1162,8 @@ enum class ConditionOp : std::uint8_t {
             break;
         case ConditionOp::IsNotEmpty:
             entry.notEmpty = true;
+            break;
+        default:
             break;
     }
     if (text && matchCase) {

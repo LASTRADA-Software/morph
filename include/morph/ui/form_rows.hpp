@@ -64,6 +64,13 @@ namespace detail {
             return table::ColumnKind::DateTime;
         case FieldKind::Boolean:
             return table::ColumnKind::Bool;
+        case FieldKind::Text:
+        case FieldKind::Multiline:
+        case FieldKind::Enum:
+        case FieldKind::Choice:
+        case FieldKind::Array:
+        case FieldKind::Object:
+        case FieldKind::ObjectArray:
         default:
             return table::ColumnKind::Text;
     }
@@ -134,6 +141,11 @@ namespace detail {
                     std::chrono::floor<std::chrono::seconds>(instant->value).time_since_epoch().count());
             }
             break;
+        case table::ColumnKind::Quantity:
+        case table::ColumnKind::Text:
+        case table::ColumnKind::Key:
+        case table::ColumnKind::Custom:
+        case table::ColumnKind::Measure:
         default:
             if (std::string const* const text = value.asString()) {
                 return *text;

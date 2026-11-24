@@ -215,33 +215,8 @@ struct glz::meta<morph::table::TableColumn> {
                     &T::tooltip, "edit", &T::edit);
 };
 
-namespace morph::table::detail {
-
-/// @brief Converts to any member's type, to count an aggregate's members; never called.
-struct AnyMember {
-    /// @brief The conversion an initializer of any member takes.
-    /// @tparam M The member's type.
-    template <typename M>
-    constexpr operator M() const;  // NOLINT(google-explicit-constructor): it stands for any initializer
-};
-
-/// @brief How many members an aggregate has: the most initializers it takes.
-/// @tparam T    The aggregate.
-/// @tparam Args The initializers counted so far.
-/// @return The count.
-template <typename T, typename... Args>
-[[nodiscard]] consteval std::size_t memberCount() {
-    if constexpr (requires { T{Args{}..., AnyMember{}}; }) {
-        return memberCount<T, Args..., AnyMember>();
-    } else {
-        return sizeof...(Args);
-    }
-}
-
-}  // namespace morph::table::detail
-
 // The JSON above names each member: a member added to `TableColumn` and not listed there would never reach the wire.
-static_assert(morph::table::detail::memberCount<morph::table::TableColumn>() == 10,
+static_assert(glz::detail::count_members<morph::table::TableColumn> == 10,
               "a TableColumn member is missing from glz::meta<morph::table::TableColumn>: list it there, then update "
               "this count");
 
@@ -2255,7 +2230,7 @@ struct RecordOptionOf<derivedFrom<Records...>> {
 /// @brief Static-init helper for `BRIDGE_REGISTER_TABLE`: registers the table's record.
 /// @tparam Key     The table's function.
 /// @tparam Options The registration's options.
-/// @param name The record's wire name, `<model type>.<table id>`.
+/// @param name The record's wire name, `<model type>.<id of the table>`.
 /// @return Always true, so the result can initialise a namespace-scope variable.
 template <auto Key, typename... Options>
 inline bool registerTableRecord(std::string const& name) noexcept {
@@ -2354,8 +2329,8 @@ template <typename Row>
 ///
 /// Calls the registered function on @p model, on the model's strand, with @p context; for a `typed<Row>` table
 /// it builds the description and the source from the rows, and a model that declares
-/// `std::shared_ptr<table::UnitRegistry const> tableUnits(table::TableContext const&)` has it called there too, its
-/// registry resolving the rows' measures. The description is stamped with its revision.
+/// `std::shared_ptr<morph::table::UnitRegistry const> tableUnits(table::TableContext const&)` has it called there too,
+/// its registry resolving the rows' measures. The description is stamped with its revision.
 /// @tparam Function The table's function, as `BRIDGE_REGISTER_TABLE` keys it.
 /// @tparam Model    The model type.
 /// @param model   The model instance.
@@ -2487,7 +2462,7 @@ struct QueryTable {
     /// @param model  The model instance.
     /// @param action The action.
     /// @return The page.
-    /// @throws morph::model::ActionRefusal `table.<code>` with the argument `column`, for a query the table
+    /// @throws morph::model::ActionRefusal `table.<reason>` with the argument `column`, for a query the table
     ///         refuses.
     template <typename Model>
     static ::core::async::Task<GenericPage> invoke(Model& model, QueryTable& action);

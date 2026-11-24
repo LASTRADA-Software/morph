@@ -4195,7 +4195,6 @@ private:
         std::string const path = pointerAppend(node.path, "maxSortKeys");
         if (!node.name("model").empty()) {
             refuse(path, "`maxSortKeys` is a `rows` table's; a model's table carries its bound in its description");
-            return;
         }
         std::int64_t const* const keys = bound->kind == ExprKind::Literal ? bound->literal.asInt() : nullptr;
         if (keys == nullptr || *keys < 1 || *keys > 32) {

@@ -401,6 +401,8 @@ namespace detail::filtermenu {
         case GroupMatch::AnyColumn:
         case GroupMatch::Together:
             break;
+        default:
+            break;
     }
     return {.kind = table::ColumnCount::Kind::Any, .n = 1};
 }
@@ -421,6 +423,8 @@ namespace detail::filtermenu {
             return "in exactly N columns";
         case GroupMatch::Together:
             return "all of them, each in a column";
+        default:
+            break;
     }
     return {};
 }
@@ -436,7 +440,7 @@ struct FilterListRow {
     Kind kind = Kind::Value;
     /// @brief The line's identity among the list's lines.
     std::string key;
-    /// @brief A value's index in the list, the `<i>` of its test ids; the dimension of a heading.
+    /// @brief A value's index in the list, the `{i}` of its test ids; the dimension of a heading.
     std::string id;
     /// @brief A value's box caption, `{text} ({count})`; a heading's dimension.
     std::string label;
@@ -1086,6 +1090,8 @@ private:
                 next.match = GroupMatch::Exactly;
                 next.count = std::to_string(group.match.n);
                 break;
+            default:
+                break;
         }
     }
 
@@ -1335,7 +1341,7 @@ private:
                 return;
             }
             bool const include = plan.side == Side::Include;
-            auto write = [this, column, include, side = plan.side, blanks = ticks.blanks](std::vector<std::string> members) {
+            auto write = [this, column, side = plan.side, blanks = ticks.blanks](std::vector<std::string> members) {
                 table::FilterSpec spec = _host.filters ? _host.filters() : table::FilterSpec{};
                 if (auto filter = valueFilter(side, std::move(members), blanks)) {
                     spec.columns.insert_or_assign(column, std::move(*filter));
@@ -1870,9 +1876,9 @@ namespace detail::filtermenu {
 ///
 /// Its content is built for each opening, by what the menu edits. A values list: a search `table_filter_search`, a
 /// box "(Select all)" `table_filter_all` and one "(Blanks)" `table_filter_blanks` while the column has empty cells,
-/// then a box `table_filter_value_<i>` per value (`{text} ({count})`, in the reply's order, `i` from 0), a
+/// then a box `table_filter_value_{i}` per value (`{text} ({count})`, in the reply's order, `i` from 0), a
 /// `Measure` column's dimension heading `table_filter_heading_<dimension>` before its first value, a button
-/// `table_filter_open_<i>` on a date bucket that opens to its months or days, and "More values"
+/// `table_filter_open_{i}` on a date bucket that opens to its months or days, and "More values"
 /// (`table_filter_more`). A date tree has no search and no "(Select all)". A note `table_filter_note`. The
 /// conditions, by the column's kind: `table_filter_op_1` and `_2`, `table_filter_operand_1` and `_2` (a date
 /// picker on a date column), `table_filter_second_1` and `_2` for `between`, `table_filter_unit_1` and `_2` on a

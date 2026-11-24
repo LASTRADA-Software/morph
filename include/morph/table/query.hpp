@@ -1490,6 +1490,7 @@ void groupRows(std::span<std::uint32_t const> rows, std::span<KeyColumn const* c
         case ColumnKind::DateTime:
             break;
         case ColumnKind::Custom:
+        case ColumnKind::Measure:  // answered above
         default:
             return both({});
     }
@@ -1856,7 +1857,7 @@ inline std::expected<DistinctValues, TableError> Engine::distinctValues(Distinct
 /// @brief One entry of a row type's `columnLevels()`: the data level a column's cells need.
 ///
 /// A row type declares its levels once, as
-/// `static constexpr std::array<table::ColumnLevel, N> columnLevels() noexcept`.
+/// `static constexpr std::array<morph::table::ColumnLevel, N> columnLevels() noexcept`.
 struct ColumnLevel {
     /// @brief The column, by the member's JSON name.
     std::string_view column;

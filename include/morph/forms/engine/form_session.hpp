@@ -411,9 +411,13 @@ public:
         return !_core->runtime().untracked([this] { return help(); }).empty();
     }
 
-    /// @brief The placeholder: `x-placeholder` resolved like the label, else `defaultPlaceholder`. Tracked.
+    /// @brief The placeholder: the one `overridePlaceholder` set, else `x-placeholder` resolved like the label, else
+    ///        `defaultPlaceholder`. Tracked.
     /// @return The placeholder.
     [[nodiscard]] std::string placeholder() const {
+        if (!_placeholderOverride.empty()) {
+            return _placeholderOverride;
+        }
         if (_spec->placeholder.empty()) {
             return defaultPlaceholder(*_spec);
         }
@@ -515,12 +519,7 @@ public:
 
     /// @brief Replaces the placeholder: a grid column's `placeholder` overlay for the field's row.
     /// @param text The placeholder; empty restores the schema's.
-    void overridePlaceholder(std::string text) {
-        _placeholder = text.empty() ? (_spec->placeholder.empty()
-                                           ? defaultPlaceholder(*_spec)
-                                           : resolveSlot(i18n::FieldSlot::Placeholder, _spec->placeholder))
-                                    : std::move(text);
-    }
+    void overridePlaceholder(std::string text) { _placeholderOverride = std::move(text); }
 
     /// @brief What an editor of the field runs as it opens: a Choice member of a collection row fetches its options
     ///        from now on (a column of rows fetches only for the rows a user opens), and a failed fetch is retried
@@ -1000,6 +999,8 @@ private:
     reactive::Signal<bool> _engaged;
     reactive::Signal<bool> _opened;
     reactive::Signal<std::optional<std::vector<std::string>>> _narrow;
+    /// The placeholder a grid column's overlay gives the field's row; empty for the schema's.
+    std::string _placeholderOverride;
     reactive::Signal<std::vector<std::shared_ptr<RowState>>> _rows;
     std::vector<std::unique_ptr<FieldState>> _members;
     reactive::Computed<Encoding> _encoded;

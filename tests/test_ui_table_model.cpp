@@ -1790,7 +1790,7 @@ std::shared_ptr<ValueRowsSource> sourceOf(RowsFixture& h, std::vector<ValueColum
 
 // Every change a source notifies, kept.
 struct RecordingListener final : table::ChangeListener {
-    explicit RecordingListener(table::DataSource& source) : source{&source} { source.subscribe(*this); }
+    explicit RecordingListener(table::DataSource& watched) : source{&watched} { watched.subscribe(*this); }
     RecordingListener(RecordingListener const&) = delete;
     RecordingListener& operator=(RecordingListener const&) = delete;
     RecordingListener(RecordingListener&&) = delete;
@@ -1889,7 +1889,9 @@ TEST_CASE("value rows source: a change to what one row's sortBy reads updates th
     for (int i = 0; i < 10; ++i) { rank.push_back(std::make_unique<reactive::Signal<std::int64_t>>(h.runtime, i)); }
     reactive::Signal<std::int64_t> scale{h.runtime, 1};
     ValueColumn ranked = col("name");
-    ranked.sortBy = [&](Value const& row) { return Value{rank.at(*row.field("id")->asInt())->get() * scale.get()}; };
+    ranked.sortBy = [&](Value const& row) {
+        return Value{rank.at(static_cast<std::size_t>(*row.field("id")->asInt()))->get() * scale.get()};
+    };
     auto const src = sourceOf(h, {ranked});  RecordingListener listener{*src};
     src->use("name");  src->assign(sampleRows(10));  h.settle();  listener.clear();
     rank.at(3)->set(99);  h.settle();
@@ -5293,7 +5295,7 @@ morph::table::TableDescription selectionDescription() {
 struct SelRow {
     std::int64_t key;
     std::string status = "open";
-    std::string lockedBy;
+    std::string lockedBy{};
 };
 
 // A page reply of selectionDescription(), against the revision @p description has; a keyed reply carries `indices`,
@@ -5342,7 +5344,7 @@ std::string selectionKeyed(std::vector<SelRow> const& rows, std::int64_t total, 
     return selectionReply(rows, total, viewRevision, {}, true);
 }
 
-std::vector<SelRow> openRows() { return {{0}, {1}, {2}, {3}, {4}, {5}}; }
+std::vector<SelRow> openRows() { return {{.key = 0}, {.key = 1}, {.key = 2}, {.key = 3}, {.key = 4}, {.key = 5}}; }
 
 // The catalog entry of an action on Lims_SampleModel that declares `updatesTable` on `samples` and returns
 // {"rows": ChangedRows}: the held record's keys are at "rows.rows", by the member "key".

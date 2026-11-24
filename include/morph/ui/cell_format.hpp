@@ -262,6 +262,11 @@ struct Digits {
                 return table::Cell{text == "true"};
             }
             return std::nullopt;
+        case ColumnKind::Text:
+        case ColumnKind::Date:
+        case ColumnKind::DateTime:
+        case ColumnKind::Custom:
+        case ColumnKind::Measure:
         default:
             return table::Cell{text};
     }
@@ -541,6 +546,8 @@ struct Digits {
             std::optional<table::UnitId> const unit = units.units != nullptr ? units.units->find(id) : std::nullopt;
             return table::Cell{table::Measure{.amount = *amount, .unit = unit.value_or(table::kUnknownUnit)}};
         }
+        case ColumnKind::Text:
+        case ColumnKind::Custom:
         default:
             return table::Cell{text};
     }

@@ -1084,7 +1084,7 @@ TEST_CASE("qt_quick interpreter: a rows table below its threshold draws its rows
     REQUIRE(table != nullptr);
     CHECK(table->property("totalRows").toLongLong() == 3);
     CHECK(table->property("sourceContentHeight").toReal() > 0);
-    for (QString const name : {QStringLiteral("one"), QStringLiteral("two"), QStringLiteral("three")}) {
+    for (QString const& name : {QStringLiteral("one"), QStringLiteral("two"), QStringLiteral("three")}) {
         INFO(name.toStdString());
         QQuickItem const* shown = nullptr;
         QList<QQuickItem*> pending{table};

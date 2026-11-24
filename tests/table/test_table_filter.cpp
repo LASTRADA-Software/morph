@@ -495,6 +495,15 @@ Cell randomValue(ColumnKind kind, std::mt19937& rng) {
             return Cell{static_cast<std::int64_t>(rng() % 6)};
         case ColumnKind::Bool:
             return Cell{rng() % 2 == 0};
+        case ColumnKind::Decimal:
+        case ColumnKind::Quantity:
+        case ColumnKind::Number:
+        case ColumnKind::Text:
+        case ColumnKind::Date:
+        case ColumnKind::DateTime:
+        case ColumnKind::Key:
+        case ColumnKind::Custom:
+        case ColumnKind::Measure:
         default:
             return Cell{std::string{kTexts.at(rng() % kTexts.size())}};
     }

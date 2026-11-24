@@ -455,7 +455,7 @@ TEST_CASE("table: rows with no unloaded sort cell keep their order under any com
         REQUIRE(engine.setSort(chain));
         std::vector<std::size_t> out(kRows);
         for (std::size_t viewRow = 0; viewRow < engine.viewRowCount(); ++viewRow) {
-            out[std::get<std::int64_t>(engine.rowIdAt(viewRow))] = viewRow;
+            out[static_cast<std::size_t>(std::get<std::int64_t>(engine.rowIdAt(viewRow)))] = viewRow;
         }
         return out;
     };

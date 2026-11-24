@@ -603,6 +603,8 @@ protected:
                    (std::holds_alternative<RenameView>(operation) ? std::get<RenameView>(operation).from : name);
         case ViewError::NotShared:
             return "The shared views have no default";
+        default:
+            break;
     }
     return {};
 }

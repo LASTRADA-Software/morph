@@ -3379,8 +3379,8 @@ void annotateSchemaRoot(glz::generic_u64& dom) {
 // NOLINTEND(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access)
 
 /// @brief A row type that declares the data levels of its columns, as
-///        `static constexpr std::array<table::ColumnLevel, N> columnLevels() noexcept`, each entry naming a member
-///        by `column` and its level by `level`.
+///        `static constexpr std::array<morph::table::ColumnLevel, N> columnLevels() noexcept`, each entry naming a
+///        member by `column` and its level by `level`.
 /// @tparam A The type whose schema is being built.
 template <typename A>
 concept HasColumnLevels = requires {
@@ -3413,8 +3413,8 @@ void annotateColumnLevels(glz::generic_u64& dom, std::span<std::string_view cons
 // NOLINTEND(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access)
 
 /// @brief A row type that declares column groups, as
-///        `static constexpr std::array<table::ColumnGroup, N> columnGroups() noexcept`, each entry naming a group by
-///        `id` and its members by `columns`.
+///        `static constexpr std::array<morph::table::ColumnGroup, N> columnGroups() noexcept`, each entry naming a
+///        group by `id` and its members by `columns`.
 /// @tparam A The type whose schema is being built.
 template <typename A>
 concept HasColumnGroups = requires {

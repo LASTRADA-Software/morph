@@ -227,7 +227,7 @@ inline bool registerRecordOnce(std::string_view name) noexcept {
 /// The record is keyed by `key`, the member a `ChangedRow` names its row by, and marked `table`.
 /// @tparam T The table's tag type, `morph::table::TableOf<fn>`.
 /// @tparam Opts Any of `privateKeys` and `derivedFrom<>`.
-/// @param name The record's wire name, `<model type>.<table id>`.
+/// @param name The record's wire name, `<model type>.<id of the table>`.
 /// @return Always true, so the result can initialise a namespace-scope variable.
 template <typename T, typename... Opts>
 inline bool registerTableRecordOnce(std::string const& name) noexcept {

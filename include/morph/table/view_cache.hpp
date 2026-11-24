@@ -40,7 +40,7 @@ namespace morph::table {
 
 /// @brief What names a cached view.
 struct ViewKey {
-    /// @brief The table's record name, `<model type>.<table id>`.
+    /// @brief The table's record name, `<model type>.<id of the table>`.
     std::string record;
     /// @brief `ServedTable::scope`: what about the caller changes the rows or their order.
     std::string scope;

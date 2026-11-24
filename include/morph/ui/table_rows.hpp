@@ -256,7 +256,7 @@ struct ChangedRowsValue {
 /// skipped, as is a `from` of neither.
 /// @param reply  The action's reply.
 /// @param action The action's catalog entry.
-/// @param record The table's record, `<model type>.<table id>`.
+/// @param record The table's record, `<model type>.<id of the table>`.
 /// @return The rows of every such path, in the reply's order; none when the catalog names no path for @p record.
 [[nodiscard]] inline ChangedRowsValue changedRowsOf(Value const& reply, ActionInfo const& action,
                                                     std::string_view record) {
@@ -2757,9 +2757,9 @@ inline constexpr std::size_t kMaxUnlistedUnits = 64;
 struct WindowRowsOptions {
     /// @brief The model's channel.
     std::shared_ptr<ModelChannel> channel;
-    /// @brief The table's id: its actions are `Table.<table>` and `Table.<table>.describe`. Empty with `action`.
+    /// @brief The table's id: its actions are `Table.<id>` and `Table.<id>.describe`. Empty with `action`.
     std::string table;
-    /// @brief A typed list action's id, sent in place of `Table.<table>`: its reply is a `Page<Row>`, read with
+    /// @brief A typed list action's id, sent in place of `Table.<id>`: its reply is a `Page<Row>`, read with
     ///        `readTypedPage`. Empty for a model's table.
     std::string action;
     /// @brief With `action`: the request member the query is written into, the one its schema marks `x-table`.
@@ -2768,7 +2768,7 @@ struct WindowRowsOptions {
     ///        (`detail::inferredJsonKind`). Their kind in the description is a placeholder until then, and stays
     ///        what that reply made it for the rows' life.
     std::vector<std::string> inferKinds;
-    /// @brief The records watched for the window's life: a model's table its `<model type>.<table>`, a typed list
+    /// @brief The records watched for the window's life: a model's table its `<model type>.<id>`, a typed list
     ///        action each record its catalog entry names. None: a reconnect or `resync` of the session drops the
     ///        pages, as a record watch's change of every row does.
     std::vector<std::string> records;
@@ -2804,7 +2804,7 @@ struct WindowRowsStats {
 ///        and the session.
 ///
 /// It watches the table's records first and sends no page fetch until every watch is answered, a description is
-/// set and, when restoring, `release` is called. Every fetch goes through `Session::read` as `Table.<table>`, makes
+/// set and, when restoring, `release` is called. Every fetch goes through `Session::read` as `Table.<id>`, makes
 /// no cache entry and is cancelled through its own stop token; its reply's text is read with
 /// `table::readGenericPage` against the held description.
 ///
@@ -2959,7 +2959,7 @@ public:
         }
     }
 
-    /// @brief Takes the description as the `Table.<table>.describe` query holds it.
+    /// @brief Takes the description as the `Table.<id>.describe` query holds it.
     ///
     /// A description's numbers are integers or exact decimals, which a `Value` holds without loss, so it is read
     /// back from the value's canonical JSON. One that does not read sets `error()` to `InvalidValue` and stops

@@ -549,8 +549,8 @@ struct TableConfig {
             TableConfig* config;
             std::weak_ptr<void const> alive;
             std::uint64_t mount;
-            Slots(TableConfig* config, std::weak_ptr<void const> alive, std::uint64_t mount)
-                : config{config}, alive{std::move(alive)}, mount{mount} {}
+            Slots(TableConfig* owner, std::weak_ptr<void const> token, std::uint64_t serial)
+                : config{owner}, alive{std::move(token)}, mount{serial} {}
             Slots(Slots const&) = delete;
             Slots& operator=(Slots const&) = delete;
             Slots(Slots&&) = delete;
@@ -838,6 +838,16 @@ void markFilterable(TableConfig const& config, std::vector<TableColumn>& columns
             case MenuCommand::Copy:
             case MenuCommand::CopyWithHeaders:
                 return true;
+            case MenuCommand::ApplyView:
+            case MenuCommand::SaveView:
+            case MenuCommand::RenameView:
+            case MenuCommand::RemoveView:
+            case MenuCommand::SetDefaultView:
+            case MenuCommand::DefaultOnMount:
+            case MenuCommand::ApplySharedView:
+            case MenuCommand::PublishView:
+            case MenuCommand::SaveAsMyView:
+            case MenuCommand::None:
             default:
                 return false;
         }
@@ -11573,7 +11583,7 @@ void ScreenCore::storedRowsState(RowsTable& table, std::optional<std::string> co
     // The filters go to the engine in a task of their own: it takes in the kinds of the columns just put in use when
     // it flushes the change that put them there, and compiles a filter against the kinds it has taken in.
     if (document.filters && !document.filters->empty()) {
-        runtime().owner().post(table.scope.token().guard([this, &table, filters = *document.filters] {
+        runtime().owner().post(table.scope.token().guard([&table, filters = *document.filters] {
             useColumns(table, usedColumns(table, table.sort, filters));
             if (table.engine->setFilter(filters)) {
                 table.filter = filters;
@@ -14417,6 +14427,8 @@ Node ScreenCore::configureTable(TableConfig& config, LowerCtx const& ctx, TableO
                             [&config, name] { config.message("Published view " + name); });
                 break;
             }
+            default:
+                break;
         }
     };
     auto const viewCommand = [&config, applyView, recordView, changeViews](TableMenuEntry const& entry) {
@@ -14472,6 +14484,25 @@ Node ScreenCore::configureTable(TableConfig& config, LowerCtx const& ctx, TableO
                     });
                 }
                 break;
+            case MenuCommand::SortAscending:
+            case MenuCommand::SortDescending:
+            case MenuCommand::AddToSort:
+            case MenuCommand::RemoveFromSort:
+            case MenuCommand::Filter:
+            case MenuCommand::FilterGroup:
+            case MenuCommand::MoveLeft:
+            case MenuCommand::MoveRight:
+            case MenuCommand::PinColumn:
+            case MenuCommand::UnpinColumn:
+            case MenuCommand::HideColumn:
+            case MenuCommand::DisplayUnit:
+            case MenuCommand::Columns:
+            case MenuCommand::SortDialog:
+            case MenuCommand::ClearAllFilters:
+            case MenuCommand::ResetColumns:
+            case MenuCommand::Copy:
+            case MenuCommand::CopyWithHeaders:
+            case MenuCommand::None:
             default:
                 break;
         }
@@ -14637,6 +14668,7 @@ Node ScreenCore::configureTable(TableConfig& config, LowerCtx const& ctx, TableO
             case MenuCommand::SaveAsMyView:
                 viewCommand(*entry);
                 break;
+            case MenuCommand::None:
             default:
                 // `offeredEntries` offers no other entry.
                 break;
@@ -14805,7 +14837,7 @@ Node ScreenCore::modelTableOf(DocNode const& node, LowerCtx const& ctx, ElementS
     ModelTable& model = *element.modelTable;
     TableOptions options;
     commonOf(node, ctx, &element, options.common);
-    options.status = slotProp<TableStatus>([this, &element, &model, scope = ctx.scope] {
+    options.status = slotProp<TableStatus>([&element, &model, scope = ctx.scope] {
         static_cast<void>(model.version.get());
         TableCountsView const counts = model.rows->counts();
         TableStatus status;
@@ -15359,7 +15391,7 @@ Node ScreenCore::modelTableOf(DocNode const& node, LowerCtx const& ctx, ElementS
         tableGesture(element);
         std::optional<TableSelection> const viewing = model.viewSelection.peek();
         if (viewing && change == SelectionChange::Extend) {
-            std::unordered_set<Key> const reported(keys.begin(), keys.end());
+            std::unordered_set<Key> const inReport(keys.begin(), keys.end());
             TableSelection next = *viewing;
             // The rows the backend holds are those the mount named in or near view; a held row outside them is not
             // in the report, and is not read as left out.
@@ -15369,7 +15401,7 @@ Node ScreenCore::modelTableOf(DocNode const& node, LowerCtx const& ctx, ElementS
                 if (!row) {
                     continue;
                 }
-                if (reported.contains(row->key)) {
+                if (inReport.contains(row->key)) {
                     std::erase(next.except, row->key);
                 } else if (!std::ranges::contains(next.except, row->key)) {
                     next.except.push_back(row->key);

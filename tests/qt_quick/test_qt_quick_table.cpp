@@ -2288,13 +2288,13 @@ struct QuickWindowFixture {
           wrapped{std::move(options.wrapped)} {
         scene.window().resize(1280, 800);
         std::vector<ui::TableColumn> columns;
-        for (std::size_t column = 0; column < columnCount; ++column) {
-            columns.push_back(ui::TableColumn{.id = "c" + std::to_string(column),
-                                              .label = "C" + std::to_string(column),
-                                              .width = ui::Sizing::fixed(8),
-                                              .unit = column < options.units.size() ? options.units.at(column)
-                                                                                    : std::string{},
-                                              .wrap = options.wrap});
+        for (std::size_t index = 0; index < columnCount; ++index) {
+            columns.push_back(
+                ui::TableColumn{.id = "c" + std::to_string(index),
+                                .label = "C" + std::to_string(index),
+                                .width = ui::Sizing::fixed(8),
+                                .unit = index < options.units.size() ? options.units.at(index) : std::string{},
+                                .wrap = options.wrap});
         }
         ui::TableSource source;
         source.rows = rows;
@@ -2303,17 +2303,18 @@ struct QuickWindowFixture {
         for (QuickWindowOptions::Level const& level : options.levels) {
             source.levels.at(level.column) = level.level;
         }
-        source.defaultCellView = [this](morph::reactive::Signal<std::size_t> const& column,
+        source.defaultCellView = [this](morph::reactive::Signal<std::size_t> const& cellColumn,
                                         morph::reactive::Signal<ui::Value> const& row) {
-            return ui::accentedCell(ui::text({.text = [this, &column, &row] { return textOf(row.get(), column.get()); }}),
-                                    [this, &column, &row] {
-                                        auto const& all = accents.get();
-                                        auto const found = all.find(std::pair{idOf(row.get()), column.get()});
-                                        return found == all.end() ? ui::CellAccent{} : found->second;
-                                    });
+            return ui::accentedCell(
+                ui::text({.text = [this, &cellColumn, &row] { return textOf(row.get(), cellColumn.get()); }}),
+                [this, &cellColumn, &row] {
+                    auto const& all = accents.get();
+                    auto const found = all.find(std::pair{idOf(row.get()), cellColumn.get()});
+                    return found == all.end() ? ui::CellAccent{} : found->second;
+                });
         };
-        source.cellView = [this](std::size_t column, morph::reactive::Signal<ui::Value> const& row) {
-            return ui::text({.text = [this, &row, column] { return textOf(row.get(), column); }});
+        source.cellView = [this](std::size_t cellColumn, morph::reactive::Signal<ui::Value> const& row) {
+            return ui::text({.text = [this, &row, cellColumn] { return textOf(row.get(), cellColumn); }});
         };
         ui::TableOptions tableOptions;
         tableOptions.arrangement = [this] { return arrangement.get(); };
@@ -2322,8 +2323,8 @@ struct QuickWindowFixture {
         tableOptions.onRetry = [this] { ++retries; };
         tableOptions.selectionMode = options.selection;
         tableOptions.selectColumn = options.selectColumn;
-        tableOptions.onSelectRange = [this](std::size_t anchor, std::size_t focus, ui::SelectionChange change) {
-            ranges.emplace_back(anchor, focus, change);
+        tableOptions.onSelectRange = [this](std::size_t anchor, std::size_t focusAt, ui::SelectionChange change) {
+            ranges.emplace_back(anchor, focusAt, change);
         };
         if (options.selectAllHandler) {
             tableOptions.onSelectAll = [this] { ++selectAlls; };
@@ -2344,10 +2345,10 @@ struct QuickWindowFixture {
         settle();
     }
 
-    [[nodiscard]] std::string textOf(ui::Value const& record, std::size_t column) const {
-        std::string text = fieldText(record, "c" + std::to_string(column));
+    [[nodiscard]] std::string textOf(ui::Value const& record, std::size_t cellColumn) const {
+        std::string text = fieldText(record, "c" + std::to_string(cellColumn));
         for (QuickWindowOptions::Wrapped const& cell : wrapped) {
-            if (cell.row == idOf(record) && cell.column == column) {
+            if (cell.row == idOf(record) && cell.column == cellColumn) {
                 for (int line = 1; line < cell.lines; ++line) {
                     text += "\n" + text;
                 }
@@ -2573,7 +2574,7 @@ TEST_CASE("qt_quick table: a toned cell keeps its selection mark, a tooltip cell
     REQUIRE(described != nullptr);
     CHECK(described->text(QAccessible::Description) == QStringLiteral("Above limit"));
     // Half the tone's fill: the row's selection fill and bar show through it.
-    CHECK(tint->property("color").value<QColor>().alphaF() < 1.0);
+    CHECK(tint->property("color").value<QColor>().alphaF() < 1.0F);
     // Over the row's background, whose tone tint and selection fill are opaque: after it among the row's children, at
     // no lower z, so a toned cell keeps its tone in a toned or selected row.
     QQuickItem* const row = tinted->parentItem();
@@ -2828,7 +2829,7 @@ TEST_CASE("qt_quick table: a right-click opens the cell menu on that cell and se
     f.selected.set({ui::Key{std::int64_t{1}}, ui::Key{std::int64_t{3}}});
     f.settle();
     QQmlExpression find{f.scene.engine().rootContext(), f.item(), QStringLiteral(R"((() => {
-        const row = rowAt(2)
+        const row = realizedRow(2)
         if (!row)
             return null
         for (let i = 0; i < row.content.children.length; ++i) {
