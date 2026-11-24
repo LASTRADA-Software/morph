@@ -1642,8 +1642,11 @@ MorphWidget {
     // different rows to be realized, in the same sense a tap is a request to select a row.
     function reportVisibleRange() {
         if (root.sourceRows) {
+            // The window bounds what can show: before the first layout a table's height is its whole content's, and
+            // realizing every row for that one pass would cost far more than the screen can ever display.
+            const shown = root.Window.height > 0 ? Math.min(flick.height, root.Window.height) : flick.height
             const first = root.rowAtY(flick.contentY)
-            const last = root.rowAtY(flick.contentY + Math.max(0, flick.height - 1))
+            const last = root.rowAtY(flick.contentY + Math.max(0, shown - 1))
             root.fire("scroll", {"first": first, "count": Math.max(0, Math.min(last - first + 1,
                                                                                root.totalRows - first))})
             return
