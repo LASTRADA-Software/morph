@@ -2780,6 +2780,9 @@ private:
         SourceTable() = default;
         // The rows go last first, as a container's children do.
         ~SourceTable() {
+            // The rows' widgets go one by one, and the backend measures the table as they do: `closing` ends every
+            // window pass that asks, since the span table and whatever else the mount made after this one is gone.
+            closing = true;
             focusLocate.request_stop();
             while (!realized.empty()) {
                 realized.pop_back();
@@ -2871,6 +2874,11 @@ private:
 
         bool mounted = false;
         bool continuing = false;
+        // Whether the table is being destroyed.
+        bool closing = false;
+        // Whether a window pass is running, and whether a call came in during it.
+        bool realizing = false;
+        bool realizeAgain = false;
         // Expires with the table, so a change the rows deliver after it is gone does nothing.
         std::shared_ptr<bool> alive = std::make_shared<bool>(true);
     };
@@ -3392,8 +3400,36 @@ private:
     // row, a cell whose column left the window goes to the row's pool, and a column that enters takes a pooled cell
     // of its pool. Binding a cell to another row or column, and building one, are counted against
     // `realizePerFrame`, nearest the viewport's centre first; the rest wait, drawn blank, for the next turn.
-    // NOLINTNEXTLINE(readability-function-cognitive-complexity): rows, cells, the budget, focus and the reports.
+    //
+    // The backend measures a table while its cells mount, which asks for the window again from inside the pass that
+    // is mounting them, and a second pass would move the rows and slots the first is still walking. A call that comes
+    // in during a pass is answered when it ends, over every row with its record set again (an equality-gated set),
+    // since the rows the call names are not known once it returns.
     void realizeWindow(SourceTable& table, std::function<bool(std::int64_t)> const& updated) {
+        if (table.closing) {
+            return;
+        }
+        if (table.realizing) {
+            table.realizeAgain = true;
+            return;
+        }
+        table.realizing = true;
+        try {
+            realizeWindowPass(table, updated);
+            while (std::exchange(table.realizeAgain, false) && !table.closing) {
+                realizeWindowPass(table, [](std::int64_t) { return true; });
+            }
+        } catch (...) {
+            table.realizing = false;
+            table.realizeAgain = false;
+            throw;
+        }
+        table.realizing = false;
+    }
+
+    // One pass of `realizeWindow`.
+    // NOLINTNEXTLINE(readability-function-cognitive-complexity): rows, cells, the budget, focus and the reports.
+    void realizeWindowPass(SourceTable& table, std::function<bool(std::int64_t)> const& updated) {
         TableRows& rows = *table.source.rows;
         TableTotal const total = rows.mountedTotal();
         auto const count = static_cast<std::size_t>(std::max<std::int64_t>(total.rows, 0));
