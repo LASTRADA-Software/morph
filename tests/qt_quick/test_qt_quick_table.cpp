@@ -93,6 +93,20 @@ qreal columnPadding(Scene& scene) {
     return 2 * theme->property("tableCellPaddingX").toReal();
 }
 
+// The first item at or under @p root, by visual children, named @p name; null for none. A Repeater's delegates are not
+// QObject children of the item they sit in, so `findChild` does not reach them.
+QQuickItem* itemNamed(QQuickItem& root, QString const& name) {
+    if (root.objectName() == name) {
+        return &root;
+    }
+    for (QQuickItem* const child : root.childItems()) {
+        if (QQuickItem* const found = itemNamed(*child, name)) {
+            return found;
+        }
+    }
+    return nullptr;
+}
+
 }  // namespace
 
 TEST_CASE("qt_quick table: a row made in a table is a table row, and an int64 key above 2^53 comes back exactly",
@@ -2558,7 +2572,7 @@ TEST_CASE("qt_quick table: a toned cell keeps its selection mark, a tooltip cell
           "with its unit",
           "[qt_quick]") {
     QuickWindowFixture f{10, 3, {.units = {"kg"}}};
-    auto* const header = f.item()->findChild<QQuickItem*>(QStringLiteral("header0"));
+    auto* const header = itemNamed(*f.item(), QStringLiteral("header0"));
     REQUIRE(header != nullptr);
     CHECK(header->property("text").toString() == QStringLiteral("C0 [kg]"));
     bool const wasActive = QAccessible::isActive();
@@ -2572,12 +2586,12 @@ TEST_CASE("qt_quick table: a toned cell keeps its selection mark, a tooltip cell
     f.settle();
     QVariant const accent = f.call("cellAccentAt", 0, 0);
     REQUIRE(accent.isValid());
-    auto* const tinted = f.item()->findChild<QQuickItem*>(QStringLiteral("cellAccent0"));
+    auto* const tinted = itemNamed(*f.item(), QStringLiteral("cellAccent0"));
     REQUIRE(tinted != nullptr);
-    auto* const tint = tinted->findChild<QQuickItem*>(QStringLiteral("cellTint"));
+    auto* const tint = itemNamed(*tinted, QStringLiteral("cellTint"));
     REQUIRE(tint != nullptr);
     CHECK(tint->isVisible());
-    CHECK(tinted->findChild<QQuickItem*>(QStringLiteral("moreMark"))->isVisible());
+    CHECK(itemNamed(*tinted, QStringLiteral("moreMark"))->isVisible());
     QAccessibleInterface const* const described = QAccessible::queryAccessibleInterface(tinted);
     REQUIRE(described != nullptr);
     CHECK(described->text(QAccessible::Description) == QStringLiteral("Above limit"));
@@ -2587,7 +2601,7 @@ TEST_CASE("qt_quick table: a toned cell keeps its selection mark, a tooltip cell
     // no lower z, so a toned cell keeps its tone in a toned or selected row.
     QQuickItem* const row = tinted->parentItem();
     REQUIRE(row != nullptr);
-    QQuickItem* layer = row->findChild<QQuickItem*>(QStringLiteral("fill"));
+    QQuickItem* layer = itemNamed(*row, QStringLiteral("fill"));
     while (layer != nullptr && layer->parentItem() != row) {
         layer = layer->parentItem();
     }
@@ -2595,13 +2609,13 @@ TEST_CASE("qt_quick table: a toned cell keeps its selection mark, a tooltip cell
     CHECK(tinted->z() >= layer->z());
     CHECK(row->childItems().indexOf(tinted) > row->childItems().indexOf(layer));
     CHECK(f.call("cellLoadAt", 0, 1).toInt() == 0);  // the load is the mount's; the mark is the accent's
-    CHECK(f.item()->findChild<QQuickItem*>(QStringLiteral("failedMark")) != nullptr);
+    CHECK(itemNamed(*f.item(), QStringLiteral("failedMark")) != nullptr);
     QAccessible::setActive(wasActive);
 
     f.accents.set({});
     f.settle();
-    CHECK(f.item()->findChild<QQuickItem*>(QStringLiteral("cellAccent0")) == nullptr);
-    CHECK(f.item()->findChild<QQuickItem*>(QStringLiteral("failedMark")) == nullptr);
+    CHECK(itemNamed(*f.item(), QStringLiteral("cellAccent0")) == nullptr);
+    CHECK(itemNamed(*f.item(), QStringLiteral("failedMark")) == nullptr);
 }
 
 // Mutations: a row's height recomputed from its realized cells each pass (it shrinks when the tall cell leaves);
@@ -2935,33 +2949,20 @@ TEST_CASE("qt_quick table: a status entry reports its id", "[qt_quick]") {
                                                                {.id = "clear", .label = "Clear marks"}},
                                            .shown = true});
     scene.settle();
-    QQuickItem const& item = Scene::itemOf(*table.table);
+    QQuickItem& item = Scene::itemOf(*table.table);
     for (auto const& [id, label] : std::vector<std::pair<QString, QString>>{
              {QStringLiteral("run"), QStringLiteral("Run on these")},
              {QStringLiteral("select"), QStringLiteral("Select them")},
              {QStringLiteral("clear"), QStringLiteral("Clear marks")}}) {
-        auto const* const button = item.findChild<QQuickItem*>(QStringLiteral("statusEntry_") + id);
+        auto const* const button = itemNamed(item, QStringLiteral("statusEntry_") + id);
         REQUIRE(button != nullptr);
         CHECK(button->property("text").toString() == label);
     }
-    scene.click(*item.findChild<QQuickItem*>(QStringLiteral("statusEntry_clear")));
+    scene.click(*itemNamed(item, QStringLiteral("statusEntry_clear")));
     CHECK(chosen == std::vector<std::string>{"clear"});
 }
 
 namespace {
-
-// The first item at or under @p root, by visual children, named @p name; null for none.
-QQuickItem* itemNamed(QQuickItem& root, QString const& name) {
-    if (root.objectName() == name) {
-        return &root;
-    }
-    for (QQuickItem* const child : root.childItems()) {
-        if (QQuickItem* const found = itemNamed(*child, name)) {
-            return found;
-        }
-    }
-    return nullptr;
-}
 
 // A grid of two specimens (`morph::test::grid::kSpecimens`) between two text inputs, `before` and `after`, on Qt
 // Quick. Its columns are every member in schema order: label 0, mass 1, volume 2, density 3, limit 4, note 5.
@@ -3207,8 +3208,8 @@ TEST_CASE("qt_quick table: a band draws over each run of its columns", "[qt_quic
     table.table->setBands({{0, "Mass retained", "g", 1, 2, false}, {0, "Mass retained", "g", 4, 1, false}});
     scene.settle();
     QQuickItem& tableItem = Scene::itemOf(*table.table);
-    auto* const first = tableItem.findChild<QQuickItem*>(QStringLiteral("band0"));
-    auto* const second = tableItem.findChild<QQuickItem*>(QStringLiteral("band1"));
+    auto* const first = itemNamed(tableItem, QStringLiteral("band0"));
+    auto* const second = itemNamed(tableItem, QStringLiteral("band1"));
     REQUIRE(first != nullptr);
     REQUIRE(second != nullptr);
     QQuickItem const& m8 = headerOf(*table.table, 1);
