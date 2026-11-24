@@ -504,7 +504,7 @@ ui::Node samplesTable(Samples const& list) {
     return ui::table(
                list.shown,
                {.key = ui::row("id"),
-                .columns =
+                .columns = layout::unfiltered(
                     {{.name = "id", .label = "Sample", .width = ui::fixed(11), .role = "mono", .sortable = true},
                      {.name = "product",
                       .label = "Product · lot",
@@ -532,7 +532,7 @@ ui::Node samplesTable(Samples const& list) {
                       .sortable = true,
                       .sortBy = ui::row("dueAt"),
                       .wrap = false},
-                     {.name = "spec", .label = "Specification", .width = ui::content(), .cell = specCell()}},
+                     {.name = "spec", .label = "Specification", .width = ui::content(), .cell = specCell()}}),
                 // The table draws the selection the cards share: its own boxes, and a header box for the page.
                 .selectionMode = ui::Selection::Multiple,
                 .selection = list.selected,

@@ -591,7 +591,7 @@ ui::Node worklistTable(Console const& console, ui::AnyHandle const& rows, std::s
     return ui::table(
                rows,
                {.key = ui::row("id"),
-                .columns = columns,
+                .columns = layout::unfiltered(columns),
                 .selectionMode = ui::Selection::Single,
                 .selection = ui::map(atCurrent, "entry", [](ui::AnyHandle const& entry) { return entry.at("id"); }),
                 .onSelectionChange = ui::set(

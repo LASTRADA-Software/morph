@@ -4714,6 +4714,9 @@ struct TableColumn {
     ///        instead of the table scrolling sideways, and gives up its width before the other stretch columns;
     ///        writes `shrink: true`. It needs a stretch `width`.
     bool shrink = false;
+    /// @brief Whether a column with a `name` draws a filter button on its header and offers "Filter…" in its menu;
+    ///        `false` writes `filterable: false`, for a column the design gives no filter.
+    bool filterable = true;
 };
 
 /// @brief Columns from cells alone, without ids or labels.
@@ -4845,6 +4848,9 @@ namespace detail {
     }
     if (column.shrink) {
         detail::put(part, "shrink", true);
+    }
+    if (!column.filterable) {
+        detail::put(part, "filterable", false);
     }
     if (column.sortBy.present()) {
         detail::put(part, "sortBy", column.sortBy.json());

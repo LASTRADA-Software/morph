@@ -40,8 +40,8 @@ TEST_CASE("samples, expanded: the table, its out-of-spec tone, and three rows se
     screen.requireNoProblems();
     CHECK(screen.shows("Table", "samples"));
     CHECK(screen.prop("Table", "samples", "columns").value_or("none") ==
-          "[Sample:fixed(11);sortable=true;filterable=true,Product · lot:stretch(6);filterable=true,Tests:stretch(4);filterable=true,Priority:content;filterable=true,"
-          "Status:content;filterable=true,Due:fixed(12);sortable=true;filterable=true;wrap=false,Specification:content;filterable=true]");
+          "[Sample:fixed(11);sortable=true,Product · lot:stretch(6),Tests:stretch(4),Priority:content,"
+          "Status:content,Due:fixed(12);sortable=true;wrap=false,Specification:content]");
     // Sorted by due time, earliest first, 25 rows a page.
     CHECK(screen.prop("Table", "samples", "sort") == "5:Ascending");
     CHECK(screen.text("range") == "1–25 of 38");

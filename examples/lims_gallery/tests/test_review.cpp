@@ -57,10 +57,10 @@ TEST_CASE("review, expanded: the queue beside the worksheet, its flagged results
     CHECK(screen.isActionRow("Row", "footer-actions"));
     // The Result column is as wide as its widest value, "99.4 % LC", so the value is not split from its unit.
     CHECK(screen.prop("Table", "results", "columns").value_or("none") ==
-          "[Sample:fixed(11);filterable=true,Analyte:stretch(1);filterable=true;wrap=false;shrink=true,Result:content;align=end;filterable=true;wrap=false,"
-          "Spec.:content;filterable=true;wrap=false,Prior "
-          "lot:content;align=end;filterable=true;wrap=false,Evaluation:stretch(1);filterable=true;wrap=false,"
-          "Change:stretch(1);filterable=true;wrap=false;shrink=true]");
+          "[Sample:fixed(11),Analyte:stretch(1);wrap=false;shrink=true,Result:content;align=end;wrap=false,"
+          "Spec.:content;wrap=false,Prior "
+          "lot:content;align=end;wrap=false,Evaluation:stretch(1);wrap=false,"
+          "Change:stretch(1);wrap=false;shrink=true]");
 }
 
 TEST_CASE("review: self-review is blocked with its reason", "[lims-gallery]") {
