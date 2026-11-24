@@ -1398,7 +1398,8 @@ TEST_CASE("tables: an action resolves a view selection on its own model", "[net]
     REQUIRE(alice.execute(model, "selnet::Rows", "MoveRow", R"({"key":7,"status":"open"})").kind == "ok");
     auto const refused = alice.execute(model, "selnet::Rows", "TagRows", tag);
     CHECK(refused.kind == "err");
-    CHECK(refused.body.find("morph.table.viewChanged") != std::string::npos);
+    REQUIRE(refused.refusal.has_value());
+    CHECK(refused.refusal->code == "morph.table.viewChanged");
 }
 // Mutation: viewRevision that ignores the source snapshot, which tags rows under the old revision.
 
@@ -1422,7 +1423,8 @@ TEST_CASE("tables: Table.<id>.resolve answers for the caller", "[net][tables][se
     auto const over = alice.execute(aliceModel, "selnet::Rows", "Table.rows.resolve", view);
     selnet::Rows::maxSelectedRows = 1'000'000;
     CHECK(over.kind == "err");
-    CHECK(over.body.find("limitExceeded") != std::string::npos);
+    REQUIRE(over.refusal.has_value());
+    CHECK(over.refusal->code == "table.limitExceeded");
 }
 // Mutation: resolve run under the server principal, which returns rows outside the caller scope.
 
@@ -1560,7 +1562,7 @@ TEST_CASE("push tables: a principal refused the edit action sees the column read
     morph::ui::UiRegistry registry{morph::ui::ApplicationInfo{.id = "lims", .version = "1.0.0"}, facts.catalog()};
     morph::ui::CatalogEntry entry;
     entry.id = "lims.edits";
-    REQUIRE(registry.addScreen(entry, R"({"vocab":"ui/1","id":"edits",)"
+    REQUIRE(registry.addScreen(entry, R"({"vocab":"ui/1","id":"lims.edits",)"
                                       R"("models":{"s":{"type":"editnet::Specimens"}},)"
                                       R"("mutations":{"edit":{"model":"s","action":"Lims_EditSpecimenCount",)"
                                       R"("body":{"lit":{"key":1,"value":4}}}},)"
