@@ -393,7 +393,12 @@ MorphWidget {
             const loaded = root.loadOf(column)
             // A value that could not be read draws the error mark in place of its text, as a failed load does.
             const load = loaded !== 0 ? loaded : accent && accent.invalid ? 2 : 0
-            cell.opacity = load === 0 ? 1 : 0
+            // Assigning the opacity replaces the cell's own binding, which dims a stale field, so a cell shown again
+            // gets it back; a cell that was never hidden keeps the binding it has.
+            if (load !== 0)
+                cell.opacity = 0
+            else if (cell.opacity === 0)
+                cell.opacity = cell.stale !== undefined ? Qt.binding(() => cell.stale ? Theme.staleOpacity : 1.0) : 1
             if (load !== 0)
                 marks.push({"x": left + inset, "width": room, "load": load, "align": across, "pinned": pinned,
                             "tip": loaded === 0 && accent ? accent.tooltip : ""})
