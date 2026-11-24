@@ -143,13 +143,13 @@ TEST_CASE("tour sync: a server without the model offers none, logged once at deb
         LevelGuard& operator=(LevelGuard const&) = delete;
         LevelGuard(LevelGuard&&) = delete;
         LevelGuard& operator=(LevelGuard&&) = delete;
-    } const level;
+    } const levelGuard;
     std::vector<std::string> warnings;
     std::vector<std::string> debug;
     morph::log::ScopedLoggerOverride const guard{[&](morph::log::LogLevel level, std::string_view message) {
         if (level == morph::log::LogLevel::warn) {
             warnings.emplace_back(message);
-        } else if (level == morph::log::LogLevel::debug && message.find("runtime tours") != std::string_view::npos) {
+        } else if (level == morph::log::LogLevel::debug && message.contains("runtime tours")) {
             debug.emplace_back(message);
         }
     }};

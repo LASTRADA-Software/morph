@@ -29,6 +29,7 @@ namespace {
 // Depth first: the items Tab stops at, shown and enabled.
 // NOLINTNEXTLINE(misc-no-recursion): an item tree, walked down.
 void collectTabStops(QQuickItem const& item, std::vector<QQuickItem*>& out) {
+    // NOLINTNEXTLINE(misc-const-correctness): the item goes into a vector of non-const items, so its pointee stays non-const.
     for (QQuickItem* const child : item.childItems()) {
         if (!child->isVisible() || !child->isEnabled()) {
             continue;
@@ -74,6 +75,7 @@ bool declaresChords(QQuickItem const& item) { return item.metaObject()->indexOfP
 // Depth first: every item under @p item.
 // NOLINTNEXTLINE(misc-no-recursion): an item tree, walked down.
 void collectItems(QQuickItem const& item, std::vector<QQuickItem*>& out) {
+    // NOLINTNEXTLINE(misc-const-correctness): the item goes into a vector of non-const items, so its pointee stays non-const.
     for (QQuickItem* const child : item.childItems()) {
         out.push_back(child);
         collectItems(*child, out);
@@ -285,6 +287,7 @@ bool SpotlightImpl::filterKey(QKeyEvent const& event) {
     // The card's widgets, the one holding focus and its ancestors first, then the rest, then the spotlight itself:
     // its chords reach the card whatever has focus.
     std::vector<QQuickItem*> candidates;
+    // NOLINTNEXTLINE(misc-const-correctness): the item goes into a vector of non-const items, so its pointee stays non-const.
     for (QQuickItem* at = focused; at != nullptr && at != content->parentItem(); at = at->parentItem()) {
         if (content->isAncestorOf(at)) {
             candidates.push_back(at);

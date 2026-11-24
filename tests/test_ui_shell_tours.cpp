@@ -83,7 +83,7 @@ TEST_CASE("shell tours: with no tour the Tours button is hidden", "[ui][shell][t
 TEST_CASE("shell tours: the Tours button sits after the help button and before the person's menu",
           "[ui][shell][tours]") {
     RecordingBackend backend;
-    ui::ShellFrame frame{backend, nullptr, options()};
+    ui::ShellFrame const frame{backend, nullptr, options()};
     int const tools = backend.find("Row", "testId", "shell_topbar_tools").value();
     std::vector<int> const children = backend.children(tools);
     auto const at = [&](int widget) { return std::ranges::find(children, widget) - children.begin(); };

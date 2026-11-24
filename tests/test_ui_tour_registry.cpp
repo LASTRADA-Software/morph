@@ -78,7 +78,7 @@ struct Rig {
 // Mutation: skip `detail::checkTour` in `TourRegistry::checked` (the unknown target is added).
 TEST_CASE("tour registry: add runs the bundle's checks and refuses with the tour and the step",
           "[ui][tours][runtime]") {
-    Rig r;
+    Rig const r;
     CHECK(r.tours->add(resultsTour("whats-new")).has_value());
     CHECK(r.changes == 1);
     auto const unknownScreen = r.tours->add(R"({"id":"a","screen":"lims.nope","title":"A","steps":[{"title":"S"}]})");
@@ -100,7 +100,7 @@ TEST_CASE("tour registry: add runs the bundle's checks and refuses with the tour
 // `/tours/0/steps/1/target`).
 TEST_CASE("tour registry: a refusal names the runtime tour and points into the submitted tour, not the app document",
           "[ui][tours][runtime]") {
-    Rig r;
+    Rig const r;
     auto const target = r.tours->add(
         R"({"id":"b","screen":"lims.results","title":"B","steps":[{"title":"S"},{"target":"nothing_here","title":"T"}]})");
     REQUIRE_FALSE(target.has_value());
@@ -122,7 +122,7 @@ TEST_CASE("tour registry: a refusal names the runtime tour and points into the s
 // Mutation: drop the id check against the registry's own tours in `add` (the second add succeeds).
 TEST_CASE("tour registry: an id the app document or another runtime tour uses is refused by add",
           "[ui][tours][runtime]") {
-    Rig r;
+    Rig const r;
     REQUIRE(r.tours->add(resultsTour("whats-new")).has_value());
     auto const again = r.tours->add(resultsTour("whats-new"));
     REQUIRE_FALSE(again.has_value());
@@ -139,7 +139,7 @@ TEST_CASE("tour registry: an id the app document or another runtime tour uses is
         REQUIRE(built.has_value());
         return *built;
     }();
-    ui::TourRegistry withAppTour{[appBundle] { return appBundle; }};
+    ui::TourRegistry withAppTour{[appBundle] { return std::shared_ptr<ui::ServedBundle const>{appBundle}; }};
     auto const clash = withAppTour.add(resultsTour("basics"));
     REQUIRE_FALSE(clash.has_value());
     CHECK(clash.error().path == "/id");
@@ -149,7 +149,7 @@ TEST_CASE("tour registry: an id the app document or another runtime tour uses is
 // Mutation: accept a `t` key in no catalogue in `missingTextKey` (the tour is added).
 TEST_CASE("tour registry: a text key in neither the catalogues nor the server's texts is refused",
           "[ui][tours][runtime]") {
-    Rig r;
+    Rig const r;
     CHECK(r.tours->add(resultsTour("known", R"({"t":"tours.new.title","fallback":"New"})")).has_value());
     auto const unknown = r.tours->add(resultsTour("unknown", R"({"t":"tours.nowhere","fallback":"Nowhere"})"));
     REQUIRE_FALSE(unknown.has_value());
@@ -160,11 +160,11 @@ TEST_CASE("tour registry: a text key in neither the catalogues nor the server's 
 // Mutation: let `replace` add an id it does not hold (the unknown replace succeeds).
 TEST_CASE("tour registry: replace and remove refuse an id the registry does not hold, and each change is told",
           "[ui][tours][runtime]") {
-    Rig r;
+    Rig const r;
     CHECK_FALSE(r.tours->replace(resultsTour("missing")).has_value());
     CHECK_FALSE(r.tours->remove("missing").has_value());
     REQUIRE(r.tours->add(resultsTour("whats-new")).has_value());
-    morph::session::Context anyone;
+    morph::session::Context const anyone;
     std::uint64_t const first = r.tours->listFor(anyone, *r.authorizer).tours.front().revision;
     REQUIRE(r.tours->replace(resultsTour("whats-new", R"("Results, again")")).has_value());
     ui::ToursListed const listed = r.tours->listFor(anyone, *r.authorizer);
@@ -218,7 +218,7 @@ TEST_CASE("tour registry: a change made while nothing publishes it logs one warn
                                                      }
                                                  },
                                                  morph::log::LogLevel::debug};
-    ui::TourRegistry silent{[bundle] { return bundle; }};
+    ui::TourRegistry silent{[bundle] { return std::shared_ptr<ui::ServedBundle const>{bundle}; }};
     CHECK_FALSE(silent.add(R"({"id":"a","screen":"lims.nope","title":"A","steps":[{"title":"S"}]})").has_value());
     CHECK(warnings.empty());
     REQUIRE(silent.add(resultsTour("one")).has_value());
@@ -229,7 +229,7 @@ TEST_CASE("tour registry: a change made while nothing publishes it logs one warn
     // A registry with a handler says nothing.
     warnings.clear();
     int told = 0;
-    ui::TourRegistry heard{[bundle] { return bundle; }};
+    ui::TourRegistry heard{[bundle] { return std::shared_ptr<ui::ServedBundle const>{bundle}; }};
     heard.setOnChanged([&told] { ++told; });
     REQUIRE(heard.add(resultsTour("one")).has_value());
     CHECK(told == 1);
@@ -283,7 +283,7 @@ public:
 
 // Mutation: leave `publishTourChanges` with no handler (the connection receives no `changes`).
 TEST_CASE("tour registry: published changes reach a connection watching morph.tours", "[ui][tours][runtime]") {
-    Rig r;
+    Rig const r;
     morph::model::detail::ActionDispatcher dispatcher;
     morph::model::detail::ModelRegistryFactory registry;
     ui::registerTours(r.tours, r.authorizer, dispatcher, registry);

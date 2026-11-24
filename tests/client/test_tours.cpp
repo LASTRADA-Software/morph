@@ -109,13 +109,18 @@ struct Window {
 };
 
 /// Whether @p node is @p ancestor or one of its descendants.
-// NOLINTNEXTLINE(misc-no-recursion): a widget tree, walked down.
 bool descendsFrom(ui::testing::RecordingBackend const& backend, int ancestor, int node) {
-    if (ancestor == node) {
-        return true;
+    std::vector<int> pending{ancestor};
+    while (!pending.empty()) {
+        int const current = pending.back();
+        pending.pop_back();
+        if (current == node) {
+            return true;
+        }
+        auto const children = backend.children(current);
+        pending.insert(pending.end(), children.begin(), children.end());
     }
-    return std::ranges::any_of(backend.children(ancestor),
-                               [&](int const child) { return descendsFrom(backend, child, node); });
+    return false;
 }
 
 }  // namespace
@@ -280,12 +285,12 @@ TEST_CASE("Client shell tours: an application with no tours shows no Tours butto
 TEST_CASE("Client shell tours: the frame's texts reach the button's caption, its tooltip and the General heading",
           "[client][tours]") {
     {
-        Window window;
+        Window const window;
         CHECK(window.prop("Menu", "shell_tours", "label") == "Tours");
         CHECK(window.prop("Menu", "shell_tours", "tooltip") == "Guided tours");
         CHECK(window.prop("Menu", "shell_tours", "items").contains("General;enabled=false;heading"));
     }
-    Window german{&tours::toursBundle, "de"};
+    Window const german{&tours::toursBundle, "de"};
     CHECK(german.prop("Menu", "shell_tours", "label") == "Touren");
     CHECK(german.prop("Menu", "shell_tours", "tooltip") == "Geführte Touren");
     CHECK(german.prop("Menu", "shell_tours", "items").contains("Allgemein;enabled=false;heading"));

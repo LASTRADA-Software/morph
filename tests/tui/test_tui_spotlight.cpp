@@ -30,7 +30,7 @@ using morph::tui::testing::Harness;
 /// The row a text first shows on, or npos.
 std::size_t rowOf(std::vector<std::string> const& rows, std::string const& text) {
     for (std::size_t row = 0; row < rows.size(); ++row) {
-        if (rows.at(row).find(text) != std::string::npos) {
+        if (rows.at(row).contains(text)) {
             return row;
         }
     }

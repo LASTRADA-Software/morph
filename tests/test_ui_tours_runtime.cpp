@@ -27,6 +27,7 @@ constexpr std::string_view kApp = R"({"vocab":"ui/1","id":"app",
   "tours":[{"id":"basics","title":"Basics","steps":[{"title":"One"},{"title":"Two"}]}]})";
 
 /// A runtime tour @p id at @p revision, its title a translated text, with @p steps steps.
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): the revision and the step count are told apart by position and name at every call
 ui::TourDecl runtimeTour(std::string const& id, std::uint64_t revision, std::size_t steps = 2,
                          std::string const& stepTitle = "Look") {
     std::string list;

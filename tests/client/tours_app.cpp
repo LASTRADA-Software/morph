@@ -67,9 +67,11 @@ constexpr std::string_view kScreenTours = R"([
 
 /// The application with @p home as its first screen and @p appTours as the app document's tours; empty serves no app
 /// document.
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): the two documents are told apart by their names at every call
 std::expected<std::shared_ptr<morph::ui::ServedBundle const>, morph::ui::Refusal> build(std::string_view home,
                                                                                         std::string_view appTours) {
     morph::ui::UiRegistry served{morph::ui::ApplicationInfo{.id = "tours", .version = "1"}};
+    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): the id and the title are told apart by their names at every call
     auto const add = [&served](std::string id, std::string const& title, std::string_view text) {
         morph::ui::CatalogEntry entry;
         entry.id = std::move(id);

@@ -163,6 +163,7 @@ public:
     Shell(ui::AppContext& context, ui::IViewBackend& backend, ShellOptions options)
         : _context{&context}, _backend{&backend}, _options{std::move(options)} {}
 
+    // NOLINTNEXTLINE(bugprone-exception-escape): the tour card's refresh compares host values, which never hold a valueless variant; a failure in teardown has no recovery.
     ~Shell() override {
         *_alive = false;
         _backend->setOnWidthClass({});

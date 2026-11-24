@@ -92,9 +92,10 @@ TEST_CASE("spotlight: an open spotlight takes presses only on its card and on th
 // Mutation: leave `_notifying` set when a listener throws (the guard removed): the next change tells nobody.
 TEST_CASE("spotlight: a listener that throws once does not leave the store deaf", "[ui][tours]") {
     auto const store = std::make_shared<ui::testing::detail::RecordStore>();
-    ui::testing::detail::FakeButton button{store, "Button", nullptr};
+    // Declared before the button: its destructor notifies the listener, which reads both.
     int heard = 0;
     bool throwNext = true;
+    ui::testing::detail::FakeButton button{store, "Button", nullptr};
     store->listen([&] {
         ++heard;
         if (std::exchange(throwNext, false)) {

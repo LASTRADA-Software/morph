@@ -89,6 +89,7 @@ void WidgetIndex::retag(ItemBase const& widget, QString const& testId) {
 
 std::vector<ItemBase*> WidgetIndex::carrying(QString const& testId) const {
     std::vector<ItemBase*> out;
+    // NOLINTNEXTLINE(misc-const-correctness): the item goes into a vector of non-const items, so its pointee stays non-const.
     for (ItemBase* const widget : _widgets) {
         if (auto const found = _tags.find(widget); found != _tags.end() && found->second == testId) {
             out.push_back(widget);

@@ -305,13 +305,15 @@ struct Tall {
 
 /// The scrolling item inside a ScrollWidget's item.
 QQuickItem* flickableIn(QQuickItem& item) {
-    if (item.inherits("QQuickFlickable")) {
-        return &item;
-    }
-    for (QQuickItem* const child : item.childItems()) {
-        if (QQuickItem* const found = flickableIn(*child)) {
-            return found;
+    std::vector<QQuickItem*> pending{&item};
+    while (!pending.empty()) {
+        QQuickItem* const current = pending.back();
+        pending.pop_back();
+        if (current->inherits("QQuickFlickable")) {
+            return current;
         }
+        auto const children = current->childItems();
+        pending.insert(pending.end(), children.rbegin(), children.rend());
     }
     return nullptr;
 }
@@ -352,7 +354,7 @@ TEST_CASE("qt_quick spotlight: a closed spotlight never scrolls the page", "[qt_
     Scene scene;
     scene.window().resize(800, 600);
     Tall const page{scene};
-    QQuickItem* const flick = flickableIn(page.flickable());
+    QQuickItem const* const flick = flickableIn(page.flickable());
     REQUIRE(flick != nullptr);
     auto const spotlight = scene.backend().createSpotlight(nullptr);
     spotlight->setTarget(std::string{"target"});
@@ -374,13 +376,13 @@ TEST_CASE("qt_quick spotlight: a missing target rings nothing and centres the ca
     spotlight->setOpen(true);
     scene.settle();
     CHECK_FALSE(spotlight->targetShown());
-    QQuickItem& item = Scene::itemOf(*spotlight);
+    QQuickItem const& item = Scene::itemOf(*spotlight);
     CHECK_FALSE(item.property("ringed").toBool());
     auto const* const box = item.property("card").value<QQuickItem*>();
     REQUIRE(box != nullptr);
     QRectF const placed = sceneBox(*box);
-    CHECK(std::abs(placed.center().x() - scene.window().width() / 2.0) <= 1.0);
-    CHECK(std::abs(placed.center().y() - scene.window().height() / 2.0) <= 1.0);
+    CHECK(std::abs(placed.center().x() - (scene.window().width() / 2.0)) <= 1.0);
+    CHECK(std::abs(placed.center().y() - (scene.window().height() / 2.0)) <= 1.0);
 }
 
 // Mutation: bind the layer's visibility to `open` alone (a hidden spotlight item leaves its layer showing).
@@ -445,7 +447,7 @@ TEST_CASE("qt_quick spotlight: Escape closes the target's open menu first, then 
     card.next->setKeys({"Escape"}, [&chords](std::string const& chord) { chords.push_back(chord); });
     card.spotlight->setTargetFocusable(true);
     QQuickItem& item = Scene::itemOf(*menu);
-    QObject* const popup = popupOf(item);
+    QObject const* const popup = popupOf(item);
     REQUIRE(popup != nullptr);
     QMetaObject::invokeMethod(&item, "openFromTrigger");
     scene.settle();

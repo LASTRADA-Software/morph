@@ -81,14 +81,15 @@ std::expected<std::shared_ptr<ui::ServedBundle const>, ui::Refusal> build(Bundle
     login.id = "lims.login";
     login.title = "Sign in";
     login.isPublic = true;
-    REQUIRE(
-        registry.addScreen(std::move(login), R"({"vocab":"ui/1","id":"lims.login","view":{"kind":"text","text":"x"}})")
-            .has_value());
+    auto const loginAdded = registry.addScreen(
+        std::move(login), R"({"vocab":"ui/1","id":"lims.login","view":{"kind":"text","text":"x"}})");
+    REQUIRE(loginAdded.has_value());
     ui::CatalogEntry explorer;
     explorer.id = "explorer";
     explorer.title = "Explorer";
     explorer.host = std::string{"explorer"};
-    REQUIRE(registry.addEntry(std::move(explorer)).has_value());
+    auto const explorerAdded = registry.addEntry(std::move(explorer));
+    REQUIRE(explorerAdded.has_value());
     auto const app = registry.addFile(
         ui::BundleFile{.kind = "app",
                        .id = "app",
