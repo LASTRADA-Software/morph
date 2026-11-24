@@ -4500,6 +4500,8 @@ struct MinColumnGridSpec {
     probe.settle();
     checks.that(clicks == 1, "Enter on a button inside a spotlight did not click it");
     checks.that(chords.size() == 1, "Enter on a button inside a spotlight reached the content's chord");
+    return checks.result();
+}
 
 /// @brief A table of entries under the given columns, each cell a Text of the entry's label and its column's index.
 /// @param rows    The entries; must outlive the node's mounts.

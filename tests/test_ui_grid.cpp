@@ -998,13 +998,16 @@ TEST_CASE("grid: a hidden grid shows no Add row", "[ui][grid][rows]") {
     std::optional<ui::Mounted> view;
     view.emplace(f.h.rt, backend, f.grid->node(columnsOf(f), std::move(options)));
     f.h.settle();
-    int const add = backend.find("Button", "testId", "grid_addRow").value_or(0);
-    REQUIRE(add != 0);
-    backend.click(add);
-    f.h.settle();
+    // A hidden container may not build its children at all; when it does, the button adds nothing.
+    if (int const hidden = backend.find("Button", "testId", "grid_addRow").value_or(0); hidden != 0) {
+        backend.click(hidden);
+        f.h.settle();
+    }
     CHECK(f.form->field("specimens").rows().size() == 1);
     shown.set(true);
     f.h.settle();
+    int const add = backend.find("Button", "testId", "grid_addRow").value_or(0);
+    REQUIRE(add != 0);
     backend.click(add);
     f.h.settle();
     CHECK(f.form->field("specimens").rows().size() == 2);

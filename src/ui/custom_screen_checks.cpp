@@ -464,7 +464,7 @@ namespace detail {
 namespace {
 
 // NOLINTBEGIN(modernize-use-designated-initializers): the table reads as rows.
-constexpr std::array<EventKey, 41> kEventKeys = {{
+constexpr std::array<EventKey, 46> kEventKeys = {{
     {"button", "onClick", EventClass::Press},         {"button", "onActivate", EventClass::Press},
     {"textInput", "onChange", EventClass::Press},     {"textInput", "onCommit", EventClass::Press},
     {"textInput", "onSubmit", EventClass::Press},     {"checkbox", "onToggle", EventClass::Press},
@@ -486,6 +486,9 @@ constexpr std::array<EventKey, 41> kEventKeys = {{
     {"actionButton", "onClick", EventClass::Press},   {"headMenuItem", "onClick", EventClass::Press},
     {"headTool", "onChange", EventClass::Press},      {"headTool", "onSubmit", EventClass::Press},
     {"headTool", "onChoose", EventClass::Press},
+    {"table", "onFiltersChange", EventClass::Press},   {"table", "onLayoutChange", EventClass::Press},
+    {"fieldGrid", "onActivate", EventClass::Press},    {"fieldGrid", "onFiltersChange", EventClass::Press},
+    {"fieldGrid", "onLayoutChange", EventClass::Press},
 }};
 // NOLINTEND(modernize-use-designated-initializers)
 
