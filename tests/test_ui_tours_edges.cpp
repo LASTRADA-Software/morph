@@ -557,10 +557,8 @@ std::expected<std::shared_ptr<ui::ServedBundle const>, ui::Refusal> buildChecked
         return entry;
     };
     REQUIRE(registry.addEntry(explorer()).has_value());
-    auto const app = registry.addFile(
-        ui::BundleFile{.kind = "app",
-                       .id = "app",
-                       .bytes = R"({"vocab":"ui/1","id":"app","tours":)" + tours + members + "}"});
+    auto const app = registry.addFile(ui::BundleFile{
+        .kind = "app", .id = "app", .bytes = R"({"vocab":"ui/1","id":"app","tours":)" + tours + members + "}"});
     REQUIRE(app.has_value());
     if (parts) {
         REQUIRE(registry.setShellParts(*parts, ui::testing::corpusCatalog()).has_value());
@@ -662,7 +660,8 @@ public:
 
     std::expected<void, ui::MountError> openScreen(std::string const& screenId, ui::ParamMap const& params) override {
         if (refused.contains(screenId)) {
-            return std::unexpected(ui::MountError{.screenId = screenId, .reason = "not for this person", .pointer = {}});
+            return std::unexpected(
+                ui::MountError{.screenId = screenId, .reason = "not for this person", .pointer = {}});
         }
         active = screenId;
         activeParams = params;
@@ -911,7 +910,8 @@ struct CardRig {
         binding = std::make_unique<ui::TourCardBinding>(
             host, [this] { return controller.get(); }, std::move(post), std::move(report));
         controller = std::make_unique<ui::TourController>(
-            h.runtime, *root, shell, ui::TourControllerOptions{.warn = {}, .onChanged = [this] { binding->refresh(); }});
+            h.runtime, *root, shell,
+            ui::TourControllerOptions{.warn = {}, .onChanged = [this] { binding->refresh(); }});
     }
 
     [[nodiscard]] ui::HostCommandResult run(std::string const& name, std::string const& tourId = {}) const {

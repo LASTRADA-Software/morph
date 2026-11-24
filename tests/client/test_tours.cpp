@@ -109,6 +109,7 @@ struct Window {
 };
 
 /// Whether @p node is @p ancestor or one of its descendants.
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): ancestor first, as in the name; both are widget ids.
 bool descendsFrom(ui::testing::RecordingBackend const& backend, int ancestor, int node) {
     std::vector<int> pending{ancestor};
     while (!pending.empty()) {
@@ -340,8 +341,6 @@ private:
     std::unique_ptr<morph::exec::ThreadPoolExecutor> _workers;
 };
 
-}  // namespace
-
 /// The ids of the screen's `refresh` head action, after the shell has had time to mount every head it makes.
 std::vector<int> headActions(Window& window) {
     window.wait(
@@ -361,6 +360,8 @@ bool inHeadSlot(Window& window, int widget) {
     std::optional<int> const slot = window.find("Row", "shell_head");
     return slot && descendsFrom(window.backend, *slot, widget);
 }
+
+}  // namespace
 
 // Control for the case below: with no tour declared, the shell mounts the head itself, in its slot (so the slot is
 // where a head action goes when the page does not hold it).
